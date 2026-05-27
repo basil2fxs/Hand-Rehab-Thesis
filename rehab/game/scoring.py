@@ -7,10 +7,17 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class ScoreConfig:
+    # Perfect: very fast RT, sub-100 ms by default. Carries the biggest
+    # reward so the patient feels a clear hit when they nail a press.
+    # Earlier versions only had Great/Good/Late and the spread (3/2/1)
+    # was too compressed to feel different - a Late hit gave a third
+    # of a Great, which on a single trial doesn't read.
+    perfect_ms: int = 100
+    perfect_points: int = 10
     great_ms: int = 200
-    great_points: int = 3
+    great_points: int = 6
     good_ms: int = 500
-    good_points: int = 2
+    good_points: int = 3
     late_points: int = 1
     # Misses + early presses default to 0 - the score never goes backwards.
     # The miss still shows up in the Misses counter for the therapist's
@@ -21,7 +28,7 @@ class ScoreConfig:
 
 @dataclass(frozen=True)
 class TrialResult:
-    label: str        # "Great" | "Good" | "Late" | "Miss" | "Early"
+    label: str        # "Perfect" | "Great" | "Good" | "Late" | "Miss" | "Early"
     points: int
     rt_ms: float | None
 
@@ -29,6 +36,11 @@ class TrialResult:
 def classify(rt_ms: float | None, cfg: ScoreConfig) -> TrialResult:
     if rt_ms is None:
         return TrialResult(label="Miss", points=cfg.miss_points, rt_ms=None)
+    # Perfect tier check goes FIRST: a 50 ms RT is also under the Great
+    # threshold, but the patient should feel rewarded for the very fast
+    # press they actually achieved, not the slower-tier label.
+    if rt_ms <= cfg.perfect_ms:
+        return TrialResult(label="Perfect", points=cfg.perfect_points, rt_ms=rt_ms)
     if rt_ms <= cfg.great_ms:
         return TrialResult(label="Great", points=cfg.great_points, rt_ms=rt_ms)
     if rt_ms <= cfg.good_ms:
@@ -51,16 +63,17 @@ class RhythmWindows:
 def classify_offset(offset_ms: float, w: RhythmWindows,
                     cfg: ScoreConfig | None = None) -> tuple[str, int]:
     """Rhythm-mode scoring. Honours cfg point values so a therapist who
-    changes miss_points sees the change in both modes."""
+    changes scoring sees the change in both modes."""
     abs_off = abs(offset_ms)
     # Default to 0 for misses (no negative scoring anywhere). cfg can
     # still override if a therapist sets a non-zero miss penalty.
+    # Defaults here mirror ScoreConfig so a caller without a cfg gets
+    # the same wider spread (10/6/3/1) as a fully-configured engine.
     miss_pts = cfg.miss_points if cfg else 0
     late_pts = cfg.late_points if cfg else 1
-    good_pts = cfg.good_points if cfg else 2
-    great_pts = cfg.great_points if cfg else 3
-    # Perfect rewards one above great so the incentive ordering survives custom configs.
-    perfect_pts = great_pts + 1
+    good_pts = cfg.good_points if cfg else 3
+    great_pts = cfg.great_points if cfg else 6
+    perfect_pts = cfg.perfect_points if cfg else 10
     if abs_off <= w.perfect_ms:
         return "Perfect", perfect_pts
     if abs_off <= w.great_ms:

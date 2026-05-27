@@ -3,6 +3,10 @@
 session:
   data_dir: sessions
   participant: null
+  # Age captured on the title screen alongside the participant name.
+  # Kept as a string so the JSON round-trips raw user input (e.g.
+  # "65y" or "NA"). An empty value means "not provided".
+  age: null
 
 serial:
   port: auto
@@ -48,6 +52,15 @@ game:
   timeout_s: 1.0
   early_window_s: 0.1
   total_trials: 40
+  # Test Mode is a supervisor-demo shortcut. When enabled, every block
+  # (classic / adaptive / rhythm) is capped at test_mode_trials trials
+  # so the full pipeline (mode select -> setup -> gameplay -> results)
+  # fits inside a 60-second demo. Rhythm mode trims the beatmap to the
+  # first N notes; the audio still plays the full track. Researcher
+  # runs should keep test_mode_enabled=false so the trial CSVs hold the
+  # normal 40-48-trial blocks. Toggleable from the Settings screen.
+  test_mode_enabled: false
+  test_mode_trials: 6
   # Unilateral RIGHT-hand keymap. Patient rests their right hand on the
   # home row so j (index finger, closest to centre) is lane 0 and ; (little
   # finger, outer edge) is lane 3. Lanes always go 0=index..3=little.
@@ -77,9 +90,15 @@ game:
     a: 7           # left little
 
 adaptive:
-  # Start slow so the patient gets some easy hits before the system speeds
-  # up. 60 BPM = 1.0s between stimuli, comfortable for most patients.
-  start_bpm: 60
+  # Start slow so the patient gets confident hits before the system
+  # speeds up. Lowered from 60 -> 30 BPM = 2.0 s between stimuli.
+  # 60 BPM (1.0 s) was opening the first block above the comfortable
+  # press cadence for stroke-rehab patients, which pushed hit-rate
+  # below the 65-80% challenge-point band and bounced the engine
+  # straight into recovery. From 30 BPM the patient can string a
+  # streak together; the engine bumps up by bpm_step every time it
+  # sees a sustained hit rate above target_high.
+  start_bpm: 30
   bpm_min: 10                 # crawl mode for severe weakness (6s gap)
   bpm_max: 140
   bpm_step: 10                # base step. Scaled up when hit rate is far off.
@@ -93,21 +112,61 @@ adaptive:
   timeout_factor: 0.90
 
 scoring:
+  # Reaction-time bands for classic + adaptive trials. The patient's
+  # press is timed from the stim firing; the band determines both the
+  # outcome label shown on screen and the points awarded.
+  #
+  #   RT  <= perfect_ms  -> "Perfect"  +perfect_points
+  #   RT  <= great_ms    -> "Great"    +great_points
+  #   RT  <= good_ms     -> "Good"     +good_points
+  #   RT  >  good_ms     -> "Late"     +late_points
+  #   no press           -> "Miss"     +miss_points
+  #
+  # The 10/6/3/1 spread is intentionally wider than the historical
+  # 3/2/1 - that earlier scheme made the difference between a 150 ms
+  # press and a 600 ms press only +2 points, which on a single trial
+  # was invisible. Now a Perfect is worth 10x a Late so the patient
+  # FEELS the variance in real time.
+  perfect_ms: 100
+  perfect_points: 10
   great_ms: 200
-  great_points: 3
+  great_points: 6
   good_ms: 500
-  good_points: 2
+  good_points: 3
   late_points: 1
   # Missed trials + early presses default to 0 (score still won't go
   # below zero, the floor is enforced in engine._apply_wrong_penalty).
   miss_points: 0
   early_penalty: 0
-  # Wrong-finger press penalty. Subtracts this many points the first
-  # time the patient hits a non-target finger inside a trial (classic +
-  # adaptive). In rhythm mode it subtracts per unmatched press (a press
-  # on a lane with no scheduled note nearby). Floored at score=0 so the
-  # display never goes negative. Set to 0 to disable.
-  wrong_press_penalty: 1
+  # Wrong-finger press penalty. Subtracts this many points on EVERY
+  # wrong-finger press during a trial (classic + adaptive) and on
+  # every unmatched press in rhythm mode. Tuned against the wider
+  # point spread above: at penalty=3, mashing 3 wrong fingers costs
+  # -9, which overwhelms even a great hit (+6). A Perfect (+10) can
+  # still net positive with one wrong (+1), but a focused Perfect
+  # (+10) always beats the spam outcome - so the dominant strategy
+  # is "press one finger fast", not "mash everything". Floored at
+  # score=0 so the display never goes negative. Set to 0 to disable.
+  wrong_press_penalty: 3
+  # Idle-press penalty. Subtracts this many points per press that
+  # lands in classic / adaptive while NO trial is active (between
+  # stims). Without it, mashing between trials cost nothing because
+  # the press handler short-circuited. Detector debounce_ms already
+  # rate-limits the spam at the hardware layer, so this just makes
+  # each accepted between-trial press cost something. Smaller than
+  # wrong_press_penalty (1 vs 3) because a legitimate finger fidget
+  # shouldn't punish as hard as actively pressing the wrong key
+  # during a trial. Set to 0 to disable.
+  idle_press_penalty: 1
+
+mirror:
+  # Bilateral coordination is harder than unimanual cued press so
+  # mirror opens slower than adaptive (which starts at 30). Patient
+  # needs to land both same-finger presses inside the timing window
+  # before the system speeds up. The same adaptive.* knobs (target
+  # band, bpm_min, bpm_max, bpm_step, weakness_bias) drive how the
+  # pace evolves from here.
+  start_bpm: 24
 
 rhythm:
   difficulty: medium     # easy | medium | hard
@@ -153,3 +212,21 @@ ui:
 logging:
   level: INFO
   file: sessions/rehab.log
+
+# Optional pretest / main / aftertest protocol. When `blocks` is a
+# non-empty list, calling GameEngine.start_protocol() runs the
+# blocks back-to-back with the named `phase` written into each
+# trial CSV row's `phase` column. Useful for learning-effects
+# studies where you want to compare baseline (pretest) and post-
+# training (aftertest) on either side of a main training block.
+#
+# Default is empty so existing free-play flow is unaffected. To
+# enable, override in user_settings.yaml or pass --config a YAML
+# like:
+#   protocol:
+#     blocks:
+#       - {mode: classic,  phase: pretest}
+#       - {mode: adaptive, phase: main}
+#       - {mode: classic,  phase: aftertest}
+protocol:
+  blocks: []

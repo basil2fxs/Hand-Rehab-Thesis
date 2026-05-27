@@ -362,5 +362,109 @@ class CalibrationPersistenceTests(unittest.TestCase):
             self.assertIsNone(Calibration.load(path))
 
 
+class PeakForceTrackingTests(unittest.TestCase):
+    """The detector tracks the per-press peak smoothed value between
+    rising and falling edges, exposed on the ReleaseEvent payload as
+    additive `peak_raw` + `peak_minus_baseline` fields. The existing
+    PressEvent layout is unchanged."""
+
+    def _cal(self):
+        # value_alpha=1.0 disables smoothing so the test can reason
+        # about exact peak values without working through the EMA.
+        from rehab.hardware.fsr_detector import Calibration
+        return Calibration(
+            num_sensors=4, value_alpha=1.0,
+            on_delta=[40] * 4, off_delta=[20] * 4,
+            abs_on_min=[300] * 4, abs_off_max=[300] * 4,
+            debounce_ms=0,
+        )
+
+    def test_release_carries_peak_raw_and_peak_minus_baseline(self) -> None:
+        # Press ramp 500 -> 700 -> 600 -> release at 50. With
+        # value_alpha=1.0 the smoothed value equals the raw, so the
+        # peak should latch on 700.
+        from rehab.hardware.fsr_detector import FSRDetector, ReleaseEvent
+        det = FSRDetector(self._cal(), hand="right")
+        releases: list[ReleaseEvent] = []
+        det.on_release = releases.append
+        # Warm-up so baseline stabilises near 50.
+        det.feed(0.0, (50, 50, 50, 50))
+        # Rising edge.
+        det.feed(0.1, (500, 50, 50, 50))
+        # Mid-press samples - peak should latch on 700.
+        det.feed(0.2, (700, 50, 50, 50))
+        det.feed(0.3, (600, 50, 50, 50))
+        # Falling edge.
+        det.feed(0.4, (50, 50, 50, 50))
+        self.assertEqual(len(releases), 1)
+        ev = releases[0]
+        self.assertAlmostEqual(ev.peak_raw, 700.0)
+        # Baseline at rising edge ~ 50 (warm-up + minor drift).
+        # peak_minus_baseline should be ~ 650 (700 - ~50).
+        self.assertIsNotNone(ev.peak_minus_baseline)
+        self.assertGreater(ev.peak_minus_baseline, 600.0)
+        self.assertLessEqual(ev.peak_minus_baseline, 700.0)
+
+    def test_release_event_default_construct_has_none_peaks(self) -> None:
+        # Test fixtures that build ReleaseEvent directly without the
+        # detector still construct (additive defaults are None).
+        from rehab.hardware.fsr_detector import ReleaseEvent
+        ev = ReleaseEvent(lane=0, t_perf=0.0, value=0)
+        self.assertIsNone(ev.peak_raw)
+        self.assertIsNone(ev.peak_minus_baseline)
+
+    def test_peak_resets_between_consecutive_presses(self) -> None:
+        # Two presses on the same lane. The second press's peak must
+        # reflect that press alone (not be carried over from the
+        # first), so a hard first press doesn't falsely report a
+        # strong second press too.
+        from rehab.hardware.fsr_detector import FSRDetector, ReleaseEvent
+        det = FSRDetector(self._cal(), hand="right")
+        releases: list[ReleaseEvent] = []
+        det.on_release = releases.append
+        det.feed(0.0, (50, 50, 50, 50))
+        # Press 1 with peak 800.
+        det.feed(0.1, (500, 0, 0, 0))
+        det.feed(0.2, (800, 0, 0, 0))
+        det.feed(0.3, (50, 0, 0, 0))
+        # Press 2 with peak 400. The rising-edge sample (500) is the
+        # first peak candidate; 400 doesn't exceed it, so the
+        # recorded peak should be 500 - confirming the reset.
+        det.feed(0.4, (500, 0, 0, 0))
+        det.feed(0.5, (400, 0, 0, 0))
+        det.feed(0.6, (50, 0, 0, 0))
+        self.assertEqual(len(releases), 2)
+        self.assertAlmostEqual(releases[0].peak_raw, 800.0)
+        self.assertAlmostEqual(releases[1].peak_raw, 500.0)
+
+
+class BaselineAccessorTests(unittest.TestCase):
+    """baseline_value(sensor_idx) returns the live EMA baseline for
+    one sensor. Used by the per-sensor drift sampler in the session
+    loop (samples every 30 s and feeds drift_slope at finish_block)."""
+
+    def test_returns_none_before_first_sample(self) -> None:
+        from rehab.hardware.fsr_detector import Calibration, FSRDetector
+        det = FSRDetector(Calibration(num_sensors=4), hand="right")
+        self.assertIsNone(det.baseline_value(0))
+
+    def test_returns_baseline_after_samples(self) -> None:
+        from rehab.hardware.fsr_detector import Calibration, FSRDetector
+        det = FSRDetector(Calibration(num_sensors=4), hand="right")
+        det.feed(0.0, (100, 0, 0, 0))
+        det.feed(0.01, (100, 0, 0, 0))
+        b = det.baseline_value(0)
+        self.assertIsNotNone(b)
+        # Baseline tracks the value when not pressed; should be
+        # in the same ballpark as the constant input.
+        self.assertGreater(b, 50)
+
+    def test_out_of_range_returns_none(self) -> None:
+        from rehab.hardware.fsr_detector import Calibration, FSRDetector
+        det = FSRDetector(Calibration(num_sensors=4), hand="right")
+        self.assertIsNone(det.baseline_value(99))
+        self.assertIsNone(det.baseline_value(-1))
+
+
 if __name__ == "__main__":
     unittest.main()

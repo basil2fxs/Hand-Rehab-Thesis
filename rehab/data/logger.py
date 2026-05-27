@@ -19,7 +19,7 @@ TRIAL_COLUMNS = [
     # Identity + context.
     "iso_ts",                  # wall-clock timestamp at trial close
     "block_t_s",               # seconds since block started
-    "participant", "hand", "block",
+    "participant", "age", "hand", "block",
     # Trial identity.
     "trial", "lane",
     # Outcome.
@@ -36,6 +36,26 @@ TRIAL_COLUMNS = [
     "streak_at_trial",         # hit streak going INTO this trial
     "in_recovery",             # was adaptive recovery mode active
     "song_time_s",             # rhythm mode: position in the song
+    # Peak force on the target sensor during the press window. Units
+    # depend on whether a force calibration constant is present in
+    # the config (`fsr.force_calibration_n_per_count`): newtons when
+    # set, raw ADC counts otherwise. session.json records the active
+    # unit under `block_summary.force_unit` so downstream analysis
+    # knows how to interpret the column.
+    "peak_force_n",
+    # Force-time integral (impulse) over the press window: integral
+    # of (smoothed force - baseline) dt from rising edge to falling
+    # edge. Newton-seconds when a force calibration is configured,
+    # ADC-count-seconds otherwise (same unit context as peak_force_n).
+    # Measures total effort delivered, not just peak strength - a
+    # patient who presses softly but holds doesn't look the same
+    # as a sharp peak with quick release.
+    "impulse_n",
+    # Optional protocol phase ("pretest" / "main" / "aftertest" or
+    # empty when no protocol is running). Lets a learning-effects
+    # analysis split the trial CSV by phase without re-deriving
+    # which block was which from the timestamps.
+    "phase",
 ]
 
 # Raw schema gains fsr5-fsr8 so the bilateral case fits without a new file format.

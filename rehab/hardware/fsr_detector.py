@@ -126,6 +126,32 @@ class ReleaseEvent:
     t_perf: float
     value: int
     hand: str = "right"
+    # Peak-force stats over the press window (rising-edge to falling-
+    # edge). Both default to None so a caller that builds a
+    # ReleaseEvent in a test fixture without going through the
+    # detector still constructs cleanly.
+    #   peak_raw          = max smoothed value seen during the press
+    #   peak_minus_baseline = peak_raw minus the baseline at press
+    #                          start (the part attributable to the
+    #                          patient's effort, not sensor offset)
+    peak_raw: float | None = None
+    peak_minus_baseline: float | None = None
+    # Force-time integral (impulse) over the press window.
+    # `impulse_raw` is the trapezoidal integral of the smoothed
+    # force value across the press; `impulse_minus_baseline` is the
+    # same integral with the press-start baseline subtracted at
+    # every sample, which is the clinically meaningful quantity
+    # (total effort delivered above sensor offset).
+    # Units are (signal-unit * seconds); newton-seconds when a
+    # force calibration constant is configured, ADC-count-seconds
+    # otherwise. The Session.json's `force_unit` field carries that
+    # context.
+    impulse_raw: float | None = None
+    impulse_minus_baseline: float | None = None
+    # Duration of the press window in seconds, useful for
+    # normalising impulse to a force average if a researcher wants
+    # impulse / duration rather than the raw impulse.
+    duration_s: float | None = None
 
 
 class FSRDetector:
@@ -140,6 +166,26 @@ class FSRDetector:
         self.pressed: list[bool] = [False] * n
         self.last_event_t: list[float] = [0.0] * n
         self.last_value: list[int] = [0] * n
+        # Per-sensor peak-force tracking. `_peak_raw` is the max
+        # smoothed value seen since the current press began; it's
+        # only meaningful while pressed[i] is True. `_peak_baseline`
+        # records the baseline AT THE MOMENT of the rising edge so
+        # the peak-minus-baseline computation uses the right
+        # reference (not a baseline that has wandered since).
+        self._peak_raw: list[float | None] = [None] * n
+        self._peak_baseline: list[float | None] = [None] * n
+        # Force-time integral (impulse) accumulators. Built up as
+        # samples arrive during a press via trapezoidal integration:
+        #   _impulse_raw   = running sum(force[i] * dt[i])
+        #   _impulse_minus = running sum((force[i] - baseline) * dt[i])
+        # The press-start timestamp lives in _press_start_t so the
+        # release event can also report duration_s = release - start.
+        # `_last_sample_t` records the t_perf of the previous sample
+        # so dt can be computed against the next one.
+        self._impulse_raw: list[float | None] = [None] * n
+        self._impulse_minus: list[float | None] = [None] * n
+        self._press_start_t: list[float | None] = [None] * n
+        self._last_sample_t: list[float | None] = [None] * n
         self.on_press: Callable[[PressEvent], None] | None = None
         self.on_release: Callable[[ReleaseEvent], None] | None = None
 
@@ -150,6 +196,58 @@ class FSRDetector:
         self.pressed = [False] * n
         self.last_event_t = [0.0] * n
         self.last_value = [0] * n
+        self._peak_raw = [None] * n
+        self._peak_baseline = [None] * n
+        self._impulse_raw = [None] * n
+        self._impulse_minus = [None] * n
+        self._press_start_t = [None] * n
+        self._last_sample_t = [None] * n
+
+    def baseline_value(self, sensor_idx: int) -> float | None:
+        """Live baseline EMA for one sensor. Used by the per-sensor
+        drift sampler in the session loop (samples every 30 s and
+        feeds drift_slope at finish_block). Returns None when no
+        sample has been fed yet for this sensor."""
+        if 0 <= sensor_idx < len(self.baseline):
+            return self.baseline[sensor_idx]
+        return None
+
+    def current_peak(self, sensor_idx: int
+                       ) -> tuple[float, float] | None:
+        """Live peak-force snapshot for an in-progress press. Returns
+        (peak_raw, peak_minus_baseline) if the sensor is currently
+        pressed, else None. Used by the engine at log_trial time:
+        log_trial runs when the correct press arrives but BEFORE
+        the release event, so the ReleaseEvent payload isn't
+        available yet. This accessor reads the running peak (the max
+        smoothed value seen between rising edge and now).
+        """
+        if not (0 <= sensor_idx < len(self._peak_raw)):
+            return None
+        if not self.pressed[sensor_idx]:
+            return None
+        peak_raw = self._peak_raw[sensor_idx]
+        peak_base = self._peak_baseline[sensor_idx]
+        if peak_raw is None or peak_base is None:
+            return None
+        return (float(peak_raw), float(peak_raw - peak_base))
+
+    def current_impulse(self, sensor_idx: int
+                          ) -> tuple[float, float] | None:
+        """Live force-time integral for an in-progress press. Returns
+        (impulse_raw, impulse_minus_baseline) accumulated between
+        the rising edge and the most recent sample, or None when
+        the sensor isn't pressed. Same shape as current_peak so the
+        engine can grab both at log_trial time."""
+        if not (0 <= sensor_idx < len(self._impulse_raw)):
+            return None
+        if not self.pressed[sensor_idx]:
+            return None
+        raw = self._impulse_raw[sensor_idx]
+        minus = self._impulse_minus[sensor_idx]
+        if raw is None or minus is None:
+            return None
+        return (float(raw), float(minus))
 
     def feed(self, t_perf: float, vals: tuple[int, ...]) -> None:
         n = self.cal.num_sensors
@@ -177,6 +275,22 @@ class FSRDetector:
             if not self.pressed[i] and sm >= on_thr and dt_ms >= cal.debounce_ms:
                 self.pressed[i] = True
                 self.last_event_t[i] = t_perf
+                # Start tracking the peak for this press. The rising-
+                # edge sample is the first candidate; subsequent
+                # samples in the while-pressed branch will replace it
+                # if they exceed it. _peak_baseline is frozen here so
+                # peak_minus_baseline uses the reference the patient
+                # actually started from.
+                self._peak_raw[i] = float(sm)
+                self._peak_baseline[i] = float(base)
+                # Start the impulse accumulator at zero. The first
+                # in-press sample after this contributes a trapezoid
+                # of (sm + sm_now) / 2 * dt to both impulse channels
+                # (raw uses sm, minus uses sm - base).
+                self._impulse_raw[i] = 0.0
+                self._impulse_minus[i] = 0.0
+                self._press_start_t[i] = float(t_perf)
+                self._last_sample_t[i] = float(t_perf)
                 # Callbacks are wrapped: an exception in the engine's
                 # press handler (CSV lock, missing screen, mode swap mid-
                 # frame) must not skip subsequent sensors in this batch.
@@ -192,11 +306,76 @@ class FSRDetector:
             elif self.pressed[i] and sm <= off_thr and dt_ms >= cal.debounce_ms:
                 self.pressed[i] = False
                 self.last_event_t[i] = t_perf
+                # Finalise the peak. _peak_raw was last updated on the
+                # most recent in-press sample (see below). Compute
+                # peak-minus-baseline from the snapshot taken at the
+                # rising edge so a slow baseline drift mid-press
+                # doesn't change the answer.
+                peak_raw = self._peak_raw[i]
+                peak_base = self._peak_baseline[i]
+                peak_minus = None
+                if peak_raw is not None and peak_base is not None:
+                    peak_minus = peak_raw - peak_base
+                # Finalise the impulse. The current sample contributes
+                # one last trapezoid before the press ends. This makes
+                # impulse_minus_baseline = integral of (force - baseline)
+                # across the whole press window.
+                if (self._impulse_raw[i] is not None
+                        and self._last_sample_t[i] is not None):
+                    dt = float(t_perf) - float(self._last_sample_t[i])
+                    if dt > 0:
+                        # Treat the falling-edge sample as also at
+                        # value sm so the trapezoid is well-defined.
+                        self._impulse_raw[i] += float(sm) * dt
+                        self._impulse_minus[i] += (
+                            float(sm) - float(peak_base
+                                                if peak_base is not None
+                                                else base)) * dt
+                impulse_raw = self._impulse_raw[i]
+                impulse_minus = self._impulse_minus[i]
+                duration_s = None
+                if self._press_start_t[i] is not None:
+                    duration_s = float(t_perf) - float(self._press_start_t[i])
+                # Clear so the next press starts fresh.
+                self._peak_raw[i] = None
+                self._peak_baseline[i] = None
+                self._impulse_raw[i] = None
+                self._impulse_minus[i] = None
+                self._press_start_t[i] = None
+                self._last_sample_t[i] = None
                 if self.on_release:
                     try:
                         self.on_release(ReleaseEvent(
                             lane=i, t_perf=t_perf, value=v, hand=self.hand,
+                            peak_raw=peak_raw,
+                            peak_minus_baseline=peak_minus,
+                            impulse_raw=impulse_raw,
+                            impulse_minus_baseline=impulse_minus,
+                            duration_s=duration_s,
                         ))
                     except Exception as e:
                         log.warning("on_release(lane=%d, hand=%s) raised: %s",
                                      i, self.hand, e)
+            elif self.pressed[i]:
+                # In-press sample. Update the rolling peak so the
+                # ReleaseEvent at the falling edge reflects the
+                # maximum smoothed value seen across the whole press
+                # window, not just the rising / falling edges.
+                if (self._peak_raw[i] is None
+                        or sm > self._peak_raw[i]):
+                    self._peak_raw[i] = float(sm)
+                # Trapezoidal integration over dt between this sample
+                # and the previous one. Done with the smoothed value
+                # `sm` so spike noise gets filtered out by the EMA
+                # that's already in place upstream.
+                last_t = self._last_sample_t[i]
+                if (last_t is not None
+                        and self._impulse_raw[i] is not None
+                        and self._peak_baseline[i] is not None):
+                    dt = float(t_perf) - float(last_t)
+                    if dt > 0:
+                        self._impulse_raw[i] += float(sm) * dt
+                        self._impulse_minus[i] += (
+                            float(sm)
+                            - float(self._peak_baseline[i])) * dt
+                self._last_sample_t[i] = float(t_perf)

@@ -7,6 +7,7 @@ feels like a finished app instead of a debug dashboard.
 from __future__ import annotations
 
 import time
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pygame
@@ -31,6 +32,30 @@ class Screen:
     def handle_event(self, e: pygame.event.Event) -> None: ...
     def update(self, dt: float) -> None: ...
     def draw(self, surf: pygame.Surface) -> None: ...
+
+
+def _chip(surf: pygame.Surface, layout: Layout,
+           centre: tuple[int, int], text: str,
+           fg: tuple[int, int, int],
+           bg_alpha: int = 38,
+           pad_x: int = 16, pad_y: int = 6,
+           font_pt: int = FONT_BODY) -> None:
+    """Small rounded pill background behind a label. Module-level so
+    it can be used from any screen rather than only GameplayScreen.
+    The pill background is the foreground colour at low alpha, which
+    keeps the chip visually tied to its content (a green text gets a
+    green-tinted pill, red gets red, etc.)."""
+    font = layout.font(font_pt)
+    text_surf = font.render(text, True, fg)
+    chip_w = text_surf.get_width() + pad_x * 2
+    chip_h = text_surf.get_height() + pad_y * 2
+    chip_rect = pygame.Rect(0, 0, chip_w, chip_h)
+    chip_rect.center = centre
+    chip_surf = pygame.Surface(chip_rect.size, pygame.SRCALPHA)
+    pygame.draw.rect(chip_surf, (*fg, bg_alpha),
+                      chip_surf.get_rect(), border_radius=chip_h // 2)
+    surf.blit(chip_surf, chip_rect.topleft)
+    surf.blit(text_surf, text_surf.get_rect(center=centre))
 
 
 def _draw_header(surf: pygame.Surface, title: str, subtitle: str,
@@ -67,26 +92,42 @@ class TitleScreen(Screen):
         super().__init__(engine)
         cx = engine.layout.width // 2
 
-        # Participant name input. Set once on the title screen and reused
-        # for every block the patient plays this app session, so every
-        # CSV row + every session folder is tagged with the same name.
-        # Pre-fill from any persisted value so quitting and reopening the
-        # title screen doesn't blank out the name.
-        prefill = str(engine.cfg.get("session.participant") or "")
-        if prefill in ("None", "NA"):
-            prefill = ""
-        input_w = 460
-        # Layout was previously: title 230, tagline 305, mode pills 350,
-        # name input 430, start 520, quit 605. With the violet pill row
-        # gone there's a big gap, so everything below the tagline pulls
-        # up by ~70 px to keep the block visually anchored.
+        # Participant name + age inputs. Set once on the title screen
+        # and reused for every block the patient plays this app
+        # session, so every CSV row + every session folder is tagged
+        # with the same name. Pre-fill from any persisted values so
+        # quitting and reopening the title screen doesn't blank them
+        # out.
+        prefill_name = str(engine.cfg.get("session.participant") or "")
+        if prefill_name in ("None", "NA"):
+            prefill_name = ""
+        prefill_age = str(engine.cfg.get("session.age") or "")
+        if prefill_age in ("None", "NA"):
+            prefill_age = ""
+        # Side-by-side row: wide name field + compact age field. The
+        # age input is a research-metadata field (demographic cohort
+        # matters for stroke rehab outcomes), so it's smaller and
+        # paired with the name rather than getting its own row.
+        name_w = 400
+        age_w = 160
+        gap = 20
+        row_w = name_w + gap + age_w
+        row_x = cx - row_w // 2
         self.name_input = TextInput(
-            pygame.Rect(cx - input_w // 2, 380, input_w, 54),
+            pygame.Rect(row_x, 380, name_w, 54),
             self.theme, self.layout,
             label="",
-            placeholder="Type a name for this session",
-            initial=prefill,
+            placeholder="Name for this session",
+            initial=prefill_name,
             max_len=40,
+        )
+        self.age_input = TextInput(
+            pygame.Rect(row_x + name_w + gap, 380, age_w, 54),
+            self.theme, self.layout,
+            label="",
+            placeholder="Age",
+            initial=prefill_age,
+            max_len=4,
         )
 
         # Primary action. Pushes the typed name into the session + config
@@ -99,10 +140,12 @@ class TitleScreen(Screen):
             font_pt=FONT_H2,
             colour=(34, 197, 94),     # green
         )
-        # Quit + Settings sit as matching compact pills in the bottom
-        # corners. Quit (left) is the destructive action so it gets a
-        # muted red; Settings (right) uses the theme accent on hover.
-        # Same dimensions + edge margins so they mirror each other.
+        # Quit + Dashboard + Settings sit as matching compact pills
+        # in the bottom row. Quit (left) is the destructive action
+        # so it gets a muted red; Settings (right) uses the theme
+        # accent on hover. Dashboard sits between them so the L/R
+        # progress view is reachable without going through any block
+        # first. Same dimensions + edge margins so they line up.
         sw, sh = 150, 44
         self.quit_rect = pygame.Rect(
             28,
@@ -114,11 +157,27 @@ class TitleScreen(Screen):
             engine.layout.height - sh - 28,
             sw, sh,
         )
+        # Dashboard pill, centred above the credit footer. Same
+        # size as quit / settings so the row visually rhymes.
+        dash_w, dash_h = 180, 44
+        self.dashboard_rect = pygame.Rect(
+            engine.layout.width // 2 - dash_w // 2,
+            engine.layout.height - sh - 28,
+            dash_w, dash_h,
+        )
 
     def _begin(self) -> None:
         name = self.name_input.value or "NA"
+        # Age is optional; an empty string is its own valid value
+        # meaning "not provided" (patient declined, or the therapist
+        # didn't type it). Stored as a raw string so the CSV column
+        # round-trips whatever was typed instead of coercing to int
+        # and rejecting unusual inputs like "65y".
+        age = self.age_input.value or ""
         self.engine.cfg.data.setdefault("session", {})["participant"] = name
+        self.engine.cfg.data.setdefault("session", {})["age"] = age
         self.engine.session.participant = name
+        self.engine.session.age = age
         self.engine.show_mode_select()
 
     def _draw_device_icon(self, surf: pygame.Surface,
@@ -187,31 +246,44 @@ class TitleScreen(Screen):
                           1)
 
     def refresh(self) -> None:
-        """Re-sync the name field with the current cfg value. Called by
-        engine.show_title() so coming BACK to the title (e.g. via Esc on
-        mode select, which clears the participant) shows the cleared
-        state instead of the stale text from last time."""
-        prefill = str(self.engine.cfg.get("session.participant") or "")
-        if prefill in ("None", "NA"):
-            prefill = ""
-        self.name_input.text = prefill
+        """Re-sync the name + age fields with the current cfg values.
+        Called by engine.show_title() so coming BACK to the title
+        (e.g. via Esc on mode select, which clears the participant)
+        shows the cleared state instead of the stale text from last
+        time."""
+        prefill_name = str(self.engine.cfg.get("session.participant") or "")
+        if prefill_name in ("None", "NA"):
+            prefill_name = ""
+        prefill_age = str(self.engine.cfg.get("session.age") or "")
+        if prefill_age in ("None", "NA"):
+            prefill_age = ""
+        self.name_input.text = prefill_name
         self.name_input.focused = False
+        self.age_input.text = prefill_age
+        self.age_input.focused = False
 
     def handle_event(self, e: pygame.event.Event) -> None:
-        # Text input first so a click in the field claims focus before any
-        # button hit-test runs underneath.
+        # Text inputs first so a click in either field claims focus
+        # before any button hit-test runs underneath. Order matters
+        # only in that whichever input handles the event first will
+        # also be the one to GET focus; we dispatch to both so a
+        # second click outside the field can still defocus it.
         self.name_input.handle_event(e)
+        self.age_input.handle_event(e)
         self.start_btn.handle_event(e)
         if e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
             if self.quit_rect.collidepoint(e.pos):
                 self.engine.request_quit()
             elif self.settings_rect.collidepoint(e.pos):
                 self.engine.show_diagnostics()
-        # Enter key on the focused name field acts as a shortcut for Start
-        # so a therapist on a keyboard doesn't have to grab the mouse.
+            elif self.dashboard_rect.collidepoint(e.pos):
+                self.engine.show_lr_dashboard()
+        # Enter key on either focused field acts as a shortcut for
+        # Start so a therapist on a keyboard doesn't have to grab the
+        # mouse to commit.
         if (e.type == pygame.KEYDOWN
                 and e.key == pygame.K_RETURN
-                and self.name_input.focused):
+                and (self.name_input.focused or self.age_input.focused)):
             self._begin()
 
     def draw(self, surf: pygame.Surface) -> None:
@@ -250,6 +322,7 @@ class TitleScreen(Screen):
         # Participant name input. Patient types here once and every
         # game logs to the same name.
         self.name_input.draw(surf)
+        self.age_input.draw(surf)
 
         # Primary Start button - the only obvious thing to do.
         self.start_btn.draw(surf)
@@ -310,16 +383,48 @@ class TitleScreen(Screen):
         surf.blit(s_surf, s_surf.get_rect(
             midleft=(s_icon_cx + icon_r + gap, s_cy)))
 
-        # Footer credit, anchored to the bottom.
+        # Dashboard pill, centred between Quit + Settings. Same
+        # hover scheme as the Settings pill but with a bar-chart
+        # glyph + "Dashboard" label so it's obvious what it is.
+        hover_d = self.dashboard_rect.collidepoint((mx, my))
+        bg_d = (self.theme.accent if hover_d
+                else tuple(max(0, c - 30) for c in self.theme.background))
+        fg_d = ((255, 255, 255) if hover_d else self.theme.foreground)
+        pygame.draw.rect(surf, bg_d, self.dashboard_rect,
+                          border_radius=12)
+        d_label = "Dashboard"
+        d_font = self.layout.font(FONT_BODY)
+        d_surf = d_font.render(d_label, True, fg_d)
+        d_total = (icon_r * 2) + gap + d_surf.get_width()
+        d_start = self.dashboard_rect.centerx - d_total // 2
+        d_cy = self.dashboard_rect.centery
+        # Two-bar chart glyph: a short bar next to a taller one.
+        d_icon_x = d_start
+        bar_w = 5
+        pygame.draw.rect(surf, fg_d,
+                          pygame.Rect(d_icon_x,
+                                       d_cy + 2, bar_w, 8),
+                          border_radius=1)
+        pygame.draw.rect(surf, fg_d,
+                          pygame.Rect(d_icon_x + bar_w + 3,
+                                       d_cy - 6, bar_w, 16),
+                          border_radius=1)
+        surf.blit(d_surf, d_surf.get_rect(
+            midleft=(d_icon_x + (icon_r * 2) + gap, d_cy)))
+
+        # Credit tucked under the Start button. Was on the bottom
+        # edge before, but the Dashboard pill now sits there too
+        # (Thread C) and the two would overlap.
         draw_text(surf, "Thesis - Basil Toufexis - 19757049",
-                  (cx, self.layout.height - 40),
+                  (cx, 570),
                   self.theme, self.layout, pt=FONT_SMALL,
                   centre=True, colour=self.theme.muted)
 
 
 class ModeSelectScreen(Screen):
-    """Pick adaptive / classic / rhythm. Each option is a card with a
-    short description so a clinician can pick without prior knowledge."""
+    """Pick adaptive / classic / rhythm / mirror. Each option is a
+    card with a short description so a clinician can pick without
+    prior knowledge."""
 
     MODES = [
         ("adaptive", "Adaptive",
@@ -328,6 +433,8 @@ class ModeSelectScreen(Screen):
          "Fixed pace, set finger pattern. Best for baseline measures."),
         ("rhythm", "Rhythm",
          "Press to the beat of music. Motor-rhythm focused."),
+        ("mirror", "Mirror",
+         "Press both hands' same finger together. Bilateral training."),
     ]
     # Per-mode accent colours. The vertical strip on the left of each
     # card uses these, plus the icon takes the same colour as a subtle
@@ -336,6 +443,10 @@ class ModeSelectScreen(Screen):
         "adaptive": (16, 185, 129),   # emerald green - "growth"
         "classic":  (99, 102, 241),   # indigo - "steady, structured"
         "rhythm":   (168, 85, 247),   # purple - "music"
+        # Mirror gets a teal / cyan so the four cards form a clear
+        # colour ladder (green -> indigo -> purple -> teal) without
+        # overlapping any of the lane-tile finger pastels.
+        "mirror":   (20, 184, 166),   # teal - "synchronised hands"
     }
 
     def __init__(self, engine: "GameEngine") -> None:
@@ -343,13 +454,14 @@ class ModeSelectScreen(Screen):
         self.buttons: list[Button] = []
         cx = engine.layout.width // 2
         card_w = 720
-        card_h = 120
-        gap = 22
-        # Cards pulled up from y=230 -> y=200 so the row sits closer to
-        # the header. The empty space below shrinks but stays large
-        # enough for the Back button at the bottom-left.
+        # Card height shrunk from 120 to 100 so the four mode cards
+        # (with mirror added in Thread C) all fit between the header
+        # at y=200 and the Back button at y=height-90. The previous
+        # 120 px cards left no room for a fourth row.
+        card_h = 100
+        gap = 18
         for i, (key, _title, _desc) in enumerate(self.MODES):
-            y = 200 + i * (card_h + gap)
+            y = 195 + i * (card_h + gap)
             # Each card gets a softened tint of its own mode accent
             # as its rest fill, so the row reads as three clearly
             # different cards instead of three identical muted-grey
@@ -381,6 +493,22 @@ class ModeSelectScreen(Screen):
 
     def _pick(self, mode_key: str) -> None:
         self.engine.cfg.data.setdefault("game", {})["mode"] = mode_key
+        # Mirror mode is bilateral-only, so skip the hand-pick step
+        # and go straight into the block. Setting hand_mode here
+        # means the gameplay screen builds with 8 lane tiles ready
+        # before begin_mirror_block fires.
+        if mode_key == "mirror":
+            self.engine.cfg.data.setdefault(
+                "bilateral", {})["hand"] = "both"
+            self.engine.hand_mode = "both"
+            self.engine.session.hand = "both"
+            self.engine._build_detectors()
+            for key in ("gameplay", "rhythm"):
+                sc = self.engine._screens.get(key)
+                if sc and hasattr(sc, "rebuild_lanes"):
+                    sc.rebuild_lanes()
+            self.engine.begin_mirror_block()
+            return
         self.engine.show_setup()
 
     def handle_event(self, e: pygame.event.Event) -> None:
@@ -444,6 +572,24 @@ class ModeSelectScreen(Screen):
                 (stem_x, stem_top + size // 5),
             ]
             pygame.draw.polygon(surf, colour, flag_pts)
+        elif kind == "mirror":
+            # Two mirrored circles connected by a thin line, reading
+            # as "two hands moving as one". I went with circles + a
+            # bridge over a literal hand outline because the mode-
+            # select cards already carry the pan_tool icon elsewhere
+            # and a second hand graphic looked too busy.
+            r = size // 5
+            bridge_w = size // 2
+            left_c = (cx - bridge_w // 2 - r, cy)
+            right_c = (cx + bridge_w // 2 + r, cy)
+            # Connecting bar through the middle.
+            pygame.draw.line(surf, colour,
+                              left_c, right_c, 3)
+            # Each "hand" disc with a thin inner ring so the icon
+            # reads at distance even at small sizes.
+            for c in (left_c, right_c):
+                pygame.draw.circle(surf, colour, c, r)
+                pygame.draw.circle(surf, colour, c, r + 4, 2)
 
     def draw(self, surf: pygame.Surface) -> None:
         surf.fill(self.theme.background)
@@ -903,20 +1049,12 @@ class GameplayScreen(Screen):
                     bg_alpha: int = 38,
                     pad_x: int = 16, pad_y: int = 6,
                     font_pt: int = FONT_BODY) -> None:
-        """Small rounded pill background behind a label. Used for the
-        hits / misses / streak / multiplier counters so they read as
-        discrete chunks of information instead of free-floating text."""
-        font = self.layout.font(font_pt)
-        text_surf = font.render(text, True, fg)
-        chip_w = text_surf.get_width() + pad_x * 2
-        chip_h = text_surf.get_height() + pad_y * 2
-        chip_rect = pygame.Rect(0, 0, chip_w, chip_h)
-        chip_rect.center = centre
-        chip_surf = pygame.Surface(chip_rect.size, pygame.SRCALPHA)
-        pygame.draw.rect(chip_surf, (*fg, bg_alpha),
-                          chip_surf.get_rect(), border_radius=chip_h // 2)
-        surf.blit(chip_surf, chip_rect.topleft)
-        surf.blit(text_surf, text_surf.get_rect(center=centre))
+        """Backwards-compat instance shim. New callers should prefer
+        the module-level `_chip` helper so the same rendering is
+        usable from any screen, not just GameplayScreen."""
+        _chip(surf, self.layout, centre, text, fg,
+               bg_alpha=bg_alpha, pad_x=pad_x, pad_y=pad_y,
+               font_pt=font_pt)
 
     def _draw_progress_bar(self, surf: pygame.Surface,
                             done: int, total: int) -> None:
@@ -955,74 +1093,23 @@ class GameplayScreen(Screen):
             self._last_score_seen = self.engine.score
 
         # ---- Top HUD ----
-        # Layout target: panel from y=10 to y=210, lane strips start at
-        # y=220. Everything inside the panel uses y-coords < 210.
+        # Stripped-down HUD: progress bar + big score + streak (when
+        # it's actually motivating) + a tiny mode pill. Everything
+        # else (HITS, MISSES, HIT RATE, multiplier, BPM, patient
+        # name, "Trial 12/40" text) was carrying therapist-only info
+        # the patient didn't need mid-session and lived on the
+        # Results screen anyway. Less noise on screen means more
+        # focus on the lane tiles where the actual work happens.
         done, total = self._progress()
-        hud_panel = pygame.Rect(cx - 420, 10, 840, 200)
-        panel_surf = pygame.Surface(hud_panel.size, pygame.SRCALPHA)
-        pygame.draw.rect(panel_surf, (*self.theme.muted, 32),
-                          panel_surf.get_rect(), border_radius=18)
-        surf.blit(panel_surf, hud_panel.topleft)
 
-        # Progress bar runs along the top edge of the panel.
+        # Slim progress bar across the top of the screen.
         self._draw_progress_bar(surf, done, total)
 
-        # Top-left corner: patient name + trial counter. The name
-        # stays muted so it doesn't fight the score for focus, but
-        # the trial counter is the patient's primary "how am I
-        # doing" cue so it's rendered in the strong foreground tone
-        # at a slightly bigger point size.
-        name = self.engine.session.participant or "NA"
-        draw_text(surf, name, (30, 28),
-                  self.theme, self.layout, pt=FONT_SMALL + 4,
-                  colour=self.theme.muted)
-        if total > 0:
-            draw_text(surf, f"Trial {done}/{total}",
-                      (30, 52), self.theme, self.layout,
-                      pt=FONT_BODY + 2, colour=self.theme.foreground)
-
-        # Top-right corner: mode badge as a filled pill in the mode's
-        # accent colour, then the adaptive pace line below it. The
-        # pill makes the mode unmistakable at a glance, particularly
-        # for a therapist standing back from the screen, and lets us
-        # reuse the same accent identity established in the mode-
-        # select cards.
-        mode_label = self.engine.current_block.title().upper()
-        # Pull the mode's identity colour from the same MODE_ACCENTS
-        # dict the mode-select screen uses, so the visual language is
-        # consistent screen-to-screen.
-        mode_accent = ModeSelectScreen.MODE_ACCENTS.get(
-            self.engine.current_block.lower(), self.theme.accent,
-        )
-        mf = self.layout.font(FONT_SMALL + 4)
-        mt_label = mf.render(mode_label, True, (255, 255, 255))
-        pill_pad_x = 14
-        pill_pad_y = 5
-        pill_w = mt_label.get_width() + pill_pad_x * 2
-        pill_h = mt_label.get_height() + pill_pad_y * 2
-        pill_rect = pygame.Rect(0, 0, pill_w, pill_h)
-        pill_rect.topright = (self.layout.width - 30, 24)
-        pygame.draw.rect(surf, mode_accent, pill_rect,
-                          border_radius=pill_h // 2)
-        surf.blit(mt_label,
-                   mt_label.get_rect(center=pill_rect.center))
-        if (self.engine.mode is not None
-                and hasattr(self.engine.mode, "adapter")):
-            bpm = getattr(self.engine.mode.adapter, "bpm", None)
-            pl = (self.engine.mode.adapter.pace_label()
-                   if hasattr(self.engine.mode.adapter, "pace_label")
-                   else "")
-            if bpm and pl:
-                pace_text = f"{pl}   {int(bpm)} BPM"
-                pf = self.layout.font(FONT_BODY)
-                pst = pf.render(pace_text, True, self.theme.accent)
-                surf.blit(pst,
-                           pst.get_rect(topright=(self.layout.width - 30,
-                                                    pill_rect.bottom + 6)))
-
-        # Centre: big score with a brief pulse on change.
+        # Centre: big SCORE with a brief pulse on change. Single
+        # focal element above the lane row so the patient's eye
+        # always returns here for "how am I doing".
         draw_text(surf, "SCORE",
-                  (cx, 32), self.theme, self.layout, pt=FONT_SMALL + 2,
+                  (cx, 36), self.theme, self.layout, pt=FONT_SMALL + 2,
                   centre=True, colour=self.theme.muted)
         age_pulse = time.perf_counter() - self._score_pulse_t
         if age_pulse < 0.35 and self._score_pulse_t > 0:
@@ -1031,63 +1118,96 @@ class GameplayScreen(Screen):
         else:
             score_pt = FONT_TITLE
         draw_text(surf, f"{self.engine.score}",
-                  (cx, 82), self.theme, self.layout, pt=score_pt,
+                  (cx, 96), self.theme, self.layout, pt=score_pt,
                   centre=True, colour=self.theme.accent)
 
-        # Stats chips: hits / hit-rate / misses on a single row.
-        total_trials_done = self.engine.hits + self.engine.misses
-        rate = (self.engine.hits / total_trials_done
-                 if total_trials_done else 0.0)
-        # Chip row sits below the big score; streak row sits below that.
-        # The y-coords are tight so the chips don't collide with the
-        # bilateral hand header drawn at y=192 below.
-        chip_y = 140
-        self._draw_chip(surf, (cx - 200, chip_y),
-                         f"HITS  {self.engine.hits}",
-                         self.theme.success)
-        if total_trials_done > 0:
-            rate_colour = (self.theme.success if rate >= 0.7
-                            else self.theme.warning if rate >= 0.5
-                            else self.theme.error)
-            self._draw_chip(surf, (cx, chip_y),
-                             f"{rate * 100:.0f}% HIT RATE",
-                             rate_colour)
-        self._draw_chip(surf, (cx + 200, chip_y),
-                         f"MISSES  {self.engine.misses}",
-                         self.theme.error)
-
-        # Streak + multiplier row. Hidden when there's nothing useful to
-        # report so a fresh block doesn't have stale chips on screen.
+        # Streak pill. Only shows when streak >= 2 - a streak of 1
+        # is just "one correct press in a row", which isn't worth
+        # celebrating yet, and an empty streak chip is dead pixels
+        # in the patient's focal area. Goes gold at 5+ to mark the
+        # "you're really on a run" moment.
+        #
+        # Mirror mode parks the chip at the top-LEFT (mirroring the
+        # mode pill at the top-right) so the centre column under the
+        # score stays clear for the "PRESS TOGETHER" bracket + label.
+        # Before, the chip at (cx, 170) collided with the bracket
+        # sitting just above the lane tiles in bilateral layout. All
+        # other modes keep the centred chip - the bracket only
+        # appears when 2+ lanes are lit at once.
         streak = self.engine.hit_streak
-        streak_y = chip_y + 30
-        if streak >= 1:
-            streak_colour = (self.theme.success if streak >= 3
-                              else self.theme.foreground)
-            self._draw_chip(surf, (cx - 100, streak_y),
-                             f"STREAK  {streak}",
-                             streak_colour,
-                             font_pt=FONT_SMALL + 4)
-        mult = (self.engine._pace_multiplier()
-                * self.engine._streak_multiplier())
-        if mult > 1.05:
-            mc = (self.theme.success if mult >= 1.5
-                   else self.theme.warning)
-            self._draw_chip(surf, (cx + 100, streak_y),
-                             f"x{mult:.1f}", mc,
-                             font_pt=FONT_SMALL + 4)
+        if streak >= 2:
+            if streak >= 10:
+                streak_colour = self.theme.success    # bright green
+                streak_label = f"x{streak} STREAK"
+            elif streak >= 5:
+                streak_colour = (255, 196, 0)         # gold
+                streak_label = f"x{streak} STREAK"
+            else:
+                streak_colour = self.theme.foreground
+                streak_label = f"x{streak} STREAK"
+            in_mirror = (getattr(self.engine, "current_block", None)
+                          == "mirror")
+            if in_mirror:
+                # Render the chip pre-sized so we can right-edge it
+                # against the same 28 px margin the mode pill uses.
+                # Anchored top-left at vertical level ~38 so it lines
+                # up with the mode pill's centre on the other side.
+                chip_pt = FONT_SMALL + 2
+                chip_font = self.layout.font(chip_pt)
+                chip_text = chip_font.render(
+                    streak_label, True, (255, 255, 255))
+                pad_x = 12
+                pad_y = 4
+                chip_w = chip_text.get_width() + pad_x * 2
+                chip_h = chip_text.get_height() + pad_y * 2
+                chip_rect = pygame.Rect(28, 30 - chip_h // 2 + 12,
+                                         chip_w, chip_h)
+                pygame.draw.rect(surf, streak_colour, chip_rect,
+                                  border_radius=chip_h // 2)
+                surf.blit(chip_text,
+                           chip_text.get_rect(center=chip_rect.center))
+            else:
+                self._draw_chip(surf, (cx, 170),
+                                 streak_label,
+                                 streak_colour,
+                                 font_pt=FONT_BODY)
 
-        # Bilateral hand headers sit ABOVE the lane strips, below the HUD.
-        # Left hand is on the LEFT side of the screen, right hand on the
-        # RIGHT, mirroring the patient.
-        if self.engine.hand_mode == "both":
-            right_colour = LaneStrip.HAND_BADGE["right"]
-            left_colour = LaneStrip.HAND_BADGE["left"]
-            draw_text(surf, "LEFT", (self.layout.width // 4, 192),
-                      self.theme, self.layout, pt=FONT_H2,
-                      centre=True, colour=left_colour)
-            draw_text(surf, "RIGHT", (self.layout.width * 3 // 4, 192),
-                      self.theme, self.layout, pt=FONT_H2,
-                      centre=True, colour=right_colour)
+        # Mode badge top-right. Small pill in the mode's accent
+        # colour. Keeps the visual identity from the mode-select
+        # cards consistent so a therapist glancing at the screen
+        # knows which mode is running without reading text.
+        mode_accent = ModeSelectScreen.MODE_ACCENTS.get(
+            self.engine.current_block.lower(), self.theme.accent,
+        )
+        mode_label = self.engine.current_block.title().upper()
+        mf = self.layout.font(FONT_SMALL + 2)
+        mt_label = mf.render(mode_label, True, (255, 255, 255))
+        pill_pad_x = 12
+        pill_pad_y = 4
+        pill_w = mt_label.get_width() + pill_pad_x * 2
+        pill_h = mt_label.get_height() + pill_pad_y * 2
+        pill_rect = pygame.Rect(0, 0, pill_w, pill_h)
+        pill_rect.topright = (self.layout.width - 28, 30)
+        pygame.draw.rect(surf, mode_accent, pill_rect,
+                          border_radius=pill_h // 2)
+        surf.blit(mt_label,
+                   mt_label.get_rect(center=pill_rect.center))
+
+        # Bilateral mid-divider: thin grey line between the two hand
+        # blocks so the eye reads them as separate groups. The LEFT /
+        # RIGHT text labels that used to sit above the lanes are gone:
+        # the hand-coloured badge icon on each tile already tells the
+        # patient which hand it is, and the extra labels just crowded
+        # the HUD chip row underneath the score.
+        #
+        # Skipped in mirror mode: the whole point of mirror is that
+        # the two hands act as a single paired unit, so visually
+        # splitting them with a divider works against the concept.
+        # The PRESS TOGETHER bracket between the two active chevrons
+        # is the connector that matters here.
+        in_mirror = (getattr(self.engine, "current_block", None)
+                      == "mirror")
+        if self.engine.hand_mode == "both" and not in_mirror:
             mid_x = self.layout.width // 2
             pygame.draw.line(surf, self.theme.muted,
                               (mid_x, 215),
@@ -1116,33 +1236,90 @@ class GameplayScreen(Screen):
 
     def _draw_target_indicator(self, surf: pygame.Surface,
                                 now: float) -> None:
-        """Big down-arrow + PRESS label centred above whichever lane
-        is currently the active target. Many of our patients aren't
-        gamers; without an explicit cue they spend the first few
-        trials hunting for the changed tile. This makes it obvious."""
+        """Down-arrow above EVERY active lane plus a pair-bracket
+        connector when two are lit at once. Many of our patients
+        aren't gamers; without an explicit cue they spend the first
+        few trials hunting for the changed tile. The bracket reads
+        as "press these two together" in mirror mode where left +
+        right of the same finger fire at the same time."""
         import math as _m
-        target = next((ls for ls in self.lanes if ls.active), None)
-        if target is None:
+        targets = [ls for ls in self.lanes if ls.active]
+        if not targets:
             return
-        border = target.HAND_BADGE.get(target.hand, self.theme.foreground)
         # Bob the indicator a few pixels with a sine wave so the eye
-        # is drawn to motion. Period 0.8 s, amplitude 6 px.
+        # is drawn to motion. Shared phase across all chevrons in
+        # mirror mode so they pulse in sync, which reinforces the
+        # "together" message.
         bob = int(_m.sin(now * (2 * _m.pi / 0.8)) * 4)
-        cx_t = target.rect.centerx
-        # The HUD panel ends at y=210; lane strips start at y=220.
-        # Park the indicator at y=190 (above the strip top) so it
-        # never crashes into the bilateral hand headers or the chips.
-        cy_t = target.rect.top - 22 + bob
-        # Down chevron - two diagonals meeting at a point.
         size = 18
-        tip = (cx_t, cy_t + size)
-        left_pt = (cx_t - size, cy_t - 2)
-        right_pt = (cx_t + size, cy_t - 2)
-        pygame.draw.polygon(surf, border,
-                             [left_pt, right_pt, tip])
-        # White outline so the chevron pops on any background tone.
-        pygame.draw.polygon(surf, (255, 255, 255),
-                             [left_pt, right_pt, tip], 2)
+        # Draw the connecting bracket FIRST so the chevrons sit on
+        # top of it. Only kicks in when there are 2+ active lanes
+        # (mirror mode) - classic / adaptive get one chevron only.
+        if len(targets) >= 2:
+            self._draw_pair_bracket(surf, targets, now, bob)
+        for target in targets:
+            border = target.HAND_BADGE.get(
+                target.hand, self.theme.foreground)
+            cx_t = target.rect.centerx
+            cy_t = target.rect.top - 22 + bob
+            tip = (cx_t, cy_t + size)
+            left_pt = (cx_t - size, cy_t - 2)
+            right_pt = (cx_t + size, cy_t - 2)
+            pygame.draw.polygon(surf, border,
+                                 [left_pt, right_pt, tip])
+            # White outline so the chevron pops on any background
+            # tone.
+            pygame.draw.polygon(surf, (255, 255, 255),
+                                 [left_pt, right_pt, tip], 2)
+
+    # Mirror-mode pair colour matches the mode's accent on the
+    # ModeSelectScreen so the connecting bracket reads as the same
+    # "synchronised hands" identity the patient picked.
+    _MIRROR_PAIR_COLOUR = (20, 184, 166)   # teal
+
+    def _draw_pair_bracket(self, surf: pygame.Surface,
+                            targets: list,
+                            now: float, bob: int) -> None:
+        """Horizontal bracket connecting the two paired chevrons in
+        mirror mode. Two short vertical stubs at each chevron + a
+        thin line across the top, like a music staccato slur. Sits
+        slightly above the chevrons so it doesn't crash into them."""
+        # Use the leftmost + rightmost active tiles as the bracket
+        # anchors so the bracket spans the gap between hands even
+        # if more than two lanes were lit at once.
+        xs = sorted(t.rect.centerx for t in targets)
+        x_left = xs[0]
+        x_right = xs[-1]
+        # Y comes off any target's tile top (they're all aligned).
+        any_target = targets[0]
+        y_base = any_target.rect.top - 22 + bob - 12
+        colour = self._MIRROR_PAIR_COLOUR
+        # Horizontal bar across the top.
+        pygame.draw.line(surf, colour,
+                          (x_left, y_base),
+                          (x_right, y_base), 3)
+        # Short downward stubs at each end so the bracket reads
+        # closed at the corners.
+        stub_h = 10
+        pygame.draw.line(surf, colour,
+                          (x_left, y_base),
+                          (x_left, y_base + stub_h), 3)
+        pygame.draw.line(surf, colour,
+                          (x_right, y_base),
+                          (x_right, y_base + stub_h), 3)
+        # "TOGETHER" label centred above the bar so the patient
+        # knows the bracket means "press these as a pair". Pulsing
+        # alpha so the cue is visible but doesn't fight the lane
+        # tiles for focus.
+        import math as _m
+        alpha_phase = (_m.sin(now * (2 * _m.pi / 1.2)) + 1) * 0.5
+        alpha = int(160 + 60 * alpha_phase)
+        label_font = self.layout.font(FONT_SMALL + 2)
+        label = label_font.render("PRESS TOGETHER", True, colour)
+        label.set_alpha(alpha)
+        x_mid = (x_left + x_right) // 2
+        surf.blit(label, label.get_rect(
+            midbottom=(x_mid, y_base - 4)))
 
     def _draw_paused_overlay(self, surf: pygame.Surface) -> None:
         overlay = pygame.Surface(
@@ -1403,26 +1580,32 @@ class RhythmScreen(Screen):
             elapsed = max(0.0, min(song_t, bm.duration_s))
             self._draw_song_progress(surf, elapsed, bm.duration_s)
 
-        if bm:
-            draw_text(surf, bm.title, (cx, 40),
-                      self.theme, self.layout, pt=FONT_BODY + 2,
-                      centre=True, colour=self.theme.muted)
+        # SCORE focal element. Song title dropped from the HUD: the
+        # patient picked the track 5 seconds ago and the song itself
+        # is already playing, so a label restating its name only
+        # competes with the falling-note area for attention.
         draw_text(surf, "SCORE",
-                  (cx, 70), self.theme, self.layout, pt=FONT_SMALL + 2,
+                  (cx, 40), self.theme, self.layout, pt=FONT_SMALL + 2,
                   centre=True, colour=self.theme.muted)
         draw_text(surf, f"{self.engine.score}",
-                  (cx, 110), self.theme, self.layout, pt=FONT_TITLE,
+                  (cx, 92), self.theme, self.layout, pt=FONT_TITLE,
                   centre=True, colour=self.theme.accent)
-        # Streak counter beside the score so the patient can see their
-        # current run. Green once they hit 3+ in a row.
+        # Streak pill - only shown when streak >= 2 so a fresh run
+        # doesn't have a permanent "STREAK -" widget burning pixels
+        # in the patient's focal area. Mirrors the gameplay screen's
+        # streak treatment for consistency between modes.
         streak = self.engine.hit_streak
-        streak_colour = (self.theme.success if streak >= 3
-                          else self.theme.muted)
-        streak_text = (f"STREAK  {streak}" if streak > 0
-                        else "STREAK  -")
-        draw_text(surf, streak_text,
-                  (cx, 160), self.theme, self.layout, pt=FONT_BODY,
-                  centre=True, colour=streak_colour)
+        if streak >= 2:
+            if streak >= 10:
+                streak_colour = self.theme.success
+            elif streak >= 5:
+                streak_colour = (255, 196, 0)         # gold tier
+            else:
+                streak_colour = self.theme.foreground
+            _chip(surf, self.layout, (cx, 152),
+                   f"x{streak} STREAK",
+                   streak_colour,
+                   font_pt=FONT_BODY)
 
         # Strike line is the y-coordinate the falling notes are aiming at.
         # I moved it up above the lane strips so the press-target rings
@@ -1432,12 +1615,14 @@ class RhythmScreen(Screen):
         strike_y = self.layout.height - 290
 
         # `top_y` is where each note becomes visible at the top of the
-        # screen. Raised from 170 to 190 so the note sits clearly under
-        # the streak HUD line (~y=160) without being clipped by it. With
-        # LOOKAHEAD_S now 2.2 s the note travels (strike_y - 190) px
-        # over 2.2 s, which gives the patient noticeably more time to
-        # spot it before it lands.
-        top_y = 190
+        # screen. Pulled UP from 190 to 140 so notes appear just below
+        # the big SCORE number (which sits around y=110). The longer
+        # visual run-up gives the patient more time to spot each ball
+        # and aim for the right finger. The streak HUD line at y=160
+        # is just text on the background, so a ball briefly passing
+        # through it is acceptable - it's the focal moving object,
+        # the streak number is static info.
+        top_y = 140
 
         # Faint vertical guide lines down each lane from top_y to the
         # strike-line ring. Reads as "this is where the ball coming for
@@ -2119,7 +2304,11 @@ class ResultsScreen(Screen):
         gap = 20
         total_w = btn_w * 3 + gap * 2
         x = cx - total_w // 2
-        y = 640
+        # Buttons pushed down from y=640 -> y=696 to clear the per-lane
+        # histograms that now sit between the stat cards and the
+        # saved-to footer. Bottom margin ~46 px at h=58 keeps them
+        # from feeling glued to the screen edge.
+        y = 696
         h = BUTTON_H + 4
         self.retry_btn = Button(
             pygame.Rect(x, y, btn_w, h),
@@ -2172,6 +2361,106 @@ class ResultsScreen(Screen):
         if letter == "C":
             return self.theme.warning
         return self.theme.error
+
+    # Per-finger labels for the histogram x-axis. Order matches the
+    # within-hand finger index used everywhere else (0=index..3=little).
+    _FINGER_SHORT = ("I", "M", "R", "L")
+
+    def _draw_per_lane_chart(self, surf: pygame.Surface,
+                              rect: pygame.Rect, title: str,
+                              values: list[float],
+                              unit: str,
+                              high_is_bad: bool) -> None:
+        """Render one bar chart inside `rect`.
+
+        `values` is a per-lane list of length N (4 unilateral, 8
+        bilateral). One bar per lane, bar height proportional to
+        the value vs the max. Bar fill colour comes from
+        theme.lane_idle for the within-hand finger index so the
+        chart's visual identity matches the in-game lane tiles.
+
+        `high_is_bad`: when True (misclick chart), the bar's outline
+        goes red if the value is the worst in the chart, so the
+        therapist's eye is pulled to problem fingers. When False
+        (RT chart) the colour stays neutral - faster is better but
+        a slow finger is data, not a problem.
+        """
+        # Card-like background + outline (matches stat-card visual
+        # treatment so the chart reads as a Results panel element).
+        body = tuple(max(0, min(255, c - 8)) for c in self.theme.background)
+        pygame.draw.rect(surf, body, rect, border_radius=14)
+        outline = tuple(max(0, c - 30) for c in self.theme.background)
+        pygame.draw.rect(surf, outline, rect, 1, border_radius=14)
+        # Title across the top of the card.
+        draw_text(surf, title, (rect.centerx, rect.y + 16),
+                  self.theme, self.layout, pt=FONT_BODY,
+                  centre=True, colour=self.theme.muted)
+        n = len(values)
+        if n == 0:
+            return
+        # Bar area: leave room above (title) + below (x-labels +
+        # value numbers).
+        inner = rect.inflate(-24, 0)
+        bar_top = rect.y + 38
+        bar_bottom = rect.y + rect.h - 36
+        bar_h_max = max(8, bar_bottom - bar_top)
+        # Bar widths: split horizontal space evenly across bars with a
+        # small gap. Bilateral (n=8) gets a tighter gap so the bars
+        # don't go pencil-thin.
+        gap = 6 if n > 4 else 12
+        bar_w = max(8, (inner.w - gap * (n - 1)) // n)
+        max_val = max(values) if max(values) > 0 else 1.0
+        # Worst-lane index for the red-outline cue (only used when
+        # high_is_bad). Ties pick the leftmost.
+        worst_idx = values.index(max(values)) if high_is_bad else -1
+        # Bilateral mode: lanes 0..3 are right hand, 4..7 are left.
+        # Same finger-colour palette indexed by within-hand finger
+        # number works for both halves.
+        for i, v in enumerate(values):
+            finger = i % 4
+            bar_x = inner.x + i * (bar_w + gap)
+            # Bar height proportional to value vs max (clamped to
+            # bar_h_max - 4 so the top of the tallest bar stays a
+            # touch inside the chart frame).
+            h = int(round((v / max_val) * (bar_h_max - 4))) if v > 0 else 0
+            bar_rect = pygame.Rect(bar_x, bar_bottom - h, bar_w, h)
+            # Bar fill = lane_idle pastel for this finger.
+            fill = self.theme.lane_idle[finger % len(self.theme.lane_idle)]
+            if h > 0:
+                pygame.draw.rect(surf, fill, bar_rect, border_radius=4)
+            # Red outline on the worst-performing lane (misclick chart
+            # only). 2 px stroke so it pops without overpowering the
+            # pastel fill.
+            if i == worst_idx and v > 0:
+                pygame.draw.rect(surf, self.theme.error, bar_rect,
+                                  width=2, border_radius=4)
+            # Value text above the bar (showing "245" or "3" etc.).
+            if v > 0:
+                val_str = (f"{int(round(v))}" if not unit
+                            else f"{int(round(v))}")
+                draw_text(surf, val_str,
+                          (bar_x + bar_w // 2, bar_top - 4),
+                          self.theme, self.layout, pt=FONT_SMALL,
+                          centre=True, colour=self.theme.foreground)
+            # X-axis finger label. Bilateral charts use a tiny L / R
+            # prefix so the therapist knows which hand the bar belongs
+            # to (lanes 4..7 are left in bilateral). Unilateral skips
+            # the prefix.
+            label = self._FINGER_SHORT[finger]
+            if n > 4:
+                hand_letter = "L" if i >= 4 else "R"
+                label = f"{hand_letter}{label}"
+            draw_text(surf, label,
+                      (bar_x + bar_w // 2, bar_bottom + 14),
+                      self.theme, self.layout, pt=FONT_SMALL,
+                      centre=True, colour=self.theme.muted)
+        # Unit hint in the bottom-right corner of the card so the
+        # reader knows what the bar heights mean.
+        if unit:
+            draw_text(surf, unit,
+                      (rect.right - 24, rect.y + rect.h - 12),
+                      self.theme, self.layout, pt=FONT_SMALL,
+                      colour=self.theme.muted)
 
     def _draw_stat_card(self, surf: pygame.Surface, rect: pygame.Rect,
                          label: str, value: str,
@@ -2256,9 +2545,11 @@ class ResultsScreen(Screen):
         gtext = gfont.render(grade, True, grade_colour)
         surf.blit(gtext, gtext.get_rect(center=grade_centre))
 
-        # Stat cards row - score, hits, hit rate, misses.
+        # Stat cards row - score, hits, hit rate, misses. Slimmer
+        # cards (110 px instead of 130) free the vertical space the
+        # per-lane histograms need below.
         card_w = 200
-        card_h = 130
+        card_h = 110
         gap = 24
         total_w = card_w * 4 + gap * 3
         cards_x = cx - total_w // 2
@@ -2284,18 +2575,333 @@ class ResultsScreen(Screen):
             "MISSES", f"{self.engine.misses}", self.theme.error,
         )
 
-        # Path to saved session for the therapist's records.
+        # Per-lane histograms below the stat-card row. Two charts
+        # side-by-side: mean RT per lane (where slow fingers stand
+        # out) + miss + wrong-press count per lane (where mistake
+        # fingers stand out). Together they let a therapist see
+        # which finger is slow vs which is failing entirely.
+        n_lanes = (8 if self.engine.hand_mode == "both" else 4)
+        # `getattr` defaults shield against an engine state where the
+        # per-lane dicts weren't populated (a fresh engine before any
+        # block, or a __new__-built engine in some test paths). Empty
+        # dicts just produce zero-height bars.
+        rts_dict = getattr(self.engine, "_per_lane_rts", {}) or {}
+        miss_dict = getattr(self.engine, "_per_lane_misses", {}) or {}
+        wrong_dict = getattr(self.engine, "_per_lane_wrong", {}) or {}
+        rts = [
+            (sum(rts_dict.get(i, [])) / len(rts_dict[i]))
+            if rts_dict.get(i) else 0.0
+            for i in range(n_lanes)
+        ]
+        miscounts = [
+            float(miss_dict.get(i, 0) + wrong_dict.get(i, 0))
+            for i in range(n_lanes)
+        ]
+        chart_y = 510
+        chart_h = 130
+        chart_gap = 24
+        total_chart_w = self.layout.width - 80
+        chart_w = (total_chart_w - chart_gap) // 2
+        left_x = (self.layout.width - total_chart_w) // 2
+        self._draw_per_lane_chart(
+            surf,
+            pygame.Rect(left_x, chart_y, chart_w, chart_h),
+            ("MEAN REACTION TIME PER FINGER"
+              if self.engine.current_block != "rhythm"
+              else "MEAN BEAT-OFFSET PER FINGER"),
+            rts, unit="ms", high_is_bad=False,
+        )
+        self._draw_per_lane_chart(
+            surf,
+            pygame.Rect(left_x + chart_w + chart_gap, chart_y,
+                         chart_w, chart_h),
+            "MISSES + WRONG PRESSES PER FINGER",
+            miscounts, unit="count", high_is_bad=True,
+        )
+
+        # Path to saved session for the therapist's records. Below
+        # the histograms now; smaller font since this is footer info.
         if self.engine.last_session_root:
             path = self.engine.last_session_root
             if len(path) > 90:
                 path = "..." + path[-87:]
             draw_text(surf, f"Saved to: {path}",
-                      (cx, 560), self.theme, self.layout, pt=FONT_SMALL + 2,
+                      (cx, 666), self.theme, self.layout, pt=FONT_SMALL,
                       centre=True, colour=self.theme.muted)
 
         self.retry_btn.draw(surf)
         self.again_btn.draw(surf)
         self.title_btn.draw(surf)
+
+
+class LRDashboardScreen(Screen):
+    """Left-vs-right progress dashboard reachable from the title
+    screen. Shows two things a therapist actually wants between
+    sessions: the latest block's per-hand metric pairs (hit rate,
+    mean RT, peak force), and the asymmetry-index trend across the
+    last N sessions so they can see whether the affected hand is
+    catching up.
+
+    Pure read - this screen never writes session data. The
+    `rehab.analytics.dashboard` helper handles file parsing so this
+    class only deals with rendering.
+    """
+
+    MAX_SESSIONS_SHOWN = 10
+    METRIC_PANEL_H = 220
+    TREND_PANEL_H = 220
+
+    def __init__(self, engine: "GameEngine") -> None:
+        super().__init__(engine)
+        self.back_btn = Button(
+            pygame.Rect(40, engine.layout.height - 90,
+                         180, BUTTON_H - 10),
+            "Back", engine.show_title,
+            self.theme, self.layout,
+        )
+        # Session rows cached on screen entry. Refresh re-reads disk
+        # so a therapist who ran a block and bounced back to the
+        # dashboard sees the new row without restarting the app.
+        self._rows: list = []
+        self.refresh()
+
+    def refresh(self) -> None:
+        """Re-scan the sessions folder. Filters to the current
+        participant when one is set on the title screen so a
+        researcher running multiple patients sees one trajectory at
+        a time."""
+        from ..analytics import dashboard
+        sessions_dir = self.engine.cfg.resolve_path(
+            self.engine.cfg.get("session.data_dir", "sessions"),
+        )
+        participant = self.engine.session.participant or None
+        if participant in (None, "", "NA"):
+            participant = None
+        self._rows = dashboard.load_recent_sessions(
+            Path(sessions_dir),
+            limit=self.MAX_SESSIONS_SHOWN,
+            participant=participant,
+        )
+
+    def handle_event(self, e: pygame.event.Event) -> None:
+        self.back_btn.handle_event(e)
+
+    # ---- render helpers ----
+
+    _HAND_COLOURS = {
+        "right": (37, 99, 235),     # blue
+        "left":  (168, 85, 247),    # purple
+    }
+
+    def _draw_metric_pair(self, surf: pygame.Surface,
+                           rect: pygame.Rect, label: str,
+                           right_val: float | None,
+                           left_val: float | None,
+                           unit: str,
+                           higher_is_better: bool) -> None:
+        """One paired bar comparing right vs left for a single
+        metric. higher_is_better controls the green / red tint
+        on the winning hand."""
+        # Background card so each pair reads as its own panel.
+        body = tuple(max(0, min(255, c - 8)) for c in self.theme.background)
+        pygame.draw.rect(surf, body, rect, border_radius=12)
+        outline = tuple(max(0, c - 30) for c in self.theme.background)
+        pygame.draw.rect(surf, outline, rect, 1, border_radius=12)
+        # Metric label across the top.
+        draw_text(surf, label, (rect.centerx, rect.y + 18),
+                  self.theme, self.layout, pt=FONT_BODY,
+                  centre=True, colour=self.theme.muted)
+        # Bar area inside the card.
+        bar_top = rect.y + 50
+        bar_bottom = rect.y + rect.h - 38
+        bar_h_max = max(8, bar_bottom - bar_top)
+        # Normalise to whichever side has the larger value so the
+        # heights are comparable. If both are None or zero, skip.
+        vals = [v for v in (right_val, left_val) if v is not None]
+        max_val = max(vals) if vals else 0
+        bar_w = (rect.w // 2) - 30
+        for i, (hand, v) in enumerate(
+                (("right", right_val), ("left", left_val))):
+            cx_b = rect.x + 18 + bar_w // 2 + i * (bar_w + 12)
+            colour = self._HAND_COLOURS[hand]
+            if v is None or max_val <= 0:
+                draw_text(surf, "-", (cx_b, rect.y + rect.h // 2),
+                          self.theme, self.layout, pt=FONT_H2,
+                          centre=True, colour=self.theme.muted)
+            else:
+                h = max(4, int((v / max_val) * (bar_h_max - 4)))
+                bar_rect = pygame.Rect(cx_b - bar_w // 2,
+                                         bar_bottom - h, bar_w, h)
+                pygame.draw.rect(surf, colour, bar_rect,
+                                  border_radius=4)
+                # Numeric value on top of the bar.
+                draw_text(surf, f"{v:.2f}",
+                          (cx_b, bar_bottom - h - 10),
+                          self.theme, self.layout, pt=FONT_SMALL,
+                          centre=True, colour=self.theme.foreground)
+            # Hand label below the bar.
+            draw_text(surf, "R" if hand == "right" else "L",
+                      (cx_b, bar_bottom + 14),
+                      self.theme, self.layout, pt=FONT_SMALL,
+                      centre=True, colour=colour)
+        # Unit hint bottom-right so the bar heights are interpretable.
+        draw_text(surf, unit, (rect.right - 18, rect.y + rect.h - 14),
+                  self.theme, self.layout, pt=FONT_SMALL,
+                  colour=self.theme.muted)
+        # Direction-of-better arrow next to the unit. Helps a
+        # therapist read "is going up good or bad" at a glance.
+        hint = "higher better" if higher_is_better else "lower better"
+        draw_text(surf, hint, (rect.x + 16, rect.y + rect.h - 14),
+                  self.theme, self.layout, pt=FONT_SMALL,
+                  colour=self.theme.muted)
+
+    def _draw_trend_panel(self, surf: pygame.Surface,
+                           rect: pygame.Rect) -> None:
+        """Line chart of asymmetry-index (peak force) across the
+        sessions in self._rows. Zero is symmetric; closer to zero
+        is better. Useful for spotting whether the affected hand
+        is closing the gap over time."""
+        body = tuple(max(0, min(255, c - 8)) for c in self.theme.background)
+        pygame.draw.rect(surf, body, rect, border_radius=12)
+        outline = tuple(max(0, c - 30) for c in self.theme.background)
+        pygame.draw.rect(surf, outline, rect, 1, border_radius=12)
+        draw_text(surf, "ASYMMETRY INDEX OVER LAST SESSIONS",
+                  (rect.centerx, rect.y + 18),
+                  self.theme, self.layout, pt=FONT_BODY,
+                  centre=True, colour=self.theme.muted)
+        # Filter to rows that actually have an asymmetry value
+        # (bilateral sessions where the engine wrote one out).
+        points = [(i, r.asymmetry_index_force)
+                  for i, r in enumerate(self._rows)
+                  if r.asymmetry_index_force is not None]
+        if not points:
+            draw_text(surf,
+                      "Run a bilateral block to populate this chart.",
+                      (rect.centerx, rect.centery),
+                      self.theme, self.layout, pt=FONT_BODY,
+                      centre=True, colour=self.theme.muted)
+            return
+        # Plot area inset from the card edges, leaving room for the
+        # title at the top and axis labels at the bottom.
+        plot_left = rect.x + 40
+        plot_right = rect.right - 24
+        plot_top = rect.y + 48
+        plot_bottom = rect.y + rect.h - 36
+        # Y range: 0 to max value (or 1 if everything is below 1).
+        max_y = max(v for _, v in points)
+        if max_y <= 0:
+            max_y = 1.0
+        # Baseline (0 = symmetric) drawn as a dashed line.
+        zero_y = plot_bottom
+        pygame.draw.line(surf, self.theme.muted,
+                          (plot_left, zero_y),
+                          (plot_right, zero_y), 1)
+        # X axis maps session index 0..N-1 across the plot width.
+        n = max(1, len(self._rows) - 1)
+        px = []
+        for idx, val in points:
+            x = plot_left + int((idx / n) * (plot_right - plot_left)) \
+                if n > 0 else plot_left
+            y = plot_bottom - int((val / max_y)
+                                   * (plot_bottom - plot_top))
+            px.append((x, y, val))
+        # Connecting line + dot markers.
+        if len(px) >= 2:
+            pygame.draw.lines(
+                surf, self.theme.accent, False,
+                [(x, y) for x, y, _ in px], 2,
+            )
+        for x, y, _ in px:
+            pygame.draw.circle(surf, self.theme.accent, (x, y), 4)
+        # Axis labels.
+        draw_text(surf, f"{max_y:.2f}",
+                  (plot_left - 4, plot_top - 4),
+                  self.theme, self.layout, pt=FONT_SMALL,
+                  colour=self.theme.muted)
+        draw_text(surf, "0",
+                  (plot_left - 4, plot_bottom - 4),
+                  self.theme, self.layout, pt=FONT_SMALL,
+                  colour=self.theme.muted)
+        draw_text(surf, "older sessions  ->  recent",
+                  (rect.centerx, rect.y + rect.h - 14),
+                  self.theme, self.layout, pt=FONT_SMALL,
+                  centre=True, colour=self.theme.muted)
+
+    def draw(self, surf: pygame.Surface) -> None:
+        surf.fill(self.theme.background)
+        cx = self.layout.width // 2
+        # Header. Mention which patient we're showing when one is
+        # set so a therapist running multiple patients doesn't get
+        # confused about whose data is on screen.
+        name = self.engine.session.participant or ""
+        if name in ("NA", "None", ""):
+            sub = "Per-hand training progress across recent sessions."
+        else:
+            sub = f"Per-hand training progress for {name}."
+        _draw_header(surf, "L / R Dashboard", sub,
+                     self.theme, self.layout)
+        # Empty state when there's nothing yet.
+        if not self._rows:
+            draw_text(surf,
+                      "No sessions logged yet. Finish a block and "
+                      "come back here.",
+                      (cx, 240),
+                      self.theme, self.layout, pt=FONT_H2,
+                      centre=True, colour=self.theme.muted)
+            self.back_btn.draw(surf)
+            return
+        # Latest session's per-hand metric pairs across the top.
+        latest = self._rows[-1]
+        panel_y = 180
+        panel_h = self.METRIC_PANEL_H
+        gap = 16
+        panel_w = (self.layout.width - 80 - gap * 2) // 3
+        panel_x = 40
+        # Hit rate (higher better).
+        self._draw_metric_pair(
+            surf,
+            pygame.Rect(panel_x, panel_y, panel_w, panel_h),
+            "HIT RATE",
+            latest.right.hit_rate, latest.left.hit_rate,
+            unit="", higher_is_better=True,
+        )
+        # Mean RT (lower better).
+        self._draw_metric_pair(
+            surf,
+            pygame.Rect(panel_x + panel_w + gap, panel_y,
+                         panel_w, panel_h),
+            "MEAN REACTION TIME",
+            latest.right.rt_mean_ms, latest.left.rt_mean_ms,
+            unit="ms", higher_is_better=False,
+        )
+        # Peak force (higher better - more press strength).
+        self._draw_metric_pair(
+            surf,
+            pygame.Rect(panel_x + (panel_w + gap) * 2, panel_y,
+                         panel_w, panel_h),
+            "PEAK FORCE",
+            latest.right.peak_force_mean,
+            latest.left.peak_force_mean,
+            unit=latest.force_unit, higher_is_better=True,
+        )
+        # Asymmetry trend across the bottom.
+        trend_y = panel_y + panel_h + 24
+        self._draw_trend_panel(
+            surf,
+            pygame.Rect(40, trend_y,
+                         self.layout.width - 80, self.TREND_PANEL_H),
+        )
+        # Session summary line at the bottom.
+        draw_text(
+            surf,
+            f"Showing {len(self._rows)} recent session"
+            f"{'s' if len(self._rows) != 1 else ''}. "
+            f"Latest: {latest.started_at[:10]} ({latest.block}).",
+            (cx, trend_y + self.TREND_PANEL_H + 16),
+            self.theme, self.layout, pt=FONT_SMALL,
+            centre=True, colour=self.theme.muted,
+        )
+        self.back_btn.draw(surf)
 
 
 class DiagnosticsScreen(Screen):
@@ -2342,9 +2948,40 @@ class DiagnosticsScreen(Screen):
         self._panel_buttons: list[Button] = []
         from .widgets import Dropdown
         self._port_dropdowns: dict[str, Dropdown] = {}
+        # Test Mode toggle. Rect is sized + positioned every frame in
+        # `draw` (depends on the rendered label width), and the click
+        # handler in handle_event consults this rect to flip the cfg
+        # flag. Storing it as an instance var keeps the click test
+        # consistent with what was drawn last frame.
+        self._test_mode_rect: pygame.Rect = pygame.Rect(0, 0, 0, 0)
         self.rebuild_lanes()
         self.refresh_ports()
         self.rebuild_panel()
+
+    def _toggle_test_mode(self) -> None:
+        """Flip game.test_mode_enabled and persist it through the
+        same user_settings.yaml the port assignments use. Persistence
+        means turning Test Mode on once survives an app restart - so
+        a researcher who left it on accidentally won't think the
+        software is broken when the next block is only 6 trials."""
+        current = bool(self.engine.cfg.get("game.test_mode_enabled", False))
+        new_value = not current
+        self.engine.cfg.data.setdefault(
+            "game", {})["test_mode_enabled"] = new_value
+        try:
+            self.engine.cfg.save_user_overrides({
+                "game.test_mode_enabled": new_value,
+            })
+        except Exception as e:
+            self._port_status = f"Test Mode save failed: {e}"
+            return
+        n = int(self.engine.cfg.get("game.test_mode_trials", 6))
+        self._port_status = (
+            f"Test Mode ON. Next block runs {n} trials so you can "
+            f"demo the full pipeline in under a minute."
+            if new_value else
+            "Test Mode OFF. Blocks run their normal full length."
+        )
 
     # The bottom panel takes ~170 px so lanes shrink to fit. Without
     # this the hardware panel would overlap the lane strips.
@@ -2355,52 +2992,47 @@ class DiagnosticsScreen(Screen):
         return self.layout.height - 100 - self.PANEL_HEIGHT - self.PANEL_GAP
 
     def rebuild_lanes(self) -> None:
-        """Show 4 or 8 lanes depending on the hand mode the user has
-        configured. Mirrors the gameplay layout so the diagnostics
-        screen LOOKS like the real game - if a lane is misbehaving in
-        here, the same one will misbehave during play."""
+        """Always render all 8 finger tiles in Settings, regardless of
+        the current hand_mode. The Settings screen is the place a
+        therapist verifies the hardware before a block; cutting it
+        down to 4 tiles when hand_mode=left/right would hide the
+        other Arduino's sensors and you'd have no way to test them
+        without changing modes first. Lanes for a hand that isn't
+        actually plugged in just sit idle (their FSR feed stays at
+        zero) so the layout is harmless even on a single-Arduino
+        rig."""
         self.lanes = []
-        hand = self.engine.hand_mode
         y = 220
         h = self._lanes_bottom_y() - y
-        if hand == "both":
-            # Same bilateral layout as GameplayScreen.
-            half_w = (self.layout.width - 120) // 2
-            block_w = half_w - 40
-            gutter = 18
-            n = 4
-            w = (block_w - gutter * (n - 1)) // n
-            rects: dict[int, pygame.Rect] = {}
-            for pos in range(n):
-                rects[7 - pos] = pygame.Rect(
-                    40 + pos * (w + gutter), y, w, h)
-            for pos in range(n):
-                rects[pos] = pygame.Rect(
-                    half_w + 120 + pos * (w + gutter), y, w, h)
-            for i in range(8):
-                is_left = i >= 4
-                finger = i - 4 if is_left else i
-                self.lanes.append(LaneStrip(
-                    lane=i, rect=rects[i],
-                    theme=self.theme, layout=self.layout,
-                    hand="left" if is_left else "right",
-                    finger=finger,
-                ))
-        else:
-            gutter = 18
-            n = 4
-            w = (self.layout.width - 160 - gutter * (n - 1)) // n
-            order = ([n - 1 - i for i in range(n)] if hand == "left"
-                      else list(range(n)))
-            rects = {lane_num: pygame.Rect(
-                        80 + pos * (w + gutter), y, w, h)
-                     for pos, lane_num in enumerate(order)}
-            for i in range(n):
-                self.lanes.append(LaneStrip(
-                    lane=i, rect=rects[i],
-                    theme=self.theme, layout=self.layout,
-                    hand=hand, finger=i,
-                ))
+        # Bilateral layout: right hand on the right half of the
+        # screen with index closest to centre, left hand on the
+        # left half mirrored. Same arrangement the gameplay screen
+        # uses in bilateral mode so what the therapist sees here
+        # matches what the patient will see when the block starts.
+        half_w = (self.layout.width - 120) // 2
+        block_w = half_w - 40
+        gutter = 18
+        n = 4
+        w = (block_w - gutter * (n - 1)) // n
+        rects: dict[int, pygame.Rect] = {}
+        # Left hand on the LEFT of the screen: lanes 7,6,5,4 reading
+        # left-to-right (little finger outermost).
+        for pos in range(n):
+            rects[7 - pos] = pygame.Rect(
+                40 + pos * (w + gutter), y, w, h)
+        # Right hand on the RIGHT: lanes 0,1,2,3 reading left-to-right.
+        for pos in range(n):
+            rects[pos] = pygame.Rect(
+                half_w + 120 + pos * (w + gutter), y, w, h)
+        for i in range(8):
+            is_left = i >= 4
+            finger = i - 4 if is_left else i
+            self.lanes.append(LaneStrip(
+                lane=i, rect=rects[i],
+                theme=self.theme, layout=self.layout,
+                hand="left" if is_left else "right",
+                finger=finger,
+            ))
 
     # ---- hardware port mapping panel --------------------------------------
 
@@ -2585,6 +3217,14 @@ class DiagnosticsScreen(Screen):
         self.back_btn.handle_event(e)
         for b in self._panel_buttons:
             b.handle_event(e)
+        # Test Mode toggle pill in the top-right. Hand-rolled hit-test
+        # rather than a Button widget because the pill style (filled
+        # green or muted with a coloured outline) is bespoke.
+        if (e.type == pygame.MOUSEBUTTONDOWN and e.button == 1
+                and self._test_mode_rect.w > 0
+                and self._test_mode_rect.collidepoint(e.pos)):
+            self._toggle_test_mode()
+            return
         # Track held keys so the visual responds even when the source
         # doesn't push samples (keyboard mode).
         if e.type == pygame.KEYDOWN:
@@ -2593,11 +3233,15 @@ class DiagnosticsScreen(Screen):
             self._held_keys.discard(e.key)
 
     def _key_pressed_for_lane(self, lane: int, hand: str) -> bool:
-        """In keyboard mode, decide whether the key bound to this lane
-        is currently held. Looks up the active hand's keymap."""
+        """Keyboard-mode press lookup. Always uses the BILATERAL
+        keymap (FDSA + JKL;) so the therapist can press-test all
+        eight fingers from Settings regardless of which hand_mode
+        the next session will use. Without this, a unilateral
+        hand_mode would only register half the keys here and the
+        therapist would think the other hand's sensors were dead."""
         from ..game.modes._keys import keymap_for_hand, resolve_key
         km = self.engine.cfg.get(
-            keymap_for_hand(self.engine.hand_mode), {},
+            keymap_for_hand("both"), {},
         )
         for key_name, lane_idx in km.items():
             if lane_idx != lane:
@@ -2709,15 +3353,47 @@ class DiagnosticsScreen(Screen):
         st = sfont.render(state_text, True, state_colour)
         surf.blit(st, st.get_rect(
             topright=(self.layout.width - 30, 50)))
+        # Test Mode toggle pill. Sits below the state text in the same
+        # top-right metadata column. Green filled when on (matches the
+        # Start Session "go" pill on the title screen so the visual
+        # language for "active / live" carries over), muted-outlined
+        # when off so it reads as an inactive switch. Click toggles.
+        tm_on = bool(self.engine.cfg.get("game.test_mode_enabled", False))
+        n_trials = int(self.engine.cfg.get("game.test_mode_trials", 6))
+        tm_label = (f"TEST MODE  ON ({n_trials})" if tm_on
+                     else "TEST MODE  OFF")
+        tm_font = self.layout.font(FONT_SMALL + 2)
+        tm_text_colour = ((255, 255, 255) if tm_on
+                           else self.theme.foreground)
+        tm_text = tm_font.render(tm_label, True, tm_text_colour)
+        tm_pad_x = 14
+        tm_pad_y = 5
+        tm_w = tm_text.get_width() + tm_pad_x * 2
+        tm_h = tm_text.get_height() + tm_pad_y * 2
+        tm_rect = pygame.Rect(0, 0, tm_w, tm_h)
+        tm_rect.topright = (self.layout.width - 30, 78)
+        # Fill colour: green when on, transparent (background) when off.
+        if tm_on:
+            pygame.draw.rect(surf, (34, 197, 94), tm_rect,
+                              border_radius=tm_h // 2)
+        else:
+            pygame.draw.rect(surf, self.theme.muted, tm_rect,
+                              width=2, border_radius=tm_h // 2)
+        surf.blit(tm_text, tm_text.get_rect(center=tm_rect.center))
+        # Cache rect for the hit-test in handle_event.
+        self._test_mode_rect = tm_rect
         now = time.perf_counter()
-        # Bilateral hand headers like the gameplay screen.
-        if self.engine.hand_mode == "both":
-            draw_text(surf, "LEFT", (self.layout.width // 4, 192),
-                      self.theme, self.layout, pt=FONT_H2, centre=True,
-                      colour=LaneStrip.HAND_BADGE["left"])
-            draw_text(surf, "RIGHT", (self.layout.width * 3 // 4, 192),
-                      self.theme, self.layout, pt=FONT_H2, centre=True,
-                      colour=LaneStrip.HAND_BADGE["right"])
+        # Bilateral hand headers, always rendered because Settings
+        # always shows all 8 lanes (even when the session-level
+        # hand_mode is left or right only). Without the labels the
+        # therapist wouldn't know which half of the screen is which
+        # hand.
+        draw_text(surf, "LEFT", (self.layout.width // 4, 192),
+                  self.theme, self.layout, pt=FONT_H2, centre=True,
+                  colour=LaneStrip.HAND_BADGE["left"])
+        draw_text(surf, "RIGHT", (self.layout.width * 3 // 4, 192),
+                  self.theme, self.layout, pt=FONT_H2, centre=True,
+                  colour=LaneStrip.HAND_BADGE["right"])
         for ls in self.lanes:
             ls.draw(surf, now)
         # Hardware port panel ------------------------------------------------

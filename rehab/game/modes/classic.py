@@ -115,20 +115,28 @@ class ClassicMode:
 
     def _handle_press(self, ev: PressEvent, now: float) -> None:
         if self.active is None:
+            # No trial in flight, but the patient still pressed. Apply
+            # the (typically smaller) idle-press penalty so spamming
+            # between stims doesn't come for free. Detector debounce
+            # rate-limits the spam at the hardware layer; this just
+            # makes each accepted press cost something.
+            self.engine.apply_idle_press_penalty()
             return
         self.active.keys_pressed.append(ev.lane)
         if ev.lane == self.active.lane:
             self._finish(ev, now)
         else:
-            # Score penalty fires only on the FIRST wrong press of the
-            # trial. Subsequent wrong presses still get logged for
-            # analysis but don't keep subtracting (otherwise a patient
-            # mashing all four fingers would dig themselves into a hole
-            # they can't recover from).
-            first_wrong = not self.active.incorrect_presses
+            # Penalise EVERY wrong press, not just the first. Earlier
+            # we only docked the first press per trial so a single
+            # fumble wasn't punished too hard, but in practice that
+            # made finger-spamming the optimal strategy: one of the
+            # four mashed fingers IS the target, so the patient
+            # earned a hit + one small penalty regardless. Now
+            # spamming 3 wrong fingers costs 3 * wrong_press_penalty,
+            # which with the bumped default (2) overwhelms the
+            # +3 great-hit reward.
             self.active.incorrect_presses.append((ev.lane, ev.t_perf))
-            if first_wrong:
-                self.engine.apply_wrong_press_penalty()
+            self.engine.apply_wrong_press_penalty()
 
     def _finish(self, ev: PressEvent | None, now: float) -> None:
         if self.active is None:
@@ -137,5 +145,20 @@ class ClassicMode:
         if ev is not None:
             rt_ms = (ev.t_perf - self.active.stim_t_perf) * 1000.0
         outcome = classify(rt_ms, self.score_cfg)
+        # If the patient pressed any wrong finger before the right
+        # one, the trial counts as a Miss. The per-press wrong_press
+        # penalty already docked points for each fumble; reclassifying
+        # the outcome stops a fumble-then-correct trial from also
+        # paying out the hit reward. The bigger win is that downstream
+        # stats (per-lane miss histogram and the adaptive weakness
+        # bias) now see "this finger struggled" instead of pretending
+        # the trial was clean.
+        if self.active.incorrect_presses:
+            from ..scoring import TrialResult
+            outcome = TrialResult(
+                label="Miss",
+                points=self.score_cfg.miss_points,
+                rt_ms=rt_ms,
+            )
         self.engine.log_trial(self.active, outcome, now)
         self.active = None

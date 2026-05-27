@@ -304,5 +304,76 @@ class HasRecentDataTests(unittest.TestCase):
             multi.stop()
 
 
+class StartupLatencyTests(unittest.TestCase):
+    """MultiSerialSource.get_startup_latency() returns a per-port dict
+    of time-to-first-sample latencies in milliseconds. Each underlying
+    SerialSource records its own port_open_ts / first_sample_ts; the
+    multi-source aggregates them."""
+
+    def test_no_latency_before_underlying_source_has_data(self) -> None:
+        # Fake source doesn't expose get_startup_latency_ms because
+        # it's not a real SerialSource. The multi-source must
+        # gracefully return None per port instead of crashing.
+        multi, fakes = _make_multi(["/dev/cu.A", "/dev/cu.B"])
+        latencies = multi.get_startup_latency()
+        self.assertEqual(set(latencies.keys()), {"/dev/cu.A", "/dev/cu.B"})
+        self.assertIsNone(latencies["/dev/cu.A"])
+        self.assertIsNone(latencies["/dev/cu.B"])
+
+    def test_underlying_source_latency_surfaces_through_multi(self) -> None:
+        # Stub a getter on the fake so the multi-source picks up a
+        # non-None value. Confirms the wiring works for real
+        # SerialSources without needing pyserial.
+        multi, fakes = _make_multi(["/dev/cu.A", "/dev/cu.B"])
+        fakes[0].get_startup_latency_ms = lambda: 1234.5
+        fakes[1].get_startup_latency_ms = lambda: 980.0
+        latencies = multi.get_startup_latency()
+        self.assertAlmostEqual(latencies["/dev/cu.A"], 1234.5)
+        self.assertAlmostEqual(latencies["/dev/cu.B"], 980.0)
+
+    def test_getter_exception_yields_none_not_crash(self) -> None:
+        # A broken underlying source must not break the whole
+        # multi-source latency report.
+        multi, fakes = _make_multi(["/dev/cu.A", "/dev/cu.B"])
+        def _raise():
+            raise RuntimeError("simulated probe failure")
+        fakes[0].get_startup_latency_ms = _raise
+        fakes[1].get_startup_latency_ms = lambda: 500.0
+        latencies = multi.get_startup_latency()
+        self.assertIsNone(latencies["/dev/cu.A"])
+        self.assertAlmostEqual(latencies["/dev/cu.B"], 500.0)
+
+
+class SerialSourceLatencyAccessorTests(unittest.TestCase):
+    """SerialSource.get_startup_latency_ms returns None until both
+    timestamps are stamped, then (first_sample - port_open) * 1000.
+    We can't open a real port in the test, so we drive the timestamps
+    by hand."""
+
+    def _bare_source(self):
+        from rehab.hardware.serial_source import SerialSource
+        s = SerialSource.__new__(SerialSource)
+        s._port_open_ts = None
+        s._first_sample_ts = None
+        return s
+
+    def test_none_until_both_stamps_set(self) -> None:
+        s = self._bare_source()
+        self.assertIsNone(s.get_startup_latency_ms())
+        s._port_open_ts = 100.0
+        self.assertIsNone(s.get_startup_latency_ms())  # half-stamped
+        s._first_sample_ts = 100.5
+        self.assertAlmostEqual(s.get_startup_latency_ms(), 500.0)
+
+    def test_returns_correct_delta_in_ms(self) -> None:
+        # port_open at t=2.0s, first_sample at t=3.234s -> 1234 ms.
+        s = self._bare_source()
+        s._port_open_ts = 2.0
+        s._first_sample_ts = 3.234
+        self.assertAlmostEqual(s.get_startup_latency_ms(), 1234.0,
+                                places=3)
+
+
+
 if __name__ == "__main__":
     unittest.main()
