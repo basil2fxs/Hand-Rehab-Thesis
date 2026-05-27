@@ -1856,27 +1856,48 @@ class DiagnosticsScreen(Screen):
             for ls in self.lanes:
                 ls.active = self._key_pressed_for_lane(ls.lane, ls.hand)
 
+    def _connection_state(self) -> tuple[str, tuple[int, int, int]]:
+        """Pick the status text + colour for the top-right badge.
+
+        Four states:
+          - KEYBOARD: source doesn't provide samples (no Arduino).
+          - DISCONNECTED: source claims to provide samples but is_connected is False.
+          - NO DATA: port is open but no FSR samples have arrived in the
+            last ~1.5 s. This is the case Mac hits when it auto-grabs
+            /dev/cu.Bluetooth-Incoming-Port, opens it fine, but never
+            receives any data because there's no Arduino on the wire.
+          - CONNECTED: port open AND samples flowing.
+        """
+        src = self.engine.source
+        if not src.provides_samples:
+            return ("KEYBOARD", self.theme.muted)
+        if not src.is_connected:
+            return ("DISCONNECTED", self.theme.error)
+        has_data = getattr(src, "has_recent_data", None)
+        if callable(has_data) and not has_data(1.5):
+            return ("NO DATA", self.theme.error)
+        return ("CONNECTED", self.theme.success)
+
     def draw(self, surf: pygame.Surface) -> None:
         surf.fill(self.theme.background)
         # Header.
         source_name = getattr(self.engine.source, "name", "?")
-        connected = (self.engine.source.is_connected
-                      if self.engine.source.provides_samples
-                      else True)
+        state_text, state_colour = self._connection_state()
         sub = ("Press each finger in turn. The matching box should "
                 "light up and the FSR reading should climb.")
-        if not self.engine.source.provides_samples:
+        if state_text == "KEYBOARD":
             sub = ("Keyboard mode active. Press the keys for each "
                     "finger and the matching box will light up.")
-        elif not connected:
+        elif state_text == "DISCONNECTED":
             sub = ("Source not connected. Plug the Arduino in and "
                     "click Back / Start to retry.")
+        elif state_text == "NO DATA":
+            sub = ("Port is open but no FSR data is arriving. "
+                    "Check the Arduino is sending FSR: lines. "
+                    "Keyboard still works as a backup.")
         _draw_header(surf, "SENSOR TEST", sub, self.theme, self.layout)
-        # Source status pill top-right. Strip "Source(...)" wrappers and
-        # right-align via the font's render rect so long names like
-        # KeyboardOnlySource don't clip off the screen edge.
-        status_colour = (self.theme.success if connected
-                          else self.theme.error)
+        # Source name pill top-right. Strip "Source(...)" wrappers so
+        # long names like KeyboardOnlySource don't clip off the edge.
         clean_name = source_name
         if "Source" in clean_name:
             clean_name = clean_name.replace("OnlySource", "")
@@ -1886,9 +1907,7 @@ class DiagnosticsScreen(Screen):
         surf.blit(nsurf,
                    nsurf.get_rect(topright=(self.layout.width - 30, 28)))
         sfont = self.layout.font(FONT_BODY)
-        st = sfont.render(
-            "CONNECTED" if connected else "DISCONNECTED",
-            True, status_colour)
+        st = sfont.render(state_text, True, state_colour)
         surf.blit(st, st.get_rect(
             topright=(self.layout.width - 30, 50)))
         now = time.perf_counter()

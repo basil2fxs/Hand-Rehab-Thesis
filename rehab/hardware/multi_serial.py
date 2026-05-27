@@ -93,6 +93,13 @@ class MultiSerialSource(Source):
         # that arrive at slightly different times.
         self._last_right: tuple[float, tuple[int, ...]] | None = None
         self._last_left:  tuple[float, tuple[int, ...]] | None = None
+        # perf_counter timestamp of the last sample we actually pushed
+        # onto the queue. Used to distinguish "port open + data flowing"
+        # from "port open but the device on the other end is silent"
+        # (e.g. /dev/cu.Bluetooth-Incoming-Port that opens fine but
+        # never produces FSR lines). Starts at None so a fresh source
+        # reads as no-data until the first sample arrives.
+        self._last_sample_t: float | None = None
 
     @property
     def name(self) -> str:
@@ -230,10 +237,12 @@ class MultiSerialSource(Source):
                     # which hand it's assigned via cfg.bilateral.hand.
                     try:
                         self._q.put_nowait(s)
+                        self._last_sample_t = time.perf_counter()
                     except queue.Full:
                         try:
                             self._q.get_nowait()
                             self._q.put_nowait(s)
+                            self._last_sample_t = time.perf_counter()
                         except queue.Empty:
                             pass
                 else:
@@ -303,9 +312,20 @@ class MultiSerialSource(Source):
         s = Sample(t_perf=t_perf, values=values)
         try:
             self._q.put_nowait(s)
+            self._last_sample_t = time.perf_counter()
         except queue.Full:
             try:
                 self._q.get_nowait()
                 self._q.put_nowait(s)
+                self._last_sample_t = time.perf_counter()
             except queue.Empty:
                 pass
+
+    def has_recent_data(self, window_s: float = 1.0) -> bool:
+        """True if a sample landed on the output queue within the last
+        `window_s` seconds. Distinguishes a real Arduino streaming
+        FSR lines from a junk port that's open but silent (which would
+        otherwise show CONNECTED forever)."""
+        if self._last_sample_t is None:
+            return False
+        return (time.perf_counter() - self._last_sample_t) <= window_s
