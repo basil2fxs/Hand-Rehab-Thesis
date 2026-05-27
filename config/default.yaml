@@ -1,0 +1,144 @@
+# Default config. Override by passing --config path/to/your.yaml.
+
+session:
+  data_dir: sessions
+  participant: null
+
+serial:
+  port: auto
+  baud: 115200
+  read_timeout_s: 0.02
+  open_retries: 3
+  open_retry_delay_s: 1.0
+  # Explicit per-hand port assignments. When set, these override the
+  # auto plug-order assignment (first detected = right, second = left).
+  # Set from the Settings screen on the title page, persisted to
+  # config/user_settings.yaml. null means "auto-pick".
+  left_port: null
+  right_port: null
+  vendor_ids:
+    - "0x2341"   # Arduino LLC
+    - "0x239A"   # Adafruit
+    - "0x10C4"   # SiLabs CP210x
+    - "0x1A86"   # CH340
+    - "0x0403"   # FTDI
+
+fsr:
+  num_sensors_per_hand: 4
+  sample_rate_hz: 200
+  baseline_alpha: 0.02
+  value_alpha: 0.35
+  on_delta: [45, 90, 45, 45]
+  off_delta: [35, 70, 35, 35]
+  abs_on_min: [320, 400, 320, 320]
+  abs_off_max: [350, 450, 350, 350]
+  debounce_ms: 100
+
+bilateral:
+  hand: right            # right | left | both
+  per_hand_calibration: true
+
+game:
+  mode: adaptive         # classic | adaptive | rhythm
+  # Classic-mode pacing. 1.2 s between stim onsets + 1.0 s timeout means the
+  # patient has up to ~2.2 s per trial, which is comfortable starting pace
+  # for most patients. Adaptive mode ignores trigger_interval_s and
+  # drives cadence from the engine's BPM instead.
+  trigger_interval_s: 1.2
+  timeout_s: 1.0
+  early_window_s: 0.1
+  total_trials: 40
+  # Unilateral RIGHT-hand keymap. Patient rests their right hand on the
+  # home row so j (index finger, closest to centre) is lane 0 and ; (little
+  # finger, outer edge) is lane 3. Lanes always go 0=index..3=little.
+  keyboard_map:
+    j: 0           # right index
+    k: 1           # right middle
+    l: 2           # right ring
+    semicolon: 3   # right little
+  # Unilateral LEFT-hand keymap. Patient rests their left hand on the home
+  # row so f (index, closest to centre) is lane 0 and a (little, outer
+  # edge) is lane 3. Same lane convention as right so the rest of the game
+  # logic doesn't care which hand.
+  keyboard_map_left:
+    f: 0           # left index
+    d: 1           # left middle
+    s: 2           # left ring
+    a: 3           # left little
+  # Bilateral keymap (both hands). Lanes 0..3 = right hand, 4..7 = left.
+  keyboard_map_bilateral:
+    j: 0           # right index
+    k: 1           # right middle
+    l: 2           # right ring
+    semicolon: 3   # right little
+    f: 4           # left index
+    d: 5           # left middle
+    s: 6           # left ring
+    a: 7           # left little
+
+adaptive:
+  # Start slow so the patient gets some easy hits before the system speeds
+  # up. 60 BPM = 1.0s between stimuli, comfortable for most patients.
+  start_bpm: 60
+  bpm_min: 10                 # crawl mode for severe weakness (6s gap)
+  bpm_max: 140
+  bpm_step: 10                # base step. Scaled up when hit rate is far off.
+  target_low: 0.65            # aim for the 65-80% band around the 70% target
+  target_high: 0.80
+  weakness_bias: 2.5
+  min_trials: 2               # react after just two trials, not eight
+  block_size: 4               # regenerate the sequence + reweight every 4 trials
+  # Timeout scales with cadence so a slow pace gives more time to press.
+  # timeout_s = cadence * timeout_factor.
+  timeout_factor: 0.90
+
+scoring:
+  great_ms: 200
+  great_points: 3
+  good_ms: 500
+  good_points: 2
+  late_points: 1
+  # No negative scores anywhere. A miss / early press just doesn't add to
+  # the score, it doesn't subtract from it. Patients are discouraged
+  # enough by missing without the screen actively going backwards.
+  miss_points: 0
+  early_penalty: 0
+
+rhythm:
+  difficulty: medium     # easy | medium | hard
+  beat_subset:           # which beats fire per difficulty
+    easy: 4              # every 4th beat
+    medium: 2            # every 2nd beat
+    hard: 1              # every beat
+  perfect_ms: 50
+  great_ms: 100
+  good_ms: 175
+  miss_ms: 300
+  # Audio-output latency compensation. pygame.mixer's buffer + the OS
+  # audio path add ~20-50 ms between when our song_time clock thinks a
+  # beat occurs and when the patient actually HEARS it. Without this
+  # the patient's "on the beat" press lands as ~40 ms Late even when
+  # they're perfectly in time. Default 40 ms is the typical pygame
+  # latency on macOS / Windows; bump it up if presses still feel late,
+  # or down toward 0 if they feel early.
+  audio_offset_ms: 40
+
+audio:
+  enabled: true
+  master_volume: 0.8
+  music_dir: assets/music
+  # Per-lane stim cue tone (C, E, G, C, repeating for bilateral) that
+  # fires the moment a stim is dispatched in classic + adaptive modes.
+  # Matches Aiden's game behaviour. Rhythm mode ignores this and plays
+  # the song instead.
+  stim_tone_enabled: true
+
+ui:
+  resolution: [1280, 800]
+  fullscreen: false
+  theme: clinical
+  font_scale: 1.0
+
+logging:
+  level: INFO
+  file: sessions/rehab.log

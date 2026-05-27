@@ -1,0 +1,28 @@
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual envs
+venv/
+.venv/
+env/
+
+# OS / editor cruft
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.idea/
+.vscode/
+
+# PyInstaller output
+bin/build/
+bin/dist/
+
+# Per-session output. Don't publish.
+sessions/
+
+# Written by the Settings screen, per user.
+config/user_settings.yaml
