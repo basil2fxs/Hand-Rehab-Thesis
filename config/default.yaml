@@ -98,14 +98,25 @@ scoring:
   good_ms: 500
   good_points: 2
   late_points: 1
-  # No negative scores anywhere. A miss / early press just doesn't add to
-  # the score, it doesn't subtract from it. Patients are discouraged
-  # enough by missing without the screen actively going backwards.
+  # Missed trials + early presses default to 0 (score still won't go
+  # below zero, the floor is enforced in engine._apply_wrong_penalty).
   miss_points: 0
   early_penalty: 0
+  # Wrong-finger press penalty. Subtracts this many points the first
+  # time the patient hits a non-target finger inside a trial (classic +
+  # adaptive). In rhythm mode it subtracts per unmatched press (a press
+  # on a lane with no scheduled note nearby). Floored at score=0 so the
+  # display never goes negative. Set to 0 to disable.
+  wrong_press_penalty: 1
 
 rhythm:
   difficulty: medium     # easy | medium | hard
+  # Seconds after the visual countdown ends before the audio starts +
+  # the first beat is due. Gives the falling-notes visualiser time to
+  # ramp in so the patient sees notes sliding down before they need to
+  # press one. The 3 s countdown ticking from "3" to "GO" still runs;
+  # this is an ADDITIONAL silent ramp on top of it.
+  pre_song_lead_s: 2.0
   beat_subset:           # which beats fire per difficulty
     easy: 4              # every 4th beat
     medium: 2            # every 2nd beat

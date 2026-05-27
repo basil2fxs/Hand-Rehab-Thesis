@@ -28,13 +28,33 @@ class RhythmMode:
                  windows: RhythmWindows, score_cfg: ScoreConfig) -> None:
         self.engine = engine
         self.beatmap = beatmap
-        self.scheduler = BeatScheduler(beatmap)
         self.windows = windows
         self.score_cfg = score_cfg
         self._presses: deque[PressEvent] = deque()
         self._countdown_done = False
         self._t_start = time.perf_counter()
         self._countdown_s = 3.0
+        # Extra silent ramp AFTER the 3-2-1-GO countdown but BEFORE the
+        # audio plays and the first beat is due. Falling notes slide
+        # into view during this window so the patient gets a clear
+        # visual lead-in. All beat times in the beatmap are pushed
+        # forward by this amount so audio + beats stay synced (audio
+        # starts at song_t = pre_song_lead_s and a beat that originally
+        # sat at audio_t = T now sits at song_t = pre_song_lead_s + T).
+        try:
+            self._pre_song_lead_s = float(
+                engine.cfg.get("rhythm.pre_song_lead_s", 2.0)
+            )
+        except (TypeError, ValueError):
+            # Test fixtures often pass a MagicMock for cfg.get that
+            # returns something non-numeric. Fall back to 2 s default.
+            self._pre_song_lead_s = 2.0
+        if self._pre_song_lead_s > 0 and beatmap.notes:
+            for n in beatmap.notes:
+                n.t = n.t + self._pre_song_lead_s
+        self.scheduler = BeatScheduler(beatmap)
+        # True once audio.play_song / start_metronome has been kicked off.
+        self._audio_started = False
         # Snapshot of song_time at the moment we paused. While paused the
         # property returns this fixed value so the falling notes don't keep
         # scrolling across the screen during the pause.
@@ -47,9 +67,11 @@ class RhythmMode:
         # the music is silent.
         if self._frozen_song_t is not None:
             return self._frozen_song_t
-        # Prefer the audio clock when active so visuals and music stay locked.
-        if self.engine.audio and self.engine.audio.is_playing:
-            return self.engine.audio.song_time()
+        # Always use the perf_counter clock so the timeline stays
+        # continuous through the countdown -> pre-song-lead -> audio
+        # transition. Audio playback is timed off perf_counter inside
+        # AudioEngine anyway so we don't lose anything by not switching
+        # to audio.song_time().
         return time.perf_counter() - self._t_start - self._countdown_s
 
     @property
@@ -94,9 +116,20 @@ class RhythmMode:
 
     def update(self, dt: float) -> None:
         now = self.song_time
-        # Start music or click track after the countdown elapses.
+        # End of the visual countdown. Notes can now appear on screen
+        # (they were filtered out by `upcoming` while song_time was
+        # negative) but audio + first press are still pre_song_lead_s
+        # away so the patient gets a clear visual ramp.
         if not self._countdown_done and now >= 0:
             self._countdown_done = True
+        # Start audio once we've cleared the pre-song lead. The
+        # beatmap has been shifted forward by pre_song_lead_s, so a
+        # beat that originally sat at audio_t=T now sits at
+        # song_t=pre_song_lead_s + T, perfectly synced with the song.
+        if (self._countdown_done
+                and not self._audio_started
+                and now >= self._pre_song_lead_s):
+            self._audio_started = True
             if self.engine.audio:
                 if self.beatmap.song:
                     if not self.engine.audio.play_song(self.beatmap.song):

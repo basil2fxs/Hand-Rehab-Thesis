@@ -139,7 +139,12 @@ class AdaptiveMode:
         if ev.lane == self.active.lane:
             self._finish(ev, now)
         else:
+            # See classic.py for why we only penalise the FIRST wrong
+            # press per trial.
+            first_wrong = not self.active.incorrect_presses
             self.active.incorrect_presses.append((ev.lane, ev.t_perf))
+            if first_wrong:
+                self.engine.apply_wrong_press_penalty()
 
     # Quality weights tell the adapter how good a press was, not just hit/miss.
     # A Great is a full-credit press, a Late only counts a quarter so it

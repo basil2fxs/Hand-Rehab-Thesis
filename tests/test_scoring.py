@@ -137,5 +137,46 @@ class TrialResultImmutabilityTests(unittest.TestCase):
             r.points = 999  # type: ignore[misc]
 
 
+class WrongPressPenaltyTests(unittest.TestCase):
+    """apply_wrong_press_penalty subtracts the configured points and
+    floors the score at zero. Score never displays negative even with
+    repeated misses."""
+
+    def _make_engine(self, penalty: int):
+        # Build a minimal engine via __new__ so we don't need pygame.
+        from unittest.mock import MagicMock
+        from rehab.game.engine import GameEngine
+        eng = GameEngine.__new__(GameEngine)
+        eng.cfg = MagicMock()
+        eng.cfg.get = MagicMock(side_effect=lambda k, d=None:
+                                  penalty if k == "scoring.wrong_press_penalty"
+                                  else d)
+        eng.score = 10
+        eng._last_gained = 0
+        return eng
+
+    def test_subtracts_configured_amount(self) -> None:
+        eng = self._make_engine(penalty=2)
+        actual = eng.apply_wrong_press_penalty()
+        self.assertEqual(actual, 2)
+        self.assertEqual(eng.score, 8)
+        self.assertEqual(eng._last_gained, -2)
+
+    def test_floors_at_zero(self) -> None:
+        eng = self._make_engine(penalty=5)
+        eng.score = 3
+        actual = eng.apply_wrong_press_penalty()
+        # Only 3 actually subtracted (clamped at 0), not 5.
+        self.assertEqual(actual, 3)
+        self.assertEqual(eng.score, 0)
+
+    def test_zero_penalty_is_noop(self) -> None:
+        eng = self._make_engine(penalty=0)
+        eng.score = 5
+        actual = eng.apply_wrong_press_penalty()
+        self.assertEqual(actual, 0)
+        self.assertEqual(eng.score, 5)
+
+
 if __name__ == "__main__":
     unittest.main()

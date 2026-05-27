@@ -487,6 +487,15 @@ class GameEngine:
                                 local = i % n_per_hand
                                 b = det.baseline[local]
                                 ls.baseline = b if b is not None else 0.0
+                                # Drive the lane-strip press visual
+                                # from the detector's live pressed[]
+                                # state. set_pressed latches a short
+                                # minimum-visible window so a quick
+                                # press-release still flashes the tile
+                                # rather than blinking for a single
+                                # frame.
+                                ls.set_pressed(bool(det.pressed[local]),
+                                                s.t_perf)
 
     def _draw_hud(self, screen, clock) -> None:
         if not self._show_fps:
@@ -595,6 +604,46 @@ class GameEngine:
         )
         self._begin_block("rhythm")
         self.screen_obj = self._screens["rhythm"]
+        # Remember the beatmap so the Retry button on results can
+        # rebuild this exact session. Storing the source song path +
+        # difficulty rather than the mutated beatmap object so the
+        # pre_song_lead time-shift doesn't compound on each retry.
+        self._last_rhythm_song = beatmap.song
+        self._last_rhythm_difficulty = beatmap.difficulty
+        self._last_rhythm_title = beatmap.title
+
+    def retry_last_block(self) -> None:
+        """Re-run the most recent block (same mode, same config, same
+        rhythm track if applicable). Called from the Retry button on
+        the results screen. Falls through to mode select if we can't
+        figure out what to re-run."""
+        kind = getattr(self, "current_block", None)
+        if kind == "classic":
+            self.begin_classic_block()
+            return
+        if kind == "adaptive":
+            self.begin_adaptive_block()
+            return
+        if kind == "rhythm":
+            song = getattr(self, "_last_rhythm_song", None)
+            difficulty = getattr(self, "_last_rhythm_difficulty", "medium")
+            if song:
+                # Rebuild the beatmap fresh so the pre_song_lead shift
+                # applies to clean note times. extract_beatmap falls
+                # back to a procedural metronome map if librosa can't
+                # parse the file, so this is safe even if the audio
+                # file is gone.
+                from ..audio.beatmap import extract_beatmap
+                bm = extract_beatmap(
+                    song,
+                    difficulty=difficulty,
+                    num_lanes=self.total_lanes,
+                )
+                self.begin_rhythm_block(bm)
+                return
+        # Unknown / no prior block. Drop back to mode select so the
+        # user can pick something concretely.
+        self.show_mode_select()
 
     def _begin_block(self, name: str) -> None:
         self.current_block = name
@@ -797,10 +846,24 @@ class GameEngine:
     # always agree.
     _ORANGE_CLOSE = (235, 130, 50)
 
-    def _outcome_colour(self, label: str) -> tuple[int, int, int]:
+    def _outcome_colour(self, label: str,
+                        mode_hint: str | None = None) -> tuple[int, int, int]:
+        """Colour for the lane / ring flash on a trial outcome.
+
+        Rhythm mode uses a softer red->orange mapping for "Miss" because
+        red is reserved there for genuinely-wrong presses (wrong-lane
+        click logged via log_rhythm_unmatched). Classic + adaptive keep
+        the original red for Miss since wrong-lane there is logged
+        inside the same trial via incorrect_presses, not as a separate
+        flash event.
+        """
         key = label.lower() if label else ""
+        if mode_hint is None:
+            mode_hint = getattr(self, "current_block", None)
         if key == "miss":
-            return self.theme.lane_miss      # red
+            if mode_hint == "rhythm":
+                return self._ORANGE_CLOSE    # rhythm: miss = orange
+            return self.theme.lane_miss      # classic / adaptive: red
         if key in ("late", "early"):
             return self._ORANGE_CLOSE        # orange (close but off)
         # Everything else (Perfect / Great / Good) is a clean correct press.
@@ -835,6 +898,24 @@ class GameEngine:
             return base_points
         boost = self._pace_multiplier() * self._streak_multiplier()
         return int(round(base_points * boost))
+
+    def apply_wrong_press_penalty(self) -> int:
+        """Subtract the configured wrong-press penalty from the score.
+        Called by mode handlers on a wrong-finger press (first one per
+        trial for classic / adaptive; per unmatched press for rhythm).
+        Floors the result at zero so the score never displays negative.
+        Returns the amount actually subtracted, useful for UI feedback.
+        """
+        penalty = int(self.cfg.get("scoring.wrong_press_penalty", 0))
+        if penalty <= 0:
+            return 0
+        new_score = max(0, self.score - penalty)
+        actually = self.score - new_score
+        self.score = new_score
+        # Mirror via _last_gained so the HUD popup reads as a deduction.
+        if actually > 0:
+            self._last_gained = -actually
+        return actually
 
     # ---- encouragement popups ---------------------------------------------
     _ENCOURAGEMENT = {
@@ -946,11 +1027,17 @@ class GameEngine:
             for ls in gp.lanes:
                 ls.clear_timing()
                 ls.active = False
-        # Only chime on a non-Miss press. Doing it from one spot keeps the
-        # behaviour consistent across classic / adaptive.
-        if outcome.label != "Miss" and self.audio:
+        # Chime on a non-Miss press; otherwise the soft thunk so the
+        # patient hears something either way (matches rhythm mode).
+        if self.audio:
             try:
-                self.audio.play_hit()
+                if outcome.label != "Miss":
+                    self.audio.play_hit(combo=self.hit_streak)
+                elif self.hit_streak > 0:
+                    # Only thunk if the miss BREAKS a real streak. A
+                    # single isolated miss with no streak just gets
+                    # the visual feedback so the audio doesn't nag.
+                    self.audio.play_miss()
             except Exception:
                 pass
         # Capture streak BEFORE _update_streak runs so the trial row
@@ -1100,11 +1187,15 @@ class GameEngine:
             # Bolder flash for rhythm: 0.6 s so the green / orange / red
             # has time to register against fast falling notes.
             rs.flash_lane(sched_note.note.lane, colour, 0.6, now)
-        # Hit chime only on a real press (Miss = note scrolled past without
-        # a press, so we stay silent).
-        if label != "Miss" and self.audio:
+        # Hit chime on a real press; combo pitches up with the streak.
+        # On a Miss that breaks an existing streak we play the soft
+        # thunk so the patient hears the combo-break.
+        if self.audio:
             try:
-                self.audio.play_hit()
+                if label != "Miss":
+                    self.audio.play_hit(combo=self.hit_streak)
+                elif self.hit_streak > 0:
+                    self.audio.play_miss()
             except Exception:
                 pass
         if label in ("Miss",):
@@ -1160,6 +1251,25 @@ class GameEngine:
         if self.raw_logger:
             self.raw_logger.queue_event("rhythm_spurious_press", lane=lane,
                                          t_perf=now, hand=self.hand_mode)
+        # Score penalty for the wrong-lane press in rhythm mode. Each
+        # unmatched press costs `scoring.wrong_press_penalty` (floored
+        # at zero so the score never goes negative).
+        self.apply_wrong_press_penalty()
+        # Audio: combo-break thunk so a wrong-lane press has a
+        # distinct aural cue without being harsh.
+        if self.audio:
+            try:
+                self.audio.play_miss()
+            except Exception:
+                pass
+        # Visual feedback: flash the lane red so the patient can see
+        # exactly which finger fired wrong.
+        rs = self._screens.get("rhythm")
+        if rs and hasattr(rs, "flash_lane"):
+            try:
+                rs.flash_lane(lane, self.theme.lane_miss, 0.5, now)
+            except Exception:
+                pass
 
     @staticmethod
     def _parse_pattern(s: str, max_lanes: int) -> list[int]:

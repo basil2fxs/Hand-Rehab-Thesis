@@ -107,46 +107,122 @@ class Button:
         elif e.type == pygame.MOUSEBUTTONUP:
             self.pressed = False
 
+    # Soft drop shadow built from three offset rounded-rects with
+    # decreasing alpha so the edge fades smoothly instead of cutting
+    # off as a hard duplicate. (dy, alpha) per layer.
+    _SHADOW_PASSES = ((1, 70), (3, 40), (6, 18))
+
     def draw(self, surf: pygame.Surface) -> None:
-        # Explicit override wins. Otherwise primary -> accent, else muted.
+        # Pick the base fill colour by precedence:
+        #   explicit colour > primary -> theme accent > muted (default)
         if self.colour is not None:
             base = self.colour
-            # Slight brighten on hover so we still feel feedback even
-            # without falling back to the theme accent.
             if self.hover:
                 base = tuple(min(255, c + 22) for c in base)
         elif self.primary:
             base = self.theme.accent
+            if self.hover:
+                base = tuple(min(255, c + 18) for c in base)
         else:
             base = self.theme.muted
             if self.hover:
                 base = self.theme.accent
-        fill = _darker(base, 0.15) if self.pressed else base
-        # Shadow rectangle sits below and right of the actual button.
-        shadow = self.rect.move(0, self.SHADOW_OFFSET if not self.pressed else 1)
-        pygame.draw.rect(surf, _darker(fill, 0.5), shadow,
-                          border_radius=self.BORDER_RADIUS)
-        # Main button
-        pygame.draw.rect(surf, fill, self.rect, border_radius=self.BORDER_RADIUS)
-        # Bright top edge to suggest a light source from above
-        top_edge = pygame.Rect(self.rect.x + 6, self.rect.y + 4,
-                                self.rect.w - 12, 2)
-        bright = tuple(min(255, c + 30) for c in fill)
-        pygame.draw.rect(surf, bright, top_edge, border_radius=2)
+        fill = _darker(base, 0.18) if self.pressed else base
 
-        font = self.layout.font(self.font_pt)
-        # Pick a label colour with good contrast against the fill.
-        avg = sum(fill) / 3
-        text_colour = self.theme.background if avg > 140 else (255, 255, 255)
-        text = font.render(self.label, True, text_colour)
-        surf.blit(text, text.get_rect(center=self.rect.center))
+        # Multi-pass soft drop shadow. Each pass is a low-alpha black
+        # rect offset slightly more than the last, so the composite
+        # reads as a gentle fade rather than a hard duplicate. Pressed
+        # state collapses the shadow so the button feels "pushed in".
+        if self.pressed:
+            passes = ((1, 60),)
+        else:
+            passes = self._SHADOW_PASSES
+        shadow_surf = pygame.Surface(
+            (self.rect.w + 12, self.rect.h + 12), pygame.SRCALPHA,
+        )
+        for dy, alpha in passes:
+            pygame.draw.rect(
+                shadow_surf, (0, 0, 0, alpha),
+                pygame.Rect(6, 6 + dy, self.rect.w, self.rect.h),
+                border_radius=self.BORDER_RADIUS,
+            )
+        surf.blit(shadow_surf, (self.rect.x - 6, self.rect.y - 6))
+
+        # Body fill. Pressed buttons shift down by 1 px so the hand
+        # feels the click visually as well.
+        body_rect = self.rect.move(0, 1 if self.pressed else 0)
+        pygame.draw.rect(surf, fill, body_rect,
+                          border_radius=self.BORDER_RADIUS)
+
+        # Subtle top "shine": a narrow inset surface of low-alpha
+        # white across the top half. Drawn as its own SRCALPHA
+        # surface so the rounded corners feather naturally.
+        if not self.pressed:
+            shine_h = max(8, body_rect.h // 3)
+            shine_surf = pygame.Surface(
+                (body_rect.w - 6, shine_h), pygame.SRCALPHA,
+            )
+            pygame.draw.rect(
+                shine_surf, (255, 255, 255, 36),
+                shine_surf.get_rect(),
+                border_radius=max(2, self.BORDER_RADIUS - 4),
+            )
+            surf.blit(shine_surf,
+                       (body_rect.x + 3, body_rect.y + 3))
+
+        # Subtle bottom inner shadow: a thin dark line just inside
+        # the lower edge. Reads as depth without the heavy bevel of a
+        # full inset shadow.
+        if not self.pressed:
+            inner = pygame.Surface(
+                (body_rect.w - 4, 4), pygame.SRCALPHA,
+            )
+            pygame.draw.rect(inner, (0, 0, 0, 35),
+                              inner.get_rect(),
+                              border_radius=2)
+            surf.blit(inner,
+                       (body_rect.x + 2, body_rect.bottom - 6))
+
+        # Hover ring: a 2 px outline in white at low alpha so the
+        # affordance reads on any background colour. Skipped while
+        # pressed because the shifted body would clip the ring.
+        if self.hover and not self.pressed:
+            ring = pygame.Surface(
+                (body_rect.w + 4, body_rect.h + 4), pygame.SRCALPHA,
+            )
+            pygame.draw.rect(
+                ring, (255, 255, 255, 120),
+                ring.get_rect(),
+                width=2,
+                border_radius=self.BORDER_RADIUS + 2,
+            )
+            surf.blit(ring,
+                       (body_rect.x - 2, body_rect.y - 2))
+
+        # Label. Contrast against the fill: dark text on light fills,
+        # white on dark.
+        if self.label:
+            font = self.layout.font(self.font_pt)
+            avg = sum(fill) / 3
+            text_colour = (self.theme.background
+                            if avg > 150 else (255, 255, 255))
+            text = font.render(self.label, True, text_colour)
+            surf.blit(text, text.get_rect(center=body_rect.center))
 
 
 class Card:
     """A subtle panel background. Used to group related controls so the
-    eye doesn't get lost on a busy screen."""
+    eye doesn't get lost on a busy screen.
 
-    BORDER_RADIUS = 16
+    Visual treatment matches the polished Button: multi-pass soft drop
+    shadow, raised body, subtle top-band highlight, thin outline. Cards
+    feel like physical panels lifted off the page rather than coloured
+    rectangles cut from it.
+    """
+
+    BORDER_RADIUS = 18
+    # Same shadow recipe the Button uses, just one pass softer.
+    _SHADOW_PASSES = ((2, 50), (6, 28), (12, 10))
 
     def __init__(self, rect: pygame.Rect, theme: Theme,
                  title: str | None = None,
@@ -157,24 +233,47 @@ class Card:
         self.layout = layout
 
     def draw(self, surf: pygame.Surface) -> None:
-        # Soft shadow.
-        shadow = self.rect.move(0, 3)
-        pygame.draw.rect(surf, _darker(self.theme.muted, 0.6), shadow,
-                          border_radius=self.BORDER_RADIUS)
-        # The card body uses a slightly different shade from the page bg
-        # so it reads as a raised panel.
+        # Multi-pass soft drop shadow built off-screen so the outermost
+        # pass fades smoothly into the page background.
+        shadow_surf = pygame.Surface(
+            (self.rect.w + 24, self.rect.h + 24), pygame.SRCALPHA,
+        )
+        for dy, alpha in self._SHADOW_PASSES:
+            pygame.draw.rect(
+                shadow_surf, (0, 0, 0, alpha),
+                pygame.Rect(12, 12 + dy, self.rect.w, self.rect.h),
+                border_radius=self.BORDER_RADIUS,
+            )
+        surf.blit(shadow_surf, (self.rect.x - 12, self.rect.y - 12))
+        # Card body: a touch darker than the page background so it
+        # reads as a raised panel.
         body_colour = tuple(
             max(0, min(255, c - 8)) for c in self.theme.background
         )
         pygame.draw.rect(surf, body_colour, self.rect,
                           border_radius=self.BORDER_RADIUS)
-        # Optional 1px outline so the card has a clean edge on light themes.
-        pygame.draw.rect(surf, self.theme.muted, self.rect, 1,
+        # Subtle top-band highlight, same trick as Button: an SRCALPHA
+        # inset rect with low-alpha white. Reads as a hint of light
+        # from above without going gel-buttony.
+        shine_h = max(10, self.rect.h // 6)
+        shine_surf = pygame.Surface(
+            (self.rect.w - 12, shine_h), pygame.SRCALPHA,
+        )
+        pygame.draw.rect(
+            shine_surf, (255, 255, 255, 28),
+            shine_surf.get_rect(),
+            border_radius=max(2, self.BORDER_RADIUS - 6),
+        )
+        surf.blit(shine_surf, (self.rect.x + 6, self.rect.y + 6))
+        # Thin 1 px outline so the edge stays crisp.
+        outline_colour = tuple(max(0, c - 30) for c in self.theme.background)
+        pygame.draw.rect(surf, outline_colour, self.rect, 1,
                           border_radius=self.BORDER_RADIUS)
+        # Optional title in the top-left corner.
         if self.title and self.layout:
             font = self.layout.font(FONT_H2)
             t = font.render(self.title, True, self.theme.accent)
-            surf.blit(t, (self.rect.x + PADDING, self.rect.y + 16))
+            surf.blit(t, (self.rect.x + PADDING, self.rect.y + 18))
 
 
 def draw_text(surf: pygame.Surface, text: str, pos: tuple[int, int],
@@ -192,16 +291,198 @@ def draw_text(surf: pygame.Surface, text: str, pos: tuple[int, int],
     return rect
 
 
+class Dropdown:
+    """Click-to-open selector with a fixed list of options.
+
+    Two-pass rendering: closed-state pill via `draw_closed`, then once
+    all other widgets are drawn, an overlay popup via `draw_overlay`
+    (skipped when closed). That keeps the open list on top of every
+    other on-screen widget without z-ordering tricks.
+
+    `options` is `[(value, label), ...]`. The Dropdown stores `value`
+    in `current_value` and shows the matching `label`. `on_change` is
+    called with the new value the moment a different option is picked.
+    """
+
+    ROW_H = 40
+    BORDER_RADIUS = 8
+
+    def __init__(self, rect: pygame.Rect,
+                 options: list[tuple[object, str]],
+                 current_value: object,
+                 on_change: Callable[[object], None],
+                 theme: Theme, layout: Layout,
+                 placeholder: str = "(none)") -> None:
+        self.rect = rect
+        self.options = options
+        self.current_value = current_value
+        self.on_change = on_change
+        self.theme = theme
+        self.layout = layout
+        self.placeholder = placeholder
+        self.is_open = False
+        self._hover_idx = -1
+
+    def set_options(self, options: list[tuple[object, str]]) -> None:
+        """Replace the option list (e.g. after a port re-scan). If the
+        previously-selected value isn't in the new list, the dropdown
+        falls back to its first option (or None if empty)."""
+        self.options = options
+        if self.current_value is not None:
+            if not any(v == self.current_value for v, _ in options):
+                self.current_value = None
+
+    def _current_label(self) -> str:
+        for v, l in self.options:
+            if v == self.current_value:
+                return l
+        return self.placeholder
+
+    def _option_rect(self, idx: int) -> pygame.Rect:
+        return pygame.Rect(self.rect.x,
+                            self.rect.bottom + idx * self.ROW_H,
+                            self.rect.w, self.ROW_H)
+
+    def handle_event(self, e: pygame.event.Event) -> bool:
+        """Returns True if the event was consumed by this dropdown so
+        the caller can skip processing it further (avoids a click on
+        an option also hitting a button underneath the popup)."""
+        if e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
+            if self.rect.collidepoint(e.pos):
+                self.is_open = not self.is_open
+                return True
+            if self.is_open:
+                for i in range(len(self.options)):
+                    if self._option_rect(i).collidepoint(e.pos):
+                        v = self.options[i][0]
+                        if v != self.current_value:
+                            self.current_value = v
+                            self.on_change(v)
+                        self.is_open = False
+                        return True
+                # Click anywhere else: close + DO NOT consume the
+                # event. Lets the click also do whatever it would do
+                # on the page below (closing the dropdown shouldn't
+                # block a Save click outside).
+                self.is_open = False
+        if e.type == pygame.MOUSEMOTION and self.is_open:
+            self._hover_idx = -1
+            for i in range(len(self.options)):
+                if self._option_rect(i).collidepoint(e.pos):
+                    self._hover_idx = i
+                    break
+        return False
+
+    def draw_closed(self, surf: pygame.Surface) -> None:
+        """Render the always-visible pill. Call from screen.draw()
+        wherever the dropdown's resting position is."""
+        bg = tuple(max(0, c - 22) for c in self.theme.background)
+        fg = self.theme.foreground
+        pygame.draw.rect(surf, bg, self.rect,
+                          border_radius=self.BORDER_RADIUS)
+        pygame.draw.rect(surf, self.theme.muted, self.rect, 1,
+                          border_radius=self.BORDER_RADIUS)
+        # Current label, left-aligned with padding.
+        label_font = self.layout.font(FONT_BODY)
+        label = self._current_label()
+        if len(label) > 28:
+            label = label[:25] + "..."
+        surf.blit(label_font.render(label, True, fg),
+                   (self.rect.x + 12, self.rect.centery
+                    - label_font.get_height() // 2))
+        # Chevron: small triangle on the right edge. Points down when
+        # closed, up when open.
+        cx = self.rect.right - 16
+        cy = self.rect.centery
+        if self.is_open:
+            points = [(cx - 6, cy + 3), (cx + 6, cy + 3), (cx, cy - 4)]
+        else:
+            points = [(cx - 6, cy - 3), (cx + 6, cy - 3), (cx, cy + 4)]
+        pygame.draw.polygon(surf, fg, points)
+
+    def draw_overlay(self, surf: pygame.Surface) -> None:
+        """Draw the popup list. Call AFTER all other widgets so the
+        list sits on top. No-op when closed."""
+        if not self.is_open:
+            return
+        # Backplate so the popup reads as a separate layer.
+        total_h = self.ROW_H * len(self.options)
+        plate = pygame.Rect(self.rect.x, self.rect.bottom,
+                             self.rect.w, total_h)
+        bg = self.theme.background
+        pygame.draw.rect(surf, bg, plate,
+                          border_radius=self.BORDER_RADIUS)
+        pygame.draw.rect(surf, self.theme.muted, plate, 1,
+                          border_radius=self.BORDER_RADIUS)
+        label_font = self.layout.font(FONT_BODY)
+        for i, (_v, label) in enumerate(self.options):
+            r = self._option_rect(i)
+            if i == self._hover_idx:
+                pygame.draw.rect(surf, self.theme.accent, r,
+                                  border_radius=self.BORDER_RADIUS)
+                text_colour = (255, 255, 255)
+            else:
+                text_colour = self.theme.foreground
+            disp = label
+            if len(disp) > 32:
+                disp = disp[:29] + "..."
+            surf.blit(label_font.render(disp, True, text_colour),
+                       (r.x + 12,
+                        r.centery - label_font.get_height() // 2))
+
+
+# Raster icons loaded once and cached by (path, size, tint, flipped).
+# Tint replaces the icon's black pixels with the requested colour while
+# keeping its alpha mask, so the same source PNG can render in any theme
+# colour without bundling a recoloured asset for each.
+_ICON_CACHE: dict[tuple, pygame.Surface] = {}
+
+
+def load_icon(path: str, size: int,
+              tint: tuple[int, int, int] | None = None,
+              flip_x: bool = False) -> pygame.Surface | None:
+    """Load a PNG icon, optionally tint it to a colour, scale to size,
+    and optionally flip horizontally. Returns None if the file can't be
+    loaded so callers can gracefully fall back to a primitive glyph.
+    Results are cached per (path, size, tint, flip) so repeat draws are
+    free."""
+    key = (path, size, tint, flip_x)
+    cached = _ICON_CACHE.get(key)
+    if cached is not None:
+        return cached
+    try:
+        raw = pygame.image.load(path).convert_alpha()
+    except (pygame.error, FileNotFoundError):
+        return None
+    # Recolour: keep the source alpha (which carries the shape) and
+    # substitute the RGB channels with the tint. Uses numpy via
+    # pygame.surfarray so the result is a clean recolour regardless
+    # of whether the source PNG was black, grey, or already coloured.
+    if tint is not None:
+        tinted = pygame.Surface(raw.get_size(), pygame.SRCALPHA)
+        tinted.fill((*tint, 255))
+        alpha = pygame.surfarray.array_alpha(raw)
+        pygame.surfarray.pixels_alpha(tinted)[:] = alpha
+        raw = tinted
+    if (size, size) != raw.get_size():
+        raw = pygame.transform.smoothscale(raw, (size, size))
+    if flip_x:
+        raw = pygame.transform.flip(raw, True, False)
+    _ICON_CACHE[key] = raw
+    return raw
+
+
 class LaneStrip:
     """One finger lane. Big finger name, hand-coloured border, hit flash."""
 
     FINGER_LABELS = ["Index", "Middle", "Ring", "Little"]
-    # Border + badge colours per hand. Blue for right, teal for left.
-    # The left used to be red but that clashed with the miss-flash red,
-    # so a left-hand tile in its default state looked like a permanent miss.
+    # Border + badge colours per hand. Blue for right, purple for left.
+    # Purple sits opposite blue on the wheel so the two hands read as a
+    # clean pair without either fighting the green/orange/red outcome
+    # flashes the lanes use during play.
     HAND_BADGE = {
         "right": (37, 99, 235),    # blue
-        "left":  (13, 148, 136),   # teal
+        "left":  (168, 85, 247),   # purple
     }
 
     def __init__(self, lane: int, rect: pygame.Rect,
@@ -216,7 +497,22 @@ class LaneStrip:
         # the global lane number could look like a fifth finger when we wrap
         # past 4 in bilateral mode.
         self.finger = finger if finger is not None else (lane % 4)
+        # `active` means "this lane is the current target (stim has
+        # fired, waiting for a press)". Set by GameEngine.on_stim.
+        # `is_pressed` is independent: it tracks whether the patient
+        # is physically pressing this finger right now, driven by the
+        # FSR detector (Arduino path) or held-keys set (keyboard
+        # fallback). The two states overlap freely: a lane can be the
+        # target AND currently pressed at the same time. Keeping them
+        # split means the press feedback never overwrites the "this
+        # is the lane you're meant to hit" cue.
         self.active = False
+        self.is_pressed = False
+        # `pressed_until_min` keeps the press-state visual alive for a
+        # minimum window after release so a quick tap (typical for
+        # keyboard test mode) still produces a satisfying flash rather
+        # than a single-frame blink the eye misses entirely.
+        self.pressed_until_min = 0.0
         self.flash_until = 0.0
         self.flash_colour: tuple[int, int, int] | None = None
         # `glow_until` drives a brief halo effect when this lane gets a press.
@@ -231,6 +527,32 @@ class LaneStrip:
         # window length in seconds. None means no bar is showing.
         self._timing_stim_t: float | None = None
         self._timing_timeout: float = 1.0
+        # Diagnostics needs the full label set (hand name, live FSR /
+        # baseline readout) so the therapist can confirm each sensor.
+        # During actual gameplay both are noise: the hand icon already
+        # tells the patient which hand it is, and the 0/0 readout has
+        # nothing to do with the rehab task. Screens that don't want
+        # them flip these to False after construction.
+        self.show_hand_label = True
+        self.show_value_readout = True
+
+    def set_pressed(self, is_pressed: bool, now: float,
+                     min_hold_s: float = 0.10) -> None:
+        """Update the live press state. On a press, latch a minimum-
+        visible window so a quick tap (single frame down then up)
+        still produces a press flash the patient can see. Holding
+        keeps is_pressed True the whole time; release falls back to
+        whether `now` is still inside the latched window."""
+        if is_pressed:
+            self.is_pressed = True
+            self.pressed_until_min = max(self.pressed_until_min,
+                                           now + min_hold_s)
+        else:
+            # Not currently held but still inside the latched window.
+            if now < self.pressed_until_min:
+                self.is_pressed = True
+            else:
+                self.is_pressed = False
 
     def arm_timing(self, stim_t: float, timeout_s: float) -> None:
         """Start a timing bar on this lane. Called when its stim fires."""
@@ -246,6 +568,20 @@ class LaneStrip:
         self.flash_until = now + duration_s
         # Add a halo at the same time so the lane really pops when scored.
         self.glow_until = now + duration_s
+
+    @staticmethod
+    def _draw_tiny_hand(surf: pygame.Surface, cx: int, cy: int,
+                         kind: str, colour: tuple[int, int, int]) -> None:
+        """Mini palm-down hand icon for the lane-strip badge. Uses
+        the bundled Material Icons pan_tool PNG (Apache 2.0), tinted
+        to the badge's text colour, scaled to fit inside the 22 px
+        radius badge. Right hand uses the icon as-is, left hand flips
+        horizontally (the PNG natively reads as a right hand)."""
+        from ..config import PROJECT_ROOT
+        path = str(PROJECT_ROOT / "assets" / "icons" / "pan_tool.png")
+        icon = load_icon(path, 30, tint=colour, flip_x=(kind == "left"))
+        if icon is not None:
+            surf.blit(icon, icon.get_rect(center=(cx, cy + 1)))
 
     def draw(self, surf: pygame.Surface, now: float) -> None:
         # Background fill
@@ -267,22 +603,95 @@ class LaneStrip:
                               border_radius=22)
             surf.blit(ts, halo.topleft)
 
-        pygame.draw.rect(surf, fill, self.rect, border_radius=14)
-        border = self.HAND_BADGE.get(self.hand, self.theme.foreground)
-        # Thicker border when the lane is the current target so it stands out.
-        border_w = 6 if self.active else 3
-        pygame.draw.rect(surf, border, self.rect, border_w, border_radius=14)
+        border_colour = self.HAND_BADGE.get(self.hand, self.theme.foreground)
 
-        # Hand badge: filled circle top-left, big letter inside.
+        # Target-lane attention pulse. While `active` is True (a stim
+        # has fired and we're waiting for a press), wrap the tile in
+        # a slow-pulsing outer halo in the hand colour. Reads as
+        # "look here NOW" without changing colour mid-trial. Sine
+        # period 0.9 s keeps it gentle but visible. Skipped when the
+        # tile is also being pressed (the press halo already does
+        # the job of attention).
+        if self.active and not self.is_pressed:
+            import math as _m
+            phase = (_m.sin(now * (2 * _m.pi / 0.9)) + 1) * 0.5
+            target_halo = self.rect.inflate(36, 36)
+            th_surf = pygame.Surface(target_halo.size, pygame.SRCALPHA)
+            outer_alpha = int(45 + 65 * phase)   # 45..110
+            pygame.draw.rect(th_surf, (*border_colour, outer_alpha),
+                              th_surf.get_rect(),
+                              border_radius=26)
+            # Tighter inner ring to give the halo body.
+            inner = th_surf.get_rect().inflate(-16, -16)
+            pygame.draw.rect(th_surf, (*border_colour,
+                                         int(outer_alpha * 0.75)),
+                              inner, border_radius=22)
+            surf.blit(th_surf, target_halo.topleft)
+
+        # Press-state outer halo. A wide soft glow in the hand colour
+        # sitting around the tile so the patient gets unmistakable
+        # "your press registered" feedback even before the timing
+        # judges it. Drawn BEFORE the body fill so the body sits on
+        # top of the glow rather than the other way round.
+        if self.is_pressed:
+            press_halo = self.rect.inflate(24, 24)
+            ph_surf = pygame.Surface(press_halo.size, pygame.SRCALPHA)
+            # Two passes for a soft falloff: a wider faint pass + a
+            # tighter brighter inner ring.
+            pygame.draw.rect(ph_surf, (*border_colour, 75),
+                              ph_surf.get_rect(),
+                              border_radius=22)
+            inner_rect = ph_surf.get_rect().inflate(-12, -12)
+            pygame.draw.rect(ph_surf, (*border_colour, 110),
+                              inner_rect,
+                              border_radius=18)
+            surf.blit(ph_surf, press_halo.topleft)
+
+        # Body fill.
+        pygame.draw.rect(surf, fill, self.rect, border_radius=14)
+
+        # Pressed fill highlight: a thin white overlay across the top
+        # third of the tile so the press reads as a "lit up" surface
+        # rather than just a colour change. Skipped on flash so the
+        # outcome colour (green/orange/red) stays pure.
+        if self.is_pressed and not (now < self.flash_until):
+            lit_h = max(8, self.rect.h // 4)
+            lit = pygame.Surface((self.rect.w - 6, lit_h), pygame.SRCALPHA)
+            pygame.draw.rect(lit, (255, 255, 255, 60),
+                              lit.get_rect(),
+                              border_radius=10)
+            surf.blit(lit, (self.rect.x + 3, self.rect.y + 3))
+
+        # Border. Thickness scales with state:
+        #   idle              -> 3 px
+        #   target (active)   -> 6 px
+        #   pressed           -> 8 px (visually loudest)
+        #   target + pressed  -> 10 px
+        if self.is_pressed and self.active:
+            border_w = 10
+        elif self.is_pressed:
+            border_w = 8
+        elif self.active:
+            border_w = 6
+        else:
+            border_w = 3
+        pygame.draw.rect(surf, border_colour, self.rect, border_w,
+                          border_radius=14)
+        border = border_colour
+
+        # Hand badge: filled circle top-left with a tiny palm-down hand
+        # icon inside. Replaces the old "L" / "R" letter so the badge
+        # reads as a piece of finger-rehab iconography instead of plain
+        # text. The hand silhouette has its thumb on the screen-side
+        # that matches the actual hand (right hand -> thumb on the
+        # LEFT of the icon, palm-down view from the patient).
         badge_r = 22
         bx = self.rect.x + badge_r + 8
         by = self.rect.y + badge_r + 8
         pygame.draw.circle(surf, border, (bx, by), badge_r)
         pygame.draw.circle(surf, self.theme.background, (bx, by), badge_r, 3)
-        badge_font = self.layout.font(20)
-        letter = self.hand[0].upper() if self.hand else "?"
-        text = badge_font.render(letter, True, self.theme.background)
-        surf.blit(text, text.get_rect(center=(bx, by)))
+        self._draw_tiny_hand(surf, bx, by, self.hand or "right",
+                              self.theme.background)
 
         # Big finger label centred near the bottom of the strip.
         font = self.layout.font(32)
@@ -293,22 +702,28 @@ class LaneStrip:
         )))
 
         # Hand strapline below the finger name in the hand colour.
-        hand_font = self.layout.font(FONT_SMALL + 2)
-        hand_word = ("Right hand" if self.hand == "right"
-                     else "Left hand" if self.hand == "left" else "")
-        if hand_word:
-            hl = hand_font.render(hand_word, True, border)
-            surf.blit(hl, hl.get_rect(midbottom=(
-                self.rect.centerx, self.rect.bottom - 16,
-            )))
+        # Hidden during gameplay (the hand badge icon top-left already
+        # carries that information). Diagnostics keeps it on so the
+        # therapist always knows which row is which hand.
+        if self.show_hand_label:
+            hand_font = self.layout.font(FONT_SMALL + 2)
+            hand_word = ("Right hand" if self.hand == "right"
+                         else "Left hand" if self.hand == "left" else "")
+            if hand_word:
+                hl = hand_font.render(hand_word, True, border)
+                surf.blit(hl, hl.get_rect(midbottom=(
+                    self.rect.centerx, self.rect.bottom - 16,
+                )))
 
-        # FSR live readout top-right corner. Small so it doesn't fight the
-        # finger name during gameplay.
-        small = self.layout.font(FONT_SMALL)
-        info = small.render(f"{int(self.value)}/{int(self.baseline)}",
-                            True, self.theme.muted)
-        surf.blit(info, info.get_rect(topright=(self.rect.right - 8,
-                                                 self.rect.top + 8)))
+        # FSR live readout top-right corner. Useful on the Diagnostics
+        # screen for confirming the sensor is delivering data; pure
+        # noise during a real session, so gameplay screens hide it.
+        if self.show_value_readout:
+            small = self.layout.font(FONT_SMALL)
+            info = small.render(f"{int(self.value)}/{int(self.baseline)}",
+                                True, self.theme.muted)
+            surf.blit(info, info.get_rect(topright=(self.rect.right - 8,
+                                                     self.rect.top + 8)))
 
         # Timing bar. Renders a vertical bar down the right edge of the
         # lane showing how much of the press window is left. Coloured by
@@ -382,6 +797,66 @@ class FloatingText:
         rect = text.get_rect(center=(self.start_pos[0],
                                       self.start_pos[1] - y_offset))
         surf.blit(text, rect)
+
+
+class HitBurst:
+    """Confetti-style particle burst for rhythm-mode hits.
+
+    Each particle is a small filled circle that flies outward from the
+    burst origin, shrinks, and fades to nothing over `lifetime_s`. The
+    burst as a whole keeps a list of these particles and exposes
+    `alive` so the owning screen can prune finished bursts off its
+    list once they're done animating.
+    """
+
+    def __init__(self, pos: tuple[int, int],
+                 colour: tuple[int, int, int],
+                 count: int = 9,
+                 lifetime_s: float = 0.5,
+                 speed_px_s: float = 320.0,
+                 r_start: int = 7) -> None:
+        import math
+        import random
+        self.colour = colour
+        self.lifetime_s = lifetime_s
+        self.born = time.perf_counter()
+        self._origin = pos
+        self._r_start = r_start
+        # Outward velocity for each particle, evenly spread around the
+        # circle with a small random jitter on angle + speed so each
+        # burst looks different from the last.
+        self._vel: list[tuple[float, float]] = []
+        for i in range(count):
+            angle = (math.tau * i / count
+                     + random.uniform(-0.25, 0.25))
+            speed = speed_px_s * random.uniform(0.7, 1.15)
+            self._vel.append((math.cos(angle) * speed,
+                               math.sin(angle) * speed))
+
+    @property
+    def alive(self) -> bool:
+        return (time.perf_counter() - self.born) < self.lifetime_s
+
+    def draw(self, surf: pygame.Surface) -> None:
+        age = time.perf_counter() - self.born
+        if age >= self.lifetime_s:
+            return
+        frac = age / self.lifetime_s
+        alpha = int(255 * (1.0 - frac))
+        radius = max(1, int(self._r_start * (1.0 - frac * 0.6)))
+        ox, oy = self._origin
+        # Render every particle onto one SRCALPHA surface so the alpha
+        # blends cleanly without us having to per-particle compose.
+        size = radius * 2 + 4
+        for vx, vy in self._vel:
+            x = ox + vx * age
+            y = oy + vy * age
+            disc = pygame.Surface((size, size), pygame.SRCALPHA)
+            pygame.draw.circle(
+                disc, (*self.colour, alpha),
+                (size // 2, size // 2), radius,
+            )
+            surf.blit(disc, (int(x) - size // 2, int(y) - size // 2))
 
 
 class TextInput:

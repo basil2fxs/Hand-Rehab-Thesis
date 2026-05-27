@@ -120,7 +120,15 @@ class ClassicMode:
         if ev.lane == self.active.lane:
             self._finish(ev, now)
         else:
+            # Score penalty fires only on the FIRST wrong press of the
+            # trial. Subsequent wrong presses still get logged for
+            # analysis but don't keep subtracting (otherwise a patient
+            # mashing all four fingers would dig themselves into a hole
+            # they can't recover from).
+            first_wrong = not self.active.incorrect_presses
             self.active.incorrect_presses.append((ev.lane, ev.t_perf))
+            if first_wrong:
+                self.engine.apply_wrong_press_penalty()
 
     def _finish(self, ev: PressEvent | None, now: float) -> None:
         if self.active is None:
