@@ -152,15 +152,28 @@ class ClassifyOffsetBoundaryTests(unittest.TestCase):
         self.assertEqual(classify_offset(300.01, w)[0], "Miss")
         self.assertEqual(classify_offset(-301.0, w)[0], "Miss")
 
-    def test_perfect_points_are_one_above_great(self) -> None:
+    def test_perfect_outscores_great(self) -> None:
         # The incentive ordering "Perfect > Great > Good > Late" must
-        # survive a custom ScoreConfig that bumps great_points up.
+        # survive a custom ScoreConfig. Perfect now has its own
+        # configurable point value rather than being implicitly
+        # great_points + 1, so the custom cfg overrides both
+        # independently.
         from rehab.game.scoring import RhythmWindows, ScoreConfig, classify_offset
         w = RhythmWindows()
-        cfg = ScoreConfig(great_points=10, good_points=5, late_points=2)
+        cfg = ScoreConfig(perfect_points=15, great_points=10,
+                           good_points=5, late_points=2)
         _, perfect_pts = classify_offset(10.0, w, cfg)
         _, great_pts = classify_offset(80.0, w, cfg)
-        self.assertEqual(perfect_pts, great_pts + 1)
+        _, good_pts = classify_offset(150.0, w, cfg)
+        _, late_pts = classify_offset(250.0, w, cfg)
+        self.assertEqual(perfect_pts, 15)
+        self.assertEqual(great_pts, 10)
+        self.assertEqual(good_pts, 5)
+        self.assertEqual(late_pts, 2)
+        # Strict descending order regardless of the chosen values.
+        self.assertGreater(perfect_pts, great_pts)
+        self.assertGreater(great_pts, good_pts)
+        self.assertGreater(good_pts, late_pts)
 
 
 class RhythmModePressMatchingTests(unittest.TestCase):

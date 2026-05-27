@@ -103,6 +103,121 @@ class HeadlessEngineBootTests(unittest.TestCase):
         rc = eng.run()
         self.assertEqual(rc, 0)
 
+    def test_startup_screen_build_failure_still_quits_pygame(self) -> None:
+        # If _build_screens() raises after pygame.display.set_mode succeeds,
+        # the engine has to still tear pygame back down. Before the
+        # try/finally was widened, pygame would stay initialised and on
+        # Windows the display context could persist across re-runs.
+        os.environ["SDL_VIDEODRIVER"] = "dummy"
+        os.environ["SDL_AUDIODRIVER"] = "dummy"
+        import pygame
+        from rehab.config import Config
+        from rehab.game.engine import GameEngine
+        from rehab.hardware.keyboard_source import KeyboardOnlySource
+        cfg = Config.load()
+        cfg.data["ui"]["resolution"] = [640, 480]
+        cfg.data["audio"]["enabled"] = False
+        src = KeyboardOnlySource()
+        eng = GameEngine(cfg, src)
+
+        def _boom():
+            raise RuntimeError("simulated screen-init failure")
+        eng._build_screens = _boom  # type: ignore[method-assign]
+        try:
+            with self.assertRaises(RuntimeError):
+                eng.run()
+        finally:
+            # Belt-and-braces: even if pygame.quit happened, calling it
+            # again is a no-op. If the fix regressed this would still
+            # leave pygame.get_init() True.
+            still_init = pygame.get_init()
+            if still_init:
+                pygame.quit()
+            self.assertFalse(
+                still_init,
+                "pygame should be quit even when _build_screens raises",
+            )
+            src.stop()
+
+    def test_startup_source_start_failure_still_cleans_up(self) -> None:
+        # If source.start() raises (e.g. a serial port that vanished
+        # between discover and open), the engine should still hit the
+        # finally and call source.stop. KeyboardOnlySource.start can't
+        # naturally raise, so we monkey-patch it.
+        os.environ["SDL_VIDEODRIVER"] = "dummy"
+        os.environ["SDL_AUDIODRIVER"] = "dummy"
+        import pygame
+        from rehab.config import Config
+        from rehab.game.engine import GameEngine
+        from rehab.hardware.keyboard_source import KeyboardOnlySource
+        cfg = Config.load()
+        cfg.data["ui"]["resolution"] = [640, 480]
+        cfg.data["audio"]["enabled"] = False
+        src = KeyboardOnlySource()
+        stop_calls: list[int] = [0]
+        original_stop = src.stop
+
+        def _spy_stop():
+            stop_calls[0] += 1
+            original_stop()
+        src.stop = _spy_stop  # type: ignore[method-assign]
+
+        def _boom():
+            raise OSError("simulated port vanished")
+        src.start = _boom  # type: ignore[method-assign]
+
+        eng = GameEngine(cfg, src)
+        try:
+            with self.assertRaises(OSError):
+                eng.run()
+        finally:
+            self.assertGreaterEqual(
+                stop_calls[0], 1,
+                "source.stop must run in finally even when source.start raises",
+            )
+            if pygame.get_init():
+                pygame.quit()
+
+    def test_startup_audio_build_failure_still_stops_source(self) -> None:
+        # If _build_audio() raises after source.start() succeeded, the
+        # finally has to stop the source. Otherwise on a real session
+        # the Arduino stays open and the next attempt to launch the
+        # game would fail to grab the port.
+        os.environ["SDL_VIDEODRIVER"] = "dummy"
+        os.environ["SDL_AUDIODRIVER"] = "dummy"
+        import pygame
+        from rehab.config import Config
+        from rehab.game.engine import GameEngine
+        from rehab.hardware.keyboard_source import KeyboardOnlySource
+        cfg = Config.load()
+        cfg.data["ui"]["resolution"] = [640, 480]
+        cfg.data["audio"]["enabled"] = True   # so _build_audio is exercised
+        src = KeyboardOnlySource()
+        stop_calls: list[int] = [0]
+        original_stop = src.stop
+
+        def _spy_stop():
+            stop_calls[0] += 1
+            original_stop()
+        src.stop = _spy_stop  # type: ignore[method-assign]
+
+        eng = GameEngine(cfg, src)
+
+        def _boom():
+            raise RuntimeError("simulated audio device gone")
+        eng._build_audio = _boom  # type: ignore[method-assign]
+
+        try:
+            with self.assertRaises(RuntimeError):
+                eng.run()
+        finally:
+            self.assertGreaterEqual(
+                stop_calls[0], 1,
+                "source.stop must run when _build_audio raises",
+            )
+            if pygame.get_init():
+                pygame.quit()
+
     def test_engine_mainloop_body_actually_iterates(self) -> None:
         # The bare run-and-exit test above never exercises the while-body.
         # This one wraps the title screen's update() so we can count

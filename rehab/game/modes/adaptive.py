@@ -134,17 +134,21 @@ class AdaptiveMode:
 
     def _handle_press(self, ev: PressEvent, now: float) -> None:
         if self.active is None:
+            # Between-trial spam still costs the idle-press penalty so
+            # mashing between stims isn't free. See classic.py for the
+            # rationale; same mechanism here.
+            self.engine.apply_idle_press_penalty()
             return
         self.active.keys_pressed.append(ev.lane)
         if ev.lane == self.active.lane:
             self._finish(ev, now)
         else:
-            # See classic.py for why we only penalise the FIRST wrong
-            # press per trial.
-            first_wrong = not self.active.incorrect_presses
+            # Every wrong press costs - see classic.py for why we
+            # changed from first-only to per-press penalties (it was
+            # the dominant strategy: mash everything, eat one small
+            # penalty, take the hit).
             self.active.incorrect_presses.append((ev.lane, ev.t_perf))
-            if first_wrong:
-                self.engine.apply_wrong_press_penalty()
+            self.engine.apply_wrong_press_penalty()
 
     # Quality weights tell the adapter how good a press was, not just hit/miss.
     # A Great is a full-credit press, a Late only counts a quarter so it
@@ -164,6 +168,19 @@ class AdaptiveMode:
         if ev is not None:
             rt_ms = (ev.t_perf - self.active.stim_t_perf) * 1000.0
         outcome = classify(rt_ms, self.score_cfg)
+        # Wrong-press => Miss. Critical for adaptive mode in particular:
+        # the adapter weights weak fingers by their MISS rate, so a
+        # fumble-then-correct trial currently masked the struggle and
+        # the engine never picked that finger more often. Now the
+        # adapter sees the miss, the lane gets weakness bias on the
+        # next sequence, and the patient is helped through it.
+        if self.active.incorrect_presses:
+            from ..scoring import TrialResult
+            outcome = TrialResult(
+                label="Miss",
+                points=self.score_cfg.miss_points,
+                rt_ms=rt_ms,
+            )
         quality = self._QUALITY.get(outcome.label, 0.0)
         # Feed the adapter then immediately recompute BPM so the next trial
         # already reflects whether this was a hit or a miss. Without this

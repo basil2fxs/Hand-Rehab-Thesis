@@ -200,10 +200,69 @@ class GlobalParticipantPersistenceTests(unittest.TestCase):
         finally:
             pygame.quit()
 
-    def test_trial_columns_no_longer_include_age(self) -> None:
+    def test_title_screen_prefills_age_from_cfg(self) -> None:
+        # If a config write set session.age previously (e.g. the last
+        # patient's age survived through a Save), the title screen
+        # should prefill that value too - same persistence behaviour
+        # the participant field already gets.
+        import pygame
+        pygame.init()
+        try:
+            from rehab.config import Config
+            from rehab.game.engine import GameEngine
+            from rehab.hardware.keyboard_source import KeyboardOnlySource
+            from rehab.ui.screens import TitleScreen
+            cfg = Config.load()
+            cfg.data["ui"]["resolution"] = [1280, 800]
+            cfg.data.setdefault("session", {})["age"] = "72"
+            eng = GameEngine(cfg, KeyboardOnlySource())
+            sc = TitleScreen(eng)
+            self.assertEqual(sc.age_input.text, "72")
+        finally:
+            pygame.quit()
+
+    def test_begin_pushes_name_and_age_to_session(self) -> None:
+        # Clicking START SESSION (or Enter) must propagate BOTH typed
+        # values onto engine.session so the first trial row that gets
+        # written downstream carries the right metadata.
+        import pygame
+        pygame.init()
+        try:
+            from rehab.config import Config
+            from rehab.game.engine import GameEngine
+            from rehab.hardware.keyboard_source import KeyboardOnlySource
+            from rehab.ui.screens import TitleScreen
+            cfg = Config.load()
+            cfg.data["ui"]["resolution"] = [1280, 800]
+            eng = GameEngine(cfg, KeyboardOnlySource())
+            sc = TitleScreen(eng)
+            sc.name_input.text = "Basil"
+            sc.age_input.text = "23"
+            # Stub the navigation so _begin doesn't try to draw the
+            # next screen during the test.
+            eng.show_mode_select = lambda: None
+            sc._begin()
+            self.assertEqual(eng.session.participant, "Basil")
+            self.assertEqual(eng.session.age, "23")
+            self.assertEqual(cfg.get("session.age"), "23")
+        finally:
+            pygame.quit()
+
+    def test_trial_columns_include_age_and_participant(self) -> None:
+        # `age` was added back to the trial schema after the demographic
+        # cohort note in MyChanges.md - patient age matters for stroke
+        # rehab outcomes and is cheap to capture on the title screen.
+        # The earlier "no_longer_include_age" test asserted the absence
+        # of this column, which had to flip when age was re-introduced.
         from rehab.data.logger import TRIAL_COLUMNS
-        self.assertNotIn("age", TRIAL_COLUMNS)
+        self.assertIn("age", TRIAL_COLUMNS)
         self.assertIn("participant", TRIAL_COLUMNS)
+        # Age sits next to participant for readability when a researcher
+        # opens the CSV in a spreadsheet.
+        self.assertEqual(
+            TRIAL_COLUMNS.index("age"),
+            TRIAL_COLUMNS.index("participant") + 1,
+        )
 
 
 class SliderWidgetTests(unittest.TestCase):
@@ -676,6 +735,98 @@ class DiagnosticsConnectionStateTests(unittest.TestCase):
         try:
             text, _ = d._connection_state()
             self.assertEqual(text, "DISCONNECTED")
+        finally:
+            pygame.quit()
+
+
+class DiagnosticsAlwaysEightLanesTests(unittest.TestCase):
+    """Settings screen has to show all 8 finger tiles regardless of
+    the session-level hand_mode. Without this, a therapist who set
+    hand_mode=right couldn't even see the left-hand tiles to verify
+    that hardware works."""
+
+    def _build(self, hand_mode: str):
+        import os
+        os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+        os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+        import pygame
+        pygame.init()
+        from rehab.config import Config
+        from rehab.game.engine import GameEngine
+        from rehab.hardware.keyboard_source import KeyboardOnlySource
+        cfg = Config.load()
+        cfg.data["ui"]["resolution"] = [1280, 800]
+        cfg.data.setdefault("bilateral", {})["hand"] = hand_mode
+        eng = GameEngine(cfg, KeyboardOnlySource(cfg))
+        eng.hand_mode = hand_mode
+        return eng, pygame
+
+    def test_eight_lanes_when_hand_mode_is_right(self) -> None:
+        eng, pygame = self._build("right")
+        try:
+            from rehab.ui.screens import DiagnosticsScreen
+            d = DiagnosticsScreen(eng)
+            self.assertEqual(len(d.lanes), 8)
+            # Lanes 0..3 right, 4..7 left.
+            hands = [ls.hand for ls in d.lanes]
+            self.assertEqual(hands[0:4], ["right"] * 4)
+            self.assertEqual(hands[4:8], ["left"] * 4)
+        finally:
+            pygame.quit()
+
+    def test_eight_lanes_when_hand_mode_is_left(self) -> None:
+        eng, pygame = self._build("left")
+        try:
+            from rehab.ui.screens import DiagnosticsScreen
+            d = DiagnosticsScreen(eng)
+            self.assertEqual(len(d.lanes), 8)
+        finally:
+            pygame.quit()
+
+    def test_eight_lanes_when_hand_mode_is_both(self) -> None:
+        eng, pygame = self._build("both")
+        try:
+            from rehab.ui.screens import DiagnosticsScreen
+            d = DiagnosticsScreen(eng)
+            self.assertEqual(len(d.lanes), 8)
+        finally:
+            pygame.quit()
+
+    def test_show_diagnostics_builds_both_detectors(self) -> None:
+        # The Settings screen needs both left + right detectors so
+        # the FSR press visual works across all 8 lanes. Confirm
+        # show_diagnostics creates the missing one when hand_mode
+        # is unilateral.
+        eng, pygame = self._build("right")
+        try:
+            self.assertNotIn("left", eng.detectors)
+            eng.show_diagnostics()
+            self.assertIn("right", eng.detectors)
+            self.assertIn("left", eng.detectors)
+        finally:
+            pygame.quit()
+
+    def test_diagnostics_keyboard_uses_bilateral_keymap(self) -> None:
+        # When the source is keyboard-only, the press-test path has
+        # to recognise both hands' keys (FDSA + JKL;) regardless of
+        # the session hand_mode. Otherwise a therapist running in
+        # right-mode couldn't test the left-hand keys at all.
+        import pygame as _pg
+        eng, pygame = self._build("right")
+        try:
+            from rehab.ui.screens import DiagnosticsScreen
+            d = DiagnosticsScreen(eng)
+            # Simulate the 'a' key (left little, lane 7) being held.
+            from rehab.game.modes._keys import resolve_key
+            a_keycode = resolve_key("a")
+            self.assertIsNotNone(a_keycode)
+            d._held_keys.add(a_keycode)
+            # Lane 7 is the left little finger; should now read held.
+            self.assertTrue(d._key_pressed_for_lane(7, "left"))
+            # And 'j' (right index, lane 0) should also work.
+            j_keycode = resolve_key("j")
+            d._held_keys.add(j_keycode)
+            self.assertTrue(d._key_pressed_for_lane(0, "right"))
         finally:
             pygame.quit()
 

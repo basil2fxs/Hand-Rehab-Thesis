@@ -16,6 +16,13 @@ SOFTWARE_VERSION = "1.0.0"
 @dataclass
 class Session:
     participant: str = "NA"
+    # Age in years, captured on the title screen alongside the
+    # participant name. Stored as a string so the JSON round-trips
+    # raw user input (a researcher might write "65", "65y", "NA",
+    # or leave it blank for a patient who declined). Empty string is
+    # a valid value meaning "not provided" and is what the title
+    # screen leaves it as when the age field stays unfilled.
+    age: str = ""
     hand: str = "right"     # "left" / "right" / "both"
     started_at: str = field(
         default_factory=lambda: time.strftime("%Y-%m-%dT%H:%M:%S")

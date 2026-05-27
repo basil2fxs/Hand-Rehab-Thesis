@@ -192,11 +192,21 @@ class OutcomeColourTests(unittest.TestCase):
         self.assertEqual(eng._outcome_colour("Late"), eng._ORANGE_CLOSE)
         self.assertEqual(eng._outcome_colour("Early"), eng._ORANGE_CLOSE)
 
-    def test_perfect_great_good_are_green(self) -> None:
+    def test_great_and_good_are_green(self) -> None:
+        # Great + Good both flash the standard hit-green; Perfect has
+        # its own gold flash now so it stands apart visually from a
+        # merely-fast press.
         eng = self._make_engine()
-        for label in ("Perfect", "Great", "Good"):
+        for label in ("Great", "Good"):
             self.assertEqual(eng._outcome_colour(label), eng.theme.lane_hit,
                               f"{label} should flash green (clean correct press)")
+
+    def test_perfect_is_gold(self) -> None:
+        # Sub-perfect_ms press carries the top reward and now gets a
+        # distinct gold flash so the patient can tell at a glance
+        # they nailed it instead of just being on time.
+        eng = self._make_engine()
+        self.assertEqual(eng._outcome_colour("Perfect"), eng._GOLD)
 
 
 class RhythmLaneNoDarkenOnStimTests(unittest.TestCase):
@@ -257,10 +267,15 @@ class AudioHitChimeTests(unittest.TestCase):
         # play_stim IS called.
         self.assertIn("self.audio.play_stim(", src,
                        "play_stim must be wired in on_stim for cue tone")
-        # And it must be gated on the current_block so rhythm doesn't
-        # also fire it.
-        self.assertIn('current_block in ("classic", "adaptive")', src,
-                       "stim tone must only fire for classic + adaptive")
+        # And it must be gated on the cadence-driven blocks so rhythm
+        # doesn't also fire it (rhythm has its own music + chime cue).
+        # Mirror mode was added in Thread C and counts as cadence-
+        # driven too, so the gate now lists all three.
+        self.assertIn(
+            'current_block in ("classic", "adaptive", "mirror")', src,
+            "stim tone must fire for the cadence-driven modes "
+            "(classic, adaptive, mirror) and be gated off rhythm",
+        )
 
 
 if __name__ == "__main__":

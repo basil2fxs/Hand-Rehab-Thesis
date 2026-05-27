@@ -329,3 +329,21 @@ class MultiSerialSource(Source):
         if self._last_sample_t is None:
             return False
         return (time.perf_counter() - self._last_sample_t) <= window_s
+
+    def get_startup_latency(self) -> dict[str, float | None]:
+        """Per-port time-to-first-sample latency, keyed by port path
+        and reported in milliseconds. Used by the per-block summary
+        builder so session.json records how long each Arduino took
+        from open to first frame. Returns None per port when that
+        port hasn't seen a valid frame yet."""
+        out: dict[str, float | None] = {}
+        for h in self.hands:
+            getter = getattr(h.source, "get_startup_latency_ms", None)
+            if callable(getter):
+                try:
+                    out[h.port] = getter()
+                except Exception:
+                    out[h.port] = None
+            else:
+                out[h.port] = None
+        return out

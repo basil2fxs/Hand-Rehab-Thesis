@@ -80,16 +80,16 @@ class Beatmap:
 _DIFFICULTY_STRIDE = {"easy": 4, "medium": 2, "hard": 1}
 
 # Fraction of detected beats kept per difficulty after onset-strength
-# ranking. Easy keeps only the strongest 22% (sparse, big-hit feel);
-# medium keeps roughly every other beat; hard keeps most beats so the
-# tempo carries the track. Tuned against the bundled Kevin MacLeod
-# tracks - lower easy figures left songs with awkwardly long gaps;
-# higher hard figures filled in syncopated off-beats that don't read
-# as satisfying. These are the keeper percentages; everything below
-# is dropped.
+# ranking. Easy keeps only the strongest ~22% (sparse, big-hit feel);
+# medium sits much closer to easy now (was 0.55 -> rehab patients
+# found the jump too steep), so it adds maybe one extra beat for
+# every two easy beats rather than doubling the density. Hard keeps
+# most beats so the tempo carries the track. Tuned against the
+# bundled Kevin MacLeod tracks; everything below the threshold is
+# dropped.
 _DIFFICULTY_KEEP_FRAC = {
     "easy":   0.22,
-    "medium": 0.55,
+    "medium": 0.35,
     "hard":   0.85,
 }
 
@@ -97,11 +97,30 @@ _DIFFICULTY_KEEP_FRAC = {
 # Stops onset clustering (a kick + cymbal hit ~30 ms apart) from
 # producing two notes the patient can't physically separate. Higher
 # gaps on easy = friendlier pace; lower gaps on hard let dense
-# percussion through.
+# percussion through. Medium gap pulled up to 0.42 s to match the
+# softer keep_frac - if we let the gap stay tight on a sparser
+# beatmap, the patient gets bursts of three notes inside one beat
+# followed by long silences.
 _DIFFICULTY_MIN_GAP_S = {
     "easy":   0.55,
-    "medium": 0.30,
+    "medium": 0.42,
     "hard":   0.18,
+}
+
+# Maximum gap allowed between consecutive notes per difficulty.
+# Strong-beat filtering can leave long silences in songs that have
+# quiet breakdowns or intros; the patient reads those as the game
+# stalling. We fill any gap longer than this with the strongest
+# unused beat from that span so there's always something to press
+# to, even if it's not on the loudest hit of the song.
+_DIFFICULTY_MAX_GAP_S = {
+    "easy":   3.8,
+    # Medium max gap pulled up from 2.6 to 3.2 because the new
+    # softer keep_frac leaves longer natural silences; clamping
+    # tighter would force backfill beats into spots that aren't
+    # actually loud, defeating the strong-beat principle.
+    "medium": 3.2,
+    "hard":   1.8,
 }
 
 
@@ -141,6 +160,58 @@ def _coerce_scalar(x) -> float:
         return float(x)
     except (TypeError, ValueError):
         return float(x[0])
+
+
+def _fill_long_gaps(chosen_times: list[float],
+                     all_times: list[float],
+                     all_strengths: list[float],
+                     max_gap_s: float,
+                     min_gap_s: float) -> list[float]:
+    """If two consecutive `chosen_times` are separated by more than
+    `max_gap_s`, insert the strongest beat from `all_times` that
+    falls inside that window AND sits at least `min_gap_s` from
+    either neighbour. Iterates until every gap is acceptable or
+    there's nothing left to insert in the gap.
+
+    This is what stops a quiet 8 second breakdown turning into a
+    "did the game freeze?" moment for the patient."""
+    if not chosen_times or max_gap_s <= 0:
+        return list(chosen_times)
+    chosen = sorted(chosen_times)
+    # Build a strength lookup so we can rank unused beats quickly.
+    strength_of = {t: s for t, s in zip(all_times, all_strengths)}
+    chosen_set = set(chosen)
+    # Loop until no gap exceeds max_gap_s OR we ran out of candidates.
+    while True:
+        # Find the LONGEST gap first; filling the worst case first
+        # converges fastest and keeps the result balanced.
+        worst_idx = -1
+        worst_size = 0.0
+        for i in range(len(chosen) - 1):
+            gap = chosen[i + 1] - chosen[i]
+            if gap > worst_size:
+                worst_size = gap
+                worst_idx = i
+        if worst_idx < 0 or worst_size <= max_gap_s:
+            return chosen
+        lo = chosen[worst_idx]
+        hi = chosen[worst_idx + 1]
+        # Candidate beats inside the gap that don't crowd either edge.
+        cands = [
+            t for t in all_times
+            if (lo + min_gap_s) <= t <= (hi - min_gap_s)
+            and t not in chosen_set
+        ]
+        if not cands:
+            # Nothing fits. Accept the long gap rather than spinning
+            # forever - the song genuinely has no beat to put here.
+            return chosen
+        # Pick the strongest of the candidates.
+        best = max(cands, key=lambda t: strength_of.get(t, 0.0))
+        # Splice it in. List insert keeps the list sorted because we
+        # picked from inside [lo, hi].
+        chosen.insert(worst_idx + 1, best)
+        chosen_set.add(best)
 
 
 def _select_strong_beats(beat_times: list[float],
@@ -253,6 +324,7 @@ def extract_beatmap(audio_path: str | Path,
 
         keep_frac = _DIFFICULTY_KEEP_FRAC.get(difficulty, 0.55)
         min_gap_s = _DIFFICULTY_MIN_GAP_S.get(difficulty, 0.30)
+        max_gap_s = _DIFFICULTY_MAX_GAP_S.get(difficulty, 2.6)
         subset = _select_strong_beats(
             times, beat_strengths,
             keep_frac=keep_frac, min_gap_s=min_gap_s,
@@ -268,6 +340,15 @@ def extract_beatmap(audio_path: str | Path,
                       "using stride fallback", len(subset), len(times))
             stride = _DIFFICULTY_STRIDE.get(difficulty, 2)
             subset = times[::stride]
+        # Backfill any remaining long silences with the strongest
+        # unused beat in each gap so the patient never sits
+        # wondering whether the game has stalled. Skipped on the
+        # stride-fallback path because uniform-spaced beats can't
+        # have a gap > 1 beat period.
+        subset = _fill_long_gaps(
+            subset, times, beat_strengths,
+            max_gap_s=max_gap_s, min_gap_s=min_gap_s,
+        )
         notes = _assign_lanes(subset, lane_pattern, num_lanes=num_lanes)
         return Beatmap(
             title=p.stem,

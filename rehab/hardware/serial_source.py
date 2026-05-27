@@ -178,6 +178,15 @@ class SerialSource(BaseQueueSource):
         self.open_retries = open_retries
         self.retry_delay_s = retry_delay_s
         self._serial: serial.Serial | None = None
+        # Startup-latency capture. `_port_open_ts` is stamped the
+        # instant pyserial returns from serial.Serial(...). It
+        # captures the kernel-level enumeration latency for this
+        # port. `_first_sample_ts` is stamped the first time the
+        # firmware sends a parseable FSR: line. The difference is
+        # the time-to-first-sample latency that lives in
+        # session.json's `startup_latency_ms` field.
+        self._port_open_ts: float | None = None
+        self._first_sample_ts: float | None = None
 
     @property
     def name(self) -> str:
@@ -194,6 +203,12 @@ class SerialSource(BaseQueueSource):
                     timeout=self.read_timeout_s,
                     write_timeout=0.5,
                 )
+                # Stamp the open timestamp here, not before the 1.8 s
+                # Arduino-reset sleep. The latency we want to measure
+                # is "open -> first valid FSR sample", which includes
+                # the firmware's own boot delay - that's part of the
+                # patient's perceived wait.
+                self._port_open_ts = time.perf_counter()
                 time.sleep(1.8)  # Arduino reset settle
                 s.reset_input_buffer()
                 log.info("Opened %s @ %d", self.port, self.baud)
@@ -261,7 +276,25 @@ class SerialSource(BaseQueueSource):
                         vals.append(int(g))
                     except ValueError:
                         vals.append(0)
+            # Stamp the first-sample timestamp the moment we get a
+            # parseable FSR line. Set-once - subsequent samples don't
+            # overwrite. Pairs with _port_open_ts for the startup-
+            # latency stat surfaced in session.json. getattr guard
+            # tolerates __new__-built test fixtures that skip
+            # __init__.
+            if getattr(self, "_first_sample_ts", None) is None:
+                self._first_sample_ts = time.perf_counter()
             self._push(tuple(vals))
+
+    def get_startup_latency_ms(self) -> float | None:
+        """Time-to-first-sample latency in ms. Returns None until both
+        the port_open and first_sample timestamps are stamped (a
+        source that never received a valid frame, or one that hasn't
+        opened yet)."""
+        if (self._port_open_ts is None
+                or self._first_sample_ts is None):
+            return None
+        return (self._first_sample_ts - self._port_open_ts) * 1000.0
 
     def send_command(self, cmd: str) -> bool:
         if not self._serial or not self._serial.is_open:
