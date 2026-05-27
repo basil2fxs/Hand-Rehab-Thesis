@@ -461,22 +461,32 @@ class DiagnosticsPortPanelTests(unittest.TestCase):
             try:
                 d.refresh_ports()
                 self.assertEqual(d._detected_ports, [])
-                # Two cycle buttons + two test buttons + two refresh
-                # placeholders = 6 buttons.
-                self.assertEqual(len(d._panel_buttons), 6)
+                # 2 test STIM + Refresh + Save = 4 buttons.
+                self.assertEqual(len(d._panel_buttons), 4)
+                # 2 dropdowns (left, right).
+                self.assertEqual(len(d._port_dropdowns), 2)
+                # Each dropdown gets a "None" option even with zero
+                # ports detected.
+                for hand in ("left", "right"):
+                    dd = d._port_dropdowns[hand]
+                    self.assertEqual(len(dd.options), 1)
+                    self.assertEqual(dd.options[0][0], None)
             finally:
                 pygame.quit()
 
-    def test_cycle_port_advances_through_options(self) -> None:
-        # With two detected ports the cycle should walk
-        # None -> port_a -> port_b -> None.
+    def test_dropdown_select_stages_change_save_persists(self) -> None:
+        # Selecting a port via the dropdown should stage the change in
+        # _pending_ports + flip _has_unsaved True. Calling _save_ports
+        # writes it to disk + clears the flag.
         from unittest import mock
         import tempfile
         from pathlib import Path
         from rehab.hardware.serial_source import PortInfo
         fake_ports = [
-            PortInfo(device="/dev/cu.A", description="", vid=0, pid=0),
-            PortInfo(device="/dev/cu.B", description="", vid=0, pid=0),
+            PortInfo(device="/dev/cu.usbmodemA",
+                      description="", vid=0x2341, pid=0),
+            PortInfo(device="/dev/cu.usbmodemB",
+                      description="", vid=0x2341, pid=0),
         ]
         with tempfile.TemporaryDirectory() as td:
             override = Path(td) / "user_settings.yaml"
@@ -487,20 +497,57 @@ class DiagnosticsPortPanelTests(unittest.TestCase):
                 eng, d, pygame = self._build()
                 try:
                     d.refresh_ports()
-                    self.assertEqual(eng.cfg.get("serial.right_port"), None)
-                    d._cycle_port("right")
-                    self.assertEqual(eng.cfg.get("serial.right_port"),
-                                      "/dev/cu.A")
-                    d._cycle_port("right")
-                    self.assertEqual(eng.cfg.get("serial.right_port"),
-                                      "/dev/cu.B")
-                    d._cycle_port("right")
-                    self.assertEqual(eng.cfg.get("serial.right_port"), None)
-                    # Persistence: file exists and contains the cycled value
-                    # after the last save.
+                    d.rebuild_panel()
+                    # No changes yet.
+                    self.assertFalse(d._has_unsaved)
+                    self.assertEqual(d._pending_ports, {})
+                    # Simulate the dropdown picking a port.
+                    d._on_port_chosen("right", "/dev/cu.usbmodemA")
+                    self.assertTrue(d._has_unsaved)
+                    self.assertEqual(
+                        d._pending_ports["right"], "/dev/cu.usbmodemA")
+                    # Not yet written to disk.
+                    self.assertFalse(override.exists())
+                    # Save: writes to disk + clears the dirty flag.
+                    d._save_ports()
+                    self.assertFalse(d._has_unsaved)
                     self.assertTrue(override.exists())
+                    self.assertEqual(eng.cfg.get("serial.right_port"),
+                                      "/dev/cu.usbmodemA")
                 finally:
                     pygame.quit()
+
+    def test_dropdown_excludes_junk_mac_ports(self) -> None:
+        # /dev/cu.debug-console and Bluetooth-Incoming-Port must never
+        # show up in the dropdown - that was the whole point of moving
+        # the Settings panel onto discover_ports instead of the raw
+        # list_available_ports.
+        from unittest.mock import patch
+        from rehab.hardware.serial_source import PortInfo
+        ports = [
+            PortInfo(device="/dev/cu.debug-console",
+                      description="", vid=None, pid=None),
+            PortInfo(device="/dev/cu.Bluetooth-Incoming-Port",
+                      description="", vid=None, pid=None),
+            PortInfo(device="/dev/cu.usbmodem1101",
+                      description="Arduino", vid=0x2341, pid=0),
+        ]
+        with patch("rehab.hardware.serial_source.list_ports") as lp:
+            lp.comports.return_value = ports
+            eng, d, pygame = self._build()
+            try:
+                d.refresh_ports()
+                d.rebuild_panel()
+                self.assertEqual(d._detected_ports,
+                                  ["/dev/cu.usbmodem1101"])
+                # Dropdown has "None" + the real Arduino, no junk.
+                for hand in ("left", "right"):
+                    values = [v for v, _ in
+                              d._port_dropdowns[hand].options]
+                    self.assertEqual(values,
+                                      [None, "/dev/cu.usbmodem1101"])
+            finally:
+                pygame.quit()
 
     def test_start_stim_test_queues_four_pulses(self) -> None:
         from unittest.mock import patch

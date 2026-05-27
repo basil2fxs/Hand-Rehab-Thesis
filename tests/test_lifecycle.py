@@ -411,5 +411,45 @@ class SessionPathsCollisionTests(unittest.TestCase):
             self.assertNotIn(" ", paths.root.name)
 
 
+class RetryLastBlockTests(unittest.TestCase):
+    """Retry button on the results screen re-runs the same block kind
+    with the same config. Classic / adaptive read their settings from
+    config; rhythm needs the last beatmap source song stashed on the
+    engine."""
+
+    def test_retry_routes_classic_to_begin_classic(self) -> None:
+        from unittest.mock import MagicMock
+        from rehab.game.engine import GameEngine
+        eng = GameEngine.__new__(GameEngine)
+        eng.current_block = "classic"
+        eng.begin_classic_block = MagicMock()
+        eng.begin_adaptive_block = MagicMock()
+        eng.show_mode_select = MagicMock()
+        eng.retry_last_block()
+        eng.begin_classic_block.assert_called_once()
+        eng.begin_adaptive_block.assert_not_called()
+        eng.show_mode_select.assert_not_called()
+
+    def test_retry_routes_adaptive_to_begin_adaptive(self) -> None:
+        from unittest.mock import MagicMock
+        from rehab.game.engine import GameEngine
+        eng = GameEngine.__new__(GameEngine)
+        eng.current_block = "adaptive"
+        eng.begin_classic_block = MagicMock()
+        eng.begin_adaptive_block = MagicMock()
+        eng.show_mode_select = MagicMock()
+        eng.retry_last_block()
+        eng.begin_adaptive_block.assert_called_once()
+
+    def test_retry_without_prior_block_falls_back_to_mode_select(self) -> None:
+        from unittest.mock import MagicMock
+        from rehab.game.engine import GameEngine
+        eng = GameEngine.__new__(GameEngine)
+        eng.current_block = "(none)"
+        eng.show_mode_select = MagicMock()
+        eng.retry_last_block()
+        eng.show_mode_select.assert_called_once()
+
+
 if __name__ == "__main__":
     unittest.main()

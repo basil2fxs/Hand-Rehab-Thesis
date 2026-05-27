@@ -181,7 +181,15 @@ class RhythmModePressMatchingTests(unittest.TestCase):
         ])
         engine = MagicMock()
         engine.audio = None
-        engine.cfg.get = MagicMock(return_value={"q": 0})
+        # Need a side_effect rather than a fixed return_value so the
+        # pre_song_lead lookup returns a numeric 0 (disabling the
+        # note-time shift) while other lookups return the dict the test
+        # already relied on.
+        def _cfg_get(key, default=None):
+            if key == "rhythm.pre_song_lead_s":
+                return 0
+            return {"q": 0}
+        engine.cfg.get = MagicMock(side_effect=_cfg_get)
         mode = RhythmMode(engine, bm, RhythmWindows(), ScoreConfig())
         mode._countdown_done = True     # skip countdown logic
         mode._countdown_s = 0.0         # so song_time = perf_counter - t_start
@@ -221,6 +229,52 @@ class RhythmModePressMatchingTests(unittest.TestCase):
         self.assertEqual(len(hits), 2)
 
 
+class RhythmPreSongLeadTests(unittest.TestCase):
+    """The pre-song lead shifts every beat forward by N seconds so
+    notes have time to slide down before the first press is due. Audio
+    start is delayed by the same N so the music stays beat-synced."""
+
+    def _build(self, lead_s: float):
+        from unittest.mock import MagicMock
+        from rehab.audio.beatmap import Beatmap, Note
+        from rehab.game.modes.rhythm import RhythmMode
+        from rehab.game.scoring import RhythmWindows, ScoreConfig
+        bm = Beatmap(notes=[
+            Note(t=0.5, lane=0),
+            Note(t=1.0, lane=1),
+            Note(t=2.0, lane=2),
+        ])
+        engine = MagicMock()
+        engine.audio = None
+        def _cfg_get(key, default=None):
+            if key == "rhythm.pre_song_lead_s":
+                return lead_s
+            return default
+        engine.cfg.get = MagicMock(side_effect=_cfg_get)
+        mode = RhythmMode(engine, bm, RhythmWindows(), ScoreConfig())
+        return mode, bm
+
+    def test_all_notes_shifted_forward_by_lead(self) -> None:
+        mode, bm = self._build(lead_s=2.0)
+        # Original times were 0.5, 1.0, 2.0. After shift: 2.5, 3.0, 4.0.
+        self.assertEqual(bm.notes[0].t, 2.5)
+        self.assertEqual(bm.notes[1].t, 3.0)
+        self.assertEqual(bm.notes[2].t, 4.0)
+
+    def test_zero_lead_keeps_original_times(self) -> None:
+        mode, bm = self._build(lead_s=0.0)
+        self.assertEqual(bm.notes[0].t, 0.5)
+        self.assertEqual(bm.notes[1].t, 1.0)
+        self.assertEqual(bm.notes[2].t, 2.0)
+
+    def test_audio_started_flag_starts_false(self) -> None:
+        # Audio isn't kicked off until song_time crosses pre_song_lead_s.
+        # On construction the flag must be False so the rhythm screen
+        # can hide the song progress bar during the lead window.
+        mode, _ = self._build(lead_s=2.0)
+        self.assertFalse(mode._audio_started)
+
+
 class RhythmMissWindowCloseRegressionTests(unittest.TestCase):
     """Regression: when a note scrolled past its miss window without any
     press, log_rhythm_hit used to be called without was_pressed=False,
@@ -236,7 +290,13 @@ class RhythmMissWindowCloseRegressionTests(unittest.TestCase):
         bm = Beatmap(notes=[Note(t=1.0, lane=2)])
         engine = MagicMock()
         engine.audio = None
-        engine.cfg.get = MagicMock(return_value={"q": 0})
+        # Disable pre_song_lead in the fixture so note times stay
+        # exactly where the test set them up.
+        def _cfg_get(key, default=None):
+            if key == "rhythm.pre_song_lead_s":
+                return 0
+            return {"q": 0}
+        engine.cfg.get = MagicMock(side_effect=_cfg_get)
         mode = RhythmMode(engine, bm, RhythmWindows(), ScoreConfig())
         mode._countdown_done = True
         mode._countdown_s = 0.0

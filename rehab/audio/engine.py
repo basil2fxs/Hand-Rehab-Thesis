@@ -33,6 +33,13 @@ class AudioEngine:
         # press. Different tone from the metronome click so the patient
         # can hear "yes that landed" without it clashing with the music.
         self._hit = None
+        # Pre-rendered chime scale used in rhythm mode. Each entry is
+        # the same chord transposed up by N semitones. play_hit picks
+        # which one based on the caller's combo so a streak rises in
+        # pitch like Beat Saber / Guitar Hero.
+        self._hit_scale: list = []
+        # Low "thunk" sound used as a combo-break / miss cue.
+        self._miss_thunk = None
         self._song_path: str | None = None
         self._song_start_perf: float | None = None
         self._metronome_period: float | None = None
@@ -76,6 +83,25 @@ class AudioEngine:
             # rather than fighting it.
             self._hit = self._chord([523.25, 659.25], 0.18,
                                      attack_s=0.012, release_s=0.10)
+            # Combo-pitched chime scale. Each step transposes the base
+            # C5 + E5 chord up by 2 semitones (whole-tone steps so the
+            # ladder sounds bright + uplifting rather than chromatic).
+            # 6 levels covers streaks 0..50+ with each tier feeling
+            # noticeably higher than the last.
+            self._hit_scale = []
+            for step in range(6):
+                ratio = 2 ** (step * 2 / 12.0)
+                self._hit_scale.append(self._chord(
+                    [523.25 * ratio, 659.25 * ratio], 0.18,
+                    attack_s=0.012, release_s=0.10,
+                ))
+            # Combo-break thunk: low chord with no upper note, snappy
+            # attack, short release. Used on miss to give the patient
+            # a soft "ah, missed that one" cue without being harsh.
+            self._miss_thunk = self._chord(
+                [98.00, 130.81], 0.20,
+                attack_s=0.005, release_s=0.14,
+            )
             self._initialised = True
             return True
         except Exception as e:
@@ -191,19 +217,53 @@ class AudioEngine:
             snd.set_volume(self.master_volume)
             snd.play()
 
-    def play_hit(self) -> None:
+    def play_hit(self, combo: int = 0) -> None:
         """Confirmation chime that fires when the patient lands a correct
-        press. Drops volume even further when music is playing under it
-        so the chime stays as a subtle 'yes that landed' cue instead of
-        a beep that fights the song."""
-        if not self._initialised or self._hit is None:
+        press. Drops volume when music is playing under it so the chime
+        stays as a subtle 'yes that landed' cue rather than a beep that
+        fights the song. `combo` lifts the pitch up the pre-rendered
+        scale at thresholds 3 / 6 / 10 / 15 / 25 so a long streak rises
+        in pitch the way a rhythm game should."""
+        if not self._initialised:
+            return
+        try:
+            music_playing = (self._song_path is not None
+                              and self._metronome_period is None)
+            vol = self.master_volume * (0.30 if music_playing else 0.50)
+            # Pick which chime step matches the combo.
+            sample = self._hit
+            if self._hit_scale:
+                # Thresholds: 0+, 3+, 6+, 10+, 15+, 25+.
+                if combo >= 25:
+                    sample = self._hit_scale[5]
+                elif combo >= 15:
+                    sample = self._hit_scale[4]
+                elif combo >= 10:
+                    sample = self._hit_scale[3]
+                elif combo >= 6:
+                    sample = self._hit_scale[2]
+                elif combo >= 3:
+                    sample = self._hit_scale[1]
+                else:
+                    sample = self._hit_scale[0]
+            if sample is not None:
+                sample.set_volume(vol)
+                sample.play()
+        except Exception:
+            pass
+
+    def play_miss(self) -> None:
+        """Low combo-break thunk. Played after a miss that breaks a
+        streak so the patient has a clear aural cue something went
+        wrong, without it being harsh or punishing."""
+        if not self._initialised or self._miss_thunk is None:
             return
         try:
             music_playing = (self._song_path is not None
                               and self._metronome_period is None)
             vol = self.master_volume * (0.25 if music_playing else 0.45)
-            self._hit.set_volume(vol)
-            self._hit.play()
+            self._miss_thunk.set_volume(vol)
+            self._miss_thunk.play()
         except Exception:
             pass
 
