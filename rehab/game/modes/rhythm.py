@@ -77,7 +77,9 @@ class RhythmMode:
         self._frozen_song_t = None
 
     def handle_event(self, e: pygame.event.Event) -> None:
-        if e.type == pygame.KEYDOWN and not self.engine.source.provides_samples:
+        if e.type == pygame.KEYDOWN:
+            # Keyboard is always-on as a backup, even with an Arduino
+            # active. See classic.py for the reasoning.
             km = self.engine.cfg.get(
                 keymap_for_hand(self.engine.hand_mode), {},
             )
