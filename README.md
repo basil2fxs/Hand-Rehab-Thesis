@@ -1,10 +1,10 @@
 # Finger Rehab
 
-Finger rehab game for stroke patients. Python on a laptop, Arduino on the device driving force sensors and vibration motors. I built this on top of Satoru Nakayama's 2025 software thesis. I kept his hardware protocol and FSR press-detection algorithm so the old patient data still loads. The rest is mine.
+Finger rehab game for stroke patients. Python program runs on a laptop, Arduino on the device driving force sensors and vibration motors. I built this on top of Satoru Nakayama's 2025 software thesis. I kept his hardware protocol and FSR press-detection algorithm so the old patient data still loads. The rest is mine.
 
-## What's new vs the 2025 game
+## 2026 vs 2025
 
-| What | 2025 game | This version |
+| What | 2025 version | This version |
 |---|---|---|
 | Modes | Classic only (fixed pattern) | Classic + Adaptive + Rhythm |
 | Hands | Right only, 4 sensors | Left, right, or both. 4 or 8 sensors |
@@ -101,27 +101,26 @@ python -m unittest discover -s tests
 ## Folder layout
 
 ```
-main.py                  entry point
+main.py                  main python file
 config/
   default.yaml           shipped defaults
-  user_settings.yaml     auto-written by the Settings screen (gitignored)
+  user_settings.yaml     user customisation (gitignored)
 rehab/                   the Python app
   hardware/              FSR detector + serial sources
   game/                  engine + classic / adaptive / rhythm modes
   audio/                 librosa wrapper + pygame.mixer wrapper
   data/                  CSV + JSON writers
   ui/                    screens + widgets
-  analytics/             adaptive challenge-point engine
+  analytics/             adaptive challenge-point algorithm
 assets/                  music + images
-sessions/                generated per session
-tests/                   327 tests
-bin/                     stuff the game doesn't need at runtime
-  arduino_firmware/      Aiden's PlatformIO project (the official build)
+sessions/                logs generated per session
+tests/                   just some tests when modifying game
+bin/                     stuff the final game doesn't need
+  arduino_firmware/      Aiden's PlatformIO project (final build)
   build/ + dist/         PyInstaller output
 ```
 
-## Credit
+## References
 
 - FSR press-detection algorithm, CSV trial schema and stim event protocol come from Satoru Nakayama's 2025 software thesis (`Past/2025_Theses/Software - Satoru Nakayama .../rhythm_game_ver.FINAL.py`).
 - The Arduino firmware in `bin/arduino_firmware/` is Aiden's hardware build (PlatformIO project with I2C sensors and a few modular C++ libs).
-- Everything in `rehab/` is mine.
