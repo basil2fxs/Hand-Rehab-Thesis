@@ -220,19 +220,31 @@ class TitleScreen(Screen):
         hover_s = self.settings_rect.collidepoint((mx, my))
         bg = (self.theme.accent if hover_s
               else tuple(max(0, c - 30) for c in self.theme.background))
-        fg = ((255, 255, 255) if hover_s else self.theme.muted)
-        pygame.draw.rect(surf, bg, self.settings_rect, border_radius=10)
-        # Cog glyph + label. Using a circle + cross-hair as a tiny icon
-        # so we don't depend on a Unicode glyph being available in the
-        # default pygame font.
-        icon_cx = self.settings_rect.x + 22
-        icon_cy = self.settings_rect.centery
-        pygame.draw.circle(surf, fg, (icon_cx, icon_cy), 9, 2)
-        pygame.draw.circle(surf, fg, (icon_cx, icon_cy), 3)
-        draw_text(surf, "Settings",
-                  (self.settings_rect.x + 44, icon_cy - 1),
-                  self.theme, self.layout, pt=FONT_BODY,
-                  centre=False, colour=fg)
+        fg = ((255, 255, 255) if hover_s else self.theme.foreground)
+        pygame.draw.rect(surf, bg, self.settings_rect, border_radius=12)
+        # Measure the label so the cog icon + text sit centred as a
+        # unit inside the pill, rather than pinned to fixed offsets
+        # that left the text shoved against the right edge.
+        label_text = "Settings"
+        label_font = self.layout.font(FONT_BODY)
+        label_font.set_bold(True)
+        try:
+            label_surf = label_font.render(label_text, True, fg)
+        finally:
+            label_font.set_bold(False)
+        icon_r = 8                            # outer cog ring radius
+        gap = 10                              # space between icon and label
+        total_w = (icon_r * 2) + gap + label_surf.get_width()
+        start_x = self.settings_rect.centerx - total_w // 2
+        cy = self.settings_rect.centery
+        # Tiny cog: hollow outer ring + filled centre. Drawn from
+        # shapes so we don't depend on a Unicode cog being available.
+        icon_cx = start_x + icon_r
+        pygame.draw.circle(surf, fg, (icon_cx, cy), icon_r, 2)
+        pygame.draw.circle(surf, fg, (icon_cx, cy), 3)
+        # Label sits to the right of the icon, vertically centred.
+        surf.blit(label_surf, label_surf.get_rect(
+            midleft=(icon_cx + icon_r + gap, cy)))
 
         # Footer credit, anchored to the bottom.
         draw_text(surf, "Thesis - Basil Toufexis - 19757049",
