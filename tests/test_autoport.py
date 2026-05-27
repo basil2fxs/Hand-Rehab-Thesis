@@ -66,6 +66,71 @@ class AutoPortTests(unittest.TestCase):
         self.assertEqual(picked, "/dev/cu.ok")
 
 
+class DiscoverPortsPluralTests(unittest.TestCase):
+    """discover_ports (plural) is the one main.py actually uses for the
+    MultiSerialSource bilateral case. Junk-port filter regression:
+    /dev/cu.debug-console and /dev/cu.Bluetooth-Incoming-Port (Mac's
+    always-present virtual serial ports) must never get auto-picked."""
+
+    def test_skips_mac_junk_ports_even_with_no_vid_match(self) -> None:
+        from rehab.hardware import serial_source
+        ports = [
+            _FakePort("/dev/cu.debug-console", vid=None),
+            _FakePort("/dev/cu.Bluetooth-Incoming-Port", vid=None),
+            _FakePort("/dev/cu.Bluetooth-Outgoing-Port", vid=None),
+        ]
+        with patch.object(serial_source, "list_ports") as lp:
+            lp.comports.return_value = ports
+            picked = serial_source.discover_ports(["0x2341"])
+        # No VID, all junk. Must return empty, not the junk ports.
+        self.assertEqual(picked, [])
+
+    def test_vid_matched_arduino_returned_even_alongside_junk(self) -> None:
+        from rehab.hardware import serial_source
+        ports = [
+            _FakePort("/dev/cu.debug-console", vid=None),
+            _FakePort("/dev/cu.usbmodem1101", vid=0x2341),
+            _FakePort("/dev/cu.Bluetooth-Incoming-Port", vid=None),
+        ]
+        with patch.object(serial_source, "list_ports") as lp:
+            lp.comports.return_value = ports
+            picked = serial_source.discover_ports(["0x2341"])
+        self.assertEqual(picked, ["/dev/cu.usbmodem1101"])
+
+    def test_two_arduinos_both_returned_for_bilateral(self) -> None:
+        from rehab.hardware import serial_source
+        ports = [
+            _FakePort("/dev/cu.usbmodemA", vid=0x2341),
+            _FakePort("/dev/cu.usbmodemB", vid=0x2341),
+            _FakePort("/dev/cu.debug-console", vid=None),
+        ]
+        with patch.object(serial_source, "list_ports") as lp:
+            lp.comports.return_value = ports
+            picked = serial_source.discover_ports(["0x2341"])
+        self.assertEqual(picked, ["/dev/cu.usbmodemA", "/dev/cu.usbmodemB"])
+
+    def test_unknown_vid_clone_picked_when_not_junk(self) -> None:
+        # Unbranded Arduino clone with a VID that isn't on the
+        # known-vendor list. Should still pick up via the "any real
+        # USB device" pass.
+        from rehab.hardware import serial_source
+        ports = [
+            _FakePort("/dev/cu.usbserial-CLONE", vid=0xBEEF),
+            _FakePort("/dev/cu.Bluetooth-Incoming-Port", vid=None),
+        ]
+        with patch.object(serial_source, "list_ports") as lp:
+            lp.comports.return_value = ports
+            picked = serial_source.discover_ports(["0x2341"])
+        self.assertEqual(picked, ["/dev/cu.usbserial-CLONE"])
+
+    def test_empty_when_no_ports(self) -> None:
+        from rehab.hardware import serial_source
+        with patch.object(serial_source, "list_ports") as lp:
+            lp.comports.return_value = []
+            picked = serial_source.discover_ports(["0x2341"])
+        self.assertEqual(picked, [])
+
+
 class SerialLineParsingTests(unittest.TestCase):
     """SerialSource._consume parses 'FSR:v1,v2,v3,v4[,v5..v8]' lines into
     sample tuples. Garbage from EM interference / firmware drift must

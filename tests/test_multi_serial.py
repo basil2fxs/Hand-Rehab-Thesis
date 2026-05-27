@@ -93,6 +93,8 @@ def _make_multi(ports: list[str],
     multi._merger_thread = None
     multi._last_right = None
     multi._last_left = None
+    # Has-recent-data tracker; None means no sample has landed yet.
+    multi._last_sample_t = None
     return multi, fakes
 
 
@@ -262,6 +264,44 @@ class SingleArduinoStimRoutingTests(unittest.TestCase):
         self.assertTrue(multi.send_command("LEFT:STIM:3"))
         self.assertFalse(multi.send_command("RIGHT:STIM:3"))
         self.assertEqual(fakes[0].sent_commands, ["STIM:3"])
+
+
+class HasRecentDataTests(unittest.TestCase):
+    """has_recent_data distinguishes a real Arduino streaming FSR lines
+    from a port that's open but silent (the Mac Bluetooth-Incoming-Port
+    failure mode). DiagnosticsScreen uses this to pick CONNECTED vs
+    NO DATA for the badge so the therapist gets honest feedback."""
+
+    def test_no_data_before_any_sample(self) -> None:
+        multi, _ = _make_multi(["/dev/cu.A"])
+        # Fresh source; nothing's been pushed.
+        self.assertFalse(multi.has_recent_data())
+
+    def test_true_immediately_after_a_sample(self) -> None:
+        multi, fakes = _make_multi(["/dev/cu.A"])
+        multi.start()
+        try:
+            fakes[0].push(time.perf_counter(), (10, 20, 30, 40))
+            time.sleep(0.05)   # Let the merger pick it up.
+            _ = multi.get_sample()
+            self.assertTrue(multi.has_recent_data(window_s=1.0))
+        finally:
+            multi.stop()
+
+    def test_false_after_window_expires(self) -> None:
+        multi, fakes = _make_multi(["/dev/cu.A"])
+        multi.start()
+        try:
+            fakes[0].push(time.perf_counter(), (10, 20, 30, 40))
+            time.sleep(0.05)
+            _ = multi.get_sample()
+            # window=0.01s should already have expired.
+            time.sleep(0.05)
+            self.assertFalse(multi.has_recent_data(window_s=0.01))
+            # Larger window still sees it.
+            self.assertTrue(multi.has_recent_data(window_s=10.0))
+        finally:
+            multi.stop()
 
 
 if __name__ == "__main__":
