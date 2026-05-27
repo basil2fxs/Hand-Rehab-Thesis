@@ -71,8 +71,11 @@ class AdaptiveMode:
             self.last_trigger_t += pause_dur
 
     def handle_event(self, e: pygame.event.Event) -> None:
-        if e.type == pygame.KEYDOWN and not self.engine.source.provides_samples:
-            # Same hand-aware keymap pick the other modes use.
+        if e.type == pygame.KEYDOWN:
+            # Keyboard is always-on as a backup, even with an Arduino
+            # active. See classic.py for the reasoning. The keymap pick
+            # is hand-aware: right -> JKL;, left -> FDSA, both -> the
+            # bilateral 8-key map.
             km = self.engine.cfg.get(
                 keymap_for_hand(self.engine.hand_mode), {},
             )
