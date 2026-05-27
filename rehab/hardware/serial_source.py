@@ -93,12 +93,42 @@ def discover_port(expected_vids: list[str] | None) -> str | None:
     return None
 
 
+# macOS exposes a few always-present virtual serial ports that have no
+# USB vendor / product ID: the kernel debug console and Bluetooth
+# RFCOMM endpoints. Without a denylist the no-VID fallback in
+# discover_ports happily picked these up as "Arduinos", which then sat
+# open forever sending nothing while the diagnostics screen showed
+# CONNECTED. The list isn't exhaustive but covers stock macOS.
+_KNOWN_JUNK_PORTS = (
+    "debug-console",
+    "Bluetooth-Incoming-Port",
+    "Bluetooth-Outgoing-Port",
+    "wlan-debug",
+)
+
+
+def _is_junk_port(device: str) -> bool:
+    return any(j in device for j in _KNOWN_JUNK_PORTS)
+
+
 def discover_ports(expected_vids: list[str] | None,
                     max_ports: int = 2) -> list[str]:
-    """Return ALL Arduino-family ports (up to max_ports). Used for the
-    two-Arduino bilateral case where one device handles each hand. If
-    no VIDs match but at least one port is present, falls back to all
-    available ports up to the cap."""
+    """Return Arduino-family ports the host can see, up to max_ports.
+
+    Priority:
+      1. Ports whose USB VID matches a known Arduino-family vendor
+         (Arduino LLC, Adafruit, SiLabs, CH340, FTDI by default).
+      2. Otherwise, ports that have ANY VID set, i.e. real USB
+         devices just not on the vendor list. Catches unbranded
+         clones.
+      3. Otherwise empty, so the engine falls back to keyboard mode
+         instead of opening a random Mac virtual port.
+
+    Junk ports (debug-console, Bluetooth-Incoming-Port, etc.) are
+    filtered at every step so they never get picked automatically.
+    The user can still assign them manually in the Settings screen if
+    they really want to.
+    """
     ports = list_available_ports()
     if not ports:
         return []
@@ -108,12 +138,23 @@ def discover_ports(expected_vids: list[str] | None,
             vid_set.add(int(v, 16) if isinstance(v, str) else int(v))
         except (TypeError, ValueError):
             log.warning("Bad VID in config: %r", v)
-    matches = [p.device for p in ports
-               if p.vid is not None and p.vid in vid_set]
-    if matches:
-        return matches[:max_ports]
-    # No VID match -> fall back to whatever's present.
-    return [p.device for p in ports][:max_ports]
+
+    # Pass 1: VID matches a known Arduino-family vendor.
+    vid_matches = [p.device for p in ports
+                    if p.vid is not None and p.vid in vid_set
+                    and not _is_junk_port(p.device)]
+    if vid_matches:
+        return vid_matches[:max_ports]
+
+    # Pass 2: any port that has a VID and isn't junk.
+    any_real_usb = [p.device for p in ports
+                    if p.vid is not None
+                    and not _is_junk_port(p.device)]
+    if any_real_usb:
+        return any_real_usb[:max_ports]
+
+    # No real USB serial device. Don't fall back to junk ports.
+    return []
 
 
 def _require_serial() -> None:

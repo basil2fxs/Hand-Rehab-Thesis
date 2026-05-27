@@ -63,11 +63,14 @@ class ClassicMode:
             self.last_trigger_t += pause_dur
 
     def handle_event(self, e: pygame.event.Event) -> None:
-        if e.type == pygame.KEYDOWN and not self.engine.source.provides_samples:
-            # Pick keymap for the hand the patient is using. right -> JKL;,
-            # left -> FDSA, both -> the bilateral 8-key map. Each map's
-            # lane values are already in the right space (0..3 unilateral,
-            # 0..7 bilateral) so no further translation needed here.
+        if e.type == pygame.KEYDOWN:
+            # Keyboard always accepts presses as a backup, even when an
+            # Arduino is plugged in. The old `not provides_samples`
+            # guard meant a busted auto-detect (e.g. Mac picking
+            # /dev/cu.Bluetooth-Incoming-Port as if it were an Arduino)
+            # left the therapist with no working input. Now FDSA / JKL;
+            # are wired in either way and the FSR detector's press
+            # events come in alongside via _on_press.
             km = self.engine.cfg.get(
                 keymap_for_hand(self.engine.hand_mode), {},
             )
