@@ -1,6 +1,6 @@
 # Finger Rehab
 
-Finger rehab game for stroke patients. Python program runs on a laptop, Arduino on the device driving force sensors and vibration motors. I built this on top of Satoru Nakayama's 2025 software thesis. I kept his hardware protocol and FSR press-detection algorithm so the old patient data still loads. The rest is mine.
+Finger rehab game for stroke patients. Python program runs on a laptop, Arduino on the hand rehab device. Built on top of Satoru Nakayama's 2025 software thesis. I kept his hardware protocol and FSR press-detection algorithm so the old patient data still loads.
 
 ## 2026 vs 2025
 
