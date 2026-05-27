@@ -533,5 +533,105 @@ class DiagnosticsPortPanelTests(unittest.TestCase):
                 pygame.quit()
 
 
+class DiagnosticsConnectionStateTests(unittest.TestCase):
+    """Four-state connection badge: KEYBOARD, DISCONNECTED, NO DATA, CONNECTED."""
+
+    def _build_with_source(self, source):
+        import os as _os
+        _os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+        import pygame
+        pygame.init()
+        from rehab.config import Config
+        from rehab.game.engine import GameEngine
+        from rehab.ui.screens import DiagnosticsScreen
+        cfg = Config.load()
+        cfg.data["ui"]["resolution"] = [1280, 800]
+        eng = GameEngine(cfg, source)
+        return eng, DiagnosticsScreen(eng), pygame
+
+    def test_keyboard_source_reads_as_KEYBOARD(self) -> None:
+        from rehab.hardware.keyboard_source import KeyboardOnlySource
+        eng, d, pygame = self._build_with_source(KeyboardOnlySource())
+        try:
+            text, _ = d._connection_state()
+            self.assertEqual(text, "KEYBOARD")
+        finally:
+            pygame.quit()
+
+    def test_open_port_no_data_reads_as_NO_DATA(self) -> None:
+        # FakeArduino: provides_samples=True, is_connected=True, but no
+        # has_recent_data => NO DATA. This is the Mac Bluetooth case.
+        from rehab.hardware.source import Source
+
+        class SilentArduino(Source):
+            def start(self): pass
+            def stop(self): pass
+            def get_sample(self, timeout=0.0): return None
+            def send_command(self, cmd): return True
+            @property
+            def is_connected(self): return True
+            @property
+            def provides_samples(self): return True
+            @property
+            def name(self): return "SilentArduino"
+
+            def has_recent_data(self, window_s=1.0):
+                return False
+
+        eng, d, pygame = self._build_with_source(SilentArduino())
+        try:
+            text, _ = d._connection_state()
+            self.assertEqual(text, "NO DATA")
+        finally:
+            pygame.quit()
+
+    def test_open_port_with_data_reads_as_CONNECTED(self) -> None:
+        from rehab.hardware.source import Source
+
+        class HealthyArduino(Source):
+            def start(self): pass
+            def stop(self): pass
+            def get_sample(self, timeout=0.0): return None
+            def send_command(self, cmd): return True
+            @property
+            def is_connected(self): return True
+            @property
+            def provides_samples(self): return True
+            @property
+            def name(self): return "HealthyArduino"
+
+            def has_recent_data(self, window_s=1.0):
+                return True
+
+        eng, d, pygame = self._build_with_source(HealthyArduino())
+        try:
+            text, _ = d._connection_state()
+            self.assertEqual(text, "CONNECTED")
+        finally:
+            pygame.quit()
+
+    def test_closed_port_reads_as_DISCONNECTED(self) -> None:
+        from rehab.hardware.source import Source
+
+        class DeadArduino(Source):
+            def start(self): pass
+            def stop(self): pass
+            def get_sample(self, timeout=0.0): return None
+            def send_command(self, cmd): return False
+            @property
+            def is_connected(self): return False
+            @property
+            def provides_samples(self): return True
+            @property
+            def name(self): return "DeadArduino"
+
+        eng, d, pygame = self._build_with_source(DeadArduino())
+        try:
+            text, _ = d._connection_state()
+            self.assertEqual(text, "DISCONNECTED")
+        finally:
+            pygame.quit()
+
+
 if __name__ == "__main__":
     unittest.main()

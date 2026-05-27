@@ -1736,6 +1736,30 @@ class DiagnosticsScreen(Screen):
             f"with {int(self.STIM_TEST_INTERVAL_S * 1000)} ms gaps."
         )
 
+    @staticmethod
+    def _short_port(p: str) -> str:
+        """Strip /dev/cu. and /dev/tty. prefixes so port labels fit in
+        a button without the noisy path repeating every row."""
+        for prefix in ("/dev/cu.", "/dev/tty.", "/dev/", "\\\\.\\"):
+            if p.startswith(prefix):
+                return p[len(prefix):]
+        return p
+
+    def _hand_button_label(self, hand: str) -> str:
+        """Build the cycle-button label for one hand. Three states:
+          - "(auto)" if no port saved -> picker will auto-detect
+          - "<short port>" if the saved port is currently detected
+          - "<short port> (missing)" if the saved port is set but not
+            visible to the OS right now (Arduino unplugged since save)
+        """
+        current = self._current_port(hand)
+        if current is None:
+            return f"{hand.upper()}: (auto)"
+        short = self._short_port(current)
+        if current not in self._detected_ports:
+            return f"{hand.upper()}: {short} (missing)"
+        return f"{hand.upper()}: {short}"
+
     def rebuild_panel(self) -> None:
         """Build the bottom-panel buttons. Called on init + after any
         port-list change so labels reflect the current assignment."""
@@ -1750,11 +1774,12 @@ class DiagnosticsScreen(Screen):
         # Cycle buttons (one per hand).
         for i, hand in enumerate(("left", "right")):
             y = panel_y + 50 + i * (row_h + row_gap)
-            current = self._current_port(hand) or "(auto)"
-            label = f"{hand.upper()}: {current}"
-            # Truncate label if too long so it fits in the button.
-            if len(label) > 36:
-                label = label[:33] + "..."
+            label = self._hand_button_label(hand)
+            # Truncate if still too long after the short-port + prefix
+            # work above. Rare on Mac, more likely on Windows COM1234
+            # type names.
+            if len(label) > 40:
+                label = label[:37] + "..."
             self._panel_buttons.append(Button(
                 pygame.Rect(rows_x, y, row_w // 2 - 10, row_h),
                 label, lambda h=hand: self._cycle_port(h),
@@ -1935,14 +1960,16 @@ class DiagnosticsScreen(Screen):
                   (panel_rect.x + 18, panel_rect.y + 8),
                   self.theme, self.layout, pt=FONT_SMALL + 4,
                   centre=False, colour=self.theme.muted)
-        # Detected ports list (right-aligned in the header row).
-        detected_label = (
-            "Detected: " + ", ".join(self._detected_ports)
-            if self._detected_ports
-            else "No serial ports detected"
-        )
-        if len(detected_label) > 90:
-            detected_label = detected_label[:87] + "..."
+        # Detected ports list, right-aligned in the header row. Show
+        # short names (the basename after /dev/cu.) so multiple Mac
+        # ports fit on one line.
+        if self._detected_ports:
+            shorts = [self._short_port(p) for p in self._detected_ports]
+            detected_label = "Detected: " + ", ".join(shorts)
+        else:
+            detected_label = "No serial ports detected"
+        if len(detected_label) > 110:
+            detected_label = detected_label[:107] + "..."
         df = self.layout.font(FONT_SMALL + 2)
         ds = df.render(detected_label, True, self.theme.muted)
         surf.blit(ds, ds.get_rect(

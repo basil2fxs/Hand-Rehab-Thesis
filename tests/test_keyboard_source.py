@@ -181,5 +181,94 @@ class KeyboardFallbackEndToEndTests(unittest.TestCase):
                               f"{expected_lane}")
 
 
+class KeyboardAlwaysOnWithArduinoTests(unittest.TestCase):
+    """Regression: when an Arduino is plugged in (source.provides_samples
+    == True), the keyboard fallback must STILL fire. Without this, a
+    busted auto-detect (Mac grabbing Bluetooth-Incoming-Port as if it
+    were an Arduino) left the therapist with no working input."""
+
+    def _build_with_fake_arduino_source(self, hand_mode: str = "right"):
+        import os as _os
+        _os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+        import pygame
+        pygame.init()
+        from rehab.config import Config
+        from rehab.game.engine import GameEngine
+        from rehab.game.modes.classic import ClassicMode
+        from rehab.game.scoring import ScoreConfig
+        from rehab.hardware.source import Source
+
+        class FakeArduino(Source):
+            """Pretends to be a real Arduino source: provides_samples=True
+            and is_connected=True. No actual data flows."""
+
+            def start(self) -> None:
+                pass
+
+            def stop(self) -> None:
+                pass
+
+            def get_sample(self, timeout: float = 0.0):
+                return None
+
+            def send_command(self, cmd: str) -> bool:
+                return True
+
+            @property
+            def is_connected(self) -> bool:
+                return True
+
+            @property
+            def provides_samples(self) -> bool:
+                return True
+
+            @property
+            def name(self) -> str:
+                return "FakeArduino"
+
+        cfg = Config.load()
+        cfg.data.setdefault("bilateral", {})["hand"] = hand_mode
+        eng = GameEngine(cfg, FakeArduino())
+        mode = ClassicMode(
+            engine=eng,
+            pattern=[0, 1, 2, 3],
+            repeat_count=1,
+            trigger_interval_s=1.0,
+            timeout_s=1.0,
+            early_window_s=0.1,
+            score_cfg=ScoreConfig(),
+        )
+        return eng, mode, pygame
+
+    def test_keyboard_queues_press_even_with_arduino_source(self) -> None:
+        # The whole point of this regression: provides_samples=True
+        # used to gate the keyboard handler off. Now it doesn't.
+        eng, mode, pygame = self._build_with_fake_arduino_source("right")
+        ev = pygame.event.Event(pygame.KEYDOWN,
+                                   {"key": pygame.K_j,
+                                    "mod": 0, "unicode": "",
+                                    "scancode": 0})
+        mode.handle_event(ev)
+        self.assertEqual(len(mode._presses), 1)
+        self.assertEqual(mode._presses[0].lane, 0)
+
+    def test_keyboard_works_in_all_three_modes_with_arduino(self) -> None:
+        # Same check for adaptive + rhythm so the guard removal applies
+        # uniformly. We just check that handle_event accepts KEYDOWN
+        # without depending on provides_samples.
+        import inspect
+        from rehab.game.modes import classic, adaptive, rhythm
+        for module in (classic, adaptive, rhythm):
+            src = inspect.getsource(
+                next(c for n, c in inspect.getmembers(module)
+                     if inspect.isclass(c)
+                     and getattr(c, "name", "") in
+                     ("Classic", "Adaptive", "Rhythm"))
+            )
+            self.assertNotIn("not self.engine.source.provides_samples", src,
+                              f"{module.__name__} still guards keyboard "
+                              f"on provides_samples")
+
+
 if __name__ == "__main__":
     unittest.main()
