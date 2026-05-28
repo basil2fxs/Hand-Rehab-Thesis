@@ -126,6 +126,20 @@ class MultiSerialSource(Source):
         return {"right", "left", "both"}
 
     def start(self) -> None:
+        # Idempotent: if a merger thread is already running (start was
+        # called twice without an intervening stop) DON'T spawn a second
+        # one. Before this guard, calling start() twice leaked a daemon
+        # thread AND made both mergers drain the same per-hand queues,
+        # which surfaced as duplicated samples on the output queue.
+        if self._merger_thread is not None and self._merger_thread.is_alive():
+            log.debug("MultiSerial.start: merger already running, no-op")
+            return
+        # Reset pair-cache state so a stop -> swap Arduinos -> start
+        # cycle doesn't get a stale right/left pair from the previous
+        # session on its first frame.
+        self._last_right = None
+        self._last_left = None
+        self._last_sample_t = None
         for h in self.hands:
             try:
                 h.source.start()
@@ -143,6 +157,7 @@ class MultiSerialSource(Source):
         self._stop.set()
         if self._merger_thread:
             self._merger_thread.join(timeout=2.0)
+        self._merger_thread = None
         for h in self.hands:
             try:
                 h.source.stop()
@@ -154,6 +169,13 @@ class MultiSerialSource(Source):
                 self._q.get_nowait()
         except queue.Empty:
             pass
+        # Reset pair cache + freshness clock. A subsequent start() will
+        # also reset these defensively, but doing it here too means a
+        # caller who only invokes stop (e.g. on engine teardown) gets
+        # a clean state object too.
+        self._last_right = None
+        self._last_left = None
+        self._last_sample_t = None
 
     def get_sample(self, timeout: float = 0.0):
         try:
@@ -222,46 +244,65 @@ class MultiSerialSource(Source):
 
     def _merge_loop(self) -> None:
         """Read samples from each underlying source and combine them
-        into the unified vector the engine expects."""
+        into the unified vector the engine expects.
+
+        Body is wrapped in try / except so any unexpected error (e.g.
+        an underlying source raising on get_sample because its port
+        got pulled mid-read, or a queue.Full + queue.Empty race that
+        escapes the inner handlers) doesn't silently kill the thread.
+        Before this, a thread crash showed up as a frozen game (engine
+        thought is_connected was still True per the per-hand flag, but
+        the output queue had stopped getting samples). Now we log and
+        keep spinning."""
         n = self.num_sensors_per_hand
         only_one = len(self.hands) == 1
         while not self._stop.is_set():
-            any_consumed = False
-            for h in self.hands:
-                s = h.source.get_sample(timeout=0)
-                if s is None:
-                    continue
-                any_consumed = True
-                if only_one:
-                    # Single board: forward verbatim. The engine knows
-                    # which hand it's assigned via cfg.bilateral.hand.
-                    try:
-                        self._q.put_nowait(s)
-                        self._last_sample_t = time.perf_counter()
-                    except queue.Full:
+            try:
+                any_consumed = False
+                for h in self.hands:
+                    s = h.source.get_sample(timeout=0)
+                    if s is None:
+                        continue
+                    any_consumed = True
+                    if only_one:
+                        # Single board: forward verbatim. The engine
+                        # knows which hand it's assigned via
+                        # cfg.bilateral.hand.
                         try:
-                            self._q.get_nowait()
                             self._q.put_nowait(s)
                             self._last_sample_t = time.perf_counter()
-                        except queue.Empty:
-                            pass
-                else:
-                    # Two boards: cache for pairing.
-                    if h.hand == "right":
-                        self._last_right = (s.t_perf, tuple(s.values[:n]))
+                        except queue.Full:
+                            try:
+                                self._q.get_nowait()
+                                self._q.put_nowait(s)
+                                self._last_sample_t = time.perf_counter()
+                            except queue.Empty:
+                                pass
                     else:
-                        self._last_left = (s.t_perf, tuple(s.values[:n]))
-            # Run the pair-emit check EVERY iteration in bilateral mode,
-            # not just when a new sample arrived. Without this, a solo
-            # hand that goes silent never triggers the window-expiry
-            # fallback (the function would only be called once when its
-            # first sample arrived, at which point the window hadn't
-            # yet elapsed).
-            if not only_one:
-                self._emit_paired_if_ready()
-            if not any_consumed:
-                # No data this tick; nap so we don't burn a CPU core.
-                time.sleep(0.002)
+                        # Two boards: cache for pairing.
+                        if h.hand == "right":
+                            self._last_right = (
+                                s.t_perf, tuple(s.values[:n]))
+                        else:
+                            self._last_left = (
+                                s.t_perf, tuple(s.values[:n]))
+                # Run the pair-emit check EVERY iteration in bilateral
+                # mode, not just when a new sample arrived. Without
+                # this, a solo hand that goes silent never triggers
+                # the window-expiry fallback (the function would only
+                # be called once when its first sample arrived, at
+                # which point the window hadn't yet elapsed).
+                if not only_one:
+                    self._emit_paired_if_ready()
+                if not any_consumed:
+                    # No data this tick; nap so we don't burn a CPU core.
+                    time.sleep(0.002)
+            except Exception as e:
+                # Unexpected error in the merge body. Log and keep the
+                # thread alive so a transient hardware glitch doesn't
+                # take the whole input pipeline down.
+                log.warning("Merger loop swallowed error: %s", e)
+                time.sleep(0.01)
 
     def _emit_paired_if_ready(self) -> None:
         """For the two-Arduino case: emit one combined 8-value sample

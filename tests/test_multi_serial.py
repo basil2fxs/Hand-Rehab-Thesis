@@ -375,5 +375,91 @@ class SerialSourceLatencyAccessorTests(unittest.TestCase):
 
 
 
+class ShutdownLifecycleTests(unittest.TestCase):
+    """The merger thread must not double-spawn, must clean up on stop,
+    and must survive an exception bubbling out of a per-hand source."""
+
+    def test_double_start_does_not_spawn_two_mergers(self) -> None:
+        # Before the idempotency guard, calling start() twice in a row
+        # leaked a thread and made both mergers drain the same queues,
+        # which surfaced as duplicated samples on the output queue.
+        multi, fakes = _make_multi(["/dev/cu.A", "/dev/cu.B"])
+        multi.start()
+        first_thread = multi._merger_thread
+        self.assertIsNotNone(first_thread)
+        multi.start()
+        second_thread = multi._merger_thread
+        # Same thread object both times; no new spawn.
+        self.assertIs(first_thread, second_thread)
+        self.assertTrue(second_thread.is_alive())
+        multi.stop()
+
+    def test_stop_then_start_resets_pair_state(self) -> None:
+        # A patient who unplugs and replugs an Arduino mid-session
+        # triggers a stop/start cycle on this source. Stale right/left
+        # pair-cache entries would emit a phantom paired sample on
+        # the first frame of the new run. Reset state on both stop
+        # AND start so either entry point gets a clean slate.
+        multi, fakes = _make_multi(["/dev/cu.A", "/dev/cu.B"])
+        multi.start()
+        # Park stale cache values directly (would normally be set by
+        # the running merger).
+        multi._last_right = (1.0, (10, 20, 30, 40))
+        multi._last_left = (1.0, (50, 60, 70, 80))
+        multi._last_sample_t = 1.0
+        multi.stop()
+        # stop() clears these.
+        self.assertIsNone(multi._last_right)
+        self.assertIsNone(multi._last_left)
+        self.assertIsNone(multi._last_sample_t)
+        # And start() also clears them defensively.
+        multi._last_right = (5.0, (1, 2, 3, 4))
+        multi.start()
+        self.assertIsNone(multi._last_right)
+        multi.stop()
+
+    def test_stop_unsets_merger_thread_reference(self) -> None:
+        # After stop, the dead thread reference shouldn't linger. A
+        # later is_alive() check (e.g. in start's idempotency guard)
+        # has to see _merger_thread as None so the next start can
+        # spawn a fresh one.
+        multi, fakes = _make_multi(["/dev/cu.A"])
+        multi.start()
+        self.assertIsNotNone(multi._merger_thread)
+        multi.stop()
+        self.assertIsNone(multi._merger_thread)
+
+    def test_merge_loop_survives_exception_from_get_sample(self) -> None:
+        # If an underlying source raises during get_sample (port pulled
+        # mid-read, OSError, etc.) the merger used to die silently and
+        # the engine would freeze. Wrapping the body in try / except
+        # keeps the thread alive across transient hardware glitches.
+        multi, fakes = _make_multi(["/dev/cu.A"])
+        # Make the fake raise once, then start returning normally.
+        raise_count = [0]
+        original_get = fakes[0].get_sample
+
+        def _flaky_get(timeout: float = 0.0):
+            if raise_count[0] < 1:
+                raise_count[0] += 1
+                raise OSError("simulated port-yanked mid-read")
+            return original_get(timeout=timeout)
+        fakes[0].get_sample = _flaky_get
+        multi.start()
+        # Push a sample after the simulated raise. If the merger died
+        # the sample never reaches the output queue.
+        time.sleep(0.05)
+        fakes[0].push(1.0, (10, 20, 30, 40))
+        time.sleep(0.05)
+        sample = multi.get_sample(timeout=0.2)
+        multi.stop()
+        self.assertIsNotNone(
+            sample,
+            "merger thread should have survived the OSError and "
+            "delivered the next sample",
+        )
+        self.assertEqual(raise_count[0], 1)
+
+
 if __name__ == "__main__":
     unittest.main()
