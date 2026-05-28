@@ -50,22 +50,44 @@ class Session:
         so a power loss during the final write lost the forensic
         record too. Now we serialise into a sibling tmp file and
         atomically replace - if anything raises before the replace,
-        the original file is untouched.
+        the original file is untouched AND the tmp file is unlinked
+        so the sessions/ directory doesn't accumulate orphan
+        metadata.json.tmp files over time.
+
+        Uses ensure_ascii=False so a researcher inspecting session.json
+        sees real unicode names (e.g. "Müller", "张") rather than the
+        escaped "M\\u00fcller" form, while still producing valid JSON.
         """
         path.parent.mkdir(parents=True, exist_ok=True)
         payload = json.dumps(
-            asdict(self), indent=2,
+            asdict(self), indent=2, ensure_ascii=False,
             default=lambda o: getattr(o, "__dict__", str(o)),
         )
         tmp = path.with_name(path.name + ".tmp")
-        with tmp.open("w", encoding="utf-8") as f:
-            f.write(payload)
-            f.flush()
+        try:
+            with tmp.open("w", encoding="utf-8") as f:
+                f.write(payload)
+                f.flush()
+                try:
+                    os.fsync(f.fileno())
+                except (OSError, AttributeError):
+                    # fsync isn't available on every platform / file
+                    # type (e.g. some mocked filesystems). The atomic
+                    # replace below still gives us the no-truncated-
+                    # file guarantee.
+                    pass
+            os.replace(tmp, path)
+        except BaseException:
+            # On ANY failure (write, flush, replace, KeyboardInterrupt)
+            # remove the partial tmp file before re-raising. The
+            # original session.json is untouched because os.replace
+            # either succeeded fully or wasn't reached. Catching
+            # BaseException (rather than Exception) covers Ctrl-C
+            # mid-write too, which is a real scenario when a
+            # researcher abandons a session at the keyboard.
             try:
-                os.fsync(f.fileno())
-            except (OSError, AttributeError):
-                # fsync isn't available on every platform / file type
-                # (e.g. some mocked filesystems). The atomic replace
-                # below still gives us the no-truncated-file guarantee.
+                if tmp.exists():
+                    tmp.unlink()
+            except OSError:
                 pass
-        os.replace(tmp, path)
+            raise

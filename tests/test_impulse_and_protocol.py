@@ -58,6 +58,87 @@ class ImpulseDetectorTests(unittest.TestCase):
         self.assertLess(ev.impulse_minus_baseline, 250.0)
         self.assertAlmostEqual(ev.duration_s, 0.4, places=2)
 
+    def test_flat_hold_with_falling_edge_drop(self) -> None:
+        # 500 held for 0.4 s (t=0.1 to t=0.5), then a final sample at
+        # t=0.6 with sm=0 closes the press. True trapezoidal integral
+        # of this profile is:
+        #   t=0.1 to t=0.5: 500 * 0.4 = 200
+        #   t=0.5 to t=0.6: half-trapezoid (500+0)/2 * 0.1 = 25
+        # Total = 225. A rectangular (right-Riemann) sum gives 200
+        # because the falling sample contributes 0 * dt = 0, and a
+        # left-Riemann sum gives 250 because it would credit the
+        # whole interval at 500. Pinning 225 locks trapezoidal in.
+        from rehab.hardware.fsr_detector import (
+            Calibration, FSRDetector, ReleaseEvent,
+        )
+        cal = Calibration(
+            num_sensors=1, value_alpha=1.0,
+            on_delta=[100], off_delta=[80],
+            abs_on_min=[300], abs_off_max=[300],
+            baseline_alpha=0.0,   # freeze baseline so it stays at 0
+            debounce_ms=0,
+        )
+        det = FSRDetector(cal, hand="right")
+        releases: list[ReleaseEvent] = []
+        det.on_release = releases.append
+        # Warm-up at 0 so the baseline locks at 0.
+        det.feed(0.0, (0,))
+        det.feed(0.1, (500,))    # rising edge
+        det.feed(0.2, (500,))    # hold
+        det.feed(0.3, (500,))    # hold
+        det.feed(0.4, (500,))    # hold
+        det.feed(0.5, (500,))    # last in-press sample
+        det.feed(0.6, (0,))      # falling edge
+        self.assertEqual(len(releases), 1)
+        self.assertAlmostEqual(releases[0].impulse_raw, 225.0, places=1)
+        # Baseline is 0 so impulse_minus_baseline equals impulse_raw
+        # for this test.
+        self.assertAlmostEqual(
+            releases[0].impulse_minus_baseline, 225.0, places=1)
+
+    def test_ramp_press_yields_triangle_area(self) -> None:
+        # Linear ramp from 0 (baseline) up to 500 over 5 samples then
+        # straight back down to 0. The true integral of a triangle
+        # with base 1.0 s and height 500 is 250. Rectangular (right-
+        # Riemann) would give ~275, trapezoidal gives 250 exactly.
+        from rehab.hardware.fsr_detector import (
+            Calibration, FSRDetector, ReleaseEvent,
+        )
+        cal = Calibration(
+            num_sensors=1, value_alpha=1.0,
+            on_delta=[100], off_delta=[80],
+            abs_on_min=[150], abs_off_max=[150],
+            baseline_alpha=0.0,
+            debounce_ms=0,
+        )
+        det = FSRDetector(cal, hand="right")
+        releases: list[ReleaseEvent] = []
+        det.on_release = releases.append
+        # Warm-up at 0.
+        det.feed(0.0, (0,))
+        # Ramp 200 -> 300 -> 400 -> 500 -> 400 -> 300 -> 200 -> 0
+        # over 0.1 s steps. Rising edge fires when sm exceeds the on
+        # threshold (~150), which happens at the first 200 sample.
+        det.feed(0.1, (200,))   # rising
+        det.feed(0.2, (300,))
+        det.feed(0.3, (400,))
+        det.feed(0.4, (500,))
+        det.feed(0.5, (400,))
+        det.feed(0.6, (300,))
+        det.feed(0.7, (200,))
+        det.feed(0.8, (0,))     # falling
+        self.assertEqual(len(releases), 1)
+        # Trapezoidal integration of the points above with dt=0.1:
+        # (200+300)/2*0.1 + (300+400)/2*0.1 + (400+500)/2*0.1
+        #   + (500+400)/2*0.1 + (400+300)/2*0.1 + (300+200)/2*0.1
+        #   + (200+0)/2*0.1
+        # = 25 + 35 + 45 + 45 + 35 + 25 + 10 = 220.
+        # Rectangular (current bug) would have given:
+        # 300*0.1 + 400*0.1 + 500*0.1 + 400*0.1 + 300*0.1
+        #   + 200*0.1 + 0*0.1 = 210
+        # We assert near 220 to lock the trapezoidal contract in.
+        self.assertAlmostEqual(releases[0].impulse_raw, 220.0, places=1)
+
     def test_impulse_resets_between_presses(self) -> None:
         # Two presses on the same sensor. The second press's impulse
         # must reflect only that press, not carry over from the
