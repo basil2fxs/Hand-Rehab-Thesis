@@ -143,7 +143,14 @@ class MultiSerialSource(Source):
         for h in self.hands:
             try:
                 h.source.start()
-            except Exception as e:
+            except (OSError, RuntimeError, ValueError) as e:
+                # OSError covers serial-open failures (port busy,
+                # permission denied, port disappeared between
+                # discovery and start). RuntimeError + ValueError
+                # cover pyserial config edge cases (baud rate
+                # mismatch, etc). The other hand may still start
+                # cleanly so we log and carry on rather than
+                # cancelling the whole session.
                 log.error("Failed to start %s source on %s: %s",
                            h.hand, h.port, e)
         self._stop.clear()

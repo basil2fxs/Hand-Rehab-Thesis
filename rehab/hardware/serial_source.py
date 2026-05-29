@@ -250,8 +250,14 @@ class SerialSource(BaseQueueSource):
             try:
                 if self._serial:
                     self._serial.close()
-            except Exception:
-                pass
+            except (Exception,) as e:
+                # serial.SerialException isn't always importable on
+                # the no-pyserial test path so we keep the catch
+                # broad but log at debug. Close-on-shutdown failures
+                # are expected when the OS already reclaimed the
+                # port (USB unplug) and aren't actionable.
+                log.debug("Serial close raised %s: %s",
+                            type(e).__name__, e)
             log.info("Serial source stopped")
 
     def _consume(self, buf: bytearray) -> None:

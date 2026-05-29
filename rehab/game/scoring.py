@@ -28,8 +28,23 @@ class ScoreConfig:
 
 @dataclass(frozen=True)
 class TrialResult:
-    label: str        # "Perfect" | "Great" | "Good" | "Late" | "Miss" | "Early"
+    """Outcome of one classified trial.
+
+    Returned by `classify()` (cadence modes) and built by the rhythm
+    pipeline from `classify_offset()`. Frozen so the engine can stash
+    it in summary dicts without worrying about later mutation.
+    """
+    # Tier name shown on screen and written to the trial CSV. One of
+    # "Perfect" (sub-100 ms), "Great" (sub-200 ms), "Good" (sub-500 ms),
+    # "Late" (slower hit), "Miss" (timeout, no press), "Early"
+    # (press before stim).
+    label: str
+    # Score points awarded for this trial. Sourced from `ScoreConfig`
+    # so a therapist re-weighting the scheme propagates through.
     points: int
+    # Reaction time in milliseconds for a hit. None for Miss / Early
+    # so downstream stats (mean RT, RT std) can filter out non-hits
+    # cleanly with a None check.
     rt_ms: float | None
 
 

@@ -56,14 +56,44 @@ def _pad(vals, n: int, defaults: list[int]) -> list[int]:
 
 @dataclass
 class Calibration:
+    """Per-hand FSR calibration. Loaded from disk at session start;
+    persists between runs so a researcher's tuning survives a restart.
+
+    Per-sensor lists are indexed [index, middle, ring, little] for a
+    standard 4-sensor hand. The detector pads short lists with the
+    defaults at construction so a hand-edited file with the wrong
+    length doesn't IndexError on the first sample.
+    """
+    # Number of FSR channels for this hand. 4 for unilateral, 4 per
+    # hand for bilateral (the detector is constructed once per hand).
     num_sensors: int = 4
+    # Exponential-moving-average smoothing on the baseline. Lower =
+    # slower drift tracking, more press isolation. 0.02 = ~50-sample
+    # half-life at typical sample rates (200 Hz -> ~0.25 s).
     baseline_alpha: float = 0.02
+    # EMA smoothing on the value stream itself. Higher = less noise
+    # in the value used for press / release detection. 0.35 keeps
+    # the press onset crisp without letting raw spikes trip the
+    # threshold.
     value_alpha: float = 0.35
+    # Delta thresholds (ADC counts above baseline) to trigger press
+    # (on) and confirm release (off). Hysteresis: on > off so a
+    # finger sitting near the edge can't chatter.
     on_delta: list[int] = field(default_factory=lambda: list(DEFAULT_ON_DELTA))
     off_delta: list[int] = field(default_factory=lambda: list(DEFAULT_OFF_DELTA))
+    # Absolute floor / ceiling on the smoothed signal. Belt and
+    # braces alongside the delta thresholds: a sensor whose baseline
+    # drifted unusually low could otherwise trip on_delta without a
+    # real press.
     abs_on_min: list[int] = field(default_factory=lambda: list(DEFAULT_ABS_ON))
     abs_off_max: list[int] = field(default_factory=lambda: list(DEFAULT_ABS_OFF))
+    # Minimum time between consecutive press / release events on the
+    # same sensor. Stops a noisy threshold crossing producing two
+    # back-to-back events at the same edge.
     debounce_ms: int = 100
+    # Free-form text the researcher can stash alongside the
+    # calibration (date, patient ID, sensor batch). Round-trips
+    # through save / load.
     note: str = ""
 
     def __post_init__(self) -> None:

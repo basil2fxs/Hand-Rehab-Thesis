@@ -150,13 +150,27 @@ class GameEngine:
 
     # ---- bilateral plumbing ------------------------------------------------
     def _build_detectors(self) -> None:
+        # FSR threshold defaults, one entry per finger in the order
+        # [index, middle, ring, little]. Middle finger uses the higher
+        # values (90 / 70 / 400 / 450) because the middle sensor pad
+        # in the v1 chassis sits closer to the support arch and reads
+        # more baseline pressure than the others; the elevated
+        # thresholds keep its press / release detection consistent
+        # with the other three. Numbers are in raw ADC counts.
         n = int(self.cfg.get("fsr.num_sensors_per_hand", 4))
         cal_kwargs = dict(
             num_sensors=n,
             baseline_alpha=float(self.cfg.get("fsr.baseline_alpha", 0.02)),
             value_alpha=float(self.cfg.get("fsr.value_alpha", 0.35)),
+            # delta thresholds (counts above baseline) to trigger a
+            # press (on) and confirm a release (off). Hysteresis: on
+            # > off so a finger sitting near the edge can't chatter.
             on_delta=list(self.cfg.get("fsr.on_delta", [45, 90, 45, 45])),
             off_delta=list(self.cfg.get("fsr.off_delta", [35, 70, 35, 35])),
+            # Absolute floor / ceiling on the smoothed signal. Belt
+            # and braces alongside the delta thresholds: a sensor
+            # whose baseline drifted unusually low could otherwise
+            # trip on_delta without a real press.
             abs_on_min=list(self.cfg.get("fsr.abs_on_min", [320, 400, 320, 320])),
             abs_off_max=list(self.cfg.get("fsr.abs_off_max", [350, 450, 350, 350])),
             debounce_ms=int(self.cfg.get("fsr.debounce_ms", 100)),
@@ -1184,6 +1198,38 @@ class GameEngine:
                     offsets[1:], offsets[:-1])
                 summary["beat_offset_stats"]["entrainment_lag1_r"] = (
                     round(entr, 4) if entr is not None else None)
+            # Tap variability CV (rhythm mode only). Inter-tap-interval
+            # consistency, distinct from RT CV. Standard metric in
+            # rhythmic-tapping studies (tremor, Parkinson's, stroke).
+            # Only meaningful when the patient is meant to tap to a
+            # beat; in random-cadence modes it would conflate patient
+            # inconsistency with stimulus inconsistency.
+            tap_cv = metrics.tap_variability_cv(self._rhythm_press_times_s)
+            summary["tap_variability_cv"] = (
+                round(tap_cv, 4) if tap_cv is not None else None)
+        # Session-level outcome rates (rolled up from the per-lane
+        # counts above). Mirrors metrics.outcome_rates on a flat trial
+        # list, but built from cached counts so the rollup matches the
+        # per-lane totals exactly.
+        total_hits = sum(len(rts) for rts
+                          in self._per_lane_rts.values())
+        total_timeouts = sum(self._per_lane_misses.values())
+        total_misclicks = sum(self._per_lane_wrong.values())
+        denom = total_hits + total_timeouts
+        if denom > 0:
+            summary["outcome_rates_overall"] = {
+                "hit_rate": round(total_hits / denom, 4),
+                "timeout_rate": round(total_timeouts / denom, 4),
+                "misclick_rate": round(total_misclicks / denom, 4),
+                "n_trials": denom,
+            }
+        else:
+            summary["outcome_rates_overall"] = {
+                "hit_rate": 0.0,
+                "timeout_rate": 0.0,
+                "misclick_rate": 0.0,
+                "n_trials": 0,
+            }
         # Bilateral asymmetry + cross-correlation. Only meaningful in
         # both-hand mode. Cross-correlation is computed on resampled
         # force series; we don't keep the raw streams in memory so
@@ -1440,8 +1486,12 @@ class GameEngine:
         return max(1.0, bpm / 60.0)
 
     def _streak_multiplier(self) -> float:
-        # Combo bonus that caps so the score doesn't explode on long runs.
-        # +0.1x per streak step, max +0.5x at streak 5+.
+        # Combo bonus tuned to reward consistency without distorting
+        # the per-block totals: +0.1x per hit on the streak, capped
+        # at +0.5x once the streak reaches 5. The cap keeps a single
+        # exceptional run from dominating the comparison between
+        # patients or between visits - a session's max possible
+        # score is bounded at 1.5x the unboosted total.
         return 1.0 + min(self.hit_streak * 0.1, 0.5)
 
     def _score_for(self, base_points: int, label: str) -> int:
@@ -1584,6 +1634,12 @@ class GameEngine:
         cal = self.cfg.get("fsr.force_calibration_n_per_count", None)
         return "N" if cal is not None else "counts"
 
+    # Cadence for the per-block drift sampler. Set to 30 s as a
+    # compromise: long enough that the baseline-tracking EMA has
+    # settled between samples (alpha=0.02 has roughly a 50-sample
+    # half-life at 200 Hz, so well under 30 s), short enough that a
+    # 5-block session still gives ~10 samples per sensor for the
+    # `drift_units_per_min` slope.
     DRIFT_SAMPLE_INTERVAL_S = 30.0
 
     def _maybe_sample_drift(self) -> None:
