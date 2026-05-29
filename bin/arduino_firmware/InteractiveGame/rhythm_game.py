@@ -87,7 +87,7 @@ CSV_COLUMNS = [
 # =========================
 
 # =========================
-# FSR to press detection parameters (tuned for 250 to 400–500 range)
+# FSR to press detection parameters (tuned for 250 to 400-500 range)
 # =========================
 FSR_EMA_ALPHA      = 0.02  # Update baseline EMA only when not pressed
 FSR_VAL_EMA_ALPHA  = 0.35   # EMA smoothing for raw values

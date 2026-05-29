@@ -57,13 +57,33 @@ class LaneState:
 
 @dataclass
 class AdaptiveConfig:
+    """Tunable parameters for the adaptive-difficulty engine.
+
+    All fields are session-level constants; the engine reads them at
+    construction and never mutates them. Defaults track the challenge-
+    point band (65 to 80 percent hit rate) reported as the motor-learning
+    sweet spot in Guadagnoli & Lee (2004).
+    """
+    # Target hit-rate band. Below `target_low` the engine slows down;
+    # above `target_high` it speeds up. Inside the band it holds steady.
     target_low: float = 0.65
     target_high: float = 0.80
+    # BPM bounds and step size for the speed-up / slow-down decisions.
+    # `bpm_min` 10 prevents the cadence collapsing during long recovery
+    # spirals; `bpm_max` 140 caps difficulty at a realistic upper bound.
     bpm_min: float = 10.0
     bpm_max: float = 140.0
     bpm_step: float = 10.0
+    # Weakness bias on lane selection. Lane weights scale as
+    # weakness_bias ** (1 - hit_ema), so a weak lane (hit_ema = 0)
+    # is picked 2.5x more often than a strong one (hit_ema = 1).
     weakness_bias: float = 2.5
+    # Minimum trials per lane before its EMA influences BPM decisions.
+    # Stops single-trial noise driving an early speed-up / slow-down.
     min_trials: int = 2
+    # EMA smoothing coefficients. Higher = more reactive to recent
+    # trials; lower = more inertia. Tuned so a 4-trial run of one
+    # outcome roughly halves the gap between current EMA and target.
     alpha_hit: float = 0.25
     alpha_rt: float = 0.2
     # Timeout window = (60/bpm) * timeout_factor. At 60 BPM the cadence

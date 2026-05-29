@@ -6,11 +6,15 @@ feels like a finished app instead of a debug dashboard.
 """
 from __future__ import annotations
 
+import logging
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pygame
+
+
+log = logging.getLogger(__name__)
 
 from .theme import Theme
 from .widgets import (
@@ -1962,7 +1966,11 @@ class RhythmSetupScreen(Screen):
                 try:
                     self._durations[key] = float(
                         librosa.get_duration(path=key))
-                except Exception:
+                except (FileNotFoundError, OSError, RuntimeError,
+                        ValueError):
+                    # File missing, unreadable, or unsupported audio
+                    # codec. None marks the row so the UI shows
+                    # `--:--` and the user can re-pick.
                     self._durations[key] = None
 
         self._dur_thread = threading.Thread(
@@ -1985,8 +1993,12 @@ class RhythmSetupScreen(Screen):
         if self.engine.audio and self._previewing:
             try:
                 self.engine.audio.stop()
-            except Exception:
-                pass
+            except (AttributeError, RuntimeError, OSError) as e:
+                # Audio engine already torn down or pygame mixer
+                # uninitialised (test path). Either way the stop is
+                # a no-op and we just need to clear the local
+                # previewing state below.
+                log.debug("audio.stop during preview teardown: %s", e)
         self._previewing = False
         self._preview_stop_at = 0.0
 
@@ -3269,7 +3281,13 @@ class DiagnosticsScreen(Screen):
                                 f"{cmd} not delivered. Check the Arduino "
                                 "is plugged in and assigned."
                             )
-                    except Exception as e:
+                    except (OSError, AttributeError, RuntimeError) as e:
+                        # OSError covers serial port faults (USB
+                        # unplug mid-test). AttributeError covers
+                        # the keyboard-only path where source has no
+                        # send_command. RuntimeError covers pyserial
+                        # closed-port edge cases. Surface the message
+                        # so the therapist sees it in the status pill.
                         self._port_status = f"STIM send error: {e}"
                 else:
                     still.append((prefix, lane, due))

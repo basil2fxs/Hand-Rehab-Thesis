@@ -131,8 +131,13 @@ class Config:
             f.flush()
             try:
                 _os.fsync(f.fileno())
-            except (OSError, AttributeError):
-                pass
+            except (OSError, AttributeError) as e:
+                # fsync is best-effort. Some filesystems (network
+                # mounts, mocked-file tests) raise; the atomic
+                # replace below still gives the no-truncated-file
+                # guarantee, so we keep going and log at debug for
+                # diagnostics.
+                log.debug("fsync on user_settings tmp failed: %s", e)
         _os.replace(tmp, USER_OVERRIDES)
         return USER_OVERRIDES
 
