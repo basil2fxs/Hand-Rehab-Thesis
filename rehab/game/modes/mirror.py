@@ -131,6 +131,12 @@ class MirrorMode:
         self.completed = 0
         self.active: PendingMirrorTrial | None = None
         self.last_trigger_t = -1.0
+        # Perf-counter time the previous trial FINISHED (both presses in,
+        # or timed out). The inter-trial rest is measured from here, not
+        # from stim onset, so a patient who completes a trial quickly at a
+        # slow BPM isn't left waiting out the rest of the cadence with
+        # empty lanes. None means no trial has finished yet.
+        self._last_finish_t: float | None = None
         self.trial_counter = 0
         self._presses: deque[PressEvent] = deque()
 
@@ -164,6 +170,11 @@ class MirrorMode:
                 self.active.left_press_t += pause_dur
         if self.last_trigger_t > 0:
             self.last_trigger_t += pause_dur
+        # Slide the finish anchor too so the inter-trial rest doesn't
+        # elapse during the pause and snap a new stim up the instant
+        # the patient resumes.
+        if self._last_finish_t is not None:
+            self._last_finish_t += pause_dur
 
     def handle_event(self, e: pygame.event.Event) -> None:
         if e.type != pygame.KEYDOWN:
@@ -182,18 +193,30 @@ class MirrorMode:
                     hand=self.engine.hand_mode,
                 ))
 
+    # Hard cap on the rest between finishing one trial and the next
+    # stim appearing. BPM-derived cadence can be several seconds at the
+    # slow end (recovery mode parks BPM near bpm_min), which used to
+    # leave the patient staring at empty lanes long after they'd
+    # completed the previous trial. Capping the rest keeps the next
+    # stim coming promptly regardless of pace. The press WINDOW still
+    # tracks BPM (see current_timeout_s), so difficulty is unaffected.
+    MAX_REST_S = 1.0
+
     def update(self, dt: float) -> None:
         now = time.perf_counter()
         while self._presses:
             self._handle_press(self._presses.popleft(), now)
-        # Cadence is BPM-derived: faster adapter BPM = shorter gap
-        # between stims. Falls back to the fixed trigger_interval when
-        # the adapter is absent (test paths). max(1.0, bpm) so a
-        # silly config can't divide by zero.
+        # Rest before the next stim, measured from when the previous
+        # trial finished. The BPM cadence still shortens it when the
+        # patient is on a fast pace, but it's capped so a slow pace
+        # never produces a long dead gap. Falls back to firing
+        # immediately on the very first trial (nothing has finished).
+        # max(1.0, bpm) so a silly config can't divide by zero.
         cadence = 60.0 / max(1.0, self.adapter.bpm)
+        rest = min(cadence, self.MAX_REST_S)
         if self.active is None and self.completed < self.total_trials:
-            if (self.last_trigger_t < 0
-                    or (now - self.last_trigger_t) >= cadence):
+            if (self._last_finish_t is None
+                    or (now - self._last_finish_t) >= rest):
                 self._fire(now)
         # Time out the in-flight trial. Press window also tracks BPM:
         # slower pace = more time per press. If one or both sides
@@ -337,3 +360,6 @@ class MirrorMode:
         self.engine.log_trial(log_obj, outcome, now)
         self.active = None
         self.completed += 1
+        # Stamp the finish time so the inter-trial rest in update() is
+        # measured from here (trial completion) rather than stim onset.
+        self._last_finish_t = now

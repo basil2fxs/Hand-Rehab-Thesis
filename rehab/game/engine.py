@@ -259,19 +259,16 @@ class GameEngine:
                        "Install pygame-ce on Py 3.14.", e)
             pygame.quit()
             return 3
-        flags = pygame.FULLSCREEN if self.cfg.get("ui.fullscreen", False) else 0
-        try:
-            screen = pygame.display.set_mode(
-                (self.layout.width, self.layout.height), flags,
-            )
-        except pygame.error as e:
+        # Boot fullscreen by default (the app runs as a kiosk-style
+        # clinical tool). F10 toggles to a windowed view at runtime.
+        self._fullscreen = bool(self.cfg.get("ui.fullscreen", True))
+        screen = self._open_display(self._fullscreen)
+        if screen is None:
             # Most common cause: no display available (headless / SSH session
-            # without X). Spell it out instead of letting the traceback land
-            # on the patient.
-            log.error("Could not open the game window at %dx%d: %s",
-                       self.layout.width, self.layout.height, e)
+            # without X). _open_display already logged the detail.
             pygame.quit()
             return 4
+        self._screen = screen
         pygame.display.set_caption("Finger Rehab")
         clock = pygame.time.Clock()
         # Initialise self.audio BEFORE any startup step that could raise.
@@ -332,9 +329,12 @@ class GameEngine:
                     if self.screen_obj:
                         self.screen_obj.update(dt)
                 if self.screen_obj:
-                    # Draw always so the pause overlay shows.
-                    self.screen_obj.draw(screen)
-                self._draw_hud(screen, clock)
+                    # Draw always so the pause overlay shows. Read the
+                    # surface off self each frame so an F10 fullscreen
+                    # toggle (which re-opens the display) takes effect
+                    # without a stale surface reference.
+                    self.screen_obj.draw(self._screen)
+                self._draw_hud(self._screen, clock)
                 pygame.display.flip()
                 clock.tick(120)
             return 0
@@ -434,7 +434,7 @@ class GameEngine:
         from ..ui.screens import (
             DiagnosticsScreen, TitleScreen, SetupScreen, GameplayScreen,
             RhythmScreen, RhythmSetupScreen, ResultsScreen,
-            ModeSelectScreen, LRDashboardScreen,
+            ModeSelectScreen,
         )
         return {
             "title": TitleScreen(self),
@@ -445,10 +445,6 @@ class GameEngine:
             "rhythm": RhythmScreen(self),
             "results": ResultsScreen(self),
             "diagnostics": DiagnosticsScreen(self),
-            # Thread C L/R dashboard. Reachable from the title pill;
-            # refresh()-able so a researcher who runs a block then
-            # bounces back sees the new row.
-            "lr_dashboard": LRDashboardScreen(self),
         }
 
     def _build_audio(self) -> AudioEngine | None:
@@ -457,6 +453,51 @@ class GameEngine:
         a = AudioEngine(master_volume=float(self.cfg.get("audio.master_volume", 0.8)))
         a.init()
         return a
+
+    def _open_display(self, fullscreen: bool):
+        """Open (or re-open) the display surface.
+
+        Uses SCALED so the fixed-layout 1280x800 UI fills whatever
+        monitor or window size it gets while every coordinate stays in
+        logical pixels (so no layout math has to change). SCALED also
+        translates mouse events back to logical coordinates, so button
+        hit-testing keeps working at any scale.
+
+        Returns the surface, or None if the display cannot be opened.
+        If SCALED is rejected (some headless video drivers do), retries
+        with plain flags so the app still comes up.
+        """
+        flags = pygame.SCALED | (pygame.FULLSCREEN if fullscreen else 0)
+        size = (self.layout.width, self.layout.height)
+        try:
+            return pygame.display.set_mode(size, flags)
+        except pygame.error as e:
+            log.warning("set_mode %s with SCALED failed (%s); "
+                         "retrying without SCALED",
+                         "fullscreen" if fullscreen else "windowed", e)
+            try:
+                plain = pygame.FULLSCREEN if fullscreen else 0
+                return pygame.display.set_mode(size, plain)
+            except pygame.error as e2:
+                log.error("Could not open the game window at %dx%d: %s",
+                           self.layout.width, self.layout.height, e2)
+                return None
+
+    def _toggle_fullscreen(self) -> None:
+        """F10: flip between fullscreen and a windowed view. The logical
+        render size stays 1280x800 either way (SCALED upscales), so the
+        layout never shifts. On failure the flag is rolled back so the
+        stored state matches what's actually on screen."""
+        target = not getattr(self, "_fullscreen", True)
+        surf = self._open_display(target)
+        if surf is not None:
+            self._screen = surf
+            self._fullscreen = target
+            log.info("Display switched to %s",
+                      "fullscreen" if target else "windowed")
+        else:
+            log.warning("Fullscreen toggle to %s failed; staying as-is",
+                         "fullscreen" if target else "windowed")
 
     def _handle_global_event(self, e: pygame.event.Event) -> None:
         if e.type == pygame.QUIT:
@@ -467,6 +508,8 @@ class GameEngine:
                 self._handle_escape()
             elif e.key == pygame.K_F2:
                 self._show_fps = not self._show_fps
+            elif e.key == pygame.K_F10:
+                self._toggle_fullscreen()
             elif e.key == pygame.K_p:
                 on_block = self.screen_obj in (
                     self._screens.get("gameplay"),
@@ -672,17 +715,6 @@ class GameEngine:
             det.on_press = self._on_press
             det.on_release = self._on_release
             self.detectors[hand] = det
-
-    def show_lr_dashboard(self) -> None:
-        """Open the L/R training-progress dashboard from the title
-        screen. Re-reads sessions on entry so newly-finished blocks
-        appear without restarting the app."""
-        dash = self._screens.get("lr_dashboard")
-        if dash is None:
-            return
-        if hasattr(dash, "refresh"):
-            dash.refresh()
-        self.screen_obj = dash
 
     def show_mode_select(self) -> None:
         self.screen_obj = self._screens["mode_select"]
@@ -933,6 +965,17 @@ class GameEngine:
 
     def _begin_block(self, name: str) -> None:
         self.current_block = name
+        # Pre-start "GET READY" countdown on the cadence modes (classic /
+        # adaptive / mirror), all of which render through the gameplay
+        # screen. Rhythm is excluded: it has its own musical lead-in.
+        # Test mode trims the countdown so quick demos stay quick.
+        if name in ("classic", "adaptive", "mirror"):
+            secs = float(self.cfg.get("game.start_countdown_s", 5.0))
+            if self._test_mode_trials() is not None:
+                secs = min(secs, 1.5)
+            gp = self._screens.get("gameplay")
+            if gp is not None and hasattr(gp, "start_countdown"):
+                gp.start_countdown(secs)
         self.session.started_at = time.strftime("%Y-%m-%dT%H:%M:%S")
         self.score = 0
         self.hits = 0
