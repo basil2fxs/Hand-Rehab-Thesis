@@ -475,7 +475,7 @@ def load_icon(path: str, size: int,
 class LaneStrip:
     """One finger lane. Big finger name, hand-coloured border, hit flash."""
 
-    FINGER_LABELS = ["Index", "Middle", "Ring", "Little"]
+    FINGER_LABELS = ["Index", "Middle", "Ring", "Pinky"]
     # Border + badge colours per hand. Blue for right, purple for left.
     # Purple sits opposite blue on the wheel so the two hands read as a
     # clean pair without either fighting the green/orange/red outcome
@@ -737,7 +737,10 @@ class LaneStrip:
             bar_w = 14
             bar_x = self.rect.right - bar_w - 14
             bar_top = self.rect.top + 70
-            bar_h = self.rect.height - 200
+            # Clamp so a shorter tile (the pinky lane, scaled down to
+            # echo finger length) can never produce a zero or negative
+            # bar height on a small window.
+            bar_h = max(40, self.rect.height - 200)
             # Background track so the bar is visible even when empty.
             pygame.draw.rect(surf, self.theme.background,
                               (bar_x, bar_top, bar_w, bar_h),

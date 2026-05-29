@@ -52,6 +52,12 @@ game:
   timeout_s: 1.0
   early_window_s: 0.1
   total_trials: 40
+  # Pre-start "GET READY" countdown (seconds) shown before the first
+  # stim on the cadence modes (classic / adaptive / mirror). Gives the
+  # patient a moment to settle their hand on the device. Rhythm mode
+  # uses its own musical lead-in and ignores this. Test mode trims it
+  # to keep quick demos quick.
+  start_countdown_s: 5.0
   # Test Mode is a supervisor-demo shortcut. When enabled, every block
   # (classic / adaptive / rhythm) is capped at test_mode_trials trials
   # so the full pipeline (mode select -> setup -> gameplay -> results)
@@ -205,7 +211,10 @@ audio:
 
 ui:
   resolution: [1280, 800]
-  fullscreen: false
+  # Boot fullscreen (kiosk-style clinical use). F10 toggles to a
+  # windowed view at runtime. The render size stays 1280x800 either
+  # way; the display opens with SCALED so it upscales to fit the monitor.
+  fullscreen: true
   theme: clinical
   font_scale: 1.0
 
