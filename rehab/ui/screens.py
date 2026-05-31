@@ -92,6 +92,25 @@ def _draw_header(surf: pygame.Surface, title: str, subtitle: str,
 
 
 class TitleScreen(Screen):
+    # Session protocol shown in the Info overlay. Every participant runs
+    # the same modes, in the same order, the same number of times, so the
+    # final analysis compares like with like. Counts come from the
+    # defaults in config/default.yaml (classic = 6-finger pattern x 8
+    # repeats, adaptive and mirror = 40 trials, rhythm = one full song).
+    INFO_TITLE = "Session protocol"
+    INFO_STEPS = [
+        "1. Enter the participant name and age, then press START SESSION.",
+        "2. Run all four modes in this order, once each per session:",
+        "      Classic  (48 trials, steady pace, baseline)",
+        "      Adaptive  (40 trials, pace adjusts to the participant)",
+        "      Rhythm  (one full song, press on the beat)",
+        "      Mirror  (40 trials, both hands together)",
+        "3. Press firmly and wait for the on-screen result each trial.",
+        "4. Finish every block. Quitting early leaves gaps in the data.",
+    ]
+    INFO_FOOTER = ("Completing all four blocks gives the reaction-time, "
+                   "force and timing data the analysis needs.")
+
     def __init__(self, engine: "GameEngine") -> None:
         super().__init__(engine)
         cx = engine.layout.width // 2
@@ -159,6 +178,20 @@ class TitleScreen(Screen):
             engine.layout.height - sh - 28,
             sw, sh,
         )
+        # Info pill, centred along the bottom between Quit and Settings.
+        # Opens a modal that lists the session protocol so a therapist
+        # running the trial knows which modes to run, in what order, and
+        # how many times, so every participant produces the same data
+        # set for the final analysis.
+        iw = 130
+        self.info_rect = pygame.Rect(
+            engine.layout.width // 2 - iw // 2,
+            engine.layout.height - sh - 28,
+            iw, sh,
+        )
+        # Whether the info overlay is currently open. Click the Info
+        # pill (or anywhere on the overlay, or Esc) to toggle it.
+        self._show_info = False
 
     def _begin(self) -> None:
         name = self.name_input.value or "NA"
@@ -257,6 +290,14 @@ class TitleScreen(Screen):
         self.age_input.focused = False
 
     def handle_event(self, e: pygame.event.Event) -> None:
+        # When the info overlay is open it is modal: any click or Esc
+        # closes it, and nothing underneath gets the event. This keeps
+        # the protocol card from accidentally starting a session.
+        if self._show_info:
+            if (e.type == pygame.MOUSEBUTTONDOWN and e.button == 1) or (
+                    e.type == pygame.KEYDOWN and e.key == pygame.K_ESCAPE):
+                self._show_info = False
+            return
         # Text inputs first so a click in either field claims focus
         # before any button hit-test runs underneath. Order matters
         # only in that whichever input handles the event first will
@@ -270,6 +311,8 @@ class TitleScreen(Screen):
                 self.engine.request_quit()
             elif self.settings_rect.collidepoint(e.pos):
                 self.engine.show_diagnostics()
+            elif self.info_rect.collidepoint(e.pos):
+                self._show_info = True
         # Enter key on either focused field acts as a shortcut for
         # Start so a therapist on a keyboard doesn't have to grab the
         # mouse to commit.
@@ -375,11 +418,80 @@ class TitleScreen(Screen):
         surf.blit(s_surf, s_surf.get_rect(
             midleft=(s_icon_cx + icon_r + gap, s_cy)))
 
+        # Info pill, bottom-centre. Same height as Quit and Settings so
+        # the three utility actions line up. Opens the protocol overlay.
+        hover_i = self.info_rect.collidepoint((mx, my))
+        bg_i = (self.theme.accent if hover_i
+                else tuple(max(0, c - 30) for c in self.theme.background))
+        fg_i = ((255, 255, 255) if hover_i else self.theme.foreground)
+        pygame.draw.rect(surf, bg_i, self.info_rect, border_radius=12)
+        i_label = "Info"
+        i_font = self.layout.font(FONT_BODY)
+        i_surf = i_font.render(i_label, True, fg_i)
+        i_total = (icon_r * 2) + gap + i_surf.get_width()
+        i_start = self.info_rect.centerx - i_total // 2
+        i_cy = self.info_rect.centery
+        i_icon_cx = i_start + icon_r
+        # Info icon: a circle with a lowercase "i" (dot + stem).
+        pygame.draw.circle(surf, fg_i, (i_icon_cx, i_cy), icon_r, 2)
+        pygame.draw.circle(surf, fg_i, (i_icon_cx, i_cy - 3), 1)
+        pygame.draw.line(surf, fg_i,
+                         (i_icon_cx, i_cy - 1), (i_icon_cx, i_cy + 4), 2)
+        surf.blit(i_surf, i_surf.get_rect(
+            midleft=(i_icon_cx + icon_r + gap, i_cy)))
+
         # Credit tucked under the Start button.
         draw_text(surf, "Thesis - Basil Toufexis - 19757049",
                   (cx, 570),
                   self.theme, self.layout, pt=FONT_SMALL,
                   centre=True, colour=self.theme.muted)
+
+        # Modal protocol overlay, drawn last so it sits on top of
+        # everything else when open.
+        if self._show_info:
+            self._draw_info_overlay(surf)
+
+    def _draw_info_overlay(self, surf: pygame.Surface) -> None:
+        """Dim the screen and draw a centred card listing the session
+        protocol. Mirrors the paused-overlay pattern used in-game."""
+        w, h = self.layout.width, self.layout.height
+        overlay = pygame.Surface((w, h), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 170))
+        surf.blit(overlay, (0, 0))
+
+        # Card. Sized to hold the title, the step lines and the footer.
+        card_w = min(720, w - 120)
+        card_h = 470
+        card = pygame.Rect(w // 2 - card_w // 2, h // 2 - card_h // 2,
+                           card_w, card_h)
+        panel = tuple(min(255, c + 8) for c in self.theme.background)
+        pygame.draw.rect(surf, panel, card, border_radius=16)
+        pygame.draw.rect(surf, self.theme.accent, card, 2, border_radius=16)
+
+        pad = 36
+        x = card.left + pad
+        y = card.top + pad
+        draw_text(surf, self.INFO_TITLE, (card.centerx, y),
+                  self.theme, self.layout, pt=FONT_H2, centre=True,
+                  colour=self.theme.accent)
+        y += 54
+        for line in self.INFO_STEPS:
+            indented = line.startswith("      ")
+            draw_text(surf, line.strip() if indented else line,
+                      (x + (28 if indented else 0), y),
+                      self.theme, self.layout, pt=FONT_BODY,
+                      colour=(self.theme.muted if indented
+                              else self.theme.foreground))
+            y += 38 if not indented else 32
+        y += 8
+        # Footer wraps to the card width.
+        draw_text(surf, self.INFO_FOOTER, (x, y),
+                  self.theme, self.layout, pt=FONT_SMALL,
+                  colour=self.theme.muted)
+        draw_text(surf, "Click anywhere or press Esc to close",
+                  (card.centerx, card.bottom - 26),
+                  self.theme, self.layout, pt=FONT_SMALL, centre=True,
+                  colour=self.theme.muted)
 
 
 class ModeSelectScreen(Screen):
