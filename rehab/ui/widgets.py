@@ -28,6 +28,23 @@ BUTTON_H = 60         # default touch-target height
 BUTTON_W = 320
 PADDING = 24
 
+# Single source of truth for the app's typeface. SysFont walks this comma
+# list and uses the first family installed on the host, so the app lands on
+# a clean modern sans wherever it runs: Avenir Next / Helvetica Neue on
+# macOS, Segoe UI on Windows, DejaVu Sans on Linux, plain Arial as the last
+# resort. Keeping it in one constant means every screen, heading and button
+# shares the exact same typeface instead of each call site hard-coding its
+# own chain (which is how the fonts drifted apart before).
+FONT_FAMILY = ("Avenir Next,Helvetica Neue,Segoe UI,Helvetica,"
+               "Arial,DejaVu Sans")
+
+
+def make_font(pt: int, bold: bool = False) -> pygame.font.Font:
+    """Resolve FONT_FAMILY at the given point size. Used directly by the
+    few call sites that need a one-off bold heading; everything else goes
+    through Layout.font() which adds caching and font_scale."""
+    return pygame.font.SysFont(FONT_FAMILY, pt, bold=bold)
+
 
 @dataclass
 class Layout:
@@ -37,19 +54,20 @@ class Layout:
 
     def __post_init__(self) -> None:
         # Cache fonts so we don't pay SysFont's lookup cost on every draw call.
-        self._fonts: dict[int, pygame.font.Font] = {}
+        # Keyed by (size, bold) so regular and bold cuts cache separately.
+        self._fonts: dict[tuple[int, bool], pygame.font.Font] = {}
 
     @property
     def gutter(self) -> int:
         return int(PADDING * self.font_scale)
 
-    def font(self, pt: int) -> pygame.font.Font:
+    def font(self, pt: int, bold: bool = False) -> pygame.font.Font:
         size = int(pt * self.font_scale)
-        f = self._fonts.get(size)
+        key = (size, bold)
+        f = self._fonts.get(key)
         if f is None:
-            # Pick the first SysFont in the list that exists on this machine.
-            f = pygame.font.SysFont("Helvetica,Arial,DejaVu Sans", size)
-            self._fonts[size] = f
+            f = pygame.font.SysFont(FONT_FAMILY, size, bold=bold)
+            self._fonts[key] = f
         return f
 
     def invalidate_fonts(self) -> None:
@@ -75,7 +93,6 @@ class Button:
     """
 
     SHADOW_OFFSET = 4
-    BORDER_RADIUS = 12
 
     def __init__(self, rect: pygame.Rect, label: str,
                  on_click: Callable[[], None],
@@ -108,9 +125,12 @@ class Button:
             self.pressed = False
 
     # Soft drop shadow built from three offset rounded-rects with
-    # decreasing alpha so the edge fades smoothly instead of cutting
-    # off as a hard duplicate. (dy, alpha) per layer.
-    _SHADOW_PASSES = ((1, 70), (3, 40), (6, 18))
+    # decreasing alpha so the edge fades smoothly instead of cutting off
+    # as a hard duplicate. Kept low and tight so buttons read as flat
+    # modern surfaces sitting just above the page, not glossy 3-D pills.
+    # (dy, alpha) per layer.
+    _SHADOW_PASSES = ((2, 28), (5, 14), (9, 6))
+    BORDER_RADIUS = 14
 
     def draw(self, surf: pygame.Surface) -> None:
         # Pick the base fill colour by precedence:
@@ -118,70 +138,47 @@ class Button:
         if self.colour is not None:
             base = self.colour
             if self.hover:
-                base = tuple(min(255, c + 22) for c in base)
+                base = tuple(min(255, c + 16) for c in base)
         elif self.primary:
             base = self.theme.accent
             if self.hover:
-                base = tuple(min(255, c + 18) for c in base)
+                base = tuple(min(255, c + 14) for c in base)
         else:
             base = self.theme.muted
             if self.hover:
                 base = self.theme.accent
-        fill = _darker(base, 0.18) if self.pressed else base
+        fill = _darker(base, 0.12) if self.pressed else base
 
-        # Multi-pass soft drop shadow. Each pass is a low-alpha black
-        # rect offset slightly more than the last, so the composite
-        # reads as a gentle fade rather than a hard duplicate. Pressed
-        # state collapses the shadow so the button feels "pushed in".
-        if self.pressed:
-            passes = ((1, 60),)
-        else:
-            passes = self._SHADOW_PASSES
+        # Single soft drop shadow that fades out downward. Pressed state
+        # collapses it to almost nothing so the button reads as pushed in.
+        passes = ((2, 22),) if self.pressed else self._SHADOW_PASSES
         shadow_surf = pygame.Surface(
-            (self.rect.w + 12, self.rect.h + 12), pygame.SRCALPHA,
+            (self.rect.w + 24, self.rect.h + 24), pygame.SRCALPHA,
         )
         for dy, alpha in passes:
             pygame.draw.rect(
-                shadow_surf, (0, 0, 0, alpha),
-                pygame.Rect(6, 6 + dy, self.rect.w, self.rect.h),
+                shadow_surf, (15, 23, 42, alpha),
+                pygame.Rect(12, 12 + dy, self.rect.w, self.rect.h),
                 border_radius=self.BORDER_RADIUS,
             )
-        surf.blit(shadow_surf, (self.rect.x - 6, self.rect.y - 6))
+        surf.blit(shadow_surf, (self.rect.x - 12, self.rect.y - 12))
 
-        # Body fill. Pressed buttons shift down by 1 px so the hand
-        # feels the click visually as well.
+        # Flat body fill. Pressed buttons shift down by 1 px so the click
+        # registers visually as well as audibly. No gloss gradient, no
+        # bevel: the soft shadow alone carries the depth, which is the
+        # look modern clinical and mobile apps use.
         body_rect = self.rect.move(0, 1 if self.pressed else 0)
         pygame.draw.rect(surf, fill, body_rect,
                           border_radius=self.BORDER_RADIUS)
 
-        # Subtle top "shine": a narrow inset surface of low-alpha
-        # white across the top half. Drawn as its own SRCALPHA
-        # surface so the rounded corners feather naturally.
+        # One-pixel top highlight: a hairline of low-alpha white along the
+        # very top edge only. Gives the surface a faint lift without the
+        # old half-height "shine" that made it look like a glass pill.
         if not self.pressed:
-            shine_h = max(8, body_rect.h // 3)
-            shine_surf = pygame.Surface(
-                (body_rect.w - 6, shine_h), pygame.SRCALPHA,
-            )
-            pygame.draw.rect(
-                shine_surf, (255, 255, 255, 36),
-                shine_surf.get_rect(),
-                border_radius=max(2, self.BORDER_RADIUS - 4),
-            )
-            surf.blit(shine_surf,
-                       (body_rect.x + 3, body_rect.y + 3))
-
-        # Subtle bottom inner shadow: a thin dark line just inside
-        # the lower edge. Reads as depth without the heavy bevel of a
-        # full inset shadow.
-        if not self.pressed:
-            inner = pygame.Surface(
-                (body_rect.w - 4, 4), pygame.SRCALPHA,
-            )
-            pygame.draw.rect(inner, (0, 0, 0, 35),
-                              inner.get_rect(),
-                              border_radius=2)
-            surf.blit(inner,
-                       (body_rect.x + 2, body_rect.bottom - 6))
+            hi = pygame.Surface((body_rect.w - 10, 2), pygame.SRCALPHA)
+            pygame.draw.rect(hi, (255, 255, 255, 40), hi.get_rect(),
+                             border_radius=1)
+            surf.blit(hi, (body_rect.x + 5, body_rect.y + 2))
 
         # Hover ring: a 2 px outline in white at low alpha so the
         # affordance reads on any background colour. Skipped while

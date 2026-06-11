@@ -311,6 +311,12 @@ class GameEngine:
                 # specific events (button clicks, key presses for lanes) are
                 # gated on paused so the pause overlay truly blocks input.
                 for e in pygame.event.get():
+                    # The window may be larger than the logical surface
+                    # (supersampling), so rewrite mouse positions into
+                    # logical space before any screen hit-tests them.
+                    if e.type in (pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN,
+                                  pygame.MOUSEBUTTONUP) and hasattr(e, "pos"):
+                        e.dict["pos"] = self._to_logical(e.pos)
                     self._handle_global_event(e)
                     if self.screen_obj and not self.paused:
                         self.screen_obj.handle_event(e)
@@ -335,7 +341,8 @@ class GameEngine:
                     # without a stale surface reference.
                     self.screen_obj.draw(self._screen)
                 self._draw_hud(self._screen, clock)
-                pygame.display.flip()
+                # Scale the logical surface up onto the window and flip.
+                self._present()
                 clock.tick(120)
             return 0
         except KeyboardInterrupt:
@@ -454,34 +461,92 @@ class GameEngine:
         a.init()
         return a
 
+    # Supersample factor for the on-screen window. The whole UI is drawn
+    # to a fixed 1280x800 logical surface, then scaled up to the window
+    # for display. On a Retina/HiDPI panel a 1280-wide image left to the
+    # OS gets stretched with a cheap blur, which is what made text and
+    # edges look soft and jagged. Drawing the window itself at SS x the
+    # logical size and doing one high-quality smoothscale per frame gives
+    # native-sharp pixels instead. Mouse events are translated back to
+    # logical coordinates in _to_logical(), so no layout or hit-testing
+    # math changes. 2 -> a 2560x1600 backing (crisp on any modern panel);
+    # 1 disables supersampling for a low-power host.
+    SUPERSAMPLE = 2
+
     def _open_display(self, fullscreen: bool):
-        """Open (or re-open) the display surface.
+        """Open the on-screen window and the off-screen logical surface.
 
-        Uses SCALED so the fixed-layout 1280x800 UI fills whatever
-        monitor or window size it gets while every coordinate stays in
-        logical pixels (so no layout math has to change). SCALED also
-        translates mouse events back to logical coordinates, so button
-        hit-testing keeps working at any scale.
+        The window is opened at the highest sensible physical resolution:
+        the monitor's native size in fullscreen, or SUPERSAMPLE x the
+        logical size in windowed mode. All screens still draw to a fixed
+        1280x800 logical surface (self._render_surf); _present() scales
+        that surface onto the window once per frame.
 
-        Returns the surface, or None if the display cannot be opened.
-        If SCALED is rejected (some headless video drivers do), retries
-        with plain flags so the app still comes up.
+        Returns the *logical* surface for screens to draw to, or None if
+        the window cannot be opened.
         """
-        flags = pygame.SCALED | (pygame.FULLSCREEN if fullscreen else 0)
-        size = (self.layout.width, self.layout.height)
+        lw, lh = self.layout.width, self.layout.height
+        ss = max(1, int(self.SUPERSAMPLE))
+        # One render path for both modes: open the window as large as the
+        # mode allows, draw the UI to a fixed 1280x800 logical surface, and
+        # smoothscale that onto the window each frame in _present(). The
+        # bigger the window's framebuffer, the sharper the result, so the
+        # windowed window is opened at SS x the logical size (a true high-
+        # density backing) and fullscreen fills the monitor.
+        if fullscreen:
+            win_size = (0, 0)              # native desktop size
+            flags = pygame.FULLSCREEN
+        else:
+            win_size = (lw * ss, lh * ss)  # e.g. 2560x1600 backing
+            flags = 0
         try:
-            return pygame.display.set_mode(size, flags)
+            window = pygame.display.set_mode(win_size, flags, vsync=1)
         except pygame.error as e:
-            log.warning("set_mode %s with SCALED failed (%s); "
-                         "retrying without SCALED",
-                         "fullscreen" if fullscreen else "windowed", e)
+            log.warning("set_mode %s failed (%s); retrying plain at %dx%d",
+                         "fullscreen" if fullscreen else "windowed",
+                         e, lw, lh)
             try:
-                plain = pygame.FULLSCREEN if fullscreen else 0
-                return pygame.display.set_mode(size, plain)
+                window = pygame.display.set_mode(
+                    (lw, lh), pygame.FULLSCREEN if fullscreen else 0)
             except pygame.error as e2:
-                log.error("Could not open the game window at %dx%d: %s",
-                           self.layout.width, self.layout.height, e2)
+                log.error("Could not open the game window: %s", e2)
                 return None
+        self._window = window
+        # Off-screen surface every screen draws into, always logical size.
+        self._render_surf = pygame.Surface((lw, lh)).convert()
+        return self._render_surf
+
+    def _present(self) -> None:
+        """Scale the logical render surface onto the window and flip.
+
+        smoothscale gives a clean bilinear upscale, far sharper than the
+        OS stretching a 1x surface across a Retina backing. When the
+        window already matches the logical size (SUPERSAMPLE 1, plain
+        windowed) it is a cheap straight blit."""
+        win = self._window
+        if win.get_size() == self._render_surf.get_size():
+            win.blit(self._render_surf, (0, 0))
+        else:
+            pygame.transform.smoothscale(self._render_surf,
+                                          win.get_size(), win)
+        pygame.display.flip()
+
+    def _to_logical(self, pos: tuple[int, int]) -> tuple[int, int]:
+        """Map a window-space mouse position back to logical coordinates
+        so button hit-testing keeps working under supersampling.
+
+        Returns the position unchanged if the window and logical surfaces
+        have not been opened yet (e.g. headless tests that build screens
+        and feed synthetic events without a real display)."""
+        window = getattr(self, "_window", None)
+        render = getattr(self, "_render_surf", None)
+        if window is None or render is None:
+            return pos
+        win_w, win_h = window.get_size()
+        lw, lh = render.get_size()
+        if (win_w, win_h) == (lw, lh):
+            return pos
+        return (int(pos[0] * lw / win_w), int(pos[1] * lh / win_h))
 
     def _toggle_fullscreen(self) -> None:
         """F10: flip between fullscreen and a windowed view. The logical

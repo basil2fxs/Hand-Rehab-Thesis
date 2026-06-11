@@ -20,7 +20,7 @@ from .theme import Theme
 from .widgets import (
     Button, Card, FloatingText, LaneStrip, Layout, Slider, TextInput,
     FONT_TITLE, FONT_H1, FONT_H2, FONT_BODY, FONT_SMALL,
-    BUTTON_H, BUTTON_W, PADDING, draw_text,
+    BUTTON_H, BUTTON_W, PADDING, draw_text, make_font,
 )
 
 if TYPE_CHECKING:
@@ -72,18 +72,17 @@ def _draw_header(surf: pygame.Surface, title: str, subtitle: str,
     """
     cx = layout.width // 2
     title_pt = int((FONT_H1 + 6) * layout.font_scale)
-    title_font = pygame.font.SysFont(
-        "Helvetica Neue,Helvetica,Arial,DejaVu Sans",
-        title_pt, bold=True,
-    )
-    title_surf = title_font.render(title, True, theme.accent)
+    title_font = make_font(title_pt, bold=True)
+    title_surf = title_font.render(title, True, theme.foreground)
     title_rect = title_surf.get_rect(center=(cx, 80))
     surf.blit(title_surf, title_rect)
     # Thin accent bar centred under the title. Width matches the
     # rendered text so different-length titles still feel balanced.
-    bar_w = max(60, title_rect.w // 3)
-    bar_rect = pygame.Rect(0, 0, bar_w, 3)
-    bar_rect.center = (cx, title_rect.bottom + 10)
+    # Slightly rounded and a touch wider than before so it reads as a
+    # deliberate accent rule rather than a stray underline.
+    bar_w = max(72, title_rect.w // 3)
+    bar_rect = pygame.Rect(0, 0, bar_w, 4)
+    bar_rect.center = (cx, title_rect.bottom + 12)
     pygame.draw.rect(surf, theme.accent, bar_rect, border_radius=2)
     if subtitle:
         draw_text(surf, subtitle, (cx, title_rect.bottom + 32),
@@ -331,22 +330,16 @@ class TitleScreen(Screen):
         # than the old abstract concentric rings.
         self._draw_device_icon(surf, cx, 105)
 
-        # Big bold title. Helvetica Neue / Helvetica with bold=True
-        # gives a heavy stroke AND keeps the wide proportional letter
-        # spacing that condensed display faces (Impact / Arial Black)
-        # squashed together until adjacent letters touched. Drop-shadow
-        # uses the same font + size so it tracks every letterform.
+        # Big bold wordmark in the app typeface. A soft neutral shadow
+        # one pixel below the text gives a faint lift without the old
+        # heavy accent-coloured offset that read as a 3-D drop. The main
+        # text carries the accent colour on its own.
         title_text = "FINGER REHAB"
         title_pt = int((FONT_TITLE + 14) * self.layout.font_scale)
-        title_font = pygame.font.SysFont(
-            "Helvetica Neue,Helvetica,Arial,DejaVu Sans",
-            title_pt,
-            bold=True,
-        )
-        shadow = title_font.render(title_text, True,
-                                    (*self.theme.accent, 60))
-        shadow.set_alpha(70)
-        surf.blit(shadow, shadow.get_rect(center=(cx + 3, 233)))
+        title_font = make_font(title_pt, bold=True)
+        shadow = title_font.render(title_text, True, (15, 23, 42))
+        shadow.set_alpha(28)
+        surf.blit(shadow, shadow.get_rect(center=(cx, 232)))
         main = title_font.render(title_text, True, self.theme.accent)
         surf.blit(main, main.get_rect(center=(cx, 230)))
         # Tagline.
@@ -362,7 +355,7 @@ class TitleScreen(Screen):
         # Primary Start button - the only obvious thing to do.
         self.start_btn.draw(surf)
 
-        mx, my = pygame.mouse.get_pos()
+        mx, my = self.engine._to_logical(pygame.mouse.get_pos())
 
         # Quit pill, bottom-left. Mirrors the Settings pill on the
         # other corner so the two utility actions live at the same
@@ -699,10 +692,7 @@ class ModeSelectScreen(Screen):
             # primary affordance. Description follows in regular weight.
             text_x = b.rect.x + 150
             title_pt = int((FONT_H2 + 4) * self.layout.font_scale)
-            title_font = pygame.font.SysFont(
-                "Helvetica Neue,Helvetica,Arial,DejaVu Sans",
-                title_pt, bold=True,
-            )
+            title_font = make_font(title_pt, bold=True)
             title_surf = title_font.render(title, True, fg)
             surf.blit(title_surf,
                        title_surf.get_rect(
@@ -2224,7 +2214,7 @@ class RhythmSetupScreen(Screen):
             # Scroll the track list when the cursor is hovering it.
             # Clamped at both ends so the wheel stops at top + bottom
             # rather than drifting into empty space below the last row.
-            mx, my = pygame.mouse.get_pos()
+            mx, my = self.engine._to_logical(pygame.mouse.get_pos())
             if self._list_rect.collidepoint((mx, my)):
                 step = e.y * 30
                 self._scroll_y = max(
@@ -2413,10 +2403,7 @@ class RhythmSetupScreen(Screen):
         # Bold title rendered via SysFont so the selection reads as the
         # focal point of the panel.
         title_pt = int(FONT_H2 * self.layout.font_scale)
-        title_font = pygame.font.SysFont(
-            "Helvetica Neue,Helvetica,Arial,DejaVu Sans",
-            title_pt, bold=True,
-        )
+        title_font = make_font(title_pt, bold=True)
         title_surf = title_font.render(title, True, self.theme.foreground)
         surf.blit(title_surf,
                    title_surf.get_rect(center=(dx + dw // 2, dy + 86)))
@@ -2673,9 +2660,7 @@ class ResultsScreen(Screen):
                   self.theme, self.layout, pt=FONT_BODY,
                   centre=True, colour=self.theme.muted)
         # Big value, bold so it pops as the stat's headline number.
-        val_font = pygame.font.SysFont(
-            "Helvetica Neue,Helvetica,Arial,DejaVu Sans",
-            int(FONT_TITLE * self.layout.font_scale),
+        val_font = make_font(int(FONT_TITLE * self.layout.font_scale),
             bold=True,
         )
         val_surf = val_font.render(value, True, value_colour)
@@ -2693,19 +2678,17 @@ class ResultsScreen(Screen):
 
         # Top banner. Bold via the shared SysFont call so the header
         # matches the rest of the menu screens.
-        title_font = pygame.font.SysFont(
-            "Helvetica Neue,Helvetica,Arial,DejaVu Sans",
-            int((FONT_H1 + 6) * self.layout.font_scale),
+        title_font = make_font(int((FONT_H1 + 6) * self.layout.font_scale),
             bold=True,
         )
         title_surf = title_font.render("Session complete", True,
-                                        self.theme.accent)
+                                        self.theme.foreground)
         title_rect = title_surf.get_rect(center=(cx, 80))
         surf.blit(title_surf, title_rect)
         # Accent bar under the title (matches _draw_header).
-        bar_w = max(60, title_rect.w // 3)
-        bar_rect = pygame.Rect(0, 0, bar_w, 3)
-        bar_rect.center = (cx, title_rect.bottom + 10)
+        bar_w = max(72, title_rect.w // 3)
+        bar_rect = pygame.Rect(0, 0, bar_w, 4)
+        bar_rect.center = (cx, title_rect.bottom + 12)
         pygame.draw.rect(surf, self.theme.accent, bar_rect, border_radius=2)
         draw_text(surf, blurb,
                   (cx, title_rect.bottom + 32),
@@ -2728,9 +2711,7 @@ class ResultsScreen(Screen):
         # Letter itself, oversized + bold so the visual weight matches
         # the heavy ring around it. A regular-weight 110pt letter
         # looked thin and disconnected from the surrounding circle.
-        gfont = pygame.font.SysFont(
-            "Helvetica Neue,Helvetica,Arial,DejaVu Sans",
-            int(120 * self.layout.font_scale),
+        gfont = make_font(int(120 * self.layout.font_scale),
             bold=True,
         )
         gtext = gfont.render(grade, True, grade_colour)
