@@ -346,15 +346,19 @@ class TitleScreen(Screen):
         draw_text(surf, "Multi-modal finger rehabilitation",
                   (cx, 300), self.theme, self.layout,
                   pt=FONT_BODY + 4, centre=True, colour=self.theme.muted)
-        # Institution + version footer, centred just above the bottom
-        # pills. Small and muted so it reads as provenance, not chrome.
+        # Footer, kept short: institution + version centred just above
+        # the bottom pills, author credit in the bottom-right corner.
         from ..data.session import SOFTWARE_VERSION
-        draw_text(surf,
-                  "Curtin University, Mechatronic Engineering "
-                  f"research project  |  v{SOFTWARE_VERSION}",
-                  (cx, self.layout.height - 96),
+        footer_y = self.layout.height - 96
+        draw_text(surf, f"Curtin University  |  v{SOFTWARE_VERSION}",
+                  (cx, footer_y),
                   self.theme, self.layout, pt=FONT_SMALL + 1,
                   centre=True, colour=self.theme.muted)
+        author_font = self.layout.font(FONT_SMALL + 1)
+        author = author_font.render("Author: Basil Toufexis", True,
+                                     self.theme.muted)
+        surf.blit(author, author.get_rect(
+            topright=(self.layout.width - 28, footer_y)))
 
         # Participant name input. Patient types here once and every
         # game logs to the same name.
@@ -442,11 +446,8 @@ class TitleScreen(Screen):
         surf.blit(i_surf, i_surf.get_rect(
             midleft=(i_icon_cx + icon_r + gap, i_cy)))
 
-        # Credit tucked under the Start button.
-        draw_text(surf, "by Basil Toufexis",
-                  (cx, 570),
-                  self.theme, self.layout, pt=FONT_SMALL,
-                  centre=True, colour=self.theme.muted)
+        # Author credit sits in the bottom-right corner, above the
+        # Settings pill (drawn in the footer block further down).
 
         # Modal protocol overlay, drawn last so it sits on top of
         # everything else when open.

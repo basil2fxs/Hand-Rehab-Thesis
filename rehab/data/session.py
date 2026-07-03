@@ -10,7 +10,7 @@ from dataclasses import dataclass, field, asdict
 from pathlib import Path
 
 
-SOFTWARE_VERSION = "1.0.0"
+SOFTWARE_VERSION = "2.4"
 
 
 @dataclass
