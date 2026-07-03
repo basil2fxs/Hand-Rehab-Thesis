@@ -64,12 +64,26 @@ Assignments save to `config/user_settings.yaml` and stick across restarts.
 Every block writes a folder under `sessions/` (next to `main.py` from source, or next to the `.app` / `.exe` from a build):
 
 ```
-sessions/<participant>_<YYYYMMDD_HHMMSS>/
-  trials.csv       one row per trial, flushed after each row
-  raw.csv          every FSR sample at 200 Hz, flushed every 50 ms
-  metadata.json    participant, hand, software version, config snapshot,
-                   block summary aggregates
+sessions/
+  sessions_index.csv                one line per block, the table of contents
+                                    (leads with a date column for day filtering)
+  <YYYY-MM-DD>/                     everything recorded that day, in one place
+    <participant>_<HHMMSS>_<mode>/
+      trials.csv       one row per trial, flushed after each row
+      raw.csv          every FSR sample at 200 Hz, flushed every 50 ms
+      metadata.json    participant, hand, software version, config snapshot,
+                       block summary aggregates
+      report.html      auto-generated researcher report, tables + charts
+      summary.csv      the block summary flattened to one spreadsheet row
+      charts/          the report's figures as standalone PNGs
 ```
+
+A trial campaign across many patients and modes stays navigable: open a
+date folder and every block from that day is there, sorted by
+participant then time. Folders copied out of their day directory stay
+traceable because metadata.json and trials.csv carry full timestamps.
+
+The report, summary and charts generate automatically when a block ends (config key `report.enabled`). The `Data folder` button on the Results screen opens the session folder in Finder / Explorer.
 
 `metadata.json` gets re-written every 10 trials so a hard kill still leaves a usable record. Saves write to a `.tmp` file then rename, so a crash mid-save doesn't blow away the prior snapshot.
 
@@ -82,13 +96,17 @@ If an Arduino unplugs mid-block, a `source_disconnected` event lands in `raw.csv
 build_app.bat         # Windows
 ```
 
-Output lands in `bin/dist/`:
+The ready-to-run apps land in `builds/` at the project root (PyInstaller intermediates stay in `bin/`):
 
-- Mac: `bin/dist/Finger Rehab.app`
-- Windows: `bin/dist/Finger Rehab/Finger Rehab.exe`
-- Linux: `bin/dist/Finger Rehab/Finger Rehab`
+- Mac: `builds/Mac/Finger Rehab.app`
+- Windows: `builds/Windows/Finger Rehab.exe` (one file)
+- Linux: `builds/Linux/Finger Rehab` (one file)
 
-PyInstaller only builds for the platform you're on. Cross-compile isn't a thing here.
+The apps are fully self-contained: Python, pygame, numpy, librosa and matplotlib all ship inside. Nothing to install on the target machine, copy the app over and double-click. Session data writes to a `sessions/` folder next to the app. Each `builds/` subfolder carries a plain-text how-to.
+
+PyInstaller only builds for the platform you're on. Cross-compile isn't a thing here. `.github/workflows/build-apps.yml` builds the Mac and Windows apps on GitHub runners instead: Actions tab, run `build-apps`, download the two zips.
+
+First launch on a fresh machine: macOS Gatekeeper flags unsigned apps, so right-click the .app, Open, then Open again, once. After that it double-clicks normally. Windows SmartScreen has the same one-time "More info, Run anyway".
 
 ## Tests
 
@@ -115,6 +133,7 @@ rehab/                   the Python app
 assets/                  music + images
 sessions/                logs generated per session
 tests/                   just some tests when modifying game
+builds/                  ready-to-run apps (Mac/ Windows/) + how-tos
 bin/                     stuff the final game doesn't need
   arduino_firmware/      Aiden's PlatformIO project (final build)
   build/ + dist/         PyInstaller output

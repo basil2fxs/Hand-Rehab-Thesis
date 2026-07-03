@@ -24,8 +24,21 @@ except ImportError:
 
 class AudioEngine:
     def __init__(self, master_volume: float = 0.8,
-                 sample_rate: int = 44100) -> None:
+                 sample_rate: int = 44100,
+                 cue_volume: float = 1.0,
+                 feedback_volume: float = 1.0) -> None:
+        # master scales the whole game. cue is the pre-press click track,
+        # feedback is the post-press hit / miss chime. Final volume of a
+        # sound is master x category x trial_gain x a fixed per-sound
+        # factor (see _cue_vol / _feedback_vol).
         self.master_volume = master_volume
+        self.cue_volume = cue_volume
+        self.feedback_volume = feedback_volume
+        # Transient per-trial loudness multiplier. The game engine raises
+        # this above 1.0 on the small fraction of "loud" trials and resets
+        # it to 1.0 when the trial ends, so the cue + feedback are slightly
+        # louder on those trials. Programmatic, not a manual setting.
+        self.trial_gain = 1.0
         self.sample_rate = sample_rate
         self._stim: list = []
         self._click = None
@@ -124,6 +137,50 @@ class AudioEngine:
         self._next_metronome_t = None
         self._initialised = False
 
+    @staticmethod
+    def _clamp01(v: float) -> float:
+        # pygame set_volume expects 0..1. trial_gain can push a level
+        # above 1.0, so clamp before handing it over.
+        return 0.0 if v < 0.0 else (1.0 if v > 1.0 else v)
+
+    def _cue_vol(self, local: float = 1.0) -> float:
+        """Effective volume for a pre-press cue (metronome click, stim
+        tone): master x cue x trial_gain x local, clamped to 0..1."""
+        return self._clamp01(self.master_volume * self.cue_volume
+                              * self.trial_gain * local)
+
+    def _feedback_vol(self, local: float = 1.0) -> float:
+        """Effective volume for a post-press feedback sound (hit chime,
+        miss thunk): master x feedback x trial_gain x local, clamped."""
+        return self._clamp01(self.master_volume * self.feedback_volume
+                             * self.trial_gain * local)
+
+    def set_trial_gain(self, gain: float) -> None:
+        """Set the transient per-trial loudness multiplier (1.0 = normal).
+        Called by the game engine: raised on a loud trial, reset to 1.0
+        when the trial ends."""
+        self.trial_gain = max(0.0, float(gain))
+
+    def set_volumes(self, master: float | None = None,
+                    cue: float | None = None,
+                    feedback: float | None = None) -> None:
+        """Update one or more base levels (0..1) live from the Settings
+        screen. Re-applies the music stream volume so a song already
+        playing follows the change; discrete cue / feedback sounds read
+        the current levels at play time so they need no refresh."""
+        if master is not None:
+            self.master_volume = self._clamp01(master)
+        if cue is not None:
+            self.cue_volume = self._clamp01(cue)
+        if feedback is not None:
+            self.feedback_volume = self._clamp01(feedback)
+        if (self._initialised and pygame is not None
+                and self._song_path is not None):
+            try:
+                pygame.mixer.music.set_volume(self._clamp01(self.master_volume))
+            except Exception:
+                pass
+
     def play_song(self, path: str | Path, loops: int = 0,
                   start_s: float = 0.0) -> bool:
         """Play a song from `start_s` seconds in. start_s > 0 is used by the
@@ -137,7 +194,10 @@ class AudioEngine:
             return False
         try:
             pygame.mixer.music.load(str(p))
-            pygame.mixer.music.set_volume(self.master_volume)
+            # Music rides the whole-game master level. The cue / feedback
+            # sliders shape the discrete click + chime sounds, not the
+            # backing track.
+            pygame.mixer.music.set_volume(self._clamp01(self.master_volume))
             pygame.mixer.music.play(loops=loops, start=max(0.0, start_s))
             self._song_path = str(p)
             # Adjust the song-start anchor so song_time() returns roughly
@@ -214,7 +274,7 @@ class AudioEngine:
             return
         snd = self._stim[lane % len(self._stim)]
         if snd is not None:
-            snd.set_volume(self.master_volume)
+            snd.set_volume(self._cue_vol())
             snd.play()
 
     def play_hit(self, combo: int = 0) -> None:
@@ -229,7 +289,7 @@ class AudioEngine:
         try:
             music_playing = (self._song_path is not None
                               and self._metronome_period is None)
-            vol = self.master_volume * (0.30 if music_playing else 0.50)
+            vol = self._feedback_vol(0.30 if music_playing else 0.50)
             # Pick which chime step matches the combo.
             sample = self._hit
             if self._hit_scale:
@@ -261,7 +321,7 @@ class AudioEngine:
         try:
             music_playing = (self._song_path is not None
                               and self._metronome_period is None)
-            vol = self.master_volume * (0.25 if music_playing else 0.45)
+            vol = self._feedback_vol(0.25 if music_playing else 0.45)
             self._miss_thunk.set_volume(vol)
             self._miss_thunk.play()
         except Exception:
@@ -269,7 +329,7 @@ class AudioEngine:
 
     def _play_click(self) -> None:
         if self._click is not None:
-            self._click.set_volume(self.master_volume * 0.6)
+            self._click.set_volume(self._cue_vol(0.6))
             self._click.play()
 
     def _tone(self, freq: float, duration_s: float,

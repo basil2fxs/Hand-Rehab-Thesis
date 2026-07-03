@@ -15,9 +15,13 @@ def setup(level: str = "INFO", file: str | None = None) -> None:
         return
     handlers: list[logging.Handler] = [logging.StreamHandler(sys.stdout)]
     if file:
-        # Make sure the log dir exists before opening the handler.
-        Path(file).parent.mkdir(parents=True, exist_ok=True)
+        # Make sure the log dir exists before opening the handler. The
+        # mkdir sits INSIDE the try: when the app is launched from
+        # Finder the working directory is / (read-only), so a relative
+        # or unwritable log path must degrade to stdout-only logging,
+        # never crash the app at startup.
         try:
+            Path(file).parent.mkdir(parents=True, exist_ok=True)
             handlers.append(logging.FileHandler(file, encoding="utf-8"))
         except OSError as e:
             print(f"[log] could not open log file {file}: {e}", file=sys.stderr)

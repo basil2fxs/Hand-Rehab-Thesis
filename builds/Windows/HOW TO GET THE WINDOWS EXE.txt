@@ -1,0 +1,22 @@
+Finger Rehab for Windows
+========================
+
+The finished app is ONE file: Finger Rehab.exe. Copy it to any Windows
+PC and double-click it. Nothing to install. The first launch takes a
+few extra seconds while the file unpacks itself, and Windows shows a
+one-time SmartScreen prompt ("More info", then "Run anyway").
+
+Windows apps can only be BUILT on Windows, so this folder starts empty.
+Two ways to fill it, pick either:
+
+1. On any Windows PC with Python 3.11 or 3.12 installed:
+     - copy the whole project folder over
+     - double-click build_app.bat in the project root
+     - it installs PyInstaller, builds, and puts
+       Finger Rehab.exe in this folder
+
+2. From GitHub (no Windows PC needed):
+     - push this repository to GitHub
+     - open the repo's Actions tab, run the "build-apps" workflow
+     - download FingerRehab-Windows.zip from the finished run
+     - unzip it and put Finger Rehab.exe in this folder

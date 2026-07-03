@@ -44,8 +44,15 @@ def main() -> int:
         # Most likely a YAML parse error from a hand-edited override.
         print(f"Could not load config: {e}", file=sys.stderr)
         return 5
+    # Resolve the log path through the config so a relative
+    # "sessions/rehab.log" lands next to the app (USER_ROOT) instead of
+    # whatever the working directory happens to be. Finder launches the
+    # frozen .app with CWD=/ where a relative mkdir would fail.
+    log_file = cfg.get("logging.file")
+    if log_file:
+        log_file = str(cfg.resolve_path(log_file))
     logutil.setup(args.log_level or cfg.get("logging.level", "INFO"),
-                  cfg.get("logging.file"))
+                  log_file)
     log = logging.getLogger("main")
     log.info("Config from %s", cfg.source)
 

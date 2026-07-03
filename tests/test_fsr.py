@@ -22,7 +22,7 @@ def _settle_baseline(det, baseline_val: int = 50,
     return t0 + n_samples * dt
 
 
-class FsrFeedRobustnessTests(unittest.TestCase):
+class FsrFeedEdgeCaseTests(unittest.TestCase):
     """feed() must not crash on degenerate inputs that the firmware
     or upstream layers might send (short tuples, empty tuples, extra
     values, etc.)."""

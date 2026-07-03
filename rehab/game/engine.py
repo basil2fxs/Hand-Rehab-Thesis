@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import copy
 import logging
+import os
+import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -147,6 +150,46 @@ class GameEngine:
         # we only log a "disconnected" warning ONCE when the Arduino
         # drops out mid-block instead of spamming every frame.
         self._source_was_connected = True
+        # ---- Miss-force metric -------------------------------------------
+        # For each trial, track every finger's peak reading above baseline
+        # over a fixed window after the go stimulus. On a MISSED trial,
+        # log_trial sums those peaks across all fingers into
+        # _miss_force_total (and bumps _miss_force_count), so the Results
+        # screen can show how much total force the patient was applying
+        # across the whole hand when they failed the trial. Units are raw
+        # sensor counts (no newton calibration); reads 0 in keyboard mode
+        # (no FSR data). Reset per block in _begin_block, alongside misses.
+        self._force_window_ms = float(
+            self.cfg.get("metrics.miss_force_window_ms", 1000))
+        self._force_window_start: float | None = None
+        self._force_window_end: float | None = None
+        self._force_window_peak: dict[int, float] = {}
+        self._miss_force_total: float = 0.0
+        self._miss_force_count: int = 0
+        # ---- Programmatic loudness variation -----------------------------
+        # A fraction of trials, spread evenly across the block, play the
+        # cue + feedback slightly louder so the patient doesn't habituate
+        # to a constant level. Deterministic (every Nth trial) so the loud
+        # count is exact and the spacing uniform. _trials_fired counts
+        # stims; the boost is applied via audio.set_trial_gain at on_stim
+        # and reset to 1.0 at log_trial.
+        self._loud_trial_fraction = float(
+            self.cfg.get("audio.loud_trial.fraction", 0.10))
+        self._loud_trial_boost = float(
+            self.cfg.get("audio.loud_trial.boost", 1.35))
+        self._trials_fired = 0
+        # Which trial ids played loud, so the trial CSV can record the
+        # flag exactly (the boost is a stimulus property and must be
+        # controllable in analysis). Also a per-block loud counter for
+        # the block summary, the response window of the latest stim
+        # (the RT censoring limit, logged per trial), and whether any
+        # FSR samples landed in the current force window (distinguishes
+        # "no data" from "zero force" in the CSV).
+        self._loud_trials_by_id: dict[int, bool] = {}
+        self._block_loud_trials = 0
+        self._last_stim_timeout_ms: float | None = None
+        self._force_window_saw_samples = False
+        self._force_window_trial_id: int | None = None
 
     # ---- bilateral plumbing ------------------------------------------------
     def _build_detectors(self) -> None:
@@ -240,6 +283,175 @@ class GameEngine:
         if (self.hand_mode not in ("right", "left", "both")
                 and self.hand_mode in self.detectors):
             self.detectors[self.hand_mode].feed(t_perf, right_vals)
+        # Miss-force window: while a trial's window is open, update each
+        # finger's running peak (reading minus baseline). log_trial sums
+        # these across all fingers on a miss. A handful of max() per
+        # sample. on_stim opens the window; log_trial closes + records it.
+        start = self._force_window_start
+        if (start is not None and self._force_window_end is not None
+                and start <= t_perf <= self._force_window_end):
+            self._track_force_peaks(right_det, right_vals,
+                                     left_det, left_vals, n)
+
+    # ---- miss-force + loudness helpers -------------------------------------
+    def _track_force_peaks(self, right_det, right_vals,
+                            left_det, left_vals, n: int) -> None:
+        """Update the per-finger peak (reading minus baseline) for the
+        fingers in play this hand_mode. Lane numbering matches the game:
+        right hand 0..n-1, left hand 0..n-1 unilateral or n..2n-1 in
+        bilateral. Negative deltas clamp to 0 (a finger sitting below its
+        baseline isn't pressing)."""
+        # Mark that real FSR data reached this window, so the trial CSV
+        # can tell "no data" (keyboard mode / dropout -> empty cell)
+        # apart from "data flowed but no finger rose" (-> 0.000).
+        self._force_window_saw_samples = True
+        peak = self._force_window_peak
+
+        def _add(det, svals, lane_base):
+            if det is None:
+                return
+            for i in range(n):
+                base = det.baseline_value(i)
+                base = 0.0 if base is None else float(base)
+                delta = float(svals[i]) - base
+                if delta < 0.0:
+                    delta = 0.0
+                lane = lane_base + i
+                if delta > peak.get(lane, 0.0):
+                    peak[lane] = delta
+
+        if self.hand_mode == "both":
+            _add(right_det, right_vals, 0)
+            _add(left_det, left_vals, n)
+        elif self.hand_mode == "left":
+            _add(left_det, left_vals, 0)
+        else:  # "right" or a legacy single-hand mode
+            _add(right_det, right_vals, 0)
+
+    def _open_force_window(self, t_perf: float,
+                            trial_id: int | None = None) -> None:
+        """Start a fresh miss-force window at the go stimulus. Clears the
+        previous trial's peaks and arms _feed_detectors to accumulate for
+        _force_window_ms milliseconds. `trial_id` tags the window so the
+        rhythm path (where notes can overlap in flight) only banks a miss
+        against the window that actually belongs to that note."""
+        self._force_window_start = t_perf
+        self._force_window_end = t_perf + self._force_window_ms / 1000.0
+        self._force_window_peak = {}
+        self._force_window_saw_samples = False
+        self._force_window_trial_id = trial_id
+
+    def _close_force_window(self, was_miss: bool
+                             ) -> tuple[float | None, dict[int, float]]:
+        """Finish the current trial's window. On a miss, add the summed
+        per-finger peak to the running total so the Results screen can
+        report it. Returns (sum, per-lane peaks) for the trial CSV row;
+        sum is None when no FSR samples reached the window (keyboard
+        mode), so the CSV cell stays empty rather than lying with a 0.
+        Then disarms the window until the next stim."""
+        peaks = dict(self._force_window_peak)
+        saw = self._force_window_saw_samples
+        window_sum: float | None = sum(peaks.values()) if saw else None
+        if was_miss and self._force_window_start is not None:
+            self._miss_force_total += sum(peaks.values())
+            self._miss_force_count += 1
+        self._force_window_start = None
+        self._force_window_end = None
+        self._force_window_peak = {}
+        self._force_window_saw_samples = False
+        self._force_window_trial_id = None
+        return window_sum, peaks
+
+    @staticmethod
+    def _format_force_window(window_sum: float | None,
+                              peaks: dict[int, float]) -> tuple[str, str]:
+        """CSV cells for the force-window columns: ("", "") when no data
+        reached the window, else the sum plus a "lane:peak;..." breakdown
+        (1-indexed lanes, only fingers that rose above baseline)."""
+        if window_sum is None:
+            return "", ""
+        peaks_str = ";".join(
+            f"{lane + 1}:{val:.3f}"
+            for lane, val in sorted(peaks.items()) if val > 0.0)
+        return f"{window_sum:.3f}", peaks_str
+
+    def _ensure_metric_state(self) -> None:
+        """Backfill miss-force + loud-trial state for engines built via
+        __new__ in tests (which skip __init__). Mirrors the hasattr guards
+        the per-lane logging already uses in log_trial."""
+        if not hasattr(self, "_force_window_ms"):
+            self._force_window_ms = 1000.0
+        if not hasattr(self, "_force_window_start"):
+            self._force_window_start = None
+        if not hasattr(self, "_force_window_end"):
+            self._force_window_end = None
+        if not hasattr(self, "_force_window_peak"):
+            self._force_window_peak = {}
+        if not hasattr(self, "_miss_force_total"):
+            self._miss_force_total = 0.0
+        if not hasattr(self, "_miss_force_count"):
+            self._miss_force_count = 0
+        if not hasattr(self, "_loud_trial_fraction"):
+            self._loud_trial_fraction = 0.0
+        if not hasattr(self, "_loud_trial_boost"):
+            self._loud_trial_boost = 1.0
+        if not hasattr(self, "_trials_fired"):
+            self._trials_fired = 0
+        if not hasattr(self, "_loud_trials_by_id"):
+            self._loud_trials_by_id = {}
+        if not hasattr(self, "_block_loud_trials"):
+            self._block_loud_trials = 0
+        if not hasattr(self, "_last_stim_timeout_ms"):
+            self._last_stim_timeout_ms = None
+        if not hasattr(self, "_force_window_saw_samples"):
+            self._force_window_saw_samples = False
+        if not hasattr(self, "_force_window_trial_id"):
+            self._force_window_trial_id = None
+
+    def _is_loud_trial(self, trial_number: int) -> bool:
+        """True if this 1-indexed trial should play louder. Loud trials
+        are spread evenly at the configured fraction (0.10 = about 1 in
+        10). Deterministic so the loud count is exact and the spacing
+        uniform rather than clustered: trial n is loud when the running
+        count of loud trials (floor(n x fraction)) ticks up from n-1."""
+        frac = self._loud_trial_fraction
+        if frac <= 0.0 or trial_number < 1:
+            return False
+        return int(trial_number * frac) > int((trial_number - 1) * frac)
+
+    def _all_rts(self) -> list[float]:
+        """Flatten the per-lane reaction-time lists into one list across
+        all fingers. getattr-guarded so a __new__-built engine in tests
+        doesn't blow up. Used by the Results screen for the overall
+        average + best-press cards."""
+        out: list[float] = []
+        for vals in (getattr(self, "_per_lane_rts", {}) or {}).values():
+            out.extend(vals)
+        return out
+
+    def overall_mean_rt(self) -> float:
+        """Mean reaction time (ms) across every logged press this block,
+        or 0.0 if none. In rhythm mode the per-lane lists hold signed
+        beat offsets, so the absolute value is used there (mean distance
+        off the beat, not a net early/late bias that cancels out)."""
+        rts = self._all_rts()
+        if not rts:
+            return 0.0
+        if getattr(self, "current_block", None) == "rhythm":
+            rts = [abs(x) for x in rts]
+        return sum(rts) / len(rts)
+
+    def overall_best_rt(self) -> float:
+        """The patient's best single press this block (ms), or 0.0 if
+        none. In a cadence mode that's the fastest reaction; in rhythm
+        it's the press landing tightest to the beat (smallest absolute
+        offset). Shown game-style as a personal best."""
+        rts = self._all_rts()
+        if not rts:
+            return 0.0
+        if getattr(self, "current_block", None) == "rhythm":
+            return min(abs(x) for x in rts)
+        return min(rts)
 
     # ---- main loop ---------------------------------------------------------
     def run(self) -> int:
@@ -270,6 +482,15 @@ class GameEngine:
             return 4
         self._screen = screen
         pygame.display.set_caption("Finger Rehab")
+        # Window / dock icon. resolve_path routes into the PyInstaller
+        # bundle when frozen. Purely cosmetic, so any failure (missing
+        # file, headless SDL) is ignored.
+        try:
+            icon_path = self.cfg.resolve_path("assets/icons/app_icon_256.png")
+            if Path(icon_path).exists():
+                pygame.display.set_icon(pygame.image.load(str(icon_path)))
+        except Exception as e:
+            log.debug("window icon skipped: %s", e)
         clock = pygame.time.Clock()
         # Initialise self.audio BEFORE any startup step that could raise.
         # Without this, if _build_screens / show_title / source.start raised
@@ -457,7 +678,11 @@ class GameEngine:
     def _build_audio(self) -> AudioEngine | None:
         if not self.cfg.get("audio.enabled", True):
             return None
-        a = AudioEngine(master_volume=float(self.cfg.get("audio.master_volume", 0.8)))
+        a = AudioEngine(
+            master_volume=float(self.cfg.get("audio.master_volume", 0.8)),
+            cue_volume=float(self.cfg.get("audio.cue_volume", 1.0)),
+            feedback_volume=float(self.cfg.get("audio.feedback_volume", 1.0)),
+        )
         a.init()
         return a
 
@@ -1092,6 +1317,23 @@ class GameEngine:
         # as the other per-lane dicts.
         self._per_lane_peak_force: dict[int, list[float]] = {}
         self._per_lane_impulse: dict[int, list[float]] = {}
+        # Miss-force + loud-trial counters reset per block so the Results
+        # screen reports THIS block, matching how hits / misses reset
+        # above. The audio gain is forced back to normal in case the
+        # previous block ended mid-loud-trial.
+        self._force_window_start = None
+        self._force_window_end = None
+        self._force_window_peak = {}
+        self._force_window_saw_samples = False
+        self._force_window_trial_id = None
+        self._miss_force_total = 0.0
+        self._miss_force_count = 0
+        self._trials_fired = 0
+        self._loud_trials_by_id = {}
+        self._block_loud_trials = 0
+        self._last_stim_timeout_ms = None
+        if self.audio is not None:
+            self.audio.set_trial_gain(1.0)
         # Drift-sampler bookkeeping. Across-block lists stay populated
         # for the lifetime of the session (so fatigue_slope can run on
         # block N looking back at blocks 1..N-1). The drift-samples
@@ -1110,6 +1352,7 @@ class GameEngine:
         Path(data_dir).mkdir(parents=True, exist_ok=True)
         self.session_paths = SessionPaths.for_session(
             Path(data_dir), self.session.participant,
+            mode=self.current_block,
         )
         self.trial_logger = TrialLogger(self.session_paths.trials_csv)
         n_total = (8 if self.hand_mode == "both"
@@ -1188,6 +1431,53 @@ class GameEngine:
             # patient try to game the scoring" signal for the thesis.
             "idle_presses": getattr(self, "_block_idle_presses", 0),
         }
+        # Miss-force capture, persisted so the analysis never depends
+        # on someone photographing the results screen. Same unit
+        # context as peak_force_n (see force_unit below).
+        mf_total = getattr(self, "_miss_force_total", 0.0)
+        mf_count = getattr(self, "_miss_force_count", 0)
+        summary["miss_force"] = {
+            "window_ms": getattr(self, "_force_window_ms", None),
+            "total": round(mf_total, 3),
+            "n_misses": mf_count,
+            "mean_per_miss": (round(mf_total / mf_count, 3)
+                               if mf_count > 0 else None),
+        }
+        # Loudness-variation bookkeeping: how many trials actually
+        # played boosted this block, next to the configured schedule,
+        # so an analyst can verify the manipulation ran as intended.
+        summary["loud_trials"] = {
+            "n": getattr(self, "_block_loud_trials", 0),
+            "configured_fraction": getattr(
+                self, "_loud_trial_fraction", None),
+            "boost": getattr(self, "_loud_trial_boost", None),
+        }
+        # Which track a rhythm block actually played. Config records
+        # the difficulty default but not the runtime song choice.
+        if self.current_block == "rhythm":
+            bm = getattr(self.mode, "beatmap", None) if self.mode else None
+            n_notes = None
+            bpm_val = None
+            if bm is not None:
+                try:
+                    n_notes = len(getattr(bm, "notes", []) or [])
+                    raw_bpm = getattr(bm, "bpm", None)
+                    bpm_val = (round(float(raw_bpm), 1)
+                               if raw_bpm is not None else None)
+                except (TypeError, ValueError):
+                    pass
+            summary["song"] = {
+                "title": (getattr(bm, "title", None)
+                           or getattr(self, "_last_rhythm_title", None)),
+                "difficulty": (getattr(bm, "difficulty", None)
+                                or getattr(self,
+                                           "_last_rhythm_difficulty",
+                                           None)),
+                "bpm": bpm_val,
+                "n_notes": n_notes,
+                "song_path": (str(getattr(bm, "song", "") or "")
+                               or None),
+            }
         # Adaptive-only context.
         bpm_min = getattr(self, "_block_bpm_min", None)
         bpm_max = getattr(self, "_block_bpm_max", None)
@@ -1390,6 +1680,21 @@ class GameEngine:
             drift[f"{hand}_{idx}"] = (round(slope, 4)
                                        if slope is not None else None)
         summary["drift_units_per_min"] = drift
+        # Per-sensor baseline at block end. Complements the drift slope
+        # (rate of change) with the absolute level, so a sensor that
+        # started weird - not just drifted - is visible without
+        # re-processing raw.csv.
+        baseline_end: dict[str, float | None] = {}
+        for hand, det in (getattr(self, "detectors", {}) or {}).items():
+            n_sensors = len(getattr(det, "last_value", []) or [])
+            for i in range(n_sensors):
+                try:
+                    b = det.baseline_value(i)
+                except Exception:
+                    b = None
+                baseline_end[f"{hand}_{i}"] = (
+                    round(float(b), 2) if b is not None else None)
+        summary["baseline_end"] = baseline_end
         # Startup latency per port. Read from the source every time
         # the summary builds (rather than caching at block start),
         # because the source might learn the first-sample timestamp
@@ -1459,6 +1764,73 @@ class GameEngine:
             self._protocol_active = False
             self._current_phase = ""
 
+    def _generate_session_report(self) -> None:
+        """Build the researcher outputs (report.html, summary.csv,
+        charts/) inside the finished session folder and append this
+        block to sessions_index.csv. Runs AFTER the loggers close so
+        the report reads complete CSVs. Fully guarded: the raw data is
+        already safe on disk, so a report failure only logs a warning."""
+        if not self.session_paths:
+            return
+        if not bool(self.cfg.get("report.enabled", True)):
+            return
+        from ..analytics import report
+        root = self.session_paths.root
+        try:
+            report.generate(root)
+        except Exception as e:
+            log.warning("Session report generation failed: %s", e)
+        try:
+            summary = self.session.block_summary or {}
+            data_dir = Path(self.cfg.resolve_path(
+                self.cfg.get("session.data_dir", "sessions")))
+            # Day-relative path (e.g. 2026-07-02/Pat_143005_adaptive)
+            # so the index row points straight at the folder from the
+            # sessions/ root. Falls back to the bare name for a root
+            # that isn't under data_dir (tests, odd configs).
+            try:
+                folder_rel = str(root.relative_to(data_dir))
+            except ValueError:
+                folder_rel = root.name
+            finished = self.session.finished_at or ""
+            report.append_index(data_dir, {
+                "date": finished[:10],
+                "finished_at": finished,
+                "participant": self.session.participant,
+                "age": self.session.age,
+                "mode": summary.get("block", self.current_block),
+                "hand": self.hand_mode,
+                "status": summary.get("status", ""),
+                "trials": summary.get("trials", ""),
+                "hit_rate": summary.get("hit_rate", ""),
+                "avg_rt_ms": summary.get("avg_rt_ms", ""),
+                "final_score": summary.get("final_score", ""),
+                "folder": folder_rel,
+            })
+        except Exception as e:
+            log.warning("sessions_index.csv update failed: %s", e)
+
+    def open_last_session_folder(self) -> bool:
+        """Open the most recent session folder in Finder / Explorer /
+        the Linux file manager. Wired to the results screen's Open
+        data folder button so a researcher can reach the CSVs and the
+        report without hunting through the filesystem."""
+        path = self.last_session_root
+        if not path or not Path(path).exists():
+            log.warning("No session folder to open")
+            return False
+        try:
+            if sys.platform == "darwin":
+                subprocess.Popen(["open", path])
+            elif os.name == "nt":
+                os.startfile(path)  # type: ignore[attr-defined]
+            else:
+                subprocess.Popen(["xdg-open", path])
+            return True
+        except Exception as e:
+            log.warning("Could not open session folder: %s", e)
+            return False
+
     def finish_block(self) -> None:
         if self.raw_logger:
             self.raw_logger.queue_event("block_end", detail=self.current_block,
@@ -1485,6 +1857,10 @@ class GameEngine:
             except Exception as e:
                 log.warning("Could not save metadata on finish: %s", e)
         self._close_loggers()
+        # Researcher outputs: report.html + summary.csv + charts in the
+        # session folder, plus a line in sessions_index.csv. After the
+        # loggers close so the CSVs are complete.
+        self._generate_session_report()
         self.session_paths = None
         # If a protocol is running, auto-advance to the next step
         # instead of bouncing to the Results screen between blocks.
@@ -1533,6 +1909,10 @@ class GameEngine:
         except Exception as e:
             log.warning("Could not save abandoned metadata: %s", e)
         self._close_loggers()
+        # Partial blocks still get the researcher outputs; the report's
+        # status field says "abandoned" so nobody mistakes it for a
+        # complete block.
+        self._generate_session_report()
         self.session_paths = None
         self.mode = None
 
@@ -1831,6 +2211,28 @@ class GameEngine:
         # lane numbering is global (0..7) and each strip's enumerate
         # index matches that.
         targets = set(int(l) for l in lanes)
+        # Loudness variation + miss-force window both key off the stimulus.
+        # Bump the trial counter, raise the audio gain on a loud trial (so
+        # the cue played just below AND the feedback chime at log_trial are
+        # louder), and open the force window so _feed_detectors starts
+        # tracking each finger's peak from this instant.
+        self._ensure_metric_state()
+        self._trials_fired += 1
+        is_loud = self._is_loud_trial(self._trials_fired)
+        if self.audio is not None:
+            self.audio.set_trial_gain(
+                self._loud_trial_boost if is_loud else 1.0)
+        else:
+            # No audio engine -> no boost was actually heard, so the
+            # trial CSV must not claim this trial played loud.
+            is_loud = False
+        # Record the flag by trial id so the CSV row (written at trial
+        # close, possibly after the NEXT stim fired in rhythm) still
+        # reports the right trial's loudness.
+        self._loud_trials_by_id[trial_id] = is_loud
+        if is_loud:
+            self._block_loud_trials += 1
+        self._open_force_window(t_perf, trial_id)
         # Rhythm mode has its own timeout window logic; the others
         # share game.timeout_s with a current_timeout_s hook for
         # adaptive's slow-down branch.
@@ -1838,6 +2240,9 @@ class GameEngine:
             timeout_s = float(self.mode.current_timeout_s)
         else:
             timeout_s = float(self.cfg.get("game.timeout_s", 1.0))
+        # The trial's response window is the RT censoring limit; the CSV
+        # logs it per trial because adaptive varies it with the cadence.
+        self._last_stim_timeout_ms = timeout_s * 1000.0
         for key in ("gameplay", "rhythm"):
             sc = self._screens.get(key)
             if sc and hasattr(sc, "lanes"):
@@ -1883,6 +2288,7 @@ class GameEngine:
                                              hand=self.hand_mode)
 
     def log_trial(self, trial, outcome: TrialResult, now: float) -> None:
+        self._ensure_metric_state()
         gp = self._screens.get("gameplay")
         if gp and hasattr(gp, "set_message"):
             # Flash colour matches the outcome tier so the screen tells the
@@ -1909,6 +2315,9 @@ class GameEngine:
                     self.audio.play_miss()
             except Exception:
                 pass
+            # A loud trial has now played its feedback at the boosted
+            # gain; drop it back so the next non-loud trial is normal.
+            self.audio.set_trial_gain(1.0)
         # Capture streak BEFORE _update_streak runs so the trial row
         # records what the patient came IN with, not what they leave
         # with. Used by motor-learning analysis.
@@ -1924,6 +2333,11 @@ class GameEngine:
             self.misses += 1
         else:
             self.hits += 1
+        # Close the miss-force window: on a miss, bank the summed
+        # per-finger peak into the running total; either way disarm the
+        # window and keep the snapshot for this trial's CSV row.
+        fw_sum, fw_peaks = self._close_force_window(
+            outcome.label == "Miss")
         # Block-summary aggregates: RT + wrong-press trial count.
         if outcome.rt_ms is not None:
             self._block_rt_sum += float(outcome.rt_ms)
@@ -2016,6 +2430,19 @@ class GameEngine:
                 # parsers that ignore unknown columns.
                 "phase": getattr(self, "_current_phase", "") or "",
             }
+            # Capture-completeness fields: loudness flag (stimulus
+            # property), response window (RT censoring limit), and the
+            # all-finger force window for this trial.
+            fw_sum_str, fw_peaks_str = self._format_force_window(
+                fw_sum, fw_peaks)
+            loud = self._loud_trials_by_id.get(trial.trial_id)
+            row["loud_trial"] = ("" if loud is None
+                                  else ("TRUE" if loud else "FALSE"))
+            row["timeout_ms"] = (
+                f"{self._last_stim_timeout_ms:.0f}"
+                if self._last_stim_timeout_ms is not None else "")
+            row["force_window_sum"] = fw_sum_str
+            row["force_window_peaks"] = fw_peaks_str
             row.update(self._trial_context(streak_before))
             self.trial_logger.write(row)
         self._maybe_resave_metadata()
@@ -2095,6 +2522,7 @@ class GameEngine:
             num_presses must be 0 to stay consistent with how classic
             and adaptive log a real no-press miss.
         """
+        self._ensure_metric_state()
         # Snapshot the streak going INTO this trial before _update_streak
         # mutates it. Used by the trial context for motor-learning analysis.
         streak_before = self.hit_streak
@@ -2159,6 +2587,16 @@ class GameEngine:
         else:
             self._per_lane_misses[lane] = (
                 self._per_lane_misses.get(lane, 0) + 1)
+        # Close this note's force window and, on a miss, bank the
+        # all-finger peak sum (same metric as classic / adaptive). The
+        # trial-id guard matters here: at fast tempos the NEXT note's
+        # stim may already have re-armed the window by the time this
+        # note resolves, in which case the window isn't ours - leave it
+        # for the newer note and log empty force cells for this row.
+        fw_sum: float | None = None
+        fw_peaks: dict[int, float] = {}
+        if self._force_window_trial_id == sched_note.index:
+            fw_sum, fw_peaks = self._close_force_window(label == "Miss")
         if self.trial_logger:
             # Song position is critical for RAS (Rhythmic Auditory
             # Stimulation) analysis - the researcher needs to see WHEN
@@ -2216,6 +2654,20 @@ class GameEngine:
                 # column lives in the same trial CSV either way.
                 "phase": getattr(self, "_current_phase", "") or "",
             }
+            # Capture-completeness fields, mirroring log_trial. The
+            # response window in rhythm is the miss_ms classify
+            # boundary (offsets beyond it grade as Miss).
+            loud = self._loud_trials_by_id.get(sched_note.index)
+            row["loud_trial"] = ("" if loud is None
+                                  else ("TRUE" if loud else "FALSE"))
+            w = getattr(self.mode, "windows", None) if self.mode else None
+            miss_ms = getattr(w, "miss_ms", None) if w is not None else None
+            row["timeout_ms"] = (f"{float(miss_ms):.0f}"
+                                  if miss_ms is not None else "")
+            fw_sum_str, fw_peaks_str = self._format_force_window(
+                fw_sum, fw_peaks)
+            row["force_window_sum"] = fw_sum_str
+            row["force_window_peaks"] = fw_peaks_str
             row.update(self._trial_context(streak_before,
                                             song_time_s=song_time))
             self.trial_logger.write(row)

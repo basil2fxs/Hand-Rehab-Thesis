@@ -1,0 +1,61 @@
+# Build the standalone Finger Rehab apps for macOS and Windows.
+#
+# PyInstaller cannot cross-compile, so each OS builds its own app on a
+# matching GitHub runner. Run it from the Actions tab (workflow_dispatch)
+# or push a tag like v1.0.0. Download the artefacts from the run page:
+#   FingerRehab-macOS.zip    -> Finger Rehab.app (double-click)
+#   FingerRehab-Windows.zip  -> Finger Rehab/Finger Rehab.exe (double-click)
+#
+# Both are fully self-contained: Python, pygame, numpy, librosa and
+# matplotlib all ship inside. Nothing to install on the target machine.
+# Windows builds as ONE file (Finger Rehab.exe); macOS as the .app.
+
+name: build-apps
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            artefact: FingerRehab-macOS
+          - os: windows-latest
+            artefact: FingerRehab-Windows
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # 3.12: newest CPython with mature wheels for the whole stack
+      # (librosa's numba dependency lags the very latest Python).
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pyinstaller
+
+      - name: Build
+        run: python -m PyInstaller --noconfirm --workpath bin/build --distpath bin/dist finger_rehab.spec
+
+      - name: Zip bundle (macOS)
+        if: runner.os == 'macOS'
+        run: cd bin/dist && ditto -c -k --keepParent "Finger Rehab.app" "${{ matrix.artefact }}.zip"
+
+      - name: Zip bundle (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path "bin/dist/Finger Rehab.exe" -DestinationPath "bin/dist/${{ matrix.artefact }}.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artefact }}
+          path: bin/dist/${{ matrix.artefact }}.zip
+          retention-days: 30

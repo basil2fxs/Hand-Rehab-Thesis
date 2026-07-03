@@ -21,6 +21,12 @@ env/
 bin/build/
 bin/dist/
 
+# Ready-to-run apps. Hundreds of MB each, far past GitHub's file
+# limits. The instruction files inside stay tracked.
+builds/Mac/Finger Rehab.app/
+builds/Windows/Finger Rehab.exe
+builds/Windows/Finger Rehab/
+
 # Per-session output. Don't publish.
 sessions/
 

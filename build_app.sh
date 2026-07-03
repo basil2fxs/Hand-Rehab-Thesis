@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Build the standalone app for the current platform (macOS or Linux).
-# Result lands in bin/dist/. Build intermediates go to bin/build/ so
-# the project root stays clean.
+# PyInstaller output goes to bin/dist/ (intermediates in bin/build/),
+# then the finished app is copied into builds/Mac/ so the ready-to-run
+# deliverables always live in one obvious place at the project root.
 
 set -euo pipefail
 
@@ -23,14 +24,19 @@ python3 -m PyInstaller \
 echo
 echo "Build complete. Artefacts:"
 ls -1 bin/dist/
+
 if [[ "$(uname)" == "Darwin" ]]; then
+    # Refresh the ready-to-run copy in builds/Mac/.
+    mkdir -p "builds/Mac"
+    rm -rf "builds/Mac/Finger Rehab.app"
+    cp -R "bin/dist/Finger Rehab.app" "builds/Mac/Finger Rehab.app"
     echo
-    echo "macOS .app bundle: bin/dist/Finger Rehab.app"
+    echo "Ready to run: builds/Mac/Finger Rehab.app"
     echo "Double-click it from Finder, or run from terminal:"
-    echo "  open 'bin/dist/Finger Rehab.app'"
+    echo "  open 'builds/Mac/Finger Rehab.app'"
 else
+    mkdir -p "builds/Linux"
+    cp -f "bin/dist/Finger Rehab" "builds/Linux/Finger Rehab"
     echo
-    echo "Linux binary: bin/dist/Finger Rehab/Finger Rehab"
-    echo "Run it with:"
-    echo "  ./bin/dist/Finger\\ Rehab/Finger\\ Rehab"
+    echo "Ready to run: builds/Linux/Finger Rehab"
 fi

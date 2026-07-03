@@ -56,6 +56,23 @@ TRIAL_COLUMNS = [
     # analysis split the trial CSV by phase without re-deriving
     # which block was which from the timestamps.
     "phase",
+    # TRUE when this trial's cue + feedback played at the boosted
+    # loudness (audio.loud_trial). The boost is a stimulus property,
+    # so any RT analysis needs this column to control for it.
+    "loud_trial",
+    # Response window for this trial in ms (the RT censoring limit).
+    # Varies per trial in adaptive mode (cadence x timeout_factor);
+    # rhythm logs its miss_ms classify boundary here.
+    "timeout_ms",
+    # All-finger force over the post-stim window (metrics.
+    # miss_force_window_ms): sum of each finger's peak above baseline,
+    # and the per-finger breakdown as "lane:peak;..." (1-indexed lanes,
+    # only fingers that rose above baseline). Same unit context as
+    # peak_force_n. Empty when no FSR samples arrived in the window
+    # (keyboard mode); "0.000" means samples flowed but no finger rose
+    # above baseline. Feeds miss-force and individuation analyses.
+    "force_window_sum",
+    "force_window_peaks",
 ]
 
 # Raw schema gains fsr5-fsr8 so the bilateral case fits without a new file format.
@@ -83,19 +100,28 @@ class SessionPaths:
 
     @classmethod
     def for_session(cls, data_dir: Path,
-                    participant: str) -> "SessionPaths":
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    participant: str, mode: str = "") -> "SessionPaths":
+        now = datetime.now()
+        day = now.strftime("%Y-%m-%d")
+        ts = now.strftime("%H%M%S")
         safe = (participant or "NA").replace("/", "_").replace(" ", "_")
-        # Folder name is just {participant}_{timestamp}/. The participant
-        # is set once on the title screen and reused for every block they
-        # play, so multiple blocks from the same patient land in sibling
-        # folders that share a common name prefix.
+        # Layout: sessions/YYYY-MM-DD/{participant}_{HHMMSS}_{mode}/.
+        # Grouping by day keeps a long trial campaign navigable: open
+        # one date folder and every block recorded that day is there,
+        # sorted by participant then time. The mode suffix says what
+        # each block was without opening metadata.json. Full timestamps
+        # still live inside (metadata.json, trials.csv iso_ts), so a
+        # folder copied out of its day directory stays traceable.
         base = f"{safe}_{ts}"
-        cand = data_dir / base
+        mode_safe = (mode or "").strip().replace("/", "_").replace(" ", "_")
+        if mode_safe:
+            base = f"{base}_{mode_safe}"
+        day_dir = data_dir / day
+        cand = day_dir / base
         i = 0
         while cand.exists():
             i += 1
-            cand = data_dir / f"{base}_{i}"
+            cand = day_dir / f"{base}_{i}"
         cand.mkdir(parents=True, exist_ok=False)
         return cls(
             root=cand,

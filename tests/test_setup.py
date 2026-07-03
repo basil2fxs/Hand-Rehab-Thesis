@@ -170,12 +170,39 @@ class SessionPathsUseTypedNameTests(unittest.TestCase):
     def test_session_paths_signature_dropped_age(self) -> None:
         # If someone later re-adds an age parameter the schema diverges
         # again. Guard the signature so the change is intentional.
+        # `mode` was added deliberately so the folder name says which
+        # block the data came from without opening metadata.json.
         import inspect
         from rehab.data.logger import SessionPaths
         sig = inspect.signature(SessionPaths.for_session)
         params = list(sig.parameters)
         self.assertNotIn("age", params)
-        self.assertEqual(params, ["data_dir", "participant"])
+        self.assertEqual(params, ["data_dir", "participant", "mode"])
+
+    def test_session_folder_name_includes_mode(self) -> None:
+        import tempfile
+        from rehab.data.logger import SessionPaths
+        with tempfile.TemporaryDirectory() as td:
+            paths = SessionPaths.for_session(Path(td), "Pat",
+                                             mode="adaptive")
+            self.assertTrue(paths.root.name.endswith("_adaptive"))
+
+    def test_sessions_group_by_day(self) -> None:
+        # Layout is sessions/YYYY-MM-DD/{participant}_{HHMMSS}_{mode}
+        # so a day's recordings all sit in one date folder.
+        import re
+        import tempfile
+        from rehab.data.logger import SessionPaths
+        with tempfile.TemporaryDirectory() as td:
+            paths = SessionPaths.for_session(Path(td), "Pat",
+                                             mode="classic")
+            day = paths.root.parent
+            self.assertRegex(day.name, r"^\d{4}-\d{2}-\d{2}$")
+            self.assertEqual(day.parent, Path(td))
+            # Two blocks the same day share the day folder.
+            paths2 = SessionPaths.for_session(Path(td), "Other",
+                                              mode="rhythm")
+            self.assertEqual(paths2.root.parent, day)
 
 
 class GlobalParticipantPersistenceTests(unittest.TestCase):

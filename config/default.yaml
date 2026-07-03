@@ -8,6 +8,13 @@ session:
   # "65y" or "NA"). An empty value means "not provided".
   age: null
 
+report:
+  # Build researcher outputs at the end of every block: report.html,
+  # summary.csv and charts/ inside the session folder, plus one line
+  # per block in sessions/sessions_index.csv. Needs matplotlib for the
+  # charts; tables still generate without it. Set false to skip.
+  enabled: true
+
 serial:
   port: auto
   baud: 115200
@@ -165,6 +172,16 @@ scoring:
   # during a trial. Set to 0 to disable.
   idle_press_penalty: 1
 
+metrics:
+  # Miss-force window. For every trial the engine tracks each finger's
+  # peak reading (minus baseline) over this many milliseconds after the
+  # go stimulus. On a MISSED trial it sums that peak across all fingers
+  # and accumulates it, so the results screen can report how much total
+  # force the patient was applying across the whole hand when they failed
+  # the trial. Units are raw sensor counts (no newton calibration is
+  # configured), and the value reads 0 in keyboard mode (no FSRs).
+  miss_force_window_ms: 1000
+
 mirror:
   # Bilateral coordination is harder than unimanual cued press so
   # mirror opens slower than adaptive (which starts at 30). Patient
@@ -201,13 +218,34 @@ rhythm:
 
 audio:
   enabled: true
+  # master_volume scales the WHOLE game (music, cues, feedback). The two
+  # levels below sit on top of it so the clinician can balance the press
+  # cue against the confirmation chime without touching the overall level.
+  # Final volume of a sound is master x category x trial_gain x a fixed
+  # per-sound factor. All three are set from the Settings screen and
+  # persist to user_settings.yaml.
   master_volume: 0.8
+  # Pre-press cue level: the metronome click in classic / adaptive (the
+  # "go" tick the patient hears before they press).
+  cue_volume: 1.0
+  # Post-press feedback level: the hit chime + miss thunk after a press.
+  feedback_volume: 1.0
   music_dir: assets/music
   # Per-lane stim cue tone (C, E, G, C, repeating for bilateral) that
   # fires the moment a stim is dispatched in classic + adaptive modes.
   # Matches Aiden's game behaviour. Rhythm mode ignores this and plays
   # the song instead.
   stim_tone_enabled: true
+  # Programmatic loudness variation. On a small fraction of trials,
+  # spread evenly across the whole session (not random clusters), the
+  # cue + feedback play slightly louder. This is automatic, not a manual
+  # per-patient knob: it keeps the auditory cue salient so the patient
+  # doesn't habituate to a constant level over a long training block.
+  # fraction 0.10 = roughly 1 in 10 trials; boost 1.35 = 35% louder on
+  # those trials. Set fraction to 0 to disable.
+  loud_trial:
+    fraction: 0.10
+    boost: 1.35
 
 ui:
   resolution: [1280, 800]

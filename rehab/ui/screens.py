@@ -346,6 +346,15 @@ class TitleScreen(Screen):
         draw_text(surf, "Multi-modal finger rehabilitation",
                   (cx, 300), self.theme, self.layout,
                   pt=FONT_BODY + 4, centre=True, colour=self.theme.muted)
+        # Institution + version footer, centred just above the bottom
+        # pills. Small and muted so it reads as provenance, not chrome.
+        from ..data.session import SOFTWARE_VERSION
+        draw_text(surf,
+                  "Curtin University, Mechatronic Engineering "
+                  f"research project  |  v{SOFTWARE_VERSION}",
+                  (cx, self.layout.height - 96),
+                  self.theme, self.layout, pt=FONT_SMALL + 1,
+                  centre=True, colour=self.theme.muted)
 
         # Participant name input. Patient types here once and every
         # game logs to the same name.
@@ -434,7 +443,7 @@ class TitleScreen(Screen):
             midleft=(i_icon_cx + icon_r + gap, i_cy)))
 
         # Credit tucked under the Start button.
-        draw_text(surf, "Thesis - Basil Toufexis - 19757049",
+        draw_text(surf, "by Basil Toufexis",
                   (cx, 570),
                   self.theme, self.layout, pt=FONT_SMALL,
                   centre=True, colour=self.theme.muted)
@@ -2465,12 +2474,14 @@ class ResultsScreen(Screen):
     def __init__(self, engine: "GameEngine") -> None:
         super().__init__(engine)
         cx = engine.layout.width // 2
-        # Three buttons centred on the screen:
+        # Four buttons centred on the screen:
         # Retry (primary, re-runs the same block) | Play again
-        # (back to mode select) | Back to title.
-        btn_w = 220
-        gap = 20
-        total_w = btn_w * 3 + gap * 2
+        # (back to mode select) | Data folder (opens the session's
+        # folder in Finder / Explorer so the researcher can reach the
+        # CSVs + report without hunting) | Back to title.
+        btn_w = 210
+        gap = 16
+        total_w = btn_w * 4 + gap * 3
         x = cx - total_w // 2
         # Buttons pushed down from y=640 -> y=696 to clear the per-lane
         # histograms that now sit between the stat cards and the
@@ -2492,6 +2503,12 @@ class ResultsScreen(Screen):
             self.theme, self.layout, font_pt=FONT_H2,
         )
         x += btn_w + gap
+        self.folder_btn = Button(
+            pygame.Rect(x, y, btn_w, h),
+            "Data folder", engine.open_last_session_folder,
+            self.theme, self.layout, font_pt=FONT_H2,
+        )
+        x += btn_w + gap
         self.title_btn = Button(
             pygame.Rect(x, y, btn_w, h),
             "Back to title", engine.show_title,
@@ -2501,6 +2518,7 @@ class ResultsScreen(Screen):
     def handle_event(self, e: pygame.event.Event) -> None:
         self.retry_btn.handle_event(e)
         self.again_btn.handle_event(e)
+        self.folder_btn.handle_event(e)
         self.title_btn.handle_event(e)
 
     # Grade thresholds from hit rate. S+ for near-perfect runs, D for low
@@ -2660,10 +2678,17 @@ class ResultsScreen(Screen):
                   self.theme, self.layout, pt=FONT_BODY,
                   centre=True, colour=self.theme.muted)
         # Big value, bold so it pops as the stat's headline number.
-        val_font = make_font(int(FONT_TITLE * self.layout.font_scale),
-            bold=True,
-        )
+        # Shrink the font until it fits the card so a value with a unit
+        # (e.g. "262 ms") never spills past the card edge the way a bare
+        # number like "1840" does.
+        max_w = rect.w - 24
+        pt = int(FONT_TITLE * self.layout.font_scale)
+        val_font = make_font(pt, bold=True)
         val_surf = val_font.render(value, True, value_colour)
+        while val_surf.get_width() > max_w and pt > 12:
+            pt -= 2
+            val_font = make_font(pt, bold=True)
+            val_surf = val_font.render(value, True, value_colour)
         surf.blit(val_surf,
                    val_surf.get_rect(center=(rect.centerx, rect.y + 78)))
 
@@ -2717,35 +2742,41 @@ class ResultsScreen(Screen):
         gtext = gfont.render(grade, True, grade_colour)
         surf.blit(gtext, gtext.get_rect(center=grade_centre))
 
-        # Stat cards row - score, hits, hit rate, misses. Slimmer
-        # cards (110 px instead of 130) free the vertical space the
-        # per-lane histograms need below.
-        card_w = 200
+        # Stat cards row - score, hits, hit rate, misses, plus the two
+        # reaction-time cards the patient sees as a game-style headline
+        # (average + personal best for the round). Six slimmer cards
+        # (180 px) keep the row inside the 1280-wide logical surface.
+        is_rhythm = (self.engine.current_block == "rhythm")
+        avg_rt = self.engine.overall_mean_rt()
+        best_rt = self.engine.overall_best_rt()
+        avg_str = f"{avg_rt:.0f} ms" if avg_rt > 0 else "n/a"
+        best_str = f"{best_rt:.0f} ms" if best_rt > 0 else "n/a"
+        # In rhythm mode the numbers are beat offsets, not reaction
+        # times, so relabel rather than mislead.
+        avg_label = "AVG OFFSET" if is_rhythm else "AVG RT"
+        best_label = "BEST OFFSET" if is_rhythm else "BEST RT"
+        cards = [
+            ("SCORE", f"{self.engine.score}", self.theme.accent),
+            ("HITS", f"{self.engine.hits}", self.theme.success),
+            ("HIT RATE", f"{rate * 100:.0f}%", self.theme.foreground),
+            ("MISSES", f"{self.engine.misses}", self.theme.error),
+            (avg_label, avg_str, self.theme.foreground),
+            (best_label, best_str, self.theme.success),
+        ]
+        card_w = 180
         card_h = 110
-        gap = 24
-        total_w = card_w * 4 + gap * 3
+        gap = 20
+        n_cards = len(cards)
+        total_w = card_w * n_cards + gap * (n_cards - 1)
         cards_x = cx - total_w // 2
         cards_y = 380
-        self._draw_stat_card(
-            surf,
-            pygame.Rect(cards_x, cards_y, card_w, card_h),
-            "SCORE", f"{self.engine.score}", self.theme.accent,
-        )
-        self._draw_stat_card(
-            surf,
-            pygame.Rect(cards_x + (card_w + gap), cards_y, card_w, card_h),
-            "HITS", f"{self.engine.hits}", self.theme.success,
-        )
-        self._draw_stat_card(
-            surf,
-            pygame.Rect(cards_x + (card_w + gap) * 2, cards_y, card_w, card_h),
-            "HIT RATE", f"{rate * 100:.0f}%", self.theme.foreground,
-        )
-        self._draw_stat_card(
-            surf,
-            pygame.Rect(cards_x + (card_w + gap) * 3, cards_y, card_w, card_h),
-            "MISSES", f"{self.engine.misses}", self.theme.error,
-        )
+        for i, (lbl, val, col) in enumerate(cards):
+            self._draw_stat_card(
+                surf,
+                pygame.Rect(cards_x + i * (card_w + gap), cards_y,
+                             card_w, card_h),
+                lbl, val, col,
+            )
 
         # Per-lane histograms below the stat-card row. Two charts
         # side-by-side: mean RT per lane (where slow fingers stand
@@ -2769,8 +2800,8 @@ class ResultsScreen(Screen):
             float(miss_dict.get(i, 0) + wrong_dict.get(i, 0))
             for i in range(n_lanes)
         ]
-        chart_y = 510
-        chart_h = 130
+        chart_y = 502
+        chart_h = 124
         chart_gap = 24
         total_chart_w = self.layout.width - 80
         chart_w = (total_chart_w - chart_gap) // 2
@@ -2791,6 +2822,29 @@ class ResultsScreen(Screen):
             miscounts, unit="count", high_is_bad=True,
         )
 
+        # Miss-trial force readout. Sums each finger's peak above baseline
+        # over the first second of every MISSED trial, across all fingers,
+        # so it answers "how hard was the patient pushing the whole hand
+        # when they failed the trial". Only real with the force sensors;
+        # keyboard mode has no force so it says so plainly.
+        src = getattr(self.engine, "source", None)
+        has_force = bool(src is not None and getattr(src, "provides_samples", False))
+        mf_total = getattr(self.engine, "_miss_force_total", 0.0)
+        mf_count = getattr(self.engine, "_miss_force_count", 0)
+        mf_window = int(getattr(self.engine, "_force_window_ms", 1000))
+        if not has_force:
+            mf_text = ("Miss-trial force: needs the force sensors "
+                       "(not available in keyboard mode)")
+        elif mf_count > 0:
+            mf_text = (
+                f"Miss-trial force: {mf_total:.0f} sensor units over "
+                f"{mf_count} missed trials (avg {mf_total / mf_count:.0f} "
+                f"per miss, all fingers, first {mf_window} ms)")
+        else:
+            mf_text = "Miss-trial force: no missed trials this round"
+        draw_text(surf, mf_text, (cx, 650), self.theme, self.layout,
+                  pt=FONT_SMALL, centre=True, colour=self.theme.muted)
+
         # Path to saved session for the therapist's records. Below
         # the histograms now; smaller font since this is footer info.
         if self.engine.last_session_root:
@@ -2803,6 +2857,7 @@ class ResultsScreen(Screen):
 
         self.retry_btn.draw(surf)
         self.again_btn.draw(surf)
+        self.folder_btn.draw(surf)
         self.title_btn.draw(surf)
 
 
@@ -2856,9 +2911,75 @@ class DiagnosticsScreen(Screen):
         # flag. Storing it as an instance var keeps the click test
         # consistent with what was drawn last frame.
         self._test_mode_rect: pygame.Rect = pygame.Rect(0, 0, 0, 0)
+        # Audio volume sliders (master / cue / feedback). _vol_dirty
+        # guards the save so we only write user_settings.yaml when a
+        # level actually changed.
+        self._vol_dirty = False
+        self._vol_sliders: dict = {}
+        self._build_volume_sliders()
         self.rebuild_lanes()
         self.refresh_ports()
         self.rebuild_panel()
+
+    # ---- audio volume sliders --------------------------------------------
+    AUDIO_ROW_Y = 230            # slider track centre line
+    AUDIO_HEADING_Y = 162        # "AUDIO LEVELS" caption
+
+    def _build_volume_sliders(self) -> None:
+        """Three sliders in a row under the header: master scales the
+        whole game, cue is the pre-press click, feedback the post-press
+        chime. Initial values come from the merged config so a saved
+        level shows up on reopen."""
+        specs = (
+            ("master", "MASTER", "audio.master_volume", 0.8),
+            ("cue", "CUE (pre-press)", "audio.cue_volume", 1.0),
+            ("feedback", "FEEDBACK (post-press)", "audio.feedback_volume", 1.0),
+        )
+        n = len(specs)
+        gap = 48
+        total_w = self.layout.width - 160
+        sw = (total_w - gap * (n - 1)) // n
+        x0 = 80
+        track_y = self.AUDIO_ROW_Y - 12   # rect top; 24 tall, centred on row
+        self._vol_sliders = {}
+        for i, (key, label, cfgkey, dflt) in enumerate(specs):
+            rect = pygame.Rect(x0 + i * (sw + gap), track_y, sw, 24)
+            self._vol_sliders[key] = Slider(
+                rect, self.theme, self.layout,
+                min_value=0.0, max_value=1.0,
+                initial=float(self.engine.cfg.get(cfgkey, dflt)),
+                step=0.05, label=label, value_format="{:.0%}",
+            )
+
+    def _apply_volumes_live(self) -> None:
+        """Push the current slider values into the in-memory config and
+        the running audio engine so a drag is heard immediately, no
+        restart needed. Marks the levels dirty so _save_volumes writes
+        them on mouse-up."""
+        m = self._vol_sliders["master"].value
+        c = self._vol_sliders["cue"].value
+        f = self._vol_sliders["feedback"].value
+        au = self.engine.cfg.data.setdefault("audio", {})
+        au["master_volume"] = m
+        au["cue_volume"] = c
+        au["feedback_volume"] = f
+        if self.engine.audio is not None:
+            self.engine.audio.set_volumes(master=m, cue=c, feedback=f)
+        self._vol_dirty = True
+
+    def _save_volumes(self) -> None:
+        """Persist the three levels to user_settings.yaml (same file the
+        port assignments use) so they survive a restart."""
+        try:
+            self.engine.cfg.save_user_overrides({
+                "audio.master_volume": self._vol_sliders["master"].value,
+                "audio.cue_volume": self._vol_sliders["cue"].value,
+                "audio.feedback_volume": self._vol_sliders["feedback"].value,
+            })
+            self._vol_dirty = False
+            self._port_status = "Audio levels saved."
+        except Exception as e:
+            self._port_status = f"Audio save failed: {e}"
 
     def _toggle_test_mode(self) -> None:
         """Flip game.test_mode_enabled and persist it through the
@@ -2904,7 +3025,9 @@ class DiagnosticsScreen(Screen):
         zero) so the layout is harmless even on a single-Arduino
         rig."""
         self.lanes = []
-        y = 220
+        # Lowered from 220 to clear the audio-slider row that now sits
+        # between the header and the finger test.
+        y = 296
         h = self._lanes_bottom_y() - y
         # Bilateral layout: right hand on the right half of the
         # screen with index closest to centre, left hand on the
@@ -3006,6 +3129,33 @@ class DiagnosticsScreen(Screen):
             f"Testing {hand} hand: firing STIM:1..{n_per_hand} "
             f"with {int(self.STIM_TEST_INTERVAL_S * 1000)} ms gaps."
         )
+
+    def _buzz_finger(self, ls: LaneStrip) -> None:
+        """Fire a single STIM pulse on ONE finger so the therapist can
+        check that finger's buzzer on its own. Uses the hand-prefixed
+        command (LEFT:/RIGHT:) so multi_serial routes it to the right
+        board; the per-hand sequence test above still covers all four at
+        once. Flashes the tile and reports delivery either way."""
+        labels = LaneStrip.FINGER_LABELS
+        finger_name = labels[ls.finger % len(labels)]
+        cmd = f"{ls.hand.upper()}:STIM:{ls.finger + 1}"
+        try:
+            ok = self.engine.source.send_command(cmd)
+        except (OSError, AttributeError, RuntimeError) as err:
+            self._port_status = f"Buzzer send error: {err}"
+            return
+        # Flash the tile regardless of delivery so the therapist sees
+        # which finger they clicked even when no buzz comes out.
+        ls.flash(LaneStrip.HAND_BADGE.get(ls.hand, self.theme.accent),
+                 0.35, time.perf_counter())
+        if ok:
+            self._port_status = (
+                f"Buzzing {ls.hand} {finger_name}. No buzz? Check that "
+                f"hand's Arduino is assigned and plugged in.")
+        else:
+            self._port_status = (
+                f"{cmd} not delivered. Assign the {ls.hand} Arduino "
+                f"(buzzers need the hardware; keyboard mode has none).")
 
     @staticmethod
     def _short_port(p: str) -> str:
@@ -3116,9 +3266,28 @@ class DiagnosticsScreen(Screen):
         # behind the popup would also fire).
         if consumed:
             return
+        # Volume sliders. Snapshot values so we only apply / save when a
+        # level actually moved (a stray click on the track still counts).
+        before = {k: s.value for k, s in self._vol_sliders.items()}
+        for s in self._vol_sliders.values():
+            s.handle_event(e)
+        if any(self._vol_sliders[k].value != v for k, v in before.items()):
+            self._apply_volumes_live()
+        if (e.type == pygame.MOUSEBUTTONUP and e.button == 1
+                and self._vol_dirty):
+            self._save_volumes()
         self.back_btn.handle_event(e)
         for b in self._panel_buttons:
             b.handle_event(e)
+        # Click a finger tile to buzz JUST that finger (fire its STIM
+        # motor on its own). Press-to-test-sensor and click-to-test-buzzer
+        # sit side by side: a physical press drives the FSR readout, a
+        # mouse click pulses that finger's actuator.
+        if e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
+            for ls in self.lanes:
+                if ls.rect.collidepoint(e.pos):
+                    self._buzz_finger(ls)
+                    return
         # Test Mode toggle pill in the top-right. Hand-rolled hit-test
         # rather than a Button widget because the pill style (filled
         # green or muted with a coloured outline) is bespoke.
@@ -3235,8 +3404,8 @@ class DiagnosticsScreen(Screen):
         # Header.
         source_name = getattr(self.engine.source, "name", "?")
         state_text, state_colour = self._connection_state()
-        sub = ("Press each finger to verify the sensor. "
-                "Pick which Arduino feeds each hand below, then Save.")
+        sub = ("Press a finger to test its sensor, or click it to buzz "
+                "that finger. Assign each hand's Arduino below, then Save.")
         if state_text == "KEYBOARD":
             sub = ("Keyboard mode. Press FDSA / JKL; to test each "
                     "lane, or plug an Arduino in and hit Refresh.")
@@ -3290,16 +3459,26 @@ class DiagnosticsScreen(Screen):
         surf.blit(tm_text, tm_text.get_rect(center=tm_rect.center))
         # Cache rect for the hit-test in handle_event.
         self._test_mode_rect = tm_rect
+        # Audio levels row: a small caption + the three sliders. Master
+        # scales the whole game; cue is the pre-press click; feedback is
+        # the post-press chime. Drag to set; it applies live and saves on
+        # release.
+        draw_text(surf, "AUDIO LEVELS",
+                  (self.layout.width // 2, self.AUDIO_HEADING_Y),
+                  self.theme, self.layout, pt=FONT_SMALL + 4,
+                  centre=True, colour=self.theme.muted)
+        for s in self._vol_sliders.values():
+            s.draw(surf)
         now = time.perf_counter()
         # Bilateral hand headers, always rendered because Settings
         # always shows all 8 lanes (even when the session-level
         # hand_mode is left or right only). Without the labels the
         # therapist wouldn't know which half of the screen is which
         # hand.
-        draw_text(surf, "LEFT", (self.layout.width // 4, 192),
+        draw_text(surf, "LEFT", (self.layout.width // 4, 268),
                   self.theme, self.layout, pt=FONT_H2, centre=True,
                   colour=LaneStrip.HAND_BADGE["left"])
-        draw_text(surf, "RIGHT", (self.layout.width * 3 // 4, 192),
+        draw_text(surf, "RIGHT", (self.layout.width * 3 // 4, 268),
                   self.theme, self.layout, pt=FONT_H2, centre=True,
                   colour=LaneStrip.HAND_BADGE["right"])
         for ls in self.lanes:

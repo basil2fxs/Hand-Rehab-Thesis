@@ -1,6 +1,8 @@
 @echo off
-REM Build the standalone Windows .exe. Result lands in bin\dist\.
-REM Build intermediates go to bin\build\ so the project root stays clean.
+REM Build the standalone Windows exe (one file, everything inside).
+REM PyInstaller output goes to bin\dist\, then the exe is copied into
+REM builds\Windows\ so the ready-to-run deliverables always live in one
+REM obvious place at the project root.
 setlocal
 
 cd /d "%~dp0"
@@ -24,7 +26,10 @@ if errorlevel 1 (
     exit /b 1
 )
 
+if not exist builds\Windows mkdir builds\Windows
+copy /y "bin\dist\Finger Rehab.exe" "builds\Windows\Finger Rehab.exe" >nul
+
 echo.
 echo Build complete.
-echo Exe: bin\dist\Finger Rehab\Finger Rehab.exe
-echo Double-click the exe or run from the command line.
+echo Ready to run: builds\Windows\Finger Rehab.exe
+echo Copy that one file to any Windows PC and double-click it.

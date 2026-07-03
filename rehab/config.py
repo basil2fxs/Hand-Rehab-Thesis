@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -30,8 +31,31 @@ def _bundle_root() -> Path:
 def _user_root() -> Path:
     """Where writable files (sessions/, logs) go when frozen."""
     if getattr(sys, "frozen", False):
-        # Folder that contains the running executable.
-        return Path(sys.executable).resolve().parent
+        exe = Path(sys.executable).resolve()
+        # On macOS the executable lives at Foo.app/Contents/MacOS/Foo.
+        # Writing next to the executable would bury sessions/ INSIDE
+        # the .app bundle where nobody can find it. Walk up out of the
+        # bundle so data lands next to the .app the user double-clicked.
+        root = exe.parent
+        for parent in exe.parents:
+            if parent.name.endswith(".app"):
+                root = parent.parent
+                break
+        # The app must run wherever it gets copied. If the folder next
+        # to it can't be written (locked-down Applications folder, a
+        # network share, running straight off a disk image), fall back
+        # to a folder in the user's home so recording still works.
+        if os.access(root, os.W_OK):
+            return root
+        fallback = Path.home() / "Finger Rehab Data"
+        try:
+            fallback.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            # Home is unwritable too; return it anyway so path
+            # building stays sane and the failure surfaces where the
+            # write happens, with a clearer error.
+            pass
+        return fallback
     return Path(__file__).resolve().parents[1]
 
 
