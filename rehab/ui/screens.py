@@ -2912,6 +2912,8 @@ class DiagnosticsScreen(Screen):
         # flag. Storing it as an instance var keeps the click test
         # consistent with what was drawn last frame.
         self._test_mode_rect: pygame.Rect = pygame.Rect(0, 0, 0, 0)
+        # Buzzer-cue toggle pill, same hand-rolled pattern as Test Mode.
+        self._buzz_rect: pygame.Rect = pygame.Rect(0, 0, 0, 0)
         # Audio volume sliders (master / cue / feedback). _vol_dirty
         # guards the save so we only write user_settings.yaml when a
         # level actually changed.
@@ -2931,12 +2933,14 @@ class DiagnosticsScreen(Screen):
         whole game, cue is the pre-press click, feedback the post-press
         chime. Initial values come from the merged config so a saved
         level shows up on reopen."""
+        # Labels stay short: four sliders across 1280 px leaves little
+        # room before the label runs into the right-aligned value.
         specs = (
             ("master", "MASTER", "audio.master_volume", 0.8),
-            ("cue", "CUE (pre-press)", "audio.cue_volume", 1.0),
-            ("feedback", "FEEDBACK (post-press)", "audio.feedback_volume", 1.0),
+            ("cue", "CUE", "audio.cue_volume", 1.0),
+            ("feedback", "FEEDBACK", "audio.feedback_volume", 1.0),
         )
-        n = len(specs)
+        n = len(specs) + 1     # + the buzzer cue-length slider
         gap = 48
         total_w = self.layout.width - 160
         sw = (total_w - gap * (n - 1)) // n
@@ -2951,6 +2955,20 @@ class DiagnosticsScreen(Screen):
                 initial=float(self.engine.cfg.get(cfgkey, dflt)),
                 step=0.05, label=label, value_format="{:.0%}",
             )
+        # Buzzer cue length. Vibration STRENGTH is fixed in the firmware
+        # (STIM_PWM is a compile-time constant and there is no command to
+        # change it), so length is the only thing the host can vary, and
+        # it is what makes a cue easy or hard to feel. Range matches the
+        # vibrotactile literature: 150 ms is one firmware pulse, beyond
+        # about 400 ms the cue starts overlapping the patient's response.
+        rect = pygame.Rect(x0 + len(specs) * (sw + gap), track_y, sw, 24)
+        self._vol_sliders["buzz"] = Slider(
+            rect, self.theme, self.layout,
+            min_value=150.0, max_value=450.0,
+            initial=float(self.engine.cfg.get("motor.cue_ms", 250)),
+            step=50.0, label="BUZZER",
+            value_format="{:.0f} ms",
+        )
 
     def _apply_volumes_live(self) -> None:
         """Push the current slider values into the in-memory config and
@@ -2966,6 +2984,9 @@ class DiagnosticsScreen(Screen):
         au["feedback_volume"] = f
         if self.engine.audio is not None:
             self.engine.audio.set_volumes(master=m, cue=c, feedback=f)
+        # Buzzer cue length lives under motor.*, not audio.*.
+        self.engine.cfg.data.setdefault("motor", {})["cue_ms"] = int(
+            self._vol_sliders["buzz"].value)
         self._vol_dirty = True
 
     def _save_volumes(self) -> None:
@@ -2976,11 +2997,43 @@ class DiagnosticsScreen(Screen):
                 "audio.master_volume": self._vol_sliders["master"].value,
                 "audio.cue_volume": self._vol_sliders["cue"].value,
                 "audio.feedback_volume": self._vol_sliders["feedback"].value,
+                "motor.cue_ms": int(self._vol_sliders["buzz"].value),
             })
             self._vol_dirty = False
-            self._port_status = "Audio levels saved."
+            self._port_status = "Audio and buzzer settings saved."
         except Exception as e:
             self._port_status = f"Audio save failed: {e}"
+
+    def _toggle_buzzer_cue(self) -> None:
+        """Turn the buzzer cue on or off. When on, the motor under the
+        target finger buzzes as that trial's stimulus so the patient
+        feels which finger to press. Applies to every mode. Persisted
+        like the other settings so it survives a restart."""
+        current = bool(self.engine.cfg.get("motor.enabled", True))
+        new_value = not current
+        self.engine.cfg.data.setdefault(
+            "motor", {})["enabled"] = new_value
+        try:
+            self.engine.cfg.save_user_overrides({
+                "motor.enabled": new_value,
+            })
+        except Exception as e:
+            self._port_status = f"Buzzer setting save failed: {e}"
+            return
+        if not new_value:
+            # Drop anything already queued so nothing buzzes after the
+            # toggle goes off.
+            try:
+                self.engine.stop_all_motors()
+            except Exception:
+                pass
+        ms = int(self.engine.cfg.get("motor.cue_ms", 250))
+        self._port_status = (
+            f"Buzzer cue ON. The target finger buzzes for {ms} ms so the "
+            f"patient feels which finger to press."
+            if new_value else
+            "Buzzer cue OFF. Cues are on-screen only."
+        )
 
     def _toggle_test_mode(self) -> None:
         """Flip game.test_mode_enabled and persist it through the
@@ -3133,15 +3186,25 @@ class DiagnosticsScreen(Screen):
 
     def _buzz_finger(self, ls: LaneStrip) -> None:
         """Fire a single STIM pulse on ONE finger so the therapist can
-        check that finger's buzzer on its own. Uses the hand-prefixed
-        command (LEFT:/RIGHT:) so multi_serial routes it to the right
-        board; the per-hand sequence test above still covers all four at
-        once. Flashes the tile and reports delivery either way."""
+        check that finger's buzzer on its own. Sends the hand-prefixed
+        command (LEFT:/RIGHT:) so multi_serial routes it to the matching
+        board. The per-hand sequence button still tests all four at once.
+        Flashes the tile and reports delivery either way."""
         labels = LaneStrip.FINGER_LABELS
         finger_name = labels[ls.finger % len(labels)]
         cmd = f"{ls.hand.upper()}:STIM:{ls.finger + 1}"
         try:
             ok = self.engine.source.send_command(cmd)
+            # One board only: it defaults to the "right" label, so a
+            # LEFT:-prefixed command matches nothing and silently fails
+            # even though the single device physically IS the hand being
+            # tested (a left-hand session on one Arduino). Fall back to
+            # the plain form, which multi_serial forwards to whichever
+            # single board is connected. Same behaviour the in-game stim
+            # path already relies on.
+            if not ok and self._single_board():
+                ok = self.engine.source.send_command(
+                    f"STIM:{ls.finger + 1}")
         except (OSError, AttributeError, RuntimeError) as err:
             self._port_status = f"Buzzer send error: {err}"
             return
@@ -3157,6 +3220,13 @@ class DiagnosticsScreen(Screen):
             self._port_status = (
                 f"{cmd} not delivered. Assign the {ls.hand} Arduino "
                 f"(buzzers need the hardware; keyboard mode has none).")
+
+    def _single_board(self) -> bool:
+        """True when exactly one Arduino is connected. Used to decide
+        whether a hand-prefixed command should fall back to the plain
+        form."""
+        hands = getattr(self.engine.source, "hands", None)
+        return bool(hands is not None and len(hands) == 1)
 
     @staticmethod
     def _short_port(p: str) -> str:
@@ -3243,6 +3313,17 @@ class DiagnosticsScreen(Screen):
             self.theme, self.layout, font_pt=FONT_BODY - 2,
             colour=save_colour,
         ))
+        # Opens the sessions folder in Finder / Explorer so the
+        # researcher can reach every recording without hunting through
+        # the filesystem. Sits to the right of Refresh / Save, spanning
+        # both rows so it reads as a separate action from the port
+        # assignment controls.
+        self._panel_buttons.append(Button(
+            pygame.Rect(refresh_x + 120, panel_y + 50,
+                         210, row_h * 2 + row_gap),
+            "Open data folder", self.engine.open_sessions_folder,
+            self.theme, self.layout, font_pt=FONT_BODY - 2,
+        ))
 
     def _rescan_ports(self) -> None:
         self.refresh_ports()
@@ -3297,6 +3378,11 @@ class DiagnosticsScreen(Screen):
                 and self._test_mode_rect.collidepoint(e.pos)):
             self._toggle_test_mode()
             return
+        if (e.type == pygame.MOUSEBUTTONDOWN and e.button == 1
+                and self._buzz_rect.w > 0
+                and self._buzz_rect.collidepoint(e.pos)):
+            self._toggle_buzzer_cue()
+            return
         # Track held keys so the visual responds even when the source
         # doesn't push samples (keyboard mode).
         if e.type == pygame.KEYDOWN:
@@ -3333,6 +3419,13 @@ class DiagnosticsScreen(Screen):
                     cmd = f"{prefix}:STIM:{lane}"
                     try:
                         ok = self.engine.source.send_command(cmd)
+                        # With one board (labelled "right" by default) a
+                        # LEFT:-prefixed command matches nothing. Retry
+                        # plain so testing the hand actually in the device
+                        # works. Same fallback as _buzz_finger.
+                        if not ok and self._single_board():
+                            ok = self.engine.source.send_command(
+                                f"STIM:{lane}")
                         if not ok:
                             # Most likely no Arduino on that hand; surface
                             # the result so the therapist knows the test
@@ -3357,22 +3450,34 @@ class DiagnosticsScreen(Screen):
         # to drive the active flag instead.
         if not self.lanes:
             return
-        # Pull one sample if the source is pushing them.
+        # Live sensor readout. The engine's _pump_source drains the
+        # sample queue every frame and writes ls.value / ls.baseline /
+        # ls.set_pressed for this screen, so we must NOT call
+        # get_sample() here: doing so would race the pump and any
+        # sample we grabbed would never reach the detectors.
+        #
+        # We do own the tile fill: reading the detector's live pressed
+        # flag each frame turns the whole tile its active colour the
+        # instant a finger goes down, which is the feedback the
+        # therapist is looking for when checking the hardware.
         if self.engine.source.provides_samples:
-            s = self.engine.source.get_sample(timeout=0)
-            if s is not None:
-                n_per_hand = int(self.engine.cfg.get(
-                    "fsr.num_sensors_per_hand", 4))
-                for i, ls in enumerate(self.lanes):
-                    if i < len(s.values):
-                        ls.value = s.values[i]
-                        det = self.engine.detectors.get(ls.hand)
-                        if det:
-                            local = i % n_per_hand
-                            b = det.baseline[local]
-                            ls.baseline = b if b is not None else 0.0
-                            # Active = currently pressed per detector.
-                            ls.active = bool(det.pressed[local])
+            n_per_hand = int(self.engine.cfg.get(
+                "fsr.num_sensors_per_hand", 4))
+            for i, ls in enumerate(self.lanes):
+                det = self.engine.detectors.get(ls.hand)
+                if not det:
+                    continue
+                local = i % n_per_hand
+                try:
+                    ls.active = bool(det.pressed[local])
+                    b = det.baseline[local]
+                    ls.baseline = b if b is not None else 0.0
+                    # Fallback for the value readout in case the pump
+                    # has not written one yet this frame.
+                    if not ls.value:
+                        ls.value = int(det.last_value[local])
+                except (IndexError, TypeError):
+                    continue
         # Keyboard fallback: light up via held keys.
         if not self.engine.source.provides_samples:
             for ls in self.lanes:
@@ -3460,6 +3565,28 @@ class DiagnosticsScreen(Screen):
         surf.blit(tm_text, tm_text.get_rect(center=tm_rect.center))
         # Cache rect for the hit-test in handle_event.
         self._test_mode_rect = tm_rect
+        # Buzzer-cue pill directly under Test Mode. Green when on,
+        # because the target finger buzzing is the normal running state.
+        bz_on = bool(self.engine.cfg.get("motor.enabled", True))
+        bz_ms = int(self.engine.cfg.get("motor.cue_ms", 250))
+        bz_label = (f"BUZZER CUE  ON ({bz_ms} ms)" if bz_on
+                     else "BUZZER CUE  OFF")
+        bz_font = self.layout.font(FONT_SMALL + 2)
+        bz_text = bz_font.render(
+            bz_label, True,
+            (255, 255, 255) if bz_on else self.theme.foreground)
+        bz_w = bz_text.get_width() + tm_pad_x * 2
+        bz_h = bz_text.get_height() + tm_pad_y * 2
+        bz_rect = pygame.Rect(0, 0, bz_w, bz_h)
+        bz_rect.topleft = (30, 78)
+        if bz_on:
+            pygame.draw.rect(surf, (34, 197, 94), bz_rect,
+                              border_radius=bz_h // 2)
+        else:
+            pygame.draw.rect(surf, self.theme.muted, bz_rect,
+                              width=2, border_radius=bz_h // 2)
+        surf.blit(bz_text, bz_text.get_rect(center=bz_rect.center))
+        self._buzz_rect = bz_rect
         # Audio levels row: a small caption + the three sliders. Master
         # scales the whole game; cue is the pre-press click; feedback is
         # the post-press chime. Drag to set; it applies live and saves on
@@ -3494,7 +3621,7 @@ class DiagnosticsScreen(Screen):
         pygame.draw.rect(surf, bg, panel_rect, border_radius=12)
         # Panel header.
         draw_text(surf,
-                  "ARDUINO PORT ASSIGNMENT",
+                  "HARDWARE AND DATA",
                   (panel_rect.x + 18, panel_rect.y + 8),
                   self.theme, self.layout, pt=FONT_SMALL + 4,
                   centre=False, colour=self.theme.muted)
@@ -3525,6 +3652,30 @@ class DiagnosticsScreen(Screen):
         # Buttons (test STIM, refresh, save).
         for b in self._panel_buttons:
             b.draw(surf)
+        # Where recordings go, spelled out next to the Open data folder
+        # button so the location is never a mystery. Shows the tail of
+        # the path since the full path is often long.
+        try:
+            sessions_dir = str(self.engine.cfg.resolve_path(
+                self.engine.cfg.get("session.data_dir", "sessions")))
+        except Exception:
+            sessions_dir = "sessions"
+        shown = sessions_dir
+        if len(shown) > 42:
+            shown = "..." + shown[-39:]
+        cap_x = panel_rect.x + 920
+        draw_text(surf, "Every session is saved here:",
+                  (cap_x, panel_y + 56),
+                  self.theme, self.layout, pt=FONT_SMALL,
+                  centre=False, colour=self.theme.muted)
+        draw_text(surf, shown,
+                  (cap_x, panel_y + 76),
+                  self.theme, self.layout, pt=FONT_SMALL,
+                  centre=False, colour=self.theme.foreground)
+        draw_text(surf, "one folder per day, newest last",
+                  (cap_x, panel_y + 100),
+                  self.theme, self.layout, pt=FONT_SMALL,
+                  centre=False, colour=self.theme.muted)
         # Dropdown rests on top of any underlying card / button rect.
         for dd in self._port_dropdowns.values():
             dd.draw_closed(surf)

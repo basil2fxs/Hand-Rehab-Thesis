@@ -7,6 +7,8 @@ librosa>=0.10
 soundfile>=0.12
 # Post-block research report charts.
 matplotlib>=3.8
+# Notebook dropdown for picking a saved session.
+ipywidgets>=8.0
 pytest>=7.0
 
 # Optional: only needed if you want to build a standalone .app / .exe

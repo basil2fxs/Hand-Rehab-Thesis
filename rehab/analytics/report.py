@@ -41,6 +41,11 @@ BG = "#f8fafc"
 
 FINGERS = ("Index", "Middle", "Ring", "Pinky")
 
+# Fixed finger colours, matching the game's lane tiles so a chart in the
+# report is read with the same colour language as the screen:
+# index = orange, middle = light blue, ring = black, pinky = yellow.
+FINGER_COLOURS = ("#ea580c", "#0ea5e9", "#0f172a", "#ca8a04")
+
 
 def lane_label(lane: int, hand: str, n_per_hand: int = 4) -> str:
     """Human name for a global lane index. Unilateral: 0..3 on the
@@ -138,7 +143,8 @@ def _chart_rt_per_finger(rows: list[dict], meta: dict,
             stds.append(0.0)
     fig, ax = _new_axes()
     xs = range(len(lanes))
-    ax.bar(xs, means, yerr=stds, capsize=4, color=ACCENT, width=0.6,
+    bar_colours = [FINGER_COLOURS[l % len(FINGER_COLOURS)] for l in lanes]
+    ax.bar(xs, means, yerr=stds, capsize=4, color=bar_colours, width=0.6,
            error_kw={"ecolor": GREY, "elinewidth": 1.2})
     ax.set_xticks(list(xs))
     ax.set_xticklabels([lane_label(l, hand) for l in lanes], fontsize=9)

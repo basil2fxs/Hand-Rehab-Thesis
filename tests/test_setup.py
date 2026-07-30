@@ -547,8 +547,13 @@ class DiagnosticsPortPanelTests(unittest.TestCase):
             try:
                 d.refresh_ports()
                 self.assertEqual(d._detected_ports, [])
-                # 2 test STIM + Refresh + Save = 4 buttons.
-                self.assertEqual(len(d._panel_buttons), 4)
+                # 2 test STIM + Refresh + Save + Open data folder.
+                # Assert by label rather than count so adding a button
+                # doesn't fail the test for the wrong reason.
+                labels = {b.label for b in d._panel_buttons}
+                for expected in ("Test LEFT STIM", "Test RIGHT STIM",
+                                  "Refresh", "Save", "Open data folder"):
+                    self.assertIn(expected, labels)
                 # 2 dropdowns (left, right).
                 self.assertEqual(len(d._port_dropdowns), 2)
                 # Each dropdown gets a "None" option even with zero

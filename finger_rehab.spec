@@ -57,6 +57,8 @@ a = Analysis(
         "IPython",
         "jupyter",
         "notebook",
+        "ipywidgets",
+        "ipykernel",
         "PyQt5",
         "PyQt6",
         "PySide2",

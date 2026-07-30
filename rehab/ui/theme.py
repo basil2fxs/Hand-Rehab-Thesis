@@ -20,11 +20,13 @@ class Theme:
     lane_miss: tuple[int, int, int]
 
 
-# Lane palette intentionally avoids green and red so the hit/miss flash
-# (which uses green and red across the whole tile) reads as feedback, not
-# as the lane's default identity. Order: index = blue, middle = purple,
-# ring = gold/yellow, little = orange. Same scheme across all themes so
-# muscle memory carries between sessions.
+# Fixed finger colours, identical on both hands and in every theme:
+# index = orange, middle = light blue, ring = black, pinky = yellow.
+# Idle tiles are the softer cut, lane_active is the same colour pushed
+# harder for the "stim fired" state. Green and red stay out of the
+# palette so the full-tile hit/miss flash still reads as feedback.
+# LaneStrip picks white or dark label text from the fill's luminance,
+# which is what keeps the black ring tile readable.
 CLINICAL = Theme(
     name="clinical",
     background=(248, 250, 252),
@@ -34,16 +36,14 @@ CLINICAL = Theme(
     success=(22, 163, 74),
     warning=(202, 138, 4),
     error=(220, 38, 38),
-    # Light pastels for idle. No light green, no light red.
-    lane_idle=((191, 219, 254),   # light blue (index)
-               (221, 214, 254),   # light purple (middle)
-               (253, 230, 138),   # light gold (ring)
-               (254, 215, 170)),  # light orange (little)
-    # Saturated versions of the same hues for the "stim fired" state.
-    lane_active=((37, 99, 235),    # blue
-                  (124, 58, 237),   # purple
-                  (202, 138, 4),    # gold
-                  (234, 88, 12)),   # orange
+    lane_idle=((254, 215, 170),   # light orange (index)
+               (186, 230, 253),   # light blue (middle)
+               (71, 85, 105),     # slate black (ring)
+               (254, 240, 138)),  # light yellow (pinky)
+    lane_active=((234, 88, 12),    # orange
+                  (14, 165, 233),   # light blue
+                  (15, 23, 42),     # black
+                  (202, 138, 4)),   # yellow
     lane_hit=(34, 197, 94),
     lane_miss=(239, 68, 68),
 )
@@ -58,15 +58,17 @@ DARK = Theme(
     success=(74, 222, 128),
     warning=(250, 204, 21),
     error=(248, 113, 113),
-    # Dim variants of the same blue / purple / gold / orange.
-    lane_idle=((30, 58, 138),       # deep blue
-               (76, 29, 149),       # deep purple
-               (113, 63, 18),       # deep gold/brown
-               (124, 45, 18)),      # deep orange
-    lane_active=((96, 165, 250),
-                  (167, 139, 250),
-                  (250, 204, 21),
-                  (251, 146, 60)),
+    # Same orange / light blue / black / yellow order, dimmed for the
+    # dark background. "Black" becomes a near-black grey so the tile is
+    # still distinguishable from the page behind it.
+    lane_idle=((124, 45, 18),       # deep orange (index)
+               (12, 74, 110),       # deep light-blue (middle)
+               (24, 24, 27),        # near black (ring)
+               (113, 63, 18)),      # deep yellow (pinky)
+    lane_active=((251, 146, 60),
+                  (56, 189, 248),
+                  (82, 82, 91),
+                  (250, 204, 21)),
     lane_hit=(74, 222, 128),
     lane_miss=(248, 113, 113),
 )
@@ -81,16 +83,17 @@ HIGH_CONTRAST = Theme(
     success=(0, 255, 0),
     warning=(255, 165, 0),
     error=(255, 0, 0),
-    # Distinct dark backgrounds for each finger that are NOT green or red.
-    lane_idle=((40, 40, 100),    # navy
-               (70, 40, 100),    # plum
-               (100, 100, 40),   # olive/gold
-               (100, 60, 40)),   # rust/orange
-    # Vivid contrast variants; cyan/magenta/yellow/white skip green and red.
-    lane_active=((255, 255, 0),
-                  (0, 255, 255),
-                  (255, 0, 255),
-                  (255, 255, 255)),
+    # Same orange / light blue / black / yellow order at high contrast.
+    # On a pure black page the ring finger uses greys so the tile stays
+    # visible while keeping its black identity.
+    lane_idle=((110, 55, 0),      # dark orange (index)
+               (0, 70, 110),      # dark light-blue (middle)
+               (55, 55, 58),      # dark grey/black (ring)
+               (110, 110, 0)),    # dark yellow (pinky)
+    lane_active=((255, 165, 0),
+                  (0, 200, 255),
+                  (190, 190, 195),
+                  (255, 255, 0)),
     lane_hit=(0, 255, 0),
     lane_miss=(255, 0, 0),
 )

@@ -73,6 +73,18 @@ TRIAL_COLUMNS = [
     # above baseline. Feeds miss-force and individuation analyses.
     "force_window_sum",
     "force_window_peaks",
+    # TRUE/FALSE whether this trial's buzzer command was successfully
+    # written to the serial port; empty when the cue was disabled.
+    #
+    # Read this as "the host sent it", NOT "the patient felt it". The
+    # firmware (Arduino_20251111.ino) sends no acknowledgement for
+    # STIM, so the software cannot confirm a motor actually ran, only
+    # that the command left the host. FALSE therefore means a real
+    # transport failure (board unplugged mid-block) and those trials
+    # must not be analysed as ordinary misses. TRUE does not by itself
+    # prove the patient received a cue: verify the motors physically
+    # with the Settings buzzer test before a session.
+    "stim_delivered",
 ]
 
 # Raw schema gains fsr5-fsr8 so the bilateral case fits without a new file format.

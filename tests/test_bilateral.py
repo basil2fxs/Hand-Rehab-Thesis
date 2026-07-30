@@ -392,5 +392,49 @@ class LaneColourReservationTests(unittest.TestCase):
                           f"left badge {c} too close to miss red")
 
 
+class FingerColourMappingTests(unittest.TestCase):
+    """The finger colours are fixed and identical on both hands:
+    index = orange, middle = light blue, ring = black, pinky = yellow.
+    Checked by hue relationship so the light and dark cuts of each
+    theme both pass without pinning exact RGB values."""
+
+    def _assert_mapping(self, palette, label: str) -> None:
+        index, middle, ring, pinky = palette[:4]
+        # Orange: red channel leads, green in the middle, little blue.
+        self.assertTrue(index[0] > index[1] > index[2],
+                         f"{label} index {index} is not orange-like")
+        # Light blue: blue channel leads, green above red (cyan lean).
+        self.assertTrue(middle[2] > middle[1] >= middle[0],
+                         f"{label} middle {middle} is not light-blue-like")
+        # Black: greyscale, all channels close together and dark-ish.
+        self.assertLessEqual(max(ring) - min(ring), 40,
+                              f"{label} ring {ring} is not neutral grey/black")
+        # Yellow: red and green both lead the blue channel and are close.
+        self.assertTrue(min(pinky[0], pinky[1]) > pinky[2],
+                         f"{label} pinky {pinky} is not yellow-like")
+        self.assertLessEqual(abs(pinky[0] - pinky[1]), 70,
+                              f"{label} pinky {pinky} red/green too uneven")
+
+    def test_all_themes_follow_orange_lightblue_black_yellow(self) -> None:
+        from rehab.ui.theme import THEMES
+        for name, theme in THEMES.items():
+            self._assert_mapping(theme.lane_idle, f"{name}.lane_idle")
+            self._assert_mapping(theme.lane_active, f"{name}.lane_active")
+
+    def test_label_colour_flips_on_dark_fill(self) -> None:
+        # The black ring tile must not render near-black text on itself.
+        from rehab.ui.theme import CLINICAL
+        from rehab.ui.widgets import LaneStrip
+        strip = LaneStrip.__new__(LaneStrip)
+        strip.theme = CLINICAL
+        self.assertEqual(strip._label_colour((15, 23, 42)),
+                          (255, 255, 255))
+        self.assertEqual(strip._label_colour((71, 85, 105)),
+                          (255, 255, 255))
+        # Light fills keep the theme's dark text.
+        self.assertEqual(strip._label_colour((254, 240, 138)),
+                          CLINICAL.foreground)
+
+
 if __name__ == "__main__":
     unittest.main()

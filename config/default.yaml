@@ -37,13 +37,131 @@ serial:
 fsr:
   num_sensors_per_hand: 4
   sample_rate_hz: 200
-  baseline_alpha: 0.02
+  # Baseline tracker. This is an EMA per sample; at the device's 200 Hz
+  # the time constant is 1 / (alpha * 200) seconds. It exists to absorb
+  # slow thermal and mechanical drift, NOT to follow a press.
+  #
+  # This was 0.02 (a 0.25 s time constant), which is faster than a weak
+  # or slow press builds. The baseline chased the press upward and the
+  # signal never crossed the threshold, so a patient pressing gently
+  # over a second or two registered nothing at all. At 0.0005 the
+  # constant is about 10 s: drift is still absorbed, presses are not.
+  baseline_alpha: 0.0005
   value_alpha: 0.35
-  on_delta: [45, 90, 45, 45]
-  off_delta: [35, 70, 35, 35]
-  abs_on_min: [320, 400, 320, 320]
-  abs_off_max: [350, 450, 350, 350]
+  # PRESS THRESHOLDS - universal, no per-participant calibration needed.
+  #
+  # Detection is relative to each sensor's own live baseline, so these
+  # work regardless of a sensor's resting value or individual
+  # sensitivity. They are set from the noise floor rather than from how
+  # hard a healthy person presses, which is what makes them suitable
+  # for a weak hand.
+  #
+  # Measured on the device 29 July 2026: resting noise is about 1.1
+  # counts SD on every sensor, and a firm adult press raises the signal
+  # by 94 to 293 counts.
+  #
+  #   on_delta 12 counts  = roughly 11x the noise SD
+  #                       = about 2.3% of the sensor's 511-count span
+  #                       = about 1.1 N (~110 g) on a 45 N SingleTact
+  #                       = 4% to 13% of a firm adult press
+  #
+  # Sensitivity that low is a deliberate clinical choice: a stroke
+  # patient's affected finger produces far less force than a healthy
+  # one, and a threshold tuned to a healthy press would score genuine
+  # attempts as misses. Sitting the threshold near the noise floor
+  # instead means the sensor's own resolution is the limit, not an
+  # arbitrary cutoff.
+  #
+  # Verified in simulation over a 10-minute block with nobody touching
+  # the device: zero false presses at the measured noise, at 3x that
+  # noise, and with 20 counts/min of drift. debounce_ms below also
+  # requires the signal to persist, which rejects transient spikes.
+  # MEASURED against a resting hand with tools/calibrate_rest_vs_press.py
+  # (29 July 2026). Counts are above the empty-device reading:
+  #
+  #   finger   resting hand   gentle press   usable gap
+  #   index         +2.5          +51.5          49
+  #   middle        +8.9          +40.9          32
+  #   ring         +11.5          +41.5          30
+  #   pinky        +30.7         +145.7         115
+  #
+  # The earlier uniform 12 was UNSAFE: the pinky pad carries +30.7 at
+  # rest, so a hand merely resting on the device sat above the trigger
+  # and fired phantom presses continuously. A threshold derived only
+  # from an empty device cannot see that; it has to be measured with a
+  # hand in the normal resting position.
+  #
+  # Each trigger now sits about 40% of the way from that finger's
+  # resting load to a gentle press: clear of a resting hand, still
+  # reachable by a press weaker than the one demonstrated.
+  #
+  # The pinky is the outlier and its threshold is high as a direct
+  # consequence of its resting load being 3-12x the other fingers,
+  # which points at pad placement rather than at the patient. Reducing
+  # that resting load in hardware and re-running the calibration would
+  # lower its trigger a lot, which matters for a weak little finger.
+  on_delta: [22, 22, 23, 77]
+  off_delta: [11, 11, 12, 38]
+  # Absolute floors are a broken-sensor guard, not part of normal
+  # detection. Real baselines sit at 235-260, so 150 never binds during
+  # a session; it only stops a sensor whose reading has collapsed to 0
+  # (an I2C fault, which the firmware reports as 0) from registering
+  # phantom presses. abs_off_max is set high so it never clips release.
+  abs_on_min: [150, 150, 150, 150]
+  abs_off_max: [1000, 1000, 1000, 1000]
   debounce_ms: 100
+
+motor:
+  # Buzzer (vibration) cue. The motor on the TARGET finger buzzes when
+  # that trial's stimulus fires, so the patient feels which finger to
+  # press rather than only reading it off the screen. This is the
+  # buzzer's only job: nothing buzzes on a press, a hit, or a miss.
+  # Applies to every mode (classic, adaptive, mirror, rhythm), and in
+  # mirror mode both target fingers buzz together.
+  # Toggled from the Settings screen; on by default.
+  enabled: true
+  # How long the cue buzzes, in milliseconds.
+  #
+  # The firmware (Arduino_20251111.ino) drives the motor at a FIXED
+  # strength: STIM_PWM = 200 is a compile-time constant and the only
+  # commands it accepts are "STIM:n" and "STOP". Vibration amplitude
+  # therefore cannot be changed from the host at all. What we can
+  # change is duration: each STIM re-arms the motor for another 150 ms,
+  # so the engine repeats pulses to hold it on for longer. That is what
+  # this setting and the Settings slider control, and it is what makes
+  # a cue feel stronger or gentler in practice.
+  #
+  # Default 250 ms, chosen from the vibrotactile literature rather
+  # than from what the firmware happens to do in one pulse:
+  #
+  #  - About 30 ms is the minimum duration for a vibrotactile stimulus
+  #    to be perceived as a vibration rather than a single pulse
+  #    (Vibrotactile stimulus duration threshold, PMC11814341). 250 ms
+  #    sits roughly 8x above that floor, so perception is not marginal.
+  #  - Vibrotactile cueing studies use burst durations across roughly
+  #    25-400 ms, so 250 ms is mid-range and not an outlier.
+  #  - Cutaneous sensation is impaired in about a third of stroke
+  #    patients and is 40-84% worse on the more-affected side
+  #    (PMC4133225), and roughly 40% greater stimulation is needed for
+  #    initial perception on the paretic hand (PMC12742966).
+  #
+  # That last point is the deciding one. The usual way to compensate
+  # for a raised perception threshold is more intensity, but this
+  # firmware fixes drive strength at STIM_PWM = 200 and exposes no way
+  # to change it. Duration is the only compensating lever available,
+  # so the default is set longer than a single 150 ms pulse to give a
+  # patient with reduced sensation a cue they can actually feel.
+  #
+  # Range worth staying inside: 150 ms (one pulse, healthy sensation)
+  # up to about 400 ms (upper end of the tested range; beyond this the
+  # cue starts running into the patient's own response).
+  # tools/calibrate_buzzers.py sets this per device and also checks
+  # each motor is wired to the finger the software thinks it is.
+  cue_ms: 250
+  # Gap between repeat pulses when cue_ms asks for more than one. Must
+  # stay under the firmware's 150 ms hold or the motor stutters
+  # instead of running continuously.
+  pulse_interval_ms: 120
 
 bilateral:
   hand: right            # right | left | both

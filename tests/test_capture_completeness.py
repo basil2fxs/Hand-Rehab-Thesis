@@ -303,3 +303,89 @@ class BlockSummaryCaptureTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StimDeliveryCaptureTests(unittest.TestCase):
+    """The buzzer cue's delivery is recorded per trial. Without it a
+    session where the Arduino dropped out looks like a patient who
+    simply stopped responding."""
+
+    def test_column_registered(self) -> None:
+        from rehab.data.logger import TRIAL_COLUMNS
+        self.assertIn("stim_delivered", TRIAL_COLUMNS)
+
+    def _stim_engine(self, send_result):
+        eng = _bare_engine()
+        eng._ensure_metric_state()
+        eng.detectors = {}
+        eng.source = MagicMock()
+        eng.source.send_command = MagicMock(return_value=send_result)
+        eng.cfg.get = MagicMock(
+            side_effect=lambda k, d=None: {
+                "motor.enabled": True, "game.timeout_s": 1.0,
+                "audio.stim_tone_enabled": False,
+            }.get(k, d))
+        eng.audio = None
+        eng.raw_logger = MagicMock()
+        return eng
+
+    def test_successful_stim_logged_true(self) -> None:
+        eng = self._stim_engine(True)
+        eng.on_stim(lane=0, trial_id=1, t_perf=0.0)
+        self.assertIs(eng._last_stim_delivered, True)
+        self.assertEqual(eng._block_stim_failures, 0)
+        eng.log_trial(_trial(lane=0), _result("Great", 200.0), now=0.0)
+        self.assertEqual(eng._rows[0]["stim_delivered"], "TRUE")
+
+    def test_failed_stim_logged_false_and_counted(self) -> None:
+        eng = self._stim_engine(False)
+        eng.on_stim(lane=0, trial_id=1, t_perf=0.0)
+        self.assertIs(eng._last_stim_delivered, False)
+        self.assertEqual(eng._block_stim_failures, 1)
+        eng.log_trial(_trial(lane=0), _result("Miss", None), now=0.0)
+        self.assertEqual(eng._rows[0]["stim_delivered"], "FALSE")
+
+    def test_raw_event_emitted_per_stim(self) -> None:
+        eng = self._stim_engine(True)
+        eng.on_stim(lane=2, trial_id=1, t_perf=5.0)
+        kinds = [c.args[0] if c.args else c.kwargs.get("event")
+                 for c in eng.raw_logger.queue_event.call_args_list]
+        self.assertIn("stim_motor", kinds)
+
+    def test_motors_disabled_logs_empty(self) -> None:
+        eng = self._stim_engine(True)
+        eng.cfg.get = MagicMock(
+            side_effect=lambda k, d=None: {
+                "motor.enabled": False, "game.timeout_s": 1.0,
+                "audio.stim_tone_enabled": False,
+            }.get(k, d))
+        eng.on_stim(lane=0, trial_id=1, t_perf=0.0)
+        self.assertIsNone(eng._last_stim_delivered)
+        eng.log_trial(_trial(lane=0), _result("Great", 200.0), now=0.0)
+        self.assertEqual(eng._rows[0]["stim_delivered"], "")
+
+
+class PauseCaptureTests(unittest.TestCase):
+    """Pauses are recorded so a long break mid-block is visible and can
+    be subtracted from the block duration."""
+
+    def test_summary_has_pause_and_stim_fields(self) -> None:
+        eng = _bare_engine()
+        eng._ensure_metric_state()
+        eng._per_lane_peak_force = {}
+        eng._per_lane_impulse = {}
+        eng._across_blocks_mean_rt = []
+        eng._across_blocks_mean_peak = []
+        eng._drift_samples = {}
+        eng._rhythm_press_times_s = []
+        eng._rhythm_beat_times_s = []
+        eng._rhythm_signed_offsets_ms = []
+        eng.detectors = {}
+        eng.source = MagicMock(spec=[])
+        eng._block_pause_count = 2
+        eng._block_paused_s = 41.25
+        eng._block_stim_failures = 3
+        s = eng._build_block_summary("completed")
+        self.assertEqual(s["pauses"], 2)
+        self.assertEqual(s["paused_total_s"], 41.25)
+        self.assertEqual(s["stim_cue_failures"], 3)

@@ -190,6 +190,18 @@ class GameEngine:
         self._last_stim_timeout_ms: float | None = None
         self._force_window_saw_samples = False
         self._force_window_trial_id: int | None = None
+        # Whether the buzzer cue for the current trial reached the
+        # hardware (None = motors disabled). Counted per block so the
+        # summary can flag a session where cues silently stopped.
+        self._last_stim_delivered: bool | None = None
+        self._block_stim_failures = 0
+        # Pause bookkeeping for the block summary: how many times the
+        # block was paused and the total time spent paused, so an
+        # analyst can subtract it from the block duration.
+        self._block_pause_count = 0
+        self._block_paused_s = 0.0
+        # Pending buzzer repeat-pulses as (lane, due_perf_counter).
+        self._motor_queue: list[tuple[int, float]] = []
 
     # ---- bilateral plumbing ------------------------------------------------
     def _build_detectors(self) -> None:
@@ -287,9 +299,13 @@ class GameEngine:
         # finger's running peak (reading minus baseline). log_trial sums
         # these across all fingers on a miss. A handful of max() per
         # sample. on_stim opens the window; log_trial closes + records it.
-        start = self._force_window_start
-        if (start is not None and self._force_window_end is not None
-                and start <= t_perf <= self._force_window_end):
+        # getattr-guarded: the Settings screen pumps samples through an
+        # engine that may not have run a block yet, and test fixtures
+        # build engines via __new__.
+        start = getattr(self, "_force_window_start", None)
+        end = getattr(self, "_force_window_end", None)
+        if (start is not None and end is not None
+                and start <= t_perf <= end):
             self._track_force_peaks(right_det, right_vals,
                                      left_det, left_vals, n)
 
@@ -407,6 +423,16 @@ class GameEngine:
             self._force_window_saw_samples = False
         if not hasattr(self, "_force_window_trial_id"):
             self._force_window_trial_id = None
+        if not hasattr(self, "_last_stim_delivered"):
+            self._last_stim_delivered = None
+        if not hasattr(self, "_block_stim_failures"):
+            self._block_stim_failures = 0
+        if not hasattr(self, "_block_pause_count"):
+            self._block_pause_count = 0
+        if not hasattr(self, "_block_paused_s"):
+            self._block_paused_s = 0.0
+        if not hasattr(self, "_motor_queue"):
+            self._motor_queue = []
 
     def _is_loud_trial(self, trial_number: int) -> bool:
         """True if this 1-indexed trial should play louder. Loud trials
@@ -527,6 +553,10 @@ class GameEngine:
                         pass
                 else:
                     self._pump_source()
+                # Buzzer cue repeat-pulses. Cheap no-op when nothing is
+                # queued; runs outside the paused branch so a cue can't
+                # keep firing while the block is frozen.
+                self._drain_motor_queue()
 
                 # Global events (Esc, P, F2, QUIT) always go through. Screen-
                 # specific events (button clicks, key presses for lanes) are
@@ -625,6 +655,14 @@ class GameEngine:
         # process them on resume.
         if self.mode and hasattr(self.mode, "_presses"):
             self.mode._presses.clear()
+        self.stop_all_motors()
+        # Record the pause. Without it a long break mid-block is
+        # invisible in the data: block duration looks inflated and
+        # reaction times either side are not comparable.
+        if self.raw_logger:
+            self.raw_logger.queue_event("pause", detail=self.current_block,
+                                         hand=self.hand_mode)
+        self._block_pause_count += 1
         log.info("Block paused")
 
     def _resume_now(self) -> None:
@@ -632,6 +670,11 @@ class GameEngine:
             self.paused = False
             return
         pause_dur = time.perf_counter() - self._pause_started_at
+        if self.raw_logger:
+            self.raw_logger.queue_event(
+                "resume", detail=f"paused_s={pause_dur:.3f}",
+                hand=self.hand_mode)
+        self._block_paused_s += pause_dur
         # Tell the mode to shift any in-flight timestamps forward so the
         # active trial doesn't instantly time out and the next-trigger
         # interval doesn't think it's overdue by an entire pause.
@@ -911,7 +954,12 @@ class GameEngine:
                 # We log them all in the raw row, the hand column is "both".
                 self.raw_logger.queue_sample(s.t_perf, s.values, hand=self.hand_mode)
             # Push to lane strips for live readout.
-            for key in ("gameplay", "rhythm"):
+            # "diagnostics" is included so the Settings screen shows a
+            # live readout when the hardware is plugged in. This pump
+            # drains the sample queue every frame, so a screen that
+            # tried to call get_sample() itself would almost always get
+            # nothing: the values have to be pushed from here.
+            for key in ("gameplay", "rhythm", "diagnostics"):
                 sc = self._screens.get(key)
                 if sc and hasattr(sc, "lanes"):
                     n_per_hand = int(self.cfg.get("fsr.num_sensors_per_hand", 4))
@@ -1329,6 +1377,10 @@ class GameEngine:
         self._miss_force_total = 0.0
         self._miss_force_count = 0
         self._trials_fired = 0
+        self._block_stim_failures = 0
+        self._last_stim_delivered = None
+        self._block_pause_count = 0
+        self._block_paused_s = 0.0
         self._loud_trials_by_id = {}
         self._block_loud_trials = 0
         self._last_stim_timeout_ms = None
@@ -1446,6 +1498,16 @@ class GameEngine:
         # Loudness-variation bookkeeping: how many trials actually
         # played boosted this block, next to the configured schedule,
         # so an analyst can verify the manipulation ran as intended.
+        # Buzzer cue delivery. Non-zero means the hardware stopped
+        # accepting stim commands mid-block, so some trials had no
+        # vibration cue and must not be read as ordinary misses.
+        summary["stim_cue_failures"] = getattr(
+            self, "_block_stim_failures", 0)
+        # Pauses. duration_s above is wall-clock including any pause,
+        # so subtract paused_total_s for actual time on task.
+        summary["pauses"] = getattr(self, "_block_pause_count", 0)
+        summary["paused_total_s"] = round(
+            getattr(self, "_block_paused_s", 0.0), 3)
         summary["loud_trials"] = {
             "n": getattr(self, "_block_loud_trials", 0),
             "configured_fraction": getattr(
@@ -1810,6 +1872,100 @@ class GameEngine:
         except Exception as e:
             log.warning("sessions_index.csv update failed: %s", e)
 
+    # ---- buzzer cue -------------------------------------------------------
+    # The firmware holds a motor on for a fixed 150 ms per STIM command
+    # and its drive strength is a compile-time constant, so the only
+    # dimension the host can vary is how long the buzz lasts. Sending
+    # another STIM before the previous one expires re-arms the motor,
+    # which is how a cue_ms longer than 150 ms is produced.
+    FIRMWARE_STIM_MS = 150
+
+    def _send_stim(self, lane: int) -> bool:
+        """Fire one STIM pulse on `lane` (0-indexed). Returns whether
+        the hardware accepted it."""
+        try:
+            return bool(self.source.send_command(f"STIM:{lane + 1}"))
+        except Exception as e:
+            log.warning("STIM send failed on lane %d: %s", lane, e)
+            return False
+
+    def _schedule_cue_pulses(self, lane: int) -> None:
+        """Queue the repeat pulses needed to stretch this lane's cue out
+        to motor.cue_ms. The caller has already sent the first pulse, so
+        this only schedules the follow-ups."""
+        if not hasattr(self, "_motor_queue"):
+            self._motor_queue = []
+        cue_ms = float(self.cfg.get("motor.cue_ms",
+                                     self.FIRMWARE_STIM_MS))
+        if cue_ms <= self.FIRMWARE_STIM_MS:
+            return
+        gap_ms = float(self.cfg.get("motor.pulse_interval_ms", 120))
+        # Keep the gap under the firmware hold or the motor stutters.
+        gap_ms = max(20.0, min(gap_ms, self.FIRMWARE_STIM_MS - 10))
+        now = time.perf_counter()
+        due = gap_ms
+        # Re-arm until the final pulse's own 150 ms tail carries the
+        # buzz past cue_ms.
+        while due + self.FIRMWARE_STIM_MS < cue_ms + gap_ms:
+            self._motor_queue.append((lane, now + due / 1000.0))
+            due += gap_ms
+            if len(self._motor_queue) > 64:      # runaway guard
+                break
+
+    def _drain_motor_queue(self) -> None:
+        """Send any cue repeat-pulses that have come due. Called once
+        per frame from the main loop."""
+        q = getattr(self, "_motor_queue", None)
+        if not q:
+            return
+        now = time.perf_counter()
+        still = []
+        for lane, due in q:
+            if now >= due:
+                self._send_stim(lane)
+            else:
+                still.append((lane, due))
+        self._motor_queue = still
+
+    def stop_all_motors(self) -> None:
+        """Drop pending cue pulses and tell the hardware to stop, so a
+        queued pulse cannot buzz after the block has ended."""
+        self._motor_queue = []
+        try:
+            self.source.send_command("STOP")
+        except Exception:
+            pass
+
+    def open_sessions_folder(self) -> bool:
+        """Open the TOP-LEVEL sessions folder (the one holding every
+        day directory and sessions_index.csv) in Finder / Explorer.
+        Wired to the Settings screen so the researcher can reach all
+        recorded data at any time, not just after a block."""
+        try:
+            data_dir = Path(self.cfg.resolve_path(
+                self.cfg.get("session.data_dir", "sessions")))
+            data_dir.mkdir(parents=True, exist_ok=True)
+            return self._reveal_in_file_manager(str(data_dir))
+        except Exception as e:
+            log.warning("Could not open sessions folder: %s", e)
+            return False
+
+    @staticmethod
+    def _reveal_in_file_manager(path: str) -> bool:
+        """Show a folder in the OS file manager. Shared by the Settings
+        and Results buttons."""
+        try:
+            if sys.platform == "darwin":
+                subprocess.Popen(["open", path])
+            elif os.name == "nt":
+                os.startfile(path)  # type: ignore[attr-defined]
+            else:
+                subprocess.Popen(["xdg-open", path])
+            return True
+        except Exception as e:
+            log.warning("Could not open %s: %s", path, e)
+            return False
+
     def open_last_session_folder(self) -> bool:
         """Open the most recent session folder in Finder / Explorer /
         the Linux file manager. Wired to the results screen's Open
@@ -1832,6 +1988,9 @@ class GameEngine:
             return False
 
     def finish_block(self) -> None:
+        # Kill any queued cue pulse so the device cannot buzz after the
+        # block is over.
+        self.stop_all_motors()
         if self.raw_logger:
             self.raw_logger.queue_event("block_end", detail=self.current_block,
                                          hand=self.hand_mode)
@@ -1883,6 +2042,7 @@ class GameEngine:
         if not self.session_paths:
             return
         log.info("Abandoning in-progress block")
+        self.stop_all_motors()
         if self.audio:
             try:
                 self.audio.stop()
@@ -2261,11 +2421,35 @@ class GameEngine:
                         # for "press this" cues, so lane tiles never
                         # go to their active colour mid-stream.
                         ls.active = False
+        # Buzzer / vibration cue. Record whether each command was
+        # actually accepted by the hardware: if the Arduino drops out
+        # mid-block the patient stops feeling the cue, and without this
+        # the trials would look like ordinary misses instead of a
+        # hardware failure. None = motors disabled for this session.
+        self._last_stim_delivered = None
         if self.cfg.get("motor.enabled", True):
-            # One STIM command per target lane. The Arduino numbers
-            # motors 1..N matching the global lane.
+            # Buzz the TARGET finger so the patient feels which one to
+            # press. One STIM command per target lane; the Arduino
+            # numbers motors 1..N matching the global lane.
+            delivered = True
             for lane in sorted(targets):
-                self.source.send_command(f"STIM:{lane + 1}")
+                ok = self._send_stim(lane)
+                if not ok:
+                    delivered = False
+                if self.raw_logger:
+                    self.raw_logger.queue_event(
+                        "stim_motor", lane=lane, t_perf=t_perf,
+                        detail=f"delivered={'yes' if ok else 'NO'}",
+                        hand=self.hand_mode)
+                # Hold the motor on for the configured cue length. The
+                # firmware runs a fixed 150 ms per command, so anything
+                # longer is built by re-arming it before it expires.
+                self._schedule_cue_pulses(lane)
+            self._last_stim_delivered = delivered
+            if not delivered:
+                self._block_stim_failures += 1
+                log.warning("Buzzer cue not delivered for trial %s. "
+                             "Check the Arduino connection.", trial_id)
         # Per-lane stim tone for the cadence-driven modes (classic,
         # adaptive, mirror). Skipped in rhythm so the cue tone
         # doesn't fight the music. play_stim only fires for the
@@ -2443,6 +2627,9 @@ class GameEngine:
                 if self._last_stim_timeout_ms is not None else "")
             row["force_window_sum"] = fw_sum_str
             row["force_window_peaks"] = fw_peaks_str
+            sd = getattr(self, "_last_stim_delivered", None)
+            row["stim_delivered"] = ("" if sd is None
+                                      else ("TRUE" if sd else "FALSE"))
             row.update(self._trial_context(streak_before))
             self.trial_logger.write(row)
         self._maybe_resave_metadata()
@@ -2668,6 +2855,9 @@ class GameEngine:
                 fw_sum, fw_peaks)
             row["force_window_sum"] = fw_sum_str
             row["force_window_peaks"] = fw_peaks_str
+            sd = getattr(self, "_last_stim_delivered", None)
+            row["stim_delivered"] = ("" if sd is None
+                                      else ("TRUE" if sd else "FALSE"))
             row.update(self._trial_context(streak_before,
                                             song_time_s=song_time))
             self.trial_logger.write(row)

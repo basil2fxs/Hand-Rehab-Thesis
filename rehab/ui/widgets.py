@@ -580,6 +580,18 @@ class LaneStrip:
         if icon is not None:
             surf.blit(icon, icon.get_rect(center=(cx, cy + 1)))
 
+    def _label_colour(self, fill: tuple[int, int, int]
+                       ) -> tuple[int, int, int]:
+        """Readable text colour for a given tile fill. Uses the standard
+        luminance weighting and flips to white once the fill is dark
+        enough that the theme's near-black text would disappear (the
+        ring finger's black tile, or any flash colour)."""
+        r, g, b = fill[0], fill[1], fill[2]
+        luminance = 0.299 * r + 0.587 * g + 0.114 * b
+        if luminance < 140:
+            return (255, 255, 255)
+        return self.theme.foreground
+
     def draw(self, surf: pygame.Surface, now: float) -> None:
         # Background fill
         if now < self.flash_until and self.flash_colour:
@@ -690,10 +702,13 @@ class LaneStrip:
         self._draw_tiny_hand(surf, bx, by, self.hand or "right",
                               self.theme.background)
 
-        # Big finger label centred near the bottom of the strip.
+        # Big finger label centred near the bottom of the strip. The
+        # text colour follows the tile fill rather than the theme, so
+        # the label stays readable on a dark finger colour (the ring
+        # finger's black tile would swallow near-black text).
         font = self.layout.font(32)
         label_text = self.FINGER_LABELS[self.finger % 4]
-        label = font.render(label_text, True, self.theme.foreground)
+        label = font.render(label_text, True, self._label_colour(fill))
         surf.blit(label, label.get_rect(midbottom=(
             self.rect.centerx, self.rect.bottom - 44,
         )))
