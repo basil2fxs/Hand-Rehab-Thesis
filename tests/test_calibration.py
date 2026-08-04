@@ -452,3 +452,286 @@ class TestApplyToEngine:
         e.session = Session(participant="T1")
         GameEngine._stamp_calibration(e)
         assert e.session.calibration == {}
+
+
+class TestReviewFixes:
+    """Regressions for bugs an adversarial review found in the first cut of
+    the calibration flow. Each one silently corrupted data rather than
+    failing loudly, which is why they get their own tests."""
+
+    def _screen(self, hand="right", n_per_hand=4, root=None):
+        import pygame
+        import tempfile
+        pygame.init()
+        pygame.font.init()
+        # Writes must never land in the repository. resolve_path below
+        # sends everything under this temp root.
+        root = Path(root or tempfile.mkdtemp(prefix="cal-test-"))
+        from rehab.game.engine import GameEngine
+        from rehab.ui.theme import THEMES
+        from rehab.ui.widgets import Layout
+        from rehab.ui.calibration_screen import CalibrationScreen
+
+        sent = []
+
+        class Src:
+            port = "/dev/mock"
+
+            def send_command(self, c):
+                sent.append(c)
+                return True
+
+        class Cfg:
+            data = {}
+
+            def get(self, key, default=None):
+                if key == "bilateral.hand":
+                    return hand
+                if key == "fsr.num_sensors_per_hand":
+                    return n_per_hand
+                return default
+
+            def resolve_path(self, v):
+                return root / v
+
+            def save_user_overrides(self, o):
+                return root / "user_settings.yaml"
+
+        e = GameEngine.__new__(GameEngine)
+        e.cfg = Cfg()
+        e.theme = list(THEMES.values())[0]
+        e.layout = Layout(1280, 800, 1.0)
+        e.source = Src()
+        e.detectors = {}
+        e.session = type("S", (), {"participant": "T1"})()
+        return CalibrationScreen(e), sent
+
+    # ---- channel map must be a permutation --------------------------
+
+    def test_felt_nothing_cannot_leave_two_fingers_on_one_channel(self):
+        """A dead motor used to leave its finger on a straight-through
+        default that another channel already owned, so cueing one finger
+        buzzed a different one and the patient pressed the wrong finger
+        while the data recorded it as their error."""
+        s, _ = self._screen()
+        s._felt = {1: 0, 2: 1, 3: 3}          # channel 4 felt nothing
+        cmap = s.channel_map()
+        assert sorted(cmap) == [1, 2, 3, 4], f"not a permutation: {cmap}"
+
+    def test_same_finger_named_twice_still_yields_a_permutation(self):
+        s, _ = self._screen()
+        s._felt = {1: 0, 2: 0, 3: 2, 4: 3}    # index claimed twice
+        cmap = s.channel_map()
+        assert sorted(cmap) == [1, 2, 3, 4], f"not a permutation: {cmap}"
+
+    def test_confirmed_answers_are_honoured(self):
+        s, _ = self._screen()
+        s._felt = {1: 3, 2: 1, 3: 2, 4: 0}
+        assert s.channel_map() == [4, 2, 3, 1]
+
+    def test_no_answers_at_all_is_straight_through(self):
+        s, _ = self._screen()
+        s._felt = {}
+        assert s.channel_map() == [1, 2, 3, 4]
+
+    def test_unconfirmed_fingers_are_reported(self):
+        s, _ = self._screen()
+        s._felt = {1: 0, 2: 1}
+        assert set(s.unmapped_fingers()) == {"ring", "pinky"}
+
+    # ---- which hand is actually being measured -----------------------
+
+    def test_left_hand_reads_the_left_half_of_the_sample_vector(self):
+        """With two boards the vector is [right 0..3, left 4..7]. Reading
+        the first four regardless of hand measured the right board's idle
+        sensors while the patient pressed with their left, producing a
+        profile of near-zero gaps taken from a hand nobody touched."""
+        s, _ = self._screen(hand="left")
+        assert s.hand == "left"
+        assert s._sensor_offset() == 4
+        s._start_collecting(0.0)
+        s.on_sample(0.0, [1, 2, 3, 4, 50, 60, 70, 80])
+        assert s._buffer[0] == [50.0, 60.0, 70.0, 80.0]
+
+    def test_right_hand_reads_the_first_half(self):
+        s, _ = self._screen(hand="right")
+        assert s._sensor_offset() == 0
+        s._start_collecting(0.0)
+        s.on_sample(0.0, [1, 2, 3, 4, 50, 60, 70, 80])
+        assert s._buffer[0] == [1.0, 2.0, 3.0, 4.0]
+
+    def test_profile_records_the_hand_that_was_calibrated(self):
+        """profile.hand used to come from a config key that does not
+        exist, so every profile was stamped right whatever was measured."""
+        for hand in ("right", "left"):
+            s, _ = self._screen(hand=hand)
+            s.profile.resting = [245.0] * 4
+            s.profile.press = [295.0] * 4
+            s.profile.empty = [243.0] * 4
+            s.profile.empty_noise = [1.0] * 4
+            s._save()
+            assert s.profile.hand == hand
+
+    # ---- stale state between participants ---------------------------
+
+    def test_reset_returns_to_the_opening_step(self):
+        """Without this the next participant opened straight onto the
+        previous participant's review table, where the only buttons were
+        Done and Back."""
+        import rehab.ui.calibration_screen as cs
+        s, _ = self._screen()
+        s.step = cs.STEP_REVIEW
+        s._saved_path = Path("x")
+        s._felt = {1: 0}
+        s.reset()
+        assert s.step == cs.STEP_INTRO
+        assert s._saved_path is None
+        assert s._felt == {}
+        assert any(b.label == "Start calibration" for b in s._buttons)
+
+    def test_leaving_mid_measurement_discards_the_partial_buffer(self):
+        """Leaving used to keep _collecting True with a part-filled
+        buffer, which the next visit's first update() wrote in as though
+        the step had completed."""
+        import rehab.ui.calibration_screen as cs
+        s, _ = self._screen()
+        s._begin()
+        s._start_collecting(5.0)
+        for _ in range(30):
+            s.on_sample(0.0, [999.0] * 4)
+        assert s._buffer
+        s._abort_collection()
+        assert not s._collecting and s._buffer == []
+        s.update(0.0)
+        assert s.step == cs.STEP_EMPTY, "partial buffer was finalised"
+
+    # ---- outlier rejection on the press level ------------------------
+
+    def test_one_glitched_sample_does_not_set_the_press_level(self):
+        """max() over the window meant a single corrupt I2C frame reading
+        800 counts became the press level, and the threshold derived from
+        it was one the finger could never reach."""
+        import rehab.ui.calibration_screen as cs
+        s, _ = self._screen()
+        s._begin()
+        s.profile.resting = [245.0] * 4
+        s.step = cs.STEP_PRESS
+        s.finger_idx = 0
+        s._start_collecting(0.0)
+        for _ in range(600):
+            s.on_sample(0.0, [295.0] * 4)     # steady held press
+        s.on_sample(0.0, [800.0] * 4)         # one corrupt frame
+        s.update(0.0)
+        assert s.profile.press[0] < 400, (
+            f"outlier set the press level: {s.profile.press[0]}")
+
+    def test_percentile_helper(self):
+        from rehab.ui.calibration_screen import _percentile
+        assert _percentile([], 0.95) == 0.0
+        assert _percentile([5.0], 0.95) == 5.0
+        assert _percentile([1, 2, 3, 4, 5], 0.0) == 1.0
+        assert _percentile([1, 2, 3, 4, 5], 1.0) == 5.0
+
+    # ---- buzz length --------------------------------------------------
+
+    def test_test_buzz_is_long_enough_to_feel(self):
+        """The firmware sets an absolute deadline per command, so four
+        commands sent inside one 150 ms window all resolve to the same
+        stop time and the motor runs once, not four times. A single
+        150 ms pulse is easy for an impaired hand to miss, and a missed
+        pulse is recorded as felt nothing."""
+        import rehab.ui.calibration_screen as cs
+        s, sent = self._screen()
+        s.step = cs.STEP_BUZZ
+        s.buzz_channel = 2
+        s._buzz_now()
+        assert len(sent) >= 3, f"only {len(sent)} pulses, too short to feel"
+        assert all(c == "STIM:2" for c in sent)
+
+
+class TestEngineApplicationFixes:
+    def _engine(self, hands=("right", "left")):
+        from rehab.game.engine import GameEngine
+        from rehab.hardware.fsr_detector import Calibration, FSRDetector
+
+        class Cfg:
+            def __init__(self):
+                self.data = {}
+
+            def get(self, key, default=None):
+                return default
+
+        e = GameEngine.__new__(GameEngine)
+        e.cfg = Cfg()
+        e.detectors = {h: FSRDetector(Calibration(num_sensors=4)) for h in hands}
+        return e
+
+    def test_calibration_applies_only_to_the_hand_it_measured(self):
+        """A profile describes one hand's pads. Writing it onto both
+        detectors pushed the calibrated hand's thresholds onto the other
+        hand's differently-placed sensors, where the same counts are a
+        different fraction of that hand's travel."""
+        from rehab.game.engine import GameEngine
+        e = self._engine()
+        before = list(e.detectors["left"].cal.on_delta)
+        prof = make_profile()
+        prof.hand = "right"
+        GameEngine.apply_calibration(e, prof)
+        assert list(e.detectors["right"].cal.on_delta) == prof.on_delta()
+        assert list(e.detectors["left"].cal.on_delta) == before, \
+            "left hand was overwritten by the right hand's calibration"
+
+    def test_calibration_is_written_into_the_config(self):
+        """Detectors get rebuilt (mirror forces both hands,
+        _ensure_both_detectors fills a missing side) and a rebuilt
+        detector reads its thresholds from the config. Without a
+        write-through the calibration silently reverted while the session
+        metadata still recorded it as active."""
+        from rehab.game.engine import GameEngine
+        e = self._engine()
+        prof = make_profile()
+        prof.hand = "right"
+        GameEngine.apply_calibration(e, prof)
+        assert e.cfg.data["fsr"]["on_delta"] == prof.on_delta()
+        assert e.cfg.data["fsr"]["off_delta"] == prof.off_delta()
+
+    def test_baselines_are_primed_from_the_calibrated_resting_level(self):
+        from rehab.game.engine import GameEngine
+        e = self._engine()
+        prof = make_profile()
+        prof.hand = "right"
+        GameEngine.apply_calibration(e, prof)
+        for i in range(N_FINGERS):
+            assert e.detectors["right"].baseline[i] == pytest.approx(
+                prof.resting[i])
+
+    def test_priming_survives_a_block_start_reset(self):
+        """reset() clears the baseline to None. Without re-priming, a block
+        that starts with the hand off the pads seeds the baseline from the
+        empty device, so the hand landing reads as a rise and the first
+        trials run under a lower effective trigger than the rest."""
+        from rehab.game.engine import GameEngine
+        e = self._engine()
+        prof = make_profile()
+        prof.hand = "right"
+        GameEngine.apply_calibration(e, prof)
+        e.detectors["right"].reset()
+        assert e.detectors["right"].baseline[0] is None
+        GameEngine._prime_baselines(e)
+        for i in range(N_FINGERS):
+            assert e.detectors["right"].baseline[i] == pytest.approx(
+                prof.resting[i])
+
+    def test_priming_without_a_profile_is_a_no_op(self):
+        from rehab.game.engine import GameEngine
+        e = self._engine()
+        GameEngine._prime_baselines(e)
+        assert e.detectors["right"].baseline[0] is None
+
+    def test_missing_detector_for_the_hand_does_not_crash(self):
+        from rehab.game.engine import GameEngine
+        e = self._engine(hands=("right",))
+        prof = make_profile()
+        prof.hand = "left"
+        GameEngine.apply_calibration(e, prof)
+        GameEngine._prime_baselines(e)
