@@ -108,6 +108,12 @@ class AdaptiveEngine:
     # quality EMA alone (which is slow to settle).
     current_streak: int = 0
     current_miss_streak: int = 0
+    # Smallest share of a block any one finger is guaranteed. Set from
+    # adaptive.min_finger_share. 0 restores the old unfloored weighting.
+    min_finger_share: float = 0.15
+    # True when num_lanes covers two hands (bilateral), so the scheduler
+    # keeps the hands equal as well as the fingers.
+    hands_split: bool = False
 
     def __post_init__(self) -> None:
         if self.num_lanes < 1:
@@ -396,16 +402,73 @@ class AdaptiveEngine:
     def generate_sequence(self, length: int,
                           rng: random.Random | None = None,
                           avoid_repeats: bool = True) -> list[int]:
+        """Next `length` lanes, weighted toward whichever finger is
+        struggling but with a floor under every finger.
+
+        Weighting alone can starve a strong finger. Simulated over 60 trials
+        with one weak finger it left the strongest with about 5% of the
+        trials, three of sixty, which is far too few to say anything about
+        that finger afterwards. The floor guarantees a usable share without
+        flattening the weighting: the weak finger is still cued most.
+
+        The weights themselves are untouched. lane_weights() has to keep
+        summing to 1.0 for pick_lane's cumulative scan, and recovery mode's
+        shape is pinned by tests, so the floor is applied here at the point
+        of choosing rather than by clamping the distribution.
+
+        In bilateral mode the hands are balanced too. The engine sees a flat
+        list of 8 lanes and has no idea two hands are involved, so without
+        this an affected hand can quietly collect most of the trials and the
+        left-versus-right comparison stops meaning anything.
+        """
         r = rng or random.Random()
-        out: list[int] = []
-        last = -1
+        floor = self._floor_scheduler()
+        if floor is None:
+            out: list[int] = []
+            last = -1
+            for _ in range(length):
+                for _ in range(8):
+                    pick = self.pick_lane(r)
+                    if not avoid_repeats or pick != last or self.num_lanes < 2:
+                        break
+                out.append(pick)
+                last = pick
+            return out
+
+        weights = self.lane_weights()
+        if self.hands_split and self.num_lanes >= 2:
+            return self._paired_sequence(length, weights, r)
+        return [floor.next(weights) for _ in range(length)]
+
+    def _floor_scheduler(self):
+        """Lazily built so it persists across the repeated short
+        regenerations adaptive mode does (block_size is 4), which is what
+        lets the floor be tracked over a whole block rather than reset every
+        four trials."""
+        if self.min_finger_share <= 0:
+            return None
+        if getattr(self, "_floor", None) is None:
+            from ..game.scheduling import FloorWeightedScheduler
+            per_hand = (self.num_lanes // 2 if self.hands_split
+                        else self.num_lanes)
+            self._floor = FloorWeightedScheduler(
+                per_hand, min_share=self.min_finger_share)
+            if self.hands_split:
+                from ..game.scheduling import BalancedScheduler
+                self._floor_other = FloorWeightedScheduler(
+                    per_hand, min_share=self.min_finger_share)
+                self._hand_order = BalancedScheduler([0, 1], avoid_repeats=False)
+        return self._floor
+
+    def _paired_sequence(self, length: int, weights, r) -> list[int]:
+        n = self.num_lanes // 2
+        out = []
         for _ in range(length):
-            for _ in range(8):
-                pick = self.pick_lane(r)
-                if not avoid_repeats or pick != last or self.num_lanes < 2:
-                    break
-            out.append(pick)
-            last = pick
+            side = self._hand_order.next()
+            sched = self._floor if side == 0 else self._floor_other
+            # Each hand is weighted by its own lanes' weights.
+            w = weights[side * n:(side + 1) * n]
+            out.append(side * n + sched.next(w))
         return out
 
     def summary(self) -> dict:

@@ -30,6 +30,7 @@ class AdaptiveMode:
                  block_size: int, score_cfg: ScoreConfig,
                  timeout_s: float, early_window_s: float,
                  num_lanes: int = 4,
+                 min_finger_share: float = 0.15,
                  start_bpm: float = 80.0,
                  adaptive_cfg: AdaptiveConfig | None = None,
                  seed: int = 0) -> None:
@@ -43,6 +44,9 @@ class AdaptiveMode:
         # generates sequences of those indices.
         self.adapter = AdaptiveEngine(
             num_lanes=num_lanes, cfg=adaptive_cfg or AdaptiveConfig(),
+            min_finger_share=min_finger_share,
+            # 8 lanes means two hands, so the scheduler keeps them equal.
+            hands_split=(num_lanes >= 8),
         )
         self.adapter.bpm = start_bpm
         self.rng = random.Random(seed)

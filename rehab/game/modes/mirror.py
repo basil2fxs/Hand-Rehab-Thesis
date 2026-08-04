@@ -93,7 +93,8 @@ class MirrorMode:
                  early_window_s: float, score_cfg: ScoreConfig,
                  adaptive_cfg: AdaptiveConfig | None = None,
                  start_bpm: float = 24.0,
-                 seed: int = 0) -> None:
+                 seed: int = 0,
+                 min_finger_share: float = 0.15) -> None:
         # Pattern is a list of within-hand finger indices (0..3), not
         # global lanes, because mirror always targets both hands.
         # Anything outside 0..3 is dropped at construction time so a
@@ -123,6 +124,8 @@ class MirrorMode:
         self.adapter.bpm = max(self.adapter.cfg.bpm_min,
                                 min(self.adapter.cfg.bpm_max, start_bpm))
         self.rng = random.Random(seed)
+        self._floor = None
+        self.min_finger_share = min_finger_share
         # Trial budget stays the same as the old contract: pattern
         # length times repeat count. Therapists who set repeat_count=8
         # with the 4-finger default still get a 32-trial block, just
@@ -231,20 +234,29 @@ class MirrorMode:
             self.engine.finish_block()
 
     def _pick_finger(self) -> int:
-        """Weakness-weighted random pick constrained to the eligible
-        finger pool from `pattern`. The adapter's pick_lane returns
-        any of 0..3 weighted by hit-rate EMA; if it picks a finger
-        that's not in `pattern` (therapist asked for a subset like
-        [0, 1] only), we retry up to a few times then fall back to a
-        uniform pick over the eligible set."""
-        eligible = set(self.pattern)
-        for _ in range(8):
-            pick = self.adapter.pick_lane(self.rng)
-            if pick in eligible:
-                return pick
-        # Uniform fallback. Happens when the pattern is a small subset
-        # AND the adapter heavily weights an excluded finger.
-        return self.rng.choice(list(eligible))
+        """Weakness-weighted pick over the eligible fingers from `pattern`,
+        with a floor so no finger is starved.
+
+        Both hands fire together on every trial, so the hands are equal by
+        construction here and only the finger split needs managing. Straight
+        weighting could leave a strong finger with a handful of trials across
+        a block, too few to support an average, which would show up in the
+        analysis as an unreliable number rather than as an easy finger.
+
+        The floor scheduler keeps the weighting and only forces a pick when a
+        finger has fallen a whole trial behind its guaranteed rate.
+        """
+        eligible = sorted(set(self.pattern))
+        if len(eligible) < 2:
+            return eligible[0] if eligible else 0
+        if self._floor is None:
+            from ..scheduling import FloorWeightedScheduler
+            self._floor = FloorWeightedScheduler(
+                len(eligible), min_share=self.min_finger_share, rng=self.rng)
+        # Weights restricted to the eligible fingers, in their sorted order.
+        w = self.adapter.lane_weights()
+        sub = [w[f] if 0 <= f < len(w) else 0.0 for f in eligible]
+        return eligible[self._floor.next(sub)]
 
     def _fire(self, now: float) -> None:
         finger = self._pick_finger()

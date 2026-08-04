@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import logging
+import random
 import os
 import subprocess
 import sys
@@ -1030,6 +1031,38 @@ class GameEngine:
             ts.refresh()
         self.screen_obj = ts
 
+    def lanes_by_hand(self) -> dict:
+        """Which lane numbers belong to which hand. Lanes are global, so in
+        bilateral mode the right hand owns 0..3 and the left owns 4..7."""
+        n = int(self.cfg.get("fsr.num_sensors_per_hand", 4))
+        if self.hand_mode == "both":
+            return {"right": list(range(n)), "left": list(range(n, 2 * n))}
+        return {self.hand_mode: list(range(n))}
+
+    def build_balanced_sequence(self, n_trials: int) -> list[int]:
+        """A trial order that cues every finger the same number of times,
+        and in bilateral mode every hand too, without being predictable.
+
+        Every cross-finger comparison in the analysis assumes the fingers got
+        a comparable number of attempts. A finger cued half as often has an
+        average built from half the samples, so the difference between
+        fingers reports how often each was asked rather than anything about
+        the hand.
+
+        Returns an empty list when balancing is switched off, which leaves
+        the caller on its previous behaviour.
+        """
+        if not bool(self.cfg.get("game.balance_targets", True)):
+            return []
+        from .scheduling import BalancedScheduler, PairedBalancedScheduler
+        by_hand = self.lanes_by_hand()
+        rng = random.Random()
+        if len(by_hand) > 1:
+            sched = PairedBalancedScheduler(by_hand, rng)
+            return [sched.next()[1] for _ in range(max(0, n_trials))]
+        lanes = next(iter(by_hand.values()))
+        return BalancedScheduler(lanes, rng).sequence(max(0, n_trials))
+
     def show_calibration(self) -> None:
         """Open the guided calibration. Reachable from the menu before a
         session so a therapist never has to touch a config file."""
@@ -1037,6 +1070,12 @@ class GameEngine:
         cs = self._screens.get("calibration")
         if cs is None:
             return
+        # The screen is built once and reused, so without this the next
+        # participant opens straight onto the previous participant's review
+        # table, where the only buttons are Done and Back and there is no way
+        # to start a fresh measurement.
+        if hasattr(cs, "reset"):
+            cs.reset()
         self.screen_obj = cs
 
     def load_saved_calibration(self) -> bool:
@@ -1078,7 +1117,16 @@ class GameEngine:
         self.calibration_profile = profile
         on_d = profile.on_delta()
         off_d = profile.off_delta()
-        for det in (self.detectors or {}).values():
+        # A profile describes ONE hand's pads. Writing it onto both
+        # detectors would push the calibrated hand's thresholds onto the
+        # other hand's differently-placed sensors, where the same numbers
+        # mean a different fraction of that hand's travel. Each hand is
+        # calibrated in its own run.
+        hand = getattr(profile, "hand", "right") or "right"
+        det = (self.detectors or {}).get(hand)
+        targets = [det] if det is not None else list(
+            (self.detectors or {}).values())
+        for det in targets:
             cal = getattr(det, "cal", None)
             if cal is None:
                 continue
@@ -1086,10 +1134,41 @@ class GameEngine:
             for i in range(min(n, len(on_d))):
                 cal.on_delta[i] = on_d[i]
                 cal.off_delta[i] = off_d[i]
-            # Prime the baseline so the first block starts already
-            # tared rather than chasing the resting load.
-            for i in range(min(n, len(profile.resting))):
-                det.baseline[i] = float(profile.resting[i])
+        # Write through to the config as well. Detectors get rebuilt (mirror
+        # mode forces hand_mode to "both", _ensure_both_detectors fills in a
+        # missing side), and a rebuilt detector reads its thresholds from the
+        # config. Without this the calibration would silently revert while
+        # the session metadata still recorded it as active.
+        try:
+            fsr = self.cfg.data.setdefault("fsr", {})
+            fsr["on_delta"] = list(on_d)
+            fsr["off_delta"] = list(off_d)
+        except Exception as e:
+            log.warning("could not write calibration into config: %s", e)
+        self._prime_baselines()
+
+    def _prime_baselines(self) -> None:
+        """Seed each detector's baseline from the calibrated resting level.
+
+        This is what lets thresholds be set from the resting-to-press gap
+        instead of from absolute counts, because there is no window where a
+        hand simply resting on the pads sits above an untared baseline.
+        Called after apply_calibration and again after every block-start
+        reset, since reset() clears the baseline.
+        """
+        prof = getattr(self, "calibration_profile", None)
+        if prof is None or not getattr(prof, "resting", None):
+            return
+        hand = getattr(prof, "hand", "right") or "right"
+        det = (self.detectors or {}).get(hand)
+        if det is None:
+            return
+        try:
+            n = det.cal.num_sensors
+            for i in range(min(n, len(prof.resting))):
+                det.baseline[i] = float(prof.resting[i])
+        except (AttributeError, TypeError, ValueError) as e:
+            log.warning("could not prime baselines: %s", e)
 
     def show_diagnostics(self) -> None:
         # Settings always shows 8 sensors, so make sure both
@@ -1188,10 +1267,12 @@ class GameEngine:
         if cap is not None and pattern:
             from math import ceil
             repeat_count = max(1, ceil(cap / len(pattern)))
+        sequence = self.build_balanced_sequence(len(pattern) * repeat_count)
         self.mode = ClassicMode(
             engine=self,
             pattern=pattern,
             repeat_count=repeat_count,
+            sequence=sequence,
             trigger_interval_s=float(self.cfg.get("game.trigger_interval_s", 0.6)),
             timeout_s=float(self.cfg.get("game.timeout_s", 1.0)),
             early_window_s=float(self.cfg.get("game.early_window_s", 0.1)),
@@ -1224,6 +1305,11 @@ class GameEngine:
         self.mode = AdaptiveMode(
             engine=self,
             num_lanes=self.total_lanes,
+            # Floor under every finger so the weighting cannot starve a
+            # strong one down to a handful of trials. Weak fingers still get
+            # the most practice; every finger still ends up analysable.
+            min_finger_share=float(
+                self.cfg.get("adaptive.min_finger_share", 0.15)),
             total_trials=total_trials,
             block_size=int(self.cfg.get("adaptive.block_size", 4)),
             score_cfg=self.score_cfg,
@@ -1309,6 +1395,8 @@ class GameEngine:
         timeout = float(self.cfg.get("game.timeout_s", 1.0)) + 0.3
         self.mode = MirrorMode(
             engine=self,
+            min_finger_share=float(
+                self.cfg.get("adaptive.min_finger_share", 0.15)),
             pattern=finger_pattern,
             repeat_count=repeat_count,
             trigger_interval_s=trigger,
@@ -1485,6 +1573,15 @@ class GameEngine:
         # Reset detectors at block start so old baselines don't leak in.
         for d in self.detectors.values():
             d.reset()
+        # reset() clears the baseline to None, which would undo the priming
+        # apply_calibration did and hand back the settling window it exists
+        # to remove. Without this, a block that starts with the hand off the
+        # pads seeds the baseline from the empty device; the hand landing
+        # then reads as a rise, and until the EMA catches up (about 10 s at
+        # the shipped alpha) the effective trigger is the resting load lower
+        # than intended. The first trials of the block would run under a
+        # different threshold from the rest.
+        self._prime_baselines()
 
     def _open_loggers(self) -> None:
         data_dir = self.cfg.resolve_path(self.cfg.get("session.data_dir", "sessions"))

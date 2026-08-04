@@ -247,6 +247,24 @@ bilateral:
   per_hand_calibration: true
 
 game:
+  # EQUAL PRACTICE PER FINGER.
+  #
+  # Every cross-finger comparison in the analysis assumes each finger got a
+  # comparable number of attempts. A finger cued half as often has an average
+  # built from half the samples, so a difference between fingers ends up
+  # reporting how often each was asked rather than anything about the hand.
+  #
+  # With this on, classic, rhythm and bilateral give every finger the same
+  # number of cues, and bilateral gives both hands the same number too. The
+  # order stays unpredictable: a fixed order lets the patient anticipate the
+  # cue, which turns a reaction time into a measure of rhythm.
+  #
+  # Adaptive is different. It deliberately gives a struggling finger more
+  # practice, which is the point of the mode, so it keeps its weighting and
+  # only puts a floor under each finger (see adaptive.min_finger_share).
+  #
+  # Turn this off to go back to the old fixed pattern from game.pattern.
+  balance_targets: true
   mode: adaptive         # classic | adaptive | rhythm
   # Classic-mode pacing. 1.2 s between stim onsets + 1.0 s timeout means the
   # patient has up to ~2.2 s per trial, which is comfortable starting pace
@@ -300,6 +318,20 @@ game:
     a: 7           # left little
 
 adaptive:
+  # Smallest share of a block any single finger is guaranteed, whatever the
+  # weighting says. Adaptive mode is meant to give a struggling finger extra
+  # practice, so this is a floor rather than a flattening: the weak finger is
+  # still cued most, but no finger is starved to the point where its trials
+  # cannot support an average.
+  #
+  # Without it, a 60-trial block with one weak finger left the strongest with
+  # about 3 trials, roughly 5%. At 0.15 the same block gives roughly
+  # 9/11/16/24 with the weak finger still on top, and only about 4 of the 60
+  # picks are forced by the floor, so the weighting still drives the rest.
+  #
+  # Capped internally at 1/num_lanes (0.25 for one hand), which would be
+  # exact balance. Set 0 to restore the old unfloored behaviour.
+  min_finger_share: 0.15
   # Start slow so the patient gets confident hits before the system
   # speeds up. Lowered from 60 -> 30 BPM = 2.0 s between stimuli.
   # 60 BPM (1.0 s) was opening the first block above the comfortable

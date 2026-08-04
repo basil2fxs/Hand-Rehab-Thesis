@@ -35,7 +35,8 @@ class ClassicMode:
     def __init__(self, engine: "GameEngine",
                  pattern: list[int], repeat_count: int,
                  trigger_interval_s: float, timeout_s: float,
-                 early_window_s: float, score_cfg: ScoreConfig) -> None:
+                 early_window_s: float, score_cfg: ScoreConfig,
+                 sequence: list[int] | None = None) -> None:
         self.engine = engine
         self.pattern = pattern
         self.repeat_count = repeat_count
@@ -43,8 +44,19 @@ class ClassicMode:
         self.timeout = timeout_s
         self.early_window = early_window_s
         self.score_cfg = score_cfg
-        # Build full sequence by repeating the pattern.
-        self.sequence = (pattern * repeat_count)
+        # `sequence` is the balanced order the engine builds. The old
+        # behaviour, repeating a fixed pattern, is kept as the fallback for
+        # anyone who sets game.pattern explicitly.
+        #
+        # That old default was "2,1,3,2,4,1" repeated 8 times, which gave the
+        # index and middle 16 trials each against 8 for the ring and pinky,
+        # and ran the identical 6-trial loop every session. Half the trials
+        # for the outer fingers makes their reaction-time averages far
+        # noisier than the inner ones, and a loop that short is learnable in
+        # seconds, so the patient starts anticipating the cue instead of
+        # reacting to it. In bilateral mode it was worse: the pattern names
+        # only lanes 1 to 4, so the left hand was never cued at all.
+        self.sequence = list(sequence) if sequence else (pattern * repeat_count)
         self.idx = 0
         self.active: PendingTrial | None = None
         self.last_trigger_t = -1.0

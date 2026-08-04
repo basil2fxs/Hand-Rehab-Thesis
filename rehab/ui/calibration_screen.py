@@ -41,12 +41,34 @@ from ..hardware.calibration_profile import (
 
 log = logging.getLogger(__name__)
 
+
+def _percentile(values, q: float) -> float:
+    """Linear-interpolated percentile. Used instead of max() so a single
+    corrupt sample cannot define a press level."""
+    xs = sorted(values)
+    if not xs:
+        return 0.0
+    if len(xs) == 1:
+        return float(xs[0])
+    pos = q * (len(xs) - 1)
+    lo = int(pos)
+    hi = min(lo + 1, len(xs) - 1)
+    frac = pos - lo
+    return float(xs[lo] * (1 - frac) + xs[hi] * frac)
+
 # How long each measurement runs. The steady steps need long enough to
 # average out sensor noise without the patient's hand drifting; the
 # press steps need long enough to reach and hold a press but short
 # enough that a weak hand is not fatigued by the end of calibration.
 HOLD_SECONDS = 3.0
 PRESS_SECONDS = 3.0
+
+# The firmware holds each STIM for this long, set in the sketch as
+# STIM_ON_MS and not changeable from the host.
+FIRMWARE_STIM_MS = 150
+# How long a test buzz should actually run. Long enough that an impaired
+# hand registers it rather than reporting nothing felt.
+BUZZ_TEST_MS = 600
 
 # Ordered steps. Each press step names the finger it measures.
 STEP_INTRO = "intro"
@@ -70,6 +92,14 @@ class CalibrationScreen:
         self.finger_idx = 0          # which finger the press step is on
         self.buzz_channel = 1        # which STIM channel the buzz step is on
         self.profile = CalibrationProfile()
+        # Which hand is on the device right now. With two boards the sample
+        # vector is [right 0..3, left 4..7], so reading the first four values
+        # regardless of hand would measure the RIGHT board's idle sensors
+        # while the patient presses with their left. That produces a profile
+        # of near-zero gaps taken from a hand nobody touched, and applying it
+        # would set every threshold from the wrong pads. The hand therefore
+        # picks the slice, and each hand is calibrated in its own run.
+        self.hand = self._default_hand()
 
         # Sample collection state.
         self._collecting = False
@@ -85,6 +115,42 @@ class CalibrationScreen:
         self._saved_path = None
         self._rebuild_buttons()
 
+    # ---- which hand, and therefore which sensors ------------------------
+
+    def _default_hand(self) -> str:
+        try:
+            hm = str(self.engine.cfg.get("bilateral.hand", "right") or "right")
+        except Exception:
+            hm = "right"
+        # "both" is not a hand you can put on the pads. Start on the right and
+        # let the therapist switch, so a bilateral rig is calibrated twice.
+        return "left" if hm == "left" else "right"
+
+    def _sensor_offset(self) -> int:
+        """Where this hand's four sensors start in the sample vector."""
+        if self.hand != "left":
+            return 0
+        try:
+            n = int(self.engine.cfg.get("fsr.num_sensors_per_hand", 4))
+        except (TypeError, ValueError):
+            n = N_FINGERS
+        return n
+
+    def _toggle_hand(self) -> None:
+        self.hand = "left" if self.hand == "right" else "right"
+        self._begin()
+
+    def _both_hands_connected(self) -> bool:
+        """Only offer the hand switch when there is a second board to
+        switch to, so a single-hand rig does not show a control that
+        would silently measure nothing."""
+        try:
+            return int(self.engine.cfg.get("fsr.num_sensors_per_hand", 4)) * 2 <= \
+                len(getattr(self.engine, "_last_sample_values", ()) or ()) or \
+                str(self.engine.cfg.get("bilateral.hand", "")) == "both"
+        except Exception:
+            return False
+
     # ---- sample intake -------------------------------------------------
 
     def on_sample(self, t_perf: float, values) -> None:
@@ -94,7 +160,8 @@ class CalibrationScreen:
         thin slice of them."""
         if not self._collecting:
             return
-        vals = list(values[:N_FINGERS])
+        off = self._sensor_offset()
+        vals = list(values[off:off + N_FINGERS])
         while len(vals) < N_FINGERS:
             vals.append(0.0)
         self._buffer.append([float(v) for v in vals])
@@ -141,7 +208,13 @@ class CalibrationScreen:
             # measures it per trial), but the threshold for THIS finger
             # comes from THIS finger.
             i = self.finger_idx
-            self.profile.press[i] = max(cols[i])
+            # A high percentile, not the maximum. A single corrupt I2C frame
+            # reading 800 counts would otherwise become the press level, and
+            # a threshold derived from it is one the finger can never reach:
+            # every trial on that finger would score a miss. The 95th
+            # percentile of a held press sits on the plateau and ignores a
+            # lone spike.
+            self.profile.press[i] = _percentile(cols[i], 0.95)
             gap = self.profile.press[i] - self.profile.resting[i]
             if gap < MIN_USABLE_GAP:
                 self._status = (
@@ -155,7 +228,7 @@ class CalibrationScreen:
             if self.finger_idx >= N_FINGERS:
                 self.step = STEP_ALL
         elif self.step == STEP_ALL:
-            self.profile.press_all = [max(c) for c in cols]
+            self.profile.press_all = [_percentile(c, 0.95) for c in cols]
             self._status = "All-finger press recorded."
             self._status_colour = self.theme.success
             self.step = STEP_BUZZ
@@ -165,17 +238,28 @@ class CalibrationScreen:
     # ---- buzzer discovery ----------------------------------------------
 
     def _buzz_now(self) -> None:
-        """Pulse the channel under test. Sent long enough to be felt:
-        the firmware holds each STIM for 150 ms, so several back-to-back
-        commands read as one continuous buzz."""
+        """Pulse the channel under test, long enough to be felt.
+
+        triggerStimMotor sets an absolute deadline, stimOffAt = millis() +
+        STIM_ON_MS, so commands sent back to back inside one 150 ms window
+        all resolve to the same stop time and the motor runs ONCE. Repeats
+        have to be spaced to actually extend the buzz. A patient with
+        post-stroke sensory impairment can easily miss a single 150 ms
+        pulse, and a missed pulse gets recorded as "felt nothing", which
+        silently leaves that finger on the wrong channel.
+        """
         sent = 0
-        for _ in range(4):
+        repeats = max(1, int(round(BUZZ_TEST_MS / FIRMWARE_STIM_MS)))
+        for k in range(repeats):
             try:
                 if self.engine.source.send_command(f"STIM:{self.buzz_channel}"):
                     sent += 1
             except Exception as e:
                 log.warning("buzz test channel %d: %s", self.buzz_channel, e)
                 break
+            if k < repeats - 1:
+                # Re-arm just before the firmware would switch the motor off.
+                time.sleep((FIRMWARE_STIM_MS - 20) / 1000.0)
         if sent:
             self._status = (f"Channel {self.buzz_channel} pulsed. "
                             f"Which finger did you feel?")
@@ -202,13 +286,40 @@ class CalibrationScreen:
 
     def channel_map(self) -> list[int]:
         """Turn "channel C was felt on finger F" into "to buzz finger F,
-        send channel C". Any finger nothing was felt on keeps its
-        straight-through channel, which is the best guess available."""
-        cmap = list(range(1, N_FINGERS + 1))
-        for channel, finger in self._felt.items():
-            if 0 <= finger < N_FINGERS:
+        send channel C".
+
+        The result must be a permutation: every finger on its own channel.
+        Two things break that. A channel answered "felt nothing" leaves its
+        finger on a straight-through default that another channel may already
+        own, and the same finger named for two channels leaves the displaced
+        channel unassigned. Either way two fingers end up sharing a channel,
+        so cueing one buzzes the other and the patient presses the wrong
+        finger while the data records it as their error.
+
+        Confirmed answers win. Whatever is left over is filled from the
+        unused channels, so the map is always a permutation even when the
+        therapist could not identify every motor.
+        """
+        cmap: list[int | None] = [None] * N_FINGERS
+        # Later answers win for a given channel, but a finger already
+        # assigned is not overwritten: the first confirmed answer holds.
+        for channel, finger in sorted(self._felt.items()):
+            if 0 <= finger < N_FINGERS and cmap[finger] is None:
                 cmap[finger] = channel
-        return cmap
+        used = {c for c in cmap if c is not None}
+        spare = [c for c in range(1, N_FINGERS + 1) if c not in used]
+        for i in range(N_FINGERS):
+            if cmap[i] is None:
+                cmap[i] = spare.pop(0) if spare else (i + 1)
+        return [int(c) for c in cmap]
+
+    def unmapped_fingers(self) -> list[str]:
+        """Fingers whose channel was never confirmed by feel. Shown on the
+        review screen so a guessed mapping is never mistaken for a
+        measured one."""
+        confirmed = set(self._felt.values())
+        return [FINGER_NAMES[i] for i in range(N_FINGERS)
+                if i not in confirmed]
 
     # ---- saving ---------------------------------------------------------
 
@@ -216,7 +327,7 @@ class CalibrationScreen:
         cfg = self.engine.cfg
         self.profile.participant = getattr(
             self.engine.session, "participant", "") or ""
-        self.profile.hand = str(cfg.get("session.hand", "right") or "right")
+        self.profile.hand = self.hand
         try:
             self.profile.device_port = str(
                 getattr(self.engine.source, "port", "") or "")
@@ -330,8 +441,31 @@ class CalibrationScreen:
         self._status_colour = None
         self._rebuild_buttons()
 
+    def _abort_collection(self) -> None:
+        """Throw away a part-finished measurement. Without this, leaving
+        the screen mid-step leaves the timer running and the partial buffer
+        intact, and the next visit's first update() writes those samples in
+        as though the step had completed."""
+        self._collecting = False
+        self._collect_until = 0.0
+        self._buffer = []
+
+    def reset(self) -> None:
+        """Put the screen back to its opening state. Called every time
+        Calibrate is opened, so a second participant does not land on the
+        previous participant's review table with only a Done button."""
+        self._abort_collection()
+        self.hand = self._default_hand()
+        self._begin()
+        self.step = STEP_INTRO
+        self._rebuild_buttons()
+
     def _back(self) -> None:
-        self.engine.stop_all_motors()
+        self._abort_collection()
+        try:
+            self.engine.stop_all_motors()
+        except Exception:
+            pass
         self.engine.show_title()
 
     # ---- event / draw ---------------------------------------------------
@@ -434,8 +568,7 @@ class CalibrationScreen:
         th, ly = self.theme, self.layout
         det = None
         try:
-            det = self.engine.detectors.get(
-                str(self.engine.cfg.get("session.hand", "right") or "right"))
+            det = self.engine.detectors.get(self.hand)
         except Exception:
             det = None
         cx = ly.width // 2

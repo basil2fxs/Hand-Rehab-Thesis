@@ -125,12 +125,30 @@ _DIFFICULTY_MAX_GAP_S = {
 
 
 def _default_pattern(num_lanes: int) -> list[int]:
+    """One cycle of lanes. Every lane appears exactly once per cycle, so
+    over a song each finger gets the same number of notes.
+
+    The bilateral default used to be [0,4,1,5,2,6,3,7,1,5,2,6], which repeats
+    the middle and ring fingers within the cycle. That gave those two fingers
+    twice the notes of the index and pinky, about 16.7% each against 8.3%, on
+    every bundled track and difficulty. A per-finger comparison of rhythm
+    timing was therefore built from twice as many samples for the inner
+    fingers as the outer ones.
+
+    Kept deterministic. Rhythm mode shows the notes coming, so an
+    unpredictable order buys nothing here, and a fixed map means retrying a
+    block gives the patient the same chart.
+    """
     if num_lanes >= 8:
-        # Bilateral default: weave through both hands so the patient has to
-        # alternate between them. Right index, left index, right middle,
-        # left middle, ... keeps both hands engaged.
-        return [0, 4, 1, 5, 2, 6, 3, 7, 1, 5, 2, 6]
-    return [0, 1, 2, 3, 1, 2, 0, 3]
+        # Alternate hands so the patient keeps swapping between them, and
+        # walk the fingers in order so each hand sees each finger once.
+        n = num_lanes // 2
+        out: list[int] = []
+        for finger in range(n):
+            out.append(finger)          # right hand
+            out.append(n + finger)      # left hand
+        return out
+    return [0, 1, 2, 3, 1, 2, 0, 3] if num_lanes == 4 else list(range(num_lanes))
 
 
 def _assign_lanes(beat_times: Iterable[float],
