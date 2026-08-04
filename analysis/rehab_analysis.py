@@ -791,6 +791,14 @@ def report(pick="latest", root=None, export=True):
     sec_raw(folders, unit)
     ons = sec_onset(folders, trials, unit)
 
+    # Analyses that came out of reading the past Curtin theses.
+    sec_objective_one(trials)
+    sec_exclusions(trials)
+    sec_phase(trials)
+    sec_threshold_audit()
+    sec_dose(trials, on_task / 60 if on_task else 0)
+    sec_sampling_note(folders)
+
     summary = {"games": len(folders), "trials": int(len(trials)),
                "time_on_task_min": round(on_task / 60, 1)}
     if not rt.empty:
@@ -1147,3 +1155,371 @@ def sec_onset(folders, trials, unit):
         print("threshold, and it grows the harder someone presses, which is")
         print("why onset is the fairer measure to compare between people.")
     return ons
+
+
+# ---------------------------------------------------------------- health
+
+def check(root=None, verbose=True) -> bool:
+    """Confirm the notebook can actually run before anything else.
+
+    Checks the packages, that the sessions folder exists, and that there
+    is something in it. Prints what to do about anything missing rather
+    than failing halfway through an analysis.
+    """
+    ok = True
+    print("CHECKING SETUP")
+    print("-" * 52)
+
+    for mod, why, install in (
+        ("pandas", "reading the CSVs", "pandas"),
+        ("numpy", "the maths", "numpy"),
+        ("matplotlib", "the plots", "matplotlib"),
+        ("ipywidgets", "the dropdown picker", "ipywidgets"),
+    ):
+        try:
+            __import__(mod)
+            if verbose:
+                print(f"   ok    {mod:12} {why}")
+        except ImportError:
+            ok = False
+            print(f"   MISSING {mod:12} {why}")
+            print(f"           fix: pip install {install}")
+
+    folder = Path(root or SESSIONS_DIR)
+    if not folder.exists():
+        ok = False
+        print(f"\n   MISSING sessions folder at {folder.resolve()}")
+        print("           The notebook expects to sit in analysis/ next to")
+        print("           it. If it lives somewhere else, set SESSIONS_DIR:")
+        print("             import rehab_analysis as ra")
+        print("             ra.SESSIONS_DIR = Path('/full/path/to/sessions')")
+    else:
+        cat = build_catalogue(folder)
+        if cat.empty:
+            print(f"\n   sessions folder found at {folder.resolve()}")
+            print("   but there are no recordings in it yet.")
+            print("   Play a block in the game, then run this again.")
+            ok = False
+        else:
+            print(f"\n   ok    {len(cat)} game(s) found in {folder.resolve()}")
+            newest = cat.iloc[-1]
+            print(f"         newest: {newest['day']} {newest['time']} "
+                  f"{newest['who']} {newest['mode']}")
+
+    print("-" * 52)
+    print("   ready to go" if ok else "   fix the above, then run check() again")
+    return ok
+
+
+# ------------------------------------------------- thesis-facing analyses
+# Everything below came out of reading the past Curtin theses in this
+# project's lineage (Lim 2023, Palmer and Lew 2024, Nakayama, Lee,
+# Demouche and Dixon 2025) and checking what each of them measured that
+# this notebook did not.
+
+# SingleTact conversion. The manufacturer equation is
+#     Load(N) = (counts - baseline) / 512 * sensor rating
+# so on a 45 N part one count is about 0.0879 N.
+SENSOR_RATING_N = 45.0
+COUNTS_FULL_SCALE = 512.0
+N_PER_COUNT = SENSOR_RATING_N / COUNTS_FULL_SCALE
+
+# Healthy peak fingertip force measured by Demouche on the 2025 button
+# device, 7 participants. Different button geometry so not a direct
+# read-across, but the only same-lineage human data available.
+DEMOUCHE_2025 = {"index_mean": 3.11, "index_max": 6.56,
+                 "little_mean": 2.66, "little_max": 5.60}
+
+# Li et al. via Lew: enslavement, the share of force appearing on the
+# fingers that were not asked to move.
+ENSLAVEMENT_REF = {"unimpaired": 0.13, "stroke": 0.251}
+
+# Lang's clinical figure for repetitions per therapy session, the number
+# Basil's dose argument is built on.
+LANG_REPS_PER_SESSION = 32
+
+
+def counts_to_newtons(counts) -> float:
+    return float(counts) * N_PER_COUNT
+
+
+def sec_threshold_audit(cfg_on_delta=None):
+    """Put the configured press thresholds into newtons and check them
+    against the only healthy force data in this project's lineage.
+
+    Demouche measured healthy peak fingertip force on the 2025 button
+    device. If a trigger sits above what a healthy little finger can
+    produce, a weak finger cannot reach it either, and the game will
+    score a genuine attempt as a miss. That reads as a patient deficit
+    when it is really a threshold problem, so it is worth checking
+    before any participant session.
+    """
+    if cfg_on_delta is None:
+        try:
+            import sys as _s
+            _s.path.insert(0, str(Path(__file__).resolve().parents[1]))
+            from rehab.config import Config
+            cfg_on_delta = list(Config.load().get("fsr.on_delta"))
+        except Exception:
+            print("Could not read fsr.on_delta from the config.")
+            return None
+    print("\n" + "=" * 62)
+    print("PRESS THRESHOLDS IN NEWTONS")
+    print("=" * 62)
+    print(f"SingleTact {SENSOR_RATING_N:.0f} N part, "
+          f"{N_PER_COUNT:.4f} N per count\n")
+    rows = []
+    for i, d in enumerate(cfg_on_delta[:4]):
+        n = counts_to_newtons(d)
+        rows.append({"finger": FINGERS[i], "on_delta_counts": d,
+                     "trigger_N": round(n, 2)})
+    tbl = pd.DataFrame(rows)
+    _show(tbl)
+
+    little = tbl.iloc[3]["trigger_N"] if len(tbl) > 3 else None
+    fig, ax = plt.subplots(figsize=(8, 3.6))
+    ax.bar(tbl["finger"], tbl["trigger_N"],
+           color=[FINGER_COLOUR[f] for f in tbl["finger"]], width=.6)
+    ax.axhline(DEMOUCHE_2025["little_mean"], color="#dc2626", ls="--", lw=2,
+               label=f"healthy little finger mean "
+                     f"{DEMOUCHE_2025['little_mean']} N")
+    ax.axhline(DEMOUCHE_2025["little_max"], color="#dc2626", ls=":", lw=2,
+               label=f"healthy little finger max "
+                     f"{DEMOUCHE_2025['little_max']} N")
+    ax.set_ylabel("force needed to register a press (N)")
+    ax.set_title("Trigger thresholds against healthy force (Demouche 2025)")
+    ax.legend(frameon=False, fontsize=8)
+    _save(fig, "threshold_audit"); plt.show()
+
+    if little is not None and little > DEMOUCHE_2025["little_max"]:
+        print(f"\n   WARNING: the pinky trigger is {little:.2f} N, which is")
+        print(f"   above the highest little-finger force Demouche recorded")
+        print(f"   in healthy participants ({DEMOUCHE_2025['little_max']} N).")
+        print("   A weak little finger may be physically unable to reach it,")
+        print("   and every attempt would be logged as a miss. Re-measure")
+        print("   with tools/calibrate_rest_vs_press.py using the")
+        print("   participant's own hand before running a session, and look")
+        print("   at why that pad carries so much load at rest.")
+    return tbl
+
+
+def sec_objective_one(trials, window=32):
+    """Objective 1 as the progress report words it: a per-finger hit rate
+    between 65 and 80 percent over a 32-trial block.
+
+    The session-level rolling figure elsewhere can sit inside the band
+    while individual fingers sit well outside it, so this checks each
+    finger against its own trials, which is what the objective claims.
+    """
+    cued = trials[trials["mode"].isin(["classic", "adaptive", "mirror"])]
+    if "stim_delivered" in cued.columns:
+        cued = cued[cued["stim_delivered"] != False]
+    if cued.empty:
+        return None
+    print("\n" + "=" * 62)
+    print(f"OBJECTIVE 1: PER-FINGER HIT RATE OVER {window}-TRIAL WINDOWS")
+    print("=" * 62)
+    order = [f for f in FINGERS if f in cued["finger"].unique()]
+    fig, axes = plt.subplots(1, len(order), figsize=(3.4 * len(order), 3.2),
+                             sharey=True)
+    if len(order) == 1:
+        axes = [axes]
+    rows = []
+    for ax, f in zip(axes, order):
+        g = cued[cued["finger"] == f].sort_values("trial")
+        hit = (g["early_late"] != "Miss").astype(float)
+        roll = hit.rolling(window, min_periods=max(5, window // 4)).mean()
+        inband = roll.dropna().between(BAND_LO, BAND_HI)
+        first = None
+        for k, (idx, val) in enumerate(roll.dropna().items()):
+            if BAND_LO <= val <= BAND_HI:
+                first = k
+                break
+        rows.append({"finger": f, "trials": len(g),
+                     "hit_rate": round(hit.mean(), 3),
+                     "in_band_share": (round(inband.mean(), 3)
+                                       if len(inband) else np.nan),
+                     "windows_to_settle": first})
+        ax.axhspan(BAND_LO, BAND_HI, color="#16a34a", alpha=.15)
+        ax.axhline(WILSON, color="#ca8a04", ls=":", lw=1.5)
+        ax.plot(range(len(roll)), roll, lw=2, color=FINGER_COLOUR[f])
+        if first is not None:
+            ax.axvline(first, color="#0f172a", ls="--", lw=1,
+                       label="first in band")
+            ax.legend(frameon=False, fontsize=7)
+        ax.set_ylim(0, 1.02); ax.set_title(f); ax.set_xlabel("window")
+    axes[0].set_ylabel(f"hit rate (rolling {window})")
+    fig.suptitle("Objective 1 per finger, band 65 to 80 percent",
+                 fontsize=11, fontweight="bold", x=0.02, ha="left")
+    _save(fig, "objective_one"); plt.show()
+    tbl = pd.DataFrame(rows)
+    _show(tbl)
+    met = tbl["hit_rate"].between(BAND_LO, BAND_HI)
+    print(f"\nfingers whose overall hit rate met the band: "
+          f"{int(met.sum())} of {len(tbl)}")
+    if not met.all():
+        miss = ", ".join(tbl.loc[~met, "finger"])
+        print(f"outside the band: {miss}")
+        print("Worth reporting per finger rather than as one session number,")
+        print("since the objective is worded per finger.")
+    return tbl
+
+
+def sec_exclusions(trials):
+    """Flag trials that should not count, and show how much the headline
+    numbers move once they are removed.
+
+    Nakayama's search window let very fast presses count as genuine
+    reactions, which matters most in exactly the predictable condition
+    where anticipation is the confound. Anything under about 100 ms is
+    faster than a real cued reaction and is almost certainly a guess.
+    """
+    if trials.empty:
+        return None
+    print("\n" + "=" * 62)
+    print("TRIAL EXCLUSIONS")
+    print("=" * 62)
+    df = trials.copy()
+    rt = df["time_difference_ms"]
+    df["_no_cue"] = (df.get("stim_delivered") == False)
+    df["_anticipation"] = rt.notna() & (rt < 100) & (df["mode"] != "rhythm")
+    df["_excluded"] = df["_no_cue"] | df["_anticipation"]
+    n = len(df)
+    print(f"recorded trials            : {n}")
+    print(f"cue never delivered        : {int(df['_no_cue'].sum())}")
+    print(f"faster than 100 ms         : {int(df['_anticipation'].sum())}"
+          "   (anticipation, not a reaction)")
+    print(f"analysed                   : {int((~df['_excluded']).sum())}")
+
+    keep = df[~df["_excluded"]]
+    def headline(d):
+        c = d[d["mode"].isin(["classic", "adaptive", "mirror"])]
+        v = c.loc[c["early_late"] != "Miss", "time_difference_ms"].dropna()
+        return {"hit_rate": round((c["early_late"] != "Miss").mean(), 3)
+                             if len(c) else np.nan,
+                "mean_rt": round(v.mean(), 1) if len(v) else np.nan}
+    before, after = headline(df), headline(keep)
+    cmp_tbl = pd.DataFrame([{"": "with everything", **before},
+                            {"": "after exclusions", **after}])
+    _show(cmp_tbl)
+    if df["_excluded"].sum():
+        print("\nQuote the excluded counts in the thesis. A reader cannot")
+        print("judge a hit rate without knowing what was dropped.")
+    return df
+
+
+def sec_phase(trials):
+    """Pretest, main and aftertest comparison.
+
+    Nakayama and Lee's headline claim is that the gain is specific to the
+    trained sequence rather than general warm-up, and it rests entirely
+    on comparing the aftertest against the last trained block. The phase
+    column already exists in the CSV, so this is free once a protocol
+    has actually been run.
+    """
+    if "phase" not in trials.columns:
+        return None
+    ph = trials[trials["phase"].notna() & (trials["phase"] != "")]
+    if ph.empty or ph["phase"].nunique() < 2:
+        return None
+    print("\n" + "=" * 62)
+    print("PRETEST TO AFTERTEST")
+    print("=" * 62)
+    rows = []
+    for (who, phase), g in ph.groupby(["participant", "phase"]):
+        v = g.loc[g["early_late"] != "Miss", "time_difference_ms"].dropna()
+        rows.append({"participant": who, "phase": phase, "trials": len(g),
+                     "mean_rt": round(v.mean(), 1) if len(v) else np.nan,
+                     "rt_cv": (round(v.std()/v.mean(), 3)
+                               if len(v) and v.mean() else np.nan),
+                     "hit_rate": round((g["early_late"] != "Miss").mean(), 3)})
+    tbl = pd.DataFrame(rows)
+    _show(tbl)
+
+    fig, ax = plt.subplots(figsize=(8, 3.4))
+    order = [p for p in ("pretest", "main", "aftertest")
+             if p in tbl["phase"].unique()]
+    for who, g in tbl.groupby("participant"):
+        g = g.set_index("phase").reindex(order)
+        ax.plot(order, g["mean_rt"], "o-", lw=2, label=who)
+    ax.set_ylabel("mean reaction time (ms)")
+    ax.set_title("Reaction time by protocol phase")
+    ax.legend(frameon=False, fontsize=8)
+    _save(fig, "phase"); plt.show()
+
+    if {"pretest", "aftertest"} <= set(tbl["phase"]):
+        pre = tbl[tbl["phase"] == "pretest"]["mean_rt"].mean()
+        post = tbl[tbl["phase"] == "aftertest"]["mean_rt"].mean()
+        print(f"\npretest {pre:.0f} ms, aftertest {post:.0f} ms, "
+              f"change {post - pre:+.0f} ms")
+        print("Nakayama and Lee measured a baseline near 408 ms on this")
+        print("device lineage, with between-participant sd about 65 ms, so")
+        print("a difference smaller than roughly 100 ms is inside the noise")
+        print("at the sample sizes this project can reach.")
+    return tbl
+
+
+def sec_dose(trials, on_task_min):
+    """Repetitions against the clinical benchmark.
+
+    Lang's figure of about 32 repetitions in a typical therapy session is
+    the number the whole dose argument rests on, so it is worth plotting
+    rather than only citing.
+    """
+    reps = len(trials)
+    print("\n" + "=" * 62)
+    print("DOSE")
+    print("=" * 62)
+    print(f"repetitions this selection : {reps}")
+    print(f"typical clinical session   : {LANG_REPS_PER_SESSION} (Lang)")
+    if reps:
+        print(f"ratio                      : {reps/LANG_REPS_PER_SESSION:.1f}x")
+    if on_task_min > 0:
+        print(f"rate                       : {reps/on_task_min:.1f} per minute")
+        print(f"projected over 30 min      : "
+              f"{reps/on_task_min*30:.0f} repetitions")
+    fig, ax = plt.subplots(figsize=(7, 2.6))
+    ax.barh(["this selection", "typical clinical session"],
+            [reps, LANG_REPS_PER_SESSION],
+            color=["#16a34a", "#94a3b8"], height=.55)
+    ax.set_xlabel("repetitions")
+    ax.set_title("Repetitions against the clinical benchmark")
+    _save(fig, "dose"); plt.show()
+
+
+def sec_sampling_note(folders):
+    """How many logged samples actually carry new sensor data.
+
+    The SingleTact interface board updates its output register at about
+    50 to 120 Hz whatever rate it is polled at, so a 200 Hz log contains
+    repeated frames. That sets the real resolution of any onset time or
+    rate-of-force figure, and it belongs in the limitations section.
+    """
+    for folder in folders:
+        raw = load_raw(folder)
+        if raw is None:
+            continue
+        s = raw[raw["event"].isna() | (raw["event"] == "")]
+        if len(s) < 50:
+            continue
+        cols = [c for c in ("fsr1", "fsr2", "fsr3", "fsr4") if c in s.columns]
+        if not cols:
+            continue
+        same = (s[cols].diff().abs().sum(axis=1) == 0)
+        dup = float(same.mean())
+        dur = s["t_perf"].max() - s["t_perf"].min()
+        logged = len(s) / max(dur, 1e-9)
+        print("\n" + "=" * 62)
+        print("SAMPLING")
+        print("=" * 62)
+        print(f"logged rate            : {logged:.0f} Hz")
+        print(f"frames identical to the one before : {dup:.0%}")
+        print(f"effective new-data rate: {logged * (1 - dup):.0f} Hz")
+        print("\nThe sensor's interface board refreshes at roughly 50 to")
+        print("120 Hz regardless of how fast it is polled, so a share of")
+        print("the 200 Hz log is repeated frames. Onset times and rate of")
+        print("force development are quantised by that, which is worth")
+        print("stating rather than quoting timings to the millisecond.")
+        return {"logged_hz": logged, "duplicate_fraction": dup,
+                "effective_hz": logged * (1 - dup)}
+    return None
