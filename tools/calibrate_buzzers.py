@@ -116,6 +116,7 @@ def main() -> int:
         felt_nothing = []
         # channel_map[finger] = the STIM channel that reaches it.
         channel_map = list(range(1, N + 1))
+        felt_map: dict[int, int] = {}      # channel -> finger confirmed
         for i in range(N):
             input(f"  ready to buzz motor {i + 1} "
                   f"(should be {FINGERS[i].upper()}) - press Enter")
@@ -129,10 +130,12 @@ def main() -> int:
                 print(f"   -> nothing felt on motor {i + 1}")
             elif got == i:
                 channel_map[got] = i + 1
+                felt_map[i + 1] = got
                 print("   -> correct")
             else:
                 wrong.append((i, got))
                 channel_map[got] = i + 1
+                felt_map[i + 1] = got
                 print(f"   -> channel {i + 1} drives the "
                       f"{FINGERS[got]}, not the {FINGERS[i]}")
 
@@ -192,6 +195,22 @@ def main() -> int:
 
         print(f"\n  chosen cue length: {chosen} ms")
         print(f"  currently in use  : {cfg.get('motor.cue_ms')} ms")
+        # Force a permutation, same rule the in-app flow uses. Leaving a
+        # finger on a straight-through default that another channel already
+        # owns means two fingers share one motor: cueing one buzzes the
+        # other, and the patient presses the wrong finger while the data
+        # records it as their mistake.
+        seen: set[int] = set()
+        fixed: list[int | None] = [None] * N
+        for finger, ch in enumerate(channel_map):
+            if finger in {v for v in felt_map.values()} and ch not in seen:
+                fixed[finger] = ch
+                seen.add(ch)
+        spare = [c for c in range(1, N + 1) if c not in seen]
+        for i in range(N):
+            if fixed[i] is None:
+                fixed[i] = spare.pop(0) if spare else (i + 1)
+        channel_map = [int(c) for c in fixed]
         print(f"  channel map       : {channel_map}")
         print(f"  currently in use  : {cfg.get('motor.channel_map')}")
         a = input("\nWrite to config/user_settings.yaml? [y/N] ")

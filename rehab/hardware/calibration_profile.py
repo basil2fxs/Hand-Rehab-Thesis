@@ -77,6 +77,18 @@ MIN_DELTA_COUNTS = DETECTOR_HYSTERESIS + 2      # 12
 # instead of saving something that will not work.
 MIN_USABLE_GAP = 20
 
+# Highest fraction of a finger's own travel the trigger may sit at. Above
+# this the patient has to reproduce almost exactly the press they gave at
+# calibration, and any weaker attempt is scored a miss.
+#
+# This matters because the preload floor can demand more than the gap allows.
+# A pad carrying 30 counts at rest under a finger that only travels 28 needs
+# a floor of 34 to stay clear of a landing hand, which is above the whole
+# travel: the trigger would be unreachable and every trial on that finger
+# would be logged as a miss, reading as a paralysed finger. That is a pad
+# placement problem and it has to be refused rather than saved.
+MAX_TRIGGER_FRACTION = 0.70
+
 
 @dataclass
 class CalibrationProfile:
@@ -167,8 +179,16 @@ class CalibrationProfile:
     def usable(self) -> tuple[bool, list[str]]:
         """Whether this profile is good enough to run a session on."""
         problems = []
+        on = self.on_delta()
         for i in range(N_FINGERS):
             g = self.gap()[i]
+            if g > 0 and on[i] > g * MAX_TRIGGER_FRACTION:
+                problems.append(
+                    f"{FINGER_NAMES[i]}: trigger of {on[i]} counts is "
+                    f"{on[i] / g * 100:.0f}% of the {g:.0f} counts this finger "
+                    f"actually travels, because the pad carries "
+                    f"{self.preload()[i]:.0f} counts at rest. Reposition that "
+                    f"pad to reduce the resting load, then calibrate again")
             if g < MIN_USABLE_GAP:
                 problems.append(
                     f"{FINGER_NAMES[i]}: only {g:.0f} counts between resting "

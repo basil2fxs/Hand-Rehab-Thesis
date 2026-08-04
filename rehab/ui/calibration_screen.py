@@ -139,15 +139,23 @@ class CalibrationScreen:
     def _toggle_hand(self) -> None:
         self.hand = "left" if self.hand == "right" else "right"
         self._begin()
+        self.step = STEP_INTRO
+        self._status = f"Calibrating the {self.hand} hand."
+        self._status_colour = self.theme.foreground
+        self._rebuild_buttons()
 
-    def _both_hands_connected(self) -> bool:
-        """Only offer the hand switch when there is a second board to
-        switch to, so a single-hand rig does not show a control that
-        would silently measure nothing."""
+    def _both_hands_possible(self) -> bool:
+        """Whether there is a second hand to switch to.
+
+        A bilateral rig has to be calibrated once per hand, because a profile
+        describes one hand's pads. Without a way to switch, only the right
+        hand could ever be measured and every left-hand press in the study
+        would run on the right hand's thresholds.
+        """
         try:
-            return int(self.engine.cfg.get("fsr.num_sensors_per_hand", 4)) * 2 <= \
-                len(getattr(self.engine, "_last_sample_values", ()) or ()) or \
-                str(self.engine.cfg.get("bilateral.hand", "")) == "both"
+            if str(self.engine.cfg.get("bilateral.hand", "")) == "both":
+                return True
+            return len(self.engine.detectors or {}) > 1
         except Exception:
             return False
 
@@ -339,7 +347,10 @@ class CalibrationScreen:
         cmap = self.channel_map()
 
         try:
-            path = cfg.resolve_path("config/calibration/current.json")
+            # Per hand, so calibrating one hand never overwrites the
+            # other's profile on a bilateral rig.
+            path = cfg.resolve_path(
+                f"config/calibration/current_{self.profile.hand}.json")
             self.profile.save(path)
             # Keep a dated copy so a calibration is never silently lost
             # when the next one is taken.
@@ -355,15 +366,12 @@ class CalibrationScreen:
 
         # Push into the live config so the very next block uses it, and
         # persist so it survives a restart.
-        cfg.data.setdefault("fsr", {})["on_delta"] = on_d
-        cfg.data["fsr"]["off_delta"] = off_d
+        # Only the buzzer map goes into the shared config. The force
+        # thresholds are per hand and are held on the engine instead, because
+        # a config value is read by BOTH detectors when they are rebuilt.
         cfg.data.setdefault("motor", {})["channel_map"] = cmap
         try:
-            cfg.save_user_overrides({
-                "fsr.on_delta": on_d,
-                "fsr.off_delta": off_d,
-                "motor.channel_map": cmap,
-            })
+            cfg.save_user_overrides({"motor.channel_map": cmap})
         except Exception as e:
             log.warning("could not persist calibration to settings: %s", e)
 
@@ -390,7 +398,14 @@ class CalibrationScreen:
                 primary=primary, colour=colour))
 
         if self.step == STEP_INTRO:
-            add("Start calibration", self._begin, cx, 300, primary=True)
+            if self._both_hands_possible():
+                add("Start calibration", self._begin, cx - 180, 300,
+                    primary=True)
+                other = "left" if self.hand == "right" else "right"
+                add(f"Switch to {other} hand", self._toggle_hand, cx + 190,
+                    260)
+            else:
+                add("Start calibration", self._begin, cx, 300, primary=True)
         elif self.step in (STEP_EMPTY, STEP_RESTING, STEP_ALL):
             if not self._collecting:
                 add("Record", lambda: self._start_collecting(
@@ -477,9 +492,11 @@ class CalibrationScreen:
     def _instruction(self) -> tuple[str, str]:
         """Heading and body for the current step."""
         if self.step == STEP_INTRO:
-            return ("Before you start",
+            return (f"Before you start   ({self.hand} hand)",
                     "This measures what a press means on this device today. "
-                    "It takes about a minute and the patient stays seated.")
+                    "It takes about a minute and the patient stays seated. "
+                    "Each hand is measured separately, because the pads sit "
+                    "differently on each.")
         if self.step == STEP_EMPTY:
             return ("Step 1 of 5   Hand off the device",
                     "Take the hand right off, nothing touching any pad. "

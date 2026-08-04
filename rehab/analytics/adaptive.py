@@ -422,6 +422,9 @@ class AdaptiveEngine:
         left-versus-right comparison stops meaning anything.
         """
         r = rng or random.Random()
+        # Hand the caller's rng to the schedulers the first time they are
+        # built, so a block replayed with the same seed comes out the same.
+        self._rng = r
         floor = self._floor_scheduler()
         if floor is None:
             out: list[int] = []
@@ -451,13 +454,15 @@ class AdaptiveEngine:
             from ..game.scheduling import FloorWeightedScheduler
             per_hand = (self.num_lanes // 2 if self.hands_split
                         else self.num_lanes)
+            # The rng is passed in so a replayed block reproduces exactly.
             self._floor = FloorWeightedScheduler(
-                per_hand, min_share=self.min_finger_share)
+                per_hand, min_share=self.min_finger_share, rng=self._rng)
             if self.hands_split:
                 from ..game.scheduling import BalancedScheduler
                 self._floor_other = FloorWeightedScheduler(
-                    per_hand, min_share=self.min_finger_share)
-                self._hand_order = BalancedScheduler([0, 1], avoid_repeats=False)
+                    per_hand, min_share=self.min_finger_share, rng=self._rng)
+                self._hand_order = BalancedScheduler(
+                    [0, 1], rng=self._rng, avoid_repeats=False)
         return self._floor
 
     def _paired_sequence(self, length: int, weights, r) -> list[int]:

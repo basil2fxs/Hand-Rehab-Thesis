@@ -39,6 +39,9 @@ class GameEngine:
         # Bilateral: one detector per hand. Number of sensors per hand is fixed
         # at 4, so for "both" we have 8 total sensors split into two detectors.
         self.hand_mode = str(cfg.get("bilateral.hand", "right"))
+        # One calibration profile per hand. Kept here rather than in the
+        # config so the two hands never share a set of thresholds.
+        self.calibration_profiles: dict = {}
         self.detectors: dict[str, FSRDetector] = {}
         self._build_detectors()
 
@@ -1031,6 +1034,15 @@ class GameEngine:
             ts.refresh()
         self.screen_obj = ts
 
+    def _pattern_is_configured(self) -> bool:
+        """Whether game.pattern was actually set by someone, as opposed to
+        falling back to the built-in default."""
+        try:
+            game = (self.cfg.data or {}).get("game") or {}
+            return bool(game.get("pattern"))
+        except (AttributeError, TypeError):
+            return False
+
     def lanes_by_hand(self) -> dict:
         """Which lane numbers belong to which hand. Lanes are global, so in
         bilateral mode the right hand owns 0..3 and the left owns 4..7."""
@@ -1039,7 +1051,8 @@ class GameEngine:
             return {"right": list(range(n)), "left": list(range(n, 2 * n))}
         return {self.hand_mode: list(range(n))}
 
-    def build_balanced_sequence(self, n_trials: int) -> list[int]:
+    def build_balanced_sequence(self, n_trials: int,
+                                lanes: list[int] | None = None) -> list[int]:
         """A trial order that cues every finger the same number of times,
         and in bilateral mode every hand too, without being predictable.
 
@@ -1056,17 +1069,28 @@ class GameEngine:
             return []
         from .scheduling import BalancedScheduler, PairedBalancedScheduler
         by_hand = self.lanes_by_hand()
+        if lanes:
+            # Keep only the requested lanes, grouped by the hand they belong
+            # to, so a narrowed pattern still balances hands when it spans
+            # both.
+            want = set(lanes)
+            by_hand = {h: [ln for ln in v if ln in want]
+                       for h, v in by_hand.items()}
+            by_hand = {h: v for h, v in by_hand.items() if v}
+            if not by_hand:
+                return []
         rng = random.Random()
         if len(by_hand) > 1:
             sched = PairedBalancedScheduler(by_hand, rng)
             return [sched.next()[1] for _ in range(max(0, n_trials))]
-        lanes = next(iter(by_hand.values()))
-        return BalancedScheduler(lanes, rng).sequence(max(0, n_trials))
+        only = next(iter(by_hand.values()))
+        return BalancedScheduler(only, rng).sequence(max(0, n_trials))
 
     def show_calibration(self) -> None:
         """Open the guided calibration. Reachable from the menu before a
         session so a therapist never has to touch a config file."""
         self._ensure_both_detectors()
+        self.reapply_calibrations()
         cs = self._screens.get("calibration")
         if cs is None:
             return
@@ -1083,21 +1107,32 @@ class GameEngine:
         the device behaves the same across restarts without anyone
         having to redo it."""
         from ..hardware.calibration_profile import CalibrationProfile
-        try:
-            path = self.cfg.resolve_path("config/calibration/current.json")
-        except Exception:
-            return False
-        prof = CalibrationProfile.load(path)
-        if prof is None:
-            return False
-        ok, problems = prof.usable()
-        if not ok:
-            log.warning("saved calibration looks wrong, ignoring it: %s",
-                        "; ".join(problems))
-            return False
-        self.apply_calibration(prof)
-        log.info("loaded calibration taken %s", prof.created_at)
-        return True
+        loaded = False
+        for hand in ("right", "left"):
+            for name in (f"current_{hand}.json", "current.json"):
+                try:
+                    path = self.cfg.resolve_path(f"config/calibration/{name}")
+                except Exception:
+                    continue
+                prof = CalibrationProfile.load(path)
+                if prof is None:
+                    continue
+                # current.json is the older single-file layout; only take it
+                # for the hand it says it was measured on.
+                if name == "current.json" and \
+                        (getattr(prof, "hand", "right") or "right") != hand:
+                    continue
+                ok, problems = prof.usable()
+                if not ok:
+                    log.warning("saved %s calibration looks wrong, ignoring "
+                                "it: %s", hand, "; ".join(problems))
+                    break
+                self.apply_calibration(prof)
+                log.info("loaded %s calibration taken %s", hand,
+                         prof.created_at)
+                loaded = True
+                break
+        return loaded
 
     def apply_calibration(self, profile) -> None:
         """Take a freshly measured profile into use.
@@ -1115,6 +1150,8 @@ class GameEngine:
         writes down which calibration it ran under.
         """
         self.calibration_profile = profile
+        if not hasattr(self, "calibration_profiles"):
+            self.calibration_profiles = {}
         on_d = profile.on_delta()
         off_d = profile.off_delta()
         # A profile describes ONE hand's pads. Writing it onto both
@@ -1134,17 +1171,16 @@ class GameEngine:
             for i in range(min(n, len(on_d))):
                 cal.on_delta[i] = on_d[i]
                 cal.off_delta[i] = off_d[i]
-        # Write through to the config as well. Detectors get rebuilt (mirror
-        # mode forces hand_mode to "both", _ensure_both_detectors fills in a
-        # missing side), and a rebuilt detector reads its thresholds from the
-        # config. Without this the calibration would silently revert while
-        # the session metadata still recorded it as active.
-        try:
-            fsr = self.cfg.data.setdefault("fsr", {})
-            fsr["on_delta"] = list(on_d)
-            fsr["off_delta"] = list(off_d)
-        except Exception as e:
-            log.warning("could not write calibration into config: %s", e)
+        # Deliberately NOT written into cfg.fsr. Detectors get rebuilt from
+        # the config (mirror mode forces hand_mode to "both" and rebuilds
+        # both sides), so writing one hand's thresholds there would hand them
+        # to the other hand as well. On a bilateral rig that means the
+        # affected hand runs on the unaffected hand's numbers, which it
+        # cannot reach, and every one of its trials is scored a miss.
+        #
+        # Instead each hand's profile is kept here and re-applied after any
+        # rebuild, so the two hands stay independent.
+        self.calibration_profiles[hand] = profile
         self._prime_baselines()
 
     def _prime_baselines(self) -> None:
@@ -1156,19 +1192,31 @@ class GameEngine:
         Called after apply_calibration and again after every block-start
         reset, since reset() clears the baseline.
         """
-        prof = getattr(self, "calibration_profile", None)
-        if prof is None or not getattr(prof, "resting", None):
-            return
-        hand = getattr(prof, "hand", "right") or "right"
-        det = (self.detectors or {}).get(hand)
-        if det is None:
-            return
-        try:
-            n = det.cal.num_sensors
-            for i in range(min(n, len(prof.resting))):
-                det.baseline[i] = float(prof.resting[i])
-        except (AttributeError, TypeError, ValueError) as e:
-            log.warning("could not prime baselines: %s", e)
+        for hand, prof in (getattr(self, "calibration_profiles", None) or {}).items():
+            if prof is None or not getattr(prof, "resting", None):
+                continue
+            det = (self.detectors or {}).get(hand)
+            if det is None:
+                continue
+            try:
+                n = det.cal.num_sensors
+                for i in range(min(n, len(prof.resting))):
+                    det.baseline[i] = float(prof.resting[i])
+            except (AttributeError, TypeError, ValueError) as e:
+                log.warning("could not prime baselines for %s: %s", hand, e)
+
+    def reapply_calibrations(self) -> None:
+        """Push every stored per-hand profile back onto its detector.
+
+        Detectors are rebuilt from the config in several places, and a
+        rebuilt detector comes back with the config's default thresholds.
+        Calling this after any rebuild keeps each hand on the calibration
+        that was actually measured for it, without the two hands sharing a
+        single set of numbers through the config.
+        """
+        for prof in list((getattr(self, "calibration_profiles", None) or {}).values()):
+            if prof is not None:
+                self.apply_calibration(prof)
 
     def show_diagnostics(self) -> None:
         # Settings always shows 8 sensors, so make sure both
@@ -1267,7 +1315,19 @@ class GameEngine:
         if cap is not None and pattern:
             from math import ceil
             repeat_count = max(1, ceil(cap / len(pattern)))
-        sequence = self.build_balanced_sequence(len(pattern) * repeat_count)
+        # Restrict to the pattern's fingers ONLY when someone actually set
+        # game.pattern. A narrowed pattern is a deliberate drill (index and
+        # middle only, say) and balancing over every lane would quietly put
+        # back the fingers it excluded.
+        #
+        # The fallback "2,1,3,2,4,1" is not a choice, it is a leftover from
+        # the old fixed-order code. Honouring it would name lanes 1 to 4
+        # only, which in bilateral mode is the right hand, and the left hand
+        # would never be cued: exactly the bug the balancing exists to fix.
+        explicit = self._pattern_is_configured()
+        sequence = self.build_balanced_sequence(
+            len(pattern) * repeat_count,
+            lanes=pattern if explicit else None)
         self.mode = ClassicMode(
             engine=self,
             pattern=pattern,

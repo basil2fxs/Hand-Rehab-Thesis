@@ -663,6 +663,7 @@ class TestEngineApplicationFixes:
 
         e = GameEngine.__new__(GameEngine)
         e.cfg = Cfg()
+        e.calibration_profiles = {}
         e.detectors = {h: FSRDetector(Calibration(num_sensors=4)) for h in hands}
         return e
 
@@ -681,19 +682,71 @@ class TestEngineApplicationFixes:
         assert list(e.detectors["left"].cal.on_delta) == before, \
             "left hand was overwritten by the right hand's calibration"
 
-    def test_calibration_is_written_into_the_config(self):
-        """Detectors get rebuilt (mirror forces both hands,
-        _ensure_both_detectors fills a missing side) and a rebuilt
-        detector reads its thresholds from the config. Without a
-        write-through the calibration silently reverted while the session
-        metadata still recorded it as active."""
+    def test_thresholds_are_never_written_into_the_shared_config(self):
+        """A config value is read by BOTH detectors when they are rebuilt,
+        so writing one hand's thresholds there hands them to the other
+        hand. On a bilateral rig the affected hand would then run on the
+        unaffected hand's numbers, which it cannot reach, and every one of
+        its trials would score a miss."""
         from rehab.game.engine import GameEngine
         e = self._engine()
         prof = make_profile()
         prof.hand = "right"
         GameEngine.apply_calibration(e, prof)
-        assert e.cfg.data["fsr"]["on_delta"] == prof.on_delta()
-        assert e.cfg.data["fsr"]["off_delta"] == prof.off_delta()
+        assert "fsr" not in e.cfg.data, (
+            "thresholds leaked into the shared config")
+
+    def test_calibration_survives_a_detector_rebuild(self):
+        """Detectors get rebuilt from config in several places (mirror
+        forces both hands, _ensure_both_detectors fills a missing side).
+        The calibration has to be re-applied or it silently reverts while
+        the session metadata still records it as active."""
+        from rehab.game.engine import GameEngine
+        from rehab.hardware.fsr_detector import Calibration, FSRDetector
+        e = self._engine()
+        prof = make_profile()
+        prof.hand = "right"
+        GameEngine.apply_calibration(e, prof)
+        # Rebuild, as mirror mode does.
+        e.detectors = {h: FSRDetector(Calibration(num_sensors=4))
+                       for h in ("right", "left")}
+        GameEngine.reapply_calibrations(e)
+        assert list(e.detectors["right"].cal.on_delta) == prof.on_delta()
+
+    def test_two_hands_keep_separate_thresholds(self):
+        from rehab.game.engine import GameEngine
+        from rehab.hardware.fsr_detector import Calibration, FSRDetector
+        e = self._engine()
+        right = make_profile(); right.hand = "right"
+        left = CalibrationProfile(
+            empty=[245.0] * 4, empty_noise=[1.1] * 4,
+            resting=[247.0] * 4, press=[247.0 + g for g in (70, 60, 55, 80)])
+        left.hand = "left"
+        GameEngine.apply_calibration(e, right)
+        GameEngine.apply_calibration(e, left)
+        e.detectors = {h: FSRDetector(Calibration(num_sensors=4))
+                       for h in ("right", "left")}
+        GameEngine.reapply_calibrations(e)
+        assert list(e.detectors["right"].cal.on_delta) == right.on_delta()
+        assert list(e.detectors["left"].cal.on_delta) == left.on_delta()
+        assert right.on_delta() != left.on_delta()
+
+    def test_both_hands_are_primed(self):
+        from rehab.game.engine import GameEngine
+        e = self._engine()
+        for hand, gaps in (("right", (49, 32, 30, 115)),
+                           ("left", (70, 60, 55, 80))):
+            pr = CalibrationProfile(
+                empty=[245.0] * 4, empty_noise=[1.1] * 4,
+                resting=[247.0] * 4,
+                press=[247.0 + g for g in gaps])
+            pr.hand = hand
+            GameEngine.apply_calibration(e, pr)
+        for d in e.detectors.values():
+            d.reset()
+        GameEngine._prime_baselines(e)
+        assert e.detectors["right"].baseline[0] is not None
+        assert e.detectors["left"].baseline[0] is not None
 
     def test_baselines_are_primed_from_the_calibrated_resting_level(self):
         from rehab.game.engine import GameEngine
@@ -735,3 +788,36 @@ class TestEngineApplicationFixes:
         prof.hand = "left"
         GameEngine.apply_calibration(e, prof)
         GameEngine._prime_baselines(e)
+
+
+class TestUnreachableTrigger:
+    """A pad carrying more load at rest than the finger can add makes the
+    trigger unreachable. Every trial on that finger is then a miss, which
+    reads as a paralysed finger rather than a placement fault."""
+
+    def _profile(self, gaps, preloads):
+        return CalibrationProfile(
+            empty=[245.0] * 4, empty_noise=[1.1] * 4,
+            resting=[245.0 + p for p in preloads],
+            press=[245.0 + p + g for p, g in zip(preloads, gaps)])
+
+    def test_trigger_above_the_gap_is_refused(self):
+        p = self._profile([49, 32, 30, 28], [2.5, 8.9, 11.5, 30.7])
+        ok, problems = p.usable()
+        assert not ok
+        assert any("pinky" in s for s in problems)
+
+    def test_the_real_device_still_calibrates(self):
+        p = self._profile([49, 32, 30, 115], [2.5, 8.9, 11.5, 30.7])
+        assert p.usable()[0] is True
+        assert p.on_delta() == [20, 13, 15, 46]
+
+    def test_no_usable_profile_has_an_unreachable_trigger(self):
+        from rehab.hardware.calibration_profile import MAX_TRIGGER_FRACTION
+        for gap in range(20, 160, 4):
+            for preload in (0.0, 5.0, 15.0, 30.7, 60.0):
+                p = self._profile([gap] * 4, [preload] * 4)
+                if not p.usable()[0]:
+                    continue
+                for i in range(N_FINGERS):
+                    assert p.on_delta()[i] <= p.gap()[i] * MAX_TRIGGER_FRACTION

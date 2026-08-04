@@ -270,3 +270,71 @@ class TestMirrorFloor:
             score_cfg=ScoreConfig(), adaptive_cfg=AdaptiveConfig(),
             start_bpm=24.0, seed=1, min_finger_share=0.15)
         assert {m._pick_finger() for _ in range(20)} == {2}
+
+
+class TestPatternRespect:
+    """A narrowed game.pattern is a deliberate drill and must be honoured.
+    The built-in fallback is not a choice and must not be, because it names
+    only lanes 1 to 4 and honouring it in bilateral mode would leave the
+    left hand permanently uncued."""
+
+    def _engine(self, hand_mode="right", pattern=None):
+        from rehab.game.engine import GameEngine
+
+        class Cfg:
+            def __init__(self):
+                self.data = {"game": {}} if pattern is None else \
+                    {"game": {"pattern": pattern}}
+
+            def get(self, key, default=None):
+                if key == "fsr.num_sensors_per_hand":
+                    return N
+                if key == "game.balance_targets":
+                    return True
+                if key == "game.pattern":
+                    return pattern or default
+                return default
+
+        e = GameEngine.__new__(GameEngine)
+        e.cfg = Cfg()
+        e.hand_mode = hand_mode
+        return e
+
+    def test_fallback_pattern_is_not_treated_as_a_choice(self):
+        e = self._engine()
+        assert e._pattern_is_configured() is False
+
+    def test_explicit_pattern_is_treated_as_a_choice(self):
+        e = self._engine(pattern="1,2")
+        assert e._pattern_is_configured() is True
+
+    def test_default_bilateral_still_cues_both_hands(self):
+        """The regression this guards: honouring the fallback pattern
+        restricted bilateral to lanes 0 to 3, so the left hand was never
+        cued, which is the original bug."""
+        e = self._engine("both")
+        pat = e._parse_pattern("2,1,3,2,4,1", 8)
+        seq = e.build_balanced_sequence(
+            48, lanes=pat if e._pattern_is_configured() else None)
+        assert any(x >= N for x in seq), "left hand never cued"
+        c = Counter(seq)
+        assert set(c) == set(range(8))
+
+    def test_explicit_narrow_pattern_excludes_the_others(self):
+        e = self._engine("right", pattern="1,2")
+        pat = e._parse_pattern("1,2", 4)
+        seq = e.build_balanced_sequence(
+            32, lanes=pat if e._pattern_is_configured() else None)
+        assert set(seq) == {0, 1}
+        c = Counter(seq)
+        assert max(c.values()) - min(c.values()) <= 1
+
+    def test_explicit_pattern_spanning_both_hands_balances_hands(self):
+        e = self._engine("both", pattern="1,2,5,6")
+        pat = e._parse_pattern("1,2,5,6", 8)
+        seq = e.build_balanced_sequence(
+            48, lanes=pat if e._pattern_is_configured() else None)
+        assert set(seq) == {0, 1, 4, 5}
+        right = sum(1 for x in seq if x < N)
+        left = sum(1 for x in seq if x >= N)
+        assert abs(right - left) <= 1
