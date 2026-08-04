@@ -46,6 +46,13 @@ class GameEngine:
             age=str(cfg.get("session.age") or ""),
             hand=self.hand_mode,
             source_name=getattr(source, "name", "?"),
+            # Participant details, set in user_settings.yaml before the
+            # session. Blank for an ordinary test run.
+            affected_side=str(cfg.get("session.affected_side", "") or ""),
+            dominant_hand=str(cfg.get("session.dominant_hand", "") or ""),
+            impairment_score=str(cfg.get("session.impairment_score", "") or ""),
+            hand_length_mm=str(cfg.get("session.hand_length_mm", "") or ""),
+            hand_breadth_mm=str(cfg.get("session.hand_breadth_mm", "") or ""),
             config_snapshot=copy.deepcopy(cfg.data),
         )
         # Fallbacks here MUST match config/default.yaml + ScoreConfig defaults.
@@ -195,6 +202,8 @@ class GameEngine:
         # summary can flag a session where cues silently stopped.
         self._last_stim_delivered: bool | None = None
         self._block_stim_failures = 0
+        # Cue modality for the current trial, logged per row.
+        self._last_cue_mode = "both"
         # Pause bookkeeping for the block summary: how many times the
         # block was paused and the total time spent paused, so an
         # analyst can subtract it from the block duration.
@@ -427,6 +436,8 @@ class GameEngine:
             self._last_stim_delivered = None
         if not hasattr(self, "_block_stim_failures"):
             self._block_stim_failures = 0
+        if not hasattr(self, "_last_cue_mode"):
+            self._last_cue_mode = "both"
         if not hasattr(self, "_block_pause_count"):
             self._block_pause_count = 0
         if not hasattr(self, "_block_paused_s"):
@@ -2371,6 +2382,14 @@ class GameEngine:
         # lane numbering is global (0..7) and each strip's enumerate
         # index matches that.
         targets = set(int(l) for l in lanes)
+        # Which cue the patient gets. "visual" suppresses the buzzer,
+        # "vibration" suppresses the on-screen reveal so the finger has
+        # to be identified by touch alone.
+        cue_mode = str(self.cfg.get("game_cue.mode", "both") or "both").lower()
+        if cue_mode not in ("both", "visual", "vibration"):
+            cue_mode = "both"
+        self._last_cue_mode = cue_mode
+        show_on_screen = cue_mode in ("both", "visual")
         # Loudness variation + miss-force window both key off the stimulus.
         # Bump the trial counter, raise the audio gain on a loud trial (so
         # the cue played just below AND the feedback chime at log_trial are
@@ -2411,7 +2430,11 @@ class GameEngine:
                         # Target lanes get the active fill + timing
                         # bar so the patient sees which fingers to
                         # press. Everyone else clears.
-                        ls.active = (i in targets)
+                        # In vibration-only the tile must not reveal
+                        # which finger to press, but the timing bar
+                        # still runs so the patient can see how long
+                        # they have left.
+                        ls.active = (i in targets) and show_on_screen
                         if i in targets:
                             ls.arm_timing(t_perf, timeout_s)
                         else:
@@ -2427,7 +2450,7 @@ class GameEngine:
         # the trials would look like ordinary misses instead of a
         # hardware failure. None = motors disabled for this session.
         self._last_stim_delivered = None
-        if self.cfg.get("motor.enabled", True):
+        if self.cfg.get("motor.enabled", True) and cue_mode != "visual":
             # Buzz the TARGET finger so the patient feels which one to
             # press. One STIM command per target lane; the Arduino
             # numbers motors 1..N matching the global lane.
@@ -2627,6 +2650,7 @@ class GameEngine:
                 if self._last_stim_timeout_ms is not None else "")
             row["force_window_sum"] = fw_sum_str
             row["force_window_peaks"] = fw_peaks_str
+            row["cue_mode"] = getattr(self, "_last_cue_mode", "both")
             sd = getattr(self, "_last_stim_delivered", None)
             row["stim_delivered"] = ("" if sd is None
                                       else ("TRUE" if sd else "FALSE"))
@@ -2855,6 +2879,7 @@ class GameEngine:
                 fw_sum, fw_peaks)
             row["force_window_sum"] = fw_sum_str
             row["force_window_peaks"] = fw_peaks_str
+            row["cue_mode"] = getattr(self, "_last_cue_mode", "both")
             sd = getattr(self, "_last_stim_delivered", None)
             row["stim_delivered"] = ("" if sd is None
                                       else ("TRUE" if sd else "FALSE"))

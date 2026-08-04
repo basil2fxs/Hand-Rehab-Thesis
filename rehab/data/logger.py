@@ -85,6 +85,11 @@ TRIAL_COLUMNS = [
     # prove the patient received a cue: verify the motors physically
     # with the Settings buzzer test before a session.
     "stim_delivered",
+    # Which cue the patient got on this trial: "both", "visual" or
+    # "vibration". Set in Settings and constant for a block, but logged
+    # per trial so blocks run under different settings can be pooled and
+    # compared without going back to the config snapshot.
+    "cue_mode",
 ]
 
 # Raw schema gains fsr5-fsr8 so the bilateral case fits without a new file format.

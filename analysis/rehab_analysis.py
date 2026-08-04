@@ -592,8 +592,6 @@ def sec_individuation(trials):
     _save(fig, "individuation"); plt.show()
     _show(ind.groupby("finger")["individuation"]
              .agg(n="count", mean="mean", sd="std").reindex(order).round(3))
-    print("A finger well below the others is losing the most force to its "
-          "neighbours,\nand is the obvious training target.")
     return ind
 
 
@@ -748,8 +746,7 @@ def sec_raw(folders, unit):
             ax.set_title("Average shape of a press")
             ax.legend(frameon=False, fontsize=8)
             _save(fig, "force_waveform"); plt.show()
-            print("The slope just after the cue is the rate of force development.")
-
+    
 
 # ---------------------------------------------------------------- entry
 
@@ -796,8 +793,10 @@ def report(pick="latest", root=None, export=True):
     sec_exclusions(trials)
     sec_phase(trials)
     sec_threshold_audit()
+    sec_cue_modality(trials)
     sec_dose(trials, on_task / 60 if on_task else 0)
     sec_sampling_note(folders)
+    sec_participant_progress(root, cat)
 
     summary = {"games": len(folders), "trials": int(len(trials)),
                "time_on_task_min": round(on_task / 60, 1)}
@@ -1102,8 +1101,6 @@ def sec_onset(folders, trials, unit):
     print("\n" + "=" * 62)
     print("MOVEMENT ONSET AND RATE OF FORCE DEVELOPMENT")
     print("=" * 62)
-    print("Onset is detected from the force trace itself rather than from a")
-    print("fixed threshold, following the method in Nakayama's 2025 thesis.")
     v = ons["onset_rt_ms"]
     print(f"\nonset reaction time : n {len(v)}   mean {v.mean():.1f} ms   "
           f"median {v.median():.1f} ms   sd {v.std():.1f} ms")
@@ -1151,9 +1148,6 @@ def sec_onset(folders, trials, unit):
     if len(thr):
         gap = thr.mean() - v.mean()
         print(f"\nthreshold crossing sits {gap:+.0f} ms after onset on average.")
-        print("That gap is the part of the press spent climbing to the")
-        print("threshold, and it grows the harder someone presses, which is")
-        print("why onset is the fairer measure to compare between people.")
     return ons
 
 
@@ -1360,8 +1354,6 @@ def sec_objective_one(trials, window=32):
     if not met.all():
         miss = ", ".join(tbl.loc[~met, "finger"])
         print(f"outside the band: {miss}")
-        print("Worth reporting per finger rather than as one session number,")
-        print("since the objective is worded per finger.")
     return tbl
 
 
@@ -1402,9 +1394,6 @@ def sec_exclusions(trials):
     cmp_tbl = pd.DataFrame([{"": "with everything", **before},
                             {"": "after exclusions", **after}])
     _show(cmp_tbl)
-    if df["_excluded"].sum():
-        print("\nQuote the excluded counts in the thesis. A reader cannot")
-        print("judge a hit rate without knowing what was dropped.")
     return df
 
 
@@ -1452,10 +1441,6 @@ def sec_phase(trials):
         post = tbl[tbl["phase"] == "aftertest"]["mean_rt"].mean()
         print(f"\npretest {pre:.0f} ms, aftertest {post:.0f} ms, "
               f"change {post - pre:+.0f} ms")
-        print("Nakayama and Lee measured a baseline near 408 ms on this")
-        print("device lineage, with between-participant sd about 65 ms, so")
-        print("a difference smaller than roughly 100 ms is inside the noise")
-        print("at the sample sizes this project can reach.")
     return tbl
 
 
@@ -1515,11 +1500,179 @@ def sec_sampling_note(folders):
         print(f"logged rate            : {logged:.0f} Hz")
         print(f"frames identical to the one before : {dup:.0%}")
         print(f"effective new-data rate: {logged * (1 - dup):.0f} Hz")
-        print("\nThe sensor's interface board refreshes at roughly 50 to")
-        print("120 Hz regardless of how fast it is polled, so a share of")
-        print("the 200 Hz log is repeated frames. Onset times and rate of")
-        print("force development are quantised by that, which is worth")
-        print("stating rather than quoting timings to the millisecond.")
         return {"logged_hz": logged, "duplicate_fraction": dup,
                 "effective_hz": logged * (1 - dup)}
     return None
+
+
+def sec_cue_modality(trials):
+    """Compare visual only, vibration only and both.
+
+    Palmer (2024) found reaction time differed between an LED-only cue
+    and all cues together, and the 2023 device existed to test exactly
+    that. Vibration-only is the condition worth reporting: the screen
+    does not say which finger, so it has to be found by touch, which
+    isolates the tactile channel. Expect it to be slower and less
+    accurate, and that difference is the result.
+    """
+    if "cue_mode" not in trials.columns:
+        return None
+    cm = trials[trials["cue_mode"].notna() & (trials["cue_mode"] != "")]
+    if cm.empty or cm["cue_mode"].nunique() < 2:
+        if not cm.empty:
+            only = cm["cue_mode"].iloc[0]
+            print("\n" + "=" * 62)
+            print("CUE MODALITY")
+            print("=" * 62)
+            print(f"Every trial here used the '{only}' cue, so there is")
+            print("nothing to compare. Run blocks under at least two")
+            print("settings (Settings screen, CUE pill) to get the")
+            print("comparison Palmer's result rests on.")
+        return None
+
+    print("\n" + "=" * 62)
+    print("CUE MODALITY: VISUAL vs VIBRATION vs BOTH")
+    print("=" * 62)
+    rows = []
+    for mode, g in cm.groupby("cue_mode"):
+        v = g.loc[g["early_late"] != "Miss", "time_difference_ms"].dropna()
+        rows.append({
+            "cue": mode, "trials": len(g),
+            "hit_rate": round((g["early_late"] != "Miss").mean(), 3),
+            "mean_rt": round(v.mean(), 1) if len(v) else np.nan,
+            "median_rt": round(v.median(), 1) if len(v) else np.nan,
+            "rt_cv": (round(v.std() / v.mean(), 3)
+                      if len(v) and v.mean() else np.nan),
+            "wrong_finger": int((g["had_incorrect_press"] == True).sum()),
+            "mean_force": (round(g["peak_force_n"].mean(), 1)
+                           if g["peak_force_n"].notna().any() else np.nan),
+        })
+    tbl = pd.DataFrame(rows).sort_values("cue").reset_index(drop=True)
+    _show(tbl)
+
+    colours = {"both": "#2563eb", "visual": "#ca8a04",
+               "vibration": "#a855f7"}
+    cols = [colours.get(c, "#94a3b8") for c in tbl["cue"]]
+    fig, ax = plt.subplots(1, 3, figsize=(14, 3.6))
+    x = np.arange(len(tbl))
+    ax[0].bar(x, tbl["mean_rt"], color=cols, width=.6)
+    ax[0].set_ylabel("mean reaction time (ms)")
+    ax[0].set_title("Speed by cue")
+    ax[1].bar(x, tbl["hit_rate"], color=cols, width=.6)
+    ax[1].axhspan(BAND_LO, BAND_HI, color="#16a34a", alpha=.15)
+    ax[1].set_ylim(0, 1.02); ax[1].set_ylabel("hit rate")
+    ax[1].set_title("Accuracy by cue")
+    ax[2].bar(x, tbl["wrong_finger"], color=cols, width=.6)
+    ax[2].set_ylabel("trials with a wrong finger")
+    ax[2].set_title("Wrong-finger errors by cue")
+    for a in ax:
+        a.set_xticks(x); a.set_xticklabels(tbl["cue"])
+    _save(fig, "cue_modality"); plt.show()
+
+    # Per-finger RT by cue, since a tactile-only cue may hurt the weaker
+    # fingers more than the strong ones.
+    order = [f for f in FINGERS if f in cm["finger"].unique()]
+    if len(order) > 1:
+        fig, ax = plt.subplots(figsize=(9, 3.4))
+        w = 0.8 / max(1, len(tbl))
+        for i, mode in enumerate(tbl["cue"]):
+            vals = [cm[(cm["cue_mode"] == mode) & (cm["finger"] == f)]
+                    ["time_difference_ms"].mean() for f in order]
+            ax.bar(np.arange(len(order)) + (i - (len(tbl)-1)/2) * w, vals, w,
+                   label=mode, color=colours.get(mode, "#94a3b8"))
+        ax.set_xticks(np.arange(len(order))); ax.set_xticklabels(order)
+        ax.set_ylabel("mean reaction time (ms)")
+        ax.set_title("Reaction time per finger, by cue")
+        ax.legend(frameon=False, fontsize=8)
+        _save(fig, "cue_modality_per_finger"); plt.show()
+
+    if {"visual", "vibration"} <= set(tbl["cue"]):
+        vis = tbl[tbl["cue"] == "visual"].iloc[0]
+        vib = tbl[tbl["cue"] == "vibration"].iloc[0]
+        d_rt = vib["mean_rt"] - vis["mean_rt"]
+        d_hit = vib["hit_rate"] - vis["hit_rate"]
+        print(f"\nvibration minus visual: {d_rt:+.0f} ms, "
+              f"hit rate {d_hit:+.3f}")
+    return tbl
+
+
+def sec_participant_progress(root=None, cat=None):
+    """Every session a participant has done, in order, so progress
+    across the whole programme is visible rather than one block at a
+    time.
+
+    This is the view that answers whether the training is working. A
+    single block says how someone did that day; the trend across blocks
+    is the outcome measure.
+    """
+    cat = build_catalogue(root) if cat is None else cat
+    if cat.empty:
+        return None
+    people = [p for p in cat["who"].unique() if str(p) not in ("NA", "")]
+    if not people:
+        return None
+
+    print("\n" + "=" * 62)
+    print("PROGRESS PER PARTICIPANT")
+    print("=" * 62)
+
+    rows = []
+    for who in people:
+        games = cat[cat["who"] == who]
+        for n, (_, g) in enumerate(games.iterrows(), start=1):
+            try:
+                df = pd.read_csv(Path(g["folder"]) / "trials.csv")
+            except OSError:
+                continue
+            rt = pd.to_numeric(df.get("time_difference_ms"), errors="coerce")
+            outcome = df.get("early_late")
+            hit = (outcome != "Miss") if outcome is not None else pd.Series(dtype=bool)
+            good = rt[(outcome != "Miss")].dropna() if outcome is not None else rt.dropna()
+            force = pd.to_numeric(df.get("peak_force_n"), errors="coerce")
+            rows.append({
+                "who": who, "n": n, "day": g["day"], "mode": g["mode"],
+                "trials": len(df),
+                "hit_rate": round(hit.mean(), 3) if len(hit) else np.nan,
+                "mean_rt": round(good.mean(), 1) if len(good) else np.nan,
+                "rt_cv": (round(good.std() / good.mean(), 3)
+                          if len(good) and good.mean() else np.nan),
+                "mean_force": (round(force.mean(), 1)
+                               if force.notna().any() else np.nan),
+            })
+    prog = pd.DataFrame(rows)
+    if prog.empty:
+        return None
+    _show(prog)
+
+    fig, ax = plt.subplots(1, 3, figsize=(14, 3.6))
+    for who, g in prog.groupby("who"):
+        g = g.sort_values("n")
+        ax[0].plot(g["n"], g["mean_rt"], "o-", lw=2, label=who)
+        ax[1].plot(g["n"], g["hit_rate"], "o-", lw=2, label=who)
+        ax[2].plot(g["n"], g["rt_cv"], "o-", lw=2, label=who)
+    ax[0].set_ylabel("mean reaction time (ms)"); ax[0].set_title("Speed")
+    ax[1].axhspan(BAND_LO, BAND_HI, color="#16a34a", alpha=.15)
+    ax[1].set_ylim(0, 1.02); ax[1].set_ylabel("hit rate")
+    ax[1].set_title("Accuracy")
+    ax[2].set_ylabel("reaction time CV")
+    ax[2].set_title("Consistency (lower is steadier)")
+    for a in ax:
+        a.set_xlabel("session number")
+        a.xaxis.set_major_locator(MaxNLocator(integer=True))
+        if len(people) > 1:
+            a.legend(frameon=False, fontsize=8)
+    _save(fig, "participant_progress"); plt.show()
+
+    print("\nchange from first to latest session:")
+    for who, g in prog.groupby("who"):
+        g = g.sort_values("n")
+        if len(g) < 2:
+            print(f"   {who}: only one session so far")
+            continue
+        d_rt = g["mean_rt"].iloc[-1] - g["mean_rt"].iloc[0]
+        d_hit = g["hit_rate"].iloc[-1] - g["hit_rate"].iloc[0]
+        d_cv = g["rt_cv"].iloc[-1] - g["rt_cv"].iloc[0]
+        print(f"   {who}: reaction time {d_rt:+.0f} ms, "
+              f"hit rate {d_hit:+.3f}, consistency {d_cv:+.3f} "
+              f"over {len(g)} sessions")
+    return prog

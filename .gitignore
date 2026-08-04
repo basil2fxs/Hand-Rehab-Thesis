@@ -32,3 +32,8 @@ sessions/
 
 # Written by the Settings screen, per user.
 config/user_settings.yaml
+
+# Notebook output. Regenerated every run, so it does not belong in git.
+analysis/figures/
+analysis/*.csv
+analysis/.ipynb_checkpoints/

@@ -2914,6 +2914,8 @@ class DiagnosticsScreen(Screen):
         self._test_mode_rect: pygame.Rect = pygame.Rect(0, 0, 0, 0)
         # Buzzer-cue toggle pill, same hand-rolled pattern as Test Mode.
         self._buzz_rect: pygame.Rect = pygame.Rect(0, 0, 0, 0)
+        # Cue-modality pill: both / visual / vibration. Cycles on click.
+        self._cue_rect: pygame.Rect = pygame.Rect(0, 0, 0, 0)
         # Audio volume sliders (master / cue / feedback). _vol_dirty
         # guards the save so we only write user_settings.yaml when a
         # level actually changed.
@@ -3003,6 +3005,33 @@ class DiagnosticsScreen(Screen):
             self._port_status = "Audio and buzzer settings saved."
         except Exception as e:
             self._port_status = f"Audio save failed: {e}"
+
+    CUE_MODES = ("both", "visual", "vibration")
+    CUE_BLURB = {
+        "both": "Screen highlights the finger and the motor buzzes.",
+        "visual": "Screen only. The buzzer stays silent.",
+        "vibration": ("Buzzer only. The screen does not reveal which "
+                       "finger, so it has to be found by touch."),
+    }
+
+    def _cycle_cue_mode(self) -> None:
+        """Step through both / visual / vibration.
+
+        This is the comparison the project line started from: Palmer
+        found reaction time differed between an LED-only cue and all
+        cues together. Recorded per trial as cue_mode so blocks run
+        under different settings can be compared directly."""
+        cur = str(self.engine.cfg.get("game_cue.mode", "both") or "both")
+        cur = cur if cur in self.CUE_MODES else "both"
+        nxt = self.CUE_MODES[(self.CUE_MODES.index(cur) + 1)
+                             % len(self.CUE_MODES)]
+        self.engine.cfg.data.setdefault("game_cue", {})["mode"] = nxt
+        try:
+            self.engine.cfg.save_user_overrides({"game_cue.mode": nxt})
+        except Exception as e:
+            self._port_status = f"Cue mode save failed: {e}"
+            return
+        self._port_status = f"Cue: {nxt.upper()}. {self.CUE_BLURB[nxt]}"
 
     def _toggle_buzzer_cue(self) -> None:
         """Turn the buzzer cue on or off. When on, the motor under the
@@ -3383,6 +3412,11 @@ class DiagnosticsScreen(Screen):
                 and self._buzz_rect.collidepoint(e.pos)):
             self._toggle_buzzer_cue()
             return
+        if (e.type == pygame.MOUSEBUTTONDOWN and e.button == 1
+                and self._cue_rect.w > 0
+                and self._cue_rect.collidepoint(e.pos)):
+            self._cycle_cue_mode()
+            return
         # Track held keys so the visual responds even when the source
         # doesn't push samples (keyboard mode).
         if e.type == pygame.KEYDOWN:
@@ -3587,6 +3621,22 @@ class DiagnosticsScreen(Screen):
                               width=2, border_radius=bz_h // 2)
         surf.blit(bz_text, bz_text.get_rect(center=bz_rect.center))
         self._buzz_rect = bz_rect
+        # Cue-modality pill under the buzzer pill. Click to cycle.
+        cue = str(self.engine.cfg.get("game_cue.mode", "both") or "both")
+        cue = cue if cue in self.CUE_MODES else "both"
+        cue_colour = {"both": (37, 99, 235), "visual": (202, 138, 4),
+                       "vibration": (168, 85, 247)}[cue]
+        cue_font = self.layout.font(FONT_SMALL + 2)
+        cue_text = cue_font.render(f"CUE  {cue.upper()}", True,
+                                    (255, 255, 255))
+        cw = cue_text.get_width() + tm_pad_x * 2
+        ch = cue_text.get_height() + tm_pad_y * 2
+        cue_rect = pygame.Rect(0, 0, cw, ch)
+        cue_rect.topleft = (30, bz_rect.bottom + 6)
+        pygame.draw.rect(surf, cue_colour, cue_rect,
+                          border_radius=ch // 2)
+        surf.blit(cue_text, cue_text.get_rect(center=cue_rect.center))
+        self._cue_rect = cue_rect
         # Audio levels row: a small caption + the three sliders. Master
         # scales the whole game; cue is the pre-press click; feedback is
         # the post-press chime. Drag to set; it applies live and saves on

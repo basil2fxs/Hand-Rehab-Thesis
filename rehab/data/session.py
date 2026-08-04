@@ -24,6 +24,33 @@ class Session:
     # screen leaves it as when the age field stays unfilled.
     age: str = ""
     hand: str = "right"     # "left" / "right" / "both"
+    # ---- participant details recorded once, at consent -------------
+    # These cannot be recovered after a session, and without them
+    # several analyses cannot be run at all. Set them in
+    # config/user_settings.yaml under session.* before the participant
+    # starts, or leave blank for a non-participant test run.
+    #
+    # affected_side is the important one. The bilateral asymmetry index
+    # is a signed number, so in a stroke cohort where half the people
+    # are impaired on the left and half on the right, group means
+    # cancel toward zero and read as "no asymmetry" when the asymmetry
+    # is in fact large. Knowing the affected side lets the analysis
+    # flip the sign per participant and pool them properly.
+    affected_side: str = ""        # "left" / "right" / "" if not applicable
+    dominant_hand: str = ""        # "left" / "right"
+    # Impairment score at consent, e.g. Fugl-Meyer upper extremity out
+    # of 66. Free text so any scale can be recorded with its name.
+    # Needed to show the cohort matches the moderate-impairment group
+    # the 65 to 80 percent challenge band was chosen for.
+    impairment_score: str = ""
+    # Hand measurements in mm, for the ANSUR II percentile check that
+    # the chassis sizing objective rests on.
+    hand_length_mm: str = ""
+    hand_breadth_mm: str = ""
+    # Whether the left/right port assignment came from auto-detection
+    # or a manual Settings override, which is what the zero-setup
+    # objective is measured on.
+    assignment_source: str = ""
     started_at: str = field(
         default_factory=lambda: time.strftime("%Y-%m-%dT%H:%M:%S")
     )
