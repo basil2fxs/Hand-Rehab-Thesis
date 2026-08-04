@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import pytest
 
 from rehab.hardware.calibration_profile import (
-    CalibrationProfile, N_FINGERS, PRESS_FRACTION,
+    CalibrationProfile, N_FINGERS, PRESS_FRACTION, MIN_USABLE_GAP,
 )
 
 
@@ -64,6 +64,57 @@ class TestProfileMaths:
         p = make_profile()
         n_per_count = 0.0879
         assert p.on_delta()[3] * n_per_count < 5.60
+
+    def test_release_point_never_falls_to_or_below_the_baseline(self):
+        """Regression. FSRDetector clamps off_thr to (on_thr - 10). If
+        on_delta is under 10 that puts the release point below a resting
+        hand, so a finger that registers one press can only release by
+        lifting off the device. It latches for the rest of the block and
+        every later trial on it is scored a miss, which reads as a
+        paralysed finger rather than a threshold fault."""
+        from rehab.hardware.calibration_profile import DETECTOR_HYSTERESIS
+        for gap in range(MIN_USABLE_GAP, 200, 3):
+            for noise in (0.2, 1.1, 3.0):
+                for preload in (0.0, 2.5, 30.7):
+                    p = CalibrationProfile(
+                        empty=[245.0] * 4, empty_noise=[noise] * 4,
+                        resting=[245.0 + preload] * 4,
+                        press=[245.0 + preload + gap] * 4)
+                    on, off = p.on_delta()[0], p.off_delta()[0]
+                    effective = min(off, on - DETECTOR_HYSTERESIS)
+                    assert effective > 0, (
+                        f"gap={gap} noise={noise} preload={preload}: "
+                        f"on={on} off={off} puts release at base{effective:+d}")
+
+    def test_latching_does_not_happen_end_to_end(self):
+        """Drive the real detector: press, then rest, and confirm the
+        finger actually releases."""
+        from rehab.hardware.fsr_detector import Calibration, FSRDetector
+        p = make_profile()
+        cal = Calibration(num_sensors=4, on_delta=p.on_delta(),
+                          off_delta=p.off_delta(), baseline_alpha=0.0005,
+                          value_alpha=1.0, debounce_ms=0,
+                          abs_on_min=[0] * 4, abs_off_max=[10000] * 4)
+        det = FSRDetector(cal)
+        rest = p.resting[0]
+        t = 0.0
+        def feed(v, secs):
+            nonlocal t
+            for _ in range(int(secs * 200)):
+                t += 1 / 200
+                det.feed(t, (v,) * 4)
+        feed(rest, 5)
+        feed(rest + 300, 0.5)
+        assert det.pressed[0], "press should register"
+        feed(rest, 5)
+        assert not det.pressed[0], "finger latched: never released back to rest"
+
+    def test_a_gap_too_small_for_a_valid_threshold_is_rejected(self):
+        p = make_profile()
+        for i in range(N_FINGERS):
+            p.press[i] = p.resting[i] + (MIN_USABLE_GAP - 1)
+        ok, problems = p.usable()
+        assert not ok and len(problems) >= N_FINGERS
 
     def test_release_sits_below_press(self):
         p = make_profile()

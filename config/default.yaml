@@ -130,8 +130,18 @@ fsr:
   #
   # Anything measured by the in-app calibration overrides these. Treat
   # them as the starting point for an uncalibrated device.
+  #
+  # RELEASE VALUES ARE CAPPED BY THE DETECTOR, so they are written here
+  # already capped rather than being silently rewritten at runtime.
+  # FSRDetector computes off_thr = min(base + off_delta, on_thr - 10). If
+  # on_delta were ever under 10 that lands BELOW the baseline, and a finger
+  # that has registered one press could then only release by lifting off the
+  # device: it stays latched and every later trial on it scores a miss, which
+  # looks like a paralysed finger rather than a threshold fault. Keeping
+  # on_delta above 12 and off_delta at or under (on_delta - 10) makes the
+  # release point always sit above a resting hand.
   on_delta: [20, 13, 15, 46]
-  off_delta: [10, 6, 6, 23]
+  off_delta: [10, 3, 5, 23]
   # Absolute floors are a broken-sensor guard, not part of normal
   # detection. Real baselines sit at 235-260, so 150 never binds during
   # a session; it only stops a sensor whose reading has collapsed to 0

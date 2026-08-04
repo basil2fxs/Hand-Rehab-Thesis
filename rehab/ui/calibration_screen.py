@@ -35,7 +35,7 @@ from .widgets import (
     Button, Layout, FONT_H2, FONT_BODY, FONT_SMALL, draw_text,
 )
 from ..hardware.calibration_profile import (
-    CalibrationProfile, FINGER_NAMES, N_FINGERS,
+    CalibrationProfile, FINGER_NAMES, N_FINGERS, MIN_USABLE_GAP,
 )
 
 
@@ -143,7 +143,7 @@ class CalibrationScreen:
             i = self.finger_idx
             self.profile.press[i] = max(cols[i])
             gap = self.profile.press[i] - self.profile.resting[i]
-            if gap < 10:
+            if gap < MIN_USABLE_GAP:
                 self._status = (
                     f"{FINGER_NAMES[i].title()} only moved {gap:.0f} counts. "
                     f"Press a little firmer and record it again.")

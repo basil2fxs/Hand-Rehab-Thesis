@@ -52,7 +52,30 @@ RELEASE_FRACTION = 0.20
 # says, so a finger that barely moved during calibration cannot end up
 # with a threshold inside the noise.
 MIN_NOISE_MULTIPLE = 8.0
-MIN_DELTA_COUNTS = 6
+
+# FSRDetector clamps the release point to (on_thr - DETECTOR_HYSTERESIS) so
+# release can never sit at or above press. That clamp is not optional and it
+# is applied after our off_delta, so any threshold computed here has to be
+# consistent with it.
+#
+# The consequence is easy to miss and it is severe. off_thr ends up at
+# base + min(off_delta, on_delta - 10). If on_delta is under 10 that lands
+# BELOW the baseline, which means a finger that has registered one press can
+# only release by pressing LIGHTER than a resting hand, i.e. by lifting off
+# the device entirely. It stays latched for the rest of the block and every
+# later trial on it is scored a miss, which reads in the data as a completely
+# paralysed finger rather than as a threshold fault.
+#
+# So on_delta must stay above the clamp with room to spare, and off_delta has
+# to be computed against the clamp rather than independently of it.
+DETECTOR_HYSTERESIS = 10
+MIN_DELTA_COUNTS = DETECTOR_HYSTERESIS + 2      # 12
+
+# Smallest resting-to-press travel that can carry a valid threshold. Below
+# this the press point cannot sit both clear of the noise and far enough
+# under the press to be reachable, so the calibration asks for a firmer press
+# instead of saving something that will not work.
+MIN_USABLE_GAP = 20
 
 
 @dataclass
@@ -109,12 +132,19 @@ class CalibrationProfile:
         return out
 
     def off_delta(self) -> list[int]:
+        """Release point per finger, relative to the tracked baseline.
+
+        Capped at (on_delta - DETECTOR_HYSTERESIS) because the detector
+        applies that cap anyway. Computing it here as well keeps the saved
+        profile honest about what will actually happen at runtime, and the
+        floor of 1 keeps the release point strictly above the baseline so a
+        pressed finger can always get back down to it.
+        """
         out = []
         for i, on in enumerate(self.on_delta()):
-            rel = max(self.gap()[i] * RELEASE_FRACTION, MIN_DELTA_COUNTS / 2)
-            # Keep a real distance below the press point or the finger
-            # chatters around the threshold.
-            out.append(int(round(min(rel, on * 0.6))))
+            rel = self.gap()[i] * RELEASE_FRACTION
+            capped = min(rel, on - DETECTOR_HYSTERESIS, on * 0.6)
+            out.append(int(round(max(1.0, capped))))
         return out
 
     def multi_finger_deficit(self) -> float | None:
@@ -139,10 +169,11 @@ class CalibrationProfile:
         problems = []
         for i in range(N_FINGERS):
             g = self.gap()[i]
-            if g < 10:
+            if g < MIN_USABLE_GAP:
                 problems.append(
                     f"{FINGER_NAMES[i]}: only {g:.0f} counts between resting "
-                    f"and pressing, too little to detect reliably")
+                    f"and pressing, needs at least {MIN_USABLE_GAP} for a "
+                    f"threshold that can both trigger and release")
             if self.empty[i] <= 1:
                 problems.append(
                     f"{FINGER_NAMES[i]}: sensor reads zero when empty, "
