@@ -544,6 +544,12 @@ class GameEngine:
             # leak handles back to the user's OS. Putting them inside the
             # try means the finally always tears everything back down.
             self._screens = self._build_screens()
+            # Reuse the calibration taken last time so the device
+            # behaves the same across restarts.
+            try:
+                self.load_saved_calibration()
+            except Exception as e:
+                log.warning("could not load saved calibration: %s", e)
             self.show_title()
             self.source.start()
             self.audio = self._build_audio()
@@ -718,6 +724,7 @@ class GameEngine:
             RhythmScreen, RhythmSetupScreen, ResultsScreen,
             ModeSelectScreen,
         )
+        from ..ui.calibration_screen import CalibrationScreen
         return {
             "title": TitleScreen(self),
             "mode_select": ModeSelectScreen(self),
@@ -727,6 +734,7 @@ class GameEngine:
             "rhythm": RhythmScreen(self),
             "results": ResultsScreen(self),
             "diagnostics": DiagnosticsScreen(self),
+            "calibration": CalibrationScreen(self),
         }
 
     def _build_audio(self) -> AudioEngine | None:
@@ -912,7 +920,9 @@ class GameEngine:
             return
         # Diagnostics returns straight to title without abandoning any
         # block (none could be in-flight on this screen).
-        if self.screen_obj is self._screens.get("diagnostics"):
+        if self.screen_obj in (self._screens.get("diagnostics"),
+                               self._screens.get("calibration")):
+            self.stop_all_motors()
             self.show_title()
             return
         # Anything else (setup, rhythm_setup, gameplay, rhythm, results)
@@ -970,6 +980,11 @@ class GameEngine:
             # drains the sample queue every frame, so a screen that
             # tried to call get_sample() itself would almost always get
             # nothing: the values have to be pushed from here.
+            # Calibration needs every sample, not the once-per-frame
+            # slice the lane strips get: it averages a whole step.
+            cal_sc = self._screens.get("calibration")
+            if cal_sc is not None and self.screen_obj is cal_sc:
+                cal_sc.on_sample(s.t_perf, s.values)
             for key in ("gameplay", "rhythm", "diagnostics"):
                 sc = self._screens.get(key)
                 if sc and hasattr(sc, "lanes"):
@@ -1014,6 +1029,67 @@ class GameEngine:
         if hasattr(ts, "refresh"):
             ts.refresh()
         self.screen_obj = ts
+
+    def show_calibration(self) -> None:
+        """Open the guided calibration. Reachable from the menu before a
+        session so a therapist never has to touch a config file."""
+        self._ensure_both_detectors()
+        cs = self._screens.get("calibration")
+        if cs is None:
+            return
+        self.screen_obj = cs
+
+    def load_saved_calibration(self) -> bool:
+        """Pick up the calibration taken last time, if there is one, so
+        the device behaves the same across restarts without anyone
+        having to redo it."""
+        from ..hardware.calibration_profile import CalibrationProfile
+        try:
+            path = self.cfg.resolve_path("config/calibration/current.json")
+        except Exception:
+            return False
+        prof = CalibrationProfile.load(path)
+        if prof is None:
+            return False
+        ok, problems = prof.usable()
+        if not ok:
+            log.warning("saved calibration looks wrong, ignoring it: %s",
+                        "; ".join(problems))
+            return False
+        self.apply_calibration(prof)
+        log.info("loaded calibration taken %s", prof.created_at)
+        return True
+
+    def apply_calibration(self, profile) -> None:
+        """Take a freshly measured profile into use.
+
+        Two things happen. The detectors get the new thresholds, and
+        their baselines are primed to the measured resting level so
+        there is no settling window at the start of a block where a
+        hand simply resting on the pads could trip the trigger. That
+        priming is what lets the thresholds be set from the
+        resting-to-press gap instead of from absolute counts, which is
+        what keeps a heavily preloaded pad (the pinky on this build)
+        usable by a weak finger.
+
+        The profile is also held so every session recorded from now on
+        writes down which calibration it ran under.
+        """
+        self.calibration_profile = profile
+        on_d = profile.on_delta()
+        off_d = profile.off_delta()
+        for det in (self.detectors or {}).values():
+            cal = getattr(det, "cal", None)
+            if cal is None:
+                continue
+            n = cal.num_sensors
+            for i in range(min(n, len(on_d))):
+                cal.on_delta[i] = on_d[i]
+                cal.off_delta[i] = off_d[i]
+            # Prime the baseline so the first block starts already
+            # tared rather than chasing the resting load.
+            for i in range(min(n, len(profile.resting))):
+                det.baseline[i] = float(profile.resting[i])
 
     def show_diagnostics(self) -> None:
         # Settings always shows 8 sensors, so make sure both
@@ -1456,6 +1532,20 @@ class GameEngine:
                 pass
             self.trial_logger = None
 
+    def _stamp_calibration(self) -> None:
+        """Record which calibration this block ran under. Written into
+        metadata.json so the analysis can convert counts to force and
+        state the thresholds without guessing."""
+        prof = getattr(self, "calibration_profile", None)
+        if prof is None:
+            self.session.calibration = {}
+            return
+        try:
+            self.session.calibration = prof.summary()
+        except Exception as e:
+            log.warning("could not summarise calibration: %s", e)
+            self.session.calibration = {}
+
     def _build_block_summary(self, status: str) -> dict:
         """Aggregates that go into metadata.json so an analyst can grok
         a block at a glance without loading trials.csv. `status` is
@@ -1891,11 +1981,37 @@ class GameEngine:
     # which is how a cue_ms longer than 150 ms is produced.
     FIRMWARE_STIM_MS = 150
 
-    def _send_stim(self, lane: int) -> bool:
-        """Fire one STIM pulse on `lane` (0-indexed). Returns whether
-        the hardware accepted it."""
+    def _stim_channel(self, lane: int) -> int:
+        """Which STIM channel actually reaches this finger.
+
+        The firmware maps STIM:1..4 onto fixed pins, so a motor wired
+        elsewhere would buzz the wrong finger. motor.channel_map holds
+        the real correspondence, discovered by the buzzer calibration,
+        so the sketch never has to change. Falls back to
+        straight-through if the map is missing or malformed.
+        """
+        n_per_hand = int(self.cfg.get("fsr.num_sensors_per_hand", 4))
+        finger = lane % n_per_hand           # 0..3 within the hand
+        # Lane numbers stay GLOBAL (1..8 in bilateral mode). multi_serial
+        # is what splits them across the two boards, so the hand offset
+        # has to be preserved here or the left hand gets sent to the
+        # right board. Only the finger part is remapped.
+        hand_offset = lane - finger
         try:
-            return bool(self.source.send_command(f"STIM:{lane + 1}"))
+            cmap = list(self.cfg.get("motor.channel_map") or [])
+            ch = int(cmap[finger])
+            if 1 <= ch <= n_per_hand:
+                return hand_offset + ch
+        except (TypeError, ValueError, IndexError):
+            pass
+        return lane + 1
+
+    def _send_stim(self, lane: int) -> bool:
+        """Fire one STIM pulse for the finger on `lane` (0-indexed).
+        Returns whether the hardware accepted it."""
+        try:
+            return bool(self.source.send_command(
+                f"STIM:{self._stim_channel(lane)}"))
         except Exception as e:
             log.warning("STIM send failed on lane %d: %s", lane, e)
             return False
@@ -2015,6 +2131,7 @@ class GameEngine:
             except Exception as e:
                 log.warning("audio.stop on finish_block: %s", e)
         self.session.finished_at = time.strftime("%Y-%m-%dT%H:%M:%S")
+        self._stamp_calibration()
         self.session.block_summary = self._build_block_summary("completed")
         self.session.notes = "block completed"
         # Wrap the metadata save: if the JSON write fails (disk full,
@@ -2071,6 +2188,7 @@ class GameEngine:
         self.session.notes = f"abandoned mid-block ({self.current_block})"
         # Capture whatever we have on the abandon path so a partial
         # block still has aggregates a researcher can use.
+        self._stamp_calibration()
         self.session.block_summary = self._build_block_summary("abandoned")
         # Record the path before attempting save so the CSV root is
         # still recoverable even if the JSON write blows up.

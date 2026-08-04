@@ -267,6 +267,51 @@ toward zero and reads as no asymmetry when the asymmetry is large. Record
 `affected_side` in `metadata.json` at consent and flip the sign per participant
 before pooling.
 
+### Calibration this data was recorded under
+
+**Reports:** the measured zero, resting load and press level per finger for the
+calibration each session ran under, the thresholds derived from them, and the
+multi-finger force deficit.
+
+**Why it exists:** a press is not an absolute quantity. It depends on where the
+pads sit, how the hand rests on them, and how hard that particular patient can
+push. Calibration (the Calibrate button on the title screen) measures all of
+that in about a minute, and every session records the calibration it used. So
+the analysis can state what a press meant on the day rather than assuming the
+current config applied.
+
+**What the four measurements give you:**
+
+| Step | Measures | Used for |
+| --- | --- | --- |
+| Hand off the device | true zero, noise SD | the counts-to-newtons origin, and the noise floor under every threshold |
+| Hand resting, no press | resting load per pad | the tare point; thresholds are measured from here, not from zero |
+| Each finger, light press | resting-to-press gap | that finger's trigger, set at 40% of its own gap |
+| All four together | simultaneous press level | the multi-finger deficit |
+
+**Multi-finger deficit:** the sum of the four single-finger presses against the
+simultaneous one, as a fraction lost. Every hand loses some force pressing four
+fingers at once rather than one; a larger loss is the deficit reported after
+stroke. Measuring it at calibration is stronger than inferring it from gameplay,
+because the instruction is explicit and the comparison is within the same minute
+on the same hand.
+
+**Two warnings this section raises, and both matter:**
+
+- *Sessions with no calibration recorded.* Anything run before this feature
+  existed. Force in counts is still valid, but the newton conversion rests on
+  the SingleTact datasheet alone, not on a measurement of this device. Do not
+  pool their absolute force values with calibrated sessions.
+- *Sessions spanning different calibrations.* A press did not mean the same
+  thing in each, so a force change across them is not necessarily a change in
+  the patient. Compare within one calibration, or report the change in counts
+  relative to that session's own threshold rather than in newtons.
+
+**How to use it in a write-up:** state the calibration date and the per-finger
+triggers in the methods, and cite the multi-finger deficit as a baseline
+measure alongside the gameplay individuation index. If a participant spans more
+than one calibration, say so and analyse the blocks separately.
+
 ### Press thresholds in newtons
 
 **Reports:** each finger's trigger converted to newtons, against healthy force
@@ -283,8 +328,19 @@ mean 3.11 N, maximum 6.56 N. Different button geometry so not a direct
 read-across, but it is the only same-lineage human data.
 
 **How to use it:** check this before every participant session. If a trigger is
-above the healthy range, fix the pad placement rather than tuning the software
-around it.
+above the healthy range there are two fixes, and they are not equivalent.
+Running Calibrate with that participant's own hand sets every trigger from
+their light press, which is the right answer for a session going ahead today.
+Reducing the resting load on the pad in hardware is the better answer, because
+a pad carrying 30 counts at rest against 2 on its neighbour is a placement
+problem that no threshold can fully undo.
+
+The pinky on this build is the worked example. Its trigger was 6.77 N, above
+Demouche's healthy maximum, because the threshold rule added the resting load on
+top of a fraction of the press gap when the detector's baseline had already
+absorbed that load. Removing the double count brought it to 4.04 N, under the
+healthy maximum but still above the healthy mean. Software took it from
+impossible to hard; the remaining gap is the pad.
 
 ### Participant progress
 

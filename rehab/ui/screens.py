@@ -177,6 +177,16 @@ class TitleScreen(Screen):
             engine.layout.height - sh - 28,
             sw, sh,
         )
+        # Calibrate pill, directly above Settings. The two device-setup
+        # actions sit together in the same corner, away from Quit. This
+        # is deliberately on the title screen rather than buried in
+        # Settings: calibration is meant to be run BEFORE a session, so
+        # it belongs on the screen you pass through on the way in.
+        self.calibrate_rect = pygame.Rect(
+            engine.layout.width - sw - 28,
+            engine.layout.height - sh - 28 - sh - 12,
+            sw, sh,
+        )
         # Info pill, centred along the bottom between Quit and Settings.
         # Opens a modal that lists the session protocol so a therapist
         # running the trial knows which modes to run, in what order, and
@@ -310,6 +320,8 @@ class TitleScreen(Screen):
                 self.engine.request_quit()
             elif self.settings_rect.collidepoint(e.pos):
                 self.engine.show_diagnostics()
+            elif self.calibrate_rect.collidepoint(e.pos):
+                self.engine.show_calibration()
             elif self.info_rect.collidepoint(e.pos):
                 self._show_info = True
         # Enter key on either focused field acts as a shortcut for
@@ -423,6 +435,25 @@ class TitleScreen(Screen):
         pygame.draw.circle(surf, fg_s, (s_icon_cx, s_cy), 3)
         surf.blit(s_surf, s_surf.get_rect(
             midleft=(s_icon_cx + icon_r + gap, s_cy)))
+
+        # Calibrate pill, sitting above Settings.
+        hover_c = self.calibrate_rect.collidepoint((mx, my))
+        bg_c = (self.theme.accent if hover_c
+                else tuple(max(0, c - 30) for c in self.theme.background))
+        fg_c = ((255, 255, 255) if hover_c else self.theme.foreground)
+        pygame.draw.rect(surf, bg_c, self.calibrate_rect, border_radius=12)
+        c_font = self.layout.font(FONT_BODY)
+        c_surf = c_font.render("Calibrate", True, fg_c)
+        c_total = (icon_r * 2) + gap + c_surf.get_width()
+        c_start = self.calibrate_rect.centerx - c_total // 2
+        c_cy = self.calibrate_rect.centery
+        c_icon_cx = c_start + icon_r
+        # Icon: a slider track with a handle part way along it.
+        pygame.draw.line(surf, fg_c, (c_icon_cx - icon_r, c_cy),
+                         (c_icon_cx + icon_r, c_cy), 2)
+        pygame.draw.circle(surf, fg_c, (c_icon_cx + 2, c_cy), 4)
+        surf.blit(c_surf, c_surf.get_rect(
+            midleft=(c_icon_cx + icon_r + gap, c_cy)))
 
         # Info pill, bottom-centre. Same height as Quit and Settings so
         # the three utility actions line up. Opens the protocol overlay.
@@ -3221,7 +3252,14 @@ class DiagnosticsScreen(Screen):
         Flashes the tile and reports delivery either way."""
         labels = LaneStrip.FINGER_LABELS
         finger_name = labels[ls.finger % len(labels)]
-        cmd = f"{ls.hand.upper()}:STIM:{ls.finger + 1}"
+        # Route through the engine's channel map so this tests exactly
+        # what a session will send. Testing STIM:finger+1 directly would
+        # verify a mapping the game does not use.
+        try:
+            ch = self.engine._stim_channel(ls.finger)
+        except Exception:
+            ch = ls.finger + 1
+        cmd = f"{ls.hand.upper()}:STIM:{ch}"
         try:
             ok = self.engine.source.send_command(cmd)
             # One board only: it defaults to the "right" label, so a
@@ -3232,8 +3270,7 @@ class DiagnosticsScreen(Screen):
             # single board is connected. Same behaviour the in-game stim
             # path already relies on.
             if not ok and self._single_board():
-                ok = self.engine.source.send_command(
-                    f"STIM:{ls.finger + 1}")
+                ok = self.engine.source.send_command(f"STIM:{ch}")
         except (OSError, AttributeError, RuntimeError) as err:
             self._port_status = f"Buzzer send error: {err}"
             return

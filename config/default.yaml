@@ -93,17 +93,45 @@ fsr:
   # from an empty device cannot see that; it has to be measured with a
   # hand in the normal resting position.
   #
-  # Each trigger now sits about 40% of the way from that finger's
-  # resting load to a gentle press: clear of a resting hand, still
-  # reachable by a press weaker than the one demonstrated.
+  # These are RELATIVE TO THE TRACKED BASELINE, which already sits at
+  # the resting level. So a trigger only has to cover the gap between
+  # resting and pressing, not the absolute load on the pad.
   #
-  # The pinky is the outlier and its threshold is high as a direct
-  # consequence of its resting load being 3-12x the other fingers,
-  # which points at pad placement rather than at the patient. Reducing
-  # that resting load in hardware and re-running the calibration would
-  # lower its trigger a lot, which matters for a weak little finger.
-  on_delta: [22, 22, 23, 77]
-  off_delta: [11, 11, 12, 38]
+  # An earlier set added the resting load on top of a fraction of the
+  # gap, which counted that load twice: the baseline had already
+  # absorbed it. The pinky suffered worst, ending up needing 67% of its
+  # available gap against 45% for the index, and 6.77 N in absolute
+  # terms. That is above the 5.60 N maximum Demouche recorded for a
+  # HEALTHY little finger, so the trigger was out of reach of the
+  # patients the device is for.
+  #
+  # Each trigger is now 40% of that finger's gap, with a floor of
+  # (resting load + 3 SD of noise). The floor only matters in one case:
+  # if a block starts with the hand off the device, the baseline
+  # initialises to the empty reading, and the hand landing looks like a
+  # rise. The floor keeps that below the trigger. It binds on the ring
+  # finger only, and it does NOT inflate the pinky, whose 40%-of-gap
+  # value already clears its resting load comfortably.
+  #
+  #   finger   gap   trigger   % of gap   force
+  #   index     49      20        40%     1.72 N
+  #   middle    32      13        40%     1.13 N
+  #   ring      30      15        49%     1.30 N
+  #   pinky    115      46        40%     4.04 N
+  #
+  # HONEST LIMIT on the pinky. 4.04 N is a real improvement on 6.77 N
+  # and is now under Demouche's healthy maximum, but it is still above
+  # the 2.66 N healthy MEAN. The pinky pad reads 115 counts for a press
+  # described as gentle, three to four times the other fingers, which
+  # is a pad placement problem rather than a patient problem. Two things
+  # fix it properly: reduce the resting load on that pad in hardware, or
+  # run the in-app calibration with the actual patient, which sets every
+  # trigger from THEIR light press instead of from these figures.
+  #
+  # Anything measured by the in-app calibration overrides these. Treat
+  # them as the starting point for an uncalibrated device.
+  on_delta: [20, 13, 15, 46]
+  off_delta: [10, 6, 6, 23]
   # Absolute floors are a broken-sensor guard, not part of normal
   # detection. Real baselines sit at 235-260, so 150 never binds during
   # a session; it only stops a sensor whose reading has collapsed to 0
@@ -187,6 +215,22 @@ motor:
   # stay under the firmware's 150 ms hold or the motor stutters
   # instead of running continuously.
   pulse_interval_ms: 120
+  # WHICH STIM CHANNEL DRIVES WHICH FINGER.
+  #
+  # Arduino_20251111.ino is the final firmware and is not being
+  # changed. It maps STIM:1..4 onto its motor pins in a fixed order,
+  # so if a motor is wired to a different pin than that order assumes,
+  # the wrong finger buzzes. Rather than touch the sketch, the host
+  # sends whichever channel actually reaches the finger it means.
+  #
+  # Read this as: to buzz the INDEX finger send STIM:<first entry>,
+  # for MIDDLE send STIM:<second>, and so on. The default 1,2,3,4 is
+  # the straight-through case where the wiring matches the sketch.
+  #
+  # Discover the real mapping with tools/calibrate_buzzers.py, which
+  # buzzes each channel and asks which finger you felt. It writes the
+  # result here so the game uses it from then on.
+  channel_map: [1, 2, 3, 4]
 
 bilateral:
   hand: right            # right | left | both

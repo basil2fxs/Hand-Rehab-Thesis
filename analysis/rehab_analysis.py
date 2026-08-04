@@ -776,6 +776,7 @@ def report(pick="latest", root=None, export=True):
         print(f"   {r['day']} {r['time']}  {r['who']:10} {r['mode']:9} "
               f"{r['trials']:4} trials")
 
+    sec_calibration(metas)
     on_task = sec_overview(trials, folders, metas)
     sec_quality(trials, folders, metas)
     comp = sec_compare(trials)
@@ -792,7 +793,7 @@ def report(pick="latest", root=None, export=True):
     sec_objective_one(trials)
     sec_exclusions(trials)
     sec_phase(trials)
-    sec_threshold_audit()
+    sec_threshold_audit(metas=metas)
     sec_cue_modality(trials)
     sec_dose(trials, on_task / 60 if on_task else 0)
     sec_sampling_note(folders)
@@ -1237,7 +1238,7 @@ def counts_to_newtons(counts) -> float:
     return float(counts) * N_PER_COUNT
 
 
-def sec_threshold_audit(cfg_on_delta=None):
+def sec_threshold_audit(cfg_on_delta=None, metas=None):
     """Put the configured press thresholds into newtons and check them
     against the only healthy force data in this project's lineage.
 
@@ -1248,6 +1249,16 @@ def sec_threshold_audit(cfg_on_delta=None):
     when it is really a threshold problem, so it is worth checking
     before any participant session.
     """
+    if cfg_on_delta is None and metas:
+        # A session's own calibration beats the current config: the
+        # config may have been recalibrated since this data was recorded.
+        for m in metas.values() if hasattr(metas, "values") else []:
+            cal = (m or {}).get("calibration") or {}
+            if cal.get("on_delta"):
+                cfg_on_delta = list(cal["on_delta"])
+                print("Thresholds below are the ones this session actually "
+                      "ran under, from its own calibration.")
+                break
     if cfg_on_delta is None:
         try:
             import sys as _s
@@ -1290,10 +1301,86 @@ def sec_threshold_audit(cfg_on_delta=None):
         print(f"   above the highest little-finger force Demouche recorded")
         print(f"   in healthy participants ({DEMOUCHE_2025['little_max']} N).")
         print("   A weak little finger may be physically unable to reach it,")
-        print("   and every attempt would be logged as a miss. Re-measure")
-        print("   with tools/calibrate_rest_vs_press.py using the")
-        print("   participant's own hand before running a session, and look")
+        print("   and every attempt would be logged as a miss. Run the")
+        print("   Calibrate step from the title screen with the")
+        print("   participant's own hand before the next session, and look")
         print("   at why that pad carries so much load at rest.")
+    return tbl
+
+
+def sec_calibration(metas):
+    """What a press meant on the day, taken from the calibration each
+    session recorded rather than from whatever the config says now.
+
+    A session run before the in-app calibration existed carries nothing
+    here. Its force numbers are still valid in counts, but the
+    counts-to-newtons conversion rests on the datasheet figure alone
+    rather than on a measurement of this device, so treat any absolute
+    force claim from those sessions as weaker evidence.
+    """
+    print("\n" + "=" * 62)
+    print("CALIBRATION THIS DATA WAS RECORDED UNDER")
+    print("=" * 62)
+
+    have = {name: m.get("calibration") or {}
+            for name, m in metas.items()}
+    withcal = {k: v for k, v in have.items() if v}
+    if not withcal:
+        print("None of these sessions recorded a calibration.")
+        print("Force is in raw counts and the newton conversion comes")
+        print("from the SingleTact datasheet, not from this device.")
+        return None
+
+    if len(withcal) < len(have):
+        missing = [k for k, v in have.items() if not v]
+        print(f"{len(missing)} of {len(have)} session(s) have no "
+              f"calibration recorded:")
+        for m in missing:
+            print(f"   {m}")
+        print("Do not pool their absolute force values with the rest.\n")
+
+    # Flag sessions that ran under DIFFERENT calibrations. Pooling force
+    # across two calibrations compares two different definitions of a
+    # press, which would show up as a spurious change over time.
+    stamps = {v.get("created_at") for v in withcal.values()}
+    if len(stamps) > 1:
+        print(f"WARNING: these sessions span {len(stamps)} different")
+        print("calibrations. A press did not mean the same thing in each,")
+        print("so a force change across them is not necessarily a change")
+        print("in the patient. Compare within one calibration:")
+        for name, v in sorted(withcal.items()):
+            print(f"   {v.get('created_at', 'unknown')}   {name}")
+        print()
+
+    ref = list(withcal.values())[0]
+    rows = []
+    for i, finger in enumerate(FINGERS[:4]):
+        def at(key, default=0):
+            seq = ref.get(key) or []
+            return seq[i] if i < len(seq) else default
+        on = at("on_delta")
+        rows.append({
+            "finger": finger,
+            "rest_load_counts": at("preload"),
+            "press_gap_counts": at("gap"),
+            "trigger_counts": on,
+            "trigger_N": round(counts_to_newtons(on), 2),
+            "pct_of_gap": (round(100 * on / at("gap"), 0)
+                           if at("gap") else None),
+        })
+    tbl = pd.DataFrame(rows)
+    print(f"Taken {ref.get('created_at', 'unknown')} "
+          f"on {ref.get('device_port') or 'an unrecorded port'}\n")
+    _show(tbl)
+
+    deficit = ref.get("multi_finger_deficit")
+    if deficit is not None:
+        print(f"\nMulti-finger force deficit: {deficit * 100:.0f}%")
+        print("Force lost per finger when all four press together against")
+        print("each finger pressing alone. Healthy hands lose some; a")
+        print("larger loss is the multi-finger deficit reported after")
+        print("stroke, and it is measured here at calibration rather than")
+        print("inferred from gameplay.")
     return tbl
 
 

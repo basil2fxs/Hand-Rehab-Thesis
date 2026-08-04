@@ -62,6 +62,14 @@ class Session:
     # CSV: trial count, hit rate, peak streak, BPM range, average RT,
     # duration. Saves loading the whole trials.csv for a quick scan.
     block_summary: dict = field(default_factory=dict)
+    # The press calibration this block ran under: the measured zero,
+    # resting and press levels per finger, and the thresholds derived
+    # from them. Copied in rather than referenced by filename, so a
+    # session folder stays self-describing if it is moved or archived.
+    # Empty when the block ran on config defaults with no calibration
+    # taken, which an analysis should treat as lower-confidence force
+    # data.
+    calibration: dict = field(default_factory=dict)
     software_version: str = SOFTWARE_VERSION
     python_version: str = field(default_factory=lambda: sys.version.split()[0])
     platform: str = field(default_factory=platform.platform)

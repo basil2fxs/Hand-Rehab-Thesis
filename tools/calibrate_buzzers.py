@@ -7,6 +7,11 @@ motor would cue the wrong finger every trial and the resulting data
 would be quietly wrong rather than obviously broken, so this checks the
 mapping by asking which finger you actually felt.
 
+The game now has this built in: Calibrate on the title screen runs the
+same check as step 5 of its flow, and saves the result the same way.
+Use this script when you want to test the motors without starting the
+game, or to tune the cue length, which the in-app flow does not cover.
+
 It then plays several cue lengths so you can pick one that is easy to
 feel without being unpleasant.
 
@@ -109,6 +114,8 @@ def main() -> int:
         print("For each buzz, say which finger you felt it on.\n")
         wrong = []
         felt_nothing = []
+        # channel_map[finger] = the STIM channel that reaches it.
+        channel_map = list(range(1, N + 1))
         for i in range(N):
             input(f"  ready to buzz motor {i + 1} "
                   f"(should be {FINGERS[i].upper()}) - press Enter")
@@ -121,22 +128,29 @@ def main() -> int:
                 felt_nothing.append(i)
                 print(f"   -> nothing felt on motor {i + 1}")
             elif got == i:
+                channel_map[got] = i + 1
                 print("   -> correct")
             else:
                 wrong.append((i, got))
-                print(f"   -> MISMATCH: motor {i + 1} is on the "
+                channel_map[got] = i + 1
+                print(f"   -> channel {i + 1} drives the "
                       f"{FINGERS[got]}, not the {FINGERS[i]}")
 
         print("\n" + "-" * 62)
         if wrong:
-            print("MOTOR POSITIONS ARE WRONG:")
+            print("WIRING DOES NOT MATCH THE SKETCH'S CHANNEL ORDER:")
             for motor, actual in wrong:
-                print(f"  motor {motor + 1} should be under "
-                      f"{FINGERS[motor]} but was felt on {FINGERS[actual]}")
-            print("\nThis has to be fixed in the hardware (swap the motor")
-            print("leads, or reposition them). The software cannot correct")
-            print("it safely: it would make the recorded lane numbers")
-            print("disagree with the firmware and with the sensors.")
+                print(f"  channel {motor + 1} reaches the {FINGERS[actual]}, "
+                      f"not the {FINGERS[motor]}")
+            print("\nThis does NOT need the Arduino reflashed.")
+            print("Arduino_20251111.ino is final and maps STIM:1..4 onto")
+            print("pins 3,4,5,6 in that order. The host can simply send")
+            print("whichever channel actually reaches the finger it means,")
+            print("which is what motor.channel_map below does.")
+            print(f"\n  to buzz index  send STIM:{channel_map[0]}")
+            print(f"  to buzz middle send STIM:{channel_map[1]}")
+            print(f"  to buzz ring   send STIM:{channel_map[2]}")
+            print(f"  to buzz pinky  send STIM:{channel_map[3]}")
         elif felt_nothing:
             names = ", ".join(FINGERS[i] for i in felt_nothing)
             print(f"NO BUZZ FELT ON: {names}")
@@ -178,9 +192,14 @@ def main() -> int:
 
         print(f"\n  chosen cue length: {chosen} ms")
         print(f"  currently in use  : {cfg.get('motor.cue_ms')} ms")
+        print(f"  channel map       : {channel_map}")
+        print(f"  currently in use  : {cfg.get('motor.channel_map')}")
         a = input("\nWrite to config/user_settings.yaml? [y/N] ")
         if a.strip().lower().startswith("y"):
-            cfg.save_user_overrides({"motor.cue_ms": chosen})
+            cfg.save_user_overrides({
+                "motor.cue_ms": chosen,
+                "motor.channel_map": channel_map,
+            })
             print("Saved. Takes effect next time the game starts.")
         else:
             print("Not saved, nothing changed.")
