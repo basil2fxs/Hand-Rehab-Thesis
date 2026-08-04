@@ -1500,13 +1500,13 @@ def sec_quality(trials, folders, metas):
 
 def sec_compare(trials):
     if trials.empty:
-        print("No trials are loaded, so there is nothing to compare.")
+        print("No trials loaded, so there's nothing to compare.")
         return None
     games = trials["game_label"].nunique()
     if games < 2:
-        print("Only one game in this selection, so there is nothing\n"
-              "to compare against. Pick a session or a participant\n"
-              "from the dropdown to compare games.")
+        print("Only one game in this selection, so there's nothing\n"
+              "to compare it against. Pick a session or a participant\n"
+              "from the dropdown to line games up side by side.")
         return None
     print("\n" + "=" * 62)
     print("COMPARING GAMES")
@@ -1755,10 +1755,10 @@ def sec_force(trials, unit="sensor counts", calset=None):
         print("\n" + "=" * 62)
         print(f"FORCE   (logged unit: {unit})")
         print("=" * 62)
-        _nothing("No force data in this selection. The force columns are",
-                 "only filled when the sensors are streaming, so they are",
-                 "empty for keyboard blocks and for blocks where nothing",
-                 "crossed a press threshold.")
+        _nothing("No force data here. The force columns only fill up",
+                 "while the sensors are streaming, so they're empty for",
+                 "keyboard blocks and for blocks where nothing crossed",
+                 "a press threshold.")
         return force
     corrected = bool(force["force_calibrated"].any())
     print("\n" + "=" * 62)
@@ -1975,9 +1975,9 @@ def sec_individuation(trials, calset=None):
     print("FINGER INDIVIDUATION")
     print("=" * 62)
     if ind.empty:
-        _nothing("No individuation data. This needs the force sensors and a",
-                 "force_window_peaks column with more than one lane reading,",
-                 "so it is empty for keyboard blocks.")
+        _nothing("No individuation data. This one needs the force sensors",
+                 "and a force_window_peaks column with more than one lane",
+                 "reading, so it's empty for keyboard blocks.")
         return ind
     s = individuation_summary(ind)
     corrected = bool(ind["corrected"].any())
@@ -2079,7 +2079,7 @@ def sec_individuation(trials, calset=None):
 def sec_rhythm(trials):
     rhy = rhythm_rows(trials)
     if rhy.empty:
-        print("No rhythm blocks in this selection, so there is no\n"
+        print("No rhythm blocks in this selection, so there's no\n"
               "timing offset to report. This section only applies to\n"
               "games played in rhythm mode.")
         return rhy
@@ -2314,9 +2314,9 @@ def sec_raw(folders, unit="sensor counts", calset=None):
         # above, so without this the section prints its heading and
         # nothing else and reads as a section that failed.
         print(f"{game} logged {len(events)} events but no sensor samples,")
-        print("so there is no press shape or press duration to show here.")
-        print("The sample stream is only written when the force sensors")
-        print("are streaming, so this is empty for keyboard sessions.")
+        print("so there's no press shape or press duration to show here.")
+        print("The sample stream only gets written while the force sensors")
+        print("are streaming, so this comes up empty for keyboard sessions.")
         return None
     presses = events[events["event"] == "press"]
     releases = events[events["event"] == "release"]
@@ -3068,10 +3068,10 @@ def sec_onset(folders, trials, unit="sensor counts", calset=None):
     they compare with the threshold-crossing figure the game records."""
     ons = onset_table(folders, unit, calset=calset)
     if ons.empty:
-        print("No movement onset could be measured. This needs the raw\n"
-              "sample stream (raw.csv) with force rising after a cue, so\n"
-              "it is empty for keyboard sessions and for blocks where no\n"
-              "press crossed the detection floor.")
+        print("Couldn't measure movement onset. This needs the raw sample\n"
+              "stream (raw.csv) with force rising after a cue, so it's\n"
+              "empty for keyboard sessions and for blocks where no press\n"
+              "crossed the detection floor.")
         return ons
     corrected = bool(ons["peak_dforce_cal"].notna().any())
     print("\n" + "=" * 62)
@@ -3742,8 +3742,8 @@ def sec_phase(trials):
         return None
     ph = trials[trials["phase"].notna() & (trials["phase"] != "")]
     if ph.empty or ph["phase"].nunique() < 2:
-        print("Only one protocol phase is present in this selection.\n"
-              "A pretest to aftertest comparison needs at least two.")
+        print("Only one protocol phase in this selection. A pretest to\n"
+              "aftertest comparison needs at least two.")
         return None
     print("\n" + "=" * 62)
     print("PRETEST TO AFTERTEST")
@@ -3839,7 +3839,7 @@ def sec_sampling_note(folders):
         return {"logged_hz": logged, "duplicate_fraction": dup,
                 "effective_hz": logged * (1 - dup)}
     print("Not enough raw samples to estimate the sampling rate.\n"
-          "This needs at least 50 rows in raw.csv, so it is empty for\n"
+          "This needs at least 50 rows in raw.csv, so it's empty for\n"
           "keyboard sessions and very short blocks.")
     return None
 
