@@ -45,6 +45,13 @@ class BalancedScheduler:
     A plain random choice does not give this. Over 40 trials on 4 lanes it
     routinely lands 15/12/7/6, which is enough imbalance to make a per-finger
     reaction-time comparison meaningless.
+
+    KNOWN PROPERTY WITH TWO LANES. Banning consecutive repeats over a pool of
+    two forces strict alternation, so the patient can predict every cue. That
+    only arises when a therapist deliberately restricts a block to two
+    fingers, which is a therapy drill rather than a measurement block, and
+    alternation is reasonable there. Do not read reaction times from a
+    two-finger block as if the cue were unpredictable.
     """
 
     def __init__(self, lanes, rng: random.Random | None = None,

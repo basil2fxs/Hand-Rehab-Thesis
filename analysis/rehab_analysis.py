@@ -278,7 +278,33 @@ def load_games(folders, cat: pd.DataFrame) -> pd.DataFrame:
         if df["hand_mode"].iloc[0] == "left":
             df["side"] = "left"
         frames.append(df)
-    return pd.concat(frames, ignore_index=True)
+    return _unique_game_labels(pd.concat(frames, ignore_index=True))
+
+
+def _unique_game_labels(trials: pd.DataFrame) -> pd.DataFrame:
+    """Make game_label name exactly one game.
+
+    The label is clock time plus mode, which two games can share: two
+    people recorded in the same minute, or the same mode started twice
+    on two boards. Sections group on this label, so a collision silently
+    merges two games into one row and sec_compare then reports there is
+    nothing to compare when there is.
+    """
+    if trials.empty or "game_label" not in trials.columns:
+        return trials
+    for extra in ("participant", "game"):
+        pairs = trials[["game", "game_label"]].drop_duplicates()
+        clashing = pairs["game_label"].duplicated(keep=False)
+        if not clashing.any():
+            break
+        mask = trials["game_label"].isin(set(pairs.loc[clashing, "game_label"]))
+        if extra == "game":
+            trials.loc[mask, "game_label"] = trials.loc[mask, "game"]
+        else:
+            trials.loc[mask, "game_label"] = (
+                trials.loc[mask, "game_label"] + "  "
+                + trials.loc[mask, extra].astype(str))
+    return trials
 
 
 def load_raw(folder: Path):
@@ -436,6 +462,32 @@ def calibration_gaps(cal) -> list:
     return out
 
 
+def calibration_signature(cal) -> tuple:
+    """What a calibration actually measured, for telling two of them
+    apart.
+
+    created_at is not enough on its own. Two profiles saved inside the
+    same second, or one metadata.json copied into another session, share
+    a timestamp while holding different numbers, and grouping on the
+    timestamp then prints one table of the first game's figures over the
+    lot.
+    """
+    out = []
+    for key in CAL_LISTS:
+        seq = cal.get(key)
+        if not isinstance(seq, (list, tuple)):
+            out.append((key, None))
+            continue
+        vals = []
+        for v in seq:
+            try:
+                vals.append(round(float(v), 3))
+            except (TypeError, ValueError):
+                vals.append(None)
+        out.append((key, tuple(vals)))
+    return tuple(out)
+
+
 @dataclass
 class CalibrationSet:
     """Every calibration behind one selection, kept apart rather than
@@ -483,14 +535,30 @@ class CalibrationSet:
 
     @property
     def stamps(self) -> dict:
-        """created_at -> the games recorded under it, oldest key first."""
-        out = {}
+        """Label -> the games recorded under it, oldest key first.
+
+        Grouped by what each calibration measured as well as by when it
+        was taken, so two different profiles sharing a timestamp stay in
+        two blocks instead of one block showing the first one's numbers.
+        """
+        groups = {}
         for name in sorted(self.per_game):
             cal = self.per_game[name]
-            if cal:
-                out.setdefault(cal.get("created_at") or "unknown",
-                               []).append(name)
-        return dict(sorted(out.items()))
+            if not cal:
+                continue
+            key = (cal.get("created_at") or "unknown",
+                   calibration_signature(cal))
+            groups.setdefault(key, []).append(name)
+
+        out, seen = {}, {}
+        for (created, _sig), games in sorted(groups.items(),
+                                             key=lambda kv: str(kv[0])):
+            seen[created] = seen.get(created, 0) + 1
+            label = (created if seen[created] == 1
+                     else f"{created}  (distinct calibration "
+                          f"{seen[created]})")
+            out[label] = games
+        return out
 
     @property
     def status(self) -> str:
@@ -888,14 +956,29 @@ def sec_quality(trials, folders, metas):
     if "stim_delivered" in trials.columns:
         sd = trials["stim_delivered"].dropna()
         if len(sd):
-            failed = int((~sd).sum())
+            # Compare against False rather than inverting. Concatenating
+            # games leaves this column as object dtype, where `~` is
+            # integer bitwise negation and turns the count negative.
+            failed = int((sd == False).sum())
             print(f"cue commands not delivered : {failed} of {len(sd)}")
             if failed:
                 print("   ^ no cue on those trials. Not ordinary misses.")
     n_force = trials["peak_force_n"].notna().sum()
     print(f"trials with force data     : {n_force} of {len(trials)}")
     if n_force == 0:
-        print("   ^ keyboard mode, so force and individuation are empty.")
+        # Blaming keyboard mode is a guess. A serial device that was
+        # connected but never crossed a trigger leaves the same empty
+        # column, and that is a hardware fault worth chasing rather than
+        # a choice of input worth ignoring.
+        sources = {str(metas.get(Path(f).name, {}).get("source_name", "?"))
+                   for f in folders}
+        if all(s == "?" or s.lower().startswith("keyboard") for s in sources):
+            print("   ^ keyboard mode, so force and individuation are empty.")
+        else:
+            print(f"   ^ input was {', '.join(sorted(sources))}, which is not")
+            print("     keyboard mode. The sensors were connected and never")
+            print("     registered a press, so check the wiring and the press")
+            print("     thresholds before reading any force number below.")
     for f in folders:
         bs = metas.get(Path(f).name, {}).get("block_summary", {}) or {}
         if bs.get("pauses"):
@@ -1196,7 +1279,54 @@ def sec_force(trials, unit="sensor counts", calset=None):
         print("   These are game presses against a trigger, not maximal")
         print("   voluntary force, so a lower number here is expected and")
         print("   is not by itself evidence of weakness.")
+        # The newton column is the datasheet constant applied to raw
+        # counts, so it carries the whole per-pad bias the calibrated
+        # column exists to remove. An over-reading pad reads as a finger
+        # stronger than any healthy participant Demouche measured.
+        print("   The newton figures are the datasheet constant applied to")
+        print("   raw counts. They are NOT corrected for where each pad")
+        print("   sits, so this comparison inherits the same per-sensor")
+        print("   skew as the raw counts and cannot rank one finger")
+        print("   against another.")
+        if corrected:
+            worst = None
+            for finger in order:
+                g = calset_gap_summary(force, finger)
+                if g is not None and (worst is None or g > worst[1]):
+                    worst = (finger, g)
+            if worst and worst[1] >= 2.0:
+                print(f"   Here the {worst[0]} pad reads {worst[1]:.1f}x the "
+                      f"counts of the")
+                print("   least sensitive pad for the same share of a")
+                print("   calibration press, so read the calibrated column")
+                print("   above before believing any newton difference.")
     return force
+
+
+def calset_gap_summary(force, finger):
+    """How many raw counts this finger logged per unit of its own
+    calibration press, relative to the least sensitive finger present.
+
+    Used only to say out loud how far apart the pads sit in the selection
+    being reported, so the newton caveat carries a number rather than a
+    warning nobody sizes.
+    """
+    sub = force[force["finger"] == finger]
+    if sub.empty:
+        return None
+    ratios = []
+    for f in force["finger"].dropna().unique():
+        other = force[force["finger"] == f]
+        raw = other["peak_force_n"].mean()
+        cal = other["peak_force_cal"].mean()
+        if pd.notna(raw) and pd.notna(cal) and cal:
+            ratios.append(raw / cal)
+    mine = sub["peak_force_n"].mean() / sub["peak_force_cal"].mean() \
+        if sub["peak_force_cal"].notna().any() \
+        and sub["peak_force_cal"].mean() else None
+    if not ratios or mine is None or not min(ratios):
+        return None
+    return mine / min(ratios)
 
 
 def sec_individuation(trials, calset=None):
@@ -1410,6 +1540,15 @@ def sec_raw(folders, unit="sensor counts", calset=None):
         dur = samples["t_perf"].max() - samples["t_perf"].min()
         print(f"{len(samples)} samples over {dur:.1f} s "
               f"({len(samples)/max(dur,1e-9):.0f} Hz), {len(events)} events")
+    else:
+        # A raw.csv holding only event rows still passes the length check
+        # above, so without this the section prints its heading and
+        # nothing else and reads as a section that failed.
+        print(f"{game} logged {len(events)} events but no sensor samples,")
+        print("so there is no press shape or press duration to show here.")
+        print("The sample stream is only written when the force sensors")
+        print("are streaming, so this is empty for keyboard sessions.")
+        return
     presses = events[events["event"] == "press"]
     releases = events[events["event"] == "release"]
     durs = []
