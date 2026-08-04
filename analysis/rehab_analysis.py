@@ -25,14 +25,30 @@ and pass `ctx["trials"]`, `ctx["calset"]` and the rest into the sec_
 functions by hand. Every section takes explicit arguments and holds no
 state between calls, so cells can be run in any order.
 
-A note on force. Each sensor pad reads a different number of counts for
-the same real force, so raw counts cannot be compared between fingers.
-Every force number here therefore comes in three forms: raw counts as
-recorded, newtons for the absolute comparison against Demouche's healthy
-data, and force as a fraction of that finger's own calibration press,
-which is the only one comparable across fingers. Sessions recorded
-before the in-app calibration existed get the first two and are said to
-be uncorrected rather than quietly pooled with the rest.
+A note on force, because it is the easiest number here to misread. Each
+sensor pad reads a different number of counts for the same real force,
+so raw counts cannot be compared between fingers. Force therefore comes
+in three columns:
+
+    peak_force_n    raw counts as recorded
+    peak_force_N    newtons, absolute, for the Demouche comparison
+    peak_force_cal  counts divided by that finger's OWN calibration press
+
+peak_force_cal is NOT a strength ranking. The calibration press is the
+patient's own light press, not a known physical force, so a weak finger
+recorded a small reference press and dividing by it cancels the real
+weakness along with the pad difference. Four identical pads with a true
+four to one weakness gradient across the hand all come out near 1.0.
+Read peak_force_cal as effort against that finger's own reference, which
+is the right measure for consistency within a finger and for change over
+time. For "which finger is stronger", read the newton column and accept
+that the pad differences are not corrected there. Separating pad
+sensitivity from finger strength needs a known physical reference on
+each pad, a weight or a load cell, which this device does not have.
+
+Sessions recorded before the in-app calibration existed get the raw and
+newton columns only, and are said to be uncorrected rather than quietly
+pooled with the rest.
 """
 from __future__ import annotations
 
@@ -154,6 +170,10 @@ def read_meta(folder: Path) -> dict:
         return {}
 
 
+CATALOGUE_COLS = ["day", "time", "who", "mode", "hand", "trials",
+                  "hit_rate", "mean_rt", "status", "folder", "session"]
+
+
 def build_catalogue(root: Path | str = None) -> pd.DataFrame:
     """One row per game folder. A game is one block of one mode; a
     session is one person on one day."""
@@ -187,8 +207,13 @@ def build_catalogue(root: Path | str = None) -> pd.DataFrame:
             "hit_rate": bs.get("hit_rate"), "mean_rt": bs.get("avg_rt_ms"),
             "status": bs.get("status", "?"), "folder": str(folder),
         })
-    cat = pd.DataFrame(rows)
+    # Columns even when there is nothing on disk. An empty frame with no
+    # columns turns every later cat["session"] into KeyError('session'),
+    # which cascades through the whole notebook and looks like a broken
+    # install rather than an empty sessions folder.
+    cat = pd.DataFrame(rows, columns=CATALOGUE_COLS[:-1])
     if cat.empty:
+        cat["session"] = pd.Series(dtype="object")
         return cat
     cat = cat.sort_values(["day", "time", "who"]).reset_index(drop=True)
     cat["session"] = cat["day"] + "  " + cat["who"]
@@ -248,6 +273,23 @@ def resolve(pick, cat: pd.DataFrame) -> pd.DataFrame:
     return sel
 
 
+def game_key(folder) -> str:
+    """A name that identifies exactly one game folder.
+
+    The folder name on its own is not enough. sessions/<day>/<game> can
+    hold the same block name on two different days, and every per-game
+    lookup here is keyed on that name: the metadata, the calibration,
+    the force factors. A collision quietly applies one game's
+    calibration profile to another game's trials, which is the same
+    class of error as normalising the left hand with the right hand's
+    gaps. The day folder disambiguates, and two folders inside one day
+    cannot share a name.
+    """
+    folder = Path(folder)
+    parent = folder.parent.name
+    return f"{parent}/{folder.name}" if parent else folder.name
+
+
 def load_games(folders, cat: pd.DataFrame) -> pd.DataFrame:
     frames = []
     for folder in folders:
@@ -262,7 +304,7 @@ def load_games(folders, cat: pd.DataFrame) -> pd.DataFrame:
         meta = read_meta(folder)
         bs = meta.get("block_summary", {}) or {}
         row = cat[cat["folder"] == str(folder)]
-        df["game"] = folder.name
+        df["game"] = game_key(folder)
         df["game_label"] = (f"{row['time'].iloc[0]} {row['mode'].iloc[0]}"
                             if len(row) else folder.name)
         df["session"] = row["session"].iloc[0] if len(row) else folder.name
@@ -330,7 +372,7 @@ def load_metas(folders) -> dict:
     """Read every metadata.json for a selection, keyed by game folder
     name. Same shape report() builds internally, so a notebook cell can
     get one without running the whole report."""
-    return {Path(f).name: read_meta(Path(f)) for f in folders}
+    return {game_key(f): read_meta(Path(f)) for f in folders}
 
 
 # ------------------------------------------------------------- calibration
@@ -342,18 +384,88 @@ def load_metas(folders) -> dict:
 # much as the patient.
 #
 # The in-app calibration records what a press was worth on each pad on
-# the day. Dividing by that finger's own gap removes the pad and leaves
-# the person.
+# the day. Dividing by that finger's own gap removes the pad, but it
+# also removes the finger: the gap is the patient's own light press, so
+# a weak finger has a small divisor and the ratio hides the weakness.
+# See NORM_MEANING below. The ratio answers "how hard did this finger
+# push compared with itself", not "which finger is stronger".
+#
+# Calibration is per hand. A bilateral block sits on eight pads and each
+# hand has its own profile, saved as config/calibration/current_<hand>.json
+# and stamped into the session metadata with a "hand" field. Lanes are
+# normalised with their own hand's profile, and a lane whose hand was
+# never calibrated stays uncorrected rather than borrowing the other
+# hand's numbers.
 
 # Per-finger lists a calibration carries, all index order
 # index/middle/ring/pinky, matching FINGERS.
 CAL_LISTS = ("empty", "resting", "press", "press_all",
              "preload", "gap", "on_delta", "off_delta")
 
-# Name for the calibrated measure. Used for column names and axis labels
-# so a reader never has to guess whether a force number is comparable.
-NORM_UNIT = "x calibration press"
-NORM_LABEL = "force (x calibration press)"
+# Name for the calibrated measure. Deliberately not called a force: it
+# is a ratio against a reference the patient produced. The old label
+# "force (x calibration press)" read as a force comparable between
+# fingers, which is exactly the wrong reading.
+NORM_UNIT = "x own reference press"
+NORM_LABEL = "relative effort (x that finger's own reference press)"
+
+# One sentence for every table and axis where the ratio turns up. The
+# reader should never meet the number without meeting this.
+NORM_SHORT = ("effort against that finger's own reference press, "
+              "not a strength ranking")
+
+# The hands a lane can belong to.
+HANDS = ("right", "left")
+
+
+def print_norm_short(indent="   "):
+    """The short version, wrapped to the width everything else here
+    prints at. Every table carrying the ratio gets this."""
+    for line in (f"{NORM_LABEL}.",
+                 "Effort against that finger's own reference press: good",
+                 "for consistency within a finger and for change over",
+                 "time, NOT a between-finger strength ranking. For which",
+                 "finger is stronger, read the newton column and its",
+                 "caveat."):
+        print(indent + line)
+
+
+def normalisation_note(indent="") -> str:
+    """The full statement of what the calibrated ratio can and cannot
+    answer, printed once wherever force is the subject.
+
+    Written out rather than summarised because the failure it guards
+    against is silent: peak_force_cal looks like a corrected force and
+    reads like one, and a reader who ranks fingers on it gets a number
+    that has had the ranking divided out of it.
+    """
+    lines = [
+        "WHAT THE CALIBRATED COLUMN MEANS",
+        f"  {NORM_LABEL}.",
+        "  Each finger's force divided by the light press THAT finger gave",
+        "  at calibration. 1.0 means the same effort as that reference.",
+        "",
+        "  It CAN answer: was this finger consistent, did its effort change",
+        "  across the block, did it change between sessions.",
+        "",
+        "  It CANNOT answer: which finger is stronger. The reference press",
+        "  is the patient's own light press, not a known physical force, so",
+        "  a weak finger recorded a small reference and dividing by it",
+        "  cancels the weakness along with the pad difference. Four",
+        "  identical pads with a real four to one weakness gradient across",
+        "  the hand all come out near 1.0 on this measure.",
+        "",
+        "  For a between-finger strength comparison, read the newton",
+        "  figures. Those are absolute, but they are NOT corrected for pad",
+        "  sensitivity, so part of any difference between fingers there is",
+        "  the hardware.",
+        "",
+        "  This device cannot separate pad sensitivity from finger strength.",
+        "  Doing that needs a known physical reference on each pad, a weight",
+        "  or a load cell, and there is none here. Report the limitation",
+        "  rather than picking whichever number looks cleaner.",
+    ]
+    return "\n".join(indent + ln if ln else ln for ln in lines)
 
 # Counts between resting and pressing below which the calibration press
 # was too weak to divide by: sensor noise would come out as a large
@@ -397,12 +509,86 @@ def _finger_index(finger):
         return None
 
 
-def read_calibration(meta) -> dict:
-    """The calibration a session recorded. Empty dict for anything
-    recorded before the in-app calibration existed, which is a normal
-    state and not an error."""
-    cal = (meta or {}).get("calibration") or {}
-    return cal if isinstance(cal, dict) else {}
+def lane_side(lane, hand_mode="right"):
+    """Which hand a 0-based lane belongs to, or None when it makes no
+    sense.
+
+    A bilateral block puts the right hand on lanes 0 to 3 and the left on
+    4 to 7. A one-handed block only ever uses 0 to 3, and those belong to
+    whichever hand was played, so the lane number alone does not say
+    which hand a reading came from.
+    """
+    mode = str(hand_mode or "right").strip().lower()
+    if mode in ("left", "right"):
+        return mode
+    try:
+        i = int(lane)
+    except (TypeError, ValueError):
+        return None
+    if isinstance(lane, float) and np.isnan(lane):
+        return None
+    return "left" if i >= len(FINGERS) else "right"
+
+
+def normalise_hand(hand) -> str | None:
+    h = str(hand or "").strip().lower()
+    return h if h in HANDS else None
+
+
+def read_calibrations(meta) -> dict:
+    """Every calibration a session recorded, keyed by hand.
+
+    Calibration is measured one hand at a time, so a bilateral block can
+    carry two profiles, one, or none. Three shapes turn up and all three
+    have to be read, because a session written by an older build has to
+    keep working:
+
+        {"hand": "right", "gap": [...], ...}      one profile
+        {"right": {...}, "left": {...}}            one per hand
+        [{...}, {...}]                             a list of profiles
+
+    A profile with no hand field at all is taken as the right hand,
+    which is what the app defaults to, and that assumption is reported
+    by sec_calibration rather than buried here.
+    """
+    raw = (meta or {}).get("calibration")
+    out = {}
+
+    def take(cal, fallback=None):
+        if not isinstance(cal, dict) or not cal:
+            return
+        hand = normalise_hand(cal.get("hand")) or normalise_hand(fallback)
+        if hand is None:
+            hand = "right"
+            cal = {**cal, "hand": hand, "hand_assumed": True}
+        out.setdefault(hand, cal)
+
+    if isinstance(raw, dict):
+        by_hand = {k: v for k, v in raw.items()
+                   if normalise_hand(k) and isinstance(v, dict)}
+        if by_hand:
+            for key, cal in by_hand.items():
+                take(cal, key)
+        else:
+            take(raw)
+    elif isinstance(raw, (list, tuple)):
+        for cal in raw:
+            take(cal)
+    return out
+
+
+def read_calibration(meta, hand=None) -> dict:
+    """One hand's calibration, empty dict when that hand has none.
+
+    Kept for callers that only ever look at one hand. With no hand asked
+    for it returns the single profile when there is exactly one, and an
+    empty dict when the session carries two, so nothing can pick up the
+    wrong hand's numbers by accident.
+    """
+    cals = read_calibrations(meta)
+    if hand is not None:
+        return cals.get(normalise_hand(hand) or "", {})
+    return list(cals.values())[0] if len(cals) == 1 else {}
 
 
 def calibration_problems(cal) -> list:
@@ -495,14 +681,23 @@ class CalibrationSet:
 
     A selection can span games recorded under different calibrations, or
     under none at all, so there is no single set of numbers to hand back.
-    Callers ask per game and get None when that game has nothing usable
-    for that finger.
+    Callers ask per game and per hand and get None when that game has
+    nothing usable for that hand and finger.
+
+    Per hand matters. Lanes 4 to 7 are the left hand, and normalising
+    them with the right hand's gaps mixes two sets of pads into one
+    number that looks corrected. A hand with no profile stays
+    uncorrected instead.
     """
 
-    per_game: dict = field(default_factory=dict)     # game -> calibration
-    gaps: dict = field(default_factory=dict)         # game -> [gap|None] x4
-    problems: dict = field(default_factory=dict)     # game -> [str]
+    # game -> {hand -> calibration}
+    per_game: dict = field(default_factory=dict)
+    # game -> {hand -> [gap|None] x4}
+    gaps: dict = field(default_factory=dict)
+    # game -> {hand -> [str]}
+    problems: dict = field(default_factory=dict)
     units: dict = field(default_factory=dict)        # game -> logged unit
+    played: dict = field(default_factory=dict)       # game -> {hand}
     # Per game, how many raw sensor counts one logged unit is, and how
     # many newtons. Both are 1.0 and N_PER_COUNT for the ordinary case
     # where force was logged in counts.
@@ -533,55 +728,111 @@ class CalibrationSet:
     def uncalibrated_games(self) -> list:
         return sorted(k for k, v in self.per_game.items() if not v)
 
+    def cals(self, game) -> dict:
+        """{hand: calibration} for one game, empty when it has none."""
+        return self.per_game.get(str(game)) or {}
+
+    def hands(self, game) -> set:
+        """Hands of one game that have at least one usable finger gap."""
+        out = set()
+        for hand, seq in (self.gaps.get(str(game)) or {}).items():
+            if any(g is not None for g in seq):
+                out.add(hand)
+        return out
+
+    def missing_hands(self, game, needed) -> list:
+        """Hands this game has trials on but no usable calibration for."""
+        have = self.hands(game)
+        return sorted(h for h in needed if h and h not in have)
+
+    @property
+    def all_cals(self) -> list:
+        """(game, hand, calibration) for every profile in the selection."""
+        return [(g, h, c)
+                for g in sorted(self.per_game)
+                for h, c in sorted((self.per_game[g] or {}).items())
+                if c]
+
     @property
     def stamps(self) -> dict:
-        """Label -> the games recorded under it, oldest key first.
+        """Label -> the (game, hand) pairs recorded under it, oldest key
+        first.
 
         Grouped by what each calibration measured as well as by when it
         was taken, so two different profiles sharing a timestamp stay in
         two blocks instead of one block showing the first one's numbers.
+        The hand is part of the grouping too: a left and a right profile
+        saved in the same second are two different measurements of two
+        different sets of pads.
         """
         groups = {}
-        for name in sorted(self.per_game):
-            cal = self.per_game[name]
-            if not cal:
-                continue
-            key = (cal.get("created_at") or "unknown",
+        for game, hand, cal in self.all_cals:
+            key = (cal.get("created_at") or "unknown", hand,
                    calibration_signature(cal))
-            groups.setdefault(key, []).append(name)
+            groups.setdefault(key, []).append((game, hand))
 
         out, seen = {}, {}
-        for (created, _sig), games in sorted(groups.items(),
-                                             key=lambda kv: str(kv[0])):
-            seen[created] = seen.get(created, 0) + 1
-            label = (created if seen[created] == 1
-                     else f"{created}  (distinct calibration "
-                          f"{seen[created]})")
-            out[label] = games
+        for (created, hand, _sig), pairs in sorted(groups.items(),
+                                                   key=lambda kv: str(kv[0])):
+            base = f"{created}  ({hand} hand)"
+            seen[base] = seen.get(base, 0) + 1
+            label = (base if seen[base] == 1
+                     else f"{base}  (distinct calibration {seen[base]})")
+            out[label] = pairs
         return out
 
     @property
     def status(self) -> str:
-        """none, single, partial (some games missing one) or multiple
-        (the selection spans more than one calibration)."""
+        """none, single, partial or multiple.
+
+        Counted per hand. One bilateral game with a left and a right
+        profile is one calibration of each hand, not two calibrations of
+        the selection, so it must not raise the "these games span more
+        than one calibration" warning.
+        """
         n_cal = len(self.calibrated_games)
         if n_cal == 0:
             return "none"
-        if len(self.stamps) > 1:
+        per_hand = {}
+        for _game, hand, cal in self.all_cals:
+            per_hand.setdefault(hand, set()).add(calibration_signature(cal))
+        if any(len(sigs) > 1 for sigs in per_hand.values()):
             return "multiple"
         if n_cal < len(self.per_game):
+            return "partial"
+        if any(self.missing_hands(g, self.played.get(g, set()))
+               for g in self.per_game):
             return "partial"
         return "single"
 
     @property
     def usable(self) -> bool:
-        """Whether any finger of any game can be normalised at all."""
-        return any(g is not None for seq in self.gaps.values() for g in seq)
+        """Whether any finger of any hand of any game can be normalised."""
+        return any(g is not None
+                   for by_hand in self.gaps.values()
+                   for seq in by_hand.values()
+                   for g in seq)
 
-    def gap(self, game, finger):
+    def gap(self, game, finger, hand=None):
         """Counts between resting and a light press, for one finger of
-        one game. None when that pad has no usable calibration."""
-        seq = self.gaps.get(str(game))
+        one hand of one game. None when that pad has no usable
+        calibration.
+
+        `hand` is required whenever the game could have both. With no
+        hand given it falls back to the game's only profile, and returns
+        None when the game carries two, so a lane can never pick up the
+        other hand's numbers by omission.
+        """
+        by_hand = self.gaps.get(str(game)) or {}
+        if not by_hand:
+            return None
+        hand = normalise_hand(hand)
+        if hand is None:
+            if len(by_hand) != 1:
+                return None
+            seq = list(by_hand.values())[0]
+        else:
+            seq = by_hand.get(hand)
         if not seq:
             return None
         i = _finger_index(finger)
@@ -589,10 +840,15 @@ class CalibrationSet:
             return None
         return seq[i]
 
-    def factor(self, game, finger):
+    def lane_gap(self, game, lane, hand_mode="right"):
+        """Gap for a 0-based lane, taken from the hand that lane sits on."""
+        return self.gap(game, lane % len(FINGERS),
+                        lane_side(lane, hand_mode))
+
+    def factor(self, game, finger, hand=None):
         """Multiply raw counts above baseline by this to get force as a
-        fraction of that finger's own calibration press."""
-        g = self.gap(game, finger)
+        fraction of that finger's own reference press."""
+        g = self.gap(game, finger, hand)
         return None if not g else 1.0 / g
 
     def newtons(self, value, game=None):
@@ -609,6 +865,40 @@ def _is_newtons(unit) -> bool:
     return str(unit).strip().upper() in ("N", "NEWTON", "NEWTONS")
 
 
+def played_hands(meta) -> set:
+    """The hands a block was played with, from its metadata."""
+    mode = str((meta or {}).get("hand") or "").strip().lower()
+    if mode == "both":
+        return set(HANDS)
+    h = normalise_hand(mode)
+    return {h} if h else set()
+
+
+def hand_profiles_on_disk(root=None) -> dict:
+    """The per-hand profiles sitting in config/calibration right now.
+
+    Only used to say which hands have ever been calibrated on this
+    machine, so the caveat text can name the file that is missing. These
+    are NOT applied to any session: current_left.json is whatever was
+    measured last, not what a past block ran under, and using it would
+    put a corrected-looking number on data it never covered.
+    """
+    base = Path(root) if root else Path(SESSIONS_DIR).parent
+    out = {}
+    for hand in HANDS:
+        p = base / "config" / "calibration" / f"current_{hand}.json"
+        if not p.exists():
+            continue
+        try:
+            data = json.loads(p.read_text())
+        except (json.JSONDecodeError, OSError):
+            continue
+        if isinstance(data, dict):
+            out[hand] = {"path": str(p),
+                         "created_at": data.get("created_at", "unknown")}
+    return out
+
+
 def calibration_factors(metas, unit=None) -> CalibrationSet:
     """Per-finger normalisation factors for a selection.
 
@@ -623,10 +913,15 @@ def calibration_factors(metas, unit=None) -> CalibrationSet:
     cs = CalibrationSet(unit=unit,
                         n_per_unit=1.0 if _is_newtons(unit) else N_PER_COUNT)
     for name, meta in items:
-        cal = read_calibration(meta)
-        cs.per_game[name] = cal
-        cs.gaps[name] = calibration_gaps(cal)
-        cs.problems[name] = calibration_problems(cal)
+        cals = read_calibrations(meta)
+        cs.per_game[name] = cals
+        cs.gaps[name] = {h: calibration_gaps(c) for h, c in cals.items()}
+        cs.problems[name] = {h: calibration_problems(c)
+                             for h, c in cals.items()}
+        # Which hands the block actually played, so sec_calibration can
+        # say a hand was used but never calibrated rather than only
+        # listing what was measured.
+        cs.played[name] = played_hands(meta)
 
         game_unit = ((meta.get("block_summary", {}) or {}).get("force_unit")
                      or unit)
@@ -650,16 +945,22 @@ def calibration_factors(metas, unit=None) -> CalibrationSet:
     return cs
 
 
-def parse_peaks_normalised(cell, game=None, calset=None) -> dict:
-    """parse_peaks with every lane divided by that lane's own calibration
-    press. Lanes with no usable gap are left out, so a caller can spot a
-    partial result by comparing the length against parse_peaks."""
+def parse_peaks_normalised(cell, game=None, calset=None,
+                           hand_mode="right") -> dict:
+    """parse_peaks with every lane divided by that lane's own reference
+    press, taken from the profile for the hand that lane sits on.
+
+    Lanes with no usable gap are left out, so a caller can spot a partial
+    result by comparing the length against parse_peaks. `hand_mode` is
+    the block's hand setting: without it, lanes 4 to 7 would be divided
+    by the right hand's gaps, which is eight pads normalised by four.
+    """
     raw = parse_peaks(cell)
     if calset is None or not raw:
         return {}
     out = {}
     for lane0, val in raw.items():
-        g = calset.gap(game, lane0 % len(FINGERS))
+        g = calset.lane_gap(game, lane0, hand_mode)
         if g:
             out[lane0] = calset.counts(game, val) / g
     return out
@@ -670,13 +971,18 @@ def add_force_columns(trials, calset=None) -> pd.DataFrame:
     columns next to the raw counts.
 
     peak_force_cal, impulse_cal and force_window_sum_cal are counts above
-    baseline divided by that finger's own calibration press, so 1.0 means
-    as strong as the press that finger gave at calibration. Those are the
-    only force numbers comparable between fingers.
+    baseline divided by the light press THAT finger of THAT hand gave at
+    calibration, so 1.0 means the same effort as its own reference. They
+    are not a between-finger strength comparison: see normalisation_note.
 
     peak_force_N and impulse_Ns stay absolute, because Demouche's healthy
     fingertip forces are in newtons and a ratio cannot be checked against
-    them.
+    them. They are not corrected for pad sensitivity either.
+
+    Each row is normalised with the profile for the hand its lane sits
+    on. A row on a hand with no profile comes back blank in the
+    calibrated columns with force_calibrated False, rather than borrowing
+    the other hand's gaps.
 
     Safe to call twice. With no calibration the calibrated columns come
     back all NaN and force_calibrated is False everywhere, which is what
@@ -694,7 +1000,10 @@ def add_force_columns(trials, calset=None) -> pd.DataFrame:
     peak_n, imp_n = [], []
     for _, r in df.iterrows():
         game = r.get("game")
-        g = calset.gap(game, r.get("finger")) if calset is not None else None
+        hand_mode = r.get("hand_mode", "right")
+        side = r.get("side") or lane_side(_lane0(r), hand_mode)
+        g = (calset.gap(game, r.get("finger"), side)
+             if calset is not None else None)
         pk, im = r.get("peak_force_n"), r.get("impulse_n")
         if calset is None:
             peak_n.append(float(pk) * N_PER_COUNT if pd.notna(pk) else np.nan)
@@ -707,7 +1016,7 @@ def add_force_columns(trials, calset=None) -> pd.DataFrame:
         imp_cal.append(calset.counts(game, im) / g
                        if g and pd.notna(im) else np.nan)
         cell = r.get("force_window_peaks")
-        norm = parse_peaks_normalised(cell, game, calset)
+        norm = parse_peaks_normalised(cell, game, calset, hand_mode)
         # Only sum when every lane that registered has a gap to divide
         # by. A partial sum mixes normalised lanes with dropped ones and
         # is not comparable with anything.
@@ -723,6 +1032,17 @@ def add_force_columns(trials, calset=None) -> pd.DataFrame:
     df["peak_force_N"] = peak_n
     df["impulse_Ns"] = imp_n
     return df
+
+
+def _lane0(row):
+    """A trial row's 0-based lane, or None when it has none."""
+    lane = row.get("lane")
+    try:
+        if pd.isna(lane):
+            return None
+        return int(lane) - 1
+    except (TypeError, ValueError):
+        return None
 
 
 def ensure_force_columns(trials, calset=None) -> pd.DataFrame:
@@ -866,53 +1186,219 @@ def individuation(trials: pd.DataFrame, calset=None) -> pd.DataFrame:
     1.0 means only the intended finger pressed; lower means the force
     spread onto its neighbours.
 
-    The raw index is biased by the sensors, not just by the hand. A
-    finger sitting on an over-reading pad inflates the denominator on
-    every trial, which drags the index down for every other finger and
-    reads as spill that never happened. `individuation_cal` divides each
-    lane by its own calibration press first and is the version to report
-    whenever the `corrected` column is True.
+    Two indices come out, on two different bases, and they are not
+    interchangeable.
+
+    `individuation` is on absolute readings. That is the basis the
+    enslavement figures in the literature use (13 percent unimpaired,
+    25.1 percent after stroke), so it is the one that can be put next to
+    them. It carries the per-pad sensitivity bias: a finger on an
+    over-reading pad inflates the denominator on every trial and drags
+    the index down for every other finger.
+
+    `individuation_cal` divides each lane by its own reference press
+    first. That removes the pad, but it also weights each finger's spill
+    by the inverse of that finger's own press strength, so a weak finger
+    with a small reference contributes more spill per newton than a
+    strong one. The per-finger ranking it produces is not the ranking on
+    absolute force, and the number is NOT comparable with the published
+    enslavement figures. It answers a different question: how the force
+    spread relative to what each finger can produce.
+
+    `comparable` marks the trials where both indices exist, so a raw
+    against corrected comparison can be made over the same trials. That
+    matters because correctability is not random: a lane is dropped
+    when its finger has no usable gap, which is exactly the lanes most
+    likely to be carrying spill, so comparing the corrected mean over
+    its own subset against the raw mean over all trials moves the
+    corrected figure up for reasons that have nothing to do with the
+    calibration.
     """
+    cols = ["row_id", "trial", "finger", "game", "game_label", "hand",
+            "on_target", "spillover", "individuation", "on_target_cal",
+            "spillover_cal", "individuation_cal", "corrected", "comparable",
+            "why_not"]
     rows = []
-    if "force_window_peaks" not in trials.columns:
-        return pd.DataFrame(rows)
-    for _, r in trials.iterrows():
+    if trials.empty or "force_window_peaks" not in trials.columns:
+        return pd.DataFrame(columns=cols)
+    for idx, r in trials.iterrows():
         cell = r.get("force_window_peaks")
         peaks = parse_peaks(cell)
-        if not peaks or pd.isna(r.get("lane")):
+        lane0 = _lane0(r)
+        if not peaks or lane0 is None:
             continue
-        tgt = int(r["lane"]) - 1
+        tgt = lane0
+        hand_mode = r.get("hand_mode", "right")
+        side = r.get("side") or lane_side(tgt, hand_mode)
         on_target = peaks.get(tgt, 0.0)
         spill = sum(v for k, v in peaks.items() if k != tgt)
         total = on_target + spill
         if total <= 0:
             continue
-        row = {"trial": r["trial"], "finger": r["finger"],
+        # The trials row this came from. Joining on (game, trial) is not
+        # safe: two folders can carry the same block name, and trial
+        # numbers restart at 1 in every block.
+        row = {"row_id": idx,
+               "trial": r["trial"], "finger": r["finger"],
                "game": r.get("game"), "game_label": r["game_label"],
+               "hand": side,
                "on_target": on_target, "spillover": spill,
                "individuation": on_target / total,
                "on_target_cal": np.nan, "spillover_cal": np.nan,
-               "individuation_cal": np.nan, "corrected": False}
+               "individuation_cal": np.nan, "corrected": False,
+               "comparable": False, "why_not": ""}
         # Every lane in the trial needs a gap, including the target lane
         # even when it registered nothing: an on-target zero is a real
-        # zero and has to stay in, or the corrected mean quietly drops
-        # the worst trials and looks better than the raw one for reasons
-        # that have nothing to do with the calibration. Normalising some
-        # lanes and leaving others raw would be worse still, because the
-        # mixture is invisible in the result.
-        norm = parse_peaks_normalised(cell, r.get("game"), calset)
-        tgt_gap = (calset.gap(r.get("game"), tgt % len(FINGERS))
+        # zero and has to stay in. Normalising some lanes and leaving
+        # others raw would be worse still, because the mixture is
+        # invisible in the result.
+        norm = parse_peaks_normalised(cell, r.get("game"), calset, hand_mode)
+        tgt_gap = (calset.gap(r.get("game"), tgt % len(FINGERS), side)
                    if calset is not None else None)
-        if tgt_gap and len(norm) == len(peaks):
+        if calset is None or not calset.usable:
+            row["why_not"] = "no calibration for these games"
+        elif not tgt_gap:
+            row["why_not"] = (f"no usable {side}-hand gap for the target "
+                              f"finger")
+        elif len(norm) != len(peaks):
+            missing = sorted(FINGERS[k % len(FINGERS)]
+                             for k in peaks if k not in norm)
+            row["why_not"] = ("no usable gap on a lane that registered: "
+                              + ", ".join(missing))
+        if not row["why_not"]:
             on_c = norm.get(tgt, 0.0)
             spill_c = sum(v for k, v in norm.items() if k != tgt)
             total_c = on_c + spill_c
             if total_c > 0:
                 row.update({"on_target_cal": on_c, "spillover_cal": spill_c,
                             "individuation_cal": on_c / total_c,
-                            "corrected": True})
+                            "corrected": True, "comparable": True})
+            else:
+                row["why_not"] = "nothing registered once normalised"
         rows.append(row)
-    return pd.DataFrame(rows)
+    return pd.DataFrame(rows, columns=cols)
+
+
+# -------------------------------------------------- what counts as a
+# reaction time
+#
+# time_difference_ms is two different measurements under one name. In
+# classic, adaptive and mirror it is the delay from the cue to the press,
+# a reaction time, and it cannot be negative. In rhythm it is a SIGNED
+# offset from the beat: the note is known in advance, so pressing early
+# is normal and the column is negative about half the time.
+#
+# Pooling the two produces numbers that are not wrong so much as
+# meaningless. A rhythm block's mean of -95 ms mixed with a classic
+# block's 158 ms gave a left-right "asymmetry" of -8.027 on the shipped
+# data, and a coefficient of variation of -0.475, which cannot exist.
+# Every reaction-time aggregate goes through here instead.
+
+CUED_MODES = ("classic", "adaptive", "mirror")
+
+
+def is_cued(trials) -> pd.Series:
+    """True on trials whose time_difference_ms is a reaction time."""
+    if trials.empty or "mode" not in trials.columns:
+        return pd.Series(False, index=trials.index, dtype=bool)
+    return trials["mode"].isin(CUED_MODES)
+
+
+def reaction_times(trials, per=None):
+    """Reaction times only: cued modes, misses removed, blanks removed.
+
+    Returns the values as a Series when `per` is None, otherwise the
+    rows, so callers that need to group keep their other columns.
+    """
+    if trials is None or trials.empty:
+        empty = trials if trials is not None else pd.DataFrame()
+        return empty if per == "rows" else pd.Series(dtype="float64")
+    rows = trials[is_cued(trials)]
+    if "time_difference_ms" not in rows.columns:
+        return rows.iloc[0:0] if per == "rows" else pd.Series(dtype="float64")
+    rows = rows[rows["time_difference_ms"].notna()]
+    if "early_late" in rows.columns:
+        rows = rows[rows["early_late"] != "Miss"]
+    if per == "rows":
+        return rows
+    return rows["time_difference_ms"].astype(float)
+
+
+def rt_stats(trials) -> dict:
+    """n, mean and CV over reaction times only. CV is None rather than
+    negative: a negative CV means beat offsets got in, not a fast
+    participant."""
+    v = reaction_times(trials)
+    if v.empty:
+        return {"n": 0, "mean_rt": np.nan, "rt_cv": np.nan}
+    mean = float(v.mean())
+    cv = float(v.std() / mean) if mean > 0 and len(v) > 1 else np.nan
+    return {"n": int(len(v)), "mean_rt": round(mean, 1),
+            "rt_cv": round(cv, 3) if pd.notna(cv) else np.nan}
+
+
+def rhythm_rows(trials):
+    """Rhythm trials with a usable beat offset."""
+    if trials.empty or "mode" not in trials.columns:
+        return trials.iloc[0:0] if not trials.empty else trials
+    rhy = trials[(trials["mode"] == "rhythm")
+                 & trials["time_difference_ms"].notna()]
+    if "early_late" in rhy.columns:
+        rhy = rhy[rhy["early_late"] != "Miss"]
+    return rhy
+
+
+# --------------------------------------------------- trial exclusions
+# Two kinds of trial cannot be analysed. A trial where the cue command
+# never reached the device was never presented, so the participant had
+# nothing to react to. A press under 100 ms is faster than a cued
+# reaction and is anticipation, not a response.
+#
+# The headline table and the exported CSV used to be built from every
+# recorded trial, including these, while the exclusions section printed
+# how many there were. On the shipped default that meant a hit rate and
+# a mean reaction time computed from 48 trials the same notebook said
+# could not be analysed.
+
+ANTICIPATION_MS = 100.0
+
+
+def exclusion_flags(trials) -> pd.DataFrame:
+    """Copy of `trials` with why each trial can or cannot be analysed."""
+    df = trials.copy()
+    if df.empty:
+        for c in ("no_cue", "anticipation", "excluded"):
+            df[c] = pd.Series(dtype="bool")
+        df["exclusion_reason"] = pd.Series(dtype="object")
+        return df
+    rt = df["time_difference_ms"] if "time_difference_ms" in df.columns \
+        else pd.Series(np.nan, index=df.index)
+    mode = df["mode"] if "mode" in df.columns \
+        else pd.Series("", index=df.index)
+    df["no_cue"] = (df.get("stim_delivered") == False)
+    df["anticipation"] = (rt.notna() & (rt < ANTICIPATION_MS)
+                          & (mode != "rhythm"))
+    df["excluded"] = df["no_cue"] | df["anticipation"]
+    df["exclusion_reason"] = np.where(
+        df["no_cue"], "cue never delivered",
+        np.where(df["anticipation"],
+                 f"faster than {ANTICIPATION_MS:.0f} ms", ""))
+    return df
+
+
+def analysable(trials):
+    """(kept trials, flagged trials, counts). The kept frame is what any
+    headline number should be built from."""
+    flagged = exclusion_flags(trials)
+    if flagged.empty:
+        counts = {"recorded": 0, "no_cue": 0, "anticipation": 0,
+                  "analysed": 0}
+        return flagged, flagged, counts
+    counts = {"recorded": int(len(flagged)),
+              "no_cue": int(flagged["no_cue"].sum()),
+              "anticipation": int(flagged["anticipation"].sum()),
+              "analysed": int((~flagged["excluded"]).sum())}
+    return flagged[~flagged["excluded"]].copy(), flagged, counts
 
 
 # ---------------------------------------------------------------- sections
@@ -921,17 +1407,32 @@ def _order(df, col="finger"):
     return [f for f in FINGERS if f in df[col].unique()]
 
 
+def _nothing(*lines):
+    """Say why a section has nothing to show. Every section prints
+    something: a section that returns in silence reads as one that
+    crashed, and the reader cannot tell an empty result from a broken
+    cell."""
+    for ln in lines:
+        print(ln)
+
+
 def sec_overview(trials, folders, metas):
     print("=" * 62)
     print("OVERVIEW")
     print("=" * 62)
+    if not folders:
+        _nothing("Nothing is selected, so there is no game to summarise.",
+                 "Record a block, then run the cells above again.")
+        return 0.0
     rows = []
     for f in folders:
-        m = metas.get(Path(f).name, {})
+        m = metas.get(game_key(f), {})
         bs = m.get("block_summary", {}) or {}
-        sub = trials[trials["folder"] == str(f)]
+        sub = (trials[trials["folder"] == str(f)]
+               if "folder" in trials.columns else trials.iloc[0:0])
         rows.append({
-            "game": sub["game_label"].iloc[0] if len(sub) else Path(f).name,
+            "game": (sub["game_label"].iloc[0] if len(sub)
+                     else game_key(f)),
             "mode": bs.get("block", "?"), "hand": m.get("hand", "?"),
             "trials": bs.get("trials", len(sub)), "hit_rate": bs.get("hit_rate"),
             "mean_rt_ms": bs.get("avg_rt_ms"), "score": bs.get("final_score"),
@@ -953,6 +1454,10 @@ def sec_quality(trials, folders, metas):
     print("\n" + "=" * 62)
     print("DATA QUALITY")
     print("=" * 62)
+    if trials.empty:
+        _nothing("No trials are loaded, so there is nothing to check.",
+                 "Pick a save from the dropdown and run the load cell.")
+        return
     if "stim_delivered" in trials.columns:
         sd = trials["stim_delivered"].dropna()
         if len(sd):
@@ -970,7 +1475,7 @@ def sec_quality(trials, folders, metas):
         # connected but never crossed a trigger leaves the same empty
         # column, and that is a hardware fault worth chasing rather than
         # a choice of input worth ignoring.
-        sources = {str(metas.get(Path(f).name, {}).get("source_name", "?"))
+        sources = {str(metas.get(game_key(f), {}).get("source_name", "?"))
                    for f in folders}
         if all(s == "?" or s.lower().startswith("keyboard") for s in sources):
             print("   ^ keyboard mode, so force and individuation are empty.")
@@ -980,20 +1485,23 @@ def sec_quality(trials, folders, metas):
             print("     registered a press, so check the wiring and the press")
             print("     thresholds before reading any force number below.")
     for f in folders:
-        bs = metas.get(Path(f).name, {}).get("block_summary", {}) or {}
+        bs = metas.get(game_key(f), {}).get("block_summary", {}) or {}
         if bs.get("pauses"):
-            print(f"{Path(f).name}: paused {bs['pauses']}x "
+            print(f"{game_key(f)}: paused {bs['pauses']}x "
                   f"for {bs.get('paused_total_s', 0):.0f}s")
         drift = bs.get("drift_units_per_min") or {}
         vals = [(abs(v), k) for k, v in drift.items() if v is not None]
         if vals:
             worst = max(vals)
             flag = "   <- large, check the sensor" if worst[0] > 10 else ""
-            print(f"{Path(f).name}: worst drift {worst[1]} "
+            print(f"{game_key(f)}: worst drift {worst[1]} "
                   f"{worst[0]:.2f}/min{flag}")
 
 
 def sec_compare(trials):
+    if trials.empty:
+        print("No trials are loaded, so there is nothing to compare.")
+        return None
     games = trials["game_label"].nunique()
     if games < 2:
         print("Only one game in this selection, so there is nothing\n"
@@ -1005,14 +1513,22 @@ def sec_compare(trials):
     print("=" * 62)
     rows = []
     for g, sub in trials.groupby("game_label", sort=False):
-        v = sub.loc[sub["early_late"] != "Miss", "time_difference_ms"].dropna()
-        rows.append({"game": g, "mode": sub["mode"].iloc[0], "trials": len(sub),
+        # Reaction time only from cued modes. A rhythm block's column is
+        # a signed offset from the beat, so putting it in a mean_rt
+        # cell would print a negative reaction time next to real ones.
+        s = rt_stats(sub)
+        mode = sub["mode"].iloc[0]
+        rows.append({"game": g, "mode": mode, "trials": len(sub),
                      "hit_rate": round((sub["early_late"] != "Miss").mean(), 3),
-                     "mean_rt": round(v.mean(), 1) if len(v) else np.nan,
-                     "rt_cv": (round(v.std() / v.mean(), 3)
-                               if len(v) and v.mean() else np.nan)})
+                     "rt_trials": s["n"],
+                     "mean_rt": s["mean_rt"], "rt_cv": s["rt_cv"]})
     comp = pd.DataFrame(rows)
     _show(comp)
+    if (comp["mode"] == "rhythm").any():
+        print("mean_rt and rt_cv are blank for rhythm blocks. Their")
+        print("time_difference_ms is a signed offset from the beat, not a")
+        print("reaction time, so it cannot go in the same column. The")
+        print("rhythm section below reports those offsets on their own.")
     cols = [MODE_COLOUR.get(m, "#94a3b8") for m in comp["mode"]]
     x = np.arange(len(comp))
     fig, ax = plt.subplots(1, 3, figsize=(14, 3.6))
@@ -1033,18 +1549,24 @@ def sec_compare(trials):
 
 
 def sec_reaction_time(trials):
-    cued = trials[trials["mode"].isin(["classic", "adaptive", "mirror"])]
-    rt = cued[cued["time_difference_ms"].notna()
-              & (cued["early_late"] != "Miss")]
+    rt = reaction_times(trials, per="rows")
     if rt.empty:
-        print("\nNo cued-mode reaction times here.")
+        print("\nNo cued-mode reaction times here. This section covers")
+        print("classic, adaptive and mirror blocks with a press logged")
+        print("against the cue. Rhythm blocks are left out on purpose:")
+        print("their timing column is an offset from the beat, not a")
+        print("reaction time.")
         return rt
     print("\n" + "=" * 62)
     print("REACTION TIME")
     print("=" * 62)
     v = rt["time_difference_ms"]
+    # CV through rt_stats so it can never come out negative. A negative
+    # CV is impossible and only ever meant beat offsets had got in.
+    s = rt_stats(rt)
+    cv = f"{s['rt_cv']:.3f}" if pd.notna(s["rt_cv"]) else "not computable"
     print(f"n {len(v)}   mean {v.mean():.1f} ms   median {v.median():.1f} ms   "
-          f"sd {v.std():.1f}   CV {v.std()/v.mean():.3f}")
+          f"sd {v.std():.1f}   CV {cv}")
     print(f"fastest {v.min():.0f} ms   10th/90th "
           f"{v.quantile(.1):.0f}/{v.quantile(.9):.0f} ms")
 
@@ -1069,7 +1591,8 @@ def sec_reaction_time(trials):
     per = (rt.groupby("finger")["time_difference_ms"]
              .agg(n="count", mean="mean", median="median", sd="std")
              .reindex(order).round(1))
-    per["CV"] = (per["sd"] / per["mean"]).round(3)
+    # Blank rather than negative where the mean is not positive.
+    per["CV"] = (per["sd"] / per["mean"]).where(per["mean"] > 0).round(3)
     _show(per)
 
     if len(rt) > 8:
@@ -1097,17 +1620,46 @@ def sec_reaction_time(trials):
 
 
 def sec_accuracy(trials):
-    cued = trials[trials["mode"].isin(["classic", "adaptive", "mirror"])]
-    adaptive = trials[trials["mode"] == "adaptive"]
-    target = adaptive if not adaptive.empty else cued
-    if target.empty:
-        return
+    """Hit rate against the challenge-point band.
+
+    The band belongs to the adaptive controller, so when the selection
+    holds adaptive blocks this narrows to them. That used to happen
+    silently, and the printed hit rate then disagreed with the one the
+    summary exported over every cued block. Both scopes are printed now,
+    and the returned dict names which one the band was checked against
+    so the summary can label them apart.
+    """
     print("\n" + "=" * 62)
     print("ACCURACY AND THE CHALLENGE POINT")
     print("=" * 62)
+    if trials.empty:
+        _nothing("No trials are loaded, so there is no hit rate to show.")
+        return None
+    cued = trials[is_cued(trials)]
+    adaptive = trials[trials["mode"] == "adaptive"] if "mode" in trials \
+        else trials.iloc[0:0]
+    if cued.empty:
+        _nothing("No classic, adaptive or mirror trials in this selection,",
+                 "so there is no hit rate against the band to show. Rhythm",
+                 "blocks are scored on beat timing instead, in the rhythm",
+                 "section below.")
+        return None
+    target = adaptive if not adaptive.empty else cued
+    scope = "adaptive blocks only" if not adaptive.empty \
+        else "all cued blocks (classic, adaptive, mirror)"
     hit = (target["early_late"] != "Miss")
-    print(f"hit rate {hit.mean():.1%}  ({hit.sum()} of {len(hit)})")
-    print(f"inside the {BAND_LO:.0%} to {BAND_HI:.0%} band: "
+    hit_all = (cued["early_late"] != "Miss")
+    print(f"SCOPE of this section: {scope}")
+    print(f"   hit rate, {scope}")
+    print(f"      {hit.mean():.1%}  ({hit.sum()} of {len(hit)} trials)")
+    print("   hit rate, all cued blocks (what the summary exports)")
+    print(f"      {hit_all.mean():.1%}  ({hit_all.sum()} of {len(hit_all)} "
+          f"trials)")
+    if not adaptive.empty and len(hit) != len(hit_all):
+        print("The band belongs to the adaptive controller, so it is")
+        print("checked against the adaptive figure. The all-cued figure is")
+        print("the one the summary exports. Two scopes, not a disagreement.")
+    print(f"inside the {BAND_LO:.0%} to {BAND_HI:.0%} band ({scope}): "
           f"{'yes' if BAND_LO <= hit.mean() <= BAND_HI else 'no'}")
 
     fig, ax = plt.subplots(1, 2, figsize=(11, 3.6))
@@ -1118,7 +1670,7 @@ def sec_accuracy(trials):
     ax[0].plot(range(len(roll)), roll, lw=2, color="#2563eb")
     ax[0].set_ylim(0, 1.02); ax[0].set_xlabel("trial")
     ax[0].set_ylabel("hit rate (rolling 12)")
-    ax[0].set_title("Did difficulty stay in the band")
+    ax[0].set_title(f"Did difficulty stay in the band ({scope})")
     ax[0].legend(frameon=False, fontsize=8)
     order = _order(target)
     ax[1].axhspan(BAND_LO, BAND_HI, color="#16a34a", alpha=.15)
@@ -1164,6 +1716,12 @@ def sec_accuracy(trials):
         ax.set_title("Two kinds of error"); ax.legend(frameon=False)
         _save(fig, "errors"); plt.show()
 
+    return {"scope": scope,
+            "hit_rate_scoped": round(float(hit.mean()), 3),
+            "hit_rate_all_cued": round(float(hit_all.mean()), 3),
+            "trials_scoped": int(len(hit)),
+            "trials_all_cued": int(len(hit_all))}
+
 
 def _boxes(ax, data, order, ylabel, title):
     bp = ax.boxplot(data, labels=order, patch_artist=True, widths=.6)
@@ -1181,14 +1739,26 @@ def sec_force(trials, unit="sensor counts", calset=None):
     Raw counts are kept because they are what the device recorded, but
     they are NOT comparable between fingers: on this device the same
     light press reads about 49 counts on the index pad and 115 on the
-    pinky. The calibrated column removes that. The newton column is
-    absolute and exists so the numbers can be put next to Demouche's
-    healthy fingertip forces, which are published in newtons.
+    pinky. The newton column is that same reading times a datasheet
+    constant, so it carries the same pad bias, and it exists so the
+    numbers can be put next to Demouche's healthy fingertip forces.
+
+    The calibrated column divides out the pad, but it divides out the
+    finger with it, so it answers consistency and change over time
+    rather than which finger is stronger. This is the section that
+    states that in full, once, because it is where force is the subject.
     """
     trials = ensure_force_columns(trials, calset)
-    force = trials[trials["peak_force_n"].notna()]
+    force = trials[trials["peak_force_n"].notna()] if not trials.empty \
+        else trials
     if force.empty:
-        print("\nNo force data (keyboard mode or sensors not connected).")
+        print("\n" + "=" * 62)
+        print(f"FORCE   (logged unit: {unit})")
+        print("=" * 62)
+        _nothing("No force data in this selection. The force columns are",
+                 "only filled when the sensors are streaming, so they are",
+                 "empty for keyboard blocks and for blocks where nothing",
+                 "crossed a press threshold.")
         return force
     corrected = bool(force["force_calibrated"].any())
     print("\n" + "=" * 62)
@@ -1199,15 +1769,12 @@ def sec_force(trials, unit="sensor counts", calset=None):
         print("Read the per-game tables rather than the pooled figures.\n")
     if corrected:
         n_missing = int((~force["force_calibrated"]).sum())
-        print(f"Comparable measure: {NORM_LABEL}. 1.0 is as strong as the")
-        print("press that finger gave at calibration. Raw counts below are")
-        print("kept for the record and are NOT comparable between fingers,")
-        print("because each pad reads a different number of counts for the")
-        print("same real force.")
+        print(normalisation_note())
         if n_missing:
-            print(f"{n_missing} of {len(force)} force trials had no usable")
-            print("calibration for their finger and are blank in the")
-            print("calibrated columns.")
+            print(f"\n{n_missing} of {len(force)} force trials had no usable")
+            print("calibration for their finger on their hand, and are blank")
+            print("in the calibrated columns rather than borrowing another")
+            print("hand's or another finger's reference.")
     else:
         print("NOT CORRECTED for per-sensor sensitivity: no calibration is")
         print("available for these games. Differences between fingers below")
@@ -1220,9 +1787,9 @@ def sec_force(trials, unit="sensor counts", calset=None):
     if corrected:
         _boxes(ax[0], [force[force["finger"] == f]["peak_force_cal"].dropna()
                        for f in order], order,
-               NORM_LABEL, "Peak force, calibrated (comparable)")
+               NORM_LABEL, "Effort against each finger's own reference")
         ax[0].axhline(1.0, color="#16a34a", ls="--", lw=1.5,
-                      label="calibration press")
+                      label="own reference press")
         ax[0].legend(frameon=False, fontsize=8)
     else:
         _boxes(ax[0], [force[force["finger"] == f]["peak_force_n"]
@@ -1261,8 +1828,28 @@ def sec_force(trials, unit="sensor counts", calset=None):
     print("peak_force_n  raw counts above baseline, not comparable "
           "between fingers")
     if corrected:
-        print(f"peak_force_cal  {NORM_LABEL}, comparable between fingers")
+        print("peak_force_cal  effort against that finger's own reference")
+        print("              press, not a strength ranking")
     print("peak_force_N  newtons, absolute, for the Demouche comparison")
+
+    # The between-finger question, answered on the only basis that can
+    # answer it at all. Absolute newtons keep the real differences in
+    # them, which the ratio above does not, at the price of keeping the
+    # pad differences too. Printing it separately and saying so is more
+    # use than printing nothing and letting the ratio be read as a
+    # ranking.
+    print("\nBETWEEN-FINGER STRENGTH, absolute newtons")
+    strength = (force.groupby("finger")["peak_force_N"]
+                     .agg(n="count", mean="mean", sd="std", max="max")
+                     .reindex(order).round(2))
+    _show(strength)
+    print("Pad differences are NOT corrected here. Each pad reads a")
+    print("different number of counts for the same real force, so part of")
+    print("any difference down this column is where the sensor sits, not")
+    print("the finger. It is still the right column for the question,")
+    print("because the calibrated ratio has the strength divided out of")
+    print("it. Treat a ranking from this table as provisional and say so")
+    print("in the write-up.")
 
     # Absolute force against the only healthy data in this lineage.
     per_finger_n = force.groupby("finger")["peak_force_N"].mean()
@@ -1298,8 +1885,8 @@ def sec_force(trials, unit="sensor counts", calset=None):
                 print(f"   Here the {worst[0]} pad reads {worst[1]:.1f}x the "
                       f"counts of the")
                 print("   least sensitive pad for the same share of a")
-                print("   calibration press, so read the calibrated column")
-                print("   above before believing any newton difference.")
+                print("   reference press, so a newton difference of that")
+                print("   size between fingers could be the pads alone.")
     return force
 
 
@@ -1329,57 +1916,118 @@ def calset_gap_summary(force, finger):
     return mine / min(ratios)
 
 
-def sec_individuation(trials, calset=None):
-    """Finger isolation, corrected for the sensors where possible.
+def individuation_summary(ind) -> dict:
+    """The individuation figures every caller should quote, on both
+    bases and over a matched set of trials.
 
-    The index is target force over total force. Raw, it is biased by the
-    pads: an over-reading pad inflates the denominator on every trial and
-    drags the index down for every OTHER finger, so a hardware quirk
-    reads as spill the patient never produced. Dividing each lane by its
-    own calibration press first removes that.
+    Two things go wrong without this. First, the corrected index is not
+    on the same basis as the published enslavement figures, so quoting it
+    next to them compares two different measurements. Second, the
+    corrected subset is not a random sample of trials: it drops trials
+    where a lane had no usable gap, and a lane with a tiny gap is a lane
+    on a pad that reads little, which is where spill hides. Comparing
+    the corrected mean over its own subset against the raw mean over
+    every trial therefore moves the number for reasons that are nothing
+    to do with the calibration.
+    """
+    out = {"n_all": 0, "n_matched": 0, "raw_all": np.nan,
+           "raw_matched": np.nan, "cal_matched": np.nan,
+           "n_dropped": 0, "why": {}}
+    if ind is None or ind.empty:
+        return out
+    matched = ind[ind["comparable"] == True]
+    out["n_all"] = int(len(ind))
+    out["n_matched"] = int(len(matched))
+    out["n_dropped"] = int(len(ind) - len(matched))
+    out["raw_all"] = round(float(ind["individuation"].mean()), 3)
+    if not matched.empty:
+        out["raw_matched"] = round(float(matched["individuation"].mean()), 3)
+        out["cal_matched"] = round(
+            float(matched["individuation_cal"].mean()), 3)
+    dropped = ind[ind["comparable"] != True]
+    if not dropped.empty:
+        out["why"] = dropped["why_not"].value_counts().to_dict()
+    return out
+
+
+def sec_individuation(trials, calset=None):
+    """Finger isolation, on both bases, with the limits of each stated.
+
+    The index is target force over total force.
+
+    On absolute readings it is the same basis as the enslavement figures
+    in the literature, so it is the one that can be quoted against them.
+    It is biased by the pads: an over-reading pad inflates the
+    denominator on every trial and drags the index down for every other
+    finger.
+
+    Dividing each lane by its own reference press removes the pad, but
+    it weights each finger's spill by the inverse of that finger's own
+    press strength. A weak finger with a small reference then contributes
+    more spill per newton than a strong one, which changes the ranking
+    between fingers and moves the number away from the published
+    figures. That version answers "how did the force spread relative to
+    what each finger can produce", and it is not comparable with 13 and
+    25.1 percent.
     """
     ind = individuation(trials, calset)
-    if ind.empty:
-        print("\nNo individuation data (needs the force sensors).")
-        return ind
-    corrected = bool(ind["corrected"].any())
-    col = "individuation_cal" if corrected else "individuation"
-    shown = ind[ind[col].notna()]
     print("\n" + "=" * 62)
     print("FINGER INDIVIDUATION")
     print("=" * 62)
-    if corrected:
-        print("Showing the CALIBRATED index: each lane divided by its own")
-        print("calibration press before the ratio, so differences between")
-        print("the sensor pads do not show up as finger spill.")
-        n_raw = int((~ind["corrected"]).sum())
-        if n_raw:
-            print(f"{n_raw} of {len(ind)} trials had at least one lane with")
-            print("no usable calibration and are left out of the corrected")
-            print("figures rather than half corrected.")
-    else:
-        print("Showing the RAW index. It is NOT corrected for per-sensor")
-        print("sensitivity, because no calibration is available for these")
-        print("games. A finger on an over-reading pad inflates the total and")
-        print("pushes every other finger's index down, so treat differences")
-        print("between fingers here as a mix of the hand and the hardware.")
-    print(f"\n{len(shown)} trials with usable force spread")
-    print(f"mean index {shown[col].mean():.3f}  "
-          f"(1.0 = only the target finger pressed)")
-    if corrected:
-        # The same trials both ways, otherwise the two means differ
-        # partly because they cover different trials.
-        print(f"uncorrected, over the same trials: "
-              f"{shown['individuation'].mean():.3f}")
-    spill = 1 - shown[col].mean()
-    print(f"enslavement (force on the other fingers): {spill:.3f}   "
-          f"unimpaired {ENSLAVEMENT_REF['unimpaired']}, "
-          f"stroke {ENSLAVEMENT_REF['stroke']} (Li via Lew)")
+    if ind.empty:
+        _nothing("No individuation data. This needs the force sensors and a",
+                 "force_window_peaks column with more than one lane reading,",
+                 "so it is empty for keyboard blocks.")
+        return ind
+    s = individuation_summary(ind)
+    corrected = bool(ind["corrected"].any())
 
+    print(f"{s['n_all']} trials with usable force spread")
+    print("\nABSOLUTE BASIS (target force over total force, as recorded)")
+    print(f"   mean index over all {s['n_all']} trials : {s['raw_all']:.3f}")
+    spill = 1 - s["raw_all"]
+    print(f"   enslavement, force on the other fingers: {spill:.3f}")
+    print(f"   published: unimpaired {ENSLAVEMENT_REF['unimpaired']}, "
+          f"stroke {ENSLAVEMENT_REF['stroke']} (Li via Lew)")
+    print("   Those published figures are computed on ABSOLUTE force, so")
+    print("   this is the line to put next to them. It carries the")
+    print("   per-pad sensitivity bias: an over-reading pad inflates the")
+    print("   total and pushes the index down.")
+
+    if corrected:
+        print(f"\nOWN-REFERENCE BASIS (each lane divided by its own "
+              f"reference press)")
+        print(f"   matched trials                : {s['n_matched']} of "
+              f"{s['n_all']}")
+        print(f"   absolute basis, same trials   : {s['raw_matched']:.3f}")
+        print(f"   own-reference basis           : {s['cal_matched']:.3f}")
+        print("   Both lines cover the SAME trials, so the difference")
+        print("   between them is the correction and nothing else.")
+        print("   This basis is NOT comparable with the published")
+        print("   enslavement figures. It weights each finger's spill by")
+        print("   the inverse of that finger's own press strength, so a")
+        print("   weak finger's spill counts for more, and the ranking")
+        print("   between fingers is not the ranking on absolute force.")
+        if s["n_dropped"]:
+            print(f"\n   {s['n_dropped']} trial(s) could not be corrected:")
+            for why, n in s["why"].items():
+                print(f"      {n}x  {why or 'unknown'}")
+            print("   Those trials are excluded from BOTH matched lines, not")
+            print("   just the corrected one. Dropping them from the")
+            print("   corrected figure alone would raise it, because a lane")
+            print("   with no usable gap is a lane on a pad that barely")
+            print("   moves, which is where spill hides.")
+    else:
+        print("\nNo usable calibration for these games, so there is no")
+        print("own-reference version. Differences between fingers above are")
+        print("a mix of the hand and the hardware.")
+
+    col = "individuation_cal" if corrected else "individuation"
+    shown = ind[ind["comparable"] == True] if corrected else ind
     order = _order(shown)
     fig, ax = plt.subplots(1, 2, figsize=(11, 3.6))
-    label = ("individuation index (calibrated)" if corrected
-             else "individuation index (raw, not corrected)")
+    label = ("individuation, own-reference basis" if corrected
+             else "individuation, absolute basis (not corrected)")
     _boxes(ax[0], [shown[shown["finger"] == f][col] for f in order], order,
            label, "How isolated was each finger")
     ax[0].axhline(1.0, color="#16a34a", ls="--", lw=1.5,
@@ -1394,16 +2042,22 @@ def sec_individuation(trials, calset=None):
     ax[1].set_ylabel(label); ax[1].set_title("Across the block")
     _save(fig, "individuation"); plt.show()
 
-    cols = [col] if not corrected else ["individuation_cal", "individuation"]
+    cols = ["individuation_cal", "individuation"] if corrected \
+        else ["individuation"]
     _show(shown.groupby("finger")[cols]
                .agg(["count", "mean", "std"]).reindex(order).round(3))
+    print("individuation      absolute basis. Comparable with the")
+    print("                   published enslavement figures.")
+    if corrected:
+        print("individuation_cal  own-reference basis. NOT comparable with")
+        print("                   them, and its per-finger ranking is not")
+        print("                   the ranking on absolute force.")
+    ind.attrs["summary"] = s
     return ind
 
 
 def sec_rhythm(trials):
-    rhy = trials[(trials["mode"] == "rhythm")
-                 & trials["time_difference_ms"].notna()
-                 & (trials["early_late"] != "Miss")]
+    rhy = rhythm_rows(trials)
     if rhy.empty:
         print("No rhythm blocks in this selection, so there is no\n"
               "timing offset to report. This section only applies to\n"
@@ -1413,6 +2067,9 @@ def sec_rhythm(trials):
     print("RHYTHM")
     print("=" * 62)
     off = rhy["time_difference_ms"]
+    print("These are SIGNED offsets from the beat, not reaction times. The")
+    print("note is known in advance, so early is normal and the sign")
+    print("matters. They are kept out of every reaction-time figure.")
     print(f"notes {len(off)}   accuracy {off.abs().mean():.1f} ms   "
           f"bias {off.mean():+.1f} ms "
           f"({'ahead of' if off.mean() < 0 else 'behind'} the beat)   "
@@ -1455,17 +2112,39 @@ def sec_rhythm(trials):
 def sec_bilateral(trials, unit="sensor counts", calset=None):
     """Left against right.
 
-    Force asymmetry is the number most exposed to the sensor problem:
-    the two hands sit on eight different pads, so a raw left-right force
-    difference is partly just which pads each hand happens to be on.
+    Two ways this used to print a wrong number.
+
+    The reaction-time line pooled every trial with a time_difference_ms,
+    including rhythm beat offsets and misses. On the shipped data that
+    gave "left -95 | right 158 -> asymmetry -8.027", where the -95 ms is
+    a rhythm block's mean offset from the beat. Only cued-mode reaction
+    times go in now.
+
+    The one-hand caveat was suppressed whenever the SELECTION held both a
+    left-calibrated and a right-calibrated game, which is exactly the
+    case where each individual game still only covers one hand. The check
+    is per game now.
     """
     trials = ensure_force_columns(trials, calset)
-    bil = trials[trials["hand_mode"] == "both"]
-    if bil.empty:
-        return
     print("\n" + "=" * 62)
     print("BOTH HANDS")
     print("=" * 62)
+    if trials.empty:
+        _nothing("No trials are loaded, so there is no left against right",
+                 "to show.")
+        return None
+    bil = trials[trials["hand_mode"] == "both"] if "hand_mode" in trials \
+        else trials.iloc[0:0]
+    if bil.empty:
+        modes = sorted({str(h) for h in trials.get("hand_mode", [])
+                        if str(h)})
+        _nothing("Nothing to show: this section needs a block played with "
+                 "both",
+                 f"hands, and this selection is {', '.join(modes) or 'one'}"
+                 f"-handed.",
+                 "Play a bilateral or mirror block, or pick one from the",
+                 "dropdown, to get a left against right comparison.")
+        return None
     L, R = bil[bil["side"] == "left"], bil[bil["side"] == "right"]
 
     def asym(l, r):
@@ -1473,9 +2152,26 @@ def sec_bilateral(trials, unit="sensor counts", calset=None):
             return float("nan")
         return (l - r) / ((l + r) / 2)
 
-    lr, rr = L["time_difference_ms"].mean(), R["time_difference_ms"].mean()
-    print(f"reaction time  left {lr:.0f} | right {rr:.0f}  "
-          f"-> asymmetry {asym(lr, rr):+.3f}")
+    # Reaction times only: cued modes, misses out. A rhythm block's
+    # signed beat offset in this line is what produced the -8.027.
+    lrt, rrt = reaction_times(L), reaction_times(R)
+    n_other = len(bil) - len(reaction_times(bil))
+    if len(lrt) and len(rrt):
+        lr, rr = lrt.mean(), rrt.mean()
+        print(f"reaction time  left {lr:.0f} | right {rr:.0f} ms  "
+              f"-> asymmetry {asym(lr, rr):+.3f}")
+        print(f"   from {len(lrt)} left and {len(rrt)} right cued trials "
+              f"with a press")
+    else:
+        print("reaction time  not available: this selection has no cued")
+        print("   trials with a press on both hands. Rhythm beat offsets")
+        print("   and missed trials are excluded on purpose, because an")
+        print("   offset from a known beat is not a reaction time.")
+    if n_other:
+        print(f"   {n_other} of {len(bil)} bilateral trials are rhythm "
+              f"offsets or")
+        print("   misses and are left out of the line above.")
+
     corrected = bool(bil["force_calibrated"].any())
     lf, rf = L["peak_force_n"].mean(), R["peak_force_n"].mean()
     if pd.notna(lf) and pd.notna(rf):
@@ -1483,37 +2179,72 @@ def sec_bilateral(trials, unit="sensor counts", calset=None):
               f"-> asymmetry {asym(lf, rf):+.3f}   NOT comparable")
     if corrected:
         lc, rc = L["peak_force_cal"].mean(), R["peak_force_cal"].mean()
+        # Per game, not per selection. A left-calibrated game and a
+        # right-calibrated game in one selection do not add up to a game
+        # with both hands calibrated.
+        gaps_missing = {}
+        for game, sub in bil.groupby("game"):
+            needed = {s for s in sub["side"].dropna().unique()}
+            miss = (calset.missing_hands(game, needed) if calset
+                    else sorted(needed))
+            if miss:
+                gaps_missing[game] = miss
+        both_hands_ok = not gaps_missing
         if pd.notna(lc) and pd.notna(rc):
-            print(f"calibrated     left {lc:.2f} | right {rc:.2f} "
+            print(f"own reference  left {lc:.2f} | right {rc:.2f} "
                   f"{NORM_UNIT}  -> asymmetry {asym(lc, rc):+.3f}")
-            print("   ^ this is the asymmetry to report")
-        # The calibration screen measures one hand at a time and stores
-        # one set of four gaps per session, so the second hand is being
-        # normalised against the first hand's pads unless both were
-        # calibrated separately.
-        hands = {(c.get("hand") or "?")
-                 for c in calset.per_game.values() if c} if calset else set()
-        if len(hands) < 2:
-            print(f"   caveat: the calibration recorded covers the "
-                  f"{', '.join(sorted(hands)) or 'one'} hand only, so the")
-            print("   other hand is normalised against pads it was not")
-            print("   measured on. Calibrate each hand to close this.")
+            print_norm_short()
+            if both_hands_ok:
+                print("   Both hands of every game here were calibrated")
+                print("   separately, so this asymmetry is not carrying one")
+                print("   hand's pads. It still compares effort against each")
+                print("   hand's own reference, so a hand that was weak at")
+                print("   calibration is weak in the reference too.")
+            else:
+                print("   Do NOT report this as a patient asymmetry.")
+        if gaps_missing:
+            print("   CAVEAT: these games have trials on a hand with no")
+            print("   usable calibration, so those rows are left")
+            print("   uncorrected rather than normalised with the other")
+            print("   hand's pads:")
+            for game, miss in gaps_missing.items():
+                print(f"      {game}: no profile for the "
+                      f"{', '.join(miss)} hand")
+            wanted = sorted({h for miss in gaps_missing.values()
+                             for h in miss})
+            on_disk = hand_profiles_on_disk()
+            for hand in wanted:
+                if hand in on_disk:
+                    print(f"   config/calibration/current_{hand}.json "
+                          f"exists, taken {on_disk[hand]['created_at']},")
+                    print("      but it is not what these blocks ran under "
+                          "so it is not applied.")
+                else:
+                    print(f"   config/calibration/current_{hand}.json does "
+                          f"not exist.")
+            print("   Run Calibrate once per hand before the next session.")
     elif pd.notna(lf) and pd.notna(rf):
         print("   no calibration, so the force asymmetry above is a mix of")
         print("   the two hands and the eight pads and should not be")
         print("   reported as a patient asymmetry.")
     order = _order(bil)
+    rt_rows = reaction_times(bil, per="rows")
     fig, ax = plt.subplots(figsize=(8, 3.4))
     x = np.arange(len(order)); w = .38
     for i, side in enumerate(("right", "left")):
         ax.bar(x + (i - .5) * w,
-               [bil[(bil["side"] == side) & (bil["finger"] == f)]
-                ["time_difference_ms"].mean() for f in order],
+               [rt_rows[(rt_rows["side"] == side) & (rt_rows["finger"] == f)]
+                ["time_difference_ms"].mean() if not rt_rows.empty else np.nan
+                for f in order],
                w, label=side, color=HAND_COLOUR[side])
     ax.set_xticks(x); ax.set_xticklabels(order)
     ax.set_ylabel("mean reaction time (ms)")
-    ax.set_title("Reaction time, both hands"); ax.legend(frameon=False)
+    ax.set_title("Reaction time, both hands (cued trials only)")
+    ax.legend(frameon=False)
     _save(fig, "bilateral"); plt.show()
+    return {"n_left": int(len(L)), "n_right": int(len(R)),
+            "rt_left": round(float(lrt.mean()), 1) if len(lrt) else np.nan,
+            "rt_right": round(float(rrt.mean()), 1) if len(rrt) else np.nan}
 
 
 def sec_raw(folders, unit="sensor counts", calset=None):
@@ -1523,17 +2254,35 @@ def sec_raw(folders, unit="sensor counts", calset=None):
     so it is a cross-finger force comparison and gets the same
     correction as the rest.
     """
-    raw, game = None, None
-    for f in folders:
-        raw = load_raw(f)
-        if raw is not None and len(raw) > 50:
-            game = Path(f).name
-            break
-    if raw is None:
-        return
     print("\n" + "=" * 62)
     print("RAW STREAM")
     print("=" * 62)
+    raw, game, folder = None, None, None
+    for f in folders:
+        candidate = load_raw(f)
+        if candidate is not None and len(candidate) > 50:
+            raw, game, folder = candidate, game_key(f), Path(f)
+            break
+    if raw is None:
+        # Silence here read as a section that crashed. Say which games
+        # were looked at and why none of them had a stream.
+        missing = [game_key(f) for f in folders
+                   if not (Path(f) / "raw.csv").exists()]
+        _nothing(f"None of the {len(folders)} selected game(s) carry a "
+                 f"usable raw.csv,",
+                 "so there is no sample stream, no press duration and no",
+                 "press shape to show here.")
+        if missing:
+            print(f"no raw.csv at all: {', '.join(missing)}")
+        thin = [game_key(f) for f in folders
+                if (Path(f) / "raw.csv").exists()
+                and game_key(f) not in missing]
+        if thin:
+            print(f"raw.csv present but under 50 rows: {', '.join(thin)}")
+        print("The 200 Hz stream is only written when the force sensors are")
+        print("streaming, so keyboard blocks and very short blocks have none.")
+        return None
+    hand_mode = read_meta(folder).get("hand", "right") if folder else "right"
     samples = raw[raw["event"].isna() | (raw["event"] == "")]
     events = raw[raw["event"].notna() & (raw["event"] != "")]
     if len(samples) > 1:
@@ -1548,7 +2297,7 @@ def sec_raw(folders, unit="sensor counts", calset=None):
         print("so there is no press shape or press duration to show here.")
         print("The sample stream is only written when the force sensors")
         print("are streaming, so this is empty for keyboard sessions.")
-        return
+        return None
     presses = events[events["event"] == "press"]
     releases = events[events["event"] == "release"]
     durs = []
@@ -1584,7 +2333,9 @@ def sec_raw(folders, unit="sensor counts", calset=None):
                     stacked[lane].append((w["t_perf"].values - t0,
                                           w[col].values - base))
         if any(stacked.values()):
-            gaps = ([calset.gap(game, i) for i in range(4)]
+            # Lanes 0 to 3, so the right hand in a bilateral block and
+            # whichever hand was played in a one-handed one.
+            gaps = ([calset.lane_gap(game, i, hand_mode) for i in range(4)]
                     if calset is not None else [None] * 4)
             # Only correct when every lane that has traces has a gap,
             # so the plot never mixes normalised and raw curves.
@@ -1610,13 +2361,17 @@ def sec_raw(folders, unit="sensor counts", calset=None):
             _save(fig, "force_waveform"); plt.show()
             if corrected:
                 print("Press shapes are divided by each finger's own")
-                print("calibration press, so the four traces are on one")
-                print("scale and their heights can be compared.")
+                print("reference press, so the pads are out of the four")
+                print("heights.")
+                print_norm_short("")
+                print("A taller trace here means more effort against that")
+                print("finger's own reference, not a stronger finger.")
             else:
                 print("Press shapes are in raw counts. The four traces sit")
                 print("on four differently sensitive pads, so their heights")
                 print("cannot be compared with each other. Shape and timing")
                 print("still can.")
+    return raw
 
 
 # ---------------------------------------------------------------- entry
@@ -1629,23 +2384,135 @@ def prepare(pick="latest", root=None) -> dict:
     function on its own, in any order, with no hidden state between
     cells. `trials` already carries the calibrated and newton force
     columns.
+
+    The selection is stamped into the context. Every later cell checks
+    that stamp against the dropdown before using anything, so changing
+    the pick and re-running only some cells cannot blend two selections
+    into one headline table. See check_selection.
     """
     cat = build_catalogue(root)
     if cat.empty:
-        return {"cat": cat, "sel": cat, "folders": [], "metas": {},
-                "sessions": {}, "trials": pd.DataFrame(),
-                "unit": "sensor counts", "calset": CalibrationSet()}
+        ctx = {"cat": cat, "sel": cat, "folders": [], "metas": {},
+               "sessions": {}, "trials": pd.DataFrame(),
+               "unit": "sensor counts", "calset": CalibrationSet(),
+               "root": root, "pick": pick}
+        ctx["selection"] = selection_key(pick, cat)
+        ctx["results"] = {}
+        return ctx
     sel = resolve(pick, cat)
     folders = [Path(p) for p in sel["folder"]]
     metas = load_metas(folders)
-    sessions = {Path(p).name: s for p, s in zip(sel["folder"], sel["session"])}
+    sessions = {game_key(p): s
+                for p, s in zip(sel["folder"], sel["session"])}
     trials = load_games(folders, cat)
     unit = force_unit(metas)
     calset = calibration_factors(metas, unit)
     trials = add_force_columns(trials, calset)
     return {"cat": cat, "sel": sel, "folders": folders, "metas": metas,
             "sessions": sessions, "trials": trials, "unit": unit,
-            "calset": calset}
+            "calset": calset, "root": root, "pick": pick,
+            "selection": selection_key(pick, sel), "results": {}}
+
+
+# ------------------------------------------------- stale-selection guard
+# The notebook keeps its selection in a global that the dropdown writes
+# to. Change the dropdown, re-run some cells and not others, and the
+# headline table ends up built from `trials` for one save and `rt` or
+# `force` for another. Nothing warns, the numbers look plausible, and
+# they belong to no single session.
+#
+# So prepare() stamps what it loaded into the context, every cell checks
+# that stamp against the dropdown before touching anything, and results
+# are filed under the stamp they were computed on. A stale run raises
+# instead of printing a mixed answer.
+
+
+class StaleSelection(RuntimeError):
+    """The cell was run against a selection the context was not built
+    from. Raised rather than warned: a warning scrolls past and the
+    wrong number still gets written to the CSV."""
+
+
+def selection_key(pick, sel) -> str:
+    """Short text naming exactly what was loaded.
+
+    Built from the resolved folders rather than from `pick` alone,
+    because two different picks can name the same games and the same
+    pick can name different games after a rescan.
+    """
+    if sel is None or getattr(sel, "empty", True):
+        return f"{pick!r} -> nothing"
+    folders = sorted(str(f) for f in sel["folder"])
+    return f"{pick!r} -> {len(folders)} game(s): " + "; ".join(folders)
+
+
+def describe_pick(pick, cat) -> str:
+    """What `pick` would load right now, for the error message."""
+    try:
+        return selection_key(pick, resolve(pick, cat))
+    except (KeyError, TypeError) as e:
+        return f"{pick!r} -> cannot be resolved ({e})"
+
+
+def check_selection(ctx, pick):
+    """Stop the cell unless ctx was built from the current dropdown value.
+
+    Call this at the top of every cell that reads anything prepare()
+    built. It costs a catalogue lookup and it is the only thing standing
+    between a changed dropdown and a headline table made of two
+    different sessions.
+    """
+    if not isinstance(ctx, dict) or "selection" not in ctx:
+        raise StaleSelection(
+            "the context has not been built yet. Run the 'Load the "
+            "selection' cell, then the cells above this one, before "
+            "running this cell.")
+    now = describe_pick(pick, ctx.get("cat"))
+    if now != ctx["selection"]:
+        raise StaleSelection(
+            "this cell is about to mix two selections.\n"
+            f"   loaded : {ctx['selection']}\n"
+            f"   dropdown now : {now}\n"
+            "   Re-run the cells above, starting at 'Load the selection', "
+            "then run this one again.")
+    return True
+
+
+def keep(ctx, name, value):
+    """File a section's result under the selection it was computed on."""
+    ctx.setdefault("results", {})[name] = (ctx.get("selection"), value)
+    return value
+
+
+def need(ctx, *names):
+    """The stored results, or a clear refusal.
+
+    The summary cell reads what the section cells produced. Without this,
+    running the summary after re-running prepare() but not the sections
+    quietly reuses the previous selection's tables.
+    """
+    out, missing, stale = {}, [], []
+    stored = ctx.get("results", {})
+    for name in names:
+        if name not in stored:
+            missing.append(name)
+            continue
+        key, value = stored[name]
+        if key != ctx.get("selection"):
+            stale.append(name)
+            continue
+        out[name] = value
+    if missing or stale:
+        lines = ["the sections this cell needs have not been run for the "
+                 "current selection."]
+        if missing:
+            lines.append(f"   never run here : {', '.join(missing)}")
+        if stale:
+            lines.append(f"   run on an older selection : {', '.join(stale)}")
+        lines.append("   Run every cell from 'Load the selection' down to "
+                     "this one, in order.")
+        raise StaleSelection("\n".join(lines))
+    return out
 
 
 def report(pick="latest", root=None, export=True):
@@ -1672,12 +2539,12 @@ def report(pick="latest", root=None, export=True):
         print(f"   {r['day']} {r['time']}  {r['who']:10} {r['mode']:9} "
               f"{r['trials']:4} trials")
 
-    sec_calibration(metas, sessions)
+    sec_calibration(metas, sessions, calset)
     on_task = sec_overview(trials, folders, metas)
     sec_quality(trials, folders, metas)
     comp = sec_compare(trials)
     rt = sec_reaction_time(trials)
-    sec_accuracy(trials)
+    acc = sec_accuracy(trials)
     force = sec_force(trials, unit, calset)
     ind = sec_individuation(trials, calset)
     rhy = sec_rhythm(trials)
@@ -1687,7 +2554,7 @@ def report(pick="latest", root=None, export=True):
 
     # Analyses that came out of reading the past Curtin theses.
     sec_objective_one(trials, calset=calset)
-    sec_exclusions(trials)
+    flagged = sec_exclusions(trials)
     sec_phase(trials)
     sec_threshold_audit(metas=metas, calset=calset)
     sec_cue_modality(trials, calset)
@@ -1695,61 +2562,185 @@ def report(pick="latest", root=None, export=True):
     sec_sampling_note(folders)
     sec_participant_progress(root, cat)
 
-    summary = {"games": len(folders), "trials": int(len(trials)),
-               "time_on_task_min": round(on_task / 60, 1)}
-    if not rt.empty:
-        summary["rt_mean_ms"] = round(rt["time_difference_ms"].mean(), 1)
-        summary["rt_cv"] = round(rt["time_difference_ms"].std()
-                                 / rt["time_difference_ms"].mean(), 3)
-    cued = trials[trials["mode"].isin(["classic", "adaptive", "mirror"])]
-    if not cued.empty:
-        summary["hit_rate"] = round((cued["early_late"] != "Miss").mean(), 3)
-    summary["calibration"] = calset.status
-    if not force.empty:
-        summary["peak_force_mean_raw"] = round(force["peak_force_n"].mean(), 1)
-        summary["force_unit"] = unit
-        summary["peak_force_mean_N"] = round(force["peak_force_N"].mean(), 2)
-        if force["peak_force_cal"].notna().any():
-            summary["peak_force_mean_cal"] = round(
-                force["peak_force_cal"].mean(), 3)
-            summary["force_measure"] = NORM_LABEL
-    if not ind.empty:
-        if ind["individuation_cal"].notna().any():
-            summary["individuation_mean"] = round(
-                ind["individuation_cal"].mean(), 3)
-            summary["individuation_basis"] = "calibrated"
-        else:
-            summary["individuation_mean"] = round(
-                ind["individuation"].mean(), 3)
-            summary["individuation_basis"] = "raw, not corrected"
-    if not rhy.empty:
-        summary["beat_accuracy_ms"] = round(rhy["time_difference_ms"]
-                                            .abs().mean(), 1)
-    if ons is not None and not ons.empty:
-        summary["onset_rt_mean_ms"] = round(ons["onset_rt_ms"].mean(), 1)
-        summary["onset_rt_cv"] = round(ons["onset_rt_ms"].std()
-                                       / ons["onset_rt_ms"].mean(), 3)
-        summary["rfd_mean_raw"] = round(ons["peak_dforce"].mean(), 1)
-        if ons["peak_dforce_cal"].notna().any():
-            summary["rfd_mean_cal"] = round(ons["peak_dforce_cal"].mean(), 3)
-
-    print("\n" + "=" * 62)
-    print("SUMMARY")
-    print("=" * 62)
-    _show(pd.DataFrame([summary]).T.rename(columns={0: "value"}))
+    summary = sec_summary(trials, unit, calset, on_task,
+                          folders=folders, onset=ons, accuracy=acc)
 
     if export:
-        pd.DataFrame([summary]).T.rename(columns={0: "value"}).to_csv(
-            "session_summary.csv")
-        trials.to_csv("selected_trials.csv", index=False)
-        if not ind.empty:
-            ind.to_csv("individuation_per_trial.csv", index=False)
-        print("\nwritten: session_summary.csv, selected_trials.csv")
-        print("figures are in figures/ ready for the report")
+        write_exports(summary, trials, calset)
 
     return {"trials": trials, "rt": rt, "force": force, "individuation": ind,
             "rhythm": rhy, "comparison": comp, "summary": summary,
-            "onset": ons, "catalogue": cat, "selected": sel}
+            "onset": ons, "accuracy": acc, "flagged": flagged,
+            "catalogue": cat, "selected": sel}
+
+
+def build_summary(trials, unit="sensor counts", calset=None, on_task=0.0,
+                  folders=None, onset=None, accuracy=None) -> dict:
+    """The headline numbers, built once so the notebook and report()
+    cannot drift apart.
+
+    Built from the trials that CAN be analysed. A trial whose cue command
+    never reached the device was never presented, and a press under
+    100 ms is anticipation rather than a response. The old summary
+    counted both, so on the shipped default it published a hit rate and a
+    mean reaction time computed from 48 trials the exclusions section
+    said could not be analysed. Every count that went into the figures is
+    in the table, so the basis is visible rather than assumed.
+    """
+    kept, flagged, counts = analysable(trials)
+    calset = calset if calset is not None else CalibrationSet()
+    s = {
+        "games": len(folders) if folders is not None else np.nan,
+        "summary_basis": "analysable trials only",
+        "trials_recorded": counts["recorded"],
+        "trials_no_cue": counts["no_cue"],
+        "trials_anticipation": counts["anticipation"],
+        "trials_analysed": counts["analysed"],
+        "time_on_task_min": round(on_task / 60, 1) if on_task else 0.0,
+        "calibration": calset.status,
+    }
+    if counts["analysed"] == 0:
+        s["warning"] = ("no analysable trials, every figure below is blank "
+                        "on purpose")
+        return s
+
+    rts = rt_stats(kept)
+    s["rt_trials"] = rts["n"]
+    s["rt_mean_ms"] = rts["mean_rt"]
+    s["rt_cv"] = rts["rt_cv"]
+    s["rt_basis"] = "cued modes, misses and rhythm beat offsets excluded"
+
+    cued = kept[is_cued(kept)]
+    if not cued.empty:
+        s["hit_rate_all_cued"] = round(
+            float((cued["early_late"] != "Miss").mean()), 3)
+        s["hit_rate_scope"] = "classic, adaptive and mirror blocks"
+    if accuracy:
+        # The accuracy section narrows to adaptive blocks when it can.
+        # Both scopes go in the table, named, rather than one number that
+        # disagrees with the printed one.
+        s["hit_rate_section_scope"] = accuracy.get("scope")
+        s["hit_rate_section"] = accuracy.get("hit_rate_scoped")
+        s["hit_rate_section_basis"] = "all recorded trials, as printed above"
+
+    force = ensure_force_columns(kept, calset)
+    force = force[force["peak_force_n"].notna()]
+    if not force.empty:
+        s["force_unit"] = unit
+        s["peak_force_mean_raw"] = round(
+            float(force["peak_force_n"].mean()), 1)
+        s["peak_force_mean_N"] = round(float(force["peak_force_N"].mean()), 2)
+        s["peak_force_N_meaning"] = ("absolute, pad sensitivity NOT "
+                                     "corrected, use for strength")
+        if force["peak_force_cal"].notna().any():
+            s["peak_force_mean_cal"] = round(
+                float(force["peak_force_cal"].mean()), 3)
+            s["peak_force_cal_meaning"] = NORM_SHORT
+
+    ind = individuation(kept, calset)
+    isum = individuation_summary(ind)
+    if isum["n_all"]:
+        s["individuation_absolute"] = isum["raw_all"]
+        s["individuation_absolute_n"] = isum["n_all"]
+        s["individuation_absolute_meaning"] = (
+            "target over total on absolute force, the basis the published "
+            "enslavement figures use")
+        if isum["n_matched"]:
+            s["individuation_own_reference"] = isum["cal_matched"]
+            s["individuation_absolute_matched"] = isum["raw_matched"]
+            s["individuation_matched_n"] = isum["n_matched"]
+            s["individuation_own_reference_meaning"] = (
+                "each lane over its own reference press, NOT comparable "
+                "with the published enslavement figures")
+            s["individuation_matched_note"] = (
+                "the two matched figures cover the same trials, so the "
+                "difference is the correction alone")
+
+    rhy = rhythm_rows(kept)
+    if not rhy.empty:
+        s["beat_accuracy_ms"] = round(
+            float(rhy["time_difference_ms"].abs().mean()), 1)
+        s["beat_bias_ms"] = round(float(rhy["time_difference_ms"].mean()), 1)
+        s["beat_note"] = "signed offset from the beat, not a reaction time"
+
+    if onset is not None and not onset.empty:
+        v = onset["onset_rt_ms"]
+        s["onset_rt_mean_ms"] = round(float(v.mean()), 1)
+        s["onset_rt_cv"] = (round(float(v.std() / v.mean()), 3)
+                            if len(v) > 1 and v.mean() > 0 else np.nan)
+        s["onset_rfd_mean_raw"] = round(float(onset["peak_dforce"].mean()), 1)
+        if onset["peak_dforce_cal"].notna().any():
+            s["onset_rfd_mean_cal"] = round(
+                float(onset["peak_dforce_cal"].mean()), 3)
+        s["onset_basis"] = ("raw sample stream, trial exclusions do not "
+                            "apply to it")
+    return s
+
+
+def sec_summary(trials, unit="sensor counts", calset=None, on_task=0.0,
+                folders=None, onset=None, accuracy=None) -> dict:
+    """Print the headline numbers and say plainly what they were built
+    from."""
+    s = build_summary(trials, unit, calset, on_task, folders, onset, accuracy)
+    print("\n" + "=" * 62)
+    print("SUMMARY")
+    print("=" * 62)
+    excluded = s["trials_no_cue"] + s["trials_anticipation"]
+    if excluded:
+        print(f"BUILT FROM {s['trials_analysed']} OF "
+              f"{s['trials_recorded']} RECORDED TRIALS.")
+        print(f"   {s['trials_no_cue']} had no cue delivered, so nothing was "
+              f"presented.")
+        print(f"   {s['trials_anticipation']} were faster than "
+              f"{ANTICIPATION_MS:.0f} ms, so they are anticipation.")
+        print("   Those are excluded here. Sections above print over every")
+        print("   recorded trial unless they say otherwise, so a figure")
+        print("   there can differ from the one below.")
+        if s["trials_analysed"] == 0:
+            print("   NOTHING IS ANALYSABLE IN THIS SELECTION. There is no")
+            print("   hit rate and no reaction time to report from it.")
+        print()
+    else:
+        print(f"Built from all {s['trials_recorded']} recorded trials: none "
+              f"were flagged.\n")
+    _show(pd.DataFrame([s]).T.rename(columns={0: "value"}))
+    return s
+
+
+def write_exports(summary, trials, calset=None, ind=None):
+    """Write the CSVs, with the exclusion flags on every trial row.
+
+    selected_trials.csv keeps every recorded trial so nothing disappears,
+    but each row now carries whether it could be analysed and why not, so
+    anyone recomputing from the CSV lands on the same figures as the
+    summary rather than on the ones that include flagged trials.
+    """
+    pd.DataFrame([summary]).T.rename(columns={0: "value"}).to_csv(
+        "session_summary.csv")
+    flags = exclusion_flags(trials)
+    flags.to_csv("selected_trials.csv", index=False)
+    written = ["session_summary.csv", "selected_trials.csv"]
+    if ind is None:
+        ind = individuation(trials, calset)
+    if ind is not None and not ind.empty:
+        # Carry the same flag onto the per-trial individuation rows, so
+        # the file the summary was built from can be reconstructed from
+        # either CSV without guessing which trials went in.
+        out = ind.copy()
+        if not flags.empty and "row_id" in out.columns:
+            excluded = flags["excluded"]
+            out["excluded"] = [bool(excluded.get(i, False))
+                               for i in out["row_id"]]
+        out.to_csv("individuation_per_trial.csv", index=False)
+        written.append("individuation_per_trial.csv")
+    print("\nwritten: " + ", ".join(written))
+    print("selected_trials.csv and individuation_per_trial.csv carry an")
+    print("excluded column, and selected_trials.csv also carries")
+    print("exclusion_reason. The summary is built from the rows where")
+    print("excluded is False, so filter on it to reproduce the headline")
+    print("numbers.")
+    print("figures are in figures/ ready for the report")
+    return written
 
 
 # ---------------------------------------------------------------- picker
@@ -1877,10 +2868,10 @@ def picker(root=None, auto=True):
     def _rescan(_):
         fresh = build_catalogue(root)
         state["cat"] = fresh
-        keep = dd.value
+        chosen = dd.value
         dd.unobserve(_changed, names="value")
         dd.options = menu_options(fresh)
-        dd.value = keep if keep in [v for _, v in dd.options] else None
+        dd.value = chosen if chosen in [v for _, v in dd.options] else None
         dd.observe(_changed, names="value")
         note.value = (f"<span style='color:#16a34a'>found {len(fresh)} "
                       f"game(s). Pick one.</span>")
@@ -1990,6 +2981,7 @@ def onset_table(folders, unit="sensor counts", cfg=None,
         raw = load_raw(folder)
         if raw is None:
             continue
+        hand_mode = read_meta(Path(folder)).get("hand", "right")
         samples = raw[raw["event"].isna() | (raw["event"] == "")]
         stims = raw[raw["event"] == "stim"]
         if not len(stims) or len(samples) < 50:
@@ -2011,13 +3003,21 @@ def onset_table(folders, unit="sensor counts", cfg=None,
                                         t0, cfg)
             if rt is None:
                 continue
-            game = Path(folder).name
-            gap = calset.gap(game, lane % 4) if calset is not None else None
+            game = game_key(folder)
+            # Lanes 4 to 7 are the left hand, so they need the left
+            # hand's profile. Dividing them by the right hand's gaps
+            # produced a corrected-looking number off the wrong pads.
+            side = lane_side(lane, hand_mode)
+            gap = (calset.lane_gap(game, lane, hand_mode)
+                   if calset is not None else None)
             rows.append({"game": game,
                          "finger": FINGERS[lane % 4], "lane": lane,
+                         "hand": side,
                          "onset_rt_ms": rt, "peak_dforce": vmax,
                          "peak_dforce_cal": vmax / gap if gap else np.nan})
-    return pd.DataFrame(rows)
+    return pd.DataFrame(
+        rows, columns=["game", "finger", "lane", "hand", "onset_rt_ms",
+                       "peak_dforce", "peak_dforce_cal"])
 
 
 def sec_onset(folders, trials, unit="sensor counts", calset=None):
@@ -2037,22 +3037,27 @@ def sec_onset(folders, trials, unit="sensor counts", calset=None):
     v = ons["onset_rt_ms"]
     print(f"\nonset reaction time : n {len(v)}   mean {v.mean():.1f} ms   "
           f"median {v.median():.1f} ms   sd {v.std():.1f} ms")
-    print(f"response stability  : CV {v.std()/v.mean():.3f}  "
-          f"(sd over mean, lower is steadier)")
+    cv = v.std() / v.mean() if len(v) > 1 and v.mean() > 0 else np.nan
+    if pd.notna(cv):
+        print(f"response stability  : CV {cv:.3f}  "
+              f"(sd over mean, lower is steadier)")
+    else:
+        print("response stability  : CV not computable from this sample")
     d = ons["peak_dforce"]
     print(f"rate of force dev.  : mean {d.mean():.0f} {unit} per second "
           f"(raw, not comparable between fingers)")
     if corrected:
-        print(f"rate, calibrated    : mean "
-              f"{ons['peak_dforce_cal'].mean():.2f} {NORM_UNIT} per second "
-              f"(comparable)")
+        print(f"rate, own reference : mean "
+              f"{ons['peak_dforce_cal'].mean():.2f} {NORM_UNIT} per second")
+        print_norm_short()
     else:
         print("no calibration available, so the per-finger rates below are")
         print("not corrected for the pads and should not be ranked.")
 
-    # Threshold-crossing RT from the game, for comparison.
-    cued = trials[trials["mode"].isin(["classic", "adaptive", "mirror"])]
-    thr = cued.loc[cued["early_late"] != "Miss", "time_difference_ms"].dropna()
+    # Threshold-crossing RT from the game, for comparison. Cued modes
+    # only: a rhythm beat offset is not a reaction time and would drag
+    # the comparison below in either direction.
+    thr = reaction_times(trials)
 
     fig, ax = plt.subplots(1, 3, figsize=(14, 3.6))
     ax[0].hist(v, bins=_nbins(v), color="#0ea5e9", alpha=.85, label="onset")
@@ -2190,19 +3195,33 @@ def threshold_sets(metas) -> list:
     """
     out = {}
     for name, meta in _meta_items(metas):
-        cal = read_calibration(meta)
-        on = cal.get("on_delta")
-        source, stamp = "calibration", cal.get("created_at") or "unknown"
-        if not on:
-            snap = ((meta.get("config_snapshot") or {}).get("fsr") or {})
-            on = snap.get("on_delta")
-            source, stamp = "config snapshot", "no calibration"
+        # One entry per hand: the two hands have their own pads and
+        # their own thresholds, and averaging or overwriting one with
+        # the other prints a trigger no finger ever ran under.
+        cals = read_calibrations(meta)
+        found = False
+        for hand, cal in sorted(cals.items()):
+            on = cal.get("on_delta")
+            if not on:
+                continue
+            found = True
+            source = f"calibration, {hand} hand"
+            stamp = cal.get("created_at") or "unknown"
+            key = (source, stamp, tuple(on))
+            out.setdefault(key, {"source": source, "stamp": stamp,
+                                 "on_delta": list(on), "hand": hand,
+                                 "games": []})["games"].append(name)
+        if found:
+            continue
+        snap = ((meta.get("config_snapshot") or {}).get("fsr") or {})
+        on = snap.get("on_delta")
+        source, stamp = "config snapshot", "no calibration"
         if not on:
             source, stamp, on = "unrecorded", "unknown", None
         key = (source, stamp, tuple(on) if on else None)
         out.setdefault(key, {"source": source, "stamp": stamp,
                              "on_delta": list(on) if on else None,
-                             "games": []})["games"].append(name)
+                             "hand": "?", "games": []})["games"].append(name)
     return [v for _, v in sorted(out.items(), key=lambda kv: str(kv[0]))]
 
 
@@ -2229,7 +3248,7 @@ def sec_threshold_audit(cfg_on_delta=None, metas=None, calset=None):
     sets = []
     if cfg_on_delta is not None:
         sets = [{"source": "supplied", "stamp": "supplied by the caller",
-                 "on_delta": list(cfg_on_delta), "games": []}]
+                 "on_delta": list(cfg_on_delta), "hand": "?", "games": []}]
     elif metas:
         found = threshold_sets(metas)
         sets = [s for s in found if s["on_delta"]]
@@ -2243,7 +3262,8 @@ def sec_threshold_audit(cfg_on_delta=None, metas=None, calset=None):
             from rehab.config import Config
             sets = [{"source": "current config", "on_delta":
                      list(Config.load().get("fsr.on_delta")),
-                     "stamp": "as the config reads today", "games": []}]
+                     "stamp": "as the config reads today", "hand": "?",
+                     "games": []}]
             print("\nNo thresholds in the session metadata, so these are the")
             print("CURRENT config values. They are not necessarily what this")
             print("data ran under.")
@@ -2350,14 +3370,15 @@ def _calibration_table(cal):
     return pd.DataFrame(rows)
 
 
-def sec_calibration(metas, sessions=None):
+def sec_calibration(metas, sessions=None, calset=None):
     """What a press meant on the day, taken from the calibration each
     game recorded rather than from whatever the config says now.
 
-    One block per distinct calibration. Nothing is collapsed: a
+    One block per distinct calibration per hand. Nothing is collapsed: a
     selection can span several, and printing the first one as though it
     covered the lot reports the OLDEST calibration and asserts the newer
-    games ran under it.
+    games ran under it. A left profile does not stand in for the right
+    hand either, because they are eight different pads.
 
     `sessions` maps game folder name to session label, so the counts
     below can say games and sessions separately. A game is one block of
@@ -2373,7 +3394,7 @@ def sec_calibration(metas, sessions=None):
     print("CALIBRATION THIS DATA WAS RECORDED UNDER")
     print("=" * 62)
 
-    cs = calibration_factors(metas)
+    cs = calset if calset is not None else calibration_factors(metas)
     n_games = len(cs.per_game)
     if sessions:
         n_sessions = len({sessions.get(g, g) for g in cs.per_game})
@@ -2404,27 +3425,59 @@ def sec_calibration(metas, sessions=None):
         print("out of the calibrated columns rather than pooled with the")
         print("rest.\n")
 
+    # A hand that was played but never calibrated. This is the case the
+    # per-hand split exists for: the bilateral force numbers used to be
+    # normalised entirely with whichever hand happened to be measured.
+    gaps_missing = {g: cs.missing_hands(g, cs.played.get(g, set()))
+                    for g in cs.per_game if cs.per_game[g]}
+    gaps_missing = {g: m for g, m in gaps_missing.items() if m}
+    if gaps_missing:
+        print("HANDS PLAYED WITH NO USABLE CALIBRATION:")
+        for game, miss in gaps_missing.items():
+            print(f"   {game}: no profile for the {', '.join(miss)} hand")
+        print("Those lanes are left uncorrected. They are NOT normalised")
+        print("with the other hand's gaps, because the two hands sit on")
+        print("eight different pads and borrowing four of them produces a")
+        print("corrected-looking number off the wrong sensors.")
+        on_disk = hand_profiles_on_disk()
+        for hand in HANDS:
+            if hand in on_disk:
+                print(f"   config/calibration/current_{hand}.json exists, "
+                      f"taken {on_disk[hand]['created_at']}. It is NOT")
+                print("      applied here: it is whatever was measured last,")
+                print("      not what these blocks ran under.")
+            else:
+                print(f"   config/calibration/current_{hand}.json does not "
+                      f"exist.")
+        print("Run Calibrate once per hand before the next bilateral "
+              "session.\n")
+
     if cs.status == "multiple":
-        print(f"WARNING: these games span {len(cs.stamps)} different")
-        print("calibrations. A press did not mean the same thing in each,")
-        print("so a force change across them is not necessarily a change in")
-        print("the patient. Normalising by each game's own calibration makes")
-        print("the fingers comparable, but a like-for-like comparison over")
-        print("time still has to stay inside one calibration.\n")
+        print("WARNING: one or both hands were calibrated more than once")
+        print("across these games. A press did not mean the same thing in")
+        print("each, so a force change across them is not necessarily a")
+        print("change in the patient. Normalising by each game's own")
+        print("calibration makes the pads comparable within a finger, but a")
+        print("like-for-like comparison over time still has to stay inside")
+        print("one calibration.\n")
 
     tables = {}
-    for stamp, games in cs.stamps.items():
-        cal = cs.per_game[games[0]]
+    for stamp, pairs in cs.stamps.items():
+        first_game, hand = pairs[0]
+        games = [g for g, _ in pairs]
+        cal = cs.per_game[first_game][hand]
         print("-" * 62)
         print(f"calibration taken {stamp} on "
-              f"{cal.get('device_port') or 'an unrecorded port'}, "
-              f"{cal.get('hand', '?')} hand")
+              f"{cal.get('device_port') or 'an unrecorded port'}")
+        if cal.get("hand_assumed"):
+            print("   this profile carries no hand field, so it is taken as")
+            print("   the right hand, which is what the app defaults to")
         label = f"{len(games)} game(s)"
         if sessions:
             label += (f" across "
                       f"{len({sessions.get(g, g) for g in games})} session(s)")
         print(f"used by {label}: {', '.join(games)}")
-        problems = cs.problems[games[0]]
+        problems = cs.problems[first_game][hand]
         if problems:
             print("\n   INCOMPLETE CALIBRATION, do not read the blanks as")
             print("   measurements of zero:")
@@ -2448,6 +3501,8 @@ def sec_calibration(metas, sessions=None):
         for note in mfd["notes"]:
             print(f"   caveat: {note}")
     print("-" * 62)
+    print("What these gaps can and cannot be used for:")
+    print(normalisation_note("   "))
     return tables[list(tables)[0]] if len(tables) == 1 else tables
 
 
@@ -2465,7 +3520,7 @@ def sec_objective_one(trials, window=32, calset=None):
     finger that is genuinely weak from a finger sitting behind a harder
     threshold than the others.
     """
-    cued = trials[trials["mode"].isin(["classic", "adaptive", "mirror"])]
+    cued = trials[is_cued(trials)] if not trials.empty else trials
     n_cued = len(cued)
     if "stim_delivered" in cued.columns:
         cued = cued[cued["stim_delivered"] != False]
@@ -2480,9 +3535,23 @@ def sec_objective_one(trials, window=32, calset=None):
             print("per-finger hit rate to check against the band. Objective")
             print("1 applies to classic, adaptive and mirror blocks.")
         return None
+    # A partial window is not a window. The objective is worded as a hit
+    # rate over a 32-trial block, so a finger with 8 trials has not been
+    # measured against it yet, and printing an 8-trial rolling mean under
+    # a "32-trial window" heading claims a measurement that was not made.
+    min_n = max(5, window // 4)
     print("\n" + "=" * 62)
-    print(f"OBJECTIVE 1: PER-FINGER HIT RATE OVER {window}-TRIAL WINDOWS")
+    print(f"OBJECTIVE 1: PER-FINGER HIT RATE, ROLLING WINDOW UP TO "
+          f"{window} TRIALS")
     print("=" * 62)
+    print(f"The objective is worded over a full {window}-trial block. A "
+          f"finger needs")
+    print(f"{window} trials of its own for one full window. Fingers with "
+          f"fewer are")
+    print(f"shown over a partial window of at least {min_n} trials, drawn "
+          f"dashed,")
+    print("and in_band_share is left blank for them rather than computed")
+    print("from a window the objective does not describe.")
     order = [f for f in FINGERS if f in cued["finger"].unique()]
     fig, axes = plt.subplots(1, len(order), figsize=(3.4 * len(order), 3.2),
                              sharey=True)
@@ -2492,31 +3561,49 @@ def sec_objective_one(trials, window=32, calset=None):
     for ax, f in zip(axes, order):
         g = cued[cued["finger"] == f].sort_values("trial")
         hit = (g["early_late"] != "Miss").astype(float)
-        roll = hit.rolling(window, min_periods=max(5, window // 4)).mean()
-        inband = roll.dropna().between(BAND_LO, BAND_HI)
+        roll = hit.rolling(window, min_periods=min_n).mean()
+        full = hit.rolling(window).mean().dropna()
+        n_full = int(len(full))
+        inband = full.between(BAND_LO, BAND_HI)
         first = None
-        for k, (idx, val) in enumerate(roll.dropna().items()):
+        for k, (idx, val) in enumerate(full.items()):
             if BAND_LO <= val <= BAND_HI:
                 first = k
                 break
         rows.append({"finger": f, "trials": len(g),
                      "hit_rate": round(hit.mean(), 3),
+                     "full_windows": n_full,
                      "in_band_share": (round(inband.mean(), 3)
-                                       if len(inband) else np.nan),
+                                       if n_full else np.nan),
                      "windows_to_settle": first})
         ax.axhspan(BAND_LO, BAND_HI, color="#16a34a", alpha=.15)
         ax.axhline(WILSON, color="#ca8a04", ls=":", lw=1.5)
-        ax.plot(range(len(roll)), roll, lw=2, color=FINGER_COLOUR[f])
+        drawn = roll.reset_index(drop=True)
+        n_partial = max(0, min(len(drawn), window - 1))
+        ax.plot(range(len(drawn)), drawn, lw=2, ls="--", alpha=.55,
+                color=FINGER_COLOUR[f])
+        if n_full:
+            ax.plot(range(n_partial, len(drawn)), drawn.iloc[n_partial:],
+                    lw=2, color=FINGER_COLOUR[f])
         if first is not None:
-            ax.axvline(first, color="#0f172a", ls="--", lw=1,
-                       label="first in band")
+            ax.axvline(n_partial + first, color="#0f172a", ls="--", lw=1,
+                       label="first full window in band")
             ax.legend(frameon=False, fontsize=7)
-        ax.set_ylim(0, 1.02); ax.set_title(f); ax.set_xlabel("window")
-    axes[0].set_ylabel(f"hit rate (rolling {window})")
-    fig.suptitle("Objective 1 per finger, band 65 to 80 percent",
+        title = f if n_full else f"{f} (no full window)"
+        ax.set_ylim(0, 1.02); ax.set_title(title); ax.set_xlabel("trial")
+    axes[0].set_ylabel(f"hit rate (rolling, up to {window})")
+    fig.suptitle(f"Objective 1 per finger, band 65 to 80 percent, "
+                 f"solid = full {window}-trial window",
                  fontsize=11, fontweight="bold", x=0.02, ha="left")
     _save(fig, "objective_one"); plt.show()
     tbl = pd.DataFrame(rows)
+    short = tbl[tbl["full_windows"] == 0]["finger"].tolist()
+    if short:
+        print(f"\nNOT ENOUGH DATA for a full {window}-trial window on: "
+              f"{', '.join(short)}.")
+        print("Their hit_rate is over every trial they have, which is fewer")
+        print(f"than the {window} the objective asks for, so it is not yet a")
+        print("test of the objective.")
 
     # How hard each finger's own trigger was, as a share of the press
     # that finger produced at calibration. Comparable between fingers,
@@ -2525,8 +3612,10 @@ def sec_objective_one(trials, window=32, calset=None):
         shares = []
         for f in tbl["finger"]:
             vals = []
-            for game, cal in calset.per_game.items():
-                gap = calset.gap(game, f)
+            # Per hand, so a left-hand trigger is compared against the
+            # left hand's own reference press and not the right's.
+            for game, hand, cal in calset.all_cals:
+                gap = calset.gap(game, f, hand)
                 on = (cal or {}).get("on_delta") or []
                 i = _finger_index(f)
                 if gap and i is not None and i < len(on):
@@ -2539,7 +3628,7 @@ def sec_objective_one(trials, window=32, calset=None):
     _show(tbl)
     if "trigger_share_of_press" in tbl.columns:
         print("trigger_share_of_press: how far into that finger's own")
-        print("calibration press the trigger sits. Fingers differ here only")
+        print("reference press the trigger sits. Fingers differ here only")
         print("because of the pads, so a finger with a higher share and a")
         print("lower hit rate is behind a harder threshold, not necessarily")
         print("weaker.")
@@ -2561,34 +3650,36 @@ def sec_exclusions(trials):
     where anticipation is the confound. Anything under about 100 ms is
     faster than a real cued reaction and is almost certainly a guess.
     """
-    if trials.empty:
-        return None
     print("\n" + "=" * 62)
     print("TRIAL EXCLUSIONS")
     print("=" * 62)
-    df = trials.copy()
-    rt = df["time_difference_ms"]
-    df["_no_cue"] = (df.get("stim_delivered") == False)
-    df["_anticipation"] = rt.notna() & (rt < 100) & (df["mode"] != "rhythm")
-    df["_excluded"] = df["_no_cue"] | df["_anticipation"]
-    n = len(df)
-    print(f"recorded trials            : {n}")
-    print(f"cue never delivered        : {int(df['_no_cue'].sum())}")
-    print(f"faster than 100 ms         : {int(df['_anticipation'].sum())}"
-          "   (anticipation, not a reaction)")
-    print(f"analysed                   : {int((~df['_excluded']).sum())}")
+    if trials.empty:
+        _nothing("No trials are loaded, so there is nothing to flag.")
+        return None
+    kept, df, counts = analysable(trials)
+    print(f"recorded trials            : {counts['recorded']}")
+    print(f"cue never delivered        : {counts['no_cue']}")
+    print(f"faster than {ANTICIPATION_MS:.0f} ms         : "
+          f"{counts['anticipation']}   (anticipation, not a reaction)")
+    print(f"analysed                   : {counts['analysed']}")
 
-    keep = df[~df["_excluded"]]
     def headline(d):
-        c = d[d["mode"].isin(["classic", "adaptive", "mirror"])]
-        v = c.loc[c["early_late"] != "Miss", "time_difference_ms"].dropna()
-        return {"hit_rate": round((c["early_late"] != "Miss").mean(), 3)
+        c = d[is_cued(d)]
+        s = rt_stats(d)
+        return {"hit_rate": round(float((c["early_late"] != "Miss").mean()), 3)
                              if len(c) else np.nan,
-                "mean_rt": round(v.mean(), 1) if len(v) else np.nan}
-    before, after = headline(df), headline(keep)
+                "mean_rt": s["mean_rt"], "rt_cv": s["rt_cv"]}
+    before, after = headline(df), headline(kept)
     cmp_tbl = pd.DataFrame([{"": "with everything", **before},
                             {"": "after exclusions", **after}])
     _show(cmp_tbl)
+    print("The summary at the end of the notebook uses the second row.")
+    print("Sections above print over every recorded trial unless they say")
+    print("otherwise, so a figure there can differ from the summary.")
+    if counts["analysed"] == 0:
+        print("\nNOTHING IN THIS SELECTION CAN BE ANALYSED. Every trial is")
+        print("flagged, so there is no hit rate and no reaction time to")
+        print("report from it. Fix the cue path and record again.")
     return df
 
 
@@ -2616,11 +3707,10 @@ def sec_phase(trials):
     print("=" * 62)
     rows = []
     for (who, phase), g in ph.groupby(["participant", "phase"]):
-        v = g.loc[g["early_late"] != "Miss", "time_difference_ms"].dropna()
+        s = rt_stats(g)
         rows.append({"participant": who, "phase": phase, "trials": len(g),
-                     "mean_rt": round(v.mean(), 1) if len(v) else np.nan,
-                     "rt_cv": (round(v.std()/v.mean(), 3)
-                               if len(v) and v.mean() else np.nan),
+                     "rt_trials": s["n"],
+                     "mean_rt": s["mean_rt"], "rt_cv": s["rt_cv"],
                      "hit_rate": round((g["early_late"] != "Miss").mean(), 3)})
     tbl = pd.DataFrame(rows)
     _show(tbl)
@@ -2742,14 +3832,17 @@ def sec_cue_modality(trials, calset=None):
     print("=" * 62)
     rows = []
     for mode, g in cm.groupby("cue_mode"):
-        v = g.loc[g["early_late"] != "Miss", "time_difference_ms"].dropna()
+        # Cued modes only, so a rhythm block under the same cue setting
+        # cannot drag the mean toward zero with its beat offsets.
+        v = reaction_times(g)
+        s = rt_stats(g)
         rows.append({
             "cue": mode, "trials": len(g),
             "hit_rate": round((g["early_late"] != "Miss").mean(), 3),
-            "mean_rt": round(v.mean(), 1) if len(v) else np.nan,
-            "median_rt": round(v.median(), 1) if len(v) else np.nan,
-            "rt_cv": (round(v.std() / v.mean(), 3)
-                      if len(v) and v.mean() else np.nan),
+            "rt_trials": s["n"],
+            "mean_rt": s["mean_rt"],
+            "median_rt": round(float(v.median()), 1) if len(v) else np.nan,
+            "rt_cv": s["rt_cv"],
             "wrong_finger": int((g["had_incorrect_press"] == True).sum()),
             "mean_force_raw": (round(g["peak_force_n"].mean(), 1)
                                if g["peak_force_n"].notna().any() else np.nan),
@@ -2762,9 +3855,13 @@ def sec_cue_modality(trials, calset=None):
         })
     tbl = pd.DataFrame(rows).sort_values("cue").reset_index(drop=True)
     _show(tbl)
+    print("mean_rt is over cued modes only. rt_trials says how many trials")
+    print("are behind it, and it is blank for a cue setting that only ever")
+    print("ran in rhythm mode.")
     if tbl["mean_force_cal"].notna().any():
-        print(f"mean_force_cal is in {NORM_UNIT} and is the force column to "
-              f"compare between cues.")
+        print(f"mean_force_cal is in {NORM_UNIT}: relative {NORM_SHORT}.")
+        print("It compares cues within a finger, not fingers with each")
+        print("other.")
     elif tbl["mean_force_raw"].notna().any():
         print("mean_force_raw is raw counts pooled over four differently")
         print("sensitive pads, so a difference between cues here can come")
@@ -2816,78 +3913,140 @@ def sec_cue_modality(trials, calset=None):
     return tbl
 
 
+def _progress_game(folder, mode) -> pd.DataFrame:
+    """One game's trials, with the columns the progress table needs.
+
+    Read here rather than from `trials` because this section covers
+    everyone on disk, not just the current selection.
+    """
+    folder = Path(folder)
+    try:
+        df = pd.read_csv(folder / "trials.csv")
+    except OSError:
+        return pd.DataFrame()
+    if df.empty:
+        return df
+    for c in ("time_difference_ms", "peak_force_n", "lane"):
+        if c in df.columns:
+            df[c] = pd.to_numeric(df[c], errors="coerce")
+    if "stim_delivered" in df.columns:
+        df["stim_delivered"] = as_bool(df["stim_delivered"])
+    meta = read_meta(folder)
+    hand_mode = meta.get("hand", "right")
+    df["mode"] = mode
+    df["game"] = game_key(folder)
+    df["hand_mode"] = hand_mode
+    df["side"] = [lane_side((int(l) - 1) if pd.notna(l) else None, hand_mode)
+                  for l in df.get("lane", pd.Series(dtype=float))]
+    return df
+
+
 def sec_participant_progress(root=None, cat=None):
     """Every session a participant has done, in order, so progress
     across the whole programme is visible rather than one block at a
     time.
 
-    This is the view that answers whether the training is working. A
-    single block says how someone did that day; the trend across blocks
-    is the outcome measure.
+    A session is one person on one day. Counting games as sessions turned
+    two blocks in one sitting into a two-session training trend, which is
+    the opposite of what this table is for.
 
-    Force here is the number most exposed to the calibration problem,
-    because a trend over sessions can cross a recalibration. Each game's
-    force is normalised by its own calibration, so mean_force_cal is
-    comparable down the column and mean_force_raw is not.
+    Reaction time is from cued modes only. Pooling rhythm beat offsets
+    into it produced a negative coefficient of variation, which cannot
+    exist, and a first-to-latest change that was really the difference
+    between a rhythm block and a classic one.
+
+    Force is the number most exposed to the calibration problem, because
+    a trend over sessions can cross a recalibration. Each game is
+    normalised against its own calibration and its own hand.
     """
     cat = build_catalogue(root) if cat is None else cat
-    if cat.empty:
-        return None
-    people = [p for p in cat["who"].unique() if str(p) not in ("NA", "")]
-    if not people:
-        return None
-
     print("\n" + "=" * 62)
     print("PROGRESS PER PARTICIPANT")
     print("=" * 62)
+    if cat.empty:
+        _nothing("Nothing is recorded yet, so there is no progress to show.")
+        return None
+    people = [p for p in cat["who"].unique() if str(p) not in ("NA", "")]
+    if not people:
+        _nothing("Every recording on disk is under the placeholder name NA,",
+                 "so there is no participant to follow across sessions.",
+                 "Enter a participant name on the session screen.")
+        return None
 
     rows = []
     for who in people:
-        games = cat[cat["who"] == who]
-        for n, (_, g) in enumerate(games.iterrows(), start=1):
-            try:
-                df = pd.read_csv(Path(g["folder"]) / "trials.csv")
-            except OSError:
+        mine = cat[cat["who"] == who]
+        # One row per DAY, not per game. Two blocks in one sitting are
+        # one session, and reading them as two points on a training
+        # curve invents a trend.
+        for n, (day, day_games) in enumerate(
+                sorted(mine.groupby("day")), start=1):
+            frames = [_progress_game(g["folder"], g["mode"])
+                      for _, g in day_games.iterrows()]
+            frames = [f for f in frames if not f.empty]
+            if not frames:
                 continue
-            rt = pd.to_numeric(df.get("time_difference_ms"), errors="coerce")
-            outcome = df.get("early_late")
-            hit = (outcome != "Miss") if outcome is not None else pd.Series(dtype=bool)
-            good = rt[(outcome != "Miss")].dropna() if outcome is not None else rt.dropna()
-            force = pd.to_numeric(df.get("peak_force_n"), errors="coerce")
-            # Each game against its own calibration, so a recalibration
-            # partway through a programme does not read as a force change.
-            folder = Path(g["folder"])
-            cs = calibration_factors({folder.name: read_meta(folder)})
-            lanes = pd.to_numeric(df.get("lane"), errors="coerce")
-            cal_force = [
-                (cs.counts(folder.name, v) / cs.gap(folder.name, int(l) - 1))
-                if (pd.notna(v) and pd.notna(l)
-                    and cs.gap(folder.name, int(l) - 1)) else np.nan
-                for v, l in zip(force, lanes)]
+            df = pd.concat(frames, ignore_index=True)
+            kept, _, counts = analysable(df)
+            hit_rows = kept[is_cued(kept)]
+            s = rt_stats(kept)
+            force = kept.get("peak_force_n", pd.Series(dtype=float))
+            cal_force = []
+            for game, sub in kept.groupby("game", sort=False):
+                folder = next((Path(g["folder"])
+                               for _, g in day_games.iterrows()
+                               if game_key(g["folder"]) == game), None)
+                if folder is None:
+                    continue
+                cs = calibration_factors({game: read_meta(folder)})
+                hand_mode = sub["hand_mode"].iloc[0]
+                for v, l in zip(sub.get("peak_force_n", []),
+                                sub.get("lane", [])):
+                    gap = (cs.lane_gap(game, int(l) - 1, hand_mode)
+                           if pd.notna(l) else None)
+                    cal_force.append(cs.counts(game, v) / gap
+                                     if (pd.notna(v) and gap) else np.nan)
             cal_force = pd.Series(cal_force, dtype="float64")
             rows.append({
-                "who": who, "n": n, "day": g["day"], "mode": g["mode"],
-                "trials": len(df),
-                "hit_rate": round(hit.mean(), 3) if len(hit) else np.nan,
-                "mean_rt": round(good.mean(), 1) if len(good) else np.nan,
-                "rt_cv": (round(good.std() / good.mean(), 3)
-                          if len(good) and good.mean() else np.nan),
-                "mean_force_raw": (round(force.mean(), 1)
-                                   if force.notna().any() else np.nan),
-                "mean_force_cal": (round(cal_force.mean(), 3)
+                "who": who, "session": n, "day": day,
+                "games": len(day_games),
+                "modes": ", ".join(dict.fromkeys(day_games["mode"])),
+                "trials": counts["recorded"],
+                "analysed": counts["analysed"],
+                "hit_rate": (round(float((hit_rows["early_late"] != "Miss")
+                                         .mean()), 3)
+                             if len(hit_rows) else np.nan),
+                "rt_trials": s["n"],
+                "mean_rt": s["mean_rt"],
+                "rt_cv": s["rt_cv"],
+                "mean_force_raw": (round(float(force.mean()), 1)
+                                   if len(force) and force.notna().any()
+                                   else np.nan),
+                "mean_force_cal": (round(float(cal_force.mean()), 3)
                                    if cal_force.notna().any() else np.nan),
             })
     prog = pd.DataFrame(rows)
     if prog.empty:
+        _nothing("No participant has a readable trials.csv, so there is no",
+                 "progress table to build.")
         return None
     _show(prog)
+    print("session  one person on one day. Two blocks in one sitting are")
+    print("         one session, not two.")
+    print("trials   recorded. analysed leaves out trials with no cue")
+    print("         delivered and presses under "
+          f"{ANTICIPATION_MS:.0f} ms.")
+    print("mean_rt  cued modes only, misses out. Rhythm blocks contribute")
+    print("         no reaction time: their timing column is a signed")
+    print("         offset from the beat. rt_trials says how many trials")
+    print("         are behind it, and it is blank when there are none.")
 
     fig, ax = plt.subplots(1, 3, figsize=(14, 3.6))
     for who, g in prog.groupby("who"):
-        g = g.sort_values("n")
-        ax[0].plot(g["n"], g["mean_rt"], "o-", lw=2, label=who)
-        ax[1].plot(g["n"], g["hit_rate"], "o-", lw=2, label=who)
-        ax[2].plot(g["n"], g["rt_cv"], "o-", lw=2, label=who)
+        g = g.sort_values("session")
+        ax[0].plot(g["session"], g["mean_rt"], "o-", lw=2, label=who)
+        ax[1].plot(g["session"], g["hit_rate"], "o-", lw=2, label=who)
+        ax[2].plot(g["session"], g["rt_cv"], "o-", lw=2, label=who)
     ax[0].set_ylabel("mean reaction time (ms)"); ax[0].set_title("Speed")
     ax[1].axhspan(BAND_LO, BAND_HI, color="#16a34a", alpha=.15)
     ax[1].set_ylim(0, 1.02); ax[1].set_ylabel("hit rate")
@@ -2903,24 +4062,49 @@ def sec_participant_progress(root=None, cat=None):
 
     print("\nchange from first to latest session:")
     for who, g in prog.groupby("who"):
-        g = g.sort_values("n")
+        g = g.sort_values("session")
         if len(g) < 2:
-            print(f"   {who}: only one session so far")
+            print(f"   {who}: only one session so far, so there is no "
+                  f"change to report")
             continue
-        d_rt = g["mean_rt"].iloc[-1] - g["mean_rt"].iloc[0]
-        d_hit = g["hit_rate"].iloc[-1] - g["hit_rate"].iloc[0]
-        d_cv = g["rt_cv"].iloc[-1] - g["rt_cv"].iloc[0]
-        line = (f"   {who}: reaction time {d_rt:+.0f} ms, "
-                f"hit rate {d_hit:+.3f}, consistency {d_cv:+.3f}")
-        fc = g["mean_force_cal"].dropna()
-        if len(fc) > 1:
-            line += f", force {fc.iloc[-1] - fc.iloc[0]:+.3f} {NORM_UNIT}"
-        print(line + f" over {len(g)} sessions")
+        parts = []
+        # Each measure only when both ends of it exist. A blank at
+        # either end used to come out as nan formatted into a change,
+        # which reads as a measured result.
+        def change(col, fmt, name):
+            v = g[col].dropna()
+            if len(v) < 2:
+                return None
+            return f"{name} {fmt.format(v.iloc[-1] - v.iloc[0])}"
+        for col, fmt, name in (("mean_rt", "{:+.0f} ms", "reaction time"),
+                               ("hit_rate", "{:+.3f}", "hit rate"),
+                               ("rt_cv", "{:+.3f}", "consistency"),
+                               ("mean_force_cal", "{:+.3f}",
+                                f"effort ({NORM_UNIT})")):
+            got = change(col, fmt, name)
+            if got:
+                parts.append(got)
+        if not parts:
+            print(f"   {who}: {len(g)} sessions, but no measure has a value "
+                  f"at both ends")
+            continue
+        print(f"   {who}: " + ", ".join(parts) + f" over {len(g)} sessions")
+        blank = [c for c in ("mean_rt", "hit_rate", "rt_cv",
+                             "mean_force_cal")
+                 if len(g[c].dropna()) < 2]
+        if blank:
+            print(f"      no change reported for: {', '.join(blank)} "
+                  f"(missing at one end)")
     if prog["mean_force_cal"].notna().any():
-        print(f"\nmean_force_cal is {NORM_LABEL}, each game against its own")
-        print("calibration, so it can be read down the column.")
+        print(f"\nmean_force_cal is {NORM_LABEL}. Each game is against its")
+        print("own calibration and its own hand, so a recalibration between")
+        print("sessions does not move it.")
+        print_norm_short()
+        print("   A rise down this column is more effort against the same")
+        print("   reference, not a stronger finger in newtons.")
     if prog["mean_force_raw"].notna().any():
-        print("mean_force_raw is raw counts and cannot: it mixes the")
-        print("fingers that came up with the pads they sat on, and a")
-        print("recalibration between sessions moves it on its own.")
+        print("mean_force_raw is raw counts and cannot be read down the")
+        print("column: it mixes the fingers that came up with the pads they")
+        print("sat on, and a recalibration between sessions moves it on its")
+        print("own.")
     return prog

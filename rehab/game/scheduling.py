@@ -65,15 +65,32 @@ class BalancedScheduler:
         self._last: int | None = None
         self.counts: dict[int, int] = {ln: 0 for ln in self.lanes}
 
+    # How many reshuffles to attempt before giving up and accepting a repeat
+    # across a bag boundary. With n lanes the chance of needing another go is
+    # 1/n, so even at n = 2 the odds of exhausting this are under one in a
+    # million.
+    _MAX_RESHUFFLES = 20
+
     def _refill(self) -> None:
         self._bag = list(self.lanes)
         self.rng.shuffle(self._bag)
-        # If the new bag starts with the lane that just played, the patient
-        # gets the same finger twice across the bag boundary. Swap it with
-        # the next one rather than reshuffling, which would bias the order.
-        if (self.avoid_repeats and len(self._bag) > 1
-                and self._last is not None and self._bag[0] == self._last):
-            self._bag[0], self._bag[1] = self._bag[1], self._bag[0]
+        if not (self.avoid_repeats and len(self._bag) > 1
+                and self._last is not None):
+            return
+        # A bag starting with the lane that just played would cue the same
+        # finger twice running.
+        #
+        # Reshuffle rather than swapping the first two entries. The swap
+        # looks equivalent and is not: it sends the just-played lane to
+        # position 1 every single time the collision happens, which measured
+        # at 50% of boundaries against the 33% an unbiased order gives. That
+        # puts a detectable rhythm in the cue order, and a patient who picks
+        # up on it starts anticipating rather than reacting, which is the
+        # thing the shuffling exists to prevent.
+        for _ in range(self._MAX_RESHUFFLES):
+            if self._bag[0] != self._last:
+                return
+            self.rng.shuffle(self._bag)
 
     def next(self) -> int:
         if not self._bag:
@@ -204,10 +221,19 @@ class FloorWeightedScheduler:
         if not weights or len(weights) != self.num_lanes:
             weights = [1.0] * self.num_lanes
         w = [max(0.0, float(x)) for x in weights]
-        # Suppress a repeat by zeroing the last lane, but only when some
-        # other lane could actually be picked.
+        # Suppress a repeat by zeroing the last lane, but only when there are
+        # at least three lanes and some other lane could actually be picked.
+        #
+        # With exactly two lanes, zeroing the last one leaves a single
+        # candidate, so the weights are discarded and the mode emits a fixed
+        # alternation. In adaptive and mirror the weighting IS the mode: a
+        # therapist who narrows a drill to two fingers still wants the
+        # weaker one cued more often. Allowing the occasional repeat keeps
+        # the weighting alive and keeps the order from being fully
+        # predictable, which matters more here than the hovering the
+        # no-repeat rule guards against.
         if (self.avoid_repeats and self._last is not None
-                and self.num_lanes > 1
+                and self.num_lanes > 2
                 and sum(x for i, x in enumerate(w) if i != self._last) > 0):
             w[self._last] = 0.0
         total = sum(w)

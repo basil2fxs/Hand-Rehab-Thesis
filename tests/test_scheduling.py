@@ -228,3 +228,77 @@ class TestFloorWeightedScheduler:
     def test_rejects_zero_lanes(self):
         with pytest.raises(ValueError):
             FloorWeightedScheduler(0)
+
+
+class TestOrderIsUnbiased:
+    """Balanced must also mean unbiased. A shuffle bag with a boundary fix
+    that always lands the repeated lane in the same slot puts a rhythm in
+    the cue order, and a patient who picks up on it starts anticipating
+    rather than reacting."""
+
+    def test_repeated_lane_lands_uniformly_in_the_next_bag(self):
+        """The bug this guards: swapping bag[0] with bag[1] on a collision
+        sent the just-played lane to index 1 on 50% of boundaries, against
+        the 33% an unbiased order gives."""
+        from collections import Counter
+        pos = Counter()
+        s = BalancedScheduler(LANES4, random.Random(1234))
+        prev = None
+        for _ in range(120000):
+            if not s._bag and prev is not None:
+                s._refill()
+                pos[s._bag.index(prev)] += 1
+            prev = s.next()
+        total = sum(pos.values())
+        assert 0 not in pos, "a repeat crossed a bag boundary"
+        for idx in (1, 2, 3):
+            share = pos[idx] / total
+            assert abs(share - 1 / 3) < 0.02, (
+                f"index {idx} at {share:.3f}, expected about 0.333")
+
+    def test_balance_and_no_repeat_survive_the_fix(self):
+        worst, repeats = 0, 0
+        for seed in range(120):
+            s = BalancedScheduler(LANES4, random.Random(seed))
+            prev = None
+            for _ in range(97):
+                lane = s.next()
+                if lane == prev:
+                    repeats += 1
+                prev = lane
+                worst = max(worst, s.spread())
+        assert worst <= 1
+        assert repeats == 0
+
+
+class TestTwoLaneWeighting:
+    """With exactly two lanes, zeroing the last one to suppress a repeat
+    leaves a single candidate, so the weights are thrown away and the mode
+    emits a fixed alternation. In adaptive and mirror the weighting IS the
+    mode, so a two-finger drill still has to favour the weaker finger."""
+
+    def test_weights_are_respected_with_two_lanes(self):
+        f = FloorWeightedScheduler(2, min_share=0.15, rng=random.Random(3))
+        counts = [0, 0]
+        for _ in range(400):
+            counts[f.next([0.8, 0.2])] += 1
+        assert counts[0] > counts[1] * 2, (
+            f"weights ignored, got {counts} (a fixed alternation is 200/200)")
+
+    def test_two_lane_order_is_not_strictly_alternating(self):
+        f = FloorWeightedScheduler(2, min_share=0.15, rng=random.Random(3))
+        seq = [f.next([0.8, 0.2]) for _ in range(200)]
+        assert not all(a != b for a, b in zip(seq, seq[1:]))
+
+    def test_three_or_more_lanes_still_avoid_repeats(self):
+        for seed in range(40):
+            f = FloorWeightedScheduler(4, min_share=0.15,
+                                       rng=random.Random(seed))
+            seq = [f.next([0.05, 0.10, 0.15, 0.70]) for _ in range(200)]
+            assert all(a != b for a, b in zip(seq, seq[1:])), f"seed {seed}"
+
+    def test_two_lane_floor_still_holds(self):
+        f = FloorWeightedScheduler(2, min_share=0.30, rng=random.Random(1))
+        for _ in range(200):
+            f.next([0.95, 0.05])
+        assert min(f.counts) >= 0.30 * 200 - 1
