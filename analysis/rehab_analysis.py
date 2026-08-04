@@ -71,6 +71,42 @@ NUMERIC = ["block_t_s", "trial", "lane", "time_difference_ms", "points",
            "impulse_n", "timeout_ms", "force_window_sum"]
 BOOLISH = ["had_incorrect_press", "in_recovery", "loud_trial", "stim_delivered"]
 
+# What the TRUE/FALSE columns can arrive as. read_csv turns a column of
+# plain TRUE/FALSE into real booleans on its own, so the text forms only
+# survive when the column also holds blanks and comes through as object.
+_TRUE_TEXT = {"true", "t", "yes", "y", "1", "1.0"}
+_FALSE_TEXT = {"false", "f", "no", "n", "0", "0.0"}
+
+
+def as_bool(series: pd.Series) -> pd.Series:
+    """A TRUE/FALSE column as real booleans, NaN where unreadable.
+
+    read_csv has already parsed most of these to bool, so mapping the
+    literal strings a second time turns every value into NaN. That is
+    silent: the checks built on these columns all test `== True`,
+    `!= False` or `.dropna()`, so an all-NaN column reads as "nothing to
+    report" rather than as an error, and a block where every cue failed
+    to reach the device comes out looking clean.
+    """
+    if pd.api.types.is_bool_dtype(series):
+        return series
+
+    def one(v):
+        if isinstance(v, (bool, np.bool_)):
+            return bool(v)
+        if v is None or v is pd.NA:
+            return np.nan
+        if isinstance(v, float) and np.isnan(v):
+            return np.nan
+        text = str(v).strip().lower()
+        if text in _TRUE_TEXT:
+            return True
+        if text in _FALSE_TEXT:
+            return False
+        return np.nan
+
+    return series.map(one)
+
 
 def use_style():
     plt.rcParams.update({
@@ -222,7 +258,7 @@ def load_games(folders, cat: pd.DataFrame) -> pd.DataFrame:
                 df[c] = pd.to_numeric(df[c], errors="coerce")
         for c in BOOLISH:
             if c in df.columns:
-                df[c] = df[c].map({"TRUE": True, "FALSE": False})
+                df[c] = as_bool(df[c])
         meta = read_meta(folder)
         bs = meta.get("block_summary", {}) or {}
         row = cat[cat["folder"] == str(folder)]
@@ -877,6 +913,9 @@ def sec_quality(trials, folders, metas):
 def sec_compare(trials):
     games = trials["game_label"].nunique()
     if games < 2:
+        print("Only one game in this selection, so there is nothing\n"
+              "to compare against. Pick a session or a participant\n"
+              "from the dropdown to compare games.")
         return None
     print("\n" + "=" * 62)
     print("COMPARING GAMES")
@@ -1236,6 +1275,9 @@ def sec_rhythm(trials):
                  & trials["time_difference_ms"].notna()
                  & (trials["early_late"] != "Miss")]
     if rhy.empty:
+        print("No rhythm blocks in this selection, so there is no\n"
+              "timing offset to report. This section only applies to\n"
+              "games played in rhythm mode.")
         return rhy
     print("\n" + "=" * 62)
     print("RHYTHM")
@@ -1844,6 +1886,10 @@ def sec_onset(folders, trials, unit="sensor counts", calset=None):
     they compare with the threshold-crossing figure the game records."""
     ons = onset_table(folders, unit, calset=calset)
     if ons.empty:
+        print("No movement onset could be measured. This needs the raw\n"
+              "sample stream (raw.csv) with force rising after a cue, so\n"
+              "it is empty for keyboard sessions and for blocks where no\n"
+              "press crossed the detection floor.")
         return ons
     corrected = bool(ons["peak_dforce_cal"].notna().any())
     print("\n" + "=" * 62)
@@ -2281,9 +2327,19 @@ def sec_objective_one(trials, window=32, calset=None):
     threshold than the others.
     """
     cued = trials[trials["mode"].isin(["classic", "adaptive", "mirror"])]
+    n_cued = len(cued)
     if "stim_delivered" in cued.columns:
         cued = cued[cued["stim_delivered"] != False]
     if cued.empty:
+        if n_cued:
+            print(f"All {n_cued} cued trials in this selection recorded the")
+            print("cue as never delivered, so there is no trial the")
+            print("participant can be scored on. Objective 1 needs blocks")
+            print("where the cue actually reached the device.")
+        else:
+            print("No cued-mode trials in this selection, so there is no")
+            print("per-finger hit rate to check against the band. Objective")
+            print("1 applies to classic, adaptive and mirror blocks.")
         return None
     print("\n" + "=" * 62)
     print(f"OBJECTIVE 1: PER-FINGER HIT RATE OVER {window}-TRIAL WINDOWS")
@@ -2407,9 +2463,14 @@ def sec_phase(trials):
     has actually been run.
     """
     if "phase" not in trials.columns:
+        print("No protocol phase recorded, so there is no pretest to\n"
+              "aftertest change to show. Phase is only set when a block\n"
+              "is run as part of a protocol.")
         return None
     ph = trials[trials["phase"].notna() & (trials["phase"] != "")]
     if ph.empty or ph["phase"].nunique() < 2:
+        print("Only one protocol phase is present in this selection.\n"
+              "A pretest to aftertest comparison needs at least two.")
         return None
     print("\n" + "=" * 62)
     print("PRETEST TO AFTERTEST")
@@ -2505,6 +2566,9 @@ def sec_sampling_note(folders):
         print(f"effective new-data rate: {logged * (1 - dup):.0f} Hz")
         return {"logged_hz": logged, "duplicate_fraction": dup,
                 "effective_hz": logged * (1 - dup)}
+    print("Not enough raw samples to estimate the sampling rate.\n"
+          "This needs at least 50 rows in raw.csv, so it is empty for\n"
+          "keyboard sessions and very short blocks.")
     return None
 
 
