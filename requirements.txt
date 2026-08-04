@@ -9,6 +9,9 @@ soundfile>=0.12
 matplotlib>=3.8
 # Notebook dropdown for picking a saved session.
 ipywidgets>=8.0
+# Notebook run button. JupyterLab 4 ignores javascript outputs, so the
+# button asks the front end through this instead.
+ipylab>=1.1.0
 pytest>=7.0
 
 # Optional: only needed if you want to build a standalone .app / .exe

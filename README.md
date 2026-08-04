@@ -137,8 +137,10 @@ config/
   calibration/           measured press calibration, one file per hand
 assets/                  music + images
 analysis/
-  session_analysis.ipynb the notebook you actually open
-  rehab_analysis.py      everything the notebook calls
+  session_analysis.ipynb the whole analysis, self-contained. No other
+                         file needed: run the first cell, pick a save,
+                         press the button
+  figures/               what the notebook draws, ready for the report
 arduino/                 the firmware that is on the device now
   Arduino_20251111/      the sketch itself, do not reflash
 tools/                   hardware check scripts, run from a terminal
