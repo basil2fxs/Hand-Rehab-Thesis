@@ -37,3 +37,9 @@ config/user_settings.yaml
 analysis/figures/
 analysis/*.csv
 analysis/.ipynb_checkpoints/
+
+# Same output when the notebook is run from the repo root instead of from
+# analysis/. A set of these got committed once and went stale, which is worse
+# than useless: they were figures of the uncorrected numbers sitting where
+# someone might pick them up for the report.
+/figures/

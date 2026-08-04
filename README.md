@@ -119,27 +119,40 @@ python -m unittest discover -s tests
 ## Folder layout
 
 ```
-main.py                  main python file
-config/
-  default.yaml           shipped defaults
-  user_settings.yaml     user customisation (gitignored)
-rehab/                   the Python app
-  hardware/              FSR detector + serial sources
-  game/                  engine + classic / adaptive / rhythm modes
+main.py                  start the game from source
+build_app.sh / .bat      build the standalone app
+finger_rehab.spec        PyInstaller config
+Finger Rehab.command     double-click launcher for Mac
+
+rehab/                   the app itself
+  hardware/              FSR detector, serial sources, calibration profile
+  game/                  engine, scheduling, classic/adaptive/rhythm/mirror
   audio/                 librosa wrapper + pygame.mixer wrapper
   data/                  CSV + JSON writers
   ui/                    screens + widgets
   analytics/             adaptive challenge-point algorithm
+config/
+  default.yaml           shipped defaults, heavily commented
+  user_settings.yaml     what the Settings screen writes (gitignored)
+  calibration/           measured press calibration, one file per hand
 assets/                  music + images
-sessions/                logs generated per session
-tests/                   just some tests when modifying game
+analysis/
+  session_analysis.ipynb the notebook you actually open
+  rehab_analysis.py      everything the notebook calls
+arduino/                 the firmware that is on the device now
+  Arduino_20251111/      the sketch itself, do not reflash
+tools/                   hardware check scripts, run from a terminal
+tests/                   run these before trusting a change
 builds/                  ready-to-run apps (Mac/ Windows/) + how-tos
-bin/                     stuff the final game doesn't need
-  arduino_firmware/      Aiden's PlatformIO project (final build)
-  build/ + dist/         PyInstaller output
+sessions/                what the game records, one folder per block
+
+bin/                     old stuff, nothing here is used by the game
+  aiden_arduino_firmware/  Aiden's PlatformIO project
+  old_interactive_game/    the 2025 rhythm game and its data
+  example_session_data.zip example folder layout from the handover
 ```
 
 ## References
 
 - FSR press-detection algorithm, CSV trial schema and stim event protocol come from Satoru Nakayama's 2025 software thesis (`Past/2025_Theses/Software - Satoru Nakayama .../rhythm_game_ver.FINAL.py`).
-- The Arduino firmware in `bin/arduino_firmware/` is Aiden's hardware build (PlatformIO project with I2C sensors and a few modular C++ libs).
+- Aiden's older hardware build is in `bin/aiden_arduino_firmware/` (PlatformIO, I2C sensors, a few modular C++ libs). It is kept for reference only. The firmware actually running on the device is `arduino/Arduino_20251111/`.
