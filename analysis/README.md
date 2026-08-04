@@ -12,17 +12,17 @@ cd analysis
 jupyter notebook session_analysis.ipynb
 ```
 
-Pick from the dropdown and press Run. No typing:
+Click a save in the dropdown near the top, then run the cells under it. No
+typing. The list is newest first with friendly dates (today, yesterday, Monday),
+and offers three scopes: one game, one session, or one person across every day
+they played.
 
-```python
-picker()
-```
+Choosing only sets the selection. Each cell below it runs one section and prints
+its own result underneath, so the working stays visible. Until you choose
+anything the newest game is used.
 
-The list is newest first, with friendly dates (today, yesterday, Monday). It shows
-single games, then whole sessions, then everything together.
-
-If you would rather type it, `report("latest")`, `report(3)`, `report("Basil")`
-and so on all still work, and `catalogue()` prints the same list as a table.
+`report("latest")`, `report(3)`, `report("Basil")` and the rest still work from a
+script or a plain shell, and `catalogue()` prints the same list as a table.
 
 ## Picking what to analyse
 
