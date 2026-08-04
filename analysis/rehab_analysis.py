@@ -2018,9 +2018,29 @@ def sec_individuation(trials, calset=None):
             print("   with no usable gap is a lane on a pad that barely")
             print("   moves, which is where spill hides.")
     else:
-        print("\nNo usable calibration for these games, so there is no")
-        print("own-reference version. Differences between fingers above are")
-        print("a mix of the hand and the hardware.")
+        # Two different situations end up here and they need different
+        # answers. Either nothing was calibrated, or a calibration was
+        # measured and every trial still touched a lane whose gap is
+        # unusable. Calling the second one "no calibration" hides the
+        # only thing the user can act on, which is that one named pad is
+        # the problem and recalibrating it brings the whole basis back.
+        why = {w: n for w, n in (s["why"] or {}).items() if w}
+        no_cal = all("no calibration" in w for w in why) if why else True
+        if no_cal:
+            print("\nNo usable calibration for these games, so there is no")
+            print("own-reference version. Differences between fingers")
+            print("above are a mix of the hand and the hardware.")
+        else:
+            print("\nA calibration was recorded, but NOT ONE trial could be")
+            print("fully corrected, so there is no own-reference version:")
+            for w, n in why.items():
+                print(f"      {n}x  {w}")
+            print("   Every trial touched a lane with no usable gap, so")
+            print("   correcting any of them would mix normalised lanes")
+            print("   with dropped ones. Recalibrate the pad named above")
+            print("   and this basis comes back. Differences between")
+            print("   fingers are a mix of the hand and the hardware")
+            print("   until then.")
 
     col = "individuation_cal" if corrected else "individuation"
     shown = ind[ind["comparable"] == True] if corrected else ind
@@ -2707,6 +2727,9 @@ def sec_summary(trials, unit="sensor counts", calset=None, on_task=0.0,
     return s
 
 
+IND_EXPORT = "individuation_per_trial.csv"
+
+
 def write_exports(summary, trials, calset=None, ind=None):
     """Write the CSVs, with the exclusion flags on every trial row.
 
@@ -2714,6 +2737,11 @@ def write_exports(summary, trials, calset=None, ind=None):
     but each row now carries whether it could be analysed and why not, so
     anyone recomputing from the CSV lands on the same figures as the
     summary rather than on the ones that include flagged trials.
+
+    Only the files actually written this run are described. A selection
+    with no individuation leaves any earlier individuation_per_trial.csv
+    untouched, and that stale file gets called out rather than listed as
+    though it went with the summary.
     """
     pd.DataFrame([summary]).T.rename(columns={0: "value"}).to_csv(
         "session_summary.csv")
@@ -2731,14 +2759,29 @@ def write_exports(summary, trials, calset=None, ind=None):
             excluded = flags["excluded"]
             out["excluded"] = [bool(excluded.get(i, False))
                                for i in out["row_id"]]
-        out.to_csv("individuation_per_trial.csv", index=False)
-        written.append("individuation_per_trial.csv")
+        out.to_csv(IND_EXPORT, index=False)
+        written.append(IND_EXPORT)
     print("\nwritten: " + ", ".join(written))
-    print("selected_trials.csv and individuation_per_trial.csv carry an")
-    print("excluded column, and selected_trials.csv also carries")
-    print("exclusion_reason. The summary is built from the rows where")
-    print("excluded is False, so filter on it to reproduce the headline")
-    print("numbers.")
+    if IND_EXPORT in written:
+        print(f"selected_trials.csv and {IND_EXPORT} both carry an")
+        print("excluded column, and selected_trials.csv also carries")
+        print("exclusion_reason.")
+    else:
+        print("selected_trials.csv carries an excluded column and an")
+        print("exclusion_reason column.")
+    print("The summary is built from the rows where excluded is False, so")
+    print("filter on it to reproduce the headline numbers.")
+    # A selection with no individuation writes no individuation file, but
+    # one from an earlier run is still sitting next to the notebook under
+    # the same name. Saying nothing points the reader at a file of
+    # another session's trials as though it matched the summary above it,
+    # and an older one does not even carry the excluded column.
+    if IND_EXPORT not in written and Path(IND_EXPORT).exists():
+        print(f"\nWARNING: {IND_EXPORT} on disk is left over from an")
+        print("earlier run. This selection has no individuation data, so")
+        print("that file was NOT rewritten and its rows belong to a")
+        print("different selection. Delete it, or re-run the export on the")
+        print("selection it came from, before reading anything off it.")
     print("figures are in figures/ ready for the report")
     return written
 
