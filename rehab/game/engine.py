@@ -1184,6 +1184,58 @@ class GameEngine:
         only = next(iter(by_hand.values()))
         return BalancedScheduler(only, rng).sequence(max(0, n_trials))
 
+    def reconnect_source(self) -> str:
+        """Rebuild the sample source from the current config, live.
+
+        Changing a port used to mean restarting the whole app, which the
+        Settings screen said out loud. That is a rotten thing to hit
+        between two blocks of a session, and it also meant a board that
+        had been unplugged and plugged back in on a different port
+        needed a restart even though the hardware was fine.
+
+        Refuses while a block is running: swapping the source mid-block
+        would leave the trial half recorded against a source that no
+        longer exists. Returns a line for the screen to show.
+        """
+        if getattr(self, "in_block", False):
+            return "Not while a block is running. Finish or abandon first."
+        old = getattr(self, "source", None)
+        try:
+            from ..hardware.discovery import build_source_from_config
+        except ImportError:
+            build_source_from_config = None
+        if build_source_from_config is None:
+            return "Cannot rebuild the connection on this build."
+        try:
+            new_source = build_source_from_config(self.cfg)
+        except Exception as e:
+            log.warning("Could not build a new source: %s", e)
+            return f"Could not open that port: {e}"
+        if new_source is None:
+            return "No Arduino found on the chosen ports."
+        try:
+            new_source.start()
+        except Exception as e:
+            log.warning("Could not start the new source: %s", e)
+            return f"Could not start that port: {e}"
+        self.source = new_source
+        # Detectors hold no reference to the source, but their baselines
+        # were learned from the old board's readings and mean nothing
+        # for a different one.
+        for det in (self.detectors or {}).values():
+            try:
+                det.reset()
+            except Exception:
+                pass
+        self._prime_baselines()
+        if old is not None and old is not new_source:
+            try:
+                old.stop()
+            except Exception as e:
+                log.debug("Stopping the old source raised: %s", e)
+        log.info("Sample source rebuilt from config")
+        return "Connected. No restart needed."
+
     def show_calibration(self) -> None:
         """Open the guided calibration. Reachable from the menu before a
         session so a therapist never has to touch a config file."""
@@ -2361,13 +2413,15 @@ class GameEngine:
     def cue_ms_for_lane(self, lane: int) -> float:
         """How long this finger's buzz should run.
 
-        Defaults to motor.cue_ms for every finger, but each can be given
-        its own length through motor.cue_ms_per_finger. That exists for
-        the pinky. Its motor is the weak one on this build, which the
-        firmware already compensates for by driving it at a higher PWM
-        than the other three, and PWM is compile-time in the firmware's
-        Config.cpp. Buzz length is the one lever the host still has, and
-        a longer pulse on a weak motor is easier to feel.
+        motor.cue_ms for every finger, which is the point: the analysis
+        compares reaction time between fingers, so a finger cued for
+        longer than its neighbours would read as different for a reason
+        that has nothing to do with the patient.
+
+        motor.cue_ms_per_finger can override it per finger and ships
+        empty. It is there for a rig with a genuinely dead motor, not
+        for tuning. A weak motor belongs in the firmware's PWM, which
+        already drives the pinky harder than the other three.
 
         A cue that runs longer than the gap to the next trial would
         still be buzzing when the next one starts, so the value is

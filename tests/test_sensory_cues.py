@@ -799,28 +799,29 @@ class PinkyBuzzTests(unittest.TestCase):
         self.assertTrue(e._send_stim(3))
         self.assertEqual(sent, ["STIM:4"])
 
-    def test_the_pinky_buzzes_longer_than_the_others(self):
+    def test_every_finger_gets_the_same_cue_length(self):
+        """The analysis compares reaction time between fingers, so a
+        finger cued for longer than its neighbours would read as
+        different for a reason that is nothing to do with the patient.
+        The pinky motor being weaker is the firmware's PWM to handle,
+        not the cue length."""
         e, _ = self._engine()
-        pinky = e.cue_ms_for_lane(3)
-        for lane in (0, 1, 2):
-            self.assertGreater(pinky, e.cue_ms_for_lane(lane))
+        lengths = {e.cue_ms_for_lane(lane) for lane in range(4)}
+        self.assertEqual(len(lengths), 1, f"cue lengths differ: {lengths}")
 
-    def test_a_longer_cue_means_more_pulses(self):
-        """Length only helps if it actually re-arms the motor. The
-        firmware holds 150 ms per pulse and nothing else can extend it."""
-        e, sent = self._engine()
-        e._send_stim(3)
-        e._schedule_cue_pulses(3)
-        pinky_pulses = len(sent) + len(e._motor_queue)
-        e2, sent2 = self._engine()
-        e2._send_stim(0)
-        e2._schedule_cue_pulses(0)
-        index_pulses = len(sent2) + len(e2._motor_queue)
-        self.assertGreater(pinky_pulses, index_pulses)
+    def test_every_finger_gets_the_same_number_of_pulses(self):
+        counts = []
+        for lane in range(4):
+            e, sent = self._engine()
+            e._send_stim(lane)
+            e._schedule_cue_pulses(lane)
+            counts.append(len(sent) + len(e._motor_queue))
+        self.assertEqual(len(set(counts)), 1, f"pulse counts differ: {counts}")
 
-    def test_the_cue_cannot_outlast_the_gap_to_the_next_trial(self):
-        """A cue still buzzing when the next trial starts would be read
-        as that trial's cue."""
+    def test_an_override_cannot_outlast_the_gap_to_the_next_trial(self):
+        """cue_ms_per_finger ships empty and is there for a rig with a
+        dead motor. If someone does set it, a cue still buzzing when the
+        next trial starts would be read as that trial's cue."""
         from rehab.config import Config
         cfg = Config.load()
         cfg.data.setdefault("motor", {})["cue_ms_per_finger"] = [

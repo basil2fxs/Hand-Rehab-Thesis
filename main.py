@@ -94,40 +94,17 @@ def main() -> int:
 
 
 def _resolve_ports_and_hands(cfg, fallback_ports):
-    """Pick the (ports, hand_assignment) pair MultiSerialSource should
-    use, honouring serial.left_port + serial.right_port overrides from
-    the Settings screen.
+    """Which ports to open and which hand each is.
 
-    Behaviour:
-      - Both overrides set -> exactly those two ports, right + left.
-      - One override set -> that hand gets its assigned port; the other
-        hand gets the first remaining detected port (if any), else
-        falls back to a single-hand source.
-      - Neither set -> use fallback_ports in plug order (default).
+    Delegates to rehab.hardware.discovery so the Settings screen's live
+    reconnect and this startup path cannot drift apart. They used to be
+    the same rules written twice, and only this copy was ever updated.
     """
-    log = logging.getLogger("main")
-    left = cfg.get("serial.left_port")
-    right = cfg.get("serial.right_port")
-    if not left and not right:
-        return fallback_ports, None
-    chosen: list[str] = []
-    hands: list[str] = []
-    if right:
-        chosen.append(right)
-        hands.append("right")
-    if left:
-        chosen.append(left)
-        hands.append("left")
-    if len(chosen) == 1:
-        # The user pinned one hand; fill the other with any remaining
-        # detected port so bilateral still works if both Arduinos are
-        # plugged in but only one was explicitly assigned.
-        remaining = [p for p in fallback_ports if p not in chosen]
-        if remaining:
-            chosen.append(remaining[0])
-            hands.append("left" if "left" not in hands else "right")
-    log.info("Using explicit port assignment: %s",
-             list(zip(hands, chosen)))
+    from rehab.hardware.discovery import resolve_ports_and_hands
+    chosen, hands = resolve_ports_and_hands(cfg, fallback_ports)
+    if hands:
+        logging.getLogger("main").info(
+            "Using explicit port assignment: %s", list(zip(hands, chosen)))
     return chosen, hands
 
 

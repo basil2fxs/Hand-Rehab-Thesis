@@ -3383,10 +3383,18 @@ class DiagnosticsScreen(Screen):
                 for hand in ("left", "right")
             })
             self._has_unsaved = False
-            self._port_status = (
-                "Saved. Restart the app for the new ports to take "
-                "effect on the next session."
-            )
+            # Apply it now. Telling a therapist to restart the app
+            # between two blocks of a session is a rotten answer, and it
+            # used to be the only one.
+            self._port_status = "Saved. Connecting..."
+            try:
+                self._port_status = f"Saved. {self.engine.reconnect_source()}"
+            except Exception as e:
+                log.warning("Live reconnect failed: %s", e)
+                self._port_status = (
+                    f"Saved, but could not connect now ({e}). "
+                    f"It will be used next time the app starts."
+                )
         except Exception as e:
             self._port_status = f"Save failed: {e}"
 

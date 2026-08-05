@@ -185,6 +185,14 @@ class SerialSource(BaseQueueSource):
         self.read_timeout_s = read_timeout_s
         self.open_retries = open_retries
         self.retry_delay_s = retry_delay_s
+        # Background reconnect. Starts short so a brief glitch is
+        # invisible, backs off so an unplugged board does not spin, and
+        # never stops trying: plugging the cable back in is meant to be
+        # the whole fix.
+        self.reconnect_delay_s = 0.5
+        self.reconnect_max_delay_s = 5.0
+        self._reconnects = 0
+        self.last_error: str | None = None
         self._serial: serial.Serial | None = None
         # Startup-latency capture. `_port_open_ts` is stamped the
         # instant pyserial returns from serial.Serial(...). It
@@ -246,40 +254,89 @@ class SerialSource(BaseQueueSource):
         )
 
     def _run(self) -> None:
-        try:
-            self._serial = self._open()
-            self._connected = True
-        except serial.SerialException as e:
-            log.error("Serial source failed to start: %s", e)
-            self._connected = False
-            return
+        """Keep a connection up for as long as the source is running.
 
-        buf = bytearray()
-        try:
-            while not self._stop.is_set():
-                try:
-                    chunk = self._serial.read(256)
-                except (serial.SerialException, OSError) as e:
-                    log.error("Serial read error: %s", e)
-                    break
-                if not chunk:
-                    continue
-                buf.extend(chunk)
-                self._consume(buf)
-        finally:
-            self._connected = False
+        This used to open the port once, read until something went
+        wrong, and then exit the thread for good. Any hiccup at all, a
+        USB glitch, the board resetting, the cable nudged, killed the
+        connection permanently and the only way back was restarting the
+        whole app. Mid-session that costs the block.
+
+        Now a dropped connection is just a state to recover from: close
+        what is left, wait a moment, open again, carry on. The retry
+        backs off so a genuinely unplugged board does not spin the CPU,
+        and it never gives up, because the therapist plugging the cable
+        back in should be all it takes.
+        """
+        backoff = self.reconnect_delay_s
+        while not self._stop.is_set():
             try:
-                if self._serial:
-                    self._serial.close()
-            except (Exception,) as e:
-                # serial.SerialException isn't always importable on
-                # the no-pyserial test path so we keep the catch
-                # broad but log at debug. Close-on-shutdown failures
-                # are expected when the OS already reclaimed the
-                # port (USB unplug) and aren't actionable.
-                log.debug("Serial close raised %s: %s",
-                            type(e).__name__, e)
-            log.info("Serial source stopped")
+                self._serial = self._open()
+            except (serial.SerialException, OSError) as e:
+                self._connected = False
+                self._note_drop(str(e))
+                if self._stop.wait(backoff):
+                    break
+                backoff = min(backoff * 2, self.reconnect_max_delay_s)
+                continue
+
+            self._connected = True
+            backoff = self.reconnect_delay_s      # a good open resets it
+            if self._reconnects:
+                log.info("Serial %s reconnected after %d attempt(s)",
+                          self.port, self._reconnects)
+                self._reconnects = 0
+                self.last_error = None
+            else:
+                log.info("Serial %s connected", self.port)
+
+            buf = bytearray()
+            try:
+                while not self._stop.is_set():
+                    try:
+                        chunk = self._serial.read(256)
+                    except (serial.SerialException, OSError) as e:
+                        self._note_drop(str(e))
+                        break
+                    if not chunk:
+                        continue
+                    buf.extend(chunk)
+                    self._consume(buf)
+            finally:
+                self._connected = False
+                try:
+                    if self._serial:
+                        self._serial.close()
+                except Exception as e:
+                    # serial.SerialException isn't always importable on
+                    # the no-pyserial test path so the catch stays broad.
+                    # A close that fails because the OS already reclaimed
+                    # the port (USB unplug) is expected and not
+                    # actionable.
+                    log.debug("Serial close raised %s: %s",
+                                type(e).__name__, e)
+                self._serial = None
+            if not self._stop.is_set():
+                # Dropped rather than asked to stop. Pause before trying
+                # again so an unplugged board does not spin.
+                if self._stop.wait(backoff):
+                    break
+        self._connected = False
+        log.info("Serial source stopped")
+
+    def _note_drop(self, why: str) -> None:
+        """Record a lost connection once, quietly on repeats.
+
+        A board left unplugged would otherwise fill the log with the
+        same line several times a second, which buries whatever actually
+        went wrong first.
+        """
+        self._reconnects += 1
+        self.last_error = why
+        if self._reconnects == 1 or self._reconnects % 20 == 0:
+            log.warning("Serial %s lost (%s), reconnecting in the "
+                         "background (attempt %d)",
+                         self.port, why, self._reconnects)
 
     def _consume(self, buf: bytearray) -> None:
         while True:
