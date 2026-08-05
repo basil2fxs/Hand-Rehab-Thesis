@@ -674,3 +674,97 @@ class LegacySettingsMigrationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OneMotorPerBoardTests(unittest.TestCase):
+    """The four motors on a board share one darlington driver that
+    cannot supply them together. The firmware's own source says so:
+
+        This function doesnt really work, since current draw from
+        all 4 motors is way too much for the darlington driver
+        and they are very weak, better to have only one on at a time
+
+    The firmware turns each motor off on its own timer, so two fingers
+    cued inside the same 150 ms hold are both driven. That does not give
+    two buzzes, it gives two weak ones, and the cue the patient reacts
+    to stops being the cue that was asked for.
+    """
+
+    def _engine(self, hand_mode="right"):
+        from rehab.game.engine import GameEngine
+        sent = []
+
+        class Src:
+            def send_command(self, c):
+                sent.append(c)
+                return True
+
+        class Cfg:
+            data = {}
+
+            def get(self, key, default=None):
+                return {"fsr.num_sensors_per_hand": 4,
+                        "motor.cue_ms": 250,
+                        "motor.channel_map": [1, 2, 3, 4]}.get(key, default)
+
+        e = GameEngine.__new__(GameEngine)
+        e.cfg = Cfg()
+        e.source = Src()
+        e.hand_mode = hand_mode
+        e._motor_queue = []
+        e.detectors = {"right": 1, "left": 1}
+        return e, sent
+
+    def test_switching_finger_stops_the_board_first(self):
+        e, sent = self._engine()
+        e._send_stim(0)
+        e._send_stim(1)
+        self.assertEqual(sent, ["STIM:1", "STOP", "STIM:2"])
+
+    def test_repeating_the_same_finger_does_not_stop_it(self):
+        """A cue longer than the firmware's hold re-arms the same motor.
+        Stopping it between pulses would chop the buzz up."""
+        e, sent = self._engine()
+        e._send_stim(2)
+        e._send_stim(2)
+        self.assertEqual(sent, ["STIM:3", "STIM:3"])
+
+    def test_no_stop_once_the_hold_has_expired(self):
+        import time
+        e, sent = self._engine()
+        e._send_stim(0)
+        e._motor_busy["right"] = (0, time.perf_counter() - 0.01)
+        e._send_stim(1)
+        self.assertNotIn("STOP", sent)
+
+    def test_the_two_hands_do_not_stop_each_other(self):
+        """Mirror mode buzzes both hands at once, and that is fine:
+        they are separate boards with separate drivers."""
+        e, sent = self._engine("both")
+        e._send_stim(0)
+        e._send_stim(4)
+        self.assertEqual(sent, ["STIM:1", "STIM:5"])
+
+    def test_the_stop_is_scoped_to_one_hand(self):
+        e, sent = self._engine("both")
+        e._send_stim(0)
+        e._send_stim(1)
+        self.assertIn("RIGHT:STOP", sent)
+        self.assertNotIn("STOP", sent)
+
+    def test_queued_pulses_for_the_cut_finger_are_dropped(self):
+        """A queued repeat would restart the motor we just stopped,
+        putting two back on together."""
+        e, sent = self._engine()
+        e._send_stim(0)
+        e._schedule_cue_pulses(0)
+        self.assertTrue(any(ln == 0 for ln, _ in e._motor_queue))
+        e._send_stim(1)
+        self.assertFalse(any(ln == 0 for ln, _ in e._motor_queue))
+
+    def test_every_finger_can_be_driven(self):
+        """All four are independent. Nothing may quietly skip one."""
+        for lane in range(4):
+            e, sent = self._engine()
+            self.assertTrue(e._send_stim(lane))
+            self.assertEqual(sent, [f"STIM:{lane + 1}"])

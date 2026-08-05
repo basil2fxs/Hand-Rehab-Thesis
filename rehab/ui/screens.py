@@ -2146,6 +2146,7 @@ class RhythmSetupScreen(Screen):
         if thread is not None and thread.is_alive():
             return
         import threading
+        from ..audio.beatmap import DECODE_LOCK
         try:
             import librosa
         except ImportError:

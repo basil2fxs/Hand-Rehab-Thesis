@@ -8,12 +8,27 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Iterable
 
 
 log = logging.getLogger(__name__)
+
+
+# Every call that opens an audio file through librosa has to hold this.
+#
+# librosa reads through soundfile, which is a cffi wrapper over
+# libsndfile, and libsndfile's MPEG decoder sets up shared state on its
+# first use per file open. Two threads inside sf_open on an mp3 at the
+# same time crash the process with SIGBUS (EXC_ARM_DA_ALIGN in
+# mpeg_init) rather than raising anything Python can catch. The rhythm
+# setup screen probes track durations on a background thread while the
+# main thread can be extracting a beatmap from the track the user just
+# picked, so the two really do overlap. One lock over both call sites
+# is the whole fix: decoding is not on any hot path.
+DECODE_LOCK = threading.Lock()
 
 
 @dataclass
@@ -312,7 +327,8 @@ def extract_beatmap(audio_path: str | Path,
     p = Path(audio_path)
     try:
         import librosa
-        y, sr = librosa.load(str(p), mono=True)
+        with DECODE_LOCK:
+            y, sr = librosa.load(str(p), mono=True)
         # Onset envelope (energy of percussive hits over time).
         # Computed once and shared between beat-track + strength
         # ranking so beat_track follows the same percussive cues we

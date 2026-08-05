@@ -2234,10 +2234,14 @@ class GameEngine:
 
         Read fresh rather than cached at block start so a change made
         on the Settings screen applies to the next block without a
-        restart. Missing keys default to on, matching
-        config/default.yaml: a config file that predates these keys
-        came from a build where the buzzer and the tones were running,
-        so on is what keeps that setup behaving the same.
+        restart.
+
+        The per-key fallbacks below mirror config/default.yaml exactly,
+        so a config that is missing a key behaves the same as one that
+        spells out what we ship. Config.load always merges default.yaml
+        underneath, so the fallbacks only come into play for a config
+        built by hand. Keep the two in step if the shipped values ever
+        change.
         """
         cfg = getattr(self, "cfg", None)
         if cfg is None:
@@ -2246,8 +2250,8 @@ class GameEngine:
         return CueSettings(
             buzz_before=bool(g("cue.buzz_before", True)),
             sound_before=bool(g("cue.sound_before", True)),
-            sound_after=bool(g("cue.sound_after", True)),
-            buzz_after=bool(g("cue.buzz_after", True)),
+            sound_after=bool(g("cue.sound_after", False)),
+            buzz_after=bool(g("cue.buzz_after", False)),
             show_target=bool(g("cue.show_target", True)),
         )
 
@@ -2286,13 +2290,51 @@ class GameEngine:
 
     def _send_stim(self, lane: int) -> bool:
         """Fire one STIM pulse for the finger on `lane` (0-indexed).
-        Returns whether the hardware accepted it."""
+        Returns whether the hardware accepted it.
+
+        Only one motor per board runs at a time. The firmware turns each
+        motor off on its own timer, so two fingers cued inside the same
+        150 ms hold would both be driven, and the hardware cannot do
+        that: the four motors share one darlington driver that cannot
+        supply them together, which the firmware's own source says in as
+        many words. The result is not two buzzes, it is two weak ones,
+        and at that point the cue the patient is supposed to react to is
+        no longer the cue that was delivered.
+
+        So a pulse aimed at a different finger on the same board stops
+        that board first. The stop is hand-prefixed so the other hand,
+        which has its own board and its own driver, keeps buzzing.
+        """
+        now = time.perf_counter()
+        resolved = self._resolve_lane_to_detector(lane)
+        hand = resolved[0] if resolved else (self.hand_mode or "right")
+        if not hasattr(self, "_motor_busy"):
+            self._motor_busy: dict[str, tuple[int, float]] = {}
+        busy = self._motor_busy.get(hand)
+        if busy is not None:
+            busy_lane, busy_until = busy
+            if busy_lane != lane and now < busy_until:
+                try:
+                    self.source.send_command(
+                        f"{hand.upper()}:STOP"
+                        if self.hand_mode == "both" else "STOP")
+                except Exception as e:
+                    log.warning("motor stop before switching finger: %s", e)
+                # Anything still queued for the finger we just cut off
+                # would restart it behind the new one.
+                self._motor_queue = [
+                    (ln, due) for (ln, due) in getattr(self, "_motor_queue", [])
+                    if ln != busy_lane]
         try:
-            return bool(self.source.send_command(
+            ok = bool(self.source.send_command(
                 f"STIM:{self._stim_channel(lane)}"))
         except Exception as e:
             log.warning("STIM send failed on lane %d: %s", lane, e)
             return False
+        if ok:
+            self._motor_busy[hand] = (
+                lane, now + self.FIRMWARE_STIM_MS / 1000.0)
+        return ok
 
     def _schedule_cue_pulses(self, lane: int) -> None:
         """Queue the repeat pulses needed to stretch this lane's cue out
