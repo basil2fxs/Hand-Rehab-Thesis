@@ -4,7 +4,17 @@
 
 uint8_t motorPins[4] = {PIN_MOTOR_INDEX, PIN_MOTOR_MIDDLE, PIN_MOTOR_RING, PIN_MOTOR_PINKY};
 uint8_t STIM_PWM[4] = {MOTOR_INDEX_PWM, MOTOR_MIDDLE_PWM, MOTOR_RING_PWM, MOTOR_PINKY_PWM};
-uint16_t stimOffAt[4] = {0,0,0,0};  // Scheduled automatic STIM off time (0 = currently off)
+// Scheduled automatic STIM off time (0 = currently off).
+//
+// MUST be the same width as millis(), which is 32-bit. This was
+// uint16_t, which only holds the first 65536 ms of uptime. Past 65.5
+// seconds the stored deadline could no longer represent the real time,
+// so the check below was true the moment it was looked at and every
+// motor was switched off microseconds after being told to turn on.
+// The buzzers simply stopped working about a minute after boot, with
+// no error anywhere, and came back only because reopening the serial
+// port resets the board and restarts millis() from zero.
+unsigned long stimOffAt[4] = {0,0,0,0};
 
 
 void motorInit(){
