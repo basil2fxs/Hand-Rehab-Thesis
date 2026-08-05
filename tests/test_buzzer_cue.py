@@ -1,13 +1,17 @@
-"""The buzzer cue: the motor under the TARGET finger buzzes when that
-trial's stimulus fires, telling the patient which finger to press.
+"""The pre-press buzzer cue: the motor under the TARGET finger buzzes
+when that trial's stimulus fires, telling the patient which finger to
+press. cue.buzz_before is the switch.
 
 Rules this locks in:
   - it fires on the target lane(s) only, in every mode
-  - nothing else ever buzzes (no press / hit / miss vibration)
-  - the toggle turns it off completely
+  - a timeout or a wrong finger never drives a motor
+  - the switch turns it off completely
   - cue length is built by repeating the firmware's fixed 150 ms pulse,
     because the sketch hardcodes drive strength and exposes no way to
     change it
+
+The post-press confirmation buzz (cue.buzz_after) and the way the four
+switches combine live in test_sensory_cues.py.
 """
 from __future__ import annotations
 
@@ -23,16 +27,19 @@ os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
-def _engine(motor_enabled=True, cue_ms=250):
+def _engine(buzz_before=True, buzz_after=False, cue_ms=250):
     from rehab.game.engine import GameEngine
     e = GameEngine.__new__(GameEngine)
     e.cfg = MagicMock()
     e.cfg.get = MagicMock(side_effect=lambda k, d=None: {
-        "motor.enabled": motor_enabled,
+        "cue.buzz_before": buzz_before,
+        "cue.buzz_after": buzz_after,
+        "cue.sound_before": False,
+        "cue.sound_after": False,
+        "cue.show_target": True,
         "motor.cue_ms": cue_ms,
         "motor.pulse_interval_ms": 120,
         "game.timeout_s": 1.0,
-        "audio.stim_tone_enabled": False,
         "fsr.num_sensors_per_hand": 4,
     }.get(k, d))
     sent = []
@@ -69,14 +76,15 @@ class CueFiresOnTargetTests(unittest.TestCase):
         self.assertIn("STIM:6", e._sent)
 
     def test_toggle_off_sends_nothing(self) -> None:
-        e = _engine(motor_enabled=False)
+        e = _engine(buzz_before=False)
         e.on_stim(lane=1, trial_id=1, t_perf=0.0)
         self.assertEqual([c for c in e._sent if c.startswith("STIM")], [])
 
 
 class NoOtherBuzzingTests(unittest.TestCase):
-    """The buzzer indicates which finger to press and does nothing
-    else. A press, a hit or a miss must never drive a motor."""
+    """With cue.buzz_after off the buzzer only ever says which finger
+    to press. Closing a trial must not drive a motor, whatever the
+    outcome was."""
 
     def test_log_trial_never_sends_a_stim(self) -> None:
         from rehab.game.modes.classic import PendingTrial
@@ -166,8 +174,14 @@ class CueLengthTests(unittest.TestCase):
 
 class ConfigDefaultsTests(unittest.TestCase):
     def test_cue_on_by_default(self) -> None:
-        from rehab.config import Config
-        self.assertTrue(Config.load().get("motor.enabled"))
+        # Read default.yaml, not Config.load(): the merged config picks
+        # up whatever this machine's user_settings.yaml happens to say,
+        # and the claim here is about what ships.
+        import yaml
+        from rehab.config import DEFAULT_CONFIG
+        with open(DEFAULT_CONFIG) as f:
+            shipped = yaml.safe_load(f)
+        self.assertIs(shipped["cue"]["buzz_before"], True)
 
     def test_cue_length_within_researched_range(self) -> None:
         # ~30 ms is the floor for a vibration to be perceived as such;

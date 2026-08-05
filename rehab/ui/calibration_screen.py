@@ -1,27 +1,36 @@
 """Guided calibration, run from the menu before a session.
 
-The therapist is walked through a short sequence and never has to open a
-terminal or edit a config file:
+The therapist picks two things on the opening screen, then is walked
+through only what they asked for and never has to open a terminal or
+edit a config file:
+
+    which hand      left or right. A profile describes one hand's pads,
+                    so a bilateral rig is calibrated once per hand. The
+                    choice is only offered when a second hand exists.
+    which job       sensors, buzzers, or both.
+
+The sensor job measures:
 
     1  hand off the device        gives the true zero and the noise level
     2  hand resting, no press     gives the tare point per finger
-    3  each finger, light press    gives the resting-to-press gap
-    4  all four together           gives the multi-finger deficit
-    5  buzzers, one channel at a   learns which STIM channel reaches
-       time (optional)             which finger
+    3  each finger, light press   gives the resting-to-press gap
+    4  all four together          gives the multi-finger deficit
+
+The buzzer job buzzes one channel at a time and asks which finger felt
+it, then saves the mapping so the game sends whichever channel actually
+reaches the finger it means. That step exists because the firmware is
+fixed. Arduino_20251111.ino maps STIM:1..4 onto pins 3,4,5,6 in that
+order and it is not being reflashed, so if a motor is wired to a
+different pin the host has to send a different channel.
 
 Everything is measured from real samples off the device. Nothing here is
 a guessed constant. The result is written to disk and stamped into every
 session recorded afterwards, so an analysis months later can still say
 exactly what a press meant on the day.
 
-Step 5 exists because the firmware is fixed. Arduino_20251111.ino maps
-STIM:1..4 onto pins 3,4,5,6 in that order, and it is not being
-reflashed. If a motor is wired to a different pin than that order
-assumes, the wrong finger buzzes. Instead of changing the sketch, this
-step buzzes one channel at a time and asks which finger felt it, then
-saves the mapping so the game sends whichever channel actually reaches
-the finger it means.
+The two jobs save to different places and a run only writes the one it
+measured, so calibrating the buzzers never disturbs the sensor
+thresholds and calibrating the sensors never disturbs the channel map.
 """
 from __future__ import annotations
 
@@ -79,6 +88,19 @@ STEP_ALL = "all"
 STEP_BUZZ = "buzz"
 STEP_REVIEW = "review"
 
+# What a run covers. Sensors and buzzers are independent jobs that save
+# to different places, so either can be run on its own without touching
+# the other's saved result.
+JOB_SENSORS = "sensors"
+JOB_BUZZERS = "buzzers"
+JOB_BOTH = "both"
+
+JOB_LABELS = {
+    JOB_SENSORS: "sensors only",
+    JOB_BUZZERS: "buzzers only",
+    JOB_BOTH: "sensors and buzzers",
+}
+
 
 class CalibrationScreen:
     """Step-through calibration. Mouse only, same as the rest of the app."""
@@ -100,6 +122,18 @@ class CalibrationScreen:
         # would set every threshold from the wrong pads. The hand therefore
         # picks the slice, and each hand is calibrated in its own run.
         self.hand = self._default_hand()
+        # What this run covers. Both by default, which is the first-time
+        # case and what a full setup needs.
+        self.job = JOB_BOTH
+        # The saved profile for this hand, loaded when the run is not
+        # measuring the sensors. It supplies the numbers the review shows
+        # and makes plain that they are being kept, not re-measured.
+        self._kept: CalibrationProfile | None = None
+        # The menu's "what stays as it is" line is drawn every frame, and
+        # it needs the saved profile's date. Cached per hand so that is
+        # not a file read at 60 Hz.
+        self._kept_cache_hand: str | None = None
+        self._kept_cache: CalibrationProfile | None = None
 
         # Sample collection state.
         self._collecting = False
@@ -113,7 +147,39 @@ class CalibrationScreen:
 
         self._buttons: list[Button] = []
         self._saved_path = None
+        self._saved = False
         self._rebuild_buttons()
+
+    # ---- what this run covers -------------------------------------------
+
+    def _does(self, job: str) -> bool:
+        return self.job in (job, JOB_BOTH)
+
+    def _plan(self) -> list[str]:
+        """The steps this run will walk through, in order. Drives both
+        the transitions and the "Step 2 of 4" counter, so a shorter run
+        never claims steps it is not going to ask for."""
+        steps: list[str] = []
+        if self._does(JOB_SENSORS):
+            steps += [STEP_EMPTY, STEP_RESTING, STEP_PRESS, STEP_ALL]
+        if self._does(JOB_BUZZERS):
+            steps.append(STEP_BUZZ)
+        return steps
+
+    def _next_step(self, current: str) -> str:
+        plan = self._plan()
+        try:
+            i = plan.index(current)
+        except ValueError:
+            return STEP_REVIEW
+        return plan[i + 1] if i + 1 < len(plan) else STEP_REVIEW
+
+    def _step_label(self, step: str) -> str:
+        plan = self._plan()
+        try:
+            return f"Step {plan.index(step) + 1} of {len(plan)}"
+        except ValueError:
+            return ""
 
     # ---- which hand, and therefore which sensors ------------------------
 
@@ -136,12 +202,19 @@ class CalibrationScreen:
             n = N_FINGERS
         return n
 
-    def _toggle_hand(self) -> None:
-        self.hand = "left" if self.hand == "right" else "right"
-        self._begin()
-        self.step = STEP_INTRO
-        self._status = f"Calibrating the {self.hand} hand."
-        self._status_colour = self.theme.foreground
+    def _pick_hand(self, hand: str) -> None:
+        if hand == self.hand:
+            return
+        self.hand = hand
+        # Anything already measured came off the other hand's pads.
+        self._reset_measurements()
+        self._rebuild_buttons()
+
+    def _pick_job(self, job: str) -> None:
+        if job == self.job:
+            return
+        self.job = job
+        self._reset_measurements()
         self._rebuild_buttons()
 
     def _both_hands_possible(self) -> bool:
@@ -239,7 +312,7 @@ class CalibrationScreen:
             self.profile.press_all = [_percentile(c, 0.95) for c in cols]
             self._status = "All-finger press recorded."
             self._status_colour = self.theme.success
-            self.step = STEP_BUZZ
+            self.step = self._next_step(STEP_ALL)
             self.buzz_channel = 1
             self._felt = {}
 
@@ -321,6 +394,31 @@ class CalibrationScreen:
                 cmap[i] = spare.pop(0) if spare else (i + 1)
         return [int(c) for c in cmap]
 
+    def saved_channel_map(self) -> list[int]:
+        """The buzzer map already in use, straight-through if there is
+        none or the saved one is malformed. This is what a run that does
+        not touch the buzzers leaves alone."""
+        straight = list(range(1, N_FINGERS + 1))
+        try:
+            raw = self.engine.cfg.get("motor.channel_map", None)
+        except Exception:
+            return straight
+        try:
+            cmap = [int(c) for c in raw]
+        except (TypeError, ValueError):
+            return straight
+        if sorted(cmap) != straight:
+            return straight
+        return cmap
+
+    def effective_channel_map(self) -> list[int]:
+        """What the game will send after this run: the newly discovered
+        map when the buzzers were part of the job, the saved one
+        otherwise."""
+        if self._does(JOB_BUZZERS):
+            return self.channel_map()
+        return self.saved_channel_map()
+
     def unmapped_fingers(self) -> list[str]:
         """Fingers whose channel was never confirmed by feel. Shown on the
         review screen so a guessed mapping is never mistaken for a
@@ -331,60 +429,129 @@ class CalibrationScreen:
 
     # ---- saving ---------------------------------------------------------
 
-    def _save(self) -> None:
-        cfg = self.engine.cfg
-        self.profile.participant = getattr(
-            self.engine.session, "participant", "") or ""
-        self.profile.hand = self.hand
-        try:
-            self.profile.device_port = str(
-                getattr(self.engine.source, "port", "") or "")
-        except Exception:
-            self.profile.device_port = ""
+    def _profile_path(self):
+        return self.engine.cfg.resolve_path(
+            f"config/calibration/current_{self.hand}.json")
 
-        on_d = self.profile.on_delta()
-        off_d = self.profile.off_delta()
-        cmap = self.channel_map()
-
+    def _load_saved_profile(self) -> CalibrationProfile | None:
+        """The profile already on disk for this hand, or None."""
         try:
-            # Per hand, so calibrating one hand never overwrites the
-            # other's profile on a bilateral rig.
-            path = cfg.resolve_path(
-                f"config/calibration/current_{self.profile.hand}.json")
-            self.profile.save(path)
-            # Keep a dated copy so a calibration is never silently lost
-            # when the next one is taken.
-            stamp = self.profile.created_at.replace(":", "").replace("-", "")
-            self.profile.save(cfg.resolve_path(
-                f"config/calibration/history/{stamp}.json"))
-            self._saved_path = path
-        except OSError as e:
-            log.warning("calibration save failed: %s", e)
-            self._status = f"Could not save: {e}"
-            self._status_colour = self.theme.error
-            return
-
-        # Push into the live config so the very next block uses it, and
-        # persist so it survives a restart.
-        # Only the buzzer map goes into the shared config. The force
-        # thresholds are per hand and are held on the engine instead, because
-        # a config value is read by BOTH detectors when they are rebuilt.
-        cfg.data.setdefault("motor", {})["channel_map"] = cmap
-        try:
-            cfg.save_user_overrides({"motor.channel_map": cmap})
+            return CalibrationProfile.load(self._profile_path())
         except Exception as e:
-            log.warning("could not persist calibration to settings: %s", e)
+            log.warning("could not read saved %s calibration: %s",
+                        self.hand, e)
+            return None
 
-        # Hand it to the engine so detectors pick it up and every
-        # session from now on records which calibration it ran under.
-        if hasattr(self.engine, "apply_calibration"):
-            self.engine.apply_calibration(self.profile)
+    def _saved_profile(self) -> CalibrationProfile | None:
+        """Cached read of the saved profile for the current hand."""
+        if self._kept_cache_hand != self.hand:
+            self._kept_cache_hand = self.hand
+            self._kept_cache = self._load_saved_profile()
+        return self._kept_cache
 
-        self._status = "Calibration saved and applied."
+    def _has_sensor_data(self) -> bool:
+        """Whether the profile in hand carries real sensor measurements,
+        taken this run or kept from the saved one."""
+        return bool(any(self.profile.press) and any(self.profile.resting))
+
+    def _save(self) -> None:
+        """Write only what this run measured.
+
+        The two jobs live in different files. Sensor thresholds are per
+        hand and go to config/calibration/current_<hand>.json; the buzzer
+        map is a config value the game reads at cue time. Writing both on
+        every run would mean a buzzer-only visit blanked the thresholds
+        with the zeros of a profile nobody measured, and a sensor-only
+        visit reset the discovered map back to straight-through. Either
+        one silently ruins the next session, so each is written only when
+        it was actually measured.
+        """
+        cfg = self.engine.cfg
+        wrote = []
+
+        if self._does(JOB_BUZZERS):
+            cmap = self.channel_map()
+            cfg.data.setdefault("motor", {})["channel_map"] = cmap
+            try:
+                cfg.save_user_overrides({"motor.channel_map": cmap})
+            except Exception as e:
+                log.warning("could not persist channel map: %s", e)
+                self._status = f"Could not save the buzzer map: {e}"
+                self._status_colour = self.theme.error
+                return
+            wrote.append("buzzer map")
+
+        if self._does(JOB_SENSORS):
+            self.profile.participant = getattr(
+                self.engine.session, "participant", "") or ""
+            self.profile.hand = self.hand
+            try:
+                self.profile.device_port = str(
+                    getattr(self.engine.source, "port", "") or "")
+            except Exception:
+                self.profile.device_port = ""
+            try:
+                # Per hand, so calibrating one hand never overwrites the
+                # other's profile on a bilateral rig.
+                path = self._profile_path()
+                self.profile.save(path)
+                # Keep a dated copy so a calibration is never silently lost
+                # when the next one is taken.
+                stamp = self.profile.created_at.replace(":", "").replace("-", "")
+                self.profile.save(cfg.resolve_path(
+                    f"config/calibration/history/{stamp}.json"))
+                self._saved_path = path
+            except OSError as e:
+                log.warning("calibration save failed: %s", e)
+                self._status = f"Could not save: {e}"
+                self._status_colour = self.theme.error
+                return
+            # Hand it to the engine so detectors pick it up and every
+            # session from now on records which calibration it ran under.
+            # Only the thresholds go to the engine; they are never written
+            # into the shared config, because a config value is read by
+            # BOTH detectors when they are rebuilt.
+            if hasattr(self.engine, "apply_calibration"):
+                self.engine.apply_calibration(self.profile)
+            wrote.append(f"{self.hand} hand thresholds")
+
+        self._saved = True
+        self._kept_cache_hand = None       # the file on disk just changed
+        self._status = "Saved and applied: " + " and ".join(wrote) + "."
         self._status_colour = self.theme.success
         self._rebuild_buttons()
 
     # ---- buttons --------------------------------------------------------
+
+    def _intro_geometry(self) -> dict:
+        """Row positions for the opening menu.
+
+        One source for both the labels drawn and the buttons hit-tested,
+        so a control can never be clickable somewhere other than where it
+        was drawn.
+        """
+        rows: dict[str, int] = {}
+        y = 322
+        if self._both_hands_possible():
+            rows["hand_label"] = y
+            rows["hand_buttons"] = y + 30
+            y += 116
+        rows["job_label"] = y
+        rows["job_buttons"] = y + 30
+        y += 116
+        rows["summary"] = y
+        rows["note"] = y + 26
+        rows["start"] = y + 72
+        return rows
+
+    def _choice_button(self, rect: pygame.Rect, label: str, cb,
+                       selected: bool) -> Button:
+        """One option in a pick-one row. The chosen one is filled in the
+        accent colour so the current setting is readable at a glance
+        rather than having to be remembered."""
+        return Button(rect, label, cb, self.theme, self.layout,
+                      font_pt=FONT_BODY,
+                      colour=self.theme.accent if selected else None)
 
     def _rebuild_buttons(self) -> None:
         th, ly = self.theme, self.layout
@@ -398,14 +565,27 @@ class CalibrationScreen:
                 primary=primary, colour=colour))
 
         if self.step == STEP_INTRO:
-            if self._both_hands_possible():
-                add("Start calibration", self._begin, cx - 180, 300,
-                    primary=True)
-                other = "left" if self.hand == "right" else "right"
-                add(f"Switch to {other} hand", self._toggle_hand, cx + 190,
-                    260)
-            else:
-                add("Start calibration", self._begin, cx, 300, primary=True)
+            g = self._intro_geometry()
+            if "hand_buttons" in g:
+                for i, hand in enumerate(("left", "right")):
+                    self._buttons.append(self._choice_button(
+                        pygame.Rect(cx - 230 + i * 240, g["hand_buttons"],
+                                    220, 56),
+                        f"{hand.title()} hand",
+                        (lambda h=hand: self._pick_hand(h)),
+                        self.hand == hand))
+            jobs = ((JOB_SENSORS, "Sensors only"),
+                    (JOB_BUZZERS, "Buzzers only"),
+                    (JOB_BOTH, "Both"))
+            for i, (key, label) in enumerate(jobs):
+                self._buttons.append(self._choice_button(
+                    pygame.Rect(cx - 328 + i * 224, g["job_buttons"],
+                                208, 56),
+                    label, (lambda k=key: self._pick_job(k)),
+                    self.job == key))
+            self._buttons.append(Button(
+                pygame.Rect(cx - 170, g["start"], 340, 64),
+                "Start calibration", self._begin, th, ly, primary=True))
         elif self.step in (STEP_EMPTY, STEP_RESTING, STEP_ALL):
             if not self._collecting:
                 add("Record", lambda: self._start_collecting(
@@ -434,9 +614,9 @@ class CalibrationScreen:
                 "Felt nothing", lambda: self._record_felt(None), th, ly,
                 font_pt=FONT_SMALL + 2))
         elif self.step == STEP_REVIEW:
-            if self._saved_path is None:
+            if not self._saved:
                 add("Save and use", self._save, cx - 160, 280, primary=True)
-                add("Start over", self._begin, cx + 160, 240)
+                add("Start over", self._to_menu, cx + 160, 240)
             else:
                 add("Done", self.engine.show_title, cx, 260, primary=True)
 
@@ -445,15 +625,42 @@ class CalibrationScreen:
             pygame.Rect(40, ly.height - 80, 160, 48), "Back",
             self._back, th, ly, font_pt=FONT_SMALL + 4))
 
-    def _begin(self) -> None:
+    def _reset_measurements(self) -> None:
+        """Drop everything measured so far. Used when the hand or the job
+        changes, since neither the samples nor the felt-channel answers
+        carry over to a different hand or a different run."""
+        self._abort_collection()
         self.profile = CalibrationProfile()
-        self.step = STEP_EMPTY
+        self._kept = None
         self.finger_idx = 0
         self.buzz_channel = 1
         self._felt = {}
         self._saved_path = None
+        self._saved = False
         self._status = ""
         self._status_colour = None
+
+    def _begin(self) -> None:
+        """Start the chosen run."""
+        self._reset_measurements()
+        # When the sensors are not part of this run, work from the saved
+        # profile so the review shows the numbers the device will actually
+        # keep running on rather than a table of zeros. A run that does
+        # measure them starts fresh, so the new profile is stamped with
+        # today's date instead of inheriting the old one's.
+        if not self._does(JOB_SENSORS):
+            kept = self._saved_profile()
+            if kept is not None:
+                self.profile = kept
+                self._kept = kept
+        self.step = self._plan()[0]
+        self._rebuild_buttons()
+
+    def _to_menu(self) -> None:
+        """Back to the opening menu with the same hand and job still
+        picked, so redoing a run is one click."""
+        self._reset_measurements()
+        self.step = STEP_INTRO
         self._rebuild_buttons()
 
     def _abort_collection(self) -> None:
@@ -469,9 +676,10 @@ class CalibrationScreen:
         """Put the screen back to its opening state. Called every time
         Calibrate is opened, so a second participant does not land on the
         previous participant's review table with only a Done button."""
-        self._abort_collection()
+        self._kept_cache_hand = None
         self.hand = self._default_hand()
-        self._begin()
+        self.job = JOB_BOTH
+        self._reset_measurements()
         self.step = STEP_INTRO
         self._rebuild_buttons()
 
@@ -489,37 +697,58 @@ class CalibrationScreen:
         for b in self._buttons:
             b.handle_event(e)
 
+    def _job_summary(self) -> str:
+        return f"{self.hand.title()} hand  |  {JOB_LABELS[self.job]}"
+
+    def _keep_note(self) -> str:
+        """What this run will leave alone. Says it out loud on the menu so
+        nobody avoids a quick buzzer check for fear of losing the sensor
+        calibration."""
+        if self.job == JOB_SENSORS:
+            return "The buzzer channel map stays exactly as it is."
+        if self.job == JOB_BUZZERS:
+            saved = self._saved_profile()
+            if saved is None:
+                return (f"No sensor calibration is saved for the "
+                        f"{self.hand} hand yet. Run the sensors when you can.")
+            return (f"Sensor thresholds measured on "
+                    f"{saved.created_at[:10]} stay exactly as they are.")
+        return "Takes about a minute. The patient stays seated throughout."
+
     def _instruction(self) -> tuple[str, str]:
         """Heading and body for the current step."""
         if self.step == STEP_INTRO:
-            return (f"Before you start   ({self.hand} hand)",
-                    "This measures what a press means on this device today. "
-                    "It takes about a minute and the patient stays seated. "
+            return ("Set up the calibration",
+                    "Pick the hand on the device and what needs measuring. "
                     "Each hand is measured separately, because the pads sit "
                     "differently on each.")
         if self.step == STEP_EMPTY:
-            return ("Step 1 of 5   Hand off the device",
+            return (f"{self._step_label(STEP_EMPTY)}   Hand off the device",
                     "Take the hand right off, nothing touching any pad. "
                     "This reads the true zero and the noise level.")
         if self.step == STEP_RESTING:
-            return ("Step 2 of 5   Hand resting, no press",
+            return (f"{self._step_label(STEP_RESTING)}   "
+                    f"Hand resting, no press",
                     "Rest the hand in its normal position on the pads. "
                     "Do not press. This is the point every threshold "
                     "is measured from.")
         if self.step == STEP_PRESS:
             f = FINGER_NAMES[self.finger_idx].title()
-            return (f"Step 3 of 5   {f} finger, light press",
+            return (f"{self._step_label(STEP_PRESS)}   {f} finger, "
+                    f"light press",
                     f"Press with the {f.lower()} finger only, as lightly as "
                     f"the patient can manage and still mean it. Hold until "
                     f"the timer runs out. Other fingers may move, that is "
                     f"fine and is measured separately.")
         if self.step == STEP_ALL:
-            return ("Step 4 of 5   All four fingers together",
+            return (f"{self._step_label(STEP_ALL)}   "
+                    f"All four fingers together",
                     "Press all four lightly at the same time and hold. "
                     "Comparing this against the single presses gives the "
                     "multi-finger deficit.")
         if self.step == STEP_BUZZ:
-            return (f"Step 5 of 5   Buzzer channel {self.buzz_channel}",
+            return (f"{self._step_label(STEP_BUZZ)}   "
+                    f"Buzzer channel {self.buzz_channel}",
                     "Press Buzz, then say which finger felt it. This learns "
                     "the wiring without changing the Arduino.")
         return ("Review", "Check these look sensible, then save.")
@@ -528,27 +757,53 @@ class CalibrationScreen:
         from .screens import _draw_header
         th, ly = self.theme, self.layout
         surf.fill(th.background)
-        _draw_header(surf, "Calibration", "", th, ly)
+        # The hand and the job ride along in the header, so what is about
+        # to happen is on screen at every step and not only on the menu.
+        _draw_header(surf, "Calibration", self._job_summary(), th, ly)
 
         head, body = self._instruction()
         cx = ly.width // 2
-        draw_text(surf, head, (cx, 170), th, ly, pt=FONT_H2, centre=True)
-        self._draw_wrapped(surf, body, cx, 212, ly.width - 260)
+        draw_text(surf, head, (cx, 190), th, ly, pt=FONT_H2, centre=True)
+        self._draw_wrapped(surf, body, cx, 232, ly.width - 260)
 
-        if self.step == STEP_REVIEW:
+        if self.step == STEP_INTRO:
+            self._draw_menu(surf)
+        elif self.step == STEP_REVIEW:
             self._draw_review(surf)
         elif self._collecting:
             self._draw_timer(surf)
-        elif self.step != STEP_INTRO:
+        else:
             self._draw_live(surf)
 
-        if self._status:
+        # The menu carries its own summary line where the status would
+        # otherwise land, so it is not drawn twice.
+        if self._status and self.step != STEP_INTRO:
             self._draw_wrapped(surf, self._status, cx, ly.height - 205,
                                ly.width - 260,
                                colour=self._status_colour or th.muted)
 
         for b in self._buttons:
             b.draw(surf)
+
+    def _draw_menu(self, surf) -> None:
+        """Row labels and the plain-English summary for the opening
+        menu. The buttons themselves come from _rebuild_buttons, off the
+        same geometry."""
+        th, ly = self.theme, self.layout
+        cx = ly.width // 2
+        g = self._intro_geometry()
+        n = 1
+        if "hand_label" in g:
+            draw_text(surf, "1.  WHICH HAND", (cx, g["hand_label"]), th, ly,
+                      pt=FONT_SMALL + 2, centre=True, colour=th.muted)
+            n = 2
+        draw_text(surf, f"{n}.  WHAT TO CALIBRATE", (cx, g["job_label"]),
+                  th, ly, pt=FONT_SMALL + 2, centre=True, colour=th.muted)
+        draw_text(surf, f"About to calibrate: {self._job_summary()}",
+                  (cx, g["summary"]), th, ly, pt=FONT_BODY, centre=True,
+                  colour=th.foreground)
+        self._draw_wrapped(surf, self._keep_note(), cx, g["note"],
+                           ly.width - 300, pt=FONT_SMALL + 2)
 
     def _draw_wrapped(self, surf, text, cx, y, max_w, colour=None,
                       pt=FONT_BODY) -> int:
@@ -616,14 +871,33 @@ class CalibrationScreen:
 
     def _draw_review(self, surf) -> None:
         th, ly = self.theme, self.layout
+        cmap = self.effective_channel_map()
+        y = 270
+
+        if not self._has_sensor_data():
+            # A buzzer-only run on a hand that has never had its sensors
+            # measured. Say so plainly rather than showing a table of
+            # zeros that looks like a broken measurement.
+            self._draw_wrapped(
+                surf,
+                f"Buzzer map only. Channels for index to pinky: "
+                f"{', '.join(str(c) for c in cmap)}.",
+                ly.width // 2, y, ly.width - 300, colour=th.foreground)
+            self._draw_wrapped(
+                surf,
+                f"No sensor calibration is saved for the {self.hand} hand, "
+                f"so presses will run on the config defaults. Run the "
+                f"sensor calibration before recording a session.",
+                ly.width // 2, y + 60, ly.width - 300, colour=th.warning,
+                pt=FONT_SMALL + 2)
+            return
+
         ok, problems = self.profile.usable()
         gaps = self.profile.gap()
         pre = self.profile.preload()
         on_d = self.profile.on_delta()
-        cmap = self.channel_map()
 
         x = 150
-        y = 270
         draw_text(surf, "Finger", (x, y), th, ly, pt=FONT_SMALL,
                   colour=th.muted)
         for j, h in enumerate(("Rest load", "Press gap", "Trigger",
@@ -644,17 +918,33 @@ class CalibrationScreen:
                           pt=FONT_BODY,
                           colour=th.error if warn else th.foreground)
 
+        # Say which columns came from this run and which are being kept,
+        # so a number on this table is never mistaken for a fresh
+        # measurement it is not.
+        notes = []
+        if not self._does(JOB_SENSORS):
+            notes.append(f"thresholds kept from "
+                         f"{self.profile.created_at[:10]}")
+        if not self._does(JOB_BUZZERS):
+            notes.append("buzzer map kept as saved")
+        below = y + 34 + N_FINGERS * 40 + 16
+        if notes:
+            draw_text(surf, "Not measured this run: " + ", ".join(notes),
+                      (ly.width // 2, below), th, ly, pt=FONT_SMALL + 2,
+                      centre=True, colour=th.muted)
+            below += 26
+
         deficit = self.profile.multi_finger_deficit()
         if deficit is not None:
             draw_text(
                 surf,
                 f"Multi-finger deficit: {deficit * 100:.0f}% "
                 f"(force lost when all four press together)",
-                (ly.width // 2, y + 34 + N_FINGERS * 40 + 20), th, ly,
+                (ly.width // 2, below), th, ly,
                 pt=FONT_SMALL + 2, centre=True, colour=th.muted)
+            below += 26
 
         if not ok:
-            self._draw_wrapped(surf, problems[0], ly.width // 2,
-                               y + 34 + N_FINGERS * 40 + 48,
+            self._draw_wrapped(surf, problems[0], ly.width // 2, below + 6,
                                ly.width - 300, colour=th.warning,
                                pt=FONT_SMALL + 2)

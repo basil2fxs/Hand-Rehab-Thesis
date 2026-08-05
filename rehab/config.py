@@ -79,6 +79,72 @@ def _merge(base: dict, over: dict) -> dict:
     return out
 
 
+# Sentinel for "the override file did not mention this key at all",
+# which is different from "it set it to None".
+_UNSET = object()
+
+
+def _dig(d: dict, *path: str):
+    node: Any = d
+    for part in path:
+        if not isinstance(node, dict) or part not in node:
+            return _UNSET
+        node = node[part]
+    return node
+
+
+def apply_cue_migration(merged: dict, overrides: dict) -> list[str]:
+    """Translate an older override file onto the cue.* toggles.
+
+    Builds before the four sensory-cue switches stored the cue setup as
+    game_cue.mode (both / visual / vibration) plus motor.enabled, and
+    the pre-press tone as audio.stim_tone_enabled. Somebody who set
+    those has a device that behaves a particular way, so we read them
+    once rather than dropping them and silently handing them a
+    different device.
+
+    The mapping:
+        motor.enabled false, or mode "visual"  -> buzz_before false
+        mode "vibration"                       -> show_target false
+        audio.stim_tone_enabled false          -> sound_before false
+
+    `overrides` is what the user's own file said and `merged` is that
+    file already sitting on top of default.yaml. A cue.* key the user
+    has set explicitly always wins, so once the Settings screen has
+    written the new keys the legacy ones stop mattering. Returns the
+    names of the keys that were derived, for the log line.
+    """
+    if not isinstance(overrides, dict):
+        return []
+    user_cue = overrides.get("cue")
+    if not isinstance(user_cue, dict):
+        user_cue = {}
+    legacy_mode = _dig(overrides, "game_cue", "mode")
+    legacy_motor = _dig(overrides, "motor", "enabled")
+    legacy_tone = _dig(overrides, "audio", "stim_tone_enabled")
+    derived: dict[str, bool] = {}
+    if legacy_mode is not _UNSET or legacy_motor is not _UNSET:
+        mode = "both"
+        if legacy_mode is not _UNSET:
+            mode = str(legacy_mode or "both").strip().lower()
+            if mode not in ("both", "visual", "vibration"):
+                mode = "both"
+        motors_on = True if legacy_motor is _UNSET else bool(legacy_motor)
+        if "buzz_before" not in user_cue:
+            derived["buzz_before"] = motors_on and mode != "visual"
+        if "show_target" not in user_cue:
+            derived["show_target"] = mode != "vibration"
+    if legacy_tone is not _UNSET and "sound_before" not in user_cue:
+        derived["sound_before"] = bool(legacy_tone)
+    if derived:
+        cue = merged.setdefault("cue", {})
+        if not isinstance(cue, dict):
+            cue = {}
+            merged["cue"] = cue
+        cue.update(derived)
+    return sorted(derived)
+
+
 @dataclass
 class Config:
     data: dict = field(default_factory=dict)
@@ -93,12 +159,14 @@ class Config:
         # Settings screen on the title page persists per-hand COM port
         # assignments and any other user-tweakable config. A malformed
         # user file just logs a warning - we never crash startup on it.
+        overrides: dict = {}
         if USER_OVERRIDES.exists() and override is None:
             try:
                 with USER_OVERRIDES.open("r", encoding="utf-8") as f:
                     user = yaml.safe_load(f) or {}
                 if isinstance(user, dict):
                     merged = _merge(merged, user)
+                    overrides = user
                     src = USER_OVERRIDES
                 else:
                     log.warning("user_settings.yaml is not a mapping; "
@@ -110,7 +178,16 @@ class Config:
             with p.open("r", encoding="utf-8") as f:
                 user = yaml.safe_load(f) or {}
             merged = _merge(merged, user)
+            if isinstance(user, dict):
+                overrides = user
             src = p
+        # An override file from an older build sets the cue up through
+        # keys this one no longer reads. Translate them before anything
+        # asks the config what the cues are.
+        migrated = apply_cue_migration(merged, overrides)
+        if migrated:
+            log.info("Translated legacy cue settings onto %s",
+                     ", ".join("cue." + k for k in migrated))
         return cls(data=merged, source=src)
 
     def save_user_overrides(self, overrides: dict) -> Path:

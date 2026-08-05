@@ -369,7 +369,12 @@ class MirrorMode:
             keys_pressed=list(self.active.keys_pressed),
             incorrect_presses=list(self.active.incorrect_presses),
         )
-        self.engine.log_trial(log_obj, outcome, now)
+        # Both hands moved, so the after-press confirmation buzz goes to
+        # both copies of the finger, not just the right-hand lane the
+        # log row is keyed on. log_trial only fires it on a correct
+        # press, so a one-handed trial never reaches this.
+        self.engine.log_trial(log_obj, outcome, now,
+                               cue_lanes=[finger, finger + 4])
         self.active = None
         self.completed += 1
         # Stamp the finish time so the inter-trial rest in update() is

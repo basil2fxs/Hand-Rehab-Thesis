@@ -151,39 +151,91 @@ fsr:
   abs_off_max: [1000, 1000, 1000, 1000]
   debounce_ms: 100
 
-game_cue:
-  # WHICH CUE THE PATIENT GETS: the screen, the buzzer, or both.
+cue:
+  # WHAT THE PATIENT GETS ON A TRIAL, as four switches that are each
+  # on or off on their own.
+  #
+  # Two moments matter. BEFORE the press, something has to tell the
+  # patient which finger to move. AFTER a correct press, something can
+  # confirm the press landed. Each moment has a buzzer channel and a
+  # sound channel, giving the four keys below. All 16 combinations are
+  # valid, including all off, and every mode (classic, adaptive,
+  # rhythm, mirror) honours whatever is set.
   #
   # This is the comparison the whole project line started from. Palmer
   # (2024) found reaction time differed between an LED-only cue and all
   # cues together, and the 2023 device existed to test exactly that.
-  # Until now the buzzer fired on every trial in every mode, so there
-  # was no contrast left to measure.
+  # Splitting the cue into separate channels is what lets a block
+  # isolate one of them.
   #
-  #   both      screen highlights the finger AND the motor buzzes
-  #   visual    screen only, no buzzer
-  #   vibration buzzer only, the screen does not reveal the finger
+  # Replaces the older game_cue.mode (both / visual / vibration) plus
+  # motor.enabled pair. A user_settings.yaml written by that build is
+  # translated onto these keys at load, so an existing setup keeps
+  # behaving the same until these are set explicitly. See
+  # apply_cue_migration in rehab/config.py.
   #
-  # "vibration" is the interesting one for a thesis: the patient has to
-  # work out which finger to press from touch alone, which is the
-  # condition that isolates the tactile channel. It is also the harder
-  # condition, so expect a lower hit rate and a longer reaction time.
+  # Recorded per trial in the cue_flags column so blocks run under
+  # different settings can be pooled and split again in the analysis.
+  # Changed from the Sensory Cues menu on the Settings screen.
+
+  # Buzzer under the TARGET finger fires when that trial's stimulus
+  # fires, so the patient feels which finger to press rather than only
+  # reading it off the screen. In mirror mode both target fingers buzz
+  # together. Buzz length is motor.cue_ms.
+  buzz_before: true
+
+  # Cue tone plays when the stimulus fires, so the patient hears the go
+  # signal. One tone per stimulus (the lowest target lane in mirror
+  # mode, so two fingers do not stack two tones onto one beat).
   #
-  # Recorded per trial as the cue_mode column, so blocks run under
-  # different settings can be compared directly in the analysis.
-  # Changed from the Settings screen.
-  mode: both
+  # In rhythm mode the tone plays on every note, over the music, which
+  # marks the beat the patient has to hit. Turn it off for rhythm
+  # blocks where the song alone should carry the beat.
+  sound_before: true
+
+  # Confirmation chime after a CORRECT press, meaning the patient
+  # pressed the cued finger inside the response window. Nothing plays
+  # on a timeout, and nothing plays on a wrong finger.
+  #
+  # This switch owns the whole post-press sound channel, so turning it
+  # off also silences the low thunk that plays when a miss breaks a
+  # streak. Leaving the thunk on would still feed the patient
+  # information through the ears after a press, which is the thing
+  # this key exists to be able to remove.
+  sound_after: true
+
+  # Buzzer fires on the finger that was just pressed correctly, for
+  # motor.cue_ms. Same rule as sound_after: correct press only, never
+  # on a timeout or a wrong finger. In mirror mode both pressed
+  # fingers buzz.
+  #
+  # New in this build, so an older user_settings.yaml has nothing to
+  # translate from and it starts on. One thing to watch: adaptive can
+  # reach 140 BPM, which is 430 ms between stimuli, so a 250 ms
+  # confirmation buzz sits close to the next trial's cue buzz. Shorten
+  # motor.cue_ms or turn this off if the two start to blur together.
+  buzz_after: true
+
+  # SCREEN REVEAL. Not one of the four switches: this is whether the
+  # gameplay screen highlights the target finger, and it is kept
+  # separate because the screen is always there whether or not any cue
+  # channel is on.
+  #
+  # Off is the interesting condition for a thesis. The tile stays
+  # neutral and the finger has to be found from the buzzer alone,
+  # which isolates the tactile channel. It is the harder condition, so
+  # expect a lower hit rate and a longer reaction time. The timing bar
+  # still runs either way so the patient can see how long is left.
+  #
+  # Off together with buzz_before off leaves nothing at all saying
+  # WHICH finger to press, only that a trial has started. The software
+  # allows it; the trials will read as misses.
+  show_target: true
 
 motor:
-  # Buzzer (vibration) cue. The motor on the TARGET finger buzzes when
-  # that trial's stimulus fires, so the patient feels which finger to
-  # press rather than only reading it off the screen. This is the
-  # buzzer's only job: nothing buzzes on a press, a hit, or a miss.
-  # Applies to every mode (classic, adaptive, mirror, rhythm), and in
-  # mirror mode both target fingers buzz together.
-  # Toggled from the Settings screen; on by default.
-  enabled: true
-  # How long the cue buzzes, in milliseconds.
+  # How long the buzzer runs, in milliseconds. Used by both the
+  # pre-press cue (cue.buzz_before) and the post-press confirmation
+  # (cue.buzz_after), so the two feel like the same signal.
   #
   # The firmware (Arduino_20251111.ino) drives the motor at a FIXED
   # strength: STIM_PWM = 200 is a compile-time constant and the only
@@ -461,9 +513,12 @@ audio:
   feedback_volume: 1.0
   music_dir: assets/music
   # Per-lane stim cue tone (C, E, G, C, repeating for bilateral) that
-  # fires the moment a stim is dispatched in classic + adaptive modes.
-  # Matches Aiden's game behaviour. Rhythm mode ignores this and plays
-  # the song instead.
+  # fires the moment a stim is dispatched. SUPERSEDED by
+  # cue.sound_before, which is the switch the game reads now and the
+  # one the Settings screen writes. Kept here because a
+  # user_settings.yaml that turned this off is translated onto
+  # cue.sound_before at load, so an existing silent setup stays
+  # silent. Nothing reads this key at run time.
   stim_tone_enabled: true
   # Programmatic loudness variation. On a small fraction of trials,
   # spread evenly across the whole session (not random clusters), the

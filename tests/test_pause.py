@@ -244,10 +244,11 @@ class RhythmLaneNoDarkenOnStimTests(unittest.TestCase):
 
 
 class AudioHitChimeTests(unittest.TestCase):
-    """AudioEngine.play_hit is the confirmation tone on a correct press
-    (every mode). The per-lane stim tone now ALSO plays on every stim
-    in classic + adaptive (matching Aiden's game). Rhythm mode skips
-    the stim tone so it doesn't clash with the song."""
+    """AudioEngine.play_hit is the confirmation tone on a correct press.
+    The per-lane cue tone plays on every stim in every mode now, rhythm
+    included, and cue.sound_before is what turns it off. Rhythm used to
+    be hard-excluded, which left it the one mode where a cue switch did
+    nothing."""
 
     def test_play_hit_no_op_without_init(self) -> None:
         from rehab.audio.engine import AudioEngine
@@ -256,25 +257,25 @@ class AudioHitChimeTests(unittest.TestCase):
         a.play_hit()
         self.assertFalse(a._initialised)
 
-    def test_engine_on_stim_calls_play_stim_for_classic_adaptive(self) -> None:
-        # The cue tone was reinstated for classic + adaptive (config
-        # toggle audio.stim_tone_enabled). Rhythm stays silent on stim
-        # because the song carries the rhythm cue. Belt-and-braces
-        # source-level check so a refactor can't silently rip it out.
+    def test_engine_on_stim_calls_play_stim(self) -> None:
+        # Source-level check so a refactor cannot silently rip the cue
+        # tone out. The behavioural coverage is in test_sensory_cues.
         from pathlib import Path
         src = (Path(__file__).resolve().parents[1]
                 / "rehab" / "game" / "engine.py").read_text()
-        # play_stim IS called.
         self.assertIn("self.audio.play_stim(", src,
                        "play_stim must be wired in on_stim for cue tone")
-        # And it must be gated on the cadence-driven blocks so rhythm
-        # doesn't also fire it (rhythm has its own music + chime cue).
-        # Mirror mode was added in Thread C and counts as cadence-
-        # driven too, so the gate now lists all three.
-        self.assertIn(
+
+    def test_the_cue_tone_is_not_gated_on_the_block(self) -> None:
+        # Any block-name gate around the cue tone would put rhythm back
+        # outside the switch, which is what this change removed.
+        from pathlib import Path
+        src = (Path(__file__).resolve().parents[1]
+                / "rehab" / "game" / "engine.py").read_text()
+        self.assertNotIn(
             'current_block in ("classic", "adaptive", "mirror")', src,
-            "stim tone must fire for the cadence-driven modes "
-            "(classic, adaptive, mirror) and be gated off rhythm",
+            "the cue tone must be gated on cue.sound_before, not on "
+            "which mode is running",
         )
 
 

@@ -108,8 +108,8 @@ if IS_MAC:
         icon="assets/icons/app_icon.icns",
         bundle_identifier="au.edu.curtin.fingerrehab",
         info_plist={
-            "CFBundleShortVersionString": "2.4",
-            "CFBundleVersion": "2.4",
+            "CFBundleShortVersionString": "3.2",
+            "CFBundleVersion": "3.2",
             "NSHighResolutionCapable": True,
             "LSApplicationCategoryType":
                 "public.app-category.healthcare-fitness",

@@ -428,6 +428,174 @@ class Dropdown:
                         r.centery - label_font.get_height() // 2))
 
 
+class ToggleMenu:
+    """Dropdown whose rows are checkboxes rather than one choice.
+
+    Same two-pass draw as Dropdown (`draw_closed` then `draw_overlay`
+    after everything else) so the open list sits on top. The difference
+    is that a row click flips that row and the menu STAYS OPEN, because
+    the point is setting several switches in one visit.
+
+    `rows` is `[(key, label, help_text), ...]`. State lives outside the
+    widget: `get_value(key)` is asked what a row currently is on every
+    draw, and `on_toggle(key, new_value)` is told when one flips. That
+    keeps the config the single source of truth, so a value changed
+    somewhere else still shows correctly here.
+
+    A row whose key is None is a separator: it draws its label as a
+    heading and cannot be clicked.
+    """
+
+    ROW_H = 34
+    HEAD_H = 26
+    BORDER_RADIUS = 8
+
+    def __init__(self, rect: pygame.Rect,
+                 rows: list[tuple[str | None, str, str]],
+                 get_value: Callable[[str], bool],
+                 on_toggle: Callable[[str, bool], None],
+                 theme: Theme, layout: Layout,
+                 title: str = "Sensory Cues") -> None:
+        self.rect = rect
+        self.rows = rows
+        self.get_value = get_value
+        self.on_toggle = on_toggle
+        self.theme = theme
+        self.layout = layout
+        self.title = title
+        self.is_open = False
+        self._hover_idx = -1
+
+    @property
+    def width(self) -> int:
+        return self.rect.w
+
+    def _row_rect(self, idx: int) -> pygame.Rect:
+        y = self.rect.bottom + 4
+        for i, (key, _label, _help) in enumerate(self.rows):
+            h = self.ROW_H if key is not None else self.HEAD_H
+            if i == idx:
+                return pygame.Rect(self.rect.x, y, self.rect.w, h)
+            y += h
+        return pygame.Rect(self.rect.x, y, self.rect.w, 0)
+
+    def _total_h(self) -> int:
+        return sum(self.ROW_H if k is not None else self.HEAD_H
+                   for k, _l, _h in self.rows) + 8
+
+    def hover_help(self) -> str:
+        """Help text of the row under the cursor, empty when none. The
+        screen paints this in its status line so each switch can explain
+        what the patient will actually experience without the row itself
+        needing room for a paragraph."""
+        if not self.is_open or not (0 <= self._hover_idx < len(self.rows)):
+            return ""
+        return self.rows[self._hover_idx][2]
+
+    def handle_event(self, e: pygame.event.Event) -> bool:
+        """True when the event was consumed, so the caller can stop
+        dispatching it (a click on a row must not also hit whatever is
+        drawn underneath the popup)."""
+        if e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
+            if self.rect.collidepoint(e.pos):
+                self.is_open = not self.is_open
+                return True
+            if self.is_open:
+                for i, (key, _label, _help) in enumerate(self.rows):
+                    if key is None:
+                        continue
+                    if self._row_rect(i).collidepoint(e.pos):
+                        self.on_toggle(key, not bool(self.get_value(key)))
+                        # Deliberately left open: the four switches are
+                        # usually set as a group, and closing after each
+                        # one would mean four trips through the menu.
+                        return True
+                # Anywhere else closes it, and the click is consumed so
+                # a control sitting under the popup does not also fire.
+                plate = pygame.Rect(self.rect.x, self.rect.bottom,
+                                     self.rect.w, self._total_h())
+                self.is_open = False
+                if plate.collidepoint(e.pos):
+                    return True
+        if e.type == pygame.MOUSEMOTION and self.is_open:
+            self._hover_idx = -1
+            for i, (key, _label, _help) in enumerate(self.rows):
+                if key is not None and self._row_rect(i).collidepoint(e.pos):
+                    self._hover_idx = i
+                    break
+        return False
+
+    def _on_count(self) -> tuple[int, int]:
+        keys = [k for k, _l, _h in self.rows if k is not None]
+        return sum(1 for k in keys if self.get_value(k)), len(keys)
+
+    def draw_closed(self, surf: pygame.Surface) -> None:
+        """The always-visible pill. Shows how many switches are on, so
+        the state is readable without opening the menu."""
+        on, total = self._on_count()
+        bg = tuple(max(0, c - 22) for c in self.theme.background)
+        pygame.draw.rect(surf, bg, self.rect,
+                          border_radius=self.BORDER_RADIUS)
+        outline = self.theme.accent if on else self.theme.muted
+        pygame.draw.rect(surf, outline, self.rect, 2,
+                          border_radius=self.BORDER_RADIUS)
+        font = self.layout.font(FONT_SMALL + 2)
+        label = f"{self.title.upper()}  {on}/{total}"
+        surf.blit(font.render(label, True, self.theme.foreground),
+                   (self.rect.x + 12,
+                    self.rect.centery - font.get_height() // 2))
+        cx = self.rect.right - 16
+        cy = self.rect.centery
+        if self.is_open:
+            points = [(cx - 6, cy + 3), (cx + 6, cy + 3), (cx, cy - 4)]
+        else:
+            points = [(cx - 6, cy - 3), (cx + 6, cy - 3), (cx, cy + 4)]
+        pygame.draw.polygon(surf, self.theme.foreground, points)
+
+    def draw_overlay(self, surf: pygame.Surface) -> None:
+        """The open list. Call after every other widget. No-op closed."""
+        if not self.is_open:
+            return
+        plate = pygame.Rect(self.rect.x, self.rect.bottom,
+                             self.rect.w, self._total_h())
+        pygame.draw.rect(surf, self.theme.background, plate,
+                          border_radius=self.BORDER_RADIUS)
+        pygame.draw.rect(surf, self.theme.muted, plate, 1,
+                          border_radius=self.BORDER_RADIUS)
+        font = self.layout.font(FONT_SMALL + 2)
+        head_font = self.layout.font(FONT_SMALL)
+        for i, (key, label, _help) in enumerate(self.rows):
+            r = self._row_rect(i)
+            if key is None:
+                surf.blit(head_font.render(label.upper(), True,
+                                            self.theme.muted),
+                           (r.x + 12,
+                            r.centery - head_font.get_height() // 2))
+                continue
+            on = bool(self.get_value(key))
+            if i == self._hover_idx:
+                hov = tuple(min(255, c + 18) for c in self.theme.background)
+                pygame.draw.rect(surf, hov, r, border_radius=6)
+            # Checkbox: filled green with a tick when on, hollow when
+            # off. A colour-only difference would be hard to read on a
+            # projector, hence the tick.
+            box = pygame.Rect(r.x + 12, r.centery - 8, 16, 16)
+            if on:
+                pygame.draw.rect(surf, (34, 197, 94), box, border_radius=4)
+                pygame.draw.lines(
+                    surf, (255, 255, 255), False,
+                    [(box.x + 4, box.centery),
+                     (box.centerx, box.bottom - 5),
+                     (box.right - 3, box.y + 4)], 2)
+            else:
+                pygame.draw.rect(surf, self.theme.muted, box, 2,
+                                  border_radius=4)
+            colour = (self.theme.foreground if on else self.theme.muted)
+            surf.blit(font.render(label, True, colour),
+                       (box.right + 10,
+                        r.centery - font.get_height() // 2))
+
+
 # Raster icons loaded once and cached by (path, size, tint, flipped).
 # Tint replaces the icon's black pixels with the requested colour while
 # keeping its alpha mask, so the same source PNG can render in any theme

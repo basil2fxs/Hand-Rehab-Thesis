@@ -85,11 +85,35 @@ TRIAL_COLUMNS = [
     # prove the patient received a cue: verify the motors physically
     # with the Settings buzzer test before a session.
     "stim_delivered",
-    # Which cue the patient got on this trial: "both", "visual" or
-    # "vibration". Set in Settings and constant for a block, but logged
-    # per trial so blocks run under different settings can be pooled and
-    # compared without going back to the config snapshot.
-    "cue_mode",
+    # Which sensory cues the patient got on this trial, as the four
+    # independent cue.* switches packed into one field.
+    #
+    # Format: "<before>/<after>", each half being the buzzer slot then
+    # the sound slot. A letter means that channel fired, "-" means it
+    # was off:
+    #
+    #   BS/BS   everything on (the default)
+    #   B-/--   buzzer cue only, no sound anywhere, no confirmation
+    #   -S/-S   sound cue and sound confirmation, no buzzer
+    #   --/--   nothing but the screen
+    #
+    # So position 1 is cue.buzz_before, 2 is cue.sound_before, 4 is
+    # cue.buzz_after and 5 is cue.sound_after. Sixteen values are
+    # possible and all of them are valid. Replaces the older cue_mode
+    # column, which only had "both" / "visual" / "vibration".
+    #
+    # Set in Settings and constant for a block, but logged per trial so
+    # blocks run under different settings can be pooled and split again
+    # without going back to the config snapshot.
+    "cue_flags",
+    # TRUE when the gameplay screen highlighted the target finger on
+    # this trial (cue.show_target), FALSE when the tile stayed neutral
+    # and the finger had to be found from the buzzer alone. Separate
+    # from cue_flags because the screen is not one of the four cue
+    # channels: it is there in every trial either way, the only
+    # question is whether it names the finger. FALSE with a "B-" in
+    # cue_flags is the tactile-only condition.
+    "cue_target_shown",
 ]
 
 # Raw schema gains fsr5-fsr8 so the bilateral case fits without a new file format.

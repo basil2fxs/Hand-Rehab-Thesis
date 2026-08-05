@@ -209,8 +209,8 @@ class OnStimRecordingTests(unittest.TestCase):
         eng.source = MagicMock()
         eng.cfg.get = MagicMock(
             side_effect=lambda k, d=None:
-                {"game.timeout_s": 0.9, "motor.enabled": False,
-                 "audio.stim_tone_enabled": False}.get(k, d))
+                {"game.timeout_s": 0.9, "cue.buzz_before": False,
+                 "cue.sound_before": False}.get(k, d))
         eng._ensure_metric_state()
         eng._loud_trial_fraction = 1.0   # every trial loud
         eng._loud_trial_boost = 1.35
@@ -233,7 +233,7 @@ class OnStimRecordingTests(unittest.TestCase):
         eng.source = MagicMock()
         eng.cfg.get = MagicMock(
             side_effect=lambda k, d=None:
-                {"motor.enabled": False}.get(k, d))
+                {"cue.buzz_before": False}.get(k, d))
         eng._ensure_metric_state()
         eng._loud_trial_fraction = 1.0
         eng.audio = None
@@ -322,8 +322,8 @@ class StimDeliveryCaptureTests(unittest.TestCase):
         eng.source.send_command = MagicMock(return_value=send_result)
         eng.cfg.get = MagicMock(
             side_effect=lambda k, d=None: {
-                "motor.enabled": True, "game.timeout_s": 1.0,
-                "audio.stim_tone_enabled": False,
+                "cue.buzz_before": True, "game.timeout_s": 1.0,
+                "cue.sound_before": False,
             }.get(k, d))
         eng.audio = None
         eng.raw_logger = MagicMock()
@@ -352,12 +352,16 @@ class StimDeliveryCaptureTests(unittest.TestCase):
                  for c in eng.raw_logger.queue_event.call_args_list]
         self.assertIn("stim_motor", kinds)
 
-    def test_motors_disabled_logs_empty(self) -> None:
+    def test_no_buzzer_cue_logs_empty(self) -> None:
+        # With cue.buzz_before off there is no serial write to succeed
+        # or fail, so the column must stay empty rather than claiming a
+        # delivery either way.
         eng = self._stim_engine(True)
         eng.cfg.get = MagicMock(
             side_effect=lambda k, d=None: {
-                "motor.enabled": False, "game.timeout_s": 1.0,
-                "audio.stim_tone_enabled": False,
+                "cue.buzz_before": False, "cue.buzz_after": False,
+                "cue.sound_before": False, "cue.sound_after": False,
+                "game.timeout_s": 1.0,
             }.get(k, d))
         eng.on_stim(lane=0, trial_id=1, t_perf=0.0)
         self.assertIsNone(eng._last_stim_delivered)

@@ -10,6 +10,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import NamedTuple
 
 import pygame
 
@@ -26,6 +27,45 @@ from .scoring import ScoreConfig, RhythmWindows, TrialResult
 
 
 log = logging.getLogger(__name__)
+
+
+class CueSettings(NamedTuple):
+    """The sensory-cue switches in force for a trial.
+
+    Four independent channels, read from the cue.* config block: a
+    buzzer and a sound before the press, and the same two after a
+    correct one. `show_target` is not one of the four; it is whether
+    the screen highlights the finger, kept alongside them because the
+    same menu sets it.
+    """
+
+    buzz_before: bool
+    sound_before: bool
+    sound_after: bool
+    buzz_after: bool
+    show_target: bool
+
+    @property
+    def code(self) -> str:
+        """Compact per-trial code for the cue_flags CSV column.
+
+        "<before>/<after>", each half being the buzzer then the sound
+        channel: the letter when that channel fired, "-" when it was
+        off. Everything on reads "BS/BS", a buzzer-only cue with no
+        feedback reads "B-/--", and screen-only reads "--/--".
+        """
+        return (f"{'B' if self.buzz_before else '-'}"
+                f"{'S' if self.sound_before else '-'}"
+                f"/{'B' if self.buzz_after else '-'}"
+                f"{'S' if self.sound_after else '-'}")
+
+
+# Fallback for an engine with no config object at all, which only
+# happens in a test that builds one through __new__ and never sets one
+# up. Nothing fires: we cannot know what the therapist chose, so we do
+# not drive the hardware. The screen stays on because it is not a cue
+# channel and something has to be drawn.
+NO_CUES = CueSettings(False, False, False, False, True)
 
 
 class GameEngine:
@@ -206,8 +246,10 @@ class GameEngine:
         # summary can flag a session where cues silently stopped.
         self._last_stim_delivered: bool | None = None
         self._block_stim_failures = 0
-        # Cue modality for the current trial, logged per row.
-        self._last_cue_mode = "both"
+        # Sensory-cue state for the current trial, logged per row: the
+        # four-channel code and whether the screen named the finger.
+        self._last_cue_code = self.cue_settings().code
+        self._last_target_shown = True
         # Pause bookkeeping for the block summary: how many times the
         # block was paused and the total time spent paused, so an
         # analyst can subtract it from the block duration.
@@ -215,6 +257,10 @@ class GameEngine:
         self._block_paused_s = 0.0
         # Pending buzzer repeat-pulses as (lane, due_perf_counter).
         self._motor_queue: list[tuple[int, float]] = []
+        # When the after-press confirmation buzz is due to end, and a
+        # STOP deferred until then. See stop_all_motors.
+        self._after_cue_until: float | None = None
+        self._motor_stop_at: float | None = None
 
     # ---- bilateral plumbing ------------------------------------------------
     def _build_detectors(self) -> None:
@@ -440,14 +486,22 @@ class GameEngine:
             self._last_stim_delivered = None
         if not hasattr(self, "_block_stim_failures"):
             self._block_stim_failures = 0
-        if not hasattr(self, "_last_cue_mode"):
-            self._last_cue_mode = "both"
+        # Placeholders only: on_stim_multi stamps the real cue state on
+        # every trial before any row is written.
+        if not hasattr(self, "_last_cue_code"):
+            self._last_cue_code = self.cue_settings().code
+        if not hasattr(self, "_last_target_shown"):
+            self._last_target_shown = bool(self.cue_settings().show_target)
         if not hasattr(self, "_block_pause_count"):
             self._block_pause_count = 0
         if not hasattr(self, "_block_paused_s"):
             self._block_paused_s = 0.0
         if not hasattr(self, "_motor_queue"):
             self._motor_queue = []
+        if not hasattr(self, "_after_cue_until"):
+            self._after_cue_until = None
+        if not hasattr(self, "_motor_stop_at"):
+            self._motor_stop_at = None
 
     def _is_loud_trial(self, trial_number: int) -> bool:
         """True if this 1-indexed trial should play louder. Loud trials
@@ -2174,6 +2228,29 @@ class GameEngine:
         except Exception as e:
             log.warning("sessions_index.csv update failed: %s", e)
 
+    # ---- sensory cues ------------------------------------------------------
+    def cue_settings(self) -> CueSettings:
+        """The four cue switches plus the screen reveal, read live.
+
+        Read fresh rather than cached at block start so a change made
+        on the Settings screen applies to the next block without a
+        restart. Missing keys default to on, matching
+        config/default.yaml: a config file that predates these keys
+        came from a build where the buzzer and the tones were running,
+        so on is what keeps that setup behaving the same.
+        """
+        cfg = getattr(self, "cfg", None)
+        if cfg is None:
+            return NO_CUES
+        g = cfg.get
+        return CueSettings(
+            buzz_before=bool(g("cue.buzz_before", True)),
+            sound_before=bool(g("cue.sound_before", True)),
+            sound_after=bool(g("cue.sound_after", True)),
+            buzz_after=bool(g("cue.buzz_after", True)),
+            show_target=bool(g("cue.show_target", True)),
+        )
+
     # ---- buzzer cue -------------------------------------------------------
     # The firmware holds a motor on for a fixed 150 ms per STIM command
     # and its drive strength is a compile-time constant, so the only
@@ -2240,25 +2317,73 @@ class GameEngine:
             if len(self._motor_queue) > 64:      # runaway guard
                 break
 
-    def _drain_motor_queue(self) -> None:
-        """Send any cue repeat-pulses that have come due. Called once
-        per frame from the main loop."""
-        q = getattr(self, "_motor_queue", None)
-        if not q:
-            return
-        now = time.perf_counter()
-        still = []
-        for lane, due in q:
-            if now >= due:
-                self._send_stim(lane)
-            else:
-                still.append((lane, due))
-        self._motor_queue = still
+    def _fire_after_press_cue(self, lanes: list[int]) -> None:
+        """Buzz the finger the patient just pressed correctly.
 
-    def stop_all_motors(self) -> None:
+        Only reached from the correct-press branch of the trial log, so
+        a timeout or a wrong finger never gets here. Mirror mode passes
+        both pressed lanes because the movement is bimanual.
+
+        Pulses still queued for those lanes from the pre-press cue are
+        dropped first. Without that, a patient who presses in 80 ms
+        against a 250 ms cue would get one continuous buzz of unknown
+        length instead of a cue and then a confirmation.
+        """
+        targets = sorted({int(l) for l in lanes})
+        if not targets:
+            return
+        q = getattr(self, "_motor_queue", None) or []
+        self._motor_queue = [(l, due) for l, due in q if l not in targets]
+        self._motor_stop_at = None
+        for lane in targets:
+            ok = self._send_stim(lane)
+            if self.raw_logger:
+                self.raw_logger.queue_event(
+                    "press_motor", lane=lane,
+                    detail=f"delivered={'yes' if ok else 'NO'}",
+                    hand=self.hand_mode)
+            self._schedule_cue_pulses(lane)
+        cue_ms = float(self.cfg.get("motor.cue_ms", self.FIRMWARE_STIM_MS))
+        self._after_cue_until = time.perf_counter() + cue_ms / 1000.0
+
+    def _drain_motor_queue(self) -> None:
+        """Send any cue repeat-pulses that have come due, and any STOP
+        that was held back for an after-press buzz. Called once per
+        frame from the main loop, including on the results screen."""
+        now = time.perf_counter()
+        q = getattr(self, "_motor_queue", None)
+        if q:
+            still = []
+            for lane, due in q:
+                if now >= due:
+                    self._send_stim(lane)
+                else:
+                    still.append((lane, due))
+            self._motor_queue = still
+        stop_at = getattr(self, "_motor_stop_at", None)
+        if stop_at is not None and now >= stop_at:
+            self.stop_all_motors()
+
+    def stop_all_motors(self, allow_after_cue: bool = False) -> None:
         """Drop pending cue pulses and tell the hardware to stop, so a
-        queued pulse cannot buzz after the block has ended."""
+        queued pulse cannot buzz after the block has ended.
+
+        finish_block runs in the same frame as the last trial's result,
+        so an unconditional STOP there would leave the final trial as
+        the only one without its confirmation buzz. allow_after_cue
+        holds the STOP back until that burst has run its length; the
+        main loop keeps draining the queue on the results screen, so it
+        still goes out a fraction of a second later. Everything else
+        (pause, Esc, abandon) stops the motors on the spot.
+        """
+        until = getattr(self, "_after_cue_until", None)
+        if (allow_after_cue and until is not None
+                and time.perf_counter() < until):
+            self._motor_stop_at = until
+            return
         self._motor_queue = []
+        self._motor_stop_at = None
+        self._after_cue_until = None
         try:
             self.source.send_command("STOP")
         except Exception:
@@ -2317,8 +2442,11 @@ class GameEngine:
 
     def finish_block(self) -> None:
         # Kill any queued cue pulse so the device cannot buzz after the
-        # block is over.
-        self.stop_all_motors()
+        # block is over. The last trial's after-press confirmation is
+        # let through first: it fired microseconds ago, in this same
+        # frame, and cutting it would make the final trial the only one
+        # the patient gets no confirmation on.
+        self.stop_all_motors(allow_after_cue=True)
         if self.raw_logger:
             self.raw_logger.queue_event("block_end", detail=self.current_block,
                                          hand=self.hand_mode)
@@ -2701,14 +2829,18 @@ class GameEngine:
         # lane numbering is global (0..7) and each strip's enumerate
         # index matches that.
         targets = set(int(l) for l in lanes)
-        # Which cue the patient gets. "visual" suppresses the buzzer,
-        # "vibration" suppresses the on-screen reveal so the finger has
-        # to be identified by touch alone.
-        cue_mode = str(self.cfg.get("game_cue.mode", "both") or "both").lower()
-        if cue_mode not in ("both", "visual", "vibration"):
-            cue_mode = "both"
-        self._last_cue_mode = cue_mode
-        show_on_screen = cue_mode in ("both", "visual")
+        # Which cue channels the patient gets before the press, and
+        # whether the screen is allowed to name the finger. Both halves
+        # are recorded on the trial row so a block run under one
+        # combination can be told apart from another later.
+        cues = self.cue_settings()
+        self._last_cue_code = cues.code
+        self._last_target_shown = cues.show_target
+        show_on_screen = cues.show_target
+        # A stim cancels any STOP held back for the previous trial's
+        # after-press buzz, or it would fire mid-cue.
+        self._motor_stop_at = None
+        self._after_cue_until = None
         # Loudness variation + miss-force window both key off the stimulus.
         # Bump the trial counter, raise the audio gain on a loud trial (so
         # the cue played just below AND the feedback chime at log_trial are
@@ -2749,10 +2881,10 @@ class GameEngine:
                         # Target lanes get the active fill + timing
                         # bar so the patient sees which fingers to
                         # press. Everyone else clears.
-                        # In vibration-only the tile must not reveal
-                        # which finger to press, but the timing bar
-                        # still runs so the patient can see how long
-                        # they have left.
+                        # With cue.show_target off the tile must not
+                        # reveal which finger to press, but the timing
+                        # bar still runs so the patient can see how
+                        # long they have left.
                         ls.active = (i in targets) and show_on_screen
                         if i in targets:
                             ls.arm_timing(t_perf, timeout_s)
@@ -2769,7 +2901,7 @@ class GameEngine:
         # the trials would look like ordinary misses instead of a
         # hardware failure. None = motors disabled for this session.
         self._last_stim_delivered = None
-        if self.cfg.get("motor.enabled", True) and cue_mode != "visual":
+        if cues.buzz_before:
             # Buzz the TARGET finger so the patient feels which one to
             # press. One STIM command per target lane; the Arduino
             # numbers motors 1..N matching the global lane.
@@ -2792,14 +2924,14 @@ class GameEngine:
                 self._block_stim_failures += 1
                 log.warning("Buzzer cue not delivered for trial %s. "
                              "Check the Arduino connection.", trial_id)
-        # Per-lane stim tone for the cadence-driven modes (classic,
-        # adaptive, mirror). Skipped in rhythm so the cue tone
-        # doesn't fight the music. play_stim only fires for the
-        # lowest target lane in a multi-lane stim so two finger tones
-        # don't pile into one beat in mirror mode.
-        if (self.audio is not None
-                and self.cfg.get("audio.stim_tone_enabled", True)
-                and self.current_block in ("classic", "adaptive", "mirror")):
+        # Pre-press cue tone, in every mode including rhythm. It used
+        # to be skipped in rhythm so it could not fight the music, but
+        # that left rhythm as the one mode where a cue switch did
+        # nothing. cue.sound_before is how it gets turned off now, per
+        # block, for whatever reason the researcher has. play_stim only
+        # fires for the lowest target lane in a multi-lane stim so two
+        # finger tones don't pile into one beat in mirror mode.
+        if self.audio is not None and cues.sound_before:
             try:
                 self.audio.play_stim(min(targets))
             except Exception:
@@ -2813,7 +2945,14 @@ class GameEngine:
                                              detail=f"trial_id={trial_id}",
                                              hand=self.hand_mode)
 
-    def log_trial(self, trial, outcome: TrialResult, now: float) -> None:
+    def log_trial(self, trial, outcome: TrialResult, now: float,
+                   cue_lanes: list[int] | None = None) -> None:
+        """Close out one classic / adaptive / mirror trial.
+
+        `cue_lanes` is which finger(s) the after-press cue should fire
+        on, defaulting to the single target lane. Mirror mode passes
+        both hands' copies because the patient pressed both.
+        """
         self._ensure_metric_state()
         gp = self._screens.get("gameplay")
         if gp and hasattr(gp, "set_message"):
@@ -2828,22 +2967,34 @@ class GameEngine:
             for ls in gp.lanes:
                 ls.clear_timing()
                 ls.active = False
-        # Chime on a non-Miss press; otherwise the soft thunk so the
-        # patient hears something either way (matches rhythm mode).
+        # After-press cues. A correct press is any non-Miss outcome:
+        # the patient hit the cued finger inside the window, and a
+        # trial spoiled by a wrong finger has already been downgraded
+        # to Miss by the mode, so neither a timeout nor a fumble
+        # reaches the cue.
+        cues = self.cue_settings()
+        correct_press = outcome.label != "Miss"
         if self.audio:
             try:
-                if outcome.label != "Miss":
-                    self.audio.play_hit(combo=self.hit_streak)
-                elif self.hit_streak > 0:
+                if correct_press:
+                    if cues.sound_after:
+                        self.audio.play_hit(combo=self.hit_streak)
+                elif self.hit_streak > 0 and cues.sound_after:
                     # Only thunk if the miss BREAKS a real streak. A
                     # single isolated miss with no streak just gets
                     # the visual feedback so the audio doesn't nag.
+                    # Held under the same switch as the chime: with
+                    # the post-press sound off, nothing sounds after a
+                    # press at all.
                     self.audio.play_miss()
             except Exception:
                 pass
             # A loud trial has now played its feedback at the boosted
             # gain; drop it back so the next non-loud trial is normal.
             self.audio.set_trial_gain(1.0)
+        if correct_press and cues.buzz_after:
+            self._fire_after_press_cue(
+                list(cue_lanes) if cue_lanes else [trial.lane])
         # Capture streak BEFORE _update_streak runs so the trial row
         # records what the patient came IN with, not what they leave
         # with. Used by motor-learning analysis.
@@ -2969,7 +3120,9 @@ class GameEngine:
                 if self._last_stim_timeout_ms is not None else "")
             row["force_window_sum"] = fw_sum_str
             row["force_window_peaks"] = fw_peaks_str
-            row["cue_mode"] = getattr(self, "_last_cue_mode", "both")
+            row["cue_flags"] = self._last_cue_code
+            row["cue_target_shown"] = ("TRUE" if self._last_target_shown
+                                        else "FALSE")
             sd = getattr(self, "_last_stim_delivered", None)
             row["stim_delivered"] = ("" if sd is None
                                       else ("TRUE" if sd else "FALSE"))
@@ -3069,17 +3222,23 @@ class GameEngine:
             # Bolder flash for rhythm: 0.6 s so the green / orange / red
             # has time to register against fast falling notes.
             rs.flash_lane(sched_note.note.lane, colour, 0.6, now)
-        # Hit chime on a real press; combo pitches up with the streak.
-        # On a Miss that breaks an existing streak we play the soft
-        # thunk so the patient hears the combo-break.
+        # After-press cues, same rule as the cadence modes. A note the
+        # patient actually pressed and landed inside the window is a
+        # correct press; a note that scrolled past unpressed arrives
+        # here as a Miss with was_pressed False and gets nothing.
+        cues = self.cue_settings()
+        correct_press = was_pressed and label != "Miss"
         if self.audio:
             try:
-                if label != "Miss":
-                    self.audio.play_hit(combo=self.hit_streak)
-                elif self.hit_streak > 0:
+                if correct_press:
+                    if cues.sound_after:
+                        self.audio.play_hit(combo=self.hit_streak)
+                elif self.hit_streak > 0 and cues.sound_after:
                     self.audio.play_miss()
             except Exception:
                 pass
+        if correct_press and cues.buzz_after:
+            self._fire_after_press_cue([sched_note.note.lane])
         if label in ("Miss",):
             self.misses += 1
         else:
@@ -3198,7 +3357,9 @@ class GameEngine:
                 fw_sum, fw_peaks)
             row["force_window_sum"] = fw_sum_str
             row["force_window_peaks"] = fw_peaks_str
-            row["cue_mode"] = getattr(self, "_last_cue_mode", "both")
+            row["cue_flags"] = self._last_cue_code
+            row["cue_target_shown"] = ("TRUE" if self._last_target_shown
+                                        else "FALSE")
             sd = getattr(self, "_last_stim_delivered", None)
             row["stim_delivered"] = ("" if sd is None
                                       else ("TRUE" if sd else "FALSE"))
@@ -3241,8 +3402,11 @@ class GameEngine:
         # at zero so the score never goes negative).
         self.apply_wrong_press_penalty()
         # Audio: combo-break thunk so a wrong-lane press has a
-        # distinct aural cue without being harsh.
-        if self.audio:
+        # distinct aural cue without being harsh. Held under
+        # cue.sound_after, which owns everything the patient hears
+        # after touching a sensor: with it off a wrong-lane press has
+        # to be as silent as a correct one.
+        if self.audio and self.cue_settings().sound_after:
             try:
                 self.audio.play_miss()
             except Exception:
