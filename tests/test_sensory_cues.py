@@ -768,3 +768,76 @@ class OneMotorPerBoardTests(unittest.TestCase):
             e, sent = self._engine()
             self.assertTrue(e._send_stim(lane))
             self.assertEqual(sent, [f"STIM:{lane + 1}"])
+
+
+class PinkyBuzzTests(unittest.TestCase):
+    """The pinky motor is the weak one on this build. The firmware
+    already drives it at a higher PWM than the other three, and that is
+    compile-time, so buzz length is the only lever the host has left."""
+
+    def _engine(self, cfg=None):
+        from rehab.game.engine import GameEngine
+        from rehab.config import Config
+        sent = []
+
+        class Src:
+            def send_command(self, c):
+                sent.append(c)
+                return True
+
+        e = GameEngine.__new__(GameEngine)
+        e.cfg = cfg or Config.load()
+        e.source = Src()
+        e.hand_mode = "right"
+        e._motor_queue = []
+        e.detectors = {"right": 1}
+        return e, sent
+
+    def test_the_pinky_reaches_its_own_channel(self):
+        e, sent = self._engine()
+        self.assertEqual(e._stim_channel(3), 4)
+        self.assertTrue(e._send_stim(3))
+        self.assertEqual(sent, ["STIM:4"])
+
+    def test_the_pinky_buzzes_longer_than_the_others(self):
+        e, _ = self._engine()
+        pinky = e.cue_ms_for_lane(3)
+        for lane in (0, 1, 2):
+            self.assertGreater(pinky, e.cue_ms_for_lane(lane))
+
+    def test_a_longer_cue_means_more_pulses(self):
+        """Length only helps if it actually re-arms the motor. The
+        firmware holds 150 ms per pulse and nothing else can extend it."""
+        e, sent = self._engine()
+        e._send_stim(3)
+        e._schedule_cue_pulses(3)
+        pinky_pulses = len(sent) + len(e._motor_queue)
+        e2, sent2 = self._engine()
+        e2._send_stim(0)
+        e2._schedule_cue_pulses(0)
+        index_pulses = len(sent2) + len(e2._motor_queue)
+        self.assertGreater(pinky_pulses, index_pulses)
+
+    def test_the_cue_cannot_outlast_the_gap_to_the_next_trial(self):
+        """A cue still buzzing when the next trial starts would be read
+        as that trial's cue."""
+        from rehab.config import Config
+        cfg = Config.load()
+        cfg.data.setdefault("motor", {})["cue_ms_per_finger"] = [
+            250, 250, 250, 5000]
+        cfg.data.setdefault("game", {})["trigger_interval_s"] = 0.6
+        e, _ = self._engine(cfg)
+        self.assertLessEqual(e.cue_ms_for_lane(3), 0.6 * 1000 * 0.8)
+
+    def test_missing_or_malformed_per_finger_falls_back(self):
+        from rehab.config import Config
+        for bad in (None, [], [0, 0, 0, 0], "nonsense", [250, 250]):
+            cfg = Config.load()
+            cfg.data.setdefault("motor", {})["cue_ms_per_finger"] = bad
+            e, _ = self._engine(cfg)
+            self.assertGreater(e.cue_ms_for_lane(3), 0)
+
+    def test_every_finger_still_gets_a_cue(self):
+        e, sent = self._engine()
+        for lane in range(4):
+            self.assertGreater(e.cue_ms_for_lane(lane), 0)

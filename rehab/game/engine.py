@@ -2342,8 +2342,7 @@ class GameEngine:
         this only schedules the follow-ups."""
         if not hasattr(self, "_motor_queue"):
             self._motor_queue = []
-        cue_ms = float(self.cfg.get("motor.cue_ms",
-                                     self.FIRMWARE_STIM_MS))
+        cue_ms = self.cue_ms_for_lane(lane)
         if cue_ms <= self.FIRMWARE_STIM_MS:
             return
         gap_ms = float(self.cfg.get("motor.pulse_interval_ms", 120))
@@ -2358,6 +2357,37 @@ class GameEngine:
             due += gap_ms
             if len(self._motor_queue) > 64:      # runaway guard
                 break
+
+    def cue_ms_for_lane(self, lane: int) -> float:
+        """How long this finger's buzz should run.
+
+        Defaults to motor.cue_ms for every finger, but each can be given
+        its own length through motor.cue_ms_per_finger. That exists for
+        the pinky. Its motor is the weak one on this build, which the
+        firmware already compensates for by driving it at a higher PWM
+        than the other three, and PWM is compile-time in the firmware's
+        Config.cpp. Buzz length is the one lever the host still has, and
+        a longer pulse on a weak motor is easier to feel.
+
+        A cue that runs longer than the gap to the next trial would
+        still be buzzing when the next one starts, so the value is
+        clamped to the trigger interval.
+        """
+        base = float(self.cfg.get("motor.cue_ms", self.FIRMWARE_STIM_MS))
+        try:
+            n_per_hand = int(self.cfg.get("fsr.num_sensors_per_hand", 4))
+            per = self.cfg.get("motor.cue_ms_per_finger") or []
+            finger = lane % n_per_hand
+            if per and finger < len(per) and per[finger]:
+                base = float(per[finger])
+        except (TypeError, ValueError, IndexError):
+            pass
+        try:
+            gap_ms = float(self.cfg.get("game.trigger_interval_s", 1.2)) * 1000
+            base = min(base, max(self.FIRMWARE_STIM_MS, gap_ms * 0.8))
+        except (TypeError, ValueError):
+            pass
+        return base
 
     def _fire_after_press_cue(self, lanes: list[int]) -> None:
         """Buzz the finger the patient just pressed correctly.

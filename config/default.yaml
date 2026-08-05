@@ -290,6 +290,19 @@ motor:
   # stay under the firmware's 150 ms hold or the motor stutters
   # instead of running continuously.
   pulse_interval_ms: 120
+  # PER-FINGER BUZZ LENGTH, one entry per finger in the order
+  # index, middle, ring, pinky. Empty or 0 falls back to cue_ms above.
+  #
+  # The pinky motor is the weak one on this build. The firmware already
+  # drives it harder than the others (MOTOR_PINKY_PWM 240 against 200,
+  # in the firmware's Config.cpp) and that PWM is compile-time, so buzz
+  # length is the only lever the host still has. A longer pulse on a
+  # weak motor is easier to feel, and the pinky is also the finger a
+  # stroke patient is least likely to notice a faint cue on.
+  #
+  # Clamped to 80% of game.trigger_interval_s so a long cue cannot still
+  # be buzzing when the next trial starts.
+  cue_ms_per_finger: [250, 250, 250, 400]
   # WHICH STIM CHANNEL DRIVES WHICH FINGER.
   #
   # The firmware maps STIM:1..4 onto its motor pins in a fixed order,
