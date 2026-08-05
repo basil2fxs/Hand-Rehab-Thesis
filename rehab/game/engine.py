@@ -819,123 +819,68 @@ class GameEngine:
     SUPERSAMPLE = 2
 
     def _open_display(self, fullscreen: bool):
-        """Open the on-screen window and the off-screen logical surface.
+        """Open the window and return the surface every screen draws to.
 
-        The window is opened at the highest sensible physical resolution:
-        the monitor's native size in fullscreen, or SUPERSAMPLE x the
-        logical size in windowed mode. All screens still draw to a fixed
-        1280x800 logical surface (self._render_surf); _present() scales
-        that surface onto the window once per frame.
+        Uses pygame.SCALED, which is the whole point. SDL then owns the
+        scaling: the surface handed back is always the logical 1280x800
+        whatever size the window is, SDL stretches it to fit, and SDL
+        translates mouse events back into that same logical space before
+        pygame ever sees them.
 
-        Returns the *logical* surface for screens to draw to, or None if
-        the window cannot be opened.
+        This replaces a hand-written version of the same thing, and the
+        hand-written one is why clicks landed off the buttons. It opened
+        a window bigger than the desktop, so the OS quietly shrank it
+        while pygame kept reporting the size that was asked for, then
+        divided mouse positions by that wrong size. Getting the draw
+        transform and the hit-test transform to agree by hand is a bug
+        waiting to come back every time either side is touched. Letting
+        SDL do both means they cannot disagree.
+
+        Returns None if the window cannot be opened.
         """
         lw, lh = self.layout.width, self.layout.height
-        ss = max(1, int(self.SUPERSAMPLE))
-        # One render path for both modes: open the window as large as the
-        # mode allows, draw the UI to a fixed 1280x800 logical surface, and
-        # smoothscale that onto the window each frame in _present(). The
-        # bigger the window's framebuffer, the sharper the result, so the
-        # windowed window is opened at SS x the logical size (a true high-
-        # density backing) and fullscreen fills the monitor.
+        flags = pygame.SCALED
         if fullscreen:
-            win_size = (0, 0)              # native desktop size
-            flags = pygame.FULLSCREEN
-        else:
-            # Cap the window to what the desktop can actually display.
-            #
-            # Asking for 2 x 1280x800 on a 1512x982 laptop gives a window
-            # the OS quietly shrinks to fit, while pygame keeps reporting
-            # the size that was asked for. Mouse events then arrive in the
-            # shrunk space and get divided by the unshrunk size, so every
-            # computed position lands above where the pointer really is
-            # and you have to aim below a button to hit it.
-            win_size = (lw * ss, lh * ss)
-            try:
-                dw, dh = pygame.display.get_desktop_sizes()[0]
-                # Leave room for the menu bar and dock rather than
-                # filling the screen exactly.
-                fit = min(1.0, (dw * 0.92) / win_size[0],
-                          (dh * 0.92) / win_size[1])
-                if fit < 1.0:
-                    win_size = (max(lw, int(win_size[0] * fit)),
-                                max(lh, int(win_size[1] * fit)))
-            except (pygame.error, IndexError, ValueError, ZeroDivisionError):
-                win_size = (lw, lh)
-            flags = 0
+            flags |= pygame.FULLSCREEN
         try:
-            window = pygame.display.set_mode(win_size, flags, vsync=1)
+            window = pygame.display.set_mode((lw, lh), flags, vsync=1)
         except pygame.error as e:
-            log.warning("set_mode %s failed (%s); retrying plain at %dx%d",
-                         "fullscreen" if fullscreen else "windowed",
-                         e, lw, lh)
+            log.warning("set_mode %s failed (%s); retrying without vsync",
+                         "fullscreen" if fullscreen else "windowed", e)
             try:
-                window = pygame.display.set_mode(
-                    (lw, lh), pygame.FULLSCREEN if fullscreen else 0)
+                window = pygame.display.set_mode((lw, lh), flags)
             except pygame.error as e2:
-                log.error("Could not open the game window: %s", e2)
-                return None
+                log.warning("SCALED failed (%s); falling back to plain", e2)
+                try:
+                    window = pygame.display.set_mode(
+                        (lw, lh), pygame.FULLSCREEN if fullscreen else 0)
+                except pygame.error as e3:
+                    log.error("Could not open the game window: %s", e3)
+                    return None
         self._window = window
-        # Off-screen surface every screen draws into, always logical size.
-        self._render_surf = pygame.Surface((lw, lh)).convert()
-        return self._render_surf
+        # With SCALED the window surface IS the logical surface, so
+        # there is nothing to blit between and nothing to convert.
+        self._render_surf = window
+        return window
 
     def _present(self) -> None:
-        """Scale the logical render surface onto the window and flip.
+        """Put the frame on screen.
 
-        smoothscale gives a clean bilinear upscale, far sharper than the
-        OS stretching a 1x surface across a Retina backing. When the
-        window already matches the logical size (SUPERSAMPLE 1, plain
-        windowed) it is a cheap straight blit."""
-        win = self._window
-        if win.get_size() == self._render_surf.get_size():
-            win.blit(self._render_surf, (0, 0))
-        else:
-            # Uniform scale plus centring, not a stretch to fill. A
-            # stretch distorts every circle and every square tile the
-            # moment the window's shape does not match 1280x800, which is
-            # most of the time in fullscreen.
-            scale, off = self._present_transform()
-            lw, lh = self._render_surf.get_size()
-            dest = (max(1, int(lw * scale)), max(1, int(lh * scale)))
-            win.fill((0, 0, 0))
-            win.blit(pygame.transform.smoothscale(self._render_surf, dest),
-                     off)
+        SCALED means the surface screens drew into is already the one
+        SDL presents, so this is just the flip.
+        """
         pygame.display.flip()
 
-    def _present_transform(self) -> tuple[float, tuple[int, int]]:
-        """Scale factor and top-left offset used to put the logical
-        surface on the window. Hit-testing inverts exactly this, so the
-        two can never disagree about where a button is."""
-        win_w, win_h = self._window.get_size()
-        lw, lh = self._render_surf.get_size()
-        scale = min(win_w / lw, win_h / lh)
-        off = (int((win_w - lw * scale) / 2), int((win_h - lh * scale) / 2))
-        return scale, off
-
     def _to_logical(self, pos: tuple[int, int]) -> tuple[int, int]:
-        """Map a window-space mouse position back to logical coordinates
-        so button hit-testing keeps working under supersampling.
+        """Mouse position in logical coordinates.
 
-        Returns the position unchanged if the window and logical surfaces
-        have not been opened yet (e.g. headless tests that build screens
-        and feed synthetic events without a real display)."""
-        window = getattr(self, "_window", None)
-        render = getattr(self, "_render_surf", None)
-        if window is None or render is None:
-            return pos
-        win_w, win_h = window.get_size()
-        lw, lh = render.get_size()
-        if (win_w, win_h) == (lw, lh):
-            return pos
-        scale, off = self._present_transform()
-        if scale <= 0:
-            return pos
-        x = (pos[0] - off[0]) / scale
-        y = (pos[1] - off[1]) / scale
-        # Clamp into the logical surface so a click on the letterbox bar
-        # cannot report a position off the edge of a screen.
-        return (int(min(max(x, 0), lw - 1)), int(min(max(y, 0), lh - 1)))
+        SDL already did this under SCALED, so the position arrives
+        correct and is passed straight through. The method stays because
+        the event loop calls it and because the plain-window fallback
+        above, taken only when SCALED will not open at all, renders at
+        the logical size anyway.
+        """
+        return pos
 
     def _toggle_fullscreen(self) -> None:
         """F10: flip between fullscreen and a windowed view. The logical
@@ -962,6 +907,17 @@ class GameEngine:
                 self._handle_escape()
             elif e.key == pygame.K_F2:
                 self._show_fps = not self._show_fps
+            elif e.key == pygame.K_F3:
+                # Pointer check. Draws a crosshair wherever the app
+                # thinks the cursor is, and outlines whatever control is
+                # under it. If the crosshair sits on the real pointer
+                # and the outline lands on the button you are pointing
+                # at, the coordinates are right. There is no other way
+                # to be sure from inside the app, and this went wrong
+                # once already.
+                self._show_pointer = not getattr(self, "_show_pointer", False)
+                log.info("Pointer check %s",
+                          "on" if self._show_pointer else "off")
             elif e.key == pygame.K_F10:
                 self._toggle_fullscreen()
             elif e.key == pygame.K_p:
@@ -1114,6 +1070,8 @@ class GameEngine:
                                                 s.t_perf)
 
     def _draw_hud(self, screen, clock) -> None:
+        if getattr(self, "_show_pointer", False):
+            self._draw_pointer_check(screen)
         if not self._show_fps:
             return
         from ..ui.widgets import draw_text
@@ -1121,6 +1079,60 @@ class GameEngine:
         draw_text(screen, f"FPS {fps:.0f}",
                   (self.layout.width - 10, self.layout.height - 10),
                   self.theme, self.layout, pt=12, colour=self.theme.muted)
+
+    def _draw_pointer_check(self, screen) -> None:
+        """F3 overlay: where the app thinks the pointer is.
+
+        A crosshair at the reported position, the coordinates next to
+        it, and a box round any control under it. Point at a button: if
+        the crosshair is on your cursor and the box is on the button,
+        clicks will land. If the crosshair sits below your cursor, the
+        window and the surface disagree about scale and that is the bug
+        to chase.
+        """
+        from ..ui.widgets import draw_text
+        try:
+            pos = self._to_logical(pygame.mouse.get_pos())
+        except Exception:
+            return
+        x, y = pos
+        red = (220, 38, 38)
+        pygame.draw.line(screen, red, (x - 22, y), (x + 22, y), 1)
+        pygame.draw.line(screen, red, (x, y - 22), (x, y + 22), 1)
+        pygame.draw.circle(screen, red, (x, y), 4, 1)
+        draw_text(screen, f"{x},{y}", (x + 10, y + 10),
+                  self.theme, self.layout, pt=12, colour=red)
+        # Outline whatever the screen would hit-test here.
+        sc = self.screen_obj
+        for rect in self._clickable_rects(sc):
+            if rect.collidepoint(pos):
+                pygame.draw.rect(screen, (34, 197, 94), rect, 2)
+
+    def _clickable_rects(self, screen_obj) -> list:
+        """Every rect the given screen would hit-test. Used only by the
+        pointer check, so it is deliberately forgiving about shape."""
+        out = []
+        if screen_obj is None:
+            return out
+        for name in dir(screen_obj):
+            if name.startswith("__"):
+                continue
+            try:
+                v = getattr(screen_obj, name)
+            except Exception:
+                continue
+            if isinstance(v, pygame.Rect):
+                out.append(v)
+            elif isinstance(v, (list, tuple)):
+                for item in v:
+                    r = getattr(item, "rect", None)
+                    if isinstance(r, pygame.Rect):
+                        out.append(r)
+            else:
+                r = getattr(v, "rect", None)
+                if isinstance(r, pygame.Rect):
+                    out.append(r)
+        return out
 
     # ---- screen helpers ----------------------------------------------------
     def show_title(self) -> None:
