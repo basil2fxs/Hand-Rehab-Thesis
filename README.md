@@ -139,7 +139,7 @@ assets/                  music + images
 analysis/
   session_analysis.ipynb the whole analysis, self-contained. No other
                          file needed: run the first cell, pick a save,
-                         press the button
+                         then Run All
   figures/               what the notebook draws, ready for the report
 arduino/                 the firmware that is on the device now
   firmware_on_device/    PlatformIO project, this is what is flashed
