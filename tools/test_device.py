@@ -287,7 +287,7 @@ def main() -> int:
         print("       python3 tools/calibrate_rest_vs_press.py")
     if buzz_none:
         print("     No buzz felt at all. The motor pins in the flashed")
-        print("     sketch (Arduino_20251111.ino, pins 3, 4, 5, 6) have to")
+        print("     sketch have to")
         print("     match where the motors are physically wired. Check the")
         print("     wiring first, then the four #define lines in the sketch.")
     if buzz_wrong:

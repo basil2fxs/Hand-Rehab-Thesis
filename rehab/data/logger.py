@@ -77,7 +77,7 @@ TRIAL_COLUMNS = [
     # written to the serial port; empty when the cue was disabled.
     #
     # Read this as "the host sent it", NOT "the patient felt it". The
-    # firmware (Arduino_20251111.ino) sends no acknowledgement for
+    # firmware sends no acknowledgement for
     # STIM, so the software cannot confirm a motor actually ran, only
     # that the command left the host. FALSE therefore means a real
     # transport failure (board unplugged mid-block) and those trials

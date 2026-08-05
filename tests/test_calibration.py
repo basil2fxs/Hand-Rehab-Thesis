@@ -207,9 +207,9 @@ class TestPersistence:
 
 
 class TestBuzzerChannelMap:
-    """Arduino_20251111.ino is final and maps STIM:1..4 onto pins
-    3,4,5,6 in that order. If a motor is wired elsewhere the host has
-    to send a different channel, because the sketch is not changing."""
+    """The firmware maps STIM:1..4 onto its motor pins in a fixed
+    order. If a motor is wired elsewhere the host has to send a
+    different channel, because the sketch is not being changed."""
 
     def _engine(self, channel_map):
         from rehab.game.engine import GameEngine

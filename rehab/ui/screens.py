@@ -3169,6 +3169,9 @@ class DiagnosticsScreen(Screen):
         ("cue.sound_before", "Cue Sound before press",
          "A tone plays when the trial starts, in every mode including "
          "rhythm, so the go signal can be heard."),
+        ("cue.show_target", "Show on screen before press",
+         "Off leaves the tile neutral so the finger has to be found "
+         "from the buzzer alone. This is the tactile-only condition."),
         (None, "After a correct press", ""),
         ("cue.buzz_after", "Cue Buzzer after press",
          "The finger that was just pressed correctly buzzes back. "
@@ -3176,10 +3179,6 @@ class DiagnosticsScreen(Screen):
         ("cue.sound_after", "Cue Sound after press",
          "A chime confirms a correct press. Off also silences the "
          "thunk that a miss makes, so nothing is heard after a press."),
-        (None, "Screen", ""),
-        ("cue.show_target", "Screen shows the target finger",
-         "Off leaves the tile neutral so the finger has to be found "
-         "from the buzzer alone. Isolates the tactile cue."),
     )
 
     def _cue_pill_rect(self) -> pygame.Rect:

@@ -142,14 +142,15 @@ analysis/
                          press the button
   figures/               what the notebook draws, ready for the report
 arduino/                 the firmware that is on the device now
-  Arduino_20251111/      the sketch itself, do not reflash
+  firmware_on_device/    PlatformIO project, this is what is flashed
+  ADDRESS/               one-off sketch for setting a sensor's I2C address
 tools/                   hardware check scripts, run from a terminal
 tests/                   run these before trusting a change
 builds/                  ready-to-run apps (Mac/ Windows/) + how-tos
 sessions/                what the game records, one folder per block
 
 bin/                     old stuff, nothing here is used by the game
-  aiden_arduino_firmware/  Aiden's PlatformIO project
+  old_handover_sketch_Arduino_20251111/  superseded, see below
   old_interactive_game/    the 2025 rhythm game and its data
   example_session_data.zip example folder layout from the handover
 ```
@@ -157,4 +158,6 @@ bin/                     old stuff, nothing here is used by the game
 ## References
 
 - FSR press-detection algorithm, CSV trial schema and stim event protocol come from Satoru Nakayama's 2025 software thesis (`Past/2025_Theses/Software - Satoru Nakayama .../rhythm_game_ver.FINAL.py`).
-- Aiden's older hardware build is in `bin/aiden_arduino_firmware/` (PlatformIO, I2C sensors, a few modular C++ libs). It is kept for reference only. The firmware actually running on the device is `arduino/Arduino_20251111/`.
+- The firmware on the device is `arduino/firmware_on_device/` (PlatformIO). It drives the motors on D11, D10, D9 and D6 for index to pinky, samples the four I2C sensors at 200 Hz, and speaks the same serial protocol as the older sketch: `FSR: a,b,c,d` out at 115200, `STIM:n` and `STOP` in.
+- The earlier handover sketch is kept at `bin/old_handover_sketch_Arduino_20251111/` for reference only. It drove the motors on D3 to D6, which is why the buzzers never worked on this wiring: only the pinky pin overlapped. Everything else about the two is the same, including the 150 ms stim hold and the 200 Hz sample rate.
+- On connect the firmware buzzes each of the four motors in turn as a self-test, which takes about 1.6 s. That is expected, not a fault. The host waits 3 s after opening the port so the boot finishes before it starts reading.

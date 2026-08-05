@@ -19,9 +19,14 @@ The sensor job measures:
 The buzzer job buzzes one channel at a time and asks which finger felt
 it, then saves the mapping so the game sends whichever channel actually
 reaches the finger it means. That step exists because the firmware is
-fixed. Arduino_20251111.ino maps STIM:1..4 onto pins 3,4,5,6 in that
-order and it is not being reflashed, so if a motor is wired to a
-different pin the host has to send a different channel.
+fixed: it maps STIM:1..4 onto its motor pins in a fixed order and is not
+being reflashed, so if a motor is wired to a different pin the host has
+to send a different channel instead.
+
+The firmware on the device drives index D11, middle D10, ring D9 and
+pinky D6, in finger order, so straight through is what it expects. The
+earlier handover sketch drove D3 to D6 instead, which is why nothing
+buzzed on this wiring: only the pinky pin overlapped at all.
 
 Everything is measured from real samples off the device. Nothing here is
 a guessed constant. The result is written to disk and stamped into every

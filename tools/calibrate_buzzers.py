@@ -17,7 +17,7 @@ feel without being unpleasant.
 
     python3 tools/calibrate_buzzers.py
 
-About strength: the firmware (Arduino_20251111.ino) drives the motors
+About strength: the firmware drives the motors
 at a fixed STIM_PWM = 200 and accepts only "STIM:n" and "STOP". There
 is no command to change vibration amplitude, and the board is not being
 reflashed. Duration is therefore the only property the host can vary,
@@ -146,8 +146,8 @@ def main() -> int:
                 print(f"  channel {motor + 1} reaches the {FINGERS[actual]}, "
                       f"not the {FINGERS[motor]}")
             print("\nThis does NOT need the Arduino reflashed.")
-            print("Arduino_20251111.ino is final and maps STIM:1..4 onto")
-            print("pins 3,4,5,6 in that order. The host can simply send")
+            print("The firmware maps STIM:1..4 onto its motor pins in")
+            print("a fixed order. The host can simply send")
             print("whichever channel actually reaches the finger it means,")
             print("which is what motor.channel_map below does.")
             print(f"\n  to buzz index  send STIM:{channel_map[0]}")

@@ -202,19 +202,32 @@ cue:
   # streak. Leaving the thunk on would still feed the patient
   # information through the ears after a press, which is the thing
   # this key exists to be able to remove.
-  sound_after: true
+  #
+  # Off by default, which is a change from the build before these
+  # toggles: that one chimed on every correct press with no way to
+  # stop it. There is no legacy key to migrate from, so an existing
+  # user_settings.yaml will not carry the chime over. Turn it on for
+  # blocks where the patient should hear that the press landed.
+  sound_after: false
 
   # Buzzer fires on the finger that was just pressed correctly, for
   # motor.cue_ms. Same rule as sound_after: correct press only, never
   # on a timeout or a wrong finger. In mirror mode both pressed
   # fingers buzz.
   #
-  # New in this build, so an older user_settings.yaml has nothing to
-  # translate from and it starts on. One thing to watch: adaptive can
-  # reach 140 BPM, which is 430 ms between stimuli, so a 250 ms
-  # confirmation buzz sits close to the next trial's cue buzz. Shorten
-  # motor.cue_ms or turn this off if the two start to blur together.
-  buzz_after: true
+  # Off by default, and new in this build so an older
+  # user_settings.yaml has nothing to translate from either way. A
+  # confirmation buzz on every correct press gets wearing over a
+  # forty-trial block, and the reaction-time comparison does not need
+  # it: what matters there is what the patient got BEFORE they moved.
+  # Turn it on when the point is to reinforce a correct press rather
+  # than to measure the response to a cue.
+  #
+  # One thing to watch once it is on: adaptive can reach 140 BPM,
+  # which is 430 ms between stimuli, so a 250 ms confirmation buzz
+  # sits close to the next trial's cue buzz. Shorten motor.cue_ms or
+  # turn this back off if the two start to blur together.
+  buzz_after: false
 
   # SCREEN REVEAL. Not one of the four switches: this is whether the
   # gameplay screen highlights the target finger, and it is kept
@@ -237,7 +250,7 @@ motor:
   # pre-press cue (cue.buzz_before) and the post-press confirmation
   # (cue.buzz_after), so the two feel like the same signal.
   #
-  # The firmware (Arduino_20251111.ino) drives the motor at a FIXED
+  # The firmware drives the motor at a FIXED
   # strength: STIM_PWM = 200 is a compile-time constant and the only
   # commands it accepts are "STIM:n" and "STOP". Vibration amplitude
   # therefore cannot be changed from the host at all. What we can
@@ -279,11 +292,16 @@ motor:
   pulse_interval_ms: 120
   # WHICH STIM CHANNEL DRIVES WHICH FINGER.
   #
-  # Arduino_20251111.ino is the final firmware and is not being
-  # changed. It maps STIM:1..4 onto its motor pins in a fixed order,
+  # The firmware maps STIM:1..4 onto its motor pins in a fixed order,
   # so if a motor is wired to a different pin than that order assumes,
   # the wrong finger buzzes. Rather than touch the sketch, the host
   # sends whichever channel actually reaches the finger it means.
+  #
+  # The firmware now on the device (arduino/firmware_on_device) drives
+  # index D11, middle D10, ring D9, pinky D6, and its motorPins array is
+  # in finger order, so straight through is correct for it. The earlier
+  # handover sketch drove D3 to D6 instead, which is why nothing buzzed
+  # on this wiring: only the pinky pin overlapped.
   #
   # Read this as: to buzz the INDEX finger send STIM:<first entry>,
   # for MIDDLE send STIM:<second>, and so on. The default 1,2,3,4 is

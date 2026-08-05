@@ -595,12 +595,21 @@ class ShippedDefaultsTests(unittest.TestCase):
         with open(DEFAULT_CONFIG) as f:
             return yaml.safe_load(f)
 
-    def test_every_switch_ships_on(self) -> None:
+    def test_the_before_press_cues_ship_on(self) -> None:
+        """Buzzer, sound and screen before the press."""
         cue = self._shipped()["cue"]
-        for key in ("buzz_before", "sound_before",
-                    "sound_after", "buzz_after", "show_target"):
+        for key in ("buzz_before", "sound_before", "show_target"):
             with self.subTest(key=key):
                 self.assertIs(cue[key], True)
+
+    def test_the_after_press_cues_ship_off(self) -> None:
+        """A confirmation on every correct press gets wearing over a
+        block, and the reaction-time comparison only cares about what
+        the patient got BEFORE they moved. Available, not default."""
+        cue = self._shipped()["cue"]
+        for key in ("buzz_after", "sound_after"):
+            with self.subTest(key=key):
+                self.assertIs(cue[key], False)
 
     def test_the_old_block_is_gone(self) -> None:
         self.assertNotIn("game_cue", self._shipped())

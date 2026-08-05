@@ -21,6 +21,14 @@ from .source import BaseQueueSource
 log = logging.getLogger(__name__)
 
 
+# How long the board takes from reset to streaming. Set from the boot
+# sequence of the firmware that is on the device (arduino/
+# firmware_on_device): half a second, then a self-test that buzzes each
+# of the four motors in turn, then a banner and another half second.
+# The buzzing at connect is the firmware checking itself, not a fault.
+BOOT_SETTLE_S = 3.0
+
+
 # Old firmware sent FSR:v1,v2,v3,v4. New firmware can extend to 8 for bilateral.
 # Matching 4 or 8 lets us avoid two regexes.
 _LINE_RE = re.compile(
@@ -209,7 +217,20 @@ class SerialSource(BaseQueueSource):
                 # the firmware's own boot delay - that's part of the
                 # patient's perceived wait.
                 self._port_open_ts = time.perf_counter()
-                time.sleep(1.8)  # Arduino reset settle
+                # Opening the port resets the board, so nothing useful
+                # arrives until its boot finishes. The firmware on the
+                # device runs a motor self-test first:
+                #
+                #   delay(500)                        0.5 s
+                #   4 motors x (200 ms on, 200 ms off) 1.6 s
+                #   prints "### Setup Complete ###"
+                #   delay(500)                        0.5 s
+                #
+                # so the first FSR line lands about 2.6 s in. Waiting
+                # 1.8 s flushed the buffer part way through the self
+                # test and then read nothing for most of a second. The
+                # extra margin covers the whole boot.
+                time.sleep(BOOT_SETTLE_S)
                 s.reset_input_buffer()
                 log.info("Opened %s @ %d", self.port, self.baud)
                 return s

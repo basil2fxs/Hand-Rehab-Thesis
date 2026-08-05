@@ -3226,14 +3226,21 @@ class GameEngine:
         # patient actually pressed and landed inside the window is a
         # correct press; a note that scrolled past unpressed arrives
         # here as a Miss with was_pressed False and gets nothing.
+        #
+        # Both branches read streak_before, not self.hit_streak.
+        # _update_streak has already run by this point (log_trial calls
+        # it after the audio, this path calls it before), so on a miss
+        # self.hit_streak is always 0 and the streak-break thunk could
+        # never fire in rhythm. The chime had the mirror-image problem:
+        # combo came out one higher than the same hit in classic.
         cues = self.cue_settings()
         correct_press = was_pressed and label != "Miss"
         if self.audio:
             try:
                 if correct_press:
                     if cues.sound_after:
-                        self.audio.play_hit(combo=self.hit_streak)
-                elif self.hit_streak > 0 and cues.sound_after:
+                        self.audio.play_hit(combo=streak_before)
+                elif streak_before > 0 and cues.sound_after:
                     self.audio.play_miss()
             except Exception:
                 pass
