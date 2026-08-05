@@ -455,7 +455,8 @@ class ToggleMenu:
                  get_value: Callable[[str], bool],
                  on_toggle: Callable[[str, bool], None],
                  theme: Theme, layout: Layout,
-                 title: str = "Sensory Cues") -> None:
+                 title: str = "Sensory Cues",
+                 open_upwards: bool = False) -> None:
         self.rect = rect
         self.rows = rows
         self.get_value = get_value
@@ -463,15 +464,30 @@ class ToggleMenu:
         self.theme = theme
         self.layout = layout
         self.title = title
+        # Rows above the pill rather than below it. Needed where the
+        # pill sits low on the screen, since a list opening downward
+        # would run off the bottom and the rows past the edge could not
+        # be clicked at all.
+        self.open_upwards = open_upwards
         self.is_open = False
         self._hover_idx = -1
+
+    def _list_height(self) -> int:
+        return sum(self.ROW_H if key is not None else self.HEAD_H
+                   for key, _l, _h in self.rows)
+
+    def _list_top(self) -> int:
+        """Where the row list starts, in screen coordinates."""
+        if self.open_upwards:
+            return self.rect.top - 4 - self._list_height()
+        return self.rect.bottom + 4
 
     @property
     def width(self) -> int:
         return self.rect.w
 
     def _row_rect(self, idx: int) -> pygame.Rect:
-        y = self.rect.bottom + 4
+        y = self._list_top()
         for i, (key, _label, _help) in enumerate(self.rows):
             h = self.ROW_H if key is not None else self.HEAD_H
             if i == idx:
@@ -512,7 +528,7 @@ class ToggleMenu:
                         return True
                 # Anywhere else closes it, and the click is consumed so
                 # a control sitting under the popup does not also fire.
-                plate = pygame.Rect(self.rect.x, self.rect.bottom,
+                plate = pygame.Rect(self.rect.x, self._list_top(),
                                      self.rect.w, self._total_h())
                 self.is_open = False
                 if plate.collidepoint(e.pos):
@@ -556,7 +572,9 @@ class ToggleMenu:
         """The open list. Call after every other widget. No-op closed."""
         if not self.is_open:
             return
-        plate = pygame.Rect(self.rect.x, self.rect.bottom,
+        # Starts where the rows start, so the panel, the rows and the
+        # click shield all agree about which way the list opened.
+        plate = pygame.Rect(self.rect.x, self._list_top() - 4,
                              self.rect.w, self._total_h())
         pygame.draw.rect(surf, self.theme.background, plate,
                           border_radius=self.BORDER_RADIUS)

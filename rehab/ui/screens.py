@@ -28,6 +28,61 @@ if TYPE_CHECKING:
     from ..game.engine import GameEngine
 
 
+
+# The Sensory Cues switches, in the order the patient meets them: the
+# things that happen before the press, then the ones after a correct
+# one. Each entry is (config key, row label, what the patient
+# experiences); the help text lands in the status line on hover.
+#
+# Module level because two screens show this menu. Settings has it for
+# setting up, and the results screen has it so the cue condition can be
+# changed between two blocks without walking back through the menus,
+# which is exactly when a researcher wants to change it.
+CUE_ROWS: tuple[tuple[str | None, str, str], ...] = (
+        (None, "Before the press", ""),
+        ("cue.buzz_before", "Cue Buzzer before press",
+         "The motor under the target finger buzzes when the trial "
+         "starts, so the finger to press can be felt."),
+        ("cue.sound_before", "Cue Sound before press",
+         "A tone plays when the trial starts, in every mode including "
+         "rhythm, so the go signal can be heard."),
+        ("cue.show_target", "Show on screen before press",
+         "Off leaves the tile neutral so the finger has to be found "
+         "from the buzzer alone. This is the tactile-only condition."),
+        (None, "After a correct press", ""),
+        ("cue.buzz_after", "Cue Buzzer after press",
+         "The finger that was just pressed correctly buzzes back. "
+         "Nothing on a timeout or a wrong finger."),
+        ("cue.sound_after", "Cue Sound after press",
+         "A chime confirms a correct press. Off also silences the "
+         "thunk that a miss makes, so nothing is heard after a press."),
+)
+
+
+def apply_cue_setting(engine, key: str, value: bool) -> None:
+    """Write one cue switch to the live config and to disk.
+
+    In memory first so it applies to the next block without a restart,
+    then persisted to the same user_settings.yaml the ports use. A
+    failed save leaves the in-memory value alone: the therapist asked
+    for it, so the session should honour it even if the file could not
+    be written.
+    """
+    section, _, leaf = key.partition(".")
+    engine.cfg.data.setdefault(section, {})[leaf] = bool(value)
+    if leaf == "buzz_before" and not value:
+        # Drop anything already queued so nothing buzzes after the
+        # switch goes off.
+        try:
+            engine.stop_all_motors()
+        except Exception:
+            pass
+    try:
+        engine.cfg.save_user_overrides({key: bool(value)})
+    except Exception as e:
+        log.warning("Could not persist %s: %s", key, e)
+
+
 class Screen:
     def __init__(self, engine: "GameEngine") -> None:
         self.engine = engine
@@ -2555,7 +2610,33 @@ class ResultsScreen(Screen):
             self.theme, self.layout, font_pt=FONT_H2,
         )
 
+        # Sensory Cues, here as well as in Settings.
+        #
+        # Between two blocks is exactly when the cue condition gets
+        # changed: run one with the buzzer, run the next without, and
+        # compare. Making that a trip back to the title screen and into
+        # Settings put four clicks between the researcher and the thing
+        # they came here to do, and the setting is recorded per trial
+        # anyway, so the two blocks stay separable afterwards.
+        #
+        # Opens upward from the pill because the pill sits low; the
+        # rows would otherwise run off the bottom of the screen.
+        self._cue_menu = ToggleMenu(
+            pygame.Rect(self.layout.width - 300, y - 62, 270, 44),
+            list(CUE_ROWS),
+            get_value=lambda k: bool(self.engine.cfg.get(k, True)),
+            on_toggle=lambda k, v: apply_cue_setting(self.engine, k, v),
+            theme=self.theme, layout=self.layout,
+            title="Cues for the next block",
+            open_upwards=True,
+        )
+
     def handle_event(self, e: pygame.event.Event) -> None:
+        # The menu gets first refusal. When it is open its rows sit over
+        # the buttons, and a click landing on both would flip a switch
+        # and start a block at the same time.
+        if self._cue_menu.handle_event(e):
+            return
         self.retry_btn.handle_event(e)
         self.again_btn.handle_event(e)
         self.folder_btn.handle_event(e)
@@ -3170,25 +3251,7 @@ class DiagnosticsScreen(Screen):
     # after a correct one, then the screen. Each entry is
     # (config key, row label, what the patient experiences). The help
     # text lands in the status line while the row is hovered.
-    CUE_ROWS: tuple[tuple[str | None, str, str], ...] = (
-        (None, "Before the press", ""),
-        ("cue.buzz_before", "Cue Buzzer before press",
-         "The motor under the target finger buzzes when the trial "
-         "starts, so the finger to press can be felt."),
-        ("cue.sound_before", "Cue Sound before press",
-         "A tone plays when the trial starts, in every mode including "
-         "rhythm, so the go signal can be heard."),
-        ("cue.show_target", "Show on screen before press",
-         "Off leaves the tile neutral so the finger has to be found "
-         "from the buzzer alone. This is the tactile-only condition."),
-        (None, "After a correct press", ""),
-        ("cue.buzz_after", "Cue Buzzer after press",
-         "The finger that was just pressed correctly buzzes back. "
-         "Nothing on a timeout or a wrong finger."),
-        ("cue.sound_after", "Cue Sound after press",
-         "A chime confirms a correct press. Off also silences the "
-         "thunk that a miss makes, so nothing is heard after a press."),
-    )
+    CUE_ROWS = CUE_ROWS
 
     def _cue_pill_rect(self) -> pygame.Rect:
         """Where the closed cue pill sits: filling the cues panel's
@@ -3228,30 +3291,8 @@ class DiagnosticsScreen(Screen):
         )
 
     def _set_cue(self, key: str, value: bool) -> None:
-        """Write one cue switch to the live config and to disk.
-
-        In-memory first so the change applies to the next block without
-        a restart, then persisted through the same user_settings.yaml
-        the ports use. A failed save leaves the in-memory value alone:
-        the therapist asked for it, so the session should honour it
-        even if the file could not be written.
-        """
-        section, _, leaf = key.partition(".")
-        self.engine.cfg.data.setdefault(section, {})[leaf] = bool(value)
-        if leaf == "buzz_before" and not value:
-            # Drop anything already queued so nothing buzzes after the
-            # switch goes off.
-            try:
-                self.engine.stop_all_motors()
-            except Exception:
-                pass
-        try:
-            self.engine.cfg.save_user_overrides({key: bool(value)})
-        except Exception as e:
-            self._port_status = f"Sensory cue save failed: {e}"
-            return
-        label = next((l for k, l, _h in self.CUE_ROWS if k == key), key)
-        self._port_status = f"{label}: {'ON' if value else 'OFF'}."
+        apply_cue_setting(self.engine, key, value)
+        self._port_status = ""
 
     def _toggle_test_mode(self) -> None:
         """Flip game.test_mode_enabled and persist it through the

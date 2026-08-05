@@ -451,3 +451,104 @@ class TestSettingsHitBoxes:
         screen, _ = settings_screen
         sx, _sy = screen._status_pos()
         assert sx > screen.back_btn.rect.right
+
+
+class TestCuesOnTheResultsScreen:
+    """Between two blocks is exactly when the cue condition gets
+    changed: run one with the buzzer, run the next without, compare.
+    Making that a trip back to the title screen and into Settings put
+    four clicks between the researcher and the thing they came here to
+    do, and the setting is recorded per trial anyway, so the two blocks
+    stay separable afterwards."""
+
+    def _results(self):
+        import pygame
+        from rehab.game.engine import GameEngine
+        from rehab.config import Config
+        from rehab.ui.theme import get as get_theme
+        from rehab.ui.widgets import Layout
+        from rehab.ui.screens import ResultsScreen
+        pygame.init()
+        pygame.font.init()
+        pygame.display.set_mode((1280, 800))
+        e = GameEngine.__new__(GameEngine)
+        e.cfg = Config.load()
+        e.theme = get_theme("clinical")
+        e.layout = Layout(1280, 800, 1.0)
+        e.hits, e.misses, e.score = 18, 6, 1200
+        e.current_block, e.hand_mode = 1, "right"
+        e.best_streak, e.per_lane_stats = 3, {}
+        e.last_session_root = None
+        e.session = type("S", (), {"participant": "T", "age": "60",
+                                   "block_summary": {}})()
+        e.stop_all_motors = lambda *a, **k: None
+        return ResultsScreen(e), e
+
+    def _click(self, screen, pos):
+        import pygame
+        for kind in (pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP):
+            screen.handle_event(pygame.event.Event(
+                kind, {"button": 1, "pos": pos}))
+
+    def test_the_menu_is_there(self):
+        r, _ = self._results()
+        keys = [k for k, _l, _h in r._cue_menu.rows if k]
+        assert keys == ["cue.buzz_before", "cue.sound_before",
+                        "cue.show_target",
+                        "cue.buzz_after", "cue.sound_after"]
+
+    def test_it_shares_one_definition_with_settings(self):
+        """Two copies would drift, and a switch that means one thing on
+        one screen and another elsewhere is worse than no switch."""
+        from rehab.ui.screens import CUE_ROWS, DiagnosticsScreen
+        r, _ = self._results()
+        assert r._cue_menu.rows == list(CUE_ROWS)
+        assert DiagnosticsScreen.CUE_ROWS is CUE_ROWS
+
+    def test_toggling_changes_the_setting(self):
+        r, e = self._results()
+        self._click(r, r._cue_menu.rect.center)
+        assert r._cue_menu.is_open
+        idx = next(i for i, (k, _l, _h) in enumerate(r._cue_menu.rows)
+                   if k == "cue.buzz_before")
+        before = bool(e.cfg.get("cue.buzz_before"))
+        self._click(r, r._cue_menu._row_rect(idx).center)
+        assert bool(e.cfg.get("cue.buzz_before")) is not before
+
+    def test_the_menu_stays_open_across_toggles(self):
+        """Several switches usually get set in one visit."""
+        r, _ = self._results()
+        self._click(r, r._cue_menu.rect.center)
+        idx = next(i for i, (k, _l, _h) in enumerate(r._cue_menu.rows) if k)
+        self._click(r, r._cue_menu._row_rect(idx).center)
+        assert r._cue_menu.is_open
+
+    def test_it_opens_upward_and_stays_on_screen(self):
+        """The pill sits low, so a list opening downward would run off
+        the bottom and those rows could not be clicked at all."""
+        r, _ = self._results()
+        assert r._cue_menu.open_upwards
+        rects = [r._cue_menu._row_rect(i)
+                 for i in range(len(r._cue_menu.rows))]
+        assert min(x.top for x in rects) >= 0
+        assert max(x.bottom for x in rects) <= 800
+
+    def test_an_open_menu_does_not_leak_clicks_to_the_buttons(self):
+        """Its rows sit over the buttons when open. A click landing on
+        both would flip a switch and start a block at once."""
+        r, _ = self._results()
+        fired = []
+        r.again_btn.on_click = lambda: fired.append("again")
+        self._click(r, r._cue_menu.rect.center)          # open it
+        idx = next(i for i, (k, _l, _h) in enumerate(r._cue_menu.rows) if k)
+        row = r._cue_menu._row_rect(idx)
+        if row.colliderect(r.again_btn.rect):
+            self._click(r, row.center)
+            assert not fired, "click reached the button under the menu"
+
+    def test_the_buttons_still_work_when_it_is_shut(self):
+        r, _ = self._results()
+        fired = []
+        r.again_btn.on_click = lambda: fired.append("again")
+        self._click(r, r.again_btn.rect.center)
+        assert fired
