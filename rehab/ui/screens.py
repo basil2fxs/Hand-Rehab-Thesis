@@ -2164,8 +2164,16 @@ class RhythmSetupScreen(Screen):
                 if key in self._durations:
                     continue
                 try:
-                    self._durations[key] = float(
-                        librosa.get_duration(path=key))
+                    # Held for the same reason extract_beatmap holds it:
+                    # get_duration opens the file through soundfile, and
+                    # two threads inside sf_open on an mp3 at once kill
+                    # the process with SIGBUS. The guard above only stops
+                    # THIS screen starting a second worker, so two
+                    # screens (or a screen and a beatmap extraction)
+                    # still overlap without the lock.
+                    with DECODE_LOCK:
+                        dur = float(librosa.get_duration(path=key))
+                    self._durations[key] = dur
                 except (FileNotFoundError, OSError, RuntimeError,
                         ValueError):
                     # File missing, unreadable, or unsupported audio
