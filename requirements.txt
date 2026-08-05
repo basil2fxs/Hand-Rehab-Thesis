@@ -1,3 +1,4 @@
+# The game.
 pygame-ce>=2.5.0
 pyserial>=3.5
 pyyaml>=6.0
@@ -5,8 +6,12 @@ numpy>=1.24
 scipy>=1.10
 librosa>=0.10
 soundfile>=0.12
-# Post-block research report charts.
+# Post-block research report charts, and the analysis notebook.
 matplotlib>=3.8
+# The analysis notebook works in dataframes throughout. It was missing
+# from here, so a fresh install followed by opening the notebook died on
+# the first import.
+pandas>=2.0
 # Notebook dropdown for picking a saved session.
 ipywidgets>=8.0
 # Notebook run button. JupyterLab 4 ignores javascript outputs, so the

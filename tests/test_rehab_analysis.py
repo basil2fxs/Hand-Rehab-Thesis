@@ -66,10 +66,21 @@ def _code_cells(path=None):
 
 
 def _is_definition(node) -> bool:
-    """True for an import, a def, a class or a CONSTANT assignment."""
+    """True for an import, a def, a class or a CONSTANT assignment.
+
+    A try/except wrapping only imports counts too. The notebook guards its
+    top-level imports that way so a missing package produces a readable
+    message instead of a bare ModuleNotFoundError out of the first cell.
+    Without this the imports are not top level any more, the extractor
+    drops them, and every test here dies on a NameError for pd.
+    """
     if isinstance(node, (ast.Import, ast.ImportFrom, ast.FunctionDef,
                          ast.AsyncFunctionDef, ast.ClassDef)):
         return True
+    if isinstance(node, ast.Try):
+        body = list(node.body)
+        return bool(body) and all(
+            isinstance(n, (ast.Import, ast.ImportFrom)) for n in body)
     if not isinstance(node, (ast.Assign, ast.AnnAssign)):
         return False
     targets = node.targets if isinstance(node, ast.Assign) else [node.target]
