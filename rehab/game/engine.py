@@ -788,7 +788,26 @@ class GameEngine:
             win_size = (0, 0)              # native desktop size
             flags = pygame.FULLSCREEN
         else:
-            win_size = (lw * ss, lh * ss)  # e.g. 2560x1600 backing
+            # Cap the window to what the desktop can actually display.
+            #
+            # Asking for 2 x 1280x800 on a 1512x982 laptop gives a window
+            # the OS quietly shrinks to fit, while pygame keeps reporting
+            # the size that was asked for. Mouse events then arrive in the
+            # shrunk space and get divided by the unshrunk size, so every
+            # computed position lands above where the pointer really is
+            # and you have to aim below a button to hit it.
+            win_size = (lw * ss, lh * ss)
+            try:
+                dw, dh = pygame.display.get_desktop_sizes()[0]
+                # Leave room for the menu bar and dock rather than
+                # filling the screen exactly.
+                fit = min(1.0, (dw * 0.92) / win_size[0],
+                          (dh * 0.92) / win_size[1])
+                if fit < 1.0:
+                    win_size = (max(lw, int(win_size[0] * fit)),
+                                max(lh, int(win_size[1] * fit)))
+            except (pygame.error, IndexError, ValueError, ZeroDivisionError):
+                win_size = (lw, lh)
             flags = 0
         try:
             window = pygame.display.set_mode(win_size, flags, vsync=1)
@@ -818,9 +837,27 @@ class GameEngine:
         if win.get_size() == self._render_surf.get_size():
             win.blit(self._render_surf, (0, 0))
         else:
-            pygame.transform.smoothscale(self._render_surf,
-                                          win.get_size(), win)
+            # Uniform scale plus centring, not a stretch to fill. A
+            # stretch distorts every circle and every square tile the
+            # moment the window's shape does not match 1280x800, which is
+            # most of the time in fullscreen.
+            scale, off = self._present_transform()
+            lw, lh = self._render_surf.get_size()
+            dest = (max(1, int(lw * scale)), max(1, int(lh * scale)))
+            win.fill((0, 0, 0))
+            win.blit(pygame.transform.smoothscale(self._render_surf, dest),
+                     off)
         pygame.display.flip()
+
+    def _present_transform(self) -> tuple[float, tuple[int, int]]:
+        """Scale factor and top-left offset used to put the logical
+        surface on the window. Hit-testing inverts exactly this, so the
+        two can never disagree about where a button is."""
+        win_w, win_h = self._window.get_size()
+        lw, lh = self._render_surf.get_size()
+        scale = min(win_w / lw, win_h / lh)
+        off = (int((win_w - lw * scale) / 2), int((win_h - lh * scale) / 2))
+        return scale, off
 
     def _to_logical(self, pos: tuple[int, int]) -> tuple[int, int]:
         """Map a window-space mouse position back to logical coordinates
@@ -837,7 +874,14 @@ class GameEngine:
         lw, lh = render.get_size()
         if (win_w, win_h) == (lw, lh):
             return pos
-        return (int(pos[0] * lw / win_w), int(pos[1] * lh / win_h))
+        scale, off = self._present_transform()
+        if scale <= 0:
+            return pos
+        x = (pos[0] - off[0]) / scale
+        y = (pos[1] - off[1]) / scale
+        # Clamp into the logical surface so a click on the letterbox bar
+        # cannot report a position off the edge of a screen.
+        return (int(min(max(x, 0), lw - 1)), int(min(max(y, 0), lh - 1)))
 
     def _toggle_fullscreen(self) -> None:
         """F10: flip between fullscreen and a windowed view. The logical
