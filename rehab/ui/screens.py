@@ -1345,10 +1345,17 @@ class GameplayScreen(Screen):
         # Hold the mode back while the pre-start countdown is running so
         # the first stim fires the instant it hits zero, not before. Lane
         # press visuals above still update so the patient can test their
-        # fingers during the GET READY window.
-        if (self.engine.mode and hasattr(self.engine.mode, "update")
-                and self._countdown_remaining() <= 0):
-            self.engine.mode.update(dt)
+        # fingers during the GET READY window. A mode with research
+        # gating of its own gets prep_tick during the hold, so that
+        # gating runs INSIDE the prep instead of stacking a second wait
+        # on top: chords accumulates its baseline-quiet clock here and
+        # a hand that settled during the card fires its first chord at
+        # zero.
+        if self.engine.mode and hasattr(self.engine.mode, "update"):
+            if self._countdown_remaining() <= 0:
+                self.engine.mode.update(dt)
+            elif hasattr(self.engine.mode, "prep_tick"):
+                self.engine.mode.prep_tick(dt)
 
     def _key_held_for_lane(self, lane: int, hand: str) -> bool:
         """In keyboard mode, decide whether any key bound to this
@@ -1882,8 +1889,10 @@ class GameplayScreen(Screen):
                            now: float) -> None:
         """Make the chord read as ONE gesture: a glowing baseline
         joins the target tiles from below, a press-window bar drains
-        from the first onset, and a green tick lands on each quiet
-        finger when the cross-talk stayed low."""
+        from the first onset, a ring on each held tile fills over the
+        hold so the patient watches the hold complete WHILE pressing,
+        and a green tick lands on each quiet finger when the
+        cross-talk stayed low."""
         m = self.engine.mode
         if m is None or not self.lanes:
             return
@@ -1891,6 +1900,7 @@ class GameplayScreen(Screen):
             "chords", self.theme.accent)
         targets = [ls for ls in self.lanes if ls.active]
         trial = getattr(m, "active", None)
+        self._draw_chord_hold(surf, m, trial, targets, accent)
         if len(targets) >= 2:
             left = min(ls.rect.left for ls in targets) + 10
             right = max(ls.rect.right for ls in targets) - 10
@@ -1968,6 +1978,99 @@ class GameplayScreen(Screen):
                                   False,
                                   [(17, 31), (27, 41), (44, 20)], 5)
                 surf.blit(ds, (cx_t - 30, cy_t - 30))
+
+    def _draw_chord_hold(self, surf: pygame.Surface, m, trial,
+                         targets: list, accent) -> None:
+        """The hold made visible. While the chord is down, a ring on
+        each held tile fills from empty to full over hold_ms; success
+        lands exactly when the ring completes, so "hold" means "keep
+        this ring filling". Before the chord completes, fingers
+        already down wear the empty track so the patient sees they
+        are registered and must stay down; a finger that lifts loses
+        its track the moment the mode withdraws its onset. With
+        cue.show_target off no lane may be singled out, so a single
+        centred bar carries the same progress without naming any
+        lane. When no hold is required (keyboard play skips it),
+        nothing draws: no progress shown means no hold asked."""
+        if getattr(m, "hold_required", None) is not True:
+            return
+        prog = None
+        hp = getattr(m, "hold_progress", None)
+        if callable(hp):
+            try:
+                p = hp()
+            except Exception:
+                p = None
+            if isinstance(p, (int, float)):
+                prog = max(0.0, min(1.0, float(p)))
+        if prog is not None:
+            if targets:
+                for ls in targets:
+                    self._draw_hold_ring(surf, ls, prog, accent)
+            else:
+                self._draw_hold_bar(surf, prog, accent)
+            return
+        # Chord still forming: empty tracks on the fingers that are
+        # down, nothing on the ones still to land.
+        onsets = getattr(trial, "onsets", None)
+        if isinstance(onsets, dict) and onsets and targets:
+            for ls in targets:
+                if ls.lane in onsets:
+                    self._draw_hold_ring(surf, ls, 0.0, accent)
+
+    def _draw_hold_ring(self, surf: pygame.Surface, ls, frac: float,
+                        colour) -> None:
+        """Progress ring centred on a held tile. The faint track says
+        a hold is part of this press; the thick arc sweeps clockwise
+        from 12 o'clock and closes at hold_ms. Drawn as a polygon
+        strip rather than pygame.draw.arc because wide arcs render
+        with moire holes."""
+        r_out = max(20, min(34, min(ls.rect.w, ls.rect.h) // 3))
+        thick = 7
+        pad = 4
+        size = (r_out + pad) * 2
+        ds = pygame.Surface((size, size), pygame.SRCALPHA)
+        c = (r_out + pad, r_out + pad)
+        pygame.draw.circle(ds, (255, 255, 255, 70), c, r_out, 3)
+        if frac > 0:
+            sweep = 2 * math.pi * frac
+            steps = max(3, int(60 * frac))
+            outer = []
+            inner = []
+            for k in range(steps + 1):
+                a = math.pi / 2 - sweep * k / steps
+                outer.append((c[0] + r_out * math.cos(a),
+                              c[1] - r_out * math.sin(a)))
+                inner.append((c[0] + (r_out - thick) * math.cos(a),
+                              c[1] - (r_out - thick) * math.sin(a)))
+            pygame.draw.polygon(ds, (*colour, 235),
+                                outer + inner[::-1])
+        surf.blit(ds, (ls.rect.centerx - c[0],
+                       ls.rect.centery - c[1]))
+
+    def _draw_hold_bar(self, surf: pygame.Surface, frac: float,
+                       accent) -> None:
+        """The tactile-condition twin of the hold ring: one centred
+        bar above the lane band filling over hold_ms. Lane-agnostic
+        on purpose: with the screen reveal off, per-lane progress
+        would name the fingers the cue may not."""
+        bw, bh = 300, 12
+        bx = self.layout.width // 2 - bw // 2
+        row_top = min(ls.rect.top for ls in self.lanes)
+        by = row_top - 64
+        track = pygame.Surface((bw, bh), pygame.SRCALPHA)
+        pygame.draw.rect(track, (*self.theme.muted, 70),
+                         track.get_rect(), border_radius=bh // 2)
+        surf.blit(track, (bx, by))
+        if frac > 0:
+            fill = pygame.Surface((max(2, int(bw * frac)), bh),
+                                  pygame.SRCALPHA)
+            pygame.draw.rect(fill, (*accent, 235), fill.get_rect(),
+                             border_radius=bh // 2)
+            surf.blit(fill, (bx, by))
+        draw_text(surf, "KEEP HOLDING", (bx + bw // 2, by + bh + 14),
+                  self.theme, self.layout, pt=FONT_SMALL,
+                  centre=True, colour=self.theme.muted)
 
     # ---- patterns ----------------------------------------------------------
     def _draw_pattern_layer(self, surf: pygame.Surface,

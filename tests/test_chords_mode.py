@@ -781,5 +781,230 @@ class EngineIntegrationTests(unittest.TestCase):
             pygame.quit()
 
 
+# ---- hold trace replay -----------------------------------------------------
+class _TraceClock:
+    """Stand-in for the time module inside the chords module: the
+    replay advances it sample by sample so the mode's own
+    time.perf_counter() reads simulation time."""
+
+    def __init__(self, t0: float = 1000.0) -> None:
+        self.t = t0
+
+    def perf_counter(self) -> float:
+        return self.t
+
+
+class _MessageScreen:
+    """Records every centre-screen message with its simulation time,
+    so a test can pin not just the words but WHEN they appeared."""
+
+    def __init__(self, clock: _TraceClock) -> None:
+        self.clock = clock
+        self.messages: list[tuple[float, str, str]] = []
+        self.lanes: list = []
+
+    def set_message(self, text, dur, kind="info"):
+        self.messages.append((self.clock.t, str(text), kind))
+
+
+_TRACE_REST = 280.0
+_TRACE_PRESS = 620.0
+_TRACE_RAMP_S = 0.015
+
+
+def _trace_value(t: float, windows) -> int:
+    """Trapezoid press profile: 15 ms ramp up, flat, 15 ms ramp down,
+    the shape a light fingertip press makes on the FSR."""
+    v = _TRACE_REST
+    for (a, b) in windows:
+        if a <= t <= b + _TRACE_RAMP_S:
+            if t < a + _TRACE_RAMP_S:
+                f = (t - a) / _TRACE_RAMP_S
+            elif t > b:
+                f = max(0.0, 1.0 - (t - b) / _TRACE_RAMP_S)
+            else:
+                f = 1.0
+            v = max(v, _TRACE_REST + (_TRACE_PRESS - _TRACE_REST) * f)
+    return int(v)
+
+
+class HoldTraceReplayTests(unittest.TestCase):
+    """Replays synthetic 200 Hz FSR traces through the REAL detector
+    into the mode on a fake clock: fast tap, held press, staggered
+    chords with an early release. This is the harness that diagnosed
+    the hold confusion Basil reported ("as soon as I press the button
+    it seems to go away"): the only hold feedback was a message
+    delivered milliseconds AFTER the trial had closed, and a stale
+    onset let the last finger complete a chord an earlier finger had
+    already left, failing the hold at the very instant of the press.
+    Pinned here: a held press satisfies the hold, live progress is
+    exposed while the fingers are down (the ring the screen draws), a
+    tap fails with wording that names the finger and the action, a
+    lifted finger withdraws its onset so no chord completes off
+    fingers that are not down together, and re-landing that finger
+    recovers the trial."""
+
+    def setUp(self) -> None:
+        import rehab.game.modes.chords as chords_mod
+        self._chords_mod = chords_mod
+        self._real_time = chords_mod.time
+        self.clock = _TraceClock()
+        chords_mod.time = self.clock
+
+    def tearDown(self) -> None:
+        self._chords_mod.time = self._real_time
+
+    def _build(self, probes: int):
+        from rehab.game.modes.chords import ChordsMode
+        from rehab.game.scoring import ScoreConfig
+        from rehab.hardware.fsr_detector import Calibration, FSRDetector
+        det = FSRDetector(Calibration(), hand="right")
+        engine = MagicMock()
+        engine.hand_mode = "right"
+        engine.source.provides_samples = True
+        engine.detectors = {"right": det}
+        engine.calibration_profiles = {}
+        engine._force_window_peak = {}
+        engine._force_window_saw_samples = False
+        screen = _MessageScreen(self.clock)
+        engine._screens = {"gameplay": screen}
+        engine.cfg.get = MagicMock(side_effect=lambda k, d=None: d)
+        mode = ChordsMode(
+            engine=engine, hand="right", lanes=[0, 1, 2, 3],
+            timeout_s=3.0, sync_windows_ms=[250, 200, 150, 100],
+            hold_ms=200, baseline_quiet_ms=500, settle_prompt_s=5.0,
+            iti_min_s=1.5, iti_max_s=2.5, trials_per_subblock=20,
+            subblocks=5, probe_trials_per_finger=probes,
+            rest_between_s=30.0, fatigue_rest_s=120.0,
+            session_cap_min=30.0, score_cfg=ScoreConfig(), seed=7,
+        )
+        det.on_press = mode.queue_press
+        mode._t0 = self.clock.t
+        return engine, mode, det, screen
+
+    def _replay(self, mode, det, engine, plan_fn):
+        """Run the loop: 200 Hz samples into the real detector, mode
+        updated every third sample (about 60 Hz). Returns the stim
+        time, the hold-progress samples seen, and every phase the
+        mode passed through."""
+        plan = None
+        stim_t = None
+        progress: list[float] = []
+        phases: list[str] = []
+        n = 0
+        t_stop = self.clock.t + 8.0
+        while self.clock.t < t_stop:
+            if mode.active is not None and plan is None:
+                stim_t = mode.active.stim_t_perf
+                plan = plan_fn(list(mode.active.targets), stim_t)
+            vals = tuple(
+                _trace_value(self.clock.t, (plan or {}).get(l, []))
+                for l in range(4))
+            det.feed(self.clock.t, vals)
+            if n % 3 == 0:
+                mode.update(1 / 60)
+                if not phases or phases[-1] != mode.phase:
+                    phases.append(mode.phase)
+                p = mode.hold_progress()
+                if p is not None:
+                    progress.append(p)
+            if plan is not None and engine.log_trial.called:
+                break
+            self.clock.t += 1.0 / 200.0
+            n += 1
+        return stim_t, progress, phases
+
+    def _warn_text(self, screen) -> str:
+        warns = [txt for (_, txt, kind) in screen.messages
+                 if kind == "warn"]
+        return warns[-1] if warns else ""
+
+    def test_a_held_press_satisfies_the_hold_with_live_progress(self):
+        engine, mode, det, screen = self._build(probes=2)
+
+        def plan(targets, stim_t):
+            s = stim_t + 0.30
+            return {targets[0]: [(s, s + 0.40)]}
+
+        _, progress, phases = self._replay(mode, det, engine, plan)
+        rec = mode._records[-1]
+        self.assertEqual(rec["class"], "hit")
+        self.assertIs(rec["hold"], True)
+        self.assertIn("hold", phases)
+        # The ring's data: progress exposed while the finger is down,
+        # monotonic, inside 0..1, and gone once the trial closed.
+        self.assertGreaterEqual(len(progress), 3)
+        self.assertEqual(progress, sorted(progress))
+        self.assertGreaterEqual(progress[0], 0.0)
+        self.assertLessEqual(progress[-1], 1.0)
+        self.assertIsNone(mode.hold_progress())
+
+    def test_a_tap_names_the_finger_that_lifted(self):
+        engine, mode, det, screen = self._build(probes=2)
+
+        def plan(targets, stim_t):
+            s = stim_t + 0.30
+            self._target = targets[0]
+            return {targets[0]: [(s, s + 0.08)]}
+
+        self._replay(mode, det, engine, plan)
+        rec = mode._records[-1]
+        self.assertEqual(rec["class"], "no_hold")
+        from rehab.game.modes.chords import FINGER_NAMES
+        expected = FINGER_NAMES[self._target]
+        self.assertEqual(self._warn_text(screen),
+                         f"{expected} lifted too soon")
+        for (_, txt, _) in screen.messages:
+            self.assertNotIn("beat", txt.lower())
+        # The together bonus is forfeited on a broken hold: 6
+        # completion + 2 quiet, never the full 10 the old build paid
+        # while scolding.
+        outcome = engine.log_trial.call_args[0][1]
+        self.assertEqual(outcome.points, 8)
+
+    def test_a_lifted_finger_withdraws_its_onset(self):
+        engine, mode, det, screen = self._build(probes=0)
+
+        def plan(targets, stim_t):
+            a, b = targets[0], targets[1]
+            s = stim_t + 0.30
+            return {a: [(s, s + 0.08)],
+                    b: [(s + 0.20, s + 0.60)]}
+
+        stim_t, _, phases = self._replay(mode, det, engine, plan)
+        rec = mode._records[-1]
+        # The old build closed this trial no_hold at the INSTANT the
+        # second finger landed (its onset window satisfied W through
+        # the first finger's stale onset), an unavoidable fail the
+        # message then lectured about. Now the chord never completes
+        # off a lifted finger: no hold phase, and the trial runs its
+        # full response window before closing partial.
+        self.assertNotIn("hold", phases)
+        self.assertEqual(rec["class"], "partial")
+        close_t = engine.log_trial.call_args[0][2]
+        self.assertGreaterEqual(close_t - stim_t, 2.9)
+        self.assertEqual(self._warn_text(screen),
+                         "Press together and keep them down")
+
+    def test_relanding_the_lifted_finger_recovers_the_chord(self):
+        engine, mode, det, screen = self._build(probes=0)
+
+        def plan(targets, stim_t):
+            a, b = targets[0], targets[1]
+            s = stim_t + 0.30
+            return {a: [(s, s + 0.08), (s + 0.35, s + 0.90)],
+                    b: [(s + 0.20, s + 0.60)]}
+
+        _, progress, phases = self._replay(mode, det, engine, plan)
+        rec = mode._records[-1]
+        self.assertEqual(rec["class"], "hit")
+        self.assertIs(rec["hold"], True)
+        self.assertIn("hold", phases)
+        # Span is measured on the chord that actually formed: the
+        # re-landed onset, not the withdrawn tap.
+        self.assertLessEqual(rec["span_ms"], 250.0)
+        self.assertGreater(len(progress), 0)
+
+
 if __name__ == "__main__":
     unittest.main()

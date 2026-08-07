@@ -638,6 +638,128 @@ class KeyboardFallbackTests(unittest.TestCase):
         self.assertEqual(mode._presses[0].lane, 0)
 
 
+class ScreenStoryTests(unittest.TestCase):
+    """The child-facing story the screen tells, pinned as copy: every
+    phase announces itself, the count-in counts DOWN to a GO, a
+    timeout is never called close, bilateral play says either hand
+    counts, and the keyboard hints live in the corner note only when
+    the keyboard IS the input. These strings are what a seven year
+    old and their parent act on, so they are load-bearing."""
+
+    def _screen(self, engine):
+        import pygame
+        pygame.init()
+        pygame.font.init()
+        from rehab.ui.syllables_screen import SyllablesScreen
+        return SyllablesScreen(engine)
+
+    def test_every_phase_announces_itself(self) -> None:
+        engine, mode = _build_mode(level=1)
+        scr = self._screen(engine)
+        mode._tick(0.0)
+        want = {
+            "warmup": "WARM UP",
+            "attend": "LISTEN...",
+            "model": "WATCH",
+            "replay": "WATCH AGAIN",
+            "countin": "GET READY...",
+            "respond": "YOUR TURN!",
+            "break": "REST TIME",
+        }
+        for phase, title in want.items():
+            mode.phase = phase
+            got, sub, _colour = scr._stage(mode)
+            self.assertEqual(got, title, f"{phase} announces {got!r}")
+        # The model instruction says hands off in words, not mechanism.
+        mode.phase = "model"
+        _t, sub, _c = scr._stage(mode)
+        self.assertIn("Hands off", sub)
+
+    def test_feedback_praises_or_names_the_one_thing_to_change(self) -> None:
+        engine, mode = _build_mode(level=1)
+        scr = self._screen(engine)
+        mode._tick(0.0)
+        mode.phase = "feedback"
+        mode._last_result = {"correct": True, "error": "ok"}
+        self.assertEqual(scr._stage(mode)[0], "WONDERFUL!")
+        for err, frag in (("extra_tap", "too many"),
+                          ("missing_tap", "still empty"),
+                          ("wrong_order", "first finger"),
+                          ("off_beat", "tick"),
+                          ("wrong_stress", "harder")):
+            mode._last_result = {"correct": False, "error": err}
+            title, sub, _ = scr._stage(mode)
+            self.assertEqual(title, "SO CLOSE!")
+            self.assertIn(frag, sub)
+
+    def test_a_timeout_is_not_called_close(self) -> None:
+        # Zero taps landed; "so close" would be untrue and a child
+        # knows it. The copy stays kind without lying.
+        engine, mode = _build_mode(level=1)
+        scr = self._screen(engine)
+        mode._tick(0.0)
+        mode.phase = "feedback"
+        mode._last_result = {"correct": False, "error": "timeout"}
+        title, sub, _ = scr._stage(mode)
+        self.assertNotIn("CLOSE", title)
+        self.assertIn("Watch", sub)
+
+    def test_count_in_counts_down_not_up(self) -> None:
+        engine, mode = _build_mode(level=3)
+        scr = self._screen(engine)
+        mode._tick(0.0)
+        mode.word = mode._draw_word()
+        mode._enter_phase("countin", 10.0)
+        ioi = mode.ioi_s
+        self.assertEqual(scr.countin_remaining(mode, 10.0), 4)
+        self.assertEqual(scr.countin_remaining(mode, 10.0 + 1.5 * ioi), 3)
+        self.assertEqual(scr.countin_remaining(mode, 10.0 + 3.5 * ioi), 1)
+
+    def test_bilateral_respond_says_either_hand_counts(self) -> None:
+        engine, mode = _build_mode(
+            level=1,
+            lanes_by_hand={"right": [0, 1, 2, 3], "left": [4, 5, 6, 7]})
+        scr = self._screen(engine)
+        mode._tick(0.0)
+        mode.phase = "respond"
+        self.assertIn("either hand", scr._either_hand_line(mode))
+        # One hand connected: no bilateral promise to make.
+        engine1, mode1 = _build_mode(level=1)
+        mode1._tick(0.0)
+        mode1.phase = "respond"
+        self.assertEqual(scr._either_hand_line(mode1), "")
+        # And never during the model: that is the hand tag's job.
+        mode.phase = "model"
+        self.assertEqual(scr._either_hand_line(mode), "")
+
+    def test_controls_note_only_when_the_keyboard_is_the_input(self) -> None:
+        engine, mode = _build_mode(level=1)
+        scr = self._screen(engine)
+        engine.source.provides_samples = False
+        self.assertEqual(scr.controls_lines(mode),
+                         ["Right hand: J K L ;"])
+        # Real sensors connected: fingers sit on the pads, no legend.
+        engine.source.provides_samples = True
+        self.assertEqual(scr.controls_lines(mode), [])
+
+    def test_model_hand_tag_tracks_the_buzz_and_clears(self) -> None:
+        engine, mode = _build_mode(
+            level=2,
+            lanes_by_hand={"right": [0, 1, 2, 3], "left": [4, 5, 6, 7]})
+        mode._tick(0.0)
+        t = 0.0
+        seen = set()
+        guard = 0
+        while mode.phase != "respond" and guard < 500:
+            t += 0.05
+            mode._tick(t)
+            if mode.phase == "model" and mode.model_hand:
+                seen.add(mode.model_hand)
+            guard += 1
+        self.assertTrue(seen and seen <= {"left", "right"})
+        self.assertIsNone(mode.model_hand)
+
+
 class EngineIntegrationTests(unittest.TestCase):
     """The wiring the user actually clicks through: the mode-select
     card leads to a real block on the dedicated screen, the screen

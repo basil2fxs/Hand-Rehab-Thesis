@@ -147,8 +147,12 @@ buzz comes off a shuffle bag over the hands, so across a block both
 hands are modelled equally, the same paired balance the adult modes
 use; the modelled lanes ride the stimulus string (model=) so the
 analysis can split taps and models by hand. On screen the blocks
-are hand-neutral (they carry finger colours, not sides) and the
-finger row shows both hands, the left one mirrored.
+are hand-neutral (they carry finger colours, not sides), and the
+both-hands story is told inside the game: while the model plays the
+screen names the hand carrying each buzz (model_hand, set per
+onset), and at respond time the screen says plainly that either
+hand counts, so a child or the parent across the table can see why
+a buzz arrived on the left when the last one was on the right.
 
 WHAT THIS MODE CANNOT CLAIM. It trains and measures in-task
 behaviour: syllable segmentation, beat synchronisation, stress
@@ -326,6 +330,12 @@ class SyllablesMode:
         # word, in onset order, packed into the stimulus string when
         # both hands play so the analysis can split models by hand.
         self._model_lanes: list[int] = []
+        # Which hand the model is buzzing RIGHT NOW, for the screen:
+        # in bilateral play the buzz hops between hands, and a child
+        # (or the parent watching) should see the hop named, not have
+        # to guess why the left hand buzzed when the right one just
+        # did. None outside the model and replay phases.
+        self.model_hand: str | None = None
 
         # Session flow state. Phases:
         #   warmup -> (attend -> model -> countin -> respond -> feedback
@@ -573,6 +583,8 @@ class SyllablesMode:
         self.phase = phase
         self._phase_t0 = now
         self._phase_until = None
+        if phase not in ("model", "replay"):
+            self.model_hand = None
         if phase == "warmup":
             self._warmup_beats = []
             self._start_metronome()
@@ -656,6 +668,7 @@ class SyllablesMode:
         pos = (self._model_idx if self.order_required
                else min(self._model_idx, 3))
         hand = self.hand_names[self._model_hand_order.next()]
+        self.model_hand = hand
         lane = self.hands[hand][pos]
         if self.phase == "model":
             self._model_lanes.append(lane)

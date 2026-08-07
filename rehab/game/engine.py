@@ -299,6 +299,14 @@ class GameEngine:
         for det in self.detectors.values():
             det.on_press = self._on_press
             det.on_release = self._on_release
+        # A rebuilt detector comes back on the config's default
+        # thresholds. Every rebuild site (the setup screen's hand pick,
+        # mirror forcing both hands, engine start) must put the measured
+        # per-hand calibration back, or the block silently runs on
+        # defaults while the metadata still records the calibration as
+        # active. Doing it here keeps the promise structural instead of
+        # relying on each caller to remember.
+        self.reapply_calibrations()
 
     def _on_press(self, ev: PressEvent) -> None:
         # In bilateral mode we want the mode to see one big 0..7 lane space,
@@ -1388,8 +1396,15 @@ class GameEngine:
         that was actually measured for it, without the two hands sharing a
         single set of numbers through the config.
         """
-        for prof in list((getattr(self, "calibration_profiles", None) or {}).values()):
-            if prof is not None:
+        for hand, prof in list(
+                (getattr(self, "calibration_profiles", None) or {}).items()):
+            # Only reapply onto the hand's own detector. apply_calibration
+            # falls back to every detector when the named hand has none,
+            # which is right for a legacy single-hand profile applied by
+            # hand, but here it would write the LEFT hand's thresholds
+            # onto the right detector whenever a unilateral rebuild
+            # dropped the left one.
+            if prof is not None and hand in (self.detectors or {}):
                 self.apply_calibration(prof)
 
     def show_diagnostics(self) -> None:
@@ -1980,6 +1995,11 @@ class GameEngine:
         self.mode = RhythmMode(
             engine=self, beatmap=beatmap, windows=rw, score_cfg=self.score_cfg,
         )
+        # Same test-mode trim the GET READY card gets, applied to the
+        # in-timeline countdown so a demo song starts as fast as a demo
+        # block does.
+        if self._test_mode_trials() is not None:
+            self.mode._countdown_s = min(self.mode._countdown_s, 1.5)
         self._begin_block("rhythm")
         self.screen_obj = self._screens["rhythm"]
         # Remember the beatmap so the Retry button on results can

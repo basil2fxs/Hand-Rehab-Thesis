@@ -54,9 +54,20 @@ says WHEN, and because the order never varies it cannot be mistaken
 for a required press order (press order is logged so any order bias is
 checkable). The first target press opens the synchrony window W: the
 chord counts as together only if every target's onset lands within W
-of the first. Then all targets must stay down for hold_ms, kept short
-(200 ms) because enslaving drifts upward about 50 percent over a 15 s
-hold (Abolins et al. 2020), so long holds train the wrong signal.
+of the first. A target that lifts again before the chord completes
+loses its onset and must land again, so a chord only ever completes
+off fingers that are down together; without that rule a stale onset
+let the last finger complete a chord an earlier finger had already
+left, and the hold below failed on the same frame with nothing the
+patient could do about it. Once the chord is down, all targets stay
+down for hold_ms, kept short (200 ms) because enslaving drifts upward
+about 50 percent over a 15 s hold (Abolins et al. 2020), so long
+holds train the wrong signal. The hold is visible while it runs: a
+ring fills on the held tiles and completes exactly at hold_ms (a
+single centred bar when the screen may not name the target), because
+feedback that only arrives after the trial closes cannot be acted on.
+A broken hold forfeits the together bonus and the feedback names the
+finger that lifted; late and missing fingers are named the same way.
 
 SYNCHRONY WINDOW. Skilled pianists land chord tones within about 30 ms
 (Goebl 2001, JASA 110); perceptual simultaneity is 20-50 ms (Rasch
@@ -219,6 +230,7 @@ log = logging.getLogger(__name__)
 
 
 FINGER_LETTERS = ("I", "M", "R", "P")
+FINGER_NAMES = ("Index", "Middle", "Ring", "Pinky")
 # Enslavability weights from the independence ranking of Hager-Ross and
 # Schieber (2000): ring least independent, then middle and pinky, index
 # best of the four sensor fingers.
@@ -266,10 +278,15 @@ CHORD_TIERS: list[list[tuple[int, ...]]] = [
 class PendingChordTrial:
     """One chord trial: several target lanes, one press per target.
     `targets` are engine-global lane numbers in ascending order.
-    `onsets` records the FIRST press time per target lane; duplicates
-    are ignored so a double-tap cannot look like a wrong press.
-    `hand` is the side the chord belongs to; in bilateral play the
-    hands alternate but a single chord never spans both."""
+    `onsets` records the press time per target lane for the CURRENT
+    down-state: with live sensors and a hold required, a target that
+    lifts before the chord completes loses its onset and must land
+    again, so a chord only ever completes off fingers that are really
+    down together. A repeat press on a finger still down is ignored,
+    so a double-tap cannot look like a wrong press. `hold_released`
+    is which targets lifted during the hold, for feedback that names
+    the finger. `hand` is the side the chord belongs to; in bilateral
+    play the hands alternate but a single chord never spans both."""
     trial_id: int
     kind: str                       # "probe" | "chord"
     fingers: tuple[int, ...]        # within-hand finger indices 0..3
@@ -282,6 +299,7 @@ class PendingChordTrial:
     keys_pressed: list[int] = field(default_factory=list)
     incorrect_presses: list[tuple[int, float]] = field(default_factory=list)
     settle_ms: float | None = None
+    hold_released: list[int] = field(default_factory=list)
 
 
 class ChordsMode:
@@ -438,6 +456,7 @@ class ChordsMode:
         self._quiet_since: float | None = None
         self._settle_t0: float | None = None
         self._prompt_t = 0.0
+        self._hold_t0: float | None = None
         self._hold_until: float | None = None
         self._rest_until: float | None = None
         self._rest_kind = "between"          # between | fatigue
@@ -506,7 +525,7 @@ class ChordsMode:
             for lane in list(self.active.onsets):
                 self.active.onsets[lane] += pause_dur
         for attr in ("_next_ok_t", "_quiet_since", "_settle_t0",
-                     "_hold_until", "_rest_until", "_t0",
+                     "_hold_t0", "_hold_until", "_rest_until", "_t0",
                      "_quiet_tick_t"):
             v = getattr(self, attr)
             if v is not None:
@@ -631,11 +650,58 @@ class ChordsMode:
         else:
             self._quiet_since = None
 
+    # ---- live hold state ---------------------------------------------------
+    @property
+    def hold_required(self) -> bool:
+        """True when this block really enforces the hold: live sensor
+        state plus a configured hold time. The screen keys the hold
+        visuals off this so keyboard play, which skips the hold, never
+        shows a progress ring it will not honour."""
+        return bool(self._fsr and self.hold_s > 0)
+
+    def hold_progress(self) -> float | None:
+        """0..1 while a hold is in flight, None otherwise. The screen
+        draws this as a ring filling on the held tiles, so the patient
+        watches the hold complete WHILE pressing. It exists because the
+        first build's only hold feedback was a message after the trial
+        had closed, when there was nothing left to act on."""
+        if self.phase != "hold" or self.active is None:
+            return None
+        if self._hold_t0 is None or self._hold_until is None:
+            return None
+        total = self._hold_until - self._hold_t0
+        if total <= 0:
+            return 1.0
+        frac = (time.perf_counter() - self._hold_t0) / total
+        return max(0.0, min(1.0, frac))
+
+    def _drop_lifted_onsets(self) -> None:
+        """Withdraw the onset of any target that pressed and lifted
+        again before the chord completed. Without this, a stale onset
+        let the LAST finger complete a chord an earlier finger had
+        already left: the hold check then failed on that same frame,
+        so the trial closed at the instant of the press with a hold
+        message the patient could do nothing about (the confusion
+        Basil reported). With the withdrawal, a chord only completes
+        off fingers that are down together, and the hold can always
+        be satisfied by simply staying down. Keyboard play has no
+        live press state, so onsets stand as pressed there."""
+        if self.active is None or not self.hold_required:
+            return
+        for lane in list(self.active.onsets):
+            if not self._lane_pressed(lane):
+                del self.active.onsets[lane]
+
     # ---- main tick ---------------------------------------------------------
     def update(self, dt: float) -> None:
         now = time.perf_counter()
         if self._t0 is None:
             self._t0 = now
+        # Withdrawals run BEFORE the press queue drains: a queued
+        # last-finger press must complete the chord against the live
+        # down-state, not against onsets a finger already left.
+        if self.phase == "stim":
+            self._drop_lifted_onsets()
         while self._presses:
             self._handle_press(self._presses.popleft(), now)
         if self.phase == "done":
@@ -756,14 +822,30 @@ class ChordsMode:
             return
         self.active.keys_pressed.append(ev.lane)
         if ev.lane in self.active.targets:
-            # First onset per target only; a double-tap on a finger
-            # already down must not read as a wrong press.
+            # One onset per down-state: a repeat event on a finger
+            # still down must not read as a wrong press, while a
+            # finger that lifted (onset withdrawn) records a fresh
+            # onset when it lands again.
             if ev.lane not in self.active.onsets:
                 self.active.onsets[ev.lane] = ev.t_perf
-            if len(self.active.onsets) == len(self.active.targets):
-                if self._fsr and self.hold_s > 0:
+            # Completion only from the stim phase: once the hold is
+            # running, a stray duplicate press must not restart the
+            # hold clock.
+            if (self.phase == "stim"
+                    and len(self.active.onsets)
+                    == len(self.active.targets)):
+                if self.hold_required:
                     self.phase = "hold"
-                    self._hold_until = now + self.hold_s
+                    # The hold runs from the last finger's own press
+                    # edge, not from the frame that drained the event
+                    # queue, so queue latency is credited to the
+                    # patient rather than added to the hold.
+                    self._hold_t0 = ev.t_perf
+                    self._hold_until = ev.t_perf + self.hold_s
+                    # Words for the ring that starts filling now; the
+                    # outcome message replaces this at trial close.
+                    self._set_message("Keep holding",
+                                      max(0.6, self.hold_s))
                 else:
                     self._finish(now, hold_achieved=None)
         else:
@@ -777,11 +859,18 @@ class ChordsMode:
     def _update_hold(self, now: float) -> None:
         if self.active is None:
             self.phase = "settle"
+            self._hold_t0 = None
+            self._hold_until = None
             return
-        if not all(self._lane_pressed(l) for l in self.active.targets):
+        lifted = [l for l in self.active.targets
+                  if not self._lane_pressed(l)]
+        if lifted:
             # A finger slipped off before the hold ended. Short hold on
             # purpose (enslaving drifts up during sustained holds), but
-            # it does have to be met for a clean hit.
+            # it does have to be met for a clean hit. Record WHICH
+            # fingers lifted so the feedback can name them instead of
+            # lecturing about the beat.
+            self.active.hold_released = lifted
             self._finish(now, hold_achieved=False)
             return
         if self._hold_until is not None and now >= self._hold_until:
@@ -793,6 +882,7 @@ class ChordsMode:
         if trial is None:
             return
         self.active = None
+        self._hold_t0 = None
         self._hold_until = None
         n_targets = len(trial.targets)
         n_pressed = len(trial.onsets)
@@ -876,7 +966,12 @@ class ChordsMode:
             outcome = TrialResult(label="Miss", points=pts, rt_ms=None)
         else:
             pts = self.COMPLETION_POINTS
-            if together and w_ms > 0:
+            # The together bonus is forfeited when the hold broke: a
+            # chord that fell apart before hold_ms did not stay
+            # together, and paying full marks anyway is what made the
+            # old hold message read as nonsense next to a 10-point
+            # "Good".
+            if together and w_ms > 0 and hold_achieved is not False:
                 pts += int(round(self.TOGETHER_POINTS
                                  * (1.0 - span_ms / w_ms)))
             if not (max_leak_ratio is not None
@@ -955,25 +1050,55 @@ class ChordsMode:
             self._staircase(cls == "hit")
         self._advance(now, trial.kind)
 
+    def _finger_name(self, trial: PendingChordTrial, lane: int) -> str:
+        """The finger's name for feedback, hand-prefixed in bilateral
+        play so "Ring" can never mean the wrong hand."""
+        f = max(0, min(3, self._finger_of_lane(lane)))
+        name = FINGER_NAMES[f]
+        if self.bilateral:
+            return f"{trial.hand.title()} {name.lower()}"
+        return name
+
     def _feedback_text(self, trial: PendingChordTrial, cls: str,
                        over_force: bool, light: bool) -> str:
+        """Failure wording says the ACTION, never the mechanism: which
+        finger lifted, which landed late, which never landed. The old
+        "Hold it a beat longer" always arrived after the trial had
+        closed, so there was nothing to hold; the live ring now covers
+        the during-the-press half of that job."""
         if over_force:
             return "Too hard, press lighter"
         if cls == "hit":
             return ("Chord! *" if light and trial.kind == "chord"
                     else "Chord!")
         if cls == "late_chord":
-            return "Nearly together"
+            # Name the finger that closed the span.
+            if trial.onsets:
+                last = max(trial.onsets, key=lambda l: trial.onsets[l])
+                return (f"{self._finger_name(trial, last)} was late, "
+                        "press together")
+            return "Press together"
         if cls == "no_hold":
-            return "Hold it a beat longer"
+            lifted = list(trial.hold_released)
+            if len(lifted) == 1:
+                return (f"{self._finger_name(trial, lifted[0])} "
+                        "lifted too soon")
+            return "Released too soon"
         if cls == "leak_fail":
             quiet = [f for f in range(4) if f not in trial.fingers]
-            names = ("Index", "Middle", "Ring", "Pinky")
             if trial.incorrect_presses:
-                f = self._finger_of_lane(trial.incorrect_presses[0][0])
-                if 0 <= f <= 3:
-                    return f"{names[f]} leaked"
+                lane = trial.incorrect_presses[0][0]
+                return f"{self._finger_name(trial, lane)} leaked"
             return "Quiet fingers leaked" if quiet else "Leaked"
+        # partial: a target was missing when the trial timed out.
+        missing = [l for l in trial.targets if l not in trial.onsets]
+        if missing and all(l in trial.keys_pressed for l in missing):
+            # Every missing finger DID land at some point but lifted
+            # again before the chord formed: the failure is
+            # togetherness, not reach.
+            return "Press together and keep them down"
+        if len(missing) == 1:
+            return f"{self._finger_name(trial, missing[0])} never landed"
         return "Fingers missing"
 
     # ---- progression -------------------------------------------------------

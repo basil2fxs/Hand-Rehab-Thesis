@@ -381,12 +381,14 @@ game:
   timeout_s: 1.0
   early_window_s: 0.1
   total_trials: 40
-  # Pre-start "GET READY" countdown (seconds) shown before the first
-  # stim on the cadence modes (classic / adaptive / mirror). Gives the
-  # patient a moment to settle their hand on the device. Rhythm mode
-  # uses its own musical lead-in and ignores this. Test mode trims it
-  # to keep quick demos quick.
-  start_countdown_s: 5.0
+  # Pre-start "GET READY" countdown (seconds): the ONE prep every mode
+  # runs between pressing start and the game beginning. Gameplay-screen
+  # modes and syllables show the same card; rhythm welds the same
+  # seconds to the front of its note-fall timeline. Research gating
+  # rides inside it rather than stacking on it (chords accumulates its
+  # baseline-quiet clock during the card). Test mode trims it to keep
+  # quick demos quick.
+  start_countdown_s: 3.0
   # Test Mode is a supervisor-demo shortcut. When enabled, every block
   # (classic / adaptive / rhythm) is capped at test_mode_trials trials
   # so the full pipeline (mode select -> setup -> gameplay -> results)
@@ -618,8 +620,10 @@ reaction:
 pattern:
   # Patterns mode: the patient records "takes" of a piano riff, one
   # key lighting at a time, press it and the next follows half a
-  # second later. Hidden inside most takes is a repeating 12-note
-  # sequence; two takes per session secretly switch to unfamiliar
+  # second later. Hidden inside most takes is a repeating sequence: 12
+  # notes over one hand's four fingers, or 24 notes over all EIGHT
+  # fingers when Both hands is selected, with the hands cued equally
+  # every loop. Two takes per session secretly switch to unfamiliar
   # material, and how much the patient slows down on those is the
   # measurement. The research case for every number lives in
   # rehab/game/modes/pattern.py; this file says what the patient
@@ -629,7 +633,9 @@ pattern:
 
   # A take is 5 loops of the 12-note sequence = 60 presses, roughly a
   # minute. Ten takes plus the warm-up run 12 to 25 minutes depending
-  # on the patient's pace.
+  # on the patient's pace. With Both hands the loops are twice as
+  # long, so the mode halves this (5 -> 3 loops of 24 = 72 presses)
+  # to keep takes near the same length.
   soc_cycles_per_block: 5
   # Settling-in presses before the first take. Not analysed; they let
   # the hand find the keys and surface any calibration problem before
@@ -684,7 +690,10 @@ chords:
   # this file says what the patient experiences. One engine block is a
   # whole session: a few single-finger warm-up presses, five rounds of
   # chords with proper rests, then the same single-finger presses
-  # again to close. Light presses only, everywhere: the game never
+  # again to close. With Both hands selected each chord still sits
+  # within one hand, but the hands take turns with equal counts and
+  # the warm-up and closing presses run per hand, so both hands play
+  # the whole session. Light presses only, everywhere: the game never
   # rewards pressing harder, and pressing much harder than the
   # calibrated light press earns a "press lighter" prompt.
 
@@ -701,6 +710,9 @@ chords:
   # 30 ms, so even the floor here stays three times softer than that.
   sync_windows_ms: [250, 200, 150, 100]
   # Once the chord is together, all its fingers stay down this long.
+  # A ring fills on the held tiles while it runs, so the patient
+  # watches the hold complete rather than being told about it after
+  # the trial is over; a finger that lifts early is named on screen.
   # Kept short on purpose: holding a press makes the unwanted leak
   # onto other fingers grow, which is the opposite of the training
   # goal. Needs the sensors; the keyboard fallback skips the hold.
@@ -746,10 +758,12 @@ syllables:
   # Syllable Beats: a children's mode, unlike everything else in this
   # file. A word appears as big blocks, one block per beat; the blocks
   # light left to right while the matching finger buzzes and a tone
-  # plays, then the child taps the beats back on the sensors. The
-  # research case for every number lives in
-  # rehab/game/modes/syllables.py; this block says what the child
-  # experiences. Two cautions carried from that file: this trains
+  # plays, then the child taps the beats back on the sensors. With
+  # Both hands connected either hand's finger counts for its beat
+  # (there is no wrong hand in this mode) and the model's buzzes are
+  # shared equally between the hands. The research case for every
+  # number lives in rehab/game/modes/syllables.py; this block says
+  # what the child experiences. Two cautions carried from that file: this trains
   # sound skills in the game only, it is NOT a dyslexia treatment or
   # test and must never be described to a family as one; and the
   # hardware was scoped for adult rehabilitation, so using it with a

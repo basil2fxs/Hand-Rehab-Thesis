@@ -33,7 +33,17 @@ class RhythmMode:
         self._presses: deque[PressEvent] = deque()
         self._countdown_done = False
         self._t_start = time.perf_counter()
-        self._countdown_s = 3.0
+        # The ONE pre-play prep every mode runs, welded to the front of
+        # the note-fall timeline here (song_time counts up through it),
+        # reading the same key as the GET READY card on the other
+        # screens so a therapist changes the prep once for every mode.
+        try:
+            self._countdown_s = float(
+                engine.cfg.get("game.start_countdown_s", 3.0))
+        except (TypeError, ValueError):
+            # Test fixtures pass a MagicMock cfg.get; keep the shipped
+            # 3 s rather than crash the block start.
+            self._countdown_s = 3.0
         # Extra silent ramp AFTER the 3-2-1-GO countdown but BEFORE the
         # audio plays and the first beat is due. Falling notes slide
         # into view during this window so the patient gets a clear

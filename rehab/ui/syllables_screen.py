@@ -1,15 +1,40 @@
 """Syllable Beats screen. Words and syllable blocks are not a lane
 strip, so the mode gets its own screen instead of GameplayScreen.
 
-The layout is built for a child: the word appears as LARGE text cut
-into rounded syllable blocks, one block per beat, each block wearing
-its finger's colour (index orange, middle light blue, ring black,
-little yellow, the same fixed colours the lane tiles use everywhere
-else) so the block-to-finger mapping is taught by colour as well as by
-position and buzz. Blocks light left to right as the word is
-modelled, fill as taps land, and at feedback time an extra tap shows
-as an extra grey block while a missing one stays hollow, so count
-errors are visible with no text to read.
+The screen is built so that a seven year old, or the parent across
+the table, always knows two things without reading anything twice:
+whose turn it is, and why what just happened happened. Every phase
+announces itself with one big stage title and one short instruction:
+
+  WARM UP      tap along with the tick, any finger
+  LISTEN...    the word appears huge and is spoken once
+  WATCH        the blocks light in turn; hands off is said outright,
+               and in bilateral play a tag under the sounding block
+               names the hand carrying the buzz, so the buzz hopping
+               between hands is explained on screen as it happens
+  GET READY... paced levels count DOWN 4 3 2 1 to GO, so the ticks
+               the child waits through cannot be mistaken for the
+               ticks the child taps on
+  YOUR TURN!   the blocks drain to hollow outlines waiting to be
+               filled, a big GO! marks the start, and in bilateral
+               play a line says either hand counts
+  feedback     WONDERFUL! with a green swell on success; a kind SO
+               CLOSE! (or HAVE ANOTHER LOOK on no taps) naming the
+               one thing to change, then the replay demonstrates it
+
+Between words the screen never goes dead: the gap says the next word
+is coming. The model and the response also LOOK different, not just
+read different: model blocks are solid and light up, response blocks
+are hollow outlines that fill as taps land, so a beat to copy and a
+beat already copied cannot be confused.
+
+There is no finger row under the blocks. Keyboard key hints live in
+a small Controls note in the bottom corner, only when the input IS
+the keyboard; with the real sensors the child's fingers sit on the
+pads and a legend would only pull eyes away from the blocks. The
+block-to-finger mapping is taught where it matters: by the buzz on
+the finger while its block lights, and by the fixed finger colours
+the blocks wear everywhere else in the app.
 
 Letters and reading: the block text shows the word's own chunks at
 levels 1 to 5 because showing the word as text IS this build's visual
@@ -36,7 +61,7 @@ from typing import TYPE_CHECKING
 
 import pygame
 
-from ..game.modes._keys import keymap_for_hand, resolve_key
+from ..game.modes._keys import keymap_for_hand
 from .screens import ModeSelectScreen, Screen
 from .widgets import (
     FONT_BODY, FONT_H1, FONT_H2, FONT_SMALL, FONT_TITLE,
@@ -50,31 +75,27 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-FINGER_NAMES = ("Index", "Middle", "Ring", "Little")
-
-
-def _text_colour_for(fill: tuple[int, int, int],
-                     light: tuple[int, int, int],
-                     dark: tuple[int, int, int]) -> tuple[int, int, int]:
-    # Same luminance trick LaneStrip uses so the black ring block still
-    # carries readable text.
-    return dark if sum(fill) / 3 > 140 else light
-
-
 class SyllablesScreen(Screen):
 
     # Block row geometry. The row is centred; heights leave room for
-    # the message above and the finger row below.
+    # the stage title above and the GO! / count-down slot below.
     BLOCK_H = 150
     STRESS_EXTRA = 36          # stressed block drawn taller from L4 up
     BLOCK_GAP = 18
     BLOCK_MIN_W = 120
     EXTRA_W = 84               # the grey "you tapped one too many" block
     ROW_CY = 400               # vertical centre of the block row
+    TITLE_Y = 168              # stage title ("YOUR TURN!")
+    SUB_Y = 222                # one-line instruction under the title
+    HINT_Y = 258               # bilateral either-hand line
+    UNDER_Y = ROW_CY + 150     # GO! and the count-down number
+    # How long the GO! stays up at the start of the response phase
+    # when no tap has landed yet. Long enough to read, short enough
+    # that it is gone before the first paced beat needs the space.
+    GO_S = 0.7
 
     def __init__(self, engine: "GameEngine") -> None:
         super().__init__(engine)
-        self._held_keys: set[int] = set()
         # Animation trackers, all read-side: the mode stays the single
         # source of truth and the screen just notices changes.
         # Which block last lit during model/replay, and when, so the
@@ -88,6 +109,20 @@ class SyllablesScreen(Screen):
         # swell does not allocate a fresh surface per frame.
         self._glow_cache: pygame.Surface | None = None
         self._glow_key: tuple[int, int] | None = None
+        # Pre-start countdown, same contract as GameplayScreen: while
+        # perf_counter() is below this the GET READY card shows and the
+        # mode's update is held back, so the warm-up beat cannot start
+        # until the child has had the one 3 s prep every mode gets.
+        self._countdown_until = 0.0
+        self._dim_cache: pygame.Surface | None = None
+
+    def start_countdown(self, seconds: float) -> None:
+        """Begin the pre-start GET READY countdown. Called by the
+        engine when the block begins, exactly as on GameplayScreen."""
+        self._countdown_until = time.perf_counter() + max(0.0, seconds)
+
+    def _countdown_remaining(self) -> float:
+        return max(0.0, self._countdown_until - time.perf_counter())
 
     def _accent(self) -> tuple[int, int, int]:
         """Syllables pink from the mode picker, so the kids' screen
@@ -96,19 +131,14 @@ class SyllablesScreen(Screen):
             "syllables", self.theme.accent)
 
     def on_block_start(self) -> None:
-        # Fresh block: drop any keys latched from a previous visit,
-        # plus every animation tracker so nothing pops on frame one.
-        self._held_keys.clear()
+        # Fresh block: drop every animation tracker so nothing pops on
+        # frame one of a new visit.
         self._last_model_idx = -1
         self._last_tap_count = 0
         self._tap_pops.clear()
 
     # ---- events ------------------------------------------------------------
     def handle_event(self, e: pygame.event.Event) -> None:
-        if e.type == pygame.KEYDOWN:
-            self._held_keys.add(e.key)
-        elif e.type == pygame.KEYUP:
-            self._held_keys.discard(e.key)
         if self.engine.paused:
             # The engine only gates input for the screens it knows run
             # blocks; belt and braces here so a press during the pause
@@ -120,8 +150,100 @@ class SyllablesScreen(Screen):
     def update(self, dt: float) -> None:
         if self.engine.paused:
             return
-        if self.engine.mode and hasattr(self.engine.mode, "update"):
+        # Hold the mode back while the GET READY countdown runs, same
+        # as GameplayScreen, so the warm-up's first beat lands the
+        # instant the card clears rather than under it.
+        if (self.engine.mode and hasattr(self.engine.mode, "update")
+                and self._countdown_remaining() <= 0):
             self.engine.mode.update(dt)
+
+    # ---- stage copy --------------------------------------------------------
+    # One title, one instruction, one colour per phase. The title is
+    # the single focal announcement; a child who reads nothing else
+    # still gets whose turn it is from the colour and the size.
+    ERROR_SUBS = {
+        "extra_tap": "One tap too many. See the grey block.",
+        "missing_tap": "One beat is still empty.",
+        "wrong_order": "Start from the first finger.",
+        "off_beat": "Try to land right on the tick.",
+        "wrong_stress": "Press the tall block harder.",
+    }
+
+    def _stage(self, mode) -> tuple[str, str, str]:
+        """(title, instruction, colour name) for the current phase.
+        Colour names resolve through _stage_colour so the copy can be
+        unit-tested without a display."""
+        phase = mode.phase
+        if phase == "warmup":
+            return ("WARM UP", "Tap along with the tick. Any finger.",
+                    "accent")
+        if phase == "attend":
+            return ("LISTEN...", "How many beats does it have?", "accent")
+        if phase == "model":
+            return ("WATCH", "Hands off. See and feel how it taps.",
+                    "accent")
+        if phase == "replay":
+            return ("WATCH AGAIN", "See how it goes. Next word after this.",
+                    "warning")
+        if phase == "countin":
+            return ("GET READY...", "Start tapping on GO. One tap each tick.",
+                    "accent")
+        if phase == "respond":
+            if mode.paced:
+                sub = "Tap with the ticks."
+            elif mode.order_required:
+                sub = "Tap the beats. First finger first."
+            else:
+                sub = "Tap once for every beat."
+            return ("YOUR TURN!", sub, "success")
+        if phase == "feedback":
+            res = mode._last_result or {}
+            if res.get("correct"):
+                return ("WONDERFUL!", "", "success")
+            err = res.get("error", "")
+            if err == "timeout":
+                # Nothing landed, so "so close" would be untrue. Kind
+                # and plain instead, and the replay follows.
+                return ("HAVE ANOTHER LOOK",
+                        "No rush. Watch how it goes.", "warning")
+            return ("SO CLOSE!",
+                    self.ERROR_SUBS.get(err, "Watch once more."), "warning")
+        if phase == "break":
+            hands = "hands" if getattr(mode, "bilateral", False) else "hand"
+            return ("REST TIME",
+                    f"Round {mode.words_done // mode.round_size} done! "
+                    f"Shake your {hands} out.", "foreground")
+        return ("", "", "muted")
+
+    def _either_hand_line(self, mode) -> str:
+        """The bilateral promise, said where the child acts on it."""
+        if getattr(mode, "bilateral", False) and mode.phase in (
+                "countin", "respond"):
+            return "Left or right: either hand counts."
+        return ""
+
+    def _stage_colour(self, name: str) -> tuple[int, int, int]:
+        if name == "accent":
+            return self._accent()
+        return getattr(self.theme, name, self.theme.foreground)
+
+    def _draw_header(self, surf: pygame.Surface, mode) -> None:
+        title, sub, colour = self._stage(mode)
+        if not title:
+            return
+        cx = self.layout.width // 2
+        draw_text(surf, title, (cx, self.TITLE_Y), self.theme, self.layout,
+                  pt=FONT_H1 + 12, centre=True,
+                  colour=self._stage_colour(colour))
+        if sub:
+            draw_text(surf, sub, (cx, self.SUB_Y), self.theme, self.layout,
+                      pt=FONT_BODY + 2, centre=True,
+                      colour=self.theme.muted)
+        hint = self._either_hand_line(mode)
+        if hint:
+            draw_text(surf, hint, (cx, self.HINT_Y), self.theme,
+                      self.layout, pt=FONT_BODY, centre=True,
+                      colour=self._accent())
 
     # ---- draw --------------------------------------------------------------
     def draw(self, surf: pygame.Surface) -> None:
@@ -137,18 +259,65 @@ class SyllablesScreen(Screen):
         self._draw_top(surf, mode)
         phase = mode.phase
         if phase == "warmup":
+            self._draw_header(surf, mode)
             self._draw_warmup(surf, mode, now)
         elif phase == "break":
+            self._draw_header(surf, mode)
             self._draw_break(surf, mode, now)
+        elif phase == "gap":
+            self._draw_gap(surf, mode, now)
         elif phase == "done":
             pass
         else:
             self._draw_word_trial(surf, mode, now)
-        self._draw_finger_row(surf, mode)
+        self._draw_controls_note(surf, mode)
+        remaining = self._countdown_remaining()
+        if remaining > 0:
+            self._draw_countdown_card(surf, remaining)
         if self.engine.paused:
             self._draw_paused_overlay(surf)
 
+    def _draw_countdown_card(self, surf: pygame.Surface,
+                             remaining: float) -> None:
+        """GET READY card matching GameplayScreen's, in this mode's
+        pink, so the pre-start moment looks the same on every screen."""
+        if (self._dim_cache is None
+                or self._dim_cache.get_size() != surf.get_size()):
+            self._dim_cache = pygame.Surface(surf.get_size(),
+                                             pygame.SRCALPHA)
+            self._dim_cache.fill((0, 0, 0, 60))
+        surf.blit(self._dim_cache, (0, 0))
+        accent = self._accent()
+        card_rect = pygame.Rect(0, 0, 420, 240)
+        card_rect.center = (self.layout.width // 2,
+                            self.layout.height // 2)
+        fill_surf = pygame.Surface(card_rect.size, pygame.SRCALPHA)
+        pygame.draw.rect(fill_surf, (*self.theme.background, 245),
+                         fill_surf.get_rect(), border_radius=22)
+        pygame.draw.rect(fill_surf, (*accent, 150),
+                         fill_surf.get_rect(), 3, border_radius=22)
+        surf.blit(fill_surf, card_rect.topleft)
+        draw_text(surf, "GET READY",
+                  (card_rect.centerx, card_rect.y + 56),
+                  self.theme, self.layout, pt=FONT_H1,
+                  centre=True, colour=self.theme.muted)
+        draw_text(surf, f"{remaining:.1f}",
+                  (card_rect.centerx, card_rect.y + 156),
+                  self.theme, self.layout, pt=140,
+                  centre=True, colour=accent)
+
     # ---- top strip ---------------------------------------------------------
+    def _top_label(self, mode) -> str:
+        """What the top-left counter says. During the warm-up and the
+        rest no word is in play, and saying "Word 1 of 50" then would
+        be a counter moving for no visible reason."""
+        if mode.phase == "warmup":
+            return "Warm up"
+        if mode.phase == "break":
+            return "Rest"
+        done, total = mode.words_done, mode.words_total
+        return f"Word {min(done + 1, total)} of {total}"
+
     def _draw_top(self, surf: pygame.Surface, mode) -> None:
         # Slim progress bar, same visual language as GameplayScreen.
         done, total = mode.words_done, mode.words_total
@@ -165,7 +334,7 @@ class SyllablesScreen(Screen):
             pygame.draw.rect(fill, (*self._accent(), 220),
                              fill.get_rect(), border_radius=bar_h // 2)
             surf.blit(fill, (pad, bar_y))
-        draw_text(surf, f"Word {min(done + 1, total)} of {total}",
+        draw_text(surf, self._top_label(mode),
                   (pad, 34), self.theme, self.layout, pt=FONT_SMALL,
                   colour=self.theme.muted)
         draw_text(surf, f"Level {mode.level}   Band {mode.band}",
@@ -192,12 +361,6 @@ class SyllablesScreen(Screen):
     # ---- warm-up -----------------------------------------------------------
     def _draw_warmup(self, surf: pygame.Surface, mode, now: float) -> None:
         cx = self.layout.width // 2
-        draw_text(surf, "Tap along with the beat!",
-                  (cx, 180), self.theme, self.layout, pt=FONT_H1,
-                  centre=True)
-        draw_text(surf, "Any finger. One tap for every tick.",
-                  (cx, 230), self.theme, self.layout, pt=FONT_BODY,
-                  centre=True, colour=self.theme.muted)
         # A circle that swells on each beat: the visual is a helper,
         # the metronome tick is the timing reference. Pink, like the
         # rest of the mode's identity colour.
@@ -216,15 +379,12 @@ class SyllablesScreen(Screen):
     # ---- break -------------------------------------------------------------
     def _draw_break(self, surf: pygame.Surface, mode, now: float) -> None:
         cx = self.layout.width // 2
-        draw_text(surf, "Great tapping! Shake your hand out.",
-                  (cx, 220), self.theme, self.layout, pt=FONT_H1,
-                  centre=True)
         left = 0
         if mode._phase_until is not None:
             left = max(0, int(math.ceil(mode._phase_until - now)))
         draw_text(surf, f"Next round in {left}",
-                  (cx, 280), self.theme, self.layout, pt=FONT_H2,
-                  centre=True, colour=self.theme.muted)
+                  (cx, self.HINT_Y + 28), self.theme, self.layout,
+                  pt=FONT_H2, centre=True, colour=self.theme.muted)
         # Four little blocks bobbing gently in the finger colours, a
         # calm animation rather than anything to respond to.
         for i in range(4):
@@ -234,6 +394,22 @@ class SyllablesScreen(Screen):
             pygame.draw.rect(surf, self.theme.lane_active[i], rect,
                              border_radius=16)
 
+    # ---- between words -----------------------------------------------------
+    def _draw_gap(self, surf: pygame.Surface, mode, now: float) -> None:
+        """The inter-trial gap used to be a dead screen: top strip,
+        finger row, nothing else, for most of a second. A child (or a
+        parent) staring at a blank screen cannot tell if the game
+        stalled. Now the gap says what is coming."""
+        cx = self.layout.width // 2
+        nxt = min(mode.words_done + 1, mode.words_total)
+        draw_text(surf, f"Here comes word {nxt}...",
+                  (cx, self.ROW_CY - 30), self.theme, self.layout,
+                  pt=FONT_H1, centre=True, colour=self.theme.muted)
+        # A slow breathing dot, so the screen visibly lives while the
+        # word loads. One cycle per second, far under the flash limit.
+        r = 12 + int(5 * math.sin(now * math.pi))
+        pygame.draw.circle(surf, self._accent(), (cx, self.ROW_CY + 60), r)
+
     # ---- the word and its blocks -------------------------------------------
     def _draw_word_trial(self, surf: pygame.Surface, mode,
                          now: float) -> None:
@@ -242,22 +418,7 @@ class SyllablesScreen(Screen):
             return
         cx = self.layout.width // 2
         phase = mode.phase
-        # Message line above the blocks: short, kind, phase-driven.
-        # At feedback time the title takes the outcome colour (green
-        # for a win, warm amber for "so close") so the moment lands
-        # for a child before any word is read.
-        msg, sub = self._messages(mode)
-        title_colour = self.theme.foreground
-        if phase == "feedback":
-            res = mode._last_result or {}
-            title_colour = (self.theme.success if res.get("correct")
-                            else self.theme.warning)
-        draw_text(surf, msg, (cx, 170), self.theme, self.layout,
-                  pt=FONT_H1, centre=True, colour=title_colour)
-        if sub:
-            draw_text(surf, sub, (cx, 218), self.theme, self.layout,
-                      pt=FONT_BODY, centre=True, colour=self.theme.muted)
-
+        self._draw_header(surf, mode)
         if phase == "attend":
             # The whole word, huge, while it is (possibly) spoken.
             font = make_font(int(FONT_TITLE * 1.6), bold=True)
@@ -267,37 +428,8 @@ class SyllablesScreen(Screen):
         self._draw_blocks(surf, mode, now)
         if phase == "countin":
             self._draw_countin(surf, mode, now)
-
-    def _messages(self, mode) -> tuple[str, str]:
-        phase = mode.phase
-        if phase == "attend":
-            return "Listen...", "How many beats can you hear?"
-        if phase == "model":
-            return "Watch and feel", "Each block is one beat"
-        if phase == "replay":
-            return "Watch once more", "Then the next word comes"
-        if phase == "countin":
-            return "Get ready...", "Tap one beat per tick"
-        if phase == "respond":
-            if mode.paced:
-                return "Your turn!", "Tap the beats in time"
-            if mode.order_required:
-                return "Your turn!", "Tap the beats, first finger first"
-            return "Your turn!", "Tap once for every beat"
-        if phase == "feedback":
-            res = mode._last_result or {}
-            if res.get("correct"):
-                return "Wonderful!", ""
-            err = res.get("error", "")
-            return "So close!", {
-                "extra_tap": "One tap too many, see the grey block",
-                "missing_tap": "A beat is still empty",
-                "wrong_order": "Try starting from the first finger",
-                "off_beat": "Try to land right on the tick",
-                "wrong_stress": "Press the tall block harder",
-                "timeout": "Have a try next time, no rush",
-            }.get(err, "Watch once more")
-        return "", ""
+        elif phase == "respond":
+            self._draw_go(surf, mode, now)
 
     def _block_rects(self, mode) -> list[pygame.Rect]:
         """One rect per expected unit, centred as a row. The stressed
@@ -336,6 +468,13 @@ class SyllablesScreen(Screen):
         res = mode._last_result or {}
         n_taps = len(mode.taps)
         feedback_ok = phase == "feedback" and res.get("correct")
+        # The response phase draws WAITING blocks as hollow outlines
+        # that fill solid as taps land, so "a beat to copy" (solid,
+        # lighting up in the model) and "a beat waiting for you" can
+        # never be confused. The count-in shows the same hollow row:
+        # it belongs to the child's turn, the blocks are already
+        # theirs to fill.
+        waiting_style = phase in ("respond", "countin")
         # One slow swell over the whole feedback window; a single
         # pulse, not a flash.
         swell = 0.0
@@ -388,6 +527,7 @@ class SyllablesScreen(Screen):
             surf.blit(self._glow_cache,
                       ((row_left + row_right) // 2 - glow_w // 2,
                        self.ROW_CY - glow_h // 2))
+        lit_rect: pygame.Rect | None = None
         for i, (u, rect) in enumerate(zip(units, rects)):
             finger = i % 4
             lit = (phase in ("model", "replay")
@@ -397,6 +537,8 @@ class SyllablesScreen(Screen):
             if lit and self._model_lit_t > 0:
                 b_frac = min(1.0, (now - self._model_lit_t) / 0.4)
                 rect = rect.move(0, -int(16 * math.sin(b_frac * math.pi)))
+            if lit:
+                lit_rect = rect
             # A fresh tap pops its block outward for a beat.
             for pi, pt0 in self._tap_pops:
                 if pi == i:
@@ -418,6 +560,22 @@ class SyllablesScreen(Screen):
                 pygame.draw.rect(surf, self.theme.muted, rect, 4,
                                  border_radius=22)
                 fill = self.theme.background
+            elif waiting_style and not filled:
+                # Waiting to be tapped: an empty outline in the
+                # finger's colour. The next paced beat pulses its
+                # outline so the child sees which block is due when.
+                width = 4
+                r = rect
+                if (phase == "respond" and mode.paced
+                        and i == n_taps and mode._beat_times):
+                    ph = ((now - mode._respond_t0) % mode.ioi_s
+                          ) / mode.ioi_s if mode._respond_t0 else 0.0
+                    r = rect.inflate(int(10 * math.exp(-3.0 * ph)),
+                                     int(10 * math.exp(-3.0 * ph)))
+                    width = 6
+                pygame.draw.rect(surf, self.theme.lane_active[finger],
+                                 r, width, border_radius=22)
+                fill = self.theme.background
             else:
                 fill = (self.theme.lane_active[finger]
                         if (lit or filled)
@@ -430,8 +588,10 @@ class SyllablesScreen(Screen):
             # Block text: the chunk itself, except level 6 shows a dot
             # until the graphemes earn their fade-in on success.
             if mode.level == 6 and not feedback_ok:
-                dot = _text_colour_for(fill, (255, 255, 255),
-                                       self.theme.foreground)
+                dot = (self.theme.lane_active[finger]
+                       if fill == self.theme.background
+                       else _text_colour_for(fill, (255, 255, 255),
+                                             self.theme.foreground))
                 pygame.draw.circle(surf, dot, rect.center, 10)
             else:
                 font = make_font(int(FONT_TITLE * 1.1), bold=True)
@@ -447,6 +607,13 @@ class SyllablesScreen(Screen):
             if phase == "feedback" and filled and not hollow:
                 pygame.draw.circle(surf, self.theme.success,
                                    (rect.centerx, rect.bottom + 20), 7)
+        # In bilateral play, name the hand carrying the buzz under the
+        # sounding block, as it sounds: the buzz hops between hands on
+        # purpose (both hands get modelled equally) and the hop should
+        # be explained on screen the moment it happens.
+        if (lit_rect is not None and getattr(mode, "bilateral", False)
+                and getattr(mode, "model_hand", None)):
+            self._draw_hand_tag(surf, lit_rect, mode.model_hand)
         # Extra taps: one grey block per surplus tap, appended to the
         # row, so "too many" is visible without words.
         extra = 0
@@ -463,106 +630,97 @@ class SyllablesScreen(Screen):
                                  border_radius=18)
                 x += self.EXTRA_W + self.BLOCK_GAP
 
+    def _draw_hand_tag(self, surf: pygame.Surface, rect: pygame.Rect,
+                       hand: str) -> None:
+        label = f"{hand.upper()} HAND"
+        pf = self.layout.font(FONT_SMALL + 2)
+        text = pf.render(label, True, (255, 255, 255))
+        pill = pygame.Rect(0, 0, text.get_width() + 22,
+                           text.get_height() + 8)
+        pill.center = (rect.centerx, rect.bottom + 34)
+        pygame.draw.rect(surf, self._accent(), pill,
+                         border_radius=pill.height // 2)
+        surf.blit(text, text.get_rect(center=pill.center))
+
+    # ---- count-down and GO -------------------------------------------------
+    def countin_remaining(self, mode, now: float) -> int:
+        """Ticks left before the child's first beat, counting DOWN.
+        The old display counted up 1 2 3 4 with no endpoint on
+        screen, so a waiting tick was indistinguishable from a
+        tapping tick until too late."""
+        if mode._phase_t0 is None or mode.count_in_beats <= 0:
+            return 0
+        elapsed = int((now - mode._phase_t0) / mode.ioi_s)
+        return max(1, min(mode.count_in_beats,
+                          mode.count_in_beats - elapsed))
+
     def _draw_countin(self, surf: pygame.Surface, mode,
                       now: float) -> None:
-        # Big count number under the blocks, stepping with the ticks.
-        if mode._phase_t0 is None or mode.count_in_beats <= 0:
+        left = self.countin_remaining(mode, now)
+        if left <= 0:
             return
-        beat = int((now - mode._phase_t0) / mode.ioi_s) + 1
-        beat = max(1, min(mode.count_in_beats, beat))
-        draw_text(surf, str(beat),
-                  (self.layout.width // 2, self.ROW_CY + 140),
+        draw_text(surf, str(left),
+                  (self.layout.width // 2, self.UNDER_Y),
                   self.theme, self.layout, pt=FONT_TITLE + 10,
                   centre=True, colour=self._accent())
 
-    # ---- finger row --------------------------------------------------------
-    def _finger_tiles(self, mode) -> list[tuple[str, int, int]]:
-        """(hand, finger, lane) per tile, in on-screen order. Each
-        hand's tiles mirror the physical hand: the LEFT hand reads
-        little to index (matching a s d f), the right index to little
-        (matching j k l ;), and with both hands the left block sits on
-        the left of the screen, same convention as the lane strips."""
+    def _draw_go(self, surf: pygame.Surface, mode, now: float) -> None:
+        """A big green GO! the instant the response phase opens, gone
+        as soon as the first tap lands. The count-down promises GO,
+        so GO must actually appear, or the child is left waiting for
+        a starting gun that never fires."""
+        if mode.taps or mode._respond_t0 is None:
+            return
+        if now - mode._respond_t0 > self.GO_S:
+            return
+        draw_text(surf, "GO!",
+                  (self.layout.width // 2, self.UNDER_Y),
+                  self.theme, self.layout, pt=FONT_TITLE + 10,
+                  centre=True, colour=self.theme.success)
+
+    # ---- corner controls note ----------------------------------------------
+    def controls_lines(self, mode) -> list[str]:
+        """Keyboard hints for the corner note, one line per playing
+        hand, in keyboard reading order. Empty when the input is the
+        real sensors: fingers sit on the pads, a legend would only
+        pull the child's eyes off the blocks."""
+        source = getattr(self.engine, "source", None)
+        if source is None or getattr(source, "provides_samples", True):
+            return []
+        km = self.engine.cfg.get(
+            keymap_for_hand(self.engine.hand_mode), {})
+        if not km:
+            return []
+        by_lane = {lane: key for key, lane in km.items()}
         hands = getattr(mode, "hands", None)
         if not isinstance(hands, dict) or not hands:
-            hands = {self.engine.hand_mode
-                     if self.engine.hand_mode in ("left", "right")
-                     else "right": list(getattr(mode, "lanes",
-                                                [0, 1, 2, 3]))}
-        out: list[tuple[str, int, int]] = []
+            hands = {"right": list(getattr(mode, "lanes", [0, 1, 2, 3]))}
+        lines: list[str] = []
         for hand in ("left", "right"):
             lanes = hands.get(hand)
             if not lanes:
                 continue
-            order = (range(len(lanes) - 1, -1, -1) if hand == "left"
-                     else range(len(lanes)))
-            for f in order:
-                out.append((hand, f, lanes[f]))
-        return out
+            # Left hand reads right-to-left on the keyboard (a s d f is
+            # little to index), so reverse it into reading order.
+            order = list(reversed(lanes)) if hand == "left" else list(lanes)
+            keys = [by_lane.get(lane, "?") for lane in order]
+            keys = [k.replace("semicolon", ";").upper() for k in keys]
+            lines.append(f"{hand.capitalize()} hand: {' '.join(keys)}")
+        return lines
 
-    def _draw_finger_row(self, surf: pygame.Surface, mode) -> None:
-        """Small tiles along the bottom in the finger colours, lighting
-        while that finger is down, so the child can always see which
-        finger is which without a lane strip. One block per playing
-        hand, each mirrored to match the physical hand, so with both
-        hands connected all eight fingers are on screen."""
-        tiles = self._finger_tiles(mode)
-        n = len(tiles)
-        if n == 0:
+    def _draw_controls_note(self, surf: pygame.Surface, mode) -> None:
+        lines = self.controls_lines(mode)
+        if not lines:
             return
-        gap = 20 if n <= 4 else 12
-        tile_w = 150 if n <= 4 else 118
-        tile_h = 64
-        # Extra space between the two hand blocks so they read apart.
-        block_gap = 44 if n > 4 else 0
-        total = tile_w * n + gap * (n - 1) + block_gap
-        x = self.layout.width // 2 - total // 2
-        y = self.layout.height - 110
-        km = self.engine.cfg.get(keymap_for_hand(self.engine.hand_mode), {})
-        prev_hand: str | None = None
-        for hand, finger, lane in tiles:
-            if prev_hand is not None and hand != prev_hand:
-                x += block_gap
-            prev_hand = hand
-            pressed = self._lane_down(lane, km)
-            fill = (self.theme.lane_active[finger] if pressed
-                    else self.theme.lane_idle[finger])
-            rect = pygame.Rect(x, y, tile_w, tile_h)
-            pygame.draw.rect(surf, fill, rect, border_radius=14)
-            colour = _text_colour_for(fill, (255, 255, 255),
-                                      self.theme.foreground)
-            draw_text(surf, FINGER_NAMES[finger],
-                      (rect.centerx, rect.centery - 10), self.theme,
-                      self.layout, pt=FONT_BODY, centre=True,
-                      colour=colour)
-            key_label = next((k for k, ln in km.items() if ln == lane), "")
-            if key_label:
-                draw_text(surf, key_label.replace("semicolon", ";"),
-                          (rect.centerx, rect.centery + 16), self.theme,
-                          self.layout, pt=FONT_SMALL, centre=True,
-                          colour=colour)
-            x += tile_w + gap
-
-    def _lane_down(self, lane: int, km: dict) -> bool:
-        # Keyboard: any bound key currently held. FSR: the detector's
-        # live pressed state, same source the lane strips use.
-        for key_name, lane_idx in km.items():
-            if lane_idx != lane:
-                continue
-            kc = resolve_key(key_name)
-            if kc is not None and kc in self._held_keys:
-                return True
-        resolved = getattr(self.engine, "_resolve_lane_to_detector", None)
-        if callable(resolved):
-            mapped = resolved(lane)
-            if mapped:
-                hand, idx = mapped
-                det = self.engine.detectors.get(hand)
-                if det is not None:
-                    try:
-                        return bool(det.pressed[idx])
-                    except (IndexError, TypeError):
-                        return False
-        return False
+        pf = self.layout.font(FONT_SMALL)
+        right = self.layout.width - 24
+        y = self.layout.height - 22 - 18 * len(lines)
+        head = pf.render("Controls", True, self.theme.muted)
+        surf.blit(head, head.get_rect(topright=(right, y - 20)))
+        for line in lines:
+            t = pf.render(line, True, self.theme.muted)
+            surf.blit(t, t.get_rect(topright=(right, y)))
+            y += 18
 
     # ---- paused ------------------------------------------------------------
     def _draw_paused_overlay(self, surf: pygame.Surface) -> None:
@@ -575,3 +733,11 @@ class SyllablesScreen(Screen):
                   (self.layout.width // 2, self.layout.height // 2 - 30),
                   self.theme, self.layout, pt=FONT_TITLE + 20, centre=True,
                   colour=self.theme.warning)
+
+
+def _text_colour_for(fill: tuple[int, int, int],
+                     light: tuple[int, int, int],
+                     dark: tuple[int, int, int]) -> tuple[int, int, int]:
+    # Same luminance trick LaneStrip uses so the black ring block still
+    # carries readable text.
+    return dark if sum(fill) / 3 > 140 else light
