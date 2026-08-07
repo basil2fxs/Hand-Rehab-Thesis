@@ -57,6 +57,8 @@ class TestColumnsTheNotebookNeeds:
         ("timeout_ms", "the response window"),
         ("phase", "pretest against aftertest"),
         ("hand", "left against right"),
+        ("stimulus", "the packed per-trial detail of the newer modes"),
+        ("pattern_trial", "trained against probe trials in pattern mode"),
     ]
 
     @pytest.mark.parametrize("column,why", REQUIRED)
