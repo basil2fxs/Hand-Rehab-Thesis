@@ -57,6 +57,10 @@ CUE_ROWS: tuple[tuple[str | None, str, str], ...] = (
         ("cue.sound_after", "Cue Sound after press",
          "A chime confirms a correct press. Off also silences the "
          "thunk that a miss makes, so nothing is heard after a press."),
+        # Note row, not a switch: in Buzz Hunt the buzz IS the
+        # stimulus, so its pulses ignore the before-press switches by
+        # design (the after-press switches still apply there).
+        (None, "Buzz Hunt stimuli skip Before cues", ""),
 )
 
 
@@ -183,7 +187,8 @@ class TitleScreen(Screen):
         "      Rhythm  (one full song, press on the beat)",
         "      Mirror  (40 trials, both hands together)",
         "3. Training modes as prescribed for the participant:",
-        "      Patterns, Chords, Syllables (each logs the same way)",
+        "      Patterns, Chords, Syllables, Force Pilot, Lighthouse,",
+        "      Buzz Hunt",
         "4. Finish every block. Quitting early leaves gaps in the data.",
     ]
     INFO_FOOTER = ("The four core blocks give the comparable data; the "
@@ -613,6 +618,12 @@ class ModeSelectScreen(Screen):
          "Tap the beats inside words. Sound skills."),
         ("mirror", "Mirror",
          "Both hands, same finger, together."),
+        ("force_pilot", "Force Pilot",
+         "Fly a corridor with finger force. Control."),
+        ("lighthouse", "Lighthouse",
+         "Keep a lantern lit with a steady hold. Feel."),
+        ("buzz_hunt", "Buzz Hunt",
+         "Press the finger that buzzed. Sensation."),
     ]
     # Per-mode accent colours. The vertical strip on the left of each
     # card uses these, plus the icon takes the same colour as a subtle
@@ -629,23 +640,32 @@ class ModeSelectScreen(Screen):
         "pattern":  (245, 158, 11),   # amber - "a path forming"
         "chords":   (14, 165, 233),   # sky blue - "keys together"
         "syllables": (236, 72, 153),  # pink - "language, playful"
+        "force_pilot": (132, 204, 22),  # lime - "altitude, lift"
+        # Warm lantern gold, kept gentle on purpose: the mode itself
+        # is calm and low-force, so its accent must not shout.
+        "lighthouse": (214, 158, 46),
+        # Orange for the buzz: warm and tactile, and the only strong
+        # orange on the grid so the tenth card reads distinct.
+        "buzz_hunt": (249, 115, 22),
     }
 
     def __init__(self, engine: "GameEngine") -> None:
         super().__init__(engine)
         self.buttons: list[Button] = []
         cx = engine.layout.width // 2
-        # Seven cards. One column fitted four; this is a two-column
-        # grid, filled left to right so the reading order matches the
-        # MODES order.
+        # A two-column grid, filled left to right so the reading order
+        # matches the MODES order. Sized for TEN cards (five rows):
+        # rows end at y = 645, clear of the back button at 710, so the
+        # remaining research modes can land here without another
+        # layout pass.
         card_w = 590
-        card_h = 96
-        gap = 16
+        card_h = 80
+        gap = 12
         for i, (key, _title, _desc) in enumerate(self.MODES):
             col = i % 2
             row = i // 2
             x0 = cx - card_w - gap // 2 + col * (card_w + gap)
-            y = 195 + row * (card_h + gap)
+            y = 185 + row * (card_h + gap)
             # Each card gets a softened tint of its own mode accent
             # as its rest fill, so the row reads as three clearly
             # different cards instead of three identical muted-grey
@@ -816,6 +836,45 @@ class ModeSelectScreen(Screen):
             for c in (left_c, right_c):
                 pygame.draw.circle(surf, colour, c, r)
                 pygame.draw.circle(surf, colour, c, r + 4, 2)
+        elif kind == "force_pilot":
+            # A craft between two corridor walls: force as altitude.
+            off = size // 3
+            for sign in (-1, 1):
+                pts = [(cx - size // 2, cy + sign * off),
+                       (cx - size // 8, cy + sign * (off + size // 9)),
+                       (cx + size // 4, cy + sign * (off - size // 9)),
+                       (cx + size // 2, cy + sign * off)]
+                pygame.draw.lines(surf, colour, False, pts, 3)
+            tri = [(cx - size // 5, cy - size // 8),
+                   (cx - size // 5, cy + size // 8),
+                   (cx + size // 4, cy)]
+            pygame.draw.polygon(surf, colour, tri)
+        elif kind == "lighthouse":
+            # A lantern: glass box with a teardrop flame inside.
+            box = pygame.Rect(0, 0, size * 2 // 3, size * 3 // 4)
+            box.center = (cx, cy + size // 12)
+            pygame.draw.rect(surf, colour, box, 2, border_radius=4)
+            pygame.draw.line(surf, colour,
+                             (box.left + 4, box.top - size // 6),
+                             (box.right - 4, box.top - size // 6), 2)
+            pygame.draw.line(surf, colour, (cx, box.top - size // 6),
+                             (cx, box.top), 2)
+            flame = [(cx, box.centery - size // 4),
+                     (cx + size // 8, box.centery + size // 12),
+                     (cx, box.centery + size // 5),
+                     (cx - size // 8, box.centery + size // 12)]
+            pygame.draw.polygon(surf, colour, flame)
+        elif kind == "buzz_hunt":
+            # A dot with vibration ripples either side: the buzz as
+            # the thing itself, not a decoration on a tile.
+            pygame.draw.circle(surf, colour, (cx, cy), size // 6)
+            for i, r in enumerate((size // 3, size // 2)):
+                arc = pygame.Rect(0, 0, r * 2, r * 2)
+                arc.center = (cx, cy)
+                span = 0.9 - i * 0.15
+                pygame.draw.arc(surf, colour, arc, -span, span, 2)
+                pygame.draw.arc(surf, colour, arc, 3.14159 - span,
+                                3.14159 + span, 2)
 
     def draw(self, surf: pygame.Surface) -> None:
         surf.fill(self.theme.background)
@@ -842,22 +901,22 @@ class ModeSelectScreen(Screen):
             fg = self.theme.foreground
             muted_fg = self.theme.foreground
             # Mode icon, in the mode's accent colour so the colour cue
-            # repeats. Larger than before so it carries the card.
-            icon_size = 44
-            icon_cx = b.rect.x + 52
+            # repeats. Sized to the ten-card row height.
+            icon_size = 40
+            icon_cx = b.rect.x + 50
             icon_cy = b.rect.centery
             self._draw_mode_icon(surf, key, icon_cx, icon_cy,
                                   icon_size, accent)
             # Title rendered bold via SysFont so it pops as the card's
             # primary affordance. Description follows in regular weight.
-            text_x = b.rect.x + 96
+            text_x = b.rect.x + 92
             title_pt = int((FONT_H2 + 2) * self.layout.font_scale)
             title_font = make_font(title_pt, bold=True)
             title_surf = title_font.render(title, True, fg)
             surf.blit(title_surf,
                        title_surf.get_rect(
-                           midleft=(text_x, b.rect.centery - 18)))
-            draw_text(surf, desc, (text_x, b.rect.centery + 14),
+                           midleft=(text_x, b.rect.centery - 15)))
+            draw_text(surf, desc, (text_x, b.rect.centery + 4),
                       self.theme, self.layout, pt=FONT_BODY,
                       centre=False, colour=muted_fg)
         self.back_btn.draw(surf)
@@ -962,6 +1021,12 @@ class SetupScreen(Screen):
             self.engine.begin_chords_block()
         elif mode == "syllables":
             self.engine.begin_syllables_block()
+        elif mode == "force_pilot":
+            self.engine.begin_force_pilot_block()
+        elif mode == "lighthouse":
+            self.engine.begin_lighthouse_block()
+        elif mode == "buzz_hunt":
+            self.engine.begin_buzz_hunt_block()
         else:
             self.engine.begin_adaptive_block()
 
@@ -3390,6 +3455,89 @@ class ResultsScreen(Screen):
             return self.theme.warning
         return self.theme.error
 
+    def _force_pilot_summary(self) -> dict | None:
+        """The force_pilot section of the block summary, or None for
+        every other mode. Read from session.block_summary (written at
+        finish_block) so the screen does not re-run mode scoring per
+        frame; falls back to the live mode's stats for a results view
+        drawn before the summary landed."""
+        if str(getattr(self.engine, "current_block", "")) != "force_pilot":
+            return None
+        summary = getattr(getattr(self.engine, "session", None),
+                          "block_summary", None)
+        if isinstance(summary, dict):
+            fp = summary.get("force_pilot")
+            if isinstance(fp, dict):
+                return fp
+        stats_fn = getattr(getattr(self.engine, "mode", None),
+                           "block_stats", None)
+        if callable(stats_fn):
+            try:
+                fp = stats_fn()
+                return fp if isinstance(fp, dict) else None
+            except Exception:
+                return None
+        return None
+
+    def _lighthouse_summary(self) -> dict | None:
+        """The lighthouse section of the block summary, or None for
+        every other mode. Same read path as _force_pilot_summary:
+        session.block_summary first, live mode stats as fallback."""
+        if str(getattr(self.engine, "current_block", "")) != "lighthouse":
+            return None
+        summary = getattr(getattr(self.engine, "session", None),
+                          "block_summary", None)
+        if isinstance(summary, dict):
+            lh = summary.get("lighthouse")
+            if isinstance(lh, dict):
+                return lh
+        stats_fn = getattr(getattr(self.engine, "mode", None),
+                           "block_stats", None)
+        if callable(stats_fn):
+            try:
+                lh = stats_fn()
+                return lh if isinstance(lh, dict) else None
+            except Exception:
+                return None
+        return None
+
+    def _buzz_hunt_summary(self) -> dict | None:
+        """The buzz_hunt section of the block summary, or None for
+        every other mode. Same read path as _force_pilot_summary:
+        session.block_summary first, live mode stats as fallback."""
+        if str(getattr(self.engine, "current_block", "")) != "buzz_hunt":
+            return None
+        summary = getattr(getattr(self.engine, "session", None),
+                          "block_summary", None)
+        if isinstance(summary, dict):
+            bh = summary.get("buzz_hunt")
+            if isinstance(bh, dict):
+                return bh
+        stats_fn = getattr(getattr(self.engine, "mode", None),
+                           "block_stats", None)
+        if callable(stats_fn):
+            try:
+                bh = stats_fn()
+                return bh if isinstance(bh, dict) else None
+            except Exception:
+                return None
+        return None
+
+    @staticmethod
+    def _buzz_hunt_threshold_ms(bh: dict) -> float | None:
+        """One headline duration threshold: the mean of the per-hand
+        estimates, falling back to the final staircase levels when a
+        short block produced too few reversals to estimate from."""
+        entries = list((bh.get("threshold") or {}).values())
+        vals = [e.get("estimate_ms") for e in entries
+                if isinstance(e, dict) and e.get("estimate_ms") is not None]
+        if not vals:
+            vals = [e.get("final_ms") for e in entries
+                    if isinstance(e, dict) and e.get("final_ms") is not None]
+        if not vals:
+            return None
+        return sum(float(v) for v in vals) / len(vals)
+
     # Per-finger labels for the histogram x-axis. Order matches the
     # within-hand finger index used everywhere else (0=index..3=pinky).
     _FINGER_SHORT = ("I", "M", "R", "P")
@@ -3493,12 +3641,13 @@ class ResultsScreen(Screen):
                       self.theme, self.layout, pt=FONT_SMALL,
                       centre=True, colour=self.theme.muted)
         # Unit hint in the bottom-right corner of the card so the
-        # reader knows what the bar heights mean.
+        # reader knows what the bar heights mean. Right-aligned so a
+        # longer unit ("% of max") stays inside the card.
         if unit:
-            draw_text(surf, unit,
-                      (rect.right - 24, rect.y + rect.h - 12),
-                      self.theme, self.layout, pt=FONT_SMALL,
-                      colour=self.theme.muted)
+            uf = self.layout.font(FONT_SMALL)
+            u = uf.render(unit, True, self.theme.muted)
+            surf.blit(u, u.get_rect(
+                bottomright=(rect.right - 10, rect.y + rect.h - 6)))
 
     def _draw_stat_card(self, surf: pygame.Surface, rect: pygame.Rect,
                          label: str, value: str,
@@ -3570,7 +3719,9 @@ class ResultsScreen(Screen):
         bar_rect.center = (cx, title_rect.bottom + 12)
         pygame.draw.rect(surf, mode_accent, bar_rect, border_radius=2)
         # Mode pill top-right, same furniture as the in-play screens.
-        mode_label = block_name.upper()
+        # Underscores come out as spaces so force_pilot reads as the
+        # mode's on-screen name, not its config key.
+        mode_label = block_name.replace("_", " ").upper()
         mf = self.layout.font(FONT_SMALL + 2)
         mt_label = mf.render(mode_label, True, (255, 255, 255))
         pill_rect = pygame.Rect(0, 0, mt_label.get_width() + 24,
@@ -3624,6 +3775,9 @@ class ResultsScreen(Screen):
         # (average + personal best for the round). Six slimmer cards
         # (180 px) keep the row inside the 1280-wide logical surface.
         is_rhythm = (self.engine.current_block == "rhythm")
+        fp = self._force_pilot_summary()
+        lh = self._lighthouse_summary()
+        bh = self._buzz_hunt_summary()
         avg_rt = self.engine.overall_mean_rt()
         best_rt = self.engine.overall_best_rt()
         avg_str = f"{avg_rt:.0f} ms" if avg_rt > 0 else "n/a"
@@ -3635,18 +3789,107 @@ class ResultsScreen(Screen):
         # The counting stats ride the entry ease so the numbers land
         # with the ring sweep. The two RT cards stay static: a timing
         # readout counting up through wrong values would read as data.
-        cards = [
-            ("SCORE", f"{int(round(self.engine.score * entry))}",
-             self.theme.accent),
-            ("HITS", f"{int(round(self.engine.hits * entry))}",
-             self.theme.success),
-            ("HIT RATE", f"{rate * 100 * entry:.0f}%",
-             self.theme.foreground),
-            ("MISSES", f"{int(round(self.engine.misses * entry))}",
-             self.theme.error),
-            (avg_label, avg_str, self.theme.foreground),
-            (best_label, best_str, self.theme.success),
-        ]
+        if fp is not None:
+            # Force Pilot has no reaction times and "hits" are runs, so
+            # the cards say what a tracking block actually measured:
+            # corridor time, mean tracking error and the section the
+            # patient controlled best.
+            overall = fp.get("overall") or {}
+            tic = overall.get("time_in_corridor")
+            mae = overall.get("mae_pct")
+            best_sec = fp.get("best_section") or "n/a"
+            cards = [
+                ("SCORE", f"{int(round(self.engine.score * entry))}",
+                 self.theme.accent),
+                ("RUNS", f"{int(round((fp.get('runs') or 0) * entry))}",
+                 self.theme.success),
+                ("IN CORRIDOR",
+                 (f"{tic * 100:.0f}%" if tic is not None else "n/a"),
+                 self.theme.foreground),
+                ("MEAN ERROR",
+                 (f"{mae:.1f}%" if mae is not None else "n/a"),
+                 self.theme.foreground),
+                ("STALLS", f"{overall.get('stalls', 0)}",
+                 self.theme.error),
+                ("BEST SECTION", str(best_sec), self.theme.success),
+            ]
+        elif lh is not None:
+            # Lighthouse has no reaction times, so the cards say what
+            # a hold block actually measured: lit steadiness, drift in
+            # the dark, the lit-dark delta headline and the echo
+            # reproduction error.
+            overall = lh.get("overall") or {}
+            echo_all = (lh.get("echo") or {}).get("overall") or {}
+            cov = overall.get("lit_cov")
+            drift = overall.get("dark_drift_pct")
+            delta = overall.get("lit_dark_delta_pct")
+            echo_err = echo_all.get("abs_err_pct")
+            cards = [
+                ("SCORE", f"{int(round(self.engine.score * entry))}",
+                 self.theme.accent),
+                ("HOLDS",
+                 f"{int(round((lh.get('holds') or 0) * entry))}",
+                 self.theme.success),
+                ("LIT STEADINESS",
+                 (f"{cov * 100:.1f}%" if cov is not None else "n/a"),
+                 self.theme.foreground),
+                ("DARK DRIFT",
+                 (f"{drift:.1f}%" if drift is not None else "n/a"),
+                 self.theme.foreground),
+                ("LIT VS DARK",
+                 (f"{delta:+.1f}%" if delta is not None else "n/a"),
+                 self.theme.foreground),
+                ("ECHO ERROR",
+                 (f"{echo_err:.1f}%" if echo_err is not None else "n/a"),
+                 self.theme.success),
+            ]
+        elif bh is not None:
+            # Buzz Hunt has its own outcome vocabulary: localisation
+            # accuracy, the duration threshold estimate, the span
+            # reached and the catch-trial false alarms.
+            loc = bh.get("loc") or {}
+            acc = loc.get("accuracy")
+            thr = self._buzz_hunt_threshold_ms(bh)
+            span = (bh.get("span") or {}).get("max_correct")
+            fa = (loc.get("catch") or {}).get("false_alarms")
+            gap_all = ((bh.get("gap") or {}).get("threshold")
+                       or {}).values()
+            gap_vals = [g.get("estimate_ms") or g.get("final_ms")
+                        for g in gap_all if isinstance(g, dict)]
+            gap_vals = [float(v) for v in gap_vals if v is not None]
+            gap_ms = (sum(gap_vals) / len(gap_vals)
+                      if gap_vals else None)
+            cards = [
+                ("SCORE", f"{int(round(self.engine.score * entry))}",
+                 self.theme.accent),
+                ("LOCALISATION",
+                 (f"{acc * 100:.0f}%" if acc is not None else "n/a"),
+                 self.theme.success),
+                ("THRESHOLD",
+                 (f"{thr:.0f} ms" if thr is not None else "n/a"),
+                 self.theme.foreground),
+                ("SPAN", (f"{span}" if span else "n/a"),
+                 self.theme.foreground),
+                ("FALSE ALARMS",
+                 (f"{fa}" if fa is not None else "n/a"),
+                 self.theme.error),
+                ("GAP",
+                 (f"{gap_ms:.0f} ms" if gap_ms is not None else "n/a"),
+                 self.theme.foreground),
+            ]
+        else:
+            cards = [
+                ("SCORE", f"{int(round(self.engine.score * entry))}",
+                 self.theme.accent),
+                ("HITS", f"{int(round(self.engine.hits * entry))}",
+                 self.theme.success),
+                ("HIT RATE", f"{rate * 100 * entry:.0f}%",
+                 self.theme.foreground),
+                ("MISSES", f"{int(round(self.engine.misses * entry))}",
+                 self.theme.error),
+                (avg_label, avg_str, self.theme.foreground),
+                (best_label, best_str, self.theme.success),
+            ]
         card_w = 180
         card_h = 110
         gap = 20
@@ -3666,45 +3909,148 @@ class ResultsScreen(Screen):
         # side-by-side: mean RT per lane (where slow fingers stand
         # out) + miss + wrong-press count per lane (where mistake
         # fingers stand out). Together they let a therapist see
-        # which finger is slow vs which is failing entirely.
+        # which finger is slow vs which is failing entirely. Force
+        # Pilot has neither RTs nor wrong presses, so its charts show
+        # the per-finger tracking summary instead: mean tracking error
+        # and time in corridor.
         n_lanes = (8 if self.engine.hand_mode == "both" else 4)
-        # `getattr` defaults shield against an engine state where the
-        # per-lane dicts weren't populated (a fresh engine before any
-        # block, or a __new__-built engine in some test paths). Empty
-        # dicts just produce zero-height bars.
-        rts_dict = getattr(self.engine, "_per_lane_rts", {}) or {}
-        miss_dict = getattr(self.engine, "_per_lane_misses", {}) or {}
-        wrong_dict = getattr(self.engine, "_per_lane_wrong", {}) or {}
-        rts = [
-            (sum(rts_dict.get(i, [])) / len(rts_dict[i]))
-            if rts_dict.get(i) else 0.0
-            for i in range(n_lanes)
-        ]
-        miscounts = [
-            float(miss_dict.get(i, 0) + wrong_dict.get(i, 0))
-            for i in range(n_lanes)
-        ]
         chart_y = 502
         chart_h = 124
         chart_gap = 24
         total_chart_w = self.layout.width - 80
         chart_w = (total_chart_w - chart_gap) // 2
         left_x = (self.layout.width - total_chart_w) // 2
-        self._draw_per_lane_chart(
-            surf,
-            pygame.Rect(left_x, chart_y, chart_w, chart_h),
-            ("MEAN REACTION TIME PER FINGER"
-              if self.engine.current_block != "rhythm"
-              else "MEAN BEAT-OFFSET PER FINGER"),
-            rts, unit="ms", high_is_bad=False,
-        )
-        self._draw_per_lane_chart(
-            surf,
-            pygame.Rect(left_x + chart_w + chart_gap, chart_y,
-                         chart_w, chart_h),
-            "MISSES + WRONG PRESSES PER FINGER",
-            miscounts, unit="count", high_is_bad=True,
-        )
+        if fp is not None:
+            per_lane = fp.get("per_lane") or {}
+            maes = [0.0] * n_lanes
+            tics = [0.0] * n_lanes
+            for key, stats in per_lane.items():
+                try:
+                    lane = int(key)
+                except (TypeError, ValueError):
+                    continue
+                if 0 <= lane < n_lanes and isinstance(stats, dict):
+                    maes[lane] = float(stats.get("mae_pct") or 0.0)
+                    tic_val = stats.get("time_in_corridor")
+                    tics[lane] = (float(tic_val) * 100.0
+                                  if tic_val is not None else 0.0)
+            self._draw_per_lane_chart(
+                surf,
+                pygame.Rect(left_x, chart_y, chart_w, chart_h),
+                "MEAN TRACKING ERROR PER FINGER",
+                maes, unit="% of max", high_is_bad=True,
+            )
+            self._draw_per_lane_chart(
+                surf,
+                pygame.Rect(left_x + chart_w + chart_gap, chart_y,
+                             chart_w, chart_h),
+                "TIME IN CORRIDOR PER FINGER",
+                tics, unit="%", high_is_bad=False,
+            )
+        elif lh is not None:
+            # Lighthouse charts: lit steadiness per finger and the
+            # lit-dark delta per finger, the mode's headline metric.
+            # A negative delta (steadier in the dark) draws as zero;
+            # the exact value lives in metadata.json.
+            per_lane = lh.get("per_lane") or {}
+            covs = [0.0] * n_lanes
+            deltas = [0.0] * n_lanes
+            for key, stats in per_lane.items():
+                try:
+                    lane = int(key)
+                except (TypeError, ValueError):
+                    continue
+                if 0 <= lane < n_lanes and isinstance(stats, dict):
+                    cov_val = stats.get("lit_cov")
+                    covs[lane] = (float(cov_val) * 100.0
+                                  if cov_val is not None else 0.0)
+                    delta_val = stats.get("delta_pct")
+                    deltas[lane] = max(0.0, float(delta_val or 0.0))
+            self._draw_per_lane_chart(
+                surf,
+                pygame.Rect(left_x, chart_y, chart_w, chart_h),
+                "LIT STEADINESS PER FINGER (CoV)",
+                covs, unit="%", high_is_bad=True,
+            )
+            self._draw_per_lane_chart(
+                surf,
+                pygame.Rect(left_x + chart_w + chart_gap, chart_y,
+                             chart_w, chart_h),
+                "LIT-DARK ERROR DELTA PER FINGER",
+                deltas, unit="% of max", high_is_bad=True,
+            )
+        elif bh is not None:
+            # Buzz Hunt charts: localisation accuracy per finger and
+            # misreferrals per finger (trials where that finger buzzed
+            # and a different finger was pressed), the on-screen
+            # shadow of the confusion matrix in metadata.json.
+            per_lane = (bh.get("loc") or {}).get("per_lane") or {}
+            accs = [0.0] * n_lanes
+            misref = [0.0] * n_lanes
+            for key, stats in per_lane.items():
+                try:
+                    lane = int(key)
+                except (TypeError, ValueError):
+                    continue
+                if 0 <= lane < n_lanes and isinstance(stats, dict):
+                    acc_val = stats.get("accuracy")
+                    accs[lane] = (float(acc_val) * 100.0
+                                  if acc_val is not None else 0.0)
+            confusion = bh.get("confusion") or {}
+            for key, row in confusion.items():
+                try:
+                    lane = int(key)
+                except (TypeError, ValueError):
+                    continue          # the "none" catch row
+                if 0 <= lane < n_lanes and isinstance(row, dict):
+                    misref[lane] = float(sum(
+                        n for resp, n in row.items()
+                        if resp not in (key, "none")))
+            self._draw_per_lane_chart(
+                surf,
+                pygame.Rect(left_x, chart_y, chart_w, chart_h),
+                "LOCALISATION ACCURACY PER FINGER",
+                accs, unit="%", high_is_bad=False,
+            )
+            self._draw_per_lane_chart(
+                surf,
+                pygame.Rect(left_x + chart_w + chart_gap, chart_y,
+                             chart_w, chart_h),
+                "MISREFERRALS PER FINGER",
+                misref, unit="count", high_is_bad=True,
+            )
+        else:
+            # `getattr` defaults shield against an engine state where
+            # the per-lane dicts weren't populated (a fresh engine
+            # before any block, or a __new__-built engine in some test
+            # paths). Empty dicts just produce zero-height bars.
+            rts_dict = getattr(self.engine, "_per_lane_rts", {}) or {}
+            miss_dict = getattr(self.engine, "_per_lane_misses", {}) or {}
+            wrong_dict = getattr(self.engine, "_per_lane_wrong", {}) or {}
+            rts = [
+                (sum(rts_dict.get(i, [])) / len(rts_dict[i]))
+                if rts_dict.get(i) else 0.0
+                for i in range(n_lanes)
+            ]
+            miscounts = [
+                float(miss_dict.get(i, 0) + wrong_dict.get(i, 0))
+                for i in range(n_lanes)
+            ]
+            self._draw_per_lane_chart(
+                surf,
+                pygame.Rect(left_x, chart_y, chart_w, chart_h),
+                ("MEAN REACTION TIME PER FINGER"
+                  if self.engine.current_block != "rhythm"
+                  else "MEAN BEAT-OFFSET PER FINGER"),
+                rts, unit="ms", high_is_bad=False,
+            )
+            self._draw_per_lane_chart(
+                surf,
+                pygame.Rect(left_x + chart_w + chart_gap, chart_y,
+                             chart_w, chart_h),
+                "MISSES + WRONG PRESSES PER FINGER",
+                miscounts, unit="count", high_is_bad=True,
+            )
 
         # Miss-trial force readout. Sums each finger's peak above baseline
         # over the first second of every MISSED trial, across all fingers,

@@ -1,0 +1,1007 @@
+"""Buzz Hunt: the vibrotactile perception suite.
+
+What is pinned here, in dependency order:
+
+  - the staircase: 2-down 1-up mechanics, floor and ceiling clamps,
+    reversal recording, and convergence near a simulated observer's
+    true threshold
+  - pure stimulus reconstruction: pulses_from_params rebuilds every
+    waveform (buzz, catch, distractor, sequence, gap) from the params
+    dict alone, matched-envelope gap trials included, and the packed
+    cell round-trips
+  - the Hebb material: participant-name seeding is deterministic and
+    case-folded, sequences avoid immediate repeats and stay inside
+    the lane pool
+  - localisation trials: the buzz goes out through pulse_motor
+    (bypassing the cue switches by design), a correct press scores,
+    a wrong finger logs a Miss with the confusion matrix updated,
+    a timeout raises the staircase, and cue_target_shown is FALSE
+  - catch trials: no STIM is ever sent, waiting is rewarded through
+    log_reaction_event, a press is a false alarm in the matrix
+  - the hand matrix: one hand rotates its four fingers at equal
+    counts, both hands run all eight balanced per hand, distractors
+    exist only bilaterally and sit on the other hand
+  - span trials: replay scoring, the span ladder, and every third
+    trial secretly replaying the participant's Hebb sequence
+  - gap trials: tap-count judging, the gap staircase, and reversal
+    events in the raw log
+  - the trial rows: waveform buzz / buzz_seq / buzz_gap with params
+    and segment bounds that parse back
+  - the screen: trial frames show a focus point only (nothing that
+    names a finger), and steady-state frames allocate no surfaces
+"""
+from __future__ import annotations
+
+import os
+import sys
+import unittest
+from pathlib import Path
+from unittest.mock import MagicMock
+
+
+os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+
+def _engine(hand_mode="right", cfg_extra=None):
+    """Engine fixture in the house style: built via __new__, MagicMock
+    config, command-recording source, loggable."""
+    from rehab.game.engine import GameEngine
+    values = {
+        "fsr.num_sensors_per_hand": 4,
+        "motor.cue_ms": 150,
+        "motor.pulse_interval_ms": 120,
+        "cue.buzz_before": False,
+        "cue.buzz_after": False,
+        "cue.sound_before": False,
+        "cue.sound_after": False,
+        "cue.show_target": True,
+        "game.timeout_s": 1.0,
+    }
+    values.update(cfg_extra or {})
+    e = GameEngine.__new__(GameEngine)
+    e.cfg = MagicMock()
+    e.cfg.get = MagicMock(side_effect=lambda k, d=None: values.get(k, d))
+    sent = []
+    src = MagicMock()
+    src.provides_samples = True
+    src.send_command = lambda c: (sent.append(c) or True)
+    e.source = src
+    e._sent = sent
+    e.hand_mode = hand_mode
+    e.audio = None
+    e.raw_logger = _RawLoggerStub()
+    e._screens = {}
+    e.mode = None
+    e.detectors = {}
+    e.calibration_profiles = {}
+    e.score = 0
+    e.hits = 0
+    e.misses = 0
+    e.hit_streak = 0
+    e.miss_streak = 0
+    e._streak_fired = set()
+    e._streak_thresholds = ()
+    e._block_rt_sum = 0.0
+    e._block_rt_count = 0
+    e._block_bpm_min = None
+    e._block_bpm_max = None
+    e._block_wrong_press_trials = 0
+    e._block_peak_streak = 0
+    e._last_gained = 0
+    e.current_block = "buzz_hunt"
+    e.session_paths = None
+    e.session = MagicMock()
+    e.session.participant = "Test"
+    e.session.age = ""
+    e._per_lane_rts = {}
+    e._per_lane_misses = {}
+    e._per_lane_wrong = {}
+    e.trial_logger = _TrialLoggerStub()
+    e._ensure_metric_state()
+    return e
+
+
+class _RawLoggerStub:
+    def __init__(self):
+        self.events = []
+
+    def queue_event(self, event, lane=None, detail="", t_perf=None,
+                    fsr_vals=None, hand="right"):
+        self.events.append({"event": event, "lane": lane,
+                            "detail": detail, "hand": hand})
+
+
+class _TrialLoggerStub:
+    def __init__(self):
+        self.rows = []
+
+    def write(self, row):
+        self.rows.append(row)
+
+
+def _press_event(lane, t):
+    from rehab.hardware.fsr_detector import PressEvent
+    return PressEvent(lane=lane, t_perf=t, value=0, baseline=0.0,
+                      hand="right")
+
+
+def _mode(e, hands=None, **over):
+    from rehab.game.modes.buzz_hunt import (BuzzHuntMode,
+                                            participant_hebb_seed)
+    from rehab.game.scoring import ScoreConfig
+    kw = dict(
+        engine=e,
+        lanes_by_hand=hands or {"right": [0, 1, 2, 3]},
+        participant_seed=participant_hebb_seed("Test"),
+        loc_trials_per_hand=8,
+        catch_rate=0.0,
+        start_ms=300.0,
+        step_ms=40.0,
+        floor_ms=40.0,
+        ceil_ms=500.0,
+        threshold_reversals=6,
+        distractor_trials_per_hand=2,
+        distractor_lead_ms=150.0,
+        span_trials=3,
+        span_start=2,
+        span_pulse_ms=150.0,
+        span_ioi_ms=400.0,
+        hebb_every=3,
+        gap_trials_per_hand=4,
+        gap_start_ms=200.0,
+        gap_step_ms=25.0,
+        gap_floor_ms=35.0,
+        gap_short_ms=80.0,
+        wait_lo_s=0.5,
+        wait_hi_s=0.8,
+        response_window_s=2.0,
+        replay_item_s=1.0,
+        announce_s=0.5,
+        rest_s=0.5,
+        stage_intro_s=0.6,
+        score_cfg=ScoreConfig(),
+        seed=7,
+        demo_trials=None,
+    )
+    kw.update(over)
+    return BuzzHuntMode(**kw)
+
+
+def _only_stage(m, stage, n):
+    """Restrict a built mode to one stage for a focused test."""
+    m._stage_plan = [stage] * n
+    m.total_trials = n
+    return m
+
+
+def _to_trial(m, t0=1000.0):
+    """Drive a fresh mode into its first trial's wait sub-phase."""
+    m._tick(t0)
+    assert m.phase == "stage", m.phase
+    t = t0 + m.stage_intro_s + 0.01
+    m._tick(t)
+    assert m.phase == "announce", m.phase
+    t += m.announce_s + 0.01
+    m._tick(t)
+    assert m.phase == "trial", m.phase
+    return t
+
+
+def _to_respond(m, t, dt=1.0 / 60.0):
+    """Advance through the wait and the stimulus until the response
+    window is open."""
+    guard = t + 30.0
+    while m.sub != "respond" and t < guard:
+        t += dt
+        m._tick(t)
+    assert m.sub == "respond", m.sub
+    return t
+
+
+def _next_trial(m, t):
+    """From feedback into the next trial's wait sub-phase."""
+    assert m.phase == "feedback", m.phase
+    t += m.rest_s + 0.01
+    m._tick(t)
+    if m.phase == "stage":
+        t += m.stage_intro_s + 0.01
+        m._tick(t)
+    assert m.phase == "announce", m.phase
+    t += m.announce_s + 0.01
+    m._tick(t)
+    return t
+
+
+# ---- the staircase ------------------------------------------------------
+
+
+class StaircaseTests(unittest.TestCase):
+    def _stair(self, **over):
+        from rehab.game.modes.buzz_hunt import Staircase
+        kw = dict(start=300.0, step=40.0, floor=40.0, ceiling=500.0)
+        kw.update(over)
+        return Staircase(**kw)
+
+    def test_two_down_one_up(self):
+        s = self._stair()
+        s.record(True)
+        self.assertEqual(s.level, 300.0)     # one correct holds
+        s.record(True)
+        self.assertEqual(s.level, 260.0)     # two correct steps down
+        s.record(False)
+        self.assertEqual(s.level, 300.0)     # one wrong steps up
+
+    def test_floor_and_ceiling_clamp(self):
+        s = self._stair(start=60.0)
+        for _ in range(10):
+            s.record(True)
+        self.assertEqual(s.level, 40.0)
+        s2 = self._stair(start=480.0)
+        for _ in range(5):
+            s2.record(False)
+        self.assertEqual(s2.level, 500.0)
+
+    def test_reversals_are_recorded_at_the_turn(self):
+        s = self._stair()
+        s.record(True)
+        s.record(True)                        # down, no reversal yet
+        self.assertEqual(s.reversals, [])
+        s.record(False)                       # up: first reversal
+        self.assertEqual(s.reversals, [260.0])
+        s.record(True)
+        s.record(True)                        # down: second reversal
+        self.assertEqual(s.reversals, [260.0, 300.0])
+
+    def test_step_floor_is_one_frame(self):
+        from rehab.game.modes.buzz_hunt import MIN_STEP_MS
+        s = self._stair(step=5.0)
+        self.assertEqual(s.step, MIN_STEP_MS)
+
+    def test_converges_near_a_simulated_observer(self):
+        # Simulated observer: reliably correct above the true
+        # threshold, at four-alternative chance below it. The 2-down
+        # 1-up rule should settle the reversal average within about a
+        # step of the truth.
+        import random
+        rng = random.Random(3)
+        true_ms = 140.0
+        s = self._stair()
+        for _ in range(120):
+            p = 0.97 if s.level >= true_ms else 0.25
+            s.record(rng.random() < p)
+        est = s.estimate(8)
+        self.assertIsNotNone(est)
+        self.assertLess(abs(est - true_ms), 2.5 * s.step)
+
+    def test_estimate_needs_two_reversals(self):
+        s = self._stair()
+        self.assertIsNone(s.estimate(6))
+        s.record(True)
+        s.record(True)
+        s.record(False)
+        self.assertIsNone(s.estimate(6))      # one reversal only
+        s.record(True)
+        s.record(True)
+        self.assertIsNotNone(s.estimate(6))
+
+
+# ---- pure stimulus reconstruction ---------------------------------------
+
+
+class PulseReconstructionTests(unittest.TestCase):
+    def test_plain_buzz(self):
+        from rehab.game.modes.buzz_hunt import pulses_from_params
+        p = {"catch": 0, "lane": 2, "dur_ms": 180.0, "window_ms": 3000.0}
+        self.assertEqual(pulses_from_params("buzz", p),
+                         [(2, 0.0, 180.0)])
+
+    def test_catch_has_no_pulses(self):
+        from rehab.game.modes.buzz_hunt import (pulses_from_params,
+                                                stimulus_span_s)
+        p = {"catch": 1, "window_ms": 3000.0}
+        self.assertEqual(pulses_from_params("buzz", p), [])
+        self.assertEqual(stimulus_span_s("buzz", p), 0.0)
+
+    def test_distractor_leads_the_target(self):
+        from rehab.game.modes.buzz_hunt import pulses_from_params
+        p = {"catch": 0, "lane": 1, "dur_ms": 120.0,
+             "distractor_lane": 5, "distractor_ms": 120.0,
+             "distractor_lead_ms": 150.0, "window_ms": 3000.0}
+        pulses = pulses_from_params("buzz", p)
+        self.assertEqual(pulses[0], (5, 0.0, 120.0))
+        self.assertEqual(pulses[1], (1, 0.15, 120.0))
+
+    def test_sequence_pulses_follow_the_ioi(self):
+        from rehab.game.modes.buzz_hunt import pulses_from_params
+        p = {"seq": "0-2-1", "len": 3, "pulse_ms": 150.0,
+             "ioi_ms": 400.0, "hebb": 0}
+        pulses = pulses_from_params("buzz_seq", p)
+        self.assertEqual([l for l, _o, _d in pulses], [0, 2, 1])
+        self.assertAlmostEqual(pulses[1][1], 0.4)
+        self.assertAlmostEqual(pulses[2][1], 0.8)
+
+    def test_gap_envelopes_are_length_matched(self):
+        # The design promise: total stimulus length never gives the
+        # answer away, so one long buzz spans exactly two shorts plus
+        # the gap.
+        from rehab.game.modes.buzz_hunt import (pulses_from_params,
+                                                stimulus_span_s)
+        one = {"lane": 3, "two": 0, "short_ms": 80.0, "gap_ms": 60.0,
+               "window_ms": 2000.0}
+        two = {"lane": 3, "two": 1, "short_ms": 80.0, "gap_ms": 60.0,
+               "window_ms": 2000.0}
+        self.assertEqual(pulses_from_params("buzz_gap", one),
+                         [(3, 0.0, 220.0)])
+        self.assertEqual(pulses_from_params("buzz_gap", two),
+                         [(3, 0.0, 80.0), (3, 0.14, 80.0)])
+        self.assertAlmostEqual(stimulus_span_s("buzz_gap", one),
+                               stimulus_span_s("buzz_gap", two))
+
+    def test_params_round_trip_through_the_packed_cell(self):
+        from rehab.data.logger import (pack_waveform_params,
+                                       parse_waveform_params)
+        from rehab.game.modes.buzz_hunt import pulses_from_params
+        p = {"seq": "0-2-1-3", "len": 4, "pulse_ms": 150.0,
+             "ioi_ms": 400.0, "hebb": 1}
+        back = parse_waveform_params(pack_waveform_params(p))
+        self.assertEqual(pulses_from_params("buzz_seq", p),
+                         pulses_from_params("buzz_seq", back))
+
+    def test_unknown_waveform_raises(self):
+        from rehab.game.modes.buzz_hunt import pulses_from_params
+        with self.assertRaises(ValueError):
+            pulses_from_params("hold", {})
+
+
+# ---- the Hebb material --------------------------------------------------
+
+
+class HebbMaterialTests(unittest.TestCase):
+    def test_name_seed_is_case_and_space_folded(self):
+        from rehab.game.modes.buzz_hunt import participant_hebb_seed
+        self.assertEqual(participant_hebb_seed("Basil "),
+                         participant_hebb_seed("basil"))
+        self.assertNotEqual(participant_hebb_seed("basil"),
+                            participant_hebb_seed("someone else"))
+
+    def test_hebb_sequence_is_stable_and_legal(self):
+        from rehab.game.modes.buzz_hunt import hebb_sequence
+        lanes = [0, 1, 2, 3]
+        a = hebb_sequence(12345, 5, lanes)
+        b = hebb_sequence(12345, 5, lanes)
+        self.assertEqual(a, b)
+        self.assertEqual(len(a), 5)
+        self.assertTrue(all(l in lanes for l in a))
+        for x, y in zip(a, a[1:]):
+            self.assertNotEqual(x, y)
+
+    def test_hebb_differs_by_length_and_seed(self):
+        from rehab.game.modes.buzz_hunt import hebb_sequence
+        lanes = list(range(8))
+        self.assertNotEqual(hebb_sequence(1, 6, lanes),
+                            hebb_sequence(2, 6, lanes))
+
+    def test_fresh_sequences_come_from_the_trial_seed(self):
+        from rehab.game.modes.buzz_hunt import draw_sequence
+        lanes = [0, 1, 2, 3]
+        self.assertEqual(draw_sequence(9, 4, lanes),
+                         draw_sequence(9, 4, lanes))
+        self.assertNotEqual(draw_sequence(9, 6, lanes),
+                            draw_sequence(10, 6, lanes))
+
+
+# ---- localisation trials ------------------------------------------------
+
+
+class LocalisationTests(unittest.TestCase):
+    def _loc_mode(self, e=None, n=4, **over):
+        m = _mode(e or _engine(), **over)
+        return _only_stage(m, "loc", n)
+
+    def test_correct_press_scores_and_fills_the_diagonal(self):
+        m = self._loc_mode()
+        t = _to_trial(m)
+        t = _to_respond(m, t)
+        lane = m.lane
+        m.queue_press(_press_event(lane, t + 0.3))
+        m._tick(t + 0.31)
+        self.assertEqual(m.phase, "feedback")
+        row = m.engine.trial_logger.rows[0]
+        self.assertEqual(row["waveform"], "buzz")
+        self.assertNotEqual(row["early_late"], "Miss")
+        self.assertEqual(m._confusion[str(lane)][str(lane)], 1)
+        self.assertTrue(m._loc_records[0]["correct"])
+        self.assertIsNotNone(m._loc_records[0]["rt_ms"])
+
+    def test_the_buzz_bypasses_the_cue_switches(self):
+        # cue.buzz_before is OFF in the fixture, and the stimulus
+        # still goes out: the buzz is the stimulus, not a cue.
+        m = self._loc_mode()
+        t = _to_trial(m)
+        t = _to_respond(m, t)
+        stims = [c for c in m.engine._sent if str(c).startswith("STIM")]
+        self.assertEqual(len(stims), 1)
+        self.assertEqual(stims[0], f"STIM:{m.lane + 1}")
+        pulse_events = [ev for ev in m.engine.raw_logger.events
+                        if ev["event"] == "pulse_motor"]
+        self.assertEqual(len(pulse_events), 1)
+
+    def test_nothing_on_screen_names_the_target(self):
+        m = self._loc_mode()
+        t = _to_trial(m)
+        _to_respond(m, t)
+        self.assertFalse(m.engine._last_target_shown)
+
+    def test_wrong_finger_logs_miss_and_the_matrix_cell(self):
+        m = self._loc_mode()
+        t = _to_trial(m)
+        t = _to_respond(m, t)
+        lane = m.lane
+        wrong = next(l for l in [0, 1, 2, 3] if l != lane)
+        m.queue_press(_press_event(wrong, t + 0.3))
+        m._tick(t + 0.31)
+        row = m.engine.trial_logger.rows[0]
+        self.assertEqual(row["early_late"], "Miss")
+        self.assertEqual(row["had_incorrect_press"], "TRUE")
+        self.assertEqual(m._confusion[str(lane)][str(wrong)], 1)
+        self.assertFalse(m._loc_records[0]["correct"])
+
+    def test_timeout_raises_the_staircase(self):
+        m = self._loc_mode()
+        t = _to_trial(m)
+        t = _to_respond(m, t)
+        before = m._dur_stair[m.hand].level
+        t += m.response_window_s + 0.05
+        m._tick(t)
+        self.assertEqual(m.phase, "feedback")
+        self.assertEqual(m._dur_stair[m.hand].level, before + m.step_ms)
+        self.assertEqual(m._confusion[str(m._loc_records[0]['lane'])]
+                         ["none"], 1)
+
+    def test_two_correct_lower_the_duration(self):
+        m = self._loc_mode(n=3)
+        t = _to_trial(m)
+        start = m._dur_stair["right"].level
+        for i in range(2):
+            t = _to_respond(m, t)
+            m.queue_press(_press_event(m.lane, t + 0.2))
+            m._tick(t + 0.21)
+            t = _next_trial(m, t + 0.21) if i < 1 else t + 0.21
+        self.assertEqual(m._dur_stair["right"].level, start - m.step_ms)
+
+    def test_reversal_is_logged_as_an_event(self):
+        m = self._loc_mode(n=6)
+        t = _to_trial(m)
+        # Two correct (down), then a timeout (up): that turn is the
+        # first reversal and must land in the raw log.
+        for i in range(3):
+            t = _to_respond(m, t)
+            if i < 2:
+                m.queue_press(_press_event(m.lane, t + 0.2))
+                m._tick(t + 0.21)
+                t = _next_trial(m, t + 0.21)
+            else:
+                t += m.response_window_s + 0.05
+                m._tick(t)
+        revs = [ev for ev in m.engine.raw_logger.events
+                if ev["event"] == "buzz_hunt_reversal"]
+        self.assertEqual(len(revs), 1)
+        self.assertIn("stair=duration", revs[0]["detail"])
+
+    def test_early_press_restarts_the_wait_without_a_trial(self):
+        m = self._loc_mode()
+        t = _to_trial(m)
+        m._tick(t + 0.01)
+        m.queue_press(_press_event(0, t + 0.02))
+        m._tick(t + 0.03)
+        self.assertEqual(m.sub, "wait")
+        self.assertEqual(m.trials_done, 0)
+        self.assertEqual(m._early_presses, 1)
+        self.assertEqual(m.engine.trial_logger.rows, [])
+
+    def test_trial_row_carries_the_reconstruction_contract(self):
+        from rehab.data.logger import (parse_segments,
+                                       parse_waveform_params)
+        from rehab.game.modes.buzz_hunt import pulses_from_params
+        m = self._loc_mode()
+        t = _to_trial(m)
+        t = _to_respond(m, t)
+        seed = m.trial_seed
+        dur = float(m.params["dur_ms"])
+        m.queue_press(_press_event(m.lane, t + 0.3))
+        m._tick(t + 0.31)
+        row = m.engine.trial_logger.rows[0]
+        self.assertEqual(row["waveform_seed"], str(seed))
+        params = parse_waveform_params(row["waveform_params"])
+        pulses = pulses_from_params("buzz", params)
+        self.assertEqual(pulses, [(m._loc_records[0]["lane"], 0.0, dur)])
+        segs = parse_segments(row["segment_times"])
+        names = [s[0] for s in segs]
+        self.assertIn("stim", names)
+        self.assertIn("respond", names)
+        stim = next(s for s in segs if s[0] == "stim")
+        self.assertAlmostEqual(stim[2] - stim[1], dur / 1000.0,
+                               delta=0.05)
+        self.assertEqual(row["cue_target_shown"], "FALSE")
+        # The response window is the RT censoring limit.
+        self.assertEqual(row["timeout_ms"],
+                         f"{m.response_window_s * 1000.0:.0f}")
+
+
+# ---- catch trials -------------------------------------------------------
+
+
+class CatchTrialTests(unittest.TestCase):
+    def _catch_mode(self):
+        # The constructor clamps catch_rate at 0.5 (a config guard),
+        # so force every trial to a catch after construction.
+        m = _mode(_engine())
+        m.catch_rate = 1.0
+        return _only_stage(m, "loc", 2)
+
+    def test_no_stim_is_ever_sent(self):
+        m = self._catch_mode()
+        t = _to_trial(m)
+        self.assertTrue(m.catch)
+        t = _to_respond(m, t)
+        self.assertFalse([c for c in m.engine._sent
+                          if str(c).startswith("STIM")])
+
+    def test_waiting_is_rewarded_off_the_hit_counters(self):
+        m = self._catch_mode()
+        t = _to_trial(m)
+        t = _to_respond(m, t)
+        t += m.response_window_s + 0.05
+        m._tick(t)
+        self.assertEqual(m.phase, "feedback")
+        self.assertEqual(m.engine.score, m.CATCH_REWARD)
+        self.assertEqual(m.engine.hits, 0)     # counters untouched
+        row = m.engine.trial_logger.rows[0]
+        self.assertEqual(row["early_late"], "CatchOk")
+        # Catch rows ride log_reaction_event, which stamps the LIVE
+        # show_target toggle by default; this mode's screen never
+        # names a finger whatever that toggle says, so the row must
+        # say FALSE like every other Buzz Hunt row.
+        self.assertEqual(row["cue_target_shown"], "FALSE")
+
+    def test_a_press_is_a_false_alarm(self):
+        m = self._catch_mode()
+        t = _to_trial(m)
+        t = _to_respond(m, t)
+        m.queue_press(_press_event(2, t + 0.4))
+        m._tick(t + 0.41)
+        self.assertEqual(m._catch_fa, 1)
+        self.assertEqual(m._confusion["none"]["2"], 1)
+        row = m.engine.trial_logger.rows[0]
+        self.assertEqual(row["error_type"], "catch_false_start")
+        self.assertEqual(row["cue_target_shown"], "FALSE")
+        stats = m.block_stats()
+        self.assertEqual(stats["loc"]["catch"]["false_alarms"], 1)
+        self.assertEqual(stats["loc"]["catch"]["fa_rate"], 1.0)
+
+
+# ---- the hand matrix ----------------------------------------------------
+
+
+class HandMatrixTests(unittest.TestCase):
+    def test_one_hand_rotates_its_four_fingers_equally(self):
+        m = _mode(_engine(), loc_trials_per_hand=8, catch_rate=0.0)
+        m._stage_plan = ["loc"] * 8
+        m.total_trials = 8
+        lanes = []
+        for i in range(8):
+            m.trials_done = i
+            m._prepare_trial()
+            lanes.append(m.lane)
+        self.assertEqual(sorted(lanes), [0, 0, 1, 1, 2, 2, 3, 3])
+
+    def test_both_hands_means_all_eight_balanced(self):
+        e = _engine(hand_mode="both")
+        m = _mode(e, hands={"right": [0, 1, 2, 3], "left": [4, 5, 6, 7]},
+                  loc_trials_per_hand=8, catch_rate=0.0)
+        m._stage_plan = ["loc"] * 16
+        m.total_trials = 16
+        lanes = []
+        hand_counts = {"right": 0, "left": 0}
+        for i in range(16):
+            m.trials_done = i
+            m._prepare_trial()
+            lanes.append(m.lane)
+            hand_counts[m.hand] += 1
+        self.assertEqual(sorted(lanes), sorted(list(range(8)) * 2))
+        self.assertEqual(hand_counts["right"], 8)
+        self.assertEqual(hand_counts["left"], 8)
+
+    def test_distractor_stage_exists_only_bilaterally(self):
+        single = _mode(_engine())
+        self.assertEqual(single._stage_counts["distractor"], 0)
+        self.assertNotIn("distractor", single._stage_plan)
+        e = _engine(hand_mode="both")
+        both = _mode(e, hands={"right": [0, 1, 2, 3],
+                               "left": [4, 5, 6, 7]})
+        self.assertGreater(both._stage_counts["distractor"], 0)
+
+    def test_distractor_sits_on_the_other_hand(self):
+        e = _engine(hand_mode="both")
+        m = _mode(e, hands={"right": [0, 1, 2, 3], "left": [4, 5, 6, 7]})
+        m._stage_plan = ["distractor"] * 4
+        m.total_trials = 4
+        for i in range(4):
+            m.trials_done = i
+            m._prepare_trial()
+            target_right = m.lane in (0, 1, 2, 3)
+            d_lane = int(m.params["distractor_lane"])
+            self.assertNotEqual(d_lane in (0, 1, 2, 3), target_right)
+
+    def test_distractor_trials_hold_the_staircase_still(self):
+        e = _engine(hand_mode="both")
+        m = _mode(e, hands={"right": [0, 1, 2, 3], "left": [4, 5, 6, 7]})
+        m._stage_plan = ["distractor"] * 2
+        m.total_trials = 2
+        t = _to_trial(m)
+        t = _to_respond(m, t)
+        before = {h: s.level for h, s in m._dur_stair.items()}
+        m.queue_press(_press_event(m.lane, t + 0.3))
+        m._tick(t + 0.31)
+        self.assertEqual({h: s.level for h, s in m._dur_stair.items()},
+                         before)
+        self.assertEqual(len(m._dis_records), 1)
+        # Both pulses went out: the decoy and the target.
+        stims = [c for c in m.engine._sent if str(c).startswith("STIM")]
+        self.assertEqual(len(stims), 2)
+
+    def test_pressing_the_decoy_finger_counts_as_lured(self):
+        e = _engine(hand_mode="both")
+        m = _mode(e, hands={"right": [0, 1, 2, 3], "left": [4, 5, 6, 7]})
+        m._stage_plan = ["distractor"] * 2
+        m.total_trials = 2
+        t = _to_trial(m)
+        t = _to_respond(m, t)
+        d_lane = int(m.params["distractor_lane"])
+        m.queue_press(_press_event(d_lane, t + 0.3))
+        m._tick(t + 0.31)
+        rec = m._dis_records[0]
+        self.assertTrue(rec["lured"])
+        self.assertFalse(rec["correct"])
+        # The cross-hand confusion cell is the point of the matrix.
+        self.assertEqual(m._confusion[str(rec["lane"])][str(d_lane)], 1)
+
+
+# ---- span trials --------------------------------------------------------
+
+
+class SpanTests(unittest.TestCase):
+    def _span_mode(self, n=6, **over):
+        m = _mode(_engine(), **over)
+        return _only_stage(m, "span", n)
+
+    def _replay(self, m, t, lanes):
+        for i, lane in enumerate(lanes):
+            m.queue_press(_press_event(lane, t + 0.2 + i * 0.1))
+        m._tick(t + 0.2 + len(lanes) * 0.1 + 0.01)
+
+    def test_correct_replay_grows_the_span(self):
+        m = self._span_mode()
+        t = _to_trial(m)
+        self.assertEqual(len(m.sequence), 2)
+        t = _to_respond(m, t)
+        self._replay(m, t, m.sequence)
+        self.assertEqual(m.phase, "feedback")
+        self.assertTrue(m._span_records[0]["correct"])
+        self.assertEqual(m.span_len, 3)
+        self.assertEqual(m._span_max_correct, 2)
+        row = m.engine.trial_logger.rows[0]
+        self.assertEqual(row["waveform"], "buzz_seq")
+        self.assertEqual(row["early_late"], "Great")
+
+    def test_wrong_order_shrinks_the_span_to_the_floor(self):
+        m = self._span_mode()
+        t = _to_trial(m)
+        t = _to_respond(m, t)
+        wrong = list(reversed(m.sequence))
+        if wrong == m.sequence:
+            wrong = [m.sequence[0]] * len(m.sequence)
+        self._replay(m, t, wrong)
+        self.assertFalse(m._span_records[0]["correct"])
+        self.assertEqual(m.span_len, 2)       # floor holds at 2
+
+    def test_every_third_span_trial_is_the_hidden_sequence(self):
+        from rehab.game.modes.buzz_hunt import hebb_sequence
+        m = self._span_mode(n=6)
+        hebb_flags = []
+        seqs = []
+        for i in range(6):
+            m.trials_done = i
+            m._prepare_trial()
+            hebb_flags.append(m.is_hebb)
+            seqs.append(list(m.sequence))
+            m._span_records.append({"len": len(m.sequence),
+                                    "hebb": m.is_hebb, "correct": False,
+                                    "n_right": 0})
+        self.assertEqual(hebb_flags, [False, False, True,
+                                      False, False, True])
+        expected = hebb_sequence(m.p_seed, m.span_len, [0, 1, 2, 3])
+        self.assertEqual(seqs[2], expected)
+        self.assertEqual(seqs[5], expected)   # same length, same seq
+
+    def test_sequence_plays_every_pulse_before_the_window(self):
+        m = self._span_mode()
+        t = _to_trial(m)
+        t = _to_respond(m, t)
+        stims = [c for c in m.engine._sent if str(c).startswith("STIM")]
+        self.assertEqual(len(stims), len(m.sequence))
+
+    def test_span_row_parses_back_to_the_played_sequence(self):
+        from rehab.data.logger import parse_waveform_params
+        from rehab.game.modes.buzz_hunt import parse_lanes
+        m = self._span_mode()
+        t = _to_trial(m)
+        played = list(m.sequence)
+        t = _to_respond(m, t)
+        self._replay(m, t, played)
+        row = m.engine.trial_logger.rows[0]
+        params = parse_waveform_params(row["waveform_params"])
+        self.assertEqual(parse_lanes(params["seq"]), played)
+        self.assertEqual(int(params["hebb"]), 0)
+
+
+# ---- gap trials ---------------------------------------------------------
+
+
+class GapTests(unittest.TestCase):
+    def _gap_mode(self, n=4, **over):
+        m = _mode(_engine(), **over)
+        return _only_stage(m, "gap", n)
+
+    def _answer(self, m, t, taps):
+        for i in range(taps):
+            m.queue_press(_press_event(m.lane, t + 0.2 + i * 0.15))
+        t += m.response_window_s + 0.05
+        m._tick(t)
+        return t
+
+    def _run_gap_trial(self, m, t, taps):
+        t = _to_respond(m, t)
+        t = self._answer(m, t, taps)
+        self.assertEqual(m.phase, "feedback")
+        return t
+
+    def test_tap_count_judges_the_trial(self):
+        m = self._gap_mode(n=8)
+        t = _to_trial(m)
+        results = []
+        for i in range(4):
+            two = m.gap_two
+            t = self._run_gap_trial(m, t, taps=2 if two else 1)
+            results.append(m._gap_records[-1]["correct"])
+            if i < 3:
+                t = _next_trial(m, t)
+        self.assertTrue(all(results))
+
+    def test_wrong_count_is_a_miss_and_raises_the_gap(self):
+        m = self._gap_mode()
+        t = _to_trial(m)
+        two = m.gap_two
+        before = m._gap_stair[m.hand].level
+        self._run_gap_trial(m, t, taps=1 if two else 2)
+        rec = m._gap_records[0]
+        self.assertFalse(rec["correct"])
+        self.assertEqual(m._gap_stair[rec["hand"]].level,
+                         before + m.gap_step_ms)
+        row = m.engine.trial_logger.rows[0]
+        self.assertEqual(row["early_late"], "Miss")
+        self.assertEqual(row["waveform"], "buzz_gap")
+
+    def test_no_response_holds_the_staircase(self):
+        m = self._gap_mode()
+        t = _to_trial(m)
+        before = m._gap_stair["right"].level
+        self._run_gap_trial(m, t, taps=0)
+        self.assertEqual(m._gap_stair["right"].level, before)
+        self.assertFalse(m._gap_records[0]["responded"])
+
+    def test_gap_reversals_reach_the_raw_log(self):
+        m = self._gap_mode(n=8)
+        t = _to_trial(m)
+        # Two correct answers (down), then a wrong one (up): reversal.
+        for i in range(3):
+            two = m.gap_two
+            right = 2 if two else 1
+            wrong = 1 if two else 2
+            t = self._run_gap_trial(m, t, taps=right if i < 2 else wrong)
+            if i < 2:
+                t = _next_trial(m, t)
+        revs = [ev for ev in m.engine.raw_logger.events
+                if ev["event"] == "buzz_hunt_reversal"]
+        self.assertEqual(len(revs), 1)
+        self.assertIn("stair=gap", revs[0]["detail"])
+
+
+# ---- block flow and stats -----------------------------------------------
+
+
+class BlockFlowTests(unittest.TestCase):
+    def test_stage_ladder_runs_in_order(self):
+        m = _mode(_engine(), loc_trials_per_hand=1, span_trials=1,
+                  gap_trials_per_hand=1)
+        self.assertEqual(m._stage_plan, ["loc", "span", "gap"])
+
+    def test_block_ends_and_carries_the_staircase(self):
+        m = _mode(_engine(), catch_rate=0.0)
+        m = _only_stage(m, "loc", 1)
+        finished = []
+        m.engine.finish_block = lambda: finished.append(True)
+        t = _to_trial(m)
+        t = _to_respond(m, t)
+        m.queue_press(_press_event(m.lane, t + 0.2))
+        m._tick(t + 0.21)
+        m._tick(t + 0.21 + m.rest_s + 0.05)
+        self.assertEqual(m.phase, "done")
+        self.assertTrue(finished)
+        self.assertEqual(m.engine._buzz_hunt_start_ms["right"],
+                         m._dur_stair["right"].level)
+
+    def test_carried_start_seeds_the_next_block(self):
+        e = _engine()
+        e._buzz_hunt_start_ms = {"right": 180.0}
+        m = _mode(e)
+        self.assertEqual(m._dur_stair["right"].level, 180.0)
+
+    def test_block_stats_carry_the_results_summary(self):
+        m = _mode(_engine(), catch_rate=0.0)
+        m = _only_stage(m, "loc", 2)
+        m.engine.finish_block = lambda: None
+        t = _to_trial(m)
+        t = _to_respond(m, t)
+        m.queue_press(_press_event(m.lane, t + 0.2))
+        m._tick(t + 0.21)
+        t = _next_trial(m, t + 0.21)
+        t = _to_respond(m, t)
+        wrong = next(l for l in range(4) if l != m.lane)
+        m.queue_press(_press_event(wrong, t + 0.2))
+        m._tick(t + 0.21)
+        stats = m.block_stats()
+        self.assertEqual(stats["loc"]["trials"], 2)
+        self.assertEqual(stats["loc"]["accuracy"], 0.5)
+        self.assertIn("right", stats["threshold"])
+        self.assertIn("reversals_ms", stats["threshold"]["right"])
+        self.assertIsNotNone(stats["loc"]["median_rt_ms"])
+        self.assertEqual(stats["span"]["trials"], 0)
+        self.assertIn("confusion", stats)
+
+    def test_pause_mid_trial_restarts_it(self):
+        m = _mode(_engine(), catch_rate=0.0)
+        m = _only_stage(m, "loc", 2)
+        t = _to_trial(m)
+        t = _to_respond(m, t)
+        trial_before = m.trial_counter
+        m.on_resume(5.0)
+        self.assertEqual(m.phase, "announce")
+        self.assertEqual(m.trial_counter, trial_before)
+        self.assertEqual(m.engine.trial_logger.rows, [])
+        restarts = [ev for ev in m.engine.raw_logger.events
+                    if ev["event"] == "trial_restart"]
+        self.assertEqual(len(restarts), 1)
+
+    def test_keyboard_source_is_refused_plainly(self):
+        e = _engine()
+        e.source.provides_samples = False
+        m = _mode(e)
+        m._tick(0.0)
+        self.assertEqual(m.phase, "no_input")
+
+    def test_demo_cap_compresses_every_stage(self):
+        m = _mode(_engine(), demo_trials=6)
+        self.assertLessEqual(m.total_trials, 8)
+        for stage in ("loc", "span", "gap"):
+            self.assertGreaterEqual(m._stage_counts[stage], 1)
+
+    def test_staircase_floor_respects_the_hardware(self):
+        from rehab.game.modes.buzz_hunt import LEVEL_FLOOR_MS
+        m = _mode(_engine(), floor_ms=5.0, start_ms=50.0)
+        self.assertEqual(m.floor_ms, LEVEL_FLOOR_MS)
+
+
+# ---- the screen ---------------------------------------------------------
+
+
+class ScreenTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        import pygame
+        pygame.init()
+        pygame.display.set_mode((320, 200))
+
+    def _screen_and_mode(self):
+        import pygame
+        from rehab.ui.buzz_hunt_screen import BuzzHuntScreen
+        from rehab.ui.theme import get as get_theme
+        from rehab.ui.widgets import Layout
+        e = _engine()
+        e.theme = get_theme("clinical")
+        e.layout = Layout(1280, 800, 1.0)
+        e.paused = False
+        m = _mode(e, catch_rate=0.0)
+        m = _only_stage(m, "loc", 4)
+        e.mode = m
+        sc = BuzzHuntScreen(e)
+        sc._countdown_until = 0.0
+        surf = pygame.Surface((1280, 800))
+        return sc, m, surf
+
+    def test_trial_frames_never_name_a_finger(self):
+        import rehab.ui.buzz_hunt_screen as bs
+        sc, m, surf = self._screen_and_mode()
+        t = _to_trial(m)
+        _to_respond(m, t)
+        seen = []
+        original = bs.draw_text
+
+        def recorder(s, text, pos, *a, **k):
+            seen.append(str(text))
+            return original(s, text, pos, *a, **k)
+
+        bs.draw_text = recorder
+        try:
+            sc.draw(surf)
+        finally:
+            bs.draw_text = original
+        joined = " | ".join(seen).upper()
+        for word in ("INDEX", "MIDDLE", "RING", "LITTLE",
+                     "LEFT", "RIGHT"):
+            self.assertNotIn(word, joined)
+
+    def test_steady_trial_frames_allocate_no_surfaces(self):
+        sc, m, surf = self._screen_and_mode()
+        t = _to_trial(m)
+        t = _to_respond(m, t)
+        sc.draw(surf)                        # warm the halo scratch
+        calls = []
+        original = sc._new_surface
+        sc._new_surface = lambda *a, **k: (calls.append(a)
+                                           or original(*a, **k))
+        for _ in range(30):
+            t += 1.0 / 60.0
+            m._tick(t)
+            sc.draw(surf)
+        self.assertEqual(calls, [])
+
+    def test_feedback_names_the_buzzed_and_pressed_fingers(self):
+        import rehab.ui.buzz_hunt_screen as bs
+        sc, m, surf = self._screen_and_mode()
+        t = _to_trial(m)
+        t = _to_respond(m, t)
+        m.queue_press(_press_event(m.lane, t + 0.3))
+        m._tick(t + 0.31)
+        self.assertEqual(m.phase, "feedback")
+        seen = []
+        original = bs.draw_text
+
+        def recorder(s, text, pos, *a, **k):
+            seen.append(str(text))
+            return original(s, text, pos, *a, **k)
+
+        bs.draw_text = recorder
+        try:
+            sc.draw(surf)
+        finally:
+            bs.draw_text = original
+        joined = " | ".join(seen)
+        self.assertIn("FOUND IT", joined)
+        self.assertIn("The buzz was on", joined)
+
+    def test_breathing_stays_far_below_the_flash_limit(self):
+        from rehab.ui.buzz_hunt_screen import BuzzHuntScreen
+        self.assertLess(BuzzHuntScreen.BREATHE_HZ, 1.0)
+
+    def test_mode_select_and_setup_know_the_mode(self):
+        from rehab.ui.screens import ModeSelectScreen
+        keys = [k for k, _t, _d in ModeSelectScreen.MODES]
+        self.assertIn("buzz_hunt", keys)
+        self.assertIn("buzz_hunt", ModeSelectScreen.MODE_ACCENTS)
+
+
+if __name__ == "__main__":
+    unittest.main()

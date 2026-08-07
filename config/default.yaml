@@ -844,6 +844,230 @@ syllables:
   # records it in raw.csv.
   seed: null
 
+force_pilot:
+  # Force Pilot: one finger's continuous force flies a craft through a
+  # scrolling corridor. The research case for every number lives in
+  # rehab/game/modes/force_pilot.py; this block says what the patient
+  # experiences. Needs the force pads: the mode says so on screen and
+  # refuses to run from the keyboard. Session max presses are probed
+  # in the mode when missing or older than six hours, and every force
+  # target below is a PERCENTAGE of that finger's probed max, never a
+  # raw sensor value.
+
+  # How many runs each finger is owed. The weakest fingers (highest
+  # tracking error so far) get extra runs on top through the floor-
+  # weighted scheduler; min_finger_share is the floor that stops the
+  # weighting starving any finger below an analysable count.
+  runs_per_finger: 2
+  min_finger_share: 0.15
+  # Force-to-altitude mapping: 0 to span_pct of the finger's max fills
+  # the screen height. Low force is where the cited deficits live, and
+  # staying under half of max keeps repeated runs sub-fatiguing.
+  span_pct: 40
+  # Run shape, all in percent of max and seconds. base is the resting
+  # altitude the run opens on; plateau is the top of the ramp; the
+  # ramp rate is drawn per run from ramp_rates_pct_s and logged. The
+  # sine and the sum-of-sines assessment sections draw frequencies
+  # inside the level's bandwidth; the assessment's seed and drawn
+  # numbers ride the trial row for exact offline rebuilds.
+  base_pct: 8
+  plateau_pct: 28
+  ramp_rates_pct_s: [5, 10]
+  hold_in_s: 3.0
+  hold_top_s: 3.0
+  sine_amp_pct: 9
+  sine_s: 6.0
+  sos_amps_pct: [6, 3.5, 2.5]
+  sos_s: 8.0
+  pre_assess_s: 1.0
+  # Difficulty ladder: level n uses corridor_halfwidth_pct[n-1] and
+  # bandwidth_hz[n-1]. The corridor narrows and the waveforms speed up
+  # together; every move is announced on screen and logged. Promotion
+  # needs two runs at or above promote_frac time-in-corridor; one run
+  # below demote_frac drops back.
+  level: 1
+  corridor_halfwidth_pct: [8, 6, 4]
+  bandwidth_hz: [0.3, 0.45, 0.6]
+  promote_frac: 0.8
+  demote_frac: 0.4
+  # Visual gain magnifies the DISPLAYED error only (craft shows
+  # target + gain x error; scoring always uses the true force).
+  # Archer 2017 shows gain moves patient error substantially, so hold
+  # it constant within any comparison; it is logged per run.
+  visual_gain: 1.0
+  # Rings sit on the corridor centreline and collect when the craft
+  # passes them inside the corridor; each is worth ring_points on top
+  # of the run outcome.
+  ring_interval_s: 1.5
+  ring_points: 2
+  # Corridor-exit buzz: tactile error feedback on the working finger.
+  # Rides the cue.buzz_after switch (so a silent-error block stays
+  # separable in the CSV) with a cooldown so edge wobble cannot drone.
+  exit_buzz_ms: 80
+  exit_buzz_cooldown_s: 1.0
+  # Max-press probe: presses per finger (median kept), the counts a
+  # press must clear to count as an attempt, and how old a stored max
+  # may be before it is re-measured.
+  probe_presses: 3
+  probe_floor_counts: 30
+  probe_max_age_s: 21600
+  # Between-run pacing: the who-flies-next announcement and the rest
+  # that shows the run's scores.
+  announce_s: 2.5
+  rest_s: 10.0
+  # Set an integer to replay a block's exact run plans (testing, or a
+  # deliberately repeated protocol). Empty draws fresh each block and
+  # records it in raw.csv.
+  seed: null
+
+lighthouse:
+  # Lighthouse: hold a low force to keep a lantern lit, with the
+  # visual feedback fading out mid-hold at higher levels, plus echo
+  # trials that reproduce a remembered force after a delay. The
+  # research case for every number lives in
+  # rehab/game/modes/lighthouse.py; this block says what the patient
+  # experiences. Needs the force pads (no keyboard fallback), probes
+  # session max presses when missing or stale, and every force target
+  # below is a PERCENTAGE of that probed max, never a raw sensor
+  # value. This mode never buzzes during a trial: a buzz inside a
+  # hold would hand the patient a tactile reference exactly when the
+  # design removes the visual one. The only motor event is the shared
+  # after-press confirmation at trial close (cue.buzz_after), and
+  # failures never buzz at all.
+
+  # How many hold and echo trials each finger is owed. Counts stay
+  # equal per finger and per hand (paired balancing): the lit-dark
+  # comparison needs the same amount of data from every finger.
+  holds_per_finger: 2
+  echoes_per_finger: 1
+  # Target band, percent of the finger's probed max. 5 to 25 percent
+  # is where the cited steadiness and CTS hold deficits live.
+  target_lo_pct: 5
+  target_hi_pct: 25
+  # One hold's length and the in-band tolerance either side of the
+  # target (the band the flame reads as steady, and the ignite band).
+  hold_s: 16.0
+  tol_pct: 3.0
+  # Feedback fade ladder: level n blanks dark_windows[n-1] windows
+  # totalling dark_fraction[n-1] of the hold. Every hold keeps a lit
+  # lead-in, lit gaps between dark windows and a lit tail so the
+  # relight can reveal the drift. Level 1 is fully lit.
+  level: 1
+  dark_windows: [0, 1, 2]
+  dark_fraction: [0.0, 0.25, 0.45]
+  lit_lead_s: 3.0
+  lit_gap_s: 2.0
+  lit_tail_s: 2.0
+  # The ladder moves on the lit-dark error delta (the Li 2015
+  # discriminator): two holds at or under promote_delta_pct promote,
+  # one hold at or over demote_delta_pct drops back. Level 1 has no
+  # dark data, so it promotes on lit accuracy alone.
+  promote_lit_mae_pct: 1.5
+  promote_delta_pct: 1.5
+  demote_delta_pct: 6.0
+  # Igniting the lantern: the flame must sit in the band this long to
+  # light, and a trial that never ignites gutters gently after the
+  # timeout (no buzzer, no klaxon; the flame just slips away).
+  ignite_hold_s: 0.5
+  ignite_timeout_s: 10.0
+  # Echo trials: match the shown glow for show_s, wait one of the
+  # delays (each delay gets equal trials), then remake it blind; the
+  # settled tail of the reproduce window is what gets scored. With
+  # both hands connected the echo goes cross-hand: one hand studies
+  # the glow, the same finger on the other hand repeats it.
+  echo_show_s: 3.0
+  echo_delays_s: [2, 5, 10, 15]
+  echo_reproduce_s: 4.0
+  echo_settle_s: 2.0
+  # Points for a dark window held within tolerance, on top of the
+  # trial outcome.
+  dark_bonus_points: 2
+  # Max-press probe: same flow and meaning as force_pilot's.
+  probe_presses: 3
+  probe_floor_counts: 30
+  probe_max_age_s: 21600
+  # Between-trial pacing: the who-holds-next announcement and the
+  # rest that shows the trial's numbers.
+  announce_s: 2.5
+  rest_s: 6.0
+  # Set an integer to replay a block's exact trial plans (testing, or
+  # a deliberately repeated protocol). Empty draws fresh each block
+  # and records it in raw.csv.
+  seed: null
+
+buzz_hunt:
+  # Buzz Hunt: the vibrotactile perception suite. The buzz IS the
+  # stimulus, so these pulses bypass the cue.* before-press switches
+  # by design (after-press feedback still honours them), and nothing
+  # on screen ever names the target finger. The research case for
+  # every number lives in rehab/game/modes/buzz_hunt.py; this block
+  # says what the patient experiences. Needs the hardware: a keyboard
+  # cannot buzz a finger, and the mode says so on screen. One block
+  # runs the stage ladder in order: localisation, cross-hand
+  # distractors (both-hands sessions only), sequence span, gap
+  # detection.
+
+  # Localisation: trials per hand (fingers stay balanced within the
+  # hand), and the share of trials where nothing buzzes at all. Catch
+  # trials price guessing: the false-alarm rate they produce is what
+  # makes the accuracy numbers readable.
+  loc_trials_per_hand: 32
+  catch_rate: 0.1
+  # Pulse duration staircase (2-down 1-up per hand, converging on
+  # 70.7 percent correct). All in ms of REQUESTED duration; delivered
+  # pulses stretch by up to about a frame and the motor's rise time
+  # sits on top, which is why the floor is 40 (the measured region
+  # where shorter requests stop being distinguishable) and the step
+  # never goes below 17 (one display frame). Thresholds are
+  # within-person measures only; see the mode docstring.
+  start_ms: 300
+  step_ms: 40
+  floor_ms: 40
+  ceil_ms: 500
+  # How many of the last reversals average into the threshold
+  # estimate.
+  threshold_reversals: 6
+  # Distractor stage (both hands only): trials per hand, and how far
+  # ahead of the target the other hand's decoy pulse starts. These
+  # trials run at the staircase's current level without moving it.
+  distractor_trials_per_hand: 8
+  distractor_lead_ms: 150
+  # Sequence span: total trials, the opening sequence length, the
+  # pulse length and onset-to-onset spacing of the playback, and how
+  # often the hidden repeating sequence returns (every Nth span
+  # trial). The hidden sequence is derived from the participant name,
+  # so it is the same every session; do not mention it to players.
+  span_trials: 10
+  span_start: 2
+  span_pulse_ms: 150
+  span_ioi_ms: 400
+  hebb_every: 3
+  # Gap detection: trials per hand; one long buzz (two shorts plus
+  # the gap, so length never gives it away) or two shorts with a
+  # silent gap between. The gap staircases down as above; the floor
+  # respects the frame-quantised stop-start path.
+  gap_trials_per_hand: 20
+  gap_start_ms: 200
+  gap_step_ms: 25
+  gap_floor_ms: 35
+  gap_short_ms: 80
+  # Trial pacing: the unpredictable quiet wait before each stimulus
+  # (uniform draw between these bounds, so the buzz cannot be timed),
+  # the response window, and the extra replay time per span item.
+  wait_lo_s: 0.8
+  wait_hi_s: 2.2
+  response_window_s: 3.0
+  replay_item_s: 1.5
+  # Between-trial pacing and the stage cards that explain each task.
+  announce_s: 2.0
+  rest_s: 3.0
+  stage_intro_s: 5.0
+  # Set an integer to replay a block's exact trial plans (testing, or
+  # a deliberately repeated protocol). Empty draws fresh each block
+  # and records it in raw.csv. The hidden repeating sequence comes
+  # from the participant name, not from this seed.
+  seed: null
+
 rhythm:
   difficulty: medium     # easy | medium | hard
   # Seconds after the visual countdown ends before the audio starts +

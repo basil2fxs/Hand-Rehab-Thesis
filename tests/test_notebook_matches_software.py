@@ -59,6 +59,10 @@ class TestColumnsTheNotebookNeeds:
         ("hand", "left against right"),
         ("stimulus", "the packed per-trial detail of the newer modes"),
         ("pattern_trial", "trained against probe trials in pattern mode"),
+        ("waveform", "which trajectory a continuous-force trial ran"),
+        ("waveform_params", "the numbers that rebuild that trajectory"),
+        ("waveform_seed", "regenerating pseudorandom sections exactly"),
+        ("segment_times", "cutting raw traces into scored windows"),
     ]
 
     @pytest.mark.parametrize("column,why", REQUIRED)
@@ -124,3 +128,96 @@ class TestCueFlagsRoundTrip:
         # The notebook splits on the slash and looks for B and S.
         assert "cue_flags" in source
         assert 'split("/")' in source or "split('/')" in source
+
+
+def _notebook_functions(source, names):
+    """Compile just the named top-level defs out of the notebook
+    source. The copies can then be exercised directly, without
+    running any of the notebook's IO or widget code around them."""
+    tree = ast.parse(source)
+    wanted = {node.name: node for node in tree.body
+              if isinstance(node, ast.FunctionDef)
+              and node.name in names}
+    missing = [n for n in names if n not in wanted]
+    assert not missing, f"notebook no longer defines {missing}"
+    import numpy
+    ns = {"np": numpy}
+    mod = ast.Module(body=[wanted[n] for n in names], type_ignores=[])
+    exec(compile(mod, "<notebook>", "exec"), ns)
+    return [ns[n] for n in names]
+
+
+class TestContinuousModeContract:
+    """The three continuous-force chapters rebuild trials offline.
+
+    The notebook carries copies of the game's pure trajectory
+    builders and keys on the game's packed tokens. Either side can
+    change without the other noticing, so the shared names are pinned
+    here, and the corridor rebuild is exercised end to end through
+    the packed CSV cell, exactly the round trip a real trial takes.
+    """
+
+    # (literal, game file that writes it, notebook section that
+    # reads it). A rename on either side must fail here, not go
+    # quiet in a chapter.
+    TOKENS = [
+        ('waveform="corridor"', "rehab/game/modes/force_pilot.py",
+         '== "corridor"'),
+        ('waveform="hold"', "rehab/game/modes/lighthouse.py",
+         '"hold"'),
+        ('waveform="reproduce"', "rehab/game/modes/lighthouse.py",
+         '"reproduce"'),
+        ('"loc"', "rehab/game/modes/buzz_hunt.py", '"loc"'),
+        ('"distractor"', "rehab/game/modes/buzz_hunt.py",
+         '"distractor"'),
+        ('"span"', "rehab/game/modes/buzz_hunt.py", '"span"'),
+        ('"gap"', "rehab/game/modes/buzz_hunt.py", '"gap"'),
+        ('"buzz_hunt_reversal"', "rehab/game/modes/buzz_hunt.py",
+         '"buzz_hunt_reversal"'),
+        ("level_ms=", "rehab/game/modes/buzz_hunt.py", '"level_ms"'),
+    ]
+
+    @pytest.mark.parametrize("game_literal,game_file,nb_literal",
+                             TOKENS)
+    def test_both_sides_still_use_the_token(self, game_literal,
+                                            game_file, nb_literal,
+                                            source):
+        game_src = (ROOT / game_file).read_text()
+        assert game_literal in game_src, (
+            f"{game_file} stopped writing {game_literal!r}")
+        assert nb_literal in source, (
+            f"the notebook stopped reading {nb_literal!r}, so that "
+            f"part of its chapter is now silent")
+
+    def test_the_notebook_rebuilds_the_corridor_the_game_flew(
+            self, source):
+        from rehab.data.logger import (pack_waveform_params,
+                                       parse_waveform_params)
+        from rehab.game.modes.force_pilot import (draw_run_params,
+                                                  sections_from_params,
+                                                  target_pct)
+        fp_sections, fp_target = _notebook_functions(
+            source, ["fp_sections_from_params", "fp_target_pct"])
+        p = draw_run_params(
+            seed=7, level=2, freq_ceiling_hz=0.45,
+            corridor_hw_pct=6.0, gain=1.0, span_pct=40.0,
+            base_pct=8.0, plateau_pct=28.0,
+            ramp_rates_pct_s=[5.0, 10.0], sine_amp_pct=9.0,
+            sine_s=6.0, sos_amps_pct=[6.0, 3.5, 2.5], sos_s=8.0,
+            hold_in_s=3.0, hold_top_s=3.0, pre_assess_s=1.0,
+            max_press_counts=420.0)
+        # Through the CSV cell, exactly as a logged trial travels.
+        rebuilt = fp_sections(
+            parse_waveform_params(pack_waveform_params(p)))
+        game = sections_from_params(p)
+        assert [s["name"] for s in rebuilt] == [s.name for s in game]
+        dur = game[-1].end_s
+        worst = max(
+            abs(target_pct(game, i / 20.0)
+                - fp_target(rebuilt, i / 20.0))
+            for i in range(int(dur * 20) + 1))
+        # The packed cell rounds to 6 significant digits, which
+        # bounds the rebuild error far under a hundredth of a
+        # percent of max.
+        assert worst < 0.01, (
+            f"corridor rebuild drifted by {worst:.4f}% of max")

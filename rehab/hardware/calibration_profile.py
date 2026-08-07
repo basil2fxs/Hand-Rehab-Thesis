@@ -107,6 +107,26 @@ class CalibrationProfile:
     # Peak on each sensor when all four pressed together. Compared with
     # `press` this gives the multi-finger deficit.
     press_all: list[float] = field(default_factory=lambda: [0.0] * N_FINGERS)
+    # Session max press per finger, in counts ABOVE RESTING (the same
+    # reference detection and the continuous force view use), measured
+    # by the in-mode max-press probes: two or three maximal presses,
+    # median peak kept. Zero means "not measured", which is what every
+    # profile saved before this field existed loads as, so old files
+    # keep working and old code reading a new file simply drops the
+    # field.
+    #
+    # This is deliberately separate from `press`. The calibration
+    # press is a LIGHT press that sets detection thresholds a weak
+    # finger can reach; max_press is the ceiling that force targets
+    # are percentages of. Conflating them would make "20 percent of
+    # max" mean "20 percent of a light press", far below anything the
+    # steadiness literature calls 20 percent MVC.
+    max_press: list[float] = field(default_factory=lambda: [0.0] * N_FINGERS)
+    # When the probes ran, same format as created_at. Max press is a
+    # session quantity (it moves with fatigue and day-to-day state),
+    # so a mode deciding whether to reuse or re-probe needs the age,
+    # not just the values.
+    max_press_measured_at: str = ""
     notes: str = ""
 
     # ---- derived values -------------------------------------------
@@ -158,6 +178,53 @@ class CalibrationProfile:
             capped = min(rel, on - DETECTOR_HYSTERESIS, on * 0.6)
             out.append(int(round(max(1.0, capped))))
         return out
+
+    # ---- session max press ----------------------------------------
+
+    def has_max_press(self) -> bool:
+        """Whether the max-press probes have run for this profile.
+        All-zero (the default, and what pre-field files load as)
+        means no."""
+        return any(v > 0.0 for v in (self.max_press or []))
+
+    def set_max_press(self, values: list[float],
+                       measured_at: str | None = None) -> None:
+        """Store the probed session max per finger, counts above
+        resting. Values are clamped at zero because a negative max is
+        always a probe fault, and a zero entry keeps meaning "not
+        measured" for that finger."""
+        vals = [max(0.0, float(v)) for v in values[:N_FINGERS]]
+        while len(vals) < N_FINGERS:
+            vals.append(0.0)
+        self.max_press = vals
+        self.max_press_measured_at = (
+            measured_at or time.strftime("%Y-%m-%dT%H:%M:%S"))
+
+    def percent_of_max(self, finger: int, counts: float) -> float | None:
+        """Convert a baseline-subtracted reading on one finger to
+        percent of that finger's session max. None when the probe has
+        not run for that finger, so a mode cannot silently fall back
+        to raw counts: force targets in the continuous modes are
+        percentages of the probed max, never counts."""
+        if not (0 <= finger < N_FINGERS):
+            return None
+        m = self.max_press[finger] if finger < len(self.max_press) else 0.0
+        if m <= 0.0:
+            return None
+        return float(counts) / float(m) * 100.0
+
+    def max_press_age_s(self, now: float | None = None) -> float | None:
+        """Seconds since the probes ran, or None when they have not.
+        Wall-clock based because the timestamp has to survive an app
+        restart within the same session day."""
+        if not self.max_press_measured_at:
+            return None
+        try:
+            measured = time.mktime(time.strptime(
+                self.max_press_measured_at, "%Y-%m-%dT%H:%M:%S"))
+        except (ValueError, OverflowError):
+            return None
+        return max(0.0, (now if now is not None else time.time()) - measured)
 
     def multi_finger_deficit(self) -> float | None:
         """Sum of the single-finger presses against the simultaneous
@@ -216,6 +283,11 @@ class CalibrationProfile:
             "on_delta": self.on_delta(),
             "off_delta": self.off_delta(),
             "multi_finger_deficit": self.multi_finger_deficit(),
+            # Session max press rides along so metadata.json records
+            # what every percent target in the block actually meant in
+            # counts. Zeros when the probes never ran.
+            "max_press": [round(v, 1) for v in self.max_press],
+            "max_press_measured_at": self.max_press_measured_at,
         }
 
     # ---- persistence ----------------------------------------------

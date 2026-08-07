@@ -1,0 +1,743 @@
+"""Force Pilot: the visuomotor force tracking mode.
+
+What is pinned here, in dependency order:
+
+  - the trajectory generator: deterministic from its seed, continuous
+    across section boundaries, inside the 0 to span band, and exactly
+    rebuildable from the packed waveform_params cell alone (the
+    offline-reconstruction contract)
+  - the probe gate: no session max means max-press probes run first
+    and land in engine.record_max_press; a fresh max skips them
+  - run scoring against synthetic force traces: perfect tracking
+    scores full corridor time, an offset trace scores a stall and the
+    exit buzz respects cue.buzz_after, release error is scored apart
+    from press error
+  - the trial row: waveform corridor, seed, params and segment bounds
+    that parse back to the sections that ran
+  - the hand matrix: one hand flies its four fingers, both hands fly
+    all eight with runs alternating hands, and the weakest finger
+    draws extra runs without starving anyone
+  - the screen: corridor geometry is cached per run and steady-state
+    frames create no new surfaces
+"""
+from __future__ import annotations
+
+import os
+import sys
+import time
+import unittest
+from pathlib import Path
+from unittest.mock import MagicMock
+
+
+os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+
+DRAW_KW = dict(
+    seed=42, level=1, freq_ceiling_hz=0.3, corridor_hw_pct=8.0,
+    gain=1.0, span_pct=40.0, base_pct=8.0, plateau_pct=28.0,
+    ramp_rates_pct_s=[5.0, 10.0], sine_amp_pct=9.0, sine_s=6.0,
+    sos_amps_pct=[6.0, 3.5, 2.5], sos_s=8.0, hold_in_s=3.0,
+    hold_top_s=3.0, pre_assess_s=1.0, max_press_counts=400.0)
+
+
+def _params(**over):
+    from rehab.game.modes.force_pilot import draw_run_params
+    kw = dict(DRAW_KW)
+    kw.update(over)
+    return draw_run_params(**kw)
+
+
+def _engine(hand_mode="right", cfg_extra=None):
+    """Engine fixture in the house style: built via __new__, MagicMock
+    config, command-recording source, loggable."""
+    from rehab.game.engine import GameEngine
+    values = {
+        "fsr.num_sensors_per_hand": 4,
+        "motor.cue_ms": 150,
+        "motor.pulse_interval_ms": 120,
+        "cue.buzz_before": False,
+        "cue.buzz_after": True,
+        "cue.sound_before": False,
+        "cue.sound_after": False,
+        "cue.show_target": True,
+        "game.timeout_s": 1.0,
+    }
+    values.update(cfg_extra or {})
+    e = GameEngine.__new__(GameEngine)
+    e.cfg = MagicMock()
+    e.cfg.get = MagicMock(side_effect=lambda k, d=None: values.get(k, d))
+    sent = []
+    src = MagicMock()
+    src.provides_samples = True
+    src.send_command = lambda c: (sent.append(c) or True)
+    e.source = src
+    e._sent = sent
+    e.hand_mode = hand_mode
+    e.audio = None
+    e.raw_logger = _RawLoggerStub()
+    e._screens = {}
+    e.mode = None
+    e.detectors = {}
+    e.calibration_profiles = {}
+    e.score = 0
+    e.hits = 0
+    e.misses = 0
+    e.hit_streak = 0
+    e.miss_streak = 0
+    e._streak_fired = set()
+    e._streak_thresholds = ()
+    e._block_rt_sum = 0.0
+    e._block_rt_count = 0
+    e._block_bpm_min = None
+    e._block_bpm_max = None
+    e._block_wrong_press_trials = 0
+    e._block_peak_streak = 0
+    e._last_gained = 0
+    e.current_block = "force_pilot"
+    e.session_paths = None
+    e.session = MagicMock()
+    e._per_lane_rts = {}
+    e._per_lane_misses = {}
+    e._per_lane_wrong = {}
+    e.trial_logger = _TrialLoggerStub()
+    e._ensure_metric_state()
+    return e
+
+
+class _RawLoggerStub:
+    def __init__(self):
+        self.events = []
+
+    def queue_event(self, event, lane=None, detail="", t_perf=None,
+                    fsr_vals=None, hand="right"):
+        self.events.append({"event": event, "lane": lane,
+                            "detail": detail, "hand": hand})
+
+
+class _TrialLoggerStub:
+    def __init__(self):
+        self.rows = []
+
+    def write(self, row):
+        self.rows.append(row)
+
+
+class _ViewStub:
+    """Scripted stand-in for ForceView: the test sets counts and pct
+    and the mode reads them like live sensor data."""
+
+    def __init__(self):
+        from rehab.game.force_stream import ForceReading
+        self._reading_cls = ForceReading
+        self.counts = 0.0
+        self.pct: float | None = None
+        self.gone = False           # simulate a source dropout
+        self.rebaselined: list = []
+
+    def read(self, lane):
+        if self.gone:
+            return None
+        return self._reading_cls(counts=self.counts, percent=self.pct)
+
+    def sample_age_s(self, lane, now):
+        return None if self.gone else 0.0
+
+    def rebaseline(self, lanes=None):
+        self.rebaselined.append(lanes)
+
+
+def _mode(e, hands=None, **over):
+    from rehab.game.modes.force_pilot import ForcePilotMode
+    from rehab.game.scoring import ScoreConfig
+    kw = dict(
+        engine=e,
+        lanes_by_hand=hands or {"right": [0, 1, 2, 3]},
+        level=1,
+        corridor_hw_by_level=[8.0, 6.0, 4.0],
+        freq_ceiling_by_level=[0.3, 0.45, 0.6],
+        runs_per_finger=2,
+        min_finger_share=0.15,
+        span_pct=40.0,
+        base_pct=8.0,
+        plateau_pct=28.0,
+        ramp_rates_pct_s=[10.0],
+        sine_amp_pct=9.0,
+        sine_s=6.0,
+        sos_amps_pct=[6.0, 3.5, 2.5],
+        sos_s=8.0,
+        hold_in_s=3.0,
+        hold_top_s=3.0,
+        pre_assess_s=1.0,
+        visual_gain=1.0,
+        ring_interval_s=1.5,
+        ring_points=2,
+        exit_buzz_ms=80.0,
+        exit_buzz_cooldown_s=1.0,
+        promote_frac=0.8,
+        demote_frac=0.4,
+        probe_presses=3,
+        probe_floor_counts=30.0,
+        probe_max_age_s=6 * 3600.0,
+        announce_s=0.5,
+        rest_s=1.0,
+        score_cfg=ScoreConfig(),
+        seed=7,
+        demo_trials=None,
+    )
+    kw.update(over)
+    m = ForcePilotMode(**kw)
+    m.view = _ViewStub()
+    return m
+
+
+def _fresh_profile(hand="right"):
+    from rehab.hardware.calibration_profile import CalibrationProfile
+    prof = CalibrationProfile(hand=hand, resting=[100.0] * 4,
+                              press=[160.0] * 4)
+    prof.set_max_press([400.0] * 4)
+    return prof
+
+
+def _to_run_phase(m, t0=1000.0):
+    """Drive a probe-free mode from init into the run phase and return
+    the run start time."""
+    m._tick(t0)
+    assert m.phase == "announce", m.phase
+    t = t0 + m.announce_s + 0.01
+    m._tick(t)
+    assert m.phase == "run", m.phase
+    return t
+
+
+def _play_run(m, t_start, force_fn, dt=1.0 / 60.0):
+    """Feed one full run with force from force_fn(t_run, target)."""
+    from rehab.game.modes.force_pilot import target_pct
+    t = t_start
+    while m.phase == "run":
+        t += dt
+        t_run = t - (m.run_t0 or t_start)
+        target = target_pct(m.sections, t_run)
+        m.view.pct = force_fn(t_run, target)
+        m._tick(t)
+    return t
+
+
+# ---- trajectory generation ---------------------------------------------
+
+
+class TrajectoryTests(unittest.TestCase):
+    def test_same_seed_same_plan(self):
+        self.assertEqual(_params(), _params())
+
+    def test_different_seed_different_plan(self):
+        a, b = _params(seed=1), _params(seed=2)
+        self.assertNotEqual(a["sine_freq_hz"], b["sine_freq_hz"])
+
+    def test_sections_are_continuous(self):
+        # A step between sections would be an uncontrolled stimulus:
+        # the corridor is designed with no jumps, and the approach
+        # ramp exists exactly to walk into the assessment's start.
+        from rehab.game.modes.force_pilot import (
+            sections_from_params, target_pct)
+        secs = sections_from_params(_params())
+        for k in range(1, len(secs)):
+            before = target_pct(secs, secs[k].start_s - 1e-7)
+            after = target_pct(secs, secs[k].start_s + 1e-7)
+            self.assertAlmostEqual(before, after, places=3,
+                                   msg=secs[k].name)
+
+    def test_duration_inside_the_brief_window(self):
+        # 20 to 30 s runs, both configured ramp rates.
+        from rehab.game.modes.force_pilot import (
+            run_duration_s, sections_from_params)
+        for seed in range(12):
+            secs = sections_from_params(_params(seed=seed))
+            dur = run_duration_s(secs)
+            self.assertGreaterEqual(dur, 20.0)
+            self.assertLessEqual(dur, 30.0)
+
+    def test_target_stays_inside_the_span(self):
+        from rehab.game.modes.force_pilot import (
+            run_duration_s, sections_from_params, target_pct)
+        for seed in range(8):
+            secs = sections_from_params(_params(seed=seed))
+            dur = run_duration_s(secs)
+            for i in range(500):
+                v = target_pct(secs, dur * i / 499.0)
+                self.assertGreaterEqual(v, 0.0)
+                self.assertLessEqual(v, 40.0)
+
+    def test_frequencies_respect_the_level_band(self):
+        from rehab.game.modes.force_pilot import (
+            SINE_FREQ_FLOOR_HZ, SOS_FREQ_FLOOR_HZ)
+        for seed in range(20):
+            p = _params(seed=seed, freq_ceiling_hz=0.45)
+            self.assertGreaterEqual(p["sine_freq_hz"], SINE_FREQ_FLOOR_HZ)
+            self.assertLessEqual(p["sine_freq_hz"], 0.45)
+            freqs = [p["sos_f1_hz"], p["sos_f2_hz"], p["sos_f3_hz"]]
+            self.assertEqual(freqs, sorted(freqs))
+            for f in freqs:
+                self.assertGreaterEqual(f, SOS_FREQ_FLOOR_HZ)
+                self.assertLessEqual(f, 0.45)
+
+    def test_rebuild_from_the_packed_cell(self):
+        # The offline contract: the notebook parses waveform_params
+        # and rebuilds the target without this module's rng. The
+        # packed cell trims floats to 6 significant digits, so the
+        # rebuild is exact to well under a hundredth of a percent.
+        from rehab.data.logger import (pack_waveform_params,
+                                       parse_waveform_params)
+        from rehab.game.modes.force_pilot import (
+            run_duration_s, sections_from_params, target_pct)
+        p = _params()
+        secs = sections_from_params(p)
+        back = sections_from_params(
+            parse_waveform_params(pack_waveform_params(p)))
+        dur = run_duration_s(secs)
+        worst = max(abs(target_pct(secs, dur * i / 399.0)
+                        - target_pct(back, dur * i / 399.0))
+                    for i in range(400))
+        self.assertLess(worst, 1e-3)
+
+
+# ---- the probe gate ----------------------------------------------------
+
+
+class ProbeGateTests(unittest.TestCase):
+    def _press(self, m, t, peak=400.0):
+        """Feed one synthetic maximal press through the mode's tick."""
+        for frac, dt in ((0.4, 0.05), (1.0, 0.05)):
+            m.view.counts = peak * frac
+            t += dt
+            m._tick(t)
+        for _ in range(8):                    # hold 0.4 s
+            t += 0.05
+            m._tick(t)
+        m.view.counts = 0.0
+        for _ in range(12):                   # release + rest 0.6 s
+            t += 0.05
+            m._tick(t)
+        return t
+
+    def test_missing_max_runs_probes_first(self):
+        e = _engine()
+        m = _mode(e)
+        m._tick(0.0)
+        self.assertEqual(m.phase, "probe_gap")
+        self.assertEqual(len(m._probe_queue), 4)
+
+    def test_probes_record_and_hand_over_to_runs(self):
+        e = _engine()
+        recorded = {}
+        e.record_max_press = lambda hand, maxes: recorded.update(
+            {hand: list(maxes)})
+        m = _mode(e)
+        t = 0.0
+        m._tick(t)
+        for _ in range(4):
+            t += 1.3                          # through the probe gap
+            m._tick(t)
+            self.assertEqual(m.phase, "probe")
+            for peak in (390.0, 400.0, 410.0):
+                t = self._press(m, t, peak)
+        self.assertEqual(recorded["right"], [400.0] * 4)
+        # The trailing rest ticks may already have crossed the short
+        # test announce window; either way the probes are over and the
+        # run flow owns the block.
+        self.assertIn(m.phase, ("announce", "run"))
+
+    def test_fresh_max_skips_probes(self):
+        e = _engine()
+        e.calibration_profiles["right"] = _fresh_profile()
+        m = _mode(e)
+        m._tick(0.0)
+        self.assertEqual(m.phase, "announce")
+
+    def test_keyboard_source_is_refused_plainly(self):
+        # No keyboard fallback by design: the mode parks on a message
+        # instead of pretending a keyboard can make force.
+        e = _engine()
+        e.source.provides_samples = False
+        m = _mode(e)
+        m._tick(0.0)
+        self.assertEqual(m.phase, "no_input")
+
+
+# ---- run scoring against synthetic traces ------------------------------
+
+
+class RunScoringTests(unittest.TestCase):
+    def _ready_mode(self, e=None, **over):
+        e = e or _engine()
+        e.calibration_profiles["right"] = _fresh_profile()
+        return _mode(e, **over)
+
+    def test_perfect_tracking_scores_full_corridor_time(self):
+        m = self._ready_mode()
+        t = _to_run_phase(m)
+        _play_run(m, t, lambda t_run, target: target)
+        rec = m._records[0]
+        self.assertGreaterEqual(rec.tic_frac, 0.999)
+        self.assertLess(rec.mae_pct, 1e-6)
+        self.assertEqual(rec.stalls, 0)
+        self.assertEqual(rec.rings_collected, rec.rings_total)
+        row = m.engine.trial_logger.rows[0]
+        self.assertEqual(row["early_late"], "Great")
+
+    def test_offset_trace_stalls_once_and_buzzes(self):
+        m = self._ready_mode()
+        t = _to_run_phase(m)
+        lane = m.lane
+        _play_run(m, t, lambda t_run, target: target + 20.0)
+        rec = m._records[0]
+        self.assertEqual(rec.tic_frac, 0.0)
+        self.assertEqual(rec.stalls, 1)
+        self.assertEqual(rec.rings_collected, 0)
+        self.assertIn(f"STIM:{lane + 1}", m.engine._sent)
+        row = m.engine.trial_logger.rows[0]
+        self.assertEqual(row["early_late"], "Miss")
+
+    def test_exit_buzz_respects_the_cue_switch(self):
+        e = _engine(cfg_extra={"cue.buzz_after": False})
+        m = self._ready_mode(e)
+        t = _to_run_phase(m)
+        _play_run(m, t, lambda t_run, target: target + 20.0)
+        self.assertEqual(m._records[0].stalls, 1)
+        self.assertFalse([c for c in m.engine._sent
+                          if str(c).startswith("STIM")])
+
+    def test_release_error_is_scored_apart_from_press(self):
+        # The Davidson 2026 marker: error during the ramp-down must be
+        # separable from error during the ramp-up.
+        m = self._ready_mode()
+        t = _to_run_phase(m)
+        release = next(s for s in m.sections if s.name == "release")
+
+        def force(t_run, target):
+            if release.start_s <= t_run < release.end_s:
+                return target + 5.0
+            return target
+
+        _play_run(m, t, force)
+        rec = m._records[0]
+        self.assertLess(rec.press_mae_pct, 0.5)
+        self.assertAlmostEqual(rec.release_mae_pct, 5.0, delta=0.5)
+
+    def test_dropout_pauses_scoring_instead_of_judging_it(self):
+        m = self._ready_mode()
+        t = _to_run_phase(m)
+        seen = {"scored_before": None}
+
+        def force(t_run, target):
+            # The source vanishes for the middle third of the run.
+            third = m.duration_s / 3.0
+            m.view.gone = third <= t_run < 2 * third
+            return target
+
+        _play_run(m, t, force)
+        rec = m._records[0]
+        del seen
+        # The dropped third contributes no scored time, and what was
+        # scored is still perfect.
+        self.assertLess(rec.scored_s, m.duration_s * 0.75)
+        self.assertGreaterEqual(rec.tic_frac, 0.999)
+        self.assertEqual(rec.stalls, 0)
+
+    def test_trial_row_carries_the_reconstruction_contract(self):
+        from rehab.data.logger import (parse_segments,
+                                       parse_waveform_params)
+        m = self._ready_mode()
+        t = _to_run_phase(m)
+        run_t0 = m.run_t0
+        sections = list(m.sections)
+        seed = m.run_seed
+        _play_run(m, t, lambda t_run, target: target)
+        row = m.engine.trial_logger.rows[0]
+        self.assertEqual(row["waveform"], "corridor")
+        self.assertEqual(row["waveform_seed"], str(seed))
+        params = parse_waveform_params(row["waveform_params"])
+        self.assertEqual(params["max_press_counts"], 400.0)
+        self.assertEqual(params["hw_pct"], 8.0)
+        self.assertEqual(params["gain"], 1.0)
+        segs = parse_segments(row["segment_times"])
+        self.assertEqual([s[0] for s in segs],
+                         [s.name for s in sections])
+        for (name, start, end), sec in zip(segs, sections):
+            self.assertAlmostEqual(start - run_t0, sec.start_s, places=4)
+            self.assertAlmostEqual(end - run_t0, sec.end_s, places=4)
+
+    def test_segment_markers_bracket_the_run_in_raw(self):
+        m = self._ready_mode()
+        t = _to_run_phase(m)
+        _play_run(m, t, lambda t_run, target: target)
+        events = [ev for ev in m.engine.raw_logger.events
+                  if ev["event"] in ("segment_start", "segment_end")]
+        names = [s.name for s in m.sections]
+        # The plan for the NEXT run replaced m.sections at close; the
+        # logged names still describe the run that played.
+        starts = [ev for ev in events if ev["event"] == "segment_start"]
+        ends = [ev for ev in events if ev["event"] == "segment_end"]
+        self.assertEqual(len(starts), len(names))
+        self.assertEqual(len(ends), len(names))
+
+    def test_rt_censoring_column_stays_empty(self):
+        # A run has no reaction-time window, so timeout_ms must not
+        # inherit a stale value from a previous cadence block.
+        m = self._ready_mode()
+        m.engine._last_stim_timeout_ms = 750.0
+        t = _to_run_phase(m)
+        _play_run(m, t, lambda t_run, target: target)
+        self.assertEqual(m.engine.trial_logger.rows[0]["timeout_ms"], "")
+
+    def test_demo_cap_trims_runs_and_length(self):
+        e = _engine()
+        e.calibration_profiles["right"] = _fresh_profile()
+        m = _mode(e, demo_trials=2)
+        self.assertEqual(m.total_runs, 2)
+        t = _to_run_phase(m)
+        self.assertLess(m.duration_s, 20.0)
+
+
+# ---- difficulty --------------------------------------------------------
+
+
+class LevelTests(unittest.TestCase):
+    def _m(self):
+        e = _engine()
+        e.calibration_profiles["right"] = _fresh_profile()
+        return _mode(e)
+
+    def test_two_strong_runs_promote_and_announce(self):
+        m = self._m()
+        m._move_level(0.9)
+        self.assertEqual(m.level, 1)
+        m._move_level(0.85)
+        self.assertEqual(m.level, 2)
+        self.assertIn("narrows", m.level_msg)
+        self.assertIn("level 2", m.level_msg)
+        evs = [ev for ev in m.engine.raw_logger.events
+               if ev["event"] == "force_pilot_level"]
+        self.assertEqual(len(evs), 1)
+
+    def test_one_weak_run_demotes(self):
+        m = self._m()
+        m.level = 2
+        m._move_level(0.2)
+        self.assertEqual(m.level, 1)
+        self.assertIn("widens", m.level_msg)
+
+    def test_level_is_capped_both_ways(self):
+        m = self._m()
+        m.level = 3
+        for _ in range(4):
+            m._move_level(0.95)
+        self.assertEqual(m.level, 3)
+        m.level = 1
+        m._move_level(0.0)
+        self.assertEqual(m.level, 1)
+
+    def test_next_run_uses_the_new_corridor(self):
+        m = self._m()
+        t = _to_run_phase(m)
+        m._recent_tic = [0.9]
+        _play_run(m, t, lambda t_run, target: target)   # promotes
+        self.assertEqual(m.level, 2)
+        # _prepare_run already drew the next plan under level 2.
+        self.assertEqual(m.corridor_hw, 6.0)
+        self.assertEqual(m.params["lvl"], 2)
+
+
+# ---- hands and scheduling ----------------------------------------------
+
+
+class HandMatrixTests(unittest.TestCase):
+    def test_left_hand_flies_left(self):
+        e = _engine(hand_mode="left")
+        e.calibration_profiles["left"] = _fresh_profile("left")
+        m = _mode(e, hands={"left": [0, 1, 2, 3]})
+        m._tick(0.0)
+        self.assertEqual(m.phase, "announce")
+        self.assertEqual(m.hand, "left")
+        self.assertEqual(m.total_runs, 8)
+
+    def test_both_hands_means_all_eight_fingers(self):
+        e = _engine(hand_mode="both")
+        e.calibration_profiles["right"] = _fresh_profile()
+        e.calibration_profiles["left"] = _fresh_profile("left")
+        m = _mode(e, hands={"right": [0, 1, 2, 3],
+                            "left": [4, 5, 6, 7]})
+        self.assertEqual(m.total_runs, 16)
+        lanes = set()
+        hand_counts = {"right": 0, "left": 0}
+        for _ in range(16):
+            m._prepare_run()
+            lanes.add(m.lane)
+            hand_counts[m.hand] += 1
+        self.assertEqual(lanes, set(range(8)))
+        # Balanced hand bag: equal run counts across the block.
+        self.assertEqual(hand_counts["right"], 8)
+        self.assertEqual(hand_counts["left"], 8)
+
+    def test_weakest_finger_draws_extra_runs_with_a_floor(self):
+        e = _engine()
+        e.calibration_profiles["right"] = _fresh_profile()
+        m = _mode(e)
+        m._mae_by_hf = {("right", 0): [10.0], ("right", 1): [1.0],
+                        ("right", 2): [1.0], ("right", 3): [1.0]}
+        counts = [0, 0, 0, 0]
+        for _ in range(200):
+            m._prepare_run()
+            counts[m.finger] += 1
+        self.assertEqual(max(counts), counts[0])
+        # The floor keeps every finger analysable.
+        for c in counts:
+            self.assertGreaterEqual(c / 200.0, 0.10)
+
+    def test_unmeasured_finger_is_not_starved(self):
+        # A finger with no runs yet weighs in at the current worst, so
+        # early weighting cannot lock it out.
+        e = _engine()
+        e.calibration_profiles["right"] = _fresh_profile()
+        m = _mode(e)
+        m._mae_by_hf = {("right", 1): [4.0]}
+        counts = [0, 0, 0, 0]
+        for _ in range(80):
+            m._prepare_run()
+            counts[m.finger] += 1
+        for c in counts:
+            self.assertGreater(c, 0)
+
+
+# ---- pause and block stats ---------------------------------------------
+
+
+class PauseAndStatsTests(unittest.TestCase):
+    def _ready(self):
+        e = _engine()
+        e.calibration_profiles["right"] = _fresh_profile()
+        return _mode(e)
+
+    def test_pause_mid_run_restarts_the_run(self):
+        m = self._ready()
+        t = _to_run_phase(m)
+        m.view.pct = m.base_pct
+        m._tick(t + 2.0)
+        self.assertEqual(m.phase, "run")
+        trial_before = m.trial_counter
+        seed_before = m.run_seed
+        m.on_resume(5.0)
+        self.assertEqual(m.phase, "announce")
+        self.assertEqual(m.trial_counter, trial_before)
+        self.assertEqual(m.run_seed, seed_before)
+        self.assertEqual(m.engine.trial_logger.rows, [])
+        restarts = [ev for ev in m.engine.raw_logger.events
+                    if ev["event"] == "run_restart"]
+        self.assertEqual(len(restarts), 1)
+
+    def test_block_stats_carry_the_results_summary(self):
+        m = self._ready()
+        finished = []
+        m.engine.finish_block = lambda: finished.append(True)
+        m.total_runs = 1
+        t = _to_run_phase(m)
+        lane = m.lane
+        _play_run(m, t, lambda t_run, target: target)
+        self.assertEqual(m.phase, "done")
+        self.assertTrue(finished)
+        stats = m.block_stats()
+        self.assertEqual(stats["runs"], 1)
+        self.assertGreaterEqual(
+            stats["overall"]["time_in_corridor"], 0.999)
+        self.assertIn(str(lane), stats["per_lane"])
+        self.assertIn(stats["best_section"],
+                      ("low hold", "press ramp", "high hold",
+                       "release ramp", "waves", "approach",
+                       "assessment"))
+        # The session-carrying level hook for the next block.
+        self.assertEqual(m.engine._force_pilot_level, m.level)
+
+
+# ---- the screen --------------------------------------------------------
+
+
+class ScreenTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        import pygame
+        pygame.init()
+        pygame.display.set_mode((320, 200))
+
+    def _screen_and_mode(self):
+        """A real screen over a stub engine carrying a scripted mode
+        in the run phase."""
+        import pygame
+        from rehab.ui.force_pilot_screen import ForcePilotScreen
+        from rehab.ui.theme import get as get_theme
+        from rehab.ui.widgets import Layout
+        e = _engine()
+        e.calibration_profiles["right"] = _fresh_profile()
+        e.theme = get_theme("clinical")
+        e.layout = Layout(1280, 800, 1.0)
+        e.paused = False
+        m = _mode(e)
+        e.mode = m
+        sc = ForcePilotScreen(e)
+        sc._countdown_until = 0.0
+        t = _to_run_phase(m)
+        m.view.pct = m.base_pct
+        m._tick(t + 0.5)
+        surf = pygame.Surface((1280, 800))
+        return sc, m, surf, t
+
+    def test_corridor_geometry_is_cached_per_run(self):
+        sc, m, surf, _t = self._screen_and_mode()
+        sc.draw(surf)
+        first = sc._corridor_surf
+        self.assertIsNotNone(first)
+        sc.draw(surf)
+        self.assertIs(sc._corridor_surf, first)
+
+    def test_steady_frames_allocate_no_new_surfaces(self):
+        sc, m, surf, t = self._screen_and_mode()
+        sc.draw(surf)                        # warm the caches
+        calls = []
+        original = sc._new_surface
+        sc._new_surface = lambda *a, **k: (calls.append(a)
+                                           or original(*a, **k))
+        for k in range(30):
+            m.view.pct = m.base_pct + (k % 5)
+            m._tick(t + 0.5 + k / 60.0)
+            sc.draw(surf)
+        self.assertEqual(calls, [])
+
+    def test_active_finger_is_named_on_screen(self):
+        import rehab.ui.force_pilot_screen as fps
+        sc, m, surf, _t = self._screen_and_mode()
+        seen = []
+        original = fps.draw_text
+
+        def recorder(s, text, pos, *a, **k):
+            seen.append(str(text))
+            return original(s, text, pos, *a, **k)
+
+        fps.draw_text = recorder
+        try:
+            sc.draw(surf)
+        finally:
+            fps.draw_text = original
+        joined = " | ".join(seen)
+        self.assertIn("Run 1 of", joined)
+        self.assertIn("Corridor +/-", joined)
+        # The finger chip and the mode pill render through their own
+        # font path (not draw_text), so pin the chip's words directly.
+        self.assertEqual(
+            sc._hand_finger_words(m.hand, m.finger),
+            f"{m.hand.upper()} "
+            f"{['INDEX', 'MIDDLE', 'RING', 'LITTLE'][m.finger]}")
+
+
+if __name__ == "__main__":
+    unittest.main()

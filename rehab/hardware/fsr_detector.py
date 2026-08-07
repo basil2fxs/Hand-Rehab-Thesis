@@ -226,6 +226,11 @@ class FSRDetector:
         self._press_start_t: list[float | None] = [None] * n
         self._last_sample_t: list[float | None] = [None] * n
         self._prev_sm: list[float | None] = [None] * n
+        # t_perf of the most recent feed() call, None before the first.
+        # The continuous force view polls the detector rather than
+        # seeing samples itself, so this is how it can tell a live
+        # reading from a stale one after the source drops out.
+        self.last_feed_t: float | None = None
         self.on_press: Callable[[PressEvent], None] | None = None
         self.on_release: Callable[[ReleaseEvent], None] | None = None
 
@@ -243,6 +248,7 @@ class FSRDetector:
         self._press_start_t = [None] * n
         self._last_sample_t = [None] * n
         self._prev_sm = [None] * n
+        self.last_feed_t = None
 
     def baseline_value(self, sensor_idx: int) -> float | None:
         """Live baseline EMA for one sensor. Used by the per-sensor
@@ -291,6 +297,7 @@ class FSRDetector:
         return (float(raw), float(minus))
 
     def feed(self, t_perf: float, vals: tuple[int, ...]) -> None:
+        self.last_feed_t = t_perf
         n = self.cal.num_sensors
         cal = self.cal
         for i in range(n):

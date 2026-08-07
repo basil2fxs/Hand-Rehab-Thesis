@@ -7,7 +7,7 @@ import logging
 import threading
 import time
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
@@ -125,6 +125,40 @@ TRIAL_COLUMNS = [
     # question is whether it names the finger. FALSE with a "B-" in
     # cue_flags is the tactile-only condition.
     "cue_target_shown",
+    # ---- continuous-force / stimulus-suite trial description ---------
+    # The next four columns exist so a trial whose stimulus is a whole
+    # trajectory or a timed pulse train, not a single lane highlight,
+    # can be rebuilt EXACTLY offline. The threshold modes leave all
+    # four empty. The rule for the continuous modes is: waveform +
+    # waveform_params + waveform_seed must be sufficient to regenerate
+    # the target the patient saw sample for sample, and segment_times
+    # must let the notebook cut the raw 200 Hz trace into the scored
+    # windows without re-deriving them from screen timing.
+    #
+    # What the target trajectory was: a short type name such as
+    # "plateau", "ramp", "sine", "sum_of_sines", "prbs", "hold",
+    # "reproduce", or a stimulus descriptor like "buzz" for pulse
+    # trials. Empty outside the continuous / stimulus modes.
+    "waveform",
+    # The numbers that pin the trajectory down, packed as
+    # "key=value;key=value" via pack_waveform_params (sorted keys, so
+    # two rows with the same parameters produce the same string).
+    # Percent values are percent of the session max press
+    # (calibration max_press), never raw counts. Includes
+    # max_press_counts itself when force targets are in play, so a
+    # mid-session re-probe cannot silently change what a percent
+    # meant.
+    "waveform_params",
+    # Seed for any pseudorandom element of the trajectory. Empty when
+    # the waveform is fully determined by its parameters.
+    "waveform_seed",
+    # Per-segment timestamps as "name:start:end;..." (pack_segments),
+    # start/end in raw-stream t_perf seconds, 6 decimal places. Same
+    # clock as raw.csv's t_perf column, so the notebook can slice the
+    # sample stream between these bounds directly. The engine also
+    # writes segment_start / segment_end event rows into raw.csv
+    # around each scored segment as a cross-check.
+    "segment_times",
 ]
 
 # Raw schema gains fsr5-fsr8 so the bilateral case fits without a new file format.
@@ -134,6 +168,99 @@ RAW_COLUMNS = [
     "fsr5", "fsr6", "fsr7", "fsr8",
     "hand", "event", "lane", "detail",
 ]
+
+
+def pack_waveform_params(params: dict) -> str:
+    """One CSV cell for a trial's waveform parameters.
+
+    "key=value;key=value" with keys sorted, floats trimmed to 6
+    significant digits. Sorted so the string is a stable fingerprint:
+    two trials run under the same parameters pack to the same cell,
+    which lets the notebook group trials by condition with a plain
+    equality test instead of parsing every row first. Keys and values
+    must not contain "=" or ";" (they are the field separators); a
+    value that does raises here, at logging time, rather than
+    producing a cell the notebook mis-splits weeks later.
+    """
+    parts = []
+    for key in sorted(params):
+        val = params[key]
+        if isinstance(val, float):
+            text = f"{val:.6g}"
+        else:
+            text = str(val)
+        if "=" in str(key) or ";" in str(key) or "=" in text or ";" in text:
+            raise ValueError(
+                f"waveform param {key!r}={text!r} contains a separator")
+        parts.append(f"{key}={text}")
+    return ";".join(parts)
+
+
+def parse_waveform_params(cell: str) -> dict:
+    """Inverse of pack_waveform_params, values as float where they
+    parse and string otherwise. Lives here so the round-trip can be
+    pinned by a test; the notebook carries its own copy because it
+    travels without this package."""
+    out: dict = {}
+    for part in (cell or "").split(";"):
+        if not part or "=" not in part:
+            continue
+        key, _, text = part.partition("=")
+        try:
+            out[key] = float(text)
+        except ValueError:
+            out[key] = text
+    return out
+
+
+def pack_segments(segments: list[tuple[str, float, float]]) -> str:
+    """One CSV cell for a trial's scored segments.
+
+    "name:start:end;..." with start/end in raw-stream t_perf seconds
+    at 6 decimal places (microsecond resolution, matching the raw
+    logger's own t_perf formatting). Segment names must not contain
+    ":" or ";". Order is preserved: segments are logged in the order
+    they ran, which is itself information for ramp trials.
+    """
+    parts = []
+    for name, start, end in segments:
+        name = str(name)
+        if ":" in name or ";" in name:
+            raise ValueError(f"segment name {name!r} contains a separator")
+        parts.append(f"{name}:{float(start):.6f}:{float(end):.6f}")
+    return ";".join(parts)
+
+
+@dataclass
+class ContinuousTrialLog:
+    """What a continuous-force or stimulus-suite trial must hand to
+    log_trial so the notebook can rebuild it. waveform names the
+    trajectory or stimulus type, params pins its numbers (percent
+    values are percent of the session max press; include
+    max_press_counts so a mid-session re-probe stays visible), seed
+    covers any pseudorandom element, and segments are the scored
+    windows in raw-stream t_perf seconds."""
+
+    waveform: str
+    params: dict = field(default_factory=dict)
+    seed: int | None = None
+    segments: list = field(default_factory=list)
+
+
+def parse_segments(cell: str) -> list[tuple[str, float, float]]:
+    """Inverse of pack_segments. Malformed entries are dropped rather
+    than raising: this side runs on data read back from disk, where a
+    truncated row should cost one trial, not the whole analysis."""
+    out: list[tuple[str, float, float]] = []
+    for part in (cell or "").split(";"):
+        bits = part.split(":")
+        if len(bits) != 3:
+            continue
+        try:
+            out.append((bits[0], float(bits[1]), float(bits[2])))
+        except ValueError:
+            continue
+    return out
 
 
 def _pad_vals(vals: tuple[int, ...] | list[int], n: int) -> list[int]:

@@ -261,6 +261,11 @@ class GameEngine:
         # STOP deferred until then. See stop_all_motors.
         self._after_cue_until: float | None = None
         self._motor_stop_at: float | None = None
+        # Scoped early stops for pulse_motor's timed buzzes, hand ->
+        # due perf_counter. Separate from _motor_stop_at because that
+        # one is a global deferred STOP; these cut ONE hand's pulse
+        # short without touching the other hand's motor.
+        self._pulse_stops: dict[str, float] = {}
 
     # ---- bilateral plumbing ------------------------------------------------
     def _build_detectors(self) -> None:
@@ -518,6 +523,8 @@ class GameEngine:
             self._after_cue_until = None
         if not hasattr(self, "_motor_stop_at"):
             self._motor_stop_at = None
+        if not hasattr(self, "_pulse_stops"):
+            self._pulse_stops = {}
 
     def _is_loud_trial(self, trial_number: int) -> bool:
         """True if this 1-indexed trial should play louder. Loud trials
@@ -799,7 +806,10 @@ class GameEngine:
             RhythmScreen, RhythmSetupScreen, ResultsScreen,
             ModeSelectScreen,
         )
+        from ..ui.buzz_hunt_screen import BuzzHuntScreen
         from ..ui.calibration_screen import CalibrationScreen
+        from ..ui.force_pilot_screen import ForcePilotScreen
+        from ..ui.lighthouse_screen import LighthouseScreen
         from ..ui.syllables_screen import SyllablesScreen
         return {
             "title": TitleScreen(self),
@@ -809,6 +819,9 @@ class GameEngine:
             "gameplay": GameplayScreen(self),
             "rhythm": RhythmScreen(self),
             "syllables": SyllablesScreen(self),
+            "force_pilot": ForcePilotScreen(self),
+            "lighthouse": LighthouseScreen(self),
+            "buzz_hunt": BuzzHuntScreen(self),
             "results": ResultsScreen(self),
             "diagnostics": DiagnosticsScreen(self),
             "calibration": CalibrationScreen(self),
@@ -1407,6 +1420,63 @@ class GameEngine:
             if prof is not None and hand in (self.detectors or {}):
                 self.apply_calibration(prof)
 
+    def record_max_press(self, hand: str,
+                          finger_maxes: list[float]) -> None:
+        """Store one hand's probed session max presses, counts above
+        resting, indexed [index, middle, ring, pinky].
+
+        Called by a mode after its MaxPressProbe flow finishes. Three
+        things happen so the value behaves like the calibration it
+        rides on:
+
+          - the hand's CalibrationProfile takes the values, so every
+            later block in this session reads the same max and the
+            session metadata records what each percent target meant;
+          - the profile is re-saved to its usual per-hand file, so an
+            app restart mid-session does not force a re-probe (the
+            stored timestamp lets needs_max_press_probe refuse a max
+            that is too old to trust);
+          - the raw log gets a max_press event, so the probe presses
+            themselves stay traceable in the sample stream.
+
+        A hand with no calibration profile gets a bare one holding
+        only the max. That keeps percent targets available on an
+        uncalibrated bench rig, but the resting reference is then
+        whatever ForceView froze from the live baseline, so it is
+        logged as a warning rather than passed silently.
+        """
+        from ..hardware.calibration_profile import CalibrationProfile
+        hand = (hand or "right").lower()
+        if not hasattr(self, "calibration_profiles"):
+            self.calibration_profiles = {}
+        prof = self.calibration_profiles.get(hand)
+        if prof is None:
+            prof = CalibrationProfile(hand=hand)
+            self.calibration_profiles[hand] = prof
+            log.warning("max press recorded for %s hand with no "
+                         "calibration profile; percent targets will "
+                         "reference a live-captured baseline, not a "
+                         "measured resting level", hand)
+        prof.set_max_press(finger_maxes)
+        # Keep the legacy single-profile pointer coherent for
+        # _stamp_calibration when nothing was applied yet this run.
+        if getattr(self, "calibration_profile", None) is None:
+            self.calibration_profile = prof
+        try:
+            path = self.cfg.resolve_path(
+                f"config/calibration/current_{hand}.json")
+            prof.save(path)
+        except Exception as e:
+            # A failed save costs a re-probe after a restart, not the
+            # session; say so and carry on.
+            log.warning("could not persist max press for %s: %s", hand, e)
+        if self.raw_logger:
+            detail = ";".join(
+                f"{i + 1}:{float(v):.1f}"
+                for i, v in enumerate(finger_maxes))
+            self.raw_logger.queue_event("max_press", detail=detail,
+                                         hand=hand)
+
     def show_diagnostics(self) -> None:
         # Settings always shows 8 sensors, so make sure both
         # detectors exist even when the game-time hand_mode is
@@ -1846,6 +1916,294 @@ class GameEngine:
             sc.on_block_start()
         self.screen_obj = self._screens["syllables"]
 
+    def begin_force_pilot_block(self) -> None:
+        """Force Pilot block: visuomotor force tracking, one finger's
+        continuous force flying a corridor. One engine block is a full
+        session (max-press probes where needed, then runs across the
+        selected hands' fingers). The research case lives in the mode
+        file's docstring; force_pilot.* in the config says what the
+        patient experiences. Renders on its own screen: a corridor is
+        not a lane strip.
+
+        The difficulty level carries across blocks within one app
+        session as `_force_pilot_level` (same pattern as reaction's
+        window level) and resets on restart, which fails in the safe
+        direction (the configured starting level).
+        """
+        from .modes.force_pilot import ForcePilotMode
+        hands = self.lanes_by_hand()
+        seed_cfg = self.cfg.get("force_pilot.seed", None)
+        try:
+            seed = (int(seed_cfg) if seed_cfg is not None
+                    else random.randrange(2 ** 32))
+        except (TypeError, ValueError):
+            seed = random.randrange(2 ** 32)
+        hw = [float(x) for x in (self.cfg.get(
+            "force_pilot.corridor_halfwidth_pct", None)
+            or [8.0, 6.0, 4.0])]
+        bw = [float(x) for x in (self.cfg.get(
+            "force_pilot.bandwidth_hz", None) or [0.3, 0.45, 0.6])]
+        level = getattr(self, "_force_pilot_level", None)
+        if not isinstance(level, int) or level < 1:
+            level = int(self.cfg.get("force_pilot.level", 1))
+        level = max(1, min(level, len(hw), len(bw)))
+        gain = float(self.cfg.get("force_pilot.visual_gain", 1.0))
+        self.mode = ForcePilotMode(
+            engine=self,
+            lanes_by_hand=hands,
+            level=level,
+            corridor_hw_by_level=hw,
+            freq_ceiling_by_level=bw,
+            runs_per_finger=int(
+                self.cfg.get("force_pilot.runs_per_finger", 2)),
+            min_finger_share=float(
+                self.cfg.get("force_pilot.min_finger_share", 0.15)),
+            span_pct=float(self.cfg.get("force_pilot.span_pct", 40.0)),
+            base_pct=float(self.cfg.get("force_pilot.base_pct", 8.0)),
+            plateau_pct=float(
+                self.cfg.get("force_pilot.plateau_pct", 28.0)),
+            ramp_rates_pct_s=[float(r) for r in (self.cfg.get(
+                "force_pilot.ramp_rates_pct_s", None) or [5.0, 10.0])],
+            sine_amp_pct=float(
+                self.cfg.get("force_pilot.sine_amp_pct", 9.0)),
+            sine_s=float(self.cfg.get("force_pilot.sine_s", 6.0)),
+            sos_amps_pct=[float(a) for a in (self.cfg.get(
+                "force_pilot.sos_amps_pct", None) or [6.0, 3.5, 2.5])],
+            sos_s=float(self.cfg.get("force_pilot.sos_s", 8.0)),
+            hold_in_s=float(self.cfg.get("force_pilot.hold_in_s", 3.0)),
+            hold_top_s=float(
+                self.cfg.get("force_pilot.hold_top_s", 3.0)),
+            pre_assess_s=float(
+                self.cfg.get("force_pilot.pre_assess_s", 1.0)),
+            visual_gain=gain,
+            ring_interval_s=float(
+                self.cfg.get("force_pilot.ring_interval_s", 1.5)),
+            ring_points=int(self.cfg.get("force_pilot.ring_points", 2)),
+            exit_buzz_ms=float(
+                self.cfg.get("force_pilot.exit_buzz_ms", 80.0)),
+            exit_buzz_cooldown_s=float(
+                self.cfg.get("force_pilot.exit_buzz_cooldown_s", 1.0)),
+            promote_frac=float(
+                self.cfg.get("force_pilot.promote_frac", 0.8)),
+            demote_frac=float(
+                self.cfg.get("force_pilot.demote_frac", 0.4)),
+            probe_presses=int(
+                self.cfg.get("force_pilot.probe_presses", 3)),
+            probe_floor_counts=float(
+                self.cfg.get("force_pilot.probe_floor_counts", 30.0)),
+            probe_max_age_s=float(
+                self.cfg.get("force_pilot.probe_max_age_s", 6 * 3600.0)),
+            announce_s=float(
+                self.cfg.get("force_pilot.announce_s", 2.5)),
+            rest_s=float(self.cfg.get("force_pilot.rest_s", 10.0)),
+            score_cfg=self.score_cfg,
+            seed=seed,
+            demo_trials=self._test_mode_trials(),
+        )
+        self._begin_block("force_pilot")
+        # The seed shaped every run plan in this block, so it lives
+        # next to the data it shaped, not only in the app log.
+        if self.raw_logger:
+            self.raw_logger.queue_event(
+                "force_pilot_config",
+                detail=(f"seed={seed} level={level} gain={gain} "
+                        f"hand={self.hand_mode}"),
+                hand=self.hand_mode)
+        sc = self._screens.get("force_pilot")
+        if sc is not None and hasattr(sc, "on_block_start"):
+            sc.on_block_start()
+        self.screen_obj = self._screens["force_pilot"]
+
+    def begin_lighthouse_block(self) -> None:
+        """Lighthouse block: precision hold with feedback fade, plus
+        blind force reproduction. One engine block is a full session
+        (max-press probes where needed, then hold and echo trials
+        across the selected hands' fingers). The research case lives
+        in the mode file's docstring; lighthouse.* in the config says
+        what the patient experiences. Renders on its own screen: a
+        lantern is not a lane strip.
+
+        The difficulty level carries across blocks within one app
+        session as `_lighthouse_level` (same pattern as Force Pilot's
+        level carry) and resets on restart, which fails in the safe
+        direction (the configured starting level).
+        """
+        from .modes.lighthouse import LighthouseMode
+        hands = self.lanes_by_hand()
+        seed_cfg = self.cfg.get("lighthouse.seed", None)
+        try:
+            seed = (int(seed_cfg) if seed_cfg is not None
+                    else random.randrange(2 ** 32))
+        except (TypeError, ValueError):
+            seed = random.randrange(2 ** 32)
+        ndark = [int(x) for x in (self.cfg.get(
+            "lighthouse.dark_windows", None) or [0, 1, 2])]
+        dfrac = [float(x) for x in (self.cfg.get(
+            "lighthouse.dark_fraction", None) or [0.0, 0.25, 0.45])]
+        level = getattr(self, "_lighthouse_level", None)
+        if not isinstance(level, int) or level < 1:
+            level = int(self.cfg.get("lighthouse.level", 1))
+        level = max(1, min(level, len(ndark), len(dfrac)))
+        self.mode = LighthouseMode(
+            engine=self,
+            lanes_by_hand=hands,
+            level=level,
+            dark_windows_by_level=ndark,
+            dark_frac_by_level=dfrac,
+            holds_per_finger=int(
+                self.cfg.get("lighthouse.holds_per_finger", 2)),
+            echoes_per_finger=int(
+                self.cfg.get("lighthouse.echoes_per_finger", 1)),
+            target_lo_pct=float(
+                self.cfg.get("lighthouse.target_lo_pct", 5.0)),
+            target_hi_pct=float(
+                self.cfg.get("lighthouse.target_hi_pct", 25.0)),
+            hold_s=float(self.cfg.get("lighthouse.hold_s", 16.0)),
+            tol_pct=float(self.cfg.get("lighthouse.tol_pct", 3.0)),
+            lit_lead_s=float(self.cfg.get("lighthouse.lit_lead_s", 3.0)),
+            lit_gap_s=float(self.cfg.get("lighthouse.lit_gap_s", 2.0)),
+            lit_tail_s=float(self.cfg.get("lighthouse.lit_tail_s", 2.0)),
+            ignite_hold_s=float(
+                self.cfg.get("lighthouse.ignite_hold_s", 0.5)),
+            ignite_timeout_s=float(
+                self.cfg.get("lighthouse.ignite_timeout_s", 10.0)),
+            echo_show_s=float(self.cfg.get("lighthouse.echo_show_s", 3.0)),
+            echo_delays_s=[float(d) for d in (self.cfg.get(
+                "lighthouse.echo_delays_s", None)
+                or [2.0, 5.0, 10.0, 15.0])],
+            echo_reproduce_s=float(
+                self.cfg.get("lighthouse.echo_reproduce_s", 4.0)),
+            echo_settle_s=float(
+                self.cfg.get("lighthouse.echo_settle_s", 2.0)),
+            promote_lit_mae_pct=float(
+                self.cfg.get("lighthouse.promote_lit_mae_pct", 1.5)),
+            promote_delta_pct=float(
+                self.cfg.get("lighthouse.promote_delta_pct", 1.5)),
+            demote_delta_pct=float(
+                self.cfg.get("lighthouse.demote_delta_pct", 6.0)),
+            dark_bonus_points=int(
+                self.cfg.get("lighthouse.dark_bonus_points", 2)),
+            probe_presses=int(
+                self.cfg.get("lighthouse.probe_presses", 3)),
+            probe_floor_counts=float(
+                self.cfg.get("lighthouse.probe_floor_counts", 30.0)),
+            probe_max_age_s=float(
+                self.cfg.get("lighthouse.probe_max_age_s", 6 * 3600.0)),
+            announce_s=float(self.cfg.get("lighthouse.announce_s", 2.5)),
+            rest_s=float(self.cfg.get("lighthouse.rest_s", 6.0)),
+            score_cfg=self.score_cfg,
+            seed=seed,
+            demo_trials=self._test_mode_trials(),
+        )
+        self._begin_block("lighthouse")
+        # The seed shaped every trial plan in this block, so it lives
+        # next to the data it shaped, not only in the app log.
+        if self.raw_logger:
+            self.raw_logger.queue_event(
+                "lighthouse_config",
+                detail=(f"seed={seed} level={level} "
+                        f"hand={self.hand_mode}"),
+                hand=self.hand_mode)
+        sc = self._screens.get("lighthouse")
+        if sc is not None and hasattr(sc, "on_block_start"):
+            sc.on_block_start()
+        self.screen_obj = self._screens["lighthouse"]
+
+    def begin_buzz_hunt_block(self) -> None:
+        """Buzz Hunt block: the vibrotactile perception suite, where
+        the motors are the stimulus rather than a cue channel. One
+        engine block runs the whole stage ladder (localisation with
+        catch trials and a duration staircase, cross-hand distractors
+        in bilateral play, sequence span with the hidden Hebb repeat,
+        gap detection). The research case lives in the mode file's
+        docstring; buzz_hunt.* in the config says what the patient
+        experiences. Renders on its own near-empty screen: a focus
+        point is not a lane strip, and nothing on screen may name the
+        target finger.
+
+        The stimuli go out through pulse_motor and BYPASS the cue.*
+        switches by design (the buzz is the stimulus, not a cue);
+        after-press feedback still respects them. The duration
+        staircase's start level carries across blocks within one app
+        session as `_buzz_hunt_start_ms` (same pattern as the other
+        modes' level carry) so a second block resumes near threshold;
+        a restart falls back to the config start, the easy direction.
+        The Hebb material comes from the participant name, so it is
+        stable across sessions the way pattern mode's sequence is.
+        """
+        from .modes.buzz_hunt import BuzzHuntMode, participant_hebb_seed
+        hands = self.lanes_by_hand()
+        seed_cfg = self.cfg.get("buzz_hunt.seed", None)
+        try:
+            seed = (int(seed_cfg) if seed_cfg is not None
+                    else random.randrange(2 ** 32))
+        except (TypeError, ValueError):
+            seed = random.randrange(2 ** 32)
+        p_seed = participant_hebb_seed(
+            str(self.session.participant or ""))
+        self.mode = BuzzHuntMode(
+            engine=self,
+            lanes_by_hand=hands,
+            participant_seed=p_seed,
+            loc_trials_per_hand=int(
+                self.cfg.get("buzz_hunt.loc_trials_per_hand", 32)),
+            catch_rate=float(self.cfg.get("buzz_hunt.catch_rate", 0.1)),
+            start_ms=float(self.cfg.get("buzz_hunt.start_ms", 300.0)),
+            step_ms=float(self.cfg.get("buzz_hunt.step_ms", 40.0)),
+            floor_ms=float(self.cfg.get("buzz_hunt.floor_ms", 40.0)),
+            ceil_ms=float(self.cfg.get("buzz_hunt.ceil_ms", 500.0)),
+            threshold_reversals=int(
+                self.cfg.get("buzz_hunt.threshold_reversals", 6)),
+            distractor_trials_per_hand=int(
+                self.cfg.get("buzz_hunt.distractor_trials_per_hand", 8)),
+            distractor_lead_ms=float(
+                self.cfg.get("buzz_hunt.distractor_lead_ms", 150.0)),
+            span_trials=int(self.cfg.get("buzz_hunt.span_trials", 10)),
+            span_start=int(self.cfg.get("buzz_hunt.span_start", 2)),
+            span_pulse_ms=float(
+                self.cfg.get("buzz_hunt.span_pulse_ms", 150.0)),
+            span_ioi_ms=float(
+                self.cfg.get("buzz_hunt.span_ioi_ms", 400.0)),
+            hebb_every=int(self.cfg.get("buzz_hunt.hebb_every", 3)),
+            gap_trials_per_hand=int(
+                self.cfg.get("buzz_hunt.gap_trials_per_hand", 20)),
+            gap_start_ms=float(
+                self.cfg.get("buzz_hunt.gap_start_ms", 200.0)),
+            gap_step_ms=float(
+                self.cfg.get("buzz_hunt.gap_step_ms", 25.0)),
+            gap_floor_ms=float(
+                self.cfg.get("buzz_hunt.gap_floor_ms", 35.0)),
+            gap_short_ms=float(
+                self.cfg.get("buzz_hunt.gap_short_ms", 80.0)),
+            wait_lo_s=float(self.cfg.get("buzz_hunt.wait_lo_s", 0.8)),
+            wait_hi_s=float(self.cfg.get("buzz_hunt.wait_hi_s", 2.2)),
+            response_window_s=float(
+                self.cfg.get("buzz_hunt.response_window_s", 3.0)),
+            replay_item_s=float(
+                self.cfg.get("buzz_hunt.replay_item_s", 1.5)),
+            announce_s=float(self.cfg.get("buzz_hunt.announce_s", 2.0)),
+            rest_s=float(self.cfg.get("buzz_hunt.rest_s", 3.0)),
+            stage_intro_s=float(
+                self.cfg.get("buzz_hunt.stage_intro_s", 5.0)),
+            score_cfg=self.score_cfg,
+            seed=seed,
+            demo_trials=self._test_mode_trials(),
+        )
+        self._begin_block("buzz_hunt")
+        # Both seeds shaped this block's stimuli (the block seed drew
+        # the trial plans, the participant seed the Hebb material), so
+        # they live next to the data they shaped.
+        if self.raw_logger:
+            self.raw_logger.queue_event(
+                "buzz_hunt_config",
+                detail=(f"seed={seed} participant_seed={p_seed} "
+                        f"hand={self.hand_mode}"),
+                hand=self.hand_mode)
+        sc = self._screens.get("buzz_hunt")
+        if sc is not None and hasattr(sc, "on_block_start"):
+            sc.on_block_start()
+        self.screen_obj = self._screens["buzz_hunt"]
+
     def begin_adaptive_block(self) -> None:
         from .modes.adaptive import AdaptiveMode
         from ..analytics.adaptive import AdaptiveConfig
@@ -2037,6 +2395,15 @@ class GameEngine:
         if kind == "syllables":
             self.begin_syllables_block()
             return
+        if kind == "force_pilot":
+            self.begin_force_pilot_block()
+            return
+        if kind == "lighthouse":
+            self.begin_lighthouse_block()
+            return
+        if kind == "buzz_hunt":
+            self.begin_buzz_hunt_block()
+            return
         if kind == "rhythm":
             song = getattr(self, "_last_rhythm_song", None)
             difficulty = getattr(self, "_last_rhythm_difficulty", "medium")
@@ -2073,11 +2440,15 @@ class GameEngine:
         # settled during the prep fires its first chord at zero. Test
         # mode trims the countdown so quick demos stay quick.
         if name in ("classic", "adaptive", "mirror", "reaction",
-                    "pattern", "chords", "syllables"):
+                    "pattern", "chords", "syllables", "force_pilot",
+                    "lighthouse", "buzz_hunt"):
             secs = float(self.cfg.get("game.start_countdown_s", 3.0))
             if self._test_mode_trials() is not None:
                 secs = min(secs, 1.5)
-            key = "syllables" if name == "syllables" else "gameplay"
+            key = {"syllables": "syllables",
+                   "force_pilot": "force_pilot",
+                   "lighthouse": "lighthouse",
+                   "buzz_hunt": "buzz_hunt"}.get(name, "gameplay")
             sc = self._screens.get(key)
             if sc is not None and hasattr(sc, "start_countdown"):
                 sc.start_countdown(secs)
@@ -2228,12 +2599,29 @@ class GameEngine:
         prof = getattr(self, "calibration_profile", None)
         if prof is None:
             self.session.calibration = {}
-            return
-        try:
-            self.session.calibration = prof.summary()
-        except Exception as e:
-            log.warning("could not summarise calibration: %s", e)
-            self.session.calibration = {}
+        else:
+            try:
+                self.session.calibration = prof.summary()
+            except Exception as e:
+                log.warning("could not summarise calibration: %s", e)
+                self.session.calibration = {}
+        # The summary above is the last-applied profile, which in a
+        # bilateral session is only one hand. Session max presses are
+        # per hand and the force targets of a continuous block depend
+        # on them, so both hands' values are stamped explicitly.
+        by_hand = {}
+        for hand, p in (getattr(self, "calibration_profiles", None)
+                        or {}).items():
+            if p is not None and getattr(p, "has_max_press", None) \
+                    and p.has_max_press():
+                by_hand[hand] = {
+                    "max_press": [round(v, 1) for v in p.max_press],
+                    "measured_at": p.max_press_measured_at,
+                }
+        if by_hand:
+            if not isinstance(self.session.calibration, dict):
+                self.session.calibration = {}
+            self.session.calibration["max_press_by_hand"] = by_hand
 
     def _build_block_summary(self, status: str) -> dict:
         """Aggregates that go into metadata.json so an analyst can grok
@@ -2375,6 +2763,43 @@ class GameEngine:
                     summary["syllables"] = stats_fn()
                 except Exception as e:
                     log.warning("syllables block stats failed: %s", e)
+        # Force Pilot context: per-finger tracking error and corridor
+        # time, section errors, level trace. These cannot be rebuilt
+        # from hits / misses because the tracking scores live in the
+        # mode's per-run records, and the results screen reads this
+        # section for its per-finger charts.
+        if self.current_block == "force_pilot" and self.mode is not None:
+            stats_fn = getattr(self.mode, "block_stats", None)
+            if callable(stats_fn):
+                try:
+                    summary["force_pilot"] = stats_fn()
+                except Exception as e:
+                    log.warning("force pilot block stats failed: %s", e)
+        # Lighthouse context: lit steadiness, dark drift, the lit-dark
+        # delta headline and echo reproduction error by delay. These
+        # cannot be rebuilt from hits / misses because the window
+        # scoring lives in the mode's per-trial records, and the
+        # results screen reads this section for its cards and charts.
+        if self.current_block == "lighthouse" and self.mode is not None:
+            stats_fn = getattr(self.mode, "block_stats", None)
+            if callable(stats_fn):
+                try:
+                    summary["lighthouse"] = stats_fn()
+                except Exception as e:
+                    log.warning("lighthouse block stats failed: %s", e)
+        # Buzz Hunt context: the confusion matrix, staircase reversals
+        # and thresholds, catch-trial false alarms, span and Hebb
+        # splits. These cannot be rebuilt from hits / misses because
+        # the staircase states and the matrix live in the mode's
+        # per-trial records, and the results screen reads this section
+        # for its cards and charts.
+        if self.current_block == "buzz_hunt" and self.mode is not None:
+            stats_fn = getattr(self.mode, "block_stats", None)
+            if callable(stats_fn):
+                try:
+                    summary["buzz_hunt"] = stats_fn()
+                except Exception as e:
+                    log.warning("buzz hunt block stats failed: %s", e)
         # Adaptive-only context.
         bpm_min = getattr(self, "_block_bpm_min", None)
         bpm_max = getattr(self, "_block_bpm_max", None)
@@ -2872,6 +3297,120 @@ class GameEngine:
             pass
         return base
 
+    # Shortest pulse worth requesting through pulse_motor, in ms.
+    #
+    # The number is honest, not aspirational, and it is host-side
+    # only. The early STOP that ends a short pulse is sent by
+    # _drain_motor_queue, which runs once per display frame, so the
+    # requested duration is quantised UP to the next drain tick.
+    # Measured on this machine with a fake source timestamping every
+    # command write and the queue drained at the display's 60 Hz
+    # cadence (30 repetitions per level; tests/test_force_foundation.py
+    # re-runs a compact version of the measurement):
+    #
+    #   requested 10 ms  -> 16.7 to 20.9 ms STIM-to-STOP, mean 19.6
+    #   requested 20 ms  -> 20.0 to 40.7 ms, mean 27.7
+    #   requested 35+ ms -> the request plus 0 to 21 ms (one frame of
+    #                       quantisation plus sleep overhead)
+    #
+    # So the host cannot end a buzz sooner than about one frame after
+    # it starts, whatever is asked: 20 ms is the floor, and every
+    # delivered duration is the request stretched by up to about 21
+    # ms. Requests below the floor are clamped to it rather than
+    # recorded as levels the hardware never produced. On real
+    # hardware the USB serial write adds a few ms each way, and the
+    # ERM motor itself needs roughly 20 ms to spin up and at least as
+    # long to stop (ranked brief, Buzz Hunt risk note), which the
+    # host cannot see at all. Buzz Hunt's duration staircases must
+    # therefore keep their step size at or above one frame (17 ms),
+    # treat levels under about 40 ms as a single terminal level, and
+    # not compare thresholds against published norms until the
+    # motors' mechanical rise and stop times have been characterised
+    # with an accelerometer.
+    MIN_PULSE_MS = 20
+
+    def _lane_hand(self, lane: int) -> str | None:
+        """Which hand's board drives this lane's motor, or None when
+        the lane cannot be resolved."""
+        resolved = self._resolve_lane_to_detector(lane)
+        return resolved[0] if resolved else None
+
+    def _scoped_stop(self, hand: str) -> None:
+        """STOP one hand's board. Hand-prefixed in bilateral mode so
+        the other hand's motor, which has its own board and driver,
+        keeps running; plain STOP when only one board exists."""
+        try:
+            self.source.send_command(
+                f"{hand.upper()}:STOP"
+                if self.hand_mode == "both" else "STOP")
+        except Exception as e:
+            log.warning("scoped motor stop failed for %s: %s", hand, e)
+
+    def pulse_motor(self, lane: int, duration_ms: float) -> bool:
+        """One buzz of a requested length on one finger's motor.
+
+        This is the stimulus path for modes where the buzz IS the
+        stimulus (Buzz Hunt), as opposed to the cue path above where
+        the buzz announces a target. The firmware holds every STIM
+        for a fixed 150 ms, so the two directions are built
+        differently:
+
+          shorter  send the STIM now, then cut it with a scoped STOP
+                   at the requested time. The STOP goes out from the
+                   per-frame queue drain, so the achieved length is
+                   quantised up to the next frame; see MIN_PULSE_MS
+                   for the measured floor and its limits.
+          longer   re-arm the motor before each 150 ms hold expires
+                   (the existing repeat-pulse queue), then trim the
+                   final hold's tail with the same scoped STOP so the
+                   total matches the request instead of rounding up
+                   to a multiple of the hold.
+
+        Requests below MIN_PULSE_MS are clamped to it rather than
+        pretending: a staircase that asks for 5 ms would otherwise
+        record a level the hardware never produced. A new pulse on a
+        hand supersedes whatever was still scheduled there, both the
+        previous pulse's early stop (which would cut the new pulse
+        short) and its queued re-arms (which would restart the old
+        finger behind it). One motor per hand at an instant, as ever;
+        cross-hand pulses coexist because each hand is its own board.
+
+        Returns whether the hardware accepted the initial STIM. The
+        raw log gets a pulse_motor event carrying the requested
+        length so the analysis can pair every stimulus with what was
+        asked of the hardware.
+        """
+        self._ensure_metric_state()
+        duration_ms = max(float(duration_ms), float(self.MIN_PULSE_MS))
+        hand = self._lane_hand(lane) or (self.hand_mode or "right")
+        self._pulse_stops.pop(hand, None)
+        self._motor_queue = [
+            (ln, due) for (ln, due) in self._motor_queue
+            if self._lane_hand(ln) != hand]
+        ok = self._send_stim(lane)
+        now = time.perf_counter()
+        if self.raw_logger:
+            self.raw_logger.queue_event(
+                "pulse_motor", lane=lane, t_perf=now,
+                detail=(f"requested_ms={duration_ms:.0f};"
+                        f"delivered={'yes' if ok else 'NO'}"),
+                hand=self.hand_mode)
+        if not ok:
+            return False
+        if duration_ms > self.FIRMWARE_STIM_MS:
+            gap_ms = float(self.cfg.get("motor.pulse_interval_ms", 120))
+            # Keep the gap under the firmware hold or the motor
+            # stutters mid-pulse, same rule as the cue stretch.
+            gap_ms = max(20.0, min(gap_ms, self.FIRMWARE_STIM_MS - 10))
+            due = gap_ms
+            while due < duration_ms:
+                self._motor_queue.append((lane, now + due / 1000.0))
+                due += gap_ms
+                if len(self._motor_queue) > 64:      # runaway guard
+                    break
+        self._pulse_stops[hand] = now + duration_ms / 1000.0
+        return True
+
     def _fire_after_press_cue(self, lanes: list[int]) -> None:
         """Buzz the finger the patient just pressed correctly.
 
@@ -2890,6 +3429,9 @@ class GameEngine:
         q = getattr(self, "_motor_queue", None) or []
         self._motor_queue = [(l, due) for l, due in q if l not in targets]
         self._motor_stop_at = None
+        # A leftover timed-pulse stop would cut this confirmation buzz
+        # short; the pulse it belonged to is over either way.
+        self._pulse_stops = {}
         for lane in targets:
             ok = self._send_stim(lane)
             if self.raw_logger:
@@ -2915,6 +3457,14 @@ class GameEngine:
                 else:
                     still.append((lane, due))
             self._motor_queue = still
+        # Timed-pulse early stops, per hand. Deleted before sending so
+        # a send that raises cannot loop the same stop every frame.
+        stops = getattr(self, "_pulse_stops", None)
+        if stops:
+            for hand, due in list(stops.items()):
+                if now >= due:
+                    del stops[hand]
+                    self._scoped_stop(hand)
         stop_at = getattr(self, "_motor_stop_at", None)
         if stop_at is not None and now >= stop_at:
             self.stop_all_motors()
@@ -2939,6 +3489,7 @@ class GameEngine:
         self._motor_queue = []
         self._motor_stop_at = None
         self._after_cue_until = None
+        self._pulse_stops = {}
         try:
             self.source.send_command("STOP")
         except Exception:
@@ -3393,9 +3944,12 @@ class GameEngine:
         self._last_target_shown = cues.show_target
         show_on_screen = cues.show_target
         # A stim cancels any STOP held back for the previous trial's
-        # after-press buzz, or it would fire mid-cue.
+        # after-press buzz, or it would fire mid-cue. Timed-pulse stops
+        # go too: a cue firing means the pulse they belonged to is
+        # done, and left pending they would cut this cue short.
         self._motor_stop_at = None
         self._after_cue_until = None
+        self._pulse_stops = {}
         # Loudness variation + miss-force window both key off the stimulus.
         # Bump the trial counter, raise the audio gain on a loud trial (so
         # the cue played just below AND the feedback chime at log_trial are
@@ -3549,11 +4103,39 @@ class GameEngine:
                                              detail=f"trial_id={trial_id}",
                                              hand=self.hand_mode)
 
+    def log_segment_start(self, name: str, trial_id: int,
+                           lane: int | None, t_perf: float) -> None:
+        """Mark the start of a scored segment in the raw stream.
+
+        The continuous modes score windows of the 200 Hz trace (a lit
+        hold, a blind hold, the release half of a ramp), and the
+        notebook must cut those windows out of raw.csv exactly. The
+        trial row's segment_times column carries the bounds, and these
+        event rows bracket the same windows inside the stream itself,
+        so a cut can be verified against the file it is cutting.
+        """
+        if self.raw_logger:
+            self.raw_logger.queue_event(
+                "segment_start", lane=lane, t_perf=t_perf,
+                detail=f"trial_id={trial_id};segment={name}",
+                hand=self.hand_mode)
+
+    def log_segment_end(self, name: str, trial_id: int,
+                         lane: int | None, t_perf: float) -> None:
+        """Mark the end of a scored segment; pairs with
+        log_segment_start by trial_id and name."""
+        if self.raw_logger:
+            self.raw_logger.queue_event(
+                "segment_end", lane=lane, t_perf=t_perf,
+                detail=f"trial_id={trial_id};segment={name}",
+                hand=self.hand_mode)
+
     def log_trial(self, trial, outcome: TrialResult, now: float,
                    cue_lanes: list[int] | None = None,
                    stimulus: str = "",
                    pattern_trial: bool | None = None,
-                   correct_lanes: list[int] | None = None) -> None:
+                   correct_lanes: list[int] | None = None,
+                   continuous=None) -> None:
         """Close out one cadence-style trial.
 
         `cue_lanes` is which finger(s) the after-press cue should fire
@@ -3570,6 +4152,12 @@ class GameEngine:
         correct_keys column. Chords passes the whole target set so the
         row says which fingers the chord asked for, not just the one
         the row is keyed on; None keeps the single-lane default.
+
+        `continuous` is a ContinuousTrialLog (rehab.data.logger) for
+        trials whose stimulus is a trajectory or a timed pulse rather
+        than a lane highlight. It fills the waveform, waveform_params,
+        waveform_seed and segment_times columns; None leaves all four
+        empty, which is every threshold mode.
         """
         self._ensure_metric_state()
         gp = self._screens.get("gameplay")
@@ -3759,6 +4347,20 @@ class GameEngine:
             sd = getattr(self, "_last_stim_delivered", None)
             row["stim_delivered"] = ("" if sd is None
                                       else ("TRUE" if sd else "FALSE"))
+            # Continuous-trial description: enough to regenerate the
+            # target trajectory and cut the raw trace, or four empty
+            # cells for every threshold mode.
+            if continuous is not None:
+                from ..data.logger import (pack_segments,
+                                            pack_waveform_params)
+                row["waveform"] = continuous.waveform
+                row["waveform_params"] = pack_waveform_params(
+                    continuous.params or {})
+                row["waveform_seed"] = (
+                    "" if continuous.seed is None
+                    else str(continuous.seed))
+                row["segment_times"] = pack_segments(
+                    continuous.segments or [])
             row.update(self._trial_context(streak_before))
             self.trial_logger.write(row)
         self._maybe_resave_metadata()
@@ -3827,7 +4429,8 @@ class GameEngine:
                             pressed_lane: int | None = None,
                             press_offset_ms: float | None = None,
                             points: int = 0,
-                            stimulus: str = "") -> None:
+                            stimulus: str = "",
+                            target_shown: bool | None = None) -> None:
         """Write a trial row for a reaction-mode event that never
         became a scorable trial: foreperiod false starts, sub-cut
         anticipations, wrong fingers in the simple sub-mode, and catch
@@ -3901,11 +4504,15 @@ class GameEngine:
         row["force_window_peaks"] = fw_peaks_str
         # Cue state read live rather than from the last stim: for a
         # no-stim event (false start, catch) the last stim belongs to
-        # an earlier attempt and would mislabel this row.
+        # an earlier attempt and would mislabel this row. A mode whose
+        # screen never names the target (Buzz Hunt) passes
+        # target_shown=False explicitly: the live show_target toggle
+        # describes what THAT mode's screen would show, and Buzz Hunt
+        # shows nothing whatever the toggle says.
         cues = self.cue_settings()
         row["cue_flags"] = cues.code
-        row["cue_target_shown"] = ("TRUE" if cues.show_target
-                                    else "FALSE")
+        shown = cues.show_target if target_shown is None else target_shown
+        row["cue_target_shown"] = "TRUE" if shown else "FALSE"
         sd = self._last_stim_delivered if stim_fired else None
         row["stim_delivered"] = ("" if sd is None
                                   else ("TRUE" if sd else "FALSE"))
