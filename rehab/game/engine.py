@@ -3394,12 +3394,15 @@ class GameEngine:
                         # Target lanes get the active fill + timing
                         # bar so the patient sees which fingers to
                         # press. Everyone else clears.
-                        # With cue.show_target off the tile must not
-                        # reveal which finger to press, but the timing
-                        # bar still runs so the patient can see how
-                        # long they have left.
+                        # With cue.show_target off the countdown must
+                        # stay useful without naming the finger. A bar
+                        # armed only on the target lane IS a visual
+                        # cue (the tactile-only screenshots showed the
+                        # target instantly), so in that condition
+                        # every lane runs the identical bar and the
+                        # frame carries no lane information.
                         ls.active = (i in targets) and show_on_screen
-                        if i in targets:
+                        if (i in targets) or not show_on_screen:
                             ls.arm_timing(t_perf, timeout_s)
                         else:
                             ls.clear_timing()

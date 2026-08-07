@@ -423,6 +423,24 @@ class ScreenRevealTests(unittest.TestCase):
         e.on_stim(lane=1, trial_id=1, t_perf=0.0)
         self.assertTrue(e._lanes[1].timing_armed)
 
+    def test_no_per_lane_state_identifies_the_hidden_target(self) -> None:
+        """The leak this pins: a timing bar armed only on the target
+        lane names the finger just as loudly as the highlight would.
+        The first version of the tactile condition shipped exactly
+        that, and the test above never noticed because it only looked
+        at the target lane. With the screen reveal off, every visual
+        property a lane strip exposes must be identical across all
+        four lanes at cue time."""
+        e = _engine(show_target=False)
+        e.on_stim(lane=1, trial_id=1, t_perf=0.0)
+        props = ("active", "timing_armed")
+        states = []
+        for ls in e._lanes:
+            states.append(tuple(getattr(ls, name, None) for name in props))
+        self.assertEqual(len(set(states)), 1,
+                          f"lane states differ, the frame names the "
+                          f"finger: {states}")
+
     def test_nothing_at_all_is_allowed(self) -> None:
         # Screen off and buzzer off leaves nothing saying WHICH finger.
         # The software must still run the trial rather than refusing it.
