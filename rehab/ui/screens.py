@@ -169,23 +169,24 @@ def _draw_header(surf: pygame.Surface, title: str, subtitle: str,
 
 class TitleScreen(Screen):
     # Session protocol shown in the Info overlay. Every participant runs
-    # the same modes, in the same order, the same number of times, so the
-    # final analysis compares like with like. Counts come from the
-    # defaults in config/default.yaml (classic = 6-finger pattern x 8
-    # repeats, adaptive and mirror = 40 trials, rhythm = one full song).
+    # the same core modes, in the same order, the same number of times, so
+    # the final analysis compares like with like. Reaction took Classic's
+    # place as the baseline: Classic's fixed pattern was learnable in
+    # seconds, so half of what it measured was anticipation.
     INFO_TITLE = "Session protocol"
     INFO_STEPS = [
         "1. Enter the participant name and age, then press START SESSION.",
-        "2. Run all four modes in this order, once each per session:",
-        "      Classic  (48 trials, steady pace, baseline)",
+        "2. Run the four core modes in this order, once each per session:",
+        "      Reaction  (baseline eye-to-hand speed, random waits)",
         "      Adaptive  (40 trials, pace adjusts to the participant)",
         "      Rhythm  (one full song, press on the beat)",
         "      Mirror  (40 trials, both hands together)",
-        "3. Press firmly and wait for the on-screen result each trial.",
+        "3. Training modes as prescribed for the participant:",
+        "      Patterns, Chords, Syllables (each logs the same way)",
         "4. Finish every block. Quitting early leaves gaps in the data.",
     ]
-    INFO_FOOTER = ("Completing all four blocks gives the reaction-time, "
-                   "force and timing data the analysis needs.")
+    INFO_FOOTER = ("The four core blocks give the comparable data; the "
+                   "training modes add their own measures on top.")
 
     # Vertical rhythm, in logical pixels against the 1280x800 render
     # surface. Held as constants because the card, the two inputs and the
