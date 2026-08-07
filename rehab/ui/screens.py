@@ -598,8 +598,12 @@ class ModeSelectScreen(Screen):
          "React fast as you can. Eye-to-hand speed."),
         ("adaptive", "Adaptive",
          "Difficulty adjusts to hold the 70-80% band."),
+        # The pattern card must not mention that a sequence repeats:
+        # the patient can read this screen, and explicit knowledge of
+        # the sequence impairs the implicit learning the mode measures
+        # (Boyd and Winstein 2003/2004; see modes/pattern.py).
         ("pattern", "Patterns",
-         "A hidden sequence repeats. Muscle memory."),
+         "Record takes of a riff. Muscle memory."),
         ("chords", "Chords",
          "Press 2-4 fingers together. Independence."),
         ("rhythm", "Rhythm",
@@ -873,11 +877,17 @@ class SetupScreen(Screen):
         super().__init__(engine)
         cx = engine.layout.width // 2
 
-        # Pace slider for classic mode. Pre-fill from the config so a
-        # therapist who's tweaked the value in YAML sees their choice.
-        # Range 0.4 s to 3.0 s in 0.1 s steps - matches the slowest the
-        # adaptive engine can crawl (~3 s per stim) up to a snappy pace
-        # for stronger patients.
+        # Pace slider for classic mode ONLY (the game.mode == "classic"
+        # gates in handle_event and draw enforce that). It must never
+        # show for reaction: reaction's whole design is that the wait
+        # before each stimulus is randomised so the patient cannot time
+        # it, and a visible pace knob would claim the opposite. The
+        # other modes set their own cadence (adaptive/mirror from the
+        # engine BPM, rhythm from the song). Pre-fill from the config
+        # so a therapist who's tweaked the value in YAML sees their
+        # choice. Range 0.4 s to 3.0 s in 0.1 s steps - matches the
+        # slowest the adaptive engine can crawl (~3 s per stim) up to a
+        # snappy pace for stronger patients.
         initial = float(engine.cfg.get("game.trigger_interval_s", 1.2))
         slider_w = 520
         self.pace_slider = Slider(
@@ -1025,6 +1035,8 @@ class SetupScreen(Screen):
                      self.theme, self.layout)
         # Classic mode gets a pace slider above the hand buttons so the
         # therapist can tune trigger_interval_s without editing YAML.
+        # Strictly classic-only: reaction randomises its wait on
+        # purpose, so it must not offer a pace control (see __init__).
         if self.engine.cfg.get("game.mode") == "classic":
             self.pace_slider.draw(surf)
         for b, (key, label, desc) in zip(self.buttons, self.HANDS):

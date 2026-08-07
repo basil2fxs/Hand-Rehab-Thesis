@@ -648,10 +648,11 @@ class GameEngine:
                         self.screen_obj.handle_event(e)
                     elif self.screen_obj and self.paused:
                         # Still let buttons on pause-friendly screens (results,
-                        # menus) work. Only block the gameplay/rhythm screens.
+                        # menus) work. Only block the screens a block runs on.
                         if self.screen_obj not in (
                             self._screens.get("gameplay"),
                             self._screens.get("rhythm"),
+                            self._screens.get("syllables"),
                         ):
                             self.screen_obj.handle_event(e)
 
@@ -783,6 +784,7 @@ class GameEngine:
             ModeSelectScreen,
         )
         from ..ui.calibration_screen import CalibrationScreen
+        from ..ui.syllables_screen import SyllablesScreen
         return {
             "title": TitleScreen(self),
             "mode_select": ModeSelectScreen(self),
@@ -790,6 +792,7 @@ class GameEngine:
             "rhythm_setup": RhythmSetupScreen(self),
             "gameplay": GameplayScreen(self),
             "rhythm": RhythmScreen(self),
+            "syllables": SyllablesScreen(self),
             "results": ResultsScreen(self),
             "diagnostics": DiagnosticsScreen(self),
             "calibration": CalibrationScreen(self),
@@ -924,6 +927,7 @@ class GameEngine:
                 on_block = self.screen_obj in (
                     self._screens.get("gameplay"),
                     self._screens.get("rhythm"),
+                    self._screens.get("syllables"),
                 )
                 if on_block:
                     if not self.paused:
@@ -1503,25 +1507,313 @@ class GameEngine:
         self._begin_block("classic")
         self.screen_obj = self._screens["gameplay"]
 
-    # The four modes below are being built against their own research
-    # briefs. Until each lands, its entry point drops back to the mode
-    # picker rather than crashing, so the card can exist before the mode
-    # does without stranding anyone who clicks it.
     def begin_reaction_block(self) -> None:
-        log.warning("Reaction mode is not built yet")
-        self.show_mode_select()
+        """Reaction block: press as fast as you can after a randomised
+        wait. The baseline measure that replaced Classic; the research
+        case lives in the mode file's docstring.
+
+        Reads the reaction.* config block, honours the Test Mode demo
+        cap, and carries two pieces of state across blocks within one
+        app session as engine attributes: `_reaction_level` (which
+        response window is in force) and `_reaction_best_ms` (session
+        personal bests, shown in the per-trial feedback). Both reset on
+        restart, which fails in the safe direction (widest window).
+        """
+        from .modes.reaction import ReactionMode
+        scorable = int(self.cfg.get("reaction.block_trials", 25))
+        attempt_cap = int(self.cfg.get("reaction.attempt_cap", 35))
+        cap = self._test_mode_trials()
+        if cap is not None:
+            scorable = cap
+            # Same headroom the real block gets (25 -> 35), so a demo
+            # with a couple of false starts still reaches Results.
+            attempt_cap = cap + 10
+        windows = [float(w) for w in (self.cfg.get(
+            "reaction.response_windows_s", None) or [2.0, 1.5, 1.2])]
+        level = getattr(self, "_reaction_level", 1)
+        if not isinstance(level, int) or level < 1:
+            level = 1
+        level = min(level, len(windows))
+        # Seed for the block's foreperiod / catch / lane order. A fixed
+        # reaction.seed reproduces a block exactly; the default draws a
+        # fresh one and records it (raw.csv event below plus the block
+        # summary) so any block stays reproducible after the fact.
+        seed_cfg = self.cfg.get("reaction.seed", None)
+        try:
+            seed = (int(seed_cfg) if seed_cfg is not None
+                    else random.randrange(2 ** 32))
+        except (TypeError, ValueError):
+            seed = random.randrange(2 ** 32)
+        sub_mode = str(self.cfg.get("reaction.sub_mode", "choice")).lower()
+        self.mode = ReactionMode(
+            engine=self,
+            lanes_by_hand=self.lanes_by_hand(),
+            sub_mode=sub_mode,
+            # Config is 1-indexed like game.pattern; the mode wants the
+            # within-hand finger index.
+            srt_finger=int(self.cfg.get("reaction.srt_finger", 1)) - 1,
+            scorable_trials=scorable,
+            attempt_cap=attempt_cap,
+            fp_min_s=float(self.cfg.get("reaction.fp_min_s", 1.5)),
+            fp_mean_extra_s=float(
+                self.cfg.get("reaction.fp_mean_extra_s", 2.5)),
+            fp_max_s=float(self.cfg.get("reaction.fp_max_s", 9.0)),
+            fp_mode=str(self.cfg.get("reaction.fp_mode", "exponential")),
+            catch_rate=float(self.cfg.get("reaction.catch_rate", 0.10)),
+            catch_wait_s=float(self.cfg.get("reaction.catch_wait_s", 8.0)),
+            anticipation_cut_ms=float(
+                self.cfg.get("reaction.anticipation_cut_ms", 100)),
+            lapse_ms=float(self.cfg.get("reaction.lapse_ms", 500)),
+            response_window_s=windows[level - 1],
+            level=level,
+            max_level=len(windows),
+            level_up_lapse_rate=float(
+                self.cfg.get("reaction.level_up_lapse_rate", 0.10)),
+            level_down_lapse_rate=float(
+                self.cfg.get("reaction.level_down_lapse_rate", 0.30)),
+            rest_gate_s=float(self.cfg.get("reaction.rest_gate_s", 0.3)),
+            feedback_s=float(self.cfg.get("reaction.feedback_s", 1.2)),
+            false_start_feedback_s=float(
+                self.cfg.get("reaction.false_start_feedback_s", 1.5)),
+            inter_trial_gap_s=float(
+                self.cfg.get("reaction.inter_trial_gap_s", 0.5)),
+            score_cfg=self.score_cfg,
+            seed=seed,
+        )
+        self._begin_block("reaction")
+        # The seed shaped every wait in this block, so it has to live
+        # next to the data it shaped, not only in the app log.
+        if self.raw_logger:
+            self.raw_logger.queue_event(
+                "reaction_config",
+                detail=(f"seed={seed} sub_mode={sub_mode} level={level} "
+                        f"window_s={windows[level - 1]}"),
+                hand=self.hand_mode)
+        self.screen_obj = self._screens["gameplay"]
 
     def begin_pattern_block(self) -> None:
-        log.warning("Pattern mode is not built yet")
-        self.show_mode_select()
+        """Patterns block: SRTT motor sequence learning, one engine
+        block = one session of "takes". The research case lives in the
+        mode file's docstring.
+
+        The trained sequence comes from a seed derived from the
+        participant name, so it is identical every session with no
+        state file; the block seed is fresh per block (unless
+        pattern.seed pins it) and drives the random-material orders
+        plus which probe sequences this session uses. Both seeds are
+        logged so any block is reproducible afterwards.
+        """
+        from .modes.pattern import PatternMode, participant_seed
+        # Patterns is a one-hand mode: the sequence runs over the four
+        # fingers of a single hand. With bilateral selected, play the
+        # affected side when it is recorded, else the right hand.
+        hands = self.lanes_by_hand()
+        if self.hand_mode == "both":
+            affected = str(self.cfg.get("session.affected_side") or "")
+            hand = affected if affected in hands else "right"
+            log.warning("Patterns is a one-hand mode; cueing the %s hand",
+                        hand)
+        else:
+            hand = self.hand_mode
+        lanes = hands.get(hand) or [0, 1, 2, 3]
+        p_seed = participant_seed(str(self.session.participant or ""))
+        seed_cfg = self.cfg.get("pattern.seed", None)
+        try:
+            block_seed = (int(seed_cfg) if seed_cfg is not None
+                          else random.randrange(2 ** 32))
+        except (TypeError, ValueError):
+            block_seed = random.randrange(2 ** 32)
+        self.mode = PatternMode(
+            engine=self,
+            lanes=lanes,
+            p_seed=p_seed,
+            block_seed=block_seed,
+            soc_cycles_per_block=int(
+                self.cfg.get("pattern.soc_cycles_per_block", 5)),
+            warmup_trials=int(self.cfg.get("pattern.warmup_trials", 20)),
+            random_block_trials=int(
+                self.cfg.get("pattern.random_block_trials", 60)),
+            probe_pool_size=int(
+                self.cfg.get("pattern.probe_pool_size", 4)),
+            rsi_s=float(self.cfg.get("pattern.rsi_ms", 500)) / 1000.0,
+            timeout_s=float(
+                self.cfg.get("pattern.timeout_ms", 2000)) / 1000.0,
+            rest_min_s=float(self.cfg.get("pattern.rest_min_s", 15)),
+            long_rest_s=float(self.cfg.get("pattern.long_rest_s", 60)),
+            fatigue_timeout_run=int(
+                self.cfg.get("pattern.fatigue_timeout_run", 5)),
+            session_cap_min=float(
+                self.cfg.get("pattern.session_cap_min", 30)),
+            short_session=bool(
+                self.cfg.get("pattern.short_session", False)),
+            score_cfg=self.score_cfg,
+            demo_trials=self._test_mode_trials(),
+        )
+        self._begin_block("pattern")
+        # Both seeds shaped this block's material, so they live next to
+        # the data they shaped, not only in the app log.
+        if self.raw_logger:
+            self.raw_logger.queue_event(
+                "pattern_config",
+                detail=(f"participant_seed={p_seed} "
+                        f"block_seed={block_seed} hand={hand} "
+                        f"short={self.mode.short_session}"),
+                hand=self.hand_mode)
+        self.screen_obj = self._screens["gameplay"]
 
     def begin_chords_block(self) -> None:
-        log.warning("Chords mode is not built yet")
-        self.show_mode_select()
+        """Chords block: two to four fingers pressed together, quiet
+        fingers scored on staying quiet. One engine block is a full
+        session (opening probes, five sub-blocks of chords with
+        enforced rests, closing probes). The research case lives in
+        the mode file's docstring; chords.* in the config says what
+        the patient experiences.
+
+        Chords is a one-hand mode like Patterns: the ladder runs over
+        the four fingers of a single hand. With bilateral selected it
+        plays the affected side when recorded, else the right hand.
+        """
+        from .modes.chords import ChordsMode
+        hands = self.lanes_by_hand()
+        if self.hand_mode == "both":
+            affected = str(self.cfg.get("session.affected_side") or "")
+            hand = affected if affected in hands else "right"
+            log.warning("Chords is a one-hand mode; cueing the %s hand",
+                        hand)
+        else:
+            hand = self.hand_mode
+        lanes = hands.get(hand) or [0, 1, 2, 3]
+        # Fresh seed per block unless chords.seed pins one, recorded
+        # below so any block's chord order and jitter stay
+        # reproducible after the fact.
+        seed_cfg = self.cfg.get("chords.seed", None)
+        try:
+            seed = (int(seed_cfg) if seed_cfg is not None
+                    else random.randrange(2 ** 32))
+        except (TypeError, ValueError):
+            seed = random.randrange(2 ** 32)
+        windows = [float(w) for w in (self.cfg.get(
+            "chords.sync_windows_ms", None) or [250, 200, 150, 100])]
+        self.mode = ChordsMode(
+            engine=self,
+            hand=hand,
+            lanes=lanes,
+            timeout_s=float(self.cfg.get("chords.timeout_s", 3.0)),
+            sync_windows_ms=windows,
+            hold_ms=float(self.cfg.get("chords.hold_ms", 200)),
+            baseline_quiet_ms=float(
+                self.cfg.get("chords.baseline_quiet_ms", 500)),
+            settle_prompt_s=float(
+                self.cfg.get("chords.settle_prompt_s", 5.0)),
+            iti_min_s=float(self.cfg.get("chords.iti_min_s", 1.5)),
+            iti_max_s=float(self.cfg.get("chords.iti_max_s", 2.5)),
+            trials_per_subblock=int(
+                self.cfg.get("chords.trials_per_subblock", 20)),
+            subblocks=int(self.cfg.get("chords.subblocks", 5)),
+            probe_trials_per_finger=int(
+                self.cfg.get("chords.probe_trials_per_finger", 2)),
+            rest_between_s=float(
+                self.cfg.get("chords.rest_between_s", 30)),
+            fatigue_rest_s=float(
+                self.cfg.get("chords.fatigue_rest_s", 120)),
+            session_cap_min=float(
+                self.cfg.get("chords.session_cap_min", 30)),
+            score_cfg=self.score_cfg,
+            seed=seed,
+            demo_trials=self._test_mode_trials(),
+        )
+        self._begin_block("chords")
+        # The seed shaped every chord draw and jitter in this block, so
+        # it lives next to the data it shaped, not only in the app log.
+        if self.raw_logger:
+            self.raw_logger.queue_event(
+                "chords_config",
+                detail=f"seed={seed} hand={hand} windows={windows}",
+                hand=self.hand_mode)
+        self.screen_obj = self._screens["gameplay"]
 
     def begin_syllables_block(self) -> None:
-        log.warning("Syllables mode is not built yet")
-        self.show_mode_select()
+        """Syllable Beats block: phonological awareness training for
+        children, tapping the beats inside words. One engine block is
+        a full session (warm-up tapping probe, rounds of words with
+        breaks, hard time cap). The research case lives in the mode
+        file's docstring; syllables.* in the config says what the
+        child experiences. This mode renders on its own screen: words
+        and syllable blocks are not a lane strip.
+
+        Syllables is a one-hand mode like Patterns and Chords: the
+        four fingers of one hand carry syllable positions 1 to 4. With
+        bilateral selected it plays the affected side when recorded,
+        else the right hand.
+        """
+        from .modes.syllables import SyllablesMode
+        hands = self.lanes_by_hand()
+        if self.hand_mode == "both":
+            affected = str(self.cfg.get("session.affected_side") or "")
+            hand = affected if affected in hands else "right"
+            log.warning("Syllables is a one-hand mode; cueing the %s hand",
+                        hand)
+        else:
+            hand = self.hand_mode
+        lanes = hands.get(hand) or [0, 1, 2, 3]
+        # Fresh seed per block unless syllables.seed pins one, recorded
+        # below so any block's word order stays reproducible.
+        seed_cfg = self.cfg.get("syllables.seed", None)
+        try:
+            seed = (int(seed_cfg) if seed_cfg is not None
+                    else random.randrange(2 ** 32))
+        except (TypeError, ValueError):
+            seed = random.randrange(2 ** 32)
+        self.mode = SyllablesMode(
+            engine=self,
+            lanes=lanes,
+            level=int(self.cfg.get("syllables.level", 1)),
+            band=str(self.cfg.get("syllables.band", "A")),
+            ioi_ms=float(self.cfg.get("syllables.beat_ioi_ms", 500)),
+            words_total=int(self.cfg.get("syllables.words_per_block", 50)),
+            round_size=int(self.cfg.get("syllables.round_size", 10)),
+            break_s=float(self.cfg.get("syllables.break_s", 30)),
+            warmup_taps=int(self.cfg.get("syllables.warmup_taps", 10)),
+            attend_s=float(self.cfg.get("syllables.attend_s", 1.5)),
+            free_window_s=float(
+                self.cfg.get("syllables.free_window_s", 6.0)),
+            count_in_beats=int(
+                self.cfg.get("syllables.count_in_beats", 4)),
+            grace_ms=float(self.cfg.get("syllables.paced_grace_ms", 1000)),
+            on_beat_window_ms=float(
+                self.cfg.get("syllables.on_beat_window_ms", 150)),
+            stress_ratio=float(
+                self.cfg.get("syllables.stress_ratio", 2.0)),
+            unstressed_max_ratio=float(
+                self.cfg.get("syllables.unstressed_max_ratio", 1.5)),
+            tap_debounce_ms=float(
+                self.cfg.get("syllables.tap_debounce_ms", 150)),
+            inter_trial_gap_ms=float(
+                self.cfg.get("syllables.inter_trial_gap_ms", 800)),
+            session_cap_min=float(
+                self.cfg.get("syllables.session_cap_min", 20)),
+            replay_on_error=bool(
+                self.cfg.get("syllables.replay_on_error", True)),
+            speak_words=bool(self.cfg.get("syllables.speak_words", True)),
+            say_voice=self.cfg.get("syllables.say_voice", None),
+            score_cfg=self.score_cfg,
+            seed=seed,
+            demo_trials=self._test_mode_trials(),
+        )
+        self._begin_block("syllables")
+        # The seed shaped this block's word order, so it lives next to
+        # the data it shaped, not only in the app log.
+        if self.raw_logger:
+            self.raw_logger.queue_event(
+                "syllables_config",
+                detail=(f"seed={seed} hand={hand} "
+                        f"level={self.mode.level} band={self.mode.band} "
+                        f"ioi_ms={self.mode.ioi_s * 1000.0:.0f}"),
+                hand=self.hand_mode)
+        sc = self._screens.get("syllables")
+        if sc is not None and hasattr(sc, "on_block_start"):
+            sc.on_block_start()
+        self.screen_obj = self._screens["syllables"]
 
     def begin_adaptive_block(self) -> None:
         from .modes.adaptive import AdaptiveMode
@@ -1732,11 +2024,15 @@ class GameEngine:
 
     def _begin_block(self, name: str) -> None:
         self.current_block = name
-        # Pre-start "GET READY" countdown on the cadence modes (classic /
-        # adaptive / mirror), all of which render through the gameplay
-        # screen. Rhythm is excluded: it has its own musical lead-in.
-        # Test mode trims the countdown so quick demos stay quick.
-        if name in ("classic", "adaptive", "mirror"):
+        # Pre-start "GET READY" countdown on the modes that render
+        # through the gameplay screen (classic / adaptive / mirror /
+        # reaction / pattern). Rhythm is excluded: it has its own
+        # musical lead-in. Reaction and pattern get it too so the
+        # patient's hand is settled before the first wait starts
+        # counting. Test mode trims the countdown so quick demos stay
+        # quick.
+        if name in ("classic", "adaptive", "mirror", "reaction",
+                    "pattern", "chords"):
             secs = float(self.cfg.get("game.start_countdown_s", 5.0))
             if self._test_mode_trials() is not None:
                 secs = min(secs, 1.5)
@@ -1992,6 +2288,51 @@ class GameEngine:
                 "song_path": (str(getattr(bm, "song", "") or "")
                                or None),
             }
+        # Reaction-only context: the mode's own outcome tallies and
+        # distribution stats (median, anticipation diagnostic, seed).
+        # These cannot be rebuilt from hits / misses because false
+        # starts and catch trials deliberately bypass those counters.
+        if self.current_block == "reaction" and self.mode is not None:
+            stats_fn = getattr(self.mode, "block_stats", None)
+            if callable(stats_fn):
+                try:
+                    summary["reaction"] = stats_fn()
+                except Exception as e:
+                    log.warning("reaction block stats failed: %s", e)
+        # Patterns-only context: the sequences actually used, per-take
+        # aggregates and the probe learning scores. These cannot be
+        # rebuilt from hits / misses because the trained/probe split
+        # and the trimmed-RT hygiene live in the mode.
+        if self.current_block == "pattern" and self.mode is not None:
+            stats_fn = getattr(self.mode, "block_stats", None)
+            if callable(stats_fn):
+                try:
+                    summary["pattern"] = stats_fn()
+                except Exception as e:
+                    log.warning("pattern block stats failed: %s", e)
+        # Chords-only context: ladder position, per-chord difficulty
+        # validation, cross-talk aggregates and the probe enslaving
+        # matrices. These cannot be rebuilt from the CSV because span,
+        # ER and the outcome classes live on per-trial onset times and
+        # normalised force peaks the fixed schema does not carry.
+        if self.current_block == "chords" and self.mode is not None:
+            stats_fn = getattr(self.mode, "block_stats", None)
+            if callable(stats_fn):
+                try:
+                    summary["chords"] = stats_fn()
+                except Exception as e:
+                    log.warning("chords block stats failed: %s", e)
+        # Syllables-only context: level, band trace, accuracy by
+        # syllable count, pooled asynchronies and the warm-up probe.
+        # These cannot be rebuilt from hits / misses because the
+        # per-word detail lives in packed stimulus strings.
+        if self.current_block == "syllables" and self.mode is not None:
+            stats_fn = getattr(self.mode, "block_stats", None)
+            if callable(stats_fn):
+                try:
+                    summary["syllables"] = stats_fn()
+                except Exception as e:
+                    log.warning("syllables block stats failed: %s", e)
         # Adaptive-only context.
         bpm_min = getattr(self, "_block_bpm_min", None)
         bpm_max = getattr(self, "_block_bpm_max", None)
@@ -2244,7 +2585,7 @@ class GameEngine:
                 phase = str(entry[1]).lower()
             else:
                 continue
-            if mode in ("classic", "adaptive", "mirror"):
+            if mode in ("classic", "adaptive", "mirror", "reaction"):
                 parsed.append((mode, phase))
         if not parsed:
             return False
@@ -2273,6 +2614,8 @@ class GameEngine:
             self.begin_adaptive_block()
         elif mode == "mirror":
             self.begin_mirror_block()
+        elif mode == "reaction":
+            self.begin_reaction_block()
         else:
             # Shouldn't reach here; start_protocol filters by mode.
             self._protocol_active = False
@@ -3072,23 +3415,69 @@ class GameEngine:
         # hardware failure. None = motors disabled for this session.
         self._last_stim_delivered = None
         if cues.buzz_before:
-            # Buzz the TARGET finger so the patient feels which one to
-            # press. One STIM command per target lane; the Arduino
-            # numbers motors 1..N matching the global lane.
-            delivered = True
+            # Buzz the TARGET fingers so the patient feels which to
+            # press. One board runs one motor at a time (_send_stim
+            # stops a board before switching fingers), so the targets
+            # are grouped by board first. A board asked for ONE finger
+            # gets the normal held cue: first pulse now, re-armed out
+            # to motor.cue_ms. A board asked for SEVERAL fingers, which
+            # only chords mode does, gets an ARPEGGIO instead: one
+            # firmware pulse per finger in fixed low-to-high lane
+            # order, onsets spaced a full pulse plus
+            # motor.arpeggio_gap_ms apart, so no pulse is cut short by
+            # the next and each finger's buzz reads as its own. The
+            # follow-up pulses ride the motor queue the main loop
+            # already drains. No cue stretch on arpeggio lanes: a
+            # stretched pulse would still be running when the next
+            # finger's pulse came due, and the board cannot do both.
+            # Mirror's two hands are two boards, so they still buzz
+            # together.
+            by_board: dict[str, list[int]] = {}
             for lane in sorted(targets):
-                ok = self._send_stim(lane)
+                resolved = self._resolve_lane_to_detector(lane)
+                # An unresolvable lane gets its own group: with no way
+                # to know it shares a driver, chopping the cue up on a
+                # guess would be worse than the current behaviour.
+                board = resolved[0] if resolved else f"?{lane}"
+                by_board.setdefault(board, []).append(lane)
+            try:
+                gap_ms = float(self.cfg.get("motor.arpeggio_gap_ms", 40))
+            except (TypeError, ValueError):
+                gap_ms = 40.0
+            spacing_s = (self.FIRMWARE_STIM_MS + max(0.0, gap_ms)) / 1000.0
+            delivered = True
+            for lanes_on_board in by_board.values():
+                first = lanes_on_board[0]
+                ok = self._send_stim(first)
                 if not ok:
                     delivered = False
                 if self.raw_logger:
                     self.raw_logger.queue_event(
-                        "stim_motor", lane=lane, t_perf=t_perf,
+                        "stim_motor", lane=first, t_perf=t_perf,
                         detail=f"delivered={'yes' if ok else 'NO'}",
                         hand=self.hand_mode)
-                # Hold the motor on for the configured cue length. The
-                # firmware runs a fixed 150 ms per command, so anything
-                # longer is built by re-arming it before it expires.
-                self._schedule_cue_pulses(lane)
+                if len(lanes_on_board) == 1:
+                    # Hold the motor on for the configured cue length.
+                    # The firmware runs a fixed 150 ms per command, so
+                    # anything longer is built by re-arming it before
+                    # it expires.
+                    self._schedule_cue_pulses(first)
+                    continue
+                if not hasattr(self, "_motor_queue"):
+                    self._motor_queue = []
+                base = time.perf_counter()
+                for k, lane in enumerate(lanes_on_board[1:], start=1):
+                    self._motor_queue.append((lane, base + k * spacing_s))
+                    if self.raw_logger:
+                        # Queued pulses go out via _drain_motor_queue,
+                        # which does not log, so the schedule is
+                        # recorded here. stim_delivered on the trial
+                        # row reflects the first pulse per board only.
+                        self.raw_logger.queue_event(
+                            "stim_motor", lane=lane, t_perf=t_perf,
+                            detail=("arpeggio_offset_ms="
+                                    f"{k * spacing_s * 1000.0:.0f}"),
+                            hand=self.hand_mode)
             self._last_stim_delivered = delivered
             if not delivered:
                 self._block_stim_failures += 1
@@ -3118,7 +3507,8 @@ class GameEngine:
     def log_trial(self, trial, outcome: TrialResult, now: float,
                    cue_lanes: list[int] | None = None,
                    stimulus: str = "",
-                   pattern_trial: bool | None = None) -> None:
+                   pattern_trial: bool | None = None,
+                   correct_lanes: list[int] | None = None) -> None:
         """Close out one cadence-style trial.
 
         `cue_lanes` is which finger(s) the after-press cue should fire
@@ -3130,6 +3520,11 @@ class GameEngine:
         marks whether the lane came from pattern mode's repeating
         sequence (True) or a random probe (False); None leaves the
         column empty, which is every other mode.
+
+        `correct_lanes` is every lane the trial required, for the CSV's
+        correct_keys column. Chords passes the whole target set so the
+        row says which fingers the chord asked for, not just the one
+        the row is keyed on; None keeps the single-lane default.
         """
         self._ensure_metric_state()
         gp = self._screens.get("gameplay")
@@ -3267,7 +3662,12 @@ class GameEngine:
                 "feedback": outcome.label,
                 "error_type": "" if outcome.label != "Miss" else "timeout",
                 "keys_pressed": keys,
-                "correct_keys": str(trial.lane + 1),
+                # Comma-joined 1-indexed lanes, matching keys_pressed,
+                # so a chord row parses the same way a press list does.
+                "correct_keys": ",".join(
+                    str(l + 1) for l in (sorted(correct_lanes)
+                                          if correct_lanes
+                                          else [trial.lane])),
                 "num_presses": len(trial.keys_pressed),
                 "had_incorrect_press": "TRUE" if had_incorrect else "FALSE",
                 "first_incorrect_ms": first_inc_ms,
@@ -3369,6 +3769,97 @@ class GameEngine:
             self.session.save(self.session_paths.metadata_json)
         except Exception as e:
             log.warning("periodic metadata save failed: %s", e)
+
+    def log_reaction_event(self, trial_id: int, lane: int | None,
+                            label: str, error_type: str,
+                            rt_ms: float | None = None,
+                            pressed_lane: int | None = None,
+                            press_offset_ms: float | None = None,
+                            points: int = 0,
+                            stimulus: str = "") -> None:
+        """Write a trial row for a reaction-mode event that never
+        became a scorable trial: foreperiod false starts, sub-cut
+        anticipations, wrong fingers in the simple sub-mode, and catch
+        outcomes.
+
+        log_trial is deliberately NOT reused for these. It counts
+        every non-Miss row as a hit, extends the streak, and fires the
+        after-press confirmation cues, all of which would reward a
+        press the reaction protocol says gets neutral feedback (and a
+        survived catch trial has no press at all). This path writes
+        the same CSV schema and per-trial context, and leaves the
+        score, the streak and the cue channels alone; the mode owns
+        the on-screen message for these events.
+
+        `lane` is the cued target when one existed (anticipation /
+        wrong finger), None when no stimulus ever fired (foreperiod
+        false starts, catch trials). `error_type` lands in the CSV's
+        error_type column: false_start / anticipation / wrong_finger /
+        catch_false_start, or "" for a survived catch.
+        """
+        self._ensure_metric_state()
+        # Whether a stimulus had fired for this attempt decides which
+        # per-stim fields (loudness, response window, delivery flag,
+        # force window) genuinely apply to the row.
+        stim_fired = error_type in ("anticipation", "wrong_finger")
+        fw_sum: float | None = None
+        fw_peaks: dict[int, float] = {}
+        if stim_fired and self._force_window_trial_id == trial_id:
+            fw_sum, fw_peaks = self._close_force_window(False)
+        if not self.trial_logger:
+            return
+        row = {
+            "participant": self.session.participant,
+            "age": self.session.age,
+            "hand": self.hand_mode,
+            "block": self.current_block,
+            "trial": trial_id,
+            "lane": "" if lane is None else lane + 1,
+            "time_difference_ms": ("" if rt_ms is None
+                                    else f"{rt_ms:.1f}"),
+            "early_late": label,
+            "points": points,
+            "feedback": label,
+            "error_type": error_type,
+            "keys_pressed": ("" if pressed_lane is None
+                              else str(pressed_lane + 1)),
+            "correct_keys": "" if lane is None else str(lane + 1),
+            "num_presses": 0 if pressed_lane is None else 1,
+            "had_incorrect_press": ("TRUE" if error_type == "wrong_finger"
+                                     else "FALSE"),
+            "first_incorrect_ms": ("" if press_offset_ms is None
+                                    else f"{press_offset_ms:.1f}"),
+            "first_incorrect_lane": (
+                str(pressed_lane + 1)
+                if error_type == "wrong_finger" and pressed_lane is not None
+                else ""),
+            "phase": getattr(self, "_current_phase", "") or "",
+            "stimulus": stimulus or "",
+        }
+        loud = (self._loud_trials_by_id.get(trial_id)
+                if stim_fired else None)
+        row["loud_trial"] = ("" if loud is None
+                              else ("TRUE" if loud else "FALSE"))
+        row["timeout_ms"] = (
+            f"{self._last_stim_timeout_ms:.0f}"
+            if stim_fired and self._last_stim_timeout_ms is not None
+            else "")
+        fw_sum_str, fw_peaks_str = self._format_force_window(
+            fw_sum, fw_peaks)
+        row["force_window_sum"] = fw_sum_str
+        row["force_window_peaks"] = fw_peaks_str
+        # Cue state read live rather than from the last stim: for a
+        # no-stim event (false start, catch) the last stim belongs to
+        # an earlier attempt and would mislabel this row.
+        cues = self.cue_settings()
+        row["cue_flags"] = cues.code
+        row["cue_target_shown"] = ("TRUE" if cues.show_target
+                                    else "FALSE")
+        sd = self._last_stim_delivered if stim_fired else None
+        row["stim_delivered"] = ("" if sd is None
+                                  else ("TRUE" if sd else "FALSE"))
+        row.update(self._trial_context(self.hit_streak))
+        self.trial_logger.write(row)
 
     def log_rhythm_hit(self, sched_note, offset_ms: float, label: str,
                        points: int, now: float,

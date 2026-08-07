@@ -71,9 +71,11 @@ class InfoOverlayTests(unittest.TestCase):
         self.assertFalse(ts._show_info)
 
     def test_protocol_text_names_all_four_modes(self):
+        # Reaction replaced Classic as the baseline core mode, so the
+        # session protocol the overlay teaches names reaction first.
         _, ts = self._title_screen()
         blob = " ".join(ts.INFO_STEPS).lower()
-        for mode in ("classic", "adaptive", "rhythm", "mirror"):
+        for mode in ("reaction", "adaptive", "rhythm", "mirror"):
             self.assertIn(mode, blob)
 
     def test_protocol_renders_without_error(self):

@@ -290,6 +290,16 @@ motor:
   # stay under the firmware's 150 ms hold or the motor stutters
   # instead of running continuously.
   pulse_interval_ms: 120
+  # Silence between the pulses of a multi-finger cue (chords mode).
+  # The four motors on a board share one driver, so a chord cannot
+  # buzz all its fingers at once; the cue is an arpeggio instead, one
+  # 150 ms firmware pulse per finger, always index to pinky. This gap
+  # sits between pulses so each finger's buzz reads as its own rather
+  # than one long buzz sliding across the hand. At 40 ms a four-finger
+  # cue spans about 720 ms. Raising it makes the fingers easier to
+  # tell apart and the cue slower; do not go below about 20 ms or the
+  # pulses start to blur together.
+  arpeggio_gap_ms: 40
   # PER-FINGER BUZZ LENGTH, one entry per finger in the order
   # index, middle, ring, pinky. Empty falls back to cue_ms for all four,
   # which is what ships and what should normally be used.
@@ -353,7 +363,7 @@ game:
   #
   # Turn this off to go back to the old fixed pattern from game.pattern.
   balance_targets: true
-  mode: adaptive         # classic | adaptive | rhythm
+  mode: adaptive         # reaction | classic | adaptive | rhythm | mirror
   # Classic-mode pacing. 1.2 s between stim onsets + 1.0 s timeout means the
   # patient has up to ~2.2 s per trial, which is comfortable starting pace
   # for most patients. Adaptive mode ignores trigger_interval_s and
@@ -507,6 +517,309 @@ mirror:
   # band, bpm_min, bpm_max, bpm_step, weakness_bias) drive how the
   # pace evolves from here.
   start_bpm: 24
+
+reaction:
+  # Reaction mode: a randomised wait, then press as fast as you can.
+  # The baseline block that replaced Classic, so these numbers decide
+  # what every cross-session comparison is made of. The research case
+  # for each value lives in rehab/game/modes/reaction.py; this file
+  # explains what the patient experiences.
+
+  # choice = any of the four fingers can be cued (all fingers get equal
+  # counts, order unpredictable). simple = one designated finger every
+  # trial, the cleanest eye-to-hand measure. The two are different
+  # measures, not difficulty levels: choice adds picking the right
+  # finger on top of reacting, and runs roughly double the RT.
+  sub_mode: choice
+  # Which finger simple mode uses, 1=index .. 4=little. Index by
+  # default because it is usually the strongest and least impaired, so
+  # the first simple blocks measure reacting, not struggling to press.
+  srt_finger: 1
+
+  # A block is this many scorable trials (a press or a timeout). False
+  # starts, wrong fingers in simple mode and catch trials do not use
+  # up scorable slots; attempt_cap ends the block anyway so a rough
+  # day cannot trap the patient in an endless block. 25 trials runs
+  # about 3 minutes, matching the validated short-form vigilance test
+  # and stopping before time-on-task fatigue sets in.
+  block_trials: 25
+  attempt_cap: 35
+
+  # The wait before the go signal. Drawn fresh every trial: fp_min_s
+  # plus an exponential extra averaging fp_mean_extra_s, redrawn if
+  # the total lands past fp_max_s. Exponential is the point, not a
+  # detail: it keeps the chance of "go arriving right now" constant
+  # however long the patient has waited, so watching the clock does
+  # not help and the press stays a reaction. Typical waits run 2-4 s.
+  # fp_mode uniform swaps in a flat 2-10 s draw for blocks meant to
+  # be compared against published PVT numbers.
+  fp_min_s: 1.5
+  fp_mean_extra_s: 2.5
+  fp_max_s: 9.0
+  fp_mode: exponential
+
+  # On this fraction of trials no go signal ever comes. Waiting it out
+  # earns a small reward; pressing anyway is a false start. This is
+  # what makes guessing a losing game rather than a free bet. Kept at
+  # 10 percent because more catches inflate everyone's RT and start to
+  # feel like the game is cheating.
+  catch_rate: 0.10
+  catch_wait_s: 8.0
+
+  # A press under this many ms after the go signal cannot be a real
+  # reaction to it (the eye-to-hand loop is not that fast), so it is
+  # scored as a false start, never as a hit. Feedback for every kind
+  # of false start stays gentle on purpose: stroke can impair the
+  # ability to hold a response back, and punishing that invites
+  # pressing harder out of stress.
+  anticipation_cut_ms: 100
+  # A press at or past this many ms counts as a lapse (pressed, but
+  # attention had wandered). Drives level progression, not the score.
+  lapse_ms: 500
+
+  # How long the patient has to press, by level. Levels move on
+  # lapse-or-miss rate: two consecutive blocks under
+  # level_up_lapse_rate tighten the window one step, one block over
+  # level_down_lapse_rate widens it back. The window is the ONLY
+  # difficulty lever; the press threshold never changes, because a
+  # harder press would change what is being measured. Progress resets
+  # to level 1 when the app restarts, the safe direction to fail.
+  response_windows_s: [2.0, 1.5, 1.2]
+  level_up_lapse_rate: 0.10
+  level_down_lapse_rate: 0.30
+
+  # The wait only starts once every finger has rested for this long,
+  # so a slow release from the last press cannot leak into the next
+  # trial as a phantom false start.
+  rest_gate_s: 0.3
+  # How long the millisecond result stays on screen after a press,
+  # how long the "Too soon" notice stays after a false start, and the
+  # blank gap before the next trial arms. Together they set the cycle
+  # at roughly 6 s per trial.
+  feedback_s: 1.2
+  false_start_feedback_s: 1.5
+  inter_trial_gap_s: 0.5
+
+  # Set an integer to replay a block's exact wait sequence (testing,
+  # or a deliberately repeated protocol). Empty draws a fresh seed per
+  # block and records it in raw.csv and the block summary, so any
+  # block can still be reproduced afterwards.
+  seed: null
+
+pattern:
+  # Patterns mode: the patient records "takes" of a piano riff, one
+  # key lighting at a time, press it and the next follows half a
+  # second later. Hidden inside most takes is a repeating 12-note
+  # sequence; two takes per session secretly switch to unfamiliar
+  # material, and how much the patient slows down on those is the
+  # measurement. The research case for every number lives in
+  # rehab/game/modes/pattern.py; this file says what the patient
+  # experiences. One thing is non-negotiable at the bench: never tell
+  # the patient a pattern exists. Knowing about it makes the learning
+  # worse after stroke, not better.
+
+  # A take is 5 loops of the 12-note sequence = 60 presses, roughly a
+  # minute. Ten takes plus the warm-up run 12 to 25 minutes depending
+  # on the patient's pace.
+  soc_cycles_per_block: 5
+  # Settling-in presses before the first take. Not analysed; they let
+  # the hand find the keys and surface any calibration problem before
+  # data that matters.
+  warmup_trials: 20
+  # Take 1 is mixed-up material every session: it tracks how fast the
+  # patient is in general, so later sessions can tell "faster overall"
+  # apart from "knows the riff".
+  random_block_trials: 60
+  # How many unfamiliar sequences the patient's pool holds. Which two
+  # a session uses rotates block to block so none of them gets
+  # familiar. Some participants' material only admits 3; the pool
+  # then holds 3.
+  probe_pool_size: 4
+  # Gap between the patient's press and the next key lighting. Fixed
+  # on purpose: the rhythm of the game must never change for a
+  # participant, or their speed changes for reasons that have nothing
+  # to do with learning.
+  rsi_ms: 500
+  # How long a key stays lit waiting for its press. 2000 suits most
+  # patients; raise to 3000 for slower stroke-affected hands. Set it
+  # once per participant and leave it.
+  timeout_ms: 2000
+  # An 8-take session for patients whose stamina will not carry ten.
+  # Both hidden-switch takes keep a familiar take on each side, which
+  # the scoring needs.
+  short_session: false
+  # Rests between takes: the patient advances with any press once the
+  # floor has passed. The longer rest lands after the fifth take,
+  # mid-session.
+  rest_min_s: 15
+  long_rest_s: 60
+  # Five lit keys in a row with no press at all reads as a tired hand:
+  # the game inserts a rest. A second such run ends the session
+  # gracefully with the data kept. Slowing on the hidden-switch takes
+  # never counts toward this.
+  fatigue_timeout_run: 5
+  # Whole-session ceiling. The session ends politely at the next press
+  # after this many minutes, however far it got.
+  session_cap_min: 30
+  # Set an integer to replay a block's exact random material and
+  # probe rotation (testing, or a deliberately repeated protocol).
+  # Empty draws fresh each block and records it in raw.csv and the
+  # block summary. The riff itself is NOT affected: that comes from
+  # the participant name so it is the same every session.
+  seed: null
+
+chords:
+  # Chords mode: two, three or four fingers pressed together, and the
+  # fingers that were NOT asked are scored on staying still. The
+  # research case for every number lives in rehab/game/modes/chords.py;
+  # this file says what the patient experiences. One engine block is a
+  # whole session: a few single-finger warm-up presses, five rounds of
+  # chords with proper rests, then the same single-finger presses
+  # again to close. Light presses only, everywhere: the game never
+  # rewards pressing harder, and pressing much harder than the
+  # calibrated light press earns a "press lighter" prompt.
+
+  # How long the fingers have to land the chord once it lights up.
+  # Generous on purpose: a slow chord still teaches the shape, and the
+  # togetherness score is about the gap BETWEEN the fingers, not about
+  # answering fast.
+  timeout_s: 3.0
+  # How close together the finger presses must land to count as "one
+  # chord", in milliseconds, from easiest to hardest. The game starts
+  # at the first value and only tightens when the patient is landing
+  # 8 of their last 10 cleanly; it loosens again the same way. The
+  # last value is the floor. Concert pianists land chords within about
+  # 30 ms, so even the floor here stays three times softer than that.
+  sync_windows_ms: [250, 200, 150, 100]
+  # Once the chord is together, all its fingers stay down this long.
+  # Kept short on purpose: holding a press makes the unwanted leak
+  # onto other fingers grow, which is the opposite of the training
+  # goal. Needs the sensors; the keyboard fallback skips the hold.
+  hold_ms: 200
+  # The hand must be properly at rest for this long before each chord
+  # fires, so every trial starts from a still hand and the leak
+  # measurement means what it says. If the hand will not settle the
+  # screen asks the patient to relax it rather than firing anyway.
+  baseline_quiet_ms: 500
+  settle_prompt_s: 5.0
+  # Breathing room between trials, drawn fresh each time so the next
+  # chord cannot be timed rather than reacted to.
+  iti_min_s: 1.5
+  iti_max_s: 2.5
+  # Session shape: rounds of chords, with a floor on the rest between
+  # rounds (the patient presses any finger to continue once the floor
+  # has passed). 5 rounds of 20 is about 100 chords, which lands the
+  # session on the feasible-dose benchmark for stroke without
+  # overstaying it.
+  trials_per_subblock: 20
+  subblocks: 5
+  rest_between_s: 30
+  # Single-finger presses at the session's start AND end, per finger.
+  # These are what let the analysis measure how much each finger leaks
+  # onto the others before and after the chords, so do not set this to
+  # 0 for a real participant.
+  probe_trials_per_finger: 2
+  # If a round goes clearly worse than the session's first round (hit
+  # rate down 30 points, or presses 30 percent slower), the game
+  # inserts this longer rest and eases the difficulty one step. A
+  # second such round ends the session politely with the data kept:
+  # a tired hand trains the wrong thing.
+  fatigue_rest_s: 120
+  # Whole-session ceiling. The session ends politely at the next trial
+  # close after this many minutes, however far it got.
+  session_cap_min: 30
+  # Set an integer to replay a block's exact chord order and timing
+  # jitter (testing, or a deliberately repeated protocol). Empty draws
+  # fresh each block and records it in raw.csv.
+  seed: null
+
+syllables:
+  # Syllable Beats: a children's mode, unlike everything else in this
+  # file. A word appears as big blocks, one block per beat; the blocks
+  # light left to right while the matching finger buzzes and a tone
+  # plays, then the child taps the beats back on the sensors. The
+  # research case for every number lives in
+  # rehab/game/modes/syllables.py; this block says what the child
+  # experiences. Two cautions carried from that file: this trains
+  # sound skills in the game only, it is NOT a dyslexia treatment or
+  # test and must never be described to a family as one; and the
+  # hardware was scoped for adult rehabilitation, so using it with a
+  # child needs its own ethics approval, a check that small fingers
+  # reach the pads, and cleaning between children.
+
+  # Which rung of the ladder this child is on. 1 counts beats with any
+  # fingers, 2 maps beats onto fingers in order, 3 taps them in time
+  # with the tick, 4 adds pressing the strong beat harder, 5 splits
+  # short words into first-sound and rest, 6 taps single sounds. Move
+  # it up only after two good sessions in a row at the top band; the
+  # app keeps no history between sessions on purpose, so this stays a
+  # researcher decision.
+  level: 1
+  # Word difficulty the block starts at: A everyday words, B less
+  # common, C rare and long ones. Moves on its own during a block
+  # (8 of the last 10 right goes up, under 5 of 10 comes down) and
+  # every move is recorded.
+  band: A
+  # Milliseconds between beats. 500 is two beats a second, the pace
+  # children this age tap most naturally and the pace the research
+  # cares most about. 667 for younger children or after repeated
+  # failure; 400 as a stretch. Leave it at one of those three.
+  beat_ioi_ms: 500
+  # Session shape: rounds of words with a proper rest between rounds,
+  # and a whole-session ceiling so an engaged child still stops in
+  # time. 50 words in rounds of 10 runs about 15 minutes.
+  words_per_block: 50
+  round_size: 10
+  break_s: 30
+  # Ten free taps along with the tick before the first word: warms the
+  # hand up, checks the sensors are seeing the child's taps, and gives
+  # the analysis a tapping-steadiness reading every session.
+  warmup_taps: 10
+  # Seconds the word is shown (and spoken, on a Mac) before the blocks
+  # start lighting.
+  attend_s: 1.5
+  # How long the child has to tap back when there is no beat to follow
+  # (levels 1, 2, 5 and 6). Generous on purpose: nothing in this mode
+  # rewards answering fast.
+  free_window_s: 6.0
+  # Beat-paced levels: ticks counted in before the child taps, and the
+  # extra time after the last expected beat before the word is scored.
+  count_in_beats: 4
+  paced_grace_ms: 1000
+  # A tap counts as on the beat within this many ms either side.
+  # Children swing wide, so 150 is deliberately soft; the exact gap to
+  # the beat is recorded for every tap regardless, so the analysis can
+  # tighten this later without replaying anyone.
+  on_beat_window_ms: 150
+  # Level 4 accent: the strong beat must be pressed at least twice as
+  # hard as the child's usual tap in that word, and the other beats
+  # must stay under 1.5 times it. Relative to the child's own taps
+  # because children differ hugely in how hard they press; never an
+  # absolute force target.
+  stress_ratio: 2.0
+  unstressed_max_ratio: 1.5
+  # Two touches on one finger inside this window count once. Sits on
+  # top of the hardware debounce so a bouncy little finger cannot rack
+  # up phantom extra taps.
+  tap_debounce_ms: 150
+  # Quiet gap between words, and the session ceiling. The block ends
+  # politely at the next word boundary after the cap.
+  inter_trial_gap_ms: 800
+  session_cap_min: 20
+  # After a wrong answer the word's blocks play through once more,
+  # then the game moves on. Once, ever: watching reruns is not
+  # practice. No error sound plays anywhere in this mode.
+  replay_on_error: true
+  # On a Mac the word is spoken aloud once as it appears, using the
+  # system voice. Set a specific voice name (e.g. Karen, the
+  # Australian one) with say_voice. Off, or on any other machine, the
+  # mode plays the same without speech.
+  speak_words: true
+  say_voice: null
+  # Set an integer to replay a block's exact word order (testing, or a
+  # deliberately repeated protocol). Empty draws fresh each block and
+  # records it in raw.csv.
+  seed: null
 
 rhythm:
   difficulty: medium     # easy | medium | hard
