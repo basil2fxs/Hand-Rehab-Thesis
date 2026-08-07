@@ -3116,12 +3116,20 @@ class GameEngine:
                                              hand=self.hand_mode)
 
     def log_trial(self, trial, outcome: TrialResult, now: float,
-                   cue_lanes: list[int] | None = None) -> None:
-        """Close out one classic / adaptive / mirror trial.
+                   cue_lanes: list[int] | None = None,
+                   stimulus: str = "",
+                   pattern_trial: bool | None = None) -> None:
+        """Close out one cadence-style trial.
 
         `cue_lanes` is which finger(s) the after-press cue should fire
         on, defaulting to the single target lane. Mirror mode passes
         both hands' copies because the patient pressed both.
+
+        `stimulus` is anything shown beyond a lane highlight: the word
+        in syllables mode, the chord in chords mode. `pattern_trial`
+        marks whether the lane came from pattern mode's repeating
+        sequence (True) or a random probe (False); None leaves the
+        column empty, which is every other mode.
         """
         self._ensure_metric_state()
         gp = self._screens.get("gameplay")
@@ -3291,6 +3299,10 @@ class GameEngine:
             row["force_window_sum"] = fw_sum_str
             row["force_window_peaks"] = fw_peaks_str
             row["cue_flags"] = self._last_cue_code
+            row["stimulus"] = stimulus or ""
+            row["pattern_trial"] = ("" if pattern_trial is None
+                                     else ("TRUE" if pattern_trial
+                                           else "FALSE"))
             row["cue_target_shown"] = ("TRUE" if self._last_target_shown
                                         else "FALSE")
             sd = getattr(self, "_last_stim_delivered", None)
