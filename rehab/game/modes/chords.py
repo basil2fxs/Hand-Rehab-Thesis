@@ -170,6 +170,12 @@ DEVIATIONS FROM THE RESEARCH BRIEF, where the plumbing wins:
 - Two-board bimanual chords are out of scope, as the brief itself
   flags (no literature basis found); with both hands connected the
   mode plays the affected side, like Patterns.
+- With the shipped cue defaults the go moment is audio-tactile-visual:
+  highlight, tone and arpeggio land together, so chord RT and span are
+  responses to that mix, not to a visual flash alone. The defaults are
+  a whole-suite choice and are not overridden here; cue_flags records
+  the mix on every trial row so blocks run under different settings
+  never pool silently.
 """
 from __future__ import annotations
 
@@ -410,6 +416,12 @@ class ChordsMode:
         # their home (raw.csv keeps the underlying events regardless).
         self._records: list[dict] = []
 
+        # Quiet-fingers reward state the gameplay screen reads: the
+        # lanes that stayed still through the last clean chord, and
+        # when that chord closed. None until the first hit.
+        self._quiet_tick_lanes: list[int] = []
+        self._quiet_tick_t: float | None = None
+
     # ---- properties the engine reads ---------------------------------------
     @property
     def total_trials(self) -> int:
@@ -444,7 +456,8 @@ class ChordsMode:
             for lane in list(self.active.onsets):
                 self.active.onsets[lane] += pause_dur
         for attr in ("_next_ok_t", "_quiet_since", "_settle_t0",
-                     "_hold_until", "_rest_until", "_t0"):
+                     "_hold_until", "_rest_until", "_t0",
+                     "_quiet_tick_t"):
             v = getattr(self, attr)
             if v is not None:
                 setattr(self, attr, v + pause_dur)
@@ -782,7 +795,15 @@ class ChordsMode:
                               stimulus=stim,
                               correct_lanes=list(trial.targets))
         self._set_message(self._feedback_text(trial, cls, over_force,
-                                              light_press), 0.9)
+                                              light_press), 0.9,
+                          kind="success" if cls == "hit" else "warn")
+        # Quiet-fingers reward moment: a clean chord leaves the
+        # untargeted fingers wearing a brief tick on the gameplay
+        # screen. State only; the screen draws and fades it.
+        if cls == "hit" and len(trial.targets) < len(self.lanes):
+            self._quiet_tick_lanes = [l for l in self.lanes
+                                      if l not in trial.targets]
+            self._quiet_tick_t = now
 
         self._records.append({
             "trial": trial.trial_id,
@@ -853,7 +874,7 @@ class ChordsMode:
             self.level += 1
             self.highest_level = max(self.highest_level, self.level)
             self._stair.clear()
-            self._set_message("Level up", 1.2)
+            self._set_message("Level up", 1.2, kind="best")
         elif hits <= self.DEMOTE_HITS and self.level > 0:
             self.level -= 1
             self._stair.clear()
@@ -977,10 +998,15 @@ class ChordsMode:
             return None
         return screens.get("gameplay")
 
-    def _set_message(self, text: str, duration_s: float) -> None:
+    def _set_message(self, text: str, duration_s: float,
+                     kind: str = "info") -> None:
         gp = self._gameplay_screen()
         if gp is not None and hasattr(gp, "set_message"):
-            gp.set_message(text, duration_s)
+            try:
+                gp.set_message(text, duration_s, kind=kind)
+            except TypeError:
+                # Older screen doubles take (text, duration) only.
+                gp.set_message(text, duration_s)
 
     def _clear_lanes(self) -> None:
         gp = self._gameplay_screen()

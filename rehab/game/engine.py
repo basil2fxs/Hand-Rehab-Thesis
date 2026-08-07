@@ -1449,7 +1449,12 @@ class GameEngine:
         self.screen_obj = rs
 
     def show_results(self) -> None:
-        self.screen_obj = self._screens["results"]
+        rs = self._screens["results"]
+        # Let the screen restart its entry animation (grade-ring sweep,
+        # stat count-up) each time a block lands here.
+        if hasattr(rs, "on_show"):
+            rs.on_show()
+        self.screen_obj = rs
 
     # ---- block lifecycle ---------------------------------------------------
     def _test_mode_trials(self) -> int | None:

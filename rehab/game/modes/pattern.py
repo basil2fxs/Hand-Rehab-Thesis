@@ -131,6 +131,13 @@ DEVIATIONS FROM THE RESEARCH BRIEF, where the plumbing wins:
 - The awareness check (free generation after the final session) and
   the retention-session schedule are protocol, run by the researcher,
   not modes of this software.
+- The shipped cue defaults buzz the target finger and play the cue
+  tone on every stimulus, so the RTs here are responses to an
+  audio-tactile-visual cue, not a visual one. The probe-minus-flanker
+  contrast survives because trained and probe material get the
+  identical cue mix, but the mix must stay fixed for a participant
+  across all sessions, and cue_flags on every trial row is how the
+  analysis verifies it did and splits blocks where it did not.
 """
 from __future__ import annotations
 

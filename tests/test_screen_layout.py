@@ -523,15 +523,36 @@ class TestCuesOnTheResultsScreen:
         self._click(r, r._cue_menu._row_rect(idx).center)
         assert r._cue_menu.is_open
 
-    def test_it_opens_upward_and_stays_on_screen(self):
-        """The pill sits low, so a list opening downward would run off
-        the bottom and those rows could not be clicked at all."""
+    def test_it_opens_downward_and_stays_on_screen(self):
+        """The pill lives in the top-left header (its old low-right
+        spot sat on the saved-to footer and was never drawn at all),
+        so the list opens downward; every row has to land inside the
+        screen or it could not be clicked."""
         r, _ = self._results()
-        assert r._cue_menu.open_upwards
+        assert not r._cue_menu.open_upwards
+        assert r._cue_menu.rect.top < 200
         rects = [r._cue_menu._row_rect(i)
                  for i in range(len(r._cue_menu.rows))]
         assert min(x.top for x in rects) >= 0
         assert max(x.bottom for x in rects) <= 800
+
+    def test_the_pill_is_actually_drawn(self):
+        """handle_event routed clicks to the menu since it was added,
+        but draw never rendered it: an invisible click target. Pin
+        that the closed pill now paints pixels inside its own rect."""
+        import pygame
+        r, _ = self._results()
+        surf = pygame.Surface((1280, 800))
+        surf.fill(r.theme.background)
+        before = surf.copy()
+        r.draw(surf)
+        rect = r._cue_menu.rect
+        changed = any(
+            surf.get_at((x, y)) != before.get_at((x, y))
+            for x in range(rect.left + 2, rect.right - 2, 24)
+            for y in range(rect.top + 2, rect.bottom - 2, 12)
+        )
+        assert changed, "cue pill rect is hit-testable but not drawn"
 
     def test_an_open_menu_does_not_leak_clicks_to_the_buttons(self):
         """Its rows sit over the buttons when open. A click landing on

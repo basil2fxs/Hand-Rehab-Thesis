@@ -75,6 +75,19 @@ class SyllablesScreen(Screen):
     def __init__(self, engine: "GameEngine") -> None:
         super().__init__(engine)
         self._held_keys: set[int] = set()
+        # Animation trackers, all read-side: the mode stays the single
+        # source of truth and the screen just notices changes.
+        # Which block last lit during model/replay, and when, so the
+        # sounding block can bounce once per beat.
+        self._last_model_idx = -1
+        self._model_lit_t = 0.0
+        # Tap count last frame, so a landed tap can pop its block.
+        self._last_tap_count = 0
+        self._tap_pops: list[tuple[int, float]] = []
+        # Cached success glow (sized to the block row) so the feedback
+        # swell does not allocate a fresh surface per frame.
+        self._glow_cache: pygame.Surface | None = None
+        self._glow_key: tuple[int, int] | None = None
 
     def _accent(self) -> tuple[int, int, int]:
         """Syllables pink from the mode picker, so the kids' screen
@@ -83,8 +96,12 @@ class SyllablesScreen(Screen):
             "syllables", self.theme.accent)
 
     def on_block_start(self) -> None:
-        # Fresh block: drop any keys latched from a previous visit.
+        # Fresh block: drop any keys latched from a previous visit,
+        # plus every animation tracker so nothing pops on frame one.
         self._held_keys.clear()
+        self._last_model_idx = -1
+        self._last_tap_count = 0
+        self._tap_pops.clear()
 
     # ---- events ------------------------------------------------------------
     def handle_event(self, e: pygame.event.Event) -> None:
@@ -154,11 +171,23 @@ class SyllablesScreen(Screen):
         draw_text(surf, f"Level {mode.level}   Band {mode.band}",
                   (self.layout.width // 2, 40), self.theme, self.layout,
                   pt=FONT_SMALL, centre=True, colour=self.theme.muted)
-        score = f"{self.engine.score}"
-        draw_text(surf, score,
-                  (self.layout.width - pad - 8 * len(score), 30),
-                  self.theme, self.layout, pt=FONT_H2,
-                  colour=self._accent())
+        # Mode pill top-right, same spot and styling as every other
+        # in-play screen, with the score sitting just left of it. The
+        # old free-floating pink number drifted with digit count.
+        accent = self._accent()
+        pf = self.layout.font(FONT_SMALL + 2)
+        pill_label = pf.render("SYLLABLES", True, (255, 255, 255))
+        pill_rect = pygame.Rect(0, 0, pill_label.get_width() + 24,
+                                pill_label.get_height() + 8)
+        pill_rect.topright = (self.layout.width - 28, 30)
+        pygame.draw.rect(surf, accent, pill_rect,
+                         border_radius=pill_rect.height // 2)
+        surf.blit(pill_label,
+                  pill_label.get_rect(center=pill_rect.center))
+        sf = self.layout.font(FONT_H2, bold=True)
+        score_surf = sf.render(f"{self.engine.score}", True, accent)
+        surf.blit(score_surf, score_surf.get_rect(
+            midright=(pill_rect.left - 16, pill_rect.centery)))
 
     # ---- warm-up -----------------------------------------------------------
     def _draw_warmup(self, surf: pygame.Surface, mode, now: float) -> None:
@@ -313,10 +342,68 @@ class SyllablesScreen(Screen):
         if phase == "feedback" and mode._phase_t0 is not None:
             swell = math.sin(min(1.0, (now - mode._phase_t0)
                                  / mode.FEEDBACK_S) * math.pi)
+        # Bounce tracker: note the moment the sounding block changes so
+        # it can hop once per beat, like a bouncing-ball singalong.
+        model_idx = getattr(mode, "_model_idx", -1)
+        if phase in ("model", "replay"):
+            if model_idx != self._last_model_idx:
+                self._last_model_idx = model_idx
+                self._model_lit_t = now
+        else:
+            self._last_model_idx = -1
+        # Tap pops: a landed tap fills its block with a quick grow-and-
+        # settle so the fill feels earned, not just recoloured.
+        if phase == "respond":
+            if n_taps > self._last_tap_count:
+                for idx in range(self._last_tap_count, n_taps):
+                    if rects:
+                        self._tap_pops.append(
+                            (min(idx, len(rects) - 1), now))
+            self._last_tap_count = n_taps
+        elif phase not in ("feedback",):
+            self._last_tap_count = 0
+        if self._tap_pops:
+            self._tap_pops = [(i, t) for (i, t) in self._tap_pops
+                              if now - t < 0.28]
+        # Success glow: one soft light behind the whole row, riding the
+        # same slow swell as the blocks. Cached; alpha set per frame.
+        if feedback_ok and rects:
+            row_left = rects[0].left
+            row_right = rects[-1].right
+            glow_w = row_right - row_left + 160
+            glow_h = self.BLOCK_H + 170
+            key = (glow_w, glow_h)
+            if self._glow_cache is None or self._glow_key != key:
+                g = pygame.Surface((glow_w, glow_h), pygame.SRCALPHA)
+                centre_rect = g.get_rect()
+                for inset, alpha in ((0, 22), (30, 30), (60, 38)):
+                    pygame.draw.ellipse(
+                        g, (*self.theme.success, alpha),
+                        centre_rect.inflate(-inset * 2, -inset * 2))
+                self._glow_cache = g
+                self._glow_key = key
+            # set_alpha applies at blit time, so the cached surface can
+            # ride the swell with no per-frame copy.
+            self._glow_cache.set_alpha(int(255 * swell))
+            surf.blit(self._glow_cache,
+                      ((row_left + row_right) // 2 - glow_w // 2,
+                       self.ROW_CY - glow_h // 2))
         for i, (u, rect) in enumerate(zip(units, rects)):
             finger = i % 4
             lit = (phase in ("model", "replay")
                    and getattr(mode, "_model_idx", -1) == i)
+            # The sounding block hops: up and back down over 0.4 s,
+            # one arc per beat, no repeat until the next block lights.
+            if lit and self._model_lit_t > 0:
+                b_frac = min(1.0, (now - self._model_lit_t) / 0.4)
+                rect = rect.move(0, -int(16 * math.sin(b_frac * math.pi)))
+            # A fresh tap pops its block outward for a beat.
+            for pi, pt0 in self._tap_pops:
+                if pi == i:
+                    p_frac = min(1.0, (now - pt0) / 0.28)
+                    grow = int(14 * math.sin(p_frac * math.pi))
+                    rect = rect.inflate(grow, grow)
+                    break
             filled = (phase == "respond" and i < n_taps) or (
                 phase == "feedback" and i < res.get("n_taps", 0))
             hollow = phase == "feedback" and i >= res.get("n_taps", 0)

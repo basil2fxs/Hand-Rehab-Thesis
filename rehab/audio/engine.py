@@ -83,8 +83,9 @@ class AudioEngine:
             pygame.mixer.pre_init(self.sample_rate, -16, 2, 512)
             pygame.mixer.init()
             pygame.mixer.set_num_channels(16)
-            # Per-lane tones kept around in case classic mode wants them
-            # later, but on_stim doesn't play them anymore.
+            # Per-lane cue tones (C E G C). on_stim_multi plays the
+            # lowest target lane's tone on every stim while
+            # cue.sound_before is on.
             freqs = [261.63, 329.63, 392.00, 523.25]   # C, E, G, C
             for f in freqs:
                 self._stim.append(self._tone(f, 0.12))
@@ -268,8 +269,9 @@ class AudioEngine:
             self._next_metronome_t += self._metronome_period
 
     def play_stim(self, lane: int) -> None:
-        # Kept for backwards compatibility but no longer called by the
-        # engine. The per-lane tones were clashing with the rhythm music.
+        # The pre-press cue tone. Called from on_stim_multi on every
+        # stim in every mode while cue.sound_before is on, once per
+        # stim (the lowest target lane in a multi-lane cue).
         if not self._initialised or not self._stim:
             return
         snd = self._stim[lane % len(self._stim)]

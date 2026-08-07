@@ -7,6 +7,7 @@ feels like a finished app instead of a debug dashboard.
 from __future__ import annotations
 
 import logging
+import math
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -1069,9 +1070,27 @@ class GameplayScreen(Screen):
         super().__init__(engine)
         self.message = ""
         self.message_until = 0.0
+        # How the message line is tinted. Modes tag their messages so a
+        # "NEW BEST" lands gold, a "Too soon" lands amber, and a plain
+        # instruction stays neutral. `_message_born` drives the short
+        # pop-in so a fresh message visibly arrives instead of just
+        # replacing the old text between frames.
+        self.message_kind = "info"
+        self._message_born = 0.0
         self.lanes: list[LaneStrip] = []
         # Floating "+3 Great!" popups go in here and fade themselves out.
         self._popups: list[FloatingText] = []
+        # Stim ignition ring. When a lane goes active (the arm moment)
+        # an expanding outline fires once around that tile so the
+        # stimulus lands hard, which matters most in reaction mode
+        # where the whole trial is "respond to this instant". Keyed by
+        # rising edge of ls.active, so with cue.show_target off the
+        # edge never happens and nothing on screen names the finger.
+        self._prev_active: dict[int, bool] = {}
+        self._ignitions: list[tuple[int, float]] = []
+        # Cached translucent overlay for the reaction hold state (a
+        # full-width band is an allocation too big for the draw loop).
+        self._hold_dim: pygame.Surface | None = None
         # Score pulse: when the score jumps we kick off a short scale-up
         # animation on the big number so the patient sees a real reaction.
         self._last_score_seen = 0
@@ -1103,6 +1122,14 @@ class GameplayScreen(Screen):
         the lanes. Called by the engine at the start of a classic /
         adaptive / mirror block."""
         self._countdown_until = time.perf_counter() + max(0.0, seconds)
+        # A block start is a hard reset for transient chrome: a message
+        # or popup left over from the previous block must not bleed
+        # into the first seconds of this one.
+        self.message = ""
+        self.message_until = 0.0
+        self._popups.clear()
+        self._ignitions.clear()
+        self._prev_active.clear()
 
     def _countdown_remaining(self) -> float:
         """Seconds left on the pre-start countdown, 0 when not counting."""
@@ -1267,9 +1294,25 @@ class GameplayScreen(Screen):
         y = lane.rect.top - 28
         self._popups.append(FloatingText(text, (x, y), colour, font_pt=42))
 
-    def set_message(self, text: str, duration_s: float) -> None:
+    def set_message(self, text: str, duration_s: float,
+                    kind: str = "info") -> None:
+        """`kind` tints the message chip: info (neutral), success
+        (green), warn (amber), error (red), best (gold). Only a text
+        change restarts the pop-in, so a throttled repeat of the same
+        prompt does not visibly re-arrive every refresh."""
+        if text != self.message:
+            self._message_born = time.perf_counter()
         self.message = text
         self.message_until = time.perf_counter() + duration_s
+        self.message_kind = kind
+
+    def _message_colour(self) -> tuple[int, int, int]:
+        return {
+            "success": self.theme.success,
+            "warn": self.theme.warning,
+            "error": self.theme.error,
+            "best": (255, 196, 0),
+        }.get(self.message_kind, self.theme.foreground)
 
     def add_encouragement(self, text: str) -> None:
         # Encouragement banners live in the empty band BELOW the lane
@@ -1511,17 +1554,28 @@ class GameplayScreen(Screen):
         surf.blit(mt_label,
                    mt_label.get_rect(center=pill_rect.center))
 
-        # Mode message line: whatever the mode asked the patient to
+        # Mode message chip: whatever the mode asked the patient to
         # read right now ("142 ms  NEW BEST", "Too soon", "Level up",
-        # "Press any finger when ready"). Before this line existed,
-        # set_message only fed the popup spawner, so a message with no
-        # accompanying lane flash (reaction's RT feedback, the settle
-        # prompts) never reached the screen at all. Lives in the gap
-        # between the streak pill and the tallest lane tile.
-        if self.message and time.perf_counter() < self.message_until:
-            draw_text(surf, self.message, (cx, 201),
-                      self.theme, self.layout, pt=30, centre=True,
-                      colour=self.theme.foreground)
+        # "Press any finger when ready"). Rendered as a tinted pill
+        # with a short pop-in so the feedback visibly ARRIVES, and the
+        # tint carries the meaning (gold best, amber caution, green
+        # reward) before the words are read. Lives in the gap between
+        # the streak pill and the tallest lane tile. Suppressed while
+        # the pattern rest card is up: the card says the same thing
+        # with more room.
+        block = getattr(self.engine, "current_block", "")
+        pattern_resting = (
+            block == "pattern" and self.engine.mode is not None
+            and getattr(self.engine.mode, "phase", "") == "rest")
+        if (self.message and time.perf_counter() < self.message_until
+                and not pattern_resting):
+            age = time.perf_counter() - self._message_born
+            pt = 30
+            if age < 0.18:
+                pt = int(30 * (1.0 + 0.22 * (1.0 - age / 0.18)))
+            _chip(surf, self.layout, (cx, 201), self.message,
+                  self._message_colour(), bg_alpha=30,
+                  pad_x=24, pad_y=10, font_pt=pt)
 
         # Bilateral mid-divider: thin grey line between the two hand
         # blocks so the eye reads them as separate groups. The LEFT /
@@ -1546,6 +1600,31 @@ class GameplayScreen(Screen):
         now = time.perf_counter()
         for ls in self.lanes:
             ls.draw(surf, now)
+
+        # Stim ignition: catch the frame a lane goes active and fire a
+        # one-shot expanding ring so the arm moment lands hard. Rising-
+        # edge only, so with cue.show_target off no lane ever goes
+        # active and the ring cannot leak the finger.
+        for ls in self.lanes:
+            if ls.active and not self._prev_active.get(ls.lane, False):
+                self._ignitions.append((ls.lane, now))
+            self._prev_active[ls.lane] = ls.active
+        if self._ignitions:
+            self._ignitions = [(l, t) for (l, t) in self._ignitions
+                               if now - t < self.IGNITE_S]
+
+        # Per-mode layers: the wait-state treatment in reaction, the
+        # chord baseline + press-window bar in chords, the take chip +
+        # rest card in patterns. Kept out of the shared path so every
+        # other mode pays nothing for them.
+        if block == "reaction":
+            self._draw_reaction_layer(surf, now)
+        elif block == "chords":
+            self._draw_chords_layer(surf, now)
+        elif block == "pattern":
+            self._draw_pattern_layer(surf, now)
+
+        self._draw_ignitions(surf, now)
 
         # Downward chevron + PRESS label above the target lane so the
         # patient never has to guess which tile to push. The chevron
@@ -1720,6 +1799,344 @@ class GameplayScreen(Screen):
         x_mid = (x_left + x_right) // 2
         surf.blit(label, label.get_rect(
             midbottom=(x_mid, y_base - 6)))
+
+    # One-shot ignition ring lifetime. Short and single so nothing here
+    # counts as a flash sequence (WCAG 2.3.1 needs three per second;
+    # this is one ring per stim, stims arrive seconds apart).
+    IGNITE_S = 0.35
+
+    def _draw_ignitions(self, surf: pygame.Surface, now: float) -> None:
+        """Expanding outline around a lane that just went active. The
+        tile colour snapping to lane_active says WHICH finger; this
+        says NOW."""
+        if not self._ignitions:
+            return
+        by_lane = {ls.lane: ls for ls in self.lanes}
+        for lane, t0 in self._ignitions:
+            ls = by_lane.get(lane)
+            if ls is None:
+                continue
+            frac = (now - t0) / self.IGNITE_S
+            if not 0.0 <= frac < 1.0:
+                continue
+            grow = int(16 + 56 * frac)
+            alpha = int(220 * (1.0 - frac))
+            ring = ls.rect.inflate(grow, grow)
+            rs = pygame.Surface(ring.size, pygame.SRCALPHA)
+            colour = ls.HAND_BADGE.get(ls.hand, self.theme.accent)
+            pygame.draw.rect(rs, (*colour, alpha), rs.get_rect(),
+                             width=6, border_radius=26)
+            surf.blit(rs, ring.topleft)
+
+    # ---- reaction ----------------------------------------------------------
+    def _draw_reaction_layer(self, surf: pygame.Surface,
+                             now: float) -> None:
+        """The wait must feel tense and the stimulus electric. During
+        the foreperiod (and a catch wait, which must be identical) the
+        whole lane band drops behind a translucent veil, so the arm
+        moment reads as the lights coming back on. A slow breathing
+        dot row says "hold" without words; the session best sits
+        quietly at the foot of the screen so "faster" always has a
+        target."""
+        m = self.engine.mode
+        if m is None or not self.lanes:
+            return
+        phase = getattr(m, "_phase", "")
+        if phase in ("foreperiod", "catch"):
+            top = min(ls.rect.top for ls in self.lanes) - 48
+            bottom = max(ls.rect.bottom for ls in self.lanes) + 34
+            size = (self.layout.width, bottom - top)
+            if self._hold_dim is None or self._hold_dim.get_size() != size:
+                self._hold_dim = pygame.Surface(size, pygame.SRCALPHA)
+                self._hold_dim.fill((*self.theme.background, 140))
+            surf.blit(self._hold_dim, (0, top))
+            # Three dots breathing at 0.55 Hz: calm, deliberate, and
+            # visibly not yet the stimulus.
+            if not (self.message and now < self.message_until):
+                pulse = (math.sin(now * (2 * math.pi / 1.8)) + 1) * 0.5
+                alpha = int(80 + 100 * pulse)
+                r = 5
+                dot = pygame.Surface((r * 2, r * 2), pygame.SRCALPHA)
+                pygame.draw.circle(dot, (*self.theme.muted, alpha),
+                                   (r, r), r)
+                cx = self.layout.width // 2
+                for dx in (-26, 0, 26):
+                    surf.blit(dot, (cx + dx - r, 201 - r))
+        best = None
+        if hasattr(m, "session_best_ms"):
+            try:
+                best = m.session_best_ms()
+            except Exception:
+                best = None
+        # isinstance rather than truthiness: a test double's mode
+        # returns a MagicMock here, which must not reach the format.
+        if isinstance(best, (int, float)):
+            _chip(surf, self.layout,
+                  (self.layout.width // 2, self.layout.height - 42),
+                  f"SESSION BEST  {best:.0f} ms",
+                  self.theme.muted, bg_alpha=24, pad_x=16, pad_y=6,
+                  font_pt=FONT_SMALL + 2)
+
+    # ---- chords ------------------------------------------------------------
+    def _draw_chords_layer(self, surf: pygame.Surface,
+                           now: float) -> None:
+        """Make the chord read as ONE gesture: a glowing baseline
+        joins the target tiles from below, a press-window bar drains
+        from the first onset, and a green tick lands on each quiet
+        finger when the cross-talk stayed low."""
+        m = self.engine.mode
+        if m is None or not self.lanes:
+            return
+        accent = ModeSelectScreen.MODE_ACCENTS.get(
+            "chords", self.theme.accent)
+        targets = [ls for ls in self.lanes if ls.active]
+        trial = getattr(m, "active", None)
+        if len(targets) >= 2:
+            left = min(ls.rect.left for ls in targets) + 10
+            right = max(ls.rect.right for ls in targets) - 10
+            base_y = max(ls.rect.bottom for ls in targets) + 14
+            # Baseline glow pulses at ~0.7 Hz, well under the flash
+            # limit, so the group cue breathes rather than blinks.
+            pulse = (math.sin(now * (2 * math.pi / 1.4)) + 1) * 0.5
+            alpha = int(140 + 80 * pulse)
+            bar = pygame.Surface((max(2, right - left), 8),
+                                 pygame.SRCALPHA)
+            pygame.draw.rect(bar, (*accent, alpha), bar.get_rect(),
+                             border_radius=4)
+            surf.blit(bar, (left, base_y))
+            for ls in targets:
+                pygame.draw.line(surf, accent,
+                                 (ls.rect.centerx, ls.rect.bottom + 4),
+                                 (ls.rect.centerx, base_y + 4), 3)
+            # Press-window bar: the togetherness budget. Idles faint
+            # until the first finger lands, then drains over w_ms so
+            # the patient sees the window closing.
+            w_ms = 0.0
+            if trial is not None:
+                raw_w = getattr(trial, "w_ms", 0.0)
+                if isinstance(raw_w, (int, float)):
+                    w_ms = float(raw_w)
+            if trial is not None and w_ms > 0:
+                bw, bh = 260, 10
+                bx = (left + right) // 2 - bw // 2
+                by = base_y + 20
+                track = pygame.Surface((bw, bh), pygame.SRCALPHA)
+                pygame.draw.rect(track, (*self.theme.muted, 70),
+                                 track.get_rect(), border_radius=bh // 2)
+                surf.blit(track, (bx, by))
+                onsets = getattr(trial, "onsets", None) or {}
+                if onsets:
+                    rem = 1.0 - (now - min(onsets.values())) * 1000.0 / w_ms
+                    rem = max(0.0, min(1.0, rem))
+                    if rem > 0:
+                        fill_col = (self.theme.success if rem > 0.35
+                                    else self.theme.warning)
+                        fill = pygame.Surface((max(2, int(bw * rem)), bh),
+                                              pygame.SRCALPHA)
+                        pygame.draw.rect(fill, (*fill_col, 230),
+                                         fill.get_rect(),
+                                         border_radius=bh // 2)
+                        surf.blit(fill, (bx, by))
+                else:
+                    fill = pygame.Surface((bw, bh), pygame.SRCALPHA)
+                    pygame.draw.rect(fill, (*accent, 70),
+                                     fill.get_rect(),
+                                     border_radius=bh // 2)
+                    surf.blit(fill, (bx, by))
+                draw_text(surf, f"TOGETHER WITHIN {w_ms:.0f} ms",
+                          (bx + bw // 2, by + bh + 14),
+                          self.theme, self.layout, pt=FONT_SMALL,
+                          centre=True, colour=self.theme.muted)
+        # Quiet-fingers reward: the tick appears over the still fingers
+        # for a beat after a clean chord, then fades. One event per
+        # trial, no repeats, so nothing here can flash.
+        tick_t = getattr(m, "_quiet_tick_t", None)
+        if isinstance(tick_t, (int, float)) and 0.0 <= now - tick_t < 0.9:
+            frac = (now - tick_t) / 0.9
+            alpha = int(235 * (1.0 - frac))
+            lanes_ok = getattr(m, "_quiet_tick_lanes", ()) or ()
+            for ls in self.lanes:
+                if ls.lane not in lanes_ok:
+                    continue
+                cx_t = ls.rect.centerx
+                cy_t = ls.rect.top + ls.rect.h // 3
+                ds = pygame.Surface((60, 60), pygame.SRCALPHA)
+                pygame.draw.circle(ds, (*self.theme.success,
+                                        int(alpha * 0.30)),
+                                   (30, 30), 28)
+                pygame.draw.lines(ds, (*self.theme.success, alpha),
+                                  False,
+                                  [(17, 31), (27, 41), (44, 20)], 5)
+                surf.blit(ds, (cx_t - 30, cy_t - 30))
+
+    # ---- patterns ----------------------------------------------------------
+    def _draw_pattern_layer(self, surf: pygame.Surface,
+                            now: float) -> None:
+        """The recording-studio frame: a REC take chip with in-take
+        progress while playing, and a breathing rest card between
+        takes. Nothing here reads seg.kind beyond the warm-up label the
+        mode itself already announces, so trained and probe takes stay
+        pixel-identical."""
+        m = self.engine.mode
+        if m is None:
+            return
+        segs = getattr(m, "segments", None)
+        idx = getattr(m, "_seg_idx", 0)
+        # isinstance guards keep MagicMock modes in tests out of the
+        # len() and index arithmetic below.
+        if (not isinstance(segs, list) or not isinstance(idx, int)
+                or not (0 <= idx < len(segs))):
+            return
+        seg = segs[idx]
+        accent = ModeSelectScreen.MODE_ACCENTS.get(
+            "pattern", self.theme.accent)
+        phase = getattr(m, "phase", "")
+        if phase == "play":
+            self._draw_take_chip(surf, now, m, seg, accent)
+        elif phase == "rest":
+            self._draw_pattern_rest_card(surf, now, m, seg, accent)
+
+    def _draw_take_chip(self, surf: pygame.Surface, now: float,
+                        m, seg, accent: tuple[int, int, int]) -> None:
+        """Top-left studio chip: pulsing REC dot, take label, and a
+        thin bar filling as the take is laid down."""
+        if seg.kind == "warmup":
+            label = "WARM-UP"
+        else:
+            label = f"TAKE {seg.label} OF {m.n_takes}"
+        font = self.layout.font(FONT_SMALL + 2)
+        text = font.render(label, True, (255, 255, 255))
+        dot_r = 6
+        pad_x = 12
+        chip_h = text.get_height() + 12
+        chip_w = pad_x * 2 + dot_r * 2 + 8 + text.get_width()
+        chip_rect = pygame.Rect(28, 26, chip_w, chip_h)
+        pygame.draw.rect(surf, self.theme.foreground, chip_rect,
+                         border_radius=chip_h // 2)
+        # REC dot breathes at ~0.6 Hz, the studio "we are rolling"
+        # signal. Alpha swing only, never off, so it cannot flash.
+        pulse = (math.sin(now * (2 * math.pi / 1.6)) + 1) * 0.5
+        dot = pygame.Surface((dot_r * 2, dot_r * 2), pygame.SRCALPHA)
+        pygame.draw.circle(dot, (239, 68, 68, int(140 + 115 * pulse)),
+                           (dot_r, dot_r), dot_r)
+        surf.blit(dot, (chip_rect.x + pad_x,
+                        chip_rect.centery - dot_r))
+        surf.blit(text, (chip_rect.x + pad_x + dot_r * 2 + 8,
+                         chip_rect.centery - text.get_height() // 2))
+        # In-take progress under the chip.
+        total = max(1, len(getattr(seg, "fingers", []) or []))
+        done = min(total, int(getattr(m, "_trial_in_seg", 0) or 0))
+        track = pygame.Surface((chip_w, 4), pygame.SRCALPHA)
+        pygame.draw.rect(track, (*self.theme.muted, 80),
+                         track.get_rect(), border_radius=2)
+        surf.blit(track, (chip_rect.x, chip_rect.bottom + 6))
+        fill_w = int(chip_w * done / total)
+        if fill_w > 0:
+            fill = pygame.Surface((fill_w, 4), pygame.SRCALPHA)
+            pygame.draw.rect(fill, (*accent, 230), fill.get_rect(),
+                             border_radius=2)
+            surf.blit(fill, (chip_rect.x, chip_rect.bottom + 6))
+
+    def _draw_star_row(self, surf: pygame.Surface, centre_x: int,
+                       y: int, earned: int) -> None:
+        """Three accuracy stars, gold when earned, outline when not.
+        Drawn as polygons so no glyph font dependency sneaks in."""
+        r_out, r_in, gap = 16, 7, 46
+        for i in range(3):
+            cx = centre_x + (i - 1) * gap
+            pts = []
+            for k in range(10):
+                ang = -math.pi / 2 + k * math.pi / 5
+                r = r_out if k % 2 == 0 else r_in
+                pts.append((cx + r * math.cos(ang),
+                            y + r * math.sin(ang)))
+            if i < earned:
+                pygame.draw.polygon(surf, (255, 196, 0), pts)
+            else:
+                pygame.draw.polygon(surf, self.theme.muted, pts, 2)
+
+    def _draw_pattern_rest_card(self, surf: pygame.Surface, now: float,
+                                m, seg,
+                                accent: tuple[int, int, int]) -> None:
+        """Between-take rest card. Breathes at 0.25 Hz (a slow halo
+        swell), shows the finished take's stars, counts the rest floor
+        down, then invites the next take."""
+        cx = self.layout.width // 2
+        cy = self.layout.height // 2 + 20
+        # Dim the stage behind the card, same cache the countdown uses.
+        if (self._dim_cache is None
+                or self._dim_cache.get_size() != surf.get_size()):
+            self._dim_cache = pygame.Surface(surf.get_size(),
+                                             pygame.SRCALPHA)
+            self._dim_cache.fill((0, 0, 0, 60))
+        surf.blit(self._dim_cache, (0, 0))
+        card_w, card_h = 480, 260
+        card_rect = pygame.Rect(0, 0, card_w, card_h)
+        card_rect.center = (cx, cy)
+        # The breath: a soft accent halo swelling over 4 s.
+        breath = (math.sin(now * (2 * math.pi / 4.0)) + 1) * 0.5
+        grow = int(10 + 16 * breath)
+        halo_rect = card_rect.inflate(grow, grow)
+        halo = pygame.Surface(halo_rect.size, pygame.SRCALPHA)
+        pygame.draw.rect(halo, (*accent, int(40 + 50 * breath)),
+                         halo.get_rect(), border_radius=28)
+        surf.blit(halo, halo_rect.topleft)
+        # Card body, same recipe as the countdown card.
+        shadow = pygame.Surface((card_w + 24, card_h + 24),
+                                pygame.SRCALPHA)
+        for dy, alpha in ((2, 50), (6, 28), (12, 10)):
+            pygame.draw.rect(shadow, (0, 0, 0, alpha),
+                             pygame.Rect(12, 12 + dy, card_w, card_h),
+                             border_radius=22)
+        surf.blit(shadow, (card_rect.x - 12, card_rect.y - 12))
+        body = pygame.Surface(card_rect.size, pygame.SRCALPHA)
+        pygame.draw.rect(body, (*self.theme.background, 246),
+                         body.get_rect(), border_radius=22)
+        pygame.draw.rect(body, (*accent, 150), body.get_rect(), 3,
+                         border_radius=22)
+        surf.blit(body, card_rect.topleft)
+        forced = getattr(m, "_rest_kind", "between") == "forced"
+        if forced:
+            title = "Take a breather"
+        elif seg.kind == "warmup":
+            title = "Warm-up done"
+        else:
+            title = f"Take {seg.label} done"
+        draw_text(surf, title, (cx, card_rect.y + 52), self.theme,
+                  self.layout, pt=FONT_H1, centre=True)
+        if not forced:
+            stars = len(m._stars(seg)) if hasattr(m, "_stars") else 0
+            self._draw_star_row(surf, cx, card_rect.y + 108, stars)
+        # Rest floor countdown, then the self-paced invitation.
+        rest_until = getattr(m, "_rest_min_until", None)
+        if rest_until is not None and now < rest_until:
+            left = int(math.ceil(rest_until - now))
+            draw_text(surf, f"Rest for {left}s",
+                      (cx, card_rect.y + 168), self.theme, self.layout,
+                      pt=FONT_H2, centre=True, colour=self.theme.muted)
+        else:
+            pulse = (math.sin(now * (2 * math.pi / 2.0)) + 1) * 0.5
+            font = self.layout.font(FONT_H2)
+            t = font.render("Press any finger when ready", True,
+                            self.theme.foreground)
+            t.set_alpha(int(150 + 105 * pulse))
+            surf.blit(t, t.get_rect(center=(cx, card_rect.y + 168)))
+        # Take dots: the session at a glance, current position filled.
+        takes = [s for s in m.segments if s.kind != "warmup"]
+        if takes:
+            n = len(takes)
+            gap = 22
+            x0 = cx - (n - 1) * gap // 2
+            done_takes = sum(
+                1 for s in takes
+                if s.n_done >= len(s.fingers) and len(s.fingers) > 0)
+            for i in range(n):
+                centre = (x0 + i * gap, card_rect.y + 218)
+                if i < done_takes:
+                    pygame.draw.circle(surf, accent, centre, 6)
+                else:
+                    pygame.draw.circle(surf, self.theme.muted, centre,
+                                       6, 2)
 
     def _draw_paused_overlay(self, surf: pygame.Surface) -> None:
         overlay = pygame.Surface(
@@ -2798,17 +3215,39 @@ class ResultsScreen(Screen):
         # they came here to do, and the setting is recorded per trial
         # anyway, so the two blocks stay separable afterwards.
         #
-        # Opens upward from the pill because the pill sits low; the
-        # rows would otherwise run off the bottom of the screen.
+        # Lives top-left as a header utility (balancing the mode pill
+        # top-right) and opens downward over the empty flank beside
+        # the grade ring. Its old spot low-right sat on the saved-to
+        # footer and clipped its own label.
         self._cue_menu = ToggleMenu(
-            pygame.Rect(self.layout.width - 300, y - 62, 270, 44),
+            pygame.Rect(28, 26, 306, 44),
             list(CUE_ROWS),
             get_value=lambda k: bool(self.engine.cfg.get(k, True)),
             on_toggle=lambda k, v: apply_cue_setting(self.engine, k, v),
             theme=self.theme, layout=self.layout,
             title="Cues for the next block",
-            open_upwards=True,
         )
+
+        # When the screen was last entered, for the one-shot entry
+        # animation (ring sweep + stat count-up). Zero means "never
+        # notified", which draws the finished state so a bare draw()
+        # in a test never renders a half-swept ring.
+        self._shown_t = 0.0
+
+    def on_show(self) -> None:
+        """Engine hook: a block just landed here, restart the entry
+        animation."""
+        self._shown_t = time.perf_counter()
+
+    def _entry_frac(self) -> float:
+        """0..1 cubic ease-out over the first 0.8 s on screen."""
+        if self._shown_t <= 0:
+            return 1.0
+        t = (time.perf_counter() - self._shown_t) / 0.8
+        if t >= 1.0:
+            return 1.0
+        t = max(0.0, t)
+        return 1.0 - (1.0 - t) ** 3
 
     def handle_event(self, e: pygame.event.Event) -> None:
         # The menu gets first refusal. When it is open its rows sit over
@@ -3001,8 +3440,20 @@ class ResultsScreen(Screen):
         grade, blurb = self._grade_for(rate)
         grade_colour = self._grade_colour(grade)
 
+        # Entry animation progress: 1.0 when settled (or in a bare
+        # test draw with no on_show notification).
+        entry = self._entry_frac()
+
         # Top banner. Bold via the shared SysFont call so the header
-        # matches the rest of the menu screens.
+        # matches the rest of the menu screens. The accent bar and the
+        # block pill wear the finished mode's accent so the results
+        # carry the same identity the patient just played under.
+        # str() because a test double can leave current_block as a
+        # non-string; an unknown block just falls back to the theme
+        # accent.
+        block_name = str(self.engine.current_block)
+        mode_accent = ModeSelectScreen.MODE_ACCENTS.get(
+            block_name.lower(), self.theme.accent)
         title_font = make_font(int((FONT_H1 + 6) * self.layout.font_scale),
             bold=True,
         )
@@ -3014,33 +3465,56 @@ class ResultsScreen(Screen):
         bar_w = max(72, title_rect.w // 3)
         bar_rect = pygame.Rect(0, 0, bar_w, 4)
         bar_rect.center = (cx, title_rect.bottom + 12)
-        pygame.draw.rect(surf, self.theme.accent, bar_rect, border_radius=2)
-        draw_text(surf, blurb,
-                  (cx, title_rect.bottom + 32),
-                  self.theme, self.layout, pt=FONT_BODY,
-                  centre=True, colour=self.theme.muted)
+        pygame.draw.rect(surf, mode_accent, bar_rect, border_radius=2)
+        # Mode pill top-right, same furniture as the in-play screens.
+        mode_label = block_name.upper()
+        mf = self.layout.font(FONT_SMALL + 2)
+        mt_label = mf.render(mode_label, True, (255, 255, 255))
+        pill_rect = pygame.Rect(0, 0, mt_label.get_width() + 24,
+                                mt_label.get_height() + 8)
+        pill_rect.topright = (self.layout.width - 28, 30)
+        pygame.draw.rect(surf, mode_accent, pill_rect,
+                         border_radius=pill_rect.height // 2)
+        surf.blit(mt_label, mt_label.get_rect(center=pill_rect.center))
 
-        # Grade letter inside a ring. Big celebratory moment, the part the
-        # patient and therapist see first.
+        # Grade letter inside a ring. Big celebratory moment, the part
+        # the patient and therapist see first. The ring sweeps closed
+        # over the entry animation, then the blurb sits directly under
+        # it so the praise reads as part of the grade (it used to
+        # collide with the glow from above).
         grade_centre = (cx, 240)
         ring_r = 90
-        # Soft glow behind the ring.
+        # Soft glow behind the ring, fading in with the sweep.
         glow = pygame.Surface((ring_r * 2 + 40, ring_r * 2 + 40),
                                pygame.SRCALPHA)
         for i, alpha in ((20, 30), (12, 50), (4, 80)):
-            pygame.draw.circle(glow, (*grade_colour, alpha),
+            pygame.draw.circle(glow, (*grade_colour,
+                                      int(alpha * entry)),
                                 (ring_r + 20, ring_r + 20), ring_r + i)
         surf.blit(glow, (grade_centre[0] - ring_r - 20,
                           grade_centre[1] - ring_r - 20))
-        pygame.draw.circle(surf, grade_colour, grade_centre, ring_r, 6)
+        if entry >= 1.0:
+            pygame.draw.circle(surf, grade_colour, grade_centre,
+                               ring_r, 6)
+        else:
+            arc_rect = pygame.Rect(0, 0, ring_r * 2, ring_r * 2)
+            arc_rect.center = grade_centre
+            start = math.pi / 2
+            pygame.draw.arc(surf, grade_colour, arc_rect,
+                            start, start + entry * 2 * math.pi, 6)
         # Letter itself, oversized + bold so the visual weight matches
-        # the heavy ring around it. A regular-weight 110pt letter
-        # looked thin and disconnected from the surrounding circle.
+        # the heavy ring around it, fading in with the sweep.
         gfont = make_font(int(120 * self.layout.font_scale),
             bold=True,
         )
         gtext = gfont.render(grade, True, grade_colour)
+        if entry < 1.0:
+            gtext.set_alpha(int(255 * entry))
         surf.blit(gtext, gtext.get_rect(center=grade_centre))
+        draw_text(surf, blurb,
+                  (cx, grade_centre[1] + ring_r + 24),
+                  self.theme, self.layout, pt=FONT_BODY,
+                  centre=True, colour=self.theme.muted)
 
         # Stat cards row - score, hits, hit rate, misses, plus the two
         # reaction-time cards the patient sees as a game-style headline
@@ -3055,11 +3529,18 @@ class ResultsScreen(Screen):
         # times, so relabel rather than mislead.
         avg_label = "AVG OFFSET" if is_rhythm else "AVG RT"
         best_label = "BEST OFFSET" if is_rhythm else "BEST RT"
+        # The counting stats ride the entry ease so the numbers land
+        # with the ring sweep. The two RT cards stay static: a timing
+        # readout counting up through wrong values would read as data.
         cards = [
-            ("SCORE", f"{self.engine.score}", self.theme.accent),
-            ("HITS", f"{self.engine.hits}", self.theme.success),
-            ("HIT RATE", f"{rate * 100:.0f}%", self.theme.foreground),
-            ("MISSES", f"{self.engine.misses}", self.theme.error),
+            ("SCORE", f"{int(round(self.engine.score * entry))}",
+             self.theme.accent),
+            ("HITS", f"{int(round(self.engine.hits * entry))}",
+             self.theme.success),
+            ("HIT RATE", f"{rate * 100 * entry:.0f}%",
+             self.theme.foreground),
+            ("MISSES", f"{int(round(self.engine.misses * entry))}",
+             self.theme.error),
             (avg_label, avg_str, self.theme.foreground),
             (best_label, best_str, self.theme.success),
         ]
@@ -3159,6 +3640,14 @@ class ResultsScreen(Screen):
         self.again_btn.draw(surf)
         self.folder_btn.draw(surf)
         self.title_btn.draw(surf)
+
+        # Sensory-cues menu. handle_event has routed clicks to this
+        # menu since the pill was added, but the pill itself was never
+        # drawn, leaving an invisible click target floating over the
+        # screen. Pill first, overlay last so the open rows sit on top
+        # of the buttons they cover.
+        self._cue_menu.draw_closed(surf)
+        self._cue_menu.draw_overlay(surf)
 
 
 class DiagnosticsScreen(Screen):

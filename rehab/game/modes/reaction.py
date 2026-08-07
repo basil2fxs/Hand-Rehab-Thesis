@@ -25,6 +25,17 @@ RT grows with the log of the number of alternatives (Hick 1952; Hyman
 default here because it exercises all four fingers; `reaction.sub_mode:
 simple` switches to the clean single-finger loop.
 
+WHAT THE NUMBER MEASURES. The shipped cue defaults play the buzzer
+and the cue tone alongside the screen highlight on every stimulus, so
+under them this mode measures audio-tactile-visual reaction time, not
+visual reaction time. Auditory and tactile RTs run systematically
+faster than visual, so the channel mix changes what the number means,
+not just its noise. Those defaults are a whole-suite choice and are
+never overridden here; a block that needs the brief's screen-only
+measure turns the channels off in Settings, and the cue_flags column
+on every trial row is how the analysis separates blocks run under
+different mixes instead of pooling them blindly.
+
 ANTICIPATIONS AND CATCH TRIALS. Responses under 100 ms are not
 physiologically plausible visual reaction times and are scored as false
 starts, never as hits (Luce 1986, Response Times; Basner and Dinges
@@ -413,7 +424,8 @@ class ReactionMode:
             stimulus=f"{self.sub_mode};fp={self._fp_scheduled:.3f}",
         )
         self._stim_due = None
-        self._set_message("Too soon", self.false_start_feedback_s)
+        self._set_message("Too soon", self.false_start_feedback_s,
+                          kind="warn")
         self._enter_rest(now, self.false_start_feedback_s)
 
     def _catch_false_start(self, ev: PressEvent, now: float) -> None:
@@ -425,7 +437,8 @@ class ReactionMode:
             stimulus=f"{self.sub_mode};catch",
         )
         self._catch_until = None
-        self._set_message("Too soon", self.false_start_feedback_s)
+        self._set_message("Too soon", self.false_start_feedback_s,
+                          kind="warn")
         self._enter_rest(now, self.false_start_feedback_s)
 
     def _catch_survived(self, now: float) -> None:
@@ -445,7 +458,7 @@ class ReactionMode:
             pass
         self._catch_until = None
         self._set_message(f"Good waiting +{self.CATCH_REWARD}",
-                          self.feedback_s)
+                          self.feedback_s, kind="success")
         self._enter_rest(now, self.feedback_s)
 
     def _press_on_stim(self, ev: PressEvent, now: float) -> None:
@@ -466,7 +479,8 @@ class ReactionMode:
                 stimulus=f"{self.sub_mode};fp={self._fp_scheduled:.3f}",
             )
             self._clear_lanes()
-            self._set_message("Too soon", self.false_start_feedback_s)
+            self._set_message("Too soon", self.false_start_feedback_s,
+                              kind="warn")
             self._enter_rest(now, self.false_start_feedback_s)
             return
         if ev.lane == trial.lane:
@@ -489,7 +503,7 @@ class ReactionMode:
             self.engine.log_trial(
                 trial, outcome, now,
                 stimulus=f"{self.sub_mode};fp={self._fp_scheduled:.3f}")
-            self._set_message("Wrong finger", self.feedback_s)
+            self._set_message("Wrong finger", self.feedback_s, kind="warn")
             self._enter_rest(now, self.feedback_s)
             return
         # Simple mode: a different finger is logged and the attempt is
@@ -504,7 +518,7 @@ class ReactionMode:
             stimulus=f"{self.sub_mode};fp={self._fp_scheduled:.3f}",
         )
         self._clear_lanes()
-        self._set_message("Wrong finger", self.feedback_s)
+        self._set_message("Wrong finger", self.feedback_s, kind="warn")
         self._enter_rest(now, self.feedback_s)
 
     def _close_scorable(self, ev: PressEvent | None, now: float) -> None:
@@ -559,15 +573,21 @@ class ReactionMode:
         is_best = prev is None or rt_ms < prev
         if is_best:
             store[key] = rt_ms
+        # The kind picks the chip colour on screen: gold for a new
+        # best, amber for a lapse, green for an ordinary valid press.
         if rt_ms >= self.lapse_ms:
             msg = f"{rt_ms:.0f} ms  too slow"
+            kind = "warn"
         elif is_best and prev is not None:
             msg = f"{rt_ms:.0f} ms  NEW BEST"
+            kind = "best"
         elif prev is not None:
             msg = f"{rt_ms:.0f} ms  best {prev:.0f}"
+            kind = "success"
         else:
             msg = f"{rt_ms:.0f} ms"
-        self._set_message(msg, self.feedback_s)
+            kind = "success"
+        self._set_message(msg, self.feedback_s, kind=kind)
 
     def session_best_ms(self) -> float | None:
         store = getattr(self.engine, "_reaction_best_ms", None)
@@ -586,10 +606,15 @@ class ReactionMode:
             return None
         return screens.get("gameplay")
 
-    def _set_message(self, text: str, duration_s: float) -> None:
+    def _set_message(self, text: str, duration_s: float,
+                     kind: str = "info") -> None:
         gp = self._gameplay_screen()
         if gp is not None and hasattr(gp, "set_message"):
-            gp.set_message(text, duration_s)
+            try:
+                gp.set_message(text, duration_s, kind=kind)
+            except TypeError:
+                # Older screen doubles take (text, duration) only.
+                gp.set_message(text, duration_s)
 
     def _clear_lanes(self) -> None:
         """Drop the target highlight and timing bar after a trial that

@@ -177,6 +177,15 @@ cue:
   # Recorded per trial in the cue_flags column so blocks run under
   # different settings can be pooled and split again in the analysis.
   # Changed from the Sensory Cues menu on the Settings screen.
+  #
+  # With buzz_before and sound_before shipped on, every timed mode is
+  # measuring the response to an audio-tactile-visual cue, not a
+  # visual one. Auditory and tactile reaction times run faster than
+  # visual, so the channel mix changes what the number means, not
+  # just its noise. Keep the mix constant within any comparison,
+  # split on cue_flags when pooling blocks, and turn channels off
+  # here for a block that needs a single-channel measure such as the
+  # reaction brief's screen-only visual RT.
 
   # Buzzer under the TARGET finger fires when that trial's stimulus
   # fires, so the patient feels which finger to press rather than only

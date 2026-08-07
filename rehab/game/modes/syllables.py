@@ -88,7 +88,13 @@ engine. On macOS, if the `say` command exists, the word is spoken
 once at ATTEND time in a background process (never blocking the frame
 loop, failing silent); everywhere else the mode is fully usable
 without speech. The word list ships in syllables_words.py with the
-grading rationale in its docstring.
+grading rationale in its docstring. The buzzer and tone ride the
+shared cue.* switches, so under the shipped defaults the model is
+audio-tactile-visual, and any tap timing it trains is timing to that
+mix, not to sound alone; cue_flags on every trial row records which
+channels a block actually ran, which is what lets sessions played
+with the vibration off (a child may ask for that) be separated from
+full-cue sessions in the analysis instead of pooled.
 
 TRIAL LOOP: ATTEND (word appears, spoken once if possible) -> MODEL
 (blocks light left to right at the beat interval, buzzer and tone per
@@ -418,7 +424,11 @@ class SyllablesMode:
             self._update_model(now)
         elif self.phase == "countin":
             if now >= self._phase_until:
-                self._enter_phase("respond", now)
+                # Anchor the response beats on the scheduled count-in
+                # end, which sits on the model's grid, not on the frame
+                # that noticed it: the child is scored against the beat
+                # they heard, not the beat plus a frame of loop delay.
+                self._enter_phase("respond", self._phase_until)
         elif self.phase == "respond":
             self._update_respond(now)
         elif self.phase == "feedback":
@@ -528,8 +538,19 @@ class SyllablesMode:
         fires the finger's buzzer and cue tone under the cue.* switches
         and records the cue condition; one motor per board runs at a
         time, so sequential onsets at the beat interval are exactly
-        what the hardware can deliver."""
-        if self._model_next_t is None or now < self._model_next_t:
+        what the hardware can deliver.
+
+        Beat deadlines are ABSOLUTE: each syllable is due one IOI after
+        the previous DEADLINE, not one IOI after the frame that noticed
+        it. Re-anchoring to the frame clock added the frame delay to
+        every interval (measured +5 ms per beat at 120 fps, drifting
+        10-25 ms across a word, worse at 60 Hz), a systematic stretch
+        of the 2 Hz grid the beat-synchronisation analysis assumes. The
+        cue still fires at the frame that crosses the deadline, so each
+        onset jitters within a frame of its grid slot, but the error no
+        longer accumulates."""
+        due = self._model_next_t
+        if due is None or now < due:
             return
         self._model_idx += 1
         if self._model_idx >= self.n_expected:
@@ -542,11 +563,19 @@ class SyllablesMode:
                 self.words_done += 1
                 self._maybe_break(now)
             elif self.paced:
-                self._enter_phase("countin", now)
+                # Hand the grid deadline over, not the frame time, so
+                # the count-in ticks continue the model's beat rather
+                # than restarting it a frame late.
+                self._enter_phase("countin", due)
             else:
-                self._enter_phase("respond", now)
+                self._enter_phase("respond", due)
             return
-        self._model_next_t = now + self.ioi_s
+        self._model_next_t = due + self.ioi_s
+        if self._model_next_t <= now:
+            # The loop stalled past a whole beat (alt-tab, IO). Re-anchor
+            # rather than burst-fire catch-up syllables a frame apart,
+            # which the one-motor-per-board hardware could not deliver.
+            self._model_next_t = now + self.ioi_s
         lane = (self.expected_lanes()[self._model_idx]
                 if self.order_required
                 else self.lanes[min(self._model_idx, 3)])
