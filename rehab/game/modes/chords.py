@@ -6,7 +6,7 @@ Zatsiorsky, Li and Latash (2000, Exp Brain Res 131) named this
 enslaving, showed it is largest between neighbouring fingers, and
 formalised the interfinger connection matrix this mode's probe trials
 reconstruct. Healthy hands leak roughly 5-15 percent of the instructed
-force at light effort (Cuadra and Latash 2021, J Neurophysiol, read via
+force at light effort (Abolins, Stremoukhov, Walter and Latash 2020, J Neurophysiol, read via
 PMC7814910: 8-10 percent at about 25 percent MVC). Stroke raises the
 leak and lowers individuation (Lang and Schieber 2003/2004,
 J Neurophysiol), and Xu et al. (2017, J Neurophysiol 118, n=54) showed
@@ -56,7 +56,7 @@ checkable). The first target press opens the synchrony window W: the
 chord counts as together only if every target's onset lands within W
 of the first. Then all targets must stay down for hold_ms, kept short
 (200 ms) because enslaving drifts upward about 50 percent over a 15 s
-hold (Cuadra and Latash 2021), so long holds train the wrong signal.
+hold (Abolins et al. 2020), so long holds train the wrong signal.
 
 SYNCHRONY WINDOW. Skilled pianists land chord tones within about 30 ms
 (Goebl 2001, JASA 110); perceptual simultaneity is 20-50 ms (Rasch
@@ -131,7 +131,7 @@ never validation. Calibration in a stroke hand is contaminated by
 synergies and spasticity, so normalised leak inherits that noise; raw
 counts stay in the CSV (force_window_peaks) alongside. The synchrony
 windows and the difficulty weights are defended design choices, not
-literature constants. Verify the Cuadra and Latash 2021 citation
+literature constants. The citation was verified against PubMed
 details before the thesis reference list.
 
 DEVIATIONS FROM THE RESEARCH BRIEF, where the plumbing wins:
@@ -268,7 +268,7 @@ class ChordsMode:
     TOGETHER_POINTS = 2
     QUIET_POINTS = 2
     # Quiet points fall linearly to zero at this ER. Healthy light-force
-    # enslaving sits under about 0.15 (Cuadra and Latash 2021), so the
+    # enslaving sits under about 0.15 (Abolins et al. 2020), so the
     # scale has room to show stroke-level impairment improving.
     ER_ZERO = 0.5
     # A single quiet finger leaking at or past this fraction of the mean

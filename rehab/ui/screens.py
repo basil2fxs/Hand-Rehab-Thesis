@@ -1088,6 +1088,9 @@ class GameplayScreen(Screen):
         # Zero means no countdown active. Set by start_countdown(), which
         # the engine calls when a cadence-mode block begins.
         self._countdown_until = 0.0
+        # Full-screen dim behind the countdown card, built once and
+        # reused (draw runs at 60 fps; no per-frame surface builds).
+        self._dim_cache: pygame.Surface | None = None
         self.rebuild_lanes()
 
     # How much empty space sits between the two hand blocks in bilateral
@@ -1239,22 +1242,29 @@ class GameplayScreen(Screen):
             self.lanes.append(ls)
 
     def flash_lane(self, lane: int, colour: tuple[int, int, int],
-                   duration_s: float, now: float) -> None:
+                   duration_s: float, now: float,
+                   popup_text: str | None = None) -> None:
         for ls in self.lanes:
             if ls.lane == lane:
                 ls.flash(colour, duration_s, now)
                 # Float a quick popup above the lane that just scored.
-                self._spawn_popup(ls, colour)
+                # `popup_text` (the outcome label) wins over whatever
+                # message happens to be live, so the popup always
+                # describes THIS trial.
+                self._spawn_popup(ls, colour, popup_text or self.message)
 
     def _spawn_popup(self, lane: LaneStrip,
-                      colour: tuple[int, int, int]) -> None:
-        if not self.message:
+                      colour: tuple[int, int, int],
+                      text: str) -> None:
+        if not text:
             return
         # Points appended to the label make the feedback feel chunky and
         # game-like rather than clinical only.
-        text = self.message
         x = lane.rect.centerx
-        y = lane.rect.top + 30
+        # Above the tile, on the page background. Inside the tile the
+        # popup landed on the outcome flash in its own colour (green
+        # text on a green tile) and vanished.
+        y = lane.rect.top - 28
         self._popups.append(FloatingText(text, (x, y), colour, font_pt=42))
 
     def set_message(self, text: str, duration_s: float) -> None:
@@ -1262,15 +1272,17 @@ class GameplayScreen(Screen):
         self.message_until = time.perf_counter() + duration_s
 
     def add_encouragement(self, text: str) -> None:
-        # Encouragement banners sit centred just below the score HUD so they
-        # don't overlap the lane strips. Bigger, brighter, and stick around
-        # longer than the per-trial "Great +3" popups.
+        # Encouragement banners live in the empty band BELOW the lane
+        # tiles. The old spot just under the score collided with the
+        # streak pill at the exact moment both fire (a streak
+        # threshold is always a fresh pill render too). Down here the
+        # banner has the whole strip to itself.
         cx = self.layout.width // 2
         self._popups.append(FloatingText(
-            text, (cx, 200), self.theme.success,
+            text, (cx, self.layout.height - 88), self.theme.success,
             font_pt=FONT_TITLE - 4,
             lifetime_s=1.8,
-            rise_px=40,
+            rise_px=30,
         ))
 
     def update(self, dt: float) -> None:
@@ -1351,10 +1363,13 @@ class GameplayScreen(Screen):
                font_pt=font_pt)
 
     def _draw_progress_bar(self, surf: pygame.Surface,
-                            done: int, total: int) -> None:
+                            done: int, total: int,
+                            fill_colour: tuple[int, int, int] | None = None,
+                            ) -> None:
         """Slim full-width bar near the top of the screen that fills as the
         session progresses. Tells the patient how much is left without
-        forcing them to count trials."""
+        forcing them to count trials. `fill_colour` lets a mode tint
+        the fill with its own accent; None keeps the theme accent."""
         if total <= 0:
             return
         pad = 30
@@ -1370,8 +1385,9 @@ class GameplayScreen(Screen):
         # Fill (accent colour, proportional width).
         fill_w = max(0, int(bar_w * frac))
         if fill_w > 0:
+            fc = fill_colour or self.theme.accent
             fill_surf = pygame.Surface((fill_w, bar_h), pygame.SRCALPHA)
-            pygame.draw.rect(fill_surf, (*self.theme.accent, 220),
+            pygame.draw.rect(fill_surf, (*fc, 220),
                               fill_surf.get_rect(), border_radius=bar_h // 2)
             surf.blit(fill_surf, (pad, bar_y))
 
@@ -1396,8 +1412,16 @@ class GameplayScreen(Screen):
         # focus on the lane tiles where the actual work happens.
         done, total = self._progress()
 
+        # The mode's accent colour (the same one its mode-select card
+        # uses) tints the progress bar, streak pill and countdown so
+        # every mode keeps its own identity in play, not just on the
+        # picker. Computed once here; the pill below reuses it.
+        mode_accent = ModeSelectScreen.MODE_ACCENTS.get(
+            self.engine.current_block.lower(), self.theme.accent,
+        )
+
         # Slim progress bar across the top of the screen.
-        self._draw_progress_bar(surf, done, total)
+        self._draw_progress_bar(surf, done, total, fill_colour=mode_accent)
 
         # Centre: big SCORE with a brief pulse on change. Single
         # focal element above the lane row so the patient's eye
@@ -1430,18 +1454,21 @@ class GameplayScreen(Screen):
         # appears when 2+ lanes are lit at once.
         streak = self.engine.hit_streak
         if streak >= 2:
+            streak_label = f"x{streak} STREAK"
             if streak >= 10:
                 streak_colour = self.theme.success    # bright green
-                streak_label = f"x{streak} STREAK"
             elif streak >= 5:
                 streak_colour = (255, 196, 0)         # gold
-                streak_label = f"x{streak} STREAK"
             else:
-                streak_colour = self.theme.foreground
-                streak_label = f"x{streak} STREAK"
-            in_mirror = (getattr(self.engine, "current_block", None)
-                          == "mirror")
-            if in_mirror:
+                # Base tier wears the mode's accent so even a small
+                # streak reinforces which game the patient is in.
+                streak_colour = mode_accent
+            # Mirror AND chords park the chip top-left: both draw the
+            # PRESS TOGETHER bracket above the tiles, and the centred
+            # chip sat exactly where the bracket bar + label go.
+            side_chip = (getattr(self.engine, "current_block", None)
+                          in ("mirror", "chords"))
+            if side_chip:
                 # Render the chip pre-sized so we can right-edge it
                 # against the same 28 px margin the mode pill uses.
                 # Anchored top-left at vertical level ~38 so it lines
@@ -1470,9 +1497,6 @@ class GameplayScreen(Screen):
         # colour. Keeps the visual identity from the mode-select
         # cards consistent so a therapist glancing at the screen
         # knows which mode is running without reading text.
-        mode_accent = ModeSelectScreen.MODE_ACCENTS.get(
-            self.engine.current_block.lower(), self.theme.accent,
-        )
         mode_label = self.engine.current_block.title().upper()
         mf = self.layout.font(FONT_SMALL + 2)
         mt_label = mf.render(mode_label, True, (255, 255, 255))
@@ -1486,6 +1510,18 @@ class GameplayScreen(Screen):
                           border_radius=pill_h // 2)
         surf.blit(mt_label,
                    mt_label.get_rect(center=pill_rect.center))
+
+        # Mode message line: whatever the mode asked the patient to
+        # read right now ("142 ms  NEW BEST", "Too soon", "Level up",
+        # "Press any finger when ready"). Before this line existed,
+        # set_message only fed the popup spawner, so a message with no
+        # accompanying lane flash (reaction's RT feedback, the settle
+        # prompts) never reached the screen at all. Lives in the gap
+        # between the streak pill and the tallest lane tile.
+        if self.message and time.perf_counter() < self.message_until:
+            draw_text(surf, self.message, (cx, 201),
+                      self.theme, self.layout, pt=30, centre=True,
+                      colour=self.theme.foreground)
 
         # Bilateral mid-divider: thin grey line between the two hand
         # blocks so the eye reads them as separate groups. The LEFT /
@@ -1539,8 +1575,23 @@ class GameplayScreen(Screen):
                              remaining: float) -> None:
         """GET READY card with the seconds remaining, styled to match
         the rhythm-mode countdown so the pre-start moment looks the
-        same across every game mode."""
+        same across every game mode. The ring and number take the
+        mode's accent so even the countdown says which game this is."""
         cx = self.layout.width // 2
+        # Faint backdrop dim so the card is the single focal point and
+        # the idle tiles behind it recede. Cached: a fresh full-screen
+        # SRCALPHA surface every frame would be an allocation in the
+        # draw hot path.
+        if (self._dim_cache is None
+                or self._dim_cache.get_size() != surf.get_size()):
+            self._dim_cache = pygame.Surface(surf.get_size(),
+                                              pygame.SRCALPHA)
+            self._dim_cache.fill((0, 0, 0, 60))
+        surf.blit(self._dim_cache, (0, 0))
+        accent = ModeSelectScreen.MODE_ACCENTS.get(
+            getattr(self.engine, "current_block", "").lower(),
+            self.theme.accent,
+        )
         card_w = 420
         card_h = 240
         card_rect = pygame.Rect(0, 0, card_w, card_h)
@@ -1560,7 +1611,7 @@ class GameplayScreen(Screen):
         fill_surf = pygame.Surface(card_rect.size, pygame.SRCALPHA)
         pygame.draw.rect(fill_surf, (*self.theme.background, 245),
                           fill_surf.get_rect(), border_radius=22)
-        pygame.draw.rect(fill_surf, (*self.theme.accent, 110),
+        pygame.draw.rect(fill_surf, (*accent, 150),
                           fill_surf.get_rect(), 3, border_radius=22)
         surf.blit(fill_surf, card_rect.topleft)
         draw_text(surf, "GET READY",
@@ -1570,7 +1621,7 @@ class GameplayScreen(Screen):
         draw_text(surf, f"{remaining:.1f}",
                   (card_rect.centerx, card_rect.y + 156),
                   self.theme, self.layout, pt=140,
-                  centre=True, colour=self.theme.accent)
+                  centre=True, colour=accent)
 
     def _draw_target_indicator(self, surf: pygame.Surface,
                                 now: float) -> None:
@@ -1625,30 +1676,41 @@ class GameplayScreen(Screen):
         # Use the leftmost + rightmost active tiles as the bracket
         # anchors so the bracket spans the gap between hands even
         # if more than two lanes were lit at once.
-        xs = sorted(t.rect.centerx for t in targets)
-        x_left = xs[0]
-        x_right = xs[-1]
-        # Y comes off any target's tile top (they're all aligned).
-        any_target = targets[0]
-        y_base = any_target.rect.top - 22 + bob - 12
-        colour = self._MIRROR_PAIR_COLOUR
+        by_x = sorted(targets, key=lambda t: t.rect.centerx)
+        left_t = by_x[0]
+        right_t = by_x[-1]
+        x_left = left_t.rect.centerx
+        x_right = right_t.rect.centerx
+        # The bar clears EVERY tile, not just the anchors' own tops.
+        # Anchored to the pair tiles it used to slice straight across
+        # any taller tile between them: the finger-length heights make
+        # a pinky pair's bar cross the middle and ring tiles.
+        row_top = min(ls.rect.top for ls in self.lanes)
+        y_base = row_top - 34 + bob
+        # Bracket wears the mode's accent (teal in mirror, sky in
+        # chords) so the pair cue carries the same identity as the
+        # mode pill.
+        colour = ModeSelectScreen.MODE_ACCENTS.get(
+            getattr(self.engine, "current_block", "").lower(),
+            self._MIRROR_PAIR_COLOUR,
+        )
         # Horizontal bar across the top.
         pygame.draw.line(surf, colour,
                           (x_left, y_base),
                           (x_right, y_base), 3)
-        # Short downward stubs at each end so the bracket reads
-        # closed at the corners.
-        stub_h = 10
-        pygame.draw.line(surf, colour,
-                          (x_left, y_base),
-                          (x_left, y_base + stub_h), 3)
-        pygame.draw.line(surf, colour,
-                          (x_right, y_base),
-                          (x_right, y_base + stub_h), 3)
+        # Stubs from the bar down toward each anchor's chevron so the
+        # bracket points at the tiles to press. Clamped so an anchor
+        # that IS the tallest tile still shows a visible stub.
+        for t in (left_t, right_t):
+            stub_end = max(y_base + 10, t.rect.top - 44 + bob)
+            pygame.draw.line(surf, colour,
+                              (t.rect.centerx, y_base),
+                              (t.rect.centerx, stub_end), 3)
         # "TOGETHER" label centred above the bar so the patient
         # knows the bracket means "press these as a pair". Pulsing
         # alpha so the cue is visible but doesn't fight the lane
-        # tiles for focus.
+        # tiles for focus. The streak chip parks top-left in the
+        # bracket modes, so this centre spot stays clear.
         import math as _m
         alpha_phase = (_m.sin(now * (2 * _m.pi / 1.2)) + 1) * 0.5
         alpha = int(160 + 60 * alpha_phase)
@@ -1657,7 +1719,7 @@ class GameplayScreen(Screen):
         label.set_alpha(alpha)
         x_mid = (x_left + x_right) // 2
         surf.blit(label, label.get_rect(
-            midbottom=(x_mid, y_base - 4)))
+            midbottom=(x_mid, y_base - 6)))
 
     def _draw_paused_overlay(self, surf: pygame.Surface) -> None:
         overlay = pygame.Surface(
@@ -1698,6 +1760,9 @@ class RhythmScreen(Screen):
         # the gameplay-screen tracker - drives ls.is_pressed each
         # frame so the lane lights up while the key is down.
         self._held_keys: set[int] = set()
+        # Cached full-screen dim for the countdown card (no per-frame
+        # surface builds in draw).
+        self._dim_cache: pygame.Surface | None = None
         self.rebuild_lanes()
 
     HAND_BLOCK_GAP = 100   # bilateral spacing between right + left blocks
@@ -1802,26 +1867,32 @@ class RhythmScreen(Screen):
         fill_w = int(bar_w * frac)
         if fill_w > 0:
             fill_surf = pygame.Surface((fill_w, bar_h), pygame.SRCALPHA)
-            pygame.draw.rect(fill_surf, (*self.theme.accent, 220),
+            pygame.draw.rect(fill_surf, (*self._mode_accent(), 220),
                               fill_surf.get_rect(), border_radius=bar_h // 2)
             surf.blit(fill_surf, (pad, bar_y))
-        # Time readout right-aligned to the bar's end. Manual right-align
-        # via font.render so the MM:SS sits flush with the screen edge.
+        # Time readout top-LEFT under the bar. The top-right corner
+        # belongs to the mode pill, same as every other in-play screen.
         time_text = f"{self._fmt_mmss(elapsed_s)} / {self._fmt_mmss(total_s)}"
         tf = self.layout.font(FONT_SMALL + 2)
         ts = tf.render(time_text, True, self.theme.muted)
-        surf.blit(ts, ts.get_rect(topright=(self.layout.width - pad,
-                                              bar_y + bar_h + 6)))
+        surf.blit(ts, ts.get_rect(topleft=(pad, bar_y + bar_h + 6)))
+
+    def _mode_accent(self) -> tuple[int, int, int]:
+        """Rhythm's purple from the mode picker, with the theme accent
+        as the fallback if the accent table ever loses the key."""
+        return ModeSelectScreen.MODE_ACCENTS.get(
+            "rhythm", self.theme.accent)
 
     def add_encouragement(self, text: str) -> None:
-        # Match the gameplay screen's banner placement (just below the
-        # score) so the user gets the same visual rhythm in both modes.
+        # Below the streak pill, above the falling-note run. The old
+        # spot at y=200 rose straight up into the streak pill at the
+        # exact moment a streak threshold refreshed it.
         cx = self.layout.width // 2
         self._popups.append(FloatingText(
-            text, (cx, 200), self.theme.success,
+            text, (cx, 250), self.theme.success,
             font_pt=FONT_TITLE - 4,
             lifetime_s=1.8,
-            rise_px=40,
+            rise_px=30,
         ))
 
     def flash_lane(self, lane: int, colour, duration_s: float, now: float) -> None:
@@ -1829,8 +1900,12 @@ class RhythmScreen(Screen):
             if ls.lane == lane:
                 ls.flash(colour, duration_s, now)
                 if self.message:
+                    # Above the strike ring, not on it: at the lane
+                    # top the judgement text sat right across the ring
+                    # the patient is aiming the next note at.
+                    strike_y = self.layout.height - 290
                     self._popups.append(FloatingText(
-                        self.message, (ls.rect.centerx, ls.rect.top - 10),
+                        self.message, (ls.rect.centerx, strike_y - 64),
                         colour, font_pt=36,
                     ))
                 # Particle burst centred on the strike-line ring for
@@ -1928,10 +2003,24 @@ class RhythmScreen(Screen):
         draw_text(surf, f"{self.engine.score}",
                   (cx, 92), self.theme, self.layout, pt=FONT_TITLE,
                   centre=True, colour=self.theme.accent)
+        # Mode pill top-right, same spot and styling as the gameplay
+        # screen so switching between modes never moves the header
+        # furniture. Rhythm was the one in-play screen without it.
+        accent = self._mode_accent()
+        mf = self.layout.font(FONT_SMALL + 2)
+        mt_label = mf.render("RHYTHM", True, (255, 255, 255))
+        pill_rect = pygame.Rect(0, 0, mt_label.get_width() + 24,
+                                 mt_label.get_height() + 8)
+        pill_rect.topright = (self.layout.width - 28, 30)
+        pygame.draw.rect(surf, accent, pill_rect,
+                          border_radius=pill_rect.height // 2)
+        surf.blit(mt_label,
+                   mt_label.get_rect(center=pill_rect.center))
         # Streak pill - only shown when streak >= 2 so a fresh run
         # doesn't have a permanent "STREAK -" widget burning pixels
         # in the patient's focal area. Mirrors the gameplay screen's
-        # streak treatment for consistency between modes.
+        # streak treatment for consistency between modes: mode accent
+        # base tier, gold at 5+, green at 10+.
         streak = self.engine.hit_streak
         if streak >= 2:
             if streak >= 10:
@@ -1939,7 +2028,7 @@ class RhythmScreen(Screen):
             elif streak >= 5:
                 streak_colour = (255, 196, 0)         # gold tier
             else:
-                streak_colour = self.theme.foreground
+                streak_colour = accent
             _chip(surf, self.layout, (cx, 152),
                    f"x{streak} STREAK",
                    streak_colour,
@@ -2112,6 +2201,14 @@ class RhythmScreen(Screen):
         if self.engine.mode:
             countdown = getattr(self.engine.mode, "countdown_remaining_s", 0.0)
             if countdown > 0:
+                # Faint backdrop dim so the card owns the moment.
+                # Cached surface: draw runs every frame.
+                if (self._dim_cache is None
+                        or self._dim_cache.get_size() != surf.get_size()):
+                    self._dim_cache = pygame.Surface(surf.get_size(),
+                                                      pygame.SRCALPHA)
+                    self._dim_cache.fill((0, 0, 0, 60))
+                surf.blit(self._dim_cache, (0, 0))
                 card_w = 420
                 card_h = 240
                 card_rect = pygame.Rect(0, 0, card_w, card_h)
@@ -2131,13 +2228,15 @@ class RhythmScreen(Screen):
                            (card_rect.x - 12, card_rect.y - 12))
                 # Themed fill at high alpha so the card reads as a
                 # solid panel while still showing a hint of the lane
-                # area underneath; the inner accent ring ties it to
-                # the rhythm UI's blue palette.
+                # area underneath; the ring and the number wear
+                # rhythm's purple so even the countdown carries the
+                # mode's identity.
+                accent = self._mode_accent()
                 fill_surf = pygame.Surface(card_rect.size, pygame.SRCALPHA)
                 fill = (*self.theme.background, 245)
                 pygame.draw.rect(fill_surf, fill,
                                   fill_surf.get_rect(), border_radius=22)
-                pygame.draw.rect(fill_surf, (*self.theme.accent, 110),
+                pygame.draw.rect(fill_surf, (*accent, 150),
                                   fill_surf.get_rect(), 3, border_radius=22)
                 surf.blit(fill_surf, card_rect.topleft)
                 draw_text(surf, "GET READY",
@@ -2147,7 +2246,7 @@ class RhythmScreen(Screen):
                 draw_text(surf, f"{countdown:.1f}",
                           (card_rect.centerx, card_rect.y + 156),
                           self.theme, self.layout, pt=140,
-                          centre=True, colour=self.theme.accent)
+                          centre=True, colour=accent)
 
         # No keyboard hints on screen. The patient is meant to be using
         # the Arduino device by this point.

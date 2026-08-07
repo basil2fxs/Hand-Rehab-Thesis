@@ -66,10 +66,13 @@ def detect_onset_teasdale(force: np.ndarray, fs: float,
 
     Press onset is the first sample where the smoothed force
     velocity exceeds `mean(baseline_velocity) + k * std(baseline_velocity)`.
-    Citable to Teasdale et al. (1993) "On the measurement of motor
-    initiation" - the standard biomechanics technique for picking
-    the moment a force trace stops being noise and starts being a
-    deliberate press.
+    Citable to Teasdale, Bard, Fleury, Young and Proteau (1993)
+    "Determining movement onsets from temporal series", Journal of
+    Motor Behavior 25(2), 97-106. The title quoted here previously
+    ("On the measurement of motor initiation") does not exist; the
+    reference check against the journal's index caught it. The
+    technique is the standard one for picking the moment a force
+    trace stops being noise and starts being a deliberate press.
 
     Steps:
       1. Smooth the raw force with the Butterworth low-pass.

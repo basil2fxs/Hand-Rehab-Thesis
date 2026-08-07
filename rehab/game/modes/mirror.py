@@ -6,7 +6,7 @@ RT used for scoring is the LATER of the two presses, because the
 clinical signal we want is "did the patient produce the bilateral
 movement together" rather than "how fast was the strong side".
 
-Mirror therapy literature (Ramachandran 1995, Altschuler 1999) says
+Mirror therapy literature (Ramachandran and Rogers-Ramachandran 1996, Altschuler 1999) says
 the unaffected hand drags the affected one along via shared motor
 representations, so the protocol wants synchronous bimanual movement.
 This mode forces that pattern.

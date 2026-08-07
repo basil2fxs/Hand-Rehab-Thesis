@@ -3533,8 +3533,14 @@ class GameEngine:
             # patient at a glance how well they did. Green = Great, yellow
             # = Good, orange = Late/Early, red = Miss.
             colour = self._outcome_colour(outcome.label)
-            gp.flash_lane(trial.lane, colour, 0.4, now)
-            gp.set_message(outcome.label, 0.8)
+            # The outcome label rides on the lane popup, not the
+            # centred message line. Passing it straight to flash_lane
+            # means the popup can never pick up a stale message from
+            # the previous trial, and the message line stays free for
+            # mode-authored text (reaction's RT readout, level-ups)
+            # so the same words are never on screen twice.
+            gp.flash_lane(trial.lane, colour, 0.4, now,
+                           popup_text=outcome.label)
             # Clear the timing bar + deactivate every strip now that the
             # trial is done. The next stim will re-arm the right lane.
             for ls in gp.lanes:

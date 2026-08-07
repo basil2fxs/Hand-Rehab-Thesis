@@ -37,7 +37,7 @@ from typing import TYPE_CHECKING
 import pygame
 
 from ..game.modes._keys import keymap_for_hand, resolve_key
-from .screens import Screen
+from .screens import ModeSelectScreen, Screen
 from .widgets import (
     FONT_BODY, FONT_H1, FONT_H2, FONT_SMALL, FONT_TITLE,
     draw_text, make_font,
@@ -75,6 +75,12 @@ class SyllablesScreen(Screen):
     def __init__(self, engine: "GameEngine") -> None:
         super().__init__(engine)
         self._held_keys: set[int] = set()
+
+    def _accent(self) -> tuple[int, int, int]:
+        """Syllables pink from the mode picker, so the kids' screen
+        keeps the same identity colour it was chosen by."""
+        return ModeSelectScreen.MODE_ACCENTS.get(
+            "syllables", self.theme.accent)
 
     def on_block_start(self) -> None:
         # Fresh block: drop any keys latched from a previous visit.
@@ -139,7 +145,7 @@ class SyllablesScreen(Screen):
         fill_w = int(bar_w * frac)
         if fill_w > 0:
             fill = pygame.Surface((fill_w, bar_h), pygame.SRCALPHA)
-            pygame.draw.rect(fill, (*self.theme.accent, 220),
+            pygame.draw.rect(fill, (*self._accent(), 220),
                              fill.get_rect(), border_radius=bar_h // 2)
             surf.blit(fill, (pad, bar_y))
         draw_text(surf, f"Word {min(done + 1, total)} of {total}",
@@ -152,7 +158,7 @@ class SyllablesScreen(Screen):
         draw_text(surf, score,
                   (self.layout.width - pad - 8 * len(score), 30),
                   self.theme, self.layout, pt=FONT_H2,
-                  colour=self.theme.accent)
+                  colour=self._accent())
 
     # ---- warm-up -----------------------------------------------------------
     def _draw_warmup(self, surf: pygame.Surface, mode, now: float) -> None:
@@ -164,10 +170,11 @@ class SyllablesScreen(Screen):
                   (cx, 230), self.theme, self.layout, pt=FONT_BODY,
                   centre=True, colour=self.theme.muted)
         # A circle that swells on each beat: the visual is a helper,
-        # the metronome tick is the timing reference.
+        # the metronome tick is the timing reference. Pink, like the
+        # rest of the mode's identity colour.
         phase = (now % mode.ioi_s) / mode.ioi_s
         r = 60 + int(26 * math.exp(-4.0 * phase))
-        pygame.draw.circle(surf, self.theme.accent,
+        pygame.draw.circle(surf, self._accent(),
                            (cx, self.ROW_CY), r)
         pygame.draw.circle(surf, self.theme.background,
                            (cx, self.ROW_CY), max(6, r - 16))
@@ -207,9 +214,17 @@ class SyllablesScreen(Screen):
         cx = self.layout.width // 2
         phase = mode.phase
         # Message line above the blocks: short, kind, phase-driven.
+        # At feedback time the title takes the outcome colour (green
+        # for a win, warm amber for "so close") so the moment lands
+        # for a child before any word is read.
         msg, sub = self._messages(mode)
+        title_colour = self.theme.foreground
+        if phase == "feedback":
+            res = mode._last_result or {}
+            title_colour = (self.theme.success if res.get("correct")
+                            else self.theme.warning)
         draw_text(surf, msg, (cx, 170), self.theme, self.layout,
-                  pt=FONT_H1, centre=True)
+                  pt=FONT_H1, centre=True, colour=title_colour)
         if sub:
             draw_text(surf, sub, (cx, 218), self.theme, self.layout,
                       pt=FONT_BODY, centre=True, colour=self.theme.muted)
@@ -371,7 +386,7 @@ class SyllablesScreen(Screen):
         draw_text(surf, str(beat),
                   (self.layout.width // 2, self.ROW_CY + 140),
                   self.theme, self.layout, pt=FONT_TITLE + 10,
-                  centre=True, colour=self.theme.accent)
+                  centre=True, colour=self._accent())
 
     # ---- finger row --------------------------------------------------------
     def _draw_finger_row(self, surf: pygame.Surface, mode) -> None:
