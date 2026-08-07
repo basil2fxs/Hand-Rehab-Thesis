@@ -106,6 +106,17 @@ TRIAL_COLUMNS = [
     # blocks run under different settings can be pooled and split again
     # without going back to the config snapshot.
     "cue_flags",
+    # What was shown on this trial beyond a lane highlight. Empty for
+    # modes that only light a finger. Syllables mode records the word;
+    # chords mode records the chord as lane numbers, e.g. "1+3+4".
+    "stimulus",
+    # TRUE when this trial's lane came from the repeating sequence,
+    # FALSE when it came from a random probe block, empty outside
+    # pattern mode. The whole point of pattern mode is the difference
+    # between those two labels: sequence learning is random-trial RT
+    # minus repeating-trial RT, and without this column the two kinds
+    # of trial are indistinguishable afterwards.
+    "pattern_trial",
     # TRUE when the gameplay screen highlighted the target finger on
     # this trial (cue.show_target), FALSE when the tile stayed neutral
     # and the finger had to be found from the buzzer alone. Separate

@@ -587,15 +587,26 @@ class ModeSelectScreen(Screen):
     card with a short description so a clinician can pick without
     prior knowledge."""
 
+    # Reaction replaces Classic as the baseline mode. Classic's fixed
+    # 6-trial loop was learnable in seconds, so half of what it measured
+    # was anticipation; Reaction randomises the wait so the number it
+    # produces is actually a reaction time. begin_classic_block survives
+    # for old sessions and tests, it just is not offered here.
     MODES = [
+        ("reaction", "Reaction",
+         "React fast as you can. Eye-to-hand speed."),
         ("adaptive", "Adaptive",
-         "Difficulty adjusts to keep you in the 70-80% hit band."),
-        ("classic", "Classic",
-         "Fixed pace, set finger pattern. Best for baseline measures."),
+         "Difficulty adjusts to hold the 70-80% band."),
+        ("pattern", "Patterns",
+         "A hidden sequence repeats. Muscle memory."),
+        ("chords", "Chords",
+         "Press 2-4 fingers together. Independence."),
         ("rhythm", "Rhythm",
-         "Press to the beat of music. Motor-rhythm focused."),
+         "Press to the beat of music."),
+        ("syllables", "Syllables",
+         "Tap the beats inside words. Sound skills."),
         ("mirror", "Mirror",
-         "Press both hands' same finger together. Bilateral training."),
+         "Both hands, same finger, together."),
     ]
     # Per-mode accent colours. The vertical strip on the left of each
     # card uses these, plus the icon takes the same colour as a subtle
@@ -608,21 +619,27 @@ class ModeSelectScreen(Screen):
         # colour ladder (green -> indigo -> purple -> teal) without
         # overlapping any of the lane-tile finger pastels.
         "mirror":   (20, 184, 166),   # teal - "synchronised hands"
+        "reaction": (239, 68, 68),    # red - "speed"
+        "pattern":  (245, 158, 11),   # amber - "a path forming"
+        "chords":   (14, 165, 233),   # sky blue - "keys together"
+        "syllables": (236, 72, 153),  # pink - "language, playful"
     }
 
     def __init__(self, engine: "GameEngine") -> None:
         super().__init__(engine)
         self.buttons: list[Button] = []
         cx = engine.layout.width // 2
-        card_w = 720
-        # Card height shrunk from 120 to 100 so the four mode cards
-        # (with mirror added in Thread C) all fit between the header
-        # at y=200 and the Back button at y=height-90. The previous
-        # 120 px cards left no room for a fourth row.
-        card_h = 100
-        gap = 18
+        # Seven cards. One column fitted four; this is a two-column
+        # grid, filled left to right so the reading order matches the
+        # MODES order.
+        card_w = 590
+        card_h = 96
+        gap = 16
         for i, (key, _title, _desc) in enumerate(self.MODES):
-            y = 195 + i * (card_h + gap)
+            col = i % 2
+            row = i // 2
+            x0 = cx - card_w - gap // 2 + col * (card_w + gap)
+            y = 195 + row * (card_h + gap)
             # Each card gets a softened tint of its own mode accent
             # as its rest fill, so the row reads as three clearly
             # different cards instead of three identical muted-grey
@@ -640,7 +657,7 @@ class ModeSelectScreen(Screen):
             # are rendered manually so we get a cleaner icon-left,
             # text-right layout than Button's auto-centred label.
             self.buttons.append(Button(
-                pygame.Rect(cx - card_w // 2, y, card_w, card_h),
+                pygame.Rect(x0, y, card_w, card_h),
                 "", lambda k=key: self._pick(k),
                 self.theme, self.layout,
                 font_pt=FONT_H2 + 2,
@@ -733,6 +750,48 @@ class ModeSelectScreen(Screen):
                 (stem_x, stem_top + size // 5),
             ]
             pygame.draw.polygon(surf, colour, flag_pts)
+        elif kind == "reaction":
+            # Lightning bolt: speed.
+            s = size
+            pts = [(cx + s // 6, cy - s // 2), (cx - s // 4, cy + s // 12),
+                   (cx - s // 24, cy + s // 12), (cx - s // 6, cy + s // 2),
+                   (cx + s // 4, cy - s // 24), (cx + s // 24, cy - s // 24)]
+            pygame.draw.polygon(surf, colour, pts)
+        elif kind == "pattern":
+            # Four dots joined by a path: a sequence forming.
+            r = max(3, size // 10)
+            pts = [(cx - size // 2 + r, cy + size // 4),
+                   (cx - size // 6, cy - size // 4),
+                   (cx + size // 6, cy + size // 6),
+                   (cx + size // 2 - r, cy - size // 3)]
+            for a, b2 in zip(pts, pts[1:]):
+                pygame.draw.line(surf, colour, a, b2, 3)
+            for pt in pts:
+                pygame.draw.circle(surf, colour, pt, r)
+        elif kind == "chords":
+            # Three close vertical bars pressed at once, like piano keys
+            # going down together.
+            bar_w = max(4, size // 6)
+            gap2 = max(3, size // 10)
+            x = cx - (bar_w * 3 + gap2 * 2) // 2
+            for dy in (size // 8, -size // 8, size // 8):
+                bar = pygame.Rect(x, cy - size // 3 + dy,
+                                  bar_w, size * 2 // 3)
+                pygame.draw.rect(surf, colour, bar, border_radius=3)
+                x += bar_w + gap2
+        elif kind == "syllables":
+            # A word split into blocks with a dot between: syllable
+            # boundaries made visible.
+            blk_h = size // 3
+            blk_w = size // 3
+            y0 = cy - blk_h // 2
+            pygame.draw.rect(surf, colour,
+                             pygame.Rect(cx - size // 2, y0, blk_w, blk_h),
+                             border_radius=4)
+            pygame.draw.circle(surf, colour, (cx, cy), max(3, size // 12))
+            pygame.draw.rect(surf, colour,
+                             pygame.Rect(cx + size // 6, y0, blk_w, blk_h),
+                             border_radius=4)
         elif kind == "mirror":
             # Two mirrored circles connected by a thin line, reading
             # as "two hands moving as one". I went with circles + a
@@ -778,15 +837,15 @@ class ModeSelectScreen(Screen):
             muted_fg = self.theme.foreground
             # Mode icon, in the mode's accent colour so the colour cue
             # repeats. Larger than before so it carries the card.
-            icon_size = 60
-            icon_cx = b.rect.x + 80
+            icon_size = 44
+            icon_cx = b.rect.x + 52
             icon_cy = b.rect.centery
             self._draw_mode_icon(surf, key, icon_cx, icon_cy,
                                   icon_size, accent)
             # Title rendered bold via SysFont so it pops as the card's
             # primary affordance. Description follows in regular weight.
-            text_x = b.rect.x + 150
-            title_pt = int((FONT_H2 + 4) * self.layout.font_scale)
+            text_x = b.rect.x + 96
+            title_pt = int((FONT_H2 + 2) * self.layout.font_scale)
             title_font = make_font(title_pt, bold=True)
             title_surf = title_font.render(title, True, fg)
             surf.blit(title_surf,
@@ -883,6 +942,14 @@ class SetupScreen(Screen):
             self.engine.begin_classic_block()
         elif mode == "rhythm":
             self.engine.show_rhythm_setup()
+        elif mode == "reaction":
+            self.engine.begin_reaction_block()
+        elif mode == "pattern":
+            self.engine.begin_pattern_block()
+        elif mode == "chords":
+            self.engine.begin_chords_block()
+        elif mode == "syllables":
+            self.engine.begin_syllables_block()
         else:
             self.engine.begin_adaptive_block()
 

@@ -1503,6 +1503,26 @@ class GameEngine:
         self._begin_block("classic")
         self.screen_obj = self._screens["gameplay"]
 
+    # The four modes below are being built against their own research
+    # briefs. Until each lands, its entry point drops back to the mode
+    # picker rather than crashing, so the card can exist before the mode
+    # does without stranding anyone who clicks it.
+    def begin_reaction_block(self) -> None:
+        log.warning("Reaction mode is not built yet")
+        self.show_mode_select()
+
+    def begin_pattern_block(self) -> None:
+        log.warning("Pattern mode is not built yet")
+        self.show_mode_select()
+
+    def begin_chords_block(self) -> None:
+        log.warning("Chords mode is not built yet")
+        self.show_mode_select()
+
+    def begin_syllables_block(self) -> None:
+        log.warning("Syllables mode is not built yet")
+        self.show_mode_select()
+
     def begin_adaptive_block(self) -> None:
         from .modes.adaptive import AdaptiveMode
         from ..analytics.adaptive import AdaptiveConfig
@@ -1676,6 +1696,18 @@ class GameEngine:
             return
         if kind == "mirror":
             self.begin_mirror_block()
+            return
+        if kind == "reaction":
+            self.begin_reaction_block()
+            return
+        if kind == "pattern":
+            self.begin_pattern_block()
+            return
+        if kind == "chords":
+            self.begin_chords_block()
+            return
+        if kind == "syllables":
+            self.begin_syllables_block()
             return
         if kind == "rhythm":
             song = getattr(self, "_last_rhythm_song", None)
