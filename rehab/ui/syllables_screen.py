@@ -476,26 +476,61 @@ class SyllablesScreen(Screen):
                   centre=True, colour=self._accent())
 
     # ---- finger row --------------------------------------------------------
+    def _finger_tiles(self, mode) -> list[tuple[str, int, int]]:
+        """(hand, finger, lane) per tile, in on-screen order. Each
+        hand's tiles mirror the physical hand: the LEFT hand reads
+        little to index (matching a s d f), the right index to little
+        (matching j k l ;), and with both hands the left block sits on
+        the left of the screen, same convention as the lane strips."""
+        hands = getattr(mode, "hands", None)
+        if not isinstance(hands, dict) or not hands:
+            hands = {self.engine.hand_mode
+                     if self.engine.hand_mode in ("left", "right")
+                     else "right": list(getattr(mode, "lanes",
+                                                [0, 1, 2, 3]))}
+        out: list[tuple[str, int, int]] = []
+        for hand in ("left", "right"):
+            lanes = hands.get(hand)
+            if not lanes:
+                continue
+            order = (range(len(lanes) - 1, -1, -1) if hand == "left"
+                     else range(len(lanes)))
+            for f in order:
+                out.append((hand, f, lanes[f]))
+        return out
+
     def _draw_finger_row(self, surf: pygame.Surface, mode) -> None:
         """Small tiles along the bottom in the finger colours, lighting
         while that finger is down, so the child can always see which
-        finger is which without a lane strip."""
-        n = 4
-        tile_w, tile_h, gap = 150, 64, 20
-        total = tile_w * n + gap * (n - 1)
+        finger is which without a lane strip. One block per playing
+        hand, each mirrored to match the physical hand, so with both
+        hands connected all eight fingers are on screen."""
+        tiles = self._finger_tiles(mode)
+        n = len(tiles)
+        if n == 0:
+            return
+        gap = 20 if n <= 4 else 12
+        tile_w = 150 if n <= 4 else 118
+        tile_h = 64
+        # Extra space between the two hand blocks so they read apart.
+        block_gap = 44 if n > 4 else 0
+        total = tile_w * n + gap * (n - 1) + block_gap
         x = self.layout.width // 2 - total // 2
         y = self.layout.height - 110
         km = self.engine.cfg.get(keymap_for_hand(self.engine.hand_mode), {})
-        for i in range(n):
-            lane = mode.lanes[i] if i < len(mode.lanes) else i
+        prev_hand: str | None = None
+        for hand, finger, lane in tiles:
+            if prev_hand is not None and hand != prev_hand:
+                x += block_gap
+            prev_hand = hand
             pressed = self._lane_down(lane, km)
-            fill = (self.theme.lane_active[i] if pressed
-                    else self.theme.lane_idle[i])
+            fill = (self.theme.lane_active[finger] if pressed
+                    else self.theme.lane_idle[finger])
             rect = pygame.Rect(x, y, tile_w, tile_h)
             pygame.draw.rect(surf, fill, rect, border_radius=14)
             colour = _text_colour_for(fill, (255, 255, 255),
                                       self.theme.foreground)
-            draw_text(surf, FINGER_NAMES[i],
+            draw_text(surf, FINGER_NAMES[finger],
                       (rect.centerx, rect.centery - 10), self.theme,
                       self.layout, pt=FONT_BODY, centre=True,
                       colour=colour)

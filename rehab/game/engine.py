@@ -332,15 +332,23 @@ class GameEngine:
 
     def _feed_detectors(self, t_perf: float, vals: tuple[int, ...]) -> None:
         n = int(self.cfg.get("fsr.num_sensors_per_hand", 4))
-        # First N values are the right hand, next N are the left hand
-        # (when present). Feed every detector that exists, even if
-        # the current hand_mode is unilateral. The Diagnostics screen
-        # builds both detectors on entry so the Settings page can
-        # always live-read all 8 sensors; this loop honours that
-        # without changing the game-time hand_mode contract.
-        right_vals = tuple(vals[:n])
-        left_vals = (tuple(vals[n:n * 2])
-                     if len(vals) >= n * 2 else (0,) * n)
+        # An 8-value sample is right hand then left hand, always. A
+        # 4-value sample is ONE board's values, and which hand that is
+        # follows the session: a left-only session runs a single LEFT
+        # board whose values must reach the left detector, not the
+        # right one. Feeding them to the right slot (the old
+        # behaviour) left the left detector reading zeros, so a
+        # left-only session never saw a press. Every detector that
+        # exists is fed, even when hand_mode is unilateral: the
+        # Diagnostics screen builds both so Settings can live-read all
+        # 8 sensors, and the off-session detector just gets zeros.
+        if self.hand_mode == "left" and len(vals) < n * 2:
+            right_vals: tuple[int, ...] = (0,) * n
+            left_vals = tuple(vals[:n])
+        else:
+            right_vals = tuple(vals[:n])
+            left_vals = (tuple(vals[n:n * 2])
+                         if len(vals) >= n * 2 else (0,) * n)
         right_det = self.detectors.get("right")
         left_det = self.detectors.get("left")
         if right_det is not None:
@@ -1599,7 +1607,9 @@ class GameEngine:
     def begin_pattern_block(self) -> None:
         """Patterns block: SRTT motor sequence learning, one engine
         block = one session of "takes". The research case lives in the
-        mode file's docstring.
+        mode file's docstring. One hand plays a 12-item four-finger
+        sequence; Both hands plays a 24-item sequence over all eight
+        fingers, hand-balanced every cycle.
 
         The trained sequence comes from a seed derived from the
         participant name, so it is identical every session with no
@@ -1609,18 +1619,18 @@ class GameEngine:
         logged so any block is reproducible afterwards.
         """
         from .modes.pattern import PatternMode, participant_seed
-        # Patterns is a one-hand mode: the sequence runs over the four
-        # fingers of a single hand. With bilateral selected, play the
-        # affected side when it is recorded, else the right hand.
+        # One hand selected: the classic 12-item SOC over that hand's
+        # four fingers. Both hands selected: the trained sequence spans
+        # all EIGHT fingers (right lanes then left lanes, the global
+        # numbering), so both hands are in the game on every take. The
+        # bimanual design lives in the mode file's docstring.
         hands = self.lanes_by_hand()
         if self.hand_mode == "both":
-            affected = str(self.cfg.get("session.affected_side") or "")
-            hand = affected if affected in hands else "right"
-            log.warning("Patterns is a one-hand mode; cueing the %s hand",
-                        hand)
+            hand = "both"
+            lanes = (hands.get("right") or []) + (hands.get("left") or [])
         else:
             hand = self.hand_mode
-        lanes = hands.get(hand) or [0, 1, 2, 3]
+            lanes = hands.get(hand) or [0, 1, 2, 3]
         p_seed = participant_seed(str(self.session.participant or ""))
         seed_cfg = self.cfg.get("pattern.seed", None)
         try:
@@ -1674,20 +1684,20 @@ class GameEngine:
         the mode file's docstring; chords.* in the config says what
         the patient experiences.
 
-        Chords is a one-hand mode like Patterns: the ladder runs over
-        the four fingers of a single hand. With bilateral selected it
-        plays the affected side when recorded, else the right hand.
+        Each chord stays within one hand (cross-talk is a within-hand
+        quantity), but with Both selected the two hands alternate
+        under the paired balance rules and the probes run per hand,
+        so both hands play through every session. One hand selected
+        runs exactly as before.
         """
         from .modes.chords import ChordsMode
         hands = self.lanes_by_hand()
         if self.hand_mode == "both":
-            affected = str(self.cfg.get("session.affected_side") or "")
-            hand = affected if affected in hands else "right"
-            log.warning("Chords is a one-hand mode; cueing the %s hand",
-                        hand)
+            hand = "both"
+            lanes = hands.get("right") or [0, 1, 2, 3]
         else:
             hand = self.hand_mode
-        lanes = hands.get(hand) or [0, 1, 2, 3]
+            lanes = hands.get(hand) or [0, 1, 2, 3]
         # Fresh seed per block unless chords.seed pins one, recorded
         # below so any block's chord order and jitter stay
         # reproducible after the fact.
@@ -1701,8 +1711,9 @@ class GameEngine:
             "chords.sync_windows_ms", None) or [250, 200, 150, 100])]
         self.mode = ChordsMode(
             engine=self,
-            hand=hand,
+            hand="right" if hand == "both" else hand,
             lanes=lanes,
+            lanes_by_hand=hands if self.hand_mode == "both" else None,
             timeout_s=float(self.cfg.get("chords.timeout_s", 3.0)),
             sync_windows_ms=windows,
             hold_ms=float(self.cfg.get("chords.hold_ms", 200)),
@@ -1746,21 +1757,20 @@ class GameEngine:
         child experiences. This mode renders on its own screen: words
         and syllable blocks are not a lane strip.
 
-        Syllables is a one-hand mode like Patterns and Chords: the
-        four fingers of one hand carry syllable positions 1 to 4. With
-        bilateral selected it plays the affected side when recorded,
-        else the right hand.
+        Syllable positions 1 to 4 map to fingers 1 to 4. One hand
+        selected plays that hand; with Both selected either hand's
+        finger satisfies its position and the model's buzzes divide
+        equally between the hands, so a child with both hands on the
+        device uses both and is never told a hand was wrong.
         """
         from .modes.syllables import SyllablesMode
         hands = self.lanes_by_hand()
         if self.hand_mode == "both":
-            affected = str(self.cfg.get("session.affected_side") or "")
-            hand = affected if affected in hands else "right"
-            log.warning("Syllables is a one-hand mode; cueing the %s hand",
-                        hand)
+            hand = "both"
+            lanes = hands.get("right") or [0, 1, 2, 3]
         else:
             hand = self.hand_mode
-        lanes = hands.get(hand) or [0, 1, 2, 3]
+            lanes = hands.get(hand) or [0, 1, 2, 3]
         # Fresh seed per block unless syllables.seed pins one, recorded
         # below so any block's word order stays reproducible.
         seed_cfg = self.cfg.get("syllables.seed", None)
@@ -1772,6 +1782,7 @@ class GameEngine:
         self.mode = SyllablesMode(
             engine=self,
             lanes=lanes,
+            lanes_by_hand=hands if self.hand_mode == "both" else None,
             level=int(self.cfg.get("syllables.level", 1)),
             band=str(self.cfg.get("syllables.band", "A")),
             ioi_ms=float(self.cfg.get("syllables.beat_ioi_ms", 500)),
@@ -2029,21 +2040,27 @@ class GameEngine:
 
     def _begin_block(self, name: str) -> None:
         self.current_block = name
-        # Pre-start "GET READY" countdown on the modes that render
-        # through the gameplay screen (classic / adaptive / mirror /
-        # reaction / pattern). Rhythm is excluded: it has its own
-        # musical lead-in. Reaction and pattern get it too so the
-        # patient's hand is settled before the first wait starts
-        # counting. Test mode trims the countdown so quick demos stay
-        # quick.
+        # ONE pre-play prep, every mode: a single 3-second GET READY
+        # countdown between pressing start and the game beginning.
+        # Gameplay-screen modes (classic / adaptive / mirror /
+        # reaction / pattern / chords) show it on the gameplay screen;
+        # syllables shows the same card on its own screen. Rhythm runs
+        # the same 3 seconds inside its own mode (the countdown there
+        # is welded to the note-fall timeline), reading the same
+        # config key. Research gating rides INSIDE the prep rather
+        # than stacking on it: chords accumulates its baseline-quiet
+        # clock during the countdown (mode.prep_tick), so a hand that
+        # settled during the prep fires its first chord at zero. Test
+        # mode trims the countdown so quick demos stay quick.
         if name in ("classic", "adaptive", "mirror", "reaction",
-                    "pattern", "chords"):
-            secs = float(self.cfg.get("game.start_countdown_s", 5.0))
+                    "pattern", "chords", "syllables"):
+            secs = float(self.cfg.get("game.start_countdown_s", 3.0))
             if self._test_mode_trials() is not None:
                 secs = min(secs, 1.5)
-            gp = self._screens.get("gameplay")
-            if gp is not None and hasattr(gp, "start_countdown"):
-                gp.start_countdown(secs)
+            key = "syllables" if name == "syllables" else "gameplay"
+            sc = self._screens.get(key)
+            if sc is not None and hasattr(sc, "start_countdown"):
+                sc.start_countdown(secs)
         self.session.started_at = time.strftime("%Y-%m-%dT%H:%M:%S")
         self.score = 0
         self.hits = 0

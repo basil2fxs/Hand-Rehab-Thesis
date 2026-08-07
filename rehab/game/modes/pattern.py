@@ -25,6 +25,32 @@ on the complete directed graph over the four fingers; the generator
 walks that graph with seeded randomised backtracking, which is
 deterministic given the seed.
 
+BOTH HANDS. With both boards connected the trained material spans all
+EIGHT fingers. Bimanual serial reaction time tasks are established
+(Verwey's discrete sequence production work is bimanual, and many
+SRTT variants map positions across both hands), so the sequence
+simply grows: a 24-item cycle over the eight lanes in which every
+lane appears exactly 3 times, no lane repeats back to back, and no
+lane-to-lane transition occurs twice, so within a cycle every first
+order transition is equally (once-)frequent, the Reed and Johnson
+property at the size K8 admits. Each cycle gives each hand exactly 12
+trials, so hand balance holds at every cycle boundary. Probes are
+built to a stricter standard than fresh random cycles: each probe
+REUSES the trained cycle's own 24 transitions in a different Eulerian
+order, so trained and probe material have IDENTICAL location and
+first-order transition frequencies and differ only in the two-back
+structure, which is the Reed and Johnson logic carried to eight
+lanes. When a seed's transition graph admits no fully disjoint
+re-ordering, the generator falls back to fresh cycles sharing zero
+(then minimally few) triplets, and the block summary records the
+material either way. Takes run 3 cycles (72 trials) instead of the
+unilateral 5 x 12, keeping take length inside the standard 50 to 100
+trial envelope. Single-hand play is untouched: one hand selected
+still runs the 12-item four-finger SOC, and a participant's
+unilateral and bimanual material are derived from the same name seed
+through different generators, so starting one never changes the
+other.
+
 SEED AND STABILITY. The trained sequence must be the same one every
 time a participant sits down, or cross-session learning curves are
 meaningless. The seed is derived from the participant name (SHA-256 of
@@ -206,6 +232,102 @@ def generate_soc(rng: random.Random) -> list[int]:
     return path[:-1]
 
 
+# Bimanual material size: 8 lanes, each appearing this many times per
+# cycle, so one cycle is 24 trials and each hand gets exactly 12.
+CYCLE8_LANES = 8
+CYCLE8_REPEATS = 3
+
+
+def generate_cycle8(rng: random.Random) -> list[int]:
+    """One 24-item cycle over the eight lanes of both hands: every
+    lane appears exactly 3 times, no lane repeats back to back, and no
+    ordered lane-to-lane transition occurs twice (wrap included), so
+    every first-order transition inside the cycle is equally frequent.
+    K8 has 56 ordered pairs and the cycle uses 24 of them; which 24 is
+    the seed's draw, and the probe builder reuses exactly that set so
+    trained and probe stay first-order matched. Same randomised
+    backtracking as generate_soc, deterministic given the rng."""
+    n, reps = CYCLE8_LANES, CYCLE8_REPEATS
+    length = n * reps
+    start = rng.randrange(n)
+    path = [start]
+    counts = [0] * n
+    counts[start] = 1
+    used: set[tuple[int, int]] = set()
+
+    def extend() -> bool:
+        if len(path) == length:
+            return (path[-1] != start
+                    and (path[-1], start) not in used)
+        options = [b for b in range(n)
+                   if b != path[-1]
+                   and (path[-1], b) not in used
+                   and counts[b] < reps]
+        rng.shuffle(options)
+        for b in options:
+            used.add((path[-1], b))
+            counts[b] += 1
+            path.append(b)
+            if extend():
+                return True
+            path.pop()
+            counts[b] -= 1
+            used.discard((path[-1], b))
+        return False
+
+    if not extend():
+        raise RuntimeError("bimanual cycle backtracking failed")
+    return path
+
+
+def reorder_cycle(trained: list[int], rng: random.Random,
+                  forbid: dict | None = None) -> list[int] | None:
+    """A different Eulerian ordering of `trained`'s own transitions:
+    the same 24 ordered pairs walked in a new order, so location and
+    first-order transition frequencies match the trained cycle
+    EXACTLY and only the two-back structure differs. `forbid` maps
+    (a, b) -> successor to avoid, normally the trained cycle's own
+    triplet map, so the result shares zero second-order transitions.
+    Returns None when the graph admits no such ordering from this
+    draw."""
+    edges: dict[int, list[int]] = {}
+    n = len(trained)
+    for i in range(n):
+        edges.setdefault(trained[i], []).append(trained[(i + 1) % n])
+    start = rng.choice(trained)
+    remaining = {a: list(bs) for a, bs in edges.items()}
+    path = [start]
+    forbid = forbid or {}
+
+    def extend() -> bool:
+        if len(path) == n + 1:
+            return path[-1] == start
+        here = path[-1]
+        options = sorted(set(remaining.get(here, [])))
+        rng.shuffle(options)
+        for b in options:
+            if len(path) >= 2:
+                pair = (path[-2], path[-1])
+                if forbid.get(pair) == b:
+                    continue
+            remaining[here].remove(b)
+            path.append(b)
+            if extend():
+                return True
+            path.pop()
+            remaining[here].append(b)
+        return False
+
+    if not extend():
+        return None
+    cycle = path[:-1]
+    # The wrap pairs also carry forbidden triplets; check them here
+    # rather than complicating the recursion's boundary cases.
+    if forbid and shared_triplets(cycle, trained) != 0:
+        return None
+    return cycle
+
+
 def _triplet_map(seq: list[int]) -> dict[tuple[int, int], int]:
     n = len(seq)
     return {(seq[i], seq[(i + 1) % n]): seq[(i + 2) % n] for i in range(n)}
@@ -238,13 +360,25 @@ _PROBE_FALLBACK_MAX_SHARED = 2
 
 def build_sequences(seed: int,
                     probe_pool_size: int = 4,
+                    n_lanes: int = 4,
                     ) -> tuple[list[int], list[list[int]]]:
-    """The participant's trained SOC plus their probe pool, all from
+    """The participant's trained cycle plus their probe pool, all from
     one seed. Probes share zero second-order transitions with the
     trained sequence and are pairwise distinct rotation classes. Some
     trained sequences only admit three zero-overlap classes, so the
-    pool can come back one short of the ask; a session needs two."""
+    pool can come back one short of the ask; a session needs two.
+
+    n_lanes=4 is the unilateral 12-item SOC and its draw order is
+    byte-identical to what it always was, so existing participants'
+    material never changes. n_lanes=8 is the bimanual 24-item cycle;
+    its probes reuse the trained cycle's own transition set in a new
+    Eulerian order where the graph allows it (perfect first-order
+    match), falling back to fresh zero-overlap cycles, then to minimal
+    overlap, so a block start can never freeze on a pathological
+    seed."""
     rng = random.Random(int(seed))
+    if int(n_lanes) >= CYCLE8_LANES:
+        return _build_sequences8(rng, probe_pool_size)
     trained = generate_soc(rng)
     want = max(2, int(probe_pool_size))
     pool: list[list[int]] = []
@@ -276,6 +410,54 @@ def build_sequences(seed: int,
         pool.append(cand)
     if len(pool) < 2:
         raise RuntimeError("probe pool generation failed")
+    return trained, pool
+
+
+# Same budgets, bimanual: the re-ordering search is cheap (24 edges)
+# and nearly always lands inside a handful of draws.
+_REORDER_DRAWS = 400
+
+
+def _build_sequences8(rng: random.Random, probe_pool_size: int
+                      ) -> tuple[list[int], list[list[int]]]:
+    trained = generate_cycle8(rng)
+    forbid = _triplet_map(trained)
+    want = max(2, int(probe_pool_size))
+    pool: list[list[int]] = []
+    seen: set[tuple[int, ...]] = {_canonical_rotation(trained)}
+
+    def take(cand: list[int] | None) -> None:
+        if cand is None:
+            return
+        canon = _canonical_rotation(cand)
+        if canon in seen:
+            return
+        seen.add(canon)
+        pool.append(cand)
+
+    # First choice: the trained cycle's own transitions in a new
+    # order, sharing zero triplets. Identical first-order statistics.
+    for _ in range(_REORDER_DRAWS):
+        if len(pool) >= want:
+            break
+        take(reorder_cycle(trained, rng, forbid))
+    # Second: fresh cycles sharing zero triplets (location frequencies
+    # still match exactly; first-order pairs may differ).
+    for _ in range(_PROBE_DRAWS):
+        if len(pool) >= want:
+            break
+        cand = generate_cycle8(rng)
+        if shared_triplets(cand, trained) == 0:
+            take(cand)
+    # Last resort: minimal overlap beats a frozen block start.
+    for _ in range(_PROBE_FALLBACK_DRAWS):
+        if len(pool) >= 2:
+            break
+        cand = generate_cycle8(rng)
+        if shared_triplets(cand, trained) <= _PROBE_FALLBACK_MAX_SHARED:
+            take(cand)
+    if len(pool) < 2:
+        raise RuntimeError("bimanual probe pool generation failed")
     return trained, pool
 
 
@@ -319,12 +501,19 @@ class PatternMode:
                  short_session: bool, score_cfg: ScoreConfig,
                  demo_trials: int | None = None) -> None:
         self.engine = engine
-        # The four lanes of the playing hand, indexed by finger 0..3.
-        # Sequences are generated over fingers and mapped through this,
-        # so the same trained sequence drives either hand.
-        self.lanes = list(lanes)[:4]
-        while len(self.lanes) < 4:
-            self.lanes.append(len(self.lanes))
+        # The lanes in play, indexed by sequence position: one hand's
+        # four fingers, or with both boards connected all eight (right
+        # 0..3 then left 4..7, the engine's global numbering).
+        # Sequences are generated over these indices and mapped
+        # through this list, so the same trained material drives
+        # whichever side the lanes belong to.
+        if len(lanes) >= CYCLE8_LANES:
+            self.lanes = list(lanes)[:CYCLE8_LANES]
+        else:
+            self.lanes = list(lanes)[:4]
+            while len(self.lanes) < 4:
+                self.lanes.append(len(self.lanes))
+        self.n_fingers = len(self.lanes)
         self.p_seed = int(p_seed)
         self.block_seed = int(block_seed)
         self.score_cfg = score_cfg
@@ -341,9 +530,16 @@ class PatternMode:
         # per-block freshness (random orders, probe rotation) from the
         # block seed, which is drawn fresh unless pattern.seed pins it.
         self.trained, self.probes = build_sequences(
-            self.p_seed, probe_pool_size)
+            self.p_seed, probe_pool_size, n_lanes=self.n_fingers)
+        self.cycle_len = len(self.trained)
         self.block_rng = random.Random(self.block_seed)
         self.probe_offset = self.block_rng.randrange(len(self.probes))
+        # Bimanual cycles are twice as long, so a take runs about half
+        # as many of them to keep take length inside the standard 50 to
+        # 100 trial envelope (5 x 12 unilateral, 3 x 24 bimanual).
+        if self.n_fingers >= CYCLE8_LANES:
+            soc_cycles_per_block = max(
+                1, (int(soc_cycles_per_block) + 1) // 2)
 
         if demo_trials is not None:
             # Test Mode: a two-take miniature (trained then probe) so a
@@ -355,12 +551,13 @@ class PatternMode:
             self.rest_min = min(self.rest_min, 2.0)
             self.long_rest = min(self.long_rest, 2.0)
             probe = self.probes[self.probe_offset]
+            cyc = self.cycle_len
             self.segments = [
                 Segment("seq", "1",
-                        [self.trained[i % 12] for i in range(n_seq)],
+                        [self.trained[i % cyc] for i in range(n_seq)],
                         "trained"),
                 Segment("probe", "2",
-                        [probe[i % 12] for i in range(n_probe)],
+                        [probe[i % cyc] for i in range(n_probe)],
                         f"p{self.probe_offset}"),
             ]
         else:
@@ -398,15 +595,17 @@ class PatternMode:
         segs: list[Segment] = []
 
         def random_fingers(n: int) -> list[int]:
-            # Shuffle-bag over the four fingers: equal counts, no
-            # back-to-back repeats, fresh order every block.
+            # Shuffle-bag over every finger in play: equal counts, no
+            # back-to-back repeats, fresh order every block. Balanced
+            # per lane, which in bimanual play balances the hands too.
             return BalancedScheduler(
-                [0, 1, 2, 3], self.block_rng).sequence(n)
+                list(range(self.n_fingers)), self.block_rng).sequence(n)
 
         def soc_block(soc: list[int]) -> list[int]:
             # Always starts at cycle position 0 so takes align across
             # blocks and sessions.
-            return [soc[i % 12] for i in range(12 * max(1, cycles))]
+            cyc = len(soc)
+            return [soc[i % cyc] for i in range(cyc * max(1, cycles))]
 
         if warmup_n > 0:
             segs.append(Segment("warmup", "W", random_fingers(warmup_n), ""))
@@ -591,7 +790,7 @@ class PatternMode:
         pattern_trial = (seg.kind == "seq")
         stim = f"{seg.kind};b={seg.label}"
         if seg.soc_id:
-            pos = self._trial_in_seg % 12
+            pos = self._trial_in_seg % self.cycle_len
             stim += f";soc={seg.soc_id};pos={pos}"
         self.engine.log_trial(trial, outcome, now,
                               stimulus=stim, pattern_trial=pattern_trial)
@@ -796,6 +995,8 @@ class PatternMode:
         return {
             "participant_seed": self.p_seed,
             "block_seed": self.block_seed,
+            "n_lanes": self.n_fingers,
+            "cycle_len": self.cycle_len,
             "trained_soc": seq_str(self.trained),
             "probe_pool": [seq_str(p) for p in self.probes],
             "probe_offset": self.probe_offset,

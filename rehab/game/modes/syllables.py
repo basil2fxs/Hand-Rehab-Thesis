@@ -130,6 +130,26 @@ the stimulus column the way pattern mode rides it):
   count but a level criterion missed, Miss = wrong count or timeout.
   No penalties are applied anywhere; this mode is for children.
 
+BOTH HANDS. A child with both hands on the device can use both:
+syllable position n maps to finger n of EITHER hand, so pressing the
+left index or the right index both count as position 1. The design
+follows from what the mode measures: the levels test WHICH beat the
+child marks and WHEN, never which hand carries it, and the canonical
+segmentation measure (Liberman's tapping task) has no hand
+requirement, so demanding a particular hand would add a rule the
+construct does not contain and would hand out errors that say
+nothing about phonological awareness. Order checking is therefore
+done on positions, not lanes, and there is no such thing as a
+"wrong hand" anywhere in the mode: the child is never told to
+switch. The model phase still buzzes exactly one finger per
+syllable (one motor per board), and WHICH hand carries each model
+buzz comes off a shuffle bag over the hands, so across a block both
+hands are modelled equally, the same paired balance the adult modes
+use; the modelled lanes ride the stimulus string (model=) so the
+analysis can split taps and models by hand. On screen the blocks
+are hand-neutral (they carry finger colours, not sides) and the
+finger row shows both hands, the left one mirrored.
+
 WHAT THIS MODE CANNOT CLAIM. It trains and measures in-task
 behaviour: syllable segmentation, beat synchronisation, stress
 marking. It is not a dyslexia treatment and cannot claim to improve
@@ -159,6 +179,7 @@ from typing import TYPE_CHECKING
 import pygame
 
 from ...hardware.fsr_detector import PressEvent
+from ..scheduling import BalancedScheduler
 from ..scoring import ScoreConfig, TrialResult
 from ._keys import keymap_for_hand, resolve_key
 from .classic import PendingTrial
@@ -234,14 +255,35 @@ class SyllablesMode:
                  say_voice: str | None,
                  score_cfg: ScoreConfig,
                  seed: int = 0,
-                 demo_trials: int | None = None) -> None:
+                 demo_trials: int | None = None,
+                 lanes_by_hand: dict[str, list[int]] | None = None,
+                 ) -> None:
         self.engine = engine
-        # The four lanes of the playing hand, indexed by syllable
+        # The lanes of each playing hand, indexed by syllable
         # position: lanes[0] carries syllable 1 (index finger) through
-        # lanes[3] (little finger). Same lane plumbing as pattern mode.
-        self.lanes = list(lanes)[:4]
-        while len(self.lanes) < 4:
-            self.lanes.append(len(self.lanes))
+        # lanes[3] (little finger). With both hands connected the
+        # position maps to finger n of EITHER hand (see docstring);
+        # self.lanes stays the first hand's four for the paths that
+        # need one canonical lane per position (CSV keying, block
+        # text), and _position_of resolves any hand's lane back to
+        # its position.
+        if lanes_by_hand and len([h for h, v in lanes_by_hand.items()
+                                  if v]) > 1:
+            self.hands = {h: list(v)[:4]
+                          for h, v in lanes_by_hand.items() if v}
+        else:
+            four = list(lanes)[:4]
+            while len(four) < 4:
+                four.append(len(four))
+            # Key the single hand by what the session actually plays,
+            # so the finger row can mirror a left-hand session.
+            hand_name = str(getattr(engine, "hand_mode", "right"))
+            if hand_name not in ("left", "right"):
+                hand_name = "right"
+            self.hands = {hand_name: four}
+        self.hand_names = list(self.hands)
+        self.bilateral = len(self.hand_names) > 1
+        self.lanes = self.hands[self.hand_names[0]]
         self.level = max(1, min(6, int(level)))
         self.band = band if band in BANDS else "A"
         self.ioi_s = max(0.2, float(ioi_ms) / 1000.0)
@@ -274,6 +316,16 @@ class SyllablesMode:
 
         self.rng = random.Random(int(seed))
         self._bag: list[Word] = []
+        # Which hand carries each model buzz: a shuffle bag over the
+        # hands so both are modelled equally across a block, in an
+        # order the child cannot predict. One entry, one syllable.
+        self._model_hand_order = BalancedScheduler(
+            list(range(len(self.hand_names))), self.rng,
+            avoid_repeats=False)
+        # The lanes the model phase actually buzzed for the current
+        # word, in onset order, packed into the stimulus string when
+        # both hands play so the analysis can split models by hand.
+        self._model_lanes: list[int] = []
 
         # Session flow state. Phases:
         #   warmup -> (attend -> model -> countin -> respond -> feedback
@@ -346,7 +398,27 @@ class SyllablesMode:
         return self.level >= 2
 
     def expected_lanes(self) -> list[int]:
+        """One canonical lane per expected position (the first hand's
+        fingers), used where the plumbing wants a single lane. The
+        press path accepts either hand via _position_of."""
         return [self.lanes[i] for i in range(self.n_expected)]
+
+    def acceptable_lanes(self) -> list[int]:
+        """Every lane that can legally carry some expected position:
+        both hands' copies of positions 0..n-1. This is what the
+        trial's correct_keys records in bilateral play, so the CSV
+        says the left and right finger were both acceptable."""
+        return sorted(hands[i]
+                      for hands in self.hands.values()
+                      for i in range(min(self.n_expected, len(hands))))
+
+    def _position_of(self, lane: int) -> int | None:
+        """Which syllable position a lane carries, whichever hand it
+        belongs to, or None for a lane outside the game."""
+        for lanes in self.hands.values():
+            if lane in lanes:
+                return lanes.index(lane)
+        return None
 
     # ---- plumbing shared with the other modes ------------------------------
     def queue_press(self, ev: PressEvent) -> None:
@@ -482,6 +554,7 @@ class SyllablesMode:
         self.trial_counter += 1
         self.taps = []
         self._last_tap_t = {}
+        self._model_lanes = []
         self._replayed = False
         self._pending_replay = False
         self._last_result = None
@@ -576,9 +649,16 @@ class SyllablesMode:
             # rather than burst-fire catch-up syllables a frame apart,
             # which the one-motor-per-board hardware could not deliver.
             self._model_next_t = now + self.ioi_s
-        lane = (self.expected_lanes()[self._model_idx]
-                if self.order_required
-                else self.lanes[min(self._model_idx, 3)])
+        # Which finger: the syllable's position. Which hand: the next
+        # one due off the hand bag, so with both hands connected the
+        # model's buzzes divide equally between them across the block
+        # (one hand connected always draws that hand).
+        pos = (self._model_idx if self.order_required
+               else min(self._model_idx, 3))
+        hand = self.hand_names[self._model_hand_order.next()]
+        lane = self.hands[hand][pos]
+        if self.phase == "model":
+            self._model_lanes.append(lane)
         # The replay runs after the trial was scored (self.active is
         # gone), but it is still the multisensory model, so the cue
         # path fires either way, tagged with the word's trial id.
@@ -610,7 +690,8 @@ class SyllablesMode:
             # No penalty anywhere in this mode: a child fidgeting
             # between words must not lose points for it.
             return
-        if ev.lane not in self.lanes:
+        pos = self._position_of(ev.lane)
+        if pos is None:
             return
         last = self._last_tap_t.get(ev.lane)
         if last is not None and (ev.t_perf - last) < self.tap_debounce_s:
@@ -619,13 +700,15 @@ class SyllablesMode:
         peak = self._peak_for(ev)
         self.taps.append(Tap(lane=ev.lane, t_perf=ev.t_perf, peak=peak))
         self.active.keys_pressed.append(ev.lane)
-        # Wrong-position taps land in incorrect_presses so the CSV's
+        # Wrong-POSITION taps land in incorrect_presses so the CSV's
         # had_incorrect_press / first_incorrect_lane columns carry
-        # them, without any of the adult modes' penalties.
+        # them, without any of the adult modes' penalties. The check
+        # is on the syllable position, never the hand: left index and
+        # right index are the same position, so there is no wrong
+        # hand in this mode.
         k = len(self.taps) - 1
-        expected = self.expected_lanes()
         if (self.order_required and
-                (k >= len(expected) or ev.lane != expected[k])):
+                (k >= self.n_expected or pos != k)):
             self.active.incorrect_presses.append((ev.lane, ev.t_perf))
 
     def _peak_for(self, ev: PressEvent) -> float | None:
@@ -659,13 +742,15 @@ class SyllablesMode:
         n = self.n_expected
         taps = self.taps
         count_correct = len(taps) == n
-        expected = self.expected_lanes()
         # Order is checked on the taps that exist; count errors are
         # named first in the taxonomy below, so wrong_order is only
-        # ever reported for a right-count trial.
+        # ever reported for a right-count trial. The check runs on
+        # syllable POSITIONS, so either hand's finger satisfies its
+        # position and no hand is ever wrong.
         order_correct = (not self.order_required
-                         or [t.lane for t in taps[:n]]
-                         == expected[:min(n, len(taps))])
+                         or [self._position_of(t.lane)
+                             for t in taps[:n]]
+                         == list(range(min(n, len(taps)))))
 
         asyn: list[float] = []
         all_on_beat = True
@@ -742,7 +827,9 @@ class SyllablesMode:
         self.engine.log_trial(
             trial, outcome, now,
             stimulus=self._pack_stimulus(word, error, asyn),
-            correct_lanes=expected,
+            # In bilateral play both hands' copies of each expected
+            # position are acceptable, and the CSV says so.
+            correct_lanes=self.acceptable_lanes(),
         )
         self._recent.append(correct)
         self._since_band_change += 1
@@ -795,6 +882,11 @@ class SyllablesMode:
         ]
         if asyn:
             parts.append("asyn=" + ",".join(f"{a:.1f}" for a in asyn))
+        if self.bilateral and self._model_lanes:
+            # Which lanes the model phase buzzed, 1-indexed like taps,
+            # so the analysis can split model hands from tap hands.
+            parts.append("model=" + ",".join(str(l + 1)
+                                             for l in self._model_lanes))
         return ";".join(parts)
 
     def _after_feedback(self, now: float) -> None:
@@ -930,6 +1022,7 @@ class SyllablesMode:
         n = len(self._records)
         return {
             "level": self.level,
+            "hands": self.hand_names,
             "band_final": self.band,
             "band_trace": list(self._band_trace),
             "ioi_ms": round(self.ioi_s * 1000.0),
