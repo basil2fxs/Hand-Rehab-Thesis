@@ -416,6 +416,22 @@ class HoldScoringTests(unittest.TestCase):
         self.assertTrue(reveals)
         self.assertIn("drifted", reveals[0])
 
+    def test_consistently_off_target_hold_earns_no_dark_bonus(self) -> None:
+        """dark_bonus_points must reward staying ACCURATE in the dark,
+        not merely staying put. A hold sitting at a constant target+8%
+        offset the whole time (lit and dark) has zero within-window
+        drift -- the old "steady" test on drift alone -- but is 100%
+        off-target and zero time in band. It must not out-score a real
+        Good hold, and no dark bonus should be earned at all."""
+        m = self._hold_mode()
+        t = _to_trial(m)
+        _play_hold(m, t, lambda t_h, target, lit: target + 8.0)
+        rec = m._holds[0]
+        self.assertLess(rec.tib_frac, 0.01)
+        row = m.engine.trial_logger.rows[0]
+        self.assertEqual(row["early_late"], "Miss")
+        self.assertLess(row["points"], m.score_cfg.good_points)
+
     def test_gutter_is_silent_and_logged_as_miss(self):
         # Child-safe register: a hold that never ignites gutters with
         # no buzz at all, even with the confirmation cue switched on.

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import os
 import sys
+import types
 import unittest
 from pathlib import Path
 
@@ -117,9 +118,16 @@ class _Det:
 
     def __init__(self, base: float) -> None:
         self._b = base
+        self.fed: list[tuple] = []
 
     def baseline_value(self, i: int) -> float:
         return self._b
+
+    def feed(self, t_perf: float, vals: tuple) -> None:
+        # _feed_detectors's own job (press/release detection) is not
+        # under test here; recording the call is enough so callers can
+        # drive _track_force_peaks with the same values afterward.
+        self.fed.append((t_perf, vals))
 
 
 class MissForceTests(unittest.TestCase):
@@ -177,6 +185,66 @@ class MissForceTests(unittest.TestCase):
                              left, (300, 300, 300, 350), 4)
         e._close_force_window(was_miss=True)
         self.assertEqual(e._miss_force_total, 150)
+
+
+class _ModeWithTimeout:
+    """Stand-in for a mode that exposes current_timeout_s/hold_s, the
+    hooks _open_force_window reads to size the window to the mode's own
+    timeout rather than the shared metrics.miss_force_window_ms default."""
+
+    def __init__(self, timeout_s: float, hold_s: float = 0.0) -> None:
+        self.current_timeout_s = timeout_s
+        self.hold_s = hold_s
+
+
+class ForceWindowSizingTests(unittest.TestCase):
+    """A mode whose own timeout allows a slower-but-still-valid press
+    (chords.timeout_s = 3.0s against the shared 1.0s default window)
+    must get a window at least that long, or a legitimate late press
+    (and any leak concurrent with it) never registers and the trial
+    reads as textbook-clean purely because of the window/timeout
+    mismatch."""
+
+    def test_window_widens_to_mode_timeout_plus_hold(self) -> None:
+        e = _bare_engine()
+        e._force_window_ms = 1000.0
+        e.mode = _ModeWithTimeout(timeout_s=3.0, hold_s=0.2)
+        e._open_force_window(10.0)
+        self.assertAlmostEqual(e._force_window_end, 10.0 + 3.2)
+
+    def test_window_keeps_default_when_mode_timeout_is_shorter(self) -> None:
+        e = _bare_engine()
+        e._force_window_ms = 1000.0
+        e.mode = _ModeWithTimeout(timeout_s=0.5)
+        e._open_force_window(10.0)
+        self.assertAlmostEqual(e._force_window_end, 10.0 + 1.0)
+
+    def test_window_keeps_default_when_mode_has_no_timeout_hook(self) -> None:
+        e = _bare_engine()
+        e._force_window_ms = 1000.0
+        e.mode = None
+        e._open_force_window(10.0)
+        self.assertAlmostEqual(e._force_window_end, 10.0 + 1.0)
+
+    def test_a_press_after_the_default_window_but_inside_mode_timeout_is_captured(self) -> None:
+        """The end-to-end shape of the reported bug: a chord fires,
+        finger 0 is caught fast (inside the old 1s window), finger 1's
+        legitimate, timeout-compliant press lands at 1.3s -- past the
+        old window's close but well inside the mode's own 3.0s timeout.
+        _feed_detectors gates samples on start<=t_perf<=end, so with the
+        window sized to the mode's timeout both presses' peaks are
+        tracked instead of the late one vanishing."""
+        e = _bare_engine()
+        det = _Det(300.0)
+        e.detectors = {"right": det}
+        e.cfg = types.SimpleNamespace(
+            get=lambda k, d=None: {"fsr.num_sensors_per_hand": 4}.get(k, d))
+        e.mode = _ModeWithTimeout(timeout_s=3.0, hold_s=0.2)
+        e._open_force_window(0.0)
+        e._feed_detectors(0.30, (330, 300, 300, 300))  # finger 0
+        e._feed_detectors(1.30, (300, 340, 300, 300))  # finger 1, late
+        self.assertIn(0, e._force_window_peak)
+        self.assertIn(1, e._force_window_peak)
 
 
 class RtAggregationTests(unittest.TestCase):

@@ -498,7 +498,7 @@ class LocalisationTests(unittest.TestCase):
         m._tick(t + 0.03)
         self.assertEqual(m.sub, "wait")
         self.assertEqual(m.trials_done, 0)
-        self.assertEqual(m._early_presses, 1)
+        self.assertEqual(m._early_presses, {"loc": 1})
         self.assertEqual(m.engine.trial_logger.rows, [])
 
     def test_trial_row_carries_the_reconstruction_contract(self):
@@ -667,6 +667,58 @@ class HandMatrixTests(unittest.TestCase):
         self.assertFalse(rec["correct"])
         # The cross-hand confusion cell is the point of the matrix.
         self.assertEqual(m._confusion[str(rec["lane"])][str(d_lane)], 1)
+
+    def test_pressing_the_decoy_during_the_decoy_pulse_scores_lured_not_a_free_retry(self) -> None:
+        """A press during the decoy pulse itself (before the response
+        window opens, since respond opens at TARGET onset) is the
+        patient falling for the decoy -- the natural failure mode this
+        stage exists to measure. It must land in the distractor tallies
+        as a lured miss, not silently reset the same trial for a free
+        retry that then reports as a clean, unlured hit."""
+        e = _engine(hand_mode="both")
+        m = _mode(e, hands={"right": [0, 1, 2, 3], "left": [4, 5, 6, 7]})
+        m._stage_plan = ["distractor"] * 2
+        m.total_trials = 2
+        t = _to_trial(m)
+        dt = 1.0 / 60.0
+        guard = t + 5.0
+        while m.sub != "play" and t < guard:
+            t += dt
+            m._tick(t)
+        self.assertEqual(m.sub, "play")
+        d_lane = int(m.params["distractor_lane"])
+        # Press the decoy finger while still inside the decoy window
+        # (before target onset opens the response).
+        self.assertLess(t, m._target_on)
+        m.queue_press(_press_event(d_lane, t))
+        m._tick(t + dt)
+        self.assertEqual(len(m._dis_records), 1,
+                          "the lured press must be scored, not silently "
+                          "retried on a fresh copy of the same trial")
+        rec = m._dis_records[0]
+        self.assertTrue(rec["lured"])
+        self.assertFalse(rec["correct"])
+        stats = m.block_stats()
+        self.assertEqual(stats["distractor"]["trials"], 1)
+        self.assertEqual(stats["distractor"]["lured"], 1)
+
+    def test_early_press_during_a_distractor_wait_is_attributed_to_that_stage(self) -> None:
+        """An early press that happens during a DISTRACTOR trial's wait
+        must not be reported under block_stats()['loc']['early_presses']
+        when zero loc trials have run yet -- each stage's early presses
+        belong under its own section."""
+        e = _engine(hand_mode="both")
+        m = _mode(e, hands={"right": [0, 1, 2, 3], "left": [4, 5, 6, 7]})
+        m._stage_plan = ["distractor"] * 2
+        m.total_trials = 2
+        t = _to_trial(m)
+        m._tick(t + 0.01)
+        m.queue_press(_press_event(0, t + 0.02))
+        m._tick(t + 0.03)
+        self.assertEqual(m.sub, "wait")
+        stats = m.block_stats()
+        self.assertEqual(stats["loc"]["early_presses"], 0)
+        self.assertEqual(stats["distractor"]["early_presses"], 1)
 
 
 # ---- span trials --------------------------------------------------------

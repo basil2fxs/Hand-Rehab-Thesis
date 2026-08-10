@@ -151,6 +151,31 @@ class AdaptiveWrongPressMissTests(unittest.TestCase):
                           "Adapter must see a fumble-then-correct as a "
                           "MISS so the weakness bias fires on that lane")
 
+    def test_perfect_press_scores_full_quality_not_zero(self) -> None:
+        """classify() returns label='Perfect' for the fastest presses,
+        checked before 'Great'. _QUALITY must score it as full credit
+        (>= Great), not fall through the .get(..., 0.0) default -- that
+        default treated the best possible press exactly like a Miss and
+        throttled BPM for a patient who was excelling."""
+        engine, mode = self._build()
+        mode._fire(now=0.0)
+        target = mode.active.lane
+        records: list = []
+        original = mode.adapter.record
+
+        def _spy(lane, was_hit, rt_ms, quality=None):
+            records.append((lane, was_hit, rt_ms, quality))
+            return original(lane, was_hit, rt_ms, quality=quality)
+
+        mode.adapter.record = _spy
+        # Well under score_cfg's perfect_ms (default 100ms).
+        mode._handle_press(self._press(lane=target, t=0.03), now=0.03)
+        outcome = engine.log_trial.call_args[0][1]
+        self.assertEqual(outcome.label, "Perfect")
+        self.assertEqual(len(records), 1)
+        _, _, _, quality = records[0]
+        self.assertGreaterEqual(quality, mode._QUALITY["Great"])
+
 
 if __name__ == "__main__":
     unittest.main()

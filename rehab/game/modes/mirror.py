@@ -312,11 +312,15 @@ class MirrorMode:
                 and self.active.left_press_t is not None):
             self._finish(now)
 
-    # Same quality table AdaptiveMode uses. A Great press counts as
-    # full credit toward the lane's hit-rate EMA, a Late only counts
+    # Same quality table AdaptiveMode uses (Perfect included for the
+    # same reason: classify() returns "Perfect" for the fastest presses,
+    # and without an entry here it silently fell through the .get(...,
+    # 0.0) default and scored the same as a Miss). A Great press counts
+    # as full credit toward the lane's hit-rate EMA, a Late only counts
     # a quarter so a session of all-Lates doesn't fool the controller
     # into thinking the patient is coping fine.
     _QUALITY = {
+        "Perfect": 1.0,
         "Great": 1.0,
         "Good":  0.75,
         "Late":  0.25,

@@ -155,9 +155,14 @@ class AdaptiveMode:
             self.engine.apply_wrong_press_penalty()
 
     # Quality weights tell the adapter how good a press was, not just hit/miss.
-    # A Great is a full-credit press, a Late only counts a quarter so it
-    # doesn't trick the system into thinking the patient's coping fine.
+    # A Perfect or a Great is full-credit (classify() returns "Perfect"
+    # for the fastest presses, checked before "Great" -- missing it here
+    # let the .get(..., 0.0) default score the best possible press the
+    # same as a Miss, throttling BPM for a patient who was doing great).
+    # A Late only counts a quarter so it doesn't trick the system into
+    # thinking the patient's coping fine.
     _QUALITY = {
+        "Perfect": 1.0,
         "Great": 1.0,
         "Good":  0.75,
         "Late":  0.25,

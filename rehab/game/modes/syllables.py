@@ -430,6 +430,41 @@ class SyllablesMode:
                 return lanes.index(lane)
         return None
 
+    def _hand_of_lane(self, lane: int) -> str:
+        for hand, lanes in self.hands.items():
+            if lane in lanes:
+                return hand
+        return self.hand_names[0]
+
+    # ---- per-finger normalisation -------------------------------------------
+    def _reference_counts(self, lane: int) -> float:
+        """This finger's calibrated light-press gap in counts, the same
+        normaliser chords.py uses so a stress ratio compares forces on a
+        common scale instead of raw ADC counts (which differ by pad
+        sensitivity, not by how hard the child pressed). Falls back to
+        the shipped fsr.on_delta thresholds when no in-app calibration
+        has run, and to 1.0 (no normalisation) when even that cannot be
+        read (test doubles with no cfg)."""
+        pos = self._position_of(lane)
+        finger = pos if pos is not None else 0
+        profs = getattr(self.engine, "calibration_profiles", None)
+        if isinstance(profs, dict):
+            prof = profs.get(self._hand_of_lane(lane))
+            try:
+                g = float(prof.gap()[finger])
+                if g > 0:
+                    return g
+            except (AttributeError, TypeError, IndexError, ValueError):
+                pass
+        try:
+            on_delta = list(self.engine.cfg.get("fsr.on_delta") or [])
+            v = float(on_delta[finger]) / 0.40
+            if v > 0:
+                return v
+        except (AttributeError, TypeError, IndexError, ValueError):
+            pass
+        return 1.0
+
     # ---- plumbing shared with the other modes ------------------------------
     def queue_press(self, ev: PressEvent) -> None:
         self._presses.append(ev)
@@ -854,24 +889,48 @@ class SyllablesMode:
     def _score_stress(self, taps: list[Tap],
                       word: Word) -> tuple[bool | None, float | None]:
         """Level 4 accent criterion, relative to the child's own trial:
-        the stressed tap at least stress_ratio times the median peak,
-        every other tap under unstressed_max_ratio times it. Keyboard
-        mode has no force data, so the criterion is unscored (None)
-        rather than failed: the child cannot mark stress on a channel
-        that does not exist."""
-        peaks = [t.peak for t in taps]
-        if any(p is None for p in peaks) or len(peaks) < 2:
+        the stressed tap at least stress_ratio times the reference
+        level of the OTHER taps, every other tap under
+        unstressed_max_ratio times it. Keyboard mode has no force data,
+        so the criterion is unscored (None) rather than failed: the
+        child cannot mark stress on a channel that does not exist.
+
+        Two things this must not do:
+        1. Compare the stressed tap against a "median" that includes
+           itself. For a 2-syllable word that median is always the
+           louder of the two taps (sorted(peaks)[1] == max(peaks) when
+           n==2), so the stressed tap can never clear it no matter how
+           hard the child accents it. The reference is instead the
+           median of every OTHER tap, which for n==2 is simply the
+           other tap -- comparable, not self-referential.
+        2. Compare raw ADC counts across fingers. Different pads read
+           different counts for the same real force (the same problem
+           chords.py's cross-talk ratio already guards against via
+           _reference_counts), so every peak is normalised by its own
+           finger's calibrated light-press gap before the ratio is
+           taken.
+        """
+        if any(t.peak is None for t in taps) or len(taps) < 2:
             return None, None
         s_idx = word.stress
-        if s_idx >= len(peaks):
+        if s_idx >= len(taps):
             return None, None
-        med = sorted(peaks)[len(peaks) // 2]
-        if med <= 0:
+        norm = [t.peak / self._reference_counts(t.lane) for t in taps]
+        others = [v for i, v in enumerate(norm) if i != s_idx]
+        if not others:
             return None, None
-        ratio = peaks[s_idx] / med
+        others_sorted = sorted(others)
+        m = len(others_sorted)
+        if m % 2:
+            ref = others_sorted[m // 2]
+        else:
+            ref = (others_sorted[m // 2 - 1] + others_sorted[m // 2]) / 2.0
+        if ref <= 0:
+            return None, None
+        ratio = norm[s_idx] / ref
         ok = ratio >= self.stress_ratio and all(
-            (p / med) < self.unstressed_max_ratio
-            for i, p in enumerate(peaks) if i != s_idx)
+            (v / ref) < self.unstressed_max_ratio
+            for i, v in enumerate(norm) if i != s_idx)
         return ok, ratio
 
     def _pack_stimulus(self, word: Word, error: str,

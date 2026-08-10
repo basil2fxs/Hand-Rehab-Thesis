@@ -122,6 +122,26 @@ class LogTrialCaptureTests(unittest.TestCase):
         eng.log_trial(_trial(lane=0), _result("Good", 300.0), now=0.0)
         self.assertEqual(eng._rows[0]["loud_trial"], "FALSE")
 
+    def test_miss_with_no_incorrect_press_is_a_timeout(self) -> None:
+        eng = _bare_engine()
+        eng._ensure_metric_state()
+        eng.log_trial(_trial(lane=1), _result("Miss", None), now=0.0)
+        self.assertEqual(eng._rows[0]["error_type"], "timeout")
+
+    def test_miss_caused_by_wrong_finger_is_not_a_timeout(self) -> None:
+        # A wrong-then-correct trial that a mode downgrades to Miss
+        # finished promptly, on the wrong finger -- it did not time
+        # out. Collapsing both into error_type=="timeout" would make a
+        # timeout-rate analysis silently swallow every wrong-finger
+        # Miss too.
+        eng = _bare_engine()
+        eng._ensure_metric_state()
+        eng.log_trial(_trial(lane=1, incorrect=[(2, 0.05)]),
+                      _result("Miss", None), now=0.0)
+        row = eng._rows[0]
+        self.assertEqual(row["error_type"], "wrong_finger")
+        self.assertEqual(row["had_incorrect_press"], "TRUE")
+
     def test_force_window_cells_empty_without_samples(self) -> None:
         # Keyboard mode: no FSR data in the window -> both cells empty
         # (a zero would be a lie).

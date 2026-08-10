@@ -545,7 +545,12 @@ class BuzzHuntMode:
         self._gap_records: list[dict] = []
         self._catch_n = 0
         self._catch_fa = 0
-        self._early_presses = 0
+        # Keyed by self.stage at the moment the early press landed
+        # (loc/distractor/span/gap), not a single block-wide count: an
+        # early press during a DISTRACTOR trial was previously folded
+        # into block_stats()['loc']['early_presses'] even when zero loc
+        # trials had run yet, misattributing it to the wrong stage.
+        self._early_presses: dict[str, int] = {}
         self._span_max_correct = 0
 
     # ---- plumbing shared with the other modes ------------------------------
@@ -791,7 +796,8 @@ class BuzzHuntMode:
         # contaminate the false-alarm bookkeeping.
         if self._presses:
             self._presses.clear()
-            self._early_presses += 1
+            self._early_presses[self.stage] = (
+                self._early_presses.get(self.stage, 0) + 1)
             self._quiet_since = None
             raw = getattr(self.engine, "raw_logger", None)
             if raw:
@@ -859,9 +865,40 @@ class BuzzHuntMode:
         # Presses during playback (before the response opens) restart
         # the wait: for a sequence they mean the replay started early,
         # for a gap trial they collide with the stimulus itself.
+        #
+        # A distractor trial is the one exception: the window before
+        # the response opens IS the decoy pulse (respond opens at
+        # target onset, which sits distractor_lead_ms after play
+        # starts). A press in that window is the patient falling for
+        # the decoy -- the natural, most likely failure mode this
+        # stage exists to measure -- not a false start on nothing. A
+        # silent same-trial retry would erase that failure entirely:
+        # it never reaches the distractor tallies and a clean retry
+        # afterward reports as a lured-free 100% hit.
+        if (self._presses and now < (self._respond_t0 or now)
+                and self.waveform == "buzz"
+                and "distractor_lane" in self.params):
+            ev = self._presses.popleft()
+            self._presses.clear()
+            self._resp_presses.append((ev.lane, ev.t_perf))
+            self.engine.stop_all_motors()
+            self._close_stim_marker(now)
+            raw = getattr(self.engine, "raw_logger", None)
+            if raw:
+                raw.queue_event(
+                    "buzz_hunt_early", lane=max(self.lane, 0),
+                    detail=(f"trial_id={self.trial_counter};"
+                            f"sub=play;lured_early=True"),
+                    hand=self.engine.hand_mode)
+            self.sub = "respond"
+            self.engine.log_segment_start("respond", self.trial_counter,
+                                          max(self.lane, 0), now)
+            self._close_buzz(now, responded=True)
+            return
         if self._presses and now < (self._respond_t0 or now):
             self._presses.clear()
-            self._early_presses += 1
+            self._early_presses[self.stage] = (
+                self._early_presses.get(self.stage, 0) + 1)
             self.engine.stop_all_motors()
             self._close_stim_marker(now)
             raw = getattr(self.engine, "raw_logger", None)
@@ -1247,7 +1284,7 @@ class BuzzHuntMode:
                     "fa_rate": (round(self._catch_fa / self._catch_n, 3)
                                 if self._catch_n else None),
                 },
-                "early_presses": self._early_presses,
+                "early_presses": self._early_presses.get("loc", 0),
             },
             "confusion": {k: dict(v) for k, v in self._confusion.items()},
             "threshold": thresholds,
@@ -1255,6 +1292,7 @@ class BuzzHuntMode:
                 "trials": len(self._dis_records),
                 "accuracy": _acc(self._dis_records),
                 "lured": sum(1 for r in self._dis_records if r["lured"]),
+                "early_presses": self._early_presses.get("distractor", 0),
             },
             "span": {
                 "trials": len(self._span_records),
@@ -1263,6 +1301,7 @@ class BuzzHuntMode:
                 "max_correct": self._span_max_correct,
                 "hebb": {"n": len(hebb), "accuracy": _acc(hebb)},
                 "novel": {"n": len(novel), "accuracy": _acc(novel)},
+                "early_presses": self._early_presses.get("span", 0),
             },
             "gap": {
                 "trials": len(self._gap_records),
@@ -1271,6 +1310,7 @@ class BuzzHuntMode:
                 "no_response": sum(1 for r in self._gap_records
                                    if not r["responded"]),
                 "threshold": gap_thresholds,
+                "early_presses": self._early_presses.get("gap", 0),
             },
             "demo": self.demo,
             "end_reason": self.end_reason,

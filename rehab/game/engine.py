@@ -428,11 +428,25 @@ class GameEngine:
                             trial_id: int | None = None) -> None:
         """Start a fresh miss-force window at the go stimulus. Clears the
         previous trial's peaks and arms _feed_detectors to accumulate for
-        _force_window_ms milliseconds. `trial_id` tags the window so the
-        rhythm path (where notes can overlap in flight) only banks a miss
-        against the window that actually belongs to that note."""
+        _force_window_ms milliseconds, or until the current mode's own
+        timeout (plus any post-timeout hold, e.g. chords' hold_s) if that
+        is longer. Without this, a mode whose timeout allows a slower-
+        but-still-valid press (chords.timeout_s = 3.0s against the
+        1.0s default window) would close the window before a legitimate
+        late press or its concurrent enslaving leak ever registered,
+        making a partial-capture trial read as textbook-clean.
+        `trial_id` tags the window so the rhythm path (where notes can
+        overlap in flight) only banks a miss against the window that
+        actually belongs to that note."""
+        window_ms = self._force_window_ms
+        mode_timeout_s = getattr(getattr(self, "mode", None),
+                                  "current_timeout_s", None)
+        if mode_timeout_s is not None:
+            hold_s = float(getattr(self.mode, "hold_s", 0.0) or 0.0)
+            window_ms = max(window_ms,
+                             (float(mode_timeout_s) + hold_s) * 1000.0)
         self._force_window_start = t_perf
-        self._force_window_end = t_perf + self._force_window_ms / 1000.0
+        self._force_window_end = t_perf + window_ms / 1000.0
         self._force_window_peak = {}
         self._force_window_saw_samples = False
         self._force_window_trial_id = trial_id
@@ -2217,6 +2231,8 @@ class GameEngine:
             bpm_step=float(self.cfg.get("adaptive.bpm_step", 10.0)),
             weakness_bias=float(self.cfg.get("adaptive.weakness_bias", 2.5)),
             min_trials=int(self.cfg.get("adaptive.min_trials", 2)),
+            timeout_factor=float(
+                self.cfg.get("adaptive.timeout_factor", 0.90)),
         )
         # Test Mode overrides total_trials to the demo cap. block_size
         # is left alone (4 trials per adapter re-tune is fine even in a
@@ -4299,7 +4315,16 @@ class GameEngine:
                 "early_late": outcome.label,
                 "points": outcome.points,
                 "feedback": outcome.label,
-                "error_type": "" if outcome.label != "Miss" else "timeout",
+                # A Miss caused by an incorrect press (the mode's
+                # wrong-press-downgrades-to-Miss rule) is not a timeout:
+                # the trial finished promptly, on the wrong finger. Only
+                # a Miss with no incorrect press at all is a genuine
+                # timeout. Without this split, filtering trials.csv on
+                # error_type=="timeout" silently pulls in every wrong-
+                # finger-caused Miss too.
+                "error_type": ("" if outcome.label != "Miss"
+                               else ("wrong_finger" if had_incorrect
+                                     else "timeout")),
                 "keys_pressed": keys,
                 # Comma-joined 1-indexed lanes, matching keys_pressed,
                 # so a chord row parses the same way a press list does.

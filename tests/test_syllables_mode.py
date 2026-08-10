@@ -372,6 +372,29 @@ class StressLevelTests(unittest.TestCase):
         self.assertIn("err=wrong_stress", _logged_stimulus(engine))
         self.assertEqual(_logged_outcome(engine).label, "Good")
 
+    def test_two_syllable_word_can_pass_the_stress_criterion(self) -> None:
+        """galah is 2 syllables, stress on the second. With the old
+        "median of all taps" formula the reference was always the
+        louder tap itself (sorted(peaks)[1] == max for n==2), so the
+        stressed tap could never clear it no matter how hard it was
+        pressed. A 3x-louder correctly-stressed tap must pass now that
+        the reference excludes the tap being judged."""
+        engine, mode = _build_mode(level=4)
+        mode._tick(0.0)
+        from rehab.game.modes.syllables_words import WORDS
+        mode.word = next(w for w in WORDS if w.word == "galah")
+        self.assertEqual(mode.word.stress, 1)
+        by_lane = {0: 100.0, 1: 300.0}
+        engine._peak_force_for_lane = lambda lane: by_lane.get(lane)
+        _run_to_respond(mode, 0.1)
+        beats = list(mode._beat_times)
+        for i, b in enumerate(beats):
+            mode.queue_press(_press(i, b))
+            mode._tick(b)
+        mode._tick(beats[-1] + mode.SETTLE_S + 0.05)
+        self.assertIn("err=ok", _logged_stimulus(engine))
+        self.assertTrue(mode._last_result["stress_correct"])
+
     def test_no_force_data_leaves_stress_unscored_not_failed(self) -> None:
         engine, mode = _build_mode(level=4)
         mode._tick(0.0)
@@ -385,6 +408,43 @@ class StressLevelTests(unittest.TestCase):
         mode._tick(beats[-1] + mode.SETTLE_S + 0.05)
         self.assertIn("err=ok", _logged_stimulus(engine))
         self.assertIsNone(mode._last_result["stress_correct"])
+
+
+class StressCalibrationTests(unittest.TestCase):
+    """The stress ratio must compare forces on a common per-finger
+    scale, the same guard chords.py already applies to its cross-talk
+    ratio, or a child pressing every syllable equally hard can pass or
+    fail purely from which physical finger carries the stress."""
+
+    def test_equal_true_force_but_unequal_pad_gain_is_corrected(self) -> None:
+        engine, mode = _build_mode(level=4)
+        mode._tick(0.0)
+        from rehab.game.modes.syllables_words import WORDS
+        mode.word = next(w for w in WORDS if w.word == "kangaroo")
+        # Same real press on every syllable, but lane 2 (the stressed
+        # one) sits on a pad that reads 3x as many counts per newton as
+        # lanes 0/1. Raw counts would read this as a huge accent; once
+        # normalised by each lane's calibration gap the true (flat)
+        # force is what the criterion sees.
+        by_lane = {0: 10.0, 1: 10.0, 2: 30.0}
+        engine._peak_force_for_lane = lambda lane: by_lane.get(lane)
+        gaps = {0: 1.0, 1: 1.0, 2: 3.0}
+
+        class _Prof:
+            def gap(self):
+                return gaps
+
+        engine.calibration_profiles = {"right": _Prof()}
+        _run_to_respond(mode, 0.1)
+        beats = list(mode._beat_times)
+        for i, b in enumerate(beats):
+            mode.queue_press(_press(i, b))
+            mode._tick(b)
+        mode._tick(beats[-1] + mode.SETTLE_S + 0.05)
+        # Normalised: 10/1, 10/1, 30/3 -> 10, 10, 10 -- perfectly flat,
+        # no real accent, so the criterion must fail.
+        self.assertIn("err=wrong_stress", _logged_stimulus(engine))
+        self.assertFalse(mode._last_result["stress_correct"])
 
 
 class SubsetLevelTests(unittest.TestCase):

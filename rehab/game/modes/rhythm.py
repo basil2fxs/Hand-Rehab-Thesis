@@ -84,6 +84,21 @@ class RhythmMode:
         # to audio.song_time().
         return time.perf_counter() - self._t_start - self._countdown_s
 
+    def _song_time_for(self, t_perf: float) -> float:
+        """Convert a press's own detection time (PressEvent.t_perf) into
+        song time, using the same mapping `song_time` uses. Every other
+        cadence mode scores RT from the press's own timestamp
+        (classic.py: ev.t_perf - stim_t_perf); rhythm must too, or a
+        press queued at t_perf but not drained by update() until later
+        (whatever the frame gap happens to be) gets scored against
+        self.song_time read at DRAIN time, fabricating lateness that is
+        pure processing delay, never the patient's. While paused the
+        song clock is frozen, so a press event (which should not occur
+        mid-pause) falls back to the frozen snapshot."""
+        if self._frozen_song_t is not None:
+            return self._frozen_song_t
+        return t_perf - self._t_start - self._countdown_s
+
     @property
     def countdown_remaining_s(self) -> float:
         if self._countdown_done:
@@ -189,7 +204,8 @@ class RhythmMode:
                 "rhythm.audio_offset_ms", 40)) / 1000.0
         except (TypeError, ValueError):
             offset_s = 0.0
-        now = self.song_time - offset_s
+        now = self._song_time_for(ev.t_perf) - offset_s
+        miss_radius_s = self.windows.miss_ms / 1000.0
         best: ScheduledNote | None = None
         best_d = float("inf")
         for s in self.scheduler.scheduled:
@@ -197,11 +213,21 @@ class RhythmMode:
                 continue
             if s.note.lane != ev.lane:
                 continue
-            d = abs(s.note.t - now)
-            if d > self.windows.miss_ms / 1000.0 * 2:
+            # A note the patient has not been cued for yet cannot be
+            # what they just pressed. Without this, a false-start or
+            # wrong-finger press made well before a lane's note is due
+            # can consume that future note (the backward-late-press
+            # radius below is intentional and stays as-is), leaving the
+            # patient's genuine later, on-time press with nothing to
+            # match and logged as a penalised spurious press instead.
+            if not getattr(s, "fired", True):
                 continue
-            if d < best_d:
-                best_d = d
+            d = now - s.note.t
+            if d < -self.windows.good_ms / 1000.0 or d > miss_radius_s * 2:
+                continue
+            ad = abs(d)
+            if ad < best_d:
+                best_d = ad
                 best = s
         if best is None:
             self.engine.log_rhythm_unmatched(ev.lane, now)

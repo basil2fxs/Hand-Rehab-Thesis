@@ -225,14 +225,20 @@ class RhythmModePressMatchingTests(unittest.TestCase):
         from rehab.hardware.fsr_detector import PressEvent
         import time as _t
         mode, engine = self._make_mode()
+        # A press can only match a note the patient has already been
+        # cued for (fired), so mark both same-lane notes fired up
+        # front, as update()'s notes_due() would have by these times.
+        for s in mode.scheduler.scheduled:
+            if s.note.lane == 0:
+                s.fired = True
         # Press 1 near note at t=1.0
         mode._t_start = _t.perf_counter() - 1.0
-        mode._score_press(PressEvent(lane=0, t_perf=0.0, value=0,
-                                       baseline=0.0))
+        mode._score_press(PressEvent(lane=0, t_perf=_t.perf_counter(),
+                                       value=0, baseline=0.0))
         # Press 2 a beat later, near note at t=2.0
         mode._t_start = _t.perf_counter() - 2.0
-        mode._score_press(PressEvent(lane=0, t_perf=0.0, value=0,
-                                       baseline=0.0))
+        mode._score_press(PressEvent(lane=0, t_perf=_t.perf_counter(),
+                                       value=0, baseline=0.0))
         # Two hits logged, no unmatched.
         self.assertEqual(engine.log_rhythm_hit.call_count, 2)
         engine.log_rhythm_unmatched.assert_not_called()
@@ -240,6 +246,64 @@ class RhythmModePressMatchingTests(unittest.TestCase):
         # marked with hit_at.
         hits = [s for s in mode.scheduler.scheduled if s.hit_at is not None]
         self.assertEqual(len(hits), 2)
+
+    def test_press_is_scored_against_its_own_timestamp_not_drain_time(self) -> None:
+        """A press queued at the true beat (song_time=1.0) but not
+        drained by _score_press until later must still score as 0ms
+        offset -- the delay between queueing and draining is processing
+        lag, not the patient being late. Uses a fake clock (the chords-
+        mode pattern) to advance wall time between the press's own
+        timestamp and the _score_press call without a real sleep."""
+        import rehab.game.modes.rhythm as rhythm_mod
+        from rehab.hardware.fsr_detector import PressEvent
+
+        class _Clock:
+            def __init__(self, t0: float) -> None:
+                self.t = t0
+
+            def perf_counter(self) -> float:
+                return self.t
+
+        real_time = rhythm_mod.time
+        clock = _Clock(1000.0)
+        rhythm_mod.time = clock
+        try:
+            mode, engine = self._make_mode()
+            for s in mode.scheduler.scheduled:
+                if s.note.lane == 0:
+                    s.fired = True
+            mode._t_start = clock.t - 1.0   # song_time reads ~1.0 now
+            press_t_perf = clock.t          # captured at the true beat
+            # Wall time (and hence self.song_time) moves on 150ms before
+            # _score_press actually drains the queued press.
+            clock.t += 0.150
+            mode._score_press(PressEvent(lane=0, t_perf=press_t_perf,
+                                           value=0, baseline=0.0))
+        finally:
+            rhythm_mod.time = real_time
+        engine.log_rhythm_hit.assert_called_once()
+        offset_ms = engine.log_rhythm_hit.call_args[0][1]
+        self.assertLess(abs(offset_ms), 50.0,
+                         f"drain-time lag leaked into offset_ms: {offset_ms}")
+
+    def test_press_before_a_note_has_fired_does_not_consume_it(self) -> None:
+        """A false-start or wrong-finger press made before a lane's note
+        has actually been cued (fired) must not silently consume that
+        future note -- the patient's later, genuinely on-time press
+        needs something to match."""
+        import time as _t
+        from rehab.hardware.fsr_detector import PressEvent
+        mode, engine = self._make_mode()
+        # Note at t=2.0 on lane 0 has NOT fired yet.
+        mode._t_start = _t.perf_counter() - 1.6   # song_time ~1.6, 400ms early
+        mode._score_press(PressEvent(lane=0, t_perf=_t.perf_counter(),
+                                       value=0, baseline=0.0))
+        engine.log_rhythm_hit.assert_not_called()
+        engine.log_rhythm_unmatched.assert_called_once()
+        # The note is still open for the genuine on-time press.
+        note_2s = next(s for s in mode.scheduler.scheduled
+                       if s.note.t == 2.0)
+        self.assertIsNone(note_2s.hit_at)
 
 
 class RhythmPreSongLeadTests(unittest.TestCase):

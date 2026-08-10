@@ -633,12 +633,16 @@ class ReactionMode:
         self.engine.finish_block()
 
     def _lapse_like_rate(self) -> float:
-        """Lapses plus outright misses over scorable trials. Misses are
-        counted with lapses because a timeout is the extreme lapse, and
-        a window that only ever times out should widen, not shrink."""
+        """Lapses, misses and wrong-finger presses over scorable trials.
+        Misses are counted with lapses because a timeout is the extreme
+        lapse, and a window that only ever times out should widen, not
+        shrink. Wrong-finger presses in choice sub-mode are counted too:
+        a block of fast-but-wrong presses is not a clean block, and must
+        not be treated as one when deciding whether to level up."""
         if self.completed <= 0:
             return 0.0
-        return (self.n_lapse + self.n_miss) / self.completed
+        return ((self.n_lapse + self.n_miss + self.n_wrong_choice)
+                / self.completed)
 
     def _update_level_progression(self) -> None:
         """Two clean blocks step the response window down a level; one

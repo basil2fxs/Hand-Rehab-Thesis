@@ -331,6 +331,21 @@ class LevelProgressionTests(unittest.TestCase):
         self.assertEqual(engine._reaction_level, 1)
         self.assertEqual(engine._reaction_clean_blocks, 0)
 
+    def test_all_wrong_finger_choice_block_does_not_level_up(self) -> None:
+        """Every press fast but on the wrong finger: n_lapse and n_miss
+        are both zero, so a rate that ignores n_wrong_choice would read
+        this as a clean block. It must not advance the level."""
+        engine, mode = _build_mode()
+        mode.completed = 25
+        mode.n_valid = 0
+        mode.n_lapse = 0
+        mode.n_miss = 0
+        mode.n_wrong_choice = 25
+        mode._update_level_progression()
+        mode._update_level_progression()
+        self.assertEqual(engine._reaction_level, 1)
+        self.assertEqual(engine._reaction_clean_blocks, 0)
+
 
 class BlockStatsTests(unittest.TestCase):
     """The block summary is what a researcher reads without opening

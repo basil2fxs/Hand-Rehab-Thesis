@@ -128,6 +128,33 @@ class BothPressesNeededTests(unittest.TestCase):
         outcome = spy.log_trial.call_args[0][1]
         self.assertEqual(outcome.label, "Miss")
 
+    def test_perfect_press_scores_full_quality_not_zero(self) -> None:
+        """classify() returns label='Perfect' for the fastest presses,
+        checked before 'Great'. Mirror's _QUALITY (a copy of
+        AdaptiveMode's) must score it as full credit, not fall through
+        the .get(..., 0.0) default -- that default treated the best
+        possible bimanual press exactly like a Miss."""
+        spy = _Spy()
+        mode = _build(spy, pattern=[0])
+        records: list = []
+        original = mode.adapter.record
+
+        def _spy_record(lane, was_hit, rt_ms, quality=None):
+            records.append((lane, was_hit, rt_ms, quality))
+            return original(lane, was_hit, rt_ms, quality=quality)
+
+        mode.adapter.record = _spy_record
+        mode._fire(now=0.0)
+        # Well under score_cfg's perfect_ms (default 100ms) for both
+        # sides.
+        mode._handle_press(_press(0, 0.03), now=0.03)
+        mode._handle_press(_press(4, 0.04), now=0.04)
+        outcome = spy.log_trial.call_args[0][1]
+        self.assertEqual(outcome.label, "Perfect")
+        self.assertEqual(len(records), 1)
+        _, _, _, quality = records[0]
+        self.assertGreaterEqual(quality, mode._QUALITY["Great"])
+
 
 class OnStimMultiWiringTests(unittest.TestCase):
     """_fire calls engine.on_stim_multi with both target lanes."""

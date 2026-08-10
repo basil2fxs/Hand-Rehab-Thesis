@@ -130,6 +130,31 @@ class AdaptiveTestModeTests(unittest.TestCase):
         finally:
             pygame.quit()
 
+    def test_adaptive_timeout_factor_is_read_from_config(self) -> None:
+        """adaptive.timeout_factor is a documented tunable in
+        config/default.yaml; begin_adaptive_block() must actually pass
+        it into AdaptiveConfig instead of silently always using the
+        dataclass's hardcoded 0.90 default."""
+        os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+        os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+        import pygame
+        pygame.init()
+        try:
+            from rehab.config import Config
+            from rehab.game.engine import GameEngine
+            from rehab.hardware.keyboard_source import KeyboardOnlySource
+            cfg = Config.load()
+            cfg.data["ui"]["resolution"] = [1280, 800]
+            cfg.data.setdefault("adaptive", {})["timeout_factor"] = 0.5
+            cfg.data["game"]["total_trials"] = 40
+            eng = GameEngine(cfg, KeyboardOnlySource())
+            eng._screens = {"gameplay": MagicMock()}
+            eng._begin_block = lambda *a, **kw: None
+            eng.begin_adaptive_block()
+            self.assertEqual(eng.mode.adapter.cfg.timeout_factor, 0.5)
+        finally:
+            pygame.quit()
+
     def test_adaptive_total_trials_normal_when_off(self) -> None:
         os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
         os.environ.setdefault("SDL_AUDIODRIVER", "dummy")

@@ -972,11 +972,33 @@ class LighthouseMode:
             label, base = "Good", self.score_cfg.good_points
         else:
             label, base = "Miss", self.score_cfg.miss_points
-        steady_darks = sum(1 for d in drifts if abs(d) <= self.tol_pct)
-        outcome = TrialResult(
-            label=label,
-            points=base + steady_darks * self.dark_bonus_points,
-            rt_ms=None)
+        # dark_bonus_points rewards staying ACCURATE in the dark, not
+        # merely staying wherever the finger happened to land. A window
+        # is "steady" only if the finger was already within tolerance
+        # of the target when the room went dark (entry) AND did not
+        # drift outside tolerance from there (exit close to entry).
+        # Scoring drift alone (exit - entry, with no reference to
+        # target) let a hold that ignited correctly then drifted to and
+        # sat steady at target+8% -- completely off-target, zero time
+        # in band -- collect the same bonus as genuinely accurate
+        # steadiness, which could out-score a real "Good" hold.
+        steady_darks = sum(
+            1 for n in self._dark_entry_pct
+            if n in self._dark_exit_pct
+            and abs(self._dark_entry_pct[n] - self.target_pct) <= self.tol_pct
+            and abs(self._dark_exit_pct[n] - self._dark_entry_pct[n])
+                <= self.tol_pct
+        )
+        bonus = steady_darks * self.dark_bonus_points
+        points = base + bonus
+        # However the bonus is earned, it must never let a lower-tier
+        # outcome out-score the tier above it: a Miss must stay below
+        # every Good, a Good below every Great.
+        if label == "Miss":
+            points = min(points, self.score_cfg.good_points - 1)
+        elif label == "Good":
+            points = min(points, self.score_cfg.great_points - 1)
+        outcome = TrialResult(label=label, points=points, rt_ms=None)
 
         rec = HoldRecord(
             hand=self.hand, finger=self.finger, lane=self.lane,
