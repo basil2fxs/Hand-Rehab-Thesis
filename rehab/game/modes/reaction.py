@@ -283,11 +283,25 @@ class ReactionMode:
             for key_name, lane in km.items():
                 kc = resolve_key(key_name)
                 if kc and e.key == kc:
+                    t_perf = time.perf_counter()
                     self.queue_press(PressEvent(
-                        lane=lane, t_perf=time.perf_counter(),
+                        lane=lane, t_perf=t_perf,
                         value=0, baseline=0.0,
                         hand=self.engine.hand_mode,
                     ))
+                    # Keyboard presses bypass engine._on_press (the FSR
+                    # detector path), which is the only place raw.csv
+                    # normally gets a "press" event (audit finding #112,
+                    # generalising the mirror-mode fix for #75 to every
+                    # mode): without this a keyboard-injected press in a
+                    # mixed session (Arduino attached, keyboard kept
+                    # live as backup) was indistinguishable from a real
+                    # FSR press. detail="keyboard" marks the source.
+                    raw_logger = getattr(self.engine, "raw_logger", None)
+                    if raw_logger:
+                        raw_logger.queue_event(
+                            "press", lane=lane, t_perf=t_perf,
+                            hand=self.engine.hand_mode, detail="keyboard")
 
     # ---- main tick ---------------------------------------------------------
     def update(self, dt: float) -> None:

@@ -103,6 +103,50 @@ class RhythmModePauseTests(unittest.TestCase):
         self.assertIsNone(mode._frozen_song_t)
 
 
+class RhythmResumeAudioGateTests(unittest.TestCase):
+    """Audit finding #63 (LOW): pausing before the audio has started
+    (during the countdown / pre-song lead) then resuming used to fall
+    back to `bm.song` with resume_at=0.0 in engine._resume_now, playing
+    the track from 0 -- then RhythmMode.update() started it AGAIN from
+    0 once song_time crossed pre_song_lead_s, so the patient heard the
+    track begin, cut, and restart. _resume_now must skip its own
+    play_song call when the mode hasn't started audio itself yet."""
+
+    def _make_engine(self, mode_audio_started: bool):
+        from rehab.game.engine import GameEngine
+        eng = GameEngine.__new__(GameEngine)
+        eng.paused = True
+        eng._pause_started_at = 0.0
+        eng.raw_logger = None
+        eng._block_paused_s = 0.0
+        eng.hand_mode = "right"
+        eng.audio = MagicMock()
+        eng.mode = MagicMock()
+        eng.mode._audio_started = mode_audio_started
+        eng.mode.beatmap = MagicMock(song="/tmp/song.mp3", bpm=100.0)
+        eng.screen_obj = "rhythm-screen"
+        eng._screens = {"rhythm": "rhythm-screen"}
+        eng._paused_song_path = None
+        eng._paused_song_time = 0.0
+        return eng
+
+    def test_resume_before_audio_started_does_not_replay_from_zero(
+            self) -> None:
+        eng = self._make_engine(mode_audio_started=False)
+        eng._resume_now()
+        eng.audio.play_song.assert_not_called()
+        eng.audio.start_metronome.assert_not_called()
+
+    def test_resume_after_audio_started_still_reseeks_the_song(
+            self) -> None:
+        eng = self._make_engine(mode_audio_started=True)
+        eng._paused_song_time = 12.3
+        eng.audio.play_song.return_value = True
+        eng._resume_now()
+        eng.audio.play_song.assert_called_once_with(
+            "/tmp/song.mp3", start_s=12.3)
+
+
 class EncouragementStreakTests(unittest.TestCase):
     """Engine fires the right encouragement at each streak threshold and
     won't re-fire the same one within a block."""

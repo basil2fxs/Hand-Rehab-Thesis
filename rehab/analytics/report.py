@@ -47,10 +47,21 @@ FINGERS = ("Index", "Middle", "Ring", "Pinky")
 FINGER_COLOURS = ("#ea580c", "#0ea5e9", "#0f172a", "#ca8a04")
 
 
-def lane_label(lane: int, hand: str, n_per_hand: int = 4) -> str:
+def lane_label(lane: int, hand: str, n_per_hand: int = 4,
+               mode: str | None = None) -> str:
     """Human name for a global lane index. Unilateral: 0..3 on the
-    session's hand. Bilateral: 0..3 right hand, 4..7 left hand."""
+    session's hand. Bilateral: 0..3 right hand, 4..7 left hand.
+
+    Mirror is a special case: it always logs the right-hand copy of
+    the finger (0..3) even though the trial fired both hands' copies
+    together and scored the LATER of the two presses, so labelling it
+    "Right <finger>" (with no "Left" bars ever appearing) reads as a
+    hand asymmetry that is really just a lane-keying convention (audit
+    finding #69). mode="mirror" labels the pair instead.
+    """
     finger = FINGERS[lane % n_per_hand]
+    if mode == "mirror":
+        return f"{finger} (both hands)"
     if hand == "both":
         side = "Right" if lane < n_per_hand else "Left"
         return f"{side} {finger}"
@@ -120,6 +131,7 @@ def _chart_rt_per_finger(rows: list[dict], meta: dict,
     """Bar chart: mean reaction time (or beat offset) per finger, with
     the standard deviation as an error bar when a finger has 2+ hits."""
     hand = str(meta.get("hand", "right"))
+    block_mode = str(meta.get("block_summary", {}).get("block", "") or "")
     by_lane: dict[int, list[float]] = {}
     for r in rows:
         rt = _f(r.get("time_difference_ms"))
@@ -147,7 +159,7 @@ def _chart_rt_per_finger(rows: list[dict], meta: dict,
     ax.bar(xs, means, yerr=stds, capsize=4, color=bar_colours, width=0.6,
            error_kw={"ecolor": GREY, "elinewidth": 1.2})
     ax.set_xticks(list(xs))
-    ax.set_xticklabels([lane_label(l, hand) for l in lanes], fontsize=9)
+    ax.set_xticklabels([lane_label(l, hand, mode=block_mode) for l in lanes], fontsize=9)
     ax.set_ylabel("Beat offset (ms)" if rhythm
                   else "Reaction time (ms)", fontsize=9)
     ax.set_title("Mean timing per finger (error bars: SD)",
@@ -159,6 +171,7 @@ def _chart_errors_per_finger(rows: list[dict], meta: dict,
                               out: Path) -> Path | None:
     """Grouped bars: timeouts (no press) and wrong presses per finger."""
     hand = str(meta.get("hand", "right"))
+    block_mode = str(meta.get("block_summary", {}).get("block", "") or "")
     misses: dict[int, int] = {}
     wrong: dict[int, int] = {}
     for r in rows:
@@ -183,7 +196,7 @@ def _chart_errors_per_finger(rows: list[dict], meta: dict,
            [wrong.get(l, 0) for l in lanes],
            width=w, color=ORANGE, label="Trials with a wrong press")
     ax.set_xticks(xs)
-    ax.set_xticklabels([lane_label(l, hand) for l in lanes], fontsize=9)
+    ax.set_xticklabels([lane_label(l, hand, mode=block_mode) for l in lanes], fontsize=9)
     ax.set_ylabel("Count", fontsize=9)
     ax.yaxis.get_major_locator().set_params(integer=True)
     ax.set_title("Errors per finger", fontsize=11, loc="left")
@@ -320,7 +333,52 @@ def _kv_table(pairs: list[tuple[str, object]]) -> str:
     return f"<table><tbody>{rows}</tbody></table>"
 
 
+def _per_finger_table_force_pilot(meta: dict) -> str | None:
+    """Force Pilot's own per-finger table, built from block_summary.
+    force_pilot.per_lane (mae_pct / time_in_corridor / press+release
+    MAE from block_stats()) rather than the generic RT/timeout summary,
+    which the mode never populates (no RTs, no wrong-finger concept in
+    a continuous tracking run) and which was showing 'Hit rate 0.0,
+    Timeout rate 1.0' for a Miss-containing finger while omitting any
+    finger whose runs were all clean. Returns None when the mode's own
+    stats are not on this metadata (old saves), so the caller falls
+    back to the generic table."""
+    summary = meta.get("block_summary", {}) or {}
+    fp = summary.get("force_pilot", {}) or {}
+    per_lane = fp.get("per_lane", {}) or {}
+    if not per_lane:
+        return None
+    hand = str(meta.get("hand", "right"))
+    head = ("<tr><th>Finger</th><th>Runs</th><th>Mean MAE (% of max)</th>"
+            "<th>Time in corridor</th><th>Press MAE</th>"
+            "<th>Release MAE</th></tr>")
+    body = []
+    for lane_str in sorted(per_lane, key=lambda s: int(s)):
+        d = per_lane[lane_str]
+
+        def cell(key, fmt="{}"):
+            v = d.get(key)
+            return "" if v is None else fmt.format(v)
+
+        body.append(
+            "<tr>"
+            f"<td>{html.escape(lane_label(int(lane_str), hand, mode='force_pilot'))}</td>"
+            f"<td>{cell('runs')}</td>"
+            f"<td>{cell('mae_pct')}</td>"
+            f"<td>{cell('time_in_corridor')}</td>"
+            f"<td>{cell('press_mae_pct')}</td>"
+            f"<td>{cell('release_mae_pct')}</td>"
+            "</tr>")
+    return f"<table><thead>{head}</thead><tbody>{''.join(body)}</tbody></table>"
+
+
 def _per_finger_table(meta: dict) -> str:
+    block_mode = str((meta.get("block_summary", {}) or {}).get(
+        "block", "") or "")
+    if block_mode == "force_pilot":
+        fp_table = _per_finger_table_force_pilot(meta)
+        if fp_table is not None:
+            return fp_table
     summary = meta.get("block_summary", {}) or {}
     per_lane = summary.get("per_lane", {}) or {}
     if not per_lane:
@@ -339,7 +397,7 @@ def _per_finger_table(meta: dict) -> str:
 
         body.append(
             "<tr>"
-            f"<td>{html.escape(lane_label(int(lane_str), hand))}</td>"
+            f"<td>{html.escape(lane_label(int(lane_str), hand, mode=block_mode))}</td>"
             f"<td>{cell('n_trials')}</td>"
             f"<td>{cell('hit_rate')}</td>"
             f"<td>{cell('rt_mean_ms')}</td>"

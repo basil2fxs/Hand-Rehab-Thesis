@@ -139,6 +139,11 @@ class GameEngine:
         # calibration constant is set, raw ADC counts otherwise).
         self._per_lane_peak_force: dict[int, list[float]] = {}
         self._per_lane_impulse: dict[int, list[float]] = {}
+        # Mirror's clean-hit |right - left| press gaps, reset per block
+        # (see log_trial and the mirror block_summary section).
+        self._mirror_gaps_ms: list[float] = []
+        self._mirror_right_rts_ms: list[float] = []
+        self._mirror_left_rts_ms: list[float] = []
         # Per-block mean RT + mean peak force, appended at finish_block,
         # used by the fatigue-slope computation in
         # metrics.fatigue_slope. Survives across blocks within a single
@@ -240,6 +245,11 @@ class GameEngine:
         self._loud_trials_by_id: dict[int, bool] = {}
         self._block_loud_trials = 0
         self._last_stim_timeout_ms: float | None = None
+        # BPM / recovery state as of the trial's own stim, snapshotted
+        # in on_stim_multi -- see _trial_context for why a live read
+        # would log the wrong trial's pace.
+        self._last_stim_bpm: float | None = None
+        self._last_stim_in_recovery: bool | None = None
         self._force_window_saw_samples = False
         self._force_window_trial_id: int | None = None
         # Whether the buzzer cue for the current trial reached the
@@ -514,6 +524,10 @@ class GameEngine:
             self._block_loud_trials = 0
         if not hasattr(self, "_last_stim_timeout_ms"):
             self._last_stim_timeout_ms = None
+        if not hasattr(self, "_last_stim_bpm"):
+            self._last_stim_bpm = None
+        if not hasattr(self, "_last_stim_in_recovery"):
+            self._last_stim_in_recovery = None
         if not hasattr(self, "_force_window_saw_samples"):
             self._force_window_saw_samples = False
         if not hasattr(self, "_force_window_trial_id"):
@@ -800,8 +814,17 @@ class GameEngine:
         # Rhythm mode: try to resume the song roughly where we paused so the
         # visuals stay in sync. play_song(start_s=...) uses pygame's seek
         # which works for OGG/WAV; for MP3 it usually still works but may
-        # snap to the nearest frame.
-        if self.audio and self.screen_obj is self._screens.get("rhythm"):
+        # snap to the nearest frame. Gated on the mode having actually
+        # started audio before the pause: pausing during the countdown /
+        # pre-song lead (before RhythmMode.update ever calls play_song)
+        # used to fall back to `bm.song` with resume_at=0.0 here, playing
+        # the track from 0 -- then the mode's own update() started it
+        # AGAIN from 0 once song_time crossed pre_song_lead_s, so the
+        # patient heard the track begin, cut, and restart. Skip resuming
+        # audio here when the mode hasn't started it yet; the mode's own
+        # update() will start it at the right moment as normal.
+        if (self.audio and self.screen_obj is self._screens.get("rhythm")
+                and getattr(self.mode, "_audio_started", False)):
             bm = getattr(self.mode, "beatmap", None)
             resume_at = self._paused_song_time
             song = self._paused_song_path or (bm.song if bm else None)
@@ -2383,6 +2406,7 @@ class GameEngine:
             score_cfg=self.score_cfg,
             adaptive_cfg=ac,
             start_bpm=start_bpm,
+            max_async_ms=float(self.cfg.get("mirror.max_async_ms", 350.0)),
         )
         self._begin_block("mirror")
         self.screen_obj = self._screens["gameplay"]
@@ -2558,6 +2582,11 @@ class GameEngine:
         # as the other per-lane dicts.
         self._per_lane_peak_force: dict[int, list[float]] = {}
         self._per_lane_impulse: dict[int, list[float]] = {}
+        # Mirror's clean-hit |right - left| press gaps, reset per block
+        # (see log_trial and the mirror block_summary section).
+        self._mirror_gaps_ms: list[float] = []
+        self._mirror_right_rts_ms: list[float] = []
+        self._mirror_left_rts_ms: list[float] = []
         # Miss-force + loud-trial counters reset per block so the Results
         # screen reports THIS block, matching how hits / misses reset
         # above. The audio gain is forced back to normal in case the
@@ -2577,6 +2606,8 @@ class GameEngine:
         self._loud_trials_by_id = {}
         self._block_loud_trials = 0
         self._last_stim_timeout_ms = None
+        self._last_stim_bpm = None
+        self._last_stim_in_recovery = None
         if self.audio is not None:
             self.audio.set_trial_gain(1.0)
         # Drift-sampler bookkeeping. Across-block lists stay populated
@@ -2587,6 +2618,7 @@ class GameEngine:
         self._last_drift_sample_t = None
         self._rhythm_press_times_s = []
         self._rhythm_beat_times_s = []
+        self._rhythm_signed_offsets_ms = []
         self._open_loggers()
         # Reset detectors at block start so old baselines don't leak in.
         for d in self.detectors.values():
@@ -2784,6 +2816,28 @@ class GameEngine:
                     summary["reaction"] = stats_fn()
                 except Exception as e:
                     log.warning("reaction block stats failed: %s", e)
+        # Mirror-only context: the coordination measure the mode
+        # exists to train. Neither hits/misses nor the per-lane RT
+        # histogram (lanes 0-3 only, since both hands' copies of a
+        # finger collapse onto one row) can show whether the two
+        # hands were IN SYNC, only whether the later press was fast.
+        # gaps_ms is the |right - left| press-latency gap on every
+        # clean synchronised hit this block (see log_trial), which is
+        # what the Results screen and report.py need to surface it to
+        # the patient/clinician instead of leaving it invisible.
+        if self.current_block == "mirror":
+            gaps = getattr(self, "_mirror_gaps_ms", [])
+            r_rts = getattr(self, "_mirror_right_rts_ms", [])
+            l_rts = getattr(self, "_mirror_left_rts_ms", [])
+            summary["mirror"] = {
+                "mean_gap_ms": (round(sum(gaps) / len(gaps), 1)
+                                 if gaps else None),
+                "n_synced_hits": len(gaps),
+                "right_hand_mean_rt_ms": (
+                    round(sum(r_rts) / len(r_rts), 1) if r_rts else None),
+                "left_hand_mean_rt_ms": (
+                    round(sum(l_rts) / len(l_rts), 1) if l_rts else None),
+            }
         # Patterns-only context: the sequences actually used, per-take
         # aggregates and the probe learning scores. These cannot be
         # rebuilt from hits / misses because the trained/probe split
@@ -2963,10 +3017,18 @@ class GameEngine:
                 k: (round(v, 3) if v is not None else None)
                 for k, v in bo.items()
             }
-            # Tempo entrainment via lag-1 autocorrelation of signed
-            # offsets. r > 0 = patient tracks the tempo (consecutive
-            # offsets are similar). r ~= 0 = independent presses
-            # (landing near the beat by luck, not tracking).
+            # Lag-1 autocorrelation of signed offsets. This is a
+            # persistence-vs-alternation measure, not a labelled
+            # "tracks the tempo" score: in the standard Wing-
+            # Kristofferson / Vorberg-Wing phase-correction account of
+            # sensorimotor synchronisation, active error correction
+            # produces a NEGATIVE lag-1 r (an early press is followed
+            # by a compensating late one), while a POSITIVE r reflects
+            # slow drift (consecutive offsets stay similar) rather than
+            # correction. r ~= 0 = offsets look like independent
+            # presses landing near the beat by luck. Do not read a
+            # positive number here as "tracking" -- see sec_rhythm in
+            # analysis/session_analysis.ipynb for the printed caveat.
             offsets = getattr(self, "_rhythm_signed_offsets_ms", [])
             if len(offsets) >= 3:
                 entr = metrics.tempo_entrainment_index(
@@ -4012,7 +4074,15 @@ class GameEngine:
         # tracking each finger's peak from this instant.
         self._ensure_metric_state()
         self._trials_fired += 1
-        is_loud = self._is_loud_trial(self._trials_fired)
+        # Syllables fires on_stim once per model SYLLABLE, not once per
+        # trial, so the loud-trial fraction would land on an arbitrary
+        # syllable inside a word whose stress the mode teaches (and, at
+        # level 4, scores): a random loudness accent the child cannot
+        # tell apart from the deliberate stress cue. Suppressed here
+        # rather than in the mode so the trial-CSV flag stays accurate
+        # (never loud) instead of merely unheard.
+        is_loud = (self._is_loud_trial(self._trials_fired)
+                   and self.current_block != "syllables")
         if self.audio is not None:
             self.audio.set_trial_gain(
                 self._loud_trial_boost if is_loud else 1.0)
@@ -4037,6 +4107,23 @@ class GameEngine:
         # The trial's response window is the RT censoring limit; the CSV
         # logs it per trial because adaptive varies it with the cadence.
         self._last_stim_timeout_ms = timeout_s * 1000.0
+        # bpm_at_trial / in_recovery must describe the pace THIS trial
+        # was actually presented at, not whatever the adapter has
+        # become by the time the row gets written. AdaptiveMode calls
+        # adapter.record()+next_bpm() (and mirror does the same)
+        # before log_trial, and a miss on this trial can also push the
+        # adapter into recovery mid-log via _update_streak -- both run
+        # before _trial_context would otherwise read adapter.bpm live.
+        # Snapshotting here, at stim time, is the only point where
+        # "the BPM this trial fired at" is unambiguous.
+        adapter = getattr(self.mode, "adapter", None) if self.mode else None
+        if adapter is not None:
+            self._last_stim_bpm = getattr(adapter, "bpm", None)
+            self._last_stim_in_recovery = getattr(
+                adapter, "in_recovery", None)
+        else:
+            self._last_stim_bpm = None
+            self._last_stim_in_recovery = None
         for key in ("gameplay", "rhythm"):
             sc = self._screens.get(key)
             if sc and hasattr(sc, "lanes"):
@@ -4198,7 +4285,8 @@ class GameEngine:
                    continuous=None,
                    hand: str | None = None,
                    mirror_hand_rts: tuple[float | None, float | None]
-                   | None = None) -> None:
+                   | None = None,
+                   error_type: str | None = None) -> None:
         """Close out one cadence-style trial.
 
         `cue_lanes` is which finger(s) the after-press cue should fire
@@ -4246,6 +4334,14 @@ class GameEngine:
         point of the mode. None in a slot means that side never
         pressed on this trial (a Miss on that side); None passed
         wholesale is every other mode, where both columns stay empty.
+
+        `error_type` overrides the had_incorrect_press-derived value
+        below (wrong_finger / timeout) with the caller's own error
+        code. Syllables passes its own taxonomy (timeout / extra_tap /
+        missing_tap) here: a Miss caused by a wrong COUNT of taps is
+        not a wrong finger and not necessarily a timeout, and the
+        derived logic has no way to tell an extra tap from silence.
+        None keeps the derived value, which is every other caller.
         """
         self._ensure_metric_state()
         gp = self._screens.get("gameplay")
@@ -4274,12 +4370,24 @@ class GameEngine:
         # reaches the cue.
         cues = self.cue_settings()
         correct_press = outcome.label != "Miss"
+        # Syllables promises "no punishment sound" and config/default.
+        # yaml's own comment on cue.sound_after says the same
+        # ("No error sound plays anywhere in this mode"), but the
+        # generic rule above chimes on any non-Miss outcome, so a
+        # wrong_order/off_beat/wrong_stress "Good" trial (screen text
+        # "SO CLOSE!") played the success chime, and a Miss that broke
+        # a streak still thunked. Syllables only chimes on a genuinely
+        # clean word (Great) and never thunks.
+        is_syllables = self.current_block == "syllables"
+        chime_on = correct_press and (
+            outcome.label == "Great" if is_syllables else True)
+        thunk_on = (not is_syllables and not correct_press
+                    and self.hit_streak > 0)
         if self.audio:
             try:
-                if correct_press:
-                    if cues.sound_after:
-                        self.audio.play_hit(combo=self.hit_streak)
-                elif self.hit_streak > 0 and cues.sound_after:
+                if chime_on and cues.sound_after:
+                    self.audio.play_hit(combo=self.hit_streak)
+                elif thunk_on and cues.sound_after:
                     # Only thunk if the miss BREAKS a real streak. A
                     # single isolated miss with no streak just gets
                     # the visual feedback so the audio doesn't nag.
@@ -4315,8 +4423,14 @@ class GameEngine:
         # window and keep the snapshot for this trial's CSV row.
         fw_sum, fw_peaks = self._close_force_window(
             outcome.label == "Miss")
-        # Block-summary aggregates: RT + wrong-press trial count.
-        if outcome.rt_ms is not None:
+        # Block-summary aggregates: RT + wrong-press trial count. A
+        # Miss can still carry an rt_ms (mirror's async-gap downgrade
+        # and the wrong-finger-then-correct downgrade both keep it for
+        # the CSV row's time_difference_ms), so gate on the label too
+        # -- otherwise a Miss trial double-counts as both a hit (via
+        # this RT) and a miss (via _per_lane_misses below), inflating
+        # hit_rate, n_trials and avg_rt_ms.
+        if outcome.rt_ms is not None and outcome.label != "Miss":
             self._block_rt_sum += float(outcome.rt_ms)
             self._block_rt_count += 1
         if trial.incorrect_presses:
@@ -4337,7 +4451,7 @@ class GameEngine:
             self._per_lane_wrong = {}
         if not hasattr(self, "_per_lane_peak_force"):
             self._per_lane_peak_force = {}
-        if outcome.rt_ms is not None:
+        if outcome.rt_ms is not None and outcome.label != "Miss":
             self._per_lane_rts.setdefault(trial.lane, []).append(
                 float(outcome.rt_ms))
         if outcome.label == "Miss":
@@ -4349,6 +4463,22 @@ class GameEngine:
         for _wrong_lane, _t in trial.incorrect_presses:
             self._per_lane_wrong[trial.lane] = (
                 self._per_lane_wrong.get(trial.lane, 0) + 1)
+        # Mirror's own trained quantity: the |right - left| press gap.
+        # Only banked on a clean pair (no wrong-finger press on this
+        # trial) so a fumble's error-recovery time doesn't get counted
+        # as coordination -- same rule the notebook's asynchrony
+        # section applies. Feeds the mirror block_summary section and
+        # the per-trial popup below.
+        if mirror_hand_rts is not None and not trial.incorrect_presses:
+            r_rt, l_rt = mirror_hand_rts
+            if r_rt is not None and l_rt is not None:
+                if not hasattr(self, "_mirror_gaps_ms"):
+                    self._mirror_gaps_ms = []
+                    self._mirror_right_rts_ms = []
+                    self._mirror_left_rts_ms = []
+                self._mirror_gaps_ms.append(abs(r_rt - l_rt))
+                self._mirror_right_rts_ms.append(r_rt)
+                self._mirror_left_rts_ms.append(l_rt)
         # Capture peak force + impulse for the trial. Both are live
         # (finger still down at log_trial time) so we sample the
         # detector's running values. None on a Miss because there's
@@ -4394,9 +4524,10 @@ class GameEngine:
                 # timeout. Without this split, filtering trials.csv on
                 # error_type=="timeout" silently pulls in every wrong-
                 # finger-caused Miss too.
-                "error_type": ("" if outcome.label != "Miss"
-                               else ("wrong_finger" if had_incorrect
-                                     else "timeout")),
+                "error_type": (error_type if error_type is not None
+                               else ("" if outcome.label != "Miss"
+                                     else ("wrong_finger" if had_incorrect
+                                           else "timeout"))),
                 "keys_pressed": keys,
                 # Comma-joined 1-indexed lanes, matching keys_pressed,
                 # so a chord row parses the same way a press list does.
@@ -4478,7 +4609,18 @@ class GameEngine:
         in_recovery = ""
         adapter = getattr(self.mode, "adapter", None) if self.mode else None
         if adapter is not None:
-            bpm_val = getattr(adapter, "bpm", None)
+            # bpm_at_trial/in_recovery must say what this trial was
+            # PRESENTED at, snapshotted in on_stim_multi. record() +
+            # next_bpm() (called by the mode before log_trial) and
+            # _update_streak's recovery entry (called above, still
+            # before this point) both mutate adapter.bpm/in_recovery
+            # for the NEXT trial; reading them live here would log the
+            # next trial's pace onto this trial's row. Fall back to a
+            # live read only if a stim snapshot was never taken (e.g.
+            # a test fixture that calls log_trial without on_stim).
+            bpm_val = getattr(self, "_last_stim_bpm", None)
+            if bpm_val is None:
+                bpm_val = getattr(adapter, "bpm", None)
             if bpm_val is not None:
                 bpm = f"{float(bpm_val):.1f}"
                 # Track BPM range for the block summary.
@@ -4488,7 +4630,9 @@ class GameEngine:
                 if (self._block_bpm_max is None
                         or float(bpm_val) > self._block_bpm_max):
                     self._block_bpm_max = float(bpm_val)
-            ir = getattr(adapter, "in_recovery", None)
+            ir = getattr(self, "_last_stim_in_recovery", None)
+            if ir is None:
+                ir = getattr(adapter, "in_recovery", None)
             if ir is not None:
                 in_recovery = "TRUE" if ir else "FALSE"
         # Block-relative time from the perf_counter anchor.

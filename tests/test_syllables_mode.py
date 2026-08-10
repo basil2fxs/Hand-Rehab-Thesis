@@ -195,6 +195,21 @@ class CountingLevelTests(unittest.TestCase):
         _tap_out(mode, lanes, t + 0.5)
         self.assertIn("err=ok", _logged_stimulus(engine))
 
+    def test_correct_keys_lists_every_playing_lane_at_level_one(
+            self) -> None:
+        """Audit finding #41: acceptable_lanes() used to restrict to
+        positions 0..n-1 even at level 1, where order_required is
+        False and any finger counts (proved above). A consumer
+        computing wrong-finger rates from correct_keys vs keys_pressed
+        would invent errors on level-1 rows: a tap on lane 4 of a
+        2-syllable word scores err=ok, so correct_keys must say lane 4
+        was acceptable too, not just lanes 1-2."""
+        engine, mode = _build_mode(level=1)
+        from rehab.game.modes.syllables_words import WORDS
+        mode.word = next(w for w in WORDS if w.n_syll == 2)
+        _run_to_respond(mode, 0.1)
+        self.assertEqual(mode.acceptable_lanes(), [0, 1, 2, 3])
+
     def test_extra_tap_is_named_and_misses(self) -> None:
         engine, mode = _build_mode(level=1)
         t = _run_to_respond(mode)
@@ -226,6 +241,33 @@ class CountingLevelTests(unittest.TestCase):
         # docked points.
         engine.apply_wrong_press_penalty.assert_not_called()
         engine.apply_idle_press_penalty.assert_not_called()
+
+    def test_repeated_lane_does_not_retro_write_the_earlier_tap(
+            self) -> None:
+        """Audit finding #33: _peak_force_for_lane reports the CURRENT
+        press's running peak, so polling every tap on a lane (not just
+        the newest) retro-wrote a second same-lane press's peak onto
+        the first tap. A level-1 child drumming one finger for a
+        2-syllable word (soft tap then hard tap, same lane) must keep
+        the soft tap's own peak."""
+        engine, mode = _build_mode(level=1, tap_debounce_ms=0)
+        mode._tick(0.0)
+        from rehab.game.modes.syllables_words import WORDS
+        mode.word = next(w for w in WORDS if w.n_syll == 2)
+        t = _run_to_respond(mode, 0.1)
+        peaks = {0: 10.0}
+        engine._peak_force_for_lane = lambda lane: peaks.get(lane)
+        mode.queue_press(_press(0, t))
+        mode._tick(t)
+        mode._poll_tap_peaks()
+        self.assertEqual(mode.taps[0].peak, 10.0)
+        peaks[0] = 50.0
+        mode.queue_press(_press(0, t + 0.3))
+        mode._tick(t + 0.3)
+        mode._poll_tap_peaks()
+        self.assertEqual(len(mode.taps), 2)
+        self.assertEqual(mode.taps[0].peak, 10.0)
+        self.assertEqual(mode.taps[1].peak, 50.0)
 
     def test_double_touch_on_one_finger_debounces(self) -> None:
         # A bouncy finger lands two contacts 50 ms apart; the second
@@ -273,6 +315,33 @@ class OrderLevelTests(unittest.TestCase):
         self.assertEqual(_logged_outcome(engine).label, "Good")
         trial = engine.log_trial.call_args.args[0]
         self.assertTrue(trial.incorrect_presses)
+
+    def test_replay_flag_reports_the_replay_that_will_run(self) -> None:
+        """Audit finding #35: replay= was packed from self._replayed,
+        which is still False at pack time on every trial (it is only
+        set True afterwards, in _after_feedback) and never logged
+        again once true, so the flag was permanently 0. With
+        replay_on_error, an error trial's row must say replay=1
+        because the replay demonstrably runs right after."""
+        engine, mode = _build_mode(level=2, replay_on_error=True)
+        mode._tick(0.0)
+        from rehab.game.modes.syllables_words import WORDS
+        mode.word = next(w for w in WORDS if w.n_syll == 2)
+        t = _run_to_respond(mode, 0.1)
+        _tap_out(mode, [1, 0], t + 0.5)      # reversed -> wrong_order
+        stim = _logged_stimulus(engine)
+        self.assertIn("err=wrong_order", stim)
+        self.assertIn("replay=1", stim)
+        self.assertTrue(mode._pending_replay)
+
+    def test_replay_flag_is_zero_without_replay_on_error(self) -> None:
+        engine, mode = _build_mode(level=2, replay_on_error=False)
+        mode._tick(0.0)
+        from rehab.game.modes.syllables_words import WORDS
+        mode.word = next(w for w in WORDS if w.n_syll == 2)
+        t = _run_to_respond(mode, 0.1)
+        _tap_out(mode, [1, 0], t + 0.5)
+        self.assertIn("replay=0", _logged_stimulus(engine))
 
 
 class PacedLevelTests(unittest.TestCase):
@@ -601,6 +670,22 @@ class BandProgressionTests(unittest.TestCase):
         mode._maybe_move_band()
         self.assertEqual(mode.band, "C")
 
+    def test_band_never_moves_at_level_five_or_six(self) -> None:
+        """Audit finding #38: words_for ignores band above level 4 (the
+        onset-rime and phoneme pools are drawn without a band split,
+        deliberately), but _maybe_move_band used to run at every
+        level, so band_trace on an L5/L6 block claimed the material
+        got harder or easier when nothing about the draw pool changed
+        at all."""
+        for level in (5, 6):
+            engine, mode = _build_mode(level=level, band="A")
+            mode._recent.extend([True] * 10)
+            mode._since_band_change = 10
+            mode._maybe_move_band()
+            self.assertEqual(mode.band, "A")
+            self.assertEqual(mode._band_trace, ["A"])
+            self.assertFalse(engine.raw_logger.queue_event.called)
+
 
 class WarmupProbeTests(unittest.TestCase):
     """The warm-up doubles as the per-session synchronisation probe:
@@ -734,6 +819,44 @@ class ScreenStoryTests(unittest.TestCase):
         mode.phase = "model"
         _t, sub, _c = scr._stage(mode)
         self.assertIn("Hands off", sub)
+
+    def test_warmup_swell_is_phased_off_the_beat_grid(self) -> None:
+        """Audit finding #36: the swell used to compute
+        `phase = (now % ioi_s) / ioi_s`, anchored to the wall-clock
+        epoch rather than the beat grid the scored warm-up beats
+        started on (mode._warmup_beats[0]). A child cueing off the
+        circle instead of the metronome tick would then tap with a
+        constant offset of up to half a period against the very
+        asynchronies the probe measures. The swell must be exactly
+        in phase with the beat grid: at the beat itself (phase 0) the
+        circle is at its largest, `60 + 26`."""
+        import math
+        from unittest.mock import patch
+        engine, mode = _build_mode(level=1, warmup_taps=3, ioi_ms=500)
+        scr = self._screen(engine)
+        # Anchor the beat grid far from t=0, so an epoch-based phase
+        # and a grid-based phase disagree unless the fix is in place.
+        mode._warmup_beats = [1000.0, 1500.0, 2000.0]
+        surf = MagicMock()
+        radii = []
+        with patch("pygame.draw.circle",
+                   side_effect=lambda _s, _c, _pos, r: radii.append(r)):
+            # Exactly on the beat: phase 0, largest circle.
+            scr._draw_warmup(surf, mode, 1000.0)
+            # One full IOI later, same beat-grid phase: same radius.
+            scr._draw_warmup(surf, mode, 1500.0)
+            # Half a period off the beat, a different beat-grid phase.
+            scr._draw_warmup(surf, mode, 1000.0 + mode.ioi_s / 2)
+        # Each call draws two circles (accent, then the punched-out
+        # background one at r - 16); only the even entries are the
+        # accent circle's own radius.
+        outer = radii[0::2]
+        expected_on_beat = 60 + int(26 * math.exp(-4.0 * 0.0))
+        expected_half = 60 + int(26 * math.exp(-4.0 * 0.5))
+        self.assertEqual(outer[0], expected_on_beat)
+        self.assertEqual(outer[1], expected_on_beat,
+                         "phase must repeat every IOI on the beat grid")
+        self.assertEqual(outer[2], expected_half)
 
     def test_feedback_praises_or_names_the_one_thing_to_change(self) -> None:
         engine, mode = _build_mode(level=1)
@@ -893,6 +1016,160 @@ class EngineIntegrationTests(unittest.TestCase):
         keys = [k for k, _t, _d in ModeSelectScreen.MODES]
         self.assertIn("syllables", keys)
 
+    def test_extra_tap_miss_carries_its_own_error_type(self) -> None:
+        """Audit finding #34: a level-1 Miss caused by a wrong TAP COUNT
+        (extra_tap) is not a wrong finger and not necessarily a
+        timeout, but log_trial's had_incorrect_press-derived logic
+        knows only wrong_finger / timeout, so an extra tap that landed
+        promptly used to read as error_type=timeout in trials.csv."""
+        import csv
+        import glob
+        import pygame
+        import tempfile
+        from rehab.hardware.fsr_detector import PressEvent
+        with tempfile.TemporaryDirectory() as tmpdir:
+            eng = self._engine(tmpdir)
+            eng.cfg.data.setdefault("syllables", {})["level"] = 1
+            eng.cfg.data["syllables"]["words_per_block"] = 1
+            eng.cfg.data["syllables"]["warmup_taps"] = 0
+            try:
+                eng.begin_syllables_block()
+                mode = eng.mode
+                t = 0.0
+                mode._tick(mode._t0 + t if mode._t0 else t)
+                guard = 0
+                while mode.phase != "respond" and guard < 500:
+                    t += 0.05
+                    mode._tick(mode._t0 + t)
+                    guard += 1
+                n = mode.n_expected
+                for _ in range(n + 1):    # one tap too many
+                    mode.queue_press(PressEvent(
+                        lane=0, t_perf=mode._t0 + t, value=0,
+                        baseline=0.0, hand="right"))
+                    mode._tick(mode._t0 + t)
+                    t += 0.3
+                mode._tick(mode._t0 + t + mode.SETTLE_S + 0.05)
+                eng._abandon_if_in_block()
+                files = glob.glob(tmpdir + "/**/trials.csv",
+                                  recursive=True)
+                with open(files[0]) as f:
+                    row = next(csv.DictReader(f))
+                self.assertEqual(row["feedback"], "Miss")
+                self.assertEqual(row["error_type"], "extra_tap")
+            finally:
+                try:
+                    eng._abandon_if_in_block()
+                except Exception:
+                    pass
+                pygame.quit()
+
+    def test_no_loud_trial_boost_inside_syllable_models(self) -> None:
+        """Audit finding #29: engine.on_stim fires once per model
+        SYLLABLE, not once per trial, so the loud-trial fraction used
+        to land on an arbitrary syllable inside a word -- a random
+        loudness accent the child cannot tell apart from the
+        deliberate level-4 stress cue. Boosted at the default 10%
+        fraction, a 12-word block (about 24-36 syllables) would almost
+        certainly hit at least one loud onset under the old code."""
+        import pygame
+        import tempfile
+        from unittest.mock import MagicMock
+        with tempfile.TemporaryDirectory() as tmpdir:
+            eng = self._engine(tmpdir)
+            eng.cfg.data.setdefault("syllables", {})["level"] = 2
+            eng.cfg.data["syllables"]["words_per_block"] = 13
+            eng.cfg.data["syllables"]["warmup_taps"] = 0
+            eng.audio = MagicMock()
+            # test_mode_enabled (set by _engine()) shrinks words_total
+            # to the demo count regardless of words_per_block, so the
+            # block can complete inside the loop below; finish_block
+            # then needs a "results" screen this harness does not
+            # otherwise register.
+            eng._screens["results"] = MagicMock()
+            try:
+                eng.begin_syllables_block()
+                mode = eng.mode
+                t = 0.0
+                mode._tick(mode._t0 + t if mode._t0 else t)
+                guard = 0
+                gains = []
+                eng.audio.set_trial_gain.side_effect = gains.append
+                while mode.phase != "done" and guard < 5000:
+                    if mode.phase == "respond":
+                        for lane in range(mode.n_expected):
+                            from rehab.hardware.fsr_detector import (
+                                PressEvent)
+                            mode.queue_press(PressEvent(
+                                lane=lane, t_perf=mode._t0 + t,
+                                value=0, baseline=0.0, hand="right"))
+                            mode._tick(mode._t0 + t)
+                            t += 0.05
+                        mode._tick(mode._t0 + t + mode.SETTLE_S + 0.05)
+                    else:
+                        t += 0.02
+                        mode._tick(mode._t0 + t)
+                    guard += 1
+                self.assertFalse(
+                    [g for g in gains if g and g > 1.0],
+                    "a syllables model onset played boosted (loud)")
+            finally:
+                try:
+                    eng._abandon_if_in_block()
+                except Exception:
+                    pass
+                pygame.quit()
+
+    def test_wrong_order_good_trial_does_not_chime(self) -> None:
+        """Audit finding #40: syllables promises "no punishment sound"
+        and config's own comment says no error sound plays anywhere in
+        this mode, but the generic after-press cue chimes on any
+        non-Miss outcome, so a wrong_order "Good" trial (screen text
+        SO CLOSE!) used to play the success chime under
+        cue.sound_after. Only a clean (Great) word may chime."""
+        import pygame
+        import tempfile
+        from unittest.mock import MagicMock
+        from rehab.hardware.fsr_detector import PressEvent
+        from rehab.game.modes.syllables_words import WORDS
+        with tempfile.TemporaryDirectory() as tmpdir:
+            eng = self._engine(tmpdir)
+            eng.cfg.data.setdefault("syllables", {})["level"] = 2
+            eng.cfg.data["syllables"]["words_per_block"] = 3
+            eng.cfg.data["syllables"]["warmup_taps"] = 0
+            eng.cfg.data.setdefault("cue", {})["sound_after"] = True
+            eng.audio = MagicMock()
+            two_syll = next(w for w in WORDS if w.n_syll == 2)
+            try:
+                eng.begin_syllables_block()
+                mode = eng.mode
+                t = 0.0
+                mode._tick(mode._t0 + t if mode._t0 else t)
+                guard = 0
+                while mode.words_done < 3 and guard < 2000:
+                    if mode.phase == "attend":
+                        mode.word = two_syll     # reproducible target
+                    if mode.phase == "respond":
+                        for lane in (1, 0):       # reversed = wrong_order
+                            mode.queue_press(PressEvent(
+                                lane=lane, t_perf=mode._t0 + t,
+                                value=0, baseline=0.0, hand="right"))
+                            mode._tick(mode._t0 + t)
+                            t += 0.3
+                        mode._tick(mode._t0 + t + mode.SETTLE_S + 0.05)
+                    else:
+                        t += 0.05
+                        mode._tick(mode._t0 + t)
+                    guard += 1
+                self.assertEqual(eng.audio.play_hit.call_count, 0)
+                self.assertEqual(eng.audio.play_miss.call_count, 0)
+            finally:
+                try:
+                    eng._abandon_if_in_block()
+                except Exception:
+                    pass
+                pygame.quit()
+
     def test_default_config_documents_the_mode(self) -> None:
         import yaml
         root = Path(__file__).resolve().parents[1]
@@ -908,6 +1185,96 @@ class EngineIntegrationTests(unittest.TestCase):
         self.assertEqual(syl["beat_ioi_ms"], 500)
         self.assertEqual(syl["on_beat_window_ms"], 150)
         self.assertEqual(syl["stress_ratio"], 2.0)
+
+
+class SyllablesResultsScreenCardsTests(unittest.TestCase):
+    """Audit finding #30: on a paced (level 3/4) syllables block, rt_ms
+    is the MEAN SIGNED beat asynchrony, not a reaction time, so falling
+    through to the generic AVG RT / BEST RT cards could print an
+    impossibly fast "RT" for a positive (late) mean, or show a
+    personal-best "RT" built from the most anticipatory word. A
+    syllables block must not fall through to the generic cards, and
+    the paced cards must read the mode's own asyn_mean_ms/sd, absolute
+    rather than signed."""
+
+    def _draw_syllables_results(self, block_summary_syllables):
+        import pygame
+        from rehab.config import Config
+        from rehab.game.engine import GameEngine
+        from rehab.ui.screens import ResultsScreen
+        from rehab.ui.theme import get as get_theme
+        from rehab.ui.widgets import Layout
+        pygame.init()
+        pygame.font.init()
+        pygame.display.set_mode((1280, 800))
+        e = GameEngine.__new__(GameEngine)
+        e.cfg = Config.load()
+        e.theme = get_theme("clinical")
+        e.layout = Layout(1280, 800, 1.0)
+        e.hits, e.misses, e.score = 20, 4, 300
+        e.current_block, e.hand_mode = "syllables", "right"
+        e.best_streak, e.per_lane_stats = 5, {}
+        e.hit_streak = 5
+        e.last_session_root = None
+        e.mode = None
+        e.session = type("S", (), {
+            "participant": "T", "age": "8",
+            "block_summary": {"syllables": block_summary_syllables}})()
+        e.stop_all_motors = lambda *a, **k: None
+        # A positive (late) mean signed asynchrony: the exact case
+        # that used to print an "impossibly fast RT" under the old
+        # AVG RT / BEST RT cards.
+        e._per_lane_rts = {0: [20.0]}
+        e.overall_mean_rt = lambda: 20.0
+        e.overall_best_rt = lambda: 20.0
+        r = ResultsScreen(e)
+        r._shown_t = 1.0
+        cards = []
+        r._draw_stat_card = (
+            lambda surf, rect, lbl, val, col: cards.append((lbl, val)))
+        surf = pygame.Surface((1280, 800))
+        r.draw(surf)
+        pygame.quit()
+        return cards
+
+    def test_paced_level_reads_asyn_stats_not_generic_rt(self) -> None:
+        cards = self._draw_syllables_results({
+            "level": 3, "accuracy": 0.8, "band_final": "B",
+            "asyn_mean_ms": 20.0, "asyn_sd_ms": 35.0,
+        })
+        labels = [lbl for lbl, _ in cards]
+        values = dict(cards)
+        self.assertNotIn("AVG RT", labels)
+        self.assertNotIn("BEST RT", labels)
+        self.assertIn("AVG OFFSET", labels)
+        self.assertEqual(values["AVG OFFSET"], "20 ms")
+        self.assertIn("OFFSET SD", labels)
+        self.assertIn("WORDS CORRECT", labels)
+        self.assertEqual(values["WORDS CORRECT"], "80%")
+        self.assertIn("BAND", labels)
+        self.assertEqual(values["BAND"], "B")
+
+    def test_paced_level_takes_absolute_value_of_a_negative_mean(
+            self) -> None:
+        # A negative (early) mean must read the same magnitude as the
+        # matching positive mean: the card is a distance-off-beat
+        # readout, not a signed bias.
+        cards = self._draw_syllables_results({
+            "level": 4, "accuracy": 0.7, "band_final": "A",
+            "asyn_mean_ms": -20.0, "asyn_sd_ms": 35.0,
+        })
+        values = dict(cards)
+        self.assertEqual(values["AVG OFFSET"], "20 ms")
+
+    def test_free_paced_level_keeps_avg_and_best_rt(self) -> None:
+        cards = self._draw_syllables_results({
+            "level": 1, "accuracy": 0.9, "band_final": "A",
+            "asyn_mean_ms": None, "asyn_sd_ms": None,
+        })
+        labels = [lbl for lbl, _ in cards]
+        self.assertIn("AVG RT", labels)
+        self.assertIn("BEST RT", labels)
+        self.assertNotIn("AVG OFFSET", labels)
 
 
 if __name__ == "__main__":

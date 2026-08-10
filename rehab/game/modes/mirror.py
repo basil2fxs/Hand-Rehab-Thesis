@@ -1,15 +1,24 @@
 """Mirror mode. Same-finger bilateral training.
 
 Both hands' copies of the same finger fire at once and the trial
-only counts when both presses arrive inside the timing window. The
-RT used for scoring is the LATER of the two presses, because the
-clinical signal we want is "did the patient produce the bilateral
-movement together" rather than "how fast was the strong side".
+only counts when both presses arrive inside the timing window AND
+within max_async_ms of each other. The RT used for scoring is the
+LATER of the two presses, because the clinical signal we want is
+"did the patient produce the bilateral movement together" rather
+than "how fast was the strong side".
 
-Mirror therapy literature (Ramachandran and Rogers-Ramachandran 1996, Altschuler 1999) says
-the unaffected hand drags the affected one along via shared motor
-representations, so the protocol wants synchronous bimanual movement.
-This mode forces that pattern.
+Research case: this is mirror-FREE bilateral synchronous training,
+in the Whitall 2000 (BATRAC) / Cauraugh and Summers lineage, not the
+mirror-visual-illusion protocol Ramachandran and Rogers-Ramachandran
+1996 and Altschuler 1999 describe (that literature hinges on the
+patient watching a mirror reflection of the unaffected hand, which
+this mode does not present). Those two are cited only as the
+origin-of-idea for "the unaffected hand can drag the affected one
+along via shared motor representations"; the bilateral-training
+efficacy literature itself is contested (the Cauraugh 2009/2010
+meta-analysis is not settled), so treat this mode as measurement of
+bimanual synchrony plus an evidence-informed, not proven, training
+mechanism -- not a guaranteed therapeutic effect.
 
 Internally this mode runs the same challenge-point adaptive engine
 that AdaptiveMode uses, just in 4-finger space (the same finger
@@ -94,7 +103,8 @@ class MirrorMode:
                  adaptive_cfg: AdaptiveConfig | None = None,
                  start_bpm: float = 24.0,
                  seed: int = 0,
-                 min_finger_share: float = 0.15) -> None:
+                 min_finger_share: float = 0.15,
+                 max_async_ms: float = 350.0) -> None:
         # Pattern is a list of within-hand finger indices (0..3), not
         # global lanes, because mirror always targets both hands.
         # Anything outside 0..3 is dropped at construction time so a
@@ -126,11 +136,29 @@ class MirrorMode:
         self.rng = random.Random(seed)
         self._floor = None
         self.min_finger_share = min_finger_share
-        # Trial budget stays the same as the old contract: pattern
-        # length times repeat count. Therapists who set repeat_count=8
-        # with the 4-finger default still get a 32-trial block, just
-        # in random order instead of 0, 1, 2, 3 four times over.
-        self._total_trials = len(self.pattern) * repeat_count
+        # Fixed-ms (not BPM-scaled) bound on how far apart the two
+        # presses may land and still count as a synchronised hit. The
+        # press WINDOW is BPM-derived and widens to 5.4 s at the BPM
+        # floor, which is exactly when a struggling patient needs the
+        # togetherness bound most, so this second, fixed gate is what
+        # actually enforces the docstring's "forces synchronous
+        # bimanual movement" claim. 350 ms sits comfortably above
+        # normal bimanual asynchrony (tens of ms) while still catching
+        # a pair that landed nowhere near together.
+        self.max_async_ms = max_async_ms
+        # Trial budget: DISTINCT finger count times repeat count, not
+        # raw pattern length. _pick_finger already reduces to
+        # sorted(set(self.pattern)) -- the weakness-weighted picker has
+        # no concept of "this finger appears twice in the config list",
+        # unlike classic mode's pattern * repeat_count sequence, where
+        # a repeated entry directly weights that finger. Before this
+        # fix, pattern=[0, 0, 1, 2] silently bought a longer block
+        # (4 * repeat_count trials) with zero extra weighting toward
+        # finger 0, since the picker only ever draws from {0, 1, 2}.
+        # Therapists who set repeat_count=8 with the 4-finger default
+        # still get a 32-trial block, just in random order instead of
+        # 0, 1, 2, 3 four times over.
+        self._total_trials = len(set(self.pattern)) * repeat_count
         self.completed = 0
         self.active: PendingMirrorTrial | None = None
         self.last_trigger_t = -1.0
@@ -190,11 +218,26 @@ class MirrorMode:
         for key_name, lane in km.items():
             kc = resolve_key(key_name)
             if kc and e.key == kc:
+                t_perf = time.perf_counter()
                 self.queue_press(PressEvent(
-                    lane=lane, t_perf=time.perf_counter(),
+                    lane=lane, t_perf=t_perf,
                     value=0, baseline=0.0,
                     hand=self.engine.hand_mode,
                 ))
+                # Keyboard presses bypass engine._on_press (the FSR
+                # detector path), which is the only place raw.csv
+                # normally gets a "press" event, so a keyboard-only
+                # mirror session's raw.csv had zero press/release rows
+                # -- a false-start / anticipatory press between trials
+                # was invisible to the data. detail="keyboard" marks
+                # it as coming from this fallback path rather than a
+                # detector, in case a session ever mixes both (Arduino
+                # attached, keyboard kept live as backup).
+                raw_logger = getattr(self.engine, "raw_logger", None)
+                if raw_logger:
+                    raw_logger.queue_event(
+                        "press", lane=lane, t_perf=t_perf,
+                        hand=self.engine.hand_mode, detail="keyboard")
 
     # Hard cap on the rest between finishing one trial and the next
     # stim appearing. BPM-derived cadence can be several seconds at the
@@ -352,9 +395,39 @@ class MirrorMode:
                       else (self.active.left_press_t
                             - self.active.stim_t_perf) * 1000.0)
         outcome = classify(rt_ms, self.score_cfg)
+        # Cap the Perfect tier at Great. The inter-trial rest is a
+        # deterministic function of BPM (fixed cadence, no jitter --
+        # see MAX_REST_S / update()), so stim timing is fully
+        # predictable and a patient who anticipates the cadence rather
+        # than reacting to the stim can land a sub-perfect_ms pair.
+        # The notebook's own analysis throws any press under
+        # ANTICIPATION_MS (100 ms) away as "anticipation, not a
+        # response", so paying it the TOP reward tier in-game
+        # disagreed with what the analysis will keep. Great still
+        # rewards a genuinely fast synchronised pair; only the
+        # anticipation-range top tier is removed. Finger identity
+        # stays unpredictable (weakness-weighted random pick), so this
+        # does not fully remove the incentive to anticipate, only caps
+        # what it pays out.
+        if outcome.label == "Perfect":
+            from ..scoring import TrialResult
+            outcome = TrialResult(label="Great",
+                                   points=self.score_cfg.great_points,
+                                   rt_ms=rt_ms)
+        # Synchrony gate: the BPM-derived press window is the only
+        # thing classify() sees, and it grows to 5.4 s at the BPM
+        # floor -- exactly when a struggling patient's asynchrony
+        # matters most. A pair that both landed inside the window but
+        # far apart from EACH OTHER is not a synchronised bimanual
+        # movement, so it downgrades to Miss regardless of how fast
+        # the later press was.
+        async_gap_ms = (None if right_rt_ms is None or left_rt_ms is None
+                         else abs(right_rt_ms - left_rt_ms))
+        asynchronous = (async_gap_ms is not None
+                         and async_gap_ms > self.max_async_ms)
         # Wrong-press trials downgrade to Miss, matching classic /
         # adaptive's clean-trial-signal behaviour.
-        if self.active.incorrect_presses:
+        if self.active.incorrect_presses or asynchronous:
             from ..scoring import TrialResult
             outcome = TrialResult(
                 label="Miss",

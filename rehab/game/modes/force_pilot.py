@@ -867,11 +867,29 @@ class ForcePilotMode:
                             or age is None or age > self.SAMPLE_STALE_S)
         if self.signal_stale:
             # Dropout: hold the craft, pause scoring, never stall-buzz
-            # a signal the patient may well be producing.
+            # a signal the patient may well be producing. Rings due
+            # DURING the dropout still need to be retired here as
+            # unjudged (no points): leaving _ring_idx untouched let
+            # every ring inside the gap get judged in one shot on the
+            # first frame after recovery, using that single frame's
+            # in-corridor state, which could bank several rings' worth
+            # of points for a stretch with no force signal at all
+            # (audit finding #81). This does not touch _scored_s /
+            # _in_c_s, so time-in-corridor is unaffected by the gap.
+            self._gutter_due_rings(t_run)
             self.force_pct_now = None
             return
         pct = float(reading.percent)
         self._score_frame(t_run, pct, dt, now)
+
+    def _gutter_due_rings(self, t_run: float) -> None:
+        """Retire every ring whose pass-time has arrived without
+        judging it in-corridor: used while the signal is stale, where
+        there is no reading to score a ring against."""
+        while (self._ring_idx < len(self.ring_times)
+               and self.ring_times[self._ring_idx] <= t_run):
+            self.ring_state[self._ring_idx] = False
+            self._ring_idx += 1
 
     def _score_frame(self, t_run: float, pct: float, dt: float,
                      now: float | None = None) -> None:
@@ -982,9 +1000,21 @@ class ForcePilotMode:
         info = ContinuousTrialLog(waveform="corridor", params=self.params,
                                   seed=self.run_seed, segments=segments)
         if trial is not None:
+            # A Miss here means the run played to completion and time
+            # in corridor came in under GOOD_TIC -- nothing timed out,
+            # there is no stim deadline in a continuous tracking run,
+            # and the row's own timeout_ms stays empty. The engine's
+            # generic "no incorrect press -> timeout" derivation would
+            # otherwise mislabel every low-tracking run this way, which
+            # pulls clean-but-poor runs into cross-mode error_type=
+            # "timeout" filters that mean "no press before the
+            # deadline". This mode has no wrong-finger concept either,
+            # so the override is unconditional, not just for Miss.
             self.engine.log_trial(trial, outcome, now, stimulus=stimulus,
                                   correct_lanes=[self.lane],
-                                  continuous=info)
+                                  continuous=info,
+                                  error_type=("low_tracking"
+                                              if label == "Miss" else None))
 
         self._last_result = {
             "label": label, "tic": tic, "mae": mae,

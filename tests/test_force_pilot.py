@@ -817,5 +817,322 @@ class ScreenTests(unittest.TestCase):
             f"{['INDEX', 'MIDDLE', 'RING', 'LITTLE'][m.finger]}")
 
 
+# ---- audit fixes: error_type and dropout ring gating ---------------------
+
+
+class ErrorTypeTests(unittest.TestCase):
+    """Audit finding #78: a Miss caused by low time-in-corridor is a
+    completed run scored poorly, not a timeout (there is no stim
+    deadline in a continuous tracking run, and timeout_ms stays empty
+    on every row). The generic engine.log_trial derivation labels
+    every no-incorrect-press Miss "timeout", which would pull clean
+    low-tracking runs into cross-mode error_type=="timeout" filters
+    that mean "no press before the deadline"."""
+
+    def test_low_tracking_miss_is_not_logged_as_timeout(self):
+        import csv
+        import tempfile
+        from pathlib import Path
+        from rehab.data.logger import TrialLogger
+        from rehab.game.modes.force_pilot import target_pct
+
+        e = _engine()
+        e.calibration_profiles["right"] = _fresh_profile()
+        with tempfile.TemporaryDirectory() as td:
+            folder = Path(td)
+            e.trial_logger = TrialLogger(folder / "trials.csv")
+            m = _mode(e)
+            m.total_runs = 2   # never let this run trigger _end()
+            finger, hand = 0, "right"
+            m._finger_sched[hand].next = lambda weights=None: finger
+
+            t0 = 1000.0
+            m._tick(t0)
+            t = t0 + m.announce_s + 0.01
+            m._tick(t)
+            self.assertEqual(m.phase, "run")
+
+            dt = 1.0 / 60.0
+            t_run = t0
+            while m.phase == "run":
+                t_run += dt
+                run_elapsed = t_run - (m.run_t0 or t0)
+                target = target_pct(m.sections, run_elapsed)
+                m.view.pct = max(0.0, target - 40.0)  # always far off
+                m._tick(t_run)
+
+            with open(folder / "trials.csv") as f:
+                rows = list(csv.DictReader(f))
+        row = rows[-1]
+        self.assertEqual(row["early_late"], "Miss")
+        self.assertEqual(row["timeout_ms"], "")
+        self.assertNotEqual(row["error_type"], "timeout")
+
+    def test_great_run_leaves_error_type_empty(self):
+        import csv
+        import tempfile
+        from pathlib import Path
+        from rehab.data.logger import TrialLogger
+
+        e = _engine()
+        e.calibration_profiles["right"] = _fresh_profile()
+        with tempfile.TemporaryDirectory() as td:
+            folder = Path(td)
+            e.trial_logger = TrialLogger(folder / "trials.csv")
+            m = _mode(e)
+            m.total_runs = 2
+            t = _to_run_phase(m)
+            _play_run(m, t, lambda t_run, target: target)  # perfect
+            with open(folder / "trials.csv") as f:
+                rows = list(csv.DictReader(f))
+        self.assertIn(rows[-1]["early_late"], ("Great", "Good"))
+        self.assertEqual(rows[-1]["error_type"], "")
+
+
+class DropoutRingGatingTests(unittest.TestCase):
+    """Audit finding #81: rings due WHILE the signal is stale must be
+    retired as unjudged (no points) as the gap happens, not judged all
+    at once on the first frame after recovery using that one frame's
+    in-corridor state."""
+
+    def test_ring_due_during_dropout_is_not_collected_on_recovery(self):
+        e = _engine()
+        e.calibration_profiles["right"] = _fresh_profile()
+        m = _mode(e)
+        m.total_runs = 5
+        finger, hand = 0, "right"
+        m._finger_sched[hand].next = lambda weights=None: finger
+        t0 = 1000.0
+        m._tick(t0)
+        t = t0 + m.announce_s + 0.01
+        m._tick(t)
+        self.assertEqual(m.phase, "run")
+
+        class _View:
+            def __init__(self):
+                self.pct = None
+                self.live = True
+
+            def read(self, lane):
+                if not self.live:
+                    return None
+                from types import SimpleNamespace
+                return SimpleNamespace(percent=self.pct)
+
+            def sample_age_s(self, lane, now):
+                return 0.0 if self.live else None
+
+        m.view = _View()
+        ring0 = m.ring_times[0]
+        self.assertLess(ring0, 3.0)
+
+        from rehab.game.modes.force_pilot import target_pct
+        dt = 1.0 / 60.0
+        t_run = t0
+        while m.phase == "run":
+            t_run += dt
+            run_elapsed = t_run - (m.run_t0 or t0)
+            if run_elapsed > m.duration_s:
+                break
+            target = target_pct(m.sections, run_elapsed)
+            if 0.3 < run_elapsed < 3.0:
+                m.view.live = False       # dropout spans ring 0
+            else:
+                m.view.live = True
+                m.view.pct = target       # perfect otherwise
+            m._tick(t_run)
+
+        self.assertFalse(m.ring_state[0])
+        self.assertNotIn(True, [m.ring_state[0]])
+
+    def test_ring_before_any_dropout_still_scores_normally(self):
+        """A dropout fix must not gutter rings judged while the signal
+        was live: only rings due DURING the stale window are affected."""
+        e = _engine()
+        e.calibration_profiles["right"] = _fresh_profile()
+        m = _mode(e)
+        m.total_runs = 5
+        finger, hand = 0, "right"
+        m._finger_sched[hand].next = lambda weights=None: finger
+        t = _to_run_phase(m)
+        m.view.pct = m.base_pct
+        dt = 1.0 / 60.0
+        t_run = t
+        # Run to just past the first ring with perfect tracking and no
+        # dropout at all.
+        while m._ring_idx == 0 and m.phase == "run":
+            t_run += dt
+            m._tick(t_run)
+        self.assertGreaterEqual(m._ring_idx, 1)
+        self.assertTrue(m.ring_state[0])
+
+
+# ---- audit fixes: Results screen level annotation, mode-select badge -----
+
+
+class ResultsScreenLevelAnnotationTests(unittest.TestCase):
+    """Audit finding #80: block_stats' own docstring says pooling a
+    lane's stats across corridor levels misrepresents both, and it
+    publishes a by_level split for exactly that reason, but the per-
+    finger charts and the IN CORRIDOR / MEAN ERROR cards drew the
+    pooled values with no level annotation, so fingers sitting at
+    different levels were compared with nothing on screen to say so."""
+
+    @staticmethod
+    def _fp_summary():
+        return {
+            "runs": 4,
+            "levels": {
+                "right:0": {"start": 1, "final": 1, "trace": []},
+                "right:1": {"start": 1, "final": 3, "trace": [1, 2, 3]},
+            },
+            "per_lane": {
+                "0": {"runs": 2, "mae_pct": 4.0, "time_in_corridor": 0.9},
+                "1": {"runs": 2, "mae_pct": 3.0, "time_in_corridor": 0.6},
+            },
+            "overall": {"mae_pct": 3.5, "time_in_corridor": 0.75,
+                       "stalls": 0},
+            "best_section": "sine",
+        }
+
+    def _draw(self, fp_summary):
+        import pygame
+        from rehab.config import Config
+        from rehab.game.engine import GameEngine
+        from rehab.ui.screens import ResultsScreen
+        from rehab.ui.theme import get as get_theme
+        from rehab.ui.widgets import Layout
+        pygame.init()
+        pygame.font.init()
+        pygame.display.set_mode((1280, 800))
+        e = GameEngine.__new__(GameEngine)
+        e.cfg = Config.load()
+        e.theme = get_theme("clinical")
+        e.layout = Layout(1280, 800, 1.0)
+        e.hits, e.misses, e.score = 4, 0, 400
+        e.current_block, e.hand_mode = "force_pilot", "right"
+        e.best_streak, e.per_lane_stats = 0, {}
+        e.hit_streak = 0
+        e.last_session_root = None
+        e.mode = None
+        e.session = type("S", (), {
+            "participant": "T", "age": "60",
+            "block_summary": {"force_pilot": fp_summary}})()
+        e.stop_all_motors = lambda *a, **k: None
+        e.overall_mean_rt = lambda: 0.0
+        e.overall_best_rt = lambda: 0.0
+        r = ResultsScreen(e)
+        r._shown_t = 1.0
+        chart_calls = []
+        orig = r._draw_per_lane_chart
+
+        def recorder(surf, rect, title, values, unit, high_is_bad,
+                     *a, **kw):
+            chart_calls.append({"title": title, "kw": kw})
+            return orig(surf, rect, title, values, unit, high_is_bad,
+                       *a, **kw)
+        r._draw_per_lane_chart = recorder
+        cards = []
+        r._draw_stat_card = (
+            lambda surf, rect, lbl, val, col: cards.append((lbl, val)))
+        surf = pygame.Surface((1280, 800))
+        r.draw(surf)
+        pygame.quit()
+        return chart_calls, cards
+
+    def test_per_finger_charts_carry_the_finger_level(self):
+        chart_calls, _cards = self._draw(self._fp_summary())
+        fp_calls = [c for c in chart_calls if "FINGER" in c["title"]]
+        self.assertTrue(fp_calls)
+        for c in fp_calls:
+            self.assertEqual(c["kw"].get("levels"), [1, 3, 0, 0])
+
+    def test_pooled_cards_flag_mixed_levels(self):
+        _chart_calls, cards = self._draw(self._fp_summary())
+        values = dict(cards)
+        self.assertIn("IN CORRIDOR (mixed levels)", values)
+        self.assertIn("MEAN ERROR (mixed levels)", values)
+
+    def test_same_level_fingers_get_no_mixed_note(self):
+        fp = self._fp_summary()
+        fp["levels"]["right:1"]["final"] = 1   # both fingers at level 1
+        _chart_calls, cards = self._draw(fp)
+        values = dict(cards)
+        self.assertIn("IN CORRIDOR", values)
+        self.assertNotIn("IN CORRIDOR (mixed levels)", values)
+
+
+class ModeSelectHardwareBadgeTests(unittest.TestCase):
+    """Audit finding #111: Force Pilot (with Lighthouse and Buzz Hunt)
+    gave no needs-hardware indication until after a keyboard-only
+    block had already run setup and the GET READY countdown, leaving
+    behind an abandoned session folder. The mode-select card must say
+    so before the click."""
+
+    @staticmethod
+    def _screen(provides_samples):
+        import pygame
+        from rehab.config import Config
+        from rehab.game.engine import GameEngine
+        from rehab.ui.screens import ModeSelectScreen
+        from rehab.ui.theme import get as get_theme
+        from rehab.ui.widgets import Layout
+        pygame.init()
+        pygame.font.init()
+        pygame.display.set_mode((1280, 800))
+        e = GameEngine.__new__(GameEngine)
+        e.cfg = Config.load()
+        e.theme = get_theme("clinical")
+        e.layout = Layout(1280, 800, 1.0)
+        src = MagicMock()
+        src.provides_samples = provides_samples
+        e.source = src
+        return ModeSelectScreen(e)
+
+    def test_needs_hardware_set_names_all_three_hardware_only_modes(
+            self):
+        sc = self._screen(True)
+        self.assertEqual(sc.NEEDS_HARDWARE,
+                         {"force_pilot", "lighthouse", "buzz_hunt"})
+
+    def test_badge_drawn_on_keyboard_only_source(self):
+        sc = self._screen(False)
+        import pygame
+        surf = pygame.Surface((1280, 800))
+        seen = []
+        import rehab.ui.screens as screens_mod
+        original = screens_mod.draw_text
+
+        def recorder(s, text, pos, *a, **k):
+            seen.append(str(text))
+            return original(s, text, pos, *a, **k)
+        screens_mod.draw_text = recorder
+        try:
+            sc.draw(surf)
+        finally:
+            screens_mod.draw_text = original
+        pygame.quit()
+        self.assertIn("NEEDS SENSOR HARDWARE", seen)
+
+    def test_no_badge_when_a_real_source_is_connected(self):
+        sc = self._screen(True)
+        import pygame
+        surf = pygame.Surface((1280, 800))
+        seen = []
+        import rehab.ui.screens as screens_mod
+        original = screens_mod.draw_text
+
+        def recorder(s, text, pos, *a, **k):
+            seen.append(str(text))
+            return original(s, text, pos, *a, **k)
+        screens_mod.draw_text = recorder
+        try:
+            sc.draw(surf)
+        finally:
+            screens_mod.draw_text = original
+        pygame.quit()
+        self.assertNotIn("NEEDS SENSOR HARDWARE", seen)
+
+
 if __name__ == "__main__":
     unittest.main()

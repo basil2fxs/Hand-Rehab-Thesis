@@ -208,6 +208,99 @@ class LaneLabelTests(unittest.TestCase):
         self.assertEqual(lane_label(4, "both"), "Left Index")
         self.assertEqual(lane_label(7, "both"), "Left Pinky")
 
+    def test_mirror_does_not_claim_a_hand(self) -> None:
+        # Audit finding #69: mirror always logs the right-hand copy of
+        # the finger as its lane, so the generic bilateral label
+        # ("Right <finger>", never "Left") reads as a hand asymmetry
+        # that is really just a lane-keying convention. mode="mirror"
+        # must label the pair, not one hand.
+        from rehab.analytics.report import lane_label
+        for lane in range(4):
+            label = lane_label(lane, "both", mode="mirror")
+            self.assertNotIn("Right", label)
+            self.assertNotIn("Left", label)
+        self.assertEqual(lane_label(0, "both", mode="mirror"),
+                          "Index (both hands)")
+
+    def test_per_finger_table_labels_mirror_rows_without_a_hand(
+            self) -> None:
+        # Drives the real _per_finger_table with a metadata blob whose
+        # block_summary.block is "mirror", the same signal the report
+        # generation pipeline reads.
+        from rehab.analytics.report import _per_finger_table
+        meta = {
+            "hand": "both",
+            "block_summary": {
+                "block": "mirror",
+                "per_lane": {"0": {"n_trials": 4, "hit_rate": 0.75}},
+            },
+        }
+        html_out = _per_finger_table(meta)
+        self.assertIn("Index (both hands)", html_out)
+        self.assertNotIn("Right Index", html_out)
+        self.assertNotIn("Left Index", html_out)
+
+
+class ForcePilotPerFingerTableTests(unittest.TestCase):
+    """Audit finding #79: the generic per_lane table (RTs, which Force
+    Pilot never logs, plus Miss counts from every mode's shared
+    log_trial bookkeeping) showed a finger with one Great and one
+    rough run as "Trials 1, Hit rate 0.0, Timeout rate 1.0" and
+    dropped fingers whose runs were all clean, while the mode's own
+    block_summary.force_pilot.per_lane (mae_pct/time_in_corridor/
+    press+release MAE) never appeared in report.html at all."""
+
+    def test_force_pilot_table_reads_the_modes_own_per_lane_stats(
+            self) -> None:
+        from rehab.analytics.report import _per_finger_table
+        meta = {
+            "hand": "right",
+            "block_summary": {
+                "block": "force_pilot",
+                # Generic per_lane: what the shared engine bookkeeping
+                # produces for a Miss-containing lane with no RTs.
+                "per_lane": {
+                    "2": {"n_trials": 1, "hit_rate": 0.0,
+                          "timeout_rate": 1.0},
+                },
+                "force_pilot": {
+                    "per_lane": {
+                        "2": {"runs": 2, "mae_pct": 12.5,
+                              "time_in_corridor": 0.63,
+                              "press_mae_pct": 10.1,
+                              "release_mae_pct": 14.9},
+                        "3": {"runs": 2, "mae_pct": 4.2,
+                              "time_in_corridor": 0.91,
+                              "press_mae_pct": 3.8,
+                              "release_mae_pct": 4.6},
+                    },
+                },
+            },
+        }
+        html_out = _per_finger_table(meta)
+        self.assertNotIn("Hit rate", html_out)
+        self.assertNotIn("Timeout rate", html_out)
+        self.assertIn("Right Ring", html_out)
+        self.assertIn("Right Pinky", html_out)   # clean-only lane 3
+        self.assertIn("12.5", html_out)
+        self.assertIn("0.63", html_out)
+        self.assertIn("4.2", html_out)
+
+    def test_falls_back_to_generic_table_for_old_metadata(self) -> None:
+        # Old saves without block_summary.force_pilot.per_lane must
+        # still render something rather than an empty table.
+        from rehab.analytics.report import _per_finger_table
+        meta = {
+            "hand": "right",
+            "block_summary": {
+                "block": "force_pilot",
+                "per_lane": {"2": {"n_trials": 1, "hit_rate": 0.0,
+                                   "timeout_rate": 1.0}},
+            },
+        }
+        html_out = _per_finger_table(meta)
+        self.assertIn("Hit rate", html_out)   # generic fallback table
+
 
 class OpenSessionFolderTests(unittest.TestCase):
     def _engine(self, root: str | None):

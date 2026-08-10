@@ -58,6 +58,28 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
+def _dark_frac_and_windows(mode) -> tuple[float, int]:
+    """The dark share and window count the top strip and the announce
+    line should quote.
+
+    The level's dark_windows/dark_fraction config is what the ladder
+    is aiming for, but draw_hold_params drops windows a short-
+    configured hold_s cannot fit (audit finding #87), so a hold that
+    is about to run (or just ran) can carry FEWER dark windows than
+    the level implies. When the current trial is a hold, read the
+    windows it actually drew; otherwise (an echo trial, or before any
+    trial has been prepared) fall back to the level's configured
+    share, which is the best available answer there."""
+    if mode.kind == "hold" and mode.params:
+        hold_s = float(mode.params.get("hold_s", 0.0))
+        n = int(round(float(mode.params.get("n_dark", 0))))
+        dark_s = float(mode.params.get("dark_s", 0.0))
+        frac = (n * dark_s / hold_s) if hold_s > 0 else 0.0
+        return frac, n
+    return mode.dark_frac_by_level[mode.level - 1], \
+        mode.dark_windows_by_level[mode.level - 1]
+
+
 # Warm lantern palette, deliberately independent of the UI theme so
 # the flame reads as firelight on both light and dark themes.
 FLAME_OUTER = (255, 138, 48)
@@ -204,7 +226,7 @@ class LighthouseScreen(Screen):
             left = f"Trial {min(done + 1, total)} of {total}"
         draw_text(surf, left, (pad, 34), self.theme, self.layout,
                   pt=FONT_SMALL, colour=self.theme.muted)
-        frac_dark = mode.dark_frac_by_level[mode.level - 1]
+        frac_dark, _n_dark = _dark_frac_and_windows(mode)
         draw_text(surf,
                   f"Level {mode.level} of {mode.max_level}   "
                   f"Dark {frac_dark * 100:.0f}% of each hold",
@@ -303,7 +325,7 @@ class LighthouseScreen(Screen):
             draw_text(surf, "Keep the lantern lit with this finger.",
                       (cx, 380), self.theme, self.layout, pt=FONT_H2,
                       centre=True, colour=self.theme.foreground)
-            n_dark = mode.dark_windows_by_level[mode.level - 1]
+            _frac_dark, n_dark = _dark_frac_and_windows(mode)
             line = ("Press gently and hold the flame steady."
                     if n_dark == 0 else
                     "Press gently and hold. When the room darkens, "

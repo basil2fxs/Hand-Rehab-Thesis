@@ -529,6 +529,30 @@ class LocalisationTests(unittest.TestCase):
         self.assertEqual(row["timeout_ms"],
                          f"{m.response_window_s * 1000.0:.0f}")
 
+    def test_a_dropped_stimulus_is_voided_not_scored_as_a_miss(self) -> None:
+        """When pulse_motor reports the hardware never accepted the
+        STIM, the trial cannot be a perception sample either way: it
+        must not be logged as a normal correct/incorrect response,
+        must not move the staircase, and must not enter the
+        localisation records (audit finding #93)."""
+        e = _engine()
+        e.source.send_command = lambda c: (e._sent.append(c) or False)
+        m = _mode(e)
+        m = _only_stage(m, "loc", 1)
+        t = _to_trial(m)
+        t = _to_respond(m, t)
+        before = m._dur_stair[m.hand].level
+        # Even a press on the correct lane must not read as a hit:
+        # nothing buzzed for it to correctly localise.
+        m.queue_press(_press_event(m.lane, t + 0.1))
+        m._tick(t + 0.11)
+        row = m.engine.trial_logger.rows[0]
+        self.assertEqual(row["stim_delivered"], "FALSE")
+        self.assertEqual(row["early_late"], "Miss")
+        self.assertEqual(m._dur_stair[m.hand].level, before)
+        self.assertEqual(m._loc_records, [])
+        self.assertEqual(m.engine._block_stim_failures, 1)
+
 
 # ---- catch trials -------------------------------------------------------
 
@@ -714,8 +738,15 @@ class HandMatrixTests(unittest.TestCase):
         rec = m._dis_records[0]
         self.assertTrue(rec["lured"])
         self.assertFalse(rec["correct"])
-        # The cross-hand confusion cell is the point of the matrix.
-        self.assertEqual(m._confusion[str(rec["lane"])][str(d_lane)], 1)
+        # The cross-hand confusion cell is the point of the DISTRACTOR
+        # matrix. It must not land in the localisation matrix
+        # (m._confusion, the Weber 2023 analogue and the Results
+        # screen's MISREFERRALS PER FINGER source): a decoy lure is a
+        # designed attention failure, not an uncued localisation error
+        # (audit finding #95).
+        self.assertEqual(
+            m._distractor_confusion[str(rec["lane"])][str(d_lane)], 1)
+        self.assertEqual(m._confusion, {})
 
     def test_pressing_the_decoy_during_the_decoy_pulse_scores_lured_not_a_free_retry(self) -> None:
         """A press during the decoy pulse itself (before the response
@@ -750,6 +781,41 @@ class HandMatrixTests(unittest.TestCase):
         stats = m.block_stats()
         self.assertEqual(stats["distractor"]["trials"], 1)
         self.assertEqual(stats["distractor"]["lured"], 1)
+
+    def test_a_lucky_press_on_the_target_finger_during_the_decoy_window_scores_nothing(
+            self) -> None:
+        """A press during the decoy window that lands on a lane OTHER
+        than the decoy -- including the finger that is about to
+        become the target -- must not be scored as a response to a
+        target that has not fired yet. Before the fix this produced a
+        Perfect hit with a negative RT and inflated distractor
+        accuracy (audit finding #89)."""
+        e = _engine(hand_mode="both")
+        m = _mode(e, hands={"right": [0, 1, 2, 3], "left": [4, 5, 6, 7]})
+        m._stage_plan = ["distractor"] * 2
+        m.total_trials = 2
+        t = _to_trial(m)
+        dt = 1.0 / 60.0
+        guard = t + 5.0
+        while m.sub != "play" and t < guard:
+            t += dt
+            m._tick(t)
+        self.assertEqual(m.sub, "play")
+        self.assertLess(t, m._target_on)
+        target_lane = m.lane
+        # Guess the finger that is about to buzz, before it has.
+        m.queue_press(_press_event(target_lane, t))
+        m._tick(t + dt)
+        self.assertEqual(m._dis_records, [],
+                          "a pre-onset guess must not become a scored "
+                          "distractor trial")
+        stats = m.block_stats()
+        self.assertEqual(stats["distractor"]["trials"], 0)
+        self.assertEqual(stats["distractor"]["accuracy"], None)
+        row = e.trial_logger.rows[-1]
+        self.assertEqual(row["error_type"], "anticipation")
+        self.assertEqual(row["early_late"], "Early")
+        self.assertEqual(row["points"], 0)
 
     def test_early_press_during_a_distractor_wait_is_attributed_to_that_stage(self) -> None:
         """An early press that happens during a DISTRACTOR trial's wait
@@ -834,6 +900,55 @@ class SpanTests(unittest.TestCase):
         stims = [c for c in m.engine._sent if str(c).startswith("STIM")]
         self.assertEqual(len(stims), len(m.sequence))
 
+    def test_a_press_during_playback_redraws_a_fresh_sequence(self):
+        """An early press mid-playback must not silently replay the
+        identical sequence: that gives a novel-span trial an extra,
+        uncounted exposure before it is scored as a normal
+        single-exposure trial (audit finding #92)."""
+        m = self._span_mode()
+        t = _to_trial(m)
+        self.assertFalse(m.is_hebb)
+        orig_seq = list(m.sequence)
+        orig_seed = m.trial_seed
+        dt = 1.0 / 60.0
+        guard = t + 5.0
+        while m._pulse_idx == 0 and t < guard:
+            t += dt
+            m._tick(t)
+        self.assertEqual(m._pulse_idx, 1, "the first pulse must have "
+                         "fired before the early press lands")
+        m.queue_press(_press_event(orig_seq[0], t))
+        m._tick(t + dt)
+        self.assertEqual(m.sub, "wait")
+        self.assertNotEqual(m.trial_seed, orig_seed)
+        self.assertNotEqual(m.sequence, orig_seq,
+                            "the retry must not replay the exact same "
+                            "sequence the player already heard part of")
+
+    def test_a_hebb_span_trial_keeps_its_material_across_a_restart(self):
+        """A Hebb trial's sequence is deterministic from the
+        participant, not the trial seed, so a mid-playback redraw
+        must not turn it into a different (non-Hebb-comparable)
+        sequence."""
+        m = self._span_mode(n=6)
+        # Two ordinary trials first, then the hidden-sequence one, the
+        # same direct-draw pattern used elsewhere in this file to
+        # inspect a specific trial's material without driving the
+        # full phase machine (is_hebb keys off span_done, the number
+        # of recorded span trials, not trials_done).
+        for i in range(2):
+            m.trials_done = i
+            m._prepare_trial()
+            m._span_records.append({"len": len(m.sequence), "hebb": False,
+                                    "correct": False, "n_right": 0})
+        m.trials_done = 2
+        m._prepare_trial()
+        self.assertTrue(m.is_hebb)
+        orig_seq = list(m.sequence)
+        m._redraw_interrupted_material()
+        self.assertTrue(m.is_hebb)
+        self.assertEqual(m.sequence, orig_seq)
+
     def test_span_row_parses_back_to_the_played_sequence(self):
         from rehab.data.logger import parse_waveform_params
         from rehab.game.modes.buzz_hunt import parse_lanes
@@ -846,6 +961,26 @@ class SpanTests(unittest.TestCase):
         params = parse_waveform_params(row["waveform_params"])
         self.assertEqual(parse_lanes(params["seq"]), played)
         self.assertEqual(int(params["hebb"]), 0)
+
+    def test_a_dropped_span_stimulus_is_voided_not_scored(self) -> None:
+        """A span trial whose pulse train never fired must not enter
+        the span curve or move the span ladder, whatever the player
+        happened to press (audit finding #93)."""
+        e = _engine()
+        e.source.send_command = lambda c: (e._sent.append(c) or False)
+        m = _mode(e)
+        m = _only_stage(m, "span", 1)
+        t = _to_trial(m)
+        played = list(m.sequence)
+        before_len = m.span_len
+        t = _to_respond(m, t)
+        self._replay(m, t, played)
+        row = m.engine.trial_logger.rows[0]
+        self.assertEqual(row["stim_delivered"], "FALSE")
+        self.assertEqual(row["early_late"], "Miss")
+        self.assertEqual(m._span_records, [])
+        self.assertEqual(m.span_len, before_len)
+        self.assertEqual(m.engine._block_stim_failures, 1)
 
 
 # ---- gap trials ---------------------------------------------------------
@@ -902,6 +1037,49 @@ class GapTests(unittest.TestCase):
         self._run_gap_trial(m, t, taps=0)
         self.assertEqual(m._gap_stair["right"].level, before)
         self.assertFalse(m._gap_records[0]["responded"])
+
+    def test_a_dropped_gap_stimulus_is_voided_not_scored(self) -> None:
+        """A gap trial whose pulse train never fired must not enter
+        the gap accuracy or move the gap staircase (audit finding
+        #93)."""
+        e = _engine()
+        e.source.send_command = lambda c: (e._sent.append(c) or False)
+        m = _mode(e)
+        m = _only_stage(m, "gap", 1)
+        t = _to_trial(m)
+        before = m._gap_stair["right"].level
+        self._run_gap_trial(m, t, taps=2 if m.gap_two else 1)
+        row = m.engine.trial_logger.rows[0]
+        self.assertEqual(row["stim_delivered"], "FALSE")
+        self.assertEqual(row["early_late"], "Miss")
+        self.assertEqual(m._gap_records, [])
+        self.assertEqual(m._gap_stair["right"].level, before)
+        self.assertEqual(m.engine._block_stim_failures, 1)
+
+    def test_a_press_during_gap_playback_redraws_a_fresh_kind(self):
+        """An early press mid-playback of a gap stimulus must not
+        silently replay the identical (seed, kind) pair: it gives the
+        trial an extra, uncounted exposure to the same stimulus
+        before it scores as a normal single-exposure trial (audit
+        finding #92, the gap-stage half)."""
+        m = self._gap_mode()
+        t = _to_trial(m)
+        orig_seed = m.trial_seed
+        dt = 1.0 / 60.0
+        guard = t + 5.0
+        while m._pulse_idx == 0 and t < guard:
+            t += dt
+            m._tick(t)
+        self.assertEqual(m._pulse_idx, 1, "the first pulse must have "
+                         "fired before the early press lands")
+        m.queue_press(_press_event(m.lane, t))
+        m._tick(t + dt)
+        self.assertEqual(m.sub, "wait")
+        self.assertNotEqual(m.trial_seed, orig_seed)
+        import random as _random
+        expected_kind = (_random.Random(m.trial_seed).random() < 0.5)
+        self.assertEqual(m.gap_two, expected_kind)
+        self.assertEqual(int(m.params["two"]), 1 if expected_kind else 0)
 
     def test_gap_reversals_reach_the_raw_log(self):
         m = self._gap_mode(n=8)
@@ -1102,6 +1280,91 @@ class ScreenTests(unittest.TestCase):
         keys = [k for k, _t, _d in ModeSelectScreen.MODES]
         self.assertIn("buzz_hunt", keys)
         self.assertIn("buzz_hunt", ModeSelectScreen.MODE_ACCENTS)
+
+
+# ---- results screen ------------------------------------------------------
+
+
+class ResultsCardTests(unittest.TestCase):
+    """Audit finding #94: THRESHOLD and GAP used to average both
+    hands into one number and fall back to a still-descending
+    staircase level when a block had fewer than 2 reversals, so a
+    clean flawless block could show the 40 ms hardware floor labelled
+    as a measured threshold, and a bilateral block's two very
+    different hand levels blended into a number representing
+    neither."""
+
+    def _draw(self, bh_summary, hand_mode="right"):
+        import pygame
+        from rehab.config import Config
+        from rehab.game.engine import GameEngine
+        from rehab.ui.screens import ResultsScreen
+        from rehab.ui.theme import get as get_theme
+        from rehab.ui.widgets import Layout
+        pygame.init()
+        pygame.font.init()
+        pygame.display.set_mode((1280, 800))
+        e = GameEngine.__new__(GameEngine)
+        e.cfg = Config.load()
+        e.theme = get_theme("clinical")
+        e.layout = Layout(1280, 800, 1.0)
+        e.hits, e.misses, e.score = 8, 0, 800
+        e.current_block, e.hand_mode = "buzz_hunt", hand_mode
+        e.best_streak, e.per_lane_stats = 0, {}
+        e.hit_streak = 0
+        e.last_session_root = None
+        e.mode = None
+        e.session = type("S", (), {
+            "participant": "T", "age": "60",
+            "block_summary": {"buzz_hunt": bh_summary}})()
+        e.stop_all_motors = lambda *a, **k: None
+        e.overall_mean_rt = lambda: 0.0
+        e.overall_best_rt = lambda: 0.0
+        r = ResultsScreen(e)
+        r._shown_t = 1.0
+        cards = []
+        r._draw_stat_card = (
+            lambda surf, rect, lbl, val, col: cards.append((lbl, val)))
+        r._draw_per_lane_chart = lambda *a, **k: None
+        surf = pygame.Surface((1280, 800))
+        r.draw(surf)
+        pygame.quit()
+        return cards
+
+    def test_a_still_descending_staircase_reads_not_reached(self):
+        bh = {
+            "hands": ["right"],
+            "loc": {"accuracy": 1.0, "catch": {"false_alarms": 0}},
+            "threshold": {"right": {"start_ms": 300.0, "final_ms": 100.0,
+                                    "estimate_ms": None, "n_reversals": 0,
+                                    "reversals_ms": []}},
+            "span": {"max_correct": 4},
+            "gap": {"threshold": {}},
+        }
+        cards = dict(self._draw(bh))
+        self.assertEqual(cards.get("THRESHOLD"), "not reached")
+        self.assertNotIn("100 ms", cards.values())
+
+    def test_bilateral_hands_get_their_own_cards_not_an_average(self):
+        bh = {
+            "hands": ["right", "left"],
+            "loc": {"accuracy": 1.0, "catch": {"false_alarms": 0}},
+            "threshold": {
+                "right": {"start_ms": 300.0, "final_ms": 300.0,
+                          "estimate_ms": 300.0, "n_reversals": 6,
+                          "reversals_ms": [300.0] * 6},
+                "left": {"start_ms": 120.0, "final_ms": 120.0,
+                         "estimate_ms": 120.0, "n_reversals": 6,
+                         "reversals_ms": [120.0] * 6},
+            },
+            "span": {"max_correct": 4},
+            "gap": {"threshold": {}},
+        }
+        cards = dict(self._draw(bh, hand_mode="both"))
+        self.assertEqual(cards.get("THRESHOLD R"), "300 ms")
+        self.assertEqual(cards.get("THRESHOLD L"), "120 ms")
+        self.assertNotIn("THRESHOLD", cards)
+        self.assertNotIn("210 ms", cards.values())
 
 
 if __name__ == "__main__":

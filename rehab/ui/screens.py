@@ -413,6 +413,20 @@ class TitleScreen(Screen):
                     e.type == pygame.KEYDOWN and e.key == pygame.K_ESCAPE):
                 self._show_info = False
             return
+        # Tab, pressed with neither field focused, is the only way a
+        # keyboard-only session (no mouse at all, audit finding #113)
+        # can reach the name field: TextInput.handle_event only
+        # accepts KEYDOWN while self.focused is already True, and the
+        # only way to SET focused=True is a mouse click inside the
+        # rect. Claim it here, before dispatch, so the field the Tab
+        # was meant for gets it instead of the keystroke being
+        # silently dropped.
+        tab_pressed = e.type == pygame.KEYDOWN and e.key == pygame.K_TAB
+        was_name_focused = self.name_input.focused
+        was_age_focused = self.age_input.focused
+        if tab_pressed and not (was_name_focused or was_age_focused):
+            self.name_input.focused = True
+            return
         # Text inputs first so a click in either field claims focus
         # before any button hit-test runs underneath. Order matters
         # only in that whichever input handles the event first will
@@ -421,17 +435,30 @@ class TitleScreen(Screen):
         self.name_input.handle_event(e)
         self.age_input.handle_event(e)
         self.start_btn.handle_event(e)
+        # Tab cycles name -> age -> (defocused, ready for Enter).
+        # TextInput's own Tab handling above already defocused
+        # whichever field had it; pick up the baton and focus the
+        # next one in the row.
+        if tab_pressed and was_name_focused and not self.age_input.focused:
+            self.age_input.focused = True
         if e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
             for rect, _label, _icon, action in self._pills:
                 if rect.collidepoint(e.pos):
                     action()
                     break
-        # Enter key on either focused field acts as a shortcut for
-        # Start so a therapist on a keyboard doesn't have to grab the
-        # mouse to commit.
-        if (e.type == pygame.KEYDOWN
-                and e.key == pygame.K_RETURN
-                and (self.name_input.focused or self.age_input.focused)):
+        # Enter always starts the session, whether or not a field was
+        # focused: this used to be gated on "a field is (still)
+        # focused after the dispatch above", but TextInput's own Enter
+        # handling defocuses the field on the very same event, so that
+        # check always read False and Enter never fired (audit finding
+        # #113's "keyboard-only start" requirement caught this: a
+        # keyboard-only session had no way to leave this screen at
+        # all). Checking the PRE-dispatch focus state, or simply
+        # firing unconditionally on Enter, both fix it; unconditional
+        # also covers the fresh-screen case where the participant
+        # never focused a field and just wants to start with the
+        # default name.
+        if e.type == pygame.KEYDOWN and e.key == pygame.K_RETURN:
             self._begin()
 
     def draw(self, surf: pygame.Surface) -> None:
@@ -629,6 +656,15 @@ class ModeSelectScreen(Screen):
         ("buzz_hunt", "Buzz Hunt",
          "Press the finger that buzzed. Sensation."),
     ]
+    # Every stage of these three needs a real analogue signal (a
+    # continuous force trace or the vibration motors themselves) --
+    # there is no keyboard-equivalent play for any of them, by design
+    # (see each mode's docstring). On a keyboard-only source, picking
+    # one used to run setup and the GET READY countdown all the way to
+    # the mode's own first-tick refusal, leaving an abandoned session
+    # folder behind with zero trial rows and no warning before the
+    # click (audit finding #111). Badged on the card instead.
+    NEEDS_HARDWARE = {"force_pilot", "lighthouse", "buzz_hunt"}
     # Per-mode accent colours. The vertical strip on the left of each
     # card uses these, plus the icon takes the same colour as a subtle
     # repeated cue.
@@ -719,9 +755,22 @@ class ModeSelectScreen(Screen):
             return
         self.engine.show_setup()
 
+    # Number-key shortcuts for the ten cards, 1-9 then 0 for the
+    # tenth, matching reading order (audit finding #113: mode select
+    # was mouse-click only, so a keyboard-only session could not get
+    # past this screen at all).
+    _DIGIT_KEYS = (
+        pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4, pygame.K_5,
+        pygame.K_6, pygame.K_7, pygame.K_8, pygame.K_9, pygame.K_0,
+    )
+
     def handle_event(self, e: pygame.event.Event) -> None:
         for b in self.buttons + [self.back_btn]:
             b.handle_event(e)
+        if e.type == pygame.KEYDOWN and e.key in self._DIGIT_KEYS:
+            idx = self._DIGIT_KEYS.index(e.key)
+            if idx < len(self.MODES):
+                self._pick(self.MODES[idx][0])
 
     @staticmethod
     def _draw_mode_icon(surf: pygame.Surface, kind: str,
@@ -885,6 +934,12 @@ class ModeSelectScreen(Screen):
         _draw_header(surf, "Pick a mode",
                      "Which training pattern for this session?",
                      self.theme, self.layout)
+        # Only relevant with no live sensor source: a serial device
+        # gives every mode real input, so there is nothing to warn
+        # about. On a keyboard-only fallback, Force Pilot / Lighthouse
+        # / Buzz Hunt cannot be played at all (finding #111).
+        src = getattr(self.engine, "source", None)
+        no_hardware = not getattr(src, "provides_samples", True)
         for b, (key, title, desc) in zip(self.buttons, self.MODES):
             b.draw(surf)
             accent = self.MODE_ACCENTS.get(key, self.theme.accent)
@@ -923,6 +978,19 @@ class ModeSelectScreen(Screen):
             draw_text(surf, desc, (text_x, b.rect.centery + 4),
                       self.theme, self.layout, pt=FONT_BODY,
                       centre=False, colour=muted_fg)
+            if no_hardware and key in self.NEEDS_HARDWARE:
+                # Said up front, before the click: these three cannot
+                # run on a keyboard-only source at all (every stage
+                # needs the sensor pads or the vibration motors), so
+                # picking one used to run all the way to the mode's
+                # own refusal screen with nothing said here first.
+                badge = "NEEDS SENSOR HARDWARE"
+                badge_font = self.layout.font(FONT_SMALL)
+                badge_w = badge_font.size(badge)[0]
+                draw_text(surf, badge,
+                          (b.rect.right - 14 - badge_w, b.rect.y + 14),
+                          self.theme, self.layout, pt=FONT_SMALL,
+                          centre=False, colour=self.theme.error)
         self.back_btn.draw(surf)
 
 
@@ -1034,6 +1102,13 @@ class SetupScreen(Screen):
         else:
             self.engine.begin_adaptive_block()
 
+    # Keyboard shortcut for each hand card, first letter of its key
+    # (audit finding #113: this screen was mouse-click only, so a
+    # keyboard-only session could not get past hand-pick at all).
+    _HAND_KEYS = {
+        pygame.K_l: "left", pygame.K_r: "right", pygame.K_b: "both",
+    }
+
     def handle_event(self, e: pygame.event.Event) -> None:
         # Slider first so a click on the knob isn't intercepted by an
         # adjacent button hit-test. Only let it respond when classic
@@ -1042,6 +1117,8 @@ class SetupScreen(Screen):
             self.pace_slider.handle_event(e)
         for b in self.buttons + [self.back_btn]:
             b.handle_event(e)
+        if e.type == pygame.KEYDOWN and e.key in self._HAND_KEYS:
+            self._pick(self._HAND_KEYS[e.key])
 
     def _button_glyph_colour(self, b: Button) -> tuple[int, int, int]:
         """Pick a glyph colour that contrasts with whatever fill the
@@ -3141,6 +3218,15 @@ class RhythmSetupScreen(Screen):
                   self.preview_btn, self.start_btn,
                   self.back_btn, self.refresh_btn):
             b.handle_event(e)
+        if e.type == pygame.KEYDOWN and e.key == pygame.K_RETURN:
+            # Same as clicking START: refresh() already pre-selects the
+            # first track and a difficulty default comes from config, so
+            # a keyboard-only session (audit finding #113: this screen
+            # was mouse-click only for both track pick and START) can
+            # still start straight away without ever picking a
+            # different track.
+            self._start()
+            return
         if e.type == pygame.MOUSEWHEEL:
             # Scroll the track list when the cursor is hovering it.
             # Clamped at both ends so the wheel stops at top + bottom
@@ -3490,6 +3576,12 @@ class ResultsScreen(Screen):
         self.again_btn.handle_event(e)
         self.folder_btn.handle_event(e)
         self.title_btn.handle_event(e)
+        # Enter confirms the primary (Retry) action, same convention as
+        # the title screen's START shortcut (audit finding #113: this
+        # screen was mouse-click only, so a keyboard-only session could
+        # not continue past its own results screen).
+        if e.type == pygame.KEYDOWN and e.key == pygame.K_RETURN:
+            self.engine.retry_last_block()
 
     # Grade thresholds from hit rate. S+ for near-perfect runs, D for low
     # accuracy. Same letter scheme rhythm games use.
@@ -3540,6 +3632,22 @@ class ResultsScreen(Screen):
                 return fp if isinstance(fp, dict) else None
             except Exception:
                 return None
+        return None
+
+    def _mirror_summary(self) -> dict | None:
+        """The mirror section of the block summary (mean sync gap +
+        per-hand mean RT), or None for every other mode. Mirror has no
+        mode.block_stats -- the gap is accumulated on the engine as
+        trials log (see GameEngine.log_trial), so this only reads
+        session.block_summary, no live fallback needed."""
+        if str(getattr(self.engine, "current_block", "")) != "mirror":
+            return None
+        summary = getattr(getattr(self.engine, "session", None),
+                          "block_summary", None)
+        if isinstance(summary, dict):
+            mir = summary.get("mirror")
+            if isinstance(mir, dict):
+                return mir
         return None
 
     def _reaction_summary(self) -> dict | None:
@@ -3652,20 +3760,58 @@ class ResultsScreen(Screen):
                 return None
         return None
 
-    @staticmethod
-    def _buzz_hunt_threshold_ms(bh: dict) -> float | None:
-        """One headline duration threshold: the mean of the per-hand
-        estimates, falling back to the final staircase levels when a
-        short block produced too few reversals to estimate from."""
-        entries = list((bh.get("threshold") or {}).values())
-        vals = [e.get("estimate_ms") for e in entries
-                if isinstance(e, dict) and e.get("estimate_ms") is not None]
-        if not vals:
-            vals = [e.get("final_ms") for e in entries
-                    if isinstance(e, dict) and e.get("final_ms") is not None]
-        if not vals:
+    def _syllables_summary(self) -> dict | None:
+        """The syllables section of the block summary, or None for
+        every other mode. Same read path as _force_pilot_summary:
+        session.block_summary first, live mode stats as fallback."""
+        if str(getattr(self.engine, "current_block", "")) != "syllables":
             return None
-        return sum(float(v) for v in vals) / len(vals)
+        summary = getattr(getattr(self.engine, "session", None),
+                          "block_summary", None)
+        if isinstance(summary, dict):
+            sy = summary.get("syllables")
+            if isinstance(sy, dict):
+                return sy
+        stats_fn = getattr(getattr(self.engine, "mode", None),
+                           "block_stats", None)
+        if callable(stats_fn):
+            try:
+                sy = stats_fn()
+                return sy if isinstance(sy, dict) else None
+            except Exception:
+                return None
+        return None
+
+    def _buzz_hunt_hand_cards(self, label: str,
+                               entries: dict) -> list[tuple]:
+        """One stat card per hand for a buzz_hunt staircase (the
+        duration threshold or the gap threshold): the two hands run
+        independent staircases at different levels (bilateral play
+        can easily be, say, right 300 ms vs left 120 ms), so a single
+        averaged number represents neither hand, the same reasoning
+        the notebook already applies to its own per-hand splits.
+        A hand needs at least 2 reversals before its final staircase
+        level counts as an estimate (Staircase.estimate's own rule);
+        short of that the level is still descending from the config
+        start, not a measured threshold, so the card says so plainly
+        instead of showing the number (which, at the floor, would
+        read as a real 40 ms threshold)."""
+        hands = sorted(h for h, e in entries.items() if isinstance(e, dict))
+        out = []
+        for hand in hands:
+            e = entries[hand]
+            tag = (f"{label} {hand[0].upper()}"
+                  if len(hands) > 1 else label)
+            n_rev = e.get("n_reversals") or 0
+            est = e.get("estimate_ms")
+            if n_rev >= 2 and est is not None:
+                out.append((tag, f"{float(est):.0f} ms",
+                           self.theme.foreground))
+            else:
+                out.append((tag, "not reached", self.theme.muted))
+        if not out:
+            out.append((label, "n/a", self.theme.foreground))
+        return out
 
     # Per-finger labels for the histogram x-axis. Order matches the
     # within-hand finger index used everywhere else (0=index..3=pinky).
@@ -3675,7 +3821,8 @@ class ResultsScreen(Screen):
                               rect: pygame.Rect, title: str,
                               values: list[float],
                               unit: str,
-                              high_is_bad: bool) -> None:
+                              high_is_bad: bool,
+                              levels: list[int] | None = None) -> None:
         """Render one bar chart inside `rect`.
 
         `values` is a per-lane list of length N (4 unilateral, 8
@@ -3689,6 +3836,17 @@ class ResultsScreen(Screen):
         therapist's eye is pulled to problem fingers. When False
         (RT chart) the colour stays neutral - faster is better but
         a slow finger is data, not a problem.
+
+        `levels`: optional per-lane corridor level (Force Pilot only).
+        block_stats' own docstring warns that pooling a lane's stats
+        across corridor levels misrepresents both (a narrower corridor
+        mechanically lowers time-in-corridor for the same skill), so
+        when two fingers in the same chart sit at different levels the
+        bars are not the same measurement even though they are drawn
+        on one axis; each finger's final level is appended to its
+        x-axis label (audit finding #80) so that is visible at a
+        glance instead of silent. None (every other mode) draws plain
+        finger labels as before.
         """
         # Card-like background + outline (matches stat-card visual
         # treatment so the chart reads as a Results panel element).
@@ -3765,6 +3923,12 @@ class ResultsScreen(Screen):
             if n > 4:
                 hand_letter = "L" if lane >= 4 else "R"
                 label = f"{hand_letter}{label}"
+            if levels and 0 <= lane < len(levels) and levels[lane]:
+                # Corridor level suffix (finding #80): fingers at
+                # different levels are not the same measurement, so
+                # say which level each bar came from right on the
+                # axis rather than only in the stored metadata.
+                label = f"{label}{levels[lane]}"
             draw_text(surf, label,
                       (bar_x + bar_w // 2, bar_bottom + 14),
                       self.theme, self.layout, pt=FONT_SMALL,
@@ -3915,6 +4079,8 @@ class ResultsScreen(Screen):
         rx = self._reaction_summary()
         pat = self._pattern_summary()
         ch = self._chords_summary()
+        sy = self._syllables_summary()
+        mir = self._mirror_summary()
         avg_rt = self.engine.overall_mean_rt()
         best_rt = self.engine.overall_best_rt()
         avg_str = f"{avg_rt:.0f} ms" if avg_rt > 0 else "n/a"
@@ -3935,15 +4101,38 @@ class ResultsScreen(Screen):
             tic = overall.get("time_in_corridor")
             mae = overall.get("mae_pct")
             best_sec = fp.get("best_section") or "n/a"
+            # IN CORRIDOR / MEAN ERROR pool every played finger's runs
+            # into one number. block_stats' own docstring says pooling
+            # a lane's stats across corridor levels misrepresents both
+            # (a narrower corridor mechanically lowers time-in-corridor
+            # for the same skill); pooling ACROSS FINGERS has the same
+            # problem whenever those fingers sit at different levels,
+            # which the per-finger charts below now show. Flag the
+            # pooled cards with a level-mix note rather than let them
+            # read as one clean measurement when they are not (finding
+            # #80).
+            fp_levels_raw = fp.get("levels") or {}
+            fp_per_lane = fp.get("per_lane") or {}
+            played_levels = set()
+            for lane_str in fp_per_lane:
+                try:
+                    lane = int(lane_str)
+                except (TypeError, ValueError):
+                    continue
+                hand_word = "right" if lane < 4 else "left"
+                lvl_entry = fp_levels_raw.get(f"{hand_word}:{lane % 4}")
+                if isinstance(lvl_entry, dict) and lvl_entry.get("final"):
+                    played_levels.add(int(lvl_entry["final"]))
+            level_note = " (mixed levels)" if len(played_levels) > 1 else ""
             cards = [
                 ("SCORE", f"{int(round(self.engine.score * entry))}",
                  self.theme.accent),
                 ("RUNS", f"{int(round((fp.get('runs') or 0) * entry))}",
                  self.theme.success),
-                ("IN CORRIDOR",
+                (f"IN CORRIDOR{level_note}",
                  (f"{tic * 100:.0f}%" if tic is not None else "n/a"),
                  self.theme.foreground),
-                ("MEAN ERROR",
+                (f"MEAN ERROR{level_note}",
                  (f"{mae:.1f}%" if mae is not None else "n/a"),
                  self.theme.foreground),
                 ("STALLS", f"{overall.get('stalls', 0)}",
@@ -3967,7 +4156,13 @@ class ResultsScreen(Screen):
                 ("HOLDS",
                  f"{int(round((lh.get('holds') or 0) * entry))}",
                  self.theme.success),
-                ("LIT STEADINESS",
+                # cov is the coefficient of variation: HIGHER means
+                # LESS steady. "LIT STEADINESS" alone reads as
+                # higher-is-better, the opposite of what the number
+                # means (audit finding #107); the per-lane chart below
+                # already carries the "(CoV)" qualifier this card was
+                # missing.
+                ("LIT VARIABILITY (CoV)",
                  (f"{cov * 100:.1f}%" if cov is not None else "n/a"),
                  self.theme.foreground),
                 ("DARK DRIFT",
@@ -3983,37 +4178,36 @@ class ResultsScreen(Screen):
         elif bh is not None:
             # Buzz Hunt has its own outcome vocabulary: localisation
             # accuracy, the duration threshold estimate, the span
-            # reached and the catch-trial false alarms.
+            # reached and the catch-trial false alarms. THRESHOLD and
+            # GAP used to average the two hands into one number and
+            # fall back to the current staircase level under two
+            # reversals, so a clean bilateral block could show a
+            # number that represented neither hand, and a short block
+            # could show the 40 ms hardware floor labelled as a
+            # measured threshold (audit finding #94). Each hand gets
+            # its own card instead, and a hand short of 2 reversals
+            # reads "not reached" rather than its still-adapting
+            # level.
             loc = bh.get("loc") or {}
             acc = loc.get("accuracy")
-            thr = self._buzz_hunt_threshold_ms(bh)
             span = (bh.get("span") or {}).get("max_correct")
             fa = (loc.get("catch") or {}).get("false_alarms")
-            gap_all = ((bh.get("gap") or {}).get("threshold")
-                       or {}).values()
-            gap_vals = [g.get("estimate_ms") or g.get("final_ms")
-                        for g in gap_all if isinstance(g, dict)]
-            gap_vals = [float(v) for v in gap_vals if v is not None]
-            gap_ms = (sum(gap_vals) / len(gap_vals)
-                      if gap_vals else None)
             cards = [
                 ("SCORE", f"{int(round(self.engine.score * entry))}",
                  self.theme.accent),
                 ("LOCALISATION",
                  (f"{acc * 100:.0f}%" if acc is not None else "n/a"),
                  self.theme.success),
-                ("THRESHOLD",
-                 (f"{thr:.0f} ms" if thr is not None else "n/a"),
-                 self.theme.foreground),
                 ("SPAN", (f"{span}" if span else "n/a"),
                  self.theme.foreground),
                 ("FALSE ALARMS",
                  (f"{fa}" if fa is not None else "n/a"),
                  self.theme.error),
-                ("GAP",
-                 (f"{gap_ms:.0f} ms" if gap_ms is not None else "n/a"),
-                 self.theme.foreground),
             ]
+            cards += self._buzz_hunt_hand_cards(
+                "THRESHOLD", bh.get("threshold") or {})
+            cards += self._buzz_hunt_hand_cards(
+                "GAP", (bh.get("gap") or {}).get("threshold") or {})
         elif pat is not None:
             # Pattern's own docstring (WHAT THE PATIENT SEES) is
             # explicit that "RT numbers are never shown": Boyd and
@@ -4134,6 +4328,68 @@ class ResultsScreen(Screen):
                 ("LEAK FAILS", f"{leak_fails}", self.theme.error),
                 ("OVER-FORCE", f"{over_force}", self.theme.warning),
             ]
+        elif sy is not None:
+            # Syllables' own outcome vocabulary (audit finding #30):
+            # on paced blocks (levels 3-4) rt_ms is the MEAN SIGNED
+            # beat asynchrony, not a reaction time, so the generic
+            # AVG RT / BEST RT cards read a personal-best "RT" out of
+            # the most anticipatory word and can print an impossibly
+            # fast RT for a positive (late) mean. Read straight from
+            # the mode's own asyn_mean_ms/asyn_sd_ms instead of
+            # engine.overall_mean_rt, and take the absolute value the
+            # way rhythm's cards do, so an early or late mean reads
+            # the same on the card. Free-paced levels (1, 2, 5, 6)
+            # keep AVG RT / BEST RT, which are real first-tap RTs.
+            level = sy.get("level")
+            paced_level = level in (3, 4)
+            acc = sy.get("accuracy")
+            acc_str = f"{acc * 100:.0f}%" if acc is not None else "n/a"
+            band = sy.get("band_final") or "n/a"
+            if paced_level:
+                amean = sy.get("asyn_mean_ms")
+                asd = sy.get("asyn_sd_ms")
+                offset_str = (f"{abs(amean):.0f} ms"
+                              if amean is not None else "n/a")
+                sd_str = f"{asd:.0f} ms" if asd is not None else "n/a"
+                fifth = ("AVG OFFSET", offset_str, self.theme.foreground)
+                sixth = ("OFFSET SD", sd_str, self.theme.success)
+            else:
+                fifth = ("AVG RT", avg_str, self.theme.foreground)
+                sixth = ("BEST RT", best_str, self.theme.success)
+            cards = [
+                ("SCORE", f"{int(round(self.engine.score * entry))}",
+                 self.theme.accent),
+                ("WORDS CORRECT", acc_str, self.theme.success),
+                ("BAND", str(band), self.theme.foreground),
+                ("MISSES", f"{int(round(self.engine.misses * entry))}",
+                 self.theme.error),
+                fifth,
+                sixth,
+            ]
+        elif mir is not None:
+            # Mirror's whole training goal is bimanual SYNCHRONY, not
+            # raw press speed, so the headline is the mean |right -
+            # left| gap (audit finding #68) rather than AVG RT, which
+            # only ever showed the later-of-two-presses speed and
+            # never told the patient or clinician how in-sync the
+            # pair actually landed.
+            gap_ms = mir.get("mean_gap_ms")
+            gap_str = f"{gap_ms:.0f} ms" if gap_ms is not None else "n/a"
+            r_rt = mir.get("right_hand_mean_rt_ms")
+            l_rt = mir.get("left_hand_mean_rt_ms")
+            r_str = f"{r_rt:.0f} ms" if r_rt is not None else "n/a"
+            l_str = f"{l_rt:.0f} ms" if l_rt is not None else "n/a"
+            cards = [
+                ("SCORE", f"{int(round(self.engine.score * entry))}",
+                 self.theme.accent),
+                ("HITS", f"{int(round(self.engine.hits * entry))}",
+                 self.theme.success),
+                ("SYNC GAP", gap_str, self.theme.foreground),
+                ("MISSES", f"{int(round(self.engine.misses * entry))}",
+                 self.theme.error),
+                ("RIGHT HAND RT", r_str, self.theme.foreground),
+                ("LEFT HAND RT", l_str, self.theme.foreground),
+            ]
         else:
             cards = [
                 ("SCORE", f"{int(round(self.engine.score * entry))}",
@@ -4191,11 +4447,26 @@ class ResultsScreen(Screen):
                     tic_val = stats.get("time_in_corridor")
                     tics[lane] = (float(tic_val) * 100.0
                                   if tic_val is not None else 0.0)
+            # Corridor level per lane (finding #80): block_stats keys
+            # levels by "hand:finger", not by lane, and its own
+            # docstring says pooling a lane across levels misrepresents
+            # both -- so a chart pooling FINGERS at different levels
+            # needs the same disclosure. Lane 0..3 is the right hand,
+            # 4..7 the left, matching the hand_letter convention just
+            # below.
+            fp_levels_raw = fp.get("levels") or {}
+            fp_levels = [0] * n_lanes
+            for lane in range(n_lanes):
+                hand_word = "right" if lane < 4 else "left"
+                lvl_entry = fp_levels_raw.get(f"{hand_word}:{lane % 4}")
+                if isinstance(lvl_entry, dict) and lvl_entry.get("final"):
+                    fp_levels[lane] = int(lvl_entry["final"])
             self._draw_per_lane_chart(
                 surf,
                 pygame.Rect(left_x, chart_y, chart_w, chart_h),
                 "MEAN TRACKING ERROR PER FINGER",
                 maes, unit="% of max", high_is_bad=True,
+                levels=fp_levels,
             )
             self._draw_per_lane_chart(
                 surf,
@@ -4203,6 +4474,7 @@ class ResultsScreen(Screen):
                              chart_w, chart_h),
                 "TIME IN CORRIDOR PER FINGER",
                 tics, unit="%", high_is_bad=False,
+                levels=fp_levels,
             )
         elif lh is not None:
             # Lighthouse charts: lit steadiness per finger and the
@@ -4310,6 +4582,72 @@ class ResultsScreen(Screen):
                     self.theme, self.layout, pt=FONT_SMALL, centre=True,
                     colour=self.theme.muted,
                 )
+        elif sy is not None:
+            # Per-lane charts don't apply to syllables either (audit
+            # finding #30): every trial is keyed to the word's first
+            # required position, so a per-finger RT chart would pile
+            # every word on lane 1 regardless of which finger actually
+            # carried each syllable. The stimulus field carries the
+            # real per-tap detail; the notebook's syllables chapter is
+            # where that lives.
+            note_rect = pygame.Rect(left_x, chart_y,
+                                    total_chart_w, chart_h)
+            body = tuple(max(0, min(255, c - 8))
+                        for c in self.theme.background)
+            pygame.draw.rect(surf, body, note_rect, border_radius=14)
+            outline = tuple(max(0, c - 30) for c in self.theme.background)
+            pygame.draw.rect(surf, outline, note_rect, 1, border_radius=14)
+            note_lines = [
+                "Per-finger timing charts don't apply to syllables: each",
+                "row is keyed to the word's first required position, not",
+                "one lane per finger. See the cards above, or the",
+                "syllables chapter in the session analysis notebook, for",
+                "accuracy by syllable count and beat-synchronisation SD.",
+            ]
+            line_h = FONT_SMALL + 6
+            start_y = note_rect.centery - (len(note_lines) - 1) * line_h // 2
+            for i, line in enumerate(note_lines):
+                draw_text(
+                    surf, line,
+                    (note_rect.centerx, start_y + i * line_h),
+                    self.theme, self.layout, pt=FONT_SMALL, centre=True,
+                    colour=self.theme.muted,
+                )
+        elif mir is not None:
+            # Mirror always keys its per-lane histogram on the
+            # right-hand copy of the finger (log_trial's lane() only
+            # ever returns 0..3, see PendingMirrorTrial.lane()), so
+            # the generic 8-lane split below would draw lanes 4-7 as
+            # empty and read as "the left hand did nothing" -- a
+            # lane-keying convention, not a real hand asymmetry (audit
+            # finding #69). Draw 4 bars for "both hands together" per
+            # finger instead; the SYNC GAP card above + the notebook's
+            # mirror asynchrony section are the real per-hand view.
+            rts_dict = getattr(self.engine, "_per_lane_rts", {}) or {}
+            miss_dict = getattr(self.engine, "_per_lane_misses", {}) or {}
+            wrong_dict = getattr(self.engine, "_per_lane_wrong", {}) or {}
+            rts4 = [
+                (sum(rts_dict.get(i, [])) / len(rts_dict[i]))
+                if rts_dict.get(i) else 0.0
+                for i in range(4)
+            ]
+            miscounts4 = [
+                float(miss_dict.get(i, 0) + wrong_dict.get(i, 0))
+                for i in range(4)
+            ]
+            self._draw_per_lane_chart(
+                surf,
+                pygame.Rect(left_x, chart_y, chart_w, chart_h),
+                "MEAN RT PER FINGER (BOTH HANDS, LATER PRESS)",
+                rts4, unit="ms", high_is_bad=False,
+            )
+            self._draw_per_lane_chart(
+                surf,
+                pygame.Rect(left_x + chart_w + chart_gap, chart_y,
+                             chart_w, chart_h),
+                "MISSES + WRONG PRESSES PER FINGER",
+                miscounts4, unit="count", high_is_bad=True,
+            )
         else:
             # `getattr` defaults shield against an engine state where
             # the per-lane dicts weren't populated (a fresh engine

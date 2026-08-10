@@ -334,6 +334,12 @@ class LighthouseMode:
     # above it the reproduce clock runs. Kept small so a weak blind
     # press still counts as an attempt.
     ENTRY_FLOOR_PCT = 2.0
+    # The standard force-sense paradigm needs a real release between
+    # encode and reproduce; this is how long the reproduce lane must
+    # sit below ENTRY_FLOOR_PCT during the delay before the trial
+    # counts as released. Short: a genuine let-go reads as a plain
+    # dip, not a held pause.
+    RELEASE_QUIET_S = 0.3
     # How long the post-dark drift reveal stays on screen. Steady text,
     # no flashing.
     REVEAL_S = 2.5
@@ -440,6 +446,30 @@ class LighthouseMode:
             self.probe_presses = 2
             n_holds = min(n_holds, max(1, cap - (1 if n_echo else 0)))
             n_echo = min(n_echo, max(0, cap - n_holds))
+        # A hold_s too short to fit even one MIN_DARK_S window leaves
+        # draw_hold_params silently dropping all darkness at any level
+        # with dark_frac > 0 (audit finding #87): the top strip and
+        # the announce line now read the drawn params rather than this
+        # config, so they cannot lie about it, but the level ladder
+        # above 1 still can't move without any dark data. Warn once so
+        # a misconfigured hold_s (defaults are unaffected) is visible
+        # in the log rather than only showing up as a stuck ladder.
+        for lvl in range(1, self.max_level + 1):
+            n = self.dark_windows_by_level[lvl - 1]
+            frac = self.dark_frac_by_level[lvl - 1]
+            if n <= 0 or frac <= 0.0:
+                continue
+            fixed = (self.lit_lead_s + self.lit_tail_s
+                     + (n - 1) * self.lit_gap_s)
+            if self.hold_s - fixed < n * MIN_DARK_S:
+                log.warning(
+                    "lighthouse: hold_s=%.1f cannot fit %d dark "
+                    "window(s) of at least %.1fs at level %d "
+                    "(lit_lead_s=%.1f, lit_gap_s=%.1f, lit_tail_s="
+                    "%.1f); the planner will drop darkness there and "
+                    "the level cannot promote past it on dark data",
+                    self.hold_s, n, MIN_DARK_S, lvl, self.lit_lead_s,
+                    self.lit_gap_s, self.lit_tail_s)
         # Interleave the two trial kinds on a shuffled bag so a block
         # is not all holds then all echoes; the per-kind schedulers
         # below keep each kind balanced across fingers regardless of
@@ -544,6 +574,8 @@ class LighthouseMode:
         self._delay_t0: float | None = None
         self._repro_prompt_t: float | None = None
         self._press_t0: float | None = None
+        self._released = False
+        self._release_quiet_s = 0.0
         self._repro_samples: deque[tuple[float, float]] = deque(maxlen=2048)
         self._reveal_until: float | None = None
 
@@ -771,6 +803,8 @@ class LighthouseMode:
         self._delay_t0 = None
         self._repro_prompt_t = None
         self._press_t0 = None
+        self._released = False
+        self._release_quiet_s = 0.0
         self._repro_samples.clear()
         self.reveal_msg = ""
         self._reveal_until = None
@@ -1031,9 +1065,12 @@ class LighthouseMode:
         info = ContinuousTrialLog(waveform="hold", params=self.params,
                                   seed=self.trial_seed, segments=segments)
         if trial is not None:
+            # A hold is always one hand's finger, even in a both-hands
+            # block; the row-level hand must say which (audit finding
+            # #86), not fall back to the block's "both".
             self.engine.log_trial(trial, outcome, now, stimulus=stimulus,
                                   correct_lanes=[self.lane],
-                                  continuous=info)
+                                  continuous=info, hand=self.hand)
 
         self._last_result = {
             "kind": "hold", "label": label, "guttered": guttered,
@@ -1136,13 +1173,42 @@ class LighthouseMode:
         if self.sub == "delay":
             self.lit_now = False
             self.force_pct_now = None
-            self.delay_left_s = max(
-                0.0, float(p["delay_s"]) - (now - (self._delay_t0 or now)))
+            # The standard force-sense paradigm needs a real release
+            # between encode and reproduce: a finger that rests on the
+            # pad through the delay carries a live tactile anchor into
+            # a window the design means to make blind. Read the
+            # reproduce lane directly (not through _read_lane, which
+            # drives the on-screen force_pct_now the delay deliberately
+            # blanks) and require it below the entry floor for
+            # RELEASE_QUIET_S at some point during the delay.
+            rel = self.view.read(self.lane)
+            if rel is not None and rel.percent is not None:
+                if rel.percent < self.ENTRY_FLOOR_PCT:
+                    self._release_quiet_s += dt
+                else:
+                    self._release_quiet_s = 0.0
+                if self._release_quiet_s >= self.RELEASE_QUIET_S:
+                    self._released = True
+            elapsed = now - (self._delay_t0 or now)
+            self.delay_left_s = max(0.0, float(p["delay_s"]) - elapsed)
             if self.delay_left_s <= 0.0:
-                self.sub = "reproduce"
-                self._repro_prompt_t = now
-                self.engine.log_segment_end(
-                    "delay", self.trial_counter, self.lane, now)
+                if self._released:
+                    self.sub = "reproduce"
+                    self._repro_prompt_t = now
+                    self.engine.log_segment_end(
+                        "delay", self.trial_counter, self.lane, now)
+                elif elapsed >= float(p["delay_s"]) + self.ignite_timeout_s:
+                    # Held straight through the delay and the grace
+                    # window on top of it: no blind reproduction is
+                    # possible from here, so the trial closes gently
+                    # rather than let a held force masquerade as a
+                    # perfect echo (audit finding #84). self.sub is
+                    # still "delay", so _close_echo's own gutter path
+                    # ties off the open marker; do not close it twice.
+                    self._close_echo(now, guttered=True)
+                # else: still waiting for the release inside the grace
+                # window; the delay clock holds at zero rather than
+                # arming reproduce on a held force.
             return
         # sub == "reproduce". The scored window starts at the press,
         # not at the prompt, so a slow blind start does not eat into
@@ -1206,7 +1272,8 @@ class LighthouseMode:
             f"finger={FINGER_WORDS[self.finger].lower()};"
             f"cross={self.cross};delay_s={float(p['delay_s']):.1f};"
             f"target={self.target_pct:.2f};made={_fmt(made)};"
-            f"err={_fmt(signed)};guttered={guttered}")
+            f"err={_fmt(signed)};guttered={guttered};"
+            f"released={self._released}")
         segments = [("enter", self.trial_t0 or now,
                      self._study_t0 if self._study_t0 is not None else now)]
         if self._study_t0 is not None:
@@ -1232,9 +1299,14 @@ class LighthouseMode:
         info = ContinuousTrialLog(waveform="reproduce", params=p,
                                   seed=self.trial_seed, segments=segments)
         if trial is not None:
+            # A plain echo is one hand's finger, same as a hold (audit
+            # finding #86); a cross echo genuinely uses both hands (one
+            # studies, the other reproduces), so "both" stays the
+            # honest row-level answer there.
+            row_hand = "both" if self.cross else self.hand
             self.engine.log_trial(trial, outcome, now, stimulus=stimulus,
                                   correct_lanes=[self.lane],
-                                  continuous=info)
+                                  continuous=info, hand=row_hand)
 
         self._last_result = {
             "kind": "echo", "label": label, "guttered": guttered,
@@ -1281,15 +1353,34 @@ class LighthouseMode:
                                    / (len(vals) - 1)), 3)
 
         holds = [h for h in self._holds if not h.guttered]
+        # The lit-dark delta grows with dark duration (drift
+        # accumulates), and the ladder is global and moves mid-block,
+        # so pooling a lane's delta across every level it happened to
+        # hold at compares fingers on different amounts of darkness,
+        # not on the fingers (audit finding #85). Report the per-lane
+        # delta from the highest level EVERY played lane has at least
+        # one hold at, so every finger's number comes off the same
+        # dark exposure; if no single level has full coverage yet
+        # (early in a block), fall back to pooling across levels for
+        # that lane rather than showing nothing.
+        lanes_with_holds = {h.lane for h in holds}
+        common_level: int | None = None
+        for lvl in sorted({h.level for h in holds}, reverse=True):
+            if {h.lane for h in holds if h.level == lvl} >= lanes_with_holds:
+                common_level = lvl
+                break
         per_lane: dict[str, dict] = {}
         for lane in sorted({h.lane for h in self._holds}):
             hs = [h for h in holds if h.lane == lane]
+            hs_delta = ([h for h in hs if h.level == common_level]
+                        if common_level is not None else hs)
             per_lane[str(lane)] = {
                 "holds": len([h for h in self._holds if h.lane == lane]),
                 "lit_cov": _mean([h.lit_cov for h in hs]),
                 "lit_mae_pct": _mean([h.lit_mae_pct for h in hs]),
                 "dark_mae_pct": _mean([h.dark_mae_pct for h in hs]),
-                "delta_pct": _mean([h.delta_pct for h in hs]),
+                "delta_pct": _mean([h.delta_pct for h in hs_delta]),
+                "delta_level": common_level,
                 "drift_rate_pct_s": _mean([h.drift_rate_pct_s
                                            for h in hs]),
             }

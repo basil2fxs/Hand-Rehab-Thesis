@@ -1,4 +1,32 @@
-"""Rhythm mode (Thread 2). Falling notes synced to music or a metronome."""
+"""Rhythm mode (Thread 2). Falling notes synced to music or a metronome.
+
+This is the RAS (Rhythmic Auditory Stimulation) arm of the fixed-cadence
+versus RAS comparative study the progress report commits to (classic.py
+is the fixed-cadence control). RAS entrains movement timing to an
+external auditory beat and is a well-established gait and upper-limb
+rehab technique after stroke (Thaut, McIntosh and Rice 1997, Journal of
+the Neurological Sciences). Unlike classic's cue-then-react loop, the
+patient can see and hear the beat coming, so the task is synchronisation,
+not reaction: presses land close to the beat in either direction, and a
+small negative mean asynchrony (anticipating the beat by tens of ms) is
+the norm in the sensorimotor-synchronisation literature, not an error
+(Repp 2005, Psychonomic Bulletin and Review; Repp and Su 2013).
+
+TIMING WINDOWS. perfect_ms/great_ms/good_ms/miss_ms (default
+50/100/175/300) are a game-feel graded scoring ladder, not a published
+synchronisation-accuracy criterion; they exist to give the patient
+step-wise feedback and a difficulty knob, not to define what counts as
+"in time" for research purposes. The signed offset logged per hit is
+the number to use for any synchronisation analysis (see
+analysis/session_analysis.ipynb, sec_rhythm).
+
+CLAIM LIMITS. This mode is a within-person timing measurement, not a
+validated RAS therapy protocol: note density, tempo range and windows
+are this project's design choices, tuned for a short at-home session
+rather than derived from a clinical RAS dosing study. Treat cross-
+session offset trends as an engagement/entrainment signal, not a
+therapy outcome.
+"""
 from __future__ import annotations
 
 import logging
@@ -106,6 +134,15 @@ class RhythmMode:
         return max(0.0, -self.song_time)
 
     def queue_press(self, ev: PressEvent) -> None:
+        # A press made during the countdown (screen explicitly says
+        # don't press yet) must not survive to be drained the instant
+        # the countdown ends -- that used to score as an unmatched
+        # spurious press (penalty, red flash, miss thunk) against the
+        # first note, purely for pressing during "3... 2... 1...".
+        # The pause path already clears the queue on pause; this is
+        # the same idea for the countdown.
+        if not self._countdown_done:
+            return
         self._presses.append(ev)
 
     def on_pause(self) -> None:
@@ -133,11 +170,25 @@ class RhythmMode:
             for key_name, lane in km.items():
                 kc = resolve_key(key_name)
                 if kc and e.key == kc:
+                    t_perf = time.perf_counter()
                     self.queue_press(PressEvent(
-                        lane=lane, t_perf=time.perf_counter(),
+                        lane=lane, t_perf=t_perf,
                         value=0, baseline=0.0,
                         hand=self.engine.hand_mode,
                     ))
+                    # Keyboard presses bypass engine._on_press (the FSR
+                    # detector path), which is the only place raw.csv
+                    # normally gets a "press" event (audit finding #112,
+                    # generalising the mirror-mode fix for #75 to every
+                    # mode): without this a keyboard-injected press in a
+                    # mixed session (Arduino attached, keyboard kept
+                    # live as backup) was indistinguishable from a real
+                    # FSR press. detail="keyboard" marks the source.
+                    raw_logger = getattr(self.engine, "raw_logger", None)
+                    if raw_logger:
+                        raw_logger.queue_event(
+                            "press", lane=lane, t_perf=t_perf,
+                            hand=self.engine.hand_mode, detail="keyboard")
 
     def update(self, dt: float) -> None:
         now = self.song_time
@@ -198,29 +249,38 @@ class RhythmMode:
         # Without compensating, a press that lands on the AUDIBLE beat
         # registers as ~40 ms Late. Subtract the configured offset so
         # the patient's reference frame (what they hear) lines up with
-        # ours (when beats were scheduled).
-        try:
-            offset_s = float(self.engine.cfg.get(
-                "rhythm.audio_offset_ms", 40)) / 1000.0
-        except (TypeError, ValueError):
-            offset_s = 0.0
+        # ours (when beats were scheduled). Only meaningful when sound
+        # is actually reaching the patient's ears: a keyboard-only or
+        # audio-disabled session has no playback latency to compensate
+        # for, and the click-track metronome (512-sample buffer, ~12 ms)
+        # has a far smaller latency than a decoded song file, so it gets
+        # its own, smaller constant rather than borrowing the song one.
+        offset_s = 0.0
+        audio = self.engine.audio
+        if audio is not None:
+            song_playing = getattr(audio, "_song_path", None) is not None
+            metronome_running = getattr(
+                audio, "_metronome_period", None) is not None
+            if song_playing:
+                try:
+                    offset_s = float(self.engine.cfg.get(
+                        "rhythm.audio_offset_ms", 40)) / 1000.0
+                except (TypeError, ValueError):
+                    offset_s = 0.0
+            elif metronome_running:
+                try:
+                    offset_s = float(self.engine.cfg.get(
+                        "rhythm.metronome_offset_ms", 12)) / 1000.0
+                except (TypeError, ValueError):
+                    offset_s = 0.0
         now = self._song_time_for(ev.t_perf) - offset_s
         miss_radius_s = self.windows.miss_ms / 1000.0
         best: ScheduledNote | None = None
         best_d = float("inf")
         for s in self.scheduler.scheduled:
-            if s.hit_at is not None:
+            if s.hit_at is not None or getattr(s, "_miss_logged", False):
                 continue
             if s.note.lane != ev.lane:
-                continue
-            # A note the patient has not been cued for yet cannot be
-            # what they just pressed. Without this, a false-start or
-            # wrong-finger press made well before a lane's note is due
-            # can consume that future note (the backward-late-press
-            # radius below is intentional and stays as-is), leaving the
-            # patient's genuine later, on-time press with nothing to
-            # match and logged as a penalised spurious press instead.
-            if not getattr(s, "fired", True):
                 continue
             d = now - s.note.t
             if d < -self.windows.good_ms / 1000.0 or d > miss_radius_s * 2:

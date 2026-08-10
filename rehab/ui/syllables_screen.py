@@ -362,8 +362,18 @@ class SyllablesScreen(Screen):
         cx = self.layout.width // 2
         # A circle that swells on each beat: the visual is a helper,
         # the metronome tick is the timing reference. Pink, like the
-        # rest of the mode's identity colour.
-        phase = (now % mode.ioi_s) / mode.ioi_s
+        # rest of the mode's identity colour. Phased off the beat GRID
+        # (mode._warmup_beats[0], one IOI after the arbitrary perf_
+        # counter moment the warm-up started), not off the wall-clock
+        # epoch: `now % ioi_s` puts the swell up to half a period away
+        # from the audible tick, so a child cueing off the circle
+        # instead of the metronome would tap with a constant offset
+        # against the very asynchronies this probe measures. Mirrors
+        # the respond-phase pulse, which is correctly anchored to
+        # _respond_t0.
+        beats = getattr(mode, "_warmup_beats", None)
+        anchor = beats[0] if beats else now
+        phase = ((now - anchor) % mode.ioi_s) / mode.ioi_s
         r = 60 + int(26 * math.exp(-4.0 * phase))
         pygame.draw.circle(surf, self._accent(),
                            (cx, self.ROW_CY), r)

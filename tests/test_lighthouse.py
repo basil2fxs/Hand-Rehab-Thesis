@@ -323,6 +323,35 @@ class FadeSchedulingTests(unittest.TestCase):
         segs = hold_segments_from_params(p)
         self.assertAlmostEqual(segs[-1][2], 6.0)
 
+    def test_misconfigured_hold_warns_instead_of_lying_on_screen(self):
+        """Audit finding #87: a hold_s too short to fit a dark window
+        at a level with dark_frac > 0 used to leave the top strip and
+        the announce line quoting the level's configured dark share
+        while the planner silently drew zero dark windows. The mode
+        now warns at construction, and the screen-facing helper reads
+        the drawn params instead of the static config."""
+        from rehab.ui.lighthouse_screen import _dark_frac_and_windows
+        with self.assertLogs("rehab.game.modes.lighthouse",
+                             level="WARNING") as cm:
+            m = _ready_mode(level=2, hold_s=5.0,
+                            dark_windows_by_level=[0, 1, 2],
+                            dark_frac_by_level=[0.0, 0.25, 0.45],
+                            holds_per_finger=1, echoes_per_finger=0)
+        self.assertTrue(any("cannot fit" in msg for msg in cm.output))
+        m._kind_bag = ["hold"]
+        t = _to_trial(m)
+        self.assertEqual(m.params.get("n_dark"), 0)
+        frac, n = _dark_frac_and_windows(m)
+        self.assertEqual(n, 0)
+        self.assertAlmostEqual(frac, 0.0)
+
+    def test_well_configured_hold_does_not_warn(self):
+        with self.assertRaises(AssertionError):
+            with self.assertLogs("rehab.game.modes.lighthouse",
+                                 level="WARNING"):
+                _ready_mode(level=3, holds_per_finger=1,
+                           echoes_per_finger=0)
+
     def test_rebuild_from_the_packed_cell(self):
         # The offline contract: the notebook parses waveform_params
         # and rebuilds the lit / dark schedule without this module's
@@ -500,6 +529,24 @@ class HoldScoringTests(unittest.TestCase):
         # RT censoring does not apply to a hold.
         self.assertEqual(row["timeout_ms"], "")
 
+    def test_bilateral_hold_row_names_the_one_hand_that_played(self):
+        # Audit finding #86: a hold in a both-hands block used to log
+        # hand="both" (the block-level default) even though every hold
+        # is one hand's finger, making the trial row's own hand column
+        # unusable for a per-trial side filter.
+        e = _engine(hand_mode="both")
+        e.calibration_profiles["right"] = _fresh_profile()
+        e.calibration_profiles["left"] = _fresh_profile("left")
+        m = self._hold_mode(e, hands={"right": [0, 1, 2, 3],
+                                      "left": [4, 5, 6, 7]},
+                            holds_per_finger=1, echoes_per_finger=0)
+        t = _to_trial(m)
+        lane = m.lane
+        _play_hold(m, t, lambda t_h, target, lit: target)
+        row = m.engine.trial_logger.rows[0]
+        self.assertIn(row["hand"], ("right", "left"))
+        self.assertEqual(row["hand"], "right" if lane < 4 else "left")
+
     def test_segment_markers_bracket_the_hold_in_raw(self):
         m = self._hold_mode()
         t = _to_trial(m)
@@ -590,6 +637,38 @@ class EchoTests(unittest.TestCase):
                                delta=0.05)
         self.assertAlmostEqual(repro[2] - repro[1], m.echo_reproduce_s,
                                delta=0.05)
+
+    def test_holding_through_the_delay_gutters_instead_of_scoring_great(
+            self):
+        # Audit finding #84: a finger that never releases through the
+        # delay used to arm reproduce instantly (its resting force
+        # already clears ENTRY_FLOOR_PCT) and score a perfect echo.
+        # The standard force-sense paradigm needs a real release
+        # between encode and reproduce.
+        m = self._echo_mode()
+        t = _to_trial(m)
+        dt = 1.0 / 60.0
+        while m.phase == "trial":
+            t += dt
+            m.view.pct = m.target_pct   # never lets go, ever
+            m._tick(t)
+        row = m.engine.trial_logger.rows[0]
+        self.assertEqual(row["early_late"], "Miss")
+        self.assertIn("released=False", row["stimulus"])
+        rec = m._echoes[0]
+        self.assertTrue(rec.guttered)
+        self.assertIsNone(rec.signed_err_pct)
+
+    def test_a_genuine_release_still_arms_reproduce_normally(self):
+        # The release check must not break the ordinary path: dipping
+        # below the floor for a moment during the delay still lets
+        # reproduce arm and score normally.
+        m = self._echo_mode()
+        t = _to_trial(m)
+        _play_echo(m, t, repro_pct=m.target_pct)
+        row = m.engine.trial_logger.rows[0]
+        self.assertIn("released=True", row["stimulus"])
+        self.assertNotEqual(row["early_late"], "Miss")
 
     def test_no_blind_press_gutters_gently(self):
         m = self._echo_mode()
@@ -790,8 +869,61 @@ class PauseAndStatsTests(unittest.TestCase):
         self.assertAlmostEqual(overall["lit_dark_delta_pct"], 0.0)
         self.assertIsNotNone(overall["lit_cov"])
         self.assertIn(str(lane), stats["per_lane"])
+        self.assertEqual(stats["per_lane"][str(lane)]["delta_level"],
+                         m.level)
         # The session-carrying level hook for the next block.
         self.assertEqual(m.engine._lighthouse_level, m.level)
+
+    def test_per_lane_delta_compares_fingers_at_the_same_level(self):
+        # Audit finding #85: pooling a lane's delta across every level
+        # the global ladder happened to sit at while that finger's
+        # holds ran compares fingers on different amounts of dark
+        # exposure, since dark MAE grows with dark duration. Two
+        # fingers held at levels [1, 3] and two at [2, 3] (as in the
+        # audit's own reproduction) must all resolve to level 3, the
+        # highest level every finger reached.
+        from rehab.game.modes.lighthouse import HoldRecord
+
+        def h(lane, level, delta):
+            return HoldRecord(hand="right", finger=lane, lane=lane,
+                              level=level, target_pct=15.0,
+                              guttered=False, tib_frac=1.0,
+                              lit_mae_pct=1.0, lit_cov=0.1,
+                              dark_mae_pct=1.0, delta_pct=delta)
+
+        m = _ready_mode()
+        m._holds = [
+            h(2, 1, 0.5), h(2, 3, 9.0),
+            h(3, 1, 0.6), h(3, 3, 9.5),
+            h(0, 2, 2.0), h(0, 3, 8.0),
+            h(1, 2, 2.5), h(1, 3, 8.5),
+        ]
+        per_lane = m.block_stats()["per_lane"]
+        for lane, expect in (("0", 8.0), ("1", 8.5), ("2", 9.0),
+                             ("3", 9.5)):
+            self.assertEqual(per_lane[lane]["delta_level"], 3)
+            self.assertAlmostEqual(per_lane[lane]["delta_pct"], expect)
+
+    def test_per_lane_delta_falls_back_to_pooling_with_no_common_level(
+            self):
+        # No level has every played lane represented (early in a
+        # block): fall back to pooling that lane's own holds rather
+        # than reporting nothing, and say so via delta_level=None.
+        from rehab.game.modes.lighthouse import HoldRecord
+
+        def h(lane, level, delta):
+            return HoldRecord(hand="right", finger=lane, lane=lane,
+                              level=level, target_pct=15.0,
+                              guttered=False, tib_frac=1.0,
+                              lit_mae_pct=1.0, lit_cov=0.1,
+                              dark_mae_pct=1.0, delta_pct=delta)
+
+        m = _ready_mode()
+        m._holds = [h(0, 1, 1.0), h(1, 2, 3.0)]
+        per_lane = m.block_stats()["per_lane"]
+        self.assertIsNone(per_lane["0"]["delta_level"])
+        self.assertAlmostEqual(per_lane["0"]["delta_pct"], 1.0)
+        self.assertAlmostEqual(per_lane["1"]["delta_pct"], 3.0)
 
 
 # ---- the screen ---------------------------------------------------------
@@ -898,6 +1030,73 @@ class ScreenTests(unittest.TestCase):
             sc._hand_finger_words(m.hand, m.finger),
             f"{m.hand.upper()} "
             f"{['INDEX', 'MIDDLE', 'RING', 'LITTLE'][m.finger]}")
+
+
+# ---- results screen ------------------------------------------------------
+
+
+class ResultsCardTests(unittest.TestCase):
+    """Audit finding #107 (lighthouse half): the LIT STEADINESS card
+    printed the coefficient of variation, where higher means LESS
+    steady, under a label that reads as higher-is-better with no CoV
+    qualifier, unlike the per-lane chart right below it."""
+
+    @staticmethod
+    def _lh_summary():
+        return {
+            "holds": 8,
+            "levels": {"start": 1, "final": 2, "trace": [1, 2]},
+            "hands": ["right"],
+            "per_lane": {},
+            "overall": {"lit_cov": 0.12, "dark_drift_pct": 1.5,
+                       "lit_dark_delta_pct": 2.0},
+            "echo": {"overall": {"abs_err_pct": 1.1}},
+        }
+
+    def _draw(self, lh_summary):
+        import pygame
+        from rehab.config import Config
+        from rehab.game.engine import GameEngine
+        from rehab.ui.screens import ResultsScreen
+        from rehab.ui.theme import get as get_theme
+        from rehab.ui.widgets import Layout
+        pygame.init()
+        pygame.font.init()
+        pygame.display.set_mode((1280, 800))
+        e = GameEngine.__new__(GameEngine)
+        e.cfg = Config.load()
+        e.theme = get_theme("clinical")
+        e.layout = Layout(1280, 800, 1.0)
+        e.hits, e.misses, e.score = 8, 0, 800
+        e.current_block, e.hand_mode = "lighthouse", "right"
+        e.best_streak, e.per_lane_stats = 0, {}
+        e.hit_streak = 0
+        e.last_session_root = None
+        e.mode = None
+        e.session = type("S", (), {
+            "participant": "T", "age": "60",
+            "block_summary": {"lighthouse": lh_summary}})()
+        e.stop_all_motors = lambda *a, **k: None
+        e.overall_mean_rt = lambda: 0.0
+        e.overall_best_rt = lambda: 0.0
+        r = ResultsScreen(e)
+        r._shown_t = 1.0
+        cards = []
+        r._draw_stat_card = (
+            lambda surf, rect, lbl, val, col: cards.append((lbl, val)))
+        r._draw_per_lane_chart = lambda *a, **k: None
+        surf = pygame.Surface((1280, 800))
+        r.draw(surf)
+        pygame.quit()
+        return cards
+
+    def test_lit_variability_card_names_the_cov(self):
+        cards = self._draw(self._lh_summary())
+        labels = [lbl for lbl, _val in cards]
+        self.assertIn("LIT VARIABILITY (CoV)", labels)
+        self.assertNotIn("LIT STEADINESS", labels)
+        value = dict(cards)["LIT VARIABILITY (CoV)"]
+        self.assertEqual(value, "12.0%")
 
 
 if __name__ == "__main__":

@@ -417,7 +417,17 @@ class SyllablesMode:
         """Every lane that can legally carry some expected position:
         both hands' copies of positions 0..n-1. This is what the
         trial's correct_keys records in bilateral play, so the CSV
-        says the left and right finger were both acceptable."""
+        says the left and right finger were both acceptable.
+
+        Level 1 is counting with ANY finger (order_required is False),
+        so restricting this to positions 0..n-1 overstates the
+        constraint: a tap on lane 4 of a 2-syllable word scores err=ok
+        (acceptable_lanes was never consulted for order, only for the
+        CSV column), but correct_keys would list only lanes 1 and 2,
+        which reads as though lane 4 was wrong. At level 1 every
+        playing lane is acceptable, so every playing lane is listed."""
+        if not self.order_required:
+            return sorted(l for hands in self.hands.values() for l in hands)
         return sorted(hands[i]
                       for hands in self.hands.values()
                       for i in range(min(self.n_expected, len(hands))))
@@ -507,11 +517,25 @@ class SyllablesMode:
             for key_name, lane in km.items():
                 kc = resolve_key(key_name)
                 if kc and e.key == kc:
+                    t_perf = time.perf_counter()
                     self.queue_press(PressEvent(
-                        lane=lane, t_perf=time.perf_counter(),
+                        lane=lane, t_perf=t_perf,
                         value=0, baseline=0.0,
                         hand=self.engine.hand_mode,
                     ))
+                    # Keyboard presses bypass engine._on_press (the FSR
+                    # detector path), which is the only place raw.csv
+                    # normally gets a "press" event (audit finding #112,
+                    # generalising the mirror-mode fix for #75 to every
+                    # mode): without this a keyboard-injected press in a
+                    # mixed session (Arduino attached, keyboard kept
+                    # live as backup) was indistinguishable from a real
+                    # FSR press. detail="keyboard" marks the source.
+                    raw_logger = getattr(self.engine, "raw_logger", None)
+                    if raw_logger:
+                        raw_logger.queue_event(
+                            "press", lane=lane, t_perf=t_perf,
+                            hand=self.engine.hand_mode, detail="keyboard")
 
     # ---- main tick ---------------------------------------------------------
     def update(self, dt: float) -> None:
@@ -769,14 +793,26 @@ class SyllablesMode:
             return None
 
     def _poll_tap_peaks(self) -> None:
+        # engine._peak_force_for_lane reports the CURRENT press's
+        # running peak on that lane, so once a second tap has landed on
+        # the same lane (a repeated-position word, or a child drumming
+        # one finger at level 1), polling every tap on the lane retro-
+        # writes the new press's peak onto the earlier tap too. Only
+        # the most recent tap on each lane is still "the press in
+        # progress"; every earlier same-lane tap has already released
+        # and keeps the peak it was scored with when it landed.
         helper = getattr(self.engine, "_peak_force_for_lane", None)
         if not callable(helper):
             return
-        for tap in self.taps:
+        latest_idx: dict[int, int] = {}
+        for i, tap in enumerate(self.taps):
+            latest_idx[tap.lane] = i
+        for lane, idx in latest_idx.items():
             try:
-                live = helper(tap.lane)
+                live = helper(lane)
             except Exception:
                 continue
+            tap = self.taps[idx]
             if live is not None and (tap.peak is None or live > tap.peak):
                 tap.peak = live
 
@@ -872,18 +908,33 @@ class SyllablesMode:
             stress_ratio=stress_ratio_val,
             stress_correct=stress_correct,
         ))
+        # The replay decision the row's replay= flag must report: it is
+        # made AFTER this trial closes (in _after_feedback, once the
+        # word's outcome and self._replayed are both final), so pack it
+        # from the same predicates now rather than reading
+        # self._replayed, which is still False at pack time on every
+        # trial and made replay= permanently 0.
+        will_replay = (not correct and self.replay_on_error
+                       and not self._replayed)
         self.engine.log_trial(
             trial, outcome, now,
-            stimulus=self._pack_stimulus(word, error, asyn),
+            stimulus=self._pack_stimulus(word, error, asyn, will_replay),
             # In bilateral play both hands' copies of each expected
             # position are acceptable, and the CSV says so.
             correct_lanes=self.acceptable_lanes(),
+            # A Miss here always means a wrong tap COUNT (timeout,
+            # extra_tap or missing_tap: the only three ways count_
+            # correct comes out False above), never a wrong finger, so
+            # the engine's had_incorrect_press-derived error_type
+            # (wrong_finger / timeout) would misclassify a prompt
+            # extra-tap Miss as a silent timeout. Pass the mode's own
+            # code straight through for Miss rows.
+            error_type=(error if outcome.label == "Miss" else ""),
         )
         self._recent.append(correct)
         self._since_band_change += 1
         self._maybe_move_band()
-        self._pending_replay = (not correct and self.replay_on_error
-                                and not self._replayed)
+        self._pending_replay = will_replay
         self._enter_phase("feedback", now)
 
     def _score_stress(self, taps: list[Tap],
@@ -934,7 +985,7 @@ class SyllablesMode:
         return ok, ratio
 
     def _pack_stimulus(self, word: Word, error: str,
-                       asyn: list[float]) -> str:
+                       asyn: list[float], replay: bool) -> str:
         taps_s = ",".join(
             f"{t.lane + 1}:"
             f"{(t.t_perf - (self._respond_t0 or t.t_perf)) * 1000.0:.1f}:"
@@ -948,7 +999,7 @@ class SyllablesMode:
             f"stress={word.stress}",
             f"paced={1 if self.paced else 0}",
             f"ioi={self.ioi_s * 1000.0:.0f}",
-            f"replay={1 if self._replayed else 0}",
+            f"replay={1 if replay else 0}",
             f"err={error}",
             f"taps={taps_s}",
         ]
@@ -985,6 +1036,13 @@ class SyllablesMode:
         words have run since the last change, so one change cannot
         cascade off the window that triggered it. Every firing is
         logged so the difficulty trace is reconstructible."""
+        # words_for ignores the band above level 4 (onset-rime and
+        # phoneme pools are drawn without a band split, deliberately -
+        # see syllables_words.py), so promoting or demoting the band on
+        # those levels changes only a label on the row and in
+        # band_trace, never the material a reader would infer from it.
+        if self.level >= 5:
+            return
         if len(self._recent) < 10 or self._since_band_change < 10:
             return
         wins = sum(1 for c in self._recent if c)

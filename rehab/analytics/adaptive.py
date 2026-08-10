@@ -1,7 +1,11 @@
 """Adaptive difficulty engine (Thread 1).
 
-Based on Guadagnoli & Lee's (2004) challenge-point framework: motor learning
-peaks when task difficulty produces a 70-80% success rate. Two control inputs:
+Motivated by Guadagnoli & Lee's (2004) challenge-point framework, which
+argues an optimal (nominal) difficulty exists for learning but does not
+itself name a success-rate number. The 65-80% target band here is a
+design choice, informed by success-rate-controlled rehab games in the
+literature (e.g. Wilson et al. 2019; the FINGER robot line), not a
+number reported by Guadagnoli & Lee. Two control inputs:
 
   - Lane weights: weak fingers get picked more often (per-lane hit-rate EMA).
   - BPM: speed up when overall hit rate is too high, slow down when too low.
@@ -60,9 +64,11 @@ class AdaptiveConfig:
     """Tunable parameters for the adaptive-difficulty engine.
 
     All fields are session-level constants; the engine reads them at
-    construction and never mutates them. Defaults track the challenge-
-    point band (65 to 80 percent hit rate) reported as the motor-learning
-    sweet spot in Guadagnoli & Lee (2004).
+    construction and never mutates them. Defaults hold a 65-80 percent
+    hit-rate band, a design choice built on Guadagnoli & Lee's (2004)
+    challenge-point framework (which motivates having a target band at
+    all, not this specific number) plus success-rate-controlled rehab
+    games in the literature (Wilson et al. 2019 and similar).
     """
     # Target hit-rate band. Below `target_low` the engine slows down;
     # above `target_high` it speeds up. Inside the band it holds steady.
@@ -114,6 +120,10 @@ class AdaptiveEngine:
     # True when num_lanes covers two hands (bilateral), so the scheduler
     # keeps the hands equal as well as the fingers.
     hands_split: bool = False
+    # How many times next_bpm() has actually applied a decision (i.e.
+    # past the min_trials data-gate). Used to soften the negative rate
+    # limit for the first few decisions -- see next_bpm().
+    bpm_decisions: int = 0
 
     def __post_init__(self) -> None:
         if self.num_lanes < 1:
@@ -213,7 +223,7 @@ class AdaptiveEngine:
 
         It's built from two independent pressure signals:
 
-            quality_pressure -- success vs the 70-80 percent target band.
+            quality_pressure -- success vs the 65-80 percent target band.
                 +1.5 max when the patient is acing every trial,
                  0    while they sit in the target band,
                 -N    when success drops below target_low (unbounded so a
@@ -242,7 +252,7 @@ class AdaptiveEngine:
         yank BPM around. Repeated calls compound smoothly toward the
         natural equilibrium.
 
-        The 70-80 percent target band is a stable equilibrium: in band
+        The 65-80 percent target band is a stable equilibrium: in band
         + comfortable RT yields combined = 0 and BPM holds. Performance
         creeping up either signal pushes BPM up; creeping down on
         either signal pushes BPM down. No discrete state machine, no
@@ -251,13 +261,14 @@ class AdaptiveEngine:
         # Don't react before we have enough data to be confident.
         if sum(s.n_trials for s in self.state) < self.cfg.min_trials:
             return self.bpm
+        self.bpm_decisions += 1
         hr = self.session_hit_rate
         qr = self.session_quality_rate
         util = self.rt_utilisation
         streak = self.current_streak
 
         # ---- Quality pressure ----
-        # Primary signal is HIT RATE (the user's stated 70-80% target).
+        # Primary signal is HIT RATE (the target band is 65-80%).
         # Quality (Great vs Good vs Late) refines it: in band but
         # mostly Lates -> nudge down; above band but only Goods -> tone
         # down the speed-up so we don't push a barely-coping patient.
@@ -336,7 +347,20 @@ class AdaptiveEngine:
         # Repeated calls compound smoothly toward equilibrium.
         step = self.cfg.bpm_step
         delta = combined * step * 0.4
-        delta = max(-step * 2.0, min(step * 1.5, delta))
+        # Cold-start softening: the full -2*step clamp is sized to be
+        # a meaningful per-trial move for a session already under way,
+        # but at session start it can equal (or exceed) the whole gap
+        # from a comfortable start_bpm down to bpm_min -- two opening
+        # misses (min_trials=2) then decide the block's entire pace in
+        # one call, before the controller has any real read on the
+        # patient. The first few decisions get a softer floor instead;
+        # this decays back to the normal clamp so a genuinely
+        # struggling patient still reaches bpm_min quickly, just not
+        # in a single step off two trials.
+        neg_clamp = step * 2.0
+        if self.bpm_decisions <= 3:
+            neg_clamp = step * (0.5 + 0.5 * self.bpm_decisions)
+        delta = max(-neg_clamp, min(step * 1.5, delta))
         self.bpm = max(self.cfg.bpm_min,
                         min(self.cfg.bpm_max, self.bpm + delta))
         return self.bpm
@@ -349,8 +373,16 @@ class AdaptiveEngine:
         return cadence_s * self.cfg.timeout_factor
 
     def pace_label(self) -> str:
-        """Short human label for the current BPM. Used by the HUD so the
-        patient can see when the system has slowed down or sped up."""
+        """Short human label for the current BPM.
+
+        Currently unused: the gameplay HUD deliberately dropped BPM
+        (and everything else therapist-only) from the patient-facing
+        screen to cut on-screen noise -- see GameplayScreen.draw's
+        "Stripped-down HUD" comment. Kept here as a ready-made string
+        for a therapist-facing view (Results screen, notebook) or a
+        future pace-change chip, should one get added; nothing calls
+        it today.
+        """
         b = self.bpm
         if b < 45:
             return "very slow"

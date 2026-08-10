@@ -18,11 +18,13 @@ and checks the level split survives end to end.
 """
 from __future__ import annotations
 
+import contextlib
 import csv
 import io
 import json
 import os
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -32,6 +34,7 @@ os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
 import matplotlib
 matplotlib.use("Agg")
+import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -211,6 +214,143 @@ class ForcePilotNotebookLevelSplitTests(unittest.TestCase):
             self.assertIn("per finger and level", out)
             self.assertIn("learning within session(s), split by",
                           out)
+
+
+class ForcePilotStoredStatsLevelReprTests(unittest.TestCase):
+    """Audit finding #77: the stored-stats table's level_final column
+    read (d.get("levels") or {}).get("final"), the OLD single-level
+    shape, but block_stats() now returns levels keyed per (hand,
+    finger) ({"right:0": {start, final, trace}, ...}), so the column
+    printed None for every block."""
+
+    def test_level_final_reads_the_current_per_finger_shape(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            folder = _write_session(root)
+            meta_path = folder / "metadata.json"
+            meta = json.loads(meta_path.read_text())
+            meta["block_summary"]["force_pilot"] = {
+                "levels": {"right:0": {"start": 1, "final": 2,
+                                       "trace": [1, 2]}},
+                "overall": {"mae_pct": 3.2, "time_in_corridor": 0.81},
+                "visual_gain": 1.0,
+            }
+            meta_path.write_text(json.dumps(meta))
+
+            ra_ns = _load_ra()
+            cat = ra_ns.build_catalogue(root=root)
+            folders = [Path(p) for p in cat["folder"]]
+            trials = ra_ns.load_games(folders, cat)
+            metas = ra_ns.load_metas(folders)
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                ra_ns.sec_force_tracking(folders, trials, metas)
+            out = buf.getvalue()
+            self.assertIn("what each block stored about itself", out)
+            self.assertNotIn("level_final           None", out)
+            self.assertIn("right:0:2", out)
+
+
+class ForcePilotDemoFlagTests(unittest.TestCase):
+    """Audit finding #82: force_tracking_runs pooled every corridor
+    row regardless of the demo (supervisor Test Mode) flag, which
+    block_stats stores precisely as block_summary.force_pilot.demo,
+    so a compressed Test Mode block entered the per-finger tables and
+    the learning slopes indistinguishably from patient runs."""
+
+    def test_demo_flag_readable_from_metas_and_excluded_from_chapter(
+            self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            folder = _write_session(root)
+            meta_path = folder / "metadata.json"
+            meta = json.loads(meta_path.read_text())
+            meta["block_summary"]["force_pilot"] = {
+                "levels": {"right:0": {"start": 1, "final": 2,
+                                       "trace": [1, 2]}},
+                "overall": {"mae_pct": 3.2, "time_in_corridor": 0.81},
+                "demo": True,
+            }
+            meta_path.write_text(json.dumps(meta))
+
+            ra_ns = _load_ra()
+            cat = ra_ns.build_catalogue(root=root)
+            folders = [Path(p) for p in cat["folder"]]
+            trials = ra_ns.load_games(folders, cat)
+            metas = ra_ns.load_metas(folders)
+
+            runs, _dropped = ra_ns.force_tracking_runs(
+                folders, trials, metas)
+            self.assertIn("demo", runs.columns)
+            self.assertTrue(runs["demo"].all())
+
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                result = ra_ns.sec_force_tracking(folders, trials, metas)
+            out = buf.getvalue()
+            self.assertIsNone(result)
+            self.assertIn("demo", out.lower())
+
+    def test_no_metas_falls_back_to_the_scored_duration_tell(self):
+        # Old call sites / old metadata without the demo flag: the
+        # short-duration fallback still separates a demo run (~14 s)
+        # from real play (23 to 30 s) rather than losing the split.
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            _write_session(root)
+            ra_ns = _load_ra()
+            cat = ra_ns.build_catalogue(root=root)
+            folders = [Path(p) for p in cat["folder"]]
+            trials = ra_ns.load_games(folders, cat)
+            runs, _dropped = ra_ns.force_tracking_runs(folders, trials)
+            self.assertIn("demo", runs.columns)
+            # These runs are real 20-30 s tracking runs (the shared
+            # test session, not a Test Mode block), so the fallback
+            # must not flag them as demo.
+            self.assertFalse(runs["demo"].any())
+
+
+class ForcePilotRampSegmentationTests(unittest.TestCase):
+    """Audit finding #83: the brief names step count and pause
+    duration on slow ramps (Naik 2011's segmentation measures, a
+    reliable PD discriminator per the cluster notes) as deliverable
+    metrics; the chapter computed none of them."""
+
+    def test_ramp_segmentation_counts_plateaus_not_a_clean_ramp(self):
+        ra_ns = _load_ra()
+        fs = 200.0
+        t = np.arange(0, 2.3, 1.0 / fs)
+        pct = np.zeros_like(t)
+        # ramp 0->10 over 1s, flat pause 0.3s, ramp 10->20 over 1s.
+        for a, b, p0, p1 in ((0.0, 1.0, 0.0, 10.0),
+                             (1.0, 1.3, 10.0, 10.0),
+                             (1.3, 2.3, 10.0, 20.0)):
+            m = (t >= a) & (t < b)
+            pct[m] = p0 if p1 == p0 else p0 + (p1 - p0) * (t[m] - a) / (
+                b - a)
+        out = ra_ns.ramp_segmentation(t, pct, [("ramp_up", 0.0, 2.3)])
+        self.assertEqual(out["ramp_up"]["steps"], 1)
+        self.assertAlmostEqual(out["ramp_up"]["mean_pause_s"], 0.3,
+                               delta=0.02)
+
+        t2 = np.arange(0, 2.0, 1.0 / fs)
+        pct2 = 10.0 * t2
+        clean = ra_ns.ramp_segmentation(t2, pct2, [("ramp_up", 0.0, 2.0)])
+        self.assertEqual(clean["ramp_up"]["steps"], 0)
+
+    def test_force_tracking_runs_carries_step_and_pause_columns(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            _write_session(root)
+            ra_ns = _load_ra()
+            cat = ra_ns.build_catalogue(root=root)
+            folders = [Path(p) for p in cat["folder"]]
+            trials = ra_ns.load_games(folders, cat)
+            runs, _dropped = ra_ns.force_tracking_runs(folders, trials)
+            for col in ("ramp_rate_pct_s", "ramp_up_steps",
+                        "ramp_up_pause_s", "release_steps",
+                        "release_pause_s"):
+                self.assertIn(col, runs.columns)
 
 
 def _load_ra():

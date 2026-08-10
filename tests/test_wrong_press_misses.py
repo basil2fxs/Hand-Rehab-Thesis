@@ -168,8 +168,15 @@ class AdaptiveWrongPressMissTests(unittest.TestCase):
             return original(lane, was_hit, rt_ms, quality=quality)
 
         mode.adapter.record = _spy
-        # Well under score_cfg's perfect_ms (default 100ms).
-        mode._handle_press(self._press(lane=target, t=0.03), now=0.03)
+        # At score_cfg's perfect_ms (default 100ms) exactly: classify()
+        # scores it Perfect (rt_ms <= perfect_ms), and it sits right at
+        # (not under) the anticipation floor the adaptive fix stage
+        # added (audit finding #52: a mash-speed press well under
+        # 100ms must not feed the adapter quality=1.0 -- see
+        # AnticipationQualityTests in tests/test_adaptive.py). 100ms
+        # exactly is the fastest RT this mode will still credit as a
+        # genuine reaction, so it is the right edge to pin here.
+        mode._handle_press(self._press(lane=target, t=0.100), now=0.100)
         outcome = engine.log_trial.call_args[0][1]
         self.assertEqual(outcome.label, "Perfect")
         self.assertEqual(len(records), 1)

@@ -196,6 +196,33 @@ class BlockResetTests(unittest.TestCase):
         self.assertEqual(eng._per_lane_misses, {})
         self.assertEqual(eng._per_lane_wrong, {})
 
+    def test_begin_block_resets_rhythm_signed_offsets(self) -> None:
+        """Audit finding #56 (HIGH): _rhythm_signed_offsets_ms was reset
+        nowhere, so for every rhythm block after the first in one
+        session the stored entrainment_lag1_r was computed over the
+        concatenated offsets of ALL previous rhythm blocks plus this
+        one. _begin_block resets the sibling lists
+        (_rhythm_press_times_s, _rhythm_beat_times_s) already; the
+        offsets list must reset alongside them."""
+        eng = _bare_engine()
+        # Seed leftover offsets from a prior rhythm block, as
+        # log_rhythm_hit would have left them at block end.
+        eng._rhythm_signed_offsets_ms = [10.0, -20.0, 5.0, -8.0]
+        eng._rhythm_press_times_s = [1.0, 2.0]
+        eng._rhythm_beat_times_s = [1.0, 2.0]
+        eng.session = MagicMock()
+        eng.session.notes = ""
+        eng.session.started_at = ""
+        eng.session.config_snapshot = {}
+        eng.session_paths = MagicMock()
+        eng._screens = {}
+        eng._open_loggers = lambda: None
+        eng.detectors = {}
+        eng._begin_block("rhythm")
+        self.assertEqual(eng._rhythm_signed_offsets_ms, [])
+        self.assertEqual(eng._rhythm_press_times_s, [])
+        self.assertEqual(eng._rhythm_beat_times_s, [])
+
 
 if __name__ == "__main__":
     unittest.main()

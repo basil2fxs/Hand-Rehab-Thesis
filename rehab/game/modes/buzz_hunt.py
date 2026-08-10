@@ -530,6 +530,7 @@ class BuzzHuntMode:
         self._pulse_plan: list[tuple[int, float, float]] = []
         self._pulse_idx = 0
         self._stim_seg_open = False
+        self._stim_delivered: bool | None = None
         self._play_t0: float | None = None
         self._respond_t0: float | None = None
         self._target_on: float | None = None
@@ -537,8 +538,11 @@ class BuzzHuntMode:
         self._last_result: dict | None = None
         self.stage_msg = ""
 
-        # Aggregates.
+        # Aggregates. _confusion is localisation only (the Weber 2023
+        # analogue); distractor lures are counted separately, not
+        # pooled into it (audit finding #95).
         self._confusion: dict[str, dict[str, int]] = {}
+        self._distractor_confusion: dict[str, dict[str, int]] = {}
         self._loc_records: list[dict] = []
         self._dis_records: list[dict] = []
         self._span_records: list[dict] = []
@@ -765,6 +769,13 @@ class BuzzHuntMode:
         self.engine._last_cue_code = cues.code
         self.engine._last_target_shown = False
         self.engine._last_stim_timeout_ms = self.response_window_s * 1000.0
+        # Delivery tracking for this trial's pulse train: None means
+        # no pulse is expected (a catch trial), True until a
+        # pulse_motor call reports failure, then sticky False. Set
+        # here rather than left over from the previous trial so a
+        # dropout on trial N cannot be misread on trial N+1.
+        self._stim_delivered = None if not self._pulse_plan else True
+        self.engine._last_stim_delivered = self._stim_delivered
         raw = getattr(self.engine, "raw_logger", None)
         if raw:
             raw.queue_event(
@@ -862,12 +873,45 @@ class BuzzHuntMode:
             self.engine.log_segment_end("stim", self.trial_counter,
                                         max(self.lane, 0), now)
 
+    def _redraw_interrupted_material(self) -> None:
+        """A press during span or gap PLAYBACK means the player heard
+        only part of the stimulus before the trial restarted; simply
+        replaying the exact same material (same seed, same sequence
+        or gap kind) would give an extra, uncounted exposure to a
+        memory or threshold-adjacent stimulus, and the retried trial
+        then scores as an ordinary single-exposure trial. Draw fresh
+        material for the same trial slot instead. A Hebb span trial
+        keeps its deterministic hidden sequence either way (that is
+        the point of it being derived from the participant, not the
+        trial seed), so this only ever changes what a NOVEL span
+        trial or a gap trial's kind presents on the retry."""
+        self.trial_seed = self.rng.randrange(2 ** 32)
+        if self.waveform == "buzz_seq" and not self.is_hebb:
+            lanes = self._active_lanes()
+            self.sequence = draw_sequence(self.trial_seed, self.span_len,
+                                          lanes)
+            self.lane = self.sequence[0]
+            self.hand, _f = self._lane_owner(self.lane)
+            self.params["seq"] = pack_lanes(self.sequence)
+        elif self.waveform == "buzz_gap":
+            draw = random.Random(self.trial_seed)
+            self.gap_two = draw.random() < 0.5
+            self.params["two"] = 1 if self.gap_two else 0
+        self._pulse_plan = pulses_from_params(self.waveform, self.params)
+
     def _play_frame(self, now: float) -> None:
         t = now - (self._play_t0 or now)
         while (self._pulse_idx < len(self._pulse_plan)
                and t >= self._pulse_plan[self._pulse_idx][1]):
             lane, _on, dur = self._pulse_plan[self._pulse_idx]
-            self.engine.pulse_motor(lane, dur)
+            ok = self.engine.pulse_motor(lane, dur)
+            if not ok:
+                # Sticky: one dropped pulse in a sequence or gap
+                # train marks the whole trial's stimulus as
+                # undelivered, matching the cue path's stim_delivered
+                # convention (engine.py's on_stim_multi).
+                self._stim_delivered = False
+            self.engine._last_stim_delivered = self._stim_delivered
             self._pulse_idx += 1
         # Presses during playback (before the response opens) restart
         # the wait: for a sequence they mean the replay started early,
@@ -876,15 +920,18 @@ class BuzzHuntMode:
         # A distractor trial is the one exception: the window before
         # the response opens IS the decoy pulse (respond opens at
         # target onset, which sits distractor_lead_ms after play
-        # starts). A press in that window is the patient falling for
-        # the decoy -- the natural, most likely failure mode this
-        # stage exists to measure -- not a false start on nothing. A
-        # silent same-trial retry would erase that failure entirely:
-        # it never reaches the distractor tallies and a clean retry
-        # afterward reports as a lured-free 100% hit.
+        # starts). A press ON THE DECOY LANE in that window is the
+        # patient falling for the decoy -- the natural, most likely
+        # failure mode this stage exists to measure -- not a false
+        # start on nothing. A silent same-trial retry would erase
+        # that failure entirely: it never reaches the distractor
+        # tallies and a clean retry afterward reports as a
+        # lured-free 100% hit.
         if (self._presses and now < (self._respond_t0 or now)
                 and self.waveform == "buzz"
-                and "distractor_lane" in self.params):
+                and "distractor_lane" in self.params
+                and self._presses[0].lane == int(
+                    self.params["distractor_lane"])):
             ev = self._presses.popleft()
             self._presses.clear()
             self._resp_presses.append((ev.lane, ev.t_perf))
@@ -902,6 +949,43 @@ class BuzzHuntMode:
                                           max(self.lane, 0), now)
             self._close_buzz(now, responded=True)
             return
+        # Any OTHER lane pressed during that same decoy window is a
+        # guess made before the target has fired at all -- including
+        # a lucky press on the finger that is about to become the
+        # target. It must never be scored as a response to that
+        # target (it would carry a negative RT and could read as a
+        # Perfect hit) and it must not count toward distractor
+        # accuracy either way, so it is logged as an anticipation
+        # event, exactly like a reaction-mode catch false start, and
+        # the trial closes without ever reaching classify() or
+        # _dis_records.
+        if (self._presses and now < (self._respond_t0 or now)
+                and self.waveform == "buzz"
+                and "distractor_lane" in self.params):
+            ev = self._presses.popleft()
+            self._presses.clear()
+            self.engine.stop_all_motors()
+            self._close_stim_marker(now)
+            raw = getattr(self.engine, "raw_logger", None)
+            if raw:
+                raw.queue_event(
+                    "buzz_hunt_early", lane=max(self.lane, 0),
+                    detail=(f"trial_id={self.trial_counter};"
+                            f"sub=play;anticipation=True"),
+                    hand=self.engine.hand_mode)
+            self._early_presses[self.stage] = (
+                self._early_presses.get(self.stage, 0) + 1)
+            self.engine.log_reaction_event(
+                trial_id=self.trial_counter, lane=self.lane,
+                label="Early", error_type="anticipation",
+                pressed_lane=ev.lane,
+                stimulus="distractor;anticipation",
+                # Nothing on this mode's screen ever names a finger.
+                target_shown=False,
+                hand=self.hand)
+            self.active = None
+            self._finish_trial(now)
+            return
         if self._presses and now < (self._respond_t0 or now):
             self._presses.clear()
             self._early_presses[self.stage] = (
@@ -914,6 +998,7 @@ class BuzzHuntMode:
                     "buzz_hunt_early", lane=max(self.lane, 0),
                     detail=f"trial_id={self.trial_counter};sub=play",
                     hand=self.engine.hand_mode)
+            self._redraw_interrupted_material()
             self.sub = "wait"
             self._quiet_since = None
             return
@@ -986,18 +1071,50 @@ class BuzzHuntMode:
                                if self._resp_presses else (None, None))
         rt_ms = (None if press_t is None or self._target_on is None
                  else (press_t - self._target_on) * 1000.0)
-        correct = responded and press_lane == self.lane
-        self._bump_confusion(str(self.lane),
-                             "none" if press_lane is None
-                             else str(press_lane))
+        # If the hardware never delivered the buzz, nothing about this
+        # trial says anything about the patient's perception: a press
+        # is a guess, silence is not a felt-nothing report. Void it
+        # rather than reading it as a real Miss (or, worse, a lucky
+        # correct guess) and pushing the staircase on hardware noise.
+        stim_failed = self._stim_delivered is False
+        if stim_failed:
+            self.engine._block_stim_failures += 1
+            log.warning("Buzz Hunt stimulus not delivered for trial "
+                         "%s. Check the Arduino connection.",
+                         self.trial_counter)
+        # Belt-and-braces: a press timestamped before the target
+        # actually fired can only reach here through the lured-decoy
+        # path above (where it is scored as a miss, not a hit), but
+        # nothing else in this function may ever classify a negative
+        # RT as a correct response to a target that has not sounded.
+        correct = (not stim_failed and responded and press_lane == self.lane
+                  and (rt_ms is None or rt_ms >= 0))
         stair = self._dur_stair[self.hand]
         distractor = "distractor_lane" in self.params
         lured = (distractor and press_lane is not None
                  and press_lane == int(self.params["distractor_lane"]))
-        if distractor:
+        if not stim_failed:
+            resp_key = "none" if press_lane is None else str(press_lane)
+            if distractor:
+                # A distractor press is a designed decoy-lure error,
+                # an attention failure the player was told to expect
+                # and gate out -- a different mechanism from the
+                # uncued localisation confusion matrix this feeds
+                # (Weber 2023's misreferral measure). Pooling the two
+                # inflates cross-hand cells and dilutes the
+                # adjacent-finger structure the loc-only matrix is
+                # meant to show (audit finding #95), so distractor
+                # presses get their own matrix.
+                row = self._distractor_confusion.setdefault(
+                    str(self.lane), {})
+                row[resp_key] = row.get(resp_key, 0) + 1
+            else:
+                self._bump_confusion(str(self.lane), resp_key)
+        if stim_failed or distractor:
             # Distractor trials run AT the staircase level but do not
             # move it (see the docstring): they measure attention at a
-            # fixed just-above-threshold duration.
+            # fixed just-above-threshold duration. A failed delivery
+            # never moves the staircase either, for the reason above.
             reversal = False
         else:
             reversal = stair.record(correct)
@@ -1026,24 +1143,32 @@ class BuzzHuntMode:
                 f"finger={FINGER_WORDS[self.lane % 4].lower()};"
                 f"dur_ms={float(self.params['dur_ms']):.0f};"
                 f"stair_ms={stair.level:.0f};reversal={reversal};"
-                f"lured={lured}")
+                f"lured={lured};stim_failed={stim_failed}")
             info = ContinuousTrialLog(waveform="buzz", params=self.params,
                                       seed=self.trial_seed,
                                       segments=self._segments(now))
             self.engine.log_trial(trial, outcome, now, stimulus=stimulus,
                                   correct_lanes=[self.lane],
                                   continuous=info)
-        rec = {"hand": self.hand, "lane": self.lane,
-               "dur_ms": float(self.params["dur_ms"]),
-               "correct": correct, "rt_ms": rt_ms,
-               "press_lane": press_lane, "lured": lured}
-        (self._dis_records if distractor else self._loc_records).append(rec)
+        if not stim_failed:
+            # A trial whose buzz never fired is not a perception
+            # sample: it must not water down (or, on a lucky guess,
+            # inflate) localisation or distractor accuracy. The row
+            # above still exists for the notebook to cross-check
+            # against the raw pulse_motor delivered=NO events.
+            rec = {"hand": self.hand, "lane": self.lane,
+                   "dur_ms": float(self.params["dur_ms"]),
+                   "correct": correct, "rt_ms": rt_ms,
+                   "press_lane": press_lane, "lured": lured}
+            (self._dis_records if distractor
+             else self._loc_records).append(rec)
         self._last_result = {
             "stage": self.stage, "label": outcome.label,
             "correct": correct, "responded": responded,
             "hand": self.hand, "lane": self.lane,
             "press_lane": press_lane, "rt_ms": rt_ms,
             "dur_ms": float(self.params["dur_ms"]), "lured": lured,
+            "stim_failed": stim_failed,
         }
         self._finish_trial(now)
 
@@ -1095,7 +1220,13 @@ class BuzzHuntMode:
         self.engine.log_segment_end("respond", self.trial_counter,
                                     max(self.lane, 0), now)
         pressed = [lane for lane, _t in self._resp_presses]
-        correct = pressed == self.sequence
+        stim_failed = self._stim_delivered is False
+        if stim_failed:
+            self.engine._block_stim_failures += 1
+            log.warning("Buzz Hunt stimulus not delivered for trial "
+                         "%s. Check the Arduino connection.",
+                         self.trial_counter)
+        correct = (not stim_failed) and pressed == self.sequence
         n_right = sum(1 for a, b in zip(pressed, self.sequence) if a == b)
         if correct:
             points = (self.score_cfg.great_points
@@ -1113,7 +1244,8 @@ class BuzzHuntMode:
                 f"span;len={len(self.sequence)};"
                 f"hebb={1 if self.is_hebb else 0};"
                 f"played={pack_lanes(self.sequence)};"
-                f"pressed={pack_lanes(pressed)}")
+                f"pressed={pack_lanes(pressed)};"
+                f"stim_failed={stim_failed}")
             info = ContinuousTrialLog(waveform="buzz_seq",
                                       params=self.params,
                                       seed=self.trial_seed,
@@ -1121,18 +1253,25 @@ class BuzzHuntMode:
             self.engine.log_trial(trial, outcome, now, stimulus=stimulus,
                                   correct_lanes=list(self.sequence),
                                   continuous=info)
-        self._span_records.append({
-            "len": len(self.sequence), "hebb": self.is_hebb,
-            "correct": correct, "n_right": n_right,
-        })
+        if not stim_failed:
+            # A sequence that never played is not a memory sample: it
+            # must not enter the span curve or the Hebb slope.
+            self._span_records.append({
+                "len": len(self.sequence), "hebb": self.is_hebb,
+                "correct": correct, "n_right": n_right,
+            })
         self._last_result = {
             "stage": "span", "label": outcome.label, "correct": correct,
             "len": len(self.sequence), "hebb": self.is_hebb,
             "pressed": pressed, "played": list(self.sequence),
+            "stim_failed": stim_failed,
         }
         # Span ladder: up one on success, down one on a miss, floor 2.
-        self.span_len = (self.span_len + 1 if correct
-                         else max(2, self.span_len - 1))
+        # A failed delivery leaves the ladder where it was, the same
+        # no-move rule as a failed localisation staircase.
+        if not stim_failed:
+            self.span_len = (self.span_len + 1 if correct
+                             else max(2, self.span_len - 1))
         self._finish_trial(now)
 
     # ---- closing: gap ------------------------------------------------------
@@ -1145,12 +1284,21 @@ class BuzzHuntMode:
         taps = len(self._resp_presses)
         answered_two = taps >= 2
         responded = taps > 0
-        correct = responded and answered_two == self.gap_two
+        stim_failed = self._stim_delivered is False
+        if stim_failed:
+            self.engine._block_stim_failures += 1
+            log.warning("Buzz Hunt stimulus not delivered for trial "
+                         "%s. Check the Arduino connection.",
+                         self.trial_counter)
+        correct = ((not stim_failed) and responded
+                  and answered_two == self.gap_two)
         stair = self._gap_stair[self.hand]
         # A no-response says nothing about the percept, so the
         # staircase holds still rather than reading silence as
-        # "cannot feel the gap".
-        reversal = stair.record(correct) if responded else False
+        # "cannot feel the gap"; a failed delivery holds it for the
+        # same reason (nothing was there to detect, felt or not).
+        reversal = (stair.record(correct)
+                    if responded and not stim_failed else False)
         if reversal:
             raw = getattr(self.engine, "raw_logger", None)
             if raw:
@@ -1176,7 +1324,7 @@ class BuzzHuntMode:
                 f"two={1 if self.gap_two else 0};"
                 f"gap_ms={float(self.params['gap_ms']):.0f};"
                 f"taps={taps};stair_ms={stair.level:.0f};"
-                f"reversal={reversal}")
+                f"reversal={reversal};stim_failed={stim_failed}")
             info = ContinuousTrialLog(waveform="buzz_gap",
                                       params=self.params,
                                       seed=self.trial_seed,
@@ -1184,17 +1332,22 @@ class BuzzHuntMode:
             self.engine.log_trial(trial, outcome, now, stimulus=stimulus,
                                   correct_lanes=[self.lane],
                                   continuous=info)
-        self._gap_records.append({
-            "hand": self.hand, "lane": self.lane,
-            "gap_ms": float(self.params["gap_ms"]),
-            "two": self.gap_two, "taps": taps,
-            "responded": responded, "correct": correct,
-        })
+        if not stim_failed:
+            # A stimulus that never played is not a gap-detection
+            # sample: it must not enter the gap accuracy or the
+            # psychometric fit.
+            self._gap_records.append({
+                "hand": self.hand, "lane": self.lane,
+                "gap_ms": float(self.params["gap_ms"]),
+                "two": self.gap_two, "taps": taps,
+                "responded": responded, "correct": correct,
+            })
         self._last_result = {
             "stage": "gap", "label": outcome.label, "correct": correct,
             "responded": responded, "two": self.gap_two, "taps": taps,
             "hand": self.hand, "lane": self.lane,
             "gap_ms": float(self.params["gap_ms"]),
+            "stim_failed": stim_failed,
         }
         self._finish_trial(now)
 
@@ -1306,6 +1459,8 @@ class BuzzHuntMode:
                 "accuracy": _acc(self._dis_records),
                 "lured": sum(1 for r in self._dis_records if r["lured"]),
                 "early_presses": self._early_presses.get("distractor", 0),
+                "confusion": {k: dict(v) for k, v
+                             in self._distractor_confusion.items()},
             },
             "span": {
                 "trials": len(self._span_records),

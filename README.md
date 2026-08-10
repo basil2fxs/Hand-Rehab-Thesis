@@ -20,7 +20,7 @@ Finger rehab game for stroke patients. Python program runs on a laptop, Arduino 
 
 ### What each new mode does
 
-Adaptive is the one I think actually scores points as research. It watches the patient's hit rate and reaction time per finger, then picks the next finger to stim and how fast to fire it. Target is 70 to 80 percent hit rate, the Guadagnoli and Lee challenge-point band where motor learning sits fastest. Weak fingers get picked more. Miss three in a row and the engine slows down hard and biases toward the patient's strongest finger so they get an easy win.
+Adaptive is the one I think actually scores points as research. It watches the patient's hit rate and reaction time per finger, then picks the next finger to stim and how fast to fire it. Target is 65 to 80 percent hit rate, a band chosen off Guadagnoli and Lee's challenge-point framework plus other success-rate-controlled rehab games in the literature (Guadagnoli and Lee don't report a specific number themselves). Weak fingers get picked more. Miss three in a row and the engine slows down hard and biases toward the patient's strongest finger so they get an easy win.
 
 Rhythm plays a song, runs librosa to find the beats, then drops falling notes on those beats. The patient presses on the beat. Each press is scored Perfect, Great, Good, Late, Early or Miss in milliseconds from the beat.
 

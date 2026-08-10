@@ -287,14 +287,15 @@ class RhythmModePressMatchingTests(unittest.TestCase):
                          f"drain-time lag leaked into offset_ms: {offset_ms}")
 
     def test_press_before_a_note_has_fired_does_not_consume_it(self) -> None:
-        """A false-start or wrong-finger press made before a lane's note
-        has actually been cued (fired) must not silently consume that
+        """A false-start or wrong-finger press made WELL before a lane's
+        note (outside the good window) must not silently consume that
         future note -- the patient's later, genuinely on-time press
         needs something to match."""
         import time as _t
         from rehab.hardware.fsr_detector import PressEvent
         mode, engine = self._make_mode()
-        # Note at t=2.0 on lane 0 has NOT fired yet.
+        # Note at t=2.0 on lane 0 has NOT fired yet, and 400ms early is
+        # outside the 175ms good window, so this must stay unmatched.
         mode._t_start = _t.perf_counter() - 1.6   # song_time ~1.6, 400ms early
         mode._score_press(PressEvent(lane=0, t_perf=_t.perf_counter(),
                                        value=0, baseline=0.0))
@@ -304,6 +305,59 @@ class RhythmModePressMatchingTests(unittest.TestCase):
         note_2s = next(s for s in mode.scheduler.scheduled
                        if s.note.t == 2.0)
         self.assertIsNone(note_2s.hit_at)
+
+    def test_early_press_within_good_window_scores_even_before_fired(
+            self) -> None:
+        """Audit finding #54 (HIGH): a press up to good_ms before an
+        UNFIRED note used to be rejected outright (the `fired` gate ran
+        before the time-window check), so the entire early half of the
+        published Perfect/Great/Good windows was unreachable and a
+        press this early was penalised as a spurious wrong-finger press
+        instead of scored. Anticipatory (early) pressing is the norm in
+        sensorimotor synchronisation, not an error, so it must score."""
+        import time as _t
+        from rehab.hardware.fsr_detector import PressEvent
+        mode, engine = self._make_mode()
+        # Note at t=2.0 on lane 0 has NOT fired (scheduler._next is
+        # still 0; notes_due() has never run). Press 100ms early, well
+        # inside the 175ms good window.
+        for s in mode.scheduler.scheduled:
+            self.assertFalse(s.fired)
+        mode._t_start = _t.perf_counter() - 1.9   # song_time ~1.9, 100ms early
+        mode._score_press(PressEvent(lane=0, t_perf=_t.perf_counter(),
+                                       value=0, baseline=0.0))
+        engine.log_rhythm_unmatched.assert_not_called()
+        engine.log_rhythm_hit.assert_called_once()
+        args, _ = engine.log_rhythm_hit.call_args
+        offset_ms = args[1]
+        self.assertLess(offset_ms, 0.0)           # early = negative
+        self.assertGreater(offset_ms, -175.0)     # inside the good window
+        note_2s = next(s for s in mode.scheduler.scheduled
+                       if s.note.t == 2.0)
+        self.assertIsNotNone(note_2s.hit_at)
+
+    def test_press_expired_and_miss_logged_does_not_double_count(
+            self) -> None:
+        """Audit finding #55 (HIGH): a press landing between miss_ms
+        (300ms) and the old 2x matching radius (600ms) after a beat
+        used to still be matched to a note whose no-press Miss row had
+        already been written by the window-expiry path, producing two
+        trial rows -- and two misses -- for one note."""
+        import time as _t
+        from rehab.hardware.fsr_detector import PressEvent
+        mode, engine = self._make_mode()
+        note = next(s for s in mode.scheduler.scheduled if s.note.t == 1.0)
+        note.fired = True          # notes_due() already cued this note
+        note._miss_logged = True   # expiry path already wrote the Miss row
+        mode._t_start = _t.perf_counter() - 1.4   # song_time ~1.4, 400ms late
+        mode._score_press(PressEvent(lane=0, t_perf=_t.perf_counter(),
+                                       value=0, baseline=0.0))
+        # Must NOT be re-matched to the already-miss-logged note --
+        # counts as an unmatched (spurious) press instead of a second
+        # hit row for the same note.
+        engine.log_rhythm_hit.assert_not_called()
+        engine.log_rhythm_unmatched.assert_called_once()
+        self.assertIsNone(note.hit_at)
 
 
 class RhythmPreSongLeadTests(unittest.TestCase):
@@ -350,6 +404,135 @@ class RhythmPreSongLeadTests(unittest.TestCase):
         # can hide the song progress bar during the lead window.
         mode, _ = self._build(lead_s=2.0)
         self.assertFalse(mode._audio_started)
+
+
+class RhythmAudioOffsetCompensationTests(unittest.TestCase):
+    """Audit finding #57 (MEDIUM): rhythm.audio_offset_ms (default
+    40ms) used to be subtracted from every press regardless of whether
+    any sound was actually playing, so a keyboard-only / audio-disabled
+    session (where the patient syncs to the visual strike line, not
+    audio) had every logged offset shifted ~40ms early for no reason,
+    and the metronome click (a much smaller ~12ms latency) was
+    over-compensated by the same song-sized constant."""
+
+    def _make_mode(self, audio):
+        from unittest.mock import MagicMock
+        from rehab.audio.beatmap import Beatmap, Note
+        from rehab.game.modes.rhythm import RhythmMode
+        from rehab.game.scoring import RhythmWindows, ScoreConfig
+        bm = Beatmap(notes=[Note(t=1.0, lane=0)])
+        engine = MagicMock()
+        engine.audio = audio
+
+        def _cfg_get(key, default=None):
+            if key == "rhythm.pre_song_lead_s":
+                return 0
+            if key == "rhythm.audio_offset_ms":
+                return 40
+            if key == "rhythm.metronome_offset_ms":
+                return 12
+            return default
+        engine.cfg.get = MagicMock(side_effect=_cfg_get)
+        mode = RhythmMode(engine, bm, RhythmWindows(), ScoreConfig())
+        mode._countdown_done = True
+        mode._countdown_s = 0.0
+        return mode, engine
+
+    def _press_on_the_beat(self, mode):
+        import time as _t
+        from rehab.hardware.fsr_detector import PressEvent
+        mode._t_start = _t.perf_counter() - 1.0   # song_time ~= 1.0
+        mode._score_press(PressEvent(lane=0, t_perf=_t.perf_counter(),
+                                       value=0, baseline=0.0))
+
+    def test_no_audio_object_applies_zero_compensation(self) -> None:
+        # Keyboard-only / audio init failed: engine.audio is None.
+        mode, engine = self._make_mode(audio=None)
+        self._press_on_the_beat(mode)
+        offset_ms = engine.log_rhythm_hit.call_args[0][1]
+        self.assertAlmostEqual(offset_ms, 0.0, delta=5.0)
+
+    def test_audio_disabled_no_song_no_metronome_applies_zero(self) -> None:
+        # Audio engine exists (audio.enabled: true in config) but
+        # nothing is actually playing yet -- neither a song nor the
+        # metronome fallback has started.
+        from unittest.mock import MagicMock
+        audio = MagicMock()
+        audio._song_path = None
+        audio._metronome_period = None
+        mode, engine = self._make_mode(audio=audio)
+        self._press_on_the_beat(mode)
+        offset_ms = engine.log_rhythm_hit.call_args[0][1]
+        self.assertAlmostEqual(offset_ms, 0.0, delta=5.0)
+
+    def test_song_playing_applies_the_song_offset(self) -> None:
+        from unittest.mock import MagicMock
+        audio = MagicMock()
+        audio._song_path = "/tmp/song.mp3"
+        audio._metronome_period = None
+        mode, engine = self._make_mode(audio=audio)
+        self._press_on_the_beat(mode)
+        offset_ms = engine.log_rhythm_hit.call_args[0][1]
+        # A press exactly on the visible beat should read as ~40ms
+        # early once the song's audio-output latency is subtracted.
+        self.assertAlmostEqual(offset_ms, -40.0, delta=5.0)
+
+    def test_metronome_running_applies_the_smaller_metronome_offset(
+            self) -> None:
+        from unittest.mock import MagicMock
+        audio = MagicMock()
+        audio._song_path = None
+        audio._metronome_period = 0.5
+        mode, engine = self._make_mode(audio=audio)
+        self._press_on_the_beat(mode)
+        offset_ms = engine.log_rhythm_hit.call_args[0][1]
+        # Metronome latency (~12ms) must not be over-compensated with
+        # the much larger song constant (~40ms).
+        self.assertAlmostEqual(offset_ms, -12.0, delta=5.0)
+
+
+class RhythmCountdownPressQueueTests(unittest.TestCase):
+    """Audit finding #60 (LOW): a press made during the countdown or
+    pre-song lead used to be queued and then drained the moment the
+    countdown ended, scored as an unmatched spurious press (wrong-press
+    penalty, red flash, miss thunk) even though the screen explicitly
+    says not to press yet. The pause path already clears the queue on
+    pause; queue_press itself must refuse to queue while the countdown
+    is still running."""
+
+    def _make_mode(self):
+        from unittest.mock import MagicMock
+        from rehab.audio.beatmap import Beatmap, Note
+        from rehab.game.modes.rhythm import RhythmMode
+        from rehab.game.scoring import RhythmWindows, ScoreConfig
+        bm = Beatmap(notes=[Note(t=1.0, lane=0)])
+        engine = MagicMock()
+        engine.audio = None
+
+        def _cfg_get(key, default=None):
+            if key == "rhythm.pre_song_lead_s":
+                return 0
+            return default
+        engine.cfg.get = MagicMock(side_effect=_cfg_get)
+        return RhythmMode(engine, bm, RhythmWindows(), ScoreConfig())
+
+    def test_press_during_countdown_is_not_queued(self) -> None:
+        from rehab.hardware.fsr_detector import PressEvent
+        import time as _t
+        mode = self._make_mode()
+        self.assertFalse(mode._countdown_done)
+        mode.queue_press(PressEvent(lane=0, t_perf=_t.perf_counter(),
+                                      value=0, baseline=0.0))
+        self.assertEqual(len(mode._presses), 0)
+
+    def test_press_after_countdown_is_queued_normally(self) -> None:
+        from rehab.hardware.fsr_detector import PressEvent
+        import time as _t
+        mode = self._make_mode()
+        mode._countdown_done = True
+        mode.queue_press(PressEvent(lane=0, t_perf=_t.perf_counter(),
+                                      value=0, baseline=0.0))
+        self.assertEqual(len(mode._presses), 1)
 
 
 class RhythmMissWindowCloseRegressionTests(unittest.TestCase):

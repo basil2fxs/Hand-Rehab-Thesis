@@ -25,6 +25,8 @@ matplotlib.use("Agg")
 import pandas as pd
 import pytest
 
+from rehab.data.logger import TRIAL_COLUMNS as BUZZ_HUNT_COLS
+
 
 NOTEBOOK = (Path(__file__).resolve().parents[1]
             / "analysis" / "session_analysis.ipynb")
@@ -408,14 +410,23 @@ def _write_chords_session(root, name, *, day, clock="090000",
 
 
 def _write_syllables_session(root, name, *, day, words, gaps=None,
-                             clock="090000", hand="right"):
-    """One syllables game folder with level-4 words packed into the
-    stimulus cell the way syllables.py._pack_stimulus writes them.
+                             clock="090000", hand="right", level=4,
+                             nsyll=2, syllables_extra=None, paced=False,
+                             asyn=None):
+    """One syllables game folder with words packed into the stimulus
+    cell the way syllables.py._pack_stimulus writes them.
 
     `words` is a list of (word, stress_idx, [(lane1, t_ms, peak), ...])
     tuples, lane1 1-indexed exactly as the mode packs it. `gaps` is the
     right hand's 4-finger calibration gap list, or None for no
-    calibration recorded (peak_force_cal stays unusable)."""
+    calibration recorded (peak_force_cal stays unusable). `level` and
+    `nsyll` go straight into the packed stimulus (lvl=/nsyll=), so a
+    caller can build a level 1/2/5/6 block instead of the level-4
+    default. `syllables_extra` merges extra keys into
+    block_summary.syllables (band_trace, warmup_asyn_mean_ms/sd),
+    mirroring what SyllablesMode.block_stats() actually returns.
+    `paced`/`asyn` pack paced=1 and an asyn= list (one per word, same
+    length every word) so the beat-synchronisation branch runs."""
     folder = Path(root) / day / f"{name}_{clock}_syllables"
     folder.mkdir(parents=True, exist_ok=True)
     rows = []
@@ -424,10 +435,15 @@ def _write_syllables_session(root, name, *, day, words, gaps=None,
             f"{lane1}:{t_ms:.1f}:" + (f"{peak:.1f}" if peak is not None
                                       else "")
             for lane1, t_ms, peak in taps)
-        stimulus = ";".join([
-            word, "lvl=4", "band=C", f"nsyll=2", f"stress={stress_idx}",
-            "paced=0", "ioi=500", "replay=0", "err=ok", f"taps={taps_s}",
-        ])
+        parts = [
+            word, f"lvl={level}", "band=C", f"nsyll={nsyll}",
+            f"stress={stress_idx}",
+            f"paced={1 if paced else 0}", "ioi=500", "replay=0",
+            "err=ok", f"taps={taps_s}",
+        ]
+        if paced and asyn:
+            parts.append("asyn=" + ",".join(f"{a:.1f}" for a in asyn))
+        stimulus = ";".join(parts)
         rows.append({
             **{c: "" for c in REACTION_COLS},
             "iso_ts": f"{day}T09:00:00", "block_t_s": trial_id * 3.0,
@@ -446,6 +462,12 @@ def _write_syllables_session(root, name, *, day, words, gaps=None,
         w.writeheader()
         w.writerows(rows)
 
+    syllables_summary = {
+        "level": level, "accuracy": 1.0, "asyn_sd_ms": None,
+        "band_final": "C", "band_trace": ["A", "B", "C"],
+    }
+    if syllables_extra:
+        syllables_summary.update(syllables_extra)
     meta = {
         "participant": name, "hand": hand,
         "started_at": f"{day}T09:00:00",
@@ -454,7 +476,8 @@ def _write_syllables_session(root, name, *, day, words, gaps=None,
                           "trials": len(rows), "hit_rate": 1.0,
                           "avg_rt_ms": 400.0, "duration_s": 60.0,
                           "paused_total_s": 0.0,
-                          "force_unit": "sensor counts"},
+                          "force_unit": "sensor counts",
+                          "syllables": syllables_summary},
         "calibration": (_calibration(gaps) if gaps is not None else {}),
     }
     (folder / "metadata.json").write_text(json.dumps(meta))
@@ -1253,3 +1276,1363 @@ class TestSyllablesStressRatio:
             gaps=None)
         assert "1 words dropped: no calibration" in out
         assert "stressed-tap ratio median" not in out
+
+
+class TestSyllablesSegmentationUnitFilter:
+    """Fix for #37 (2026-08-08 audit): nsyll= is the packed UNIT
+    count -- syllables at levels 1-4, but onset-rime pairs at level 5
+    and graphemes at level 6 -- so grouping the whole frame by nsyll
+    plotted a level-6 word's 2-4 phoneme graphemes as though they were
+    2-4 "syllables" against the Liberman syllable-tapping anchor. The
+    segmentation-by-count chart must be restricted to levels 1-4."""
+
+    def test_level_six_words_are_excluded_and_flagged(
+            self, ra, tmp_path, capsys):
+        _write_syllables_session(
+            tmp_path, "P1", day="2026-08-01", level=1, nsyll=2,
+            words=[("cat", 0, [(1, 400.0, None), (2, 800.0, None)])])
+        _write_syllables_session(
+            tmp_path, "P1", day="2026-08-01", clock="091000", level=6,
+            nsyll=3,
+            words=[("sun", 0, [(1, 400.0, None), (2, 800.0, None),
+                               (3, 1200.0, None)])])
+        ctx = ra.prepare("all", root=tmp_path)
+        ra.sec_syllables(ctx["trials"], ctx["metas"], ctx["calset"])
+        out = capsys.readouterr().out
+        assert "1 level 5/6 word(s) excluded" in out
+
+    def test_no_exclusion_note_when_every_word_is_level_one_to_four(
+            self, ra, tmp_path, capsys):
+        _write_syllables_session(
+            tmp_path, "P1", day="2026-08-01", level=2, nsyll=2,
+            words=[("cat", 0, [(1, 400.0, None), (2, 800.0, None)])])
+        ctx = ra.prepare("all", root=tmp_path)
+        ra.sec_syllables(ctx["trials"], ctx["metas"], ctx["calset"])
+        out = capsys.readouterr().out
+        assert "excluded from the syllable" not in out
+
+
+class TestSyllablesWarmupProbe:
+    """Fix for #31 (2026-08-08 audit): the warm-up (10 free taps to the
+    metronome before the first word) is logged every session, but the
+    chapter only ever built asynchrony from paced word trials, so an
+    L1/L2 session -- every word free-paced -- printed "no asynchrony
+    to draw yet" although block_summary.syllables.warmup_asyn_mean_ms/
+    sd carried a synchronisation reading the whole time."""
+
+    def test_level_one_session_still_prints_a_synchronisation_reading(
+            self, ra, tmp_path, capsys):
+        _write_syllables_session(
+            tmp_path, "P1", day="2026-08-01", level=1, nsyll=2,
+            words=[("cat", 0, [(1, 400.0, None), (2, 800.0, None)])],
+            syllables_extra={"warmup_taps": 10,
+                             "warmup_asyn_mean_ms": -12.3,
+                             "warmup_asyn_sd_ms": 18.4})
+        ctx = ra.prepare("all", root=tmp_path)
+        ra.sec_syllables(ctx["trials"], ctx["metas"], ctx["calset"])
+        out = capsys.readouterr().out
+        # The old code's only message for an all-free-paced selection.
+        assert "no asynchrony to draw yet" in out   # still true of paced
+        assert "warm-up synchronisation probe" in out
+        assert "18.4" in out
+
+    def test_no_stored_warmup_stats_says_so_plainly(
+            self, ra, tmp_path, capsys):
+        _write_syllables_session(
+            tmp_path, "P1", day="2026-08-01", level=1, nsyll=2,
+            words=[("cat", 0, [(1, 400.0, None), (2, 800.0, None)])])
+        ctx = ra.prepare("all", root=tmp_path)
+        ra.sec_syllables(ctx["trials"], ctx["metas"], ctx["calset"])
+        out = capsys.readouterr().out
+        assert "No stored warm-up asynchrony yet" in out
+
+
+class TestSyllablesLatencyCaveat:
+    """Fix for #39 (2026-08-08 audit): output-latency measurement is
+    genuinely not implemented anywhere (mixer init only forces a
+    buffer size, it does not measure the OS output chain), so the
+    fix is the caveat the audit's own fix sketch asks for: tell the
+    reader the mean asynchrony carries an unknown constant positive
+    bias they cannot correct for, without pretending it was fixed."""
+
+    def test_beat_sync_mean_line_carries_the_latency_caveat(
+            self, ra, tmp_path, capsys):
+        _write_syllables_session(
+            tmp_path, "P1", day="2026-08-01", level=3, nsyll=2,
+            paced=True, asyn=[-20.0, -20.0],
+            words=[("cat", 0, [(1, 400.0, None), (2, 800.0, None)])])
+        ctx = ra.prepare("all", root=tmp_path)
+        ra.sec_syllables(ctx["trials"], ctx["metas"], ctx["calset"])
+        out = capsys.readouterr().out
+        assert "CAVEAT: the mean is not corrected for unmeasured audio" in out
+        assert "unknown constant positive bias" in out
+
+
+class TestSyllablesClaimLimits:
+    """Fix for #32 (2026-08-08 audit): the chapter never printed the
+    mode docstring's mandated statement that the curves are
+    within-task learning, not evidence of reading transfer, and never
+    surfaced band_trace outside the raw stored-stats table."""
+
+    def test_claim_limit_paragraph_always_prints(
+            self, ra, tmp_path, capsys):
+        _write_syllables_session(
+            tmp_path, "P1", day="2026-08-01", level=1, nsyll=2,
+            words=[("cat", 0, [(1, 400.0, None), (2, 800.0, None)])])
+        ctx = ra.prepare("all", root=tmp_path)
+        ra.sec_syllables(ctx["trials"], ctx["metas"], ctx["calset"])
+        out = capsys.readouterr().out
+        assert "CLAIM LIMITS" in out
+        assert "not evidence that" in out
+        assert "reading has improved" in out
+        assert "not a diagnostic instrument" in out
+
+    def test_band_trace_is_printed_per_session(
+            self, ra, tmp_path, capsys):
+        _write_syllables_session(
+            tmp_path, "P1", day="2026-08-01", level=1, nsyll=2,
+            words=[("cat", 0, [(1, 400.0, None), (2, 800.0, None)])],
+            syllables_extra={"band_trace": ["A", "B"]})
+        ctx = ra.prepare("all", root=tmp_path)
+        ra.sec_syllables(ctx["trials"], ctx["metas"], ctx["calset"])
+        out = capsys.readouterr().out
+        assert "band trace per session" in out
+        assert "A->B" in out
+
+
+# ---------------------------------------------------------------------
+# Audit findings #44/#46/#47/#48 (adaptive fix stage, notebook side)
+# ---------------------------------------------------------------------
+
+def _write_adaptive_session(root, name, trial_specs, *, clock="090000",
+                            day="2026-08-05"):
+    """One adaptive game folder built from explicit (lane0, early_late,
+    timeout_ms, bpm_at_trial) tuples, so a test controls exactly which
+    finger missed and exactly what window/pace each row claims -- the
+    two things findings #46/#47/#48 are about."""
+    folder = Path(root) / day / f"{name}_{clock}_adaptive"
+    folder.mkdir(parents=True, exist_ok=True)
+    rows = []
+    for t, (lane0, early_late, timeout_ms, bpm) in enumerate(trial_specs, 1):
+        rt = (timeout_ms * 0.3) if early_late != "Miss" else ""
+        rows.append({
+            **{c: "" for c in FINGER_COLS},
+            "iso_ts": f"{day}T09:00:00", "block_t_s": t * 1.5,
+            "participant": name, "age": 30, "hand": "right",
+            "block": "adaptive", "trial": t, "lane": lane0 + 1,
+            "time_difference_ms": rt, "early_late": early_late,
+            "points": 0 if early_late == "Miss" else 3,
+            "feedback": early_late, "keys_pressed": lane0 + 1,
+            "correct_keys": lane0 + 1, "num_presses": 1,
+            "had_incorrect_press": "FALSE",
+            "streak_at_trial": t, "in_recovery": "FALSE",
+            "bpm_at_trial": bpm, "timeout_ms": timeout_ms,
+            "stim_delivered": "TRUE", "cue_mode": "both"})
+    with open(folder / "trials.csv", "w", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=FINGER_COLS)
+        w.writeheader()
+        w.writerows(rows)
+    n = len(trial_specs)
+    hits = sum(1 for _, el, _, _ in trial_specs if el != "Miss")
+    meta = {
+        "participant": name, "hand": "right",
+        "started_at": f"{day}T09:00:00",
+        "source_name": "MultiSerial(right@/dev/cu.usbserial-test)",
+        "block_summary": {"block": "adaptive", "status": "completed",
+                          "trials": n, "hit_rate": hits / n,
+                          "avg_rt_ms": 300.0, "duration_s": 60.0,
+                          "paused_total_s": 0.0,
+                          "force_unit": "sensor counts"},
+        "calibration": {},
+    }
+    (folder / "metadata.json").write_text(json.dumps(meta))
+    return folder
+
+
+class TestCensoringCaveat:
+    """Finding #46: adaptive's response window varies with the cadence
+    (timeout_ms per trial), so pooling its RTs with no note is not the
+    same measurement as a fixed-window mode's RTs. censoring_caveat
+    must fire when a pool holds adaptive trials under different
+    windows, and stay quiet when the window never moved."""
+
+    def test_fires_when_adaptive_rows_span_different_windows(
+            self, ra, tmp_path):
+        _write_adaptive_session(tmp_path, "P1", [
+            (0, "Good", 386, 140.0),
+            (1, "Good", 1800, 30.0),
+            (2, "Good", 386, 140.0),
+        ])
+        ctx = ra.prepare("all", root=tmp_path)
+        caveat = ra.censoring_caveat(ctx["trials"])
+        assert caveat is not None
+        assert "386" in caveat
+        assert "1800" in caveat
+
+    def test_quiet_when_the_window_never_moved(self, ra, tmp_path):
+        _write_adaptive_session(tmp_path, "P1", [
+            (0, "Good", 1000, 60.0),
+            (1, "Good", 1000, 60.0),
+            (2, "Good", 1000, 60.0),
+        ])
+        ctx = ra.prepare("all", root=tmp_path)
+        assert ra.censoring_caveat(ctx["trials"]) is None
+
+    def test_reaction_time_headline_prints_the_caveat(
+            self, ra, tmp_path, capsys):
+        _write_adaptive_session(tmp_path, "P1", [
+            (0, "Good", 386, 140.0),
+            (1, "Good", 1800, 30.0),
+        ])
+        ctx = ra.prepare("all", root=tmp_path)
+        ra.sec_reaction_time(ctx["trials"])
+        out = capsys.readouterr().out
+        assert "CAVEAT" in out
+        assert "survivorship" in out
+
+
+class TestChallengePointLaneMean:
+    """Findings #47/#48: the controller regulates the unweighted mean
+    of PER-LANE hit rates, not the trial-share hit rate -- weakness-
+    biased sampling pulls the two apart. sec_accuracy must compute and
+    report both, name which one the band verdict is checked against,
+    and the return dict must carry the per-lane figure too."""
+
+    def test_lanemean_and_trialshare_diverge_under_weakness_bias(
+            self, ra, tmp_path, capsys):
+        # 3 strong lanes (9/10 hits, oversampled less) and one weak
+        # lane sampled far more often (weakness_bias), all misses.
+        specs = []
+        for _ in range(9):
+            specs.append((0, "Good", 1000, 60.0))
+        specs.append((0, "Miss", 1000, 60.0))
+        for lane0 in (1, 2, 3):
+            for _ in range(9):
+                specs.append((lane0, "Good", 1000, 60.0))
+            specs.append((lane0, "Miss", 1000, 60.0))
+        # Now add a heavily-oversampled weak lane pulling the
+        # trial-share figure down harder than the per-lane mean.
+        for _ in range(60):
+            specs.append((0, "Miss", 1000, 60.0))
+        _write_adaptive_session(tmp_path, "P1", specs)
+        ctx = ra.prepare("all", root=tmp_path)
+        result = ra.sec_accuracy(ctx["trials"])
+        assert result is not None
+        assert "hit_rate_lanemean_scoped" in result
+        assert result["hit_rate_lanemean_scoped"] is not None
+        # The oversampled weak lane must pull the trial-share figure
+        # below the unweighted per-lane mean.
+        assert result["hit_rate_scoped"] < result["hit_rate_lanemean_scoped"]
+        out = capsys.readouterr().out
+        assert "per-lane mean" in out
+        assert "trial-share" in out
+
+    def test_per_finger_panel_no_longer_implies_per_finger_regulation(
+            self):
+        # The notebook source itself, not the exec'd function (which
+        # has no real file for inspect.getsource to read back): the
+        # per-finger bar panel must not draw the band as if the
+        # controller held each finger inside it individually.
+        src = NOTEBOOK.read_text()
+        start = src.index('"def sec_accuracy(trials):')
+        end = src.index('def sec_')  # next section after the caveat below
+        end = src.index('"def sec_', start + 10)
+        section = src[start:end]
+        assert 'ax[1].axhspan(BAND_LO, BAND_HI' not in section
+
+
+# ---------------------------------------------------------------------
+# Audit finding #58 (fix:rhythm stage): fixed-cadence vs RAS comparison
+# ---------------------------------------------------------------------
+
+def _write_cadence_ras_session(root, name, *, mode, rows, day="2026-08-05",
+                               clock="090000",
+                               rhythm_spurious_presses=0):
+    """One classic or rhythm game folder built from explicit
+    (lane0, early_late, time_difference_ms, had_incorrect_press) tuples,
+    for cadence_ras_rows (findings #58) which needs both no-press Miss
+    rows (rhythm writes a literal 0.0 into time_difference_ms for
+    these) and, for rhythm, a block_summary rhythm_spurious_presses
+    count (rhythm's had_incorrect_press is hard-coded FALSE on every
+    row, so wrong-finger activity has to come from there instead)."""
+    folder = Path(root) / day / f"{name}_{clock}_{mode}"
+    folder.mkdir(parents=True, exist_ok=True)
+    out_rows = []
+    for t, (lane0, early_late, rt_ms, incorrect) in enumerate(rows, 1):
+        out_rows.append({
+            **{c: "" for c in FINGER_COLS},
+            "iso_ts": f"{day}T09:00:00", "block_t_s": t * 1.0,
+            "participant": name, "age": 30, "hand": "right",
+            "block": mode, "trial": t, "lane": lane0 + 1,
+            "time_difference_ms": rt_ms, "early_late": early_late,
+            "points": 0 if early_late == "Miss" else 3,
+            "feedback": early_late,
+            "keys_pressed": ("" if early_late == "Miss" and mode == "rhythm"
+                              else lane0 + 1),
+            "correct_keys": lane0 + 1,
+            "num_presses": 0 if (early_late == "Miss" and mode == "rhythm")
+                           else 1,
+            "had_incorrect_press": "TRUE" if incorrect else "FALSE",
+            "streak_at_trial": t, "in_recovery": "FALSE",
+            "timeout_ms": 300, "stim_delivered": "TRUE", "cue_mode": "both"})
+    with open(folder / "trials.csv", "w", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=FINGER_COLS)
+        w.writeheader()
+        w.writerows(out_rows)
+    n = len(rows)
+    hits = sum(1 for _, el, _, _ in rows if el != "Miss")
+    bs = {"block": mode, "status": "completed", "trials": n,
+          "hit_rate": hits / n if n else 0.0, "avg_rt_ms": 300.0,
+          "duration_s": 60.0, "paused_total_s": 0.0,
+          "force_unit": "sensor counts"}
+    if mode == "rhythm":
+        bs["rhythm_spurious_presses"] = rhythm_spurious_presses
+    meta = {
+        "participant": name, "hand": "right",
+        "started_at": f"{day}T09:00:00",
+        "source_name": "MultiSerial(right@/dev/cu.usbserial-test)",
+        "block_summary": bs,
+        "calibration": {},
+    }
+    (folder / "metadata.json").write_text(json.dumps(meta))
+    return folder
+
+
+class TestCadenceRasNoPressMissTimingSpread:
+    """Finding #58a: a rhythm no-press Miss writes a literal 0.0 into
+    time_difference_ms (classic writes an empty cell for the same
+    outcome), and cadence_ras_rows used to fold Misses straight into
+    the timing spread with no filter, so every missed note read as a
+    perfectly-on-beat press and pulled timing_sd_ms / timing_iqr_ms
+    toward zero purely from how many notes were missed."""
+
+    def test_miss_rows_are_excluded_from_timing_spread(self, ra, tmp_path):
+        # Two real hits with a genuine spread, plus a pile of no-press
+        # Misses (0.0 in time_difference_ms). Including the Misses
+        # would crush the spread toward zero.
+        rows = [(0, "Good", 40.0, False), (1, "Good", -60.0, False)]
+        rows += [(2, "Miss", 0.0, False) for _ in range(20)]
+        _write_cadence_ras_session(tmp_path, "P1", mode="rhythm", rows=rows)
+        ctx = ra.prepare("all", root=tmp_path)
+        tbl = ra.cadence_ras_rows(ctx["trials"], ctx["metas"])
+        ras = tbl[tbl["condition"] == "RAS (rhythm)"].iloc[0]
+        # Spread of just [40.0, -60.0]: sd = 70.71, not crushed by 20
+        # zeros mixed in.
+        assert ras["timing_sd_ms"] > 50.0, (
+            f"timing_sd_ms={ras['timing_sd_ms']} was pulled toward zero "
+            f"by no-press Miss rows' fabricated 0.0 offset")
+
+    def test_classic_misses_have_no_offset_to_exclude(self, ra, tmp_path):
+        # Classic writes an empty cell for a Miss, so trials.dropna()
+        # already excludes them; the fix must not touch classic's row.
+        rows = [(0, "Good", 400.0, False), (1, "Good", 420.0, False),
+                (2, "Miss", "", False)]
+        _write_cadence_ras_session(tmp_path, "P1", mode="classic", rows=rows)
+        ctx = ra.prepare("all", root=tmp_path)
+        tbl = ra.cadence_ras_rows(ctx["trials"], ctx["metas"])
+        classic = tbl[tbl["condition"] == "fixed cadence (classic)"].iloc[0]
+        assert classic["trials"] == 3
+        assert classic["misses"] == 1
+
+
+class TestCadenceRasWrongFingerFromSpuriousPresses:
+    """Finding #58b: had_incorrect_press is hard-coded FALSE on every
+    rhythm trial row (rhythm's wrong presses are unmatched spurious
+    presses, not a wrong press inside a scored trial), so the RAS
+    wrong_finger count used to always read 0 no matter how many
+    spurious presses the block summary recorded. cadence_ras_rows must
+    read rhythm_spurious_presses from the block summary for the RAS
+    row instead."""
+
+    def test_ras_wrong_finger_reads_spurious_press_count(self, ra, tmp_path):
+        rows = [(0, "Good", 40.0, False), (1, "Good", -30.0, False)]
+        _write_cadence_ras_session(tmp_path, "P1", mode="rhythm", rows=rows,
+                                   rhythm_spurious_presses=5)
+        ctx = ra.prepare("all", root=tmp_path)
+        tbl = ra.cadence_ras_rows(ctx["trials"], ctx["metas"])
+        ras = tbl[tbl["condition"] == "RAS (rhythm)"].iloc[0]
+        assert ras["wrong_finger"] == 5
+
+    def test_classic_wrong_finger_still_reads_had_incorrect_press(
+            self, ra, tmp_path):
+        rows = [(0, "Good", 400.0, False), (1, "Late", 900.0, True)]
+        _write_cadence_ras_session(tmp_path, "P1", mode="classic", rows=rows)
+        ctx = ra.prepare("all", root=tmp_path)
+        tbl = ra.cadence_ras_rows(ctx["trials"], ctx["metas"])
+        classic = tbl[tbl["condition"] == "fixed cadence (classic)"].iloc[0]
+        assert classic["wrong_finger"] == 1
+
+
+# ------------------------------------------------------------ mirror mode
+# Findings #66, #70, #71, #73 (mirror fix stage).
+
+MIRROR_COLS = FINGER_COLS + [
+    "mirror_right_rt_ms", "mirror_left_rt_ms", "cue_target_shown"]
+
+
+def _write_mirror_session(root, name, trial_specs, *, clock="090000",
+                          day="2026-08-05"):
+    """One bilateral mirror game folder. trial_specs is a list of
+    (finger0, right_rt_ms, left_rt_ms, had_incorrect) tuples; finger0
+    is the within-hand finger index (0..3), the row's lane is always
+    the right-hand copy (finger0 + 1) the way PendingMirrorTrial.lane()
+    logs it. time_difference_ms is the later of the two RTs, matching
+    MirrorMode._finish's scoring rule; a Miss (either RT missing) or a
+    wrong-finger-then-correct trial (had_incorrect) still carries both
+    per-hand RTs when both sides eventually pressed, the same way the
+    engine logs it (audit finding #65's fix)."""
+    folder = Path(root) / day / f"{name}_{clock}_mirror"
+    folder.mkdir(parents=True, exist_ok=True)
+    rows = []
+    for t, (finger0, right_rt, left_rt, had_incorrect) in enumerate(
+            trial_specs, 1):
+        both_in = right_rt is not None and left_rt is not None
+        rt = max(right_rt, left_rt) if both_in else ""
+        label = "Miss" if (had_incorrect or not both_in) else "Great"
+        rows.append({
+            **{c: "" for c in MIRROR_COLS},
+            "iso_ts": f"{day}T09:00:00", "block_t_s": t * 1.5,
+            "participant": name, "age": 30, "hand": "both",
+            "block": "mirror", "trial": t, "lane": finger0 + 1,
+            "time_difference_ms": rt, "early_late": label,
+            "points": 0 if label == "Miss" else 6,
+            "feedback": label, "keys_pressed": finger0 + 1,
+            "correct_keys": f"{finger0 + 1},{finger0 + 5}",
+            "num_presses": 2 if both_in else 1,
+            "had_incorrect_press": "TRUE" if had_incorrect else "FALSE",
+            "mirror_right_rt_ms": "" if right_rt is None else right_rt,
+            "mirror_left_rt_ms": "" if left_rt is None else left_rt,
+            "cue_target_shown": "TRUE",
+            "stim_delivered": "FALSE", "cue_mode": "both"})
+    with open(folder / "trials.csv", "w", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=MIRROR_COLS)
+        w.writeheader()
+        w.writerows(rows)
+    n = len(trial_specs)
+    hits = sum(1 for _, r, l, inc in trial_specs
+               if r is not None and l is not None and not inc)
+    meta = {
+        "participant": name, "hand": "both",
+        "started_at": f"{day}T09:00:00",
+        # Keyboard fallback: no Arduino, buzz_before still on by
+        # default, so stim_delivered is FALSE on every row even though
+        # cue_target_shown is TRUE (audit finding #70).
+        "source_name": "KeyboardOnlySource",
+        "block_summary": {"block": "mirror", "status": "completed",
+                          "trials": n, "hit_rate": hits / n if n else 0.0,
+                          "avg_rt_ms": 300.0, "duration_s": 60.0,
+                          "paused_total_s": 0.0,
+                          "force_unit": "sensor counts"},
+        "calibration": {},
+    }
+    (folder / "metadata.json").write_text(json.dumps(meta))
+    return folder
+
+
+class TestMirrorSideBasedSplitsExcludeMirror:
+    """Finding #66: mirror always logs the right-hand copy of the
+    finger as its lane (PendingMirrorTrial.lane()), so `side` derived
+    from lane is always "right" for a mirror row -- pooling mirror
+    into any left/right split silently reports its later-press RT
+    (systematically slower than a unimanual RT) as right-hand data.
+    sec_bilateral's headline reaction-time line and per-finger chart
+    must exclude mirror rows; the dedicated mirror asynchrony readout
+    further down is the correct per-hand view."""
+
+    def test_mirror_rt_does_not_contaminate_the_right_hand_mean(
+            self, ra, tmp_path, capsys):
+        # A real (non-mirror) bilateral block would need reaction
+        # rows; here we isolate the bug by writing ONLY a mirror
+        # session and confirming the headline line reports "not
+        # available" (no cued non-mirror trials) rather than folding
+        # mirror's later-press RT into a right-hand mean.
+        _write_mirror_session(tmp_path, "P1", [
+            (0, 850.0, 900.0, False),
+            (1, 800.0, 950.0, False),
+        ])
+        ctx = ra.prepare("all", root=tmp_path)
+        ra.sec_bilateral(ctx["trials"])
+        out = capsys.readouterr().out
+        assert "reaction time  not available" in out
+        assert "bilateral trials are mirror" in out
+        # The dedicated mirror asynchrony section still reports it.
+        assert "mirror asynchrony" in out
+        assert "right hand mean 825" in out
+
+
+class TestMirrorAsynchronyGapExcludesFumbles:
+    """Finding #73: a wrong-finger-then-correct trial downgrades to
+    Miss but both hands still eventually pressed, so the naive
+    both_in filter folded the ERROR-RECOVERY time into the mean
+    |left - right| coordination gap. Must be filtered on
+    had_incorrect_press."""
+
+    def test_fumbled_trial_excluded_from_the_gap(self, ra, tmp_path,
+                                                  capsys):
+        _write_mirror_session(tmp_path, "P1", [
+            (0, 104.2, 109.2, False),        # clean, 5ms gap
+            (1, 104.2, 303.7, True),         # fumbled, 199.5ms "gap"
+        ])
+        ctx = ra.prepare("all", root=tmp_path)
+        ra.sec_bilateral(ctx["trials"])
+        out = capsys.readouterr().out
+        assert "mean |left - right| gap 5 ms over 1 clean trial" in out
+        assert "1 wrong-finger-then-correct trial(s) excluded" in out
+
+
+class TestMirrorKeyboardNoCueExclusion:
+    """Finding #70: a keyboard-only mirror block has buzz_before on by
+    default with no Arduino, so stim_delivered is FALSE on every row
+    even though the visual cue WAS shown (cue_target_shown TRUE) and
+    the patient plainly had something to react to. The no_cue
+    exclusion must not drop a trial where another channel delivered
+    the cue."""
+
+    def test_keyboard_block_with_visual_cue_is_not_all_excluded(
+            self, ra, tmp_path):
+        _write_mirror_session(tmp_path, "P1", [
+            (0, 150.0, 160.0, False),
+            (1, 140.0, 170.0, False),
+        ])
+        ctx = ra.prepare("all", root=tmp_path)
+        kept, flagged, counts = ra.analysable(ctx["trials"])
+        assert counts["no_cue"] == 0
+        assert counts["analysed"] == 2
+
+    def test_genuine_no_cue_trial_still_excluded(self, ra, tmp_path):
+        folder = _write_mirror_session(tmp_path, "P1", [(0, 150.0, 160.0, False)])
+        # Flip cue_target_shown off for the one row: neither channel
+        # delivered anything.
+        rows = list(csv.DictReader(open(folder / "trials.csv")))
+        rows[0]["cue_target_shown"] = "FALSE"
+        with open(folder / "trials.csv", "w", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=MIRROR_COLS)
+            w.writeheader()
+            w.writerows(rows)
+        ctx = ra.prepare("all", root=tmp_path)
+        kept, flagged, counts = ra.analysable(ctx["trials"])
+        assert counts["no_cue"] == 1
+        assert counts["analysed"] == 0
+
+
+class TestMirrorPooledReactionTimeCaveat:
+    """Finding #71: mirror's time_difference_ms is the LATER of two
+    simultaneous presses, systematically slower than a single-hand
+    reaction time, but sec_reaction_time pools it into the same
+    headline mean/median/CV as classic/adaptive with no note. A
+    selection's mode mix (more mirror this session than last) then
+    moves the headline even with no change in patient speed. A
+    caveat must fire when the pool holds any mirror rows."""
+
+    def test_caveat_fires_when_pool_holds_mirror_rows(
+            self, ra, tmp_path, capsys):
+        _write_adaptive_session(tmp_path, "P1", [
+            (0, "Good", 400, 60.0),
+            (1, "Good", 400, 60.0),
+        ])
+        _write_mirror_session(tmp_path, "P1", [
+            (0, 850.0, 900.0, False),
+        ])
+        ctx = ra.prepare("all", root=tmp_path)
+        ra.sec_reaction_time(ctx["trials"])
+        out = capsys.readouterr().out
+        assert "CAVEAT" in out
+        assert "1 of" in out and "mirror" in out
+        assert "LATER" in out
+
+    def test_no_caveat_when_pool_has_no_mirror_rows(
+            self, ra, tmp_path, capsys):
+        _write_adaptive_session(tmp_path, "P1", [
+            (0, "Good", 400, 60.0),
+            (1, "Good", 400, 60.0),
+        ])
+        ctx = ra.prepare("all", root=tmp_path)
+        ra.sec_reaction_time(ctx["trials"])
+        out = capsys.readouterr().out
+        assert "mirror" not in out.lower()
+
+
+# --------------------------------------------------------------- buzz_hunt
+# Audit findings #90, #91, #95, #96, #97 (fix:buzz_hunt stage).
+
+def _bh_pack(lanes):
+    return "-".join(str(int(x)) for x in lanes)
+
+
+def _write_buzz_hunt_span_session(root, name, span_specs, *, day="2026-08-05",
+                                  clock="090000", hand="right"):
+    """One buzz_hunt game folder with only span-stage rows.
+
+    span_specs: list of (length, hebb, played_lanes, pressed_lanes)
+    tuples, matching the stimulus cell BuzzHuntMode._close_span writes
+    ("span;len=..;hebb=..;played=..;pressed=..;stim_failed=..").
+    """
+    folder = Path(root) / day / f"{name}_{clock}_buzz_hunt"
+    folder.mkdir(parents=True, exist_ok=True)
+    rows = []
+    for t, (length, hebb, played, pressed) in enumerate(span_specs, 1):
+        correct = played == pressed
+        rows.append({
+            **{c: "" for c in BUZZ_HUNT_COLS},
+            "iso_ts": f"{day}T09:00:00", "block_t_s": t * 2.0,
+            "participant": name, "age": 30, "hand": hand,
+            "block": "buzz_hunt", "trial": t, "lane": played[0] + 1,
+            "early_late": "Great" if correct else "Miss",
+            "points": 4 if correct else 0, "feedback": "Great" if correct
+            else "Miss", "keys_pressed": _bh_pack([p + 1 for p in pressed]),
+            "correct_keys": _bh_pack([p + 1 for p in played]),
+            "num_presses": len(pressed), "had_incorrect_press": "FALSE",
+            "streak_at_trial": t, "in_recovery": "FALSE",
+            "cue_target_shown": "FALSE",
+            "stimulus": (f"span;len={length};hebb={1 if hebb else 0};"
+                        f"played={_bh_pack(played)};"
+                        f"pressed={_bh_pack(pressed)};"
+                        f"stim_failed=False"),
+            "waveform": "buzz_seq", "stim_delivered": "TRUE"})
+    with open(folder / "trials.csv", "w", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=BUZZ_HUNT_COLS)
+        w.writeheader()
+        w.writerows(rows)
+    meta = {
+        "participant": name, "hand": hand,
+        "started_at": f"{day}T09:00:00",
+        "source_name": "MultiSerial(right@/dev/cu.usbserial-test)",
+        "block_summary": {"block": "buzz_hunt", "status": "completed",
+                          "trials": len(span_specs), "hit_rate": None,
+                          "avg_rt_ms": None, "duration_s": 60.0,
+                          "paused_total_s": 0.0,
+                          "force_unit": "sensor counts"},
+        "calibration": {},
+    }
+    (folder / "metadata.json").write_text(json.dumps(meta))
+    return folder
+
+
+def _write_buzz_hunt_gap_session(root, name, gap_specs, *, day="2026-08-05",
+                                 clock="090000", hand="right"):
+    """One buzz_hunt game folder with only gap-stage rows.
+
+    gap_specs: list of (two, taps, gap_ms) tuples, matching the
+    stimulus cell BuzzHuntMode._close_gap writes.
+    """
+    folder = Path(root) / day / f"{name}_{clock}_buzz_hunt"
+    folder.mkdir(parents=True, exist_ok=True)
+    rows = []
+    for t, (two, taps, gap_ms) in enumerate(gap_specs, 1):
+        answered_two = taps >= 2
+        responded = taps > 0
+        correct = responded and answered_two == two
+        rows.append({
+            **{c: "" for c in BUZZ_HUNT_COLS},
+            "iso_ts": f"{day}T09:00:00", "block_t_s": t * 2.0,
+            "participant": name, "age": 30, "hand": hand,
+            "block": "buzz_hunt", "trial": t, "lane": 1,
+            "early_late": "Great" if correct else "Miss",
+            "points": 3 if correct else 0, "feedback": "Great" if correct
+            else "Miss", "keys_pressed": "1" if taps else "",
+            "correct_keys": "1", "num_presses": taps,
+            "had_incorrect_press": "FALSE",
+            "streak_at_trial": t, "in_recovery": "FALSE",
+            "cue_target_shown": "FALSE",
+            "stimulus": (f"gap;hand={hand};finger=index;"
+                        f"two={1 if two else 0};gap_ms={gap_ms:.0f};"
+                        f"taps={taps};stair_ms={gap_ms:.0f};"
+                        f"reversal=False;stim_failed=False"),
+            "waveform": "buzz_gap", "stim_delivered": "TRUE"})
+    with open(folder / "trials.csv", "w", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=BUZZ_HUNT_COLS)
+        w.writeheader()
+        w.writerows(rows)
+    meta = {
+        "participant": name, "hand": hand,
+        "started_at": f"{day}T09:00:00",
+        "source_name": "MultiSerial(right@/dev/cu.usbserial-test)",
+        "block_summary": {"block": "buzz_hunt", "status": "completed",
+                          "trials": len(gap_specs), "hit_rate": None,
+                          "avg_rt_ms": None, "duration_s": 60.0,
+                          "paused_total_s": 0.0,
+                          "force_unit": "sensor counts"},
+        "calibration": {},
+    }
+    (folder / "metadata.json").write_text(json.dumps(meta))
+    return folder
+
+
+def _write_buzz_hunt_distractor_session(root, name, records, *,
+                                        day="2026-08-05", clock="090000"):
+    """One bilateral buzz_hunt game folder with distractor-stage rows.
+
+    records: list of (target_lane0, decoy_lane0, pressed_lane0) global
+    0-based lanes, matching BuzzHuntMode._close_buzz's distractor
+    stimulus cell.
+    """
+    folder = Path(root) / day / f"{name}_{clock}_buzz_hunt"
+    folder.mkdir(parents=True, exist_ok=True)
+    rows = []
+    for t, (target, decoy, pressed) in enumerate(records, 1):
+        lured = pressed == decoy
+        correct = pressed == target
+        hand = "left" if target >= 4 else "right"
+        rows.append({
+            **{c: "" for c in BUZZ_HUNT_COLS},
+            "iso_ts": f"{day}T09:00:00", "block_t_s": t * 2.0,
+            "participant": name, "age": 30, "hand": "both",
+            "block": "buzz_hunt", "trial": t, "lane": target + 1,
+            "early_late": "Great" if correct else "Miss",
+            "points": 4 if correct else 0, "feedback": "Great" if correct
+            else "Miss", "keys_pressed": str(pressed + 1),
+            "correct_keys": str(target + 1), "num_presses": 1,
+            "had_incorrect_press": "FALSE" if correct else "TRUE",
+            "streak_at_trial": t, "in_recovery": "FALSE",
+            "cue_target_shown": "FALSE",
+            "stimulus": (f"distractor;hand={hand};finger=index;"
+                        f"dur_ms=300;stair_ms=300;reversal=False;"
+                        f"lured={lured};stim_failed=False"),
+            "waveform": "buzz", "stim_delivered": "TRUE"})
+    with open(folder / "trials.csv", "w", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=BUZZ_HUNT_COLS)
+        w.writeheader()
+        w.writerows(rows)
+    meta = {
+        "participant": name, "hand": "both",
+        "started_at": f"{day}T09:00:00",
+        "source_name": "MultiSerial(both)",
+        "block_summary": {"block": "buzz_hunt", "status": "completed",
+                          "trials": len(records), "hit_rate": None,
+                          "avg_rt_ms": None, "duration_s": 60.0,
+                          "paused_total_s": 0.0,
+                          "force_unit": "sensor counts"},
+        "calibration": {},
+    }
+    (folder / "metadata.json").write_text(json.dumps(meta))
+    return folder
+
+
+def _write_buzz_hunt_reversal_session(root, name, reversals, *,
+                                      day="2026-08-05", clock="090000",
+                                      hand="right"):
+    """One buzz_hunt game folder whose raw.csv carries only the given
+    duration-staircase reversal events (level_ms per reversal, in
+    order), plus one trivial loc trial row so the folder is
+    discovered. Matches buzz_hunt_reversal's detail cell."""
+    folder = Path(root) / day / f"{name}_{clock}_buzz_hunt"
+    folder.mkdir(parents=True, exist_ok=True)
+    rows = [{
+        **{c: "" for c in BUZZ_HUNT_COLS},
+        "iso_ts": f"{day}T09:00:00", "block_t_s": 2.0,
+        "participant": name, "age": 30, "hand": hand,
+        "block": "buzz_hunt", "trial": 1, "lane": 1,
+        "early_late": "Great", "points": 3, "feedback": "Great",
+        "keys_pressed": "1", "correct_keys": "1", "num_presses": 1,
+        "had_incorrect_press": "FALSE", "streak_at_trial": 1,
+        "in_recovery": "FALSE", "cue_target_shown": "FALSE",
+        "stimulus": "loc;hand=right;finger=index;dur_ms=300;"
+                    "stair_ms=300;reversal=False;lured=False;"
+                    "stim_failed=False",
+        "waveform": "buzz", "stim_delivered": "TRUE"}]
+    with open(folder / "trials.csv", "w", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=BUZZ_HUNT_COLS)
+        w.writeheader()
+        w.writerows(rows)
+
+    raw_cols = ["iso_ts", "t_perf", "sample_idx", "fsr1", "fsr2", "fsr3",
+               "fsr4", "fsr5", "fsr6", "fsr7", "fsr8", "hand", "event",
+               "lane", "detail"]
+    raw_rows = []
+    for n, level_ms in enumerate(reversals, 1):
+        raw_rows.append({
+            **{c: "" for c in raw_cols},
+            "iso_ts": f"{day}T09:00:00", "t_perf": n * 3.0,
+            "hand": hand, "event": "buzz_hunt_reversal", "lane": 0,
+            "detail": (f"stair=duration;hand={hand};"
+                      f"level_ms={level_ms:.0f};n={n}")})
+    with open(folder / "raw.csv", "w", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=raw_cols)
+        w.writeheader()
+        w.writerows(raw_rows)
+
+    meta = {
+        "participant": name, "hand": hand,
+        "started_at": f"{day}T09:00:00",
+        "source_name": "MultiSerial(right@/dev/cu.usbserial-test)",
+        "block_summary": {"block": "buzz_hunt", "status": "completed",
+                          "trials": 1, "hit_rate": None,
+                          "avg_rt_ms": None, "duration_s": 60.0,
+                          "paused_total_s": 0.0,
+                          "force_unit": "sensor counts"},
+        "calibration": {},
+    }
+    (folder / "metadata.json").write_text(json.dumps(meta))
+    return folder
+
+
+class TestBuzzHuntHebbSlopeByLength:
+    """Finding #90: hebb_sequence draws a DIFFERENT hidden sequence
+    per span LENGTH, so pooling hebb-flagged trials of different
+    lengths into one slope fits a line over item accuracies that were
+    never repeats of each other."""
+
+    def test_different_lengths_are_not_pooled_into_one_repeated_count(
+            self, ra, tmp_path, capsys):
+        specs = [
+            (4, True, [0, 2, 0, 1], [0, 2, 0, 1]),   # repeat 1, correct
+            (4, False, [1, 3, 1, 2], [1, 3, 1, 2]),
+            (4, True, [0, 2, 0, 1], [0, 1, 0, 1]),   # repeat 2, one wrong
+            (7, True, [0, 3, 2, 0, 3, 0, 3], [0, 3, 2, 0, 3, 0, 3]),
+        ]
+        _write_buzz_hunt_span_session(tmp_path, "P1", specs)
+        ctx = ra.prepare("all", root=tmp_path)
+        ra.sec_tactile(ctx["folders"], ctx["trials"], ctx["metas"])
+        out = capsys.readouterr().out
+        # The length-4 sequence really did repeat twice.
+        assert "length 4: repeated 2 time(s)" in out
+        # The length-7 sequence occurred once: unusable, not pooled
+        # into a 3-point slope with the length-4 trials.
+        assert "length 7: repeated 1 time(s)" in out
+        assert "unusable" in out
+        assert "repeated 3 time(s)" not in out
+
+    def test_prints_nothing_pooled_when_no_span_trials(
+            self, ra, tmp_path, capsys):
+        _write_buzz_hunt_gap_session(tmp_path, "P1", [(True, 2, 200.0)])
+        ctx = ra.prepare("all", root=tmp_path)
+        ra.sec_tactile(ctx["folders"], ctx["trials"], ctx["metas"])
+        out = capsys.readouterr().out
+        assert "Hebb repetition learning" not in out
+
+
+class TestBuzzHuntGapNoResponseExclusion:
+    """Finding #91: a no-response gap trial says nothing about the
+    percept (the mode's own staircase holds still on silence), so it
+    must not count as a false 'two' or feed the psychometric fit's
+    hit column."""
+
+    def test_no_responses_do_not_inflate_the_false_two_rate(
+            self, ra, tmp_path, capsys):
+        specs = [(False, 1, 150.0) for _ in range(8)]  # correct
+        specs += [(False, 0, 150.0), (False, 0, 150.0)]  # no response
+        _write_buzz_hunt_gap_session(tmp_path, "P1", specs)
+        ctx = ra.prepare("all", root=tmp_path)
+        ra.sec_tactile(ctx["folders"], ctx["trials"], ctx["metas"])
+        out = capsys.readouterr().out
+        assert "false 'two' on responded one-buzz trials 0%" in out
+        assert "2 no-response" in out
+
+
+class TestBuzzHuntGapFitFloorFromMeasuredBias:
+    """Finding #97: the gap psychometric fit's guess floor must come
+    from the participant's own measured false-two rate on one-buzz
+    trials, not a fixed 0.1 constant."""
+
+    def test_gamma_floor_is_not_the_fixed_constant(self):
+        src = NOTEBOOK.read_text()
+        start = src.index('"def sec_tactile(folders')
+        section = src[start:start + 20000]
+        assert "gamma=0.1" not in section
+        assert "gamma = fa if np.isfinite(fa)" in section
+
+
+class TestBuzzHuntConfusionExcludesDistractor:
+    """Finding #95: the localisation confusion matrix (the Weber 2023
+    misreferral analogue) must not include distractor-stage presses,
+    a designed decoy-lure error and a different mechanism."""
+
+    def test_distractor_lure_does_not_enter_the_loc_matrix(
+            self, ra, tmp_path):
+        # One clean localisation trial (lane 0 -> 0) and one distractor
+        # trial lured onto the decoy (target 5, decoy 2, pressed 2).
+        _write_buzz_hunt_distractor_session(
+            tmp_path, "P1", [(5, 2, 2)])
+        ctx = ra.prepare("all", root=tmp_path)
+        rows = ra.bh_frame(ctx["trials"])
+        m, lanes = ra.bh_confusion(rows)
+        assert m is None or m.sum() == 0, (
+            "a distractor-only selection must not populate the "
+            "localisation confusion matrix")
+
+
+class TestBuzzHuntReversalPlotGroupedByGame:
+    """Finding #96: a reversal index restarts at 1 in every session,
+    so the headline reversal plot and threshold estimate must be
+    grouped by (game, hand), not hand alone, or two sessions' reversal
+    sequences zigzag together and their thresholds blend."""
+
+    def test_two_sessions_produce_two_separate_threshold_estimates(
+            self, ra, tmp_path, capsys):
+        _write_buzz_hunt_reversal_session(
+            tmp_path, "P1", [300.0, 300.0, 280.0, 280.0, 260.0, 260.0],
+            clock="090000")
+        _write_buzz_hunt_reversal_session(
+            tmp_path, "P1", [150.0, 150.0, 140.0, 140.0, 130.0, 130.0],
+            clock="100000")
+        ctx = ra.prepare("all", root=tmp_path)
+        result = ra.sec_tactile(ctx["folders"], ctx["trials"], ctx["metas"])
+        capsys.readouterr()
+        thresholds = result["thresholds"]
+        assert len(thresholds) == 2, (
+            "each session's reversals must produce its own threshold "
+            "estimate, not one blended figure")
+        ests = sorted(t["threshold_ms"] for t in thresholds)
+        # Each session's own tail-of-reversals mean, not a figure
+        # that blends the two very different sessions together.
+        assert ests[0] < 200.0 < ests[1]
+
+
+def _write_buzz_hunt_segment_session(root, name, *, day="2026-08-05",
+                                     clock="090000", trial=1,
+                                     respond_start, respond_end,
+                                     raw_start, raw_end,
+                                     waveform="buzz"):
+    """One buzz_hunt game folder with a single trial whose packed
+    "respond" segment and raw segment_start/segment_end markers can be
+    set independently, for the segment cut check (audit finding #102):
+    a folder-filtering bug that let one game's markers be checked
+    against every selected game's rows, and buzz_hunt's own
+    documented one-frame respond-start offset."""
+    from rehab.data.logger import pack_segments
+    folder = Path(root) / day / f"{name}_{clock}_buzz_hunt"
+    folder.mkdir(parents=True, exist_ok=True)
+    seg_cell = pack_segments([("stim", respond_start - 0.3, respond_start),
+                              ("respond", respond_start, respond_end)])
+    rows = [{
+        **{c: "" for c in BUZZ_HUNT_COLS},
+        "iso_ts": f"{day}T09:00:00", "block_t_s": 2.0,
+        "participant": name, "age": 30, "hand": "right",
+        "block": "buzz_hunt", "trial": trial, "lane": 1,
+        "early_late": "Great", "points": 3, "feedback": "Great",
+        "keys_pressed": "1", "correct_keys": "1", "num_presses": 1,
+        "had_incorrect_press": "FALSE", "streak_at_trial": 1,
+        "in_recovery": "FALSE", "cue_target_shown": "FALSE",
+        "stimulus": "loc;hand=right;finger=index;dur_ms=300;"
+                    "stair_ms=300;reversal=False;lured=False;"
+                    "stim_failed=False",
+        "waveform": waveform, "stim_delivered": "TRUE",
+        "segment_times": seg_cell}]
+    with open(folder / "trials.csv", "w", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=BUZZ_HUNT_COLS)
+        w.writeheader()
+        w.writerows(rows)
+
+    raw_cols = ["iso_ts", "t_perf", "sample_idx", "fsr1", "fsr2", "fsr3",
+               "fsr4", "fsr5", "fsr6", "fsr7", "fsr8", "hand", "event",
+               "lane", "detail"]
+    raw_rows = [
+        {**{c: "" for c in raw_cols}, "iso_ts": f"{day}T09:00:00",
+         "t_perf": raw_start, "hand": "right", "event": "segment_start",
+         "lane": 0, "detail": f"trial_id={trial};segment=respond"},
+        {**{c: "" for c in raw_cols}, "iso_ts": f"{day}T09:00:00",
+         "t_perf": raw_end, "hand": "right", "event": "segment_end",
+         "lane": 0, "detail": f"trial_id={trial};segment=respond"},
+    ]
+    # Pad past load_raw's 200-byte minimum-size guard.
+    raw_rows += [{**{c: "" for c in raw_cols}} for _ in range(10)]
+    with open(folder / "raw.csv", "w", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=raw_cols)
+        w.writeheader()
+        w.writerows(raw_rows)
+
+    meta = {
+        "participant": name, "hand": "right",
+        "started_at": f"{day}T09:00:00",
+        "source_name": "MultiSerial(right@/dev/cu.usbserial-test)",
+        "block_summary": {"block": "buzz_hunt", "status": "completed",
+                          "trials": 1, "hit_rate": None,
+                          "avg_rt_ms": None, "duration_s": 60.0,
+                          "paused_total_s": 0.0,
+                          "force_unit": "sensor counts"},
+        "calibration": {},
+    }
+    (folder / "metadata.json").write_text(json.dumps(meta))
+    return folder
+
+
+class TestBuzzHuntSegmentCutCheckPerFolder:
+    """Finding #102: the segment cut check compared every selected
+    game's rows against every folder's markers, so trial-id
+    collisions across games reported mostly false mismatches, and
+    buzz_hunt's documented one-display-frame respond-start offset
+    against the raw marker needs its own wider tolerance rather than
+    being flagged as a real cut error."""
+
+    def test_two_games_sharing_trial_1_do_not_cross_contaminate(
+            self, ra, tmp_path, capsys):
+        _write_buzz_hunt_segment_session(
+            tmp_path, "P1", clock="090000", trial=1,
+            respond_start=100.0, respond_end=100.5,
+            raw_start=100.0, raw_end=100.5)
+        _write_buzz_hunt_segment_session(
+            tmp_path, "P1", clock="100000", trial=1,
+            respond_start=200.0, respond_end=200.7,
+            raw_start=200.0, raw_end=200.7)
+        ctx = ra.prepare("all", root=tmp_path)
+        ra.sec_continuous(ctx["folders"], ctx["trials"])
+        out = capsys.readouterr().out
+        assert "0 mismatched" in out
+        assert "investigate before" not in out
+
+    def test_one_frame_respond_offset_is_not_flagged(self, ra, tmp_path,
+                                                      capsys):
+        _write_buzz_hunt_segment_session(
+            tmp_path, "P1", respond_start=100.0, respond_end=100.5,
+            raw_start=100.017, raw_end=100.517)
+        ctx = ra.prepare("all", root=tmp_path)
+        ra.sec_continuous(ctx["folders"], ctx["trials"])
+        out = capsys.readouterr().out
+        assert "0 mismatched" in out
+
+    def test_a_genuinely_wrong_cut_is_still_caught(self, ra, tmp_path,
+                                                    capsys):
+        _write_buzz_hunt_segment_session(
+            tmp_path, "P1", respond_start=100.0, respond_end=100.5,
+            raw_start=100.3, raw_end=100.8)
+        ctx = ra.prepare("all", root=tmp_path)
+        ra.sec_continuous(ctx["folders"], ctx["trials"])
+        out = capsys.readouterr().out
+        assert "1 mismatched" in out
+
+
+# ------------------------------------------------------- notebook-wide
+# Findings #100, #101, #105, #106, #108 (fix:notebook stage). Unlike the
+# per-mode findings above, each of these is a bug in a section that pools
+# every selected mode together, not in one mode's own chapter.
+
+class TestBilateralExcludesAnticipationTrials:
+    """Finding #100: sec_bilateral ran its reaction-time and force lines
+    on raw `trials`, so a sub-100 ms anticipation press (not a plausible
+    reaction) rode straight into the left/right mean. On the shipped
+    data that gave a left reaction time of 53.4 ms built entirely from
+    eight anticipations. Restricted to analysable(trials) now."""
+
+    def test_left_mean_excludes_the_anticipation_press(self, ra, tmp_path):
+        _write_reaction_session(tmp_path, "P1",
+                                right_rt_ms=[300.0],
+                                left_rt_ms=[45.0, 315.0])
+        ctx = ra.prepare("all", root=tmp_path)
+        out = ra.sec_bilateral(ctx["trials"])
+        assert out["rt_left"] == pytest.approx(315.0), (
+            f"rt_left={out['rt_left']} still carries the 45 ms "
+            "anticipation press (audit finding #100)")
+
+
+def _write_dose_session(root, name, *, day="2026-08-05", clock="090000"):
+    """One reaction game folder with three real movement trials, one
+    CatchOk (a correctly WITHHELD press -- the correct response there is
+    not pressing) and one row whose cue never reached the device, for
+    sec_dose's repetition count (audit finding #100)."""
+    folder = Path(root) / day / f"{name}_{clock}_reaction"
+    folder.mkdir(parents=True, exist_ok=True)
+    rows = []
+    for t, rt in enumerate([300.0, 310.0, 320.0], 1):
+        rows.append({
+            **{c: "" for c in REACTION_COLS},
+            "iso_ts": f"{day}T09:00:00", "block_t_s": t * 3.0,
+            "participant": name, "age": 30, "hand": "right",
+            "block": "reaction", "trial": t, "lane": 1,
+            "time_difference_ms": rt, "early_late": "Good", "points": 3,
+            "feedback": "Good", "keys_pressed": 1, "correct_keys": 1,
+            "num_presses": 1, "had_incorrect_press": "FALSE",
+            "streak_at_trial": t, "in_recovery": "FALSE",
+            "timeout_ms": 2000, "stim_delivered": "TRUE",
+            "cue_target_shown": "TRUE", "stimulus": "choice;fp=1.500"})
+    rows.append({  # a correctly-withheld catch trial: no press at all
+        **{c: "" for c in REACTION_COLS},
+        "iso_ts": f"{day}T09:00:00", "block_t_s": 12.0,
+        "participant": name, "age": 30, "hand": "right",
+        "block": "reaction", "trial": 4, "lane": "",
+        "time_difference_ms": "", "early_late": "CatchOk", "points": 1,
+        "feedback": "CatchOk", "keys_pressed": "", "correct_keys": "",
+        "num_presses": 0, "had_incorrect_press": "FALSE",
+        "streak_at_trial": 4, "in_recovery": "FALSE",
+        "timeout_ms": 2000, "stim_delivered": "TRUE",
+        "cue_target_shown": "TRUE", "stimulus": "choice;catch"})
+    rows.append({  # cue never reached the device: nothing was presented
+        **{c: "" for c in REACTION_COLS},
+        "iso_ts": f"{day}T09:00:00", "block_t_s": 15.0,
+        "participant": name, "age": 30, "hand": "right",
+        "block": "reaction", "trial": 5, "lane": 1,
+        "time_difference_ms": "", "early_late": "Miss", "points": 0,
+        "feedback": "Miss", "keys_pressed": "", "correct_keys": 1,
+        "num_presses": 0, "had_incorrect_press": "FALSE",
+        "streak_at_trial": 0, "in_recovery": "FALSE",
+        "timeout_ms": 2000, "stim_delivered": "FALSE",
+        "cue_target_shown": "FALSE", "stimulus": "choice;fp=1.700"})
+    with open(folder / "trials.csv", "w", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=REACTION_COLS)
+        w.writeheader()
+        w.writerows(rows)
+    meta = {
+        "participant": name, "hand": "right",
+        "started_at": f"{day}T09:00:00",
+        "source_name": "MultiSerial(right@/dev/cu.usbserial-test)",
+        "block_summary": {"block": "reaction", "status": "completed",
+                          "trials": 5, "hit_rate": 0.6,
+                          "avg_rt_ms": 310.0, "duration_s": 60.0,
+                          "paused_total_s": 0.0,
+                          "force_unit": "sensor counts"},
+        "calibration": {},
+    }
+    (folder / "metadata.json").write_text(json.dumps(meta))
+    return folder
+
+
+class TestDoseCountsAnalysableMovementTrialsOnly:
+    """Finding #100: sec_dose used to count reps = len(trials), so a
+    trial whose cue never reached the device (nothing was presented)
+    and a CatchOk trial (the correct response is NOT pressing) both
+    counted as a repetition against Lang's clinical benchmark."""
+
+    def test_reps_excludes_catch_and_no_cue_rows(self, ra, tmp_path,
+                                                  capsys):
+        _write_dose_session(tmp_path, "P1")
+        ctx = ra.prepare("all", root=tmp_path)
+        out = ra.sec_dose(ctx["trials"])
+        assert out["reps"] == 3, (
+            f"reps={out['reps']}, should be 3 real movement trials, "
+            "not 5 (audit finding #100)")
+        printed = capsys.readouterr().out
+        assert "analysable movement trials" in printed
+
+
+class TestCrosstalkAndIndividuationExcludeErrorTrials:
+    """Finding #101: crosstalk_cells and individuation had no outcome
+    filter, so a Miss or a wrong-finger-first trial's force spread
+    pooled straight into "force on the quiet fingers", reading a
+    deliberate wrong press as finger enslavement."""
+
+    def _write(self, root):
+        def peaks_cell(vals):
+            return ";".join(f"{i + 1}:{v:.3f}" for i, v in enumerate(vals))
+        folder = Path(root) / "2026-08-05" / "P1_090000_classic"
+        folder.mkdir(parents=True, exist_ok=True)
+        rows = [
+            {  # clean hit: small, plausible leak onto the neighbours
+                **{c: "" for c in FINGER_COLS},
+                "iso_ts": "2026-08-05T09:00:00", "block_t_s": 1.2,
+                "participant": "P1", "age": 30, "hand": "right",
+                "block": "classic", "trial": 1, "lane": 1,
+                "time_difference_ms": 400.0, "early_late": "Good",
+                "points": 3, "feedback": "Good",
+                "keys_pressed": 1, "correct_keys": 1, "num_presses": 1,
+                "had_incorrect_press": "FALSE", "streak_at_trial": 1,
+                "in_recovery": "FALSE",
+                "peak_force_n": 100.0, "impulse_n": 19.0,
+                "force_window_sum": 130.0,
+                "force_window_peaks": peaks_cell([100.0, 20.0, 5.0, 5.0]),
+                "stim_delivered": "TRUE", "cue_mode": "both"},
+            {  # Miss, with a big spurious spike on a neighbour: a
+               # response error, not spill from the intended press
+                **{c: "" for c in FINGER_COLS},
+                "iso_ts": "2026-08-05T09:00:00", "block_t_s": 2.4,
+                "participant": "P1", "age": 30, "hand": "right",
+                "block": "classic", "trial": 2, "lane": 1,
+                "time_difference_ms": "", "early_late": "Miss",
+                "points": 0, "feedback": "Miss",
+                "keys_pressed": "", "correct_keys": 1, "num_presses": 0,
+                "had_incorrect_press": "FALSE", "streak_at_trial": 0,
+                "in_recovery": "FALSE",
+                "peak_force_n": "", "impulse_n": "",
+                "force_window_sum": 98.0,
+                "force_window_peaks": peaks_cell([2.0, 90.0, 3.0, 3.0]),
+                "stim_delivered": "TRUE", "cue_mode": "both"},
+            {  # wrong finger pressed first, then corrected
+                **{c: "" for c in FINGER_COLS},
+                "iso_ts": "2026-08-05T09:00:00", "block_t_s": 3.6,
+                "participant": "P1", "age": 30, "hand": "right",
+                "block": "classic", "trial": 3, "lane": 1,
+                "time_difference_ms": 600.0, "early_late": "Good",
+                "points": 1, "feedback": "Good",
+                "keys_pressed": "2,1", "correct_keys": 1, "num_presses": 2,
+                "had_incorrect_press": "TRUE", "streak_at_trial": 0,
+                "in_recovery": "FALSE",
+                "peak_force_n": 95.0, "impulse_n": 18.0,
+                "force_window_sum": 175.0,
+                "force_window_peaks": peaks_cell([95.0, 80.0, 0.0, 0.0]),
+                "stim_delivered": "TRUE", "cue_mode": "both"},
+        ]
+        with open(folder / "trials.csv", "w", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=FINGER_COLS)
+            w.writeheader()
+            w.writerows(rows)
+        meta = {
+            "participant": "P1", "hand": "right",
+            "started_at": "2026-08-05T09:00:00",
+            "source_name": "MultiSerial(right@/dev/cu.usbserial-test)",
+            "block_summary": {"block": "classic", "status": "completed",
+                              "trials": 3, "hit_rate": 0.667,
+                              "avg_rt_ms": 500.0, "duration_s": 60.0,
+                              "paused_total_s": 0.0,
+                              "force_unit": "sensor counts"},
+            "calibration": {},
+        }
+        (folder / "metadata.json").write_text(json.dumps(meta))
+        return folder
+
+    def test_crosstalk_cells_only_uses_the_clean_hit(self, ra, tmp_path):
+        self._write(tmp_path)
+        ctx = ra.prepare("all", root=tmp_path)
+        cells, n_multi = ra.crosstalk_cells(ctx["trials"])
+        assert set(cells["row_id"]) == {0}, (
+            "the Miss and the wrong-finger trial must not contribute "
+            "cells (audit finding #101)")
+        assert cells["leak_frac"].mean() == pytest.approx(0.1), (
+            f"mean leak_frac={cells['leak_frac'].mean()}, should be the "
+            "clean trial's 0.1, not inflated by the two error trials")
+
+    def test_individuation_only_uses_the_clean_hit(self, ra, tmp_path):
+        self._write(tmp_path)
+        ctx = ra.prepare("all", root=tmp_path)
+        ind = ra.individuation(ctx["trials"])
+        assert len(ind) == 1
+        assert ind.iloc[0]["trial"] == 1
+        assert ind.iloc[0]["individuation"] == pytest.approx(
+            100.0 / 130.0)
+
+
+class TestCueModalityPerFingerChartCuedOnly:
+    """Finding #105: the per-finger reaction-time chart averaged raw
+    time_difference_ms over every mode sharing a cue_mode/finger pair,
+    including rhythm's signed beat offsets, while the table above it
+    already restricts mean_rt to cued modes via reaction_times(). Must
+    build the chart the same way."""
+
+    def test_chart_bar_is_the_cued_only_mean_not_the_pooled_mean(
+            self, ra, tmp_path):
+        import matplotlib.pyplot as plt
+        # Index finger: a classic 400 ms RT and a rhythm -300 ms signed
+        # beat offset share the "both" cue setting. Pooled, that
+        # averages to 50 ms; cued-only, it is the classic 400 ms alone.
+        _write_cadence_ras_session(
+            tmp_path, "P1", mode="classic",
+            rows=[(0, "Good", 400.0, False), (1, "Good", 410.0, False)])
+        _write_cadence_ras_session(
+            tmp_path, "P1", mode="rhythm",
+            rows=[(0, "Good", -300.0, False)])
+        # A second cue setting so sec_cue_modality has something to
+        # compare (it needs at least two distinct cue_mode values).
+        visual_folder = _write_cadence_ras_session(
+            tmp_path, "P1", mode="classic", clock="100000",
+            rows=[(2, "Good", 420.0, False)])
+        rows = list(csv.DictReader(open(visual_folder / "trials.csv")))
+        for r in rows:
+            r["cue_mode"] = "visual"
+        with open(visual_folder / "trials.csv", "w", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=FINGER_COLS)
+            w.writeheader()
+            w.writerows(rows)
+
+        ctx = ra.prepare("all", root=tmp_path)
+        plt.close("all")
+        ra.sec_cue_modality(ctx["trials"])
+        per_finger_fig = plt.figure(plt.get_fignums()[-1])
+        heights = [p.get_height() for p in per_finger_fig.axes[0].patches]
+        plt.close("all")
+        assert heights[0] == pytest.approx(400.0), (
+            f"per-finger chart bar for Index/'both' is {heights[0]}, not "
+            "the cued-only mean 400.0 -- rhythm's signed offset is still "
+            "pooled in (audit finding #105)")
+
+
+class TestCuedModesIncludesReaction:
+    """Finding #106: reaction is the PVT-style press-after-randomised-
+    wait task and its time_difference_ms is a genuine cue-to-press
+    latency by the same reasoning as classic and adaptive, but it was
+    left out of CUED_MODES, so a selection with reaction blocks logged
+    real RTs in its own chapter while sec_bilateral reported nothing."""
+
+    def test_reaction_mode_bilateral_rt_is_reported(self, ra, tmp_path):
+        _write_reaction_session(tmp_path, "P1",
+                                right_rt_ms=[300.0, 320.0],
+                                left_rt_ms=[310.0, 330.0])
+        ctx = ra.prepare("all", root=tmp_path)
+        out = ra.sec_bilateral(ctx["trials"])
+        assert out is not None
+        assert out["rt_left"] == pytest.approx(320.0)
+        assert out["rt_right"] == pytest.approx(310.0)
+
+    def test_caveat_names_the_actual_excluded_mode_not_rhythm(
+            self, ra, tmp_path, capsys):
+        # A bilateral buzz_hunt selection -- not in CUED_MODES, and
+        # not rhythm -- used to print "are rhythm offsets or misses"
+        # regardless of which mode was actually excluded (audit
+        # finding #106's mislabelling).
+        folder = Path(tmp_path) / "2026-08-05" / "P1_090000_buzz_hunt"
+        folder.mkdir(parents=True, exist_ok=True)
+        cols = REACTION_COLS
+        rows = [
+            {**{c: "" for c in cols}, "iso_ts": "2026-08-05T09:00:00",
+             "block_t_s": 1.0, "participant": "P1", "age": 30,
+             "hand": "right", "block": "buzz_hunt", "trial": 1, "lane": 1,
+             "early_late": "Great", "points": 3, "feedback": "Great",
+             "had_incorrect_press": "FALSE", "stim_delivered": "TRUE",
+             "stimulus": "loc;hand=right"},
+            {**{c: "" for c in cols}, "iso_ts": "2026-08-05T09:00:00",
+             "block_t_s": 2.0, "participant": "P1", "age": 30,
+             "hand": "left", "block": "buzz_hunt", "trial": 2, "lane": 5,
+             "early_late": "Great", "points": 3, "feedback": "Great",
+             "had_incorrect_press": "FALSE", "stim_delivered": "TRUE",
+             "stimulus": "loc;hand=left"},
+        ]
+        with open(folder / "trials.csv", "w", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=cols)
+            w.writeheader()
+            w.writerows(rows)
+        meta = {
+            "participant": "P1", "hand": "both",
+            "started_at": "2026-08-05T09:00:00",
+            "source_name": "MultiSerial(both)",
+            "block_summary": {"block": "buzz_hunt", "status": "completed",
+                              "trials": 2, "hit_rate": 1.0,
+                              "avg_rt_ms": None, "duration_s": 60.0,
+                              "paused_total_s": 0.0,
+                              "force_unit": "sensor counts"},
+            "calibration": {},
+        }
+        (folder / "metadata.json").write_text(json.dumps(meta))
+        ctx = ra.prepare("all", root=tmp_path)
+        ra.sec_bilateral(ctx["trials"])
+        out = capsys.readouterr().out
+        assert "buzz_hunt" in out
+        assert "rhythm" not in out, (
+            "the caveat still hard-codes \"rhythm\" instead of naming "
+            "the mode that was actually excluded (audit finding #106)")
+
+
+class TestSamplingNoteChecksAllEightChannels:
+    """Finding #108: sec_sampling_note checked fsr1-4 only, so on a
+    bilateral block a frame where only the LEFT hand changed still
+    counted as a duplicate, and its effective-rate figure could
+    disagree with sample_rate_rows (which already used all eight) for
+    the identical raw log."""
+
+    def test_left_hand_only_changes_are_not_duplicates(self, ra, tmp_path):
+        folder = _write_mirror_session(tmp_path, "P1", [
+            (0, 150.0, 160.0, False)])
+        raw_cols = ["iso_ts", "t_perf", "sample_idx", "fsr1", "fsr2",
+                   "fsr3", "fsr4", "fsr5", "fsr6", "fsr7", "fsr8",
+                   "hand", "event", "lane", "detail"]
+        rows = []
+        for i in range(60):
+            # Right hand (fsr1-4) is frozen; left hand (fsr5-8) ramps.
+            # A right-only check reads every one of these as a
+            # duplicate frame; the real answer is 0 percent.
+            rows.append({**{c: "" for c in raw_cols},
+                        "iso_ts": "2026-08-05T09:00:00",
+                        "t_perf": i * 0.005, "hand": "both",
+                        "fsr1": 10, "fsr2": 10, "fsr3": 10, "fsr4": 10,
+                        "fsr5": 10 + i, "fsr6": 10, "fsr7": 10,
+                        "fsr8": 10})
+        with open(folder / "raw.csv", "w", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=raw_cols)
+            w.writeheader()
+            w.writerows(rows)
+        ctx = ra.prepare("all", root=tmp_path)
+        note = ra.sec_sampling_note(ctx["folders"])
+        assert note is not None
+        # Every frame differs on fsr5 (the left hand's own ramp), so
+        # only the diff-boundary's first row can read as "identical to
+        # the one before" -- checking fsr1-4 only would have read all
+        # 60 as duplicates instead, since the right hand never moves.
+        assert note["duplicate_fraction"] < 0.05, (
+            f"duplicate_fraction={note['duplicate_fraction']}, should be "
+            "near 0 -- the left hand's own ramp was visible on "
+            "fsr1-4-only and got missed (audit finding #108)")

@@ -528,6 +528,12 @@ mirror:
   # band, bpm_min, bpm_max, bpm_step, weakness_bias) drive how the
   # pace evolves from here.
   start_bpm: 24
+  # Fixed-ms bound on |right press - left press|. The press window
+  # above is BPM-derived and widens with a struggling patient, so it
+  # cannot by itself enforce synchronous movement; this fixed gate is
+  # what actually does. A pair further apart than this downgrades to
+  # a Miss even if both landed inside the window.
+  max_async_ms: 350
 
 reaction:
   # Reaction mode: a randomised wait, then press as fast as you can.
@@ -1079,10 +1085,12 @@ rhythm:
   # press one. The 3 s countdown ticking from "3" to "GO" still runs;
   # this is an ADDITIONAL silent ramp on top of it.
   pre_song_lead_s: 2.0
-  beat_subset:           # which beats fire per difficulty
-    easy: 4              # every 4th beat
-    medium: 2            # every 2nd beat
-    hard: 1              # every beat
+  # Difficulty is NOT config-driven: how many notes fire per difficulty
+  # lives in code as _DIFFICULTY_STRIDE / _DIFFICULTY_KEEP_FRAC /
+  # _DIFFICULTY_MIN_GAP_S / _DIFFICULTY_MAX_GAP_S in
+  # rehab/audio/beatmap.py, because tuning them needs the onset-
+  # strength data those functions already have in scope. Edit that
+  # file, not this one, to change beat density per difficulty.
   perfect_ms: 50
   great_ms: 100
   good_ms: 175
@@ -1093,8 +1101,14 @@ rhythm:
   # the patient's "on the beat" press lands as ~40 ms Late even when
   # they're perfectly in time. Default 40 ms is the typical pygame
   # latency on macOS / Windows; bump it up if presses still feel late,
-  # or down toward 0 if they feel early.
+  # or down toward 0 if they feel early. Only applied while a song is
+  # actually playing; a keyboard-only or audio-disabled session has
+  # nothing to compensate for and gets 0.
   audio_offset_ms: 40
+  # Same idea for the click-track metronome fallback (no song file).
+  # The metronome uses the same 512-sample mixer buffer, ~12 ms at
+  # 44.1 kHz, far less than a decoded song's latency.
+  metronome_offset_ms: 12
 
 audio:
   enabled: true

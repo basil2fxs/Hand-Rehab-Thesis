@@ -487,5 +487,448 @@ class NoNegativeScoreTests(unittest.TestCase):
         self.assertEqual(cfg.get("scoring.early_penalty"), 0)
 
 
+# ---------------------------------------------------------------------
+# Audit findings #42-53 (adaptive fix stage)
+# ---------------------------------------------------------------------
+
+def _bare_engine():
+    """Real GameEngine, minus construction, wired with just the state
+    on_stim_multi + log_trial actually touch, plus a recording stand-in
+    for the trial logger. Mirrors tests/test_capture_completeness.py's
+    helper of the same name."""
+    from unittest.mock import MagicMock
+    from rehab.game.engine import GameEngine
+    eng = GameEngine.__new__(GameEngine)
+    eng.cfg = MagicMock()
+    eng.cfg.get = MagicMock(return_value=0)
+    eng.score = 0
+    eng.hits = 0
+    eng.misses = 0
+    eng.hit_streak = 0
+    eng.miss_streak = 0
+    eng._streak_fired = set()
+    eng._streak_thresholds = ()
+    eng._recovery_threshold = 3
+    eng._block_rt_sum = 0.0
+    eng._block_rt_count = 0
+    eng._block_bpm_min = None
+    eng._block_bpm_max = None
+    eng._block_wrong_press_trials = 0
+    eng._block_rhythm_spurious_presses = 0
+    eng._block_idle_presses = 0
+    eng._block_peak_streak = 0
+    eng._last_gained = 0
+    eng.current_block = "adaptive"
+    eng.hand_mode = "right"
+    eng.raw_logger = None
+    eng.audio = None
+    eng._screens = {}
+    eng.session_paths = None
+    eng.session = MagicMock()
+    eng.session.participant = "T"
+    eng.session.age = ""
+    eng.theme = MagicMock()
+    eng.mode = None
+    eng._per_lane_rts = {}
+    eng._per_lane_misses = {}
+    eng._per_lane_wrong = {}
+    eng._trial_context_orig = None
+    eng._last_stim_bpm = None
+    eng._last_stim_in_recovery = None
+
+    rows: list[dict] = []
+    logger = MagicMock()
+    logger.write = rows.append
+    eng.trial_logger = logger
+    eng._rows = rows
+    return eng
+
+
+class BpmAtTrialSnapshotTests(unittest.TestCase):
+    """Finding #42: bpm_at_trial (and in_recovery) must record the
+    state AS OF THIS TRIAL'S STIM, not whatever the adapter has become
+    by the time the row is written. AdaptiveMode calls
+    adapter.record()+next_bpm() (and a miss can push the adapter into
+    recovery via _update_streak) before log_trial, both BEFORE
+    _trial_context would otherwise read the adapter live."""
+
+    def test_bpm_at_trial_uses_the_stim_time_snapshot_not_live_value(
+            self) -> None:
+        from rehab.game.modes.classic import PendingTrial
+        from rehab.game.scoring import TrialResult
+        eng = _bare_engine()
+        eng._ensure_metric_state()
+
+        class FakeAdapter:
+            bpm = 30.0
+            in_recovery = False
+
+        class FakeMode:
+            adapter = FakeAdapter()
+        eng.mode = FakeMode()
+
+        # Trial fires at bpm=30 (on_stim_multi snapshots it).
+        eng.on_stim_multi([0], trial_id=1, t_perf=0.0)
+        self.assertEqual(eng._last_stim_bpm, 30.0)
+
+        # Mirrors what AdaptiveMode._finish does next: record() +
+        # next_bpm() (and _update_streak, inside log_trial, could also
+        # flip in_recovery) BEFORE the row is written -- a miss crashes
+        # the adapter to the floor and into recovery.
+        eng.mode.adapter.bpm = 10.0
+        eng.mode.adapter.in_recovery = True
+
+        trial = PendingTrial(trial_id=1, lane=0, stim_t_perf=0.0,
+                              keys_pressed=[], incorrect_presses=[])
+        eng.log_trial(trial, TrialResult(label="Miss", points=0,
+                                          rt_ms=None), now=0.0)
+        row = eng._rows[0]
+        self.assertEqual(row["bpm_at_trial"], "30.0",
+            "must log the BPM this trial was PRESENTED at (30), not "
+            "the post-miss value (10) the adapter crashed to before "
+            "the row was written")
+        self.assertEqual(row["in_recovery"], "FALSE",
+            "recovery had not started yet when this trial's stim fired")
+
+    def test_next_trial_gets_its_own_fresh_snapshot(self) -> None:
+        from rehab.game.modes.classic import PendingTrial
+        from rehab.game.scoring import TrialResult
+        eng = _bare_engine()
+        eng._ensure_metric_state()
+
+        class FakeAdapter:
+            bpm = 10.0
+            in_recovery = True
+
+        class FakeMode:
+            adapter = FakeAdapter()
+        eng.mode = FakeMode()
+
+        eng.on_stim_multi([0], trial_id=2, t_perf=1.0)
+        trial = PendingTrial(trial_id=2, lane=0, stim_t_perf=1.0,
+                              keys_pressed=[0], incorrect_presses=[])
+        eng.log_trial(trial, TrialResult(label="Great", points=6,
+                                          rt_ms=150.0), now=1.0)
+        row = eng._rows[0]
+        self.assertEqual(row["bpm_at_trial"], "10.0")
+        self.assertEqual(row["in_recovery"], "TRUE")
+
+
+def _mode(engine=None, **overrides):
+    from unittest.mock import MagicMock
+    from rehab.analytics.adaptive import AdaptiveConfig
+    from rehab.game.modes.adaptive import AdaptiveMode
+    from rehab.game.scoring import ScoreConfig
+    if engine is None:
+        engine = MagicMock()
+        engine.cfg = MagicMock()
+        engine.cfg.get = MagicMock(return_value=0)
+        engine.apply_wrong_press_penalty = MagicMock(return_value=2)
+        engine.apply_idle_press_penalty = MagicMock(return_value=0)
+        engine.log_trial = MagicMock()
+        engine.on_stim = MagicMock()
+        engine.hand_mode = "right"
+        engine.raw_logger = None
+    kwargs = dict(engine=engine, num_lanes=4, total_trials=8,
+                  block_size=4, score_cfg=ScoreConfig(), timeout_s=1.0,
+                  early_window_s=0.1, start_bpm=30.0,
+                  adaptive_cfg=AdaptiveConfig(target_low=0.65,
+                                              target_high=0.80,
+                                              bpm_min=10.0, bpm_max=140.0,
+                                              bpm_step=10.0,
+                                              weakness_bias=2.5,
+                                              min_trials=2))
+    kwargs.update(overrides)
+    return engine, AdaptiveMode(**kwargs)
+
+
+def _press(lane: int, t: float):
+    from rehab.hardware.fsr_detector import PressEvent
+    return PressEvent(lane=lane, t_perf=t, value=0, baseline=0.0,
+                       hand="right")
+
+
+class CadenceFloorTests(unittest.TestCase):
+    """Finding #43: the presented cadence must floor at the adapter's
+    OWN configured bpm_min (10 -> 6s gap for severe weakness), not a
+    stale literal 20 (3s gap) left over from an earlier floor. Drives
+    update() itself through a fake clock rather than recomputing the
+    formula independently, so a hardcoded 20 in the source is actually
+    caught."""
+
+    def test_update_waits_a_full_6s_gap_at_bpm_min_not_3s(self) -> None:
+        import rehab.game.modes.adaptive as adaptive_mod
+        engine, mode = _mode()
+        mode.adapter.bpm = mode.adapter.cfg.bpm_min  # 10.0 -> 6s cadence
+        mode.completed = 0
+        mode.total_trials = 99
+        mode.active = None
+        mode.seq_idx = 0
+        mode.sequence = [0, 1, 2, 3]
+
+        fake_t = [1000.0]
+        orig_perf_counter = adaptive_mod.time.perf_counter
+        adaptive_mod.time.perf_counter = lambda: fake_t[0]
+        try:
+            mode.update(0.0)  # first trial fires immediately
+            self.assertIsNotNone(mode.active)
+            mode.active = None  # simulate an instant finish, re-arm
+            mode.last_trigger_t = fake_t[0]
+
+            # 3.5s later (past the OLD 3s/20bpm floor, short of the
+            # correct 6s/10bpm floor): must NOT have fired again.
+            fake_t[0] += 3.5
+            mode.update(0.0)
+            self.assertIsNone(mode.active,
+                "fired again after 3.5s -- still using the stale 20 "
+                "BPM (3s) floor instead of bpm_min=10 (6s)")
+
+            # Past the real 6s gap: must fire now.
+            fake_t[0] += 3.0  # total 6.5s since last_trigger_t
+            mode.update(0.0)
+            self.assertIsNotNone(mode.active,
+                "did not fire even after the full 6s gap at bpm_min=10")
+        finally:
+            adaptive_mod.time.perf_counter = orig_perf_counter
+
+
+class RecoverySequenceRegenTests(unittest.TestCase):
+    """Finding #50: entering (or exiting) recovery must bias the very
+    NEXT lane pick, not whatever is left of the sequence drawn under
+    the OLD weighting -- up to block_size-1 trials could otherwise
+    still come from before the transition."""
+
+    def _build_with_recovery_transition(self, becomes_recovery: bool):
+        engine, mode = _mode()
+
+        def _log_trial(trial, outcome, now, **kw):
+            # Stand-in for engine._update_streak, which is what
+            # actually flips adapter.in_recovery inside the real
+            # engine.log_trial.
+            mode.adapter.in_recovery = becomes_recovery
+        engine.log_trial.side_effect = _log_trial
+        return engine, mode
+
+    def test_entering_recovery_discards_remaining_sequence(self) -> None:
+        engine, mode = self._build_with_recovery_transition(True)
+        mode.sequence = [0, 1, 2, 3]
+        mode.seq_idx = 0
+        mode._fire(now=0.0)
+        self.assertEqual(mode.seq_idx, 1,
+            "only 1 of 4 pre-drawn trials should be consumed so far")
+        target = mode.active.lane
+        mode._handle_press(_press(target, 0.05), now=0.05)
+        self.assertGreaterEqual(mode.seq_idx, len(mode.sequence),
+            "entering recovery must discard whatever is left of the "
+            "pre-recovery sequence so the next _fire() regenerates "
+            "under the recovery-biased weights immediately")
+
+    def test_exiting_recovery_also_discards_remaining_sequence(self) -> None:
+        engine, mode = self._build_with_recovery_transition(False)
+        mode.adapter.in_recovery = True
+        mode._last_recovery = True
+        mode.sequence = [0, 1, 2, 3]
+        mode.seq_idx = 0
+        mode._fire(now=0.0)
+        target = mode.active.lane
+        mode._handle_press(_press(target, 0.05), now=0.05)
+        self.assertGreaterEqual(mode.seq_idx, len(mode.sequence),
+            "exiting recovery must also discard the recovery-shaped "
+            "sequence rather than letting it keep playing out")
+
+    def test_no_transition_leaves_sequence_alone(self) -> None:
+        engine, mode = self._build_with_recovery_transition(False)
+        mode.sequence = [0, 1, 2, 3]
+        mode.seq_idx = 0
+        mode._fire(now=0.0)
+        target = mode.active.lane
+        mode._handle_press(_press(target, 0.05), now=0.05)
+        self.assertEqual(mode.seq_idx, 1,
+            "no recovery transition happened, so the sequence should "
+            "advance normally, not get discarded")
+
+
+class SingleNextBpmPerTrialTests(unittest.TestCase):
+    """Finding #51 (part 1): next_bpm() must run exactly once per
+    completed trial. _fire() used to call it again at every sequence
+    regen (every block_size trials) with no new data, doubling up
+    right at the boundary."""
+
+    def test_next_bpm_called_once_per_trial_across_a_regen_boundary(
+            self) -> None:
+        engine, mode = _mode()
+        calls = []
+        orig = mode.adapter.next_bpm
+        def _spy():
+            r = orig()
+            calls.append(r)
+            return r
+        mode.adapter.next_bpm = _spy
+
+        t = 0.0
+        for _ in range(5):  # crosses the block_size=4 regen boundary
+            mode._fire(now=t)
+            target = mode.active.lane
+            t += 0.05
+            mode._handle_press(_press(target, t), now=t)
+            t += 0.1
+        self.assertEqual(len(calls), 5,
+            f"5 completed trials must mean exactly 5 next_bpm() calls, "
+            f"got {len(calls)} (a regen-time extra call inflates this)")
+
+
+class ColdStartClampTests(unittest.TestCase):
+    """Finding #51 (part 2): two opening misses (min_trials=2) must
+    not floor BPM in a single step -- the full -2*bpm_step clamp can
+    equal (or exceed) the whole gap from a comfortable start_bpm down
+    to bpm_min, letting 2 trials decide the entire block's pace."""
+
+    def test_two_opening_misses_do_not_instantly_floor_bpm(self) -> None:
+        from rehab.analytics.adaptive import AdaptiveConfig, AdaptiveEngine
+        ac = AdaptiveConfig(target_low=0.65, target_high=0.80,
+                             bpm_min=10.0, bpm_max=140.0, bpm_step=10.0,
+                             weakness_bias=2.5, min_trials=2)
+        eng = AdaptiveEngine(num_lanes=4, cfg=ac)
+        eng.bpm = 30.0
+        eng.record(0, hit=False, rt_ms=None, quality=0.0)
+        eng.record(1, hit=False, rt_ms=None, quality=0.0)
+        new_bpm = eng.next_bpm()
+        self.assertGreater(new_bpm, ac.bpm_min,
+            "two opening misses should not floor BPM in one call; the "
+            "cold-start clamp should soften the first couple of "
+            "next_bpm() decisions")
+
+    def test_a_sustained_collapse_still_reaches_the_floor(self) -> None:
+        # The softening must be temporary -- a genuinely struggling
+        # patient still needs to reach bpm_min, just not off 2 trials.
+        from rehab.analytics.adaptive import AdaptiveConfig, AdaptiveEngine
+        ac = AdaptiveConfig(target_low=0.65, target_high=0.80,
+                             bpm_min=10.0, bpm_max=140.0, bpm_step=10.0,
+                             weakness_bias=2.5, min_trials=2)
+        eng = AdaptiveEngine(num_lanes=4, cfg=ac)
+        eng.bpm = 30.0
+        for _ in range(10):
+            for lane in range(4):
+                eng.record(lane, hit=False, rt_ms=None, quality=0.0)
+            eng.next_bpm()
+        self.assertEqual(eng.bpm, ac.bpm_min)
+
+
+class AnticipationQualityTests(unittest.TestCase):
+    """Finding #52: classify() has no lower RT bound, so a sub-cut
+    (mash-speed) press reads as a clean Perfect/Great. The label/score/
+    rt_ms this mode logs must stay as classify() said (the notebook's
+    own exclusion_flags already drops sub-100ms cued rows by
+    time_difference_ms), but the ADAPTER must not be told it was a
+    quality=1.0 press -- that would speed the pace up off blind
+    mashing."""
+
+    def test_subcut_press_does_not_feed_full_quality_to_adapter(
+            self) -> None:
+        engine, mode = _mode()
+        records = []
+        orig = mode.adapter.record
+        def _spy(lane, was_hit, rt_ms, quality=None):
+            records.append((lane, was_hit, rt_ms, quality))
+            return orig(lane, was_hit, rt_ms, quality=quality)
+        mode.adapter.record = _spy
+
+        mode._fire(now=0.0)
+        target = mode.active.lane
+        mode._handle_press(_press(target, 0.060), now=0.060)  # 60ms
+
+        outcome = engine.log_trial.call_args[0][1]
+        self.assertIn(outcome.label, ("Perfect", "Great"),
+            "the classified label/score/rt_ms must stay as classify() "
+            "said -- the notebook filters sub-100ms rows itself")
+        self.assertEqual(records[0][3], 0.0,
+            "a 60ms press is too fast to be a real reaction; the "
+            "adapter must not be told quality=1.0 off it")
+
+    def test_normal_speed_press_still_feeds_full_quality(self) -> None:
+        engine, mode = _mode()
+        records = []
+        orig = mode.adapter.record
+        def _spy(lane, was_hit, rt_ms, quality=None):
+            records.append((lane, was_hit, rt_ms, quality))
+            return orig(lane, was_hit, rt_ms, quality=quality)
+        mode.adapter.record = _spy
+
+        mode._fire(now=0.0)
+        target = mode.active.lane
+        mode._handle_press(_press(target, 0.150), now=0.150)  # 150ms
+
+        outcome = engine.log_trial.call_args[0][1]
+        self.assertEqual(outcome.label, "Great")
+        self.assertEqual(records[0][3], 1.0,
+            "a genuine 150ms press must still earn full adapter credit")
+
+
+class IdlePressRawEventTests(unittest.TestCase):
+    """Finding #53: an idle (between-trial) press must reach raw.csv
+    with its own lane and timestamp, not just bump a per-block count --
+    otherwise no idle press can ever be told apart from any other after
+    the fact."""
+
+    def test_idle_press_queues_a_raw_event_with_lane_and_time(
+            self) -> None:
+        from unittest.mock import MagicMock
+        engine, mode = _mode()
+        engine.raw_logger = MagicMock()
+
+        mode._handle_press(_press(2, 1.234), now=1.234)
+
+        engine.apply_idle_press_penalty.assert_called_once()
+        engine.raw_logger.queue_event.assert_called_once()
+        args, kwargs = engine.raw_logger.queue_event.call_args
+        self.assertEqual(args[0], "idle_press")
+        self.assertEqual(kwargs["lane"], 2)
+        self.assertEqual(kwargs["t_perf"], 1.234)
+
+    def test_no_raw_logger_does_not_crash(self) -> None:
+        engine, mode = _mode()
+        engine.raw_logger = None
+        mode._handle_press(_press(1, 0.5), now=0.5)  # must not raise
+        engine.apply_idle_press_penalty.assert_called_once()
+
+
+class BandCitationTests(unittest.TestCase):
+    """Finding #44: the 70-80 vs 65-80 percent band was stated
+    inconsistently and misattributed to Guadagnoli & Lee (2004), who
+    do not report a numeric success-rate band. Code, config and every
+    docstring must now agree on one number (65-80) with no bare "70-80"
+    left implying a different figure than the config actually holds."""
+
+    def test_config_defaults_are_65_to_80(self) -> None:
+        from rehab.analytics.adaptive import AdaptiveConfig
+        cfg = AdaptiveConfig()
+        self.assertEqual(cfg.target_low, 0.65)
+        self.assertEqual(cfg.target_high, 0.80)
+
+    def test_default_yaml_matches_the_engine_defaults(self) -> None:
+        from rehab.config import Config
+        cfg = Config.load()
+        self.assertEqual(cfg.get("adaptive.target_low"), 0.65)
+        self.assertEqual(cfg.get("adaptive.target_high"), 0.80)
+
+    def test_no_stray_70_80_band_text_left_in_the_module(self) -> None:
+        import rehab.analytics.adaptive as ad
+        src = Path(ad.__file__).read_text()
+        self.assertNotIn("70-80", src)
+        self.assertNotIn("70 to 80", src)
+
+
+class PaceLabelUnusedDocstringTests(unittest.TestCase):
+    """Finding #49: pace_label's docstring claimed the HUD shows it;
+    nothing calls it (the gameplay HUD deliberately dropped BPM). The
+    docstring must say so rather than describe a UI element that
+    doesn't exist."""
+
+    def test_docstring_no_longer_claims_the_hud_uses_it(self) -> None:
+        from rehab.analytics.adaptive import AdaptiveEngine
+        doc = AdaptiveEngine.pace_label.__doc__ or ""
+        self.assertNotIn("Used by the HUD", doc)
+
+
 if __name__ == "__main__":
     unittest.main()

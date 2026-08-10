@@ -37,6 +37,16 @@ class AdaptiveMode:
         self.engine = engine
         self.score_cfg = score_cfg
         self.timeout = timeout_s
+        # Stored for constructor-signature parity with the other cadence
+        # modes (engine.begin_adaptive_block passes game.early_window_s
+        # through), but nothing in this mode reads it. Unlike classic/
+        # reaction there is no "pressed before the cue but inside a
+        # grace window" check here -- an early press just falls into
+        # _handle_press's active-is-None branch and eats the idle-press
+        # penalty like any other between-trial press. Kept as a stored
+        # (unused) field rather than dropped so a future early-window
+        # gate has a natural home, and so this does not silently start
+        # accepting an arbitrary kwarg.
         self.early_window = early_window_s
         self.total_trials = total_trials
         self.block_size = block_size
@@ -57,6 +67,10 @@ class AdaptiveMode:
         self.active: PendingTrial | None = None
         self.last_trigger_t = -1.0
         self._presses: deque[PressEvent] = deque()
+        # Tracked so _finish can tell a recovery entry/exit apart from
+        # "still in recovery" or "still not in recovery" -- see the
+        # regen-on-transition note there.
+        self._last_recovery = self.adapter.in_recovery
 
     def queue_press(self, ev: PressEvent) -> None:
         self._presses.append(ev)
@@ -86,11 +100,25 @@ class AdaptiveMode:
             for key_name, lane in km.items():
                 kc = resolve_key(key_name)
                 if kc and e.key == kc:
+                    t_perf = time.perf_counter()
                     self.queue_press(PressEvent(
-                        lane=lane, t_perf=time.perf_counter(),
+                        lane=lane, t_perf=t_perf,
                         value=0, baseline=0.0,
                         hand=self.engine.hand_mode,
                     ))
+                    # Keyboard presses bypass engine._on_press (the FSR
+                    # detector path), which is the only place raw.csv
+                    # normally gets a "press" event (audit finding #112,
+                    # generalising the mirror-mode fix for #75 to every
+                    # mode): without this a keyboard-injected press in a
+                    # mixed session (Arduino attached, keyboard kept
+                    # live as backup) was indistinguishable from a real
+                    # FSR press. detail="keyboard" marks the source.
+                    raw_logger = getattr(self.engine, "raw_logger", None)
+                    if raw_logger:
+                        raw_logger.queue_event(
+                            "press", lane=lane, t_perf=t_perf,
+                            hand=self.engine.hand_mode, detail="keyboard")
 
     def update(self, dt: float) -> None:
         now = time.perf_counter()
@@ -99,8 +127,13 @@ class AdaptiveMode:
 
         if self.active is None and self.completed < self.total_trials:
             # Cadence comes from the current BPM. When the engine slowed
-            # the patient down it'll widen automatically.
-            cadence = 60.0 / max(20.0, self.adapter.bpm)
+            # the patient down it'll widen automatically. Floor at the
+            # adapter's own configured bpm_min, not a stale literal --
+            # config/default.yaml sets bpm_min=10 for a 6 s crawl gap
+            # for severely impaired patients; clamping to 20 here cut
+            # that floor in half and made the logged bpm_at_trial (10)
+            # lie about the cadence actually presented (20 BPM).
+            cadence = 60.0 / max(self.adapter.cfg.bpm_min, self.adapter.bpm)
             if self.last_trigger_t < 0 or (now - self.last_trigger_t) >= cadence:
                 self._fire(now)
 
@@ -115,9 +148,15 @@ class AdaptiveMode:
             self.engine.finish_block()
 
     def _fire(self, now: float) -> None:
-        # Regenerate when current block is exhausted.
+        # Regenerate when current block is exhausted. next_bpm() is NOT
+        # called here -- _finish already calls it once per trial, right
+        # after adapter.record(), so BPM is current the moment the last
+        # trial of a sequence closes. Calling it again here doubled up
+        # right at every block_size boundary (two next_bpm() calls
+        # between two consecutive stims, on no new data the second
+        # time), diluting the "single sample can't yank BPM around"
+        # rate limit next_bpm() documents for itself.
         if self.seq_idx >= len(self.sequence):
-            self.adapter.next_bpm()
             self.sequence = self.adapter.generate_sequence(self.block_size, self.rng)
             self.seq_idx = 0
             log.info("Adaptive block: bpm=%.0f weights=%s",
@@ -142,6 +181,18 @@ class AdaptiveMode:
             # mashing between stims isn't free. See classic.py for the
             # rationale; same mechanism here.
             self.engine.apply_idle_press_penalty()
+            # apply_idle_press_penalty only bumps a per-block COUNT
+            # (_block_idle_presses); no lane or timestamp for any one
+            # idle press reaches trials.csv or raw.csv, so a press just
+            # before a stim (anticipation) is indistinguishable from
+            # one mid-gap (mashing) after the fact. Queue the raw event
+            # here where the lane/time are actually known.
+            raw = getattr(self.engine, "raw_logger", None)
+            if raw:
+                raw.queue_event(
+                    "idle_press", lane=ev.lane, t_perf=ev.t_perf,
+                    detail=f"trial_id={self.trial_counter}",
+                    hand=ev.hand)
             return
         self.active.keys_pressed.append(ev.lane)
         if ev.lane == self.active.lane:
@@ -170,6 +221,25 @@ class AdaptiveMode:
         "Miss":  0.0,
     }
 
+    # classify() (shared across every cadence mode) has no lower RT
+    # bound, so a sub-cut press reads as a clean Perfect exactly like a
+    # genuinely fast, accurate one. Reaction mode screens these out
+    # before they're even scored (its own anticipation_cut_ms, default
+    # 100ms, Basner and Dinges 2011: a press that fast cannot be a
+    # response to the stimulus). The label/score/rt_ms this mode logs
+    # stay as classify() said -- the notebook's own exclusion_flags
+    # already drops sub-100ms cued rows from every headline stat by
+    # time_difference_ms, so the CSV needs the real number kept intact.
+    # What must not happen is the adapter treating a mash-speed press
+    # as a quality=1.0 "acing it" signal: that is exactly the reading
+    # that would speed the pace up off blind mashing.
+    ANTICIPATION_MS = 100.0
+
+    def _quality_for(self, outcome_label: str, rt_ms: float | None) -> float:
+        if rt_ms is not None and rt_ms < self.ANTICIPATION_MS:
+            return 0.0
+        return self._QUALITY.get(outcome_label, 0.0)
+
     def _finish(self, ev: PressEvent | None, now: float) -> None:
         if self.active is None:
             return
@@ -190,7 +260,7 @@ class AdaptiveMode:
                 points=self.score_cfg.miss_points,
                 rt_ms=rt_ms,
             )
-        quality = self._QUALITY.get(outcome.label, 0.0)
+        quality = self._quality_for(outcome.label, rt_ms)
         # Feed the adapter then immediately recompute BPM so the next trial
         # already reflects whether this was a hit or a miss. Without this
         # the system only reacted once per block (every 4 trials) which
@@ -198,6 +268,21 @@ class AdaptiveMode:
         self.adapter.record(self.active.lane, outcome.label != "Miss",
                              rt_ms, quality=quality)
         self.adapter.next_bpm()
+        # engine.log_trial runs _update_streak, which is what actually
+        # calls adapter.enter_recovery()/exit_recovery() (3 consecutive
+        # misses in, 1 hit out). Check for the transition straight
+        # after, not just at a block_size boundary.
         self.engine.log_trial(self.active, outcome, now)
         self.active = None
         self.completed += 1
+        now_recovery = self.adapter.in_recovery
+        if now_recovery != self._last_recovery:
+            # enter_recovery's own docstring promises biasing "the next
+            # lane pick" toward the strongest finger, and exit_recovery
+            # promises returning to normal weighting -- both mean NOW,
+            # not whenever the current 4-trial sequence happens to run
+            # out. Discard whatever is left of it so the next _fire()
+            # regenerates from the weights that are current as of this
+            # trial closing.
+            self.seq_idx = len(self.sequence)
+            self._last_recovery = now_recovery
