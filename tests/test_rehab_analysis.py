@@ -260,6 +260,152 @@ def _write_session(root, name, gaps, *, cal=True, delivered="TRUE",
     return folder
 
 
+REACTION_COLS = ["iso_ts", "block_t_s", "participant", "age", "hand",
+                  "block", "trial", "lane", "time_difference_ms",
+                  "early_late", "points", "feedback", "error_type",
+                  "keys_pressed", "correct_keys", "num_presses",
+                  "had_incorrect_press", "first_incorrect_ms",
+                  "first_incorrect_lane", "bpm_at_trial", "streak_at_trial",
+                  "in_recovery", "song_time_s", "peak_force_n", "impulse_n",
+                  "phase", "loud_trial", "timeout_ms", "force_window_sum",
+                  "force_window_peaks", "stim_delivered", "cue_flags",
+                  "stimulus", "pattern_trial", "cue_target_shown"]
+
+
+def _write_reaction_session(root, name, *, right_rt_ms, left_rt_ms,
+                            clock="090000", day="2026-08-05"):
+    """A both-hands reaction block: `right_rt_ms` cues lanes 1-4, then
+    `left_rt_ms` cues lanes 5-8, one trial per RT given. Mirrors what
+    engine.log_trial now writes for reaction with the per-trial hand
+    fix: hand follows the cued lane, not the block-level "both"."""
+    folder = Path(root) / day / f"{name}_{clock}_reaction"
+    folder.mkdir(parents=True, exist_ok=True)
+    rows = []
+    trial_id = 0
+    for lane0, rt in enumerate(right_rt_ms):
+        trial_id += 1
+        rows.append({
+            **{c: "" for c in REACTION_COLS},
+            "iso_ts": f"{day}T09:00:00", "block_t_s": trial_id * 3.0,
+            "participant": name, "age": 30, "hand": "right",
+            "block": "reaction", "trial": trial_id, "lane": lane0 + 1,
+            "time_difference_ms": rt, "early_late": "Good", "points": 3,
+            "feedback": "Good", "keys_pressed": lane0 + 1,
+            "correct_keys": lane0 + 1, "num_presses": 1,
+            "had_incorrect_press": "FALSE",
+            "streak_at_trial": trial_id, "in_recovery": "FALSE",
+            "timeout_ms": 2000, "stim_delivered": "TRUE",
+            "stimulus": f"choice;fp={1.5 + 0.1 * trial_id:.3f}"})
+    for lane0, rt in enumerate(left_rt_ms):
+        trial_id += 1
+        rows.append({
+            **{c: "" for c in REACTION_COLS},
+            "iso_ts": f"{day}T09:00:00", "block_t_s": trial_id * 3.0,
+            "participant": name, "age": 30, "hand": "left",
+            "block": "reaction", "trial": trial_id, "lane": lane0 + 5,
+            "time_difference_ms": rt, "early_late": "Good", "points": 3,
+            "feedback": "Good", "keys_pressed": lane0 + 5,
+            "correct_keys": lane0 + 5, "num_presses": 1,
+            "had_incorrect_press": "FALSE",
+            "streak_at_trial": trial_id, "in_recovery": "FALSE",
+            "timeout_ms": 2000, "stim_delivered": "TRUE",
+            "stimulus": f"choice;fp={1.5 + 0.1 * trial_id:.3f}"})
+
+    with open(folder / "trials.csv", "w", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=REACTION_COLS)
+        w.writeheader()
+        w.writerows(rows)
+
+    all_rt = list(right_rt_ms) + list(left_rt_ms)
+    meta = {
+        "participant": name, "hand": "both",
+        "started_at": f"{day}T09:00:00",
+        "source_name": "MultiSerial(both)",
+        "block_summary": {
+            "block": "reaction", "status": "completed",
+            "trials": len(all_rt), "hit_rate": 1.0,
+            "avg_rt_ms": sum(all_rt) / len(all_rt), "duration_s": 60.0,
+            "paused_total_s": 0.0, "force_unit": "sensor counts",
+            "reaction": {
+                "sub_mode": "choice", "level": 1,
+                "median_rt_ms": sorted(all_rt)[len(all_rt) // 2],
+                "p10_rt_ms": min(all_rt),
+                "spearman_rho_rt_vs_fp": 0.05,
+                "accuracy": 0.875,
+            },
+        },
+        "calibration": {},
+    }
+    (folder / "metadata.json").write_text(json.dumps(meta))
+    return folder
+
+
+def _write_pattern_session(root, name, *, day, rsi_ms=500, timeout_ms=2000,
+                           cue_flags="BS/--", clock="090000",
+                           seq_rt_ms=300.0, probe_rt_ms=420.0,
+                           mixed_cue_on_probe=None):
+    """One pattern-mode game: a trained take followed by a probe take,
+    the two-row minimum the mode's own stimulus packing needs to mark
+    both pattern_trial values. rsi_ms/timeout_ms land in
+    block_summary.pattern the way pattern.py's block_stats() writes
+    them; cue_flags lands on the trial rows the way every mode writes
+    it. mixed_cue_on_probe overrides just the probe row's cue_flags,
+    for the single-game internal-mismatch case."""
+    folder = Path(root) / day / f"{name}_{clock}_pattern"
+    folder.mkdir(parents=True, exist_ok=True)
+    rows = [
+        {**{c: "" for c in REACTION_COLS},
+         "iso_ts": f"{day}T09:00:00", "block_t_s": 1.0,
+         "participant": name, "age": 30, "hand": "right",
+         "block": "pattern", "trial": 1, "lane": 1,
+         "time_difference_ms": seq_rt_ms, "early_late": "Good",
+         "points": 3, "feedback": "Good", "keys_pressed": 1,
+         "correct_keys": 1, "num_presses": 1,
+         "had_incorrect_press": "FALSE", "streak_at_trial": 1,
+         "in_recovery": "FALSE", "timeout_ms": timeout_ms,
+         "stim_delivered": "TRUE", "cue_flags": cue_flags,
+         "stimulus": "seq;b=1;soc=trained;pos=0",
+         "pattern_trial": "TRUE"},
+        {**{c: "" for c in REACTION_COLS},
+         "iso_ts": f"{day}T09:00:00", "block_t_s": 2.0,
+         "participant": name, "age": 30, "hand": "right",
+         "block": "pattern", "trial": 2, "lane": 2,
+         "time_difference_ms": probe_rt_ms, "early_late": "Good",
+         "points": 3, "feedback": "Good", "keys_pressed": 2,
+         "correct_keys": 2, "num_presses": 1,
+         "had_incorrect_press": "FALSE", "streak_at_trial": 2,
+         "in_recovery": "FALSE", "timeout_ms": timeout_ms,
+         "stim_delivered": "TRUE",
+         "cue_flags": mixed_cue_on_probe or cue_flags,
+         "stimulus": "probe;b=2;soc=p0;pos=0",
+         "pattern_trial": "FALSE"},
+    ]
+    with open(folder / "trials.csv", "w", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=REACTION_COLS)
+        w.writeheader()
+        w.writerows(rows)
+
+    meta = {
+        "participant": name, "hand": "right",
+        "started_at": f"{day}T09:00:00",
+        "source_name": "MultiSerial(right@/dev/cu.usbserial-test)",
+        "block_summary": {
+            "block": "pattern", "status": "completed", "trials": 2,
+            "hit_rate": 1.0, "avg_rt_ms": (seq_rt_ms + probe_rt_ms) / 2,
+            "duration_s": 60.0, "paused_total_s": 0.0,
+            "force_unit": "sensor counts",
+            "pattern": {
+                "rsi_ms": rsi_ms, "timeout_ms": timeout_ms,
+                "session_learning_score_ms": probe_rt_ms - seq_rt_ms,
+                "end_reason": "completed", "short_session": False,
+            },
+        },
+        "calibration": {},
+    }
+    (folder / "metadata.json").write_text(json.dumps(meta))
+    return folder
+
+
 # ---------------------------------------------------------- self-contained
 
 class TestNotebookStandsAlone:
@@ -478,6 +624,52 @@ class TestSectionsAlwaysSaySomething:
         assert capsys.readouterr().out.strip(), f"{section} printed nothing"
 
 
+class TestReactionModeByHand:
+    """A both-hands reaction block cues one board per trial (lanes 1-4
+    right, 5-8 left). Before the engine fix each row still said
+    hand="both" and this section never split anything by hand; now
+    trials.csv carries the real per-trial side (via load_games's
+    lane-derived "side" column) and the section reads it."""
+
+    def test_bilateral_block_prints_a_per_hand_split(self, ra, tmp_path,
+                                                      capsys):
+        _write_reaction_session(
+            tmp_path, "P1",
+            right_rt_ms=[280.0, 300.0, 260.0, 310.0],
+            left_rt_ms=[420.0, 440.0, 400.0, 460.0])
+        ctx = ra.prepare("all", root=tmp_path)
+        ra.sec_reaction_mode(ctx["trials"], ctx["metas"])
+        out = capsys.readouterr().out
+        assert "median and p10 by hand" in out, (
+            "sec_reaction_mode did not print a per-hand split for a "
+            "bilateral block")
+        assert "right" in out and "left" in out
+
+    def test_unilateral_block_skips_the_hand_split(self, ra, tmp_path,
+                                                    capsys):
+        # Only right-hand lanes fire, so "side" has one unique value
+        # and the split is meaningless noise to print.
+        _write_reaction_session(tmp_path, "P1",
+                                right_rt_ms=[280.0, 300.0, 260.0, 310.0],
+                                left_rt_ms=[])
+        ctx = ra.prepare("all", root=tmp_path)
+        ra.sec_reaction_mode(ctx["trials"], ctx["metas"])
+        out = capsys.readouterr().out
+        assert "median and p10 by hand" not in out
+
+    def test_block_summary_accuracy_reaches_the_stored_table(
+            self, ra, tmp_path, capsys):
+        _write_reaction_session(
+            tmp_path, "P1",
+            right_rt_ms=[280.0, 300.0, 260.0, 310.0],
+            left_rt_ms=[420.0, 440.0, 400.0, 460.0])
+        ctx = ra.prepare("all", root=tmp_path)
+        ra.sec_reaction_mode(ctx["trials"], ctx["metas"])
+        out = capsys.readouterr().out
+        assert "stored_accuracy" in out
+        assert "0.875" in out
+
+
 class TestCheckAndCatalogue:
 
     def test_catalogue_and_check_agree(self, ra, tmp_path, capsys):
@@ -490,3 +682,92 @@ class TestCheckAndCatalogue:
     def test_check_reports_an_empty_folder(self, ra, tmp_path, capsys):
         assert ra.check(tmp_path, verbose=False) is False
         assert "no recordings" in capsys.readouterr().out
+
+
+class TestPatternConsistencyCheck:
+    """pattern.py's own docstring says rsi_ms, timeout_ms and cue_flags
+    must stay fixed for a participant across sessions, and that
+    cue_flags on every row is how the analysis is meant to verify it
+    did. sec_pattern_srtt used to group purely on (game, take) and pool
+    RTs across whatever sessions got selected, with nothing reading
+    those three fields at all: a therapist changing the RSI between
+    two sessions would blend a slower rhythm's RTs into a faster one's
+    curve with no warning. These pin the check in its place."""
+
+    def test_matching_sessions_pool_into_one_curve(self, ra, tmp_path,
+                                                    capsys):
+        _write_pattern_session(tmp_path, "P1", day="2026-08-01",
+                               rsi_ms=500, timeout_ms=2000)
+        _write_pattern_session(tmp_path, "P1", day="2026-08-02",
+                               rsi_ms=500, timeout_ms=2000,
+                               clock="091000")
+        ctx = ra.prepare("all", root=tmp_path)
+        takes = ra.sec_pattern_srtt(ctx["trials"], ctx["metas"])
+        out = capsys.readouterr().out
+        assert "SPLIT" not in out
+        assert "WARNING" not in out
+        # Both sessions' takes survive, pooled as one group.
+        assert takes["session"].nunique() == 2
+
+    def test_different_rsi_splits_instead_of_pooling(self, ra, tmp_path,
+                                                      capsys):
+        f1 = _write_pattern_session(tmp_path, "P1", day="2026-08-01",
+                                    rsi_ms=500)
+        f2 = _write_pattern_session(tmp_path, "P1", day="2026-08-02",
+                                    rsi_ms=900, clock="091000")
+        ctx = ra.prepare("all", root=tmp_path)
+        takes = ra.sec_pattern_srtt(ctx["trials"], ctx["metas"])
+        out = capsys.readouterr().out
+        assert "SPLIT" in out
+        assert "rsi=500" in out and "rsi=900" in out
+        g1, g2 = f1.parent.name + "/" + f1.name, f2.parent.name + "/" + f2.name
+        assert g1 in out and g2 in out
+        # Nothing is silently dropped: both sessions still come back.
+        assert takes["session"].nunique() == 2
+
+    def test_different_timeout_splits_instead_of_pooling(self, ra, tmp_path,
+                                                          capsys):
+        _write_pattern_session(tmp_path, "P1", day="2026-08-01",
+                               timeout_ms=2000)
+        _write_pattern_session(tmp_path, "P1", day="2026-08-02",
+                               timeout_ms=3000, clock="091000")
+        ctx = ra.prepare("all", root=tmp_path)
+        ra.sec_pattern_srtt(ctx["trials"], ctx["metas"])
+        out = capsys.readouterr().out
+        assert "SPLIT" in out
+        assert "timeout=2000" in out and "timeout=3000" in out
+
+    def test_different_cue_flags_splits_instead_of_pooling(self, ra,
+                                                            tmp_path, capsys):
+        _write_pattern_session(tmp_path, "P1", day="2026-08-01",
+                               cue_flags="BS/--")
+        _write_pattern_session(tmp_path, "P1", day="2026-08-02",
+                               cue_flags="B-/--", clock="091000")
+        ctx = ra.prepare("all", root=tmp_path)
+        ra.sec_pattern_srtt(ctx["trials"], ctx["metas"])
+        out = capsys.readouterr().out
+        assert "SPLIT" in out
+        assert "cue=BS/--" in out and "cue=B-/--" in out
+
+    def test_mixed_cue_flags_within_one_game_warns(self, ra, tmp_path,
+                                                    capsys):
+        # A single block should carry one cue_flags value; two on one
+        # game's rows means the CSV and the mode's settings drifted
+        # apart, which is a different failure to the cross-session one
+        # and gets its own message rather than silently picking one.
+        _write_pattern_session(tmp_path, "P1", day="2026-08-01",
+                               cue_flags="BS/--",
+                               mixed_cue_on_probe="B-/--")
+        ctx = ra.prepare("all", root=tmp_path)
+        ra.sec_pattern_srtt(ctx["trials"], ctx["metas"])
+        out = capsys.readouterr().out
+        assert "WARNING" in out and "not constant WITHIN" in out
+
+    def test_single_session_never_splits(self, ra, tmp_path, capsys):
+        # One session cannot disagree with itself; the split machinery
+        # must not fire just because there is only one group.
+        _write_pattern_session(tmp_path, "P1", day="2026-08-01")
+        ctx = ra.prepare("all", root=tmp_path)
+        ra.sec_pattern_srtt(ctx["trials"], ctx["metas"])
+        out = capsys.readouterr().out
+        assert "SPLIT" not in out and "WARNING" not in out

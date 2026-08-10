@@ -1913,6 +1913,24 @@ class GameplayScreen(Screen):
         m = self.engine.mode
         if m is None or not self.lanes:
             return
+        # Level + response window. Reaction has no force or amplitude
+        # difficulty axis (see reaction.py's PROGRESSION docstring
+        # section) - the response window is the ONLY difficulty lever,
+        # yet nothing on screen said which window was in force, so a
+        # block feeling harder had no visible cause. Matches the
+        # "Level X of Y   <difficulty>" convention lighthouse and
+        # force pilot already show in their own top strips.
+        level = getattr(m, "level", None)
+        max_level = getattr(m, "max_level", None)
+        window_s = getattr(m, "response_window", None)
+        if (isinstance(level, int) and isinstance(max_level, int)
+                and isinstance(window_s, (int, float))):
+            draw_text(surf,
+                      f"Level {level} of {max_level}   "
+                      f"Window {window_s:.1f}s",
+                      (self.layout.width // 2, 40), self.theme,
+                      self.layout, pt=FONT_SMALL, centre=True,
+                      colour=self.theme.muted)
         phase = getattr(m, "_phase", "")
         if phase in ("foreperiod", "catch"):
             top = min(ls.rect.top for ls in self.lanes) - 48

@@ -30,6 +30,20 @@ TRIAL_COLUMNS = [
     # Press behaviour: what the patient pressed + any wrong-finger presses.
     "keys_pressed", "correct_keys", "num_presses",
     "had_incorrect_press", "first_incorrect_ms", "first_incorrect_lane",
+    # Mirror mode fires the same finger on both hands in a single trial
+    # and scores it on the LATER of the two presses (time_difference_ms),
+    # because the clinical question is whether the movement was
+    # synchronised. That collapses which hand did what: the row's own
+    # `lane` is always the right-hand copy (1..4) and `hand` is always
+    # "both", so no per-hand split was recoverable from the row. These
+    # two hold each side's OWN press latency in ms from stim to press,
+    # independent of the shared scored RT above. The right lane is
+    # `lane`, the left lane is always `lane + 4` (mirror always pairs
+    # a finger with its same-finger opposite), so no extra lane column
+    # is needed to say which side each number belongs to. Empty when
+    # that side never pressed (a Miss on that side) or outside mirror
+    # mode, where both stay blank.
+    "mirror_right_rt_ms", "mirror_left_rt_ms",
     # Engine state at the moment the trial closed. Empty when not
     # applicable (e.g. bpm_at_trial outside adaptive mode).
     "bpm_at_trial",            # adaptive engine BPM when stim fired

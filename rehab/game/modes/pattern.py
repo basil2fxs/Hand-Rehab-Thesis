@@ -597,7 +597,20 @@ class PatternMode:
         def random_fingers(n: int) -> list[int]:
             # Shuffle-bag over every finger in play: equal counts, no
             # back-to-back repeats, fresh order every block. Balanced
-            # per lane, which in bimanual play balances the hands too.
+            # per lane, which in bimanual play balances the hands too
+            # ONLY when n divides evenly by n_fingers: BalancedScheduler
+            # guarantees lane counts within 1 of each other, but which
+            # lanes get the extra trial is a property of the shuffle,
+            # not of the count, so a remainder can land unevenly across
+            # the two hands. The shipped defaults are clean multiples
+            # of both 4 and 8; a config change that breaks that gets
+            # flagged here rather than silently trusted.
+            if n % self.n_fingers != 0:
+                log.warning(
+                    "pattern random block: %d trials does not divide "
+                    "evenly across %d lanes; per-lane counts stay "
+                    "within 1 of each other but hand balance is no "
+                    "longer guaranteed", n, self.n_fingers)
             return BalancedScheduler(
                 list(range(self.n_fingers)), self.block_rng).sequence(n)
 

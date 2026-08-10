@@ -439,6 +439,123 @@ class EngineIntegrationTests(unittest.TestCase):
             pygame.quit()
 
 
+class BilateralPerTrialHandTests(unittest.TestCase):
+    """A both-hands reaction block cues one board per trial, right OR
+    left, from lanes_by_hand's 0..3 / 4..7 split. The trials.csv hand
+    column must say which board that trial actually cued, not just
+    the block-level "both", or the notebook's reaction chapter cannot
+    split RT median/p10/histogram/trend by hand for a bilateral block."""
+
+    def _run_bilateral_block(self):
+        import pygame
+        pygame.init()
+        try:
+            from rehab.config import Config
+            from rehab.game.engine import GameEngine
+            from rehab.hardware.keyboard_source import KeyboardOnlySource
+            td = tempfile.mkdtemp()
+            cfg = Config.load()
+            cfg.data["ui"]["resolution"] = [640, 480]
+            cfg.data["audio"]["enabled"] = False
+            cfg.data["session"]["data_dir"] = td
+            cfg.data["report"] = {"enabled": False}
+            cfg.data["bilateral"] = {"hand": "both"}
+            cfg.data["reaction"] = {"seed": 7, "catch_rate": 0.0}
+            eng = GameEngine(cfg, KeyboardOnlySource())
+            gp = MagicMock()
+            gp.lanes = []
+            eng._screens = {"gameplay": gp, "results": MagicMock()}
+            eng.begin_reaction_block()
+            self.assertEqual(eng.hand_mode, "both")
+            mode = eng.mode
+            # PairedBalancedScheduler alternates hands, so eight clean
+            # hits are guaranteed to cover both the right board (lanes
+            # 0-3) and the left board (lanes 4-7) at least once each.
+            t = 100.0
+            for i in range(8):
+                mode._begin_trial(now=t)
+                mode._fire(now=t + 2.0)
+                target = mode.active.lane
+                mode._handle_press(_press(lane=target, t=t + 2.2),
+                                   now=t + 2.2)
+                t += 3.0
+            root = Path(eng.session_paths.root)
+            eng.finish_block()
+            with (root / "trials.csv").open() as f:
+                rows = list(csv.DictReader(f))
+            return rows
+        finally:
+            pygame.quit()
+
+    def test_hand_column_is_per_trial_not_block_level(self) -> None:
+        rows = self._run_bilateral_block()
+        self.assertEqual(len(rows), 8)
+        # This is the finding this test reproduces: every row used to
+        # come back "both" no matter which board the lane belonged
+        # to, which is what the fix below asserts against.
+        seen = set()
+        for r in rows:
+            lane0 = int(r["lane"]) - 1
+            expected = "left" if lane0 >= 4 else "right"
+            self.assertEqual(
+                r["hand"], expected,
+                f"lane {lane0 + 1} row logged hand={r['hand']!r}, "
+                f"expected {expected!r} (both-hands block, "
+                f"per-trial hand must follow the lane)")
+            seen.add(r["hand"])
+        # Both boards actually fired in this run, so the assertion
+        # above is exercising both branches, not just one.
+        self.assertEqual(seen, {"right", "left"})
+
+
+class LevelAndWindowOnScreenTests(unittest.TestCase):
+    """The response window is reaction's only difficulty lever (see the
+    mode's PROGRESSION docstring), yet nothing on the gameplay screen
+    named the level or the window in force, so a block feeling harder
+    had no visible cause for patient or clinician. Drives the real
+    engine and the real GameplayScreen; only draw_text is intercepted,
+    the same pattern test_force_pilot.py and test_lighthouse.py use to
+    pin their own on-screen difficulty indicators."""
+
+    def test_level_and_window_are_drawn(self) -> None:
+        import pygame
+        pygame.init()
+        try:
+            from rehab.config import Config
+            from rehab.game.engine import GameEngine
+            from rehab.hardware.keyboard_source import KeyboardOnlySource
+            import rehab.ui.screens as screens
+            cfg = Config.load()
+            cfg.data["ui"]["resolution"] = [640, 480]
+            cfg.data["audio"]["enabled"] = False
+            cfg.data["reaction"] = {"seed": 1, "catch_rate": 0.0}
+            eng = GameEngine(cfg, KeyboardOnlySource())
+            eng._screens = {"gameplay": MagicMock(), "results": MagicMock()}
+            eng.begin_reaction_block()
+            eng.mode.level = 2
+            eng.mode.max_level = 3
+            eng.mode.response_window = 1.5
+            gp = screens.GameplayScreen(eng)
+            surf = pygame.Surface((640, 480))
+            seen = []
+            original = screens.draw_text
+
+            def recorder(s, text, pos, *a, **k):
+                seen.append(str(text))
+                return original(s, text, pos, *a, **k)
+
+            screens.draw_text = recorder
+            try:
+                gp.draw(surf)
+            finally:
+                screens.draw_text = original
+            joined = " | ".join(seen)
+            self.assertIn("Level 2 of 3", joined)
+            self.assertIn("Window 1.5s", joined)
+        finally:
+            pygame.quit()
+
+
 class SetupScreenGatingTests(unittest.TestCase):
     """The pace slider is a classic-only control. Showing it for
     reaction would hand the patient a knob that claims the wait is

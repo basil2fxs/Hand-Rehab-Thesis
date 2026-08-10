@@ -409,5 +409,105 @@ class EndToEndMirrorBlockTests(unittest.TestCase):
             pygame.quit()
 
 
+class PerHandLoggingTests(unittest.TestCase):
+    """Regression coverage for the per-hand logging fix.
+
+    Before the fix, a mirror trial's CSV row logged hand="both" and a
+    lane in 1..4 only (PendingMirrorTrial.lane() never returns
+    finger + 4), and time_difference_ms carried the shared LATER-press
+    RT used for scoring. None of that let an analysis recover which
+    hand was actually slow on a given trial, even though synchronised
+    bilateral movement is mirror's whole training goal. Driven through
+    a real engine + real TrialLogger, not mocked, so this catches the
+    bug at the point it actually showed up: the CSV row.
+    """
+
+    def test_trials_csv_carries_each_hands_own_press_latency(self) -> None:
+        import os
+        import csv
+        import tempfile
+        os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+        os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+        import pygame
+        pygame.init()
+        try:
+            from rehab.config import Config
+            from rehab.game.engine import GameEngine
+            from rehab.hardware.keyboard_source import KeyboardOnlySource
+            from rehab.hardware.fsr_detector import PressEvent
+
+            tmpdir = tempfile.mkdtemp()
+            cfg = Config.load()
+            cfg.data["ui"]["resolution"] = [1280, 800]
+            cfg.data.setdefault("session", {})["data_dir"] = tmpdir
+            eng = GameEngine(cfg, KeyboardOnlySource(cfg))
+            eng.screen = pygame.display.set_mode(
+                (eng.layout.width, eng.layout.height))
+            eng._screens = eng._build_screens()
+            eng.hand_mode = "both"
+            eng._build_detectors()
+            for key in ("gameplay", "rhythm"):
+                sc = eng._screens.get(key)
+                if sc and hasattr(sc, "rebuild_lanes"):
+                    sc.rebuild_lanes()
+
+            eng.begin_mirror_block()
+            mode = eng.mode
+            mode._fire(now=0.0)
+            finger = mode.active.finger
+            # Right hand fast (100 ms), left hand slow (270 ms), so the
+            # two sides are only distinguishable if each is logged
+            # separately rather than collapsed into the shared
+            # later-press RT (270 ms) that scoring uses.
+            mode._handle_press(
+                PressEvent(lane=finger, t_perf=0.10, value=0,
+                           baseline=0.0, hand="both"), now=0.10)
+            mode._handle_press(
+                PressEvent(lane=finger + 4, t_perf=0.27, value=0,
+                           baseline=0.0, hand="both"), now=0.27)
+
+            eng.trial_logger.close()
+            with open(eng.session_paths.trials_csv) as f:
+                rows = list(csv.DictReader(f))
+
+            # One row per trial, not two: the fix attributes both
+            # hands from a single row rather than duplicating it (which
+            # would double-count the trial in every block-level stat).
+            self.assertEqual(len(rows), 1)
+            row = rows[0]
+            self.assertEqual(row["hand"], "both")
+            # The scored RT is still the later of the two presses,
+            # unchanged by the fix.
+            self.assertAlmostEqual(
+                float(row["time_difference_ms"]), 270.0, places=1)
+            # Each hand's OWN latency is now attributable from this one
+            # row, independent of the shared scored RT above.
+            self.assertAlmostEqual(
+                float(row["mirror_right_rt_ms"]), 100.0, places=1)
+            self.assertAlmostEqual(
+                float(row["mirror_left_rt_ms"]), 270.0, places=1)
+        finally:
+            pygame.quit()
+
+    def test_miss_on_one_side_leaves_that_hands_rt_blank(self) -> None:
+        spy = _Spy()
+        mode = _build(spy, pattern=[0], timeout=0.2)
+        mode._fire(now=0.0)
+        mode._handle_press(_press(0, 0.10), now=0.10)   # right only
+        mode.adapter.bpm = 270.0
+        import time
+        original = time.perf_counter
+        time.perf_counter = lambda: 1.0
+        try:
+            mode.update(dt=0.0)
+        finally:
+            time.perf_counter = original
+        spy.log_trial.assert_called_once()
+        kwargs = spy.log_trial.call_args.kwargs
+        right_rt, left_rt = kwargs["mirror_hand_rts"]
+        self.assertAlmostEqual(right_rt, 100.0, places=1)
+        self.assertIsNone(left_rt)
+
+
 if __name__ == "__main__":
     unittest.main()

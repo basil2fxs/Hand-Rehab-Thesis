@@ -542,12 +542,49 @@ class LevelTests(unittest.TestCase):
     def test_next_run_uses_the_new_corridor(self):
         m = self._m()
         t = _to_run_phase(m)
-        m._recent_tic = [0.9]
+        hand, finger = m.hand, m.finger
+        m._recent_tic_by_hf[(hand, finger)] = [0.9]
         _play_run(m, t, lambda t_run, target: target)   # promotes
+        # The finger that just ran is the one that moved, regardless
+        # of which finger the scheduler hands out next.
+        self.assertEqual(m._level_by_hf[(hand, finger)], 2)
+        # Force the same finger back so its own promoted corridor is
+        # visible on its very next run (a different finger's next run
+        # must still be whatever ITS OWN level says, which the
+        # per-finger-level tests below cover).
+        m._finger_sched[hand].next = lambda weights=None: finger
+        m._prepare_run()
+        self.assertEqual(m.hand, hand)
+        self.assertEqual(m.finger, finger)
         self.assertEqual(m.level, 2)
-        # _prepare_run already drew the next plan under level 2.
         self.assertEqual(m.corridor_hw, 6.0)
         self.assertEqual(m.params["lvl"], 2)
+
+    def test_one_fingers_promotion_does_not_move_another(self):
+        # The headline finding this fixes: level was one shared value
+        # per hand (and across hands in bilateral play), so the
+        # strongest finger's runs forced the same corridor onto the
+        # weakest finger's runs. Two strong runs on finger 0 must not
+        # touch finger 1's level, which a finger that has never played
+        # should still hold at the configured start.
+        m = self._m()
+        m._move_level(0.9)     # finger (right, 0), first strong run
+        m._move_level(0.85)    # second strong run: promotes to 2
+        self.assertEqual(m._level_by_hf[("right", 0)], 2)
+        self.assertEqual(m._level_by_hf[("right", 1)], 1)
+        self.assertEqual(m._level_by_hf[("right", 2)], 1)
+        self.assertEqual(m._level_by_hf[("right", 3)], 1)
+
+    def test_bilateral_hands_keep_independent_levels(self):
+        e = _engine(hand_mode="both")
+        e.calibration_profiles["right"] = _fresh_profile()
+        e.calibration_profiles["left"] = _fresh_profile("left")
+        m = _mode(e, hands={"right": [0, 1, 2, 3], "left": [4, 5, 6, 7]})
+        m.hand, m.finger = "right", 0
+        m._move_level(0.9)
+        m._move_level(0.85)    # promotes the right index finger to 2
+        self.assertEqual(m._level_by_hf[("right", 0)], 2)
+        self.assertEqual(m._level_by_hf[("left", 0)], 1)
 
 
 # ---- hands and scheduling ----------------------------------------------
@@ -656,8 +693,49 @@ class PauseAndStatsTests(unittest.TestCase):
                       ("low hold", "press ramp", "high hold",
                        "release ramp", "waves", "approach",
                        "assessment"))
-        # The session-carrying level hook for the next block.
-        self.assertEqual(m.engine._force_pilot_level, m.level)
+        # The session-carrying level hook for the next block: now a
+        # dict keyed by (hand, finger), not one shared value.
+        self.assertEqual(m.engine._force_pilot_levels[(m.hand, m.finger)],
+                         m.level)
+
+    def test_block_stats_splits_per_lane_and_section_by_level(self):
+        # A run at the easiest level and a run at the hardest level
+        # earn differently-scaled outcomes for the same real tracking
+        # quality, so per_lane and section_mae must not silently pool
+        # across a level change mid-block.
+        m = self._ready()
+        m.engine.finish_block = lambda: None
+        m.total_runs = 2
+        t = _to_run_phase(m)
+        lane, hand, finger = m.lane, m.hand, m.finger
+        # Force the same finger back every time so the second run
+        # plays at whatever level its own promotion left it at.
+        m._finger_sched[hand].next = lambda weights=None: finger
+        # Force a promotion after the first run so the second run at
+        # this same finger plays at a different level.
+        m._recent_tic_by_hf[(hand, finger)] = [0.9]
+        _play_run(m, t, lambda t_run, target: target)
+        self.assertEqual(m._level_by_hf[(hand, finger)], 2)
+        self.assertEqual(m.phase, "feedback")
+        t = m._phase_until + 0.01
+        m._tick(t)                                 # feedback -> announce
+        self.assertEqual(m.phase, "announce")
+        t = m._phase_until + 0.01
+        m._tick(t)                                 # announce -> run
+        self.assertEqual(m.phase, "run")
+        self.assertEqual(m.level, 2)
+        _play_run(m, t, lambda t_run, target: target)
+        stats = m.block_stats()
+        by_level = stats["per_lane"][str(lane)]["by_level"]
+        self.assertEqual(set(by_level), {"1", "2"})
+        self.assertEqual(by_level["1"]["runs"], 1)
+        self.assertEqual(by_level["2"]["runs"], 1)
+        sec_by_level = stats["section_mae_pct_by_level"]
+        self.assertEqual(set(sec_by_level), {"1", "2"})
+        self.assertEqual(stats["levels"][f"{hand}:{finger}"]["start"], 1)
+        self.assertEqual(stats["levels"][f"{hand}:{finger}"]["final"], 2)
+        self.assertEqual(stats["levels"][f"{hand}:{finger}"]["trace"],
+                         [1, 2])
 
 
 # ---- the screen --------------------------------------------------------

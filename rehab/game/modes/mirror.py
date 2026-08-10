@@ -340,6 +340,17 @@ class MirrorMode:
             rt_ms = (later_t - self.active.stim_t_perf) * 1000.0
         else:
             rt_ms = None
+        # Each side's OWN latency, independent of the shared later-press
+        # RT above. This is what makes a hand's press attributable after
+        # the fact: the scored RT alone can never say whether the right
+        # or the left hand was the slow one on a given trial, only that
+        # the pair landed inside the window or didn't.
+        right_rt_ms = (None if self.active.right_press_t is None
+                       else (self.active.right_press_t
+                             - self.active.stim_t_perf) * 1000.0)
+        left_rt_ms = (None if self.active.left_press_t is None
+                      else (self.active.left_press_t
+                            - self.active.stim_t_perf) * 1000.0)
         outcome = classify(rt_ms, self.score_cfg)
         # Wrong-press trials downgrade to Miss, matching classic /
         # adaptive's clean-trial-signal behaviour.
@@ -378,7 +389,8 @@ class MirrorMode:
         # log row is keyed on. log_trial only fires it on a correct
         # press, so a one-handed trial never reaches this.
         self.engine.log_trial(log_obj, outcome, now,
-                               cue_lanes=[finger, finger + 4])
+                               cue_lanes=[finger, finger + 4],
+                               mirror_hand_rts=(right_rt_ms, left_rt_ms))
         self.active = None
         self.completed += 1
         # Stamp the finish time so the inter-trial rest in update() is

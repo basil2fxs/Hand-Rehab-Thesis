@@ -581,6 +581,55 @@ class CatchTrialTests(unittest.TestCase):
         self.assertEqual(stats["loc"]["catch"]["false_alarms"], 1)
         self.assertEqual(stats["loc"]["catch"]["fa_rate"], 1.0)
 
+    def test_catch_hand_draws_from_both_in_bilateral_play(self):
+        # A catch trial has no real lane, but in bilateral play it
+        # still logically stands in for one hand's worth of waiting.
+        # Before the fix this was always hand_names[0] ("right"), so
+        # a left-hand false alarm could never be counted against the
+        # left hand. Drive enough catch trials through _prepare_trial
+        # that both hands must appear if the draw is fair.
+        e = _engine(hand_mode="both")
+        m = _mode(e, hands={"right": [0, 1, 2, 3], "left": [4, 5, 6, 7]})
+        m.catch_rate = 1.0
+        m = _only_stage(m, "loc", 40)
+        seen = set()
+        for i in range(40):
+            m.trials_done = i
+            m._prepare_trial()
+            self.assertTrue(m.catch)
+            seen.add(m.hand)
+        self.assertEqual(seen, {"right", "left"})
+
+    def test_catch_false_alarm_is_logged_against_the_left_hand(self):
+        # Force the per-trial draw to land on "left" and confirm the
+        # false alarm reaches the CSV row as "left", not silently
+        # falling back to the session-level hand_mode ("both", which
+        # is not a real hand and would drop the false alarm out of
+        # both hands' FA rates).
+        e = _engine(hand_mode="both")
+        m = _mode(e, hands={"right": [0, 1, 2, 3], "left": [4, 5, 6, 7]})
+        m.catch_rate = 1.0
+        m = _only_stage(m, "loc", 2)
+        t = _to_trial(m)
+        self.assertIn(m.hand, ("right", "left"))
+        m.hand = "left"  # pin the draw for a deterministic assertion
+        t = _to_respond(m, t)
+        m.queue_press(_press_event(5, t + 0.4))
+        m._tick(t + 0.41)
+        row = m.engine.trial_logger.rows[0]
+        self.assertEqual(row["error_type"], "catch_false_start")
+        self.assertEqual(row["hand"], "left")
+
+    def test_single_hand_session_catch_still_uses_hand_names_zero(self):
+        # Unilateral play has only one hand to stand in for, so the
+        # fix must not change that case.
+        m = self._catch_mode()
+        m = _only_stage(m, "loc", 5)
+        for i in range(5):
+            m.trials_done = i
+            m._prepare_trial()
+            self.assertEqual(m.hand, "right")
+
 
 # ---- the hand matrix ----------------------------------------------------
 

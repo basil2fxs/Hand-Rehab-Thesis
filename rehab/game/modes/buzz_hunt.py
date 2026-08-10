@@ -666,7 +666,14 @@ class BuzzHuntMode:
             if self.catch:
                 self._catch_n += 1
                 self.lane = -1
-                self.hand = self.hand_names[0]
+                # No real lane fires on a catch, but in bilateral play
+                # it still logically stands in for one hand's worth of
+                # waiting. Drawing that hand fairly (instead of always
+                # hand_names[0]) means a false alarm can be charged to
+                # the hand it happened for, so neither hand's FA rate
+                # is silently undercounted.
+                self.hand = (draw.choice(self.hand_names)
+                             if self.bilateral else self.hand_names[0])
                 self.params = {"catch": 1,
                                "window_ms": self.response_window_s * 1000.0}
             else:
@@ -1053,7 +1060,12 @@ class BuzzHuntMode:
                 stimulus="loc;catch",
                 # Nothing on this mode's screen ever names a finger,
                 # whatever the show_target toggle says.
-                target_shown=False)
+                target_shown=False,
+                # Without this, log_reaction_event falls back to the
+                # session-level hand_mode ("both" in bilateral play),
+                # which is not a hand at all and would silently drop
+                # this false alarm out of either hand's FA rate.
+                hand=self.hand)
             self._last_result = {"stage": "loc", "label": "FalseAlarm",
                                  "catch": True, "correct": False,
                                  "press_lane": press_lane}
@@ -1063,7 +1075,8 @@ class BuzzHuntMode:
                 label="CatchOk", error_type="",
                 points=self.CATCH_REWARD,
                 stimulus="loc;catch",
-                target_shown=False)
+                target_shown=False,
+                hand=self.hand)
             try:
                 self.engine.score += self.CATCH_REWARD
                 self.engine._last_gained = self.CATCH_REWARD

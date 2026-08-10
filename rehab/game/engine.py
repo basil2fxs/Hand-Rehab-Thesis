@@ -1746,7 +1746,7 @@ class GameEngine:
                 self.cfg.get("pattern.soc_cycles_per_block", 5)),
             warmup_trials=int(self.cfg.get("pattern.warmup_trials", 20)),
             random_block_trials=int(
-                self.cfg.get("pattern.random_block_trials", 60)),
+                self.cfg.get("pattern.random_block_trials", 64)),
             probe_pool_size=int(
                 self.cfg.get("pattern.probe_pool_size", 4)),
             rsi_s=float(self.cfg.get("pattern.rsi_ms", 500)) / 1000.0,
@@ -1940,9 +1940,13 @@ class GameEngine:
         not a lane strip.
 
         The difficulty level carries across blocks within one app
-        session as `_force_pilot_level` (same pattern as reaction's
-        window level) and resets on restart, which fails in the safe
-        direction (the configured starting level).
+        session as `_force_pilot_levels`, a dict keyed by (hand,
+        finger) (same carry-across-blocks pattern as reaction's
+        window level, but per finger rather than one shared value --
+        see the mode file's docstring for why one shared level
+        defeated the adaptive-weighting intent). Resets on restart,
+        which fails in the safe direction (the configured starting
+        level for every finger).
         """
         from .modes.force_pilot import ForcePilotMode
         hands = self.lanes_by_hand()
@@ -1957,15 +1961,17 @@ class GameEngine:
             or [8.0, 6.0, 4.0])]
         bw = [float(x) for x in (self.cfg.get(
             "force_pilot.bandwidth_hz", None) or [0.3, 0.45, 0.6])]
-        level = getattr(self, "_force_pilot_level", None)
-        if not isinstance(level, int) or level < 1:
-            level = int(self.cfg.get("force_pilot.level", 1))
+        level_by_hf = getattr(self, "_force_pilot_levels", None)
+        if not isinstance(level_by_hf, dict):
+            level_by_hf = {}
+        level = int(self.cfg.get("force_pilot.level", 1))
         level = max(1, min(level, len(hw), len(bw)))
         gain = float(self.cfg.get("force_pilot.visual_gain", 1.0))
         self.mode = ForcePilotMode(
             engine=self,
             lanes_by_hand=hands,
             level=level,
+            level_by_hf=level_by_hf,
             corridor_hw_by_level=hw,
             freq_ceiling_by_level=bw,
             runs_per_finger=int(
@@ -2016,12 +2022,17 @@ class GameEngine:
         )
         self._begin_block("force_pilot")
         # The seed shaped every run plan in this block, so it lives
-        # next to the data it shaped, not only in the app log.
+        # next to the data it shaped, not only in the app log. Levels
+        # are logged per (hand, finger) since that is the real carried
+        # state now, not the single config default.
         if self.raw_logger:
+            starting = ",".join(
+                f"{k}={v}" for k, v in sorted(level_by_hf.items())
+            ) or "none carried"
             self.raw_logger.queue_event(
                 "force_pilot_config",
-                detail=(f"seed={seed} level={level} gain={gain} "
-                        f"hand={self.hand_mode}"),
+                detail=(f"seed={seed} default_level={level} gain={gain} "
+                        f"hand={self.hand_mode} carried_levels=[{starting}]"),
                 hand=self.hand_mode)
         sc = self._screens.get("force_pilot")
         if sc is not None and hasattr(sc, "on_block_start"):
@@ -4151,7 +4162,10 @@ class GameEngine:
                    stimulus: str = "",
                    pattern_trial: bool | None = None,
                    correct_lanes: list[int] | None = None,
-                   continuous=None) -> None:
+                   continuous=None,
+                   hand: str | None = None,
+                   mirror_hand_rts: tuple[float | None, float | None]
+                   | None = None) -> None:
         """Close out one cadence-style trial.
 
         `cue_lanes` is which finger(s) the after-press cue should fire
@@ -4174,6 +4188,31 @@ class GameEngine:
         than a lane highlight. It fills the waveform, waveform_params,
         waveform_seed and segment_times columns; None leaves all four
         empty, which is every threshold mode.
+
+        `hand` overrides the row's hand column with a per-trial value
+        (right/left) instead of the block-level self.hand_mode. A
+        both-hands block plays every lane with a single hand_mode of
+        "both", which is correct at the block level but wrong at the
+        row level: a bilateral reaction block's trial rows all said
+        hand="both" even though each single trial only ever cued one
+        board, so the trial-level side was unrecoverable from
+        trials.csv alone. None keeps the old block-level behaviour for
+        every other caller; widening those to a per-trial hand too is
+        out of scope for this fix and each has its own trial-hand
+        story (mirror always plays both hands on one trial, so "both"
+        is the right row-level answer there, not a bug to fix).
+
+        `mirror_hand_rts` is (right_rt_ms, left_rt_ms): each hand's OWN
+        press latency in ms from stim to press, independent of
+        `time_difference_ms`, which mirror scores on the LATER of the
+        two presses so the outcome reflects synchronisation, not
+        per-hand speed. Without this a mirror trial's row could never
+        say how fast either hand actually was, only how in-sync the
+        pair was, so no analysis could split mirror performance by
+        hand even though synchronised bilateral movement is the whole
+        point of the mode. None in a slot means that side never
+        pressed on this trial (a Miss on that side); None passed
+        wholesale is every other mode, where both columns stay empty.
         """
         self._ensure_metric_state()
         gp = self._screens.get("gameplay")
@@ -4307,7 +4346,7 @@ class GameEngine:
             row = {
                 "participant": self.session.participant,
                 "age": self.session.age,
-                "hand": self.hand_mode,
+                "hand": hand or self.hand_mode,
                 "block": self.current_block,
                 "trial": trial.trial_id,
                 "lane": trial.lane + 1,
@@ -4336,6 +4375,12 @@ class GameEngine:
                 "had_incorrect_press": "TRUE" if had_incorrect else "FALSE",
                 "first_incorrect_ms": first_inc_ms,
                 "first_incorrect_lane": first_inc_lane,
+                "mirror_right_rt_ms": (
+                    "" if mirror_hand_rts is None or mirror_hand_rts[0] is None
+                    else f"{mirror_hand_rts[0]:.1f}"),
+                "mirror_left_rt_ms": (
+                    "" if mirror_hand_rts is None or mirror_hand_rts[1] is None
+                    else f"{mirror_hand_rts[1]:.1f}"),
                 "peak_force_n": (
                     f"{peak_force_n_value:.3f}"
                     if peak_force_n_value is not None else ""
@@ -4455,11 +4500,18 @@ class GameEngine:
                             press_offset_ms: float | None = None,
                             points: int = 0,
                             stimulus: str = "",
-                            target_shown: bool | None = None) -> None:
+                            target_shown: bool | None = None,
+                            hand: str | None = None) -> None:
         """Write a trial row for a reaction-mode event that never
         became a scorable trial: foreperiod false starts, sub-cut
         anticipations, wrong fingers in the simple sub-mode, and catch
         outcomes.
+
+        `hand` is the same per-trial override log_trial takes: None
+        falls back to the block-level hand_mode, which is also the
+        only option when `lane` is None (a foreperiod or catch false
+        start fires before any board is cued, so there is no lane to
+        derive a side from).
 
         log_trial is deliberately NOT reused for these. It counts
         every non-Miss row as a hit, extends the streak, and fires the
@@ -4490,7 +4542,7 @@ class GameEngine:
         row = {
             "participant": self.session.participant,
             "age": self.session.age,
-            "hand": self.hand_mode,
+            "hand": hand or self.hand_mode,
             "block": self.current_block,
             "trial": trial_id,
             "lane": "" if lane is None else lane + 1,

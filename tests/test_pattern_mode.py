@@ -18,7 +18,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -133,6 +133,115 @@ class SequenceGeneratorTests(unittest.TestCase):
                 canons.add(canon)
 
 
+class Cycle8Tests(unittest.TestCase):
+    """K8: the bimanual 24-item cycle over eight lanes, the probe
+    builder that reuses its own transitions, and the fresh-cycle and
+    minimal-overlap fallbacks build_sequences(n_lanes=8) falls back to
+    when a seed's graph will not give a clean re-ordering. Untested
+    before this, despite being the material bilateral play depends on."""
+
+    def test_generate_cycle8_satisfies_the_k8_constraints(self) -> None:
+        import random
+        from rehab.game.modes.pattern import generate_cycle8
+        for seed in range(25):
+            cyc = generate_cycle8(random.Random(seed))
+            self.assertEqual(len(cyc), 24)
+            # Every lane exactly 3 times, so a per-finger comparison
+            # inside a take rests on equal counts across all 8 lanes.
+            for lane in range(8):
+                self.assertEqual(cyc.count(lane), 3)
+            pairs = [(cyc[i], cyc[(i + 1) % 24]) for i in range(24)]
+            # No back-to-back repeats, and no ordered transition used
+            # twice, wrap included, so every first-order transition
+            # inside the cycle is equally frequent.
+            self.assertTrue(all(a != b for a, b in pairs))
+            self.assertEqual(len(set(pairs)), 24)
+
+    def test_reorder_cycle_matches_first_order_and_zero_triplets(
+            self) -> None:
+        import random
+        from rehab.game.modes.pattern import (_triplet_map, generate_cycle8,
+                                              reorder_cycle,
+                                              shared_triplets)
+        hits = 0
+        for seed in range(60):
+            rng = random.Random(seed)
+            trained = generate_cycle8(rng)
+            forbid = _triplet_map(trained)
+            cand = reorder_cycle(trained, rng, forbid)
+            if cand is None:
+                continue
+            hits += 1
+            # Same 24 transitions in a new order: identical location
+            # and first-order frequencies, only the two-back structure
+            # (the triplet map) may differ, and here it must be zero.
+            self.assertEqual(sorted(cand), sorted(trained))
+            self.assertEqual(
+                sorted((cand[i], cand[(i + 1) % 24]) for i in range(24)),
+                sorted((trained[i], trained[(i + 1) % 24])
+                      for i in range(24)))
+            self.assertEqual(shared_triplets(cand, trained), 0)
+        # A re-ordering exists for the large majority of seeds; the
+        # test would be vacuous if the search never once succeeded.
+        self.assertGreater(hits, 30)
+
+    def test_build_sequences8_first_choice_reuses_trained_transitions(
+            self) -> None:
+        from rehab.game.modes.pattern import build_sequences, shared_triplets
+        trained, pool = build_sequences(seed=7, n_lanes=8)
+        self.assertEqual(len(trained), 24)
+        self.assertGreaterEqual(len(pool), 2)
+        for probe in pool:
+            self.assertEqual(len(probe), 24)
+            self.assertEqual(shared_triplets(probe, trained), 0)
+            # First choice is a re-ordering of the trained cycle's own
+            # transitions, so probe material stays location- and
+            # first-order-matched unless the fallback had to fire.
+            self.assertEqual(sorted(probe), sorted(trained))
+
+    def test_build_sequences8_falls_back_to_fresh_zero_overlap_cycles(
+            self) -> None:
+        # Force every re-ordering attempt to fail so the second stage,
+        # fresh cycles sharing zero triplets with the trained one, is
+        # what actually builds the pool.
+        from rehab.game.modes import pattern as pattern_mod
+        with patch.object(pattern_mod, "reorder_cycle", return_value=None):
+            trained, pool = pattern_mod.build_sequences(seed=7, n_lanes=8)
+        self.assertGreaterEqual(len(pool), 2)
+        for probe in pool:
+            self.assertEqual(pattern_mod.shared_triplets(probe, trained), 0)
+            # Fresh cycles satisfy K8 on their own; they are not
+            # required to reuse the trained transition set.
+            for lane in range(8):
+                self.assertEqual(probe.count(lane), 3)
+
+    def test_build_sequences8_falls_back_to_minimal_overlap(self) -> None:
+        # Force both the re-ordering stage and the zero-overlap fresh
+        # cycle stage to fail, so only the last-resort minimal-overlap
+        # fallback (shared triplets <= _PROBE_FALLBACK_MAX_SHARED) can
+        # fill the pool. A frozen block start is worse than this.
+        from rehab.game.modes import pattern as pattern_mod
+        real_shared = pattern_mod.shared_triplets
+        with patch.object(pattern_mod, "reorder_cycle", return_value=None), \
+             patch.object(pattern_mod, "shared_triplets",
+                          side_effect=lambda a, b: max(1, real_shared(a, b))):
+            trained, pool = pattern_mod.build_sequences(seed=7, n_lanes=8)
+        self.assertGreaterEqual(len(pool), 2)
+        for probe in pool:
+            self.assertLessEqual(real_shared(probe, trained),
+                                 pattern_mod._PROBE_FALLBACK_MAX_SHARED)
+
+    def test_build_sequences8_raises_when_no_probe_survives(self) -> None:
+        # Every candidate reported as sharing more than the fallback
+        # allows: no probe can ever qualify, so the pool must fail
+        # loudly rather than hand back too few probes to alternate.
+        from rehab.game.modes import pattern as pattern_mod
+        with patch.object(pattern_mod, "reorder_cycle", return_value=None), \
+             patch.object(pattern_mod, "shared_triplets", return_value=99):
+            with self.assertRaises(RuntimeError):
+                pattern_mod.build_sequences(seed=7, n_lanes=8)
+
+
 class LayoutTests(unittest.TestCase):
     """The session structure is the experiment: probes at fixed spots
     with trained takes either side, every take starting the cycle at
@@ -198,6 +307,102 @@ class LayoutTests(unittest.TestCase):
                     self.assertEqual(seg.fingers.count(finger), per)
                 pairs = zip(seg.fingers, seg.fingers[1:])
                 self.assertTrue(all(a != b for a, b in pairs))
+
+
+class BimanualLayoutTests(unittest.TestCase):
+    """The 8-lane session layout bilateral play depends on: the K8
+    cycle instead of the 12-item SOC, the halved cycle count that
+    keeps take length in the standard envelope, and the same probe
+    positions and hygiene the unilateral layout guarantees."""
+
+    def test_both_hands_use_the_k8_cycle(self) -> None:
+        _, mode = _build_mode(lanes=list(range(8)))
+        self.assertEqual(mode.n_fingers, 8)
+        self.assertEqual(mode.cycle_len, 24)
+        self.assertEqual(len(mode.trained), 24)
+        for lane in range(8):
+            self.assertEqual(mode.trained.count(lane), 3)
+
+    def test_soc_cycles_per_block_halves_for_bimanual_takes(self) -> None:
+        # 5 loops of 12 unilaterally; bimanual halves the loop count so
+        # a take stays near the same length (3 loops of 24 = 72, not
+        # 5 loops of 24 = 120).
+        _, mode = _build_mode(lanes=list(range(8)), soc_cycles_per_block=5)
+        for seg in mode.segments:
+            if seg.kind in ("seq", "probe"):
+                self.assertEqual(len(seg.fingers), 24 * 3)
+
+    def test_standard_layout_shape_is_unchanged_bimanual(self) -> None:
+        _, mode = _build_mode(lanes=list(range(8)))
+        kinds = [s.kind for s in mode.segments]
+        self.assertEqual(kinds, ["warmup", "random",
+                                 "seq", "seq", "seq", "probe",
+                                 "seq", "seq", "seq", "probe", "seq"])
+        labels = [s.label for s in mode.segments if s.kind == "probe"]
+        self.assertEqual(labels, ["5", "9"])
+
+    def test_takes_start_the_cycle_at_position_zero_bimanual(self) -> None:
+        _, mode = _build_mode(lanes=list(range(8)))
+        for seg in mode.segments:
+            if seg.kind == "seq":
+                self.assertEqual(seg.fingers[:24], mode.trained)
+
+    def test_probe_takes_use_untrained_bimanual_material(self) -> None:
+        from rehab.game.modes.pattern import shared_triplets
+        _, mode = _build_mode(lanes=list(range(8)))
+        probe_socs = [s.fingers[:24] for s in mode.segments
+                      if s.kind == "probe"]
+        self.assertEqual(len(probe_socs), 2)
+        for soc in probe_socs:
+            self.assertIn(soc, mode.probes)
+            self.assertEqual(shared_triplets(soc, mode.trained), 0)
+
+    def test_random_block_balances_lanes_and_hands_at_the_default(
+            self) -> None:
+        # random_block_trials=64 is the shipped default specifically
+        # because it is a clean multiple of 8: every lane gets exactly
+        # 8 trials, so the two hands (lanes 0-3 and 4-7) come out
+        # exactly equal rather than within-one.
+        _, mode = _build_mode(lanes=list(range(8)), random_block_trials=64)
+        random_seg = next(s for s in mode.segments if s.kind == "random")
+        for lane in range(8):
+            self.assertEqual(random_seg.fingers.count(lane), 8)
+        right = sum(1 for f in random_seg.fingers if f < 4)
+        left = sum(1 for f in random_seg.fingers if f >= 4)
+        self.assertEqual(right, left)
+
+    def test_random_block_off_multiple_of_8_warns(self) -> None:
+        # random_block_trials=60 does not divide evenly across 8 lanes
+        # (4 lanes get 8, 4 get 7): the mode must say so rather than
+        # silently letting the "balances the hands too" claim slip.
+        with self.assertLogs("rehab.game.modes.pattern",
+                             level="WARNING") as cm:
+            _build_mode(lanes=list(range(8)), random_block_trials=60)
+        self.assertTrue(any("does not divide evenly" in m
+                            for m in cm.output))
+
+    def test_block_stats_scores_a_bimanual_probe(self) -> None:
+        # Same probe-minus-flankers arithmetic as the unilateral case,
+        # exercised on an 8-lane build so the K8 material path is
+        # covered end to end, not just the generator in isolation.
+        _, mode = _build_mode(lanes=list(range(8)))
+        probe_i = _seg_index(mode, "probe")
+        flankers = (probe_i - 1, probe_i + 1)
+        for i, rt in ((flankers[0], 320.0), (flankers[1], 360.0),
+                      (probe_i, 440.0)):
+            for _ in range(5):
+                mode._trials.append((i, True, rt))
+            mode.segments[i].n_done += 5
+            mode.segments[i].n_correct += 5
+        stats = mode.block_stats()
+        self.assertEqual(stats["cycle_len"], 24)
+        self.assertEqual(len(stats["trained_soc"].split(",")), 24)
+        probe = [p for p in stats["probe_scores"]
+                 if p["block"] == mode.segments[probe_i].label][0]
+        # 440 - mean(320, 360) = 100.
+        self.assertAlmostEqual(probe["learning_score_ms"], 100.0, places=1)
+        self.assertAlmostEqual(
+            stats["session_learning_score_ms"], 100.0, places=1)
 
 
 class TrialFlowTests(unittest.TestCase):

@@ -395,6 +395,20 @@ class ReactionMode:
         self._stim_due = None
         self.engine.on_stim_multi([lane], self.trial_counter, now)
 
+    def _hand_for_lane(self, lane: int) -> str:
+        """Which board a lane sits on, for the trial row's hand column.
+
+        A both-hands block runs with engine.hand_mode == "both" for
+        the whole block, but every single trial only ever cues ONE
+        board, right or left, from lanes_by_hand's own 0..3 / 4..7
+        split. Reusing the engine's lane->hand resolver (the same one
+        pulse_motor uses to send a STOP at the right board) instead of
+        the block-level hand_mode is what lets a bilateral block's RT
+        median, p10, histogram and foreperiod trend be split by hand
+        downstream, in the notebook or anywhere else that reads
+        trials.csv directly."""
+        return self.engine._lane_hand(lane) or self.engine.hand_mode
+
     # ---- presses -----------------------------------------------------------
     def _handle_press(self, ev: PressEvent, now: float) -> None:
         # Every press, whatever the phase, restarts the rest gate: a
@@ -477,6 +491,7 @@ class ReactionMode:
                 label="Early", error_type="anticipation",
                 rt_ms=rt_ms, pressed_lane=ev.lane,
                 stimulus=f"{self.sub_mode};fp={self._fp_scheduled:.3f}",
+                hand=self._hand_for_lane(trial.lane),
             )
             self._clear_lanes()
             self._set_message("Too soon", self.false_start_feedback_s,
@@ -502,7 +517,8 @@ class ReactionMode:
                                   rt_ms=None)
             self.engine.log_trial(
                 trial, outcome, now,
-                stimulus=f"{self.sub_mode};fp={self._fp_scheduled:.3f}")
+                stimulus=f"{self.sub_mode};fp={self._fp_scheduled:.3f}",
+                hand=self._hand_for_lane(trial.lane))
             self._set_message("Wrong finger", self.feedback_s, kind="warn")
             self._enter_rest(now, self.feedback_s)
             return
@@ -516,6 +532,7 @@ class ReactionMode:
             label="Wrong", error_type="wrong_finger",
             pressed_lane=ev.lane, press_offset_ms=rt_ms,
             stimulus=f"{self.sub_mode};fp={self._fp_scheduled:.3f}",
+            hand=self._hand_for_lane(trial.lane),
         )
         self._clear_lanes()
         self._set_message("Wrong finger", self.feedback_s, kind="warn")
@@ -546,7 +563,8 @@ class ReactionMode:
             self._valid_idx.append(self.completed)
         self.engine.log_trial(
             trial, outcome, now,
-            stimulus=f"{self.sub_mode};fp={self._fp_scheduled:.3f}")
+            stimulus=f"{self.sub_mode};fp={self._fp_scheduled:.3f}",
+            hand=self._hand_for_lane(trial.lane))
         if rt_ms is not None:
             self._show_rt_feedback(rt_ms)
             self._enter_rest(now, self.feedback_s)

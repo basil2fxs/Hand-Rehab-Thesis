@@ -57,6 +57,8 @@ class TestColumnsTheNotebookNeeds:
         ("timeout_ms", "the response window"),
         ("phase", "pretest against aftertest"),
         ("hand", "left against right"),
+        ("mirror_right_rt_ms", "mirror mode's right-hand press latency"),
+        ("mirror_left_rt_ms", "mirror mode's left-hand press latency"),
         ("stimulus", "the packed per-trial detail of the newer modes"),
         ("pattern_trial", "trained against probe trials in pattern mode"),
         ("waveform", "which trajectory a continuous-force trial ran"),

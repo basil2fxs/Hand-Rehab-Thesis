@@ -54,12 +54,18 @@ PARAMETER DEFENCES, in config order:
   frequencies, random phases) so it cannot be memorised, and its seed
   and drawn parameters are logged for exact offline reconstruction.
 - corridor half-widths 8 / 6 / 4 percent and waveform bandwidth per
-  level: the two difficulty axes the brief names. Moves are announced
-  plainly on screen and logged (force_pilot_level raw event).
+  level: the two difficulty axes the brief names. Level is tracked
+  per (hand, finger), not one shared value, so the strongest finger
+  promoting cannot drag a weaker finger (or the other hand) into a
+  harder corridor it never earned, matching the adaptive-weighting
+  intent the mode was built with. Moves are announced plainly on
+  screen and logged (force_pilot_level raw event, with the moving
+  hand and finger in its detail).
 - promotion at 80 percent time-in-corridor over two runs, demotion
-  under 40 percent: the app's challenge-point convention (adaptive
-  mode holds a 65 to 80 percent band); no published staircase exists
-  for corridor tracking, so this is a design choice and says so.
+  under 40 percent, both judged on that finger's own recent runs
+  only: the app's challenge-point convention (adaptive mode holds a
+  65 to 80 percent band); no published staircase exists for corridor
+  tracking, so this is a design choice and says so.
 - visual gain 1.0 by default: gain magnifies the DISPLAYED error only
   (craft shows target + gain x error). Archer 2017 shows gain shifts
   patient error substantially, so it is a per-block config lever, is
@@ -423,7 +429,9 @@ class ForcePilotMode:
                  rest_s: float,
                  score_cfg: ScoreConfig,
                  seed: int = 0,
-                 demo_trials: int | None = None) -> None:
+                 demo_trials: int | None = None,
+                 level_by_hf: dict[tuple[str, int], int] | None = None
+                 ) -> None:
         self.engine = engine
         self.hands = {h: list(v)[:4] for h, v in lanes_by_hand.items() if v}
         if not self.hands:
@@ -434,8 +442,36 @@ class ForcePilotMode:
         self.freq_ceiling_by_level = [float(x) for x in freq_ceiling_by_level]
         self.max_level = min(len(self.corridor_hw_by_level),
                              len(self.freq_ceiling_by_level))
-        self.level = max(1, min(int(level), self.max_level))
-        self.level_start = self.level
+        # Difficulty is per (hand, finger), not one shared value: a
+        # strong finger promoting must never drag a finger that has
+        # never played into a harder corridor, and a weak finger
+        # demoting must never soften the corridor for a finger that
+        # is coping fine. level_by_hf carries any state from a prior
+        # block (same pattern as the other adaptive modes keying
+        # their difficulty state per unit of play, e.g. buzz_hunt's
+        # per-hand staircases); a combo missing from it starts at the
+        # configured `level`. self.level/.corridor_hw below are a
+        # live mirror of whichever (hand, finger) is currently
+        # playing, updated by _prepare_run and _move_level, kept only
+        # because the screen and draw_run_params read them as scalars.
+        default_level = max(1, min(int(level), self.max_level))
+        carried = dict(level_by_hf or {})
+        self._level_by_hf: dict[tuple[str, int], int] = {}
+        self._level_start_by_hf: dict[tuple[str, int], int] = {}
+        self._level_trace_by_hf: dict[tuple[str, int], list[int]] = {}
+        self._recent_tic_by_hf: dict[tuple[str, int], list[float]] = {}
+        for hand in self.hand_names:
+            for f in range(4):
+                key = (hand, f)
+                lvl = carried.get(key)
+                if not isinstance(lvl, int) or lvl < 1:
+                    lvl = default_level
+                lvl = max(1, min(lvl, self.max_level))
+                self._level_by_hf[key] = lvl
+                self._level_start_by_hf[key] = lvl
+                self._level_trace_by_hf[key] = [lvl]
+        self.level = default_level
+        self.level_start = default_level
         self.span_pct = float(span_pct)
         self.base_pct = float(base_pct)
         self.plateau_pct = float(plateau_pct)
@@ -542,8 +578,6 @@ class ForcePilotMode:
         self.ring_state: list[bool | None] = []
         self.level_msg: str = ""
         self._last_result: dict | None = None
-        self._level_trace: list[int] = [self.level]
-        self._recent_tic: list[float] = []
         self._records: list[RunRecord] = []
 
         # Live readouts the screen draws from.
@@ -702,6 +736,11 @@ class ForcePilotMode:
             use = None
         self.finger = self._finger_sched[self.hand].next(use)
         self.lane = self.hands[self.hand][self.finger]
+        # Difficulty is this finger's own state, not whatever the
+        # previous run's finger had drifted to. self.level is only a
+        # scalar mirror of _level_by_hf[(hand, finger)] for the run
+        # that is about to play; _move_level writes both back.
+        self.level = self._level_by_hf[(self.hand, self.finger)]
         self.trial_counter += 1
         self.run_seed = self.rng.randrange(2 ** 32)
         self._build_run_plan()
@@ -966,12 +1005,21 @@ class ForcePilotMode:
     def _move_level(self, tic: float) -> None:
         """Difficulty on the brief's two axes at once: the level index
         picks both the corridor half-width and the waveform bandwidth.
-        Announced plainly (level_msg shows on the rest and announce
-        screens) and logged, so no run's difficulty is ever implicit."""
-        self._recent_tic.append(tic)
+        State is per (hand, finger): the run just closed belongs to
+        self.hand/self.finger (this fires from _close_run before
+        _prepare_run advances to the next combo), so only THAT
+        finger's promotion history and level move. A strong finger's
+        streak must never promote a finger that has not played, and a
+        weak finger's miss must never soften the corridor for a
+        finger that is coping fine. Announced plainly (level_msg shows
+        on the rest and announce screens) and logged, so no run's
+        difficulty is ever implicit."""
+        key = (self.hand, self.finger)
+        recent = self._recent_tic_by_hf.setdefault(key, [])
+        recent.append(tic)
         moved = 0
-        if (len(self._recent_tic) >= 2
-                and min(self._recent_tic[-2:]) >= self.promote_frac
+        if (len(recent) >= 2
+                and min(recent[-2:]) >= self.promote_frac
                 and self.level < self.max_level):
             moved = 1
         elif tic < self.demote_frac and self.level > 1:
@@ -979,18 +1027,22 @@ class ForcePilotMode:
         if not moved:
             return
         self.level += moved
-        self._recent_tic.clear()
-        self._level_trace.append(self.level)
+        self._level_by_hf[key] = self.level
+        recent.clear()
+        self._level_trace_by_hf.setdefault(key, []).append(self.level)
         hw = self.corridor_hw_by_level[self.level - 1]
         word = "narrows" if moved > 0 else "widens"
+        finger_word = FINGER_WORDS[self.finger].lower()
         self.level_msg = (f"Corridor {word}: level {self.level} of "
-                          f"{self.max_level} ({hw:.0f}% wide each side)")
+                          f"{self.max_level} ({hw:.0f}% wide each side) "
+                          f"-- {self.hand} {finger_word}")
         raw = getattr(self.engine, "raw_logger", None)
         if raw:
             raw.queue_event(
                 "force_pilot_level",
                 detail=(f"level={self.level} hw_pct={hw} "
-                        f"runs_done={self.runs_done}"),
+                        f"runs_done={self.runs_done} hand={self.hand} "
+                        f"finger={self.finger + 1}"),
                 hand=self.engine.hand_mode)
 
     def _next_run(self, now: float) -> None:
@@ -1001,15 +1053,28 @@ class ForcePilotMode:
         self.phase = "done"
         self.end_reason = reason
         # Next block this app session starts where this one ended,
-        # like reaction's window level; a restart resets to config.
-        self.engine._force_pilot_level = self.level
+        # like reaction's window level, but one level per (hand,
+        # finger): the dict shape is the point, since the whole
+        # finding this fixes was one shared level flattening that
+        # per-finger state. A restart resets to config.
+        self.engine._force_pilot_levels = dict(self._level_by_hf)
         self.engine.finish_block()
 
     # ---- block summary -----------------------------------------------------
+    @staticmethod
+    def _hf_key(hand: str, finger: int) -> str:
+        return f"{hand}:{finger}"
+
     def block_stats(self) -> dict:
         """What finish_block folds into metadata.json, and what the
         results screen reads: per-finger tracking quality, the pooled
-        per-section errors and the best section in plain words."""
+        per-section errors and the best section in plain words.
+
+        Levels and the per-lane / per-section stats are broken out by
+        corridor level as well as by lane: a run played at the
+        easiest level and one at the hardest earn differently-scaled
+        outcomes for the same real tracking quality, so pooling them
+        without the level split would misrepresent both."""
         def _mean(vals):
             vals = [v for v in vals if v is not None]
             return round(sum(vals) / len(vals), 3) if vals else None
@@ -1017,25 +1082,51 @@ class ForcePilotMode:
         per_lane: dict[str, dict] = {}
         for lane in sorted({r.lane for r in self._records}):
             rs = [r for r in self._records if r.lane == lane]
+            by_level: dict[str, dict] = {}
+            for lvl in sorted({r.level for r in rs}):
+                lrs = [r for r in rs if r.level == lvl]
+                by_level[str(lvl)] = {
+                    "runs": len(lrs),
+                    "mae_pct": _mean([r.mae_pct for r in lrs]),
+                    "time_in_corridor": _mean([r.tic_frac for r in lrs]),
+                    "press_mae_pct": _mean([r.press_mae_pct for r in lrs]),
+                    "release_mae_pct": _mean([r.release_mae_pct
+                                              for r in lrs]),
+                }
             per_lane[str(lane)] = {
                 "runs": len(rs),
                 "mae_pct": _mean([r.mae_pct for r in rs]),
                 "time_in_corridor": _mean([r.tic_frac for r in rs]),
                 "press_mae_pct": _mean([r.press_mae_pct for r in rs]),
                 "release_mae_pct": _mean([r.release_mae_pct for r in rs]),
+                "by_level": by_level,
             }
         section_mae: dict[str, float | None] = {}
         for name in SECTION_LABELS:
             vals = [r.section_mae.get(name) for r in self._records]
             section_mae[name] = _mean(vals)
+        section_mae_by_level: dict[str, dict] = {}
+        for lvl in sorted({r.level for r in self._records}):
+            lrs = [r for r in self._records if r.level == lvl]
+            section_mae_by_level[str(lvl)] = {
+                name: _mean([r.section_mae.get(name) for r in lrs])
+                for name in SECTION_LABELS
+            }
         best = None
         scored_secs = {n: v for n, v in section_mae.items()
                        if v is not None}
         if scored_secs:
             best = SECTION_LABELS[min(scored_secs, key=scored_secs.get)]
+        levels = {
+            self._hf_key(hand, finger): {
+                "start": self._level_start_by_hf[(hand, finger)],
+                "final": self._level_by_hf[(hand, finger)],
+                "trace": list(self._level_trace_by_hf[(hand, finger)]),
+            }
+            for hand in self.hand_names for finger in range(4)
+        }
         return {
-            "levels": {"start": self.level_start, "final": self.level,
-                       "trace": list(self._level_trace)},
+            "levels": levels,
             "visual_gain": self.visual_gain,
             "hands": self.hand_names,
             "runs": len(self._records),
@@ -1054,6 +1145,7 @@ class ForcePilotMode:
                 "rings_total": sum(r.rings_total for r in self._records),
             },
             "section_mae_pct": section_mae,
+            "section_mae_pct_by_level": section_mae_by_level,
             "best_section": best,
             "demo": self.demo,
             "end_reason": self.end_reason,

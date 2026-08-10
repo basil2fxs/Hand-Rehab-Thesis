@@ -643,8 +643,11 @@ pattern:
   warmup_trials: 20
   # Take 1 is mixed-up material every session: it tracks how fast the
   # patient is in general, so later sessions can tell "faster overall"
-  # apart from "knows the riff".
-  random_block_trials: 60
+  # apart from "knows the riff". A multiple of 8 so the shuffle-bag
+  # balances both hands exactly in bimanual play, not just the 4-lane
+  # unilateral case; changing this away from a multiple of 8 still
+  # runs, but bimanual hand balance is then only within one trial.
+  random_block_trials: 64
   # How many unfamiliar sequences the patient's pool holds. Which two
   # a session uses rotates block to block so none of them gets
   # familiar. Some participants' material only admits 3; the pool
