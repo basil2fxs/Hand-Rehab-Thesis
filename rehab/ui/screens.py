@@ -22,7 +22,8 @@ from .widgets import (
     Button, Card, FloatingText, LaneStrip, Layout, Slider, TextInput,
     ToggleMenu,
     FONT_TITLE, FONT_H1, FONT_H2, FONT_BODY, FONT_SMALL,
-    BUTTON_H, BUTTON_W, PADDING, draw_text, make_font,
+    BUTTON_H, BUTTON_W, PADDING, draw_text, keyboard_controls_lines,
+    make_font,
 )
 
 if TYPE_CHECKING:
@@ -187,7 +188,7 @@ class TitleScreen(Screen):
         "      Rhythm  (one full song, press on the beat)",
         "      Mirror  (40 trials, both hands together)",
         "3. Training modes as prescribed for the participant:",
-        "      Patterns, Chords, Syllables, Force Pilot, Lighthouse,",
+        "      Muscle Memory, Chords, Syllables, Force Pilot, Lighthouse,",
         "      Buzz Hunt",
         "4. Finish every block. Quitting early leaves gaps in the data.",
     ]
@@ -604,11 +605,14 @@ class ModeSelectScreen(Screen):
          "React fast as you can. Eye-to-hand speed."),
         ("adaptive", "Adaptive",
          "Difficulty adjusts to hold the 70-80% band."),
-        # The pattern card must not mention that a sequence repeats:
-        # the patient can read this screen, and explicit knowledge of
-        # the sequence impairs the implicit learning the mode measures
-        # (Boyd and Winstein 2003/2004; see modes/pattern.py).
-        ("pattern", "Patterns",
+        # The pattern card must not mention that a sequence repeats, or
+        # even use the word "pattern": the patient can read this
+        # screen, and explicit knowledge of the sequence impairs the
+        # implicit learning the mode measures (Boyd and Winstein
+        # 2003/2004; see modes/pattern.py). Titled "Muscle Memory"
+        # rather than "Patterns" for the same reason (audit finding
+        # #10) -- the internal mode key stays "pattern".
+        ("pattern", "Muscle Memory",
          "Record takes of a riff. Muscle memory."),
         ("chords", "Chords",
          "Press 2-4 fingers together. Independence."),
@@ -1612,7 +1616,13 @@ class GameplayScreen(Screen):
         # colour. Keeps the visual identity from the mode-select
         # cards consistent so a therapist glancing at the screen
         # knows which mode is running without reading text.
-        mode_label = self.engine.current_block.title().upper()
+        # "pattern" reads as "MUSCLE MEMORY" here too (audit finding
+        # #10) -- the in-play pill must match the mode-select card and
+        # results pill, or the patient sees the word "pattern" on the
+        # one screen they're staring at for the whole session.
+        mode_label = ("MUSCLE MEMORY"
+                      if self.engine.current_block == "pattern"
+                      else self.engine.current_block.title().upper())
         mf = self.layout.font(FONT_SMALL + 2)
         mt_label = mf.render(mode_label, True, (255, 255, 255))
         pill_pad_x = 12
@@ -1709,8 +1719,12 @@ class GameplayScreen(Screen):
         for p in self._popups:
             p.draw(surf, self.layout)
 
-        # No footer hint. Patient is using the Arduino sensor device, so
-        # any on-screen mention of keyboard shortcuts would be noise.
+        # Corner Controls note: only drawn in keyboard-fallback sessions
+        # (see keyboard_controls_lines), silent on the real sensor device
+        # where the comment above used to claim this legend would only
+        # be noise -- that premise is false whenever the Arduino isn't
+        # actually connected (audit finding #110).
+        self._draw_controls_note(surf)
 
         # Pre-start countdown card. Drawn near-last so it sits over the
         # lanes and reads as the clear "wait, don't press yet" focal
@@ -1721,6 +1735,24 @@ class GameplayScreen(Screen):
 
         if self.engine.paused:
             self._draw_paused_overlay(surf)
+
+    def _draw_controls_note(self, surf: pygame.Surface) -> None:
+        """Corner Controls note for keyboard-fallback sessions, shared
+        with SyllablesScreen and RhythmScreen via
+        widgets.keyboard_controls_lines. Empty (draws nothing) whenever
+        the source is the real sensors."""
+        lines = keyboard_controls_lines(self.engine, self.engine.mode)
+        if not lines:
+            return
+        pf = self.layout.font(FONT_SMALL)
+        right = self.layout.width - 24
+        y = self.layout.height - 22 - 18 * len(lines)
+        head = pf.render("Controls", True, self.theme.muted)
+        surf.blit(head, head.get_rect(topright=(right, y - 20)))
+        for line in lines:
+            t = pf.render(line, True, self.theme.muted)
+            surf.blit(t, t.get_rect(topright=(right, y)))
+            y += 18
 
     def _draw_countdown_card(self, surf: pygame.Surface,
                              remaining: float) -> None:
@@ -2851,8 +2883,21 @@ class RhythmScreen(Screen):
                           self.theme, self.layout, pt=140,
                           centre=True, colour=accent)
 
-        # No keyboard hints on screen. The patient is meant to be using
-        # the Arduino device by this point.
+        # Corner Controls note: silent on the real sensor device, drawn
+        # only in keyboard-fallback sessions (audit finding #110 --
+        # the old comment here assumed the Arduino is always connected
+        # by this point, which is false in a keyboard-fallback session).
+        lines = keyboard_controls_lines(self.engine, self.engine.mode)
+        if lines:
+            pf = self.layout.font(FONT_SMALL)
+            right = self.layout.width - 24
+            y = self.layout.height - 22 - 18 * len(lines)
+            head = pf.render("Controls", True, self.theme.muted)
+            surf.blit(head, head.get_rect(topright=(right, y - 20)))
+            for line in lines:
+                t = pf.render(line, True, self.theme.muted)
+                surf.blit(t, t.get_rect(topright=(right, y)))
+                y += 18
 
         if self.engine.paused:
             overlay = pygame.Surface(
@@ -3497,6 +3542,28 @@ class ResultsScreen(Screen):
                 return None
         return None
 
+    def _reaction_summary(self) -> dict | None:
+        """The reaction section of the block summary, or None for
+        every other mode. Same read path as _force_pilot_summary:
+        session.block_summary first, live mode stats as fallback."""
+        if str(getattr(self.engine, "current_block", "")) != "reaction":
+            return None
+        summary = getattr(getattr(self.engine, "session", None),
+                          "block_summary", None)
+        if isinstance(summary, dict):
+            rx = summary.get("reaction")
+            if isinstance(rx, dict):
+                return rx
+        stats_fn = getattr(getattr(self.engine, "mode", None),
+                           "block_stats", None)
+        if callable(stats_fn):
+            try:
+                rx = stats_fn()
+                return rx if isinstance(rx, dict) else None
+            except Exception:
+                return None
+        return None
+
     def _lighthouse_summary(self) -> dict | None:
         """The lighthouse section of the block summary, or None for
         every other mode. Same read path as _force_pilot_summary:
@@ -3537,6 +3604,50 @@ class ResultsScreen(Screen):
             try:
                 bh = stats_fn()
                 return bh if isinstance(bh, dict) else None
+            except Exception:
+                return None
+        return None
+
+    def _pattern_summary(self) -> dict | None:
+        """The pattern section of the block summary, or None for every
+        other mode. Same read path as _force_pilot_summary:
+        session.block_summary first, live mode stats as fallback."""
+        if str(getattr(self.engine, "current_block", "")) != "pattern":
+            return None
+        summary = getattr(getattr(self.engine, "session", None),
+                          "block_summary", None)
+        if isinstance(summary, dict):
+            pat = summary.get("pattern")
+            if isinstance(pat, dict):
+                return pat
+        stats_fn = getattr(getattr(self.engine, "mode", None),
+                           "block_stats", None)
+        if callable(stats_fn):
+            try:
+                pat = stats_fn()
+                return pat if isinstance(pat, dict) else None
+            except Exception:
+                return None
+        return None
+
+    def _chords_summary(self) -> dict | None:
+        """The chords section of the block summary, or None for every
+        other mode. Same read path as _force_pilot_summary:
+        session.block_summary first, live mode stats as fallback."""
+        if str(getattr(self.engine, "current_block", "")) != "chords":
+            return None
+        summary = getattr(getattr(self.engine, "session", None),
+                          "block_summary", None)
+        if isinstance(summary, dict):
+            ch = summary.get("chords")
+            if isinstance(ch, dict):
+                return ch
+        stats_fn = getattr(getattr(self.engine, "mode", None),
+                           "block_stats", None)
+        if callable(stats_fn):
+            try:
+                ch = stats_fn()
+                return ch if isinstance(ch, dict) else None
             except Exception:
                 return None
         return None
@@ -3738,8 +3849,13 @@ class ResultsScreen(Screen):
         pygame.draw.rect(surf, mode_accent, bar_rect, border_radius=2)
         # Mode pill top-right, same furniture as the in-play screens.
         # Underscores come out as spaces so force_pilot reads as the
-        # mode's on-screen name, not its config key.
-        mode_label = block_name.replace("_", " ").upper()
+        # mode's on-screen name, not its config key. "pattern" is a
+        # special case: the mode-select card is titled "Muscle Memory"
+        # so the patient never sees the word "pattern" (audit finding
+        # #10), and the results pill has to say the same thing or the
+        # rename leaks right back in on the very next screen.
+        mode_label = ("MUSCLE MEMORY" if block_name.lower() == "pattern"
+                      else block_name.replace("_", " ").upper())
         mf = self.layout.font(FONT_SMALL + 2)
         mt_label = mf.render(mode_label, True, (255, 255, 255))
         pill_rect = pygame.Rect(0, 0, mt_label.get_width() + 24,
@@ -3796,6 +3912,9 @@ class ResultsScreen(Screen):
         fp = self._force_pilot_summary()
         lh = self._lighthouse_summary()
         bh = self._buzz_hunt_summary()
+        rx = self._reaction_summary()
+        pat = self._pattern_summary()
+        ch = self._chords_summary()
         avg_rt = self.engine.overall_mean_rt()
         best_rt = self.engine.overall_best_rt()
         avg_str = f"{avg_rt:.0f} ms" if avg_rt > 0 else "n/a"
@@ -3894,6 +4013,126 @@ class ResultsScreen(Screen):
                 ("GAP",
                  (f"{gap_ms:.0f} ms" if gap_ms is not None else "n/a"),
                  self.theme.foreground),
+            ]
+        elif pat is not None:
+            # Pattern's own docstring (WHAT THE PATIENT SEES) is
+            # explicit that "RT numbers are never shown": Boyd and
+            # Winstein found explicit sequence knowledge impairs
+            # implicit learning after stroke, and an RT number here
+            # would show the patient exactly the anticipation reward
+            # the mode is trying not to teach (audit finding #9). Cards
+            # stay accuracy-flavoured: takes completed and stars earned
+            # are the same feedback the between-take rest screen gives.
+            per_take = [t for t in (pat.get("per_take") or [])
+                        if isinstance(t, dict) and t.get("kind") != "warmup"]
+            n_takes = len(per_take)
+            total_stars = sum(
+                (3 if (t.get("accuracy") or 0) >= 0.95 else
+                 2 if (t.get("accuracy") or 0) >= 0.85 else
+                 1 if (t.get("accuracy") or 0) >= 0.70 else 0)
+                for t in per_take)
+            n_correct = sum(int(round((t.get("accuracy") or 0)
+                                       * (t.get("n") or 0)))
+                            for t in per_take)
+            n_total = sum(t.get("n") or 0 for t in per_take)
+            overall_acc = (n_correct / n_total) if n_total else None
+            acc_str = (f"{overall_acc * 100:.0f}%"
+                       if overall_acc is not None else "n/a")
+            cards = [
+                ("SCORE", f"{int(round(self.engine.score * entry))}",
+                 self.theme.accent),
+                ("TAKES", f"{n_takes}", self.theme.success),
+                ("ACCURACY", acc_str, self.theme.foreground),
+                ("MISSES", f"{int(round(self.engine.misses * entry))}",
+                 self.theme.error),
+                ("STARS EARNED", f"{total_stars} / {n_takes * 3}",
+                 self.theme.success),
+                ("STREAK", f"{self.engine.hit_streak}",
+                 self.theme.foreground),
+            ]
+        elif rx is not None:
+            # Reaction's own research case (reaction.py's module
+            # docstring, Ratcliff 1993; Whelan 2008) names the median
+            # as the headline because RT distributions are
+            # right-skewed and a mean gets dragged by lapses; AVG RT
+            # was the only figure shown here, so the headline never
+            # matched the design. p10 (the mode's "best consistent
+            # speed") replaces raw BEST RT for the same reason.
+            median_rt = rx.get("median_rt_ms")
+            p10_rt = rx.get("p10_rt_ms")
+            median_str = (f"{median_rt:.0f} ms"
+                          if median_rt is not None else "n/a")
+            p10_str = f"{p10_rt:.0f} ms" if p10_rt is not None else "n/a"
+            # Choice-RT accuracy below 80% means the patient is
+            # guessing a favourite finger fast rather than responding,
+            # and the RT that survives is not interpretable (the
+            # brief's threshold; reaction.py names accuracy "a
+            # headline metric for choice RT"). Below 90% is still
+            # worth a soft flag. Simple sub-mode has no wrong-choice
+            # concept so accuracy is None there and the card is
+            # skipped in favour of MISSES.
+            accuracy = rx.get("accuracy")
+            acc_colour = self.theme.foreground
+            acc_str = "n/a"
+            if accuracy is not None:
+                acc_str = f"{accuracy * 100:.0f}%"
+                if accuracy < 0.80:
+                    acc_colour = self.theme.error
+                elif accuracy < 0.90:
+                    acc_colour = self.theme.warning
+                else:
+                    acc_colour = self.theme.success
+            fifth = (("ACCURACY", acc_str, acc_colour)
+                     if accuracy is not None
+                     else ("FASTEST (P10)", p10_str, self.theme.success))
+            sixth = (("FASTEST (P10)", p10_str, self.theme.success)
+                     if accuracy is not None
+                     else ("AVG RT (not headline)", avg_str,
+                           self.theme.muted))
+            cards = [
+                ("SCORE", f"{int(round(self.engine.score * entry))}",
+                 self.theme.accent),
+                ("HITS", f"{int(round(self.engine.hits * entry))}",
+                 self.theme.success),
+                ("MEDIAN RT", median_str, self.theme.foreground),
+                ("MISSES", f"{int(round(self.engine.misses * entry))}",
+                 self.theme.error),
+                fifth,
+                sixth,
+            ]
+        elif ch is not None:
+            # Chords has its own outcome vocabulary (audit finding
+            # #23): the generic HIT RATE counts every non-Miss, which
+            # includes late chords, measured leak fails, broken holds
+            # and over-force trials as "hits", and AVG RT mixes probe
+            # RTs with chord completion times on a per-lane chart keyed
+            # to each chord's lowest lane. Cards here read the mode's
+            # own classes instead: only "hit" is a clean chord, ER is
+            # the trained cross-talk quantity, and leak fails / over
+            # -force are shown as counts rather than folded into a
+            # misleadingly generic hit rate.
+            classes = ch.get("outcome_classes") or {}
+            n_all = sum(int(v) for v in classes.values())
+            clean_hits = int(classes.get("hit", 0))
+            clean_rate = (clean_hits / n_all) if n_all else None
+            clean_str = (f"{clean_rate * 100:.0f}%"
+                        if clean_rate is not None else "n/a")
+            median_er = ch.get("median_er")
+            er_str = (f"{median_er * 100:.0f}%"
+                      if median_er is not None else "n/a")
+            level_highest = ch.get("level_highest")
+            leak_fails = int(classes.get("leak_fail", 0))
+            over_force = int(ch.get("over_force_trials") or 0)
+            cards = [
+                ("SCORE", f"{int(round(self.engine.score * entry))}",
+                 self.theme.accent),
+                ("CLEAN HIT RATE", clean_str, self.theme.success),
+                ("MEDIAN ER", er_str, self.theme.foreground),
+                ("HIGHEST LEVEL",
+                 (f"{level_highest}" if level_highest is not None
+                  else "n/a"), self.theme.foreground),
+                ("LEAK FAILS", f"{leak_fails}", self.theme.error),
+                ("OVER-FORCE", f"{over_force}", self.theme.warning),
             ]
         else:
             cards = [
@@ -4037,6 +4276,40 @@ class ResultsScreen(Screen):
                 "MISREFERRALS PER FINGER",
                 misref, unit="count", high_is_bad=True,
             )
+        elif ch is not None:
+            # The generic per-lane RT/miss chart keys every trial on
+            # the row's single lane column, which for a chord is the
+            # LOWEST target finger (chords.py's own "known
+            # simplification"): 7 of the 11 chords contain the index
+            # finger, so the chart would concentrate every chord's
+            # timing on lane 1 regardless of which finger actually lagged.
+            # Rather than draw a chart that reads as per-finger data
+            # and is not, this panel is skipped for chords; the clean
+            # per-chord and per-hand numbers are in the cards above and
+            # in the session_analysis notebook's chord chapter.
+            note_rect = pygame.Rect(left_x, chart_y,
+                                    total_chart_w, chart_h)
+            body = tuple(max(0, min(255, c - 8))
+                        for c in self.theme.background)
+            pygame.draw.rect(surf, body, note_rect, border_radius=14)
+            outline = tuple(max(0, c - 30) for c in self.theme.background)
+            pygame.draw.rect(surf, outline, note_rect, 1, border_radius=14)
+            note_lines = [
+                "Per-finger timing charts don't apply to chords: each",
+                "row is keyed to one lane per chord, not one per",
+                "finger. See the cards above, or the chords chapter in",
+                "the session analysis notebook, for the per-chord and",
+                "per-hand numbers.",
+            ]
+            line_h = FONT_SMALL + 6
+            start_y = note_rect.centery - (len(note_lines) - 1) * line_h // 2
+            for i, line in enumerate(note_lines):
+                draw_text(
+                    surf, line,
+                    (note_rect.centerx, start_y + i * line_h),
+                    self.theme, self.layout, pt=FONT_SMALL, centre=True,
+                    colour=self.theme.muted,
+                )
         else:
             # `getattr` defaults shield against an engine state where
             # the per-lane dicts weren't populated (a fresh engine

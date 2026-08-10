@@ -436,6 +436,11 @@ class ReactionMode:
             label="Early", error_type="false_start",
             pressed_lane=ev.lane,
             stimulus=f"{self.sub_mode};fp={self._fp_scheduled:.3f}",
+            # No cued lane to derive a side from (the stimulus never
+            # fired), but the PRESSING lane did happen and resolves to
+            # a board via _lane_hand, so a both-hands block still gets
+            # a real right/left attribution instead of "both".
+            hand=self._hand_for_lane(ev.lane),
         )
         self._stim_due = None
         self._set_message("Too soon", self.false_start_feedback_s,
@@ -449,6 +454,7 @@ class ReactionMode:
             label="Early", error_type="catch_false_start",
             pressed_lane=ev.lane,
             stimulus=f"{self.sub_mode};catch",
+            hand=self._hand_for_lane(ev.lane),
         )
         self._catch_until = None
         self._set_message("Too soon", self.false_start_feedback_s,
@@ -480,6 +486,15 @@ class ReactionMode:
         if trial is None:
             return
         rt_ms = (ev.t_perf - trial.stim_t_perf) * 1000.0
+        # update() pops the whole press queue before it checks the
+        # phase=='stim' timeout, so a press that lands after the
+        # response window but before the next tick reaches here
+        # instead of the timeout branch. Close it the same way the
+        # timeout would (a scorable Miss, no RT), so no row's own
+        # rt_ms ever exceeds the timeout_ms it was censored against.
+        if rt_ms > self.response_window * 1000.0:
+            self._close_scorable(None, now)
+            return
         # Sub-cut presses are anticipations whichever finger fired: a
         # press that fast cannot be a response to the stimulus, so the
         # finger carries no information (Basner and Dinges 2011).

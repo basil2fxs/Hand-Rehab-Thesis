@@ -308,6 +308,22 @@ class LayoutTests(unittest.TestCase):
                 pairs = zip(seg.fingers, seg.fingers[1:])
                 self.assertTrue(all(a != b for a, b in pairs))
 
+    def test_lopsided_warmup_does_not_warn_but_lopsided_random_does(
+            self) -> None:
+        # Audit finding #14: the shipped warmup (20 trials) is not a
+        # multiple of 4 lanes, so with the warning unconditional every
+        # default bimanual block cried wolf about a segment that is
+        # excluded from analysis anyway, training the researcher to
+        # ignore the same warning firing about B1, where it matters.
+        import logging
+        log = logging.getLogger("rehab.game.modes.pattern")
+        with self.assertNoLogs(log, level="WARNING"):
+            _build_mode(warmup_trials=21, random_block_trials=64)
+        with self.assertLogs(log, level="WARNING") as cm:
+            _build_mode(warmup_trials=20, random_block_trials=61)
+        self.assertIn("random block", cm.output[0])
+        self.assertNotIn("warmup block", cm.output[0])
+
 
 class BimanualLayoutTests(unittest.TestCase):
     """The 8-lane session layout bilateral play depends on: the K8
@@ -496,6 +512,42 @@ class TrialFlowTests(unittest.TestCase):
         engine.apply_idle_press_penalty.assert_not_called()
         engine.apply_wrong_press_penalty.assert_not_called()
         engine.log_trial.assert_not_called()
+
+    def test_rsi_presses_are_counted_per_take_not_lost(self) -> None:
+        # Audit finding #12: an RSI press writes no trial row (there is
+        # no trial to attach it to, see the test above) but must not
+        # vanish entirely -- it is the one countable trace of
+        # anticipatory pressing, an early marker of explicit sequence
+        # knowledge, and a keyboard-only session has no raw.csv sample
+        # stream to recover it from otherwise.
+        _, mode = _build_mode()
+        seq_i = _seg_index(mode, "seq")
+        mode._seg_idx = seq_i
+        mode._trial_in_seg = 0
+        # Two anticipatory presses before the cue fires.
+        mode._handle_press(_press(lane=0, t=10.0), now=10.0)
+        mode._handle_press(_press(lane=1, t=10.05), now=10.05)
+        self.assertEqual(mode._rsi_presses[seq_i], 2)
+        # One ordinary trial in the same take, so it shows up in
+        # block_stats' per_take list (gated on seg.n_done > 0).
+        mode._fire(now=10.1)
+        mode._handle_press(_press(lane=mode.active.lane, t=10.4),
+                           now=10.4)
+        take = next(t for t in mode.block_stats()["per_take"]
+                   if t["block"] == mode.segments[seq_i].label
+                   and t["kind"] == "seq")
+        self.assertEqual(take["n_rsi_presses"], 2)
+        # A take with no RSI presses reports zero, not a missing key.
+        other_seq_i = _seg_index(mode, "seq", nth=1)
+        mode._seg_idx = other_seq_i
+        mode._trial_in_seg = 0
+        mode._fire(now=20.0)
+        mode._handle_press(_press(lane=mode.active.lane, t=20.3),
+                           now=20.3)
+        other_take = next(t for t in mode.block_stats()["per_take"]
+                          if t["block"] == mode.segments[other_seq_i].label
+                          and t["kind"] == "seq")
+        self.assertEqual(other_take["n_rsi_presses"], 0)
 
     def test_pause_shifts_inflight_deadlines(self) -> None:
         _, mode = _build_mode()
@@ -686,6 +738,170 @@ class KeyboardFallbackTests(unittest.TestCase):
         mode.handle_event(e)
         self.assertEqual(len(mode._presses), 1)
         self.assertEqual(mode._presses[0].lane, 0)
+
+    def test_keyboard_session_shows_the_controls_hint(self) -> None:
+        # Audit finding #110: GameplayScreen (which pattern uses) drew
+        # no keyboard legend at all, unconditionally, on the stale
+        # premise that the patient is always on the Arduino. A
+        # keyboard-fallback pattern session must get the same corner
+        # Controls note syllables already had, and a real sensor
+        # session must still get none of it.
+        import pygame
+        pygame.init()
+        try:
+            from rehab.config import Config
+            from rehab.game.engine import GameEngine
+            from rehab.hardware.keyboard_source import KeyboardOnlySource
+            from rehab.ui.widgets import keyboard_controls_lines
+            with tempfile.TemporaryDirectory() as td:
+                cfg = Config.load()
+                cfg.data["ui"]["resolution"] = [640, 480]
+                cfg.data["audio"]["enabled"] = False
+                cfg.data["session"]["data_dir"] = td
+                cfg.data["report"] = {"enabled": False}
+                cfg.data["session"]["participant"] = "Basil"
+                eng = GameEngine(cfg, KeyboardOnlySource())
+                eng.session.participant = "Basil"
+                eng._screens = {"gameplay": MagicMock(lanes=[]),
+                                "results": MagicMock()}
+                eng.begin_pattern_block()
+                lines = keyboard_controls_lines(eng, eng.mode)
+                self.assertEqual(lines, ["Right hand: J K L ;"])
+        finally:
+            pygame.quit()
+        # A real-sensor session (provides_samples True) gets nothing.
+        engine, mode = _build_mode()
+        engine.source = MagicMock(provides_samples=True)
+        self.assertEqual(keyboard_controls_lines(engine, mode), [])
+
+
+class ScoreCapTests(unittest.TestCase):
+    """Audit finding #11: the default ScoreConfig gives its top tier
+    (Perfect, 10 points) to RTs at or under 100 ms, exactly the
+    anticipation region the mode's own RT stats exclude as
+    non-stimulus-driven. Rewarding that response class more than an
+    honest one biases the whole session toward guessing. Engine-level
+    because the cap is applied where the mode is built
+    (GameEngine.begin_pattern_block), not in PatternMode itself."""
+
+    def test_pattern_block_caps_perfect_points_to_good(self) -> None:
+        import pygame
+        pygame.init()
+        try:
+            from rehab.config import Config
+            from rehab.game.engine import GameEngine
+            from rehab.hardware.keyboard_source import KeyboardOnlySource
+            with tempfile.TemporaryDirectory() as td:
+                cfg = Config.load()
+                cfg.data["ui"]["resolution"] = [640, 480]
+                cfg.data["audio"]["enabled"] = False
+                cfg.data["session"]["data_dir"] = td
+                cfg.data["report"] = {"enabled": False}
+                cfg.data["session"]["participant"] = "Basil"
+                eng = GameEngine(cfg, KeyboardOnlySource())
+                eng.session.participant = "Basil"
+                eng._screens = {"gameplay": MagicMock(lanes=[]),
+                                "results": MagicMock()}
+                # The suite-wide default rewards a sub-100 ms guess
+                # more than any other mode's honest response.
+                self.assertGreater(eng.score_cfg.perfect_points,
+                                   eng.score_cfg.good_points)
+                eng.begin_pattern_block()
+                self.assertEqual(eng.mode.score_cfg.perfect_points,
+                                 eng.mode.score_cfg.good_points)
+                # The tier label is untouched -- only the points are
+                # levelled (the docstring's own distinction).
+                from rehab.game.scoring import classify
+                fast = classify(50.0, eng.mode.score_cfg)
+                self.assertEqual(fast.label, "Perfect")
+                self.assertEqual(fast.points, eng.mode.score_cfg.good_points)
+        finally:
+            pygame.quit()
+
+
+class ResultsScreenPatientFacingTests(unittest.TestCase):
+    """Two docstring promises the shipped Results screen used to break
+    (audit findings #9 and #10): 'RT numbers are never shown' (Boyd and
+    Winstein -- explicit sequence knowledge impairs the implicit
+    learning this mode measures) and nothing patient-facing names the
+    concept of a repeating pattern."""
+
+    def _draw_pattern_results(self, block_summary_pattern):
+        import pygame
+        from rehab.config import Config
+        from rehab.game.engine import GameEngine
+        from rehab.ui.screens import ResultsScreen
+        from rehab.ui.theme import get as get_theme
+        from rehab.ui.widgets import Layout
+        pygame.init()
+        pygame.font.init()
+        pygame.display.set_mode((1280, 800))
+        e = GameEngine.__new__(GameEngine)
+        e.cfg = Config.load()
+        e.theme = get_theme("clinical")
+        e.layout = Layout(1280, 800, 1.0)
+        e.hits, e.misses, e.score = 500, 20, 1200
+        e.current_block, e.hand_mode = "pattern", "right"
+        e.best_streak, e.per_lane_stats = 5, {}
+        e.hit_streak = 5
+        e.last_session_root = None
+        e.mode = None
+        e.session = type("S", (), {
+            "participant": "T", "age": "60",
+            "block_summary": {"pattern": block_summary_pattern}})()
+        e.stop_all_motors = lambda *a, **k: None
+        # A 50 ms anticipation dragging the pool, exactly the finding
+        # #9 failure scenario: BEST RT would read a sub-100 ms guess.
+        e.overall_mean_rt = lambda: 55.0
+        e.overall_best_rt = lambda: 50.0
+        r = ResultsScreen(e)
+        r._shown_t = 1.0
+        cards = []
+        r._draw_stat_card = (
+            lambda surf, rect, lbl, val, col: cards.append((lbl, val)))
+        surf = pygame.Surface((1280, 800))
+        r.draw(surf)
+        pygame.quit()
+        return cards
+
+    def test_no_rt_cards_on_a_pattern_results_screen(self) -> None:
+        cards = self._draw_pattern_results({
+            "per_take": [
+                {"block": "2", "kind": "seq", "n": 60, "accuracy": 0.97},
+            ],
+        })
+        labels = [lbl for lbl, _ in cards]
+        self.assertNotIn("AVG RT", labels)
+        self.assertNotIn("BEST RT", labels)
+        # The BEST RT value the mean/best functions would have supplied
+        # (55/50 ms, an anticipation) must not appear under any label.
+        self.assertNotIn("50 ms", [v for _, v in cards])
+        self.assertNotIn("55 ms", [v for _, v in cards])
+
+    def test_pattern_results_show_accuracy_not_speed(self) -> None:
+        cards = self._draw_pattern_results({
+            "per_take": [
+                {"block": "2", "kind": "seq", "n": 60, "accuracy": 0.90},
+                {"block": "3", "kind": "seq", "n": 60, "accuracy": 0.80},
+            ],
+        })
+        labels = [lbl for lbl, _ in cards]
+        self.assertIn("TAKES", labels)
+        self.assertIn("ACCURACY", labels)
+        self.assertIn("STARS EARNED", labels)
+
+    def test_mode_select_card_and_results_pill_never_say_pattern(
+            self) -> None:
+        # audit finding #10: config/default.yaml calls never showing
+        # the patient the word "pattern" non-negotiable, but the mode
+        # card, title-screen overlay and results pill all used to say
+        # "Patterns"/"PATTERN".
+        from rehab.ui.screens import ModeSelectScreen, TitleScreen
+        mode_titles = dict((k, t) for k, t, _ in ModeSelectScreen.MODES)
+        self.assertEqual(mode_titles["pattern"], "Muscle Memory")
+        overlay_text = "\n".join(TitleScreen.INFO_STEPS)
+        self.assertNotIn("Patterns", overlay_text)
+        self.assertIn("Muscle Memory", overlay_text)
 
 
 class EngineIntegrationTests(unittest.TestCase):

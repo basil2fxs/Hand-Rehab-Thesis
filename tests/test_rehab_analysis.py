@@ -340,6 +340,127 @@ def _write_reaction_session(root, name, *, right_rt_ms, left_rt_ms,
     return folder
 
 
+def _write_chords_session(root, name, *, day, clock="090000",
+                          per_chord, outcome_classes, per_hand=None,
+                          over_force_trials=0, median_settle_ms=None,
+                          sub_trials=None):
+    """One chords game folder with a shaped block_summary.chords (the
+    fields block_stats() actually writes, per_chord now carrying
+    w_ms per audit finding #21): enough trials.csv rows to pass
+    chord_frame's emptiness check, real analysis reads block_summary.
+    `per_chord` is [{"hand","chord","w_ms","d","n","hit_rate",
+    "median_span_ms","median_er"}, ...]; `sub_trials` (optional) is
+    the per-trial "trials" list block_stats() stores, for the C6
+    within-session trajectory."""
+    folder = Path(root) / day / f"{name}_{clock}_chords"
+    folder.mkdir(parents=True, exist_ok=True)
+    rows = []
+    trial_id = 0
+    hands_seen = sorted({row["hand"] for row in per_chord})
+    for hand in hands_seen:
+        board = 0 if hand == "right" else 1
+        lanes = [board * 4, board * 4 + 1]
+        for _ in range(2):
+            trial_id += 1
+            rows.append({
+                **{c: "" for c in REACTION_COLS},
+                "iso_ts": f"{day}T09:00:00", "block_t_s": trial_id * 3.0,
+                "participant": name, "age": 30, "hand": hand,
+                "block": "chords", "trial": trial_id, "lane": lanes[0] + 1,
+                "stimulus": "+".join(str(l + 1) for l in lanes),
+                "correct_keys": ",".join(str(l + 1) for l in lanes),
+                "early_late": "Good", "points": 10, "feedback": "Chord!",
+                "keys_pressed": "+".join(str(l + 1) for l in lanes),
+                "num_presses": 2, "had_incorrect_press": "FALSE",
+                "streak_at_trial": trial_id, "in_recovery": "FALSE",
+                "timeout_ms": 3000, "stim_delivered": "TRUE",
+                "force_window_peaks": ""})
+    with open(folder / "trials.csv", "w", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=REACTION_COLS)
+        w.writeheader()
+        w.writerows(rows)
+
+    chords_summary = {
+        "hand": "both" if len(hands_seen) > 1 else hands_seen[0],
+        "hands": hands_seen,
+        "outcome_classes": outcome_classes,
+        "over_force_trials": over_force_trials,
+        "median_settle_ms": median_settle_ms,
+        "per_chord": per_chord,
+        "per_hand": per_hand or {},
+        "trials": sub_trials or [],
+    }
+    meta = {
+        "participant": name, "hand": chords_summary["hand"],
+        "started_at": f"{day}T09:00:00",
+        "source_name": "MultiSerial(both)",
+        "block_summary": {
+            "block": "chords", "status": "completed",
+            "trials": trial_id, "hit_rate": 1.0, "avg_rt_ms": 300.0,
+            "duration_s": 60.0, "paused_total_s": 0.0,
+            "force_unit": "sensor counts",
+            "chords": chords_summary,
+        },
+        "calibration": {},
+    }
+    (folder / "metadata.json").write_text(json.dumps(meta))
+    return folder
+
+
+def _write_syllables_session(root, name, *, day, words, gaps=None,
+                             clock="090000", hand="right"):
+    """One syllables game folder with level-4 words packed into the
+    stimulus cell the way syllables.py._pack_stimulus writes them.
+
+    `words` is a list of (word, stress_idx, [(lane1, t_ms, peak), ...])
+    tuples, lane1 1-indexed exactly as the mode packs it. `gaps` is the
+    right hand's 4-finger calibration gap list, or None for no
+    calibration recorded (peak_force_cal stays unusable)."""
+    folder = Path(root) / day / f"{name}_{clock}_syllables"
+    folder.mkdir(parents=True, exist_ok=True)
+    rows = []
+    for trial_id, (word, stress_idx, taps) in enumerate(words, start=1):
+        taps_s = ",".join(
+            f"{lane1}:{t_ms:.1f}:" + (f"{peak:.1f}" if peak is not None
+                                      else "")
+            for lane1, t_ms, peak in taps)
+        stimulus = ";".join([
+            word, "lvl=4", "band=C", f"nsyll=2", f"stress={stress_idx}",
+            "paced=0", "ioi=500", "replay=0", "err=ok", f"taps={taps_s}",
+        ])
+        rows.append({
+            **{c: "" for c in REACTION_COLS},
+            "iso_ts": f"{day}T09:00:00", "block_t_s": trial_id * 3.0,
+            "participant": name, "age": 30, "hand": hand,
+            "block": "syllables", "trial": trial_id, "lane": taps[0][0],
+            "stimulus": stimulus,
+            "early_late": "Great", "points": 6, "feedback": "Great",
+            "keys_pressed": ",".join(str(t[0]) for t in taps),
+            "correct_keys": ",".join(str(t[0]) for t in taps),
+            "num_presses": len(taps), "had_incorrect_press": "FALSE",
+            "streak_at_trial": trial_id, "in_recovery": "FALSE",
+            "timeout_ms": 6000, "stim_delivered": "TRUE",
+        })
+    with open(folder / "trials.csv", "w", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=REACTION_COLS)
+        w.writeheader()
+        w.writerows(rows)
+
+    meta = {
+        "participant": name, "hand": hand,
+        "started_at": f"{day}T09:00:00",
+        "source_name": "MultiSerial(right@/dev/cu.usbserial-test)",
+        "block_summary": {"block": "syllables", "status": "completed",
+                          "trials": len(rows), "hit_rate": 1.0,
+                          "avg_rt_ms": 400.0, "duration_s": 60.0,
+                          "paused_total_s": 0.0,
+                          "force_unit": "sensor counts"},
+        "calibration": (_calibration(gaps) if gaps is not None else {}),
+    }
+    (folder / "metadata.json").write_text(json.dumps(meta))
+    return folder
+
+
 def _write_pattern_session(root, name, *, day, rsi_ms=500, timeout_ms=2000,
                            cue_flags="BS/--", clock="090000",
                            seq_rt_ms=300.0, probe_rt_ms=420.0,
@@ -771,3 +892,364 @@ class TestPatternConsistencyCheck:
         ra.sec_pattern_srtt(ctx["trials"], ctx["metas"])
         out = capsys.readouterr().out
         assert "SPLIT" not in out and "WARNING" not in out
+
+
+def _write_pattern_flanked_probe_session(root, name, *, day,
+                                         before_rts, probe_rts, after_rts,
+                                         clock="090000"):
+    """One pattern game: a flanker take BEFORE the probe, the probe
+    itself, and a flanker take AFTER, each with its own list of RTs
+    (one trial per RT). Lets a test give the two flankers different
+    trial counts and means, which is exactly the case where the
+    trial-count-weighted pool and the mean-of-take-means disagree
+    (audit finding #15)."""
+    folder = Path(root) / day / f"{name}_{clock}_pattern"
+    folder.mkdir(parents=True, exist_ok=True)
+    rows = []
+    trial = 0
+
+    def add_take(take_label, kind, soc, rts, pattern_trial):
+        nonlocal trial
+        for rt in rts:
+            trial += 1
+            rows.append({
+                **{c: "" for c in REACTION_COLS},
+                "iso_ts": f"{day}T09:00:00", "block_t_s": float(trial),
+                "participant": name, "age": 30, "hand": "right",
+                "block": "pattern", "trial": trial, "lane": 1,
+                "time_difference_ms": rt, "early_late": "Good",
+                "points": 3, "feedback": "Good", "keys_pressed": 1,
+                "correct_keys": 1, "num_presses": 1,
+                "had_incorrect_press": "FALSE", "streak_at_trial": 1,
+                "in_recovery": "FALSE", "timeout_ms": 2000,
+                "stim_delivered": "TRUE", "cue_flags": "BS/--",
+                "stimulus": f"{kind};b={take_label};soc={soc};pos=0",
+                "pattern_trial": "TRUE" if pattern_trial else "FALSE",
+            })
+
+    add_take("4", "seq", "trained", before_rts, True)
+    add_take("5", "probe", "p0", probe_rts, False)
+    add_take("6", "seq", "trained", after_rts, True)
+
+    with open(folder / "trials.csv", "w", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=REACTION_COLS)
+        w.writeheader()
+        w.writerows(rows)
+
+    fl_mean = (sum(before_rts) / len(before_rts)
+              + sum(after_rts) / len(after_rts)) / 2
+    mode_style_score = sum(probe_rts) / len(probe_rts) - fl_mean
+    meta = {
+        "participant": name, "hand": "right",
+        "started_at": f"{day}T09:00:00",
+        "source_name": "MultiSerial(right@/dev/cu.usbserial-test)",
+        "block_summary": {
+            "block": "pattern", "status": "completed", "trials": trial,
+            "hit_rate": 1.0, "avg_rt_ms": sum(probe_rts) / len(probe_rts),
+            "duration_s": 60.0, "paused_total_s": 0.0,
+            "force_unit": "sensor counts",
+            "pattern": {
+                "rsi_ms": 500, "timeout_ms": 2000,
+                "session_learning_score_ms": round(mode_style_score, 1),
+                "end_reason": "completed", "short_session": False,
+                "demo": False,
+            },
+        },
+        "calibration": {},
+    }
+    (folder / "metadata.json").write_text(json.dumps(meta))
+    return folder, mode_style_score
+
+
+class TestPatternLearningScoreMatchesModeConvention:
+    """block_stats() (pattern.py) scores a probe as the mean of its two
+    FLANKING TAKE MEANS (a block-mean average), the classic SRTT
+    convention; pattern_learning_scores() used to pool both flankers'
+    raw trial RTs into one series first, which is trial-count-weighted
+    instead. The two agree only when both flankers have the same
+    number of trials -- exactly the case every other test in this file
+    happens to use, which is how this survived. A short/truncated
+    flanker (attrition, an abandoned take) makes them diverge (audit
+    finding #15)."""
+
+    def test_score_matches_mode_style_with_uneven_flanker_counts(
+            self, ra, tmp_path):
+        # Flanker BEFORE the probe has only 2 trials (as if the take
+        # got cut short), flanker AFTER has 8: a trial-count-weighted
+        # pool skews hard toward the AFTER take's mean, but the mode's
+        # own block-mean convention weighs both takes equally.
+        folder, mode_style_score = _write_pattern_flanked_probe_session(
+            tmp_path, "P1", day="2026-08-01",
+            before_rts=[300.0, 320.0],
+            probe_rts=[500.0, 520.0, 480.0, 510.0],
+            after_rts=[200.0, 210.0, 205.0, 195.0,
+                      200.0, 210.0, 205.0, 195.0])
+        ctx = ra.prepare("all", root=tmp_path)
+        takes = ra.pattern_take_table(ctx["trials"])
+        scores = ra.pattern_learning_scores(takes)
+        assert len(scores) == 1
+        nb_score = scores["learning_score_ms"].iloc[0]
+        assert nb_score == pytest.approx(mode_style_score, abs=0.1), (
+            f"notebook score {nb_score} does not match the mode's own "
+            f"block-mean convention {mode_style_score}; "
+            "pattern_learning_scores has drifted back to pooling "
+            "flanker trials by count instead of averaging take means")
+
+    def test_matches_mode_convention_even_with_equal_flanker_counts(
+            self, ra, tmp_path):
+        # Sanity check: with equal-sized flankers pooled and
+        # mean-of-means agree, so this alone would not have caught the
+        # bug -- the uneven-count test above is the one that matters.
+        folder, mode_style_score = _write_pattern_flanked_probe_session(
+            tmp_path, "P2", day="2026-08-01",
+            before_rts=[300.0, 320.0, 310.0, 305.0],
+            probe_rts=[500.0, 520.0],
+            after_rts=[200.0, 210.0, 205.0, 195.0])
+        ctx = ra.prepare("all", root=tmp_path)
+        takes = ra.pattern_take_table(ctx["trials"])
+        scores = ra.pattern_learning_scores(takes)
+        nb_score = scores["learning_score_ms"].iloc[0]
+        assert nb_score == pytest.approx(mode_style_score, abs=0.1)
+
+
+class TestPatternDemoBlocksExcluded:
+    """Test Mode's pattern demo block (block_summary.pattern.demo=True)
+    is a supervisor-facing miniature built to write both pattern_trial
+    values, not a measurement. sec_pattern_srtt used to pool it in
+    alongside real sessions with nothing reading the flag at all
+    (audit finding #16)."""
+
+    def test_demo_game_excluded_from_curve_and_scores(self, ra, tmp_path,
+                                                       capsys):
+        real_folder = _write_pattern_session(tmp_path, "P1",
+                                             day="2026-08-01")
+        demo_folder = Path(tmp_path) / "2026-08-01" / "P1_091500_pattern"
+        demo_folder.mkdir(parents=True, exist_ok=True)
+        # Copy the real session's row shape but mark the block a demo.
+        import shutil
+        shutil.copy(real_folder / "trials.csv",
+                    demo_folder / "trials.csv")
+        meta = json.loads((real_folder / "metadata.json").read_text())
+        meta["block_summary"]["pattern"]["demo"] = True
+        (demo_folder / "metadata.json").write_text(json.dumps(meta))
+
+        ctx = ra.prepare("all", root=tmp_path)
+        takes = ra.sec_pattern_srtt(ctx["trials"], ctx["metas"])
+        out = capsys.readouterr().out
+        assert "EXCLUDED" in out and "demo" in out.lower()
+        demo_game = demo_folder.parent.name + "/" + demo_folder.name
+        assert demo_game not in takes["game"].unique()
+        real_game = real_folder.parent.name + "/" + real_folder.name
+        assert real_game in takes["game"].unique()
+
+    def test_selection_of_only_demo_games_reports_nothing(self, ra,
+                                                           tmp_path,
+                                                           capsys):
+        real_folder = _write_pattern_session(tmp_path, "P1",
+                                             day="2026-08-01")
+        meta = json.loads((real_folder / "metadata.json").read_text())
+        meta["block_summary"]["pattern"]["demo"] = True
+        (real_folder / "metadata.json").write_text(json.dumps(meta))
+
+        ctx = ra.prepare("all", root=tmp_path)
+        result = ra.sec_pattern_srtt(ctx["trials"], ctx["metas"])
+        out = capsys.readouterr().out
+        assert "EXCLUDED" in out
+        assert result is None
+
+
+class TestChordsMode:
+    """Chords chapter fixes from the 2026-08-08 audit: #21 (per-chord
+    hit rate pooled across synchrony windows can mistake a window
+    artefact for the enslaving pattern), #20 (missing data-quality,
+    across-session learning-curve and within-session subsections)."""
+
+    def _run(self, ra, tmp_path, capsys, **kwargs):
+        _write_chords_session(tmp_path, "P1", day="2026-08-01", **kwargs)
+        ctx = ra.prepare("all", root=tmp_path)
+        ra.sec_chords(ctx["trials"], ctx["metas"], calset=None)
+        return capsys.readouterr().out
+
+    def test_per_chord_table_splits_the_rank_test_by_window(
+            self, ra, tmp_path, capsys):
+        # A skilled player climbing the ladder meets the easy chord
+        # (RP, D=2) at the wide W=250 window and the hard chord (IR,
+        # D=6) first at the tight W=100 window. Pooled, IR's low hit
+        # rate at the hardest window would read as agreement with D;
+        # per window, both windows are near-ceiling and there is not
+        # enough spread to call a rank result either way.
+        out = self._run(
+            ra, tmp_path, capsys,
+            per_chord=[
+                {"hand": "right", "chord": "RP", "w_ms": 250.0, "d": 2.0,
+                 "n": 10, "hit_rate": 0.95, "median_span_ms": 40.0,
+                 "median_er": 0.1},
+                {"hand": "right", "chord": "IR", "w_ms": 100.0, "d": 6.0,
+                 "n": 10, "hit_rate": 0.90, "median_span_ms": 60.0,
+                 "median_er": 0.15},
+            ],
+            outcome_classes={"hit": 18, "late_chord": 2},
+        )
+        assert "W=250ms" in out
+        assert "W=100ms" in out
+        # Pooling both chords into one rank test would have been the
+        # old behaviour; the new per-window groups have too few chords
+        # each to compute a rank at all, which is the honest answer.
+        assert "predicted-vs-actual ordering cannot be tested" in out
+
+    def test_data_quality_section_prints_outcome_classes(
+            self, ra, tmp_path, capsys):
+        out = self._run(
+            ra, tmp_path, capsys,
+            per_chord=[
+                {"hand": "right", "chord": "RP", "w_ms": 250.0, "d": 2.0,
+                 "n": 4, "hit_rate": 0.5, "median_span_ms": 40.0,
+                 "median_er": 0.1},
+            ],
+            outcome_classes={"hit": 2, "leak_fail": 1, "over_force": 1},
+            over_force_trials=1, median_settle_ms=540.0,
+        )
+        assert "data quality" in out
+        assert "leak_fail" in out
+        assert "over-force trials" in out
+        assert "540" in out
+
+    def test_single_session_reports_no_learning_curve_yet(
+            self, ra, tmp_path, capsys):
+        out = self._run(
+            ra, tmp_path, capsys,
+            per_chord=[
+                {"hand": "right", "chord": "RP", "w_ms": 250.0, "d": 2.0,
+                 "n": 4, "hit_rate": 0.5, "median_span_ms": 40.0,
+                 "median_er": 0.1},
+            ],
+            outcome_classes={"hit": 2},
+            per_hand={"right": {"median_er": 0.1}},
+        )
+        assert "Only one session with chords" in out
+
+    def test_two_sessions_report_data_but_too_few_for_a_trend(
+            self, ra, tmp_path, capsys):
+        # A linear slope from two points is meaningless; the section
+        # should say so rather than fit one anyway.
+        _write_chords_session(
+            tmp_path, "P1", day="2026-08-01",
+            per_chord=[{"hand": "right", "chord": "RP", "w_ms": 250.0,
+                       "d": 2.0, "n": 4, "hit_rate": 0.5,
+                       "median_span_ms": 40.0, "median_er": 0.30}],
+            outcome_classes={"hit": 2},
+            per_hand={"right": {"median_er": 0.30}})
+        _write_chords_session(
+            tmp_path, "P1", day="2026-08-05",
+            per_chord=[{"hand": "right", "chord": "RP", "w_ms": 250.0,
+                       "d": 2.0, "n": 4, "hit_rate": 0.9,
+                       "median_span_ms": 40.0, "median_er": 0.12}],
+            outcome_classes={"hit": 4},
+            per_hand={"right": {"median_er": 0.12}})
+        ctx = ra.prepare("all", root=tmp_path)
+        ra.sec_chords(ctx["trials"], ctx["metas"], calset=None)
+        out = capsys.readouterr().out
+        assert "fewer than 3 sessions" in out
+
+    def test_three_sessions_print_a_falling_er_trend(
+            self, ra, tmp_path, capsys):
+        for day, er in (("2026-08-01", 0.30), ("2026-08-03", 0.20),
+                        ("2026-08-05", 0.12)):
+            _write_chords_session(
+                tmp_path, "P1", day=day,
+                per_chord=[{"hand": "right", "chord": "RP", "w_ms": 250.0,
+                           "d": 2.0, "n": 4, "hit_rate": 0.5,
+                           "median_span_ms": 40.0, "median_er": er}],
+                outcome_classes={"hit": 2},
+                per_hand={"right": {"median_er": er}})
+        ctx = ra.prepare("all", root=tmp_path)
+        ra.sec_chords(ctx["trials"], ctx["metas"], calset=None)
+        out = capsys.readouterr().out
+        assert "ER trend" in out
+        assert "-0." in out          # improving (falling) ER
+
+    def test_within_session_subblock_trajectory_reads_the_trials_list(
+            self, ra, tmp_path, capsys):
+        sub_trials = [
+            {"trial": i, "kind": "chord", "hand": "right", "chord": "RP",
+             "d": 2.0, "w_ms": 250.0,
+             "class": "hit" if i % 2 else "late_chord",
+             "span_ms": 40.0, "rt_ms": 300.0, "er": 0.1 + 0.01 * i,
+             "subblock": 1 + i // 4}
+            for i in range(1, 9)
+        ]
+        out = self._run(
+            ra, tmp_path, capsys,
+            per_chord=[
+                {"hand": "right", "chord": "RP", "w_ms": 250.0, "d": 2.0,
+                 "n": 8, "hit_rate": 0.5, "median_span_ms": 40.0,
+                 "median_er": 0.12},
+            ],
+            outcome_classes={"hit": 4, "late_chord": 4},
+            sub_trials=sub_trials,
+        )
+        # No exception and the "no sub-block data" fallback message did
+        # not fire, i.e. the subblock field on the stored trials list
+        # was actually read.
+        assert "No sub-block breakdown" not in out
+
+
+class TestSyllablesStressRatio:
+    """Fix for #28/#99 (2026-08-08 audit): the stress ratio used to be
+    peaks[stress] / median(ALL peaks including the stressed one). For a
+    2-syllable word that median is always the louder tap, so a
+    correctly accented word could never clear any criterion above 1.0.
+    The fix mirrors rehab/game/modes/syllables.py's _score_stress: the
+    reference is the median of the OTHER taps only, on each finger's
+    own calibrated light-press gap."""
+
+    def _ratios(self, ra, tmp_path, capsys, words, gaps=None):
+        _write_syllables_session(tmp_path, "P1", day="2026-08-01",
+                                 words=words, gaps=gaps)
+        ctx = ra.prepare("all", root=tmp_path)
+        ra.sec_syllables(ctx["trials"], ctx["metas"], ctx["calset"])
+        return capsys.readouterr().out
+
+    def test_strong_accent_on_a_two_syllable_word_clears_the_criterion(
+            self, ra, tmp_path, capsys):
+        # galah, stress on the second syllable: a soft first tap (0.5x
+        # the calibration gap) and a hard second tap (3.0x). Every pad
+        # shares the same gap here, isolating the self-referential
+        # median bug from the cross-finger normalisation fix below.
+        gaps = [49.0, 49.0, 49.0, 49.0]
+        out = self._ratios(
+            ra, tmp_path, capsys,
+            words=[("galah", 1,
+                    [(1, 400.0, 0.5 * gaps[0]), (2, 800.0, 3.0 * gaps[1])])],
+            gaps=gaps)
+        assert "stressed-tap ratio median 6.00" in out
+        # The old formula pinned this at 1.0 ("no accent was produced")
+        # for every 2-syllable word no matter how hard the child
+        # accented; it must not print that reading here.
+        assert "median 1.00" not in out
+
+    def test_cross_finger_pad_gain_is_normalised_before_the_ratio(
+            self, ra, tmp_path, capsys):
+        # Same raw ADC counts (115) on both taps, but the stressed tap
+        # is on a much more sensitive pad (gap 49) than the unstressed
+        # tap (gap 115). Un-normalised, equal raw counts read as ratio
+        # 1.0 ("no accent"); normalised by each finger's own gap the
+        # stressed tap is 115/49 = 2.347x its own reference, a real
+        # accent the raw-counts comparison could never show.
+        gaps = [49.0, 115.0, 75.0, 115.0]
+        out = self._ratios(
+            ra, tmp_path, capsys,
+            words=[("galah", 0,
+                    [(1, 400.0, 115.0), (2, 800.0, 115.0)])],
+            gaps=gaps)
+        assert "stressed-tap ratio median 2.35" in out
+
+    def test_no_calibration_skips_the_ratio_instead_of_using_raw_counts(
+            self, ra, tmp_path, capsys):
+        out = self._ratios(
+            ra, tmp_path, capsys,
+            words=[("galah", 1,
+                    [(1, 400.0, 15.0), (2, 800.0, 90.0)])],
+            gaps=None)
+        assert "1 words dropped: no calibration" in out
+        assert "stressed-tap ratio median" not in out

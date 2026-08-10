@@ -61,11 +61,10 @@ from typing import TYPE_CHECKING
 
 import pygame
 
-from ..game.modes._keys import keymap_for_hand
 from .screens import ModeSelectScreen, Screen
 from .widgets import (
     FONT_BODY, FONT_H1, FONT_H2, FONT_SMALL, FONT_TITLE,
-    draw_text, make_font,
+    draw_text, keyboard_controls_lines, make_font,
 )
 
 if TYPE_CHECKING:
@@ -683,30 +682,12 @@ class SyllablesScreen(Screen):
         """Keyboard hints for the corner note, one line per playing
         hand, in keyboard reading order. Empty when the input is the
         real sensors: fingers sit on the pads, a legend would only
-        pull the child's eyes off the blocks."""
-        source = getattr(self.engine, "source", None)
-        if source is None or getattr(source, "provides_samples", True):
-            return []
-        km = self.engine.cfg.get(
-            keymap_for_hand(self.engine.hand_mode), {})
-        if not km:
-            return []
-        by_lane = {lane: key for key, lane in km.items()}
-        hands = getattr(mode, "hands", None)
-        if not isinstance(hands, dict) or not hands:
-            hands = {"right": list(getattr(mode, "lanes", [0, 1, 2, 3]))}
-        lines: list[str] = []
-        for hand in ("left", "right"):
-            lanes = hands.get(hand)
-            if not lanes:
-                continue
-            # Left hand reads right-to-left on the keyboard (a s d f is
-            # little to index), so reverse it into reading order.
-            order = list(reversed(lanes)) if hand == "left" else list(lanes)
-            keys = [by_lane.get(lane, "?") for lane in order]
-            keys = [k.replace("semicolon", ";").upper() for k in keys]
-            lines.append(f"{hand.capitalize()} hand: {' '.join(keys)}")
-        return lines
+        pull the child's eyes off the blocks.
+
+        Delegates to the shared widgets.keyboard_controls_lines so
+        every gameplay screen renders the same convention (audit
+        finding #110)."""
+        return keyboard_controls_lines(self.engine, mode)
 
     def _draw_controls_note(self, surf: pygame.Surface, mode) -> None:
         lines = self.controls_lines(mode)

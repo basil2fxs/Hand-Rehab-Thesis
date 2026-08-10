@@ -118,6 +118,35 @@ class FalseStartTests(unittest.TestCase):
         # The attempt still counts toward the cap so a rough block ends.
         self.assertEqual(mode.trial_counter, 1)
 
+    def test_false_start_hand_follows_the_pressing_lane(self) -> None:
+        # A foreperiod false start fires before any board is cued, so
+        # there is no cued lane to derive a side from, but the
+        # PRESSING lane did happen. In a both-hands block the row must
+        # carry the real board the press landed on, not the block's
+        # generic hand_mode="both", or a bilateral response-inhibition
+        # split cannot use the hand column.
+        engine, mode = _build_mode(
+            lanes_by_hand={"right": [0, 1, 2, 3], "left": [4, 5, 6, 7]})
+        engine.hand_mode = "both"
+        engine._lane_hand = lambda lane: "left" if lane >= 4 else "right"
+        mode._begin_trial(now=10.0)
+        mode._handle_press(_press(lane=5, t=10.5), now=10.5)
+        kwargs = engine.log_reaction_event.call_args.kwargs
+        self.assertEqual(kwargs["hand"], "left")
+
+    def test_catch_false_start_hand_follows_the_pressing_lane(self) -> None:
+        engine, mode = _build_mode(
+            lanes_by_hand={"right": [0, 1, 2, 3], "left": [4, 5, 6, 7]},
+            catch_rate=1.0)
+        engine.hand_mode = "both"
+        engine._lane_hand = lambda lane: "left" if lane >= 4 else "right"
+        mode._begin_trial(now=10.0)
+        self.assertEqual(mode._phase, "catch")
+        mode._handle_press(_press(lane=6, t=10.5), now=10.5)
+        kwargs = engine.log_reaction_event.call_args.kwargs
+        self.assertEqual(kwargs["error_type"], "catch_false_start")
+        self.assertEqual(kwargs["hand"], "left")
+
     def test_sub_cut_press_after_stimulus_is_an_anticipation(self) -> None:
         # Under 100 ms the press cannot be a response to the stimulus
         # (Basner and Dinges 2011), whichever finger fired.
@@ -173,6 +202,26 @@ class ScorableTrialTests(unittest.TestCase):
         mode._handle_press(_press(lane=target, t=12.7), now=12.7)
         self.assertEqual(mode.n_valid, 1)
         self.assertEqual(mode.n_lapse, 1)
+
+    def test_press_past_the_response_window_is_a_timeout_not_a_late_hit(
+            self) -> None:
+        # update() pops the whole press queue before it checks the
+        # phase=='stim' timeout branch, so a press landing after the
+        # window but before the next tick used to reach
+        # _press_on_stim and log a scorable "Late" row whose own
+        # rt_ms exceeded the response_window it was meant to be
+        # censored against. It must close the same way a real timeout
+        # does: a Miss with no RT.
+        engine, mode = _build_mode(response_window_s=2.0)
+        mode._begin_trial(now=10.0)
+        mode._fire(now=12.0)
+        target = mode.active.lane
+        mode._handle_press(_press(lane=target, t=12.0 + 2.15), now=12.0 + 2.15)
+        outcome = engine.log_trial.call_args[0][1]
+        self.assertEqual(outcome.label, "Miss")
+        self.assertIsNone(outcome.rt_ms)
+        self.assertEqual(mode.n_miss, 1)
+        self.assertEqual(mode.n_valid, 0)
 
     def test_choice_wrong_finger_follows_classic_miss_convention(self) -> None:
         # In choice mode a wrong finger consumes the trial (accuracy is
@@ -584,6 +633,70 @@ class SetupScreenGatingTests(unittest.TestCase):
             ss.pace_slider.handle_event.assert_called_once()
         finally:
             pygame.quit()
+
+
+class ResultsScreenMedianCardTests(unittest.TestCase):
+    """reaction.py's own research case (Ratcliff 1993; Whelan 2008)
+    names the median RT as the headline because the distribution is
+    right-skewed and a mean gets dragged by lapses, but the Results
+    screen used to fall into the generic card set and show only AVG
+    RT (a mean). A reaction block must show MEDIAN RT, sourced from
+    the block summary, not the mode-agnostic mean."""
+
+    def _draw_reaction_results(self, block_summary_reaction):
+        import pygame
+        from rehab.config import Config
+        from rehab.game.engine import GameEngine
+        from rehab.ui.screens import ResultsScreen
+        from rehab.ui.theme import get as get_theme
+        from rehab.ui.widgets import Layout
+        pygame.init()
+        pygame.font.init()
+        pygame.display.set_mode((1280, 800))
+        e = GameEngine.__new__(GameEngine)
+        e.cfg = Config.load()
+        e.theme = get_theme("clinical")
+        e.layout = Layout(1280, 800, 1.0)
+        e.hits, e.misses, e.score = 18, 6, 1200
+        e.current_block, e.hand_mode = "reaction", "right"
+        e.best_streak, e.per_lane_stats = 3, {}
+        e.last_session_root = None
+        e.mode = None
+        e.session = type("S", (), {
+            "participant": "T", "age": "60",
+            "block_summary": {"reaction": block_summary_reaction}})()
+        e.stop_all_motors = lambda *a, **k: None
+        e.overall_mean_rt = lambda: 298.5
+        e.overall_best_rt = lambda: 202.4
+        r = ResultsScreen(e)
+        r._shown_t = 1.0  # entry animation already finished
+        seen = []
+        r._draw_stat_card = (
+            lambda surf, rect, lbl, val, col: seen.append((lbl, val)))
+        surf = pygame.Surface((1280, 800))
+        r.draw(surf)
+        pygame.quit()
+        return seen
+
+    def test_median_rt_card_replaces_avg_rt_as_the_headline(self) -> None:
+        cards = self._draw_reaction_results({
+            "median_rt_ms": 202.4, "p10_rt_ms": 180.0, "accuracy": None,
+        })
+        labels = [lbl for lbl, _ in cards]
+        self.assertIn("MEDIAN RT", labels)
+        median_val = dict(cards)["MEDIAN RT"]
+        self.assertEqual(median_val, "202 ms")
+        # AVG RT (the mean, dragged by lapses in this scenario) must
+        # not be the number under the headline MEDIAN RT label.
+        self.assertNotEqual(median_val, "298 ms")
+
+    def test_choice_accuracy_shown_when_available(self) -> None:
+        cards = self._draw_reaction_results({
+            "median_rt_ms": 250.0, "p10_rt_ms": 200.0, "accuracy": 0.72,
+        })
+        labels = [lbl for lbl, _ in cards]
+        self.assertIn("ACCURACY", labels)
+        self.assertEqual(dict(cards)["ACCURACY"], "72%")
 
 
 if __name__ == "__main__":

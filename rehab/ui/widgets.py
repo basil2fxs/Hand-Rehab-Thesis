@@ -12,6 +12,7 @@ from typing import Callable
 
 import pygame
 
+from ..game.modes._keys import keymap_for_hand
 from .theme import Theme
 
 
@@ -653,6 +654,57 @@ def load_icon(path: str, size: int,
         raw = pygame.transform.flip(raw, True, False)
     _ICON_CACHE[key] = raw
     return raw
+
+
+def keyboard_controls_lines(engine, mode) -> list[str]:
+    """Keyboard hints for the corner Controls note, one line per playing
+    hand, in keyboard reading order. Empty when the input is the real
+    sensors: fingers sit on the pads, a legend would only be noise.
+
+    Shared by every gameplay screen (syllables, GameplayScreen,
+    RhythmScreen) so the keyboard-fallback convention reads the same
+    everywhere a keyboard session can land, not just syllables. Reads
+    `mode.hands` when the mode tracks hands explicitly (chords,
+    syllables); everything else falls back to `mode.lanes`, split
+    0-3 right / 4-7 left when there are eight lanes (the bimanual
+    convention used across the suite), or treated as one hand's four
+    lanes otherwise.
+    """
+    source = getattr(engine, "source", None)
+    if source is None or getattr(source, "provides_samples", True):
+        return []
+    km = engine.cfg.get(keymap_for_hand(engine.hand_mode), {})
+    if not km:
+        return []
+    by_lane = {lane: key for key, lane in km.items()}
+    hands = getattr(mode, "hands", None)
+    if not isinstance(hands, dict) or not hands:
+        raw_lanes = getattr(mode, "lanes", None)
+        if raw_lanes is None:
+            # Mode doesn't keep its own lane list (rhythm reads lanes
+            # off the beatmap / screen instead) -- fall back to the
+            # full lane set implied by hand_mode so a bilateral
+            # session still gets both hands' keys, not just four.
+            mode_lanes = (list(range(8)) if engine.hand_mode == "both"
+                          else list(range(4)))
+        else:
+            mode_lanes = list(raw_lanes)
+        if len(mode_lanes) > 4:
+            hands = {"right": mode_lanes[:4], "left": mode_lanes[4:]}
+        else:
+            hands = {"right": mode_lanes}
+    lines: list[str] = []
+    for hand in ("left", "right"):
+        lanes = hands.get(hand)
+        if not lanes:
+            continue
+        # Left hand reads right-to-left on the keyboard (a s d f is
+        # little to index), so reverse it into reading order.
+        order = list(reversed(lanes)) if hand == "left" else list(lanes)
+        keys = [by_lane.get(lane, "?") for lane in order]
+        keys = [k.replace("semicolon", ";").upper() for k in keys]
+        lines.append(f"{hand.capitalize()} hand: {' '.join(keys)}")
+    return lines
 
 
 class LaneStrip:

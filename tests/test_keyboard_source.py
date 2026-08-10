@@ -12,6 +12,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
+def _press(lane: int, t: float = 0.0):
+    from rehab.hardware.fsr_detector import PressEvent
+    return PressEvent(lane=lane, t_perf=t, value=0, baseline=0.0,
+                       hand="right")
+
+
 class KeyboardSourceContractTests(unittest.TestCase):
 
     def test_provides_samples_is_false(self) -> None:
@@ -268,6 +274,147 @@ class KeyboardAlwaysOnWithArduinoTests(unittest.TestCase):
             self.assertNotIn("not self.engine.source.provides_samples", src,
                               f"{module.__name__} still guards keyboard "
                               f"on provides_samples")
+
+
+class KeyboardStimNotFabricatedTests(unittest.TestCase):
+    """Regression for the keyboard-session hardware-failure fabrication
+    bug: cue.buzz_before defaults true, and KeyboardOnlySource.send_command
+    always returns False, so every trial in a keyboard-only session used
+    to log stim_delivered=FALSE and count as a stim_cue_failure, which
+    the notebook's exclusion_flags then read as "cue never delivered"
+    and excluded every trial. A keyboard session never has motors to
+    fail, so it must not read as one that does.
+    """
+
+    def _run_keyboard_reaction_block(self, n_trials: int = 3):
+        import csv
+        import json
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import MagicMock
+
+        import pygame
+        pygame.init()
+        try:
+            from rehab.config import Config
+            from rehab.game.engine import GameEngine
+            from rehab.hardware.keyboard_source import KeyboardOnlySource
+            with tempfile.TemporaryDirectory() as td:
+                cfg = Config.load()
+                cfg.data["ui"]["resolution"] = [640, 480]
+                cfg.data["audio"]["enabled"] = False
+                cfg.data["session"]["data_dir"] = td
+                cfg.data["report"] = {"enabled": False}
+                cfg.data["reaction"] = {"seed": 1234, "catch_rate": 0.0}
+                eng = GameEngine(cfg, KeyboardOnlySource())
+                gp = MagicMock()
+                gp.lanes = []
+                eng._screens = {"gameplay": gp, "results": MagicMock()}
+                eng.begin_reaction_block()
+                mode = eng.mode
+                t = 100.0
+                for _ in range(n_trials):
+                    mode._begin_trial(now=t)
+                    mode._fire(now=t + 2.0)
+                    target = mode.active.lane
+                    mode._handle_press(_press(target, t + 2.2), now=t + 2.2)
+                    t += 3.0
+                root = Path(eng.session_paths.root)
+                eng.finish_block()
+                with (root / "trials.csv").open() as f:
+                    rows = list(csv.DictReader(f))
+                meta = json.loads((root / "metadata.json").read_text())
+                return rows, meta
+        finally:
+            pygame.quit()
+
+    def test_keyboard_session_leaves_stim_delivered_blank(self) -> None:
+        rows, _ = self._run_keyboard_reaction_block()
+        self.assertEqual(len(rows), 3)
+        # None (blank in the CSV), not FALSE: distinct from a real
+        # hardware delivery failure.
+        for row in rows:
+            self.assertEqual(row["stim_delivered"], "",
+                              "keyboard session fabricated a hardware "
+                              "cue-delivery failure")
+
+    def test_keyboard_session_counts_zero_stim_cue_failures(self) -> None:
+        _, meta = self._run_keyboard_reaction_block()
+        self.assertEqual(meta["block_summary"]["stim_cue_failures"], 0)
+
+    def test_keyboard_session_does_not_warn_about_the_arduino(self) -> None:
+        with self.assertNoLogs("rehab.game.engine", level="WARNING"):
+            self._run_keyboard_reaction_block()
+
+    def test_real_hardware_failure_still_flags_stim_delivered_false(
+            self) -> None:
+        # The other half of the regression: a real source that refuses
+        # the stim command must still be caught, so the fix must gate
+        # on provides_samples, not remove the failure path entirely.
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import MagicMock
+
+        import pygame
+        pygame.init()
+        try:
+            from rehab.config import Config
+            from rehab.game.engine import GameEngine
+            from rehab.hardware.source import Source
+
+            class FailingArduino(Source):
+                """A real, connected source whose motor refuses every
+                STIM command (a dropped Arduino mid-block)."""
+
+                def start(self) -> None:
+                    pass
+
+                def stop(self) -> None:
+                    pass
+
+                def get_sample(self, timeout: float = 0.0):
+                    return None
+
+                def send_command(self, cmd: str) -> bool:
+                    return False
+
+                @property
+                def is_connected(self) -> bool:
+                    return True
+
+                @property
+                def provides_samples(self) -> bool:
+                    return True
+
+                @property
+                def name(self) -> str:
+                    return "FailingArduino"
+
+            with tempfile.TemporaryDirectory() as td:
+                cfg = Config.load()
+                cfg.data["ui"]["resolution"] = [640, 480]
+                cfg.data["audio"]["enabled"] = False
+                cfg.data["session"]["data_dir"] = td
+                cfg.data["report"] = {"enabled": False}
+                cfg.data["reaction"] = {"seed": 1234, "catch_rate": 0.0}
+                eng = GameEngine(cfg, FailingArduino())
+                gp = MagicMock()
+                gp.lanes = []
+                eng._screens = {"gameplay": gp, "results": MagicMock()}
+                eng.begin_reaction_block()
+                mode = eng.mode
+                mode._begin_trial(now=100.0)
+                mode._fire(now=102.0)
+                target = mode.active.lane
+                mode._handle_press(_press(target, 102.2), now=102.2)
+                root = Path(eng.session_paths.root)
+                eng.finish_block()
+                import csv
+                with (root / "trials.csv").open() as f:
+                    rows = list(csv.DictReader(f))
+                self.assertEqual(rows[0]["stim_delivered"], "FALSE")
+        finally:
+            pygame.quit()
 
 
 if __name__ == "__main__":

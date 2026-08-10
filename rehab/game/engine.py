@@ -3,6 +3,7 @@ per-hand FSR detectors (Thread 3 bilateral)."""
 from __future__ import annotations
 
 import copy
+import dataclasses
 import logging
 import random
 import os
@@ -1057,6 +1058,23 @@ class GameEngine:
                     )
                 except Exception:
                     pass
+            # Clear each detector's pressed state instead of leaving it
+            # latched at whatever it was the instant the samples
+            # stopped. Without this, a drop that happens with a finger
+            # down freezes that finger "pressed" forever (no more
+            # samples means no falling edge ever arrives to clear it),
+            # which chords.py's quiet gate reads as a hand that never
+            # rests, so no chord fires again and the on-screen prompt
+            # keeps saying "Relax your hand" for a problem relaxing
+            # cannot fix. Baseline and calibration are left alone: a
+            # brief drop should not force a recalibration on
+            # reconnect, only the live press latch is stale.
+            dets = getattr(self, "detectors", None)
+            if isinstance(dets, dict):
+                for det in dets.values():
+                    pressed = getattr(det, "pressed", None)
+                    if pressed:
+                        det.pressed = [False] * len(pressed)
         elif (not self._source_was_connected) and connected:
             log.info("Source %s reconnected.",
                       getattr(self.source, "name", "?"))
@@ -1760,7 +1778,17 @@ class GameEngine:
                 self.cfg.get("pattern.session_cap_min", 30)),
             short_session=bool(
                 self.cfg.get("pattern.short_session", False)),
-            score_cfg=self.score_cfg,
+            # Perfect (sub-100 ms) and the anticipation cut the mode's
+            # own RT stats apply (PatternMode.ANTICIPATION_CUT_MS) sit
+            # on the exact same boundary, so the default score_cfg
+            # rewards the response class the analysis discards --
+            # bigger points for guessing the next key than for actually
+            # responding to it. Perfect is capped down to Good's points
+            # for this mode only so the score no longer chases
+            # anticipation (audit finding #11); the tier label and
+            # timing thresholds are unchanged.
+            score_cfg=dataclasses.replace(
+                self.score_cfg, perfect_points=self.score_cfg.good_points),
             demo_trials=self._test_mode_trials(),
         )
         self._begin_block("pattern")
@@ -4038,9 +4066,14 @@ class GameEngine:
         # actually accepted by the hardware: if the Arduino drops out
         # mid-block the patient stops feeling the cue, and without this
         # the trials would look like ordinary misses instead of a
-        # hardware failure. None = motors disabled for this session.
+        # hardware failure. None = motors disabled for this session, OR
+        # the active source has no motors to fail (keyboard fallback).
+        # Skipping the attempt entirely on a keyboard-only source keeps
+        # stim_delivered=None distinct from a real delivery failure on
+        # real hardware, so a keyboard session does not fabricate a
+        # hardware-cue-failure signal for every trial.
         self._last_stim_delivered = None
-        if cues.buzz_before:
+        if cues.buzz_before and self.source.provides_samples:
             # Buzz the TARGET fingers so the patient feels which to
             # press. One board runs one motor at a time (_send_stim
             # stops a board before switching fingers), so the targets
@@ -4508,10 +4541,11 @@ class GameEngine:
         outcomes.
 
         `hand` is the same per-trial override log_trial takes: None
-        falls back to the block-level hand_mode, which is also the
-        only option when `lane` is None (a foreperiod or catch false
-        start fires before any board is cued, so there is no lane to
-        derive a side from).
+        falls back to the block-level hand_mode. `lane` being None (a
+        foreperiod or catch false start fires before any board is
+        cued) does not by itself mean there is no side to derive: the
+        caller can still resolve one from `pressed_lane`, the board
+        the false-start press actually landed on.
 
         log_trial is deliberately NOT reused for these. It counts
         every non-Miss row as a hit, extends the streak, and fires the

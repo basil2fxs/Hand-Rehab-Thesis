@@ -77,7 +77,8 @@ Johnson logic.
 
 BLOCK LAYOUT, one engine block = one session of takes:
     W    warm-up, 20 balanced-random trials, excluded from analysis
-    B1   60 random trials (general-speed baseline, tracked across days)
+    B1   64 random trials (general-speed baseline, tracked across days;
+         a multiple of 8 so bimanual hand balance holds exactly)
     B2-4 trained sequence, 5 cycles each (60 trials per take)
     B5   PROBE, untrained SOC, then a mandatory 60 s rest
     B6-8 trained sequence
@@ -107,7 +108,12 @@ first_incorrect_ms, and RT aggregates use correct trials only. Presses
 under 100 ms stay in the accuracy count but leave RT stats (they
 cannot be stimulus-driven), and correct RTs past mean + 2.5 SD within
 a take are trimmed from aggregates, both standard SRTT hygiene; raw
-rows log unfiltered.
+rows log unfiltered. A press that lands in the RSI gap between trials
+(no cue lit yet) is not penalised and writes no trial row -- there is
+no trial to attach it to -- but is counted per take as
+n_rsi_presses in block_stats, so anticipatory pressing is at least
+visible in metadata.json even though it cannot be recovered from
+trials.csv.
 
 WHAT THE PATIENT SEES. Takes and stars, never the word sequence:
 Boyd and Winstein (2003 Physical Therapy; 2004 Learning and Memory)
@@ -147,7 +153,14 @@ DEVIATIONS FROM THE RESEARCH BRIEF, where the plumbing wins:
   melody and note the cue_flags value. Either way it is logged.
 - engine.log_trial flashes the outcome tier (Perfect/Great/Good/Late)
   like every other mode. That is a speed hint but not an RT number;
-  accepted for consistency across the suite.
+  accepted for consistency across the suite. The Perfect tier's point
+  value is capped down to the Good tier's (engine.begin_pattern_block
+  builds a mode-specific ScoreConfig for this) because Perfect's
+  sub-100 ms window is exactly ANTICIPATION_CUT_MS, the region the RT
+  stats already exclude as non-stimulus-driven; without the cap the
+  score would reward the fastest possible guess more than an honest
+  response. The tier LABEL still shows "Perfect" on a fast press
+  (the flash is accepted above) -- only the points are levelled.
 - RT is logged for the CORRECT press (time_difference_ms), with the
   first wrong press in first_incorrect_ms, rather than first-press RT
   in one column; both are recoverable from the row.
@@ -164,6 +177,15 @@ DEVIATIONS FROM THE RESEARCH BRIEF, where the plumbing wins:
   identical cue mix, but the mix must stay fixed for a participant
   across all sessions, and cue_flags on every trial row is how the
   analysis verifies it did and splits blocks where it did not.
+- Stimulus onset is timestamped at the update tick that fires it
+  (PendingTrial.stim_t_perf), not at the next pygame flip; no flip
+  time or flip-tick delta is logged. This gives every RT an
+  unmeasurable 0 to 16.7 ms early-reference bias on top of the 60 Hz
+  quantisation already named above, and the display-timing sanity
+  check the research brief specifies cannot be run from these logs.
+  The probe-minus-flanker contrast survives because trained and probe
+  trials share the same bias, so this does not change the headline,
+  but it should not be claimed as flip-measured RT.
 """
 from __future__ import annotations
 
@@ -588,13 +610,21 @@ class PatternMode:
         # Per-trial record for block_stats: (segment index, correct,
         # rt_ms of the correct press or None).
         self._trials: list[tuple[int, bool, float | None]] = []
+        # RSI presses are not penalised (see _handle_press) but they
+        # were vanishing entirely -- not logged, not counted anywhere
+        # -- so a keyboard-only session left no trace of anticipatory
+        # pressing at all. Counted per take here and folded into
+        # block_stats so it is at least recoverable from metadata.json
+        # even though no trial row exists for it (audit finding #12).
+        self._rsi_presses: dict[int, int] = {}
 
     # ---- layout ------------------------------------------------------------
     def _build_layout(self, cycles: int, warmup_n: int,
                       random_n: int) -> list[Segment]:
         segs: list[Segment] = []
 
-        def random_fingers(n: int) -> list[int]:
+        def random_fingers(n: int, kind: str = "random",
+                          warn: bool = True) -> list[int]:
             # Shuffle-bag over every finger in play: equal counts, no
             # back-to-back repeats, fresh order every block. Balanced
             # per lane, which in bimanual play balances the hands too
@@ -604,13 +634,17 @@ class PatternMode:
             # not of the count, so a remainder can land unevenly across
             # the two hands. The shipped defaults are clean multiples
             # of both 4 and 8; a config change that breaks that gets
-            # flagged here rather than silently trusted.
-            if n % self.n_fingers != 0:
+            # flagged here rather than silently trusted. `warn` is off
+            # for the warmup block: it is excluded from analysis, so a
+            # lopsided warmup does not matter, and crying wolf about it
+            # trains the researcher to ignore the same warning firing
+            # about B1, where it does.
+            if warn and n % self.n_fingers != 0:
                 log.warning(
-                    "pattern random block: %d trials does not divide "
+                    "pattern %s block: %d trials does not divide "
                     "evenly across %d lanes; per-lane counts stay "
                     "within 1 of each other but hand balance is no "
-                    "longer guaranteed", n, self.n_fingers)
+                    "longer guaranteed", kind, n, self.n_fingers)
             return BalancedScheduler(
                 list(range(self.n_fingers)), self.block_rng).sequence(n)
 
@@ -621,7 +655,9 @@ class PatternMode:
             return [soc[i % cyc] for i in range(cyc * max(1, cycles))]
 
         if warmup_n > 0:
-            segs.append(Segment("warmup", "W", random_fingers(warmup_n), ""))
+            segs.append(Segment(
+                "warmup", "W",
+                random_fingers(warmup_n, kind="warmup", warn=False), ""))
         # Take kinds in order. The standard session puts probes at
         # positions 5 and 9 with trained takes either side; the short
         # session keeps both probes flanked (the flanker subtraction is
@@ -760,8 +796,13 @@ class PatternMode:
             # patient anticipating what comes next, which is exactly
             # what expressing sequence knowledge looks like. Penalising
             # it (classic's idle-press deduction) would punish the
-            # thing this mode exists to grow, so RSI presses pass
-            # silently; the next cue lands within the RSI anyway.
+            # thing this mode exists to grow, so RSI presses pass with
+            # no penalty and no trial row; the next cue lands within
+            # the RSI anyway. Still counted per take (not per trial --
+            # there is no trial to attach it to) so the analysis can at
+            # least see how often it happened.
+            self._rsi_presses[self._seg_idx] = (
+                self._rsi_presses.get(self._seg_idx, 0) + 1)
             return
         self.active.keys_pressed.append(ev.lane)
         self._timeout_run = 0
@@ -968,6 +1009,7 @@ class PatternMode:
                 "block": seg.label,
                 "kind": seg.kind,
                 "soc": seg.soc_id or None,
+                "n_rsi_presses": self._rsi_presses.get(i, 0),
                 **st,
             })
         learning = []

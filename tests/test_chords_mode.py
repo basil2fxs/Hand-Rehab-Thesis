@@ -1006,5 +1006,237 @@ class HoldTraceReplayTests(unittest.TestCase):
         self.assertGreater(len(progress), 0)
 
 
+class RtIsFirstOnsetTests(unittest.TestCase):
+    """Audit finding #19: rt_ms must be the brief's RT (first target
+    onset minus go), not chord completion (last onset minus go), or
+    classify()'s speed tiers and the results screen's RT cards read a
+    slow chord as a fast press."""
+
+    def test_rt_ms_is_first_onset_not_last(self) -> None:
+        engine, mode = _build_mode()
+        t = _burn_probes(mode)
+        mode._fire(t)
+        targets = mode.active.targets
+        stim_t = mode.active.stim_t_perf
+        # First press 300ms after stim, second 350ms after: rt_ms must
+        # read 300 (first onset), not 350 (completion/last onset).
+        mode._handle_press(_press(targets[0], stim_t + 0.30), stim_t + 0.30)
+        mode._handle_press(_press(targets[1], stim_t + 0.35), stim_t + 0.35)
+        rec = mode._records[-1]
+        self.assertAlmostEqual(rec["rt_ms"], 300.0, delta=2.0)
+        self.assertAlmostEqual(rec["complete_ms"], 350.0, delta=2.0)
+        outcome = engine.log_trial.call_args[0][1]
+        self.assertAlmostEqual(outcome.rt_ms, 300.0, delta=2.0)
+
+
+class LeakFeedbackNamesFingerTests(unittest.TestCase):
+    """Audit finding #26: a measured leak fail (no wrong press) must
+    name the offending finger, the argmax of leak_norms, not a generic
+    'Quiet fingers leaked'."""
+
+    def test_measured_leak_fail_names_the_worst_finger(self) -> None:
+        engine, mode = _build_mode()
+        mode._fire(5.0)
+        lane = mode.active.targets[0]
+        quiet = [l for l in mode.lanes if l != lane]
+        refs = {0: 50.0, 1: 32.5, 2: 37.5, 3: 115.0}
+        engine._force_window_peak = {
+            lane: refs[lane], quiet[0]: 0.5 * refs[quiet[0]]}
+        engine._force_window_saw_samples = True
+        orig = mode._feedback_text
+        captured = {}
+
+        def wrap(*a, **kw):
+            text = orig(*a, **kw)
+            captured["text"] = text
+            return text
+        mode._feedback_text = wrap
+        mode._handle_press(_press(lane, 5.4), 5.4)
+        rec = mode._records[-1]
+        self.assertEqual(rec["class"], "leak_fail")
+        self.assertIn("leaked, keep it still", captured["text"])
+        self.assertNotEqual(captured["text"], "Quiet fingers leaked")
+
+
+class BilateralHandColumnTests(unittest.TestCase):
+    """Audit finding #25: a chord trial's hand column must carry the
+    trial's own side, not the block-level 'both', or trials.csv cannot
+    be filtered on hand alone in bilateral play."""
+
+    def test_log_trial_gets_the_trial_own_hand(self) -> None:
+        engine, mode = _build_mode(
+            hand="right", lanes=[0, 1, 2, 3],
+            lanes_by_hand={"right": [0, 1, 2, 3], "left": [4, 5, 6, 7]})
+        t = _burn_probes(mode)
+        mode._fire(t)
+        fired_hand = mode.active.hand
+        _complete_chord(mode, t + 0.3)
+        kwargs = engine.log_trial.call_args.kwargs
+        self.assertEqual(kwargs["hand"], fired_hand)
+        self.assertIn(fired_hand, ("left", "right"))
+
+
+class PerChordSplitByWindowTests(unittest.TestCase):
+    """Audit finding #21: block_stats' per-chord table must split on
+    the synchrony window as well as hand and chord, since the level
+    ladder interleaves tier and window and a skilled player's easy
+    chords are met at wide windows while hard ones are first met at
+    the tightest."""
+
+    def test_per_chord_table_carries_w_ms_and_splits_on_it(self) -> None:
+        engine, mode = _build_mode()
+        t = _burn_probes(mode)
+        # Two chord hits at different windows for the mode's current
+        # chord, forced by changing the level between fires.
+        mode._fire(t)
+        _complete_chord(mode, t + 0.3, gap_s=0.01)
+        mode.level = 4          # bumps the window tier down
+        t2 = t + 2.0
+        mode._fire(t2)
+        _complete_chord(mode, t2 + 0.3, gap_s=0.01)
+        stats = mode.block_stats()
+        w_values = {row["w_ms"] for row in stats["per_chord"]}
+        self.assertGreaterEqual(len(w_values), 1)
+        for row in stats["per_chord"]:
+            self.assertIn("w_ms", row)
+
+
+class ChordsResultsScreenCardsTests(unittest.TestCase):
+    """Audit finding #23: a chords block must not fall through to the
+    generic results cards (HIT RATE counting every non-Miss, AVG RT
+    mixing probe RTs with chord completion times); it needs its own
+    cards built from the mode's own outcome classes."""
+
+    def _draw_chords_results(self, block_summary_chords):
+        import pygame
+        from rehab.config import Config
+        from rehab.game.engine import GameEngine
+        from rehab.ui.screens import ResultsScreen
+        from rehab.ui.theme import get as get_theme
+        from rehab.ui.widgets import Layout
+        pygame.init()
+        pygame.font.init()
+        pygame.display.set_mode((1280, 800))
+        e = GameEngine.__new__(GameEngine)
+        e.cfg = Config.load()
+        e.theme = get_theme("clinical")
+        e.layout = Layout(1280, 800, 1.0)
+        e.hits, e.misses, e.score = 100, 20, 500
+        e.current_block, e.hand_mode = "chords", "right"
+        e.best_streak, e.per_lane_stats = 5, {}
+        e.hit_streak = 5
+        e.last_session_root = None
+        e.mode = None
+        e.session = type("S", (), {
+            "participant": "T", "age": "60",
+            "block_summary": {"chords": block_summary_chords}})()
+        e.stop_all_motors = lambda *a, **k: None
+        e.overall_mean_rt = lambda: 300.0
+        e.overall_best_rt = lambda: 200.0
+        r = ResultsScreen(e)
+        r._shown_t = 1.0
+        cards = []
+        r._draw_stat_card = (
+            lambda surf, rect, lbl, val, col: cards.append((lbl, val)))
+        surf = pygame.Surface((1280, 800))
+        r.draw(surf)
+        pygame.quit()
+        return cards
+
+    def test_chords_results_use_clean_hit_rate_not_generic_hit_rate(
+            self) -> None:
+        # 100 non-Miss trials out of 120 (83%), but only 20 are clean
+        # "hit" outcomes (20%): the generic card must not appear.
+        cards = self._draw_chords_results({
+            "outcome_classes": {"hit": 20, "late_chord": 40,
+                                "leak_fail": 20, "no_hold": 20},
+            "median_er": 0.4, "level_highest": 5,
+            "over_force_trials": 3,
+        })
+        labels = [lbl for lbl, _ in cards]
+        values = dict(cards)
+        self.assertNotIn("HIT RATE", labels)
+        self.assertNotIn("AVG RT", labels)
+        self.assertNotIn("BEST RT", labels)
+        self.assertIn("CLEAN HIT RATE", labels)
+        self.assertEqual(values["CLEAN HIT RATE"], "20%")
+        self.assertIn("MEDIAN ER", labels)
+        self.assertIn("LEAK FAILS", labels)
+        self.assertIn("OVER-FORCE", labels)
+
+
+class DisconnectedSourceTests(unittest.TestCase):
+    """Audit finding #27: a dropped serial connection must not freeze
+    the quiet gate forever on a stale press latch, and the settle
+    prompt should say the sensor connection dropped rather than
+    repeating advice that cannot fix it."""
+
+    def test_disconnect_clears_frozen_detector_pressed_state(self) -> None:
+        from rehab.game.engine import GameEngine
+        from rehab.hardware.fsr_detector import FSRDetector, Calibration
+
+        class FakeSource:
+            provides_samples = True
+            is_connected = True
+            name = "fake"
+
+        e = GameEngine.__new__(GameEngine)
+        e.source = FakeSource()
+        e._source_was_connected = True
+        e.raw_logger = None
+        e.hand_mode = "right"
+        det = FSRDetector(Calibration(), "right")
+        # A finger is "down" the instant the connection drops: with no
+        # more samples ever arriving, nothing would clear this bit
+        # without the engine doing it on the disconnect transition.
+        det.pressed = [True, False, False, False]
+        e.detectors = {"right": det}
+
+        e.source.is_connected = False
+        e._check_source_connection()
+        self.assertEqual(det.pressed, [False, False, False, False])
+
+    def _busy_hand_mode(self, connected: bool):
+        """A ChordsMode whose hand detector reads permanently pressed,
+        the shape both a genuinely busy hand and a frozen post-
+        disconnect detector produce: _hand_quiet() never returns
+        True, so the settle gate stays in its prompt branch."""
+        engine, mode = _build_mode()
+        mode._fsr = True
+        engine.source.provides_samples = True
+        engine.source.is_connected = connected
+        stuck = type("StuckDetector", (), {})()
+        stuck.pressed = [True, False, False, False]
+        engine.detectors = {"right": stuck}
+        mode._settle_t0 = 0.0
+        mode._quiet_since = None
+        mode._prompt_t = -100.0
+        return engine, mode
+
+    def test_settle_prompt_names_the_dropped_sensor(self) -> None:
+        _, mode = self._busy_hand_mode(connected=False)
+        captured = {}
+        orig = mode._set_message
+
+        def wrap(text, *a, **kw):
+            captured["text"] = text
+            return orig(text, *a, **kw)
+        mode._set_message = wrap
+        mode._update_settle(mode.settle_prompt_s + 1.0)
+        self.assertEqual(captured.get("text"), "Sensor connection lost")
+
+    def test_settle_prompt_says_relax_when_connected(self) -> None:
+        _, mode = self._busy_hand_mode(connected=True)
+        captured = {}
+        orig = mode._set_message
+
+        def wrap(text, *a, **kw):
+            captured["text"] = text
+            return orig(text, *a, **kw)
+        mode._set_message = wrap
+        mode._update_settle(mode.settle_prompt_s + 1.0)
+        self.assertEqual(captured.get("text"), "Relax your hand")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -94,6 +94,13 @@ measured leak at or past 25 percent of the mean target press (2-3x the
 healthy ratio, so clearly worse than healthy rather than noise) marks
 the trial leak_fail in the block summary and zeroes the quiet points.
 
+OUTCOME CLASS PRECEDENCE. The block-summary class is mutually
+exclusive; a trial can only match one, checked in this order:
+partial (a target never landed) > leak_fail (a wrong press, or a
+measured leak past the threshold above) > over_force > late_chord
+(completed outside the window) > no_hold (broken before hold_ms) >
+hit.
+
 LIGHT PRESSES ONLY. Enslaving scales with instructed force and fatigue
 inflates both enslaving and the force deficit (Danion, Latash, Li and
 Zatsiorsky 2000/2001: four-finger MVC dropped about 43 percent after
@@ -160,10 +167,12 @@ DEVIATIONS FROM THE RESEARCH BRIEF, where the plumbing wins:
   (CalibrationProfile.gap), not percent MVC: no per-finger maximum
   exists in this app, and demanding maximal presses to measure one
   would fight the fatigue rules above. ER stays a dimensionless ratio.
-- The leak window is the engine's existing force window, a fixed 1 s
-  from stimulus onset, not first-onset to hold-end plus 100 ms. Trials
-  answered slower than that window lose their cross-talk measure for
-  that trial (ER logs as missing, quiet points are not withheld).
+- The leak window is the engine's force window, stretched to cover the
+  mode's own timeout plus hold (about 3.2 s), not the brief's
+  first-onset to hold-end plus 100 ms. Every in-time trial keeps its
+  ER: the window is open from stimulus onset to trial close, so it
+  also catches any activity before the first target lands, which the
+  brief's onset-anchored window would exclude.
 - The per-trial baseline is the detector's primed baseline EMA rather
   than a fresh 500 ms mean; the 500 ms quiet requirement is enforced
   on the detectors' live press state instead.
@@ -737,7 +746,21 @@ class ChordsMode:
             if ((now - self._settle_t0) > self.settle_prompt_s
                     and (now - self._prompt_t) > self.PROMPT_EVERY_S):
                 self._prompt_t = now
-                self._set_message("Relax your hand", 1.2)
+                # A dropped sensor connection is not something
+                # relaxing the hand can fix; say so instead of
+                # repeating advice that cannot help (audit finding
+                # #27). engine.detectors' pressed state is cleared on
+                # disconnect (GameEngine._check_source_connection), so
+                # this prompt is reachable again rather than the gate
+                # freezing on a stale press latch.
+                src = getattr(self.engine, "source", None)
+                if (self._fsr and src is not None
+                        and getattr(src, "provides_samples", False)
+                        and not getattr(src, "is_connected", True)):
+                    self._set_message("Sensor connection lost", 1.2,
+                                      kind="warn")
+                else:
+                    self._set_message("Relax your hand", 1.2)
             return
         self._fire(now)
 
@@ -891,11 +914,19 @@ class ChordsMode:
 
         span_ms = None
         rt_ms = None
+        complete_ms = None
         if full:
             first = min(trial.onsets.values())
             last = max(trial.onsets.values())
             span_ms = (last - first) * 1000.0
-            rt_ms = (last - trial.stim_t_perf) * 1000.0
+            # rt_ms is the brief's RT (first target onset minus go), not
+            # chord completion: classify()'s speed tiers and the results
+            # screen's RT cards are built for a single-press latency, and
+            # feeding them the last-finger time made a slow chord read as
+            # a fast press. Completion time is kept separately below
+            # (complete_ms) for anyone who wants it.
+            rt_ms = (first - trial.stim_t_perf) * 1000.0
+            complete_ms = (last - trial.stim_t_perf) * 1000.0
         together = full and span_ms is not None and span_ms <= w_ms
 
         # Cross-talk from the engine's force window, normalised per
@@ -906,6 +937,7 @@ class ChordsMode:
         peaks = self._window_peaks()
         er = None
         max_leak_ratio = None
+        max_leak_lane = None
         over_force = False
         light_press = False
         leak_norms: dict[int, float] = {}
@@ -924,6 +956,7 @@ class ChordsMode:
                     er = sum(leak_norms.values()) / len(leak_norms) \
                         / mean_press
                     max_leak_ratio = max(leak_norms.values()) / mean_press
+                    max_leak_lane = max(leak_norms, key=leak_norms.get)
                 light_press = all(
                     self.LIGHT_BAND[0] <= p <= self.LIGHT_BAND[1]
                     for p in press_norms)
@@ -996,9 +1029,11 @@ class ChordsMode:
         stim = "+".join(str(l + 1) for l in trial.targets)
         self.engine.log_trial(log_obj, outcome, now,
                               stimulus=stim,
-                              correct_lanes=list(trial.targets))
+                              correct_lanes=list(trial.targets),
+                              hand=trial.hand)
         self._set_message(self._feedback_text(trial, cls, over_force,
-                                              light_press), 0.9,
+                                              light_press, max_leak_lane),
+                          0.9,
                           kind="success" if cls == "hit" else "warn")
         # Quiet-fingers reward moment: a clean chord leaves the
         # untargeted fingers OF ITS OWN HAND wearing a brief tick on
@@ -1022,6 +1057,8 @@ class ChordsMode:
             "class": cls,
             "span_ms": None if span_ms is None else round(span_ms, 1),
             "rt_ms": None if rt_ms is None else round(rt_ms, 1),
+            "complete_ms": (None if complete_ms is None
+                            else round(complete_ms, 1)),
             "er": None if er is None else round(er, 4),
             # Probe rows keep the raw material for the enslaving
             # matrix: the instructed finger's normalised press and
@@ -1060,7 +1097,8 @@ class ChordsMode:
         return name
 
     def _feedback_text(self, trial: PendingChordTrial, cls: str,
-                       over_force: bool, light: bool) -> str:
+                       over_force: bool, light: bool,
+                       max_leak_lane: int | None = None) -> str:
         """Failure wording says the ACTION, never the mechanism: which
         finger lifted, which landed late, which never landed. The old
         "Hold it a beat longer" always arrived after the trial had
@@ -1089,6 +1127,8 @@ class ChordsMode:
             if trial.incorrect_presses:
                 lane = trial.incorrect_presses[0][0]
                 return f"{self._finger_name(trial, lane)} leaked"
+            if max_leak_lane is not None:
+                return f"{self._finger_name(trial, max_leak_lane)} leaked, keep it still"
             return "Quiet fingers leaked" if quiet else "Leaked"
         # partial: a target was missing when the trial timed out.
         missing = [l for l in trial.targets if l not in trial.onsets]
@@ -1297,11 +1337,16 @@ class ChordsMode:
                       if first_chord is not None
                       and r["trial"] > first_chord]
 
-        # Per-chord table, split by hand in bilateral play so the
-        # difficulty ladder can be validated for each hand on its own.
-        per_chord: dict[tuple[str, str], dict] = {}
+        # Per-chord table, split by hand AND by synchrony window: the
+        # level ladder interleaves tier and window (level = window*4 +
+        # tier), so an easy chord is met at wide windows and a hard one
+        # first met at the tightest, and pooling their hit rates lets a
+        # window artefact masquerade as the enslaving pattern the
+        # difficulty rank test is meant to read off (see docstring
+        # CROSS-TALK SCORE and the DIFFICULTY ORDER section above).
+        per_chord: dict[tuple[str, str, float], dict] = {}
         for r in chords:
-            d = per_chord.setdefault((r["hand"], r["chord"]), {
+            d = per_chord.setdefault((r["hand"], r["chord"], r["w_ms"]), {
                 "d": r["d"], "n": 0, "hits": 0,
                 "spans": [], "ers": []})
             d["n"] += 1
@@ -1320,14 +1365,16 @@ class ChordsMode:
         chord_table = [{
             "hand": hand,
             "chord": name,
+            "w_ms": w_ms,
             "d": v["d"],
             "n": v["n"],
             "hit_rate": round(v["hits"] / v["n"], 3) if v["n"] else None,
             "median_span_ms": _median(v["spans"]),
             "median_er": _median(v["ers"]),
-        } for (hand, name), v in sorted(per_chord.items(),
-                                        key=lambda kv: (kv[0][0],
-                                                        kv[1]["d"]))]
+        } for (hand, name, w_ms), v in sorted(per_chord.items(),
+                                              key=lambda kv: (kv[0][0],
+                                                              kv[1]["d"],
+                                                              kv[0][2]))]
 
         classes: dict[str, int] = {}
         for r in self._records:
