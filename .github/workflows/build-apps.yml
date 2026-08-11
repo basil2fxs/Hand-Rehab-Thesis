@@ -56,6 +56,31 @@ jobs:
         shell: pwsh
         run: Compress-Archive -Path "bin/dist/Finger Rehab.exe" -DestinationPath "bin/dist/${{ matrix.artefact }}.zip"
 
+      # The lab package is the exe plus the lab config and launcher in
+      # one folder: copy to the lab desktop, double-click the bat, no
+      # Python or PsychoPy install. Built from the same commit as the
+      # exe, so the lab version can never lag the game.
+      - name: Assemble EEG lab package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $pkg = "bin/dist/Finger Rehab EEG Lab"
+          New-Item -ItemType Directory -Path $pkg | Out-Null
+          Copy-Item "bin/dist/Finger Rehab.exe" $pkg
+          Copy-Item "config/eeg_lab.yaml" "$pkg/eeg_lab.yaml"
+          Copy-Item "docs/lab_package/EEG Lab.bat" $pkg
+          Copy-Item "docs/lab_package/README.txt" $pkg
+          Copy-Item "docs/eeg_lab_setup.md" "$pkg/eeg_lab_setup.md"
+          Compress-Archive -Path $pkg -DestinationPath "bin/dist/FingerRehab-EEGLab-Windows.zip"
+
+      - name: Upload EEG lab package (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: FingerRehab-EEGLab-Windows
+          path: bin/dist/FingerRehab-EEGLab-Windows.zip
+          retention-days: 30
+
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artefact }}
