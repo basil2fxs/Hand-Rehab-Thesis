@@ -638,6 +638,15 @@ reaction:
   fp_mean_extra_s: 2.5
   fp_max_s: 9.0
   fp_mode: exponential
+  # EEG variant: set a number (e.g. 2.5) for a CONSTANT wait plus a
+  # visible "Ready" cue at its onset, replacing the exponential draw.
+  # The exponential keeps the hazard flat on purpose, and a flat
+  # hazard suppresses exactly the expectancy ramp the CNV analysis
+  # measures, so EEG reaction blocks need the predictable wait. Set in
+  # config/eeg_lab.yaml; null keeps the shipped behaviour everywhere
+  # else. Do not compare RTs across the two variants: a predictable
+  # wait changes what the number means.
+  fp_eeg_fixed_s: null
 
   # On this fraction of trials no go signal ever comes. Waiting it out
   # earns a small reward; pressing anyway is a false start. This is

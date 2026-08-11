@@ -1,0 +1,23 @@
+# Lab preset for EEG sessions. Loaded OVER config/default.yaml by
+#   python main.py --config config/eeg_lab.yaml
+# (the "EEG Lab.command" / "EEG Lab.bat" launchers do exactly that).
+# Only the lab deltas live here: the game itself is the same engine,
+# the same modes and the same main.py as the shipping build, so every
+# future game change is automatically the lab version too.
+#
+# See docs/eeg_lab_setup.md for the lab-computer checklist.
+
+eeg:
+  enabled: true
+  # The trigger box on the lab's Windows desktop. Change here if the
+  # box enumerates on a different COM port (Device Manager shows it).
+  port: COM10
+  # Refuse to start without the box: a lab block recorded with no
+  # markers is worthless, so failing loudly at launch is the feature.
+  require_port: true
+
+reaction:
+  # Fixed-foreperiod CNV variant with the visible ready cue. See the
+  # fp_eeg_fixed_s comment in config/default.yaml for why EEG blocks
+  # trade the flat hazard away.
+  fp_eeg_fixed_s: 2.5
