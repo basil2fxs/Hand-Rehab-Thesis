@@ -54,6 +54,45 @@ serial:
     - "0x1A86"   # CH340
     - "0x0403"   # FTDI
 
+eeg:
+  # EEG trigger markers. When enabled, every event the analysis wants
+  # to epoch on (stimulus onsets, presses, block boundaries, pauses)
+  # is written to a trigger box on its own serial port as a single
+  # byte, held for pulse_ms and then reset to 0. The code map lives in
+  # rehab/hardware/eeg_trigger.py (CODES); every emission is also
+  # logged as an "eeg" event row in raw.csv with the intended-event
+  # and wire timestamps, on the same clock as the force samples.
+  #
+  # Shipping default is OFF: a normal rehab session has no amplifier
+  # and pays nothing for this block existing. The lab preset
+  # (config/eeg_lab.yaml, launched by "EEG Lab.command" or
+  # "EEG Lab.bat") flips it on over these defaults.
+  enabled: false
+  # The trigger box's serial port, e.g. COM10 on the lab's Windows
+  # desktop. This is a SECOND port, separate from the Arduino sensor
+  # ports; null plus enabled true runs the logging-only dummy backend.
+  port: null
+  # Virtual COM trigger boxes ignore baud; real UARTs need it to match.
+  baud: 115200
+  # true (the lab preset): refuse to start without an openable trigger
+  # box, so a lab session can never run silently unmarked. false: fall
+  # back to the dummy backend and say so at startup, which is right
+  # for development and demos.
+  require_port: false
+  # Marker pulse width and the enforced low time between markers, in
+  # milliseconds, held on the wall clock, never by frame counting (the
+  # old lab script counted frames and delivered 1-4 ms pulses). An
+  # amplifier sampling 250 Hz needs at least 8 ms to guarantee two
+  # samples of the pulse; 10 ms clears every plausible lab rate.
+  # Confirm the amplifier model and rate with Welber and record both
+  # in the thesis methods before changing these.
+  pulse_ms: 10
+  gap_ms: 10
+  # Feedback-onset markers (140 positive / 141 negative) for FRN
+  # analyses. Off until an FRN analysis is actually planned; the
+  # response and stimulus bands carry everything else regardless.
+  feedback_markers: false
+
 fsr:
   num_sensors_per_hand: 4
   sample_rate_hz: 200

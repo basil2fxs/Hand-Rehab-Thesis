@@ -70,6 +70,12 @@ class Session:
     # taken, which an analysis should treat as lower-confidence force
     # data.
     calibration: dict = field(default_factory=dict)
+    # EEG marker-channel state for the block: backend and port, pulse
+    # and gap widths, code-map version, failure / delay / drop counts
+    # and the degraded flag with its first-failure timestamp. Empty
+    # for a session with eeg.enabled false. This is what tells an
+    # analyst whether the block's trigger record can be trusted.
+    eeg: dict = field(default_factory=dict)
     software_version: str = SOFTWARE_VERSION
     python_version: str = field(default_factory=lambda: sys.version.split()[0])
     platform: str = field(default_factory=platform.platform)

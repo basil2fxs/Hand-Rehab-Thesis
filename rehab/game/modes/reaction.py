@@ -130,6 +130,7 @@ from typing import TYPE_CHECKING
 
 import pygame
 
+from ...hardware.eeg_trigger import CODES as EEG_CODES
 from ...hardware.fsr_detector import PressEvent
 from ..scheduling import BalancedScheduler, PairedBalancedScheduler
 from ..scoring import ScoreConfig, TrialResult, classify
@@ -164,7 +165,8 @@ class ReactionMode:
                  level_up_lapse_rate: float, level_down_lapse_rate: float,
                  rest_gate_s: float, feedback_s: float,
                  false_start_feedback_s: float, inter_trial_gap_s: float,
-                 score_cfg: ScoreConfig, seed: int = 0) -> None:
+                 score_cfg: ScoreConfig, seed: int = 0,
+                 fp_fixed_s: float | None = None) -> None:
         self.engine = engine
         self.sub_mode = "simple" if sub_mode == "simple" else "choice"
         self.score_cfg = score_cfg
@@ -187,6 +189,14 @@ class ReactionMode:
         self.feedback_s = float(feedback_s)
         self.false_start_feedback_s = float(false_start_feedback_s)
         self.inter_trial_gap = float(inter_trial_gap_s)
+        # EEG variant: a constant foreperiod instead of the exponential
+        # draw. The exponential keeps the hazard flat so the wait
+        # cannot be timed, which is right for behaviour and wrong for
+        # the CNV: a flat hazard suppresses the expectancy ramp the
+        # CNV is. None (the shipping default) changes nothing.
+        self.fp_fixed_s = (float(fp_fixed_s)
+                           if fp_fixed_s and float(fp_fixed_s) > 0
+                           else None)
         self.seed = int(seed)
         # One seeded generator drives the foreperiod draws, the catch
         # decisions AND the lane order, so a block is reproducible from
@@ -227,6 +237,9 @@ class ReactionMode:
         self._stim_due: float | None = None
         self._fp_scheduled: float = 0.0
         self._catch_until: float | None = None
+        # When the go signal WOULD have fired on the current catch
+        # trial, for the stimulus-free preparation marker (25).
+        self._catch_virtual_due: float | None = None
         self._rest_until: float | None = None
         self._last_activity_t: float | None = None
         self._rest_msg_t = 0.0
@@ -265,8 +278,8 @@ class ReactionMode:
         # a stim, expire a catch wait, or time a trial out on resume.
         if self.active is not None:
             self.active.stim_t_perf += pause_dur
-        for attr in ("_stim_due", "_catch_until", "_rest_until",
-                     "_last_activity_t"):
+        for attr in ("_stim_due", "_catch_until", "_catch_virtual_due",
+                     "_rest_until", "_last_activity_t"):
             v = getattr(self, attr)
             if v is not None:
                 setattr(self, attr, v + pause_dur)
@@ -327,6 +340,14 @@ class ReactionMode:
                 self._fire(now)
             return
         if self._phase == "catch":
+            # Stimulus-free preparation marker: the instant the go
+            # signal would have fired had this not been a catch trial.
+            # Gives the CNV analysis epochs with identical preparation
+            # and no stimulus response mixed in.
+            if (self._catch_virtual_due is not None
+                    and now >= self._catch_virtual_due):
+                self._catch_virtual_due = None
+                self._eeg(EEG_CODES["prep_catch_onset"], now)
             if self._catch_until is not None and now >= self._catch_until:
                 self._catch_survived(now)
             return
@@ -374,17 +395,52 @@ class ReactionMode:
         if self.catch_rate > 0.0 and self.rng.random() < self.catch_rate:
             self.n_catch += 1
             self._catch_until = now + self.catch_wait
+            # The catch trial is armed exactly like a real one (same
+            # S1 marker, same ready cue) or the patient could tell
+            # them apart. The virtual go instant uses the fixed
+            # foreperiod when set, else the exponential draw's mean;
+            # deliberately NOT a draw from self.rng, which would shift
+            # the seeded wait sequence and break reproducibility of
+            # previously recorded seeds.
+            self._eeg(EEG_CODES["prep_foreperiod"], now)
+            self._show_ready_cue()
+            self._catch_virtual_due = now + (
+                self.fp_fixed_s or (self.fp_min + self.fp_mean_extra))
             self._phase = "catch"
             return
         self._fp_scheduled = self._draw_foreperiod()
         self._stim_due = now + self._fp_scheduled
+        # CNV S1: the wait is armed. The marker fires in every config;
+        # the visible ready cue only in the fixed-foreperiod EEG
+        # variant, so the shipping game's screen stays as it was.
+        self._eeg(EEG_CODES["prep_foreperiod"], now)
+        self._show_ready_cue()
         self._phase = "foreperiod"
+
+    def _eeg(self, code: int, t_event: float) -> None:
+        """Marker doorway; inert unless the engine carries an active
+        MarkerWriter (the engine helper does the guarding)."""
+        send = getattr(self.engine, "_eeg_send", None)
+        if callable(send):
+            send(code, t_event=t_event)
+
+    def _show_ready_cue(self) -> None:
+        """Visible S1 for the CNV epochs. Only in the EEG variant: the
+        CNV is defined S1-to-S2, and without a visible S1 the 21
+        marker would be an invisible bookmark, not a cue the brain can
+        prepare from."""
+        if self.fp_fixed_s is not None:
+            self._set_message("Ready", 0.8)
 
     def _draw_foreperiod(self) -> float:
         """One foreperiod in seconds. Exponential above fp_min keeps
         the stimulus hazard flat so the wait cannot be timed; draws
         past fp_max are redrawn (the truncation the docstring owns up
-        to). The uniform option exists for PVT-comparable blocks."""
+        to). The uniform option exists for PVT-comparable blocks. The
+        fixed option (fp_fixed_s, the EEG variant) trades the flat
+        hazard for the predictable wait CNV epochs need."""
+        if self.fp_fixed_s is not None:
+            return self.fp_fixed_s
         if self.fp_mode == "uniform":
             # The PVT's 2-10 s inter-stimulus range (Dinges and Powell
             # 1985), independent of fp_min / fp_max on purpose.
@@ -448,7 +504,7 @@ class ReactionMode:
         self.engine.log_reaction_event(
             trial_id=self.trial_counter, lane=None,
             label="Early", error_type="false_start",
-            pressed_lane=ev.lane,
+            pressed_lane=ev.lane, press_t_perf=ev.t_perf,
             stimulus=f"{self.sub_mode};fp={self._fp_scheduled:.3f}",
             # No cued lane to derive a side from (the stimulus never
             # fired), but the PRESSING lane did happen and resolves to
@@ -466,7 +522,7 @@ class ReactionMode:
         self.engine.log_reaction_event(
             trial_id=self.trial_counter, lane=None,
             label="Early", error_type="catch_false_start",
-            pressed_lane=ev.lane,
+            pressed_lane=ev.lane, press_t_perf=ev.t_perf,
             stimulus=f"{self.sub_mode};catch",
             hand=self._hand_for_lane(ev.lane),
         )
@@ -519,6 +575,7 @@ class ReactionMode:
                 trial_id=trial.trial_id, lane=trial.lane,
                 label="Early", error_type="anticipation",
                 rt_ms=rt_ms, pressed_lane=ev.lane,
+                press_t_perf=ev.t_perf,
                 stimulus=f"{self.sub_mode};fp={self._fp_scheduled:.3f}",
                 hand=self._hand_for_lane(trial.lane),
             )
@@ -560,6 +617,7 @@ class ReactionMode:
             trial_id=trial.trial_id, lane=trial.lane,
             label="Wrong", error_type="wrong_finger",
             pressed_lane=ev.lane, press_offset_ms=rt_ms,
+            press_t_perf=ev.t_perf,
             stimulus=f"{self.sub_mode};fp={self._fp_scheduled:.3f}",
             hand=self._hand_for_lane(trial.lane),
         )

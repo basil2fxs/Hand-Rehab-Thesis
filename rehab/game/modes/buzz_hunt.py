@@ -162,6 +162,7 @@ from collections import deque
 from typing import TYPE_CHECKING
 
 from ...data.logger import ContinuousTrialLog
+from ...hardware.eeg_trigger import CODES as EEG_CODES
 from ..scheduling import BalancedScheduler, PairedBalancedScheduler
 from ..scoring import ScoreConfig, TrialResult, classify
 from .classic import PendingTrial
@@ -905,6 +906,18 @@ class BuzzHuntMode:
                and t >= self._pulse_plan[self._pulse_idx][1]):
             lane, _on, dur = self._pulse_plan[self._pulse_idx]
             ok = self.engine.pulse_motor(lane, dur)
+            if self._pulse_idx == 0:
+                # EEG buzz-as-stimulus marker (38). Anchored to the
+                # moment the STIM byte left for the Arduino, because
+                # here the buzz IS the stimulus; there is no flip to
+                # anchor to. Motor mechanical rise (20-50 ms for ERM
+                # motors) is a constant offset the bench measurement
+                # supplies. Its own code keeps perception trials out
+                # of the cued-response averages.
+                send = getattr(self.engine, "_eeg_send", None)
+                if callable(send):
+                    send(EEG_CODES["stim_buzz_hunt"], lane=lane,
+                         t_event=now)
             if not ok:
                 # Sticky: one dropped pulse in a sequence or gap
                 # train marks the whole trial's stimulus as

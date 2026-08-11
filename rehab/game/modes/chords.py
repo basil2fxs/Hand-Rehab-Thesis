@@ -225,6 +225,7 @@ from typing import TYPE_CHECKING
 
 import pygame
 
+from ...hardware.eeg_trigger import CODES as EEG_CODES
 from ...hardware.fsr_detector import PressEvent
 from ..scheduling import BalancedScheduler
 from ..scoring import ScoreConfig, TrialResult, classify
@@ -1258,6 +1259,11 @@ class ChordsMode:
     def _enter_rest(self, now: float, floor_s: float, kind: str,
                     msg: str) -> None:
         self.phase = "rest"
+        # EEG rest markers bracket sub-block and fatigue rests so
+        # alpha-trend analysis can separate task time from rest time.
+        send = getattr(self.engine, "_eeg_send", None)
+        if callable(send):
+            send(EEG_CODES["rest_start"], t_event=now)
         self._rest_kind = kind
         self._rest_until = now + max(0.0, floor_s)
         self._prompt_t = now
@@ -1271,6 +1277,9 @@ class ChordsMode:
             self._set_message("Press any finger when ready", 1.2)
 
     def _leave_rest(self, now: float) -> None:
+        send = getattr(self.engine, "_eeg_send", None)
+        if callable(send):
+            send(EEG_CODES["rest_end"], t_event=now)
         self._rest_until = None
         self.phase = "settle"
         self._next_ok_t = now + self.REST_LEAD_S

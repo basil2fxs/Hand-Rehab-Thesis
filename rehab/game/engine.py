@@ -18,6 +18,7 @@ import pygame
 from ..audio.engine import AudioEngine
 from ..data.logger import RawLogger, SessionPaths, TrialLogger
 from ..data.session import Session
+from ..hardware import eeg_trigger
 from ..hardware.fsr_detector import (
     Calibration, FSRDetector, PressEvent, ReleaseEvent,
 )
@@ -284,6 +285,20 @@ class GameEngine:
         # one is a global deferred STOP; these cut ONE hand's pulse
         # short without touching the other hand's motor.
         self._pulse_stops: dict[str, float] = {}
+        # ---- EEG trigger markers -----------------------------------------
+        # Built even with eeg.enabled false so every call site can stay
+        # unconditional: a disabled MarkerWriter no-ops at the cost of
+        # one attribute test, zero rows. In lab mode (require_port
+        # true) a missing or unopenable trigger box raises here, before
+        # any window opens, so a lab session can never run silently
+        # unmarked; main.py surfaces the message and exits.
+        self._eeg_feedback_markers = bool(
+            cfg.get("eeg.feedback_markers", False))
+        # Stimulus markers armed by on_stim_multi, wired by the frame
+        # loop immediately after the flip that shows the stimulus.
+        self._pending_eeg_stim: list[tuple[int, int]] = []
+        self.markers = eeg_trigger.writer_from_config(
+            cfg.get, on_emit=self._on_eeg_emission)
 
     # ---- bilateral plumbing ------------------------------------------------
     def _build_detectors(self) -> None:
@@ -670,6 +685,7 @@ class GameEngine:
             self.show_title()
             self.source.start()
             self.audio = self._build_audio()
+            self.eeg_session_start()
             last = time.perf_counter()
             while self.running:
                 now = time.perf_counter()
@@ -743,6 +759,13 @@ class GameEngine:
                 self._draw_hud(self._screen, clock)
                 # Scale the logical surface up onto the window and flip.
                 self._present()
+                # Stimulus markers ride the frame's own flip: armed in
+                # on_stim_multi, wired here so the byte follows the
+                # photons, not the update order. tick() then runs the
+                # pulse-and-gap protocol (reset after pulse_ms, release
+                # one queued marker per gap).
+                self._flush_eeg_stim()
+                self.markers.tick()
                 clock.tick(120)
             return 0
         except KeyboardInterrupt:
@@ -764,6 +787,10 @@ class GameEngine:
                     self.audio.shutdown()
                 except Exception as e:
                     log.warning("audio.shutdown: %s", e)
+            try:
+                self._eeg_shutdown()
+            except Exception as e:
+                log.warning("eeg shutdown: %s", e)
             try:
                 self._close_loggers()
             except Exception as e:
@@ -811,6 +838,10 @@ class GameEngine:
         if self.raw_logger:
             self.raw_logger.queue_event("pause", detail=self.current_block,
                                          hand=self.hand_mode)
+        # EEG pause marker: any epoch spanning a pause must be
+        # rejected, and without the code the EEG record cannot know a
+        # pause happened.
+        self._eeg_send(eeg_trigger.CODES["pause"])
         self._block_pause_count += 1
         log.info("Block paused")
 
@@ -823,6 +854,7 @@ class GameEngine:
             self.raw_logger.queue_event(
                 "resume", detail=f"paused_s={pause_dur:.3f}",
                 hand=self.hand_mode)
+        self._eeg_send(eeg_trigger.CODES["resume"])
         self._block_paused_s += pause_dur
         # Tell the mode to shift any in-flight timestamps forward so the
         # active trial doesn't instantly time out and the next-trigger
@@ -858,6 +890,67 @@ class GameEngine:
         self.paused = False
         self._pause_started_at = None
         log.info("Block resumed after %.2fs", pause_dur)
+
+    # ---- EEG marker plumbing -----------------------------------------------
+    def _eeg_send(self, code: int | None, lane: int | None = None,
+                  t_event: float | None = None) -> None:
+        """One guarded doorway to the MarkerWriter. getattr-guarded so
+        engines built via __new__ in tests can hit any call site
+        without owning a writer; None codes (an unknown mode name in
+        block_code) are swallowed rather than sent as a wrong byte."""
+        markers = getattr(self, "markers", None)
+        if markers is None or code is None or not markers.active:
+            return
+        markers.send(int(code), lane=lane, t_event=t_event)
+
+    def _on_eeg_emission(self, rec) -> None:
+        """Log one marker emission next to the sample stream. Every
+        emission attempt lands as an "eeg" event row in raw.csv with
+        the intended-event time AND the actual wire time, sharing the
+        t_perf clock with the 200 Hz samples; that pair is what lets
+        offline epoching correct a queued or failed marker. Outside a
+        block there is no raw.csv, so session-level markers (240/241)
+        go to the app log instead."""
+        detail = eeg_trigger.format_detail(rec)
+        raw = getattr(self, "raw_logger", None)
+        if raw is not None:
+            raw.queue_event("eeg", lane=rec.lane, t_perf=rec.t_event,
+                            detail=detail,
+                            hand=getattr(self, "hand_mode", "right"))
+        else:
+            log.info("eeg marker outside block: %s", detail)
+
+    def _flush_eeg_stim(self) -> None:
+        """Wire the stimulus markers armed this frame. Called by the
+        frame loop immediately after _present()'s flip, before
+        anything else, so t_event is the flip return: the closest
+        software timestamp to photons. Serial path adds ~1-2 ms; the
+        monitor's own lag is a constant the photodiode run measures."""
+        pending = getattr(self, "_pending_eeg_stim", None)
+        if not pending:
+            return
+        now = time.perf_counter()
+        for code, lane in pending:
+            self._eeg_send(code, lane=lane, t_event=now)
+        pending.clear()
+
+    def eeg_session_start(self) -> None:
+        """Session-start marker (engine up, participant confirmed).
+        Factored out of run() so the contract test can pin the marker
+        sequence without driving the whole frame loop."""
+        self._eeg_send(eeg_trigger.CODES["session_start"])
+
+    def _eeg_shutdown(self) -> None:
+        """Session-end marker, then reset the line and free the port.
+        Runs in run()'s finally so every exit path (Esc, crash,
+        Ctrl+C) leaves the trigger lines at 0 instead of latched on
+        the last code."""
+        markers = getattr(self, "markers", None)
+        if markers is None or not markers.active:
+            return
+        self._eeg_send(eeg_trigger.CODES["session_end"])
+        markers.drain(0.1)
+        markers.close()
 
     def _build_screens(self) -> dict:
         from ..ui.screens import (
@@ -1283,6 +1376,15 @@ class GameEngine:
     def _draw_hud(self, screen, clock) -> None:
         if getattr(self, "_show_pointer", False):
             self._draw_pointer_check(screen)
+        # Degraded EEG channel banner. The behavioural session stays
+        # valid, but the researcher must see live that markers stopped
+        # reaching the amplifier; the log records exactly which trials
+        # are affected.
+        markers = getattr(self, "markers", None)
+        if markers is not None and markers.degraded:
+            from ..ui.widgets import draw_text
+            draw_text(screen, "EEG markers lost", (12, 10), self.theme,
+                      self.layout, pt=14, colour=(220, 38, 38))
         if not self._show_fps:
             return
         from ..ui.widgets import draw_text
@@ -1914,6 +2016,16 @@ class GameEngine:
         except (TypeError, ValueError):
             seed = random.randrange(2 ** 32)
         sub_mode = str(self.cfg.get("reaction.sub_mode", "choice")).lower()
+        # Fixed-foreperiod EEG variant. The shipped exponential draw
+        # keeps the stimulus hazard flat ON PURPOSE, and a flat hazard
+        # suppresses exactly the expectancy ramp the CNV analysis
+        # needs, so EEG blocks swap in a constant wait via this flag
+        # (set in config/eeg_lab.yaml, null everywhere else).
+        fp_fixed_cfg = self.cfg.get("reaction.fp_eeg_fixed_s", None)
+        try:
+            fp_fixed = float(fp_fixed_cfg) if fp_fixed_cfg else None
+        except (TypeError, ValueError):
+            fp_fixed = None
         self.mode = ReactionMode(
             engine=self,
             lanes_by_hand=self.lanes_by_hand(),
@@ -1948,6 +2060,7 @@ class GameEngine:
                 self.cfg.get("reaction.inter_trial_gap_s", 0.5)),
             score_cfg=self.score_cfg,
             seed=seed,
+            fp_fixed_s=fp_fixed,
         )
         self._begin_block("reaction")
         # The seed shaped every wait in this block, so it has to live
@@ -2734,6 +2847,7 @@ class GameEngine:
         # clock during the countdown (mode.prep_tick), so a hand that
         # settled during the prep fires its first chord at zero. Test
         # mode trims the countdown so quick demos stay quick.
+        countdown_t: float | None = None
         if name in ("classic", "adaptive", "mirror", "reaction",
                     "pattern", "chords", "syllables", "force_pilot",
                     "lighthouse", "buzz_hunt"):
@@ -2747,6 +2861,10 @@ class GameEngine:
             sc = self._screens.get(key)
             if sc is not None and hasattr(sc, "start_countdown"):
                 sc.start_countdown(secs)
+                # Captured for the GET READY marker below: the loggers
+                # are not open yet, so the marker itself has to wait,
+                # but its t_event must be the real countdown onset.
+                countdown_t = time.perf_counter()
         self.session.started_at = time.strftime("%Y-%m-%dT%H:%M:%S")
         self.score = 0
         self.hits = 0
@@ -2836,6 +2954,17 @@ class GameEngine:
         self._rhythm_beat_times_s = []
         self._rhythm_signed_offsets_ms = []
         self._open_loggers()
+        # Block-boundary and GET READY markers, sent after the loggers
+        # open so their raw.csv rows land in this block's file.
+        # t_event still carries the real onsets captured above. Rhythm
+        # has no countdown card here (it welds the same seconds into
+        # its note-fall lead-in), so its GET READY marker anchors to
+        # the block start, which is when that lead-in begins.
+        self._eeg_send(eeg_trigger.block_code(name, "start"),
+                       t_event=self._block_t0)
+        self._eeg_send(eeg_trigger.CODES["prep_countdown"],
+                       t_event=(countdown_t if countdown_t is not None
+                                else self._block_t0))
         # Reset detectors at block start so old baselines don't leak in.
         for d in self.detectors.values():
             d.reset()
@@ -2899,6 +3028,12 @@ class GameEngine:
         """Record which calibration this block ran under. Written into
         metadata.json so the analysis can convert counts to force and
         state the thresholds without guessing."""
+        # EEG marker-channel health for this block: backend, pulse and
+        # gap widths, code-map version, failure counts. An analyst can
+        # judge from metadata.json alone whether the block's marker
+        # record is trustworthy or degraded, and from when.
+        markers = getattr(self, "markers", None)
+        self.session.eeg = markers.status() if markers is not None else {}
         prof = getattr(self, "calibration_profile", None)
         if prof is None:
             self.session.calibration = {}
@@ -3889,6 +4024,14 @@ class GameEngine:
         if self.raw_logger:
             self.raw_logger.queue_event("block_end", detail=self.current_block,
                                          hand=self.hand_mode)
+        # Block-end marker, then pump the writer off the frame path so
+        # anything still queued (a response marker from the final
+        # trial, this boundary) lands in raw.csv before the loggers
+        # close below.
+        self._eeg_send(eeg_trigger.block_code(self.current_block, "end"))
+        markers = getattr(self, "markers", None)
+        if markers is not None and markers.active:
+            markers.drain(0.25)
         # Silence music / metronome / stim sounds before showing results.
         # Otherwise a track that didn't naturally end keeps playing into
         # the results screen, and the last click of the metronome tail
@@ -3952,6 +4095,11 @@ class GameEngine:
                 )
             except Exception:
                 pass
+        self._eeg_send(eeg_trigger.block_code(self.current_block,
+                                              "abandoned"))
+        markers = getattr(self, "markers", None)
+        if markers is not None and markers.active:
+            markers.drain(0.25)
         self.session.finished_at = time.strftime("%Y-%m-%dT%H:%M:%S")
         self.session.notes = f"abandoned mid-block ({self.current_block})"
         # Capture whatever we have on the abandon path so a partial
@@ -4079,6 +4227,10 @@ class GameEngine:
 
         Returns the points actually subtracted.
         """
+        # EEG artifact bookkeeping: a press with no trial active is
+        # code 131, marked whether or not a score penalty applies (the
+        # press happened either way).
+        self._eeg_send(eeg_trigger.CODES["resp_idle"])
         penalty = int(self.cfg.get("scoring.idle_press_penalty", 0))
         if penalty <= 0:
             return 0
@@ -4465,6 +4617,31 @@ class GameEngine:
                                              t_perf=t_perf,
                                              detail=f"trial_id={trial_id}",
                                              hand=self.hand_mode)
+        # EEG stimulus marker. Armed here, wired by the frame loop
+        # straight after the flip that shows this stimulus, so the
+        # byte tracks photons rather than update order. The byte codes
+        # the cue condition (visual, tone, buzzer mixes produce
+        # different ERPs and must never be pooled); lane identity
+        # rides the raw.csv marker row instead, because 8 lanes x 8
+        # cue conditions does not fit one band. Pattern mode overrides
+        # the band with its sequence-status codes via eeg_stim_code.
+        markers = getattr(self, "markers", None)
+        if markers is not None and markers.active:
+            eeg_code = None
+            hook = getattr(self.mode, "eeg_stim_code", None)
+            if callable(hook):
+                try:
+                    eeg_code = hook()
+                except Exception as e:
+                    log.warning("mode eeg_stim_code failed: %s", e)
+            if eeg_code is None:
+                eeg_code = eeg_trigger.stim_code(cues.sound_before,
+                                                 cues.buzz_before,
+                                                 cues.show_target)
+            pending = getattr(self, "_pending_eeg_stim", None)
+            if pending is None:
+                pending = self._pending_eeg_stim = []
+            pending.append((int(eeg_code), min(targets)))
 
     def log_segment_start(self, name: str, trial_id: int,
                            lane: int | None, t_perf: float) -> None:
@@ -4721,6 +4898,49 @@ class GameEngine:
             # rehab patients and worth analysing separately from
             # "completely wrong hand" errors.
             first_inc_lane = str(trial.incorrect_presses[0][0] + 1)
+        # EEG response marker, correctness in the byte. One marker per
+        # trial, for the trial's FIRST classified response: the correct
+        # press, the first wrong-finger press of a downgraded trial, or
+        # the deadline of a genuine timeout (130 is bookkeeping only, a
+        # miss has no response onset). t_event carries the press's own
+        # detector timestamp, so the wire byte may trail it by the
+        # frame-loop queue latency (and, for a wrong-press trial that
+        # ran on to its timeout, by up to the response window); offline
+        # epoching corrects from the logged t_event. Mirror trials get
+        # one marker per hand because hand identity is what the LRP is
+        # made of.
+        if outcome.label != "Miss":
+            if mirror_hand_rts is not None:
+                r_rt, l_rt = mirror_hand_rts
+                if r_rt is not None:
+                    self._eeg_send(
+                        eeg_trigger.response_code("correct", trial.lane),
+                        lane=trial.lane,
+                        t_event=trial.stim_t_perf + r_rt / 1000.0)
+                if l_rt is not None:
+                    left_lane = trial.lane + 4
+                    self._eeg_send(
+                        eeg_trigger.response_code("correct", left_lane),
+                        lane=left_lane,
+                        t_event=trial.stim_t_perf + l_rt / 1000.0)
+            else:
+                self._eeg_send(
+                    eeg_trigger.response_code("correct", trial.lane),
+                    lane=trial.lane,
+                    t_event=(trial.stim_t_perf + outcome.rt_ms / 1000.0
+                             if outcome.rt_ms is not None else now))
+        elif had_incorrect:
+            wrong_lane, wrong_t = trial.incorrect_presses[0]
+            self._eeg_send(eeg_trigger.response_code("wrong", wrong_lane),
+                           lane=wrong_lane, t_event=wrong_t)
+        else:
+            self._eeg_send(eeg_trigger.CODES["resp_timeout"], t_event=now)
+        # Feedback markers are optional (FRN work only): the discrete
+        # moment the outcome flash and chime appear is right here.
+        if getattr(self, "_eeg_feedback_markers", False):
+            self._eeg_send(eeg_trigger.CODES[
+                "feedback_positive" if outcome.label != "Miss"
+                else "feedback_negative"], t_event=now)
         if self.trial_logger:
             row = {
                 "participant": self.session.participant,
@@ -4894,7 +5114,8 @@ class GameEngine:
                             points: int = 0,
                             stimulus: str = "",
                             target_shown: bool | None = None,
-                            hand: str | None = None) -> None:
+                            hand: str | None = None,
+                            press_t_perf: float | None = None) -> None:
         """Write a trial row for a reaction-mode event that never
         became a scorable trial: foreperiod false starts, sub-cut
         anticipations, wrong fingers in the simple sub-mode, and catch
@@ -4921,8 +5142,29 @@ class GameEngine:
         false starts, catch trials). `error_type` lands in the CSV's
         error_type column: false_start / anticipation / wrong_finger /
         catch_false_start, or "" for a survived catch.
+
+        `press_t_perf` is the pressing event's own detector timestamp,
+        used as the EEG marker's t_event so the marker rides the 200 Hz
+        crossing clock, not the frame the row was written on. None (a
+        survived catch, or an old caller) falls back to send time.
         """
         self._ensure_metric_state()
+        # EEG response markers for events that never became scorable
+        # trials. Every anticipatory press (foreperiod, catch, sub-cut)
+        # shares the 120 band so guesses never pollute the reaction
+        # averages; a wrong finger in simple mode is a real wrong-
+        # finger response (110 band). A survived catch has no press
+        # and gets nothing here; its virtual onset (25) is the mode's.
+        if pressed_lane is not None:
+            if error_type in ("false_start", "anticipation",
+                              "catch_false_start"):
+                self._eeg_send(
+                    eeg_trigger.response_code("anticipation", pressed_lane),
+                    lane=pressed_lane, t_event=press_t_perf)
+            elif error_type == "wrong_finger":
+                self._eeg_send(
+                    eeg_trigger.response_code("wrong", pressed_lane),
+                    lane=pressed_lane, t_event=press_t_perf)
         # Whether a stimulus had fired for this attempt decides which
         # per-stim fields (loudness, response window, delivery flag,
         # force window) genuinely apply to the row.
@@ -5064,6 +5306,21 @@ class GameEngine:
         if not hasattr(self, "_per_lane_misses"):
             self._per_lane_misses = {}
         lane = sched_note.note.lane
+        # EEG response marker for the note. Any press on the note's
+        # lane is a correct-finger response whatever its timing tier
+        # (the row's early_late column carries the timing); a note
+        # that scrolled past unpressed is a timeout. t_event is frame
+        # time: rhythm sessions are never pooled for response-locked
+        # ERPs, so frame granularity is acceptable here.
+        if was_pressed:
+            self._eeg_send(eeg_trigger.response_code("correct", lane),
+                           lane=lane, t_event=now)
+        else:
+            self._eeg_send(eeg_trigger.CODES["resp_timeout"], t_event=now)
+        if getattr(self, "_eeg_feedback_markers", False):
+            self._eeg_send(eeg_trigger.CODES[
+                "feedback_positive" if label != "Miss"
+                else "feedback_negative"], t_event=now)
         if label != "Miss":
             self._per_lane_rts.setdefault(lane, []).append(abs(float(offset_ms)))
             # Capture press time + nearest beat time for the
@@ -5206,6 +5463,11 @@ class GameEngine:
         if self.raw_logger:
             self.raw_logger.queue_event("rhythm_spurious_press", lane=lane,
                                          t_perf=now, hand=self.hand_mode)
+        # EEG: a press with no scheduled note nearby is an idle press
+        # (131, artifact bookkeeping). The wrong-finger band is
+        # reserved for presses inside a trial. apply_wrong_press_penalty
+        # below only docks score; the marker belongs to this event.
+        self._eeg_send(eeg_trigger.CODES["resp_idle"], t_event=now)
         # Score penalty for the wrong-lane press in rhythm mode. Each
         # unmatched press costs `scoring.wrong_press_penalty` (floored
         # at zero so the score never goes negative).

@@ -199,6 +199,7 @@ from typing import TYPE_CHECKING
 
 import pygame
 
+from ...hardware.eeg_trigger import CODES as EEG_CODES
 from ...hardware.fsr_detector import PressEvent
 from ..scheduling import BalancedScheduler
 from ..scoring import ScoreConfig, TrialResult, classify
@@ -795,6 +796,19 @@ class PatternMode:
         self._next_stim_due = None
         self.engine.on_stim_multi([lane], self.trial_counter, now)
 
+    def eeg_stim_code(self) -> int | None:
+        """Sequence status rides the marker byte in this mode: the
+        N2b/P3b deviance analysis epochs on trained-versus-random
+        items, and cue condition is fixed within a block (recoverable
+        from cue_flags), so the byte carries what varies. Warm-up and
+        probe material counts as random, matching the pattern_trial
+        CSV column."""
+        if not 0 <= self._seg_idx < len(self.segments):
+            return None
+        return (EEG_CODES["stim_pattern_sequence"]
+                if self.segments[self._seg_idx].kind == "seq"
+                else EEG_CODES["stim_pattern_random"])
+
     # ---- presses -----------------------------------------------------------
     def _handle_press(self, ev: PressEvent, now: float) -> None:
         if self.phase == "rest":
@@ -915,6 +929,11 @@ class PatternMode:
     def _enter_rest(self, now: float, min_s: float, kind: str,
                     msg: str) -> None:
         self.phase = "rest"
+        # EEG rest markers bracket the take breaks so alpha-trend
+        # analysis can separate task time from rest time.
+        send = getattr(self.engine, "_eeg_send", None)
+        if callable(send):
+            send(EEG_CODES["rest_start"], t_event=now)
         self._rest_kind = kind
         self._rest_min_until = now + max(0.0, min_s)
         self._rest_msg_t = now
@@ -930,6 +949,9 @@ class PatternMode:
 
     def _leave_rest(self, now: float) -> None:
         self.phase = "play"
+        send = getattr(self.engine, "_eeg_send", None)
+        if callable(send):
+            send(EEG_CODES["rest_end"], t_event=now)
         self._rest_min_until = None
         if self._rest_kind == "between":
             self._seg_idx += 1
