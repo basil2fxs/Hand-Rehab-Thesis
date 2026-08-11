@@ -591,6 +591,13 @@ class CalibrationScreen:
             self._buttons.append(Button(
                 pygame.Rect(cx - 170, g["start"], 340, 64),
                 "Start calibration", self._begin, th, ly, primary=True))
+            # The gamified quick flow, one click away for a deliberate
+            # redo without waiting for the next session gate. Sensors
+            # only, so it is pointless without a force signal.
+            if getattr(self.engine.source, "provides_samples", True):
+                self._buttons.append(Button(
+                    pygame.Rect(cx + 210, g["start"], 250, 64),
+                    "Quick calibrate", self._quick_calibrate, th, ly))
         elif self.step in (STEP_EMPTY, STEP_RESTING, STEP_ALL):
             if not self._collecting:
                 add("Record", lambda: self._start_collecting(
@@ -660,6 +667,13 @@ class CalibrationScreen:
                 self._kept = kept
         self.step = self._plan()[0]
         self._rebuild_buttons()
+
+    def _quick_calibrate(self) -> None:
+        """Hand over to the gamified quick flow for the session's
+        hands. It saves through the same profile path this screen
+        uses, so coming back here afterwards shows its result."""
+        if hasattr(self.engine, "show_quick_calibration"):
+            self.engine.show_quick_calibration()
 
     def _to_menu(self) -> None:
         """Back to the opening menu with the same hand and job still

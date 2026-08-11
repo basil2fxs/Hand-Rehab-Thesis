@@ -289,6 +289,116 @@ def draw_text(surf: pygame.Surface, text: str, pos: tuple[int, int],
     return rect
 
 
+class ConfirmDialog:
+    """Modal are-you-sure card: full-screen dim, a centred question,
+    one safe button and one destructive button.
+
+    Layout and colours copy the quick calibration Esc guard so every
+    confirm in the app reads the same. The safe action is the primary
+    button AND owns keyboard focus when the dialog opens, so a reflex
+    Enter (or a stray double-press of whatever raised the dialog) lands
+    on the harmless choice. Reaching the destructive button takes a
+    deliberate move: a direct click on it, or Tab / an arrow key to
+    shift focus and THEN Enter.
+
+    Esc is deliberately NOT handled here. The engine owns Esc and
+    treats it as "dismiss" while a dialog is up, so the key that raised
+    the dialog can only ever back out of it, never through it.
+
+    Everything drawn is static (no flashing): a dim layer, the card,
+    text, buttons, and a steady focus ring around the focused button.
+    """
+
+    CARD_W = 640
+    CARD_H = 240
+    BTN_W = 230
+    BTN_H = 56
+
+    def __init__(self, question: str, detail: str,
+                 safe_label: str, danger_label: str,
+                 on_safe: Callable[[], None],
+                 on_danger: Callable[[], None],
+                 theme: Theme, layout: Layout,
+                 accent: tuple[int, int, int] | None = None) -> None:
+        self.question = question
+        self.detail = detail
+        self.theme = theme
+        self.layout = layout
+        # The raiser's accent (the running mode's colour) tops the card
+        # so the dialog visibly belongs to the game it interrupted.
+        self.accent = accent or theme.accent
+        cx = layout.width // 2
+        y = layout.height // 2 + 40
+        self.safe_btn = Button(
+            pygame.Rect(cx - 250, y, self.BTN_W, self.BTN_H),
+            safe_label, on_safe, theme, layout, primary=True)
+        self.danger_btn = Button(
+            pygame.Rect(cx + 20, y, self.BTN_W, self.BTN_H),
+            danger_label, on_danger, theme, layout)
+        # 0 = safe, 1 = danger. Focus starts on the safe choice.
+        self.focus = 0
+        self._dim_cache: pygame.Surface | None = None
+
+    def _buttons(self) -> tuple[Button, Button]:
+        return (self.safe_btn, self.danger_btn)
+
+    def handle_event(self, e: pygame.event.Event) -> None:
+        """Mouse goes to the two buttons; the keyboard moves focus and
+        fires the focused button. Esc is ignored on purpose (the caller
+        handles it as dismiss before this method ever runs)."""
+        if e.type in (pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN,
+                      pygame.MOUSEBUTTONUP):
+            for b in self._buttons():
+                b.handle_event(e)
+            return
+        if e.type != pygame.KEYDOWN:
+            return
+        if e.key in (pygame.K_TAB, pygame.K_LEFT, pygame.K_RIGHT,
+                     pygame.K_UP, pygame.K_DOWN):
+            # Two buttons, so any move flips to the other one.
+            self.focus = 1 - self.focus
+        elif e.key in (pygame.K_RETURN, pygame.K_KP_ENTER,
+                       pygame.K_SPACE):
+            self._buttons()[self.focus].on_click()
+
+    def draw(self, surf: pygame.Surface) -> None:
+        th, ly = self.theme, self.layout
+        # Full-screen dim behind the card, cached: draw runs every
+        # frame and a fresh SRCALPHA surface per frame is an allocation
+        # the draw hot path does not need.
+        if (self._dim_cache is None
+                or self._dim_cache.get_size() != surf.get_size()):
+            self._dim_cache = pygame.Surface(surf.get_size(),
+                                             pygame.SRCALPHA)
+            self._dim_cache.fill((0, 0, 0, 160))
+        surf.blit(self._dim_cache, (0, 0))
+        cx, cy = ly.width // 2, ly.height // 2
+        card = pygame.Rect(cx - self.CARD_W // 2, cy - 130,
+                           self.CARD_W, self.CARD_H)
+        pygame.draw.rect(surf, th.background, card, border_radius=18)
+        pygame.draw.rect(surf, th.muted, card, 2, border_radius=18)
+        # Slim accent rule along the card's top edge, in the raising
+        # mode's colour, mirroring the header underline convention.
+        rule = pygame.Rect(0, 0, 96, 4)
+        rule.center = (cx, card.top + 2)
+        pygame.draw.rect(surf, self.accent, rule, border_radius=2)
+        draw_text(surf, self.question, (cx, cy - 80), th, ly,
+                  pt=FONT_H2, centre=True)
+        if self.detail:
+            draw_text(surf, self.detail, (cx, cy - 35), th, ly,
+                      pt=FONT_BODY, centre=True, colour=th.muted)
+        for b in self._buttons():
+            b.draw(surf)
+        # Steady focus ring so a keyboard-only player can see where
+        # Enter will land. Drawn outside the button so it never fights
+        # the hover ring. Theme accent, NOT the mode accent: a red
+        # mode's ring around Keep playing would read as a warning.
+        focused = self._buttons()[self.focus]
+        ring = focused.rect.inflate(12, 12)
+        pygame.draw.rect(surf, self.theme.accent, ring, 3,
+                         border_radius=Button.BORDER_RADIUS + 4)
+
+
 class Dropdown:
     """Click-to-open selector with a fixed list of options.
 

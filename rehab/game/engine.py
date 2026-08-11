@@ -266,6 +266,13 @@ class GameEngine:
         # analyst can subtract it from the block duration.
         self._block_pause_count = 0
         self._block_paused_s = 0.0
+        # Mid-block exit guard. Holds the live ConfirmDialog while
+        # "End this session?" is up; None means no dialog. The
+        # was-paused flag remembers whether the block was already
+        # paused (P key) when the dialog raised, so dismissing it does
+        # not silently un-pause a break the player chose.
+        self._exit_confirm = None
+        self._exit_confirm_was_paused = False
         # Pending buzzer repeat-pulses as (lane, due_perf_counter).
         self._motor_queue: list[tuple[int, float]] = []
         # When the after-press confirmation buzz is due to end, and a
@@ -695,8 +702,16 @@ class GameEngine:
                     if e.type in (pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN,
                                   pygame.MOUSEBUTTONUP) and hasattr(e, "pos"):
                         e.dict["pos"] = self._to_logical(e.pos)
+                    # The exit dialog is modal. Note whether it was up
+                    # BEFORE the global handler runs: the Esc that
+                    # raises or dismisses it must not also leak into
+                    # the screen underneath on the same frame.
+                    exit_dialog_had_event = self._exit_confirm is not None
                     self._handle_global_event(e)
-                    if self.screen_obj and not self.paused:
+                    if exit_dialog_had_event or self._exit_confirm is not None:
+                        if self._exit_confirm is not None:
+                            self._exit_confirm.handle_event(e)
+                    elif self.screen_obj and not self.paused:
                         self.screen_obj.handle_event(e)
                     elif self.screen_obj and self.paused:
                         # Still let buttons on pause-friendly screens (results,
@@ -719,6 +734,12 @@ class GameEngine:
                     # toggle (which re-opens the display) takes effect
                     # without a stale surface reference.
                     self.screen_obj.draw(self._screen)
+                if self._exit_confirm is not None:
+                    # Exit dialog over the frozen play field. Screens
+                    # skip their own PAUSED overlay while it is up (see
+                    # exit_confirm_active) so the dialog's dim is the
+                    # only layer between card and lanes.
+                    self._exit_confirm.draw(self._screen)
                 self._draw_hud(self._screen, clock)
                 # Scale the logical surface up onto the window and flip.
                 self._present()
@@ -848,6 +869,7 @@ class GameEngine:
         from ..ui.calibration_screen import CalibrationScreen
         from ..ui.force_pilot_screen import ForcePilotScreen
         from ..ui.lighthouse_screen import LighthouseScreen
+        from ..ui.quick_calibration_screen import QuickCalibrationScreen
         from ..ui.syllables_screen import SyllablesScreen
         return {
             "title": TitleScreen(self),
@@ -863,6 +885,7 @@ class GameEngine:
             "results": ResultsScreen(self),
             "diagnostics": DiagnosticsScreen(self),
             "calibration": CalibrationScreen(self),
+            "quick_cal": QuickCalibrationScreen(self),
         }
 
     def _build_audio(self) -> AudioEngine | None:
@@ -991,6 +1014,11 @@ class GameEngine:
             elif e.key == pygame.K_F10:
                 self._toggle_fullscreen()
             elif e.key == pygame.K_p:
+                if self._exit_confirm is not None:
+                    # The dialog owns the keyboard while it is up. A P
+                    # falling through here would resume the block
+                    # UNDER the card and let trials tick away unseen.
+                    return
                 on_block = self.screen_obj in (
                     self._screens.get("gameplay"),
                     self._screens.get("rhythm"),
@@ -1002,6 +1030,81 @@ class GameEngine:
                     else:
                         self._resume_now()
 
+    # Screens a live block runs on. Esc from any of these while the
+    # block's loggers are open must ask before anything is abandoned:
+    # one stray key press ending a patient's session is exactly the
+    # accident the exit dialog exists to stop.
+    _BLOCK_SCREEN_KEYS = ("gameplay", "rhythm", "syllables",
+                          "force_pilot", "lighthouse", "buzz_hunt")
+
+    @property
+    def exit_confirm_active(self) -> bool:
+        """True while the End-this-session dialog is up. Screens read
+        this to skip their own PAUSED overlay under the dialog. getattr
+        so an engine built bare via __new__ in a test reads False."""
+        return getattr(self, "_exit_confirm", None) is not None
+
+    def _on_block_screen(self) -> bool:
+        return any(
+            self.screen_obj is sc
+            for sc in (self._screens.get(k)
+                       for k in self._BLOCK_SCREEN_KEYS)
+            if sc is not None)
+
+    def _raise_exit_confirm(self) -> None:
+        """Esc landed mid-block: freeze play through the normal pause
+        path and put the question on screen instead of acting. The
+        block stays fully intact underneath (no trial ticks away; the
+        pause tests set that convention)."""
+        if self._exit_confirm is not None:
+            return
+        self._exit_confirm_was_paused = self.paused
+        if not self.paused:
+            self._pause_now()
+        from ..ui.screens import ModeSelectScreen
+        from ..ui.widgets import ConfirmDialog
+        accent = ModeSelectScreen.MODE_ACCENTS.get(
+            str(self.current_block).lower(), self.theme.accent)
+        self._exit_confirm = ConfirmDialog(
+            question="End this session and go back to the menu?",
+            detail="Finished trials stay saved. The block is recorded "
+                   "as cut short.",
+            safe_label="Keep playing",
+            danger_label="End session",
+            on_safe=self._dismiss_exit_confirm,
+            on_danger=self._confirm_exit_to_menu,
+            theme=self.theme, layout=self.layout,
+            accent=accent)
+
+    def _dismiss_exit_confirm(self) -> None:
+        """Keep playing: drop the dialog and resume through the normal
+        pause path so in-flight trial timestamps shift forward. A block
+        the player had ALREADY paused before the dialog stays paused;
+        their break is not the dialog's to end."""
+        self._exit_confirm = None
+        if not self._exit_confirm_was_paused:
+            self._resume_now()
+
+    def _confirm_exit_to_menu(self) -> None:
+        """End session, deliberately chosen. Close the dialog's pause
+        bookkeeping first (matched pause/resume pair in the raw CSV,
+        paused seconds into the block summary), then reuse the one
+        existing abandon path so every completed trial is on disk and
+        the metadata marks the block cut short, exactly as an Esc-quit
+        used to record it."""
+        self._exit_confirm = None
+        if self.paused and self._pause_started_at is not None:
+            pause_dur = time.perf_counter() - self._pause_started_at
+            self._block_paused_s += pause_dur
+            if self.raw_logger:
+                self.raw_logger.queue_event(
+                    "resume", detail=f"paused_s={pause_dur:.3f}",
+                    hand=self.hand_mode)
+        self.paused = False
+        self._pause_started_at = None
+        self._abandon_if_in_block()
+        self.show_mode_select()
+
     def _handle_escape(self) -> None:
         """Two-step exit so a therapist can run several blocks for the
         same patient without retyping the name.
@@ -1011,9 +1114,20 @@ class GameEngine:
           name so the next patient enters their own
         - Esc on setup / rhythm-setup / results -> back to mode-select
           (name persists)
-        - Esc during a block (gameplay / rhythm) -> abandon, save partial
-          data, then back to mode-select (name persists)
+        - Esc during a block (any screen a block runs on) -> the End
+          session dialog. Only a deliberate confirm abandons (partial
+          data still saved); Esc again keeps playing.
         """
+        # Esc with the exit dialog up backs OUT of it, never through
+        # it. Ending the session takes a click on End session or an
+        # explicit keyboard move onto it plus Enter.
+        if self._exit_confirm is not None:
+            self._dismiss_exit_confirm()
+            return
+        # A live block never ends on a bare Esc.
+        if self._on_block_screen() and self.session_paths is not None:
+            self._raise_exit_confirm()
+            return
         title = self._screens.get("title")
         mode_select = self._screens.get("mode_select")
         # Whatever screen we're on, clear pause + stop audio first so we
@@ -1046,6 +1160,13 @@ class GameEngine:
             self.cfg.data.setdefault("session", {})["participant"] = None
             self.cfg.data["session"]["age"] = None
             self.show_title()
+            return
+        # The quick calibration guards its own exit: a stray Esc must
+        # not throw away a half-measured run, so the screen raises a
+        # confirm overlay and only a second Esc (or Stop) abandons.
+        qc = self._screens.get("quick_cal")
+        if qc is not None and self.screen_obj is qc:
+            qc.on_escape()
             return
         # Diagnostics returns straight to title without abandoning any
         # block (none could be in-flight on this screen).
@@ -1127,10 +1248,12 @@ class GameEngine:
             # tried to call get_sample() itself would almost always get
             # nothing: the values have to be pushed from here.
             # Calibration needs every sample, not the once-per-frame
-            # slice the lane strips get: it averages a whole step.
-            cal_sc = self._screens.get("calibration")
-            if cal_sc is not None and self.screen_obj is cal_sc:
-                cal_sc.on_sample(s.t_perf, s.values)
+            # slice the lane strips get: it averages a whole step. The
+            # quick flow has the same appetite for the same reason.
+            for cal_key in ("calibration", "quick_cal"):
+                cal_sc = self._screens.get(cal_key)
+                if cal_sc is not None and self.screen_obj is cal_sc:
+                    cal_sc.on_sample(s.t_perf, s.values)
             for key in ("gameplay", "rhythm", "diagnostics"):
                 sc = self._screens.get(key)
                 if sc and hasattr(sc, "lanes"):
@@ -1351,6 +1474,99 @@ class GameEngine:
         if hasattr(cs, "reset"):
             cs.reset()
         self.screen_obj = cs
+
+    def _usable_saved_profile(self, hand: str):
+        """The usable profile saved on disk for one hand, or None.
+
+        Same file candidates and same legacy-file rule as
+        load_saved_calibration; kept separate because the quick-cal
+        trigger needs a per-hand answer without re-applying every hand.
+        """
+        from ..hardware.calibration_profile import CalibrationProfile
+        for name in (f"current_{hand}.json", "current.json"):
+            try:
+                path = self.cfg.resolve_path(f"config/calibration/{name}")
+            except Exception:
+                continue
+            prof = CalibrationProfile.load(path)
+            if prof is None:
+                continue
+            # current.json is the older single-file layout; only take it
+            # for the hand it says it was measured on.
+            if name == "current.json" and \
+                    (getattr(prof, "hand", "right") or "right") != hand:
+                continue
+            if prof.usable()[0]:
+                return prof
+        return None
+
+    def quick_cal_hands_needed(self) -> list[str]:
+        """Which of the session's hands still need a calibration before
+        play. Empty means the session can start straight away.
+
+        A keyboard session never needs one: there is no force signal to
+        calibrate and the thresholds do not matter for keys, so showing
+        the flow (or any hardware nag) would only be noise. A hand
+        counts as covered when a usable profile is already applied, or
+        when a usable saved one is sitting on disk, in which case it is
+        applied here so the check leaves the session ready to run.
+        """
+        if not getattr(self.source, "provides_samples", True):
+            return []
+        if not bool(self.cfg.get("quick_cal.enabled", True)):
+            return []
+        if self.hand_mode == "both":
+            hands = ["left", "right"]
+        elif self.hand_mode in ("left", "right"):
+            hands = [self.hand_mode]
+        else:
+            hands = ["right"]
+        needed = []
+        for hand in hands:
+            prof = (self.calibration_profiles or {}).get(hand)
+            if prof is not None and prof.usable()[0]:
+                continue
+            saved = self._usable_saved_profile(hand)
+            if saved is not None:
+                self.apply_calibration(saved)
+                continue
+            needed.append(hand)
+        return needed
+
+    def maybe_start_quick_calibration(self, continue_cb) -> bool:
+        """Gate a block start on the quick calibration when any selected
+        hand has no usable profile. Returns True when the flow took the
+        screen (continue_cb runs when it finishes or is skipped), False
+        when the session can start immediately. The returning-player
+        skip is this False: it costs nothing and shows nothing."""
+        hands = self.quick_cal_hands_needed()
+        if not hands:
+            return False
+        self.show_quick_calibration(hands, continue_cb)
+        return True
+
+    def show_quick_calibration(self, hands=None, continue_cb=None) -> None:
+        """Open the quick flow directly. With no hands given it covers
+        every hand of the current session, profiles or not, which is
+        what the deliberate menu entry wants."""
+        sc = self._screens.get("quick_cal")
+        if sc is None:
+            return
+        if hands is None:
+            if self.hand_mode == "both":
+                hands = ["left", "right"]
+            elif self.hand_mode in ("left", "right"):
+                hands = [self.hand_mode]
+            else:
+                hands = ["right"]
+        # The flow reads live values off each hand's detector, so a
+        # menu launch outside a bilateral session may need the second
+        # detector built first.
+        if any(h not in (self.detectors or {}) for h in hands):
+            self._ensure_both_detectors()
+            self.reapply_calibrations()
+        sc.begin(list(hands), continue_cb)
+        self.screen_obj = sc
 
     def load_saved_calibration(self) -> bool:
         """Pick up the calibration taken last time, if there is one, so

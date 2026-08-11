@@ -151,6 +151,31 @@ fsr:
   abs_off_max: [1000, 1000, 1000, 1000]
   debounce_ms: 100
 
+quick_cal:
+  # The gamified calibration that runs after the hand pick when any
+  # selected hand has no usable saved profile. It collects the same
+  # empty / resting / light-press captures as the menu calibration and
+  # saves through the same CalibrationProfile path; these knobs only
+  # shape the game around that collection. Keyboard sessions never see
+  # it (no force to calibrate), and a session where every selected
+  # hand already has a usable profile skips it at zero cost.
+  enabled: true
+  # Seconds each rest capture runs (hands off, then hands resting).
+  # Shorter than the menu flow's 3 s because the player is watched
+  # through it live; long enough to average the sensor noise.
+  rest_capture_s: 2.0
+  # Seconds a press must sit inside the target band to count. The held
+  # plateau is what the light-press level is read from, so shortening
+  # this below ~0.5 s starts sampling the rise instead of the hold.
+  hold_s: 1.0
+  # Target band, counts above resting. The floor is clamped in code to
+  # sit above MIN_USABLE_GAP so any press held in the band yields a
+  # profile the threshold maths accepts. The ceiling teaches "light":
+  # pressing above it stops the hold meter and asks for less. On this
+  # device measured light presses sat between about 40 and 145 counts.
+  zone_min_counts: 24
+  zone_max_counts: 110
+
 cue:
   # WHAT THE PATIENT GETS ON A TRIAL, as four switches that are each
   # on or off on their own.

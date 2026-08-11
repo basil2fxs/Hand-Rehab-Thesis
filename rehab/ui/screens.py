@@ -1082,25 +1082,26 @@ class SetupScreen(Screen):
             # ClassicMode constructor reads it back when the block starts.
             self.engine.cfg.data.setdefault("game", {})[
                 "trigger_interval_s"] = self.pace_slider.value
-            self.engine.begin_classic_block()
-        elif mode == "rhythm":
-            self.engine.show_rhythm_setup()
-        elif mode == "reaction":
-            self.engine.begin_reaction_block()
-        elif mode == "pattern":
-            self.engine.begin_pattern_block()
-        elif mode == "chords":
-            self.engine.begin_chords_block()
-        elif mode == "syllables":
-            self.engine.begin_syllables_block()
-        elif mode == "force_pilot":
-            self.engine.begin_force_pilot_block()
-        elif mode == "lighthouse":
-            self.engine.begin_lighthouse_block()
-        elif mode == "buzz_hunt":
-            self.engine.begin_buzz_hunt_block()
-        else:
-            self.engine.begin_adaptive_block()
+        starters = {
+            "classic": self.engine.begin_classic_block,
+            "rhythm": self.engine.show_rhythm_setup,
+            "reaction": self.engine.begin_reaction_block,
+            "pattern": self.engine.begin_pattern_block,
+            "chords": self.engine.begin_chords_block,
+            "syllables": self.engine.begin_syllables_block,
+            "force_pilot": self.engine.begin_force_pilot_block,
+            "lighthouse": self.engine.begin_lighthouse_block,
+            "buzz_hunt": self.engine.begin_buzz_hunt_block,
+        }
+        start = starters.get(mode, self.engine.begin_adaptive_block)
+        # A hand with no usable calibration gets the quick flow first,
+        # which teaches the light press and measures it in one go; the
+        # block start is handed over as the continuation. A returning
+        # player (or a keyboard session) sails straight through: the
+        # gate returns False without showing anything.
+        if self.engine.maybe_start_quick_calibration(start):
+            return
+        start()
 
     # Keyboard shortcut for each hand card, first letter of its key
     # (audit finding #113: this screen was mouse-click only, so a
@@ -1810,7 +1811,10 @@ class GameplayScreen(Screen):
         if remaining > 0:
             self._draw_countdown_card(surf, remaining)
 
-        if self.engine.paused:
+        # The exit dialog (engine-drawn, above this screen) brings its
+        # own dim; stacking PAUSED under it would put two overlays and
+        # two messages on one frozen frame.
+        if self.engine.paused and not self.engine.exit_confirm_active:
             self._draw_paused_overlay(surf)
 
     def _draw_controls_note(self, surf: pygame.Surface) -> None:
@@ -2976,7 +2980,9 @@ class RhythmScreen(Screen):
                 surf.blit(t, t.get_rect(topright=(right, y)))
                 y += 18
 
-        if self.engine.paused:
+        # Skipped under the exit dialog, same as GameplayScreen: the
+        # dialog dims the field itself.
+        if self.engine.paused and not self.engine.exit_confirm_active:
             overlay = pygame.Surface(
                 (self.layout.width, self.layout.height), pygame.SRCALPHA,
             )

@@ -159,7 +159,9 @@ class ForcePilotScreen(Screen):
         remaining = self._countdown_remaining()
         if remaining > 0:
             self._draw_countdown_card(surf, remaining)
-        if self.engine.paused:
+        # Skipped under the exit dialog (engine draws it above this
+        # screen with its own dim), matching GameplayScreen.
+        if self.engine.paused and not self.engine.exit_confirm_active:
             self._draw_paused_overlay(surf)
 
     # ---- top strip ---------------------------------------------------------
