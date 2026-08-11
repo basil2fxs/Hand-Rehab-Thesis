@@ -385,6 +385,8 @@ class TestSkipAndEscape:
 
     def test_escape_asks_before_abandoning(self, tmp_path):
         eng = _engine(tmp_path)
+        # The gate fires on a game start, so the player is logged in.
+        eng.begin_session("P1", "")
         calls = []
         eng.maybe_start_quick_calibration(lambda: calls.append(1))
         sc = eng.screen_obj
@@ -394,12 +396,23 @@ class TestSkipAndEscape:
         assert eng.screen_obj is sc
         sc._keep_going()
         assert not sc._confirm
-        # Esc twice abandons to mode select without saving or starting.
+        # Esc twice abandons to game select (the session's home base)
+        # without saving or starting.
         eng._handle_escape()
         eng._handle_escape()
         assert eng.screen_obj is eng._screens["mode_select"]
         assert calls == []
         assert not (tmp_path / "config/calibration").exists()
+
+    def test_escape_abandon_without_login_lands_on_title(self, tmp_path):
+        # A menu launch from the login screen's Calibrate flow has no
+        # session behind it, so abandoning cannot strand the player on
+        # game select with nobody logged in.
+        eng = _engine(tmp_path)
+        eng.show_quick_calibration()
+        eng._handle_escape()
+        eng._handle_escape()
+        assert eng.screen_obj is eng._screens["title"]
 
     def test_flow_is_frozen_while_the_guard_is_up(self, tmp_path):
         eng = _engine(tmp_path)

@@ -132,6 +132,27 @@ the start AND end of the session, separating trained-task gains from
 transfer, the standard criticism of game training (Zondervan et al.
 2016: MusicGlove task gains without superior functional transfer).
 
+THE WARM-UP IS ANNOUNCED AND CAPPED. The opening probes are eight
+single-finger presses (sixteen with both hands), and played cold they
+read as the game itself: a patient who quits or demos early has seen
+nothing BUT single fingers and concludes chords mode never asks for a
+chord. Three rules keep the probes a warm-up rather than the game.
+First, the screen says so: a persistent WARM-UP banner with a counter
+runs over every opening probe, a WIND-DOWN banner over the closing
+set, and the first chord is announced when it arrives. Second, probes
+run on their own short fixed gap (warmup_iti_s) instead of the
+chord trials' jittered ITI: the jitter exists so a chord cannot be
+timed rather than reacted to, but a probe is an instructed press
+whose measurement (leak while pressing) does not care whether the
+patient saw it coming. Third, a hard budget (warmup_cap_s) bounds the
+time to the first chord: if the opening probes are still running when
+it expires (a hand that will not settle, repeated timeouts), the
+remainder move to the closing set, the block summary records
+warmup_capped, and the chords start. The start matrix then has fewer
+probes behind it, which the analysis can see and say; a session whose
+first minutes are all warm-up is the worse failure, because the
+patient stops playing before the training content ever appears.
+
 FATIGUE GUARD. Fatigue corrupts exactly what this mode trains (Danion
 2000/2001), so after each sub-block: a clean-hit rate 30 or more
 percentage points below the session's first sub-block, or a median RT
@@ -188,25 +209,102 @@ DEVIATIONS FROM THE RESEARCH BRIEF, where the plumbing wins:
   CSV's fixed schema carries the chord in `stimulus` ("1+3+4"), the
   target set in `correct_keys` and the peaks in force_window_peaks.
 
-BOTH HANDS. With both boards connected every chord is still drawn
-WITHIN one hand, because enslaving is a within-hand quantity and no
-literature basis was found for cross-hand chord individuation
-training, but the two hands alternate under the suite's paired
-balance rules: a shuffle bag over the hands keeps their trial counts
-equal (never apart by more than one) while each hand's own shuffle
-bag keeps its chords equally dealt, the same two-axis balancing
-PairedBalancedScheduler applies elsewhere. Single-finger probes run
-per hand (2 per finger per hand at each session edge), so the
-analysis gets a clean start and end enslaving matrix for EACH hand,
-and every per-trial record carries its hand. The staircase level is
-shared across the hands: both climb the same ladder, so the weaker
-hand sets the pace, which errs in the safe direction. On screen the
-chord's fingers light inside that hand's own tile block (left block
-left of centre, right block right, mirrored finger order), and a
-"Left hand" / "Right hand" chip names the side at each stim; both of
-those visual identifications are suppressed when cue.show_target is
-off, where no visual may name the target. Quiet-finger leak is
-always measured against the chord's own hand only.
+BOTH HANDS. With both boards connected a WITHIN-hand chord is still
+drawn inside one hand, because enslaving is a within-hand quantity
+(cross-hand enslaving is negligible next to within-hand: Li, Danion,
+Latash, Li and Zatsiorsky 2000, J Appl Biomech 16; Li et al. 2001,
+Exp Brain Res 141), and the two hands alternate under the suite's
+paired balance rules: a shuffle bag over the hands keeps their trial
+counts equal (never apart by more than one) while each hand's own
+shuffle bag keeps its chords equally dealt, the same two-axis
+balancing PairedBalancedScheduler applies elsewhere. Single-finger
+probes run per hand (2 per finger per hand at each session edge), so
+the analysis gets a clean start and end enslaving matrix for EACH
+hand, and every per-trial record carries its hand. The within-hand
+staircase level is shared across the hands: both climb the same
+ladder, so the weaker hand sets the pace, which errs in the safe
+direction. On screen the chord's fingers light inside that hand's own
+tile block (left block left of centre, right block right, mirrored
+finger order), and a "Left hand" / "Right hand" chip names the side
+at each stim; both of those visual identifications are suppressed
+when cue.show_target is off, where no visual may name the target.
+Quiet-finger leak is always measured against the chord's own hand
+only.
+
+CROSS-HAND CHORDS. Bilateral sessions also deal chords that SPAN the
+hands, and those measure a different thing: not individuation but
+bimanual coordination, the yoking of the two hands into one
+functional unit (Kelso, Southard and Goodman 1979, Science 203;
+Swinnen 2002, Nat Rev Neurosci 3). The replicated fact the tier
+ladder is built on is the symmetry advantage: mirror-symmetric
+simultaneous action is the stable default (Kelso 1984; Haken, Kelso
+and Bunz 1985) and the bias is spatial-perceptual (Mechsner et al.
+2001, Nature 414), so with both palms down on the boards homologous
+fingers are the mirrored ones and mirror chords are the easy tier.
+Non-mirror chords demand active suppression of that default
+coupling, exactly the interhemispheric machinery that is disturbed
+after stroke (Murase et al. 2004, Ann Neurol 55), and asymmetric
+two-hand tasks are where cross-hand interaction effects actually
+appear (Li 2001). Kantak, Jax and Wittenberg (2017, Restor Neurol
+Neurosci 35) argue bimanual coordination is its own rehab target
+that unilateral practice does not cover; the bilateral training
+lineage (Whitall 2000; Luft 2004; Cauraugh 2010 meta, contested)
+supports repetitive coupled bilateral work without settling
+efficacy, so the mode's stance stays measurement plus mechanism.
+
+The cross-hand difficulty formula reuses the within-hand machinery:
+D_cross is the within-hand D of each hand's fingers (each hand still
+has quiet fingers to keep still), plus the same 1.5 size penalty per
+finger above two on TOTAL chord size, plus 1.5 per unit of mirror
+distance (each active finger's distance to the nearest active finger
+of the other hand in mirror coordinates, summed): zero for mirror
+chords, growing with spatial asymmetry. The 1.5 weights are defended
+design choices, like the within-hand weights. The ladder
+(left-of-bar = left hand):
+
+    Tier XB1  mirror singles:   I|I (4),  P|P (6),  M|M (8), R|R (8)
+    Tier XB2  mirror doubles:   RP|RP (7), IM|IM (9), MR|MR (9)
+    Tier XB3  neighbour shifts: I|M, M|I (9), R|P, P|R (10),
+                                M|R, R|M (11)
+    Tier XB4  far and uneven:   I|R (12), I|MR (12.5), I|P (14),
+                                IM|RP (17)
+
+Scheduling is scope-pure: of the five training sub-blocks the third
+and fifth deal cross-hand chords, the rest within-hand, in a FIXED
+order so fatigue trends stay comparable across sessions and the EEG
+layer gets clean block-level contrasts. Cross-hand chords run on
+their own staircase (level_cross, same tier-within-window ladder
+shape and the same W values) so a cross-hand artefact can never
+drive the within-hand level or the reverse. In Test Mode's bilateral
+miniature the two scopes simply alternate so a demo shows both.
+
+Cross-hand measurement, logged per trial in the block summary:
+per-hand ER (each hand's leak against its OWN targets and quiet
+fingers, never pooled with within-hand ER: the other hand moving is
+a coupling confound), mirror flag and mirror-distance (asym),
+lead hand and lag (first-onset difference between the hands, the
+temporal coupling measure), and per-hand press levels so mirror
+singles can be compared against the same finger's unimanual probe
+press for the bilateral deficit ratio (Li 2000/2001). Within-hand
+chords in bilateral play additionally log mirror_leak: the resting
+hand's loudest normalised peak against the chord's mean press, the
+silent mirror-force measure (Cincotta and Ziemann 2008), free
+because the other board is instrumented and quiet. The trial CSV
+separates the scopes in the stimulus descriptor itself: a
+within-hand chord stays "1+3+4", a cross-hand chord is written
+"x:1+5", so no analysis can mistake one for the other. On screen a
+cross-hand chord lights its fingers in BOTH tile blocks with the
+shared baseline glow joining them across the divider, and the side
+chip reads "Both hands"; a same-instant buzz on the two boards is
+fine (one motor per board at a time is the only constraint), so a
+1+1 cross chord cues both hands simultaneously while a within-hand
+multi-finger cue arpeggiates. Cue span therefore differs between
+scopes, a known confound when comparing RT across scopes, which is
+why cross RT is never pooled with within RT anywhere.
+
+What cross-hand chords do NOT cover: anti-phase rhythmic
+coordination. That is Load Split's job; the two modes measure
+different halves of the bimanual literature.
 - With the shipped cue defaults the go moment is audio-tactile-visual:
   highlight, tone and arpeggio land together, so chord RT and span are
   responses to that mix, not to a visual flash alone. The defaults are
@@ -283,6 +381,56 @@ CHORD_TIERS: list[list[tuple[int, ...]]] = [
     [(0, 2), (1, 3), (0, 1, 3)],            # IR, MP, IMP
 ]
 
+# Weight per unit of mirror distance in a cross-hand chord: zero for
+# mirror-symmetric chords, growing with spatial asymmetry (the
+# symmetry advantage: Kelso 1984; Mechsner 2001). A defended design
+# choice, the same status as SIZE_PENALTY.
+CROSS_ASYM_WEIGHT = 1.5
+
+
+def cross_mirror_distance(left: tuple[int, ...],
+                          right: tuple[int, ...]) -> float:
+    """Spatial asymmetry of a cross-hand chord: each active finger's
+    distance to the NEAREST active finger of the other hand in mirror
+    coordinates (I=0 M=1 R=2 P=3, both palms down), summed over every
+    active finger. Zero exactly when the pattern is mirror-symmetric."""
+    d = 0.0
+    for f in left:
+        d += min(abs(int(f) - int(g)) for g in right)
+    for g in right:
+        d += min(abs(int(g) - int(f)) for f in left)
+    return d
+
+
+def chord_difficulty_cross(left: tuple[int, ...],
+                           right: tuple[int, ...]) -> float:
+    """Predicted hardness of a chord spanning both hands: each hand's
+    own within-hand D (its quiet fingers still have to stay still),
+    the size penalty on TOTAL chord size, and the mirror-distance
+    cost for spatial asymmetry."""
+    return (chord_difficulty(left) + chord_difficulty(right)
+            + SIZE_PENALTY * max(0, len(left) + len(right) - 2)
+            + CROSS_ASYM_WEIGHT * cross_mirror_distance(left, right))
+
+
+def cross_label(left: tuple[int, ...], right: tuple[int, ...]) -> str:
+    """Left of the bar is the left hand: I|M means left index with
+    right middle."""
+    return f"{chord_label(left)}|{chord_label(right)}"
+
+
+# The cross-hand ladder, (left fingers, right fingers) per chord,
+# tiers ordered by D_cross medians: mirror singles, mirror doubles,
+# neighbour shifts, far shifts and uneven counts. Explicit for the
+# same reason as CHORD_TIERS; the tests recompute every D_cross.
+CROSS_TIERS: list[list[tuple[tuple[int, ...], tuple[int, ...]]]] = [
+    [((0,), (0,)), ((3,), (3,)), ((1,), (1,)), ((2,), (2,))],
+    [((2, 3), (2, 3)), ((0, 1), (0, 1)), ((1, 2), (1, 2))],
+    [((0,), (1,)), ((1,), (0,)), ((2,), (3,)), ((3,), (2,)),
+     ((1,), (2,)), ((2,), (1,))],
+    [((0,), (2,)), ((0,), (1, 2)), ((0,), (3,)), ((0, 1), (2, 3))],
+]
+
 
 @dataclass
 class PendingChordTrial:
@@ -295,8 +443,10 @@ class PendingChordTrial:
     down together. A repeat press on a finger still down is ignored,
     so a double-tap cannot look like a wrong press. `hold_released`
     is which targets lifted during the hold, for feedback that names
-    the finger. `hand` is the side the chord belongs to; in bilateral
-    play the hands alternate but a single chord never spans both."""
+    the finger. `hand` is the side a within-hand chord belongs to; a
+    cross-hand chord (scope "cross") spans both hands, carries
+    hand="both" and keeps each side's fingers in `fingers_left` /
+    `fingers_right` (its `fingers` tuple stays empty)."""
     trial_id: int
     kind: str                       # "probe" | "chord"
     fingers: tuple[int, ...]        # within-hand finger indices 0..3
@@ -305,6 +455,9 @@ class PendingChordTrial:
     tier: int | None                # 0-based tier, None for probes
     w_ms: float
     hand: str = "right"
+    scope: str = "within"           # "within" | "cross"
+    fingers_left: tuple[int, ...] = ()
+    fingers_right: tuple[int, ...] = ()
     onsets: dict[int, float] = field(default_factory=dict)
     keys_pressed: list[int] = field(default_factory=list)
     incorrect_presses: list[tuple[int, float]] = field(default_factory=list)
@@ -370,6 +523,8 @@ class ChordsMode:
                  seed: int = 0,
                  demo_trials: int | None = None,
                  lanes_by_hand: dict[str, list[int]] | None = None,
+                 warmup_iti_s: float = 0.8,
+                 warmup_cap_s: float = 60.0,
                  ) -> None:
         self.engine = engine
         self.hand = hand
@@ -405,6 +560,12 @@ class ChordsMode:
         self.settle_prompt_s = float(settle_prompt_s)
         self.iti_min = float(iti_min_s)
         self.iti_max = max(float(iti_min_s), float(iti_max_s))
+        # Probes pace themselves: a short fixed gap (predictability is
+        # harmless for an instructed press) and a hard budget on the
+        # whole opening warm-up so the first chord is never more than
+        # warmup_cap_s away (see THE WARM-UP IS ANNOUNCED AND CAPPED).
+        self.warmup_iti = max(0.0, float(warmup_iti_s))
+        self.warmup_cap_s = max(0.0, float(warmup_cap_s))
         self.rest_between = float(rest_between_s)
         self.fatigue_rest = float(fatigue_rest_s)
         self.session_cap_s = float(session_cap_min) * 60.0
@@ -412,14 +573,20 @@ class ChordsMode:
         self.rng = random.Random(seed)
 
         # Session layout counters. Demo (Test Mode) shrinks to a
-        # miniature that still writes both trial kinds to the CSV:
-        # two probes then a handful of tier-1 chords, rests trimmed.
-        # Probes scale with the hands in play: 2 per finger PER HAND,
-        # so a bilateral session's matrices cover both hands.
+        # miniature where the CHORDS are the demo: one probe per hand
+        # so both trial kinds still land in the CSV, then chords for
+        # every remaining trial, rests trimmed. The old miniature gave
+        # the probes 2 per hand, which in a bilateral 6-trial demo made
+        # two thirds of the whole session single-finger presses: a
+        # supervisor (or Basil) walked away believing chords mode never
+        # asks for a chord.
+        # Probes in a full session scale with the hands in play: 2 per
+        # finger PER HAND, so a bilateral session's matrices cover both
+        # hands.
         n_hands = len(self.hand_names)
         if demo_trials is not None:
             n = max(2, int(demo_trials))
-            self._probe_left_start = min(2 * n_hands, n)
+            self._probe_left_start = min(n_hands, n - 1)
             self._probe_left_end = 0
             self.trials_per_subblock = max(1, n - self._probe_left_start)
             self.subblocks = 1
@@ -434,6 +601,13 @@ class ChordsMode:
         self._sub_idx = 0
         self._sub_done = 0
         self._probes_planned = self._probe_left_start + self._probe_left_end
+        # Warm-up bookkeeping: the planned opening and closing counts
+        # (the banner's "3 of 16"), whether the opening budget ran out,
+        # and which one-off announcements have fired.
+        self._probes_start_planned = self._probe_left_start
+        self._probes_end_planned = self._probe_left_end
+        self._warmup_capped = False
+        self._announced: set[str] = set()
         # Two-axis balance, the PairedBalancedScheduler shape: which
         # hand goes next is its own shuffle bag (counts never drift
         # apart by more than one), and within each hand the fingers or
@@ -455,6 +629,24 @@ class ChordsMode:
         self._chord_sched: dict[str, BalancedScheduler] = {}
         self._sched_tier: int | None = None
         self._stair: deque[bool] = deque(maxlen=self.STAIRCASE_WINDOW)
+        # Cross-hand chords climb their OWN ladder: pooling hit rates
+        # across scopes would let a cross-hand artefact drive the
+        # within-hand level (or the reverse), and the two ladders
+        # measure different things. Same shape: 4 tiers per window.
+        self.level_cross = 0
+        self.max_level_cross = 4 * len(self.windows_ms) - 1
+        self.highest_level_cross = 0
+        self._cross_sched: BalancedScheduler | None = None
+        self._cross_sched_tier: int | None = None
+        self._stair_cross: deque[bool] = deque(
+            maxlen=self.STAIRCASE_WINDOW)
+        # Scope-pure sub-blocks in bilateral play: of each five, the
+        # third and fifth deal cross-hand chords, in a FIXED order so
+        # fatigue trends stay comparable across sessions and the EEG
+        # layer gets clean block-level contrasts. A short custom
+        # config still gets at least one cross sub-block whenever it
+        # has two or more. Unilateral play is all within, unchanged.
+        self._scope_seq = self._plan_scope_sequence()
 
         # Trial state machine: settle -> stim [-> hold] -> settle ...
         # with rest between sub-blocks and done at the end.
@@ -522,6 +714,52 @@ class ChordsMode:
     @property
     def current_tier(self) -> int:
         return self.level % 4
+
+    @property
+    def current_w_cross_ms(self) -> float:
+        return self.windows_ms[min(self.level_cross // 4,
+                                   len(self.windows_ms) - 1)]
+
+    @property
+    def current_tier_cross(self) -> int:
+        return self.level_cross % 4
+
+    def _plan_scope_sequence(self) -> list[str]:
+        """One scope per training sub-block, fixed for the session."""
+        if not self.bilateral:
+            return ["within"] * self.subblocks
+        template = ["within", "within", "cross", "within", "cross"]
+        seq = [template[i % len(template)] for i in range(self.subblocks)]
+        if self.subblocks >= 2 and "cross" not in seq:
+            seq[-1] = "cross"
+        return seq
+
+    @property
+    def current_scope(self) -> str:
+        """Which scope the next chord draws from. The Test Mode
+        miniature has one sub-block, so bilateral demos alternate the
+        scopes per chord instead: a 60 second demo must show both."""
+        if not self.bilateral:
+            return "within"
+        if self.demo_trials is not None:
+            return "cross" if self._sub_done % 2 else "within"
+        idx = min(self._sub_idx, len(self._scope_seq) - 1)
+        return self._scope_seq[idx] if self._scope_seq else "within"
+
+    def warmup_state(self) -> tuple[str, int, int] | None:
+        """("warmup" | "winddown", done, planned) while the probe sets
+        run, None during the chords. The gameplay screen draws this as
+        a persistent banner so the single-finger stretch is visibly a
+        warm-up and not the game."""
+        if self._probe_left_start > 0:
+            done = self._probes_start_planned - self._probe_left_start
+            return ("warmup", done, self._probes_start_planned)
+        if (not self._in_training() and self._probe_left_end > 0
+                and self._probes_end_planned > 0
+                and self.phase != "done"):
+            done = self._probes_end_planned - self._probe_left_end
+            return ("winddown", done, self._probes_end_planned)
+        return None
 
     # ---- plumbing shared with the other cadence modes ----------------------
     def queue_press(self, ev: PressEvent) -> None:
@@ -780,16 +1018,32 @@ class ChordsMode:
         self._fire(now)
 
     # ---- firing ------------------------------------------------------------
-    def _next_targets(self) -> tuple[str, str, tuple[int, ...]]:
-        """What the next trial asks for: a single-finger probe at the
-        session's edges, otherwise a chord from the current tier, and
-        WHOSE hand it is. In bilateral play the hand comes off its own
-        shuffle bag so the hands' trial counts never drift apart by
-        more than one, while each hand's chords or probe fingers come
-        off that hand's own bag; that is the paired balance shape."""
+    def _next_targets(self) -> tuple[str, str, str,
+                                     tuple[int, ...], tuple[int, ...]]:
+        """What the next trial asks for, as (kind, scope, hand,
+        fingers, fingers_right): a single-finger probe at the
+        session's edges, otherwise a chord from the current scope's
+        tier. For probes and within-hand chords `fingers` is the
+        chord within `hand` and `fingers_right` is empty; for a
+        cross-hand chord hand is "both", `fingers` is the LEFT hand's
+        share and `fingers_right` the right's. In bilateral play the
+        within-hand side comes off its own shuffle bag so the hands'
+        trial counts never drift apart by more than one, while each
+        hand's chords or probe fingers come off that hand's own bag;
+        cross-hand chords need no hand bag (every trial uses both) so
+        one bag per tier deals them."""
         if self._probe_left_start > 0 or not self._in_training():
             hand = self.hand_names[self._probe_hand_order.next()]
-            return "probe", hand, (self._probe_sched[hand].next(),)
+            return "probe", "within", hand, (
+                self._probe_sched[hand].next(),), ()
+        if self.current_scope == "cross":
+            tier = self.current_tier_cross
+            if self._cross_sched_tier != tier:
+                self._cross_sched = BalancedScheduler(
+                    list(range(len(CROSS_TIERS[tier]))), self.rng)
+                self._cross_sched_tier = tier
+            left, right = CROSS_TIERS[tier][self._cross_sched.next()]
+            return "chord", "cross", "both", left, right
         tier = self.current_tier
         if self._sched_tier != tier:
             # Fresh shuffle bags whenever the tier changes so the
@@ -801,16 +1055,25 @@ class ChordsMode:
                 for h in self.hand_names}
             self._sched_tier = tier
         hand = self.hand_names[self._chord_hand_order.next()]
-        return ("chord", hand,
-                CHORD_TIERS[tier][self._chord_sched[hand].next()])
+        return ("chord", "within", hand,
+                CHORD_TIERS[tier][self._chord_sched[hand].next()], ())
 
     def _in_training(self) -> bool:
         return self._sub_idx < self.subblocks
 
     def _fire(self, now: float) -> None:
-        kind, hand, fingers = self._next_targets()
-        hand_lanes = self.hands[hand]
-        targets = tuple(sorted(hand_lanes[f] for f in fingers))
+        kind, scope, hand, fingers, fingers_right = self._next_targets()
+        if scope == "cross":
+            targets = tuple(sorted(
+                [self.hands["left"][f] for f in fingers]
+                + [self.hands["right"][f] for f in fingers_right]))
+            w_ms = self.current_w_cross_ms
+            tier = self.current_tier_cross
+        else:
+            hand_lanes = self.hands[hand]
+            targets = tuple(sorted(hand_lanes[f] for f in fingers))
+            w_ms = self.current_w_ms
+            tier = None if kind == "probe" else self.current_tier
         self.trial_counter += 1
         settle_ms = None
         if self._settle_t0 is not None:
@@ -818,31 +1081,67 @@ class ChordsMode:
         self.active = PendingChordTrial(
             trial_id=self.trial_counter,
             kind=kind,
-            fingers=tuple(sorted(fingers)),
+            fingers=(() if scope == "cross"
+                     else tuple(sorted(fingers))),
             targets=targets,
             stim_t_perf=now,
-            tier=None if kind == "probe" else self.current_tier,
-            w_ms=self.current_w_ms,
+            tier=tier,
+            w_ms=w_ms,
             hand=hand,
+            scope=scope,
+            fingers_left=(tuple(sorted(fingers))
+                          if scope == "cross" else ()),
+            fingers_right=(tuple(sorted(fingers_right))
+                           if scope == "cross" else ()),
             settle_ms=settle_ms,
         )
         self.phase = "stim"
         self._quiet_since = None
         self._settle_t0 = None
-        # With two hands on the device the chord's side is named out
-        # loud, so the patient never has to scan both blocks to find
-        # it. Suppressed when the screen may not name the target: a
-        # hand label is half the answer.
-        if self.bilateral:
-            try:
-                if self.engine.cue_settings().show_target:
-                    self._set_message(f"{hand.title()} hand", 0.9)
-            except Exception:
-                pass
+        self._announce(kind, scope, hand)
         # ALL target fingers light at once; with the buzzer channel on,
         # the engine turns a same-board multi-lane stim into the
-        # arpeggio (see engine.on_stim_multi).
+        # arpeggio (see engine.on_stim_multi). A cross-hand chord is
+        # two boards, and two boards buzz together.
         self.engine.on_stim_multi(list(targets), self.trial_counter, now)
+
+    def _announce(self, kind: str, scope: str, hand: str) -> None:
+        """The words that keep the session legible: warm-up and
+        wind-down probes say they are probes (with a counter, so the
+        patient can see the warm-up ending), the first chord announces
+        the game proper, and in bilateral play each chord names its
+        side. Side naming is suppressed when the screen may not name
+        the target: a hand label is half the answer. The warm-up
+        wording itself names no finger, so it always shows."""
+        show_target = True
+        try:
+            show_target = bool(self.engine.cue_settings().show_target)
+        except Exception:
+            pass
+        if kind == "probe":
+            state = self.warmup_state()
+            if state is not None:
+                word = ("Warm-up" if state[0] == "warmup"
+                        else "Wind-down")
+                if state[0] == "winddown" and "winddown" not in \
+                        self._announced:
+                    self._announced.add("winddown")
+                    self._set_message(
+                        "Chords done. Single fingers to finish", 1.8)
+                else:
+                    label = f"{word} {state[1] + 1} of {state[2]}"
+                    if self.bilateral and show_target:
+                        label += f": {hand} hand"
+                    self._set_message(label, 1.1)
+            return
+        if "chords" not in self._announced:
+            self._announced.add("chords")
+            self._set_message("Warm-up done. Chords: press together",
+                              1.8, kind="best")
+            return
+        if self.bilateral and show_target:
+            self._set_message("Both hands" if scope == "cross"
+                              else f"{hand.title()} hand", 0.9)
 
     # ---- presses -----------------------------------------------------------
     def _handle_press(self, ev: PressEvent, now: float) -> None:
@@ -946,32 +1245,82 @@ class ChordsMode:
 
         # Cross-talk from the engine's force window, normalised per
         # finger by the calibrated light press. Read before log_trial
-        # closes the window. Leak is measured against the chord's OWN
-        # hand only: cross-talk is a within-hand quantity, and the
-        # other hand resting has its own trials to speak on.
+        # closes the window. For a within-hand chord, leak is measured
+        # against the chord's OWN hand only: cross-talk is a
+        # within-hand quantity, and the other hand resting has its own
+        # trials to speak on (its silence is logged separately as
+        # mirror_leak below). A cross-hand chord is scored per hand,
+        # each hand's leak against its OWN targets and quiet fingers,
+        # and the two ER values stay separate all the way to the
+        # summary (Li 2001: pooling them hides exactly the asymmetric
+        # interaction the tiers exist to show).
         peaks = self._window_peaks()
         er = None
+        er_by_hand: dict[str, float | None] = {}
+        press_by_hand: dict[str, float] = {}
         max_leak_ratio = None
         max_leak_lane = None
         over_force = False
         light_press = False
         leak_norms: dict[int, float] = {}
         mean_press = 0.0
+        mirror_leak = None
         if peaks is not None:
-            hand_lanes = list(self.hands[trial.hand])
+            if trial.scope == "cross":
+                scored_hands = list(self.hand_names)
+            else:
+                scored_hands = [trial.hand]
+            all_lanes = [l for h in scored_hands
+                         for l in self.hands[h]]
             norms = {l: max(0.0, peaks.get(l, 0.0))
-                     / self._reference_counts(l) for l in hand_lanes}
+                     / self._reference_counts(l) for l in all_lanes}
             press_norms = [norms[l] for l in trial.targets]
-            leak_norms = {l: norms[l] for l in hand_lanes
-                          if l not in trial.targets}
             mean_press = (sum(press_norms) / len(press_norms)
                           if press_norms else 0.0)
+            for h in scored_hands:
+                h_lanes = list(self.hands[h])
+                h_press = [norms[l] for l in trial.targets
+                           if l in h_lanes]
+                h_leaks = {l: norms[l] for l in h_lanes
+                           if l not in trial.targets}
+                hp = (sum(h_press) / len(h_press)) if h_press else 0.0
+                press_by_hand[h] = hp
+                if hp > 0 and h_leaks:
+                    er_by_hand[h] = (sum(h_leaks.values())
+                                     / len(h_leaks) / hp)
+                    worst = max(h_leaks.values()) / hp
+                    if max_leak_ratio is None or worst > max_leak_ratio:
+                        max_leak_ratio = worst
+                        max_leak_lane = max(h_leaks,
+                                            key=h_leaks.get)
+                else:
+                    er_by_hand[h] = None
+                leak_norms.update(h_leaks)
+            if trial.scope == "cross":
+                # Scoring uses the WORST hand's ER; the per-hand
+                # values are what the analysis reads. er itself stays
+                # None on cross records so no within-hand ER aggregate
+                # can swallow a cross trial by accident.
+                measured = [v for v in er_by_hand.values()
+                            if v is not None]
+                er = max(measured) if measured else None
+            else:
+                er = er_by_hand.get(trial.hand)
+                # Silent mirror force: the resting hand's loudest
+                # normalised peak against this chord's mean press.
+                # Only meaningful with both boards live.
+                if self.bilateral and mean_press > 0:
+                    other = [h for h in self.hand_names
+                             if h != trial.hand]
+                    other_lanes = [l for h in other
+                                   for l in self.hands[h]]
+                    other_norms = [
+                        max(0.0, peaks.get(l, 0.0))
+                        / self._reference_counts(l)
+                        for l in other_lanes]
+                    if other_norms:
+                        mirror_leak = max(other_norms) / mean_press
             if mean_press > 0:
-                if leak_norms:
-                    er = sum(leak_norms.values()) / len(leak_norms) \
-                        / mean_press
-                    max_leak_ratio = max(leak_norms.values()) / mean_press
-                    max_leak_lane = max(leak_norms, key=leak_norms.get)
                 light_press = all(
                     self.LIGHT_BAND[0] <= p <= self.LIGHT_BAND[1]
                     for p in press_norms)
@@ -1033,7 +1382,12 @@ class ChordsMode:
         # ("1+3+4"), correct_keys the full target set; the row is keyed
         # on the lowest target lane so per-lane charts stay populated
         # (a chord's RT lands on its lowest finger, a known
-        # simplification the block summary does not share).
+        # simplification the block summary does not share). A
+        # cross-hand chord writes "x:1+5" instead: the scope lives in
+        # the stimulus descriptor itself, so no lane arithmetic can
+        # ever mistake a cross chord for a within one (the notebook's
+        # chord parser maps lanes mod 4, under which "1+5" would read
+        # as a single-finger probe).
         log_obj = PendingTrial(
             trial_id=trial.trial_id,
             lane=trial.targets[0],
@@ -1042,39 +1396,73 @@ class ChordsMode:
             incorrect_presses=list(trial.incorrect_presses),
         )
         stim = "+".join(str(l + 1) for l in trial.targets)
+        if trial.scope == "cross":
+            stim = "x:" + stim
         self.engine.log_trial(log_obj, outcome, now,
                               stimulus=stim,
                               correct_lanes=list(trial.targets),
-                              hand=trial.hand)
+                              hand=(None if trial.scope == "cross"
+                                    else trial.hand))
         self._set_message(self._feedback_text(trial, cls, over_force,
                                               light_press, max_leak_lane),
                           0.9,
                           kind="success" if cls == "hit" else "warn")
         # Quiet-fingers reward moment: a clean chord leaves the
-        # untargeted fingers OF ITS OWN HAND wearing a brief tick on
-        # the gameplay screen. State only; the screen draws and fades
-        # it.
-        own_lanes = self.hands[trial.hand]
+        # untargeted fingers wearing a brief tick on the gameplay
+        # screen: its own hand's for a within chord, both hands' for a
+        # cross chord (the whole device had to stay quiet). State
+        # only; the screen draws and fades it.
+        if trial.scope == "cross":
+            own_lanes = [l for h in self.hand_names
+                         for l in self.hands[h]]
+        else:
+            own_lanes = list(self.hands[trial.hand])
         if cls == "hit" and len(trial.targets) < len(own_lanes):
             self._quiet_tick_lanes = [l for l in own_lanes
                                       if l not in trial.targets]
             self._quiet_tick_t = now
 
-        self._records.append({
+        # Temporal coupling on a full cross chord: which hand led, and
+        # by how much (first onset to first onset). The coupling
+        # literature's yoking measure (Kelso 1979; Swinnen 2002).
+        lead_hand = None
+        lag_ms = None
+        if trial.scope == "cross" and full:
+            firsts: dict[str, float] = {}
+            for h in self.hand_names:
+                h_on = [t for l, t in trial.onsets.items()
+                        if l in self.hands[h]]
+                if h_on:
+                    firsts[h] = min(h_on)
+            if len(firsts) == 2:
+                lead_hand = min(firsts, key=firsts.get)
+                trail = max(firsts, key=firsts.get)
+                lag_ms = (firsts[trail] - firsts[lead_hand]) * 1000.0
+
+        cross = trial.scope == "cross"
+        rec = {
             "trial": trial.trial_id,
             "kind": trial.kind,
-            "hand": trial.hand,
-            "chord": chord_label(trial.fingers),
+            "scope": trial.scope,
+            "hand": "both" if cross else trial.hand,
+            "chord": (cross_label(trial.fingers_left,
+                                  trial.fingers_right) if cross
+                      else chord_label(trial.fingers)),
             "tier": None if trial.tier is None else trial.tier + 1,
-            "d": chord_difficulty(trial.fingers),
+            "d": (chord_difficulty_cross(trial.fingers_left,
+                                         trial.fingers_right) if cross
+                  else chord_difficulty(trial.fingers)),
             "w_ms": w_ms,
-            "level": self.level,
+            "level": self.level_cross if cross else self.level,
             "class": cls,
             "span_ms": None if span_ms is None else round(span_ms, 1),
             "rt_ms": None if rt_ms is None else round(rt_ms, 1),
             "complete_ms": (None if complete_ms is None
                             else round(complete_ms, 1)),
-            "er": None if er is None else round(er, 4),
+            # er stays a WITHIN-hand number: cross trials leave it
+            # empty and carry per-hand values instead, so no
+            # within-hand aggregate can swallow a cross trial.
+            "er": (None if cross or er is None else round(er, 4)),
             # Probe rows keep the raw material for the enslaving
             # matrix: the instructed finger's normalised press and
             # every quiet finger's normalised leak, keyed by the
@@ -1092,23 +1480,55 @@ class ChordsMode:
                           else round(trial.settle_ms, 1)),
             "subblock": (self._sub_idx + 1
                          if trial.kind == "chord" else None),
-        })
+        }
+        if cross:
+            rec.update({
+                "chord_left": chord_label(trial.fingers_left),
+                "chord_right": chord_label(trial.fingers_right),
+                "mirror": trial.fingers_left == trial.fingers_right,
+                "asym": cross_mirror_distance(trial.fingers_left,
+                                              trial.fingers_right),
+                "er_left": (None if er_by_hand.get("left") is None
+                            else round(er_by_hand["left"], 4)),
+                "er_right": (None if er_by_hand.get("right") is None
+                             else round(er_by_hand["right"], 4)),
+                "press_left": (round(press_by_hand["left"], 4)
+                               if press_by_hand.get("left") else None),
+                "press_right": (round(press_by_hand["right"], 4)
+                                if press_by_hand.get("right")
+                                else None),
+                "lead_hand": lead_hand,
+                "lag_ms": (None if lag_ms is None
+                           else round(lag_ms, 1)),
+            })
+        elif self.bilateral and trial.kind == "chord":
+            # Silent mirror force on the resting hand, the free
+            # measure bilateral within-hand chords carry.
+            rec["mirror_leak"] = (None if mirror_leak is None
+                                  else round(mirror_leak, 4))
+        self._records.append(rec)
         self.completed += 1
 
         if trial.kind == "chord":
             self._sub_hits += 1 if cls == "hit" else 0
             if rt_ms is not None:
                 self._sub_rts.append(rt_ms)
-            self._staircase(cls == "hit")
+            if cross:
+                self._staircase_cross(cls == "hit")
+            else:
+                self._staircase(cls == "hit")
         self._advance(now, trial.kind)
 
     def _finger_name(self, trial: PendingChordTrial, lane: int) -> str:
         """The finger's name for feedback, hand-prefixed in bilateral
-        play so "Ring" can never mean the wrong hand."""
+        play so "Ring" can never mean the wrong hand. The prefix is
+        the LANE's own hand, which for a within-hand chord is the
+        trial's hand and for a cross-hand chord is whichever side the
+        named finger sits on."""
         f = max(0, min(3, self._finger_of_lane(lane)))
         name = FINGER_NAMES[f]
         if self.bilateral:
-            return f"{trial.hand.title()} {name.lower()}"
+            return f"{self._hand_of_lane(lane).title()} {name.lower()}"
         return name
 
     def _feedback_text(self, trial: PendingChordTrial, cls: str,
@@ -1171,6 +1591,25 @@ class ChordsMode:
             self.level -= 1
             self._stair.clear()
 
+    def _staircase_cross(self, hit: bool) -> None:
+        """The cross-hand ladder's own staircase, same rule, separate
+        state: within and cross hit rates must never pool (see the
+        constructor comment)."""
+        self._stair_cross.append(hit)
+        if len(self._stair_cross) < self.STAIRCASE_WINDOW:
+            return
+        hits = sum(1 for h in self._stair_cross if h)
+        if (hits >= self.PROMOTE_HITS
+                and self.level_cross < self.max_level_cross):
+            self.level_cross += 1
+            self.highest_level_cross = max(self.highest_level_cross,
+                                           self.level_cross)
+            self._stair_cross.clear()
+            self._set_message("Level up", 1.2, kind="best")
+        elif hits <= self.DEMOTE_HITS and self.level_cross > 0:
+            self.level_cross -= 1
+            self._stair_cross.clear()
+
     # ---- session flow ------------------------------------------------------
     def _advance(self, now: float, kind: str) -> None:
         # Hard session cap, checked at trial close so it never cuts a
@@ -1183,6 +1622,20 @@ class ChordsMode:
         if kind == "probe":
             if self._probe_left_start > 0:
                 self._probe_left_start -= 1
+                # The warm-up budget: when the opening probes are
+                # still running past warmup_cap_s of session time, the
+                # remainder move to the closing set and the chords
+                # start. The start matrix gets fewer probes behind it,
+                # which the summary records; the alternative is a
+                # session whose first minutes are all warm-up.
+                if (self._probe_left_start > 0
+                        and self._probe_left_end > 0
+                        and self._t0 is not None
+                        and (now - self._t0) > self.warmup_cap_s):
+                    self._warmup_capped = True
+                    self._probe_left_end += self._probe_left_start
+                    self._probes_end_planned += self._probe_left_start
+                    self._probe_left_start = 0
             else:
                 self._probe_left_end -= 1
                 if self._probe_left_end <= 0:
@@ -1197,8 +1650,15 @@ class ChordsMode:
 
     def _arm_next(self, now: float) -> None:
         self.phase = "settle"
-        self._next_ok_t = now + self.rng.uniform(self.iti_min,
-                                                 self.iti_max)
+        # Probes pace themselves on the short fixed warm-up gap; the
+        # jittered ITI belongs to the chords, whose timing is the
+        # thing being measured (a chord must be reacted to, a probe is
+        # an instructed press).
+        if self._probe_left_start > 0 or not self._in_training():
+            self._next_ok_t = now + self.warmup_iti
+        else:
+            self._next_ok_t = now + self.rng.uniform(self.iti_min,
+                                                     self.iti_max)
         self._quiet_since = None
         self._settle_t0 = None
 
@@ -1206,11 +1666,14 @@ class ChordsMode:
         n = max(1, self._sub_done)
         rts = sorted(self._sub_rts)
         median_rt = rts[len(rts) // 2] if rts else None
+        scope = self.current_scope
         stats = {"subblock": self._sub_idx + 1,
+                 "scope": scope,
                  "hit_rate": round(self._sub_hits / n, 3),
                  "median_rt_ms": (None if median_rt is None
                                   else round(median_rt, 1)),
-                 "level_at_end": self.level}
+                 "level_at_end": (self.level_cross if scope == "cross"
+                                  else self.level)}
         self._sub_stats.append(stats)
         self._sub_idx += 1
         self._sub_done = 0
@@ -1230,8 +1693,13 @@ class ChordsMode:
                 self._arm_next(now)
             return
         if fatigued:
-            self.level = max(0, self.level - 1)
-            self._stair.clear()
+            # Ease the ladder the fatigued sub-block was climbing.
+            if stats.get("scope") == "cross":
+                self.level_cross = max(0, self.level_cross - 1)
+                self._stair_cross.clear()
+            else:
+                self.level = max(0, self.level - 1)
+                self._stair.clear()
             self._enter_rest(now, self.fatigue_rest, "fatigue",
                              "Take a longer breather")
         else:
@@ -1239,12 +1707,20 @@ class ChordsMode:
                              "Rest your hand")
 
     def _fatigue_check(self, stats: dict) -> bool:
-        """Judge this sub-block against the session's first. Both
-        triggers point the same way: the hand is tiring, and a tired
-        hand trains the wrong signal."""
+        """Judge this sub-block against the session's first sub-block
+        OF THE SAME SCOPE. Both triggers point the same way: the hand
+        is tiring, and a tired hand trains the wrong signal. Cross
+        sub-blocks are judged against the first cross sub-block only,
+        because cross-hand chords are legitimately harder and a scope
+        difference must not read as fatigue."""
         if len(self._sub_stats) < 2:
             return False
-        first = self._sub_stats[0]
+        scope = stats.get("scope", "within")
+        earlier = [s for s in self._sub_stats[:-1]
+                   if s.get("scope", "within") == scope]
+        if not earlier:
+            return False
+        first = earlier[0]
         dropped = (first["hit_rate"] - stats["hit_rate"]
                    >= self.FATIGUE_HIT_DROP)
         slowed = (first["median_rt_ms"] is not None
@@ -1349,11 +1825,17 @@ class ChordsMode:
         legacy single-hand keys stay for unilateral blocks so older
         analyses keep reading), the fatigue trajectory and the
         per-trial detail the fixed CSV schema cannot carry."""
-        chords = [r for r in self._records if r["kind"] == "chord"]
+        all_chords = [r for r in self._records if r["kind"] == "chord"]
+        # Scope is a first-class label: every aggregate below consumes
+        # exactly one scope. `chords` (within-hand) keeps its old name
+        # so the summary keys older analyses read stay unchanged.
+        chords = [r for r in all_chords
+                  if r.get("scope", "within") == "within"]
+        cross = [r for r in all_chords if r.get("scope") == "cross"]
         probes = [r for r in self._records if r["kind"] == "probe"]
         # Probes before the first chord are the start set; the rest are
         # the end set. Demo blocks have no end set.
-        first_chord = chords[0]["trial"] if chords else None
+        first_chord = all_chords[0]["trial"] if all_chords else None
         probes_start = [r for r in probes
                         if first_chord is None or r["trial"] < first_chord]
         probes_end = [r for r in probes
@@ -1421,9 +1903,87 @@ class ChordsMode:
                 "median_span_ms": _median([r["span_ms"] for r in chords
                                            if r["hand"] == h
                                            and r["span_ms"] is not None]),
+                # Silent mirror force on the OTHER hand while this
+                # hand's within-hand chords ran (bilateral only).
+                "median_mirror_leak": _median(
+                    [r["mirror_leak"] for r in chords
+                     if r["hand"] == h
+                     and r.get("mirror_leak") is not None]),
             }
             for h in self.hand_names
         }
+
+        # Cross-hand aggregates: the per-pair table (scope-pure, so it
+        # cannot pollute the within-hand per_chord consumers), and the
+        # summary contrasts the bimanual analysis reads: mirror vs
+        # non-mirror, lead-lag, and the bilateral deficit ratio from
+        # mirror singles against the same finger's unimanual probes.
+        per_cross: dict[tuple[str, float], dict] = {}
+        for r in cross:
+            d = per_cross.setdefault((r["chord"], r["w_ms"]), {
+                "d": r["d"], "mirror": bool(r.get("mirror")),
+                "asym": r.get("asym"), "n": 0, "hits": 0,
+                "spans": [], "lags": []})
+            d["n"] += 1
+            d["hits"] += 1 if r["class"] == "hit" else 0
+            if r["span_ms"] is not None:
+                d["spans"].append(r["span_ms"])
+            if r.get("lag_ms") is not None:
+                d["lags"].append(r["lag_ms"])
+        cross_table = [{
+            "chord": name,
+            "w_ms": w_ms,
+            "d": v["d"],
+            "mirror": v["mirror"],
+            "asym": v["asym"],
+            "n": v["n"],
+            "hit_rate": round(v["hits"] / v["n"], 3) if v["n"] else None,
+            "median_span_ms": _median(v["spans"]),
+            "median_lag_ms": _median(v["lags"]),
+        } for (name, w_ms), v in sorted(per_cross.items(),
+                                        key=lambda kv: (kv[1]["d"],
+                                                        kv[0][1]))]
+
+        def _rate(rows: list[dict]) -> float | None:
+            if not rows:
+                return None
+            return round(sum(1 for r in rows
+                             if r["class"] == "hit") / len(rows), 3)
+
+        mirror_rows = [r for r in cross if r.get("mirror")]
+        nonmirror_rows = [r for r in cross if not r.get("mirror")]
+        lead_counts = {h: sum(1 for r in cross
+                              if r.get("lead_hand") == h)
+                       for h in self.hand_names}
+        lag_by_lead = {h: _median([r["lag_ms"] for r in cross
+                                   if r.get("lead_hand") == h
+                                   and r.get("lag_ms") is not None])
+                       for h in self.hand_names}
+        # Bilateral deficit per hand and finger (Li 2000/2001): the
+        # finger's press in mirror singles over the same finger's
+        # unimanual probe press, both normalised the same way. Only
+        # mirror singles qualify: one finger per hand, so the per-hand
+        # press IS that finger's press.
+        deficit: dict[str, dict[str, float]] = {}
+        for h, key in (("left", "press_left"), ("right", "press_right")):
+            if h not in self.hand_names:
+                continue
+            for f in range(4):
+                letter = FINGER_LETTERS[f]
+                mirror_presses = [
+                    r[key] for r in mirror_rows
+                    if r.get("chord_left") == letter
+                    and r.get("chord_right") == letter
+                    and r.get(key) is not None]
+                probe_presses = [
+                    r["press_norm"] for r in probes
+                    if r["hand"] == h and r["chord"] == letter
+                    and r.get("press_norm")]
+                m_bi = _median(mirror_presses)
+                m_uni = _median(probe_presses)
+                if m_bi is not None and m_uni:
+                    deficit.setdefault(h, {})[letter] = round(
+                        m_bi / m_uni, 3)
 
         out = {
             "hand": self.hand_label,
@@ -1434,6 +1994,9 @@ class ChordsMode:
             "level_highest": self.highest_level,
             "w_final_ms": self.current_w_ms,
             "tier_final": self.current_tier + 1,
+            # n_chords stays the WITHIN-hand count, matching every
+            # other aggregate at this level (median_er, per_chord);
+            # the cross section carries its own counts.
             "n_chords": len(chords),
             "n_probes": len(probes),
             "outcome_classes": classes,
@@ -1446,9 +2009,40 @@ class ChordsMode:
                                          if r["settle_ms"] is not None]),
             "over_force_trials": sum(1 for r in self._records
                                      if r["over_force"]),
-            "light_press_trials": sum(1 for r in chords if r["light"]),
+            "light_press_trials": sum(1 for r in all_chords
+                                      if r["light"]),
+            "warmup_capped": self._warmup_capped,
+            "scope_sequence": self._scope_seq,
             "per_chord": chord_table,
+            "per_chord_cross": cross_table,
             "per_hand": per_hand,
+            "cross": {
+                "n_chords": len(cross),
+                "level_final": self.level_cross,
+                "level_highest": self.highest_level_cross,
+                "w_final_ms": self.current_w_cross_ms,
+                "tier_final": self.current_tier_cross + 1,
+                "hit_rate_mirror": _rate(mirror_rows),
+                "hit_rate_nonmirror": _rate(nonmirror_rows),
+                "median_span_mirror_ms": _median(
+                    [r["span_ms"] for r in mirror_rows
+                     if r["span_ms"] is not None]),
+                "median_span_nonmirror_ms": _median(
+                    [r["span_ms"] for r in nonmirror_rows
+                     if r["span_ms"] is not None]),
+                "median_lag_ms": _median(
+                    [r["lag_ms"] for r in cross
+                     if r.get("lag_ms") is not None]),
+                "lead_hand_counts": lead_counts,
+                "median_lag_by_lead_ms": lag_by_lead,
+                "median_er_left": _median(
+                    [r["er_left"] for r in cross
+                     if r.get("er_left") is not None]),
+                "median_er_right": _median(
+                    [r["er_right"] for r in cross
+                     if r.get("er_right") is not None]),
+                "bilateral_deficit": deficit,
+            },
             "subblocks": self._sub_stats,
             "fatigue_triggers": self._fatigue_triggers,
             "end_reason": self.end_reason,

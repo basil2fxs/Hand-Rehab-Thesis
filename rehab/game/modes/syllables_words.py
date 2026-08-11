@@ -36,6 +36,22 @@ one tap maps to one block maps to one sound, and the graphemes can
 fade into the blocks as letter feedback after a correct response
 (letters attached, Ehri et al. 2001). Words whose spelling cannot be
 cut one-to-one (cake, ball) carry None and stay out of level 6.
+
+LONG MATERIAL FOR THE READ-ACROSS ROW (bilateral pools only). With
+both hands on the device the mode lays 5 to 8 unit words across both
+hands' fingers, so this list carries the material: transparent words
+of 5 to 6 graphemes (stamp, muffin, basket), a 7 to 8 grapheme
+stretch pool that only enters at band C (blanket, sandpit,
+breakfast), and a token pair of 5-syllable words at band C for
+levels 2 to 4 (hippopotamus, refrigerator). The phoneme level is the
+legitimate long territory: fluency measures use 3 to 4 phonemes
+(DIBELS PSF) and power tests reach about 6 (CTOPP-2), while English
+child vocabulary tops out near 5 syllables and verbal span in 5 to 8
+year olds sits around 4 to 5 items (Gathercole, Pickering, Ambridge
+and Wearing 2004), so there are deliberately NO 6-8 syllable words:
+strings past span would measure memory, not segmentation. A single
+hand never draws any of this; four fingers cap one hand's pool at 4
+units and the 2 to 4 material stays the entry pool everywhere.
 """
 from __future__ import annotations
 
@@ -96,6 +112,22 @@ WORDS: tuple[Word, ...] = (
     _w("boat", "A", ("boat",), 0, ("b", "oat"), ("b", "oa", "t")),
     _w("rain", "A", ("rain",), 0, ("r", "ain"), ("r", "ai", "n")),
     _w("foot", "A", ("foot",), 0, ("f", "oot"), ("f", "oo", "t")),
+    # Five-grapheme cluster words: transparent CCVCC/CCVC+C spellings
+    # for the bilateral read-across row at level 6 (a single hand's
+    # four fingers never draw them). The onset-rime cut still works,
+    # so levels 1 to 5 use them like any one-syllable word.
+    _w("stamp", "A", ("stamp",), 0, ("st", "amp"),
+       ("s", "t", "a", "m", "p")),
+    _w("plant", "A", ("plant",), 0, ("pl", "ant"),
+       ("p", "l", "a", "n", "t")),
+    _w("drink", "A", ("drink",), 0, ("dr", "ink"),
+       ("d", "r", "i", "n", "k")),
+    _w("frost", "B", ("frost",), 0, ("fr", "ost"),
+       ("f", "r", "o", "s", "t")),
+    _w("crust", "B", ("crust",), 0, ("cr", "ust"),
+       ("c", "r", "u", "s", "t")),
+    _w("twist", "B", ("twist",), 0, ("tw", "ist"),
+       ("t", "w", "i", "s", "t")),
     # Spelling not one-to-one, so no grapheme blocks: level 6 skips
     # these two, levels 1 to 5 still use them.
     _w("ball", "A", ("ball",), 0, ("b", "all")),
@@ -103,7 +135,8 @@ WORDS: tuple[Word, ...] = (
 
     # ---- two syllables.
     _w("wombat", "A", ("wom", "bat"), 0),
-    _w("rabbit", "A", ("rab", "bit"), 0),
+    _w("rabbit", "A", ("rab", "bit"), 0,
+       graphemes=("r", "a", "bb", "i", "t")),
     _w("monkey", "A", ("mon", "key"), 0),
     _w("tiger", "A", ("ti", "ger"), 0),
     _w("spider", "A", ("spi", "der"), 0),
@@ -132,6 +165,30 @@ WORDS: tuple[Word, ...] = (
     _w("penguin", "B", ("pen", "guin"), 0),
     _w("galah", "B", ("ga", "lah"), 1),
     _w("guitar", "B", ("gui", "tar"), 1),
+    # Two-syllable words with transparent 5-6 grapheme spellings: the
+    # core of the bilateral level 6 row pool. Ordinary words for the
+    # syllable levels too, banded on frequency like everything else.
+    _w("muffin", "A", ("muf", "fin"), 0,
+       graphemes=("m", "u", "ff", "i", "n")),
+    _w("pocket", "A", ("pock", "et"), 0,
+       graphemes=("p", "o", "ck", "e", "t")),
+    _w("basket", "A", ("bas", "ket"), 0,
+       graphemes=("b", "a", "s", "k", "e", "t")),
+    _w("picnic", "A", ("pic", "nic"), 0,
+       graphemes=("p", "i", "c", "n", "i", "c")),
+    _w("insect", "B", ("in", "sect"), 0,
+       graphemes=("i", "n", "s", "e", "c", "t")),
+    _w("sunset", "B", ("sun", "set"), 0,
+       graphemes=("s", "u", "n", "s", "e", "t")),
+    # The 7-8 grapheme stretch pool: these recruit the little fingers
+    # on the read-across row, so they only enter the bilateral level 6
+    # draw at band C (the stretch band), gated in words_for.
+    _w("blanket", "A", ("blan", "ket"), 0,
+       graphemes=("b", "l", "a", "n", "k", "e", "t")),
+    _w("sandpit", "B", ("sand", "pit"), 0,
+       graphemes=("s", "a", "n", "d", "p", "i", "t")),
+    _w("breakfast", "A", ("break", "fast"), 0,
+       graphemes=("b", "r", "ea", "k", "f", "a", "s", "t")),
 
     # ---- three syllables. Stress varies here, which is what makes
     # this the working range for level 4.
@@ -171,6 +228,13 @@ WORDS: tuple[Word, ...] = (
     _w("television", "C", ("tel", "e", "vi", "sion"), 0),
     _w("motorcycle", "C", ("mo", "tor", "cy", "cle"), 0),
     _w("alligator", "C", ("al", "li", "ga", "tor"), 0),
+
+    # ---- five syllables: a token band C pool for the bilateral
+    # read-across row at levels 2 to 4. Deliberately tiny: five
+    # syllables is where English child vocabulary tops out, and
+    # anything longer would test memory span, not segmentation.
+    _w("hippopotamus", "C", ("hip", "po", "pot", "a", "mus"), 2),
+    _w("refrigerator", "C", ("re", "frig", "er", "a", "tor"), 1),
 )
 
 
@@ -179,11 +243,22 @@ WORDS: tuple[Word, ...] = (
 ONSET_RIME_WORDS: tuple[Word, ...] = tuple(
     w for w in WORDS if w.onset_rime is not None)
 
-# Level 6 material: transparent spellings with 2 to 4 phonemes (four
-# fingers cap the count at 4 by design).
+# Level 6 material, single hand: transparent spellings with 2 to 4
+# phonemes. Four fingers cap ONE hand's count at 4; this stays the
+# entry pool and the whole pool for any single-hand session.
 TRANSPARENT_WORDS: tuple[Word, ...] = tuple(
     w for w in WORDS if w.graphemes is not None
     and 2 <= len(w.graphemes) <= 4)
+
+# Level 6 material, both hands: 5 to 6 graphemes span the read-across
+# row without touching the little fingers (the row is centred on the
+# midline), and the 7 to 8 grapheme stretch recruits them last.
+TRANSPARENT_WORDS_WIDE: tuple[Word, ...] = tuple(
+    w for w in WORDS if w.graphemes is not None
+    and 5 <= len(w.graphemes) <= 6)
+TRANSPARENT_WORDS_STRETCH: tuple[Word, ...] = tuple(
+    w for w in WORDS if w.graphemes is not None
+    and 7 <= len(w.graphemes) <= 8)
 
 
 # The bag needs at least this many words or a 10-word round repeats
@@ -192,7 +267,8 @@ TRANSPARENT_WORDS: tuple[Word, ...] = tuple(
 _MIN_POOL = 8
 
 
-def words_for(level: int, band: str) -> tuple[Word, ...]:
+def words_for(level: int, band: str,
+              bilateral: bool = False) -> tuple[Word, ...]:
     """The draw pool for a level at a band.
 
     Levels 1 to 4 draw whole words from the current band: level 1 stops
@@ -201,16 +277,31 @@ def words_for(level: int, band: str) -> tuple[Word, ...]:
     thin for the level (band C at level 1 holds only the rare 3-syllable
     words) tops up from the easier bands so a round of 10 words never
     cycles a handful of items. Level 5 is the onset-rime subset and
-    level 6 the transparent subset; both ignore the band because those
-    subsets are already the easy end of the list, and thinning them
+    level 6 the transparent subset; level 5 ignores the band because
+    that subset is already the easy end of the list, and thinning it
     further would leave too few words to fill a session without
     immediate repeats.
+
+    `bilateral` unlocks the read-across row material, which a single
+    hand's four fingers cannot play: level 6 widens to 5-6 graphemes
+    (plus the 7-8 stretch at band C only), and levels 2 to 4 admit the
+    token 5-syllable pool, which is band C so it only ever surfaces in
+    a band C block. Eight fingers is a pool extension, never a level
+    or a requirement: every rung stays fully playable on one hand.
     """
     if level >= 6:
-        return TRANSPARENT_WORDS
+        if not bilateral:
+            return TRANSPARENT_WORDS
+        pool = TRANSPARENT_WORDS + TRANSPARENT_WORDS_WIDE
+        if band == "C":
+            pool = pool + TRANSPARENT_WORDS_STRETCH
+        return pool
     if level == 5:
         return ONSET_RIME_WORDS
-    max_syll = 3 if level <= 1 else 4
+    if level <= 1:
+        max_syll = 3
+    else:
+        max_syll = 5 if bilateral else 4
     ladder = ["A", "B", "C"]
     start = ladder.index(band) if band in ladder else 0
     pool: list[Word] = []

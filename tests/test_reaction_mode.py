@@ -605,6 +605,150 @@ class LevelAndWindowOnScreenTests(unittest.TestCase):
             pygame.quit()
 
 
+class ReactionScreenLayerTests(unittest.TestCase):
+    """The reaction gameplay layer, pinned after the screenshot-driven
+    rework: the level pill must not render through the SCORE label,
+    the RT feedback chip is the mode's headline feedback (larger,
+    higher, stronger than the shared default), the streak chip parks
+    under the mode pill instead of inside the feedback chip, the tier
+    popup never rises through the RT number, and the foreperiod veil
+    is strong enough that the stimulus visibly turns the lights back
+    on. Real engine, real GameplayScreen, keyboard source."""
+
+    def _engine_and_screen(self):
+        import pygame
+        pygame.init()
+        from rehab.config import Config
+        from rehab.game.engine import GameEngine
+        from rehab.hardware.keyboard_source import KeyboardOnlySource
+        import rehab.ui.screens as screens
+        cfg = Config.load()
+        cfg.data["ui"]["resolution"] = [1280, 800]
+        cfg.data["audio"]["enabled"] = False
+        cfg.data["reaction"] = {"seed": 1, "catch_rate": 0.0}
+        eng = GameEngine(cfg, KeyboardOnlySource())
+        eng._screens = {"gameplay": MagicMock(), "results": MagicMock()}
+        eng.begin_reaction_block()
+        gp = screens.GameplayScreen(eng)
+        gp._countdown_until = 0.0
+        return eng, gp, screens
+
+    def test_level_pill_clears_the_score_label(self) -> None:
+        import pygame
+        try:
+            eng, gp, screens = self._engine_and_screen()
+            surf = pygame.Surface((1280, 800))
+            calls = []
+            original = screens.draw_text
+
+            def recorder(s, text, pos, theme, layout, pt=20,
+                         centre=False, **k):
+                calls.append((str(text), pos, pt, centre))
+                return original(s, text, pos, theme, layout, pt=pt,
+                                centre=centre, **k)
+
+            screens.draw_text = recorder
+            try:
+                gp.draw(surf)
+            finally:
+                screens.draw_text = original
+
+            def rect_for(needle):
+                for text, pos, pt, centre in calls:
+                    if needle in text:
+                        font = gp.layout.font(pt)
+                        w, h = font.size(text)
+                        r = pygame.Rect(0, 0, w, h)
+                        if centre:
+                            r.center = pos
+                        else:
+                            r.topleft = pos
+                        return r
+                raise AssertionError(f"{needle!r} never drawn")
+
+            level_rect = rect_for("Level 1 of")
+            score_rect = rect_for("SCORE")
+            self.assertFalse(level_rect.colliderect(score_rect),
+                             "level pill renders through SCORE again")
+        finally:
+            pygame.quit()
+
+    def test_rt_chip_is_the_headline_and_sits_clear_of_tiles(
+            self) -> None:
+        import pygame
+        try:
+            eng, gp, screens = self._engine_and_screen()
+            gp.set_message("262 ms", 2.0, kind="success")
+            chips = []
+            original = screens._chip
+
+            def recorder(surf, layout, centre, text, fg, **k):
+                chips.append((text, centre, k))
+                return original(surf, layout, centre, text, fg, **k)
+
+            screens._chip = recorder
+            try:
+                gp.draw(pygame.Surface((1280, 800)))
+            finally:
+                screens._chip = original
+            rt = [(c, k) for t, c, k in chips if t == "262 ms"]
+            self.assertEqual(len(rt), 1)
+            centre, kwargs = rt[0]
+            # Larger and stronger than the shared 30 pt / alpha 30
+            # default, and high enough that the grown chip still
+            # clears the tallest lane tile (top = 220).
+            self.assertGreaterEqual(kwargs.get("font_pt", 0), 34)
+            self.assertGreaterEqual(kwargs.get("bg_alpha", 0), 40)
+            self.assertLessEqual(centre[1], 190)
+        finally:
+            pygame.quit()
+
+    def test_streak_chip_stays_out_of_the_feedback_chip(self) -> None:
+        import pygame
+        try:
+            eng, gp, screens = self._engine_and_screen()
+            eng.hit_streak = 3
+            centred = []
+            gp._draw_chip = (lambda surf, centre, text, fg, **k:
+                             centred.append(text))
+            gp.draw(pygame.Surface((1280, 800)))
+            self.assertFalse(
+                [t for t in centred if "STREAK" in t],
+                "reaction streak chip is back at (cx, 170), inside "
+                "the RT feedback chip")
+        finally:
+            pygame.quit()
+
+    def test_no_tier_popup_in_reaction(self) -> None:
+        import pygame
+        try:
+            eng, gp, _screens = self._engine_and_screen()
+            now = 100.0
+            gp.flash_lane(0, (0, 200, 0), 0.4, now, popup_text="Good")
+            self.assertEqual(gp._popups, [],
+                             "tier popup rises through the RT chip")
+            # Every other mode keeps the popup.
+            eng.current_block = "adaptive"
+            gp.flash_lane(0, (0, 200, 0), 0.4, now, popup_text="Good")
+            self.assertEqual(len(gp._popups), 1)
+        finally:
+            pygame.quit()
+
+    def test_foreperiod_veil_is_strong_enough_to_read(self) -> None:
+        import pygame
+        try:
+            eng, gp, _screens = self._engine_and_screen()
+            eng.mode._phase = "foreperiod"
+            gp.draw(pygame.Surface((1280, 800)))
+            self.assertIsNotNone(gp._hold_dim)
+            alpha = gp._hold_dim.get_at((5, 5)).a
+            # 140 washed the pastel tiles to near full brightness, so
+            # the stimulus had nothing to switch back on.
+            self.assertGreaterEqual(alpha, 160)
+        finally:
+            pygame.quit()
+
+
 class SetupScreenGatingTests(unittest.TestCase):
     """The pace slider is a classic-only control. Showing it for
     reaction would hand the patient a knob that claims the wait is

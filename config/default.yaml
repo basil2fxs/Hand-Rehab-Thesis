@@ -743,18 +743,27 @@ pattern:
   timeout_ms: 2000
   # An 8-take session for patients whose stamina will not carry ten.
   # Both hidden-switch takes keep a familiar take on each side, which
-  # the scoring needs.
+  # the scoring needs. The short session skips the long mid-session
+  # rest: in eight takes there is no spot where the extra rest cannot
+  # lean on the scoring, so every break uses the same floor.
   short_session: false
   # Rests between takes: the patient advances with any press once the
-  # floor has passed. The longer rest lands after the fifth take,
-  # mid-session.
-  rest_min_s: 15
-  long_rest_s: 60
+  # floor has passed. Rest length does not change the learning
+  # (varied 15 s / 30 s / self-paced in a 268-person study with no
+  # difference), so the floor is for recovery and comfort. The longer
+  # rest lands after the sixth take, mid-session, where the fresh
+  # burst of speed a rest hands the next take cannot touch the takes
+  # the scoring compares. A patient who wants more rest simply waits:
+  # the floor is a minimum, never a push.
+  rest_min_s: 10
+  long_rest_s: 30
   # Five lit keys in a row with no press at all reads as a tired hand:
-  # the game inserts a rest. A second such run ends the session
+  # the game inserts a proper rest, longer than the between-take floor
+  # because its job is recovery. A second such run ends the session
   # gracefully with the data kept. Slowing on the hidden-switch takes
   # never counts toward this.
   fatigue_timeout_run: 5
+  fatigue_rest_s: 45
   # Whole-session ceiling. The session ends politely at the next press
   # after this many minutes, however far it got.
   session_cap_min: 30
@@ -770,14 +779,17 @@ chords:
   # fingers that were NOT asked are scored on staying still. The
   # research case for every number lives in rehab/game/modes/chords.py;
   # this file says what the patient experiences. One engine block is a
-  # whole session: a few single-finger warm-up presses, five rounds of
-  # chords with proper rests, then the same single-finger presses
-  # again to close. With Both hands selected each chord still sits
-  # within one hand, but the hands take turns with equal counts and
-  # the warm-up and closing presses run per hand, so both hands play
-  # the whole session. Light presses only, everywhere: the game never
-  # rewards pressing harder, and pressing much harder than the
-  # calibrated light press earns a "press lighter" prompt.
+  # whole session: a short announced warm-up of single-finger presses,
+  # five rounds of chords with proper rests, then the same
+  # single-finger presses again to close. With Both hands selected the
+  # hands take turns on within-hand chords with equal counts, the
+  # warm-up and closing presses run per hand, and the third and fifth
+  # rounds ask for chords that SPAN the hands (one or two fingers per
+  # hand, mirrored pairs first), so both hands play the whole session
+  # and the session also measures how well the hands work together.
+  # Light presses only, everywhere: the game never rewards pressing
+  # harder, and pressing much harder than the calibrated light press
+  # earns a "press lighter" prompt.
 
   # How long the fingers have to land the chord once it lights up.
   # Generous on purpose: a slow chord still teaches the shape, and the
@@ -822,6 +834,19 @@ chords:
   # onto the others before and after the chords, so do not set this to
   # 0 for a real participant.
   probe_trials_per_finger: 2
+  # The warm-up presses pace themselves on this short fixed gap
+  # instead of the jittered gap the chords use: a warm-up press is an
+  # instructed press, not a reaction test, so there is nothing to
+  # protect from being predictable. Keeps the single-finger stretch
+  # short so the chords start quickly.
+  warmup_iti_s: 0.8
+  # Hard budget on the whole opening warm-up, in seconds. If the
+  # single-finger presses are still running when it expires (a hand
+  # that will not settle, repeated timeouts), the remaining ones move
+  # to the end of the session and the chords start; the session
+  # summary records that it happened. The first chord is therefore
+  # never more than about a minute away.
+  warmup_cap_s: 60
   # If a round goes clearly worse than the session's first round (hit
   # rate down 30 points, or presses 30 percent slower), the game
   # inserts this longer rest and eases the difficulty one step. A
@@ -840,12 +865,18 @@ syllables:
   # Syllable Beats: a children's mode, unlike everything else in this
   # file. A word appears as big blocks, one block per beat; the blocks
   # light left to right while the matching finger buzzes and a tone
-  # plays, then the child taps the beats back on the sensors. With
-  # Both hands connected either hand's finger counts for its beat
-  # (there is no wrong hand in this mode) and the model's buzzes are
-  # shared equally between the hands. The research case for every
-  # number lives in rehab/game/modes/syllables.py; this block says
-  # what the child experiences. Two cautions carried from that file: this trains
+  # plays, then the child taps the beats back on the sensors. Taps
+  # always walk left to right like the blocks, on either hand: the
+  # right hand starts at the index, the left hand ends on it. With
+  # both hands connected either hand's finger counts for its beat on
+  # short words (there is no wrong hand in this mode) and the model's
+  # buzzes are shared equally between the hands; long words of 5 to 8
+  # beats lay across BOTH hands as one left-to-right row, centred so
+  # the little fingers only join on the longest words. Long words
+  # only exist with both hands connected, at band C for the longest
+  # ones; one hand always keeps the full game. The research case for
+  # every number lives in rehab/game/modes/syllables.py; this block
+  # says what the child experiences. Two cautions carried from that file: this trains
   # sound skills in the game only, it is NOT a dyslexia treatment or
   # test and must never be described to a family as one; and the
   # hardware was scoped for adult rehabilitation, so using it with a

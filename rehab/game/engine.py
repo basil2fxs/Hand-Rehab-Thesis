@@ -192,6 +192,17 @@ class GameEngine:
         # multiplier so the patient sees why their score jumped.
         self._last_gained = 0
         self.current_block = "(none)"
+        # ---- session model ------------------------------------------------
+        # One login is one session. The participant enters their name
+        # and age once on the login screen, then plays as many games as
+        # they want from game select; only ending the session (or
+        # quitting the app) closes it. This state drives the
+        # End-session dialog's summary line and the EEG session
+        # markers. Per-game data never depends on it: every game
+        # finalises its own files the moment it ends.
+        self._session_active = False
+        self._session_started_perf: float | None = None
+        self._session_games = 0
         self.session_paths: SessionPaths | None = None
         self.last_session_root: str | None = None
         self.trial_logger: TrialLogger | None = None
@@ -267,11 +278,12 @@ class GameEngine:
         # analyst can subtract it from the block duration.
         self._block_pause_count = 0
         self._block_paused_s = 0.0
-        # Mid-block exit guard. Holds the live ConfirmDialog while
-        # "End this session?" is up; None means no dialog. The
-        # was-paused flag remembers whether the block was already
-        # paused (P key) when the dialog raised, so dismissing it does
-        # not silently un-pause a break the player chose.
+        # Exit guard. Holds the live ConfirmDialog while "End this
+        # game?" (mid-block) or "End this session?" (game select ->
+        # login) is up; None means no dialog. The was-paused flag
+        # remembers whether the block was already paused (P key) when
+        # the dialog raised, so dismissing it does not silently
+        # un-pause a break the player chose.
         self._exit_confirm = None
         self._exit_confirm_was_paused = False
         # Pending buzzer repeat-pulses as (lane, due_perf_counter).
@@ -297,6 +309,11 @@ class GameEngine:
         # Stimulus markers armed by on_stim_multi, wired by the frame
         # loop immediately after the flip that shows the stimulus.
         self._pending_eeg_stim: list[tuple[int, int]] = []
+        # Whether a 240 session-start marker has been sent without its
+        # matching 241 yet. Keeps the pair symmetric: ending a session
+        # on game select sends 241 there, and the app-quit shutdown
+        # then must not send a second one.
+        self._eeg_session_open = False
         self.markers = eeg_trigger.writer_from_config(
             cfg.get, on_emit=self._on_eeg_emission)
 
@@ -685,7 +702,10 @@ class GameEngine:
             self.show_title()
             self.source.start()
             self.audio = self._build_audio()
-            self.eeg_session_start()
+            # No session marker here. 240 rides the login
+            # (begin_session) and 241 the session end, so the EEG
+            # record brackets the participant's games, not the app
+            # process sitting on the login screen.
             last = time.perf_counter()
             while self.running:
                 now = time.perf_counter()
@@ -935,20 +955,37 @@ class GameEngine:
         pending.clear()
 
     def eeg_session_start(self) -> None:
-        """Session-start marker (engine up, participant confirmed).
-        Factored out of run() so the contract test can pin the marker
-        sequence without driving the whole frame loop."""
+        """Session-start marker (240). Fires when the participant logs
+        in, which is where the session boundary lives: one login, many
+        games, one 240/241 pair bracketing them all. Factored out of
+        begin_session so the contract test can pin the marker sequence
+        without driving the whole login flow."""
         self._eeg_send(eeg_trigger.CODES["session_start"])
+        self._eeg_session_open = True
+
+    def eeg_session_end(self) -> None:
+        """Session-end marker (241), at most once per 240. The open
+        flag guards the pair: a session ended on game select must not
+        fire a second 241 when the app later closes. Drains briefly so
+        the byte reaches the wire before any port close."""
+        if not getattr(self, "_eeg_session_open", False):
+            return
+        self._eeg_session_open = False
+        self._eeg_send(eeg_trigger.CODES["session_end"])
+        markers = getattr(self, "markers", None)
+        if markers is not None and markers.active:
+            markers.drain(0.25)
 
     def _eeg_shutdown(self) -> None:
-        """Session-end marker, then reset the line and free the port.
-        Runs in run()'s finally so every exit path (Esc, crash,
-        Ctrl+C) leaves the trigger lines at 0 instead of latched on
-        the last code."""
+        """Close the marker channel: session-end marker if a session
+        is still open (an app quit mid-session), then reset the line
+        and free the port. Runs in run()'s finally so every exit path
+        (Esc, crash, Ctrl+C) leaves the trigger lines at 0 instead of
+        latched on the last code."""
         markers = getattr(self, "markers", None)
         if markers is None or not markers.active:
             return
-        self._eeg_send(eeg_trigger.CODES["session_end"])
+        self.eeg_session_end()
         markers.drain(0.1)
         markers.close()
 
@@ -1132,9 +1169,10 @@ class GameEngine:
 
     @property
     def exit_confirm_active(self) -> bool:
-        """True while the End-this-session dialog is up. Screens read
-        this to skip their own PAUSED overlay under the dialog. getattr
-        so an engine built bare via __new__ in a test reads False."""
+        """True while an exit dialog (End this game? / End this
+        session?) is up. Screens read this to skip their own PAUSED
+        overlay under the dialog. getattr so an engine built bare via
+        __new__ in a test reads False."""
         return getattr(self, "_exit_confirm", None) is not None
 
     def _on_block_screen(self) -> bool:
@@ -1159,11 +1197,12 @@ class GameEngine:
         accent = ModeSelectScreen.MODE_ACCENTS.get(
             str(self.current_block).lower(), self.theme.accent)
         self._exit_confirm = ConfirmDialog(
-            question="End this session and go back to the menu?",
-            detail="Finished trials stay saved. The block is recorded "
-                   "as cut short.",
+            question="End this game?",
+            detail="Finished trials stay saved; this game is recorded "
+                   "as cut short.\nBack to the game list. The session "
+                   "keeps going.",
             safe_label="Keep playing",
-            danger_label="End session",
+            danger_label="End game",
             on_safe=self._dismiss_exit_confirm,
             on_danger=self._confirm_exit_to_menu,
             theme=self.theme, layout=self.layout,
@@ -1179,12 +1218,12 @@ class GameEngine:
             self._resume_now()
 
     def _confirm_exit_to_menu(self) -> None:
-        """End session, deliberately chosen. Close the dialog's pause
+        """End game, deliberately chosen. Close the dialog's pause
         bookkeeping first (matched pause/resume pair in the raw CSV,
         paused seconds into the block summary), then reuse the one
         existing abandon path so every completed trial is on disk and
-        the metadata marks the block cut short, exactly as an Esc-quit
-        used to record it."""
+        the metadata marks the block cut short. Lands on game select,
+        never the login screen: the session keeps going."""
         self._exit_confirm = None
         if self.paused and self._pause_started_at is not None:
             pause_dur = time.perf_counter() - self._pause_started_at
@@ -1199,20 +1238,21 @@ class GameEngine:
         self.show_mode_select()
 
     def _handle_escape(self) -> None:
-        """Two-step exit so a therapist can run several blocks for the
-        same patient without retyping the name.
+        """Escape walks one level out of the session flow.
 
-        - Esc on title -> quit the app
-        - Esc on mode-select -> back to title AND clear the participant
-          name so the next patient enters their own
-        - Esc on setup / rhythm-setup / results -> back to mode-select
-          (name persists)
-        - Esc during a block (any screen a block runs on) -> the End
-          session dialog. Only a deliberate confirm abandons (partial
-          data still saved); Esc again keeps playing.
+        - Esc on the login screen (title) -> quit the app
+        - Esc on game select -> the End-session dialog, the one place
+          the session-ending warning lives; confirm finalises the
+          session and returns to the login screen for the next player
+        - Esc on setup / rhythm-setup / results -> back to game select
+          (the logged-in identity persists)
+        - Esc during a game (any screen a block runs on) -> the End
+          game dialog. Only a deliberate confirm ends the game (all
+          completed trials already on disk), and it lands on game
+          select, never the login screen.
         """
-        # Esc with the exit dialog up backs OUT of it, never through
-        # it. Ending the session takes a click on End session or an
+        # Esc with an exit dialog up backs OUT of it, never through
+        # it. Confirming takes a click on the danger button or an
         # explicit keyboard move onto it plus Enter.
         if self._exit_confirm is not None:
             self._dismiss_exit_confirm()
@@ -1244,15 +1284,11 @@ class GameEngine:
             self.running = False
             return
         if self.screen_obj is mode_select:
-            # Clear the participant name AND age so the title screen
-            # comes up blank for the next patient. Without clearing
-            # age too, a researcher running back-to-back patients
-            # could accidentally tag patient B with patient A's age.
-            self.session.participant = "NA"
-            self.session.age = ""
-            self.cfg.data.setdefault("session", {})["participant"] = None
-            self.cfg.data["session"]["age"] = None
-            self.show_title()
+            # Game select -> login screen ends the whole session, so
+            # this is where the session warning lives. end_session
+            # (behind the dialog's confirm) clears the name and age so
+            # the login screen comes up blank for the next patient.
+            self.request_end_session()
             return
         # The quick calibration guards its own exit: a stray Esc must
         # not throw away a half-measured run, so the screen raises a
@@ -1450,12 +1486,102 @@ class GameEngine:
     # ---- screen helpers ----------------------------------------------------
     def show_title(self) -> None:
         ts = self._screens["title"]
-        # Refresh the name input so a cleared participant (from Esc on
-        # mode-select) actually shows up blank, instead of the stale
+        # Refresh the name input so a cleared participant (after a
+        # session ends) actually shows up blank, instead of the stale
         # text from whatever the previous patient typed.
         if hasattr(ts, "refresh"):
             ts.refresh()
         self.screen_obj = ts
+
+    # ---- session lifecycle -------------------------------------------------
+    def begin_session(self, name: str, age: str) -> None:
+        """Log in: the login screen's commit. One session spans every
+        game played from here until end_session (or an app quit), so
+        the identity typed once tags every block's files and no game
+        ever re-asks for it. Age is free text, same rule as the input
+        field: empty means not provided."""
+        name = name or "NA"
+        self.cfg.data.setdefault("session", {})["participant"] = name
+        self.cfg.data["session"]["age"] = age
+        self.session.participant = name
+        self.session.age = age
+        self._session_active = True
+        self._session_started_perf = time.perf_counter()
+        self._session_games = 0
+        self.eeg_session_start()
+        log.info("Session started: participant=%s age=%s",
+                 name, age or "(not given)")
+        self.show_mode_select()
+
+    def session_minutes(self) -> float:
+        """Minutes since login, for the End-session summary line.
+        0.0 when no session is open."""
+        t0 = getattr(self, "_session_started_perf", None)
+        if t0 is None:
+            return 0.0
+        return (time.perf_counter() - t0) / 60.0
+
+    def request_end_session(self) -> None:
+        """Leaving game select for the login screen. This is the one
+        place the session-ending warning lives: a mid-game quit only
+        ends that game, and by the time game select is back every
+        game's files are closed. With no session open (a bare menu
+        walk in tests, or a future logged-out path) it just
+        navigates."""
+        if not getattr(self, "_session_active", False):
+            self.show_title()
+            return
+        if self._exit_confirm is not None:
+            return
+        from ..ui.widgets import ConfirmDialog
+        games = int(getattr(self, "_session_games", 0))
+        played = ("No games finished yet" if games == 0
+                  else f"{games} game{'s' if games != 1 else ''} played")
+        detail = (f"{played}, {self.session_minutes():.0f} min this "
+                  "session.\nAll game data is saved; the next player "
+                  "logs in fresh.")
+        # Nothing is paused under this dialog (no block is live on
+        # game select), so a dismiss must not walk the resume path.
+        self._exit_confirm_was_paused = True
+        self._exit_confirm = ConfirmDialog(
+            question="End this session?",
+            detail=detail,
+            safe_label="Stay",
+            danger_label="End session",
+            on_safe=self._dismiss_session_end_confirm,
+            on_danger=self._confirm_end_session,
+            theme=self.theme, layout=self.layout)
+
+    def _dismiss_session_end_confirm(self) -> None:
+        self._exit_confirm = None
+
+    def _confirm_end_session(self) -> None:
+        self._exit_confirm = None
+        self.end_session()
+
+    def end_session(self) -> None:
+        """Close the session, deliberately chosen on game select.
+        Every game already finalised its own trials/raw/metadata when
+        it ended or was abandoned, so the session-level work is the
+        241 marker, the summary line in the app log, and clearing the
+        identity so the next player logs in fresh. The abandon call is
+        belt and braces: no block can normally be live here, but if
+        one ever is, its data lands on disk before the identity
+        resets."""
+        self._abandon_if_in_block()
+        log.info("Session ended: participant=%s games=%d minutes=%.1f",
+                 self.session.participant,
+                 int(getattr(self, "_session_games", 0)),
+                 self.session_minutes())
+        self.eeg_session_end()
+        self.session.participant = "NA"
+        self.session.age = ""
+        self.cfg.data.setdefault("session", {})["participant"] = None
+        self.cfg.data["session"]["age"] = None
+        self._session_active = False
+        self._session_started_perf = None
+        self._session_games = 0
+        self.show_title()
 
     def _pattern_is_configured(self) -> bool:
         """Whether game.pattern was actually set by someone, as opposed to
@@ -2122,8 +2248,10 @@ class GameEngine:
             rsi_s=float(self.cfg.get("pattern.rsi_ms", 500)) / 1000.0,
             timeout_s=float(
                 self.cfg.get("pattern.timeout_ms", 2000)) / 1000.0,
-            rest_min_s=float(self.cfg.get("pattern.rest_min_s", 15)),
-            long_rest_s=float(self.cfg.get("pattern.long_rest_s", 60)),
+            rest_min_s=float(self.cfg.get("pattern.rest_min_s", 10)),
+            long_rest_s=float(self.cfg.get("pattern.long_rest_s", 30)),
+            fatigue_rest_s=float(
+                self.cfg.get("pattern.fatigue_rest_s", 45)),
             fatigue_timeout_run=int(
                 self.cfg.get("pattern.fatigue_timeout_run", 5)),
             session_cap_min=float(
@@ -2163,11 +2291,15 @@ class GameEngine:
         the mode file's docstring; chords.* in the config says what
         the patient experiences.
 
-        Each chord stays within one hand (cross-talk is a within-hand
-        quantity), but with Both selected the two hands alternate
-        under the paired balance rules and the probes run per hand,
-        so both hands play through every session. One hand selected
-        runs exactly as before.
+        A within-hand chord stays inside one hand (cross-talk is a
+        within-hand quantity); with Both selected the hands alternate
+        under the paired balance rules, the probes run per hand, and
+        the third and fifth sub-blocks deal CROSS-hand chords spanning
+        both hands, which measure bimanual coordination on their own
+        tier ladder and staircase. One hand selected runs exactly as
+        before. The opening probes are announced as a warm-up and
+        their total time is capped so the first chord always arrives
+        early (chords.warmup_iti_s / chords.warmup_cap_s).
         """
         from .modes.chords import ChordsMode
         hands = self.lanes_by_hand()
@@ -2216,6 +2348,10 @@ class GameEngine:
             score_cfg=self.score_cfg,
             seed=seed,
             demo_trials=self._test_mode_trials(),
+            warmup_iti_s=float(
+                self.cfg.get("chords.warmup_iti_s", 0.8)),
+            warmup_cap_s=float(
+                self.cfg.get("chords.warmup_cap_s", 60)),
         )
         self._begin_block("chords")
         # The seed shaped every chord draw and jitter in this block, so
@@ -4060,6 +4196,9 @@ class GameEngine:
         # loggers close so the CSVs are complete.
         self._generate_session_report()
         self.session_paths = None
+        # One more game recorded for this session's End-session
+        # summary. getattr-safe for engines built bare in tests.
+        self._session_games = getattr(self, "_session_games", 0) + 1
         # If a protocol is running, auto-advance to the next step
         # instead of bouncing to the Results screen between blocks.
         # The final Results screen still shows after the LAST step
@@ -4120,6 +4259,9 @@ class GameEngine:
         self._generate_session_report()
         self.session_paths = None
         self.mode = None
+        # A cut-short game still counts in the session summary: it
+        # produced data and took the participant's time.
+        self._session_games = getattr(self, "_session_games", 0) + 1
 
     # ---- per-outcome colour --------------------------------------------------
     # Three tiers so the patient knows roughly how well they did at a

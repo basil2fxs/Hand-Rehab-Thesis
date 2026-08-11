@@ -385,8 +385,16 @@ class ConfirmDialog:
         draw_text(surf, self.question, (cx, cy - 80), th, ly,
                   pt=FONT_H2, centre=True)
         if self.detail:
-            draw_text(surf, self.detail, (cx, cy - 35), th, ly,
-                      pt=FONT_BODY, centre=True, colour=th.muted)
+            # Detail can carry explicit newlines: a 640-wide card fits
+            # about 65 body-font characters per line, and a longer
+            # sentence drawn as one line runs past the card edges.
+            # The block stays centred on the single-line anchor so
+            # existing one-line dialogs render exactly as before.
+            lines = self.detail.split("\n")
+            y0 = cy - 35 - (len(lines) - 1) * 13
+            for i, line in enumerate(lines):
+                draw_text(surf, line, (cx, y0 + i * 26), th, ly,
+                          pt=FONT_BODY, centre=True, colour=th.muted)
         for b in self._buttons():
             b.draw(surf)
         # Steady focus ring so a keyboard-only player can see where

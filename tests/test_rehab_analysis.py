@@ -345,7 +345,7 @@ def _write_reaction_session(root, name, *, right_rt_ms, left_rt_ms,
 def _write_chords_session(root, name, *, day, clock="090000",
                           per_chord, outcome_classes, per_hand=None,
                           over_force_trials=0, median_settle_ms=None,
-                          sub_trials=None):
+                          sub_trials=None, cross=None):
     """One chords game folder with a shaped block_summary.chords (the
     fields block_stats() actually writes, per_chord now carrying
     w_ms per audit finding #21): enough trials.csv rows to pass
@@ -392,6 +392,11 @@ def _write_chords_session(root, name, *, day, clock="090000",
         "per_hand": per_hand or {},
         "trials": sub_trials or [],
     }
+    if cross is not None:
+        # The bimanual section block_stats() writes for bilateral
+        # sessions (mirror vs non-mirror, lead-lag, per-hand ER,
+        # bilateral deficit).
+        chords_summary["cross"] = cross
     meta = {
         "participant": name, "hand": chords_summary["hand"],
         "started_at": f"{day}T09:00:00",
@@ -412,7 +417,7 @@ def _write_chords_session(root, name, *, day, clock="090000",
 def _write_syllables_session(root, name, *, day, words, gaps=None,
                              clock="090000", hand="right", level=4,
                              nsyll=2, syllables_extra=None, paced=False,
-                             asyn=None):
+                             asyn=None, row=False, errs=None):
     """One syllables game folder with words packed into the stimulus
     cell the way syllables.py._pack_stimulus writes them.
 
@@ -426,7 +431,10 @@ def _write_syllables_session(root, name, *, day, words, gaps=None,
     block_summary.syllables (band_trace, warmup_asyn_mean_ms/sd),
     mirroring what SyllablesMode.block_stats() actually returns.
     `paced`/`asyn` pack paced=1 and an asyn= list (one per word, same
-    length every word) so the beat-synchronisation branch runs."""
+    length every word) so the beat-synchronisation branch runs. `row`
+    packs map=row the way _pack_stimulus marks a spanning read-across
+    row trial; `errs` is an optional per-word error-code list (default
+    every word err=ok)."""
     folder = Path(root) / day / f"{name}_{clock}_syllables"
     folder.mkdir(parents=True, exist_ok=True)
     rows = []
@@ -435,11 +443,16 @@ def _write_syllables_session(root, name, *, day, words, gaps=None,
             f"{lane1}:{t_ms:.1f}:" + (f"{peak:.1f}" if peak is not None
                                       else "")
             for lane1, t_ms, peak in taps)
+        err = (errs[trial_id - 1] if errs else "ok")
         parts = [
             word, f"lvl={level}", "band=C", f"nsyll={nsyll}",
             f"stress={stress_idx}",
+        ]
+        if row:
+            parts.append("map=row")
+        parts += [
             f"paced={1 if paced else 0}", "ioi=500", "replay=0",
-            "err=ok", f"taps={taps_s}",
+            f"err={err}", f"taps={taps_s}",
         ]
         if paced and asyn:
             parts.append("asyn=" + ",".join(f"{a:.1f}" for a in asyn))
@@ -1035,6 +1048,50 @@ class TestPatternLearningScoreMatchesModeConvention:
         assert nb_score == pytest.approx(mode_style_score, abs=0.1)
 
 
+class TestPatternStartTrimAlignment:
+    """pattern.py drops the first cycle of every take from RT
+    aggregates (block-start transient after a rest, not learning) and
+    stores that as start_trim in block_summary.pattern. The notebook
+    must apply exactly the stored trim, so recomputed take means keep
+    matching the stored ones (the finding #15 alignment rule), and
+    must leave sessions saved before the trim existed un-trimmed,
+    because their stored means are un-trimmed too."""
+
+    def test_stored_start_trim_is_applied(self, ra, tmp_path):
+        folder, _ = _write_pattern_flanked_probe_session(
+            tmp_path, "P1", day="2026-08-01",
+            before_rts=[200.0, 300.0, 300.0],
+            probe_rts=[900.0, 500.0, 500.0],
+            after_rts=[200.0, 300.0, 300.0])
+        meta = json.loads((folder / "metadata.json").read_text())
+        meta["block_summary"]["pattern"]["start_trim"] = 1
+        (folder / "metadata.json").write_text(json.dumps(meta))
+        ctx = ra.prepare("all", root=tmp_path)
+        takes = ra.sec_pattern_srtt(ctx["trials"], ctx["metas"])
+        by_take = {r["take"]: r for _, r in takes.iterrows()}
+        # First trial of every take excluded, so the burst values
+        # (200 / 900) never reach a take mean.
+        assert by_take["4"]["rt_ms"] == pytest.approx(300.0)
+        assert by_take["5"]["rt_ms"] == pytest.approx(500.0)
+        assert int(by_take["4"]["n_start_excluded"]) == 1
+        assert int(by_take["5"]["n_start_excluded"]) == 1
+
+    def test_sessions_without_start_trim_stay_untrimmed(self, ra,
+                                                        tmp_path):
+        # Saved before the trim existed: stored take means are
+        # un-trimmed, so the recompute must be too.
+        _write_pattern_flanked_probe_session(
+            tmp_path, "P1", day="2026-08-01",
+            before_rts=[200.0, 300.0, 300.0],
+            probe_rts=[500.0, 500.0],
+            after_rts=[300.0, 300.0])
+        ctx = ra.prepare("all", root=tmp_path)
+        takes = ra.sec_pattern_srtt(ctx["trials"], ctx["metas"])
+        by_take = {r["take"]: r for _, r in takes.iterrows()}
+        assert by_take["4"]["rt_ms"] == pytest.approx(800.0 / 3, abs=0.1)
+        assert int(by_take["4"]["n_start_excluded"]) == 0
+
+
 class TestPatternDemoBlocksExcluded:
     """Test Mode's pattern demo block (block_summary.pattern.demo=True)
     is a supervisor-facing miniature built to write both pattern_trial
@@ -1215,6 +1272,99 @@ class TestChordsMode:
         # not fire, i.e. the subblock field on the stored trials list
         # was actually read.
         assert "No sub-block breakdown" not in out
+
+
+class TestChordsBimanualSubsection:
+    """The cross-hand upgrade's notebook half: the chapter reads the
+    block summary's cross section, keeps it scope-pure (no pooling
+    with the within-hand numbers), and says honestly when a selection
+    has none."""
+
+    CROSS = {
+        "n_chords": 20, "level_final": 3, "level_highest": 4,
+        "w_final_ms": 250.0, "tier_final": 4,
+        "hit_rate_mirror": 0.9, "hit_rate_nonmirror": 0.6,
+        "median_span_mirror_ms": 60.0,
+        "median_span_nonmirror_ms": 110.0,
+        "median_lag_ms": 35.0,
+        "lead_hand_counts": {"right": 14, "left": 6},
+        "median_lag_by_lead_ms": {"right": 30.0, "left": 55.0},
+        "median_er_left": 0.18, "median_er_right": 0.09,
+        "bilateral_deficit": {"right": {"I": 0.85, "M": 0.9},
+                              "left": {"I": 0.8}},
+    }
+
+    def _run(self, ra, tmp_path, capsys, cross):
+        _write_chords_session(
+            tmp_path, "P1", day="2026-08-01",
+            per_chord=[
+                {"hand": "right", "chord": "RP", "w_ms": 250.0,
+                 "d": 2.0, "n": 10, "hit_rate": 0.8,
+                 "median_span_ms": 40.0, "median_er": 0.1},
+                {"hand": "left", "chord": "RP", "w_ms": 250.0,
+                 "d": 2.0, "n": 10, "hit_rate": 0.7,
+                 "median_span_ms": 50.0, "median_er": 0.12},
+            ],
+            outcome_classes={"hit": 30, "late_chord": 10},
+            cross=cross)
+        ctx = ra.prepare("all", root=tmp_path)
+        ra.sec_chords(ctx["trials"], ctx["metas"], calset=None)
+        return capsys.readouterr().out
+
+    def test_cross_section_prints_the_bimanual_numbers(
+            self, ra, tmp_path, capsys):
+        out = self._run(ra, tmp_path, capsys, self.CROSS)
+        assert "cross-hand (bimanual) chords" in out
+        assert "20 cross-hand chords" in out
+        assert "symmetry advantage" in out
+        assert "median between-hand lag 35 ms" in out
+        assert "right led 14x" in out
+        assert "bilateral deficit ratio" in out
+        assert "per-hand ER on cross chords: left 0.180, right 0.090" \
+            in out
+        # Scope purity: the within-hand ER medians must not have
+        # swallowed the cross numbers (0.18 or 0.09 as a pooled ER).
+        assert "Never pooled with within-hand ER" in out
+
+    def test_selection_without_cross_says_so(self, ra, tmp_path,
+                                             capsys):
+        out = self._run(ra, tmp_path, capsys, None)
+        assert "cross-hand (bimanual) chords" in out
+        assert "none in this selection" in out
+
+    def test_cross_subblocks_stay_out_of_the_trajectory(
+            self, ra, tmp_path, capsys):
+        # Sub-blocks 1-2 within at hit rate 1.0, sub-block 3 cross at
+        # 0.0: if the trajectory pooled scopes the cross sub-block
+        # would appear as a fatigue dip. It must be excluded.
+        sub_trials = (
+            [{"trial": i, "kind": "chord", "scope": "within",
+              "hand": "right", "chord": "RP", "d": 2.0, "w_ms": 250.0,
+              "class": "hit", "span_ms": 40.0, "rt_ms": 300.0,
+              "er": 0.1, "subblock": 1 + (i - 1) // 4}
+             for i in range(1, 9)]
+            + [{"trial": 8 + i, "kind": "chord", "scope": "cross",
+                "hand": "both", "chord": "I|M", "d": 9.0,
+                "w_ms": 250.0, "class": "late_chord", "span_ms": 400.0,
+                "rt_ms": 500.0, "er": None, "subblock": 3}
+               for i in range(1, 5)])
+        _write_chords_session(
+            tmp_path, "P1", day="2026-08-01",
+            per_chord=[
+                {"hand": "right", "chord": "RP", "w_ms": 250.0,
+                 "d": 2.0, "n": 8, "hit_rate": 1.0,
+                 "median_span_ms": 40.0, "median_er": 0.1},
+            ],
+            outcome_classes={"hit": 8, "late_chord": 4},
+            sub_trials=sub_trials, cross=self.CROSS)
+        ctx = ra.prepare("all", root=tmp_path)
+        ra.sec_chords(ctx["trials"], ctx["metas"], calset=None)
+        out = capsys.readouterr().out
+        assert "No sub-block breakdown" not in out
+        # The chapter object's within-hand span histogram and the
+        # trajectory ran on within trials only; the cross rows still
+        # got their own subsection.
+        assert "cross-hand (bimanual) chords" in out
 
 
 class TestSyllablesStressRatio:
@@ -1398,6 +1548,90 @@ class TestSyllablesClaimLimits:
         out = capsys.readouterr().out
         assert "band trace per session" in out
         assert "A->B" in out
+
+
+class TestSyllablesReadAcrossRow:
+    """Read-across row regime (2026-08 upgrade): words of 5-8 units
+    span both hands with one lane per position and map=row in the
+    stimulus. The chapter must (a) hold row trials out of the
+    Liberman-anchored chart even at levels 2-4, because Liberman
+    tested 1-3 syllable dowel tapping; (b) report the regimes apart,
+    because the row adds a spatial-mapping demand; and (c) locate
+    each row trial's first wrong position relative to the hand
+    transition, the one new motor event the row introduces."""
+
+    # A clean 5-unit row trial: expected 1-indexed row for n=5 is
+    # 7,6,5 (left ring/middle/index) then 1,2 (right index/middle).
+    ROW5_OK = [(7, 400.0, None), (6, 800.0, None), (5, 1200.0, None),
+               (1, 1600.0, None), (2, 2000.0, None)]
+    # Same word with the transition fumbled: position 3 (the first
+    # right-hand unit) tapped on the wrong finger.
+    ROW5_HOP = [(7, 400.0, None), (6, 800.0, None), (5, 1200.0, None),
+                (2, 1600.0, None), (1, 2000.0, None)]
+
+    def test_row_words_are_held_out_of_the_liberman_chart(
+            self, ra, tmp_path, capsys):
+        _write_syllables_session(
+            tmp_path, "P1", day="2026-08-01", level=2, nsyll=2,
+            words=[("cat", 0, [(1, 400.0, None), (2, 800.0, None)])])
+        _write_syllables_session(
+            tmp_path, "P1", day="2026-08-01", clock="091500", level=2,
+            nsyll=5, row=True, hand="both",
+            words=[("hippopotamus", 2, self.ROW5_OK)])
+        ctx = ra.prepare("all", root=tmp_path)
+        ra.sec_syllables(ctx["trials"], ctx["metas"], ctx["calset"])
+        out = capsys.readouterr().out
+        assert "read-across row word(s) also held out" in out
+        assert "READ-ACROSS ROW" in out
+        assert "either-hand (1-4 units)" in out
+        assert "row (5-8 units)" in out
+
+    def test_row_regime_is_inferred_from_nsyll_without_the_flag(
+            self, ra, tmp_path, capsys):
+        # Rows logged before map=row existed still carry nsyll >= 5,
+        # so the regime split must not depend on the flag alone.
+        _write_syllables_session(
+            tmp_path, "P1", day="2026-08-01", level=6, nsyll=5,
+            row=False, hand="both",
+            words=[("stamp", 0, self.ROW5_OK)])
+        ctx = ra.prepare("all", root=tmp_path)
+        ra.sec_syllables(ctx["trials"], ctx["metas"], ctx["calset"])
+        out = capsys.readouterr().out
+        assert "READ-ACROSS ROW" in out
+
+    def test_transition_errors_are_located_and_named(
+            self, ra, tmp_path, capsys):
+        _write_syllables_session(
+            tmp_path, "P1", day="2026-08-01", level=2, nsyll=5,
+            row=True, hand="both", errs=["wrong_order"],
+            words=[("hippopotamus", 2, self.ROW5_HOP)])
+        ctx = ra.prepare("all", root=tmp_path)
+        ra.sec_syllables(ctx["trials"], ctx["metas"], ctx["calset"])
+        out = capsys.readouterr().out
+        assert "first wrong position: at the hand transition 1" in out
+        assert "motor artefact" in out
+
+    def test_clean_row_trials_report_no_mismatches(
+            self, ra, tmp_path, capsys):
+        _write_syllables_session(
+            tmp_path, "P1", day="2026-08-01", level=2, nsyll=5,
+            row=True, hand="both",
+            words=[("hippopotamus", 2, self.ROW5_OK)])
+        ctx = ra.prepare("all", root=tmp_path)
+        ra.sec_syllables(ctx["trials"], ctx["metas"], ctx["calset"])
+        out = capsys.readouterr().out
+        assert "no positional mismatches on row trials" in out
+        assert "row taps by hand: left 3, right 2" in out
+
+    def test_claim_limits_name_the_row_as_scaffolding(
+            self, ra, tmp_path, capsys):
+        _write_syllables_session(
+            tmp_path, "P1", day="2026-08-01", level=1, nsyll=2,
+            words=[("cat", 0, [(1, 400.0, None), (2, 800.0, None)])])
+        ctx = ra.prepare("all", root=tmp_path)
+        ra.sec_syllables(ctx["trials"], ctx["metas"], ctx["calset"])
+        out = capsys.readouterr().out
+        assert "scaffolding and engagement" in out
 
 
 # ---------------------------------------------------------------------

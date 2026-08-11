@@ -1,13 +1,18 @@
-"""Leaving a live session takes a deliberate choice, never a stray Esc.
+"""Leaving a live game takes a deliberate choice, never a stray Esc.
 
 Esc used to abandon a running block on the spot: partial data was
-saved, but one key press ended a patient's session with no way back.
-Now Esc from any screen a block runs on raises the End-session dialog:
-the block pauses through the normal pause path underneath (no trial
-ticks away), Esc or Keep playing backs out and resumes, and only a
-deliberate End session (a click on it, or an explicit focus move plus
+saved, but one key press ended a patient's game with no way back. Now
+Esc from any screen a block runs on raises the End-game dialog: the
+block pauses through the normal pause path underneath (no trial ticks
+away), Esc or Keep playing backs out and resumes, and only a
+deliberate End game (a click on it, or an explicit focus move plus
 Enter) walks the existing abandon path, so completed trials are on
 disk and the metadata marks the block cut short exactly as before.
+
+The confirm lands on game select, never the login screen: in the
+session model a mid-game quit only ends that game, and the session
+(with its own End-session warning) lives on game select. The
+session-level dialog is covered in test_session_model.py.
 
 All driven headless through the real engine and screens, same as the
 pause and keyboard-only navigation tests.
@@ -87,7 +92,7 @@ class _EngineHarness(unittest.TestCase):
             now=time.perf_counter())
 
     def _confirm_via_keyboard(self) -> None:
-        """Tab moves focus off Keep playing, Enter fires End session."""
+        """Tab moves focus off Keep playing, Enter fires End game."""
         import pygame
         self.eng._exit_confirm.handle_event(_key_event(pygame.K_TAB))
         self.eng._exit_confirm.handle_event(_key_event(pygame.K_RETURN))
@@ -99,6 +104,12 @@ class EscRaisesDialogTests(_EngineHarness):
         mode = self.eng.mode
         self.eng._handle_escape()
         self.assertTrue(self.eng.exit_confirm_active)
+        # The dialog asks about THIS game, not the session: a mid-game
+        # quit only ends the game, and the session warning lives on
+        # game select.
+        self.assertEqual(self.eng._exit_confirm.question, "End this game?")
+        self.assertEqual(self.eng._exit_confirm.danger_btn.label,
+                         "End game")
         # Block untouched underneath: same loggers, same mode, still on
         # the gameplay screen, frozen through the pause path.
         self.assertIs(self.eng.session_paths, paths)

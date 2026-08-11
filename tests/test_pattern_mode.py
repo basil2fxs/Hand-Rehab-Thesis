@@ -52,8 +52,9 @@ def _build_mode(**overrides):
         probe_pool_size=4,
         rsi_s=0.5,
         timeout_s=2.0,
-        rest_min_s=15.0,
-        long_rest_s=60.0,
+        rest_min_s=10.0,
+        long_rest_s=30.0,
+        fatigue_rest_s=45.0,
         fatigue_timeout_run=5,
         session_cap_min=30.0,
         short_session=False,
@@ -259,10 +260,18 @@ class LayoutTests(unittest.TestCase):
         self.assertEqual(labels, ["5", "9"])
         # 20 warm-up + 10 takes of 60 = 620 trials.
         self.assertEqual(sum(len(s.fingers) for s in mode.segments), 620)
-        # The mandatory long rest follows the first probe only.
+        # The one long rest follows take 6, never a probe: a rest
+        # boosts the take after it, and B7 is the only trained take
+        # the probe subtraction never reads. Both probes keep the
+        # plain floor on both sides (symmetric rests).
         rests = [s.long_rest_after for s in mode.segments]
         self.assertEqual(sum(rests), 1)
-        self.assertTrue(mode.segments[5].long_rest_after)
+        self.assertTrue(mode.segments[6].long_rest_after)
+        self.assertEqual(mode.segments[6].kind, "seq")
+        self.assertEqual(mode.segments[6].label, "6")
+        for seg in mode.segments:
+            if seg.kind == "probe":
+                self.assertFalse(seg.long_rest_after)
 
     def test_takes_start_the_cycle_at_position_zero(self) -> None:
         _, mode = _build_mode()
@@ -404,12 +413,15 @@ class BimanualLayoutTests(unittest.TestCase):
         _, mode = _build_mode(lanes=list(range(8)))
         probe_i = _seg_index(mode, "probe")
         flankers = (probe_i - 1, probe_i + 1)
+        # Past the block-start exclusion (a full 24-trial cycle here),
+        # with one shared RT per take so the mean is unchanged.
+        n_rows = mode.cycle_len + 5
         for i, rt in ((flankers[0], 320.0), (flankers[1], 360.0),
                       (probe_i, 440.0)):
-            for _ in range(5):
+            for _ in range(n_rows):
                 mode._trials.append((i, True, rt))
-            mode.segments[i].n_done += 5
-            mode.segments[i].n_correct += 5
+            mode.segments[i].n_done += n_rows
+            mode.segments[i].n_correct += n_rows
         stats = mode.block_stats()
         self.assertEqual(stats["cycle_len"], 24)
         self.assertEqual(len(stats["trained_soc"].split(",")), 24)
@@ -564,7 +576,10 @@ class TrialFlowTests(unittest.TestCase):
 class RestFlowTests(unittest.TestCase):
     """Rests are self-paced past a floor. Without the floor a keen
     patient skips recovery; without the self-pacing a tired one is
-    rushed. The long rest after the first probe is part of the design."""
+    rushed. Placement is measurement-critical: a rest speeds up the
+    take after it, so the one long rest must sit where the scoring
+    never looks (after take 6), and probes must see the same floor on
+    both sides."""
 
     def test_rest_gates_on_the_floor_then_any_press_advances(self) -> None:
         _, mode = _build_mode()
@@ -580,12 +595,36 @@ class RestFlowTests(unittest.TestCase):
         self.assertEqual(mode.phase, "play")
         self.assertEqual(mode._seg_idx, seq_i + 1)
 
-    def test_long_rest_follows_the_first_probe(self) -> None:
+    def test_long_rest_follows_take_six_not_the_probe(self) -> None:
+        # The rest boost lands on the take AFTER a rest, so the long
+        # rest sits where the boosted take (B7) is never read by the
+        # probe subtraction. A probe take gets the plain floor.
         _, mode = _build_mode()
-        probe_i = _seg_index(mode, "probe")
-        mode._seg_idx = probe_i
+        take6 = next(i for i, s in enumerate(mode.segments)
+                     if s.label == "6")
+        mode._seg_idx = take6
         mode._after_segment(now=100.0)
         self.assertAlmostEqual(mode._rest_min_until, 100.0 + mode.long_rest)
+
+    def test_probe_rests_are_the_plain_floor_on_both_sides(self) -> None:
+        _, mode = _build_mode()
+        probe_i = _seg_index(mode, "probe")
+        # After the probe itself.
+        mode._seg_idx = probe_i
+        mode._after_segment(now=100.0)
+        self.assertAlmostEqual(mode._rest_min_until, 100.0 + mode.rest_min)
+        # After the trained take right before the probe.
+        mode.phase = "play"
+        mode._seg_idx = probe_i - 1
+        mode._after_segment(now=200.0)
+        self.assertAlmostEqual(mode._rest_min_until, 200.0 + mode.rest_min)
+
+    def test_short_session_has_no_long_rest(self) -> None:
+        # In the 8-take layout B6 flanks BOTH probes, so there is no
+        # take an asymmetric rest can boost without the scoring
+        # reading it; every break uses the floor.
+        _, mode = _build_mode(short_session=True)
+        self.assertFalse(any(s.long_rest_after for s in mode.segments))
 
     def test_final_take_ends_the_block(self) -> None:
         engine, mode = _build_mode()
@@ -614,10 +653,15 @@ class FatigueAndCapTests(unittest.TestCase):
         engine, mode = _build_mode()
         mode._seg_idx = _seg_index(mode, "seq")
         mode._trial_in_seg = 0
-        self._run_timeouts(mode, 5)
+        t_end = self._run_timeouts(mode, 5)
         self.assertEqual(mode.phase, "rest")
         self.assertEqual(mode._rest_kind, "forced")
         self.assertEqual(mode._fatigue_triggers, 1)
+        # The forced rest has its own duration: its job is recovery,
+        # which the 10 s between-take floor is too thin for.
+        self.assertAlmostEqual(mode._rest_min_until,
+                               t_end + mode.fatigue_rest)
+        self.assertGreater(mode.fatigue_rest, mode.rest_min)
         engine.finish_block.assert_not_called()
 
     def test_second_fatigue_run_ends_the_session_gracefully(self) -> None:
@@ -664,6 +708,10 @@ class TestModeDemoTests(unittest.TestCase):
         self.assertEqual(kinds, ["seq", "probe"])
         self.assertEqual(sum(len(s.fingers) for s in mode.segments), 6)
         self.assertLessEqual(mode.rest_min, 2.0)
+        self.assertLessEqual(mode.fatigue_rest, 2.0)
+        # Demo takes are shorter than a cycle, so the block-start RT
+        # exclusion is off or the demo CSV would carry no RT stats.
+        self.assertEqual(mode.start_trim, 0)
 
     def test_demo_material_still_follows_the_design(self) -> None:
         _, mode = _build_mode(demo_trials=6)
@@ -684,12 +732,16 @@ class BlockStatsTests(unittest.TestCase):
         _, mode = _build_mode()
         probe_i = _seg_index(mode, "probe")
         flankers = (probe_i - 1, probe_i + 1)
+        # Enough rows that the block-start exclusion (first cycle of
+        # every take) still leaves RTs; every row in a take shares one
+        # value so the take mean is unchanged by the trim.
+        n_rows = mode.cycle_len + 5
         for i, rt in ((flankers[0], 300.0), (flankers[1], 340.0),
                       (probe_i, 420.0)):
-            for _ in range(5):
+            for _ in range(n_rows):
                 mode._trials.append((i, True, rt))
-            mode.segments[i].n_done += 5
-            mode.segments[i].n_correct += 5
+            mode.segments[i].n_done += n_rows
+            mode.segments[i].n_correct += n_rows
         stats = mode.block_stats()
         probe = [p for p in stats["probe_scores"]
                  if p["block"] == mode.segments[probe_i].label][0]
@@ -701,8 +753,11 @@ class BlockStatsTests(unittest.TestCase):
 
     def test_anticipations_leave_rt_stats_but_keep_accuracy(self) -> None:
         # Sub-100 ms presses cannot be responses to the stimulus, so
-        # they stay in the accuracy count but not the RT mean.
+        # they stay in the accuracy count but not the RT mean. The
+        # block-start exclusion has its own tests below; disabled here
+        # so this one stays about the anticipation cut.
         _, mode = _build_mode()
+        mode.start_trim = 0
         seq_i = _seg_index(mode, "seq")
         for rt in (50.0, 300.0, 300.0, 300.0):
             mode._trials.append((seq_i, True, rt))
@@ -714,6 +769,45 @@ class BlockStatsTests(unittest.TestCase):
         self.assertAlmostEqual(st["mean_rt_ms"], 300.0, places=1)
         self.assertAlmostEqual(st["accuracy"], 1.0, places=3)
 
+    def test_first_cycle_of_a_take_leaves_rt_aggregates(self) -> None:
+        # The first presses after a rest carry a recovery transient
+        # that is not learning (Das 2025; Gupta and Rickard 2022), so
+        # the first cycle of every take leaves RT stats. Accuracy
+        # keeps every trial.
+        _, mode = _build_mode()
+        self.assertEqual(mode.start_trim, mode.cycle_len)
+        seq_i = _seg_index(mode, "seq")
+        # First cycle artificially fast (the post-rest burst), the
+        # rest of the take steady at 400 ms.
+        for _ in range(mode.cycle_len):
+            mode._trials.append((seq_i, True, 200.0))
+        for _ in range(10):
+            mode._trials.append((seq_i, True, 400.0))
+        n = mode.cycle_len + 10
+        mode.segments[seq_i].n_done = n
+        mode.segments[seq_i].n_correct = n
+        st = mode._segment_rt_stats(seq_i)
+        self.assertEqual(st["n_start_excluded"], mode.cycle_len)
+        self.assertEqual(st["n_rt_used"], 10)
+        # The burst never reaches the mean.
+        self.assertAlmostEqual(st["mean_rt_ms"], 400.0, places=1)
+        self.assertAlmostEqual(st["accuracy"], 1.0, places=3)
+
+    def test_start_exclusion_counts_positions_not_rt_rows(self) -> None:
+        # Position within the take counts every closed trial, correct
+        # or not: a miss inside the first cycle consumes one of its
+        # slots rather than pushing the exclusion deeper into the take.
+        _, mode = _build_mode()
+        seq_i = _seg_index(mode, "seq")
+        for _ in range(mode.cycle_len):
+            mode._trials.append((seq_i, False, None))
+        for _ in range(4):
+            mode._trials.append((seq_i, True, 350.0))
+        st = mode._segment_rt_stats(seq_i)
+        self.assertEqual(st["n_start_excluded"], 0)
+        self.assertEqual(st["n_rt_used"], 4)
+        self.assertAlmostEqual(st["mean_rt_ms"], 350.0, places=1)
+
     def test_stats_record_the_material_and_seeds(self) -> None:
         _, mode = _build_mode()
         stats = mode.block_stats()
@@ -723,6 +817,51 @@ class BlockStatsTests(unittest.TestCase):
         self.assertGreaterEqual(len(stats["probe_pool"]), 2)
         self.assertEqual(stats["rsi_ms"], 500)
         self.assertEqual(stats["timeout_ms"], 2000)
+        # The rest protocol and RT hygiene that shaped the numbers:
+        # the notebook reads start_trim to apply the same exclusion.
+        self.assertEqual(stats["rest_min_s"], 10.0)
+        self.assertEqual(stats["long_rest_s"], 30.0)
+        self.assertEqual(stats["fatigue_rest_s"], 45.0)
+        self.assertEqual(stats["start_trim"], mode.cycle_len)
+
+    def test_three_star_streak_rolls_and_records(self) -> None:
+        # Reward-flavoured, accuracy-only feedback (Abe 2011; OPTIMAL
+        # theory): consecutive 3-star takes are counted, the best run
+        # lands in the block summary, and speed never enters it.
+        _, mode = _build_mode()
+        take_idxs = [i for i, s in enumerate(mode.segments)
+                     if s.kind != "warmup"]
+
+        def finish(i, acc_num, acc_den=20):
+            seg = mode.segments[i]
+            seg.n_done = acc_den
+            seg.n_correct = acc_num
+            mode._seg_idx = i
+            mode.phase = "play"
+            mode._after_segment(now=100.0 + i)
+
+        finish(take_idxs[0], 20)          # 100% -> ***
+        finish(take_idxs[1], 20)          # ***
+        self.assertEqual(mode.star_streak, 2)
+        finish(take_idxs[2], 15)          # 75% -> * breaks the run
+        self.assertEqual(mode.star_streak, 0)
+        finish(take_idxs[3], 20)          # ***
+        self.assertEqual(mode.star_streak, 1)
+        self.assertEqual(mode.best_star_streak, 2)
+        self.assertEqual(mode.block_stats()["three_star_streak_best"], 2)
+
+    def test_final_take_still_counts_toward_the_streak(self) -> None:
+        # The last take ends the block without a rest card; its stars
+        # must still roll into the streak the results screen recaps.
+        _, mode = _build_mode()
+        last = len(mode.segments) - 1
+        seg = mode.segments[last]
+        seg.n_done = 20
+        seg.n_correct = 20
+        mode._seg_idx = last
+        mode._after_segment(now=100.0)
+        self.assertEqual(mode.best_star_streak, 1)
+        self.assertEqual(mode.end_reason, "completed")
 
 
 class KeyboardFallbackTests(unittest.TestCase):
@@ -859,9 +998,13 @@ class ResultsScreenPatientFacingTests(unittest.TestCase):
         cards = []
         r._draw_stat_card = (
             lambda surf, rect, lbl, val, col: cards.append((lbl, val)))
+        charts = []
+        r._draw_per_lane_chart = (
+            lambda surf, rect, title, *a, **k: charts.append(title))
         surf = pygame.Surface((1280, 800))
         r.draw(surf)
         pygame.quit()
+        self._charts = charts
         return cards
 
     def test_no_rt_cards_on_a_pattern_results_screen(self) -> None:
@@ -877,6 +1020,19 @@ class ResultsScreenPatientFacingTests(unittest.TestCase):
         # (55/50 ms, an anticipation) must not appear under any label.
         self.assertNotIn("50 ms", [v for _, v in cards])
         self.assertNotIn("55 ms", [v for _, v in cards])
+        # The per-finger MEAN RT chart is an RT number too: pattern
+        # results draw the what-this-trains panel instead of any
+        # per-lane timing chart.
+        self.assertEqual(self._charts, [])
+
+    def test_pattern_results_recap_the_star_run(self) -> None:
+        cards = self._draw_pattern_results({
+            "three_star_streak_best": 4,
+            "per_take": [
+                {"block": "2", "kind": "seq", "n": 60, "accuracy": 0.97},
+            ],
+        })
+        self.assertIn(("BEST 3-STAR RUN", "4 takes"), cards)
 
     def test_pattern_results_show_accuracy_not_speed(self) -> None:
         cards = self._draw_pattern_results({

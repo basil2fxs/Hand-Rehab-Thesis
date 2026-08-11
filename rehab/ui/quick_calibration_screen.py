@@ -461,8 +461,9 @@ class QuickCalibrationScreen(Screen):
     def on_escape(self) -> None:
         """Esc asks before abandoning. First Esc raises the guard,
         Esc again (or the Stop button) confirms; Keep going lowers it.
-        Abandoning discards the run and lands on mode select, the same
-        place Esc from the setup screen goes."""
+        Abandoning discards the run and lands where the player came
+        from: game select mid-session (the flow gated a game start),
+        the login screen otherwise (a menu launch before any login)."""
         if self._confirm:
             self._abandon()
         else:
@@ -476,7 +477,10 @@ class QuickCalibrationScreen(Screen):
     def _abandon(self) -> None:
         self._confirm = False
         self._continue = None
-        self.engine.show_mode_select()
+        if getattr(self.engine, "_session_active", False):
+            self.engine.show_mode_select()
+        else:
+            self.engine.show_title()
 
     # ---- buttons ---------------------------------------------------------
 

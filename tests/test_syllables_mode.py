@@ -12,6 +12,16 @@ force data, errors earn exactly one replay and never a penalty, band
 movement follows the 8-of-10 / under-5-of-10 rule and is logged, and
 the session ends politely at word boundaries on completion or the
 time cap.
+
+The read-across row (2026-08 upgrade) adds its own guarantees: taps
+walk physically left to right on ANY hand (a left-hand 2-unit word is
+middle then index, the flip from the old index-first rule), spanning
+words of 5-8 units exist only in bilateral play and give each
+position exactly ONE lane (centred on the midline, littles recruited
+last), correct_keys says so, the stimulus carries map=row, the model
+buzzes the row in order without consuming the hand bag, the keyboard
+equals the sensors (an 8-unit word is the home row typed left to
+right), and the long material stays out of every single-hand pool.
 """
 from __future__ import annotations
 
@@ -32,18 +42,19 @@ def _press(lane: int, t: float = 0.0):
                       hand="right")
 
 
-def _build_mode(**overrides):
+def _build_mode(hand_mode: str = "right", **overrides):
     """A SyllablesMode wired to a MagicMock engine, driven with
     explicit `now` values through _tick, following the chords-mode
     test harness. Speech is off (no macOS say in a test), the peak
     helper reports no force data (keyboard reality) unless a test
     installs its own, and the timing knobs are shrunk so a scenario
-    runs in a handful of ticks."""
+    runs in a handful of ticks. `hand_mode` keys a single-hand mode
+    to that hand (a left session's walk runs the other way)."""
     from rehab.game.modes.syllables import SyllablesMode
     from rehab.game.scoring import ScoreConfig
     engine = MagicMock()
     engine._screens = {}
-    engine.hand_mode = "right"
+    engine.hand_mode = hand_mode
     engine.source.provides_samples = False
     engine.detectors = {}
     engine._peak_force_for_lane = lambda lane: None
@@ -342,6 +353,396 @@ class OrderLevelTests(unittest.TestCase):
         t = _run_to_respond(mode, 0.1)
         _tap_out(mode, [1, 0], t + 0.5)
         self.assertIn("replay=0", _logged_stimulus(engine))
+
+
+def _word(name: str):
+    from rehab.game.modes.syllables_words import WORDS
+    return next(w for w in WORDS if w.word == name)
+
+
+BILATERAL = {"right": [0, 1, 2, 3], "left": [4, 5, 6, 7]}
+
+
+class ReadAcrossRowWalkTests(unittest.TestCase):
+    """The one rule of the row design: taps travel physically LEFT TO
+    RIGHT, the way the blocks light and the way print runs, on any
+    hand. On the right hand that is index outward (unchanged); on the
+    left hand the same word walks the n fingers nearest the thumb, so
+    a 2-unit word is middle then index (d f on the keyboard), NOT
+    index then middle. This flips the old left-hand behaviour on
+    purpose: the old rule made a left-hand word run physically right
+    to left, against the mapping the mode exists to teach."""
+
+    def test_left_hand_two_unit_word_walks_middle_then_index(self) -> None:
+        engine, mode = _build_mode(hand_mode="left", level=2)
+        mode._tick(0.0)
+        mode.word = _word("wombat")
+        self.assertEqual(mode.expected_lanes(), [1, 0])
+        t = _run_to_respond(mode, 0.1)
+        _tap_out(mode, [1, 0], t + 0.5)
+        self.assertIn("err=ok", _logged_stimulus(engine))
+
+    def test_left_hand_index_first_is_now_wrong_order(self) -> None:
+        engine, mode = _build_mode(hand_mode="left", level=2)
+        mode._tick(0.0)
+        mode.word = _word("wombat")
+        t = _run_to_respond(mode, 0.1)
+        _tap_out(mode, [0, 1], t + 0.5)
+        self.assertIn("err=wrong_order", _logged_stimulus(engine))
+
+    def test_left_hand_four_unit_word_starts_on_the_little(self) -> None:
+        engine, mode = _build_mode(hand_mode="left", level=2)
+        mode._tick(0.0)
+        mode.word = _word("kookaburra")
+        self.assertEqual(mode.expected_lanes(), [3, 2, 1, 0])
+        # The blocks wear the fingers that play them: little to index.
+        self.assertEqual([mode.finger_for_position(i) for i in range(4)],
+                         [3, 2, 1, 0])
+
+    def test_left_model_buzzes_left_to_right_too(self) -> None:
+        # The model teaches the walk, so its buzz order must BE the
+        # walk: middle then index on a left-hand 2-unit word.
+        engine, mode = _build_mode(hand_mode="left", level=2)
+        mode._tick(0.0)
+        mode.word = _word("wombat")
+        _run_to_respond(mode, 0.1)
+        lanes = [c.args[0] for c in engine.on_stim.call_args_list]
+        self.assertEqual(lanes, [1, 0])
+
+    def test_right_hand_behaviour_is_unchanged(self) -> None:
+        engine, mode = _build_mode(level=2)
+        mode._tick(0.0)
+        mode.word = _word("kookaburra")
+        self.assertEqual(mode.expected_lanes(), [0, 1, 2, 3])
+
+    def test_bilateral_short_word_accepts_each_hands_own_walk(self) -> None:
+        """Either hand still counts on short words, but through its
+        OWN walk: position 0 of a 2-unit word is the right index OR
+        the left middle (lane 5), and the left index (lane 4) now
+        carries position 1, not position 0."""
+        engine, mode = _build_mode(level=2, lanes_by_hand=BILATERAL)
+        mode._tick(0.0)
+        mode.word = _word("wombat")
+        self.assertEqual(mode.lanes_for_position(0), [0, 5])
+        self.assertEqual(mode.lanes_for_position(1), [1, 4])
+        t = _run_to_respond(mode, 0.1)
+        _tap_out(mode, [5, 4], t + 0.5)      # all-left, walked l-to-r
+        self.assertIn("err=ok", _logged_stimulus(engine))
+
+    def test_bilateral_old_left_index_first_is_wrong_order(self) -> None:
+        engine, mode = _build_mode(level=2, lanes_by_hand=BILATERAL)
+        mode._tick(0.0)
+        mode.word = _word("wombat")
+        t = _run_to_respond(mode, 0.1)
+        _tap_out(mode, [4, 5], t + 0.5)      # the pre-flip "correct"
+        self.assertIn("err=wrong_order", _logged_stimulus(engine))
+
+    def test_mixed_hands_still_count_on_short_words(self) -> None:
+        engine, mode = _build_mode(level=2, lanes_by_hand=BILATERAL)
+        mode._tick(0.0)
+        mode.word = _word("wombat")
+        t = _run_to_respond(mode, 0.1)
+        _tap_out(mode, [5, 1], t + 0.5)      # left middle, right middle
+        self.assertIn("err=ok", _logged_stimulus(engine))
+
+
+class SpanningRowTests(unittest.TestCase):
+    """Words of 5-8 units span both hands as ONE row in physical desk
+    order, centred on the midline: 5 units run left-ring to
+    right-middle, 8 use all eight fingers. Each position owns exactly
+    one lane, so correct_keys names the row, the stimulus carries
+    map=row, and the model's hand is determined by the position (the
+    hand shuffle bag keeps balancing only the short words it owns)."""
+
+    ROWS = {
+        "stamp": [6, 5, 4, 0, 1],
+        "basket": [6, 5, 4, 0, 1, 2],
+        "blanket": [7, 6, 5, 4, 0, 1, 2],
+        "breakfast": [7, 6, 5, 4, 0, 1, 2, 3],
+    }
+
+    def _row_mode(self, word_name: str, **overrides):
+        engine, mode = _build_mode(level=6, band="C",
+                                   lanes_by_hand=BILATERAL, **overrides)
+        mode._tick(0.0)
+        mode.word = _word(word_name)
+        return engine, mode
+
+    def test_rows_are_centred_and_recruit_littles_last(self) -> None:
+        for word_name, want in self.ROWS.items():
+            engine, mode = self._row_mode(word_name)
+            self.assertTrue(mode.row_mode, word_name)
+            self.assertEqual(mode.row_lanes(), want, word_name)
+        # 5 and 6 unit rows never touch a little finger (lanes 7, 3):
+        # the weakest, most enslaved fingers join only at 7-8 units.
+        self.assertNotIn(7, self.ROWS["stamp"] + self.ROWS["basket"])
+        self.assertNotIn(3, self.ROWS["stamp"] + self.ROWS["basket"])
+
+    def test_row_taps_in_desk_order_score_ok(self) -> None:
+        engine, mode = self._row_mode("breakfast")
+        t = _run_to_respond(mode, 0.1)
+        _tap_out(mode, self.ROWS["breakfast"], t + 0.5, gap=0.3)
+        stim = _logged_stimulus(engine)
+        self.assertIn("err=ok", stim)
+        self.assertIn("map=row", stim)
+        self.assertIn("nsyll=8", stim)
+
+    def test_swapped_row_taps_name_wrong_order(self) -> None:
+        engine, mode = self._row_mode("stamp")
+        lanes = list(self.ROWS["stamp"])
+        lanes[0], lanes[1] = lanes[1], lanes[0]
+        t = _run_to_respond(mode, 0.1)
+        _tap_out(mode, lanes, t + 0.5, gap=0.3)
+        self.assertIn("err=wrong_order", _logged_stimulus(engine))
+        self.assertEqual(_logged_outcome(engine).label, "Good")
+
+    def test_correct_keys_is_the_row_one_lane_per_position(self) -> None:
+        engine, mode = self._row_mode("basket")
+        t = _run_to_respond(mode, 0.1)
+        _tap_out(mode, self.ROWS["basket"], t + 0.5, gap=0.3)
+        self.assertEqual(
+            engine.log_trial.call_args.kwargs["correct_lanes"],
+            self.ROWS["basket"])
+
+    def test_model_buzzes_the_row_and_leaves_the_hand_bag_alone(
+            self) -> None:
+        engine, mode = self._row_mode("blanket")
+        bag_before = mode._model_hand_order
+        drawn = []
+        real_next = bag_before.next
+        bag_before.next = lambda: drawn.append(1) or real_next()
+        _run_to_respond(mode, 0.1)
+        lanes = [c.args[0] for c in engine.on_stim.call_args_list]
+        self.assertEqual(lanes, self.ROWS["blanket"])
+        self.assertEqual(drawn, [], "the hand bag was consumed on a "
+                                    "spanning word")
+
+    def test_playing_finger_with_no_block_is_a_wrong_tap(self) -> None:
+        """On a 5-unit word the right ring and both littles carry no
+        position. A tap there is a real press on a playing hand, so
+        it must land in the tap list and the incorrect-press record,
+        never be silently ignored: ignoring it would hide exactly the
+        stray presses the row regime is expected to produce."""
+        engine, mode = self._row_mode("stamp")
+        t = _run_to_respond(mode, 0.1)
+        lanes = self.ROWS["stamp"][:4] + [3]     # last tap on R-little
+        _tap_out(mode, lanes, t + 0.5, gap=0.3)
+        self.assertIn("err=wrong_order", _logged_stimulus(engine))
+        trial = engine.log_trial.call_args.args[0]
+        self.assertTrue(trial.incorrect_presses)
+        self.assertEqual(trial.incorrect_presses[0][0], 3)
+
+    def test_short_words_carry_no_map_row_flag(self) -> None:
+        engine, mode = _build_mode(level=2, lanes_by_hand=BILATERAL)
+        mode._tick(0.0)
+        mode.word = _word("wombat")
+        t = _run_to_respond(mode, 0.1)
+        _tap_out(mode, [0, 1], t + 0.5)
+        self.assertNotIn("map=row", _logged_stimulus(engine))
+
+    def test_row_finger_colours_mirror_across_the_midline(self) -> None:
+        engine, mode = self._row_mode("breakfast")
+        self.assertEqual(
+            [mode.finger_for_position(i) for i in range(8)],
+            [3, 2, 1, 0, 0, 1, 2, 3])
+
+    def test_home_row_typed_left_to_right_plays_an_eight_unit_word(
+            self) -> None:
+        """The keyboard IS the sensor mapping: an 8-unit word is
+        literally a s d f j k l ; typed left to right, with nothing
+        extra configured (the bilateral keymap already says so). The
+        keys resolve through handle_event to the exact row lanes;
+        their taps are then replayed on the simulated clock (a real
+        KEYDOWN stamps wall time, which a ticked test cannot mix in)
+        and must score the word clean."""
+        import pygame
+        engine, mode = _build_mode(level=6, band="C",
+                                   lanes_by_hand=BILATERAL)
+        engine.hand_mode = "both"
+        engine.cfg.get = MagicMock(side_effect=lambda k, d=None: {
+            "game.keyboard_map_bilateral": {
+                "j": 0, "k": 1, "l": 2, "semicolon": 3,
+                "f": 4, "d": 5, "s": 6, "a": 7},
+        }.get(k, d))
+        mode._tick(0.0)
+        mode.word = _word("breakfast")
+        t = _run_to_respond(mode, 0.1)
+        keys = [pygame.K_a, pygame.K_s, pygame.K_d, pygame.K_f,
+                pygame.K_j, pygame.K_k, pygame.K_l, pygame.K_SEMICOLON]
+        for key in keys:
+            mode.handle_event(pygame.event.Event(pygame.KEYDOWN, key=key))
+        typed = [p.lane for p in mode._presses]
+        self.assertEqual(typed, mode.row_lanes(),
+                         "home row left to right must be the row")
+        mode._presses.clear()
+        _tap_out(mode, typed, t + 0.5, gap=0.3)
+        stim = _logged_stimulus(engine)
+        self.assertIn("err=ok", stim)
+        self.assertIn("map=row", stim)
+
+    def test_stress_normalisation_reads_the_finger_not_the_position(
+            self) -> None:
+        """On the row a left-ring lane carries position 0, but its
+        calibration gap is still the RING's. Reading the gap by
+        position (the old code) would normalise the left ring by the
+        index finger's gap, quietly skewing every level-4 stress
+        ratio on 5-syllable words."""
+        engine, mode = _build_mode(level=4, lanes_by_hand=BILATERAL)
+        mode._tick(0.0)
+        mode.word = _word("hippopotamus")
+        gaps_left = {0: 11.0, 1: 12.0, 2: 13.0, 3: 14.0}
+        gaps_right = {0: 21.0, 1: 22.0, 2: 23.0, 3: 24.0}
+
+        class _Prof:
+            def __init__(self, gaps):
+                self._g = gaps
+
+            def gap(self):
+                return self._g
+
+        engine.calibration_profiles = {"left": _Prof(gaps_left),
+                                       "right": _Prof(gaps_right)}
+        # Row for 5 units: 6 (L-ring), 5 (L-middle), 4 (L-index),
+        # 0 (R-index), 1 (R-middle).
+        self.assertEqual(mode._reference_counts(6), 13.0)   # L ring
+        self.assertEqual(mode._reference_counts(5), 12.0)   # L middle
+        self.assertEqual(mode._reference_counts(4), 11.0)   # L index
+        self.assertEqual(mode._reference_counts(0), 21.0)   # R index
+        self.assertEqual(mode._reference_counts(1), 22.0)   # R middle
+
+
+class LongMaterialPoolTests(unittest.TestCase):
+    """The long words are a bilateral pool extension, never a level or
+    a requirement: a one-hand child keeps the full ladder on the 2-4
+    unit material, 5-syllable words live only in bilateral band C at
+    levels 2-4, the level 6 bilateral pool widens to 5-6 graphemes,
+    and the 7-8 stretch enters at band C only. Level 1 keeps its
+    3-syllable counting cap everywhere."""
+
+    def test_single_hand_pools_never_exceed_four_units(self) -> None:
+        from rehab.game.modes.syllables_words import words_for
+        for level in (1, 2, 3, 4):
+            for band in ("A", "B", "C"):
+                self.assertTrue(all(w.n_syll <= 4
+                                    for w in words_for(level, band)))
+        self.assertTrue(all(len(w.graphemes) <= 4
+                            for w in words_for(6, "C")))
+
+    def test_five_syllable_words_only_in_bilateral_band_c(self) -> None:
+        from rehab.game.modes.syllables_words import words_for
+        pool = words_for(2, "C", bilateral=True)
+        self.assertTrue(any(w.n_syll == 5 for w in pool))
+        for band in ("A", "B"):
+            self.assertTrue(all(w.n_syll <= 4 for w in
+                                words_for(2, band, bilateral=True)))
+        # Level 1 keeps the counting entry point's 3-syllable cap.
+        self.assertTrue(all(w.n_syll <= 3 for w in
+                            words_for(1, "C", bilateral=True)))
+
+    def test_level_six_bilateral_widens_to_six_and_stretches_at_c(
+            self) -> None:
+        from rehab.game.modes.syllables_words import words_for
+        for band in ("A", "B"):
+            pool = words_for(6, band, bilateral=True)
+            self.assertEqual(max(len(w.graphemes) for w in pool), 6)
+        pool_c = words_for(6, "C", bilateral=True)
+        self.assertEqual(max(len(w.graphemes) for w in pool_c), 8)
+        # The 2-4 entry material stays in every bilateral pool.
+        self.assertTrue(any(len(w.graphemes) <= 4 for w in pool_c))
+
+    def test_long_grapheme_cuts_join_and_are_five_to_eight(self) -> None:
+        from rehab.game.modes.syllables_words import (
+            TRANSPARENT_WORDS_STRETCH, TRANSPARENT_WORDS_WIDE)
+        self.assertGreaterEqual(len(TRANSPARENT_WORDS_WIDE), 10)
+        self.assertGreaterEqual(len(TRANSPARENT_WORDS_STRETCH), 3)
+        for w in TRANSPARENT_WORDS_WIDE + TRANSPARENT_WORDS_STRETCH:
+            self.assertEqual("".join(w.graphemes), w.word, w.word)
+        self.assertTrue(all(5 <= len(w.graphemes) <= 6
+                            for w in TRANSPARENT_WORDS_WIDE))
+        self.assertTrue(all(7 <= len(w.graphemes) <= 8
+                            for w in TRANSPARENT_WORDS_STRETCH))
+
+    def test_no_six_to_eight_syllable_words_exist(self) -> None:
+        # The binding what-NOT-to-do: strings past young verbal span
+        # (Gathercole et al. 2004) would measure memory, not
+        # segmentation. Phonemes are the long territory, syllables
+        # stop at 5.
+        from rehab.game.modes.syllables_words import WORDS
+        self.assertEqual(max(w.n_syll for w in WORDS), 5)
+
+
+class RowScreenTests(unittest.TestCase):
+    """What the child sees on a spanning word: the either-hand promise
+    is replaced (not just hidden) by the row rule, and the block row
+    opens a wider gap between the two hands' groups so the word
+    visibly crosses hands where the fingers do."""
+
+    def _screen(self, engine):
+        import pygame
+        pygame.init()
+        pygame.font.init()
+        from rehab.ui.syllables_screen import SyllablesScreen
+        from rehab.ui.theme import get as get_theme
+        from rehab.ui.widgets import Layout
+        # The block geometry is real arithmetic on the layout, so the
+        # mock engine needs the real 1280x800 logical layout, not a
+        # MagicMock that turns every coordinate into nonsense.
+        engine.layout = Layout(1280, 800, 1.0)
+        engine.theme = get_theme("clinical")
+        return SyllablesScreen(engine)
+
+    def test_long_word_line_replaces_either_hand_line(self) -> None:
+        engine, mode = _build_mode(level=6, band="C",
+                                   lanes_by_hand=BILATERAL)
+        scr = self._screen(engine)
+        mode._tick(0.0)
+        mode.word = _word("breakfast")
+        mode.phase = "respond"
+        line = scr._either_hand_line(mode)
+        self.assertIn("both hands", line)
+        self.assertIn("left to right", line)
+        self.assertNotIn("either hand", line)
+        # Short words keep the either-hand promise.
+        mode.word = _word("cat")
+        self.assertIn("either hand", scr._either_hand_line(mode))
+
+    def test_row_blocks_split_into_two_hand_groups(self) -> None:
+        engine, mode = _build_mode(level=6, band="C",
+                                   lanes_by_hand=BILATERAL)
+        scr = self._screen(engine)
+        mode._tick(0.0)
+        mode.word = _word("basket")     # 6 units, split after 3
+        rects = scr._block_rects(mode)
+        self.assertEqual(len(rects), 6)
+        gaps = [rects[i + 1].left - rects[i].right
+                for i in range(len(rects) - 1)]
+        split = mode.row_split()
+        self.assertEqual(split, 3)
+        hand_gap = gaps[split - 1]
+        within = [g for i, g in enumerate(gaps) if i != split - 1]
+        self.assertGreater(hand_gap, max(within),
+                           "the gap between the hands' groups must be "
+                           "visibly wider than the within-hand gaps")
+        # The whole row still fits the 1280 logical width.
+        self.assertGreaterEqual(rects[0].left, 0)
+        engine2, mode2 = _build_mode(level=6, band="C",
+                                     lanes_by_hand=BILATERAL)
+        mode2._tick(0.0)
+        mode2.word = _word("breakfast")
+        rects8 = scr._block_rects(mode2)
+        self.assertLessEqual(rects8[-1].right, 1280)
+        self.assertGreaterEqual(rects8[0].left, 0)
+
+    def test_short_words_keep_one_even_row(self) -> None:
+        engine, mode = _build_mode(level=2, lanes_by_hand=BILATERAL)
+        scr = self._screen(engine)
+        mode._tick(0.0)
+        mode.word = _word("kangaroo")
+        rects = scr._block_rects(mode)
+        gaps = {rects[i + 1].left - rects[i].right
+                for i in range(len(rects) - 1)}
+        self.assertEqual(len(gaps), 1, "short words must keep the "
+                                       "single even block gap")
 
 
 class PacedLevelTests(unittest.TestCase):

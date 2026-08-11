@@ -121,7 +121,7 @@ class TestTitleLayout:
         screen, _ = title_screen
         assert screen.name_input is not None
         assert screen.age_input is not None
-        assert screen.start_btn.label == "START SESSION"
+        assert screen.start_btn.label == "LOG IN"
         labels = {label for _r, label, _i, _a in screen._pills}
         assert labels == {"Quit", "Info", "Calibrate", "Settings"}
 
@@ -573,3 +573,102 @@ class TestCuesOnTheResultsScreen:
         r.again_btn.on_click = lambda: fired.append("again")
         self._click(r, r.again_btn.rect.center)
         assert fired
+
+
+@pytest.fixture
+def mode_select_screen():
+    import pygame
+    pygame.init()
+    pygame.font.init()
+    from rehab.config import Config
+    from rehab.game.engine import GameEngine
+    from rehab.hardware.keyboard_source import KeyboardOnlySource
+    from rehab.ui.screens import ModeSelectScreen
+    cfg = Config.load()
+    cfg.data.setdefault("ui", {})["resolution"] = [1280, 800]
+    eng = GameEngine(cfg, KeyboardOnlySource())
+    yield ModeSelectScreen(eng), eng
+    pygame.quit()
+
+
+class TestModeSelectCardLayout:
+    """Every mode card carries a what-you-do + what-it-trains
+    description, wrapped to at most two lines. The wrap cap is a
+    contract: a third line would silently vanish, so this class
+    renders every description with the same font and wrap the screen
+    uses and fails when any card in either column runs out of room."""
+
+    def _card_lines(self, sc):
+        from rehab.ui.widgets import FONT_SMALL
+        for b, (key, title, desc) in zip(sc.buttons, sc.MODES):
+            font = sc.layout.font(FONT_SMALL + 2)
+            text_x = b.rect.x + 92
+            max_w = b.rect.right - 14 - text_x
+            lines = sc._wrap_desc(font, desc, max_w)
+            yield key, b, font, max_w, lines
+
+    def test_ten_cards_and_every_mode_described(self, mode_select_screen):
+        sc, _ = mode_select_screen
+        assert len(sc.MODES) == 10
+        assert len(sc.buttons) == 10
+        for _key, _title, desc in sc.MODES:
+            assert desc.strip(), "a card without a description tells "
+            "the clinician nothing"
+
+    def test_descriptions_fit_two_lines_in_both_columns(
+            self, mode_select_screen):
+        sc, _ = mode_select_screen
+        for key, b, font, max_w, lines in self._card_lines(sc):
+            assert len(lines) <= sc.DESC_MAX_LINES, (
+                f"{key}: description needs {len(lines)} lines; the "
+                f"card draws at most {sc.DESC_MAX_LINES}")
+            for line in lines:
+                assert font.size(line)[0] <= max_w, (
+                    f"{key}: line wider than the card interior")
+
+    def test_description_block_stays_inside_the_card(
+            self, mode_select_screen):
+        sc, _ = mode_select_screen
+        for key, b, font, _max_w, lines in self._card_lines(sc):
+            n = min(len(lines), sc.DESC_MAX_LINES)
+            bottom = b.rect.y + 44 + (n - 1) * 20 + font.get_height()
+            assert bottom <= b.rect.bottom, (
+                f"{key}: description bottom {bottom} spills past the "
+                f"card bottom {b.rect.bottom}")
+
+    def test_the_grid_clears_the_end_session_button(
+            self, mode_select_screen):
+        sc, _ = mode_select_screen
+        lowest = max(b.rect.bottom for b in sc.buttons)
+        assert lowest < sc.back_btn.rect.top, (
+            "cards overlap the End session button")
+
+    def test_columns_do_not_overlap(self, mode_select_screen):
+        sc, _ = mode_select_screen
+        for i, b in enumerate(sc.buttons):
+            for j, other in enumerate(sc.buttons):
+                if i < j:
+                    assert not b.rect.colliderect(other.rect)
+
+    def test_measurement_modes_say_measure_not_treat(
+            self, mode_select_screen):
+        # Reaction and Buzz Hunt are measurement-first (their
+        # docstrings refuse therapy claims), so their cards must say
+        # "measures" and no card may promise treatment or recovery.
+        sc, _ = mode_select_screen
+        descs = {k: d.lower() for k, _t, d in sc.MODES}
+        assert "measures" in descs["reaction"]
+        assert "measures" in descs["buzz_hunt"]
+        for key, d in descs.items():
+            for banned in ("cure", "recover", "restores", "treats",
+                           "therapy"):
+                assert banned not in d, f"{key} card overclaims: {banned}"
+
+    def test_pattern_card_still_keeps_the_secret(self, mode_select_screen):
+        # Boyd and Winstein: explicit knowledge impairs the implicit
+        # learning. The card must never hint that material repeats.
+        sc, _ = mode_select_screen
+        desc = dict((k, d) for k, _t, d in sc.MODES)["pattern"].lower()
+        for banned in ("pattern", "sequence", "repeat", "hidden",
+                       "memoris"):
+            assert banned not in desc

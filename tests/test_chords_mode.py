@@ -1238,5 +1238,508 @@ class DisconnectedSourceTests(unittest.TestCase):
         self.assertEqual(captured.get("text"), "Relax your hand")
 
 
+class CrossLadderTests(unittest.TestCase):
+    """The cross-hand ladder is the bimanual manipulation: mirror
+    chords first (the symmetry advantage), asymmetry and size costed
+    explicitly. The briefed D_cross values are recomputed from the
+    formula every run, exactly like the within-hand ladder tests."""
+
+    EXPECTED_D_CROSS = {
+        ((0,), (0,)): 4.0, ((3,), (3,)): 6.0,
+        ((1,), (1,)): 8.0, ((2,), (2,)): 8.0,
+        ((2, 3), (2, 3)): 7.0, ((0, 1), (0, 1)): 9.0,
+        ((1, 2), (1, 2)): 9.0,
+        ((0,), (1,)): 9.0, ((1,), (0,)): 9.0,
+        ((2,), (3,)): 10.0, ((3,), (2,)): 10.0,
+        ((1,), (2,)): 11.0, ((2,), (1,)): 11.0,
+        ((0,), (2,)): 12.0, ((0,), (1, 2)): 12.5,
+        ((0,), (3,)): 14.0, ((0, 1), (2, 3)): 17.0,
+    }
+
+    def test_cross_difficulty_reproduces_the_briefed_values(self) -> None:
+        from rehab.game.modes.chords import chord_difficulty_cross
+        for (left, right), d in self.EXPECTED_D_CROSS.items():
+            self.assertAlmostEqual(chord_difficulty_cross(left, right),
+                                   d, places=3,
+                                   msg=f"{left}|{right}")
+
+    def test_tiers_cover_the_brief_and_step_up_in_hardness(self) -> None:
+        from rehab.game.modes.chords import (CROSS_TIERS,
+                                             chord_difficulty_cross)
+        listed = [c for tier in CROSS_TIERS for c in tier]
+        self.assertEqual(set(listed), set(self.EXPECTED_D_CROSS))
+        self.assertEqual(len(listed), len(self.EXPECTED_D_CROSS))
+        medians = []
+        for tier in CROSS_TIERS:
+            ds = sorted(chord_difficulty_cross(l, r) for l, r in tier)
+            medians.append(ds[len(ds) // 2])
+        self.assertEqual(medians, sorted(medians))
+
+    def test_every_cross_chord_is_two_to_four_fingers_both_hands(
+            self) -> None:
+        from rehab.game.modes.chords import CROSS_TIERS
+        for tier in CROSS_TIERS:
+            for left, right in tier:
+                self.assertGreaterEqual(len(left), 1)
+                self.assertGreaterEqual(len(right), 1)
+                self.assertLessEqual(len(left) + len(right), 4)
+
+    def test_mirror_tiers_have_zero_asymmetry(self) -> None:
+        from rehab.game.modes.chords import (CROSS_TIERS,
+                                             cross_mirror_distance)
+        for tier in CROSS_TIERS[:2]:
+            for left, right in tier:
+                self.assertEqual(cross_mirror_distance(left, right), 0.0)
+        for tier in CROSS_TIERS[2:]:
+            for left, right in tier:
+                self.assertGreater(cross_mirror_distance(left, right), 0.0)
+
+    def test_cross_label_reads_left_bar_right(self) -> None:
+        from rehab.game.modes.chords import cross_label
+        self.assertEqual(cross_label((0,), (1,)), "I|M")
+        self.assertEqual(cross_label((0, 1), (2, 3)), "IM|RP")
+
+
+def _build_bilateral(**overrides):
+    """_build_mode with both hands' lanes wired, the shape
+    begin_chords_block passes for hand_mode 'both'."""
+    kwargs = dict(
+        hand="right",
+        lanes=[0, 1, 2, 3],
+        lanes_by_hand={"right": [0, 1, 2, 3], "left": [4, 5, 6, 7]},
+    )
+    kwargs.update(overrides)
+    return _build_mode(**kwargs)
+
+
+class ScopeScheduleTests(unittest.TestCase):
+    """Scope-pure sub-blocks: the third and fifth of each five deal
+    cross-hand chords, in a fixed order, bilateral only. A short
+    custom config still gets at least one cross sub-block."""
+
+    def test_default_five_subblocks_run_w_w_x_w_x(self) -> None:
+        _, mode = _build_bilateral()
+        self.assertEqual(mode._scope_seq,
+                         ["within", "within", "cross", "within",
+                          "cross"])
+
+    def test_two_subblocks_still_get_one_cross(self) -> None:
+        _, mode = _build_bilateral(subblocks=2)
+        self.assertEqual(mode._scope_seq, ["within", "cross"])
+
+    def test_unilateral_never_draws_cross(self) -> None:
+        _, mode = _build_mode()
+        self.assertEqual(set(mode._scope_seq), {"within"})
+        self.assertEqual(mode.current_scope, "within")
+
+
+class CrossPlayTests(unittest.TestCase):
+    """A cross sub-block's chords span both hands and are logged
+    distinctly: 'x:' stimulus, scope on the record, per-hand ER,
+    lead-lag, and their own staircase. Nothing here may leak into the
+    within-hand aggregates."""
+
+    def _mode_in_cross(self, **overrides):
+        """A bilateral mode advanced into its first cross sub-block
+        (two within sub-blocks of 1 trial each, then cross)."""
+        kwargs = dict(trials_per_subblock=1, subblocks=5)
+        kwargs.update(overrides)
+        engine, mode = _build_bilateral(**kwargs)
+        t = _burn_probes(mode)
+        for _ in range(2):          # the two within sub-blocks
+            self.assertEqual(mode.current_scope, "within")
+            mode._fire(t)
+            self.assertEqual(mode.active.scope, "within")
+            _complete_chord(mode, t + 0.3, gap_s=0.01)
+            mode.phase = "settle"   # skip the rest gate
+            mode._rest_until = None
+            t += 2.0
+        self.assertEqual(mode.current_scope, "cross")
+        return engine, mode, t
+
+    def test_cross_chord_spans_both_hands(self) -> None:
+        engine, mode, t = self._mode_in_cross()
+        mode._fire(t)
+        trial = mode.active
+        self.assertEqual(trial.kind, "chord")
+        self.assertEqual(trial.scope, "cross")
+        left = [l for l in trial.targets if l >= 4]
+        right = [l for l in trial.targets if l < 4]
+        self.assertGreaterEqual(len(left), 1)
+        self.assertGreaterEqual(len(right), 1)
+        # Tier XB1: mirror singles, one finger per hand.
+        self.assertEqual(len(trial.targets), 2)
+        self.assertEqual(trial.fingers_left, trial.fingers_right)
+        # The stim goes out through the shared multi-lane path (the
+        # EEG marker layer hangs off it, unchanged).
+        lanes_sent = engine.on_stim_multi.call_args[0][0]
+        self.assertEqual(sorted(lanes_sent), sorted(trial.targets))
+
+    def test_cross_stimulus_descriptor_is_marked(self) -> None:
+        engine, mode, t = self._mode_in_cross()
+        mode._fire(t)
+        targets = mode.active.targets
+        _complete_chord(mode, t + 0.3, gap_s=0.01)
+        kwargs = engine.log_trial.call_args.kwargs
+        expected = "x:" + "+".join(str(l + 1) for l in targets)
+        self.assertEqual(kwargs["stimulus"], expected)
+        # hand=None keeps the block-level 'both' on the row: the trial
+        # genuinely used both hands.
+        self.assertIsNone(kwargs["hand"])
+
+    def test_cross_record_carries_the_bimanual_fields(self) -> None:
+        engine, mode, t = self._mode_in_cross()
+        mode._fire(t)
+        trial = mode.active
+        # Right hand leads by 80 ms.
+        right = [l for l in trial.targets if l < 4]
+        left = [l for l in trial.targets if l >= 4]
+        mode._handle_press(_press(right[0], t + 0.30), t + 0.30)
+        mode._handle_press(_press(left[0], t + 0.38), t + 0.38)
+        rec = mode._records[-1]
+        self.assertEqual(rec["scope"], "cross")
+        self.assertEqual(rec["hand"], "both")
+        self.assertIn("|", rec["chord"])
+        self.assertTrue(rec["mirror"])
+        self.assertEqual(rec["asym"], 0.0)
+        self.assertEqual(rec["lead_hand"], "right")
+        self.assertAlmostEqual(rec["lag_ms"], 80.0, delta=2.0)
+        self.assertIsNone(rec["er"])
+        from rehab.game.modes.chords import chord_difficulty_cross
+        self.assertAlmostEqual(
+            rec["d"], chord_difficulty_cross(trial.fingers_left,
+                                             trial.fingers_right))
+
+    def test_cross_er_is_per_hand_and_never_pools(self) -> None:
+        engine, mode, t = self._mode_in_cross()
+        mode._fire(t)
+        trial = mode.active
+        refs = {l: 50.0 for l in range(8)}
+        peaks = {l: 0.0 for l in range(8)}
+        for l in trial.targets:
+            peaks[l] = 50.0
+        # Only the LEFT hand leaks: 20 percent on each quiet finger.
+        for l in range(4, 8):
+            if l not in trial.targets:
+                peaks[l] = 10.0
+        engine._force_window_peak = peaks
+        engine._force_window_saw_samples = True
+        mode._reference_counts = lambda lane: refs[lane]
+        _complete_chord(mode, t + 0.3, gap_s=0.01)
+        rec = mode._records[-1]
+        self.assertAlmostEqual(rec["er_left"], 0.2, places=3)
+        self.assertAlmostEqual(rec["er_right"], 0.0, places=3)
+        self.assertIsNone(rec["er"])
+        # The within-hand summary aggregates must not see this trial.
+        stats = mode.block_stats()
+        self.assertIsNone(stats["median_er"])
+
+    def test_cross_staircase_is_separate(self) -> None:
+        engine, mode = _build_bilateral(trials_per_subblock=30)
+        t = _burn_probes(mode)
+        mode._sub_idx = 2           # jump into the cross sub-block
+        self.assertEqual(mode.current_scope, "cross")
+        level_before = mode.level
+        for _ in range(10):
+            mode._fire(t)
+            self.assertEqual(mode.active.scope, "cross")
+            _complete_chord(mode, t + 0.2, gap_s=0.01)
+            t += 2.0
+        self.assertEqual(mode.level_cross, 1)
+        self.assertEqual(mode.level, level_before)
+
+    def test_within_chords_in_bilateral_log_mirror_leak(self) -> None:
+        engine, mode = _build_bilateral()
+        t = _burn_probes(mode)
+        mode._fire(t)
+        trial = mode.active
+        own = mode.hands[trial.hand]
+        other = [l for l in range(8) if l not in own]
+        peaks = {l: 0.0 for l in range(8)}
+        for l in trial.targets:
+            peaks[l] = 50.0
+        peaks[other[0]] = 5.0          # silent mirror force, 10 percent
+        engine._force_window_peak = peaks
+        engine._force_window_saw_samples = True
+        mode._reference_counts = lambda lane: 50.0
+        _complete_chord(mode, t + 0.3, gap_s=0.01)
+        rec = mode._records[-1]
+        self.assertEqual(rec["scope"], "within")
+        self.assertAlmostEqual(rec["mirror_leak"], 0.1, places=3)
+        stats = mode.block_stats()
+        self.assertAlmostEqual(
+            stats["per_hand"][trial.hand]["median_mirror_leak"], 0.1,
+            places=3)
+
+    def test_block_stats_split_the_scopes(self) -> None:
+        engine, mode, t = self._mode_in_cross()
+        mode._fire(t)
+        _complete_chord(mode, t + 0.3, gap_s=0.01)
+        stats = mode.block_stats()
+        self.assertEqual(stats["n_chords"], 2)           # the within pair
+        self.assertEqual(stats["cross"]["n_chords"], 1)
+        for row in stats["per_chord"]:
+            self.assertNotIn("|", row["chord"])
+        for row in stats["per_chord_cross"]:
+            self.assertIn("|", row["chord"])
+        self.assertEqual(stats["scope_sequence"],
+                         ["within", "within", "cross", "within",
+                          "cross"])
+        self.assertIn("hit_rate_mirror", stats["cross"])
+        self.assertIn("bilateral_deficit", stats["cross"])
+
+
+class WarmupTests(unittest.TestCase):
+    """The diagnosis behind Basil's 'I get 1 finger at a time': the
+    opening probes owned the start of every session with nothing on
+    screen saying warm-up, and the old bilateral Test Mode miniature
+    was two-thirds probes. Pinned here: the announced warm-up state,
+    the demo rebalance, the probe pacing and the hard cap on time to
+    the first chord."""
+
+    def test_demo_miniature_is_mostly_chords(self) -> None:
+        _, mode = _build_mode(demo_trials=6)
+        self.assertEqual(mode._probe_left_start, 1)
+        self.assertEqual(mode.trials_per_subblock, 5)
+        _, mode = _build_bilateral(demo_trials=6)
+        self.assertEqual(mode._probe_left_start, 2)
+        self.assertEqual(mode.trials_per_subblock, 4)
+
+    def test_bilateral_demo_alternates_scopes(self) -> None:
+        _, mode = _build_bilateral(demo_trials=6)
+        t = _burn_probes(mode)
+        scopes = []
+        for _ in range(4):
+            mode._fire(t)
+            scopes.append(mode.active.scope)
+            _complete_chord(mode, t + 0.3, gap_s=0.01)
+            t += 2.0
+        self.assertEqual(scopes, ["within", "cross", "within", "cross"])
+
+    def test_warmup_state_counts_down_then_clears(self) -> None:
+        _, mode = _build_mode()
+        state = mode.warmup_state()
+        self.assertEqual(state, ("warmup", 0, 8))
+        t = _burn_probes(mode)
+        self.assertIsNone(mode.warmup_state())
+        # Wind-down state appears once training is done.
+        mode._sub_idx = mode.subblocks
+        state = mode.warmup_state()
+        self.assertEqual(state[0], "winddown")
+        self.assertEqual(state[2], 8)
+
+    def test_probes_pace_on_the_warmup_gap(self) -> None:
+        _, mode = _build_mode(warmup_iti_s=0.7)
+        mode._fire(5.0)
+        for lane in mode.active.targets:
+            mode._handle_press(_press(lane, 5.2), 5.2)
+        # Next trial is still a probe: the gap is the fixed warm-up
+        # one, not the jittered chord ITI (1.5-2.5).
+        self.assertAlmostEqual(mode._next_ok_t - 5.2, 0.7, delta=0.01)
+
+    def test_warmup_announcement_reaches_the_screen(self) -> None:
+        engine, mode = _build_mode()
+        seen = []
+        gp = MagicMock()
+        gp.set_message = lambda text, dur, kind="info": seen.append(text)
+        engine._screens = {"gameplay": gp}
+        t = _burn_probes(mode)
+        self.assertTrue(any(s.startswith("Warm-up 1 of 8")
+                            for s in seen), seen)
+        mode._fire(t)
+        self.assertIn("Warm-up done. Chords: press together", seen)
+
+    def test_warmup_cap_defers_probes_and_starts_chords(self) -> None:
+        _, mode = _build_mode(warmup_cap_s=10.0)
+        mode._t0 = 0.0
+        t = 5.0
+        # Two slow probes, then the budget is gone: the remaining six
+        # move to the closing set and the next fire is a chord.
+        for _ in range(2):
+            mode._fire(t)
+            for lane in mode.active.targets:
+                mode._handle_press(_press(lane, t + 0.2), t + 0.2)
+            t += 6.0
+        self.assertEqual(mode._probe_left_start, 0)
+        self.assertEqual(mode._probe_left_end, 8 + 6)
+        mode._fire(t)
+        self.assertEqual(mode.active.kind, "chord")
+        stats = mode.block_stats()
+        self.assertTrue(stats["warmup_capped"])
+
+    def test_warmup_cap_never_fires_inside_the_budget(self) -> None:
+        _, mode = _build_mode()
+        mode._t0 = 0.0
+        t = _burn_probes(mode, t=5.0)
+        self.assertFalse(mode._warmup_capped)
+        self.assertEqual(mode._probe_left_end, 8)
+
+
+class FirstChordLatencyTests(unittest.TestCase):
+    """The headline regression for the diagnosis, driven through the
+    REAL engine under the shipped default config: a compliant player
+    (RT 650 ms) meets the first chord inside the first minute in the
+    worst case (both hands), and the mode fires exactly the planned
+    probes first. Before the fix a bilateral session took ~53 s of
+    perfect play (longer in real hands) with nothing announcing the
+    warm-up; Test Mode bilateral was 4 probes to 2 chords."""
+
+    def setUp(self) -> None:
+        import rehab.game.modes.chords as chords_mod
+        self._chords_mod = chords_mod
+        self._real_time = chords_mod.time
+        self.clock = _TraceClock()
+        chords_mod.time = self.clock
+
+    def tearDown(self) -> None:
+        self._chords_mod.time = self._real_time
+
+    def _engine(self, td: str):
+        import pygame
+        pygame.init()
+        from rehab.config import Config
+        from rehab.game.engine import GameEngine
+        from rehab.hardware.keyboard_source import KeyboardOnlySource
+        cfg = Config.load()
+        cfg.data["ui"]["resolution"] = [640, 480]
+        cfg.data["audio"]["enabled"] = False
+        cfg.data["session"]["data_dir"] = td
+        cfg.data["report"] = {"enabled": False}
+        cfg.data["bilateral"]["hand"] = "both"
+        cfg.data["chords"]["seed"] = 7
+        eng = GameEngine(cfg, KeyboardOnlySource())
+        gp = MagicMock()
+        gp.lanes = []
+        eng._screens = {"gameplay": gp, "results": MagicMock()}
+        return eng
+
+    def _drive_to_first_chord(self, mode, react_s: float | None):
+        """50 Hz update loop against the trace clock with a scripted
+        player. react_s=None never presses (the slowest hand there
+        is). Returns (probes seen, seconds to the first chord stim)."""
+        from rehab.hardware.fsr_detector import PressEvent
+        t_start = self.clock.t
+        pending: list[tuple[float, int]] = []
+        seen: int | None = None
+        probes = 0
+        while self.clock.t - t_start < 180.0:
+            for (due, lane) in list(pending):
+                if self.clock.t >= due:
+                    pending.remove((due, lane))
+                    mode.queue_press(PressEvent(
+                        lane=lane, t_perf=due, value=0,
+                        baseline=0.0, hand="both"))
+            mode.update(0.02)
+            if mode.active is not None and mode.active.trial_id != seen:
+                seen = mode.active.trial_id
+                if mode.active.kind == "chord":
+                    return probes, self.clock.t - t_start
+                probes += 1
+                if react_s is not None:
+                    for i, lane in enumerate(mode.active.targets):
+                        pending.append(
+                            (self.clock.t + react_s + 0.05 * i, lane))
+            self.clock.t += 0.02
+        self.fail("no chord fired inside 180 simulated seconds")
+
+    def test_bilateral_first_chord_inside_the_first_minute(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            eng = self._engine(td)
+            try:
+                eng.begin_chords_block()
+                probes, elapsed = self._drive_to_first_chord(
+                    eng.mode, react_s=0.65)
+                self.assertEqual(probes, 16)
+                self.assertLess(elapsed, 60.0)
+                self.assertFalse(eng.mode._warmup_capped)
+            finally:
+                import pygame
+                pygame.quit()
+
+    def test_never_pressing_hand_still_meets_a_chord_by_the_cap(
+            self) -> None:
+        # The pathological case the cap exists for: every probe times
+        # out. The first chord must still arrive just past the 60 s
+        # budget (one in-flight trial of slack), with the unplayed
+        # probes deferred to the closing set.
+        with tempfile.TemporaryDirectory() as td:
+            eng = self._engine(td)
+            try:
+                eng.begin_chords_block()
+                cap = eng.mode.warmup_cap_s
+                timeout = eng.mode.timeout
+                probes, elapsed = self._drive_to_first_chord(
+                    eng.mode, react_s=None)
+                self.assertLess(probes, 16)
+                self.assertLess(elapsed, cap + timeout + 3.0)
+                self.assertTrue(eng.mode._warmup_capped)
+                self.assertGreater(eng.mode._probe_left_end, 16)
+            finally:
+                import pygame
+                pygame.quit()
+
+
+class EngineCrossIntegrationTests(unittest.TestCase):
+    """A bilateral Test Mode session through the real engine: cross
+    rows land in trials.csv with the 'x:' stimulus, and the block
+    summary carries the cross section next to the unchanged
+    within-hand keys."""
+
+    def test_bilateral_demo_writes_cross_rows_and_summary(self) -> None:
+        import pygame
+        pygame.init()
+        try:
+            from rehab.config import Config
+            from rehab.game.engine import GameEngine
+            from rehab.hardware.keyboard_source import KeyboardOnlySource
+            with tempfile.TemporaryDirectory() as td:
+                cfg = Config.load()
+                cfg.data["ui"]["resolution"] = [640, 480]
+                cfg.data["audio"]["enabled"] = False
+                cfg.data["session"]["data_dir"] = td
+                cfg.data["report"] = {"enabled": False}
+                cfg.data["bilateral"]["hand"] = "both"
+                cfg.data["game"]["test_mode_enabled"] = True
+                cfg.data["game"]["test_mode_trials"] = 6
+                cfg.data["session"]["participant"] = "Basil"
+                eng = GameEngine(cfg, KeyboardOnlySource())
+                eng.session.participant = "Basil"
+                gp = MagicMock()
+                gp.lanes = []
+                eng._screens = {"gameplay": gp, "results": MagicMock()}
+                eng.begin_chords_block()
+                mode = eng.mode
+                mode._t0 = 0.0
+                root = Path(eng.session_paths.root)
+                t = 100.0
+                # Play the whole miniature; the mode ends the block
+                # itself (its _end calls engine.finish_block).
+                while mode.phase != "done":
+                    mode._fire(t)
+                    tp = t + 0.3
+                    for lane in mode.active.targets:
+                        mode._handle_press(_press(lane, tp), tp)
+                        tp += 0.02
+                    t += 2.0
+                with (root / "trials.csv").open() as f:
+                    rows = list(csv.DictReader(f))
+                cross_rows = [r for r in rows
+                              if r["stimulus"].startswith("x:")]
+                self.assertEqual(len(cross_rows), 2)
+                for r in cross_rows:
+                    self.assertEqual(r["hand"], "both")
+                    lanes = [int(x) - 1 for x in
+                             r["stimulus"][2:].split("+")]
+                    self.assertTrue(any(l < 4 for l in lanes))
+                    self.assertTrue(any(l >= 4 for l in lanes))
+                meta = json.loads((root / "metadata.json").read_text())
+                stats = meta["block_summary"]["chords"]
+                self.assertEqual(stats["cross"]["n_chords"], 2)
+                self.assertEqual(stats["n_chords"], 2)
+                self.assertEqual(stats["n_probes"], 2)
+        finally:
+            pygame.quit()
+
+
 if __name__ == "__main__":
     unittest.main()

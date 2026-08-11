@@ -41,10 +41,13 @@ task with it.
 
 ## Marker channel behaviour worth knowing
 
-- Session-level markers (240 session start, 241 session end) fire
-  outside any block, where no raw.csv is open; they reach the wire
-  and the app log, and each block's own record starts at its 200-band
-  boundary marker.
+- Session-level markers (240 session start, 241 session end) bracket
+  one login: 240 fires when the participant logs in on the title
+  screen, 241 when the session ends on game select (or when the app
+  closes with a session still open, whichever comes first; never
+  both). They fire outside any block, where no raw.csv is open, so
+  they reach the wire and the app log, and each block's own record
+  starts at its 200-band boundary marker.
 - If the box dies mid-session the app keeps running: after 3 failed
   writes it reopens the port once, and if that fails the HUD shows
   "EEG markers lost", every intended marker is still logged with a

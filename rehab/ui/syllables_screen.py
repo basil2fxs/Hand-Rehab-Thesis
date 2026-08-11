@@ -17,7 +17,11 @@ announces itself with one big stage title and one short instruction:
                ticks the child taps on
   YOUR TURN!   the blocks drain to hollow outlines waiting to be
                filled, a big GO! marks the start, and in bilateral
-               play a line says either hand counts
+               play a line says either hand counts; on a spanning
+               word (5-8 units) the line says "both hands, left to
+               right" instead, and the block row opens a wider gap
+               between the two hands' groups so the row visibly
+               reads as two hands
   feedback     WONDERFUL! with a green swell on success; a kind SO
                CLOSE! (or HAVE ANOTHER LOOK on no taps) naming the
                one thing to change, then the replay demonstrates it
@@ -81,7 +85,14 @@ class SyllablesScreen(Screen):
     BLOCK_H = 150
     STRESS_EXTRA = 36          # stressed block drawn taller from L4 up
     BLOCK_GAP = 18
+    # Extra gap between the two hands' block groups on a spanning
+    # word, so the row visibly reads as two hands meeting in the
+    # middle rather than one long ribbon.
+    HAND_GAP = 46
     BLOCK_MIN_W = 120
+    # Spanning words carry up to 8 blocks; narrower blocks keep an
+    # 8-unit row plus the hand gap inside the 1280 logical width.
+    BLOCK_MIN_W_ROW = 108
     EXTRA_W = 84               # the grey "you tapped one too many" block
     ROW_CY = 400               # vertical centre of the block row
     TITLE_Y = 168              # stage title ("YOUR TURN!")
@@ -215,9 +226,16 @@ class SyllablesScreen(Screen):
         return ("", "", "muted")
 
     def _either_hand_line(self, mode) -> str:
-        """The bilateral promise, said where the child acts on it."""
-        if getattr(mode, "bilateral", False) and mode.phase in (
-                "countin", "respond"):
+        """The bilateral promise, said where the child acts on it. On
+        a spanning word the promise would be untrue (each block owns
+        one finger of one hand), so the line changes to the row rule
+        instead of hiding: the child still gets one short sentence
+        saying what their hands should do."""
+        if mode.phase not in ("countin", "respond"):
+            return ""
+        if getattr(mode, "row_mode", False):
+            return "Long word: both hands, left to right."
+        if getattr(mode, "bilateral", False):
             return "Left or right: either hand counts."
         return ""
 
@@ -445,21 +463,33 @@ class SyllablesScreen(Screen):
     def _block_rects(self, mode) -> list[pygame.Rect]:
         """One rect per expected unit, centred as a row. The stressed
         block is taller from level 4 up; level 5 draws the onset small
-        and the rime large, the standard onset-rime visual."""
+        and the rime large, the standard onset-rime visual. On a
+        spanning word the row splits into the two hands' groups with a
+        wider gap between them (mode.row_split says where the right
+        hand's positions begin), so the child sees the word cross from
+        one hand to the other exactly where their fingers do."""
         word = mode.word
         units = mode.units_for(word)
+        split = (mode.row_split()
+                 if hasattr(mode, "row_split") else None)
+        min_w = self.BLOCK_MIN_W_ROW if split is not None \
+            else self.BLOCK_MIN_W
         font = make_font(int(FONT_TITLE * 1.1), bold=True)
         widths = []
         for i, u in enumerate(units):
             text = u if mode.level != 6 else "  "
-            w = max(self.BLOCK_MIN_W, font.size(text)[0] + 56)
+            w = max(min_w, font.size(text)[0] + 56)
             if mode.level == 5:
                 w = int(w * (0.7 if i == 0 else 1.15))
             widths.append(w)
         total = sum(widths) + self.BLOCK_GAP * (len(units) - 1)
+        if split is not None and 0 < split < len(units):
+            total += self.HAND_GAP
         x = self.layout.width // 2 - total // 2
         rects = []
         for i, w in enumerate(widths):
+            if split is not None and i == split and i > 0:
+                x += self.HAND_GAP
             h = self.BLOCK_H
             if mode.level == 5:
                 h = int(h * (0.72 if i == 0 else 1.0))
@@ -540,7 +570,14 @@ class SyllablesScreen(Screen):
                        self.ROW_CY - glow_h // 2))
         lit_rect: pygame.Rect | None = None
         for i, (u, rect) in enumerate(zip(units, rects)):
-            finger = i % 4
+            # The block wears the colour of the finger that plays it
+            # (the mode resolves position to finger through the
+            # read-across walks), so a left-hand 2-unit word shows
+            # middle then index, and a spanning word's colours run
+            # little-to-index then index-to-little across the gap.
+            finger = (mode.finger_for_position(i)
+                      if hasattr(mode, "finger_for_position")
+                      else i % 4)
             lit = (phase in ("model", "replay")
                    and getattr(mode, "_model_idx", -1) == i)
             # The sounding block hops: up and back down over 0.4 s,

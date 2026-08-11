@@ -80,8 +80,9 @@ BLOCK LAYOUT, one engine block = one session of takes:
     B1   64 random trials (general-speed baseline, tracked across days;
          a multiple of 8 so bimanual hand balance holds exactly)
     B2-4 trained sequence, 5 cycles each (60 trials per take)
-    B5   PROBE, untrained SOC, then a mandatory 60 s rest
-    B6-8 trained sequence
+    B5   PROBE, untrained SOC
+    B6   trained sequence, then the mandatory 30 s long rest
+    B7-8 trained sequence
     B9   PROBE
     B10  trained sequence (retention anchor for the next session)
 Probes sit at fixed positions 5 and 9 so sessions line up across days,
@@ -96,6 +97,30 @@ within 4 blocks of 100). Five training sessions on separate days is
 the intended dose: Savion-Lemieux and Penhune (2005, Exp Brain Res)
 found distribution across days matters more than amount per day.
 
+RESTS, and why the long one sits after B6. A rest boosts the take
+right after it: fatigue-like inhibition built during work dissipates
+over the break and the first presses after it come back fast, which
+both camps of the micro-offline-gains dispute predict even though
+they disagree about why (Gupta and Rickard 2022 npj Sci Learn, 2024
+Sci Rep; Das et al 2025 PNAS; against Bonstrup 2019 Curr Biol, Buch
+2021 Cell Rep). The long rest used to follow the first probe, so its
+boost landed on B6, a flanker in the probe subtraction, deflating the
+flanker mean and inflating the learning score. It now follows B6:
+B7 is the only trained take the scoring never touches, so the boost
+lands where no measurement reads it, and every probe sees the same
+short floor on both sides. Rest LENGTH barely matters for the
+learning itself: Szucs-Bencze et al (2023, eNeuro, n=268) varied
+inter-block rest between 15 s, 30 s and self-paced and implicit
+sequence learning came out identical, so the floor is 10 s (the
+spaced-practice arm length of Bonstrup and Das) for recovery and
+comfort, not for consolidation, and the long rest is 30 s. The short
+session has NO long rest: in the 8-take layout B6 flanks both probes,
+so there is no take an asymmetric rest can boost harmlessly, and the
+uniform floors plus the fatigue guard cover an 8-take session. The
+fatigue-forced rest has its own duration (pattern.fatigue_rest_s,
+45 s): its job is recovery after five straight timeouts, which a
+10 s floor is too thin for; chords' fatigue_rest_s is precedent.
+
 TRIAL LOOP. One key lights; the cue stays until the correct finger
 presses or 2 s passes (headroom for stroke-slowed RTs plus
 corrections); the next cue follows 500 ms after the response, the
@@ -108,7 +133,15 @@ first_incorrect_ms, and RT aggregates use correct trials only. Presses
 under 100 ms stay in the accuracy count but leave RT stats (they
 cannot be stimulus-driven), and correct RTs past mean + 2.5 SD within
 a take are trimmed from aggregates, both standard SRTT hygiene; raw
-rows log unfiltered. A press that lands in the RSI gap between trials
+rows log unfiltered. The FIRST CYCLE of every take (12 trials
+unilateral, 24 bimanual) also leaves RT aggregates: the first presses
+after a rest carry a recovery-plus-preplanning transient that is not
+learning (Das et al 2025, PNAS; Gupta and Rickard 2022), and dropping
+block-start trials is standard SRTT hygiene. Accuracy keeps every
+trial, raw rows keep every trial, and the exclusion is counted per
+take (n_start_excluded) so attrition stays reportable. This also
+backstops the rest placement: wherever a rest lands, the trials that
+carry its boost never reach a take mean. A press that lands in the RSI gap between trials
 (no cue lit yet) is not penalised and writes no trial row -- there is
 no trial to attach it to -- but is counted per take as
 n_rsi_presses in block_stats, so anticipatory pressing is at least
@@ -121,14 +154,23 @@ found explicit knowledge of the sequence IMPAIRS implicit motor
 learning after stroke, so nothing on screen or in this mode's messages
 mentions that a pattern exists, probe takes render identically to
 trained takes, and between-take stars reward accuracy only (3 stars at
-95 percent, 2 at 85, 1 at 70). RT numbers are never shown.
+95 percent, 2 at 85, 1 at 70). RT numbers are never shown. Within
+that constraint the feedback is deliberately reward-flavoured: take
+progress, a running 3-star streak across takes, and an end-of-session
+recap of stars and takes. Reward tied to performance improves
+overnight and 30-day retention of motor memories (Abe et al 2011,
+Curr Biol), and enhanced expectancies are one of the OPTIMAL theory's
+two levers (Wulf and Lewthwaite 2016, Psychon Bull Rev). The guard
+rail: reward accuracy and completion only, never speed, or the
+speed-accuracy trade-off contaminates the RT outcome.
 
-SAFETY. Rests between takes are self-paced with a 15 s floor plus the
-60 s rest after B5; five consecutive timeouts inside one non-probe
-take force a rest, a second such run ends the session gracefully
-(probe takes are exempt so expected probe slowing is not punished);
-and a 30 min cap ends the session at the next trial close. Presses
-are the calibrated light-press threshold only.
+SAFETY. Rests between takes are self-paced with a 10 s floor plus the
+30 s rest after B6 (see RESTS above); five consecutive timeouts
+inside one non-probe take force a 45 s rest, a second such run ends
+the session gracefully (probe takes are exempt so expected probe
+slowing is not punished); and a 30 min cap ends the session at the
+next trial close. Presses are the calibrated light-press threshold
+only.
 
 WHAT THIS MODE CANNOT CLAIM. Implicit sequence learning after stroke
 is demonstrated for the less-affected hand (Kal et al 2016, PLoS ONE
@@ -522,7 +564,8 @@ class PatternMode:
                  rest_min_s: float, long_rest_s: float,
                  fatigue_timeout_run: int, session_cap_min: float,
                  short_session: bool, score_cfg: ScoreConfig,
-                 demo_trials: int | None = None) -> None:
+                 demo_trials: int | None = None,
+                 fatigue_rest_s: float | None = None) -> None:
         self.engine = engine
         # The lanes in play, indexed by sequence position: one hand's
         # four fingers, or with both boards connected all eight (right
@@ -544,6 +587,12 @@ class PatternMode:
         self.timeout = float(timeout_s)
         self.rest_min = float(rest_min_s)
         self.long_rest = float(long_rest_s)
+        # The fatigue-forced rest used to reuse rest_min; recovery
+        # after five straight timeouts needs more than the 10 s floor
+        # (see RESTS in the module docstring). None keeps the shipped
+        # default so direct constructions in tests stay valid.
+        self.fatigue_rest = (float(fatigue_rest_s)
+                             if fatigue_rest_s is not None else 45.0)
         self.fatigue_run = max(1, int(fatigue_timeout_run))
         self.session_cap_s = float(session_cap_min) * 60.0
         self.short_session = bool(short_session)
@@ -573,6 +622,7 @@ class PatternMode:
             n_probe = max(1, n - n_seq)
             self.rest_min = min(self.rest_min, 2.0)
             self.long_rest = min(self.long_rest, 2.0)
+            self.fatigue_rest = min(self.fatigue_rest, 2.0)
             probe = self.probes[self.probe_offset]
             cyc = self.cycle_len
             self.segments = [
@@ -587,6 +637,12 @@ class PatternMode:
             self.segments = self._build_layout(
                 soc_cycles_per_block, warmup_trials, random_block_trials)
         self.n_takes = sum(1 for s in self.segments if s.kind != "warmup")
+        # Block-start RT hygiene: the first cycle of every take leaves
+        # RT aggregates (recovery-plus-preplanning transient after a
+        # rest, not learning; Das 2025, Gupta and Rickard 2022).
+        # Demo takes are shorter than a cycle and are not measurements,
+        # so the demo keeps every RT and its CSV stays populated.
+        self.start_trim = 0 if demo_trials is not None else self.cycle_len
 
         # Trial state machine: play -> rest -> play ... -> done.
         self.phase = "play"
@@ -607,6 +663,12 @@ class PatternMode:
         self._timeout_run = 0
         self._fatigue_triggers = 0
         self.end_reason: str | None = None
+
+        # Reward-flavoured, accuracy-only feedback (Abe 2011; Wulf and
+        # Lewthwaite 2016): consecutive takes at 3 stars, shown on the
+        # rest card and recapped on the results screen. Never speed.
+        self.star_streak = 0
+        self.best_star_streak = 0
 
         # Per-trial record for block_stats: (segment index, correct,
         # rt_ms of the correct press or None).
@@ -676,17 +738,25 @@ class PatternMode:
                 segs.append(Segment("random", label,
                                     random_fingers(random_n), ""))
             elif kind == "seq":
-                segs.append(Segment("seq", label,
-                                    soc_block(self.trained), "trained"))
+                seg = Segment("seq", label,
+                              soc_block(self.trained), "trained")
+                # The mandatory long rest follows take 6, so its
+                # post-rest boost lands on B7, the one trained take
+                # the probe subtraction never reads, and every probe
+                # keeps the same short floor on both sides (RESTS in
+                # the module docstring). It used to follow the first
+                # probe, which handed flanker B6 a rest-fresh speed-up
+                # and inflated the learning score. The short session
+                # has no clean spot (B6 flanks both probes), so it has
+                # no long rest at all.
+                seg.long_rest_after = (not self.short_session
+                                       and label == "6")
+                segs.append(seg)
             else:
                 pi = (self.probe_offset + probe_i) % len(self.probes)
                 probe_i += 1
-                seg = Segment("probe", label,
-                              soc_block(self.probes[pi]), f"p{pi}")
-                # The mandatory long rest follows the first probe
-                # (B5 in the standard layout).
-                seg.long_rest_after = (probe_i == 1)
-                segs.append(seg)
+                segs.append(Segment("probe", label,
+                                    soc_block(self.probes[pi]), f"p{pi}"))
         return segs
 
     # ---- plumbing shared with the other cadence modes ----------------------
@@ -895,15 +965,32 @@ class PatternMode:
                     self._set_message("Great effort. Session done", 2.0)
                     self._end("fatigue")
                 else:
-                    self._enter_rest(now, self.rest_min, "forced",
+                    self._enter_rest(now, self.fatigue_rest, "forced",
                                      "Take a breather")
 
     # ---- segment and rest flow ---------------------------------------------
+    def _note_take_stars(self, seg: Segment) -> None:
+        """Roll the 3-star streak. Accuracy-only by construction: the
+        stars themselves never read speed, so neither can the streak
+        (the Abe 2011 / OPTIMAL guard rail)."""
+        if seg.kind == "warmup":
+            return
+        if self._stars(seg) == "***":
+            self.star_streak += 1
+            self.best_star_streak = max(self.best_star_streak,
+                                        self.star_streak)
+        else:
+            self.star_streak = 0
+
     def _after_segment(self, now: float) -> None:
+        seg = self.segments[self._seg_idx]
+        # Streak update runs for EVERY finished take, including the
+        # final one, which ends the block without a rest card and used
+        # to be the one take no feedback path ever counted.
+        self._note_take_stars(seg)
         if self._seg_idx >= len(self.segments) - 1:
             self._end("completed")
             return
-        seg = self.segments[self._seg_idx]
         stars = self._stars(seg)
         title = ("Warm-up done" if seg.kind == "warmup"
                  else f"Take {seg.label} done")
@@ -993,9 +1080,17 @@ class PatternMode:
         rows = [t for t in self._trials if t[0] == seg_idx]
         n = len(rows)
         n_correct = sum(1 for _, c, _ in rows if c)
+        # Block-start exclusion first: rows are appended in trial
+        # order, so a row's index within its take IS its position, and
+        # the first start_trim trials (one full cycle) leave RT
+        # aggregates while keeping their accuracy (see TRIAL LOOP in
+        # the module docstring).
         rts = [r for _, c, r in rows if c and r is not None]
-        kept = [r for r in rts if r >= self.ANTICIPATION_CUT_MS]
-        n_anticipation = len(rts) - len(kept)
+        rts_kept = [r for i, (_, c, r) in enumerate(rows)
+                    if c and r is not None and i >= self.start_trim]
+        n_start = len(rts) - len(rts_kept)
+        kept = [r for r in rts_kept if r >= self.ANTICIPATION_CUT_MS]
+        n_anticipation = len(rts_kept) - len(kept)
         n_outlier = 0
         if len(kept) >= 3:
             m = sum(kept) / len(kept)
@@ -1011,6 +1106,7 @@ class PatternMode:
             "accuracy": round(n_correct / n, 3) if n else None,
             "mean_rt_ms": round(mean_rt, 1) if mean_rt is not None else None,
             "n_rt_used": len(kept),
+            "n_start_excluded": n_start,
             "n_anticipation": n_anticipation,
             "n_rt_outliers": n_outlier,
         }
@@ -1096,6 +1192,15 @@ class PatternMode:
             "demo": self.demo_trials is not None,
             "rsi_ms": round(self.rsi * 1000.0),
             "timeout_ms": round(self.timeout * 1000.0),
+            # The rest protocol and the RT-hygiene trim that shaped
+            # these numbers, so a session is auditable against the
+            # config that produced it and the notebook can apply the
+            # same start-of-take exclusion.
+            "rest_min_s": self.rest_min,
+            "long_rest_s": self.long_rest,
+            "fatigue_rest_s": self.fatigue_rest,
+            "start_trim": self.start_trim,
+            "three_star_streak_best": self.best_star_streak,
             "n_trials": len(self._trials),
             "fatigue_rests": self._fatigue_triggers,
             "end_reason": self.end_reason,

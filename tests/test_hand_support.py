@@ -663,18 +663,38 @@ class ModeHandMatrixTests(unittest.TestCase):
                 cued = [l for lanes in eng._stim_record for l in lanes]
                 self.assertTrue(
                     set(cued) <= self._expected_lanes(hand_mode), cued)
-                for lanes in eng._stim_record:
-                    # Every chord sits within ONE hand: cross-talk is
-                    # a within-hand quantity.
-                    self.assertLessEqual(len(hands_of(lanes)), 1, lanes)
+                # Scope contract: a WITHIN-hand stim sits in one hand
+                # (cross-talk is a within-hand quantity); bilateral
+                # sessions also deal CROSS-hand chords, which must
+                # span exactly the two hands with 2-4 lanes total.
+                scopes = [r.get("scope", "within") for r in records]
+                # The last stim may still be in flight when the loop
+                # stops, so pair stims with the CLOSED records only
+                # (zip stops at the shorter list; both are in firing
+                # order).
+                for lanes, scope in zip(eng._stim_record, scopes):
+                    if scope == "cross":
+                        self.assertEqual(hand_mode, "both")
+                        self.assertEqual(len(hands_of(lanes)), 2, lanes)
+                        self.assertIn(len(lanes), (2, 3, 4), lanes)
+                    else:
+                        self.assertLessEqual(len(hands_of(lanes)), 1,
+                                             lanes)
                 if hand_mode == "both":
                     by_hand = {"left": 0, "right": 0}
+                    n_cross = 0
                     for r in records:
-                        by_hand[r["hand"]] += 1
+                        if r.get("scope") == "cross":
+                            n_cross += 1
+                        else:
+                            by_hand[r["hand"]] += 1
                     self.assertTrue(by_hand["left"] > 0
                                     and by_hand["right"] > 0, by_hand)
-                    # Probe bag and chord bag each keep the hands
-                    # within one of each other.
+                    # The bilateral miniature alternates the scopes so
+                    # a demo shows the cross-hand chords too.
+                    self.assertGreater(n_cross, 0, scopes)
+                    # Probe bag and within-chord bag each keep the
+                    # hands within one of each other.
                     self.assertLessEqual(
                         abs(by_hand["left"] - by_hand["right"]), 2,
                         by_hand)
@@ -695,16 +715,20 @@ class ModeHandMatrixTests(unittest.TestCase):
                 def respond(clock, mode=mode, hand_mode=hand_mode):
                     # Tap back the word during respond, alternating
                     # hands in bilateral play: either hand's finger
-                    # must satisfy its position.
+                    # must satisfy its position, through that hand's
+                    # own left-to-right walk (a left-hand 2-unit word
+                    # is middle then index, and on a spanning word
+                    # the position owns exactly one lane).
                     if mode.phase != "respond" or mode.active is None:
                         return
                     if len(mode.taps) >= mode.n_expected:
                         return
                     pos = len(mode.taps)
-                    hands = list(mode.hands.items())
-                    hand, lanes = hands[pos % len(hands)]
+                    options = mode.lanes_for_position(pos)
+                    lane = options[pos % len(options)]
                     mode.queue_press(
-                        _press(lanes[pos], clock.t, hand=hand))
+                        _press(lane, clock.t,
+                               hand=mode._hand_of_lane(lane)))
 
                 drive(eng, clock, responder=respond, step_s=0.05,
                       stop=lambda: (len(mode._records) >= 4

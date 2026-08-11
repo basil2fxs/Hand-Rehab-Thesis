@@ -249,8 +249,8 @@ class GlobalParticipantPersistenceTests(unittest.TestCase):
             pygame.quit()
 
     def test_begin_pushes_name_and_age_to_session(self) -> None:
-        # Clicking START SESSION (or Enter) must propagate BOTH typed
-        # values onto engine.session so the first trial row that gets
+        # Clicking LOG IN (or Enter) must propagate BOTH typed values
+        # onto engine.session so the first trial row that gets
         # written downstream carries the right metadata.
         import pygame
         pygame.init()
@@ -407,10 +407,12 @@ class ClassicPaceFlowTests(unittest.TestCase):
 
 
 class EscNavigationTests(unittest.TestCase):
-    """Two-step exit so a therapist can run several blocks for the same
-    patient without retyping the name. Esc on a block / setup / results
-    backs out to mode-select (name persists). Esc on mode-select goes
-    back to title AND clears the participant name."""
+    """The session model's navigation ladder. Esc on a block / setup /
+    results backs out to game select and the logged-in identity
+    persists, so a therapist runs several games without retyping the
+    name. Esc on game select raises the End-session dialog; only its
+    confirm ends the session, clears the identity and returns to the
+    login screen."""
 
     def _make_engine_with_screens(self):
         import pygame
@@ -476,24 +478,66 @@ class EscNavigationTests(unittest.TestCase):
             import pygame
             pygame.quit()
 
-    def test_esc_from_mode_select_clears_name_and_goes_to_title(self) -> None:
+    def test_esc_from_mode_select_raises_the_session_dialog(self) -> None:
+        # Game select -> login is the one place the session-ending
+        # warning lives. Esc must ask, not act.
         eng = self._make_engine_with_screens()
         try:
-            eng.session.participant = "Basil"
-            eng.cfg.data["session"]["participant"] = "Basil"
-            eng.screen_obj = eng._screens["mode_select"]
+            eng.begin_session("Basil", "70")
+            self.assertIs(eng.screen_obj, eng._screens["mode_select"])
             eng._handle_escape()
-            self.assertIs(eng.screen_obj, eng._screens["title"])
-            # Name cleared so the next patient enters their own.
-            self.assertEqual(eng.session.participant, "NA")
-            self.assertIsNone(eng.cfg.get("session.participant"))
+            self.assertTrue(eng.exit_confirm_active)
+            self.assertIs(eng.screen_obj, eng._screens["mode_select"])
+            # Identity untouched while the question is on screen.
+            self.assertEqual(eng.session.participant, "Basil")
         finally:
             import pygame
             pygame.quit()
 
-    def test_title_screen_input_clears_after_esc_from_mode_select(self) -> None:
-        # End-to-end: type a name, go to mode-select, Esc back. The name
-        # input on title must show empty, not the old name.
+    def test_confirming_the_dialog_ends_session_and_clears_name(self) -> None:
+        import pygame
+        eng = self._make_engine_with_screens()
+        try:
+            eng.begin_session("Basil", "70")
+            eng.screen_obj = eng._screens["mode_select"]
+            eng._handle_escape()
+            # Tab moves focus off Stay, Enter fires End session.
+            eng._exit_confirm.handle_event(pygame.event.Event(
+                pygame.KEYDOWN, {"key": pygame.K_TAB, "mod": 0,
+                                 "unicode": "", "scancode": 0}))
+            eng._exit_confirm.handle_event(pygame.event.Event(
+                pygame.KEYDOWN, {"key": pygame.K_RETURN, "mod": 0,
+                                 "unicode": "", "scancode": 0}))
+            self.assertFalse(eng.exit_confirm_active)
+            self.assertIs(eng.screen_obj, eng._screens["title"])
+            # Name AND age cleared so the next patient logs in fresh.
+            self.assertEqual(eng.session.participant, "NA")
+            self.assertEqual(eng.session.age, "")
+            self.assertIsNone(eng.cfg.get("session.participant"))
+            self.assertFalse(eng._session_active)
+        finally:
+            pygame.quit()
+
+    def test_esc_again_dismisses_and_stays_logged_in(self) -> None:
+        eng = self._make_engine_with_screens()
+        try:
+            eng.begin_session("Basil", "70")
+            eng.screen_obj = eng._screens["mode_select"]
+            eng._handle_escape()
+            self.assertTrue(eng.exit_confirm_active)
+            eng._handle_escape()
+            self.assertFalse(eng.exit_confirm_active)
+            self.assertIs(eng.screen_obj, eng._screens["mode_select"])
+            self.assertEqual(eng.session.participant, "Basil")
+            self.assertTrue(eng._session_active)
+        finally:
+            import pygame
+            pygame.quit()
+
+    def test_title_screen_input_clears_after_the_session_ends(self) -> None:
+        # End-to-end: log in, end the session from game select. The
+        # name input on the login screen must show empty, not the old
+        # name.
         eng = self._make_engine_with_screens()
         try:
             ts = eng._screens["title"]
@@ -501,9 +545,23 @@ class EscNavigationTests(unittest.TestCase):
             ts._begin()
             self.assertIs(eng.screen_obj, eng._screens["mode_select"])
             eng._handle_escape()
-            # Title screen now active and its input has been refreshed.
+            eng._confirm_end_session()
+            # Login screen now active and its input has been refreshed.
             self.assertIs(eng.screen_obj, eng._screens["title"])
             self.assertEqual(ts.name_input.text, "")
+        finally:
+            import pygame
+            pygame.quit()
+
+    def test_esc_from_mode_select_without_login_just_navigates(self) -> None:
+        # No session open (a bare menu walk): nothing to warn about,
+        # so no dialog appears.
+        eng = self._make_engine_with_screens()
+        try:
+            eng.screen_obj = eng._screens["mode_select"]
+            eng._handle_escape()
+            self.assertFalse(eng.exit_confirm_active)
+            self.assertIs(eng.screen_obj, eng._screens["title"])
         finally:
             import pygame
             pygame.quit()
