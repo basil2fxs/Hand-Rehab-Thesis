@@ -47,3 +47,4 @@ analysis/.ipynb_checkpoints/
 # than useless: they were figures of the uncorrected numbers sitting where
 # someone might pick them up for the report.
 /figures/
+docs/research/rayan/__pycache__/
