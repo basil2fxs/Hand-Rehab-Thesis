@@ -309,6 +309,28 @@ class TitleScreen(Screen):
     def _open_info(self) -> None:
         self._show_info = True
 
+    def _hardware_status(self) -> tuple[str, tuple[int, int, int]]:
+        """One line saying which port each hand got, for the strip above
+        the utility pills. Boards auto-assign by plug order (first =
+        right, second = left) and this is where that result is said out
+        loud, so the login screen answers "did both hands connect?"
+        without a trip into Settings. Amber when a stale saved port was
+        ignored, so the fallback is visible rather than silent."""
+        src = self.engine.source
+        hands = getattr(src, "hands", None)
+        if not getattr(src, "provides_samples", False) or not hands:
+            return ("No Arduino detected: keyboard mode "
+                    "(right J K L ;  left F D S A)", self.theme.muted)
+        from ..hardware.discovery import short_port
+        bits = "   ".join(f"{h.hand.upper()} = {short_port(h.port)}"
+                          for h in hands)
+        note = getattr(src, "assignment_note", "")
+        if "ignored" in note:
+            return (f"Arduino: {bits}   "
+                    "(saved port ignored, see Settings)",
+                    self.theme.warning)
+        return (f"Arduino: {bits}", self.theme.muted)
+
     def _begin(self) -> None:
         name = self.name_input.value or "NA"
         # Age is optional; an empty string is its own valid value
@@ -509,6 +531,14 @@ class TitleScreen(Screen):
         pygame.draw.line(surf, rule_colour,
                          (self.EDGE, rule_y),
                          (self.layout.width - self.EDGE, rule_y), 1)
+        # Hardware line just above the rule: which port went to which
+        # hand (auto plug order: first board = right, second = left),
+        # or the keyboard fallback. Lives on the login screen so a
+        # therapist knows both hands connected before starting.
+        hw_line, hw_colour = self._hardware_status()
+        draw_text(surf, hw_line, (cx, rule_y - 22),
+                  self.theme, self.layout, pt=FONT_SMALL + 1,
+                  centre=True, colour=hw_colour)
         mouse = self.engine._to_logical(pygame.mouse.get_pos())
         for rect, label, icon, _action in self._pills:
             self._draw_pill(surf, rect, label, icon,
@@ -4926,9 +4956,12 @@ class DiagnosticsScreen(Screen):
     Three jobs:
     1. Live FSR readout per lane (or keyboard-press feedback in keyboard
        mode) so the therapist can verify each finger before a session.
-    2. Detect available COM ports and let the user assign which port
-       belongs to the LEFT hand and which to the RIGHT. Saves to
-       config/user_settings.yaml.
+    2. Show which port each hand got. Boards auto-assign by plug
+       order (first detected = right, second = left); the dropdowns
+       exist only to pin a specific port to a hand when plug order is
+       not enough. Saves to config/user_settings.yaml. A saved port
+       that no longer exists is ignored at boot and that hand falls
+       back to plug order.
     3. A "Test STIM" button per hand that fires STIM:1..4 in sequence
        so the therapist can confirm each motor reacts.
     """
@@ -4984,6 +5017,12 @@ class DiagnosticsScreen(Screen):
         self.rebuild_lanes()
         self.refresh_ports()
         self.rebuild_panel()
+        # Open with the boot assignment on the status line, so the
+        # plug-order result (and any ignored stale saved port) greets
+        # the therapist instead of hiding in the log.
+        note = getattr(engine.source, "assignment_note", "")
+        if note and not self._port_status:
+            self._port_status = note
 
     # ---- screen groups ----------------------------------------------------
     # Five labelled panels in three rows: the cue switches beside the
@@ -5449,21 +5488,20 @@ class DiagnosticsScreen(Screen):
     @staticmethod
     def _short_port(p: str) -> str:
         """Strip /dev/cu. and /dev/tty. prefixes so port labels fit
-        comfortably in a dropdown row."""
-        for prefix in ("/dev/cu.", "/dev/tty.", "/dev/", "\\\\.\\"):
-            if p.startswith(prefix):
-                return p[len(prefix):]
-        return p
+        comfortably in a dropdown row. Delegates to discovery so the
+        status lines and the dropdowns shorten names the same way."""
+        from ..hardware.discovery import short_port
+        return short_port(p)
 
     def _dropdown_options(self) -> list[tuple[object, str]]:
         """Options shown in each hand's port dropdown:
-          - ('None', sentinel for unassigned)
+          - (None, the default: no override, plug order decides)
           - one entry per detected Arduino-family port
         Junk Mac ports (debug-console, Bluetooth-Incoming-Port, etc.)
         are filtered upstream in discover_ports so they cannot appear
         here even if the user clicks Refresh while one is present.
         """
-        options: list[tuple[object, str]] = [(None, "None (no Arduino)")]
+        options: list[tuple[object, str]] = [(None, "Auto (plug order)")]
         for p in self._detected_ports:
             options.append((p, self._short_port(p)))
         return options
@@ -5500,7 +5538,7 @@ class DiagnosticsScreen(Screen):
                     on_change=(lambda v, h=hand:
                                 self._on_port_chosen(h, v)),
                     theme=self.theme, layout=self.layout,
-                    placeholder="None (no Arduino)",
+                    placeholder="Auto (plug order)",
                 )
             else:
                 existing.rect = dd_rect
@@ -5728,7 +5766,8 @@ class DiagnosticsScreen(Screen):
         source_name = getattr(self.engine.source, "name", "?")
         state_text, state_colour = self._connection_state()
         sub = ("Press a finger to test its sensor, or click it to buzz "
-                "that finger. Assign each hand's Arduino below, then Save.")
+                "that finger. Ports auto-assign by plug order; "
+                "override below only if needed.")
         if state_text == "KEYBOARD":
             sub = ("Keyboard mode. Press FDSA / JKL; to test each "
                     "lane, or plug an Arduino in and hit Refresh.")
@@ -5825,15 +5864,16 @@ class DiagnosticsScreen(Screen):
                       colour=LaneStrip.HAND_BADGE[hand])
         for ls in self.lanes:
             ls.draw(surf, now)
-        # Group 4, which Arduino is on which hand. Detected ports go in
-        # the heading row as short names (the basename after /dev/cu.)
-        # so several fit on one line.
+        # Group 4, which Arduino is on which hand. The heading row
+        # states the auto rule, then the detected ports as short names
+        # (the basename after /dev/cu.) so several fit on one line.
         ports_rect = self._ports_rect()
+        auto_rule = "auto: first board = right, second = left"
         if self._detected_ports:
             shorts = [self._short_port(p) for p in self._detected_ports]
-            detected_label = "detected: " + ", ".join(shorts)
+            detected_label = auto_rule + " | detected: " + ", ".join(shorts)
         else:
-            detected_label = "no serial ports detected"
+            detected_label = auto_rule + " | none detected"
         self._draw_band(surf, ports_rect, "ARDUINO PORTS", detected_label)
         # Per-hand row labels (LEFT / RIGHT) beside each dropdown, off
         # the same row geometry the dropdown was built from.
@@ -5844,6 +5884,19 @@ class DiagnosticsScreen(Screen):
                       (self.PORTS_LABEL_X, y + self.PORTS_ROW_H // 2 - 9),
                       self.theme, self.layout, pt=FONT_BODY,
                       centre=False, colour=colour)
+        # Live result line: the port each hand actually has right now,
+        # so the auto assignment (or an override) is never a mystery.
+        live_hands = getattr(self.engine.source, "hands", None)
+        if live_hands:
+            now_txt = "now: " + "   ".join(
+                f"{h.hand.upper()} = {self._short_port(h.port)}"
+                for h in live_hands)
+        else:
+            now_txt = "now: keyboard (no Arduino connected)"
+        draw_text(surf, now_txt,
+                  (self.PORTS_LABEL_X, ports_rect.bottom - 24),
+                  self.theme, self.layout, pt=FONT_SMALL,
+                  centre=False, colour=self.theme.muted)
         # Group 5, where the recordings land. Says the path out loud next
         # to the button that opens it so the location is never a mystery.
         data_rect = self._data_rect()

@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+from pathlib import Path
 
 
 def parse_args() -> argparse.Namespace:
@@ -29,12 +30,40 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
+def _sibling_lab_config() -> Path | None:
+    """Return eeg_lab.yaml sitting next to the frozen executable, if any.
+
+    The lab package (docs/lab_package) ships the exe with eeg_lab.yaml
+    in the same folder. Double-clicking the exe passes no --config, and
+    a plain run from that folder used to mean the standard game with
+    markers off: exactly the silent failure lab mode exists to prevent.
+    So a frozen exe treats a sibling eeg_lab.yaml as if --config had
+    named it. Source runs never auto-load anything; the launchers pass
+    --config explicitly and dev runs stay on the defaults.
+    """
+    if not getattr(sys, "frozen", False):
+        return None
+    exe = Path(sys.executable).resolve()
+    here = exe.parent
+    # On macOS the executable is buried inside Foo.app/Contents/MacOS;
+    # the config would sit next to the .app the user sees, not in there.
+    for parent in exe.parents:
+        if parent.name.endswith(".app"):
+            here = parent.parent
+            break
+    candidate = here / "eeg_lab.yaml"
+    return candidate if candidate.is_file() else None
+
+
 def main() -> int:
     args = parse_args()
     from finger_rehab.config import Config
     from finger_rehab.utils import log as logutil
+    config_path = args.config
+    if config_path is None:
+        config_path = _sibling_lab_config()
     try:
-        cfg = Config.load(args.config)
+        cfg = Config.load(config_path)
     except FileNotFoundError as e:
         # Either default.yaml went missing (broken install) or the user
         # passed --config pointing at a non-existent file.
@@ -55,6 +84,9 @@ def main() -> int:
                   log_file)
     log = logging.getLogger("main")
     log.info("Config from %s", cfg.source)
+    if args.config is None and config_path is not None:
+        log.info("Found eeg_lab.yaml next to the app; running in "
+                 "EEG lab mode")
 
     # CLI overrides
     if args.hand:
@@ -93,79 +125,35 @@ def main() -> int:
     return engine.run()
 
 
-def _resolve_ports_and_hands(cfg, fallback_ports):
-    """Which ports to open and which hand each is.
-
-    Delegates to finger_rehab.hardware.discovery so the Settings screen's live
-    reconnect and this startup path cannot drift apart. They used to be
-    the same rules written twice, and only this copy was ever updated.
-    """
-    from finger_rehab.hardware.discovery import resolve_ports_and_hands
-    chosen, hands = resolve_ports_and_hands(cfg, fallback_ports)
-    if hands:
-        logging.getLogger("main").info(
-            "Using explicit port assignment: %s", list(zip(hands, chosen)))
-    return chosen, hands
-
-
 def _build_source(cfg, args):
-    log = logging.getLogger("main")
-    n_per_hand = int(cfg.get("fsr.num_sensors_per_hand", 4))
+    """Pick the sample source for this run.
 
-    def _make_multi(ports, hands):
-        from finger_rehab.hardware.multi_serial import MultiSerialSource
-        return MultiSerialSource(
-            ports=ports,
-            baud=int(cfg.get("serial.baud", 115200)),
-            num_sensors_per_hand=n_per_hand,
-            read_timeout_s=float(cfg.get("serial.read_timeout_s", 0.02)),
-            open_retries=int(cfg.get("serial.open_retries", 3)),
-            retry_delay_s=float(cfg.get("serial.open_retry_delay_s", 1.0)),
-            hand_assignment=hands,
-        )
+    The serial path delegates wholly to
+    finger_rehab.hardware.discovery.build_source_from_config, the same
+    builder the Settings screen's live reconnect uses, so the startup
+    rules and the reconnect rules cannot drift apart. They used to be
+    the same rules written twice, and only one copy was ever updated.
+    Plug order assigns the first detected board to the RIGHT hand and
+    the second to the LEFT; Settings overrides win only while the port
+    they name still exists.
+    """
+    log = logging.getLogger("main")
 
     chosen = args.source
-    if chosen == "auto":
+    if chosen in ("auto", "serial"):
+        from finger_rehab.hardware.discovery import build_source_from_config
+        source = None
         try:
-            from finger_rehab.hardware.serial_source import (
-                _HAVE_SERIAL, discover_ports,
-            )
-        except ImportError:
-            _HAVE_SERIAL = False
-        if _HAVE_SERIAL:
-            # Discover up to two Arduinos. Aiden's firmware puts one
-            # hand on each board, so bilateral training needs both
-            # connected. Either-or-both is fine; the source class
-            # only exposes the hand_modes it can actually drive.
-            ports: list[str] = []
-            forced = args.port or cfg.get("serial.port", "auto")
-            if forced and forced != "auto":
-                ports = [forced]
-            else:
-                ports = discover_ports(cfg.get("serial.vendor_ids"))
-            ports, hands = _resolve_ports_and_hands(cfg, ports)
-            if ports:
-                try:
-                    return _make_multi(ports, hands)
-                except Exception as e:
-                    log.warning("Could not open serial: %s", e)
+            source = build_source_from_config(cfg, forced_port=args.port)
+        except Exception as e:
+            log.warning("Could not open serial: %s", e)
+        if source is not None:
+            return source
+        if chosen == "serial":
+            log.error("Serial unavailable: no usable port found")
+            return None
         log.info("Falling back to keyboard mode")
         chosen = "keyboard"
-
-    if chosen == "serial":
-        from finger_rehab.hardware.serial_source import discover_ports
-        if args.port:
-            ports = [args.port]
-        else:
-            ports = discover_ports(cfg.get("serial.vendor_ids"))
-        ports, hands = _resolve_ports_and_hands(cfg, ports)
-        if not ports:
-            return None
-        try:
-            return _make_multi(ports, hands)
-        except Exception as e:
-            log.error("Serial unavailable: %s", e)
-            return None
 
     if chosen == "keyboard":
         from finger_rehab.hardware.keyboard_source import KeyboardOnlySource

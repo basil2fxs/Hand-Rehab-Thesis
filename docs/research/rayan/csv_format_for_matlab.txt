@@ -1,19 +1,20 @@
-CSV FORMAT FOR RAYAN
-====================
+CSV FORMAT 
+============
 
 Each session folder has the two files you need:
     sessions/<date>/<name>/raw.csv      the 200 Hz force stream
     sessions/<date>/<name>/trials.csv   one row per trial
+	<name> = <participant>_<HHMMSS>_<mode>
 
 YOUR SCRIPTS RUN ON raw.csv. Same column names as the old files
 (t_perf, fsr1-4, event, lane, detail), plus fsr5-8 for the left hand
 in two-handed sessions. Two fixes needed:
 
-1. My stim rows say "trial_id=7" not "trial=7". Update the regex.
+1. My stim rows say "trial_id=7" not "trial=7". Update
 2. My timestamps come in bursts, so median-gap sample rate estimation
    breaks. Use sample count / time span. Rate is 200 Hz.
 
-Notes:
+Note:
 - Event rows (stim, press, ...) have zeros in the fsr cells. Read
   force from the nearest sample row.
 - Lanes on raw.csv events are 0-based (0-3 right, 4-7 left).
@@ -25,3 +26,144 @@ Notes:
 trials.csv has the game's own scoring per trial (RT, outcome, points,
 per-finger peak forces). Open it and the headers are self-explanatory;
 ask me if any column is unclear.
+
+
+
+
+RAW.CSV
+
+t_perf      monotonic time in seconds
+sample_idx  sample number
+fsr1-fsr4   right hand: index, middle, ring, pinky
+fsr5-fsr8   left hand: index, middle, ring, pinky
+hand        right / left / both
+event       event type
+lane        finger number, 0-based
+detail      extra event information
+
+Events can include:
+block_start, block_end, stim, stim_motor, press, release,
+segment_start, segment_end
+
+Stim rows store the trial number like:
+trial_id=7
+
+Lane numbering in raw.csv:
+0-3 = right hand
+4-7 = left hand
+
+IMPORTANT:
+Event rows have 0 in the FSR columns.
+For force at an event, use the nearest normal sample row.
+
+A "press" event is when the detection threshold was crossed.
+It is NOT the peak force.
+
+
+FORCE UNITS
+FSR values are raw ADC counts.
+
+Idle values are usually around 255-315 counts and can drift,
+so force should be zeroed using a local baseline for each press.
+
+For Newtons use:
+
+metadata.json:
+config_snapshot.fsr.force_calibration_n_per_count
+
+If this is missing, use:
+45 N / 512 counts
+
+
+TRIALS.CSV
+Important columns:
+
+participant          participant ID
+age                  age
+hand                 right / left / both
+block                mode
+trial                trial number, starting at 1
+lane                 target finger, 1-based
+time_difference_ms   response timing
+early_late           outcome
+points               score
+error_type            timeout / wrong_finger / etc.
+keys_pressed          fingers pressed
+correct_keys          target fingers
+num_presses           number of presses
+had_incorrect_press   TRUE if wrong finger was pressed first
+first_incorrect_ms    timing of first wrong press
+first_incorrect_lane  wrong finger
+bpm_at_trial          current adaptive BPM
+streak_at_trial       streak before trial
+in_recovery           adaptive recovery state
+peak_force_n          peak force above baseline
+impulse_n             force-time integral
+phase                 pretest / main / aftertest
+timeout_ms            response window
+stim_delivered        FALSE if buzzer/stim failed
+cue_flags             cue settings
+stimulus              mode-specific stimulus info
+pattern_trial         sequence trial or random probe
+cue_target_shown      whether target finger was shown
+segment_times         named time ranges using t_perf
+
+
+LANE NUMBERING
+raw.csv:
+0-7
+
+trials.csv:
+1-8
+
+So:
+trials.csv lane = raw.csv lane + 1
+
+
+REACTION TIME
+time_difference_ms means different things depending on the mode.
+
+Normal modes:
+- reaction time in ms
+
+Rhythm mode:
+- signed beat timing error
+- negative = early
+- positive = late
+
+Do NOT combine normal RT and rhythm timing error in the same analysis.
+
+
+FORCE
+peak_force_n:
+peak force above the local baseline.
+
+force_window_sum:
+sum of all finger peak forces after the stimulus.
+
+force_window_peaks:
+individual finger peaks, e.g.
+1:8.4;2:3.1;3:0.5
+
+
+MIRROR MODE
+mirror_right_rt_ms = right hand response time
+mirror_left_rt_ms  = left hand response time
+
+
+RHYTHM MODE
+song_time_s = position in the song
+
+
+CONTINUOUS MODES
+waveform        = trajectory type
+waveform_params = values needed to rebuild it
+waveform_seed   = random seed
+
+
+DATA CLEANING
+- Exclude trials where stim_delivered = FALSE.
+- Empty cells mean "not applicable", not zero.
+- Use nearest sample row for force around event rows.
+- Baseline-correct force because FSR idle values drift.
+- Keep rhythm timing error separate from standard reaction time.

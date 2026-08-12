@@ -29,8 +29,11 @@ task with it.
 2. If the box is FTDI-based, set its latency timer to 1 ms: Device
    Manager, the box's COM port, Port Settings, Advanced, Latency
    Timer. The 16 ms default adds a buffering delay to every marker.
-3. Double-click `EEG Lab.bat`. If it refuses to start, the message
-   says which port failed; that refusal is `require_port` working.
+3. Double-click `Finger Rehab.exe` (it loads the `eeg_lab.yaml`
+   beside it on its own) or `EEG Lab.bat`, which starts the exe the
+   same way but keeps the window open on failure. If it refuses to
+   start, the message says which port failed; that refusal is
+   `require_port` working.
 4. Verify vsync ON for the game's window (GPU control panel). With
    vsync off, the flip returns before photons and every visual marker
    leads the screen by an unknown amount.

@@ -18,5 +18,7 @@ the app is not code-signed:
 After that it double-clicks normally.
 
 To rebuild after changing the source: run build_app.sh on a Mac or
-build_app.bat on a Windows PC (both sit in the project root). Each
-drops its finished app back into this folder.
+build_app.bat on a Windows PC (both sit in this folder). Each drops
+its finished app back into this folder and refreshes the EEG lab
+package at docs/lab_package, the one folder that gets copied to the
+lab desktop.

@@ -44,7 +44,10 @@ serial:
   # Explicit per-hand port assignments. When set, these override the
   # auto plug-order assignment (first detected = right, second = left).
   # Set from the Settings screen on the title page, persisted to
-  # config/user_settings.yaml. null means "auto-pick".
+  # config/user_settings.yaml. null means "auto-pick". A saved port
+  # the OS can no longer see is ignored at boot and that hand falls
+  # back to plug order, because port names change between plug-ins
+  # and a stale entry must not block the session.
   left_port: null
   right_port: null
   vendor_ids:

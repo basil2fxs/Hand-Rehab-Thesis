@@ -1,6 +1,9 @@
 # Lab preset for EEG sessions. Loaded OVER config/default.yaml by
 #   python main.py --config config/eeg_lab.yaml
 # (the "EEG Lab.command" / "EEG Lab.bat" launchers do exactly that).
+# The frozen exe also loads a copy of this file on its own whenever
+# one sits in the same folder, which is how the lab package's exe
+# starts in lab mode from a bare double-click.
 # Only the lab deltas live here: the game itself is the same engine,
 # the same modes and the same main.py as the shipping build, so every
 # future game change is automatically the lab version too.

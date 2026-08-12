@@ -1,7 +1,8 @@
 @echo off
-rem EEG lab launcher for the self-contained build. No Python install
-rem needed: Finger Rehab.exe carries everything, and this just starts
-rem it with the lab config (markers on, trigger box required).
+rem Convenience launcher for the self-contained build. Double-clicking
+rem the exe itself does the same thing (it finds the eeg_lab.yaml
+rem beside it); this bat only adds a window that stays open with a
+rem hint when the launch fails, instead of flashing and vanishing.
 cd /d "%~dp0"
 
 echo Starting Finger Rehab (EEG lab mode)...

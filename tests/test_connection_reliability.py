@@ -160,8 +160,9 @@ class TestPortChangesApplyLive:
 
     def test_startup_and_settings_share_one_resolver(self):
         """They were the same rules written twice and only one copy was
-        ever kept up to date."""
+        ever kept up to date. Startup now delegates to the exact
+        builder the Settings reconnect calls."""
         import main
-        from finger_rehab.hardware import discovery
         import inspect
-        assert "discovery" in inspect.getsource(main._resolve_ports_and_hands)
+        src = inspect.getsource(main._build_source)
+        assert "build_source_from_config" in src

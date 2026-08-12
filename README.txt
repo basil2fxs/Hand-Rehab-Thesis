@@ -16,6 +16,11 @@ No Arduino plugged in? It falls back to keyboard. Log in with a name
 and age, pick a game, play. A session is as many games as you want;
 data saves even if you quit a game halfway.
 
+Two boards: the first one detected is the right hand, the second is
+the left. The login screen and Settings both show which port went to
+which hand. Settings can pin a port to a hand instead; a pinned port
+that is no longer present is ignored and plug order takes over.
+
 Keyboard keys: right hand `J K L ;`, left hand `F D S A` (index to
 little on both). Both hands is all 8.
 

@@ -6,7 +6,9 @@ SerialSource instances and merges their sample streams into a single
 
 Hand assignment is plug-order based: the first Arduino discovered is
 the right hand, the second is the left. The user can swap by unplugging
-in the reverse order before starting, or override via cfg.
+in the reverse order before starting, or pin a port to a hand from the
+Settings screen. discovery.resolve_assignment owns those rules,
+including ignoring a saved port that no longer exists.
 
 The engine sees this as a normal Source: start / stop / get_sample /
 send_command / is_connected. No engine-side changes needed beyond
@@ -77,6 +79,11 @@ class MultiSerialSource(Source):
                 f"match port count {len(ports)}"
             )
         self.num_sensors_per_hand = num_sensors_per_hand
+        # One line saying which port went to which hand and why, set
+        # by discovery.build_source_from_config. The title screen and
+        # the Settings port panel show it so plug-order auto-assignment
+        # is never a mystery. Empty for hand-built sources.
+        self.assignment_note: str = ""
         self.hands: list[HandPort] = []
         for port, hand in zip(ports, hand_assignment):
             src = SerialSource(

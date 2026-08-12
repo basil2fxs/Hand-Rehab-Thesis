@@ -66,10 +66,14 @@ jobs:
         run: |
           $pkg = "bin/dist/Finger Rehab EEG Lab"
           New-Item -ItemType Directory -Path $pkg | Out-Null
+          # Everything committed in docs/lab_package ships as-is (the
+          # bat, README and run_from_source.py); the exe and the two
+          # generated copies come from this build and the sources of
+          # truth, exactly what build_app.bat drops into the folder
+          # locally, so the zip and the folder never fork.
+          Copy-Item "docs/lab_package/*" $pkg
           Copy-Item "bin/dist/Finger Rehab.exe" $pkg
           Copy-Item "config/eeg_lab.yaml" "$pkg/eeg_lab.yaml"
-          Copy-Item "docs/lab_package/EEG Lab.bat" $pkg
-          Copy-Item "docs/lab_package/README.txt" $pkg
           Copy-Item "docs/eeg_lab_setup.txt" "$pkg/eeg_lab_setup.txt"
           Compress-Archive -Path $pkg -DestinationPath "bin/dist/FingerRehab-EEGLab-Windows.zip"
 

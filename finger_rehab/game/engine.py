@@ -1685,6 +1685,12 @@ class GameEngine:
             except Exception as e:
                 log.debug("Stopping the old source raised: %s", e)
         log.info("Sample source rebuilt from config")
+        # Say which port went to which hand, so the therapist can see
+        # the assignment (and any ignored stale port) without digging
+        # through logs.
+        note = getattr(new_source, "assignment_note", "")
+        if note:
+            return f"Connected: {note}."
         return "Connected. No restart needed."
 
     def show_calibration(self) -> None:
