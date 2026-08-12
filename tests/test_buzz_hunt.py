@@ -47,7 +47,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 def _engine(hand_mode="right", cfg_extra=None):
     """Engine fixture in the house style: built via __new__, MagicMock
     config, command-recording source, loggable."""
-    from rehab.game.engine import GameEngine
+    from finger_rehab.game.engine import GameEngine
     values = {
         "fsr.num_sensors_per_hand": 4,
         "motor.cue_ms": 150,
@@ -122,15 +122,15 @@ class _TrialLoggerStub:
 
 
 def _press_event(lane, t):
-    from rehab.hardware.fsr_detector import PressEvent
+    from finger_rehab.hardware.fsr_detector import PressEvent
     return PressEvent(lane=lane, t_perf=t, value=0, baseline=0.0,
                       hand="right")
 
 
 def _mode(e, hands=None, **over):
-    from rehab.game.modes.buzz_hunt import (BuzzHuntMode,
+    from finger_rehab.game.modes.buzz_hunt import (BuzzHuntMode,
                                             participant_hebb_seed)
-    from rehab.game.scoring import ScoreConfig
+    from finger_rehab.game.scoring import ScoreConfig
     kw = dict(
         engine=e,
         lanes_by_hand=hands or {"right": [0, 1, 2, 3]},
@@ -219,7 +219,7 @@ def _next_trial(m, t):
 
 class StaircaseTests(unittest.TestCase):
     def _stair(self, **over):
-        from rehab.game.modes.buzz_hunt import Staircase
+        from finger_rehab.game.modes.buzz_hunt import Staircase
         kw = dict(start=300.0, step=40.0, floor=40.0, ceiling=500.0)
         kw.update(over)
         return Staircase(**kw)
@@ -255,7 +255,7 @@ class StaircaseTests(unittest.TestCase):
         self.assertEqual(s.reversals, [260.0, 300.0])
 
     def test_step_floor_is_one_frame(self):
-        from rehab.game.modes.buzz_hunt import MIN_STEP_MS
+        from finger_rehab.game.modes.buzz_hunt import MIN_STEP_MS
         s = self._stair(step=5.0)
         self.assertEqual(s.step, MIN_STEP_MS)
 
@@ -292,20 +292,20 @@ class StaircaseTests(unittest.TestCase):
 
 class PulseReconstructionTests(unittest.TestCase):
     def test_plain_buzz(self):
-        from rehab.game.modes.buzz_hunt import pulses_from_params
+        from finger_rehab.game.modes.buzz_hunt import pulses_from_params
         p = {"catch": 0, "lane": 2, "dur_ms": 180.0, "window_ms": 3000.0}
         self.assertEqual(pulses_from_params("buzz", p),
                          [(2, 0.0, 180.0)])
 
     def test_catch_has_no_pulses(self):
-        from rehab.game.modes.buzz_hunt import (pulses_from_params,
+        from finger_rehab.game.modes.buzz_hunt import (pulses_from_params,
                                                 stimulus_span_s)
         p = {"catch": 1, "window_ms": 3000.0}
         self.assertEqual(pulses_from_params("buzz", p), [])
         self.assertEqual(stimulus_span_s("buzz", p), 0.0)
 
     def test_distractor_leads_the_target(self):
-        from rehab.game.modes.buzz_hunt import pulses_from_params
+        from finger_rehab.game.modes.buzz_hunt import pulses_from_params
         p = {"catch": 0, "lane": 1, "dur_ms": 120.0,
              "distractor_lane": 5, "distractor_ms": 120.0,
              "distractor_lead_ms": 150.0, "window_ms": 3000.0}
@@ -314,7 +314,7 @@ class PulseReconstructionTests(unittest.TestCase):
         self.assertEqual(pulses[1], (1, 0.15, 120.0))
 
     def test_sequence_pulses_follow_the_ioi(self):
-        from rehab.game.modes.buzz_hunt import pulses_from_params
+        from finger_rehab.game.modes.buzz_hunt import pulses_from_params
         p = {"seq": "0-2-1", "len": 3, "pulse_ms": 150.0,
              "ioi_ms": 400.0, "hebb": 0}
         pulses = pulses_from_params("buzz_seq", p)
@@ -326,7 +326,7 @@ class PulseReconstructionTests(unittest.TestCase):
         # The design promise: total stimulus length never gives the
         # answer away, so one long buzz spans exactly two shorts plus
         # the gap.
-        from rehab.game.modes.buzz_hunt import (pulses_from_params,
+        from finger_rehab.game.modes.buzz_hunt import (pulses_from_params,
                                                 stimulus_span_s)
         one = {"lane": 3, "two": 0, "short_ms": 80.0, "gap_ms": 60.0,
                "window_ms": 2000.0}
@@ -340,9 +340,9 @@ class PulseReconstructionTests(unittest.TestCase):
                                stimulus_span_s("buzz_gap", two))
 
     def test_params_round_trip_through_the_packed_cell(self):
-        from rehab.data.logger import (pack_waveform_params,
+        from finger_rehab.data.logger import (pack_waveform_params,
                                        parse_waveform_params)
-        from rehab.game.modes.buzz_hunt import pulses_from_params
+        from finger_rehab.game.modes.buzz_hunt import pulses_from_params
         p = {"seq": "0-2-1-3", "len": 4, "pulse_ms": 150.0,
              "ioi_ms": 400.0, "hebb": 1}
         back = parse_waveform_params(pack_waveform_params(p))
@@ -350,7 +350,7 @@ class PulseReconstructionTests(unittest.TestCase):
                          pulses_from_params("buzz_seq", back))
 
     def test_unknown_waveform_raises(self):
-        from rehab.game.modes.buzz_hunt import pulses_from_params
+        from finger_rehab.game.modes.buzz_hunt import pulses_from_params
         with self.assertRaises(ValueError):
             pulses_from_params("hold", {})
 
@@ -360,14 +360,14 @@ class PulseReconstructionTests(unittest.TestCase):
 
 class HebbMaterialTests(unittest.TestCase):
     def test_name_seed_is_case_and_space_folded(self):
-        from rehab.game.modes.buzz_hunt import participant_hebb_seed
+        from finger_rehab.game.modes.buzz_hunt import participant_hebb_seed
         self.assertEqual(participant_hebb_seed("Basil "),
                          participant_hebb_seed("basil"))
         self.assertNotEqual(participant_hebb_seed("basil"),
                             participant_hebb_seed("someone else"))
 
     def test_hebb_sequence_is_stable_and_legal(self):
-        from rehab.game.modes.buzz_hunt import hebb_sequence
+        from finger_rehab.game.modes.buzz_hunt import hebb_sequence
         lanes = [0, 1, 2, 3]
         a = hebb_sequence(12345, 5, lanes)
         b = hebb_sequence(12345, 5, lanes)
@@ -378,13 +378,13 @@ class HebbMaterialTests(unittest.TestCase):
             self.assertNotEqual(x, y)
 
     def test_hebb_differs_by_length_and_seed(self):
-        from rehab.game.modes.buzz_hunt import hebb_sequence
+        from finger_rehab.game.modes.buzz_hunt import hebb_sequence
         lanes = list(range(8))
         self.assertNotEqual(hebb_sequence(1, 6, lanes),
                             hebb_sequence(2, 6, lanes))
 
     def test_fresh_sequences_come_from_the_trial_seed(self):
-        from rehab.game.modes.buzz_hunt import draw_sequence
+        from finger_rehab.game.modes.buzz_hunt import draw_sequence
         lanes = [0, 1, 2, 3]
         self.assertEqual(draw_sequence(9, 4, lanes),
                          draw_sequence(9, 4, lanes))
@@ -502,9 +502,9 @@ class LocalisationTests(unittest.TestCase):
         self.assertEqual(m.engine.trial_logger.rows, [])
 
     def test_trial_row_carries_the_reconstruction_contract(self):
-        from rehab.data.logger import (parse_segments,
+        from finger_rehab.data.logger import (parse_segments,
                                        parse_waveform_params)
-        from rehab.game.modes.buzz_hunt import pulses_from_params
+        from finger_rehab.game.modes.buzz_hunt import pulses_from_params
         m = self._loc_mode()
         t = _to_trial(m)
         t = _to_respond(m, t)
@@ -875,7 +875,7 @@ class SpanTests(unittest.TestCase):
         self.assertEqual(m.span_len, 2)       # floor holds at 2
 
     def test_every_third_span_trial_is_the_hidden_sequence(self):
-        from rehab.game.modes.buzz_hunt import hebb_sequence
+        from finger_rehab.game.modes.buzz_hunt import hebb_sequence
         m = self._span_mode(n=6)
         hebb_flags = []
         seqs = []
@@ -950,8 +950,8 @@ class SpanTests(unittest.TestCase):
         self.assertEqual(m.sequence, orig_seq)
 
     def test_span_row_parses_back_to_the_played_sequence(self):
-        from rehab.data.logger import parse_waveform_params
-        from rehab.game.modes.buzz_hunt import parse_lanes
+        from finger_rehab.data.logger import parse_waveform_params
+        from finger_rehab.game.modes.buzz_hunt import parse_lanes
         m = self._span_mode()
         t = _to_trial(m)
         played = list(m.sequence)
@@ -1178,7 +1178,7 @@ class BlockFlowTests(unittest.TestCase):
             self.assertGreaterEqual(m._stage_counts[stage], 1)
 
     def test_staircase_floor_respects_the_hardware(self):
-        from rehab.game.modes.buzz_hunt import LEVEL_FLOOR_MS
+        from finger_rehab.game.modes.buzz_hunt import LEVEL_FLOOR_MS
         m = _mode(_engine(), floor_ms=5.0, start_ms=50.0)
         self.assertEqual(m.floor_ms, LEVEL_FLOOR_MS)
 
@@ -1195,9 +1195,9 @@ class ScreenTests(unittest.TestCase):
 
     def _screen_and_mode(self):
         import pygame
-        from rehab.ui.buzz_hunt_screen import BuzzHuntScreen
-        from rehab.ui.theme import get as get_theme
-        from rehab.ui.widgets import Layout
+        from finger_rehab.ui.buzz_hunt_screen import BuzzHuntScreen
+        from finger_rehab.ui.theme import get as get_theme
+        from finger_rehab.ui.widgets import Layout
         e = _engine()
         e.theme = get_theme("clinical")
         e.layout = Layout(1280, 800, 1.0)
@@ -1211,7 +1211,7 @@ class ScreenTests(unittest.TestCase):
         return sc, m, surf
 
     def test_trial_frames_never_name_a_finger(self):
-        import rehab.ui.buzz_hunt_screen as bs
+        import finger_rehab.ui.buzz_hunt_screen as bs
         sc, m, surf = self._screen_and_mode()
         t = _to_trial(m)
         _to_respond(m, t)
@@ -1248,7 +1248,7 @@ class ScreenTests(unittest.TestCase):
         self.assertEqual(calls, [])
 
     def test_feedback_names_the_buzzed_and_pressed_fingers(self):
-        import rehab.ui.buzz_hunt_screen as bs
+        import finger_rehab.ui.buzz_hunt_screen as bs
         sc, m, surf = self._screen_and_mode()
         t = _to_trial(m)
         t = _to_respond(m, t)
@@ -1272,11 +1272,11 @@ class ScreenTests(unittest.TestCase):
         self.assertIn("The buzz was on", joined)
 
     def test_breathing_stays_far_below_the_flash_limit(self):
-        from rehab.ui.buzz_hunt_screen import BuzzHuntScreen
+        from finger_rehab.ui.buzz_hunt_screen import BuzzHuntScreen
         self.assertLess(BuzzHuntScreen.BREATHE_HZ, 1.0)
 
     def test_mode_select_and_setup_know_the_mode(self):
-        from rehab.ui.screens import ModeSelectScreen
+        from finger_rehab.ui.screens import ModeSelectScreen
         keys = [k for k, _t, _d in ModeSelectScreen.MODES]
         self.assertIn("buzz_hunt", keys)
         self.assertIn("buzz_hunt", ModeSelectScreen.MODE_ACCENTS)
@@ -1296,11 +1296,11 @@ class ResultsCardTests(unittest.TestCase):
 
     def _draw(self, bh_summary, hand_mode="right"):
         import pygame
-        from rehab.config import Config
-        from rehab.game.engine import GameEngine
-        from rehab.ui.screens import ResultsScreen
-        from rehab.ui.theme import get as get_theme
-        from rehab.ui.widgets import Layout
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.ui.screens import ResultsScreen
+        from finger_rehab.ui.theme import get as get_theme
+        from finger_rehab.ui.widgets import Layout
         pygame.init()
         pygame.font.init()
         pygame.display.set_mode((1280, 800))

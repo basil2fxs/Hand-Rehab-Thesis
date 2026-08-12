@@ -21,8 +21,8 @@ class ClassicWrongPressMissTests(unittest.TestCase):
     press must result in a Miss outcome being logged."""
 
     def _build(self):
-        from rehab.game.modes.classic import ClassicMode
-        from rehab.game.scoring import ScoreConfig
+        from finger_rehab.game.modes.classic import ClassicMode
+        from finger_rehab.game.scoring import ScoreConfig
         engine = MagicMock()
         engine.cfg = MagicMock()
         engine.cfg.get = MagicMock(return_value=0)
@@ -42,7 +42,7 @@ class ClassicWrongPressMissTests(unittest.TestCase):
         return engine, mode
 
     def _press(self, lane: int, t: float = 0.0):
-        from rehab.hardware.fsr_detector import PressEvent
+        from finger_rehab.hardware.fsr_detector import PressEvent
         return PressEvent(lane=lane, t_perf=t, value=0, baseline=0.0,
                             hand="right")
 
@@ -85,9 +85,9 @@ class AdaptiveWrongPressMissTests(unittest.TestCase):
     then-correct trial so the weakness bias fires for that finger."""
 
     def _build(self):
-        from rehab.analytics.adaptive import AdaptiveConfig
-        from rehab.game.modes.adaptive import AdaptiveMode
-        from rehab.game.scoring import ScoreConfig
+        from finger_rehab.analytics.adaptive import AdaptiveConfig
+        from finger_rehab.game.modes.adaptive import AdaptiveMode
+        from finger_rehab.game.scoring import ScoreConfig
         engine = MagicMock()
         engine.cfg = MagicMock()
         engine.cfg.get = MagicMock(return_value=0)
@@ -114,7 +114,7 @@ class AdaptiveWrongPressMissTests(unittest.TestCase):
         return engine, mode
 
     def _press(self, lane: int, t: float = 0.0):
-        from rehab.hardware.fsr_detector import PressEvent
+        from finger_rehab.hardware.fsr_detector import PressEvent
         return PressEvent(lane=lane, t_perf=t, value=0, baseline=0.0,
                             hand="right")
 

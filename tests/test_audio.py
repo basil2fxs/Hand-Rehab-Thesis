@@ -22,7 +22,7 @@ class AudioEngineUninitialisedTests(unittest.TestCase):
     half-built engine."""
 
     def test_methods_noop_before_init(self) -> None:
-        from rehab.audio.engine import AudioEngine
+        from finger_rehab.audio.engine import AudioEngine
         a = AudioEngine()
         self.assertFalse(a._initialised)
         # All of these must return / no-op without raising.
@@ -39,7 +39,7 @@ class AudioEngineUninitialisedTests(unittest.TestCase):
         self.assertFalse(a.is_playing)
 
     def test_start_metronome_without_init_does_nothing(self) -> None:
-        from rehab.audio.engine import AudioEngine
+        from finger_rehab.audio.engine import AudioEngine
         a = AudioEngine()
         a.start_metronome(80.0)
         # No initialised mixer, so the metronome state stays clean.
@@ -53,8 +53,8 @@ class AudioEngineInitFailureTests(unittest.TestCase):
     so subsequent calls all no-op."""
 
     def test_init_returns_false_when_mixer_init_raises(self) -> None:
-        from rehab.audio import engine as audio_mod
-        from rehab.audio.engine import AudioEngine
+        from finger_rehab.audio import engine as audio_mod
+        from finger_rehab.audio.engine import AudioEngine
         a = AudioEngine()
         # Patch pygame.mixer.init to raise as if no device available.
         with patch.object(audio_mod.pygame.mixer, "init",
@@ -73,14 +73,14 @@ class ShutdownIdempotencyTests(unittest.TestCase):
     (engine.finally + caller). Must be idempotent."""
 
     def test_shutdown_twice_is_safe(self) -> None:
-        from rehab.audio.engine import AudioEngine
+        from finger_rehab.audio.engine import AudioEngine
         a = AudioEngine()
         a.shutdown()
         a.shutdown()    # Should not raise.
 
     def test_shutdown_after_failed_init_is_safe(self) -> None:
-        from rehab.audio import engine as audio_mod
-        from rehab.audio.engine import AudioEngine
+        from finger_rehab.audio import engine as audio_mod
+        from finger_rehab.audio.engine import AudioEngine
         a = AudioEngine()
         with patch.object(audio_mod.pygame.mixer, "init",
                           side_effect=Exception("nope")):
@@ -93,14 +93,14 @@ class PlaySongInputValidationTests(unittest.TestCase):
     negative start_s, empty string."""
 
     def test_missing_file_returns_false(self) -> None:
-        from rehab.audio.engine import AudioEngine
+        from finger_rehab.audio.engine import AudioEngine
         a = AudioEngine()
         # Force _initialised so we hit the file-existence check.
         a._initialised = True
         self.assertFalse(a.play_song("/tmp/this-mp3-doesnt-exist-xyz.mp3"))
 
     def test_empty_path_returns_false(self) -> None:
-        from rehab.audio.engine import AudioEngine
+        from finger_rehab.audio.engine import AudioEngine
         a = AudioEngine()
         a._initialised = True
         self.assertFalse(a.play_song(""))
@@ -109,7 +109,7 @@ class PlaySongInputValidationTests(unittest.TestCase):
         # We can't actually load audio in a headless test, but we can
         # check play_song doesn't crash with a negative start. The
         # max(0.0, start_s) inside the method takes care of clamping.
-        from rehab.audio.engine import AudioEngine
+        from finger_rehab.audio.engine import AudioEngine
         a = AudioEngine()
         # Without init it returns False before even reading start_s,
         # which is sufficient: the engine.py pause-resume path calls
@@ -126,8 +126,8 @@ class AudioInitOrderRegressionTests(unittest.TestCase):
     reports an active mixer, so pre_init actually takes effect."""
 
     def test_init_quits_mixer_before_pre_init_when_already_up(self) -> None:
-        from rehab.audio import engine as audio_mod
-        from rehab.audio.engine import AudioEngine
+        from finger_rehab.audio import engine as audio_mod
+        from finger_rehab.audio.engine import AudioEngine
         order: list[str] = []
 
         def fake_get_init():
@@ -159,8 +159,8 @@ class AudioInitOrderRegressionTests(unittest.TestCase):
         # If pygame.init() hasn't run yet (or quit() already happened),
         # get_init() returns None and we should NOT call quit again -
         # that would log noise and waste a syscall.
-        from rehab.audio import engine as audio_mod
-        from rehab.audio.engine import AudioEngine
+        from finger_rehab.audio import engine as audio_mod
+        from finger_rehab.audio.engine import AudioEngine
         order: list[str] = []
         with patch.object(audio_mod.pygame.mixer, "get_init",
                           return_value=None), \
@@ -185,7 +185,7 @@ class MetronomeMathTests(unittest.TestCase):
     BPM and tick() must not burst-fire after an alt-tab stall."""
 
     def test_start_metronome_zero_bpm_does_not_divide_by_zero(self) -> None:
-        from rehab.audio.engine import AudioEngine
+        from finger_rehab.audio.engine import AudioEngine
         a = AudioEngine()
         a._initialised = True
         a.start_metronome(0.0)
@@ -193,7 +193,7 @@ class MetronomeMathTests(unittest.TestCase):
         self.assertEqual(a._metronome_period, 60.0)
 
     def test_start_metronome_negative_bpm_clamped(self) -> None:
-        from rehab.audio.engine import AudioEngine
+        from finger_rehab.audio.engine import AudioEngine
         a = AudioEngine()
         a._initialised = True
         a.start_metronome(-50.0)
@@ -206,7 +206,7 @@ class StopClearsStateTests(unittest.TestCase):
     play_song / start_metronome starts from zero."""
 
     def test_stop_clears_song_and_metronome_anchors(self) -> None:
-        from rehab.audio.engine import AudioEngine
+        from finger_rehab.audio.engine import AudioEngine
         a = AudioEngine()
         a._initialised = True
         a.start_metronome(120.0)
@@ -220,7 +220,7 @@ class StopClearsStateTests(unittest.TestCase):
         self.assertFalse(a.is_playing)
 
     def test_song_time_returns_zero_after_stop(self) -> None:
-        from rehab.audio.engine import AudioEngine
+        from finger_rehab.audio.engine import AudioEngine
         a = AudioEngine()
         a._initialised = True
         a.start_metronome(80.0)

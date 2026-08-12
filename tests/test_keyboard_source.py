@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
 def _press(lane: int, t: float = 0.0):
-    from rehab.hardware.fsr_detector import PressEvent
+    from finger_rehab.hardware.fsr_detector import PressEvent
     return PressEvent(lane=lane, t_perf=t, value=0, baseline=0.0,
                        hand="right")
 
@@ -21,21 +21,21 @@ def _press(lane: int, t: float = 0.0):
 class KeyboardSourceContractTests(unittest.TestCase):
 
     def test_provides_samples_is_false(self) -> None:
-        from rehab.hardware.keyboard_source import KeyboardOnlySource
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
         # The engine reads this flag to decide between FSR samples and
         # KEYDOWN events as the press surrogate. Flipping it would break
         # every keyboard-fallback session.
         self.assertFalse(KeyboardOnlySource().provides_samples)
 
     def test_name_property(self) -> None:
-        from rehab.hardware.keyboard_source import KeyboardOnlySource
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
         self.assertEqual(KeyboardOnlySource().name, "KeyboardOnlySource")
 
 
 class KeyboardSourceLifecycleTests(unittest.TestCase):
 
     def test_start_marks_connected_then_stop_clears(self) -> None:
-        from rehab.hardware.keyboard_source import KeyboardOnlySource
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
         src = KeyboardOnlySource()
         self.assertFalse(src.is_connected)
         src.start()
@@ -51,7 +51,7 @@ class KeyboardSourceLifecycleTests(unittest.TestCase):
         self.assertFalse(src.is_connected)
 
     def test_get_sample_always_returns_none(self) -> None:
-        from rehab.hardware.keyboard_source import KeyboardOnlySource
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
         src = KeyboardOnlySource()
         src.start()
         try:
@@ -67,7 +67,7 @@ class KeyboardSourceLifecycleTests(unittest.TestCase):
         # start() must early-return on an already-running thread (the
         # base class handles this) - calling twice must not spawn a
         # second worker.
-        from rehab.hardware.keyboard_source import KeyboardOnlySource
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
         src = KeyboardOnlySource()
         src.start()
         first_thread = src._thread
@@ -76,7 +76,7 @@ class KeyboardSourceLifecycleTests(unittest.TestCase):
         src.stop()
 
     def test_stop_before_start_is_safe(self) -> None:
-        from rehab.hardware.keyboard_source import KeyboardOnlySource
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
         src = KeyboardOnlySource()
         # Calling stop() on a never-started source must not raise.
         src.stop()
@@ -88,7 +88,7 @@ class KeyboardSourceCommandTests(unittest.TestCase):
         # Keyboard mode has no motor, so STIM / STOP / anything else
         # cannot succeed. Returning False lets the engine log it and
         # move on without expecting a motor pulse.
-        from rehab.hardware.keyboard_source import KeyboardOnlySource
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
         src = KeyboardOnlySource()
         self.assertFalse(src.send_command("STIM:1"))
         self.assertFalse(src.send_command("STOP"))
@@ -109,11 +109,11 @@ class KeyboardFallbackEndToEndTests(unittest.TestCase):
         _os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
         import pygame
         pygame.init()
-        from rehab.config import Config
-        from rehab.game.engine import GameEngine
-        from rehab.game.modes.classic import ClassicMode
-        from rehab.game.scoring import ScoreConfig
-        from rehab.hardware.keyboard_source import KeyboardOnlySource
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.game.modes.classic import ClassicMode
+        from finger_rehab.game.scoring import ScoreConfig
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
         cfg = Config.load()
         cfg.data.setdefault("bilateral", {})["hand"] = hand_mode
         src = KeyboardOnlySource()
@@ -198,11 +198,11 @@ class KeyboardAlwaysOnWithArduinoTests(unittest.TestCase):
         _os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
         import pygame
         pygame.init()
-        from rehab.config import Config
-        from rehab.game.engine import GameEngine
-        from rehab.game.modes.classic import ClassicMode
-        from rehab.game.scoring import ScoreConfig
-        from rehab.hardware.source import Source
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.game.modes.classic import ClassicMode
+        from finger_rehab.game.scoring import ScoreConfig
+        from finger_rehab.hardware.source import Source
 
         class FakeArduino(Source):
             """Pretends to be a real Arduino source: provides_samples=True
@@ -263,7 +263,7 @@ class KeyboardAlwaysOnWithArduinoTests(unittest.TestCase):
         # uniformly. We just check that handle_event accepts KEYDOWN
         # without depending on provides_samples.
         import inspect
-        from rehab.game.modes import classic, adaptive, rhythm
+        from finger_rehab.game.modes import classic, adaptive, rhythm
         for module in (classic, adaptive, rhythm):
             src = inspect.getsource(
                 next(c for n, c in inspect.getmembers(module)
@@ -296,9 +296,9 @@ class KeyboardStimNotFabricatedTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.config import Config
-            from rehab.game.engine import GameEngine
-            from rehab.hardware.keyboard_source import KeyboardOnlySource
+            from finger_rehab.config import Config
+            from finger_rehab.game.engine import GameEngine
+            from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
             with tempfile.TemporaryDirectory() as td:
                 cfg = Config.load()
                 cfg.data["ui"]["resolution"] = [640, 480]
@@ -343,7 +343,7 @@ class KeyboardStimNotFabricatedTests(unittest.TestCase):
         self.assertEqual(meta["block_summary"]["stim_cue_failures"], 0)
 
     def test_keyboard_session_does_not_warn_about_the_arduino(self) -> None:
-        with self.assertNoLogs("rehab.game.engine", level="WARNING"):
+        with self.assertNoLogs("finger_rehab.game.engine", level="WARNING"):
             self._run_keyboard_reaction_block()
 
     def test_real_hardware_failure_still_flags_stim_delivered_false(
@@ -358,9 +358,9 @@ class KeyboardStimNotFabricatedTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.config import Config
-            from rehab.game.engine import GameEngine
-            from rehab.hardware.source import Source
+            from finger_rehab.config import Config
+            from finger_rehab.game.engine import GameEngine
+            from finger_rehab.hardware.source import Source
 
             class FailingArduino(Source):
                 """A real, connected source whose motor refuses every

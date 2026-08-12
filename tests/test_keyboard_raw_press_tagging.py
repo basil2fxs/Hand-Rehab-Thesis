@@ -29,10 +29,10 @@ def _drive_keyboard_press(begin_fn_name: str, rhythm: bool = False):
     import pygame
     pygame.init()
     try:
-        from rehab.config import Config
-        from rehab.game.engine import GameEngine
-        from rehab.game.modes._keys import keymap_for_hand, resolve_key
-        from rehab.hardware.keyboard_source import KeyboardOnlySource
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.game.modes._keys import keymap_for_hand, resolve_key
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
         with tempfile.TemporaryDirectory() as td:
             cfg = Config.load()
             cfg.data["ui"]["resolution"] = [640, 480]
@@ -47,7 +47,7 @@ def _drive_keyboard_press(begin_fn_name: str, rhythm: bool = False):
             eng._screens = {"gameplay": gp, "results": MagicMock(),
                              "rhythm": gp, "syllables": gp}
             if rhythm:
-                from rehab.audio.beatmap import Beatmap, Note
+                from finger_rehab.audio.beatmap import Beatmap, Note
                 bm = Beatmap(notes=[Note(t=1.0, lane=0)])
                 getattr(eng, begin_fn_name)(bm)
                 # Skip the countdown gate: rhythm's queue_press drops

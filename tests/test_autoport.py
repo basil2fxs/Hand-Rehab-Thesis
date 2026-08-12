@@ -20,7 +20,7 @@ class _FakePort:
 
 class AutoPortTests(unittest.TestCase):
     def test_picks_single_arduino_match(self) -> None:
-        from rehab.hardware import serial_source
+        from finger_rehab.hardware import serial_source
         ports = [
             _FakePort("/dev/cu.bluetooth", vid=0xABCD),
             _FakePort("/dev/cu.usbmodem1101", vid=0x2341, description="Arduino"),
@@ -31,7 +31,7 @@ class AutoPortTests(unittest.TestCase):
         self.assertEqual(picked, "/dev/cu.usbmodem1101")
 
     def test_returns_none_on_ambiguous_match(self) -> None:
-        from rehab.hardware import serial_source
+        from finger_rehab.hardware import serial_source
         ports = [
             _FakePort("/dev/cu.a", vid=0x2341),
             _FakePort("/dev/cu.b", vid=0x2341),
@@ -42,7 +42,7 @@ class AutoPortTests(unittest.TestCase):
         self.assertIsNone(picked)
 
     def test_falls_back_to_only_port_when_no_vid_match(self) -> None:
-        from rehab.hardware import serial_source
+        from finger_rehab.hardware import serial_source
         ports = [_FakePort("/dev/cu.lonely", vid=0xDEAD)]
         with patch.object(serial_source, "list_ports") as lp:
             lp.comports.return_value = ports
@@ -50,14 +50,14 @@ class AutoPortTests(unittest.TestCase):
         self.assertEqual(picked, "/dev/cu.lonely")
 
     def test_returns_none_when_no_ports_at_all(self) -> None:
-        from rehab.hardware import serial_source
+        from finger_rehab.hardware import serial_source
         with patch.object(serial_source, "list_ports") as lp:
             lp.comports.return_value = []
             picked = serial_source.discover_port(["0x2341"])
         self.assertIsNone(picked)
 
     def test_handles_bad_vid_string_in_config(self) -> None:
-        from rehab.hardware import serial_source
+        from finger_rehab.hardware import serial_source
         ports = [_FakePort("/dev/cu.ok", vid=0x2341)]
         with patch.object(serial_source, "list_ports") as lp:
             lp.comports.return_value = ports
@@ -73,7 +73,7 @@ class DiscoverPortsPluralTests(unittest.TestCase):
     always-present virtual serial ports) must never get auto-picked."""
 
     def test_skips_mac_junk_ports_even_with_no_vid_match(self) -> None:
-        from rehab.hardware import serial_source
+        from finger_rehab.hardware import serial_source
         ports = [
             _FakePort("/dev/cu.debug-console", vid=None),
             _FakePort("/dev/cu.Bluetooth-Incoming-Port", vid=None),
@@ -86,7 +86,7 @@ class DiscoverPortsPluralTests(unittest.TestCase):
         self.assertEqual(picked, [])
 
     def test_vid_matched_arduino_returned_even_alongside_junk(self) -> None:
-        from rehab.hardware import serial_source
+        from finger_rehab.hardware import serial_source
         ports = [
             _FakePort("/dev/cu.debug-console", vid=None),
             _FakePort("/dev/cu.usbmodem1101", vid=0x2341),
@@ -98,7 +98,7 @@ class DiscoverPortsPluralTests(unittest.TestCase):
         self.assertEqual(picked, ["/dev/cu.usbmodem1101"])
 
     def test_two_arduinos_both_returned_for_bilateral(self) -> None:
-        from rehab.hardware import serial_source
+        from finger_rehab.hardware import serial_source
         ports = [
             _FakePort("/dev/cu.usbmodemA", vid=0x2341),
             _FakePort("/dev/cu.usbmodemB", vid=0x2341),
@@ -113,7 +113,7 @@ class DiscoverPortsPluralTests(unittest.TestCase):
         # Unbranded Arduino clone with a VID that isn't on the
         # known-vendor list. Should still pick up via the "any real
         # USB device" pass.
-        from rehab.hardware import serial_source
+        from finger_rehab.hardware import serial_source
         ports = [
             _FakePort("/dev/cu.usbserial-CLONE", vid=0xBEEF),
             _FakePort("/dev/cu.Bluetooth-Incoming-Port", vid=None),
@@ -124,7 +124,7 @@ class DiscoverPortsPluralTests(unittest.TestCase):
         self.assertEqual(picked, ["/dev/cu.usbserial-CLONE"])
 
     def test_empty_when_no_ports(self) -> None:
-        from rehab.hardware import serial_source
+        from finger_rehab.hardware import serial_source
         with patch.object(serial_source, "list_ports") as lp:
             lp.comports.return_value = []
             picked = serial_source.discover_ports(["0x2341"])
@@ -140,7 +140,7 @@ class SerialLineParsingTests(unittest.TestCase):
         # SerialSource.__init__ calls _require_serial which raises if
         # pyserial is missing. We skip if so.
         try:
-            from rehab.hardware.serial_source import SerialSource
+            from finger_rehab.hardware.serial_source import SerialSource
         except RuntimeError:
             self.skipTest("pyserial not installed")
         # Construct without actually opening the port. _consume is a
@@ -219,7 +219,7 @@ class SerialLineParsingTests(unittest.TestCase):
 class SerialSendCommandTests(unittest.TestCase):
     def test_send_command_without_open_port_returns_false(self) -> None:
         try:
-            from rehab.hardware.serial_source import SerialSource
+            from finger_rehab.hardware.serial_source import SerialSource
         except RuntimeError:
             self.skipTest("pyserial not installed")
         src = SerialSource.__new__(SerialSource)

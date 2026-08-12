@@ -29,8 +29,8 @@ NOISE_SD = 1.1          # measured on the real device, 29 July 2026
 
 
 def _cal():
-    from rehab.config import Config
-    from rehab.hardware.fsr_detector import Calibration
+    from finger_rehab.config import Config
+    from finger_rehab.hardware.fsr_detector import Calibration
     c = Config.load()
     return Calibration(
         num_sensors=4,
@@ -47,7 +47,7 @@ def _cal():
 def _press(rise: float, secs: float, base: float = 250.0, seed: int = 3,
             lane: int = 0):
     """Ramp a press on `lane` and return (pressed, released)."""
-    from rehab.hardware.fsr_detector import FSRDetector
+    from finger_rehab.hardware.fsr_detector import FSRDetector
     det = FSRDetector(_cal(), hand="right")
     p, r = [], []
     det.on_press = lambda ev: p.append(1)
@@ -79,7 +79,7 @@ def _press(rise: float, secs: float, base: float = 250.0, seed: int = 3,
 # Measured on the device with a hand present, 29 July 2026, in counts
 # above the empty-device reading. The gentle press is what a relaxed
 # adult produced when asked for the softest thing still worth calling a
-# press. See tools/calibrate_rest_vs_press.py.
+# press. See bin/old_tools/calibrate_rest_vs_press.py (retired: the in-app calibration replaced it).
 RESTING = (2.5, 8.9, 11.5, 30.7)
 GENTLE = (51.5, 40.9, 41.5, 145.7)
 
@@ -108,7 +108,7 @@ class SoftPressDetectionTests(unittest.TestCase):
     def test_press_just_over_threshold_detected(self) -> None:
         # Weakest press the configured threshold admits, with a small
         # margin. Anything at or above this must register.
-        from rehab.config import Config
+        from finger_rehab.config import Config
         deltas = Config.load().get("fsr.on_delta")
         for lane in range(4):
             with self.subTest(finger=lane):
@@ -123,8 +123,8 @@ class RestingHandTests(unittest.TestCase):
     uniform threshold and fired phantom presses continuously."""
 
     def test_resting_hand_never_triggers(self) -> None:
-        from rehab.config import Config
-        from rehab.hardware.fsr_detector import FSRDetector
+        from finger_rehab.config import Config
+        from finger_rehab.hardware.fsr_detector import FSRDetector
         det = FSRDetector(_cal(), hand="right")
         fired: list[int] = []
         det.on_press = lambda ev: fired.append(ev.lane)
@@ -138,7 +138,7 @@ class RestingHandTests(unittest.TestCase):
         self.assertEqual(fired, [], f"resting hand fired presses: {fired}")
 
     def test_every_threshold_clears_its_resting_load(self) -> None:
-        from rehab.config import Config
+        from finger_rehab.config import Config
         deltas = Config.load().get("fsr.on_delta")
         for i, d in enumerate(deltas):
             self.assertGreater(
@@ -147,7 +147,7 @@ class RestingHandTests(unittest.TestCase):
                 f"+{RESTING[i]}, a resting hand would false-trigger")
 
     def test_every_threshold_is_reachable_by_a_gentle_press(self) -> None:
-        from rehab.config import Config
+        from finger_rehab.config import Config
         deltas = Config.load().get("fsr.on_delta")
         for i, d in enumerate(deltas):
             self.assertLess(
@@ -161,7 +161,7 @@ class NoFalsePressTests(unittest.TestCase):
 
     def _false_presses(self, minutes: float, drift_per_min: float,
                         noise_sd: float) -> int:
-        from rehab.hardware.fsr_detector import FSRDetector
+        from finger_rehab.hardware.fsr_detector import FSRDetector
         det = FSRDetector(_cal(), hand="right")
         fired: list[int] = []
         det.on_press = lambda ev: fired.append(1)
@@ -189,7 +189,7 @@ class BaselineTrackerTests(unittest.TestCase):
         # At 200 Hz the EMA time constant is 1/(alpha*200) seconds. It
         # must be far longer than a press takes to build, or slow
         # presses vanish into the baseline.
-        from rehab.config import Config
+        from finger_rehab.config import Config
         alpha = float(Config.load().get("fsr.baseline_alpha"))
         tau = 1.0 / (alpha * 200.0)
         self.assertGreater(tau, 5.0, f"baseline tau {tau:.2f}s too fast")
@@ -198,7 +198,7 @@ class BaselineTrackerTests(unittest.TestCase):
         # Thresholds are per-finger now, set from each sensor's own
         # measured resting load and press range rather than shared.
         # Hysteresis must still hold on every finger.
-        from rehab.config import Config
+        from finger_rehab.config import Config
         c = Config.load()
         for on_d, off_d in zip(c.get("fsr.on_delta"),
                                 c.get("fsr.off_delta")):
@@ -208,7 +208,7 @@ class BaselineTrackerTests(unittest.TestCase):
         # Real resting values are 235-260. The floor is a broken-sensor
         # guard and must sit below them, or it silently governs instead
         # of the delta and no press registers.
-        from rehab.config import Config
+        from finger_rehab.config import Config
         c = Config.load()
         for floor in c.get("fsr.abs_on_min"):
             self.assertLess(floor, 235)
@@ -221,7 +221,7 @@ class SettingsLiveFeedbackTests(unittest.TestCase):
 
     def test_pump_feeds_the_diagnostics_screen(self) -> None:
         import inspect
-        from rehab.game.engine import GameEngine
+        from finger_rehab.game.engine import GameEngine
         src = inspect.getsource(GameEngine._pump_source)
         self.assertIn("diagnostics", src)
 
@@ -230,7 +230,7 @@ class SettingsLiveFeedbackTests(unittest.TestCase):
         # detectors of data. Comments are stripped first so the note
         # explaining this rule doesn't trip the check itself.
         import inspect
-        from rehab.ui.screens import DiagnosticsScreen
+        from finger_rehab.ui.screens import DiagnosticsScreen
         src = inspect.getsource(DiagnosticsScreen.update)
         code = "\n".join(
             line.split("#", 1)[0] for line in src.splitlines())
@@ -240,11 +240,11 @@ class SettingsLiveFeedbackTests(unittest.TestCase):
         import pygame
         pygame.init()
         pygame.font.init()
-        from rehab.config import Config
-        from rehab.game.engine import GameEngine
-        from rehab.ui.screens import DiagnosticsScreen
-        from rehab.ui.theme import get as get_theme
-        from rehab.ui.widgets import Layout
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.ui.screens import DiagnosticsScreen
+        from finger_rehab.ui.theme import get as get_theme
+        from finger_rehab.ui.widgets import Layout
 
         e = GameEngine.__new__(GameEngine)
         e.cfg = Config.load()

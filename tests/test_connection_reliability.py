@@ -11,7 +11,7 @@ import time
 
 import pytest
 
-import rehab.hardware.serial_source as ss
+import finger_rehab.hardware.serial_source as ss
 
 
 class FakePort:
@@ -148,11 +148,11 @@ class TestPortChangesApplyLive:
     def test_the_engine_can_rebuild_its_source(self):
         """Changing a port used to need an app restart, which the
         Settings screen said out loud."""
-        from rehab.game.engine import GameEngine
+        from finger_rehab.game.engine import GameEngine
         assert hasattr(GameEngine, "reconnect_source")
 
     def test_it_refuses_mid_block(self):
-        from rehab.game.engine import GameEngine
+        from finger_rehab.game.engine import GameEngine
         e = GameEngine.__new__(GameEngine)
         e.in_block = True
         msg = GameEngine.reconnect_source(e)
@@ -162,6 +162,6 @@ class TestPortChangesApplyLive:
         """They were the same rules written twice and only one copy was
         ever kept up to date."""
         import main
-        from rehab.hardware import discovery
+        from finger_rehab.hardware import discovery
         import inspect
         assert "discovery" in inspect.getsource(main._resolve_ports_and_hands)

@@ -12,7 +12,7 @@ import random
 
 import pytest
 
-from rehab.game.scheduling import (
+from finger_rehab.game.scheduling import (
     BalancedScheduler, PairedBalancedScheduler, FloorWeightedScheduler,
 )
 

@@ -27,7 +27,7 @@ os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
 
 def _press(lane: int, t: float = 0.0):
-    from rehab.hardware.fsr_detector import PressEvent
+    from finger_rehab.hardware.fsr_detector import PressEvent
     return PressEvent(lane=lane, t_perf=t, value=0, baseline=0.0,
                        hand="right")
 
@@ -36,8 +36,8 @@ def _build_mode(**overrides):
     """A PatternMode wired to a MagicMock engine, driven with explicit
     `now` values instead of sleeping, following the reaction-mode test
     harness."""
-    from rehab.game.modes.pattern import PatternMode
-    from rehab.game.scoring import ScoreConfig
+    from finger_rehab.game.modes.pattern import PatternMode
+    from finger_rehab.game.scoring import ScoreConfig
     engine = MagicMock()
     engine._screens = {}
     engine.hand_mode = "right"
@@ -79,7 +79,7 @@ class SequenceGeneratorTests(unittest.TestCase):
 
     def test_soc_satisfies_the_reed_johnson_constraints(self) -> None:
         import random
-        from rehab.game.modes.pattern import generate_soc
+        from finger_rehab.game.modes.pattern import generate_soc
         for seed in range(25):
             seq = generate_soc(random.Random(seed))
             self.assertEqual(len(seq), 12)
@@ -94,7 +94,7 @@ class SequenceGeneratorTests(unittest.TestCase):
             self.assertEqual(len(set(pairs)), 12)
 
     def test_trained_sequence_is_stable_for_a_participant(self) -> None:
-        from rehab.game.modes.pattern import (build_sequences,
+        from finger_rehab.game.modes.pattern import (build_sequences,
                                               participant_seed)
         # The seed comes from the name, trimmed and case-folded, so the
         # common typing slips do not silently fork the material.
@@ -107,14 +107,14 @@ class SequenceGeneratorTests(unittest.TestCase):
         self.assertEqual(p1, p2)
 
     def test_different_participants_get_different_material(self) -> None:
-        from rehab.game.modes.pattern import (build_sequences,
+        from finger_rehab.game.modes.pattern import (build_sequences,
                                               participant_seed)
         t_a, _ = build_sequences(participant_seed("alice"))
         t_b, _ = build_sequences(participant_seed("bob"))
         self.assertNotEqual(t_a, t_b)
 
     def test_probes_share_no_second_order_structure(self) -> None:
-        from rehab.game.modes.pattern import (_canonical_rotation,
+        from finger_rehab.game.modes.pattern import (_canonical_rotation,
                                               build_sequences,
                                               shared_triplets)
         for seed in range(10):
@@ -143,7 +143,7 @@ class Cycle8Tests(unittest.TestCase):
 
     def test_generate_cycle8_satisfies_the_k8_constraints(self) -> None:
         import random
-        from rehab.game.modes.pattern import generate_cycle8
+        from finger_rehab.game.modes.pattern import generate_cycle8
         for seed in range(25):
             cyc = generate_cycle8(random.Random(seed))
             self.assertEqual(len(cyc), 24)
@@ -161,7 +161,7 @@ class Cycle8Tests(unittest.TestCase):
     def test_reorder_cycle_matches_first_order_and_zero_triplets(
             self) -> None:
         import random
-        from rehab.game.modes.pattern import (_triplet_map, generate_cycle8,
+        from finger_rehab.game.modes.pattern import (_triplet_map, generate_cycle8,
                                               reorder_cycle,
                                               shared_triplets)
         hits = 0
@@ -188,7 +188,7 @@ class Cycle8Tests(unittest.TestCase):
 
     def test_build_sequences8_first_choice_reuses_trained_transitions(
             self) -> None:
-        from rehab.game.modes.pattern import build_sequences, shared_triplets
+        from finger_rehab.game.modes.pattern import build_sequences, shared_triplets
         trained, pool = build_sequences(seed=7, n_lanes=8)
         self.assertEqual(len(trained), 24)
         self.assertGreaterEqual(len(pool), 2)
@@ -205,7 +205,7 @@ class Cycle8Tests(unittest.TestCase):
         # Force every re-ordering attempt to fail so the second stage,
         # fresh cycles sharing zero triplets with the trained one, is
         # what actually builds the pool.
-        from rehab.game.modes import pattern as pattern_mod
+        from finger_rehab.game.modes import pattern as pattern_mod
         with patch.object(pattern_mod, "reorder_cycle", return_value=None):
             trained, pool = pattern_mod.build_sequences(seed=7, n_lanes=8)
         self.assertGreaterEqual(len(pool), 2)
@@ -221,7 +221,7 @@ class Cycle8Tests(unittest.TestCase):
         # cycle stage to fail, so only the last-resort minimal-overlap
         # fallback (shared triplets <= _PROBE_FALLBACK_MAX_SHARED) can
         # fill the pool. A frozen block start is worse than this.
-        from rehab.game.modes import pattern as pattern_mod
+        from finger_rehab.game.modes import pattern as pattern_mod
         real_shared = pattern_mod.shared_triplets
         with patch.object(pattern_mod, "reorder_cycle", return_value=None), \
              patch.object(pattern_mod, "shared_triplets",
@@ -236,7 +236,7 @@ class Cycle8Tests(unittest.TestCase):
         # Every candidate reported as sharing more than the fallback
         # allows: no probe can ever qualify, so the pool must fail
         # loudly rather than hand back too few probes to alternate.
-        from rehab.game.modes import pattern as pattern_mod
+        from finger_rehab.game.modes import pattern as pattern_mod
         with patch.object(pattern_mod, "reorder_cycle", return_value=None), \
              patch.object(pattern_mod, "shared_triplets", return_value=99):
             with self.assertRaises(RuntimeError):
@@ -281,7 +281,7 @@ class LayoutTests(unittest.TestCase):
                 self.assertEqual(seg.fingers, mode.trained * 5)
 
     def test_probe_takes_use_untrained_material(self) -> None:
-        from rehab.game.modes.pattern import shared_triplets
+        from finger_rehab.game.modes.pattern import shared_triplets
         _, mode = _build_mode()
         probe_socs = [s.fingers[:12] for s in mode.segments
                       if s.kind == "probe"]
@@ -325,7 +325,7 @@ class LayoutTests(unittest.TestCase):
         # excluded from analysis anyway, training the researcher to
         # ignore the same warning firing about B1, where it matters.
         import logging
-        log = logging.getLogger("rehab.game.modes.pattern")
+        log = logging.getLogger("finger_rehab.game.modes.pattern")
         with self.assertNoLogs(log, level="WARNING"):
             _build_mode(warmup_trials=21, random_block_trials=64)
         with self.assertLogs(log, level="WARNING") as cm:
@@ -373,7 +373,7 @@ class BimanualLayoutTests(unittest.TestCase):
                 self.assertEqual(seg.fingers[:24], mode.trained)
 
     def test_probe_takes_use_untrained_bimanual_material(self) -> None:
-        from rehab.game.modes.pattern import shared_triplets
+        from finger_rehab.game.modes.pattern import shared_triplets
         _, mode = _build_mode(lanes=list(range(8)))
         probe_socs = [s.fingers[:24] for s in mode.segments
                       if s.kind == "probe"]
@@ -400,7 +400,7 @@ class BimanualLayoutTests(unittest.TestCase):
         # random_block_trials=60 does not divide evenly across 8 lanes
         # (4 lanes get 8, 4 get 7): the mode must say so rather than
         # silently letting the "balances the hands too" claim slip.
-        with self.assertLogs("rehab.game.modes.pattern",
+        with self.assertLogs("finger_rehab.game.modes.pattern",
                              level="WARNING") as cm:
             _build_mode(lanes=list(range(8)), random_block_trials=60)
         self.assertTrue(any("does not divide evenly" in m
@@ -888,10 +888,10 @@ class KeyboardFallbackTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.config import Config
-            from rehab.game.engine import GameEngine
-            from rehab.hardware.keyboard_source import KeyboardOnlySource
-            from rehab.ui.widgets import keyboard_controls_lines
+            from finger_rehab.config import Config
+            from finger_rehab.game.engine import GameEngine
+            from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
+            from finger_rehab.ui.widgets import keyboard_controls_lines
             with tempfile.TemporaryDirectory() as td:
                 cfg = Config.load()
                 cfg.data["ui"]["resolution"] = [640, 480]
@@ -927,9 +927,9 @@ class ScoreCapTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.config import Config
-            from rehab.game.engine import GameEngine
-            from rehab.hardware.keyboard_source import KeyboardOnlySource
+            from finger_rehab.config import Config
+            from finger_rehab.game.engine import GameEngine
+            from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
             with tempfile.TemporaryDirectory() as td:
                 cfg = Config.load()
                 cfg.data["ui"]["resolution"] = [640, 480]
@@ -950,7 +950,7 @@ class ScoreCapTests(unittest.TestCase):
                                  eng.mode.score_cfg.good_points)
                 # The tier label is untouched -- only the points are
                 # levelled (the docstring's own distinction).
-                from rehab.game.scoring import classify
+                from finger_rehab.game.scoring import classify
                 fast = classify(50.0, eng.mode.score_cfg)
                 self.assertEqual(fast.label, "Perfect")
                 self.assertEqual(fast.points, eng.mode.score_cfg.good_points)
@@ -967,11 +967,11 @@ class ResultsScreenPatientFacingTests(unittest.TestCase):
 
     def _draw_pattern_results(self, block_summary_pattern):
         import pygame
-        from rehab.config import Config
-        from rehab.game.engine import GameEngine
-        from rehab.ui.screens import ResultsScreen
-        from rehab.ui.theme import get as get_theme
-        from rehab.ui.widgets import Layout
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.ui.screens import ResultsScreen
+        from finger_rehab.ui.theme import get as get_theme
+        from finger_rehab.ui.widgets import Layout
         pygame.init()
         pygame.font.init()
         pygame.display.set_mode((1280, 800))
@@ -1052,7 +1052,7 @@ class ResultsScreenPatientFacingTests(unittest.TestCase):
         # the patient the word "pattern" non-negotiable, but the mode
         # card, title-screen overlay and results pill all used to say
         # "Patterns"/"PATTERN".
-        from rehab.ui.screens import ModeSelectScreen, TitleScreen
+        from finger_rehab.ui.screens import ModeSelectScreen, TitleScreen
         mode_titles = dict((k, t) for k, t, _ in ModeSelectScreen.MODES)
         self.assertEqual(mode_titles["pattern"], "Muscle Memory")
         overlay_text = "\n".join(TitleScreen.INFO_STEPS)
@@ -1069,9 +1069,9 @@ class EngineIntegrationTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.config import Config
-            from rehab.game.engine import GameEngine
-            from rehab.hardware.keyboard_source import KeyboardOnlySource
+            from finger_rehab.config import Config
+            from finger_rehab.game.engine import GameEngine
+            from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
             with tempfile.TemporaryDirectory() as td:
                 cfg = Config.load()
                 cfg.data["ui"]["resolution"] = [640, 480]
@@ -1133,9 +1133,9 @@ class EngineIntegrationTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.config import Config
-            from rehab.game.engine import GameEngine
-            from rehab.hardware.keyboard_source import KeyboardOnlySource
+            from finger_rehab.config import Config
+            from finger_rehab.game.engine import GameEngine
+            from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
             with tempfile.TemporaryDirectory() as td:
                 sequences = []
                 for _ in range(2):

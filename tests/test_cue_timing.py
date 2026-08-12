@@ -46,8 +46,8 @@ def _build_mode(**overrides):
     """A SyllablesMode wired to a MagicMock engine, driven with
     explicit `now` values through _tick, same shape as the builder in
     test_syllables_mode.py."""
-    from rehab.game.modes.syllables import SyllablesMode
-    from rehab.game.scoring import ScoreConfig
+    from finger_rehab.game.modes.syllables import SyllablesMode
+    from finger_rehab.game.scoring import ScoreConfig
     engine = MagicMock()
     engine._screens = {}
     engine.hand_mode = "right"
@@ -87,7 +87,7 @@ def _build_mode(**overrides):
 
 
 def _word_with(n_syll: int):
-    from rehab.game.modes.syllables_words import WORDS
+    from finger_rehab.game.modes.syllables_words import WORDS
     return next(w for w in WORDS if w.n_syll == n_syll)
 
 
@@ -200,10 +200,10 @@ class ResearchDefaultStatementTests(unittest.TestCase):
     thesis writeup, so they are pinned like the shipped defaults are."""
 
     def test_each_research_mode_names_the_multisensory_measure(self):
-        import rehab.game.modes.chords as chords
-        import rehab.game.modes.pattern as pattern
-        import rehab.game.modes.reaction as reaction
-        import rehab.game.modes.syllables as syllables
+        import finger_rehab.game.modes.chords as chords
+        import finger_rehab.game.modes.pattern as pattern
+        import finger_rehab.game.modes.reaction as reaction
+        import finger_rehab.game.modes.syllables as syllables
         for mod in (reaction, pattern, chords, syllables):
             with self.subTest(module=mod.__name__):
                 doc = mod.__doc__ or ""
@@ -211,7 +211,7 @@ class ResearchDefaultStatementTests(unittest.TestCase):
                 self.assertIn("cue_flags", doc)
 
     def test_the_config_comment_carries_the_same_statement(self):
-        from rehab.config import DEFAULT_CONFIG
+        from finger_rehab.config import DEFAULT_CONFIG
         text = Path(DEFAULT_CONFIG).read_text(encoding="utf-8")
         self.assertIn("audio-tactile-visual", text)
         self.assertIn("cue_flags", text)

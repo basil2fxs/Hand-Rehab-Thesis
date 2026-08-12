@@ -36,7 +36,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 def _profile(hand="right"):
     """A usable single-hand profile with easy numbers: resting 100,
     light press 160, so the gap is 60 counts everywhere."""
-    from rehab.hardware.calibration_profile import CalibrationProfile
+    from finger_rehab.hardware.calibration_profile import CalibrationProfile
     return CalibrationProfile(
         hand=hand,
         empty=[10.0] * 4, empty_noise=[1.0] * 4,
@@ -47,7 +47,7 @@ def _profile(hand="right"):
 def _engine(hand_mode="right", cfg_extra=None):
     """Engine fixture in the house style: built via __new__, MagicMock
     config, command-recording source."""
-    from rehab.game.engine import GameEngine
+    from finger_rehab.game.engine import GameEngine
     values = {
         "fsr.num_sensors_per_hand": 4,
         "motor.cue_ms": 150,
@@ -85,7 +85,7 @@ def _commands(e):
 
 
 def _add_detector(e, hand):
-    from rehab.hardware.fsr_detector import Calibration, FSRDetector
+    from finger_rehab.hardware.fsr_detector import Calibration, FSRDetector
     det = FSRDetector(Calibration(num_sensors=4), hand=hand)
     e.detectors[hand] = det
     return det
@@ -141,7 +141,7 @@ class MaxPressFieldTests(unittest.TestCase):
     def test_old_file_without_the_field_loads(self):
         # Every profile saved before the field existed must keep
         # loading, with the max simply reading as not measured.
-        from rehab.hardware.calibration_profile import CalibrationProfile
+        from finger_rehab.hardware.calibration_profile import CalibrationProfile
         with TemporaryDirectory() as td:
             path = Path(td) / "current_right.json"
             old = {
@@ -157,7 +157,7 @@ class MaxPressFieldTests(unittest.TestCase):
             self.assertFalse(prof.has_max_press())
 
     def test_round_trip_keeps_the_max(self):
-        from rehab.hardware.calibration_profile import CalibrationProfile
+        from finger_rehab.hardware.calibration_profile import CalibrationProfile
         prof = _profile()
         prof.set_max_press([210.0, 190.0, 160.0, 130.0])
         with TemporaryDirectory() as td:
@@ -187,11 +187,11 @@ class MaxPressFieldTests(unittest.TestCase):
 
 class NeedsProbeTests(unittest.TestCase):
     def test_no_profile_needs_a_probe(self):
-        from rehab.game.force_stream import needs_max_press_probe
+        from finger_rehab.game.force_stream import needs_max_press_probe
         self.assertTrue(needs_max_press_probe(None))
 
     def test_fresh_max_is_reused(self):
-        from rehab.game.force_stream import needs_max_press_probe
+        from finger_rehab.game.force_stream import needs_max_press_probe
         prof = _profile()
         prof.set_max_press([200.0] * 4)
         self.assertFalse(needs_max_press_probe(prof))
@@ -199,7 +199,7 @@ class NeedsProbeTests(unittest.TestCase):
     def test_stale_max_is_re_probed(self):
         # A max persisted from yesterday reflects yesterday's strength
         # and fatigue, so it must be measured again.
-        from rehab.game.force_stream import needs_max_press_probe
+        from finger_rehab.game.force_stream import needs_max_press_probe
         prof = _profile()
         prof.set_max_press([200.0] * 4,
                             measured_at="2026-01-01T10:00:00")
@@ -209,7 +209,7 @@ class NeedsProbeTests(unittest.TestCase):
         self.assertTrue(needs_max_press_probe(prof, now=day_later))
 
     def test_values_without_a_timestamp_are_not_trusted(self):
-        from rehab.game.force_stream import needs_max_press_probe
+        from finger_rehab.game.force_stream import needs_max_press_probe
         prof = _profile()
         prof.max_press = [200.0] * 4       # bypasses set_max_press
         self.assertTrue(needs_max_press_probe(prof))
@@ -238,7 +238,7 @@ def _run_press(probe, t0, peak, hold_s=0.4, dt=0.02):
 
 class MaxPressProbeTests(unittest.TestCase):
     def _probe(self, n=3):
-        from rehab.game.force_stream import MaxPressProbe
+        from finger_rehab.game.force_stream import MaxPressProbe
         return MaxPressProbe(n_presses=n, floor_counts=30.0)
 
     def test_three_presses_median(self):
@@ -300,7 +300,7 @@ class MaxPressProbeTests(unittest.TestCase):
         self.assertEqual(p.presses_remaining, 2)
 
     def test_one_press_is_refused(self):
-        from rehab.game.force_stream import MaxPressProbe
+        from finger_rehab.game.force_stream import MaxPressProbe
         with self.assertRaises(ValueError):
             MaxPressProbe(n_presses=1)
 
@@ -319,7 +319,7 @@ class MaxPressProbeTests(unittest.TestCase):
 
 class ForceViewTests(unittest.TestCase):
     def _view(self, e):
-        from rehab.game.force_stream import ForceView
+        from finger_rehab.game.force_stream import ForceView
         return ForceView(e)
 
     def _settle(self, det, value, n=200, t0=0.0, dt=0.005):
@@ -386,7 +386,7 @@ class ForceViewTests(unittest.TestCase):
         # drive). The tare must come from the resting hand's smoothed
         # value instead, which sheds the hold within a fraction of a
         # second of the release.
-        from rehab.hardware.fsr_detector import Calibration, FSRDetector
+        from finger_rehab.hardware.fsr_detector import Calibration, FSRDetector
         e = _engine()
         det = FSRDetector(Calibration(num_sensors=4,
                                       baseline_alpha=0.0005),
@@ -479,7 +479,7 @@ class PulseMotorTests(unittest.TestCase):
     def test_floor_covers_the_drain_quantisation(self):
         # The early STOP rides the per-frame drain, so nothing shorter
         # than one 60 Hz frame is deliverable; the floor must say so.
-        from rehab.game.engine import GameEngine
+        from finger_rehab.game.engine import GameEngine
         self.assertGreaterEqual(GameEngine.MIN_PULSE_MS, 1000.0 / 60.0)
 
     def test_delivered_length_matches_the_measurement(self):
@@ -587,7 +587,7 @@ class PulseMotorTests(unittest.TestCase):
 
 class TrialColumnTests(unittest.TestCase):
     def test_the_four_columns_exist_in_order(self):
-        from rehab.data.logger import TRIAL_COLUMNS
+        from finger_rehab.data.logger import TRIAL_COLUMNS
         tail = TRIAL_COLUMNS[-4:]
         self.assertEqual(tail, ["waveform", "waveform_params",
                                  "waveform_seed", "segment_times"])
@@ -595,14 +595,14 @@ class TrialColumnTests(unittest.TestCase):
     def test_they_come_after_the_existing_contract(self):
         # Appended, never inserted: every older analysis tool indexes
         # the columns it knows, and the pinned ones must not move.
-        from rehab.data.logger import TRIAL_COLUMNS
+        from finger_rehab.data.logger import TRIAL_COLUMNS
         self.assertLess(TRIAL_COLUMNS.index("cue_target_shown"),
                          TRIAL_COLUMNS.index("waveform"))
 
 
 class PackingTests(unittest.TestCase):
     def test_params_round_trip(self):
-        from rehab.data.logger import (pack_waveform_params,
+        from finger_rehab.data.logger import (pack_waveform_params,
                                         parse_waveform_params)
         params = {"freq_hz": 0.4, "amplitude_pct": 30.0,
                   "max_press_counts": 412.5, "kind": "sine"}
@@ -616,33 +616,33 @@ class PackingTests(unittest.TestCase):
     def test_params_pack_sorted_for_stable_grouping(self):
         # Same condition, same string: the notebook groups trials by
         # equality on this cell, so insertion order must not leak in.
-        from rehab.data.logger import pack_waveform_params
+        from finger_rehab.data.logger import pack_waveform_params
         a = pack_waveform_params({"b": 1, "a": 2})
         b = pack_waveform_params({"a": 2, "b": 1})
         self.assertEqual(a, b)
         self.assertEqual(a, "a=2;b=1")
 
     def test_separators_in_params_fail_at_logging_time(self):
-        from rehab.data.logger import pack_waveform_params
+        from finger_rehab.data.logger import pack_waveform_params
         with self.assertRaises(ValueError):
             pack_waveform_params({"bad": "a;b"})
         with self.assertRaises(ValueError):
             pack_waveform_params({"al=so": 1})
 
     def test_segments_round_trip_at_microsecond_resolution(self):
-        from rehab.data.logger import pack_segments, parse_segments
+        from finger_rehab.data.logger import pack_segments, parse_segments
         segs = [("lit", 12.345678, 27.345678),
                 ("blind", 27.345678, 42.000001)]
         back = parse_segments(pack_segments(segs))
         self.assertEqual(back, segs)
 
     def test_malformed_segments_drop_not_raise(self):
-        from rehab.data.logger import parse_segments
+        from finger_rehab.data.logger import parse_segments
         self.assertEqual(parse_segments("lit:1.0:2.0;garbage;x:y:z"),
                           [("lit", 1.0, 2.0)])
 
     def test_segment_names_with_separators_are_refused(self):
-        from rehab.data.logger import pack_segments
+        from finger_rehab.data.logger import pack_segments
         with self.assertRaises(ValueError):
             pack_segments([("a:b", 0.0, 1.0)])
 
@@ -675,13 +675,13 @@ class ContinuousTrialRowTests(unittest.TestCase):
         return e
 
     def _trial(self):
-        from rehab.game.modes.classic import PendingTrial
+        from finger_rehab.game.modes.classic import PendingTrial
         return PendingTrial(trial_id=7, lane=0, stim_t_perf=0.0,
                              keys_pressed=[0], incorrect_presses=[])
 
     def test_continuous_info_lands_in_the_row(self):
-        from rehab.data.logger import ContinuousTrialLog
-        from rehab.game.scoring import TrialResult
+        from finger_rehab.data.logger import ContinuousTrialLog
+        from finger_rehab.game.scoring import TrialResult
         e = self._loggable_engine()
         info = ContinuousTrialLog(
             waveform="sine",
@@ -701,7 +701,7 @@ class ContinuousTrialRowTests(unittest.TestCase):
                           "release:40.000000:55.000000")
 
     def test_threshold_modes_leave_the_cells_empty(self):
-        from rehab.game.scoring import TrialResult
+        from finger_rehab.game.scoring import TrialResult
         e = self._loggable_engine()
         e.log_trial(self._trial(),
                      TrialResult(label="Great", points=5, rt_ms=200.0),
@@ -747,7 +747,7 @@ class RecordMaxPressTests(unittest.TestCase):
             self.assertTrue(prof.max_press_measured_at)
             # Persisted next to the calibration so a restart mid-
             # session does not force a re-probe.
-            from rehab.hardware.calibration_profile import (
+            from finger_rehab.hardware.calibration_profile import (
                 CalibrationProfile)
             saved = CalibrationProfile.load(
                 Path(td) / "config/calibration/current_right.json")
@@ -777,7 +777,7 @@ class RecordMaxPressTests(unittest.TestCase):
 
 class MetadataStampTests(unittest.TestCase):
     def test_both_hands_max_press_reaches_metadata(self):
-        from rehab.data.session import Session
+        from finger_rehab.data.session import Session
         e = _engine(hand_mode="both")
         e.session = Session()
         right = _profile("right")
@@ -792,7 +792,7 @@ class MetadataStampTests(unittest.TestCase):
         self.assertEqual(by_hand["left"]["max_press"], [150.0] * 4)
 
     def test_no_probe_leaves_metadata_unchanged(self):
-        from rehab.data.session import Session
+        from finger_rehab.data.session import Session
         e = _engine()
         e.session = Session()
         e.calibration_profiles = {"right": _profile()}

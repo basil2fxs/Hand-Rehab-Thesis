@@ -31,8 +31,8 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    from rehab.config import Config
-    from rehab.utils import log as logutil
+    from finger_rehab.config import Config
+    from finger_rehab.utils import log as logutil
     try:
         cfg = Config.load(args.config)
     except FileNotFoundError as e:
@@ -45,7 +45,7 @@ def main() -> int:
         print(f"Could not load config: {e}", file=sys.stderr)
         return 5
     # Resolve the log path through the config so a relative
-    # "sessions/rehab.log" lands next to the app (USER_ROOT) instead of
+    # "sessions/finger_rehab.log" lands next to the app (USER_ROOT) instead of
     # whatever the working directory happens to be. Finder launches the
     # frozen .app with CWD=/ where a relative mkdir would fail.
     log_file = cfg.get("logging.file")
@@ -65,7 +65,7 @@ def main() -> int:
         cfg.data.setdefault("session", {})["participant"] = args.participant
 
     if args.list_ports:
-        from rehab.hardware.serial_source import list_available_ports
+        from finger_rehab.hardware.serial_source import list_available_ports
         for p in list_available_ports():
             vid = f"0x{p.vid:04x}" if p.vid is not None else "?"
             pid = f"0x{p.pid:04x}" if p.pid is not None else "?"
@@ -77,7 +77,7 @@ def main() -> int:
         log.error("Could not build any source. Try --source keyboard.")
         return 2
 
-    from rehab.game.engine import GameEngine
+    from finger_rehab.game.engine import GameEngine
     try:
         engine = GameEngine(cfg, source)
     except Exception as e:
@@ -96,11 +96,11 @@ def main() -> int:
 def _resolve_ports_and_hands(cfg, fallback_ports):
     """Which ports to open and which hand each is.
 
-    Delegates to rehab.hardware.discovery so the Settings screen's live
+    Delegates to finger_rehab.hardware.discovery so the Settings screen's live
     reconnect and this startup path cannot drift apart. They used to be
     the same rules written twice, and only this copy was ever updated.
     """
-    from rehab.hardware.discovery import resolve_ports_and_hands
+    from finger_rehab.hardware.discovery import resolve_ports_and_hands
     chosen, hands = resolve_ports_and_hands(cfg, fallback_ports)
     if hands:
         logging.getLogger("main").info(
@@ -113,7 +113,7 @@ def _build_source(cfg, args):
     n_per_hand = int(cfg.get("fsr.num_sensors_per_hand", 4))
 
     def _make_multi(ports, hands):
-        from rehab.hardware.multi_serial import MultiSerialSource
+        from finger_rehab.hardware.multi_serial import MultiSerialSource
         return MultiSerialSource(
             ports=ports,
             baud=int(cfg.get("serial.baud", 115200)),
@@ -127,7 +127,7 @@ def _build_source(cfg, args):
     chosen = args.source
     if chosen == "auto":
         try:
-            from rehab.hardware.serial_source import (
+            from finger_rehab.hardware.serial_source import (
                 _HAVE_SERIAL, discover_ports,
             )
         except ImportError:
@@ -153,7 +153,7 @@ def _build_source(cfg, args):
         chosen = "keyboard"
 
     if chosen == "serial":
-        from rehab.hardware.serial_source import discover_ports
+        from finger_rehab.hardware.serial_source import discover_ports
         if args.port:
             ports = [args.port]
         else:
@@ -168,7 +168,7 @@ def _build_source(cfg, args):
             return None
 
     if chosen == "keyboard":
-        from rehab.hardware.keyboard_source import KeyboardOnlySource
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
         return KeyboardOnlySource()
 
     return None

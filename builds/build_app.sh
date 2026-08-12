@@ -6,7 +6,8 @@
 
 set -euo pipefail
 
-cd "$(dirname "$0")"
+# The script lives in builds/; the build runs from the project root.
+cd "$(dirname "$0")/.."
 
 # Install build dependency if missing. Doesn't touch your existing venv.
 python3 -m pip install --quiet --upgrade pyinstaller

@@ -33,7 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 @pytest.fixture(autouse=True, scope="session")
 def _never_touch_the_real_user_settings(tmp_path_factory):
     """Point USER_OVERRIDES at a temp file for the whole run."""
-    import rehab.config as config
+    import finger_rehab.config as config
 
     real = config.USER_OVERRIDES
     fake = tmp_path_factory.mktemp("user-config") / "user_settings.yaml"
@@ -53,7 +53,7 @@ def _never_touch_the_real_user_settings(tmp_path_factory):
 def _real_user_settings_is_untouched():
     """Fail loudly if a test writes to the real file anyway.
 
-    The redirect above covers anything going through rehab.config. This
+    The redirect above covers anything going through finger_rehab.config. This
     catches a test that reaches the path some other way, which is how it
     would slip through again.
     """

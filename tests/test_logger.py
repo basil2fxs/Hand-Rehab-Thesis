@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 class TrialLoggerBasicTests(unittest.TestCase):
 
     def test_write_creates_file_with_header(self) -> None:
-        from rehab.data.logger import TrialLogger, TRIAL_COLUMNS
+        from finger_rehab.data.logger import TrialLogger, TRIAL_COLUMNS
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "trials.csv"
             tl = TrialLogger(path)
@@ -30,7 +30,7 @@ class TrialLoggerBasicTests(unittest.TestCase):
             self.assertEqual(len(rows), 2)
 
     def test_missing_keys_default_to_empty_string(self) -> None:
-        from rehab.data.logger import TrialLogger, TRIAL_COLUMNS
+        from finger_rehab.data.logger import TrialLogger, TRIAL_COLUMNS
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "trials.csv"
             tl = TrialLogger(path)
@@ -51,7 +51,7 @@ class TrialLoggerCloseTruncationRegressionTests(unittest.TestCase):
     which truncated everything written during the block."""
 
     def test_write_after_close_does_not_truncate_file(self) -> None:
-        from rehab.data.logger import TrialLogger
+        from finger_rehab.data.logger import TrialLogger
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "trials.csv"
             tl = TrialLogger(path)
@@ -68,7 +68,7 @@ class TrialLoggerCloseTruncationRegressionTests(unittest.TestCase):
             self.assertNotIn("99", trial_nums)
 
     def test_close_is_idempotent(self) -> None:
-        from rehab.data.logger import TrialLogger
+        from finger_rehab.data.logger import TrialLogger
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "trials.csv"
             tl = TrialLogger(path)
@@ -80,7 +80,7 @@ class TrialLoggerCloseTruncationRegressionTests(unittest.TestCase):
         # If a block is abandoned before any trial completes, close()
         # gets called on a logger that never opened the file. Must not
         # raise and must not create a stray empty CSV.
-        from rehab.data.logger import TrialLogger
+        from finger_rehab.data.logger import TrialLogger
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "trials.csv"
             tl = TrialLogger(path)
@@ -91,7 +91,7 @@ class TrialLoggerCloseTruncationRegressionTests(unittest.TestCase):
 class RawLoggerBasicTests(unittest.TestCase):
 
     def test_queue_sample_flushes_to_disk(self) -> None:
-        from rehab.data.logger import RawLogger, RAW_COLUMNS
+        from finger_rehab.data.logger import RawLogger, RAW_COLUMNS
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "raw.csv"
             rl = RawLogger(path)
@@ -115,7 +115,7 @@ class RawLoggerBasicTests(unittest.TestCase):
                 self.assertIn(col, rows[0])
 
     def test_queue_event_records_event_columns(self) -> None:
-        from rehab.data.logger import RawLogger
+        from finger_rehab.data.logger import RawLogger
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "raw.csv"
             rl = RawLogger(path)
@@ -135,7 +135,7 @@ class RawLoggerBasicTests(unittest.TestCase):
         # Anything still queued when stop() runs must end up on disk -
         # the final drain inside stop() is the only guarantee against
         # losing the last batch.
-        from rehab.data.logger import RawLogger
+        from finger_rehab.data.logger import RawLogger
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "raw.csv"
             rl = RawLogger(path)
@@ -156,7 +156,7 @@ class RawLoggerHungThreadRegressionTests(unittest.TestCase):
     Now both happen anyway, on a best-effort basis."""
 
     def test_stop_closes_file_even_when_thread_hangs(self) -> None:
-        from rehab.data.logger import RawLogger
+        from finger_rehab.data.logger import RawLogger
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "raw.csv"
             rl = RawLogger(path)
@@ -172,7 +172,7 @@ class RawLoggerHungThreadRegressionTests(unittest.TestCase):
             rl.path.parent.mkdir(parents=True, exist_ok=True)
             rl._file = rl.path.open("w", newline="", encoding="utf-8")
             rl._writer = csv.writer(rl._file)
-            from rehab.data.logger import RAW_COLUMNS
+            from finger_rehab.data.logger import RAW_COLUMNS
             rl._writer.writerow(RAW_COLUMNS)
             rl._file.flush()
             rl._thread = threading.Thread(target=_hang_loop, daemon=True)

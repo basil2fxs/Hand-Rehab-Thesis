@@ -85,7 +85,7 @@ def make_source(hand_mode: str):
     """A real MultiSerialSource whose per-board SerialSources are
     swapped for FakeBoards, so the ROUTING under test is the shipped
     send_command, not a reimplementation. Returns (source, boards)."""
-    from rehab.hardware.multi_serial import MultiSerialSource
+    from finger_rehab.hardware.multi_serial import MultiSerialSource
     if hand_mode == "both":
         src = MultiSerialSource(ports=["fakeR", "fakeL"],
                                 hand_assignment=["right", "left"])
@@ -120,7 +120,7 @@ class patched_clock:
 
 
 def _press(lane: int, t: float, hand: str = "right"):
-    from rehab.hardware.fsr_detector import PressEvent
+    from finger_rehab.hardware.fsr_detector import PressEvent
     return PressEvent(lane=lane, t_perf=t, value=600, baseline=50.0,
                       hand=hand)
 
@@ -129,8 +129,8 @@ def make_engine(hand_mode: str, data_dir: str):
     """A real GameEngine on a fake board rig, screens built, reports
     off (chart generation is minutes of matplotlib the assertions
     never read), stim cues on their shipped defaults."""
-    from rehab.config import Config
-    from rehab.game.engine import GameEngine
+    from finger_rehab.config import Config
+    from finger_rehab.game.engine import GameEngine
     cfg = Config.load()
     cfg.data["ui"]["resolution"] = [1280, 800]
     cfg.data.setdefault("bilateral", {})["hand"] = hand_mode
@@ -240,7 +240,7 @@ class LeftCalibrationProfileTests(unittest.TestCase):
     must NOT register once the profile is applied."""
 
     def _engine_with_left_profile(self, td: str, gap: float):
-        from rehab.hardware.calibration_profile import CalibrationProfile
+        from finger_rehab.hardware.calibration_profile import CalibrationProfile
         eng = make_engine("left", td)
         prof = CalibrationProfile(
             hand="left",
@@ -350,9 +350,9 @@ class ScreenMirrorTests(unittest.TestCase):
         # The corner note is for the child whose input IS the
         # keyboard, so these tests need the keyboard source, not the
         # fake board rig make_engine builds.
-        from rehab.config import Config
-        from rehab.game.engine import GameEngine
-        from rehab.hardware.keyboard_source import KeyboardOnlySource
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
         cfg = Config.load()
         cfg.data["ui"]["resolution"] = [1280, 800]
         cfg.data.setdefault("bilateral", {})["hand"] = hand_mode
@@ -405,7 +405,7 @@ class ScreenMirrorTests(unittest.TestCase):
     def test_syllables_screen_keeps_no_finger_row(self) -> None:
         # Basil's order, 7 Aug 2026: no finger or letter labels under
         # the blocks. The tiles must not quietly come back.
-        from rehab.ui.syllables_screen import SyllablesScreen
+        from finger_rehab.ui.syllables_screen import SyllablesScreen
         self.assertFalse(hasattr(SyllablesScreen, "_draw_finger_row"))
         self.assertFalse(hasattr(SyllablesScreen, "_finger_tiles"))
 
@@ -445,11 +445,11 @@ class KeyboardFallbackTests(unittest.TestCase):
 
     def _key_event(self, name: str):
         import pygame
-        from rehab.game.modes._keys import resolve_key
+        from finger_rehab.game.modes._keys import resolve_key
         return pygame.event.Event(pygame.KEYDOWN, key=resolve_key(name))
 
     def test_left_map_is_asdf_with_index_on_f(self) -> None:
-        from rehab.config import Config
+        from finger_rehab.config import Config
         cfg = Config.load()
         km = cfg.get("game.keyboard_map_left", {})
         self.assertEqual(km, {"f": 0, "d": 1, "s": 2, "a": 3})
@@ -750,7 +750,7 @@ class ModeHandMatrixTests(unittest.TestCase):
                 self._assert_block_end_clean(eng)
 
     def test_rhythm_matrix(self) -> None:
-        from rehab.audio.beatmap import procedural_beatmap
+        from finger_rehab.audio.beatmap import procedural_beatmap
         for hand_mode in ("left", "right", "both"):
             with self.subTest(hand=hand_mode), \
                     tempfile.TemporaryDirectory() as td, \
@@ -798,7 +798,7 @@ class CalibrationSurvivesRebuildTests(unittest.TestCase):
     defaults while the metadata still recorded the calibration."""
 
     def _profile(self, hand: str, gap: float):
-        from rehab.hardware.calibration_profile import CalibrationProfile
+        from finger_rehab.hardware.calibration_profile import CalibrationProfile
         return CalibrationProfile(
             hand=hand,
             empty=[10.0] * 4, empty_noise=[2.0] * 4,
@@ -859,7 +859,7 @@ class PrepCountdownTests(unittest.TestCase):
     begins."""
 
     def test_shipped_default_is_three_seconds(self) -> None:
-        from rehab.config import Config
+        from finger_rehab.config import Config
         cfg = Config.load()
         self.assertEqual(float(cfg.get("game.start_countdown_s")), 3.0)
 
@@ -895,7 +895,7 @@ class PrepCountdownTests(unittest.TestCase):
             eng.finish_block()
 
     def test_rhythm_reads_the_same_config_key(self) -> None:
-        from rehab.audio.beatmap import procedural_beatmap
+        from finger_rehab.audio.beatmap import procedural_beatmap
         with tempfile.TemporaryDirectory() as td:
             eng = make_engine("right", td)
             bm = procedural_beatmap(bpm=120, beats=8, num_lanes=4)
@@ -957,7 +957,7 @@ class Pattern8SequenceTests(unittest.TestCase):
                          f"a transition repeats in {seq}")
 
     def test_trained_cycle_properties_across_seeds(self) -> None:
-        from rehab.game.modes.pattern import build_sequences
+        from finger_rehab.game.modes.pattern import build_sequences
         for seed in (1, 7, 1234, 99991):
             trained, pool = build_sequences(seed, n_lanes=8)
             with self.subTest(seed=seed):
@@ -966,13 +966,13 @@ class Pattern8SequenceTests(unittest.TestCase):
                     self._props(p)
 
     def test_each_hand_gets_exactly_half_of_every_cycle(self) -> None:
-        from rehab.game.modes.pattern import build_sequences
+        from finger_rehab.game.modes.pattern import build_sequences
         for seed in (1, 7, 1234):
             trained, _ = build_sequences(seed, n_lanes=8)
             self.assertEqual(sum(1 for l in trained if l >= 4), 12)
 
     def test_probes_share_no_second_order_structure(self) -> None:
-        from rehab.game.modes.pattern import build_sequences, shared_triplets
+        from finger_rehab.game.modes.pattern import build_sequences, shared_triplets
         for seed in (1, 7, 1234):
             trained, pool = build_sequences(seed, n_lanes=8)
             self.assertGreaterEqual(len(pool), 2)
@@ -981,7 +981,7 @@ class Pattern8SequenceTests(unittest.TestCase):
                                      "probe leaks trained structure")
 
     def test_material_is_stable_for_a_participant(self) -> None:
-        from rehab.game.modes.pattern import build_sequences
+        from finger_rehab.game.modes.pattern import build_sequences
         a = build_sequences(4242, n_lanes=8)
         b = build_sequences(4242, n_lanes=8)
         self.assertEqual(a, b)
@@ -991,7 +991,7 @@ class Pattern8SequenceTests(unittest.TestCase):
         # the generator always produced, or their cross-session curves
         # break the day the app updates.
         import random
-        from rehab.game.modes.pattern import build_sequences, generate_soc
+        from finger_rehab.game.modes.pattern import build_sequences, generate_soc
         for seed in (1, 7, 1234):
             trained, _ = build_sequences(seed, n_lanes=4)
             legacy = generate_soc(random.Random(seed))

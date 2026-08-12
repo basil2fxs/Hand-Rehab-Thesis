@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pytest
 
-from rehab.hardware.calibration_profile import (
+from finger_rehab.hardware.calibration_profile import (
     CalibrationProfile, N_FINGERS, PRESS_FRACTION, MIN_USABLE_GAP,
 )
 
@@ -72,7 +72,7 @@ class TestProfileMaths:
         lifting off the device. It latches for the rest of the block and
         every later trial on it is scored a miss, which reads as a
         paralysed finger rather than a threshold fault."""
-        from rehab.hardware.calibration_profile import DETECTOR_HYSTERESIS
+        from finger_rehab.hardware.calibration_profile import DETECTOR_HYSTERESIS
         for gap in range(MIN_USABLE_GAP, 200, 3):
             for noise in (0.2, 1.1, 3.0):
                 for preload in (0.0, 2.5, 30.7):
@@ -89,7 +89,7 @@ class TestProfileMaths:
     def test_latching_does_not_happen_end_to_end(self):
         """Drive the real detector: press, then rest, and confirm the
         finger actually releases."""
-        from rehab.hardware.fsr_detector import Calibration, FSRDetector
+        from finger_rehab.hardware.fsr_detector import Calibration, FSRDetector
         p = make_profile()
         cal = Calibration(num_sensors=4, on_delta=p.on_delta(),
                           off_delta=p.off_delta(), baseline_alpha=0.0005,
@@ -212,7 +212,7 @@ class TestBuzzerChannelMap:
     different channel, because the sketch is not being changed."""
 
     def _engine(self, channel_map):
-        from rehab.game.engine import GameEngine
+        from finger_rehab.game.engine import GameEngine
 
         class Cfg:
             def __init__(self, cmap):
@@ -267,10 +267,10 @@ class TestScreenFlow:
         import pygame
         pygame.init()
         pygame.font.init()
-        from rehab.game.engine import GameEngine
-        from rehab.ui.theme import THEMES
-        from rehab.ui.widgets import Layout
-        from rehab.ui.calibration_screen import CalibrationScreen
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.ui.theme import THEMES
+        from finger_rehab.ui.widgets import Layout
+        from finger_rehab.ui.calibration_screen import CalibrationScreen
 
         sent = []
 
@@ -307,7 +307,7 @@ class TestScreenFlow:
             screen.on_sample(0.0, values)
 
     def test_flow_reaches_review_with_a_saveable_profile(self):
-        import rehab.ui.calibration_screen as cs
+        import finger_rehab.ui.calibration_screen as cs
         screen, _ = self._screen()
         screen._begin()
         assert screen.step == cs.STEP_EMPTY
@@ -344,7 +344,7 @@ class TestScreenFlow:
     def test_a_finger_that_barely_moves_does_not_advance(self):
         """The therapist is asked to press again rather than being let
         through with a threshold that will not work."""
-        import rehab.ui.calibration_screen as cs
+        import finger_rehab.ui.calibration_screen as cs
         screen, _ = self._screen()
         screen._begin()
         screen.profile.resting = list(EMPTY)
@@ -357,7 +357,7 @@ class TestScreenFlow:
         assert screen.step == cs.STEP_PRESS
 
     def test_no_samples_reports_a_disconnected_device(self):
-        import rehab.ui.calibration_screen as cs
+        import finger_rehab.ui.calibration_screen as cs
         screen, _ = self._screen()
         screen._begin()
         screen._start_collecting(0.0)
@@ -371,7 +371,7 @@ class TestScreenFlow:
         assert screen._buffer == []
 
     def test_buzz_sends_the_channel_under_test(self):
-        import rehab.ui.calibration_screen as cs
+        import finger_rehab.ui.calibration_screen as cs
         screen, sent = self._screen()
         screen.step = cs.STEP_BUZZ
         screen.buzz_channel = 3
@@ -392,7 +392,7 @@ class TestScreenFlow:
         assert cmap[2] == 3 and cmap[3] == 4
 
     def test_every_step_has_an_instruction(self):
-        import rehab.ui.calibration_screen as cs
+        import finger_rehab.ui.calibration_screen as cs
         screen, _ = self._screen()
         for step in (cs.STEP_INTRO, cs.STEP_EMPTY, cs.STEP_RESTING,
                      cs.STEP_PRESS, cs.STEP_ALL, cs.STEP_BUZZ,
@@ -403,7 +403,7 @@ class TestScreenFlow:
 
     def test_back_is_offered_at_every_step(self):
         """Nobody gets trapped part way through the flow."""
-        import rehab.ui.calibration_screen as cs
+        import finger_rehab.ui.calibration_screen as cs
         for step in (cs.STEP_INTRO, cs.STEP_EMPTY, cs.STEP_RESTING,
                      cs.STEP_PRESS, cs.STEP_ALL, cs.STEP_BUZZ,
                      cs.STEP_REVIEW):
@@ -415,8 +415,8 @@ class TestScreenFlow:
 
 class TestApplyToEngine:
     def test_apply_writes_thresholds_and_primes_the_baseline(self):
-        from rehab.game.engine import GameEngine
-        from rehab.hardware.fsr_detector import Calibration, FSRDetector
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.hardware.fsr_detector import Calibration, FSRDetector
 
         det = FSRDetector(Calibration(num_sensors=4))
         e = GameEngine.__new__(GameEngine)
@@ -434,8 +434,8 @@ class TestApplyToEngine:
         assert e.calibration_profile is prof
 
     def test_stamp_writes_the_profile_into_session_metadata(self):
-        from rehab.game.engine import GameEngine
-        from rehab.data.session import Session
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.data.session import Session
 
         e = GameEngine.__new__(GameEngine)
         e.session = Session(participant="T1")
@@ -445,8 +445,8 @@ class TestApplyToEngine:
             e.calibration_profile.on_delta()
 
     def test_stamp_is_empty_when_nothing_was_calibrated(self):
-        from rehab.game.engine import GameEngine
-        from rehab.data.session import Session
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.data.session import Session
 
         e = GameEngine.__new__(GameEngine)
         e.session = Session(participant="T1")
@@ -467,10 +467,10 @@ class TestReviewFixes:
         # Writes must never land in the repository. resolve_path below
         # sends everything under this temp root.
         root = Path(root or tempfile.mkdtemp(prefix="cal-test-"))
-        from rehab.game.engine import GameEngine
-        from rehab.ui.theme import THEMES
-        from rehab.ui.widgets import Layout
-        from rehab.ui.calibration_screen import CalibrationScreen
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.ui.theme import THEMES
+        from finger_rehab.ui.widgets import Layout
+        from finger_rehab.ui.calibration_screen import CalibrationScreen
 
         sent = []
 
@@ -578,7 +578,7 @@ class TestReviewFixes:
         """Without this the next participant opened straight onto the
         previous participant's review table, where the only buttons were
         Done and Back."""
-        import rehab.ui.calibration_screen as cs
+        import finger_rehab.ui.calibration_screen as cs
         s, _ = self._screen()
         s.step = cs.STEP_REVIEW
         s._saved_path = Path("x")
@@ -593,7 +593,7 @@ class TestReviewFixes:
         """Leaving used to keep _collecting True with a part-filled
         buffer, which the next visit's first update() wrote in as though
         the step had completed."""
-        import rehab.ui.calibration_screen as cs
+        import finger_rehab.ui.calibration_screen as cs
         s, _ = self._screen()
         s._begin()
         s._start_collecting(5.0)
@@ -611,7 +611,7 @@ class TestReviewFixes:
         """max() over the window meant a single corrupt I2C frame reading
         800 counts became the press level, and the threshold derived from
         it was one the finger could never reach."""
-        import rehab.ui.calibration_screen as cs
+        import finger_rehab.ui.calibration_screen as cs
         s, _ = self._screen()
         s._begin()
         s.profile.resting = [245.0] * 4
@@ -626,7 +626,7 @@ class TestReviewFixes:
             f"outlier set the press level: {s.profile.press[0]}")
 
     def test_percentile_helper(self):
-        from rehab.ui.calibration_screen import _percentile
+        from finger_rehab.ui.calibration_screen import _percentile
         assert _percentile([], 0.95) == 0.0
         assert _percentile([5.0], 0.95) == 5.0
         assert _percentile([1, 2, 3, 4, 5], 0.0) == 1.0
@@ -640,7 +640,7 @@ class TestReviewFixes:
         stop time and the motor runs once, not four times. A single
         150 ms pulse is easy for an impaired hand to miss, and a missed
         pulse is recorded as felt nothing."""
-        import rehab.ui.calibration_screen as cs
+        import finger_rehab.ui.calibration_screen as cs
         s, sent = self._screen()
         s.step = cs.STEP_BUZZ
         s.buzz_channel = 2
@@ -651,8 +651,8 @@ class TestReviewFixes:
 
 class TestEngineApplicationFixes:
     def _engine(self, hands=("right", "left")):
-        from rehab.game.engine import GameEngine
-        from rehab.hardware.fsr_detector import Calibration, FSRDetector
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.hardware.fsr_detector import Calibration, FSRDetector
 
         class Cfg:
             def __init__(self):
@@ -672,7 +672,7 @@ class TestEngineApplicationFixes:
         detectors pushed the calibrated hand's thresholds onto the other
         hand's differently-placed sensors, where the same counts are a
         different fraction of that hand's travel."""
-        from rehab.game.engine import GameEngine
+        from finger_rehab.game.engine import GameEngine
         e = self._engine()
         before = list(e.detectors["left"].cal.on_delta)
         prof = make_profile()
@@ -688,7 +688,7 @@ class TestEngineApplicationFixes:
         hand. On a bilateral rig the affected hand would then run on the
         unaffected hand's numbers, which it cannot reach, and every one of
         its trials would score a miss."""
-        from rehab.game.engine import GameEngine
+        from finger_rehab.game.engine import GameEngine
         e = self._engine()
         prof = make_profile()
         prof.hand = "right"
@@ -701,8 +701,8 @@ class TestEngineApplicationFixes:
         forces both hands, _ensure_both_detectors fills a missing side).
         The calibration has to be re-applied or it silently reverts while
         the session metadata still records it as active."""
-        from rehab.game.engine import GameEngine
-        from rehab.hardware.fsr_detector import Calibration, FSRDetector
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.hardware.fsr_detector import Calibration, FSRDetector
         e = self._engine()
         prof = make_profile()
         prof.hand = "right"
@@ -714,8 +714,8 @@ class TestEngineApplicationFixes:
         assert list(e.detectors["right"].cal.on_delta) == prof.on_delta()
 
     def test_two_hands_keep_separate_thresholds(self):
-        from rehab.game.engine import GameEngine
-        from rehab.hardware.fsr_detector import Calibration, FSRDetector
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.hardware.fsr_detector import Calibration, FSRDetector
         e = self._engine()
         right = make_profile(); right.hand = "right"
         left = CalibrationProfile(
@@ -732,7 +732,7 @@ class TestEngineApplicationFixes:
         assert right.on_delta() != left.on_delta()
 
     def test_both_hands_are_primed(self):
-        from rehab.game.engine import GameEngine
+        from finger_rehab.game.engine import GameEngine
         e = self._engine()
         for hand, gaps in (("right", (49, 32, 30, 115)),
                            ("left", (70, 60, 55, 80))):
@@ -749,7 +749,7 @@ class TestEngineApplicationFixes:
         assert e.detectors["left"].baseline[0] is not None
 
     def test_baselines_are_primed_from_the_calibrated_resting_level(self):
-        from rehab.game.engine import GameEngine
+        from finger_rehab.game.engine import GameEngine
         e = self._engine()
         prof = make_profile()
         prof.hand = "right"
@@ -763,7 +763,7 @@ class TestEngineApplicationFixes:
         that starts with the hand off the pads seeds the baseline from the
         empty device, so the hand landing reads as a rise and the first
         trials run under a lower effective trigger than the rest."""
-        from rehab.game.engine import GameEngine
+        from finger_rehab.game.engine import GameEngine
         e = self._engine()
         prof = make_profile()
         prof.hand = "right"
@@ -776,13 +776,13 @@ class TestEngineApplicationFixes:
                 prof.resting[i])
 
     def test_priming_without_a_profile_is_a_no_op(self):
-        from rehab.game.engine import GameEngine
+        from finger_rehab.game.engine import GameEngine
         e = self._engine()
         GameEngine._prime_baselines(e)
         assert e.detectors["right"].baseline[0] is None
 
     def test_missing_detector_for_the_hand_does_not_crash(self):
-        from rehab.game.engine import GameEngine
+        from finger_rehab.game.engine import GameEngine
         e = self._engine(hands=("right",))
         prof = make_profile()
         prof.hand = "left"
@@ -813,7 +813,7 @@ class TestUnreachableTrigger:
         assert p.on_delta() == [20, 13, 15, 46]
 
     def test_no_usable_profile_has_an_unreachable_trigger(self):
-        from rehab.hardware.calibration_profile import MAX_TRIGGER_FRACTION
+        from finger_rehab.hardware.calibration_profile import MAX_TRIGGER_FRACTION
         for gap in range(20, 160, 4):
             for preload in (0.0, 5.0, 15.0, 30.7, 60.0):
                 p = self._profile([gap] * 4, [preload] * 4)

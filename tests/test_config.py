@@ -19,7 +19,7 @@ class DottedGetTests(unittest.TestCase):
     intermediate types, and empty keys without crashing."""
 
     def _cfg(self, data):
-        from rehab.config import Config
+        from finger_rehab.config import Config
         return Config(data=data)
 
     def test_simple_key(self) -> None:
@@ -63,24 +63,24 @@ class MergeBehaviourTests(unittest.TestCase):
     override replace the base. Lists are NOT concatenated."""
 
     def test_override_adds_new_keys(self) -> None:
-        from rehab.config import _merge
+        from finger_rehab.config import _merge
         out = _merge({"a": 1}, {"b": 2})
         self.assertEqual(out, {"a": 1, "b": 2})
 
     def test_override_replaces_scalar(self) -> None:
-        from rehab.config import _merge
+        from finger_rehab.config import _merge
         out = _merge({"a": 1}, {"a": 99})
         self.assertEqual(out, {"a": 99})
 
     def test_nested_dicts_merge_deeply(self) -> None:
-        from rehab.config import _merge
+        from finger_rehab.config import _merge
         out = _merge({"a": {"b": 1, "c": 2}}, {"a": {"b": 99}})
         self.assertEqual(out, {"a": {"b": 99, "c": 2}})
 
     def test_lists_are_replaced_not_concatenated(self) -> None:
         # A therapist who overrides on_delta should get their list,
         # not their list appended to the default.
-        from rehab.config import _merge
+        from finger_rehab.config import _merge
         out = _merge({"on_delta": [45, 90, 45, 45]},
                       {"on_delta": [60, 60]})
         self.assertEqual(out["on_delta"], [60, 60])
@@ -88,12 +88,12 @@ class MergeBehaviourTests(unittest.TestCase):
     def test_scalar_replaces_dict_in_override(self) -> None:
         # If the override has a scalar where the default had a dict,
         # the scalar wins. Unusual but defensible.
-        from rehab.config import _merge
+        from finger_rehab.config import _merge
         out = _merge({"a": {"b": 1}}, {"a": 99})
         self.assertEqual(out, {"a": 99})
 
     def test_dict_replaces_scalar_in_override(self) -> None:
-        from rehab.config import _merge
+        from finger_rehab.config import _merge
         out = _merge({"a": 1}, {"a": {"b": 2}})
         self.assertEqual(out, {"a": {"b": 2}})
 
@@ -102,7 +102,7 @@ class LoadOverrideTests(unittest.TestCase):
     """Config.load merges a YAML override file onto the defaults."""
 
     def test_override_merges_onto_default(self) -> None:
-        from rehab.config import Config
+        from finger_rehab.config import Config
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "user.yaml"
             path.write_text("game:\n  trigger_interval_s: 2.5\n")
@@ -114,7 +114,7 @@ class LoadOverrideTests(unittest.TestCase):
             self.assertEqual(cfg.source, path)
 
     def test_load_without_override_uses_defaults(self) -> None:
-        from rehab.config import Config
+        from finger_rehab.config import Config
         cfg = Config.load()
         self.assertIsNotNone(cfg.get("game.mode"))
 
@@ -124,31 +124,31 @@ class ResolvePathTests(unittest.TestCase):
     asset paths to PROJECT_ROOT. Absolute paths pass through."""
 
     def test_absolute_path_returns_unchanged(self) -> None:
-        from rehab.config import Config
+        from finger_rehab.config import Config
         cfg = Config()
         abs_path = Path("/tmp/foo.csv")
         self.assertEqual(cfg.resolve_path(abs_path), abs_path)
 
     def test_sessions_routes_to_user_root(self) -> None:
-        from rehab.config import Config, USER_ROOT
+        from finger_rehab.config import Config, USER_ROOT
         cfg = Config()
         got = cfg.resolve_path("sessions/foo.csv")
         self.assertTrue(str(got).startswith(str(USER_ROOT)))
 
     def test_logs_routes_to_user_root(self) -> None:
-        from rehab.config import Config, USER_ROOT
+        from finger_rehab.config import Config, USER_ROOT
         cfg = Config()
         got = cfg.resolve_path("logs/app.log")
         self.assertTrue(str(got).startswith(str(USER_ROOT)))
 
     def test_calibration_routes_to_user_root(self) -> None:
-        from rehab.config import Config, USER_ROOT
+        from finger_rehab.config import Config, USER_ROOT
         cfg = Config()
         got = cfg.resolve_path("config/calibration/user.json")
         self.assertTrue(str(got).startswith(str(USER_ROOT)))
 
     def test_assets_routes_to_project_root(self) -> None:
-        from rehab.config import Config, PROJECT_ROOT
+        from finger_rehab.config import Config, PROJECT_ROOT
         cfg = Config()
         got = cfg.resolve_path("assets/music/song.mp3")
         self.assertTrue(str(got).startswith(str(PROJECT_ROOT)))
@@ -163,10 +163,10 @@ class SaveUserOverridesTests(unittest.TestCase):
         import tempfile
         from pathlib import Path
         from unittest import mock
-        from rehab.config import Config
+        from finger_rehab.config import Config
         with tempfile.TemporaryDirectory() as td:
             override = Path(td) / "user_settings.yaml"
-            with mock.patch("rehab.config.USER_OVERRIDES", override):
+            with mock.patch("finger_rehab.config.USER_OVERRIDES", override):
                 cfg = Config(data={"serial": {"left_port": None,
                                                  "right_port": None}})
                 cfg.save_user_overrides({
@@ -187,7 +187,7 @@ class SaveUserOverridesTests(unittest.TestCase):
         import tempfile
         from pathlib import Path
         from unittest import mock
-        from rehab.config import Config
+        from finger_rehab.config import Config
         with tempfile.TemporaryDirectory() as td:
             override = Path(td) / "user_settings.yaml"
             override.write_text(
@@ -196,7 +196,7 @@ class SaveUserOverridesTests(unittest.TestCase):
                 "audio:\n"
                 "  master_volume: 0.5\n"
             )
-            with mock.patch("rehab.config.USER_OVERRIDES", override):
+            with mock.patch("finger_rehab.config.USER_OVERRIDES", override):
                 cfg = Config(data={})
                 cfg.save_user_overrides(
                     {"serial.right_port": "/dev/cu.NEW"})
@@ -210,10 +210,10 @@ class SaveUserOverridesTests(unittest.TestCase):
         import tempfile
         from pathlib import Path
         from unittest import mock
-        from rehab.config import Config
+        from finger_rehab.config import Config
         with tempfile.TemporaryDirectory() as td:
             override = Path(td) / "user_settings.yaml"
-            with mock.patch("rehab.config.USER_OVERRIDES", override):
+            with mock.patch("finger_rehab.config.USER_OVERRIDES", override):
                 Config(data={}).save_user_overrides(
                     {"serial.left_port": "/dev/cu.X"})
             tmps = list(Path(td).glob("*.tmp"))
@@ -228,7 +228,7 @@ class ResolvePathPrefixRegressionTests(unittest.TestCase):
     but the routing should be correct everywhere."""
 
     def test_sessions_old_routes_to_project_root(self) -> None:
-        from rehab.config import Config, PROJECT_ROOT, USER_ROOT
+        from finger_rehab.config import Config, PROJECT_ROOT, USER_ROOT
         cfg = Config()
         got = cfg.resolve_path("sessions_old/foo.csv")
         # When USER_ROOT == PROJECT_ROOT (source checkout) both starts
@@ -242,7 +242,7 @@ class ResolvePathPrefixRegressionTests(unittest.TestCase):
         self.assertIn("sessions_old", got.parts)
 
     def test_logs_archive_routes_to_project_root(self) -> None:
-        from rehab.config import Config, PROJECT_ROOT, USER_ROOT
+        from finger_rehab.config import Config, PROJECT_ROOT, USER_ROOT
         cfg = Config()
         got = cfg.resolve_path("logs_archive/old.log")
         if USER_ROOT != PROJECT_ROOT:
@@ -252,7 +252,7 @@ class ResolvePathPrefixRegressionTests(unittest.TestCase):
     def test_config_other_routes_to_project_root(self) -> None:
         # 'config/calibration' is writable but 'config/themes' must not
         # match - same string-prefix trap if someone gets sloppy.
-        from rehab.config import Config, PROJECT_ROOT, USER_ROOT
+        from finger_rehab.config import Config, PROJECT_ROOT, USER_ROOT
         cfg = Config()
         got = cfg.resolve_path("config/themes/dark.yaml")
         if USER_ROOT != PROJECT_ROOT:

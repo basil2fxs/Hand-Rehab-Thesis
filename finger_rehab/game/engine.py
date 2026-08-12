@@ -4839,7 +4839,7 @@ class GameEngine:
         row says which fingers the chord asked for, not just the one
         the row is keyed on; None keeps the single-lane default.
 
-        `continuous` is a ContinuousTrialLog (rehab.data.logger) for
+        `continuous` is a ContinuousTrialLog (finger_rehab.data.logger) for
         trials whose stimulus is a trajectory or a timed pulse rather
         than a lane highlight. It fills the waveform, waveform_params,
         waveform_seed and segment_times columns; None leaves all four

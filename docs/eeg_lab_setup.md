@@ -10,7 +10,7 @@ task with it.
 
 - `eeg.enabled: true`: every stimulus, response, boundary and pause
   writes a single-byte marker to the trigger box (code map in
-  `rehab/hardware/eeg_trigger.py`, `CODES`), 10 ms high then reset
+  `finger_rehab/hardware/eeg_trigger.py`, `CODES`), 10 ms high then reset
   to 0, and one `eeg` event row in the session's raw.csv carrying the
   intended-event time and the actual wire time on the same clock as
   the force samples.

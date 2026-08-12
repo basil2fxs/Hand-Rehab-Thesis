@@ -12,14 +12,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 class BeatmapTests(unittest.TestCase):
     def test_procedural_beatmap_is_sorted(self) -> None:
-        from rehab.audio.beatmap import procedural_beatmap
+        from finger_rehab.audio.beatmap import procedural_beatmap
         bm = procedural_beatmap(bpm=120, beats=16, difficulty="hard")
         times = [n.t for n in bm.notes]
         self.assertEqual(times, sorted(times))
         self.assertGreater(len(bm.notes), 0)
 
     def test_difficulty_stride_reduces_note_count(self) -> None:
-        from rehab.audio.beatmap import procedural_beatmap
+        from finger_rehab.audio.beatmap import procedural_beatmap
         hard = procedural_beatmap(bpm=120, beats=16, difficulty="hard")
         med = procedural_beatmap(bpm=120, beats=16, difficulty="medium")
         easy = procedural_beatmap(bpm=120, beats=16, difficulty="easy")
@@ -27,15 +27,15 @@ class BeatmapTests(unittest.TestCase):
         self.assertGreaterEqual(len(med.notes), len(easy.notes))
 
     def test_rejects_zero_bpm(self) -> None:
-        from rehab.audio.beatmap import procedural_beatmap
+        from finger_rehab.audio.beatmap import procedural_beatmap
         with self.assertRaises(ValueError):
             procedural_beatmap(bpm=0, beats=16)
 
 
 class SchedulerTests(unittest.TestCase):
     def test_notes_due_yields_each_note_once(self) -> None:
-        from rehab.audio.beatmap import procedural_beatmap
-        from rehab.audio.scheduler import BeatScheduler
+        from finger_rehab.audio.beatmap import procedural_beatmap
+        from finger_rehab.audio.scheduler import BeatScheduler
         bm = procedural_beatmap(bpm=120, beats=8, difficulty="hard")
         sched = BeatScheduler(bm)
         # Walk time forward in big jumps. Each note should fire exactly once.
@@ -49,7 +49,7 @@ class SchedulerTests(unittest.TestCase):
 
 class LibrosaIntegrationTests(unittest.TestCase):
     def test_extract_beatmap_falls_back_when_audio_missing(self) -> None:
-        from rehab.audio.beatmap import extract_beatmap
+        from finger_rehab.audio.beatmap import extract_beatmap
         # Point at a nonexistent file. The extractor should fall back to
         # a procedural map rather than crash.
         bm = extract_beatmap("/nonexistent/song.mp3", difficulty="medium")
@@ -64,7 +64,7 @@ class LibrosaIntegrationTests(unittest.TestCase):
         import tempfile
         import numpy as np
         import soundfile as sf
-        from rehab.audio.beatmap import extract_beatmap
+        from finger_rehab.audio.beatmap import extract_beatmap
         sr = 22050
         duration_s = 6.0
         period = 60.0 / 120.0       # 120 BPM = 0.5s between clicks
@@ -91,7 +91,7 @@ class LibrosaIntegrationTests(unittest.TestCase):
             Path(wav_path).unlink(missing_ok=True)
 
     def test_coerce_scalar_handles_numpy_arrays(self) -> None:
-        from rehab.audio.beatmap import _coerce_scalar
+        from finger_rehab.audio.beatmap import _coerce_scalar
         try:
             import numpy as np
         except ImportError:
@@ -108,46 +108,46 @@ class ClassifyOffsetBoundaryTests(unittest.TestCase):
     score so the windows need exact-equality tests."""
 
     def test_at_perfect_boundary_returns_perfect(self) -> None:
-        from rehab.game.scoring import RhythmWindows, classify_offset
+        from finger_rehab.game.scoring import RhythmWindows, classify_offset
         w = RhythmWindows()       # perfect_ms=50
         self.assertEqual(classify_offset(50.0, w)[0], "Perfect")
         self.assertEqual(classify_offset(-50.0, w)[0], "Perfect")
 
     def test_just_past_perfect_returns_great(self) -> None:
-        from rehab.game.scoring import RhythmWindows, classify_offset
+        from finger_rehab.game.scoring import RhythmWindows, classify_offset
         w = RhythmWindows()
         self.assertEqual(classify_offset(50.01, w)[0], "Great")
 
     def test_at_great_boundary_returns_great(self) -> None:
-        from rehab.game.scoring import RhythmWindows, classify_offset
+        from finger_rehab.game.scoring import RhythmWindows, classify_offset
         w = RhythmWindows()       # great_ms=100
         self.assertEqual(classify_offset(100.0, w)[0], "Great")
         self.assertEqual(classify_offset(-100.0, w)[0], "Great")
 
     def test_at_good_boundary_returns_good(self) -> None:
-        from rehab.game.scoring import RhythmWindows, classify_offset
+        from finger_rehab.game.scoring import RhythmWindows, classify_offset
         w = RhythmWindows()       # good_ms=175
         self.assertEqual(classify_offset(175.0, w)[0], "Good")
         self.assertEqual(classify_offset(-175.0, w)[0], "Good")
 
     def test_positive_offset_past_good_is_late(self) -> None:
-        from rehab.game.scoring import RhythmWindows, classify_offset
+        from finger_rehab.game.scoring import RhythmWindows, classify_offset
         w = RhythmWindows()
         self.assertEqual(classify_offset(200.0, w)[0], "Late")
 
     def test_negative_offset_past_good_is_early(self) -> None:
-        from rehab.game.scoring import RhythmWindows, classify_offset
+        from finger_rehab.game.scoring import RhythmWindows, classify_offset
         w = RhythmWindows()
         self.assertEqual(classify_offset(-200.0, w)[0], "Early")
 
     def test_at_miss_boundary_still_late_or_early(self) -> None:
-        from rehab.game.scoring import RhythmWindows, classify_offset
+        from finger_rehab.game.scoring import RhythmWindows, classify_offset
         w = RhythmWindows()       # miss_ms=300
         self.assertEqual(classify_offset(300.0, w)[0], "Late")
         self.assertEqual(classify_offset(-300.0, w)[0], "Early")
 
     def test_past_miss_window_is_miss(self) -> None:
-        from rehab.game.scoring import RhythmWindows, classify_offset
+        from finger_rehab.game.scoring import RhythmWindows, classify_offset
         w = RhythmWindows()
         self.assertEqual(classify_offset(300.01, w)[0], "Miss")
         self.assertEqual(classify_offset(-301.0, w)[0], "Miss")
@@ -158,7 +158,7 @@ class ClassifyOffsetBoundaryTests(unittest.TestCase):
         # configurable point value rather than being implicitly
         # great_points + 1, so the custom cfg overrides both
         # independently.
-        from rehab.game.scoring import RhythmWindows, ScoreConfig, classify_offset
+        from finger_rehab.game.scoring import RhythmWindows, ScoreConfig, classify_offset
         w = RhythmWindows()
         cfg = ScoreConfig(perfect_points=15, great_points=10,
                            good_points=5, late_points=2)
@@ -184,9 +184,9 @@ class RhythmModePressMatchingTests(unittest.TestCase):
 
     def _make_mode(self):
         from unittest.mock import MagicMock
-        from rehab.audio.beatmap import Beatmap, Note
-        from rehab.game.modes.rhythm import RhythmMode
-        from rehab.game.scoring import RhythmWindows, ScoreConfig
+        from finger_rehab.audio.beatmap import Beatmap, Note
+        from finger_rehab.game.modes.rhythm import RhythmMode
+        from finger_rehab.game.scoring import RhythmWindows, ScoreConfig
         bm = Beatmap(notes=[
             Note(t=1.0, lane=0),
             Note(t=2.0, lane=0),
@@ -209,7 +209,7 @@ class RhythmModePressMatchingTests(unittest.TestCase):
         return mode, engine
 
     def test_press_in_wrong_lane_logged_as_unmatched(self) -> None:
-        from rehab.hardware.fsr_detector import PressEvent
+        from finger_rehab.hardware.fsr_detector import PressEvent
         mode, engine = self._make_mode()
         # Press in lane 2 at t=1.0; no note in lane 2.
         mode._t_start = (__import__("time").perf_counter() - 1.0)
@@ -222,7 +222,7 @@ class RhythmModePressMatchingTests(unittest.TestCase):
         # When two notes on the same lane are close together, the first
         # press should hit the nearer note and the second press should
         # match the OTHER one (not double-fire on the first).
-        from rehab.hardware.fsr_detector import PressEvent
+        from finger_rehab.hardware.fsr_detector import PressEvent
         import time as _t
         mode, engine = self._make_mode()
         # A press can only match a note the patient has already been
@@ -254,8 +254,8 @@ class RhythmModePressMatchingTests(unittest.TestCase):
         lag, not the patient being late. Uses a fake clock (the chords-
         mode pattern) to advance wall time between the press's own
         timestamp and the _score_press call without a real sleep."""
-        import rehab.game.modes.rhythm as rhythm_mod
-        from rehab.hardware.fsr_detector import PressEvent
+        import finger_rehab.game.modes.rhythm as rhythm_mod
+        from finger_rehab.hardware.fsr_detector import PressEvent
 
         class _Clock:
             def __init__(self, t0: float) -> None:
@@ -292,7 +292,7 @@ class RhythmModePressMatchingTests(unittest.TestCase):
         future note -- the patient's later, genuinely on-time press
         needs something to match."""
         import time as _t
-        from rehab.hardware.fsr_detector import PressEvent
+        from finger_rehab.hardware.fsr_detector import PressEvent
         mode, engine = self._make_mode()
         # Note at t=2.0 on lane 0 has NOT fired yet, and 400ms early is
         # outside the 175ms good window, so this must stay unmatched.
@@ -316,7 +316,7 @@ class RhythmModePressMatchingTests(unittest.TestCase):
         instead of scored. Anticipatory (early) pressing is the norm in
         sensorimotor synchronisation, not an error, so it must score."""
         import time as _t
-        from rehab.hardware.fsr_detector import PressEvent
+        from finger_rehab.hardware.fsr_detector import PressEvent
         mode, engine = self._make_mode()
         # Note at t=2.0 on lane 0 has NOT fired (scheduler._next is
         # still 0; notes_due() has never run). Press 100ms early, well
@@ -344,7 +344,7 @@ class RhythmModePressMatchingTests(unittest.TestCase):
         already been written by the window-expiry path, producing two
         trial rows -- and two misses -- for one note."""
         import time as _t
-        from rehab.hardware.fsr_detector import PressEvent
+        from finger_rehab.hardware.fsr_detector import PressEvent
         mode, engine = self._make_mode()
         note = next(s for s in mode.scheduler.scheduled if s.note.t == 1.0)
         note.fired = True          # notes_due() already cued this note
@@ -367,9 +367,9 @@ class RhythmPreSongLeadTests(unittest.TestCase):
 
     def _build(self, lead_s: float):
         from unittest.mock import MagicMock
-        from rehab.audio.beatmap import Beatmap, Note
-        from rehab.game.modes.rhythm import RhythmMode
-        from rehab.game.scoring import RhythmWindows, ScoreConfig
+        from finger_rehab.audio.beatmap import Beatmap, Note
+        from finger_rehab.game.modes.rhythm import RhythmMode
+        from finger_rehab.game.scoring import RhythmWindows, ScoreConfig
         bm = Beatmap(notes=[
             Note(t=0.5, lane=0),
             Note(t=1.0, lane=1),
@@ -417,9 +417,9 @@ class RhythmAudioOffsetCompensationTests(unittest.TestCase):
 
     def _make_mode(self, audio):
         from unittest.mock import MagicMock
-        from rehab.audio.beatmap import Beatmap, Note
-        from rehab.game.modes.rhythm import RhythmMode
-        from rehab.game.scoring import RhythmWindows, ScoreConfig
+        from finger_rehab.audio.beatmap import Beatmap, Note
+        from finger_rehab.game.modes.rhythm import RhythmMode
+        from finger_rehab.game.scoring import RhythmWindows, ScoreConfig
         bm = Beatmap(notes=[Note(t=1.0, lane=0)])
         engine = MagicMock()
         engine.audio = audio
@@ -440,7 +440,7 @@ class RhythmAudioOffsetCompensationTests(unittest.TestCase):
 
     def _press_on_the_beat(self, mode):
         import time as _t
-        from rehab.hardware.fsr_detector import PressEvent
+        from finger_rehab.hardware.fsr_detector import PressEvent
         mode._t_start = _t.perf_counter() - 1.0   # song_time ~= 1.0
         mode._score_press(PressEvent(lane=0, t_perf=_t.perf_counter(),
                                        value=0, baseline=0.0))
@@ -502,9 +502,9 @@ class RhythmCountdownPressQueueTests(unittest.TestCase):
 
     def _make_mode(self):
         from unittest.mock import MagicMock
-        from rehab.audio.beatmap import Beatmap, Note
-        from rehab.game.modes.rhythm import RhythmMode
-        from rehab.game.scoring import RhythmWindows, ScoreConfig
+        from finger_rehab.audio.beatmap import Beatmap, Note
+        from finger_rehab.game.modes.rhythm import RhythmMode
+        from finger_rehab.game.scoring import RhythmWindows, ScoreConfig
         bm = Beatmap(notes=[Note(t=1.0, lane=0)])
         engine = MagicMock()
         engine.audio = None
@@ -517,7 +517,7 @@ class RhythmCountdownPressQueueTests(unittest.TestCase):
         return RhythmMode(engine, bm, RhythmWindows(), ScoreConfig())
 
     def test_press_during_countdown_is_not_queued(self) -> None:
-        from rehab.hardware.fsr_detector import PressEvent
+        from finger_rehab.hardware.fsr_detector import PressEvent
         import time as _t
         mode = self._make_mode()
         self.assertFalse(mode._countdown_done)
@@ -526,7 +526,7 @@ class RhythmCountdownPressQueueTests(unittest.TestCase):
         self.assertEqual(len(mode._presses), 0)
 
     def test_press_after_countdown_is_queued_normally(self) -> None:
-        from rehab.hardware.fsr_detector import PressEvent
+        from finger_rehab.hardware.fsr_detector import PressEvent
         import time as _t
         mode = self._make_mode()
         mode._countdown_done = True
@@ -544,9 +544,9 @@ class RhythmMissWindowCloseRegressionTests(unittest.TestCase):
 
     def _build_mode(self):
         from unittest.mock import MagicMock
-        from rehab.audio.beatmap import Beatmap, Note
-        from rehab.game.modes.rhythm import RhythmMode
-        from rehab.game.scoring import RhythmWindows, ScoreConfig
+        from finger_rehab.audio.beatmap import Beatmap, Note
+        from finger_rehab.game.modes.rhythm import RhythmMode
+        from finger_rehab.game.scoring import RhythmWindows, ScoreConfig
         bm = Beatmap(notes=[Note(t=1.0, lane=2)])
         engine = MagicMock()
         engine.audio = None
@@ -581,11 +581,11 @@ class RhythmMissWindowCloseRegressionTests(unittest.TestCase):
         import tempfile
         from pathlib import Path
         from unittest.mock import MagicMock
-        from rehab.audio.beatmap import Note
-        from rehab.audio.scheduler import ScheduledNote
-        from rehab.data.logger import TrialLogger
-        from rehab.game.scoring import ScoreConfig
-        from rehab.game.engine import GameEngine
+        from finger_rehab.audio.beatmap import Note
+        from finger_rehab.audio.scheduler import ScheduledNote
+        from finger_rehab.data.logger import TrialLogger
+        from finger_rehab.game.scoring import ScoreConfig
+        from finger_rehab.game.engine import GameEngine
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "trials.csv"
             engine = GameEngine.__new__(GameEngine)
@@ -634,11 +634,11 @@ class RhythmMissWindowCloseRegressionTests(unittest.TestCase):
         import tempfile
         from pathlib import Path
         from unittest.mock import MagicMock
-        from rehab.audio.beatmap import Note
-        from rehab.audio.scheduler import ScheduledNote
-        from rehab.data.logger import TrialLogger
-        from rehab.game.scoring import ScoreConfig
-        from rehab.game.engine import GameEngine
+        from finger_rehab.audio.beatmap import Note
+        from finger_rehab.audio.scheduler import ScheduledNote
+        from finger_rehab.data.logger import TrialLogger
+        from finger_rehab.game.scoring import ScoreConfig
+        from finger_rehab.game.engine import GameEngine
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "trials.csv"
             engine = GameEngine.__new__(GameEngine)
@@ -683,7 +683,7 @@ class BeatmapEdgeCaseTests(unittest.TestCase):
     crash the rhythm mode."""
 
     def test_empty_beatmap_has_zero_duration(self) -> None:
-        from rehab.audio.beatmap import Beatmap
+        from finger_rehab.audio.beatmap import Beatmap
         bm = Beatmap(title="empty")
         self.assertEqual(bm.duration_s, 0.0)
         self.assertEqual(bm.notes, [])
@@ -692,7 +692,7 @@ class BeatmapEdgeCaseTests(unittest.TestCase):
         # If a caller passes a pattern that addresses lanes >= num_lanes,
         # those beats get dropped silently. Documents that quirk so a
         # future change doesn't accidentally accept lane 99.
-        from rehab.audio.beatmap import procedural_beatmap
+        from finger_rehab.audio.beatmap import procedural_beatmap
         bm = procedural_beatmap(
             bpm=120, beats=16, difficulty="hard",
             lane_pattern=[0, 1, 99],
@@ -702,12 +702,12 @@ class BeatmapEdgeCaseTests(unittest.TestCase):
             self.assertLess(n.lane, 4)
 
     def test_procedural_beatmap_minimum_one_beat(self) -> None:
-        from rehab.audio.beatmap import procedural_beatmap
+        from finger_rehab.audio.beatmap import procedural_beatmap
         bm = procedural_beatmap(bpm=120, beats=1, difficulty="hard")
         self.assertEqual(len(bm.notes), 1)
 
     def test_unknown_difficulty_defaults_to_medium_stride(self) -> None:
-        from rehab.audio.beatmap import procedural_beatmap
+        from finger_rehab.audio.beatmap import procedural_beatmap
         # "ultra-hard" isn't a known difficulty; should fall through to
         # the default stride (medium = every 2nd beat) without crashing.
         bm = procedural_beatmap(bpm=120, beats=16, difficulty="ultra-hard")
@@ -721,8 +721,8 @@ class SchedulerEdgeCaseTests(unittest.TestCase):
     even when nothing was generated."""
 
     def test_all_done_on_empty_beatmap_after_song_time_zero(self) -> None:
-        from rehab.audio.beatmap import Beatmap
-        from rehab.audio.scheduler import BeatScheduler
+        from finger_rehab.audio.beatmap import Beatmap
+        from finger_rehab.audio.scheduler import BeatScheduler
         sched = BeatScheduler(Beatmap(title="empty"))
         # duration_s = 0, no notes. all_done returns True for any
         # positive song time.
@@ -731,8 +731,8 @@ class SchedulerEdgeCaseTests(unittest.TestCase):
         self.assertEqual(sched.upcoming(0.0), [])
 
     def test_single_note_scheduler_yields_once_then_done(self) -> None:
-        from rehab.audio.beatmap import Beatmap, Note
-        from rehab.audio.scheduler import BeatScheduler
+        from finger_rehab.audio.beatmap import Beatmap, Note
+        from finger_rehab.audio.scheduler import BeatScheduler
         bm = Beatmap(notes=[Note(t=0.5, lane=0)])
         sched = BeatScheduler(bm)
         # Before t=0.5: nothing due, not all_done.
@@ -746,8 +746,8 @@ class SchedulerEdgeCaseTests(unittest.TestCase):
         self.assertTrue(sched.all_done(1.6))
 
     def test_reset_clears_fired_flags(self) -> None:
-        from rehab.audio.beatmap import Beatmap, Note
-        from rehab.audio.scheduler import BeatScheduler
+        from finger_rehab.audio.beatmap import Beatmap, Note
+        from finger_rehab.audio.scheduler import BeatScheduler
         bm = Beatmap(notes=[Note(t=0.1, lane=0)])
         sched = BeatScheduler(bm)
         list(sched.notes_due(1.0))      # fire it

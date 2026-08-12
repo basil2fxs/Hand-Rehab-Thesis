@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
 def _press(lane: int, t: float):
-    from rehab.hardware.fsr_detector import PressEvent
+    from finger_rehab.hardware.fsr_detector import PressEvent
     return PressEvent(lane=lane, t_perf=t, value=0, baseline=0.0,
                        hand="both")
 
@@ -43,8 +43,8 @@ class _Spy:
 
 def _build(spy: _Spy, pattern=None, repeat_count=1,
             trigger=0.5, timeout=1.0):
-    from rehab.game.modes.mirror import MirrorMode
-    from rehab.game.scoring import ScoreConfig
+    from finger_rehab.game.modes.mirror import MirrorMode
+    from finger_rehab.game.scoring import ScoreConfig
     return MirrorMode(
         engine=spy,
         pattern=pattern if pattern is not None else [0, 1, 2, 3],
@@ -312,10 +312,10 @@ class EnginePickPathTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.config import Config
-            from rehab.game.engine import GameEngine
-            from rehab.hardware.keyboard_source import KeyboardOnlySource
-            from rehab.ui.screens import ModeSelectScreen
+            from finger_rehab.config import Config
+            from finger_rehab.game.engine import GameEngine
+            from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
+            from finger_rehab.ui.screens import ModeSelectScreen
             cfg = Config.load()
             cfg.data["ui"]["resolution"] = [1280, 800]
             eng = GameEngine(cfg, KeyboardOnlySource(cfg))
@@ -349,9 +349,9 @@ class EndToEndMirrorBlockTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.config import Config
-            from rehab.game.engine import GameEngine
-            from rehab.hardware.keyboard_source import KeyboardOnlySource
+            from finger_rehab.config import Config
+            from finger_rehab.game.engine import GameEngine
+            from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
             cfg = Config.load()
             cfg.data["ui"]["resolution"] = [1280, 800]
             eng = GameEngine(cfg, KeyboardOnlySource(cfg))
@@ -400,9 +400,9 @@ class EndToEndMirrorBlockTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.config import Config
-            from rehab.game.engine import GameEngine
-            from rehab.hardware.keyboard_source import KeyboardOnlySource
+            from finger_rehab.config import Config
+            from finger_rehab.game.engine import GameEngine
+            from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
             cfg = Config.load()
             cfg.data["ui"]["resolution"] = [1280, 800]
             eng = GameEngine(cfg, KeyboardOnlySource(cfg))
@@ -450,10 +450,10 @@ class PerHandLoggingTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.config import Config
-            from rehab.game.engine import GameEngine
-            from rehab.hardware.keyboard_source import KeyboardOnlySource
-            from rehab.hardware.fsr_detector import PressEvent
+            from finger_rehab.config import Config
+            from finger_rehab.game.engine import GameEngine
+            from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
+            from finger_rehab.hardware.fsr_detector import PressEvent
 
             tmpdir = tempfile.mkdtemp()
             cfg = Config.load()
@@ -610,9 +610,9 @@ class BlockRtDoubleCountTests(unittest.TestCase):
         import pygame
         pygame.init()
         import tempfile
-        from rehab.config import Config
-        from rehab.game.engine import GameEngine
-        from rehab.hardware.keyboard_source import KeyboardOnlySource
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
         cfg = Config.load()
         cfg.data["ui"]["resolution"] = [1280, 800]
         cfg.data.setdefault("session", {})["data_dir"] = tempfile.mkdtemp()
@@ -630,7 +630,7 @@ class BlockRtDoubleCountTests(unittest.TestCase):
 
     def test_wrong_finger_miss_with_an_rt_does_not_inflate_rt_count(
             self) -> None:
-        from rehab.hardware.fsr_detector import PressEvent
+        from finger_rehab.hardware.fsr_detector import PressEvent
         eng, pygame = self._real_engine()
         try:
             eng.begin_mirror_block()
@@ -685,9 +685,9 @@ class MirrorBlockSummarySectionTests(unittest.TestCase):
         import pygame
         pygame.init()
         import tempfile
-        from rehab.config import Config
-        from rehab.game.engine import GameEngine
-        from rehab.hardware.keyboard_source import KeyboardOnlySource
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
         cfg = Config.load()
         cfg.data["ui"]["resolution"] = [1280, 800]
         cfg.data.setdefault("session", {})["data_dir"] = tempfile.mkdtemp()
@@ -704,7 +704,7 @@ class MirrorBlockSummarySectionTests(unittest.TestCase):
         return eng, pygame
 
     def test_block_summary_carries_mirror_sync_section(self) -> None:
-        from rehab.hardware.fsr_detector import PressEvent
+        from finger_rehab.hardware.fsr_detector import PressEvent
         eng, pygame = self._real_engine()
         try:
             eng.begin_mirror_block()
@@ -757,10 +757,10 @@ class KeyboardPressRawLoggingTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.config import Config
-            from rehab.game.engine import GameEngine
-            from rehab.hardware.keyboard_source import KeyboardOnlySource
-            from rehab.game.modes._keys import resolve_key
+            from finger_rehab.config import Config
+            from finger_rehab.game.engine import GameEngine
+            from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
+            from finger_rehab.game.modes._keys import resolve_key
 
             tmpdir = tempfile.mkdtemp()
             cfg = Config.load()

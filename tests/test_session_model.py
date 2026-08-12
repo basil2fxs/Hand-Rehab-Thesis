@@ -42,9 +42,9 @@ class _SessionHarness(unittest.TestCase):
     def setUp(self) -> None:
         import pygame
         pygame.init()
-        from rehab.config import Config
-        from rehab.game.engine import GameEngine
-        from rehab.hardware.keyboard_source import KeyboardOnlySource
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
         self._td = tempfile.TemporaryDirectory()
         cfg = Config.load()
         cfg.data["ui"]["resolution"] = [1280, 800]
@@ -81,8 +81,8 @@ class _SessionHarness(unittest.TestCase):
         return paths
 
     def _log_one_trial(self) -> None:
-        from rehab.game.modes.classic import PendingTrial
-        from rehab.game.scoring import TrialResult
+        from finger_rehab.game.modes.classic import PendingTrial
+        from finger_rehab.game.scoring import TrialResult
         trial = PendingTrial(
             trial_id=1, lane=0, stim_t_perf=time.perf_counter(),
             keys_pressed=[0], incorrect_presses=[])
@@ -305,7 +305,7 @@ class ResultsWordingTests(_SessionHarness):
     select) and the Play again / End session buttons under it."""
 
     def test_results_header_never_claims_the_session_ended(self) -> None:
-        from rehab.ui.screens import ResultsScreen
+        from finger_rehab.ui.screens import ResultsScreen
         title = ResultsScreen.RESULTS_TITLE
         self.assertNotIn("session", title.lower())
         self.assertIn("game", title.lower())
@@ -316,7 +316,7 @@ class ResultsWordingTests(_SessionHarness):
         old subtitle said "this session", implying the pick was locked
         in for every game."""
         import pygame
-        from rehab.ui import screens as screens_mod
+        from finger_rehab.ui import screens as screens_mod
         self._login()
         captured = []
         real = screens_mod._draw_header

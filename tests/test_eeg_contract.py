@@ -40,7 +40,7 @@ class MapIntegrityTests(unittest.TestCase):
     0 reserved for reset."""
 
     def test_codes_are_unique_bytes_and_zero_is_reserved(self) -> None:
-        from rehab.hardware.eeg_trigger import CODES, RESET
+        from finger_rehab.hardware.eeg_trigger import CODES, RESET
         values = list(CODES.values())
         self.assertEqual(len(values), len(set(values)),
                          "duplicate marker codes")
@@ -52,7 +52,7 @@ class MapIntegrityTests(unittest.TestCase):
         self.assertNotIn(0, values, "0 may only ever be the reset line")
 
     def test_every_code_sits_in_its_documented_band(self) -> None:
-        from rehab.hardware.eeg_trigger import BANDS, CODES
+        from finger_rehab.hardware.eeg_trigger import BANDS, CODES
         for name, code in CODES.items():
             for prefix, (lo, hi) in BANDS.items():
                 if name.startswith(prefix):
@@ -67,12 +67,12 @@ class MapIntegrityTests(unittest.TestCase):
         # The lab's standing habit is "epoch on 30". The old prototype
         # used 30 for miss/timeout; that conflict is the reason this
         # assertion exists.
-        from rehab.hardware.eeg_trigger import CODES
+        from finger_rehab.hardware.eeg_trigger import CODES
         self.assertEqual(CODES["stim_visual"], 30)
         self.assertNotEqual(CODES["resp_timeout"], 30)
 
     def test_stim_code_covers_all_cue_conditions(self) -> None:
-        from rehab.hardware.eeg_trigger import stim_code
+        from finger_rehab.hardware.eeg_trigger import stim_code
         seen = set()
         for sound in (False, True):
             for buzz in (False, True):
@@ -85,7 +85,7 @@ class MapIntegrityTests(unittest.TestCase):
         self.assertEqual(stim_code(False, True, False), 36)
 
     def test_response_codes_carry_lane_and_reject_bad_lanes(self) -> None:
-        from rehab.hardware.eeg_trigger import response_code
+        from finger_rehab.hardware.eeg_trigger import response_code
         self.assertEqual(response_code("correct", 0), 100)
         self.assertEqual(response_code("correct", 7), 107)
         self.assertEqual(response_code("wrong", 3), 113)
@@ -95,7 +95,7 @@ class MapIntegrityTests(unittest.TestCase):
         self.assertIsNone(response_code("nonsense", 0))
 
     def test_block_codes_cover_every_mode_without_hitting_219(self) -> None:
-        from rehab.hardware.eeg_trigger import (CODES, MODE_IDS,
+        from finger_rehab.hardware.eeg_trigger import (CODES, MODE_IDS,
                                                 block_code)
         emitted = set()
         for mode in MODE_IDS:
@@ -115,7 +115,7 @@ class EncodingTests(unittest.TestCase):
         # Guards the chr()/UTF-8 regression: any code over 127 would
         # become two bytes and corrupt the trigger channel. 220 = 0xDC
         # is a block-end code, safely over the boundary.
-        from rehab.hardware.eeg_trigger import SerialBackend
+        from finger_rehab.hardware.eeg_trigger import SerialBackend
         backend = SerialBackend("dummy")
 
         class _FakePort:
@@ -171,7 +171,7 @@ class ProtocolTests(unittest.TestCase):
             pass
 
     def _writer(self, records):
-        from rehab.hardware.eeg_trigger import MarkerWriter
+        from finger_rehab.hardware.eeg_trigger import MarkerWriter
         clock = self._Clock()
         backend = self._Backend()
         writer = MarkerWriter(backend=backend, enabled=True,
@@ -217,9 +217,9 @@ class _EngineHarness(unittest.TestCase):
     backend: the same path a lab session takes minus the amplifier."""
 
     def _make_engine(self, td: str, eeg_enabled: bool = True):
-        from rehab.config import Config
-        from rehab.game.engine import GameEngine
-        from rehab.hardware.keyboard_source import KeyboardOnlySource
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
         cfg = Config.load()
         cfg.data["ui"]["resolution"] = [640, 480]
         cfg.data["audio"]["enabled"] = False
@@ -242,7 +242,7 @@ class _EngineHarness(unittest.TestCase):
 
     @staticmethod
     def _press(lane: int, t: float):
-        from rehab.hardware.fsr_detector import PressEvent
+        from finger_rehab.hardware.fsr_detector import PressEvent
         return PressEvent(lane=lane, t_perf=t, value=0, baseline=0.0,
                           hand="right")
 
@@ -276,7 +276,7 @@ class EngineWiringTests(_EngineHarness):
         try:
             with tempfile.TemporaryDirectory() as td:
                 eng = self._make_engine(td)
-                from rehab.hardware.eeg_trigger import DummyBackend
+                from finger_rehab.hardware.eeg_trigger import DummyBackend
                 self.assertIsInstance(eng.markers.backend, DummyBackend)
                 eng.eeg_session_start()
                 self._settle(eng)
@@ -482,8 +482,8 @@ class FixedForeperiodVariantTests(unittest.TestCase):
     """The CNV variant: constant wait, ready cue, catch virtual onset."""
 
     def _mode(self, **overrides):
-        from rehab.game.modes.reaction import ReactionMode
-        from rehab.game.scoring import ScoreConfig
+        from finger_rehab.game.modes.reaction import ReactionMode
+        from finger_rehab.game.scoring import ScoreConfig
         engine = MagicMock()
         engine.detectors = {}
         engine._screens = {}
@@ -514,14 +514,14 @@ class FixedForeperiodVariantTests(unittest.TestCase):
         self.assertGreater(len(draws), 1)
 
     def test_foreperiod_onset_emits_21(self) -> None:
-        from rehab.hardware.eeg_trigger import CODES
+        from finger_rehab.hardware.eeg_trigger import CODES
         engine, mode = self._mode(fp_fixed_s=2.5)
         mode._begin_trial(now=100.0)
         sent = [c.args[0] for c in engine._eeg_send.call_args_list]
         self.assertIn(CODES["prep_foreperiod"], sent)
 
     def test_catch_trial_emits_virtual_onset_25(self) -> None:
-        from rehab.hardware.eeg_trigger import CODES
+        from finger_rehab.hardware.eeg_trigger import CODES
         engine, mode = self._mode(fp_fixed_s=2.5, catch_rate=1.0)
         mode._begin_trial(now=100.0)
         self.assertEqual(mode._phase, "catch")
@@ -530,7 +530,7 @@ class FixedForeperiodVariantTests(unittest.TestCase):
         mode._presses.clear()
         mode._catch_virtual_due = 102.5
         import unittest.mock as um
-        with um.patch("rehab.game.modes.reaction.time") as fake_time:
+        with um.patch("finger_rehab.game.modes.reaction.time") as fake_time:
             fake_time.perf_counter.return_value = 102.6
             mode.update(0.0)
         sent = [c.args[0] for c in engine._eeg_send.call_args_list]
@@ -541,7 +541,7 @@ class ParityTests(unittest.TestCase):
     """One engine, one entry point; lab mode is a config overlay."""
 
     def test_lab_overlay_loads_over_defaults(self) -> None:
-        from rehab.config import Config
+        from finger_rehab.config import Config
         cfg = Config.load(REPO / "config" / "eeg_lab.yaml")
         self.assertTrue(cfg.get("eeg.enabled"))
         self.assertTrue(cfg.get("eeg.require_port"))
@@ -576,7 +576,7 @@ class ParityTests(unittest.TestCase):
                          re.MULTILINE):
                 hits.append(path.relative_to(REPO))
         self.assertEqual([str(p) for p in hits],
-                         ["rehab/game/engine.py"])
+                         ["finger_rehab/game/engine.py"])
 
     def test_old_prototype_module_is_gone(self) -> None:
         # The conflicting map (30 = miss) must not linger importable
@@ -624,7 +624,7 @@ def _capture_backend():
     """A real SerialBackend riding the capture port, so the bytes on
     the fake wire went through the exact write path the lab box sees,
     including the bytes([code]) encoding."""
-    from rehab.hardware.eeg_trigger import SerialBackend
+    from finger_rehab.hardware.eeg_trigger import SerialBackend
     backend = SerialBackend("fake-lab-box")
     port = _CaptureTriggerPort()
     backend._serial = port
@@ -636,7 +636,7 @@ def _fake_sensor_source():
     engine then treats the session as a force session; samples are
     pushed through engine._feed_detectors, the same call the frame
     loop makes when it drains the 200 Hz queue."""
-    from rehab.hardware.multi_serial import MultiSerialSource
+    from finger_rehab.hardware.multi_serial import MultiSerialSource
 
     class _StubBoard:
         is_connected = True
@@ -691,7 +691,7 @@ class _WireResponder:
 
     @staticmethod
     def _lane_keys(eng) -> dict[int, int]:
-        from rehab.game.modes._keys import keymap_for_hand, resolve_key
+        from finger_rehab.game.modes._keys import keymap_for_hand, resolve_key
         km = eng.cfg.get(keymap_for_hand(eng.hand_mode), {}) or {}
         out: dict[int, int] = {}
         for name, lane in km.items():
@@ -782,9 +782,9 @@ def _run_wire_block(mode_name: str, input_kind: str) -> dict:
     pygame.init()
     try:
         with tempfile.TemporaryDirectory() as td:
-            from rehab.config import Config
-            from rehab.game.engine import GameEngine
-            from rehab.hardware.keyboard_source import KeyboardOnlySource
+            from finger_rehab.config import Config
+            from finger_rehab.game.engine import GameEngine
+            from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
             cfg = Config.load()
             cfg.data["ui"]["resolution"] = [640, 480]
             cfg.data["audio"]["enabled"] = False

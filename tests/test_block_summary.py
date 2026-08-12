@@ -27,7 +27,7 @@ class TrialCsvPeakForceColumnTests(unittest.TestCase):
         # that consume the older columns still work. peak_force_n
         # came first, then impulse_n, then the phase tag for the
         # protocol pretest/main/aftertest scaffolding.
-        from rehab.data.logger import TRIAL_COLUMNS
+        from finger_rehab.data.logger import TRIAL_COLUMNS
         self.assertIn("peak_force_n", TRIAL_COLUMNS)
         self.assertIn("impulse_n", TRIAL_COLUMNS)
         self.assertIn("phase", TRIAL_COLUMNS)
@@ -45,7 +45,7 @@ class TrialCsvPeakForceColumnTests(unittest.TestCase):
     def test_age_still_after_participant(self) -> None:
         # Regression: the age column was added in a prior phase. The
         # peak_force_n append must not have moved age.
-        from rehab.data.logger import TRIAL_COLUMNS
+        from finger_rehab.data.logger import TRIAL_COLUMNS
         self.assertEqual(
             TRIAL_COLUMNS.index("age"),
             TRIAL_COLUMNS.index("participant") + 1,
@@ -58,7 +58,7 @@ def _bare_engine_for_summary():
     summary builder reads many engine attrs that the production
     __init__ sets up; we mirror the bits it touches here."""
     import time
-    from rehab.game.engine import GameEngine
+    from finger_rehab.game.engine import GameEngine
     eng = GameEngine.__new__(GameEngine)
     eng.cfg = MagicMock()
     eng.cfg.get = MagicMock(side_effect=lambda k, d=None:

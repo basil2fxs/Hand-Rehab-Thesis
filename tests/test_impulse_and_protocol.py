@@ -23,7 +23,7 @@ class ImpulseDetectorTests(unittest.TestCase):
     Compute trapezoidal integration over the press window."""
 
     def _cal(self):
-        from rehab.hardware.fsr_detector import Calibration
+        from finger_rehab.hardware.fsr_detector import Calibration
         # value_alpha=1 disables smoothing so the test can predict
         # the integral analytically.
         return Calibration(
@@ -34,7 +34,7 @@ class ImpulseDetectorTests(unittest.TestCase):
         )
 
     def test_release_event_carries_impulse_fields(self) -> None:
-        from rehab.hardware.fsr_detector import FSRDetector, ReleaseEvent
+        from finger_rehab.hardware.fsr_detector import FSRDetector, ReleaseEvent
         det = FSRDetector(self._cal(), hand="right")
         releases: list[ReleaseEvent] = []
         det.on_release = releases.append
@@ -68,7 +68,7 @@ class ImpulseDetectorTests(unittest.TestCase):
         # because the falling sample contributes 0 * dt = 0, and a
         # left-Riemann sum gives 250 because it would credit the
         # whole interval at 500. Pinning 225 locks trapezoidal in.
-        from rehab.hardware.fsr_detector import (
+        from finger_rehab.hardware.fsr_detector import (
             Calibration, FSRDetector, ReleaseEvent,
         )
         cal = Calibration(
@@ -101,7 +101,7 @@ class ImpulseDetectorTests(unittest.TestCase):
         # straight back down to 0. The true integral of a triangle
         # with base 1.0 s and height 500 is 250. Rectangular (right-
         # Riemann) would give ~275, trapezoidal gives 250 exactly.
-        from rehab.hardware.fsr_detector import (
+        from finger_rehab.hardware.fsr_detector import (
             Calibration, FSRDetector, ReleaseEvent,
         )
         cal = Calibration(
@@ -143,7 +143,7 @@ class ImpulseDetectorTests(unittest.TestCase):
         # Two presses on the same sensor. The second press's impulse
         # must reflect only that press, not carry over from the
         # first. Detects state leaks in the integrator.
-        from rehab.hardware.fsr_detector import FSRDetector, ReleaseEvent
+        from finger_rehab.hardware.fsr_detector import FSRDetector, ReleaseEvent
         det = FSRDetector(self._cal(), hand="right")
         releases: list[ReleaseEvent] = []
         det.on_release = releases.append
@@ -170,14 +170,14 @@ class EngineImpulsePlumbingTests(unittest.TestCase):
     peak_force_n plumbing."""
 
     def test_impulse_in_trial_csv_columns(self) -> None:
-        from rehab.data.logger import TRIAL_COLUMNS
+        from finger_rehab.data.logger import TRIAL_COLUMNS
         self.assertIn("impulse_n", TRIAL_COLUMNS)
 
     def test_per_lane_impulse_appears_in_block_summary(self) -> None:
         # Build a __new__-style engine, seed per_lane_impulse, and
         # confirm _populate_research_summary surfaces it under
         # block_summary.per_lane[lane]["impulse_mean"].
-        from rehab.game.engine import GameEngine
+        from finger_rehab.game.engine import GameEngine
         import time
         eng = GameEngine.__new__(GameEngine)
         eng.cfg = MagicMock()
@@ -222,7 +222,7 @@ class RhythmEntrainmentLagOneTests(unittest.TestCase):
     entrainment_lag1_r alongside beat_offset_stats."""
 
     def test_lag1_appears_with_three_offsets(self) -> None:
-        from rehab.game.engine import GameEngine
+        from finger_rehab.game.engine import GameEngine
         import time
         eng = GameEngine.__new__(GameEngine)
         eng.cfg = MagicMock()
@@ -274,9 +274,9 @@ class ProtocolTests(unittest.TestCase):
         os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
         import pygame
         pygame.init()
-        from rehab.config import Config
-        from rehab.game.engine import GameEngine
-        from rehab.hardware.keyboard_source import KeyboardOnlySource
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
         cfg = Config.load()
         cfg.data["ui"]["resolution"] = [1280, 800]
         cfg.data.setdefault("protocol", {})["blocks"] = blocks

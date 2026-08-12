@@ -71,15 +71,15 @@ class _FakeSerialSource:
         return f"FakeSerial({self.port})"
 
     def push(self, t_perf: float, values: tuple[int, ...]) -> None:
-        from rehab.hardware.source import Sample
+        from finger_rehab.hardware.source import Sample
         self._q.put(Sample(t_perf=t_perf, values=values))
 
 
 def _make_multi(ports: list[str]):
     """Build a MultiSerialSource without going through SerialSource's
     pyserial-dependent ctor. Same approach test_multi_serial uses."""
-    from rehab.hardware.multi_serial import MultiSerialSource, HandPort
-    from rehab.hardware.source import BaseQueueSource
+    from finger_rehab.hardware.multi_serial import MultiSerialSource, HandPort
+    from finger_rehab.hardware.source import BaseQueueSource
     multi = MultiSerialSource.__new__(MultiSerialSource)
     BaseQueueSource.__init__(multi)
     fakes = [_FakeSerialSource(p) for p in ports]
@@ -215,7 +215,7 @@ class EightFingerSimultaneousPressTests(unittest.TestCase):
     8 distinct PressEvent callbacks (one per lane per hand)."""
 
     def test_all_eight_lanes_fire_press_events_in_one_sample(self) -> None:
-        from rehab.hardware.fsr_detector import (
+        from finger_rehab.hardware.fsr_detector import (
             Calibration, FSRDetector, PressEvent,
         )
         # value_alpha=1.0 disables the EMA smoothing so the press
@@ -259,7 +259,7 @@ class EightFingerSimultaneousPressTests(unittest.TestCase):
         engine can route the score to the right detector. Regression
         guard: this used to default to "right" silently when one
         FSRDetector wasn't constructed with hand=..."""
-        from rehab.hardware.fsr_detector import (
+        from finger_rehab.hardware.fsr_detector import (
             Calibration, FSRDetector, PressEvent,
         )
         cal = Calibration(num_sensors=4, value_alpha=1.0,

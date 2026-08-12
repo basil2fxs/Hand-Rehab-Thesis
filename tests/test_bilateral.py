@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 class BilateralDetectorTests(unittest.TestCase):
     def test_press_event_carries_hand_label(self) -> None:
-        from rehab.hardware.fsr_detector import Calibration, FSRDetector
+        from finger_rehab.hardware.fsr_detector import Calibration, FSRDetector
         det = FSRDetector(Calibration(num_sensors=4), hand="left")
         captured = []
         det.on_press = lambda ev: captured.append(ev)
@@ -28,7 +28,7 @@ class BilateralDetectorTests(unittest.TestCase):
 
     def test_per_hand_routing_via_engine_split(self) -> None:
         # Simulates engine._feed_detectors for the both-hand case.
-        from rehab.hardware.fsr_detector import Calibration, FSRDetector
+        from finger_rehab.hardware.fsr_detector import Calibration, FSRDetector
         right = FSRDetector(Calibration(num_sensors=4), hand="right")
         left = FSRDetector(Calibration(num_sensors=4), hand="left")
         events = []
@@ -50,13 +50,13 @@ class BilateralDetectorTests(unittest.TestCase):
 
 class BilateralCSVSchemaTests(unittest.TestCase):
     def test_raw_csv_columns_include_hand_and_fsr5_to_8(self) -> None:
-        from rehab.data.logger import RAW_COLUMNS
+        from finger_rehab.data.logger import RAW_COLUMNS
         self.assertIn("hand", RAW_COLUMNS)
         for col in ("fsr5", "fsr6", "fsr7", "fsr8"):
             self.assertIn(col, RAW_COLUMNS)
 
     def test_trial_csv_columns_include_hand(self) -> None:
-        from rehab.data.logger import TRIAL_COLUMNS
+        from finger_rehab.data.logger import TRIAL_COLUMNS
         self.assertIn("hand", TRIAL_COLUMNS)
 
 
@@ -65,7 +65,7 @@ class BilateralEightLaneTests(unittest.TestCase):
     0-3, left hand uses lanes 4-7, and the modes generate sequences in 0-7."""
 
     def test_adaptive_engine_accepts_eight_lanes(self) -> None:
-        from rehab.analytics.adaptive import AdaptiveEngine
+        from finger_rehab.analytics.adaptive import AdaptiveEngine
         eng = AdaptiveEngine(num_lanes=8)
         # Should be able to record events on any of the 8 lanes.
         for lane in range(8):
@@ -74,14 +74,14 @@ class BilateralEightLaneTests(unittest.TestCase):
 
     def test_adaptive_sequence_uses_eight_lanes(self) -> None:
         import random
-        from rehab.analytics.adaptive import AdaptiveEngine
+        from finger_rehab.analytics.adaptive import AdaptiveEngine
         eng = AdaptiveEngine(num_lanes=8)
         seq = eng.generate_sequence(200, rng=random.Random(0))
         # All 8 lanes should appear at least once over a long sequence.
         self.assertEqual(set(seq), set(range(8)))
 
     def test_procedural_beatmap_uses_eight_lanes_when_bilateral(self) -> None:
-        from rehab.audio.beatmap import procedural_beatmap
+        from finger_rehab.audio.beatmap import procedural_beatmap
         bm = procedural_beatmap(bpm=120, beats=32, difficulty="hard",
                                  num_lanes=8)
         used = {n.lane for n in bm.notes}
@@ -92,7 +92,7 @@ class BilateralEightLaneTests(unittest.TestCase):
                             "bilateral beatmap should touch lanes on both hands")
 
     def test_unilateral_beatmap_stays_under_four_lanes(self) -> None:
-        from rehab.audio.beatmap import procedural_beatmap
+        from finger_rehab.audio.beatmap import procedural_beatmap
         bm = procedural_beatmap(bpm=120, beats=16, difficulty="hard")
         used = {n.lane for n in bm.notes}
         self.assertTrue(used.issubset({0, 1, 2, 3}))
@@ -103,7 +103,7 @@ class BilateralKeyboardMapTests(unittest.TestCase):
     user picked both hands."""
 
     def test_bilateral_keymap_covers_eight_lanes(self) -> None:
-        from rehab.config import Config
+        from finger_rehab.config import Config
         cfg = Config.load()
         km = cfg.get("game.keyboard_map_bilateral", {})
         self.assertEqual(len(km), 8,
@@ -119,7 +119,7 @@ class UnilateralKeymapNaturalTests(unittest.TestCase):
     hand uses J K L ;, left hand uses F D S A."""
 
     def test_right_hand_keymap_is_jkl_semicolon(self) -> None:
-        from rehab.config import Config
+        from finger_rehab.config import Config
         cfg = Config.load()
         km = cfg.get("game.keyboard_map", {})
         # j = index = lane 0; ; = little = lane 3.
@@ -131,7 +131,7 @@ class UnilateralKeymapNaturalTests(unittest.TestCase):
         self.assertEqual(sorted(km.values()), [0, 1, 2, 3])
 
     def test_left_hand_keymap_is_fdsa(self) -> None:
-        from rehab.config import Config
+        from finger_rehab.config import Config
         cfg = Config.load()
         km = cfg.get("game.keyboard_map_left", {})
         # f = index = lane 0; a = little = lane 3.
@@ -142,7 +142,7 @@ class UnilateralKeymapNaturalTests(unittest.TestCase):
         self.assertEqual(sorted(km.values()), [0, 1, 2, 3])
 
     def test_keymap_for_hand_picks_correct_config_key(self) -> None:
-        from rehab.game.modes._keys import keymap_for_hand
+        from finger_rehab.game.modes._keys import keymap_for_hand
         self.assertEqual(keymap_for_hand("right"),
                           "game.keyboard_map")
         self.assertEqual(keymap_for_hand("left"),
@@ -161,7 +161,7 @@ class KeyResolverTests(unittest.TestCase):
 
     def test_lowercase_letter_resolves(self) -> None:
         import pygame
-        from rehab.game.modes._keys import resolve_key
+        from finger_rehab.game.modes._keys import resolve_key
         pygame.init()
         try:
             self.assertEqual(resolve_key("j"), pygame.K_j)
@@ -171,7 +171,7 @@ class KeyResolverTests(unittest.TestCase):
 
     def test_semicolon_resolves(self) -> None:
         import pygame
-        from rehab.game.modes._keys import resolve_key
+        from finger_rehab.game.modes._keys import resolve_key
         pygame.init()
         try:
             # The bug: old code used K_semicolon (lowercase) which doesn't
@@ -181,7 +181,7 @@ class KeyResolverTests(unittest.TestCase):
             pygame.quit()
 
     def test_unknown_key_returns_none(self) -> None:
-        from rehab.game.modes._keys import resolve_key
+        from finger_rehab.game.modes._keys import resolve_key
         self.assertIsNone(resolve_key("not_a_real_key"))
         self.assertIsNone(resolve_key(""))
 
@@ -196,9 +196,9 @@ class BilateralLaneLayoutTests(unittest.TestCase):
         # hand_mode, theme, layout, and a stub config.
         import os
         os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
-        from rehab.config import Config
-        from rehab.game.engine import GameEngine
-        from rehab.hardware.keyboard_source import KeyboardOnlySource
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
         cfg = Config.load()
         cfg.data["bilateral"]["hand"] = "both"
         cfg.data["ui"]["resolution"] = [1280, 800]
@@ -211,7 +211,7 @@ class BilateralLaneLayoutTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.ui.screens import GameplayScreen
+            from finger_rehab.ui.screens import GameplayScreen
             eng = self._make_engine()
             sc = GameplayScreen(eng)
             self.assertEqual(len(sc.lanes), 8)
@@ -227,7 +227,7 @@ class BilateralLaneLayoutTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.ui.screens import GameplayScreen
+            from finger_rehab.ui.screens import GameplayScreen
             eng = self._make_engine()
             sc = GameplayScreen(eng)
             mid = eng.layout.width / 2.0
@@ -248,7 +248,7 @@ class BilateralLaneLayoutTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.ui.screens import GameplayScreen
+            from finger_rehab.ui.screens import GameplayScreen
             eng = self._make_engine()
             sc = GameplayScreen(eng)
             xs = [sc.lanes[lane].rect.centerx for lane in (7, 6, 5, 4)]
@@ -264,7 +264,7 @@ class BilateralLaneLayoutTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.ui.screens import GameplayScreen
+            from finger_rehab.ui.screens import GameplayScreen
             eng = self._make_engine()
             sc = GameplayScreen(eng)
             xs = [sc.lanes[lane].rect.centerx for lane in (0, 1, 2, 3)]
@@ -278,7 +278,7 @@ class BilateralLaneLayoutTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.ui.screens import RhythmScreen
+            from finger_rehab.ui.screens import RhythmScreen
             eng = self._make_engine()
             sc = RhythmScreen(eng)
             mid = eng.layout.width / 2.0
@@ -301,9 +301,9 @@ class UnilateralLeftLayoutMirrorTests(unittest.TestCase):
     def _make_engine(self, hand: str):
         import os
         os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
-        from rehab.config import Config
-        from rehab.game.engine import GameEngine
-        from rehab.hardware.keyboard_source import KeyboardOnlySource
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
         cfg = Config.load()
         cfg.data["bilateral"]["hand"] = hand
         cfg.data["ui"]["resolution"] = [1280, 800]
@@ -313,7 +313,7 @@ class UnilateralLeftLayoutMirrorTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.ui.screens import GameplayScreen
+            from finger_rehab.ui.screens import GameplayScreen
             eng = self._make_engine("left")
             sc = GameplayScreen(eng)
             # Reading lanes in physical key order a s d f -> lanes 3 2 1 0,
@@ -329,7 +329,7 @@ class UnilateralLeftLayoutMirrorTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.ui.screens import GameplayScreen
+            from finger_rehab.ui.screens import GameplayScreen
             eng = self._make_engine("right")
             sc = GameplayScreen(eng)
             xs = [sc.lanes[lane].rect.centerx for lane in (0, 1, 2, 3)]
@@ -344,14 +344,14 @@ class GamePaceDefaultsTests(unittest.TestCase):
     for severely impaired patients."""
 
     def test_classic_default_trigger_interval_is_slow_enough(self) -> None:
-        from rehab.config import Config
+        from finger_rehab.config import Config
         cfg = Config.load()
         # 0.6 s was too fast for a rehab session. Anything under 1.0 s is
         # uncomfortable for the patient.
         self.assertGreaterEqual(cfg.get("game.trigger_interval_s"), 1.0)
 
     def test_adaptive_can_drop_to_super_slow(self) -> None:
-        from rehab.config import Config
+        from finger_rehab.config import Config
         cfg = Config.load()
         # 20 BPM = 3 s per stim. Lower than that gets unwieldy.
         self.assertLessEqual(cfg.get("adaptive.bpm_min"), 20)
@@ -368,7 +368,7 @@ class LaneColourReservationTests(unittest.TestCase):
         return all(abs(c[i] - target[i]) <= tol for i in range(3))
 
     def test_clinical_lane_palettes_avoid_green_and_red(self) -> None:
-        from rehab.ui.theme import CLINICAL
+        from finger_rehab.ui.theme import CLINICAL
         for c in CLINICAL.lane_idle + CLINICAL.lane_active:
             self.assertFalse(self._too_close(c, self.HIT_GREEN),
                               f"{c} too close to hit green")
@@ -376,7 +376,7 @@ class LaneColourReservationTests(unittest.TestCase):
                               f"{c} too close to miss red")
 
     def test_dark_lane_palettes_avoid_green_and_red(self) -> None:
-        from rehab.ui.theme import DARK
+        from finger_rehab.ui.theme import DARK
         for c in DARK.lane_idle + DARK.lane_active:
             self.assertFalse(self._too_close(c, self.HIT_GREEN),
                               f"{c} too close to hit green")
@@ -386,7 +386,7 @@ class LaneColourReservationTests(unittest.TestCase):
     def test_left_hand_badge_is_not_red(self) -> None:
         # The left-hand border + badge mustn't be red either or a default
         # left-hand tile would look "missed".
-        from rehab.ui.widgets import LaneStrip
+        from finger_rehab.ui.widgets import LaneStrip
         c = LaneStrip.HAND_BADGE["left"]
         self.assertFalse(self._too_close(c, self.MISS_RED),
                           f"left badge {c} too close to miss red")
@@ -416,15 +416,15 @@ class FingerColourMappingTests(unittest.TestCase):
                               f"{label} pinky {pinky} red/green too uneven")
 
     def test_all_themes_follow_orange_lightblue_black_yellow(self) -> None:
-        from rehab.ui.theme import THEMES
+        from finger_rehab.ui.theme import THEMES
         for name, theme in THEMES.items():
             self._assert_mapping(theme.lane_idle, f"{name}.lane_idle")
             self._assert_mapping(theme.lane_active, f"{name}.lane_active")
 
     def test_label_colour_flips_on_dark_fill(self) -> None:
         # The black ring tile must not render near-black text on itself.
-        from rehab.ui.theme import CLINICAL
-        from rehab.ui.widgets import LaneStrip
+        from finger_rehab.ui.theme import CLINICAL
+        from finger_rehab.ui.widgets import LaneStrip
         strip = LaneStrip.__new__(LaneStrip)
         strip.theme = CLINICAL
         self.assertEqual(strip._label_colour((15, 23, 42)),

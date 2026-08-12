@@ -1,8 +1,8 @@
-"""Unit tests for rehab.hardware.eeg_trigger: backends and the
+"""Unit tests for finger_rehab.hardware.eeg_trigger: backends and the
 MarkerWriter's pulse, gap, queue and failure behaviour. The map and
 the engine wiring are pinned separately in test_eeg_contract.py.
 
-These replaced the tests for the old rehab/hardware/eeg.py prototype
+These replaced the tests for the old finger_rehab/hardware/eeg.py prototype
 when its code map (30 = miss, 11-18 stimulus) was retired in favour of
 the lab convention (30 = stimulus onset)."""
 from __future__ import annotations
@@ -61,7 +61,7 @@ class _RecordingBackend:
 
 
 def _writer(clock=None, backend=None, **kwargs):
-    from rehab.hardware.eeg_trigger import MarkerWriter
+    from finger_rehab.hardware.eeg_trigger import MarkerWriter
     clock = clock or _FakeClock()
     backend = backend or _RecordingBackend()
     defaults = dict(backend=backend, enabled=True, pulse_ms=10.0,
@@ -75,7 +75,7 @@ class DisabledSilenceTests(unittest.TestCase):
     backend-less writer must be a no-op, never an error."""
 
     def test_disabled_writer_noops(self) -> None:
-        from rehab.hardware.eeg_trigger import MarkerWriter
+        from finger_rehab.hardware.eeg_trigger import MarkerWriter
         w = MarkerWriter(backend=None, enabled=False)
         self.assertFalse(w.active)
         w.send(30)
@@ -84,14 +84,14 @@ class DisabledSilenceTests(unittest.TestCase):
         w.close()
 
     def test_enabled_without_backend_noops(self) -> None:
-        from rehab.hardware.eeg_trigger import MarkerWriter
+        from finger_rehab.hardware.eeg_trigger import MarkerWriter
         w = MarkerWriter(backend=None, enabled=True)
         self.assertFalse(w.active)
         w.send(30)
         w.tick()
 
     def test_disabled_writer_emits_no_records(self) -> None:
-        from rehab.hardware.eeg_trigger import MarkerWriter
+        from finger_rehab.hardware.eeg_trigger import MarkerWriter
         records = []
         w = MarkerWriter(backend=None, enabled=False,
                          on_emit=records.append)
@@ -167,7 +167,7 @@ class GapAndQueueTests(unittest.TestCase):
         self.assertEqual(backend.written, [101, 0, 30, 0, 204])
 
     def test_queue_overflow_drops_lowest_priority(self) -> None:
-        from rehab.hardware.eeg_trigger import MarkerWriter
+        from finger_rehab.hardware.eeg_trigger import MarkerWriter
         records = []
         clock = _FakeClock()
         backend = _RecordingBackend()
@@ -260,7 +260,7 @@ class FailurePolicyTests(unittest.TestCase):
 class SerialBackendTests(unittest.TestCase):
 
     def test_write_code_is_single_raw_byte(self) -> None:
-        from rehab.hardware.eeg_trigger import SerialBackend
+        from finger_rehab.hardware.eeg_trigger import SerialBackend
         backend = SerialBackend("dummy")
 
         class _FakePort:
@@ -283,7 +283,7 @@ class SerialBackendTests(unittest.TestCase):
     def test_open_passes_write_timeout(self) -> None:
         # A wedged box must never hang the frame loop: the open call
         # has to cap single writes.
-        from rehab.hardware import eeg_trigger
+        from finger_rehab.hardware import eeg_trigger
         captured: dict = {}
 
         class _StubSerialModule:
@@ -321,7 +321,7 @@ class DummyBackendTests(unittest.TestCase):
     record."""
 
     def test_dummy_keeps_every_write(self) -> None:
-        from rehab.hardware.eeg_trigger import DummyBackend
+        from finger_rehab.hardware.eeg_trigger import DummyBackend
         backend = DummyBackend()
         self.assertTrue(backend.open())
         for code in (30, 0, 101, 0):
@@ -336,19 +336,19 @@ class ConfigFactoryTests(unittest.TestCase):
         return lambda key, default=None: mapping.get(key, default)
 
     def test_disabled_config_returns_inert_writer(self) -> None:
-        from rehab.hardware.eeg_trigger import writer_from_config
+        from finger_rehab.hardware.eeg_trigger import writer_from_config
         w = writer_from_config(self._get_from({"eeg.enabled": False}))
         self.assertFalse(w.active)
 
     def test_enabled_without_port_falls_back_to_dummy(self) -> None:
-        from rehab.hardware.eeg_trigger import DummyBackend, writer_from_config
+        from finger_rehab.hardware.eeg_trigger import DummyBackend, writer_from_config
         w = writer_from_config(self._get_from({
             "eeg.enabled": True, "eeg.require_port": False}))
         self.assertTrue(w.active)
         self.assertIsInstance(w.backend, DummyBackend)
 
     def test_require_port_refuses_without_a_box(self) -> None:
-        from rehab.hardware.eeg_trigger import (TriggerPortError,
+        from finger_rehab.hardware.eeg_trigger import (TriggerPortError,
                                                 writer_from_config)
         with self.assertRaises(TriggerPortError):
             writer_from_config(self._get_from({

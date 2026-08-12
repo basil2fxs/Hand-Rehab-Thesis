@@ -18,8 +18,8 @@ from pathlib import Path
 
 import pytest
 
-import rehab.ui.calibration_screen as cs
-from rehab.hardware.calibration_profile import CalibrationProfile
+import finger_rehab.ui.calibration_screen as cs
+from finger_rehab.hardware.calibration_profile import CalibrationProfile
 
 
 # A profile that passes usable(): each finger travels well clear of the
@@ -69,9 +69,9 @@ def make_screen(tmp_path: Path, hand: str = "right",
     import pygame
     pygame.init()
     pygame.font.init()
-    from rehab.game.engine import GameEngine
-    from rehab.ui.theme import THEMES
-    from rehab.ui.widgets import Layout
+    from finger_rehab.game.engine import GameEngine
+    from finger_rehab.ui.theme import THEMES
+    from finger_rehab.ui.widgets import Layout
 
     sent: list[str] = []
 

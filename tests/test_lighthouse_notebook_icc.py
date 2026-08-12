@@ -56,7 +56,7 @@ def _write_session(root: Path, day: str, right_noise: float,
     scored lit MAE lands near that noise). Real GameEngine, real
     LighthouseMode, real TrialLogger, real raw.csv -- the notebook
     reads this off disk exactly as it would a patient's session."""
-    from rehab.data.logger import TrialLogger
+    from finger_rehab.data.logger import TrialLogger
 
     folder = root / day / "Pat_100000_lighthouse"
     folder.mkdir(parents=True, exist_ok=True)

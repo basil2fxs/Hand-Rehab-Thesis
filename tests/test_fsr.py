@@ -28,7 +28,7 @@ class FsrFeedEdgeCaseTests(unittest.TestCase):
     values, etc.)."""
 
     def test_short_vals_tuple_treats_missing_as_zero(self) -> None:
-        from rehab.hardware.fsr_detector import Calibration, FSRDetector
+        from finger_rehab.hardware.fsr_detector import Calibration, FSRDetector
         det = FSRDetector(Calibration(num_sensors=4))
         # Only 2 values for a 4-sensor detector.
         det.feed(100.0, (200, 300))
@@ -37,14 +37,14 @@ class FsrFeedEdgeCaseTests(unittest.TestCase):
         self.assertEqual(det.last_value[3], 0)
 
     def test_empty_vals_tuple_doesnt_crash(self) -> None:
-        from rehab.hardware.fsr_detector import Calibration, FSRDetector
+        from finger_rehab.hardware.fsr_detector import Calibration, FSRDetector
         det = FSRDetector(Calibration(num_sensors=4))
         det.feed(100.0, ())
         for v in det.last_value:
             self.assertEqual(v, 0)
 
     def test_excess_vals_ignored(self) -> None:
-        from rehab.hardware.fsr_detector import Calibration, FSRDetector
+        from finger_rehab.hardware.fsr_detector import Calibration, FSRDetector
         det = FSRDetector(Calibration(num_sensors=4))
         # 8 values for a 4-sensor detector. First 4 are read.
         det.feed(100.0, (10, 20, 30, 40, 99, 99, 99, 99))
@@ -57,7 +57,7 @@ class CallbackErrorIsolationTests(unittest.TestCase):
     flaky callback would silently dead-zone half the patient's hand."""
 
     def test_press_callback_raise_does_not_skip_later_sensors(self) -> None:
-        from rehab.hardware.fsr_detector import Calibration, FSRDetector
+        from finger_rehab.hardware.fsr_detector import Calibration, FSRDetector
         det = FSRDetector(Calibration(num_sensors=4, debounce_ms=10))
         seen: list[int] = []
 
@@ -80,7 +80,7 @@ class CallbackErrorIsolationTests(unittest.TestCase):
             "callback raise on lane 0 must not block lanes 1-3 from firing")
 
     def test_release_callback_raise_does_not_skip_later_sensors(self) -> None:
-        from rehab.hardware.fsr_detector import Calibration, FSRDetector
+        from finger_rehab.hardware.fsr_detector import Calibration, FSRDetector
         det = FSRDetector(Calibration(num_sensors=4, debounce_ms=10))
         rel_seen: list[int] = []
 
@@ -104,7 +104,7 @@ class DebounceTests(unittest.TestCase):
     fire. This protects against signal chatter at the threshold."""
 
     def test_rapid_repeat_within_debounce_is_suppressed(self) -> None:
-        from rehab.hardware.fsr_detector import Calibration, FSRDetector
+        from finger_rehab.hardware.fsr_detector import Calibration, FSRDetector
         # 100 ms debounce.
         det = FSRDetector(Calibration(num_sensors=4, debounce_ms=100))
         presses = []
@@ -137,7 +137,7 @@ class HysteresisTests(unittest.TestCase):
     value sitting near the boundary doesn't oscillate press/release."""
 
     def test_hysteresis_keeps_off_below_on(self) -> None:
-        from rehab.hardware.fsr_detector import Calibration, FSRDetector
+        from finger_rehab.hardware.fsr_detector import Calibration, FSRDetector
         # Bad config: abs_on_min == abs_off_max could collapse the
         # window. The detector should still keep off < on - 10.
         cal = Calibration(
@@ -175,7 +175,7 @@ class BaselineBehaviourTests(unittest.TestCase):
     missed."""
 
     def test_baseline_frozen_during_press(self) -> None:
-        from rehab.hardware.fsr_detector import Calibration, FSRDetector
+        from finger_rehab.hardware.fsr_detector import Calibration, FSRDetector
         det = FSRDetector(Calibration(num_sensors=1, debounce_ms=10))
         det.on_press = lambda ev: None
         det.on_release = lambda ev: None
@@ -198,7 +198,7 @@ class BaselineBehaviourTests(unittest.TestCase):
         # gets missed. After release, baseline drifts back down and
         # subsequent presses register normally. This documents the
         # known behaviour so a future change knows to consider it.
-        from rehab.hardware.fsr_detector import Calibration, FSRDetector
+        from finger_rehab.hardware.fsr_detector import Calibration, FSRDetector
         det = FSRDetector(Calibration(num_sensors=1, debounce_ms=10,
                                         baseline_alpha=0.3))
         presses: list[int] = []
@@ -228,7 +228,7 @@ class CalibrationPaddingTests(unittest.TestCase):
     out of bounds."""
 
     def test_calibration_pads_short_arrays(self) -> None:
-        from rehab.hardware.fsr_detector import Calibration
+        from finger_rehab.hardware.fsr_detector import Calibration
         cal = Calibration(num_sensors=4,
                            on_delta=[60], off_delta=[40],
                            abs_on_min=[300], abs_off_max=[350])
@@ -240,7 +240,7 @@ class CalibrationPaddingTests(unittest.TestCase):
         self.assertEqual(cal.on_delta[0], 60)
 
     def test_calibration_clamps_zero_sensors_to_one(self) -> None:
-        from rehab.hardware.fsr_detector import Calibration
+        from finger_rehab.hardware.fsr_detector import Calibration
         cal = Calibration(num_sensors=0)
         self.assertGreaterEqual(cal.num_sensors, 1)
         self.assertEqual(len(cal.on_delta), cal.num_sensors)
@@ -253,13 +253,13 @@ class CalibrationPadCoercionTests(unittest.TestCase):
     int and falls back to the default on failure."""
 
     def test_pad_coerces_strings_to_int(self) -> None:
-        from rehab.hardware.fsr_detector import _pad
+        from finger_rehab.hardware.fsr_detector import _pad
         # All strings that parse as ints.
         out = _pad(["10", "20", "30", "40"], 4, [1, 2, 3, 4])
         self.assertEqual(out, [10, 20, 30, 40])
 
     def test_pad_falls_back_on_non_numeric(self) -> None:
-        from rehab.hardware.fsr_detector import _pad
+        from finger_rehab.hardware.fsr_detector import _pad
         # Mix of garbage and good values - garbage gets replaced by
         # defaults at the same index, good values are preserved.
         out = _pad(["a", 20, None, "x"], 4, [1, 2, 3, 4])
@@ -270,14 +270,14 @@ class CalibrationPadCoercionTests(unittest.TestCase):
         # the config as fsr.on_delta: "weird" instead of a list, the
         # engine called list("weird") and got chars. Every char fails
         # int() so we should end up with all defaults.
-        from rehab.hardware.fsr_detector import _pad
+        from finger_rehab.hardware.fsr_detector import _pad
         out = _pad(list("weird"), 4, [11, 22, 33, 44])
         self.assertEqual(out, [11, 22, 33, 44])
 
     def test_calibration_post_init_survives_bad_lists(self) -> None:
         # End-to-end: build a Calibration with a list-of-chars and
         # make sure __post_init__ produces sane int values.
-        from rehab.hardware.fsr_detector import Calibration
+        from finger_rehab.hardware.fsr_detector import Calibration
         cal = Calibration(num_sensors=4,
                            on_delta=list("xxxx"),
                            off_delta=["1", "2", "3", "4"])
@@ -293,7 +293,7 @@ class CalibrationPersistenceTests(unittest.TestCase):
     def test_save_then_load_round_trips(self) -> None:
         import tempfile
         from pathlib import Path
-        from rehab.hardware.fsr_detector import Calibration
+        from finger_rehab.hardware.fsr_detector import Calibration
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "calib.json"
             cal = Calibration(num_sensors=4, on_delta=[60, 60, 60, 60],
@@ -309,7 +309,7 @@ class CalibrationPersistenceTests(unittest.TestCase):
     def test_save_leaves_no_tmp_file(self) -> None:
         import tempfile
         from pathlib import Path
-        from rehab.hardware.fsr_detector import Calibration
+        from finger_rehab.hardware.fsr_detector import Calibration
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "calib.json"
             Calibration(num_sensors=4).save(path)
@@ -323,8 +323,8 @@ class CalibrationPersistenceTests(unittest.TestCase):
         import tempfile
         from pathlib import Path
         from unittest import mock
-        from rehab.hardware import fsr_detector
-        from rehab.hardware.fsr_detector import Calibration
+        from finger_rehab.hardware import fsr_detector
+        from finger_rehab.hardware.fsr_detector import Calibration
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "calib.json"
             Calibration(num_sensors=4, on_delta=[1, 2, 3, 4]).save(path)
@@ -337,13 +337,13 @@ class CalibrationPersistenceTests(unittest.TestCase):
 
     def test_load_returns_none_on_missing(self) -> None:
         from pathlib import Path
-        from rehab.hardware.fsr_detector import Calibration
+        from finger_rehab.hardware.fsr_detector import Calibration
         self.assertIsNone(Calibration.load(Path("/tmp/this-does-not-exist.json")))
 
     def test_load_returns_none_on_corrupt_json(self) -> None:
         import tempfile
         from pathlib import Path
-        from rehab.hardware.fsr_detector import Calibration
+        from finger_rehab.hardware.fsr_detector import Calibration
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "calib.json"
             path.write_text("{not valid json")
@@ -355,7 +355,7 @@ class CalibrationPersistenceTests(unittest.TestCase):
         # Now load returns None so the engine falls back to defaults.
         import tempfile
         from pathlib import Path
-        from rehab.hardware.fsr_detector import Calibration
+        from finger_rehab.hardware.fsr_detector import Calibration
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "calib.json"
             path.write_text('{"num_sensors": "four", "debounce_ms": 100}')
@@ -371,7 +371,7 @@ class PeakForceTrackingTests(unittest.TestCase):
     def _cal(self):
         # value_alpha=1.0 disables smoothing so the test can reason
         # about exact peak values without working through the EMA.
-        from rehab.hardware.fsr_detector import Calibration
+        from finger_rehab.hardware.fsr_detector import Calibration
         return Calibration(
             num_sensors=4, value_alpha=1.0,
             on_delta=[40] * 4, off_delta=[20] * 4,
@@ -383,7 +383,7 @@ class PeakForceTrackingTests(unittest.TestCase):
         # Press ramp 500 -> 700 -> 600 -> release at 50. With
         # value_alpha=1.0 the smoothed value equals the raw, so the
         # peak should latch on 700.
-        from rehab.hardware.fsr_detector import FSRDetector, ReleaseEvent
+        from finger_rehab.hardware.fsr_detector import FSRDetector, ReleaseEvent
         det = FSRDetector(self._cal(), hand="right")
         releases: list[ReleaseEvent] = []
         det.on_release = releases.append
@@ -408,7 +408,7 @@ class PeakForceTrackingTests(unittest.TestCase):
     def test_release_event_default_construct_has_none_peaks(self) -> None:
         # Test fixtures that build ReleaseEvent directly without the
         # detector still construct (additive defaults are None).
-        from rehab.hardware.fsr_detector import ReleaseEvent
+        from finger_rehab.hardware.fsr_detector import ReleaseEvent
         ev = ReleaseEvent(lane=0, t_perf=0.0, value=0)
         self.assertIsNone(ev.peak_raw)
         self.assertIsNone(ev.peak_minus_baseline)
@@ -418,7 +418,7 @@ class PeakForceTrackingTests(unittest.TestCase):
         # reflect that press alone (not be carried over from the
         # first), so a hard first press doesn't falsely report a
         # strong second press too.
-        from rehab.hardware.fsr_detector import FSRDetector, ReleaseEvent
+        from finger_rehab.hardware.fsr_detector import FSRDetector, ReleaseEvent
         det = FSRDetector(self._cal(), hand="right")
         releases: list[ReleaseEvent] = []
         det.on_release = releases.append
@@ -444,12 +444,12 @@ class BaselineAccessorTests(unittest.TestCase):
     loop (samples every 30 s and feeds drift_slope at finish_block)."""
 
     def test_returns_none_before_first_sample(self) -> None:
-        from rehab.hardware.fsr_detector import Calibration, FSRDetector
+        from finger_rehab.hardware.fsr_detector import Calibration, FSRDetector
         det = FSRDetector(Calibration(num_sensors=4), hand="right")
         self.assertIsNone(det.baseline_value(0))
 
     def test_returns_baseline_after_samples(self) -> None:
-        from rehab.hardware.fsr_detector import Calibration, FSRDetector
+        from finger_rehab.hardware.fsr_detector import Calibration, FSRDetector
         det = FSRDetector(Calibration(num_sensors=4), hand="right")
         det.feed(0.0, (100, 0, 0, 0))
         det.feed(0.01, (100, 0, 0, 0))
@@ -460,7 +460,7 @@ class BaselineAccessorTests(unittest.TestCase):
         self.assertGreater(b, 50)
 
     def test_out_of_range_returns_none(self) -> None:
-        from rehab.hardware.fsr_detector import Calibration, FSRDetector
+        from finger_rehab.hardware.fsr_detector import Calibration, FSRDetector
         det = FSRDetector(Calibration(num_sensors=4), hand="right")
         self.assertIsNone(det.baseline_value(99))
         self.assertIsNone(det.baseline_value(-1))

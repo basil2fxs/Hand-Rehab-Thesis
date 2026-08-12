@@ -28,7 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
 def _engine(buzz_before=True, buzz_after=False, cue_ms=250):
-    from rehab.game.engine import GameEngine
+    from finger_rehab.game.engine import GameEngine
     e = GameEngine.__new__(GameEngine)
     e.cfg = MagicMock()
     e.cfg.get = MagicMock(side_effect=lambda k, d=None: {
@@ -87,8 +87,8 @@ class NoOtherBuzzingTests(unittest.TestCase):
     outcome was."""
 
     def test_log_trial_never_sends_a_stim(self) -> None:
-        from rehab.game.modes.classic import PendingTrial
-        from rehab.game.scoring import TrialResult
+        from finger_rehab.game.modes.classic import PendingTrial
+        from finger_rehab.game.scoring import TrialResult
         e = _engine()
         e.score = 0
         e.hits = 0
@@ -178,7 +178,7 @@ class ConfigDefaultsTests(unittest.TestCase):
         # up whatever this machine's user_settings.yaml happens to say,
         # and the claim here is about what ships.
         import yaml
-        from rehab.config import DEFAULT_CONFIG
+        from finger_rehab.config import DEFAULT_CONFIG
         with open(DEFAULT_CONFIG) as f:
             shipped = yaml.safe_load(f)
         self.assertIs(shipped["cue"]["buzz_before"], True)
@@ -187,13 +187,13 @@ class ConfigDefaultsTests(unittest.TestCase):
         # ~30 ms is the floor for a vibration to be perceived as such;
         # cueing studies use bursts up to about 400 ms, beyond which the
         # cue starts overlapping the patient's own response.
-        from rehab.config import Config
+        from finger_rehab.config import Config
         ms = int(Config.load().get("motor.cue_ms"))
         self.assertGreaterEqual(ms, 150)
         self.assertLessEqual(ms, 450)
 
     def test_pulse_interval_under_firmware_hold(self) -> None:
-        from rehab.config import Config
+        from finger_rehab.config import Config
         self.assertLess(int(Config.load().get("motor.pulse_interval_ms")), 150)
 
 

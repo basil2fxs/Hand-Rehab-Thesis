@@ -1,4 +1,4 @@
-"""Tests for rehab/analytics/signal.py.
+"""Tests for finger_rehab/analytics/signal.py.
 
 Each filter is exercised with a synthetic input where the expected
 spectral behaviour is computable from the cutoff alone: a sine in
@@ -37,7 +37,7 @@ class ButterLowpassForceTests(unittest.TestCase):
     def test_passband_5hz_survives(self) -> None:
         # 5 Hz sits well inside the 20 Hz passband, so the output
         # should keep at least 80% of the input power.
-        from rehab.analytics.signal import butter_lowpass_force
+        from finger_rehab.analytics.signal import butter_lowpass_force
         x = self._sine(5.0)
         y = butter_lowpass_force(x, self.FS)
         self.assertGreater(_power(y), 0.8 * _power(x))
@@ -46,7 +46,7 @@ class ButterLowpassForceTests(unittest.TestCase):
         # 60 Hz is 3x the cutoff. With a 2nd-order Butterworth applied
         # twice (filtfilt -> effective 4th-order) the attenuation at
         # 3x is enormous; require at least 10x power reduction.
-        from rehab.analytics.signal import butter_lowpass_force
+        from finger_rehab.analytics.signal import butter_lowpass_force
         x = self._sine(60.0)
         y = butter_lowpass_force(x, self.FS)
         self.assertLess(_power(y), 0.1 * _power(x))
@@ -54,7 +54,7 @@ class ButterLowpassForceTests(unittest.TestCase):
     def test_noise_high_frequency_attenuated(self) -> None:
         # 5 Hz passband sine + a noisy 60 Hz stopband sine. After
         # filtering the 5 Hz signal should dominate the residual.
-        from rehab.analytics.signal import butter_lowpass_force
+        from finger_rehab.analytics.signal import butter_lowpass_force
         signal_5 = self._sine(5.0)
         noise_60 = self._sine(60.0)
         x = signal_5 + noise_60
@@ -67,7 +67,7 @@ class ButterLowpassForceTests(unittest.TestCase):
         self.assertLess(clean_dist, dirty_dist * 0.1)
 
     def test_same_length_output(self) -> None:
-        from rehab.analytics.signal import butter_lowpass_force
+        from finger_rehab.analytics.signal import butter_lowpass_force
         x = self._sine(5.0, n=500)
         y = butter_lowpass_force(x, self.FS)
         self.assertEqual(len(y), len(x))
@@ -84,7 +84,7 @@ class ButterLowpassDforceTests(unittest.TestCase):
         return np.sin(2 * np.pi * freq * t)
 
     def test_passband_3hz_survives(self) -> None:
-        from rehab.analytics.signal import butter_lowpass_dforce
+        from finger_rehab.analytics.signal import butter_lowpass_dforce
         x = self._sine(3.0)
         y = butter_lowpass_dforce(x, self.FS)
         self.assertGreater(_power(y), 0.8 * _power(x))
@@ -93,7 +93,7 @@ class ButterLowpassDforceTests(unittest.TestCase):
         # 15 Hz sits between the two cutoffs (20 Hz force, 10 Hz
         # dforce). The dforce filter must hit it harder than the
         # force filter does.
-        from rehab.analytics.signal import (
+        from finger_rehab.analytics.signal import (
             butter_lowpass_force, butter_lowpass_dforce,
         )
         x = self._sine(15.0)
@@ -105,7 +105,7 @@ class ButterLowpassDforceTests(unittest.TestCase):
 class SavgolTests(unittest.TestCase):
 
     def test_smooths_random_noise(self) -> None:
-        from rehab.analytics.signal import savgol
+        from finger_rehab.analytics.signal import savgol
         rng = np.random.default_rng(seed=42)
         x = rng.normal(0.0, 1.0, size=200)
         y = savgol(x)
@@ -115,7 +115,7 @@ class SavgolTests(unittest.TestCase):
     def test_preserves_linear_ramp(self) -> None:
         # Polyorder=3 reproduces any polynomial up to degree 3
         # exactly. A linear ramp must survive unchanged.
-        from rehab.analytics.signal import savgol
+        from finger_rehab.analytics.signal import savgol
         x = np.linspace(0.0, 10.0, 100)
         y = savgol(x)
         # Interior samples (away from edge effects) should match
@@ -123,7 +123,7 @@ class SavgolTests(unittest.TestCase):
         np.testing.assert_allclose(y[20:80], x[20:80], atol=1e-9)
 
     def test_same_length_output(self) -> None:
-        from rehab.analytics.signal import savgol
+        from finger_rehab.analytics.signal import savgol
         x = np.zeros(50)
         self.assertEqual(len(savgol(x)), len(x))
 
@@ -131,7 +131,7 @@ class SavgolTests(unittest.TestCase):
 class DerivativeTests(unittest.TestCase):
 
     def test_constant_signal_zero_derivative(self) -> None:
-        from rehab.analytics.signal import derivative
+        from finger_rehab.analytics.signal import derivative
         x = np.full(20, 7.5)
         y = derivative(x, fs=100.0)
         np.testing.assert_allclose(y, np.zeros_like(x))
@@ -141,7 +141,7 @@ class DerivativeTests(unittest.TestCase):
         # be 2 * fs = 200 per sample after the prepend boundary
         # condition stabilises (sample 0 returns 0 because of the
         # prepend trick - that's documented behaviour).
-        from rehab.analytics.signal import derivative
+        from finger_rehab.analytics.signal import derivative
         x = np.arange(10, dtype=float) * 2.0   # 0, 2, 4, ...
         y = derivative(x, fs=100.0)
         # sample 0: diff(0 - 0) * 100 = 0 (prepend boundary).
@@ -150,7 +150,7 @@ class DerivativeTests(unittest.TestCase):
         np.testing.assert_allclose(y[1:], 200.0)
 
     def test_same_length_output(self) -> None:
-        from rehab.analytics.signal import derivative
+        from finger_rehab.analytics.signal import derivative
         x = np.arange(50, dtype=float)
         self.assertEqual(len(derivative(x, fs=100.0)), len(x))
 
@@ -174,7 +174,7 @@ class TeasdaleOnsetTests(unittest.TestCase):
         return x + ramp
 
     def test_picks_ramp_onset_within_tolerance(self) -> None:
-        from rehab.analytics.signal import detect_onset_teasdale
+        from finger_rehab.analytics.signal import detect_onset_teasdale
         trace = self._trace(onset_idx=120)
         idx = detect_onset_teasdale(trace, fs=self.FS,
                                       baseline_window=80, k=3.0)
@@ -187,7 +187,7 @@ class TeasdaleOnsetTests(unittest.TestCase):
     def test_returns_none_when_no_press(self) -> None:
         # Pure noise, no ramp -> the threshold is never crossed for
         # two consecutive samples.
-        from rehab.analytics.signal import detect_onset_teasdale
+        from finger_rehab.analytics.signal import detect_onset_teasdale
         rng = np.random.default_rng(seed=1)
         trace = rng.normal(0.0, 0.01, size=200)
         # Use a high k so noise can't sneak past the threshold.
@@ -196,7 +196,7 @@ class TeasdaleOnsetTests(unittest.TestCase):
         self.assertIsNone(idx)
 
     def test_returns_none_on_short_input(self) -> None:
-        from rehab.analytics.signal import detect_onset_teasdale
+        from finger_rehab.analytics.signal import detect_onset_teasdale
         self.assertIsNone(detect_onset_teasdale(
             np.zeros(5), fs=self.FS))
 

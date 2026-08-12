@@ -9,7 +9,7 @@ Grounding facts checked in the code this session:
 - Dr Marinovic's SRT program (SRT_Sequence_learning_Final_v2.py): one marker only,
   byte 30 written to COM10 at flash onset, held ~16.7 ms (2 frames at 120 Hz), then
   byte 0. No response marker, no warning marker, no block markers. ISIs 250 to 750 ms.
-- Basil's reaction mode (rehab/game/modes/reaction.py): exponential foreperiod above
+- Basil's reaction mode (finger_rehab/game/modes/reaction.py): exponential foreperiod above
   fp_min truncated at fp_max (flat hazard by design, citing Naatanen 1971 and Niemi
   and Naatanen 1981 in its own docstring), optional uniform 2 to 10 s PVT-style
   draw, 10 percent catch trials, rest gate before each trial, false starts aborted.

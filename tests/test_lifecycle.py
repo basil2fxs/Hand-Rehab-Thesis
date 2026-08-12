@@ -24,10 +24,10 @@ class ResultsScreenGradeTests(unittest.TestCase):
     def setUp(self) -> None:
         import pygame
         pygame.init()
-        from rehab.config import Config
-        from rehab.game.engine import GameEngine
-        from rehab.hardware.keyboard_source import KeyboardOnlySource
-        from rehab.ui.screens import ResultsScreen
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
+        from finger_rehab.ui.screens import ResultsScreen
         cfg = Config.load()
         cfg.data["ui"]["resolution"] = [1280, 800]
         self.eng = GameEngine(cfg, KeyboardOnlySource())
@@ -81,9 +81,9 @@ class FinishBlockLifecycleTests(unittest.TestCase):
     last_session_root, AND not leak file handles when save fails."""
 
     def _make_engine(self):
-        from rehab.config import Config
-        from rehab.game.engine import GameEngine
-        from rehab.hardware.keyboard_source import KeyboardOnlySource
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
         cfg = Config.load()
         cfg.data["ui"]["resolution"] = [1280, 800]
         eng = GameEngine(cfg, KeyboardOnlySource())
@@ -143,9 +143,9 @@ class AutoSaveDuringBlockTests(unittest.TestCase):
     file should be re-written periodically as trials accumulate."""
 
     def _make_engine(self):
-        from rehab.config import Config
-        from rehab.game.engine import GameEngine
-        from rehab.hardware.keyboard_source import KeyboardOnlySource
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
         cfg = Config.load()
         cfg.data["ui"]["resolution"] = [1280, 800]
         eng = GameEngine(cfg, KeyboardOnlySource())
@@ -220,9 +220,9 @@ class ResearchSchemaTests(unittest.TestCase):
     position for rhythm. Block summary lands in metadata.json."""
 
     def _make_engine(self):
-        from rehab.config import Config
-        from rehab.game.engine import GameEngine
-        from rehab.hardware.keyboard_source import KeyboardOnlySource
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
         cfg = Config.load()
         cfg.data["ui"]["resolution"] = [1280, 800]
         eng = GameEngine(cfg, KeyboardOnlySource())
@@ -230,7 +230,7 @@ class ResearchSchemaTests(unittest.TestCase):
         return eng
 
     def test_trial_columns_include_research_fields(self) -> None:
-        from rehab.data.logger import TRIAL_COLUMNS
+        from finger_rehab.data.logger import TRIAL_COLUMNS
         for field_name in ("iso_ts", "block_t_s", "bpm_at_trial",
                             "streak_at_trial", "in_recovery",
                             "song_time_s"):
@@ -241,8 +241,8 @@ class ResearchSchemaTests(unittest.TestCase):
         # Fire a synthetic trial in classic mode and confirm the new
         # columns appear in the written row.
         from unittest.mock import MagicMock
-        from rehab.game.modes.classic import PendingTrial
-        from rehab.game.scoring import TrialResult
+        from finger_rehab.game.modes.classic import PendingTrial
+        from finger_rehab.game.scoring import TrialResult
         with tempfile.TemporaryDirectory() as td:
             eng = self._make_engine()
             eng.cfg.data["session"]["data_dir"] = td
@@ -272,8 +272,8 @@ class ResearchSchemaTests(unittest.TestCase):
 
     def test_adaptive_trial_row_captures_bpm(self) -> None:
         from unittest.mock import MagicMock
-        from rehab.game.modes.classic import PendingTrial
-        from rehab.game.scoring import TrialResult
+        from finger_rehab.game.modes.classic import PendingTrial
+        from finger_rehab.game.scoring import TrialResult
         with tempfile.TemporaryDirectory() as td:
             eng = self._make_engine()
             eng.cfg.data["session"]["data_dir"] = td
@@ -301,8 +301,8 @@ class ResearchSchemaTests(unittest.TestCase):
     def test_block_summary_written_at_finish(self) -> None:
         import json
         from unittest.mock import MagicMock
-        from rehab.game.modes.classic import PendingTrial
-        from rehab.game.scoring import TrialResult
+        from finger_rehab.game.modes.classic import PendingTrial
+        from finger_rehab.game.scoring import TrialResult
         with tempfile.TemporaryDirectory() as td:
             eng = self._make_engine()
             eng.cfg.data["session"]["data_dir"] = td
@@ -342,9 +342,9 @@ class AbandonLifecycleTests(unittest.TestCase):
     must save the abandon marker, and must not double-fire CSV handles."""
 
     def _make_engine(self):
-        from rehab.config import Config
-        from rehab.game.engine import GameEngine
-        from rehab.hardware.keyboard_source import KeyboardOnlySource
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
         cfg = Config.load()
         cfg.data["ui"]["resolution"] = [1280, 800]
         eng = GameEngine(cfg, KeyboardOnlySource())
@@ -392,7 +392,7 @@ class SessionPathsCollisionTests(unittest.TestCase):
     pre-existing directory."""
 
     def test_collision_appends_numeric_suffix(self) -> None:
-        from rehab.data.logger import SessionPaths
+        from finger_rehab.data.logger import SessionPaths
         with tempfile.TemporaryDirectory() as td:
             data_dir = Path(td)
             p1 = SessionPaths.for_session(data_dir, "Basil")
@@ -403,7 +403,7 @@ class SessionPathsCollisionTests(unittest.TestCase):
             self.assertTrue(p2.root.exists())
 
     def test_unsafe_chars_in_name_get_replaced(self) -> None:
-        from rehab.data.logger import SessionPaths
+        from finger_rehab.data.logger import SessionPaths
         with tempfile.TemporaryDirectory() as td:
             paths = SessionPaths.for_session(Path(td), "A/B C")
             # Slashes and spaces replaced so the folder is a valid path.
@@ -419,7 +419,7 @@ class RetryLastBlockTests(unittest.TestCase):
 
     def test_retry_routes_classic_to_begin_classic(self) -> None:
         from unittest.mock import MagicMock
-        from rehab.game.engine import GameEngine
+        from finger_rehab.game.engine import GameEngine
         eng = GameEngine.__new__(GameEngine)
         eng.current_block = "classic"
         eng.begin_classic_block = MagicMock()
@@ -432,7 +432,7 @@ class RetryLastBlockTests(unittest.TestCase):
 
     def test_retry_routes_adaptive_to_begin_adaptive(self) -> None:
         from unittest.mock import MagicMock
-        from rehab.game.engine import GameEngine
+        from finger_rehab.game.engine import GameEngine
         eng = GameEngine.__new__(GameEngine)
         eng.current_block = "adaptive"
         eng.begin_classic_block = MagicMock()
@@ -443,7 +443,7 @@ class RetryLastBlockTests(unittest.TestCase):
 
     def test_retry_without_prior_block_falls_back_to_mode_select(self) -> None:
         from unittest.mock import MagicMock
-        from rehab.game.engine import GameEngine
+        from finger_rehab.game.engine import GameEngine
         eng = GameEngine.__new__(GameEngine)
         eng.current_block = "(none)"
         eng.show_mode_select = MagicMock()

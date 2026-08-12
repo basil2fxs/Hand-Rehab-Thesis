@@ -5,7 +5,8 @@ REM builds\Windows\ so the ready-to-run deliverables always live in one
 REM obvious place at the project root.
 setlocal
 
-cd /d "%~dp0"
+rem The script lives in builds\; the build runs from the project root.
+cd /d "%~dp0.."
 
 py -m pip install --quiet --upgrade pyinstaller
 if errorlevel 1 (

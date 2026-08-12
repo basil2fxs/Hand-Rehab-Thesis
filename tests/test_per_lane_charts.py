@@ -24,7 +24,7 @@ def _bare_engine():
     log_trial / log_rhythm_hit / log_rhythm_unmatched calls used in
     these tests. Real engine construction needs pygame + a source +
     pyserial; this lets us hit the per-lane bookkeeping in isolation."""
-    from rehab.game.engine import GameEngine
+    from finger_rehab.game.engine import GameEngine
     eng = GameEngine.__new__(GameEngine)
     eng.cfg = MagicMock()
     eng.cfg.get = MagicMock(return_value=0)
@@ -69,7 +69,7 @@ class ClassicAdaptivePerLaneTests(unittest.TestCase):
     def _trial(self, lane: int, incorrect=()):
         # Minimal stand-in for PendingTrial. log_trial only reads
         # .lane, .stim_t_perf, .keys_pressed, and .incorrect_presses.
-        from rehab.game.modes.classic import PendingTrial
+        from finger_rehab.game.modes.classic import PendingTrial
         return PendingTrial(
             trial_id=1, lane=lane, stim_t_perf=0.0,
             keys_pressed=[lane],
@@ -77,7 +77,7 @@ class ClassicAdaptivePerLaneTests(unittest.TestCase):
         )
 
     def _result(self, label: str, rt_ms: float | None, points: int = 0):
-        from rehab.game.scoring import TrialResult
+        from finger_rehab.game.scoring import TrialResult
         return TrialResult(label=label, points=points, rt_ms=rt_ms)
 
     def test_rt_appended_to_target_lane(self) -> None:
@@ -131,7 +131,7 @@ class RhythmPerLaneTests(unittest.TestCase):
     so the rhythm Results screen sees per-lane data too."""
 
     def _sched_note(self, lane: int):
-        from rehab.audio.beatmap import Note
+        from finger_rehab.audio.beatmap import Note
         sched = MagicMock()
         sched.note = Note(t=1.0, lane=lane)
         sched.index = 0

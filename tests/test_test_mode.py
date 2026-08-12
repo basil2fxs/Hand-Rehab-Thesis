@@ -23,7 +23,7 @@ class TestModeTrialsHelperTests(unittest.TestCase):
     truth."""
 
     def _engine(self, enabled: bool, trials: int = 6):
-        from rehab.game.engine import GameEngine
+        from finger_rehab.game.engine import GameEngine
         eng = GameEngine.__new__(GameEngine)
         eng.cfg = MagicMock()
         def _get(k, d=None):
@@ -62,9 +62,9 @@ class ClassicTestModeTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.config import Config
-            from rehab.game.engine import GameEngine
-            from rehab.hardware.keyboard_source import KeyboardOnlySource
+            from finger_rehab.config import Config
+            from finger_rehab.game.engine import GameEngine
+            from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
             cfg = Config.load()
             cfg.data["ui"]["resolution"] = [1280, 800]
             # Pattern length 6 (default), test_mode 6 trials -> ceil(6/6)
@@ -90,9 +90,9 @@ class ClassicTestModeTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.config import Config
-            from rehab.game.engine import GameEngine
-            from rehab.hardware.keyboard_source import KeyboardOnlySource
+            from finger_rehab.config import Config
+            from finger_rehab.game.engine import GameEngine
+            from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
             cfg = Config.load()
             cfg.data["ui"]["resolution"] = [1280, 800]
             cfg.data.setdefault("game", {})["test_mode_enabled"] = False
@@ -114,9 +114,9 @@ class AdaptiveTestModeTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.config import Config
-            from rehab.game.engine import GameEngine
-            from rehab.hardware.keyboard_source import KeyboardOnlySource
+            from finger_rehab.config import Config
+            from finger_rehab.game.engine import GameEngine
+            from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
             cfg = Config.load()
             cfg.data["ui"]["resolution"] = [1280, 800]
             cfg.data.setdefault("game", {})["test_mode_enabled"] = True
@@ -140,9 +140,9 @@ class AdaptiveTestModeTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.config import Config
-            from rehab.game.engine import GameEngine
-            from rehab.hardware.keyboard_source import KeyboardOnlySource
+            from finger_rehab.config import Config
+            from finger_rehab.game.engine import GameEngine
+            from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
             cfg = Config.load()
             cfg.data["ui"]["resolution"] = [1280, 800]
             cfg.data.setdefault("adaptive", {})["timeout_factor"] = 0.5
@@ -161,9 +161,9 @@ class AdaptiveTestModeTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.config import Config
-            from rehab.game.engine import GameEngine
-            from rehab.hardware.keyboard_source import KeyboardOnlySource
+            from finger_rehab.config import Config
+            from finger_rehab.game.engine import GameEngine
+            from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
             cfg = Config.load()
             cfg.data["ui"]["resolution"] = [1280, 800]
             cfg.data.setdefault("game", {})["test_mode_enabled"] = False
@@ -185,10 +185,10 @@ class RhythmTestModeTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.audio.beatmap import Beatmap, Note
-            from rehab.config import Config
-            from rehab.game.engine import GameEngine
-            from rehab.hardware.keyboard_source import KeyboardOnlySource
+            from finger_rehab.audio.beatmap import Beatmap, Note
+            from finger_rehab.config import Config
+            from finger_rehab.game.engine import GameEngine
+            from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
             cfg = Config.load()
             cfg.data["ui"]["resolution"] = [1280, 800]
             cfg.data.setdefault("game", {})["test_mode_enabled"] = True
@@ -210,10 +210,10 @@ class RhythmTestModeTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.audio.beatmap import Beatmap, Note
-            from rehab.config import Config
-            from rehab.game.engine import GameEngine
-            from rehab.hardware.keyboard_source import KeyboardOnlySource
+            from finger_rehab.audio.beatmap import Beatmap, Note
+            from finger_rehab.config import Config
+            from finger_rehab.game.engine import GameEngine
+            from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
             cfg = Config.load()
             cfg.data["ui"]["resolution"] = [1280, 800]
             cfg.data.setdefault("game", {})["test_mode_enabled"] = False

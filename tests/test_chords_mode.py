@@ -28,7 +28,7 @@ os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
 
 def _press(lane: int, t: float = 0.0):
-    from rehab.hardware.fsr_detector import PressEvent
+    from finger_rehab.hardware.fsr_detector import PressEvent
     return PressEvent(lane=lane, t_perf=t, value=0, baseline=0.0,
                        hand="right")
 
@@ -38,8 +38,8 @@ def _build_mode(**overrides):
     `now` values instead of sleeping, following the pattern-mode test
     harness. The engine reports keyboard input (no live FSR data) so
     the sensor-dependent checks relax unless a test wires them up."""
-    from rehab.game.modes.chords import ChordsMode
-    from rehab.game.scoring import ScoreConfig
+    from finger_rehab.game.modes.chords import ChordsMode
+    from finger_rehab.game.scoring import ScoreConfig
     engine = MagicMock()
     engine._screens = {}
     engine.hand_mode = "right"
@@ -115,13 +115,13 @@ class DifficultyLadderTests(unittest.TestCase):
     }
 
     def test_difficulty_formula_reproduces_the_briefed_values(self) -> None:
-        from rehab.game.modes.chords import chord_difficulty
+        from finger_rehab.game.modes.chords import chord_difficulty
         for chord, d in self.EXPECTED_D.items():
             self.assertAlmostEqual(chord_difficulty(chord), d, places=3,
                                    msg=f"chord {chord}")
 
     def test_ladder_covers_every_chord_of_two_to_four_fingers(self) -> None:
-        from rehab.game.modes.chords import CHORD_TIERS
+        from finger_rehab.game.modes.chords import CHORD_TIERS
         seen = [c for tier in CHORD_TIERS for c in tier]
         # 6 pairs + 4 triples + 1 quad = 11, each exactly once.
         self.assertEqual(len(seen), 11)
@@ -131,7 +131,7 @@ class DifficultyLadderTests(unittest.TestCase):
             self.assertLessEqual(len(c), 4)
 
     def test_tiers_step_up_in_predicted_hardness(self) -> None:
-        from rehab.game.modes.chords import CHORD_TIERS, chord_difficulty
+        from finger_rehab.game.modes.chords import CHORD_TIERS, chord_difficulty
         maxima = [max(chord_difficulty(c) for c in tier)
                   for tier in CHORD_TIERS]
         self.assertEqual(maxima, sorted(maxima))
@@ -632,7 +632,7 @@ class ArpeggioCueTests(unittest.TestCase):
     keep buzzing together."""
 
     def _engine(self, hand_mode="right"):
-        from rehab.game.engine import GameEngine
+        from finger_rehab.game.engine import GameEngine
         e = GameEngine.__new__(GameEngine)
         e.cfg = MagicMock()
         e.cfg.get = MagicMock(side_effect=lambda k, d=None: {
@@ -715,9 +715,9 @@ class EngineIntegrationTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.config import Config
-            from rehab.game.engine import GameEngine
-            from rehab.hardware.keyboard_source import KeyboardOnlySource
+            from finger_rehab.config import Config
+            from finger_rehab.game.engine import GameEngine
+            from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
             with tempfile.TemporaryDirectory() as td:
                 cfg = Config.load()
                 cfg.data["ui"]["resolution"] = [640, 480]
@@ -845,7 +845,7 @@ class HoldTraceReplayTests(unittest.TestCase):
     recovers the trial."""
 
     def setUp(self) -> None:
-        import rehab.game.modes.chords as chords_mod
+        import finger_rehab.game.modes.chords as chords_mod
         self._chords_mod = chords_mod
         self._real_time = chords_mod.time
         self.clock = _TraceClock()
@@ -855,9 +855,9 @@ class HoldTraceReplayTests(unittest.TestCase):
         self._chords_mod.time = self._real_time
 
     def _build(self, probes: int):
-        from rehab.game.modes.chords import ChordsMode
-        from rehab.game.scoring import ScoreConfig
-        from rehab.hardware.fsr_detector import Calibration, FSRDetector
+        from finger_rehab.game.modes.chords import ChordsMode
+        from finger_rehab.game.scoring import ScoreConfig
+        from finger_rehab.hardware.fsr_detector import Calibration, FSRDetector
         det = FSRDetector(Calibration(), hand="right")
         engine = MagicMock()
         engine.hand_mode = "right"
@@ -950,7 +950,7 @@ class HoldTraceReplayTests(unittest.TestCase):
         self._replay(mode, det, engine, plan)
         rec = mode._records[-1]
         self.assertEqual(rec["class"], "no_hold")
-        from rehab.game.modes.chords import FINGER_NAMES
+        from finger_rehab.game.modes.chords import FINGER_NAMES
         expected = FINGER_NAMES[self._target]
         self.assertEqual(self._warn_text(screen),
                          f"{expected} lifted too soon")
@@ -1109,11 +1109,11 @@ class ChordsResultsScreenCardsTests(unittest.TestCase):
 
     def _draw_chords_results(self, block_summary_chords):
         import pygame
-        from rehab.config import Config
-        from rehab.game.engine import GameEngine
-        from rehab.ui.screens import ResultsScreen
-        from rehab.ui.theme import get as get_theme
-        from rehab.ui.widgets import Layout
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.ui.screens import ResultsScreen
+        from finger_rehab.ui.theme import get as get_theme
+        from finger_rehab.ui.widgets import Layout
         pygame.init()
         pygame.font.init()
         pygame.display.set_mode((1280, 800))
@@ -1172,8 +1172,8 @@ class DisconnectedSourceTests(unittest.TestCase):
     repeating advice that cannot fix it."""
 
     def test_disconnect_clears_frozen_detector_pressed_state(self) -> None:
-        from rehab.game.engine import GameEngine
-        from rehab.hardware.fsr_detector import FSRDetector, Calibration
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.hardware.fsr_detector import FSRDetector, Calibration
 
         class FakeSource:
             provides_samples = True
@@ -1257,14 +1257,14 @@ class CrossLadderTests(unittest.TestCase):
     }
 
     def test_cross_difficulty_reproduces_the_briefed_values(self) -> None:
-        from rehab.game.modes.chords import chord_difficulty_cross
+        from finger_rehab.game.modes.chords import chord_difficulty_cross
         for (left, right), d in self.EXPECTED_D_CROSS.items():
             self.assertAlmostEqual(chord_difficulty_cross(left, right),
                                    d, places=3,
                                    msg=f"{left}|{right}")
 
     def test_tiers_cover_the_brief_and_step_up_in_hardness(self) -> None:
-        from rehab.game.modes.chords import (CROSS_TIERS,
+        from finger_rehab.game.modes.chords import (CROSS_TIERS,
                                              chord_difficulty_cross)
         listed = [c for tier in CROSS_TIERS for c in tier]
         self.assertEqual(set(listed), set(self.EXPECTED_D_CROSS))
@@ -1277,7 +1277,7 @@ class CrossLadderTests(unittest.TestCase):
 
     def test_every_cross_chord_is_two_to_four_fingers_both_hands(
             self) -> None:
-        from rehab.game.modes.chords import CROSS_TIERS
+        from finger_rehab.game.modes.chords import CROSS_TIERS
         for tier in CROSS_TIERS:
             for left, right in tier:
                 self.assertGreaterEqual(len(left), 1)
@@ -1285,7 +1285,7 @@ class CrossLadderTests(unittest.TestCase):
                 self.assertLessEqual(len(left) + len(right), 4)
 
     def test_mirror_tiers_have_zero_asymmetry(self) -> None:
-        from rehab.game.modes.chords import (CROSS_TIERS,
+        from finger_rehab.game.modes.chords import (CROSS_TIERS,
                                              cross_mirror_distance)
         for tier in CROSS_TIERS[:2]:
             for left, right in tier:
@@ -1295,7 +1295,7 @@ class CrossLadderTests(unittest.TestCase):
                 self.assertGreater(cross_mirror_distance(left, right), 0.0)
 
     def test_cross_label_reads_left_bar_right(self) -> None:
-        from rehab.game.modes.chords import cross_label
+        from finger_rehab.game.modes.chords import cross_label
         self.assertEqual(cross_label((0,), (1,)), "I|M")
         self.assertEqual(cross_label((0, 1), (2, 3)), "IM|RP")
 
@@ -1405,7 +1405,7 @@ class CrossPlayTests(unittest.TestCase):
         self.assertEqual(rec["lead_hand"], "right")
         self.assertAlmostEqual(rec["lag_ms"], 80.0, delta=2.0)
         self.assertIsNone(rec["er"])
-        from rehab.game.modes.chords import chord_difficulty_cross
+        from finger_rehab.game.modes.chords import chord_difficulty_cross
         self.assertAlmostEqual(
             rec["d"], chord_difficulty_cross(trial.fingers_left,
                                              trial.fingers_right))
@@ -1585,7 +1585,7 @@ class FirstChordLatencyTests(unittest.TestCase):
     warm-up; Test Mode bilateral was 4 probes to 2 chords."""
 
     def setUp(self) -> None:
-        import rehab.game.modes.chords as chords_mod
+        import finger_rehab.game.modes.chords as chords_mod
         self._chords_mod = chords_mod
         self._real_time = chords_mod.time
         self.clock = _TraceClock()
@@ -1597,9 +1597,9 @@ class FirstChordLatencyTests(unittest.TestCase):
     def _engine(self, td: str):
         import pygame
         pygame.init()
-        from rehab.config import Config
-        from rehab.game.engine import GameEngine
-        from rehab.hardware.keyboard_source import KeyboardOnlySource
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
         cfg = Config.load()
         cfg.data["ui"]["resolution"] = [640, 480]
         cfg.data["audio"]["enabled"] = False
@@ -1617,7 +1617,7 @@ class FirstChordLatencyTests(unittest.TestCase):
         """50 Hz update loop against the trace clock with a scripted
         player. react_s=None never presses (the slowest hand there
         is). Returns (probes seen, seconds to the first chord stim)."""
-        from rehab.hardware.fsr_detector import PressEvent
+        from finger_rehab.hardware.fsr_detector import PressEvent
         t_start = self.clock.t
         pending: list[tuple[float, int]] = []
         seen: int | None = None
@@ -1689,9 +1689,9 @@ class EngineCrossIntegrationTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.config import Config
-            from rehab.game.engine import GameEngine
-            from rehab.hardware.keyboard_source import KeyboardOnlySource
+            from finger_rehab.config import Config
+            from finger_rehab.game.engine import GameEngine
+            from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
             with tempfile.TemporaryDirectory() as td:
                 cfg = Config.load()
                 cfg.data["ui"]["resolution"] = [640, 480]

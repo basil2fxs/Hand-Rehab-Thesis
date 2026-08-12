@@ -1,4 +1,4 @@
-"""Tests for the post-block research report (rehab/analytics/report.py)
+"""Tests for the post-block research report (finger_rehab/analytics/report.py)
 and the pieces around it: session folder naming, the sessions index,
 and the results screen's Data folder button."""
 from __future__ import annotations
@@ -85,7 +85,7 @@ def _write_session(root: Path, n_trials: int = 12) -> None:
 
 class ReportGenerationTests(unittest.TestCase):
     def test_generates_all_outputs(self) -> None:
-        from rehab.analytics import report
+        from finger_rehab.analytics import report
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             _write_session(root)
@@ -97,7 +97,7 @@ class ReportGenerationTests(unittest.TestCase):
             self.assertGreaterEqual(len(charts), 3)
 
     def test_html_contains_key_content(self) -> None:
-        from rehab.analytics import report
+        from finger_rehab.analytics import report
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             _write_session(root)
@@ -109,7 +109,7 @@ class ReportGenerationTests(unittest.TestCase):
                 self.assertIn(needle, html_text)
 
     def test_summary_csv_is_one_flat_row(self) -> None:
-        from rehab.analytics import report
+        from finger_rehab.analytics import report
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             _write_session(root)
@@ -123,14 +123,14 @@ class ReportGenerationTests(unittest.TestCase):
             self.assertEqual(row["loud_trials.n"], "1")
 
     def test_empty_folder_returns_none(self) -> None:
-        from rehab.analytics import report
+        from finger_rehab.analytics import report
         with tempfile.TemporaryDirectory() as td:
             self.assertIsNone(report.generate(Path(td)))
 
     def test_metadata_only_still_reports(self) -> None:
         # A crashed block can leave metadata without trials. Tables
         # still generate; charts are skipped.
-        from rehab.analytics import report
+        from finger_rehab.analytics import report
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             _write_session(root)
@@ -142,7 +142,7 @@ class ReportGenerationTests(unittest.TestCase):
 
 class SessionsIndexTests(unittest.TestCase):
     def test_index_appends_with_single_header(self) -> None:
-        from rehab.analytics import report
+        from finger_rehab.analytics import report
         with tempfile.TemporaryDirectory() as td:
             entry = {"finished_at": "t", "participant": "P", "age": "1",
                      "mode": "classic", "hand": "right",
@@ -155,7 +155,7 @@ class SessionsIndexTests(unittest.TestCase):
             self.assertTrue(lines[0].startswith("date,finished_at,"))
 
     def test_unknown_keys_ignored(self) -> None:
-        from rehab.analytics import report
+        from finger_rehab.analytics import report
         with tempfile.TemporaryDirectory() as td:
             p = report.append_index(td, {"participant": "P",
                                           "bogus_key": "x"})
@@ -165,7 +165,7 @@ class SessionsIndexTests(unittest.TestCase):
             self.assertNotIn("bogus_key", rows[0])
 
     def test_date_column_leads_the_index(self) -> None:
-        from rehab.analytics import report
+        from finger_rehab.analytics import report
         with tempfile.TemporaryDirectory() as td:
             p = report.append_index(td, {"date": "2026-07-02",
                                           "participant": "P"})
@@ -176,7 +176,7 @@ class SessionsIndexTests(unittest.TestCase):
         # An index written with an older column set must be renamed to
         # sessions_index_legacy.csv, not appended to with misaligned
         # rows.
-        from rehab.analytics import report
+        from finger_rehab.analytics import report
         with tempfile.TemporaryDirectory() as td:
             old = Path(td) / "sessions_index.csv"
             old.write_text("finished_at,participant\n2026-01-01,Old\n")
@@ -194,16 +194,16 @@ class SessionsIndexTests(unittest.TestCase):
 
 class LaneLabelTests(unittest.TestCase):
     def test_unilateral_right(self) -> None:
-        from rehab.analytics.report import lane_label
+        from finger_rehab.analytics.report import lane_label
         self.assertEqual(lane_label(0, "right"), "Right Index")
         self.assertEqual(lane_label(3, "right"), "Right Pinky")
 
     def test_unilateral_left(self) -> None:
-        from rehab.analytics.report import lane_label
+        from finger_rehab.analytics.report import lane_label
         self.assertEqual(lane_label(0, "left"), "Left Index")
 
     def test_bilateral(self) -> None:
-        from rehab.analytics.report import lane_label
+        from finger_rehab.analytics.report import lane_label
         self.assertEqual(lane_label(0, "both"), "Right Index")
         self.assertEqual(lane_label(4, "both"), "Left Index")
         self.assertEqual(lane_label(7, "both"), "Left Pinky")
@@ -214,7 +214,7 @@ class LaneLabelTests(unittest.TestCase):
         # ("Right <finger>", never "Left") reads as a hand asymmetry
         # that is really just a lane-keying convention. mode="mirror"
         # must label the pair, not one hand.
-        from rehab.analytics.report import lane_label
+        from finger_rehab.analytics.report import lane_label
         for lane in range(4):
             label = lane_label(lane, "both", mode="mirror")
             self.assertNotIn("Right", label)
@@ -227,7 +227,7 @@ class LaneLabelTests(unittest.TestCase):
         # Drives the real _per_finger_table with a metadata blob whose
         # block_summary.block is "mirror", the same signal the report
         # generation pipeline reads.
-        from rehab.analytics.report import _per_finger_table
+        from finger_rehab.analytics.report import _per_finger_table
         meta = {
             "hand": "both",
             "block_summary": {
@@ -252,7 +252,7 @@ class ForcePilotPerFingerTableTests(unittest.TestCase):
 
     def test_force_pilot_table_reads_the_modes_own_per_lane_stats(
             self) -> None:
-        from rehab.analytics.report import _per_finger_table
+        from finger_rehab.analytics.report import _per_finger_table
         meta = {
             "hand": "right",
             "block_summary": {
@@ -289,7 +289,7 @@ class ForcePilotPerFingerTableTests(unittest.TestCase):
     def test_falls_back_to_generic_table_for_old_metadata(self) -> None:
         # Old saves without block_summary.force_pilot.per_lane must
         # still render something rather than an empty table.
-        from rehab.analytics.report import _per_finger_table
+        from finger_rehab.analytics.report import _per_finger_table
         meta = {
             "hand": "right",
             "block_summary": {
@@ -304,7 +304,7 @@ class ForcePilotPerFingerTableTests(unittest.TestCase):
 
 class OpenSessionFolderTests(unittest.TestCase):
     def _engine(self, root: str | None):
-        from rehab.game.engine import GameEngine
+        from finger_rehab.game.engine import GameEngine
         e = GameEngine.__new__(GameEngine)
         e.last_session_root = root
         return e
@@ -312,8 +312,8 @@ class OpenSessionFolderTests(unittest.TestCase):
     def test_opens_existing_folder_mac(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             e = self._engine(td)
-            with patch("rehab.game.engine.sys") as m_sys, \
-                 patch("rehab.game.engine.subprocess") as m_sub:
+            with patch("finger_rehab.game.engine.sys") as m_sys, \
+                 patch("finger_rehab.game.engine.subprocess") as m_sub:
                 m_sys.platform = "darwin"
                 self.assertTrue(e.open_last_session_folder())
                 m_sub.Popen.assert_called_once_with(["open", td])
@@ -329,8 +329,8 @@ class ReportHookTests(unittest.TestCase):
     def test_generate_session_report_writes_outputs(self) -> None:
         # End-to-end through the ENGINE hook: a real session folder,
         # engine state pointing at it, hook builds report + index.
-        from rehab.game.engine import GameEngine
-        from rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.config import Config
         with tempfile.TemporaryDirectory() as td:
             sessions = Path(td) / "sessions"
             root = sessions / "Pat_20260702_100000_adaptive"

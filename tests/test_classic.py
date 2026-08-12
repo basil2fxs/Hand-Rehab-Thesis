@@ -22,7 +22,7 @@ class ParsePatternTests(unittest.TestCase):
     the whole string parses to nothing, it falls back to 0..max_lanes-1."""
 
     def _parse(self, s, max_lanes=4):
-        from rehab.game.engine import GameEngine
+        from finger_rehab.game.engine import GameEngine
         return GameEngine._parse_pattern(s, max_lanes)
 
     def test_simple_pattern(self) -> None:
@@ -60,8 +60,8 @@ class ClassicModeConstructionTests(unittest.TestCase):
 
     def test_classic_mode_picks_up_slider_pace(self) -> None:
         from unittest.mock import MagicMock
-        from rehab.game.modes.classic import ClassicMode
-        from rehab.game.scoring import ScoreConfig
+        from finger_rehab.game.modes.classic import ClassicMode
+        from finger_rehab.game.scoring import ScoreConfig
         mode = ClassicMode(
             engine=MagicMock(),
             pattern=[0, 1, 2, 3],
@@ -83,9 +83,9 @@ class MainloopActuallyIteratesTests(unittest.TestCase):
     confirm it actually advanced frames, then signal stop."""
 
     def test_run_executes_frames_then_exits_cleanly(self) -> None:
-        from rehab.config import Config
-        from rehab.game.engine import GameEngine
-        from rehab.hardware.keyboard_source import KeyboardOnlySource
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
         cfg = Config.load()
         cfg.data["ui"]["resolution"] = [640, 480]
         cfg.data["audio"]["enabled"] = False
@@ -138,9 +138,9 @@ class SourceDisconnectionTests(unittest.TestCase):
     the raw CSV and warn-once via the logger."""
 
     def _make_engine_with_fake_source(self):
-        from rehab.config import Config
-        from rehab.game.engine import GameEngine
-        from rehab.hardware.source import Source
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.hardware.source import Source
         cfg = Config.load()
         cfg.data["ui"]["resolution"] = [640, 480]
 
@@ -202,9 +202,9 @@ class SourceDisconnectionTests(unittest.TestCase):
     def test_keyboard_source_does_not_warn(self) -> None:
         # Keyboard-only mode returns provides_samples=False; the check
         # should short-circuit and never inspect is_connected.
-        from rehab.config import Config
-        from rehab.game.engine import GameEngine
-        from rehab.hardware.keyboard_source import KeyboardOnlySource
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
         cfg = Config.load()
         cfg.data["ui"]["resolution"] = [640, 480]
         eng = GameEngine(cfg, KeyboardOnlySource())

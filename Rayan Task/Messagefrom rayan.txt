@@ -1,0 +1,10 @@
+You can access all the Rstudio&python files in “folder_hierarcy_example.zip”, ive also added a ‘guide’ document showing what each R file does and which folder it outputs to.
+
+We’ll focus in the two below as Welber was asking for them, keeping in mind these are ran on the old csv file, will need to change to parse through your new csv file :
+
+•The Teasdale Algorithm is from “process_force_peaks.py”
+
+•For the more accurate force reading code, it is in “analyze_baseline_drift_modified_newtons.R”
+
+
+the faded stims/response in ss3.jpeg show how the baseline drifts upwards, and the opaque stims/response show how every press has a dynamic baseline that is “zeroed” before every press

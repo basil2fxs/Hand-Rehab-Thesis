@@ -35,7 +35,7 @@ class VolumeMathTests(unittest.TestCase):
     clamp to 0..1."""
 
     def _engine(self, master=0.8, cue=1.0, feedback=1.0):
-        from rehab.audio.engine import AudioEngine
+        from finger_rehab.audio.engine import AudioEngine
         return AudioEngine(master_volume=master, cue_volume=cue,
                            feedback_volume=feedback)
 
@@ -76,7 +76,7 @@ class VolumeMathTests(unittest.TestCase):
 
 def _bare_engine():
     """GameEngine via __new__ with just the metric state backfilled."""
-    from rehab.game.engine import GameEngine
+    from finger_rehab.game.engine import GameEngine
     e = GameEngine.__new__(GameEngine)
     e._ensure_metric_state()
     e.hand_mode = "right"
@@ -252,7 +252,7 @@ class RtAggregationTests(unittest.TestCase):
     treat rhythm offsets by absolute value."""
 
     def _eng(self, rts, block="adaptive"):
-        from rehab.game.engine import GameEngine
+        from finger_rehab.game.engine import GameEngine
         e = GameEngine.__new__(GameEngine)
         e._per_lane_rts = rts
         e.current_block = block
@@ -281,7 +281,7 @@ class ConfigDefaultsTests(unittest.TestCase):
     load (covers a typo'd YAML key silently falling back)."""
 
     def test_audio_and_metric_defaults(self) -> None:
-        from rehab.config import Config
+        from finger_rehab.config import Config
         cfg = Config.load()
         for key in ("audio.cue_volume", "audio.feedback_volume",
                     "audio.loud_trial.fraction", "audio.loud_trial.boost"):

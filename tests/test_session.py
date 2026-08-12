@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 class SessionSaveTests(unittest.TestCase):
 
     def test_save_writes_valid_json_with_all_fields(self) -> None:
-        from rehab.data.session import Session, SOFTWARE_VERSION
+        from finger_rehab.data.session import Session, SOFTWARE_VERSION
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "metadata.json"
             s = Session(participant="Basil", hand="right",
@@ -32,7 +32,7 @@ class SessionSaveTests(unittest.TestCase):
             self.assertEqual(payload["notes"], "testing")
 
     def test_save_creates_parent_directory(self) -> None:
-        from rehab.data.session import Session
+        from finger_rehab.data.session import Session
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "nested" / "deep" / "metadata.json"
             Session(participant="X").save(path)
@@ -42,7 +42,7 @@ class SessionSaveTests(unittest.TestCase):
         # Same file written twice should reflect the latest state - the
         # engine relies on this to update notes from "in progress" to
         # "completed".
-        from rehab.data.session import Session
+        from finger_rehab.data.session import Session
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "metadata.json"
             Session(participant="A", notes="block in progress").save(path)
@@ -51,7 +51,7 @@ class SessionSaveTests(unittest.TestCase):
             self.assertEqual(payload["notes"], "completed")
 
     def test_save_leaves_no_tmp_file_behind(self) -> None:
-        from rehab.data.session import Session
+        from finger_rehab.data.session import Session
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "metadata.json"
             Session(participant="A").save(path)
@@ -65,14 +65,14 @@ class SessionAtomicityRegressionTests(unittest.TestCase):
     tmp file and atomically replacing."""
 
     def test_failed_save_preserves_prior_file(self) -> None:
-        from rehab.data.session import Session
+        from finger_rehab.data.session import Session
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "metadata.json"
             # Lay down a good metadata first.
             Session(participant="A", notes="block in progress").save(path)
             prior = path.read_text()
             # Now force the next save to blow up during serialisation.
-            with mock.patch("rehab.data.session.json.dumps",
+            with mock.patch("finger_rehab.data.session.json.dumps",
                              side_effect=RuntimeError("disk forgot how to disk")):
                 with self.assertRaises(RuntimeError):
                     Session(participant="A", notes="completed").save(path)
@@ -82,12 +82,12 @@ class SessionAtomicityRegressionTests(unittest.TestCase):
     def test_failed_replace_preserves_prior_file(self) -> None:
         # Even if os.replace raises (rare: permission flap, EBUSY on
         # Windows), the original file must still be intact.
-        from rehab.data.session import Session
+        from finger_rehab.data.session import Session
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "metadata.json"
             Session(participant="A", notes="block in progress").save(path)
             prior = path.read_text()
-            with mock.patch("rehab.data.session.os.replace",
+            with mock.patch("finger_rehab.data.session.os.replace",
                              side_effect=OSError("EBUSY")):
                 with self.assertRaises(OSError):
                     Session(participant="A", notes="completed").save(path)
@@ -101,11 +101,11 @@ class TmpFileCleanupTests(unittest.TestCase):
     disk forever, slowly littering the sessions/ folder over time."""
 
     def test_tmp_file_removed_when_replace_fails(self) -> None:
-        from rehab.data.session import Session
+        from finger_rehab.data.session import Session
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "metadata.json"
             Session(participant="A").save(path)
-            with mock.patch("rehab.data.session.os.replace",
+            with mock.patch("finger_rehab.data.session.os.replace",
                              side_effect=OSError("EBUSY")):
                 with self.assertRaises(OSError):
                     Session(participant="A",
@@ -122,7 +122,7 @@ class TmpFileCleanupTests(unittest.TestCase):
     def test_tmp_file_removed_when_write_fails(self) -> None:
         # Simulate a disk-full or quota error during the write itself
         # by mocking the file handle's write method to raise.
-        from rehab.data.session import Session
+        from finger_rehab.data.session import Session
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "metadata.json"
             real_open = Path.open
@@ -153,7 +153,7 @@ class UnicodeRoundtripTests(unittest.TestCase):
     eyeballing the file."""
 
     def test_unicode_name_written_as_raw_characters(self) -> None:
-        from rehab.data.session import Session
+        from finger_rehab.data.session import Session
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "metadata.json"
             Session(participant="Müller").save(path)
@@ -165,7 +165,7 @@ class UnicodeRoundtripTests(unittest.TestCase):
     def test_unicode_name_roundtrips_through_json(self) -> None:
         # JSON.load should give us back the original string regardless
         # of the file encoding details.
-        from rehab.data.session import Session
+        from finger_rehab.data.session import Session
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "metadata.json"
             Session(participant="张伟").save(path)

@@ -43,13 +43,13 @@ from tests.test_force_pilot import _engine, _mode, _fresh_profile
 
 
 class _RealRawLogger:
-    """Same on-disk row shape as rehab.data.logger.RawLogger (see its
+    """Same on-disk row shape as finger_rehab.data.logger.RawLogger (see its
     RAW_COLUMNS), written synchronously so the test controls exactly
     which sample lands at which t_perf -- no background-thread timing
     to race in a test."""
 
     def __init__(self, path: Path) -> None:
-        from rehab.data.logger import RAW_COLUMNS
+        from finger_rehab.data.logger import RAW_COLUMNS
         path.parent.mkdir(parents=True, exist_ok=True)
         self._file = path.open("w", newline="", encoding="utf-8")
         self._writer = csv.writer(self._file)
@@ -100,7 +100,7 @@ def _queue_baseline(raw: _RealRawLogger, finger: int, hand: str,
 
 def _play_run_with_raw(m, raw: _RealRawLogger, finger: int, hand: str,
                        t_start: float, force_fn, dt: float = 1.0 / 60.0):
-    from rehab.game.modes.force_pilot import target_pct
+    from finger_rehab.game.modes.force_pilot import target_pct
     t = t_start
     while m.phase == "run":
         t += dt
@@ -123,7 +123,7 @@ def _write_session(root: Path) -> Path:
     folder = day_dir / "Pat_100000_force_pilot"
     folder.mkdir(parents=True, exist_ok=True)
 
-    from rehab.data.logger import TrialLogger
+    from finger_rehab.data.logger import TrialLogger
 
     e = _engine()
     e.calibration_profiles["right"] = _fresh_profile()

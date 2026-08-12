@@ -1,0 +1,52 @@
+,value
+games,23
+summary_basis,analysable trials only
+trials_recorded,352
+trials_no_cue,0
+trials_anticipation,61
+trials_analysed,291
+time_on_task_min,15.9
+calibration,multiple
+rt_trials,54
+rt_mean_ms,550.6
+rt_cv,0.309
+rt_basis,"cued modes, misses and rhythm beat offsets excluded"
+hit_rate_all_cued,0.342
+hit_rate_scope,"classic, adaptive and mirror blocks"
+hit_rate_section_scope,adaptive blocks only
+hit_rate_section,0.485
+hit_rate_section_basis,"all recorded trials, as printed above"
+force_unit,counts
+peak_force_mean_raw,33.8
+peak_force_mean_N,2.97
+peak_force_N_meaning,"absolute, pad sensitivity NOT corrected, use for strength"
+peak_force_mean_cal,0.388
+peak_force_cal_meaning,"effort against that finger's own reference press, not a strength ranking"
+individuation_absolute,0.57
+individuation_absolute_n,56
+individuation_absolute_meaning,"target over total on absolute force, the basis the published enslavement figures use"
+individuation_own_reference,0.563
+individuation_absolute_matched,0.57
+individuation_matched_n,56
+individuation_own_reference_meaning,"each lane over its own reference press, NOT comparable with the published enslavement figures"
+individuation_matched_note,"the two matched figures cover the same trials, so the difference is the correction alone"
+beat_accuracy_ms,100.9
+beat_bias_ms,-100.9
+beat_note,"signed offset from the beat, not a reaction time"
+bilateral_trials_left,0
+bilateral_trials_right,38
+bilateral_rt_left_ms,
+bilateral_rt_right_ms,
+dose_reps,291
+dose_vs_lang_ratio,9.09
+dose_projected_30_min,548
+cue_both_trials,298
+cue_both_hit_rate,0.487
+cue_both_mean_rt_ms,302.3
+cue_visual_trials,54
+cue_visual_hit_rate,0.981
+cue_visual_mean_rt_ms,
+objective_one_band,65% to 80%
+objective_one_fingers_in_band,0 of 4
+objective_one_met,False
+objective_one_full_windows,35

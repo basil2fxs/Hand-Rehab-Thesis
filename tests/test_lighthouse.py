@@ -49,7 +49,7 @@ HOLD_KW = dict(
 
 
 def _hold_params(**over):
-    from rehab.game.modes.lighthouse import draw_hold_params
+    from finger_rehab.game.modes.lighthouse import draw_hold_params
     kw = dict(HOLD_KW)
     kw.update(over)
     return draw_hold_params(**kw)
@@ -58,7 +58,7 @@ def _hold_params(**over):
 def _engine(hand_mode="right", cfg_extra=None):
     """Engine fixture in the house style: built via __new__, MagicMock
     config, command-recording source, loggable."""
-    from rehab.game.engine import GameEngine
+    from finger_rehab.game.engine import GameEngine
     values = {
         "fsr.num_sensors_per_hand": 4,
         "motor.cue_ms": 150,
@@ -136,7 +136,7 @@ class _ViewStub:
     overrides pct for a specific lane (cross-hand echoes read two)."""
 
     def __init__(self):
-        from rehab.game.force_stream import ForceReading
+        from finger_rehab.game.force_stream import ForceReading
         self._reading_cls = ForceReading
         self.counts = 0.0
         self.pct: float | None = None
@@ -158,8 +158,8 @@ class _ViewStub:
 
 
 def _mode(e, hands=None, **over):
-    from rehab.game.modes.lighthouse import LighthouseMode
-    from rehab.game.scoring import ScoreConfig
+    from finger_rehab.game.modes.lighthouse import LighthouseMode
+    from finger_rehab.game.scoring import ScoreConfig
     kw = dict(
         engine=e,
         lanes_by_hand=hands or {"right": [0, 1, 2, 3]},
@@ -201,7 +201,7 @@ def _mode(e, hands=None, **over):
 
 
 def _fresh_profile(hand="right"):
-    from rehab.hardware.calibration_profile import CalibrationProfile
+    from finger_rehab.hardware.calibration_profile import CalibrationProfile
     prof = CalibrationProfile(hand=hand, resting=[100.0] * 4,
                               press=[160.0] * 4)
     prof.set_max_press([400.0] * 4)
@@ -228,7 +228,7 @@ def _to_trial(m, t0=1000.0):
 def _play_hold(m, t_start, force_fn, dt=1.0 / 60.0):
     """Feed one full hold trial. force_fn(t_hold, target, lit) gives
     the percent-of-max force; t_hold is None while igniting."""
-    from rehab.game.modes.lighthouse import feedback_lit
+    from finger_rehab.game.modes.lighthouse import feedback_lit
     t = t_start
     while m.phase == "trial":
         t += dt
@@ -270,7 +270,7 @@ class FadeSchedulingTests(unittest.TestCase):
         self.assertNotEqual(a["target_pct"], b["target_pct"])
 
     def test_level_one_is_fully_lit(self):
-        from rehab.game.modes.lighthouse import (feedback_lit,
+        from finger_rehab.game.modes.lighthouse import (feedback_lit,
                                                  hold_segments_from_params)
         p = _hold_params(level=1, n_dark=0, dark_frac=0.0)
         self.assertEqual(p["n_dark"], 0)
@@ -280,7 +280,7 @@ class FadeSchedulingTests(unittest.TestCase):
             self.assertTrue(feedback_lit(p, 16.0 * i / 49.0))
 
     def test_dark_windows_honour_lead_gap_and_tail(self):
-        from rehab.game.modes.lighthouse import hold_segments_from_params
+        from finger_rehab.game.modes.lighthouse import hold_segments_from_params
         for seed in range(20):
             p = _hold_params(seed=seed)
             segs = hold_segments_from_params(p)
@@ -293,7 +293,7 @@ class FadeSchedulingTests(unittest.TestCase):
             self.assertAlmostEqual(dark_total, 0.45 * 16.0, places=6)
 
     def test_segments_tile_the_hold_exactly(self):
-        from rehab.game.modes.lighthouse import hold_segments_from_params
+        from finger_rehab.game.modes.lighthouse import hold_segments_from_params
         for seed in range(8):
             segs = hold_segments_from_params(_hold_params(seed=seed))
             self.assertAlmostEqual(segs[0][1], 0.0)
@@ -302,7 +302,7 @@ class FadeSchedulingTests(unittest.TestCase):
                 self.assertAlmostEqual(b1, a2, msg=f"{n1}->{n2}")
 
     def test_feedback_lit_matches_the_segments(self):
-        from rehab.game.modes.lighthouse import (feedback_lit,
+        from finger_rehab.game.modes.lighthouse import (feedback_lit,
                                                  hold_segments_from_params)
         p = _hold_params()
         for name, a, b in hold_segments_from_params(p):
@@ -314,7 +314,7 @@ class FadeSchedulingTests(unittest.TestCase):
         # A demo-length hold cannot fit two darks plus the lit
         # guarantees; the planner drops to what fits rather than
         # planning windows too short to drift in.
-        from rehab.game.modes.lighthouse import (MIN_DARK_S,
+        from finger_rehab.game.modes.lighthouse import (MIN_DARK_S,
                                                  hold_segments_from_params)
         p = _hold_params(hold_s=6.0)
         self.assertLess(p["n_dark"], 2)
@@ -330,8 +330,8 @@ class FadeSchedulingTests(unittest.TestCase):
         while the planner silently drew zero dark windows. The mode
         now warns at construction, and the screen-facing helper reads
         the drawn params instead of the static config."""
-        from rehab.ui.lighthouse_screen import _dark_frac_and_windows
-        with self.assertLogs("rehab.game.modes.lighthouse",
+        from finger_rehab.ui.lighthouse_screen import _dark_frac_and_windows
+        with self.assertLogs("finger_rehab.game.modes.lighthouse",
                              level="WARNING") as cm:
             m = _ready_mode(level=2, hold_s=5.0,
                             dark_windows_by_level=[0, 1, 2],
@@ -347,7 +347,7 @@ class FadeSchedulingTests(unittest.TestCase):
 
     def test_well_configured_hold_does_not_warn(self):
         with self.assertRaises(AssertionError):
-            with self.assertLogs("rehab.game.modes.lighthouse",
+            with self.assertLogs("finger_rehab.game.modes.lighthouse",
                                  level="WARNING"):
                 _ready_mode(level=3, holds_per_finger=1,
                            echoes_per_finger=0)
@@ -356,9 +356,9 @@ class FadeSchedulingTests(unittest.TestCase):
         # The offline contract: the notebook parses waveform_params
         # and rebuilds the lit / dark schedule without this module's
         # rng. The packed cell trims floats to 6 significant digits.
-        from rehab.data.logger import (pack_waveform_params,
+        from finger_rehab.data.logger import (pack_waveform_params,
                                        parse_waveform_params)
-        from rehab.game.modes.lighthouse import hold_segments_from_params
+        from finger_rehab.game.modes.lighthouse import hold_segments_from_params
         p = _hold_params()
         segs = hold_segments_from_params(p)
         back = hold_segments_from_params(
@@ -505,7 +505,7 @@ class HoldScoringTests(unittest.TestCase):
         self.assertGreaterEqual(rec.tib_frac, 0.999)
 
     def test_trial_row_carries_the_reconstruction_contract(self):
-        from rehab.data.logger import (parse_segments,
+        from finger_rehab.data.logger import (parse_segments,
                                        parse_waveform_params)
         m = self._hold_mode()
         t = _to_trial(m)
@@ -617,7 +617,7 @@ class EchoTests(unittest.TestCase):
         self.assertIn("delay_s=", row["stimulus"])
 
     def test_echo_row_segments_parse_back(self):
-        from rehab.data.logger import (parse_segments,
+        from finger_rehab.data.logger import (parse_segments,
                                        parse_waveform_params)
         m = self._echo_mode()
         t = _to_trial(m)
@@ -693,7 +693,7 @@ class EchoTests(unittest.TestCase):
                           if str(c).startswith("STIM")])
 
     def test_constant_and_variable_error_split_by_delay(self):
-        from rehab.game.modes.lighthouse import EchoRecord
+        from finger_rehab.game.modes.lighthouse import EchoRecord
         m = self._echo_mode()
 
         def rec(delay, err):
@@ -882,7 +882,7 @@ class PauseAndStatsTests(unittest.TestCase):
         # fingers held at levels [1, 3] and two at [2, 3] (as in the
         # audit's own reproduction) must all resolve to level 3, the
         # highest level every finger reached.
-        from rehab.game.modes.lighthouse import HoldRecord
+        from finger_rehab.game.modes.lighthouse import HoldRecord
 
         def h(lane, level, delta):
             return HoldRecord(hand="right", finger=lane, lane=lane,
@@ -909,7 +909,7 @@ class PauseAndStatsTests(unittest.TestCase):
         # No level has every played lane represented (early in a
         # block): fall back to pooling that lane's own holds rather
         # than reporting nothing, and say so via delta_level=None.
-        from rehab.game.modes.lighthouse import HoldRecord
+        from finger_rehab.game.modes.lighthouse import HoldRecord
 
         def h(lane, level, delta):
             return HoldRecord(hand="right", finger=lane, lane=lane,
@@ -938,9 +938,9 @@ class ScreenTests(unittest.TestCase):
 
     def _screen_and_mode(self, level=3):
         import pygame
-        from rehab.ui.lighthouse_screen import LighthouseScreen
-        from rehab.ui.theme import get as get_theme
-        from rehab.ui.widgets import Layout
+        from finger_rehab.ui.lighthouse_screen import LighthouseScreen
+        from finger_rehab.ui.theme import get as get_theme
+        from finger_rehab.ui.widgets import Layout
         e = _engine()
         e.calibration_profiles["right"] = _fresh_profile()
         e.theme = get_theme("clinical")
@@ -959,7 +959,7 @@ class ScreenTests(unittest.TestCase):
 
     def _drive_to(self, m, t, lit_wanted):
         """Advance the hold until the feedback state matches."""
-        from rehab.game.modes.lighthouse import feedback_lit
+        from finger_rehab.game.modes.lighthouse import feedback_lit
         guard = t + 30.0
         while t < guard:
             t += 1.0 / 60.0
@@ -988,7 +988,7 @@ class ScreenTests(unittest.TestCase):
         self.assertEqual(calls, [])
 
     def test_dark_frame_draws_the_dark_room(self):
-        import rehab.ui.lighthouse_screen as ls
+        import finger_rehab.ui.lighthouse_screen as ls
         sc, m, surf, t = self._screen_and_mode()
         t = self._drive_to(m, t, lit_wanted=False)
         seen = []
@@ -1009,7 +1009,7 @@ class ScreenTests(unittest.TestCase):
         self.assertNotIn(f"{m.target_pct:.1f}", joined)
 
     def test_trial_furniture_names_the_trial(self):
-        import rehab.ui.lighthouse_screen as ls
+        import finger_rehab.ui.lighthouse_screen as ls
         sc, m, surf, t = self._screen_and_mode()
         seen = []
         original = ls.draw_text
@@ -1055,11 +1055,11 @@ class ResultsCardTests(unittest.TestCase):
 
     def _draw(self, lh_summary):
         import pygame
-        from rehab.config import Config
-        from rehab.game.engine import GameEngine
-        from rehab.ui.screens import ResultsScreen
-        from rehab.ui.theme import get as get_theme
-        from rehab.ui.widgets import Layout
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.ui.screens import ResultsScreen
+        from finger_rehab.ui.theme import get as get_theme
+        from finger_rehab.ui.widgets import Layout
         pygame.init()
         pygame.font.init()
         pygame.display.set_mode((1280, 800))

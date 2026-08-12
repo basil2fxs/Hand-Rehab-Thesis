@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from rehab.data.logger import TRIAL_COLUMNS, RAW_COLUMNS
+from finger_rehab.data.logger import TRIAL_COLUMNS, RAW_COLUMNS
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -122,7 +122,7 @@ class TestCueFlagsRoundTrip:
     """The notebook has to understand the code the game writes."""
 
     def test_the_game_and_the_notebook_agree_on_the_format(self, source):
-        from rehab.game.engine import CueSettings
+        from finger_rehab.game.engine import CueSettings
         code = CueSettings(buzz_before=True, sound_before=True,
                            sound_after=False, buzz_after=False,
                            show_target=True).code
@@ -191,7 +191,7 @@ class TestChordsNotebookContract:
     def test_chord_difficulty_matches_the_game_for_every_chord(
             self, source):
         from itertools import combinations
-        from rehab.game.modes.chords import chord_difficulty as game_d
+        from finger_rehab.game.modes.chords import chord_difficulty as game_d
 
         names = ["chord_difficulty"] + self.CONSTANT_NAMES[:4]
         nb_d = _notebook_names(source, names)[0]
@@ -375,20 +375,20 @@ class TestContinuousModeContract:
     # reads it). A rename on either side must fail here, not go
     # quiet in a chapter.
     TOKENS = [
-        ('waveform="corridor"', "rehab/game/modes/force_pilot.py",
+        ('waveform="corridor"', "finger_rehab/game/modes/force_pilot.py",
          '== "corridor"'),
-        ('waveform="hold"', "rehab/game/modes/lighthouse.py",
+        ('waveform="hold"', "finger_rehab/game/modes/lighthouse.py",
          '"hold"'),
-        ('waveform="reproduce"', "rehab/game/modes/lighthouse.py",
+        ('waveform="reproduce"', "finger_rehab/game/modes/lighthouse.py",
          '"reproduce"'),
-        ('"loc"', "rehab/game/modes/buzz_hunt.py", '"loc"'),
-        ('"distractor"', "rehab/game/modes/buzz_hunt.py",
+        ('"loc"', "finger_rehab/game/modes/buzz_hunt.py", '"loc"'),
+        ('"distractor"', "finger_rehab/game/modes/buzz_hunt.py",
          '"distractor"'),
-        ('"span"', "rehab/game/modes/buzz_hunt.py", '"span"'),
-        ('"gap"', "rehab/game/modes/buzz_hunt.py", '"gap"'),
-        ('"buzz_hunt_reversal"', "rehab/game/modes/buzz_hunt.py",
+        ('"span"', "finger_rehab/game/modes/buzz_hunt.py", '"span"'),
+        ('"gap"', "finger_rehab/game/modes/buzz_hunt.py", '"gap"'),
+        ('"buzz_hunt_reversal"', "finger_rehab/game/modes/buzz_hunt.py",
          '"buzz_hunt_reversal"'),
-        ("level_ms=", "rehab/game/modes/buzz_hunt.py", '"level_ms"'),
+        ("level_ms=", "finger_rehab/game/modes/buzz_hunt.py", '"level_ms"'),
     ]
 
     @pytest.mark.parametrize("game_literal,game_file,nb_literal",
@@ -405,9 +405,9 @@ class TestContinuousModeContract:
 
     def test_the_notebook_rebuilds_the_corridor_the_game_flew(
             self, source):
-        from rehab.data.logger import (pack_waveform_params,
+        from finger_rehab.data.logger import (pack_waveform_params,
                                        parse_waveform_params)
-        from rehab.game.modes.force_pilot import (draw_run_params,
+        from finger_rehab.game.modes.force_pilot import (draw_run_params,
                                                   sections_from_params,
                                                   target_pct)
         fp_sections, fp_target = _notebook_functions(

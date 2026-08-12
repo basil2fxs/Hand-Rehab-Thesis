@@ -16,7 +16,7 @@ class ScoreConfigDefaultsTests(unittest.TestCase):
     drift silently or historical sessions would become incomparable."""
 
     def test_default_thresholds_and_points(self) -> None:
-        from rehab.game.scoring import ScoreConfig
+        from finger_rehab.game.scoring import ScoreConfig
         cfg = ScoreConfig()
         # RT bands.
         self.assertEqual(cfg.perfect_ms, 100)
@@ -37,7 +37,7 @@ class ScoreConfigDefaultsTests(unittest.TestCase):
 class ClassifyMissTests(unittest.TestCase):
 
     def test_none_rt_is_miss_with_zero_points(self) -> None:
-        from rehab.game.scoring import ScoreConfig, classify
+        from finger_rehab.game.scoring import ScoreConfig, classify
         result = classify(None, ScoreConfig())
         self.assertEqual(result.label, "Miss")
         self.assertEqual(result.points, 0)
@@ -47,7 +47,7 @@ class ClassifyMissTests(unittest.TestCase):
         # A therapist could plausibly want a negative-mood reward on
         # misses. The config should be honoured even though defaults
         # never go below zero.
-        from rehab.game.scoring import ScoreConfig, classify
+        from finger_rehab.game.scoring import ScoreConfig, classify
         cfg = ScoreConfig(miss_points=-2)
         self.assertEqual(classify(None, cfg).points, -2)
 
@@ -58,19 +58,19 @@ class ClassifyPerfectBoundaryTests(unittest.TestCase):
     as Perfect with 10 points instead of 6."""
 
     def test_rt_zero_is_perfect(self) -> None:
-        from rehab.game.scoring import ScoreConfig, classify
+        from finger_rehab.game.scoring import ScoreConfig, classify
         r = classify(0, ScoreConfig())
         self.assertEqual(r.label, "Perfect")
         self.assertEqual(r.points, 10)
 
     def test_rt_at_perfect_threshold_inclusive(self) -> None:
-        from rehab.game.scoring import ScoreConfig, classify
+        from finger_rehab.game.scoring import ScoreConfig, classify
         r = classify(100, ScoreConfig())
         self.assertEqual(r.label, "Perfect")
         self.assertEqual(r.points, 10)
 
     def test_rt_just_over_perfect_is_great(self) -> None:
-        from rehab.game.scoring import ScoreConfig, classify
+        from finger_rehab.game.scoring import ScoreConfig, classify
         r = classify(100.001, ScoreConfig())
         self.assertEqual(r.label, "Great")
         self.assertEqual(r.points, 6)
@@ -80,13 +80,13 @@ class ClassifyGreatBoundaryTests(unittest.TestCase):
 
     def test_rt_at_great_threshold_inclusive(self) -> None:
         # 200ms is "Great", not "Good". Threshold is inclusive.
-        from rehab.game.scoring import ScoreConfig, classify
+        from finger_rehab.game.scoring import ScoreConfig, classify
         r = classify(200, ScoreConfig())
         self.assertEqual(r.label, "Great")
         self.assertEqual(r.points, 6)
 
     def test_rt_just_over_great_is_good(self) -> None:
-        from rehab.game.scoring import ScoreConfig, classify
+        from finger_rehab.game.scoring import ScoreConfig, classify
         r = classify(200.001, ScoreConfig())
         self.assertEqual(r.label, "Good")
         self.assertEqual(r.points, 3)
@@ -95,13 +95,13 @@ class ClassifyGreatBoundaryTests(unittest.TestCase):
 class ClassifyGoodBoundaryTests(unittest.TestCase):
 
     def test_rt_at_good_threshold_inclusive(self) -> None:
-        from rehab.game.scoring import ScoreConfig, classify
+        from finger_rehab.game.scoring import ScoreConfig, classify
         r = classify(500, ScoreConfig())
         self.assertEqual(r.label, "Good")
         self.assertEqual(r.points, 3)
 
     def test_rt_just_over_good_is_late(self) -> None:
-        from rehab.game.scoring import ScoreConfig, classify
+        from finger_rehab.game.scoring import ScoreConfig, classify
         r = classify(500.001, ScoreConfig())
         self.assertEqual(r.label, "Late")
         self.assertEqual(r.points, 1)
@@ -112,7 +112,7 @@ class ClassifyLateTests(unittest.TestCase):
     def test_very_slow_rt_is_late(self) -> None:
         # No upper bound on Late - even multi-second reactions still
         # earn the 1-point participation reward.
-        from rehab.game.scoring import ScoreConfig, classify
+        from finger_rehab.game.scoring import ScoreConfig, classify
         r = classify(99999, ScoreConfig())
         self.assertEqual(r.label, "Late")
         self.assertEqual(r.points, 1)
@@ -121,7 +121,7 @@ class ClassifyLateTests(unittest.TestCase):
 class ClassifyCustomConfigTests(unittest.TestCase):
 
     def test_custom_thresholds_shift_boundaries(self) -> None:
-        from rehab.game.scoring import ScoreConfig, classify
+        from finger_rehab.game.scoring import ScoreConfig, classify
         # Force perfect_ms below the Great band so this test covers the
         # Great/Good/Late path. (The default 100 ms perfect threshold
         # would otherwise eat the 50 ms sample below as Perfect.)
@@ -140,7 +140,7 @@ class ClassifyCustomConfigTests(unittest.TestCase):
 class EarlyPenaltyTests(unittest.TestCase):
 
     def test_early_penalty_label_and_default_zero_points(self) -> None:
-        from rehab.game.scoring import ScoreConfig, early_penalty
+        from finger_rehab.game.scoring import ScoreConfig, early_penalty
         r = early_penalty(ScoreConfig())
         self.assertEqual(r.label, "Early")
         # Default early_penalty is 0 so an early press doesn't drag the
@@ -149,7 +149,7 @@ class EarlyPenaltyTests(unittest.TestCase):
         self.assertIsNone(r.rt_ms)
 
     def test_early_penalty_respects_cfg(self) -> None:
-        from rehab.game.scoring import ScoreConfig, early_penalty
+        from finger_rehab.game.scoring import ScoreConfig, early_penalty
         cfg = ScoreConfig(early_penalty=-1)
         self.assertEqual(early_penalty(cfg).points, -1)
 
@@ -159,7 +159,7 @@ class TrialResultImmutabilityTests(unittest.TestCase):
     being able to share it between threads without defensive copies."""
 
     def test_trial_result_is_frozen(self) -> None:
-        from rehab.game.scoring import TrialResult
+        from finger_rehab.game.scoring import TrialResult
         r = TrialResult(label="Great", points=3, rt_ms=150.0)
         with self.assertRaises(Exception):
             r.points = 999  # type: ignore[misc]
@@ -173,7 +173,7 @@ class WrongPressPenaltyTests(unittest.TestCase):
     def _make_engine(self, penalty: int):
         # Build a minimal engine via __new__ so we don't need pygame.
         from unittest.mock import MagicMock
-        from rehab.game.engine import GameEngine
+        from finger_rehab.game.engine import GameEngine
         eng = GameEngine.__new__(GameEngine)
         eng.cfg = MagicMock()
         eng.cfg.get = MagicMock(side_effect=lambda k, d=None:
@@ -214,7 +214,7 @@ class IdlePressPenaltyTests(unittest.TestCase):
 
     def _make_engine(self, idle_pen: int, wrong_pen: int = 0):
         from unittest.mock import MagicMock
-        from rehab.game.engine import GameEngine
+        from finger_rehab.game.engine import GameEngine
         eng = GameEngine.__new__(GameEngine)
         eng.cfg = MagicMock()
         def _get(k, d=None):

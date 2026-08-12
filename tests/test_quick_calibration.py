@@ -32,10 +32,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pytest
 
-from rehab.hardware.calibration_profile import (
+from finger_rehab.hardware.calibration_profile import (
     CalibrationProfile, N_FINGERS,
 )
-from rehab.hardware.source import Source
+from finger_rehab.hardware.source import Source
 
 
 # Same bench numbers test_calibration.py uses, measured on the device.
@@ -89,8 +89,8 @@ def _engine(tmp_path: Path, hand: str = "right", source=None):
     import pygame
     pygame.init()
     pygame.font.init()
-    from rehab.config import Config
-    from rehab.game.engine import GameEngine
+    from finger_rehab.config import Config
+    from finger_rehab.game.engine import GameEngine
     cfg = Config.load()
     cfg.data["ui"]["resolution"] = [1280, 800]
     cfg.data.setdefault("bilateral", {})["hand"] = hand
@@ -148,7 +148,7 @@ def _hold_current_finger(eng, sc, hand: str) -> None:
 
 
 def _run_whole_flow(eng, sc) -> None:
-    from rehab.ui import quick_calibration_screen as q
+    from finger_rehab.ui import quick_calibration_screen as q
     _finish_rest_step(eng, sc, EMPTY * (2 if len(sc.hands) > 1 else 1))
     assert sc.phase == q.PHASE_REST
     _finish_rest_step(eng, sc, RESTING * (2 if len(sc.hands) > 1 else 1))
@@ -190,7 +190,7 @@ class TestTriggerRule:
         assert det.cal.on_delta[:N_FINGERS] == prof.on_delta()
 
     def test_keyboard_session_skips_with_no_notice(self, tmp_path):
-        from rehab.hardware.keyboard_source import KeyboardOnlySource
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
         eng = _engine(tmp_path, source=KeyboardOnlySource())
         calls = []
         assert not eng.maybe_start_quick_calibration(lambda: calls.append(1))
@@ -228,7 +228,7 @@ class TestTriggerRule:
         assert begun == [1]
 
     def test_setup_screen_starts_straight_away_on_keyboard(self, tmp_path):
-        from rehab.hardware.keyboard_source import KeyboardOnlySource
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
         eng = _engine(tmp_path, source=KeyboardOnlySource())
         begun = []
         eng.begin_adaptive_block = lambda: begun.append(1)
@@ -291,7 +291,7 @@ class TestFlowEndToEnd:
         the clinical screen's collection; the resulting thresholds
         must be identical, because both are CalibrationProfile and
         neither forks the maths."""
-        import rehab.ui.calibration_screen as cs
+        import finger_rehab.ui.calibration_screen as cs
 
         # Quick flow, driven for real.
         eng = _engine(tmp_path)
@@ -329,7 +329,7 @@ class TestFlowEndToEnd:
     def test_pump_pushes_samples_into_the_quick_flow(self, tmp_path):
         """The engine's own pump must feed this screen every sample,
         the same wiring the clinical screen relies on."""
-        from rehab.hardware.source import Sample
+        from finger_rehab.hardware.source import Sample
         src = FakeFsrSource()
         eng = _engine(tmp_path, source=src)
         eng.maybe_start_quick_calibration(lambda: None)
@@ -425,7 +425,7 @@ class TestSkipAndEscape:
         sc.update(0.0)
         # Neither the sample nor the elapsed timer moved the flow on.
         assert sc._rest_buffers.get("right", []) == []
-        from rehab.ui import quick_calibration_screen as q
+        from finger_rehab.ui import quick_calibration_screen as q
         assert sc.phase == q.PHASE_OFF
 
 
@@ -434,7 +434,7 @@ class TestSkipAndEscape:
 class TestDrawing:
     def test_every_phase_draws_headless(self, tmp_path):
         import pygame
-        from rehab.ui import quick_calibration_screen as q
+        from finger_rehab.ui import quick_calibration_screen as q
         eng = _engine(tmp_path)
         surf = pygame.Surface((1280, 800))
         eng.maybe_start_quick_calibration(lambda: None)

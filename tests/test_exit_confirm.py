@@ -51,9 +51,9 @@ class _EngineHarness(unittest.TestCase):
     def setUp(self) -> None:
         import pygame
         pygame.init()
-        from rehab.config import Config
-        from rehab.game.engine import GameEngine
-        from rehab.hardware.keyboard_source import KeyboardOnlySource
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
         self._td = tempfile.TemporaryDirectory()
         cfg = Config.load()
         cfg.data["ui"]["resolution"] = [1280, 800]
@@ -82,8 +82,8 @@ class _EngineHarness(unittest.TestCase):
         return self.eng.session_paths
 
     def _log_one_trial(self) -> None:
-        from rehab.game.modes.classic import PendingTrial
-        from rehab.game.scoring import TrialResult
+        from finger_rehab.game.modes.classic import PendingTrial
+        from finger_rehab.game.scoring import TrialResult
         trial = PendingTrial(
             trial_id=1, lane=0, stim_t_perf=time.perf_counter(),
             keys_pressed=[0], incorrect_presses=[])
@@ -118,7 +118,7 @@ class EscRaisesDialogTests(_EngineHarness):
         self.assertTrue(self.eng.paused)
 
     def test_esc_raises_the_dialog_on_syllables_and_rhythm_too(self) -> None:
-        from rehab.audio.beatmap import procedural_beatmap
+        from finger_rehab.audio.beatmap import procedural_beatmap
         self.eng.begin_syllables_block()
         self.eng._handle_escape()
         self.assertTrue(self.eng.exit_confirm_active)
@@ -139,7 +139,7 @@ class EscRaisesDialogTests(_EngineHarness):
 
 class DismissResumesTests(_EngineHarness):
     def test_esc_again_dismisses_and_resumes_with_state_intact(self) -> None:
-        from rehab.game.modes.classic import PendingTrial
+        from finger_rehab.game.modes.classic import PendingTrial
         paths = self._begin_classic()
         mode = self.eng.mode
         # Synthesise an in-flight trial so the resume shift is visible.

@@ -37,7 +37,7 @@ os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
 
 def _press(lane: int, t: float = 0.0):
-    from rehab.hardware.fsr_detector import PressEvent
+    from finger_rehab.hardware.fsr_detector import PressEvent
     return PressEvent(lane=lane, t_perf=t, value=0, baseline=0.0,
                       hand="right")
 
@@ -50,8 +50,8 @@ def _build_mode(hand_mode: str = "right", **overrides):
     installs its own, and the timing knobs are shrunk so a scenario
     runs in a handful of ticks. `hand_mode` keys a single-hand mode
     to that hand (a left session's walk runs the other way)."""
-    from rehab.game.modes.syllables import SyllablesMode
-    from rehab.game.scoring import ScoreConfig
+    from finger_rehab.game.modes.syllables import SyllablesMode
+    from finger_rehab.game.scoring import ScoreConfig
     engine = MagicMock()
     engine._screens = {}
     engine.hand_mode = hand_mode
@@ -135,7 +135,7 @@ class WordListTests(unittest.TestCase):
     what its docstring defends."""
 
     def test_at_least_eighty_words_and_all_splits_join(self) -> None:
-        from rehab.game.modes.syllables_words import WORDS
+        from finger_rehab.game.modes.syllables_words import WORDS
         self.assertGreaterEqual(len(WORDS), 80)
         for w in WORDS:
             self.assertEqual("".join(w.syllables), w.word, w.word)
@@ -145,13 +145,13 @@ class WordListTests(unittest.TestCase):
     def test_every_four_syllable_word_is_band_c(self) -> None:
         # The brief's banding rule: 4-syllable words are band C
         # regardless of frequency.
-        from rehab.game.modes.syllables_words import WORDS
+        from finger_rehab.game.modes.syllables_words import WORDS
         for w in WORDS:
             if w.n_syll == 4:
                 self.assertEqual(w.band, "C", w.word)
 
     def test_onset_rime_and_grapheme_cuts_join_to_the_word(self) -> None:
-        from rehab.game.modes.syllables_words import (
+        from finger_rehab.game.modes.syllables_words import (
             ONSET_RIME_WORDS, TRANSPARENT_WORDS)
         self.assertGreaterEqual(len(ONSET_RIME_WORDS), 20)
         self.assertGreaterEqual(len(TRANSPARENT_WORDS), 20)
@@ -163,7 +163,7 @@ class WordListTests(unittest.TestCase):
             self.assertTrue(2 <= len(w.graphemes) <= 4, w.word)
 
     def test_level_pools_hold_only_their_material(self) -> None:
-        from rehab.game.modes.syllables_words import words_for
+        from finger_rehab.game.modes.syllables_words import words_for
         # Level 1 is the counting entry point: no 4-syllable words.
         self.assertTrue(all(w.n_syll <= 3 for w in words_for(1, "A")))
         # Level 2 up adds the 4-syllable words at band C.
@@ -176,7 +176,7 @@ class WordListTests(unittest.TestCase):
         # Band C at level 1 holds only the rare 3-syllable words; the
         # pool must borrow downward rather than cycle a handful of
         # items through a 10-word round.
-        from rehab.game.modes.syllables_words import words_for
+        from finger_rehab.game.modes.syllables_words import words_for
         self.assertGreaterEqual(len(words_for(1, "C")), 8)
 
 
@@ -216,7 +216,7 @@ class CountingLevelTests(unittest.TestCase):
         2-syllable word scores err=ok, so correct_keys must say lane 4
         was acceptable too, not just lanes 1-2."""
         engine, mode = _build_mode(level=1)
-        from rehab.game.modes.syllables_words import WORDS
+        from finger_rehab.game.modes.syllables_words import WORDS
         mode.word = next(w for w in WORDS if w.n_syll == 2)
         _run_to_respond(mode, 0.1)
         self.assertEqual(mode.acceptable_lanes(), [0, 1, 2, 3])
@@ -263,7 +263,7 @@ class CountingLevelTests(unittest.TestCase):
         the soft tap's own peak."""
         engine, mode = _build_mode(level=1, tap_debounce_ms=0)
         mode._tick(0.0)
-        from rehab.game.modes.syllables_words import WORDS
+        from finger_rehab.game.modes.syllables_words import WORDS
         mode.word = next(w for w in WORDS if w.n_syll == 2)
         t = _run_to_respond(mode, 0.1)
         peaks = {0: 10.0}
@@ -304,7 +304,7 @@ class OrderLevelTests(unittest.TestCase):
     finger-mapping is the skill this rung adds."""
 
     def _two_syllable_word(self, mode):
-        from rehab.game.modes.syllables_words import WORDS
+        from finger_rehab.game.modes.syllables_words import WORDS
         return next(w for w in WORDS if w.n_syll == 2)
 
     def test_in_order_taps_score_great(self) -> None:
@@ -336,7 +336,7 @@ class OrderLevelTests(unittest.TestCase):
         because the replay demonstrably runs right after."""
         engine, mode = _build_mode(level=2, replay_on_error=True)
         mode._tick(0.0)
-        from rehab.game.modes.syllables_words import WORDS
+        from finger_rehab.game.modes.syllables_words import WORDS
         mode.word = next(w for w in WORDS if w.n_syll == 2)
         t = _run_to_respond(mode, 0.1)
         _tap_out(mode, [1, 0], t + 0.5)      # reversed -> wrong_order
@@ -348,7 +348,7 @@ class OrderLevelTests(unittest.TestCase):
     def test_replay_flag_is_zero_without_replay_on_error(self) -> None:
         engine, mode = _build_mode(level=2, replay_on_error=False)
         mode._tick(0.0)
-        from rehab.game.modes.syllables_words import WORDS
+        from finger_rehab.game.modes.syllables_words import WORDS
         mode.word = next(w for w in WORDS if w.n_syll == 2)
         t = _run_to_respond(mode, 0.1)
         _tap_out(mode, [1, 0], t + 0.5)
@@ -356,7 +356,7 @@ class OrderLevelTests(unittest.TestCase):
 
 
 def _word(name: str):
-    from rehab.game.modes.syllables_words import WORDS
+    from finger_rehab.game.modes.syllables_words import WORDS
     return next(w for w in WORDS if w.word == name)
 
 
@@ -620,7 +620,7 @@ class LongMaterialPoolTests(unittest.TestCase):
     3-syllable counting cap everywhere."""
 
     def test_single_hand_pools_never_exceed_four_units(self) -> None:
-        from rehab.game.modes.syllables_words import words_for
+        from finger_rehab.game.modes.syllables_words import words_for
         for level in (1, 2, 3, 4):
             for band in ("A", "B", "C"):
                 self.assertTrue(all(w.n_syll <= 4
@@ -629,7 +629,7 @@ class LongMaterialPoolTests(unittest.TestCase):
                             for w in words_for(6, "C")))
 
     def test_five_syllable_words_only_in_bilateral_band_c(self) -> None:
-        from rehab.game.modes.syllables_words import words_for
+        from finger_rehab.game.modes.syllables_words import words_for
         pool = words_for(2, "C", bilateral=True)
         self.assertTrue(any(w.n_syll == 5 for w in pool))
         for band in ("A", "B"):
@@ -641,7 +641,7 @@ class LongMaterialPoolTests(unittest.TestCase):
 
     def test_level_six_bilateral_widens_to_six_and_stretches_at_c(
             self) -> None:
-        from rehab.game.modes.syllables_words import words_for
+        from finger_rehab.game.modes.syllables_words import words_for
         for band in ("A", "B"):
             pool = words_for(6, band, bilateral=True)
             self.assertEqual(max(len(w.graphemes) for w in pool), 6)
@@ -651,7 +651,7 @@ class LongMaterialPoolTests(unittest.TestCase):
         self.assertTrue(any(len(w.graphemes) <= 4 for w in pool_c))
 
     def test_long_grapheme_cuts_join_and_are_five_to_eight(self) -> None:
-        from rehab.game.modes.syllables_words import (
+        from finger_rehab.game.modes.syllables_words import (
             TRANSPARENT_WORDS_STRETCH, TRANSPARENT_WORDS_WIDE)
         self.assertGreaterEqual(len(TRANSPARENT_WORDS_WIDE), 10)
         self.assertGreaterEqual(len(TRANSPARENT_WORDS_STRETCH), 3)
@@ -667,7 +667,7 @@ class LongMaterialPoolTests(unittest.TestCase):
         # (Gathercole et al. 2004) would measure memory, not
         # segmentation. Phonemes are the long territory, syllables
         # stop at 5.
-        from rehab.game.modes.syllables_words import WORDS
+        from finger_rehab.game.modes.syllables_words import WORDS
         self.assertEqual(max(w.n_syll for w in WORDS), 5)
 
 
@@ -681,9 +681,9 @@ class RowScreenTests(unittest.TestCase):
         import pygame
         pygame.init()
         pygame.font.init()
-        from rehab.ui.syllables_screen import SyllablesScreen
-        from rehab.ui.theme import get as get_theme
-        from rehab.ui.widgets import Layout
+        from finger_rehab.ui.syllables_screen import SyllablesScreen
+        from finger_rehab.ui.theme import get as get_theme
+        from finger_rehab.ui.widgets import Layout
         # The block geometry is real arithmetic on the layout, so the
         # mock engine needs the real 1280x800 logical layout, not a
         # MagicMock that turns every coordinate into nonsense.
@@ -754,7 +754,7 @@ class PacedLevelTests(unittest.TestCase):
 
     def _start(self, engine, mode):
         mode._tick(0.0)
-        from rehab.game.modes.syllables_words import WORDS
+        from finger_rehab.game.modes.syllables_words import WORDS
         mode.word = next(w for w in WORDS if w.n_syll == 2)
         return _run_to_respond(mode, 0.1)
 
@@ -800,7 +800,7 @@ class PacedLevelTests(unittest.TestCase):
     def test_response_window_covers_count_in_beats_and_grace(self) -> None:
         engine, mode = _build_mode(level=3)
         mode._tick(0.0)
-        from rehab.game.modes.syllables_words import WORDS
+        from finger_rehab.game.modes.syllables_words import WORDS
         mode.word = next(w for w in WORDS if w.n_syll == 3)
         expected = (mode.count_in_beats + 3) * mode.ioi_s + mode.grace_s
         self.assertAlmostEqual(mode.current_timeout_s, expected)
@@ -816,7 +816,7 @@ class StressLevelTests(unittest.TestCase):
     def _start_with_peaks(self, peaks_by_order):
         engine, mode = _build_mode(level=4)
         mode._tick(0.0)
-        from rehab.game.modes.syllables_words import WORDS
+        from finger_rehab.game.modes.syllables_words import WORDS
         # kangaroo: 3 syllables, stress on the third. The taps land on
         # lanes 0, 1, 2 in order, so keying the fake force reading by
         # lane gives each tap its own stable peak, exactly what the
@@ -851,7 +851,7 @@ class StressLevelTests(unittest.TestCase):
         the reference excludes the tap being judged."""
         engine, mode = _build_mode(level=4)
         mode._tick(0.0)
-        from rehab.game.modes.syllables_words import WORDS
+        from finger_rehab.game.modes.syllables_words import WORDS
         mode.word = next(w for w in WORDS if w.word == "galah")
         self.assertEqual(mode.word.stress, 1)
         by_lane = {0: 100.0, 1: 300.0}
@@ -868,7 +868,7 @@ class StressLevelTests(unittest.TestCase):
     def test_no_force_data_leaves_stress_unscored_not_failed(self) -> None:
         engine, mode = _build_mode(level=4)
         mode._tick(0.0)
-        from rehab.game.modes.syllables_words import WORDS
+        from finger_rehab.game.modes.syllables_words import WORDS
         mode.word = next(w for w in WORDS if w.word == "kangaroo")
         _run_to_respond(mode, 0.1)
         beats = list(mode._beat_times)
@@ -889,7 +889,7 @@ class StressCalibrationTests(unittest.TestCase):
     def test_equal_true_force_but_unequal_pad_gain_is_corrected(self) -> None:
         engine, mode = _build_mode(level=4)
         mode._tick(0.0)
-        from rehab.game.modes.syllables_words import WORDS
+        from finger_rehab.game.modes.syllables_words import WORDS
         mode.word = next(w for w in WORDS if w.word == "kangaroo")
         # Same real press on every syllable, but lane 2 (the stressed
         # one) sits on a pad that reads 3x as many counts per newton as
@@ -1128,7 +1128,7 @@ class LoggingContractTests(unittest.TestCase):
     def test_stimulus_packs_word_context_and_taps(self) -> None:
         engine, mode = _build_mode(level=2)
         mode._tick(0.0)
-        from rehab.game.modes.syllables_words import WORDS
+        from finger_rehab.game.modes.syllables_words import WORDS
         mode.word = next(w for w in WORDS if w.word == "wombat")
         t = _run_to_respond(mode, 0.1)
         _tap_out(mode, [0, 1], t + 0.5)
@@ -1150,7 +1150,7 @@ class LoggingContractTests(unittest.TestCase):
     def test_correct_lanes_carries_every_required_finger(self) -> None:
         engine, mode = _build_mode(level=2)
         mode._tick(0.0)
-        from rehab.game.modes.syllables_words import WORDS
+        from finger_rehab.game.modes.syllables_words import WORDS
         mode.word = next(w for w in WORDS if w.n_syll == 3)
         t = _run_to_respond(mode, 0.1)
         _tap_out(mode, [0, 1, 2], t + 0.5)
@@ -1196,7 +1196,7 @@ class ScreenStoryTests(unittest.TestCase):
         import pygame
         pygame.init()
         pygame.font.init()
-        from rehab.ui.syllables_screen import SyllablesScreen
+        from finger_rehab.ui.syllables_screen import SyllablesScreen
         return SyllablesScreen(engine)
 
     def test_every_phase_announces_itself(self) -> None:
@@ -1354,10 +1354,10 @@ class EngineIntegrationTests(unittest.TestCase):
         import pygame
         pygame.init()
         pygame.font.init()
-        from rehab.config import Config
-        from rehab.game.engine import GameEngine
-        from rehab.hardware.keyboard_source import KeyboardOnlySource
-        from rehab.ui.syllables_screen import SyllablesScreen
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
+        from finger_rehab.ui.syllables_screen import SyllablesScreen
         cfg = Config.load()
         cfg.data.setdefault("ui", {})["resolution"] = [1280, 800]
         cfg.data.setdefault("session", {})["data_dir"] = tmpdir
@@ -1413,7 +1413,7 @@ class EngineIntegrationTests(unittest.TestCase):
     def test_mode_select_card_and_setup_route_exist(self) -> None:
         # The card was shipped ahead of the mode; now that the mode is
         # real, the pick path must call the real entry point.
-        from rehab.ui.screens import ModeSelectScreen
+        from finger_rehab.ui.screens import ModeSelectScreen
         keys = [k for k, _t, _d in ModeSelectScreen.MODES]
         self.assertIn("syllables", keys)
 
@@ -1427,7 +1427,7 @@ class EngineIntegrationTests(unittest.TestCase):
         import glob
         import pygame
         import tempfile
-        from rehab.hardware.fsr_detector import PressEvent
+        from finger_rehab.hardware.fsr_detector import PressEvent
         with tempfile.TemporaryDirectory() as tmpdir:
             eng = self._engine(tmpdir)
             eng.cfg.data.setdefault("syllables", {})["level"] = 1
@@ -1499,7 +1499,7 @@ class EngineIntegrationTests(unittest.TestCase):
                 while mode.phase != "done" and guard < 5000:
                     if mode.phase == "respond":
                         for lane in range(mode.n_expected):
-                            from rehab.hardware.fsr_detector import (
+                            from finger_rehab.hardware.fsr_detector import (
                                 PressEvent)
                             mode.queue_press(PressEvent(
                                 lane=lane, t_perf=mode._t0 + t,
@@ -1531,8 +1531,8 @@ class EngineIntegrationTests(unittest.TestCase):
         import pygame
         import tempfile
         from unittest.mock import MagicMock
-        from rehab.hardware.fsr_detector import PressEvent
-        from rehab.game.modes.syllables_words import WORDS
+        from finger_rehab.hardware.fsr_detector import PressEvent
+        from finger_rehab.game.modes.syllables_words import WORDS
         with tempfile.TemporaryDirectory() as tmpdir:
             eng = self._engine(tmpdir)
             eng.cfg.data.setdefault("syllables", {})["level"] = 2
@@ -1600,11 +1600,11 @@ class SyllablesResultsScreenCardsTests(unittest.TestCase):
 
     def _draw_syllables_results(self, block_summary_syllables):
         import pygame
-        from rehab.config import Config
-        from rehab.game.engine import GameEngine
-        from rehab.ui.screens import ResultsScreen
-        from rehab.ui.theme import get as get_theme
-        from rehab.ui.widgets import Layout
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.ui.screens import ResultsScreen
+        from finger_rehab.ui.theme import get as get_theme
+        from finger_rehab.ui.widgets import Layout
         pygame.init()
         pygame.font.init()
         pygame.display.set_mode((1280, 800))

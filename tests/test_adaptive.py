@@ -12,14 +12,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 class AdaptiveEngineTests(unittest.TestCase):
     def test_construction_requires_positive_num_lanes(self) -> None:
-        from rehab.analytics.adaptive import AdaptiveEngine
+        from finger_rehab.analytics.adaptive import AdaptiveEngine
         with self.assertRaises(ValueError):
             AdaptiveEngine(num_lanes=0)
         with self.assertRaises(ValueError):
             AdaptiveEngine(num_lanes=-1)
 
     def test_weak_lanes_get_higher_weight(self) -> None:
-        from rehab.analytics.adaptive import AdaptiveEngine
+        from finger_rehab.analytics.adaptive import AdaptiveEngine
         eng = AdaptiveEngine()
         for _ in range(20):
             eng.record(0, hit=False, rt_ms=None)
@@ -28,7 +28,7 @@ class AdaptiveEngineTests(unittest.TestCase):
         self.assertGreater(w[0], w[3])
 
     def test_bpm_speeds_up_when_hits_are_easy(self) -> None:
-        from rehab.analytics.adaptive import AdaptiveEngine
+        from finger_rehab.analytics.adaptive import AdaptiveEngine
         eng = AdaptiveEngine()
         eng.bpm = 80.0
         for _ in range(20):
@@ -37,7 +37,7 @@ class AdaptiveEngineTests(unittest.TestCase):
         self.assertGreater(eng.next_bpm(), 80.0)
 
     def test_bpm_slows_down_when_misses_pile_up(self) -> None:
-        from rehab.analytics.adaptive import AdaptiveEngine
+        from finger_rehab.analytics.adaptive import AdaptiveEngine
         eng = AdaptiveEngine()
         eng.bpm = 80.0
         for _ in range(20):
@@ -46,7 +46,7 @@ class AdaptiveEngineTests(unittest.TestCase):
         self.assertLess(eng.next_bpm(), 80.0)
 
     def test_sequence_avoids_immediate_repeats_when_possible(self) -> None:
-        from rehab.analytics.adaptive import AdaptiveEngine
+        from finger_rehab.analytics.adaptive import AdaptiveEngine
         eng = AdaptiveEngine()
         rng = random.Random(42)
         seq = eng.generate_sequence(50, rng=rng, avoid_repeats=True)
@@ -55,7 +55,7 @@ class AdaptiveEngineTests(unittest.TestCase):
         self.assertLess(repeats, 5)
 
     def test_warm_start_from_csv_like_history(self) -> None:
-        from rehab.analytics.adaptive import warm_start_from_history
+        from finger_rehab.analytics.adaptive import warm_start_from_history
         history = [
             {"lane": 0, "hit": "True", "rt_ms": "300"},
             {"lane": 1, "hit": "False", "rt_ms": ""},
@@ -73,7 +73,7 @@ class QualityWeightedAdaptiveTests(unittest.TestCase):
     clearly struggling, so the pace should drop."""
 
     def test_all_lates_slow_the_pace_down(self) -> None:
-        from rehab.analytics.adaptive import AdaptiveConfig, AdaptiveEngine
+        from finger_rehab.analytics.adaptive import AdaptiveConfig, AdaptiveEngine
         eng = AdaptiveEngine(cfg=AdaptiveConfig(min_trials=2))
         eng.bpm = 80.0
         # 20 trials where every press was a hit but at Late quality.
@@ -85,7 +85,7 @@ class QualityWeightedAdaptiveTests(unittest.TestCase):
         self.assertLess(eng.next_bpm(), 80.0)
 
     def test_all_greats_speed_the_pace_up(self) -> None:
-        from rehab.analytics.adaptive import AdaptiveConfig, AdaptiveEngine
+        from finger_rehab.analytics.adaptive import AdaptiveConfig, AdaptiveEngine
         eng = AdaptiveEngine(cfg=AdaptiveConfig(min_trials=2))
         eng.bpm = 80.0
         for _ in range(20):
@@ -94,7 +94,7 @@ class QualityWeightedAdaptiveTests(unittest.TestCase):
         self.assertGreater(eng.next_bpm(), 80.0)
 
     def test_session_quality_rate_tracks_quality_not_hits(self) -> None:
-        from rehab.analytics.adaptive import AdaptiveEngine
+        from finger_rehab.analytics.adaptive import AdaptiveEngine
         eng = AdaptiveEngine()
         # Drive ALL four lanes so the per-lane EMAs converge, otherwise
         # the unstimulated lanes drag the session rate back toward 0.5.
@@ -113,7 +113,7 @@ class RtAwareSlowDownTests(unittest.TestCase):
     Helps severely impaired patients who CAN hit but only just."""
 
     def test_session_rt_ms_averages_played_lanes_only(self) -> None:
-        from rehab.analytics.adaptive import AdaptiveEngine
+        from finger_rehab.analytics.adaptive import AdaptiveEngine
         eng = AdaptiveEngine()
         # Only feed lanes 0 and 1. Lanes 2 + 3 keep their default 500ms
         # EMA but shouldn't pull the session average toward 500.
@@ -126,7 +126,7 @@ class RtAwareSlowDownTests(unittest.TestCase):
         self.assertLess(rt, 1000.0)
 
     def test_rt_utilisation_ratio_against_current_timeout(self) -> None:
-        from rehab.analytics.adaptive import AdaptiveConfig, AdaptiveEngine
+        from finger_rehab.analytics.adaptive import AdaptiveConfig, AdaptiveEngine
         eng = AdaptiveEngine(cfg=AdaptiveConfig(min_trials=2))
         eng.bpm = 60.0     # cadence = 1.0s, window = 0.9s = 900 ms
         for _ in range(30):
@@ -140,7 +140,7 @@ class RtAwareSlowDownTests(unittest.TestCase):
         # Patient is hitting (quality 0.6 = somewhere between Good and
         # Great) but their RT is eating most of the window. The adapter
         # should still slow down because they're cutting it fine.
-        from rehab.analytics.adaptive import AdaptiveConfig, AdaptiveEngine
+        from finger_rehab.analytics.adaptive import AdaptiveConfig, AdaptiveEngine
         eng = AdaptiveEngine(cfg=AdaptiveConfig(min_trials=2))
         eng.bpm = 60.0     # window ~900ms
         for _ in range(30):
@@ -153,7 +153,7 @@ class RtAwareSlowDownTests(unittest.TestCase):
         # qr above target_high should normally speed up, but if RT is
         # eating > 80% of the window the engine should hold steady (or
         # slow, but at minimum not speed up).
-        from rehab.analytics.adaptive import AdaptiveConfig, AdaptiveEngine
+        from finger_rehab.analytics.adaptive import AdaptiveConfig, AdaptiveEngine
         eng = AdaptiveEngine(cfg=AdaptiveConfig(min_trials=2))
         eng.bpm = 60.0
         for _ in range(40):
@@ -166,7 +166,7 @@ class RtAwareSlowDownTests(unittest.TestCase):
     def test_bpm_can_drop_below_old_floor_of_20(self) -> None:
         # bpm_min was lowered from 20 to 10 (3s -> 6s per stim) so a
         # severely impaired patient still has room to slow further.
-        from rehab.analytics.adaptive import AdaptiveConfig, AdaptiveEngine
+        from finger_rehab.analytics.adaptive import AdaptiveConfig, AdaptiveEngine
         cfg = AdaptiveConfig(min_trials=2, bpm_min=10.0, bpm_step=15.0)
         eng = AdaptiveEngine(cfg=cfg)
         eng.bpm = 30.0
@@ -189,7 +189,7 @@ class ColdStartTests(unittest.TestCase):
     seeds to the first observed quality on the very first trial."""
 
     def test_first_trial_seeds_quality_ema_to_observed_value(self) -> None:
-        from rehab.analytics.adaptive import AdaptiveEngine
+        from finger_rehab.analytics.adaptive import AdaptiveEngine
         eng = AdaptiveEngine()
         # First record sets the EMA directly, NOT averaged with 0.5.
         eng.record(0, hit=True, rt_ms=200.0, quality=1.0)
@@ -198,7 +198,7 @@ class ColdStartTests(unittest.TestCase):
     def test_patient_hitting_greats_from_start_does_not_get_slowed(self) -> None:
         # End-to-end: starting BPM should NOT crash to the floor on
         # the early trials when the patient is performing well.
-        from rehab.analytics.adaptive import AdaptiveConfig, AdaptiveEngine
+        from finger_rehab.analytics.adaptive import AdaptiveConfig, AdaptiveEngine
         eng = AdaptiveEngine(cfg=AdaptiveConfig(min_trials=2,
                                                   bpm_step=10.0))
         eng.bpm = 60.0
@@ -216,7 +216,7 @@ class StreakAmplifiedSpeedUpTests(unittest.TestCase):
     bigger jump than one with a fresh 3-hit run."""
 
     def test_record_tracks_consecutive_hits(self) -> None:
-        from rehab.analytics.adaptive import AdaptiveEngine
+        from finger_rehab.analytics.adaptive import AdaptiveEngine
         eng = AdaptiveEngine()
         for _ in range(5):
             eng.record(0, hit=True, rt_ms=200.0, quality=1.0)
@@ -224,7 +224,7 @@ class StreakAmplifiedSpeedUpTests(unittest.TestCase):
         self.assertEqual(eng.current_miss_streak, 0)
 
     def test_record_resets_streak_on_miss(self) -> None:
-        from rehab.analytics.adaptive import AdaptiveEngine
+        from finger_rehab.analytics.adaptive import AdaptiveEngine
         eng = AdaptiveEngine()
         for _ in range(4):
             eng.record(0, hit=True, rt_ms=200.0, quality=1.0)
@@ -236,7 +236,7 @@ class StreakAmplifiedSpeedUpTests(unittest.TestCase):
         # Even with hit rate above target, if the streak is below 2
         # the adapter must NOT speed up. Prevents a single fluke press
         # after a miss spree from instantly pushing the pace.
-        from rehab.analytics.adaptive import AdaptiveConfig, AdaptiveEngine
+        from finger_rehab.analytics.adaptive import AdaptiveConfig, AdaptiveEngine
         eng = AdaptiveEngine(cfg=AdaptiveConfig(min_trials=2))
         eng.bpm = 60.0
         # High hit rate AND high quality, but only streak=1.
@@ -254,7 +254,7 @@ class StreakAmplifiedSpeedUpTests(unittest.TestCase):
     def test_long_streak_amplifies_speed_up(self) -> None:
         # A 10-hit streak should produce a noticeably larger jump
         # than a 3-hit streak under identical hit-rate + quality + RT.
-        from rehab.analytics.adaptive import AdaptiveConfig, AdaptiveEngine
+        from finger_rehab.analytics.adaptive import AdaptiveConfig, AdaptiveEngine
 
         def jump_for_streak(streak_len: int) -> float:
             eng = AdaptiveEngine(cfg=AdaptiveConfig(min_trials=2,
@@ -283,7 +283,7 @@ class ClosedLoopEquilibriumTests(unittest.TestCase):
 
     def _drive(self, fixed_rt_ms: float, start_bpm: float = 60.0,
                 n_trials: int = 80) -> float:
-        from rehab.analytics.adaptive import AdaptiveConfig, AdaptiveEngine
+        from finger_rehab.analytics.adaptive import AdaptiveConfig, AdaptiveEngine
         eng = AdaptiveEngine(cfg=AdaptiveConfig(min_trials=2,
                                                   bpm_step=10.0,
                                                   bpm_min=10.0,
@@ -335,7 +335,7 @@ class ProbeStepTests(unittest.TestCase):
     rt_pressure path (low utilisation -> positive pressure)."""
 
     def test_probe_fires_when_in_band_with_comfortable_rt_and_streak(self) -> None:
-        from rehab.analytics.adaptive import AdaptiveConfig, AdaptiveEngine
+        from finger_rehab.analytics.adaptive import AdaptiveConfig, AdaptiveEngine
         eng = AdaptiveEngine(cfg=AdaptiveConfig(min_trials=2, bpm_step=10.0))
         eng.bpm = 80.0
         # Hit rate in band (target_low=0.65, target_high=0.80),
@@ -353,7 +353,7 @@ class ProbeStepTests(unittest.TestCase):
             "probe should be a small nudge, not a full step")
 
     def test_probe_does_not_fire_without_streak(self) -> None:
-        from rehab.analytics.adaptive import AdaptiveConfig, AdaptiveEngine
+        from finger_rehab.analytics.adaptive import AdaptiveConfig, AdaptiveEngine
         eng = AdaptiveEngine(cfg=AdaptiveConfig(min_trials=2))
         eng.bpm = 80.0
         for s in eng.state:
@@ -371,7 +371,7 @@ class ScoreMultiplierTests(unittest.TestCase):
     """Score multipliers reward speed (pace) and consistency (streak)."""
 
     def _make_engine(self):
-        from rehab.game.engine import GameEngine
+        from finger_rehab.game.engine import GameEngine
         eng = GameEngine.__new__(GameEngine)
         eng.hit_streak = 0
         eng.mode = None
@@ -419,7 +419,7 @@ class AdaptiveRecoveryTests(unittest.TestCase):
     until they land a hit. Then recovery clears."""
 
     def test_enter_recovery_drops_bpm_hard(self) -> None:
-        from rehab.analytics.adaptive import AdaptiveConfig, AdaptiveEngine
+        from finger_rehab.analytics.adaptive import AdaptiveConfig, AdaptiveEngine
         eng = AdaptiveEngine(cfg=AdaptiveConfig(bpm_step=10.0,
                                                   bpm_min=30.0))
         eng.bpm = 80.0
@@ -429,7 +429,7 @@ class AdaptiveRecoveryTests(unittest.TestCase):
         self.assertTrue(eng.in_recovery)
 
     def test_recovery_floors_at_bpm_min(self) -> None:
-        from rehab.analytics.adaptive import AdaptiveConfig, AdaptiveEngine
+        from finger_rehab.analytics.adaptive import AdaptiveConfig, AdaptiveEngine
         eng = AdaptiveEngine(cfg=AdaptiveConfig(bpm_step=10.0,
                                                   bpm_min=30.0))
         eng.bpm = 35.0
@@ -438,7 +438,7 @@ class AdaptiveRecoveryTests(unittest.TestCase):
         self.assertEqual(eng.bpm, 30.0)
 
     def test_recovery_lane_weights_favour_strongest_finger(self) -> None:
-        from rehab.analytics.adaptive import AdaptiveEngine
+        from finger_rehab.analytics.adaptive import AdaptiveEngine
         eng = AdaptiveEngine()
         # Make lane 2 the strongest by feeding it hits, the rest get misses.
         for _ in range(15):
@@ -453,7 +453,7 @@ class AdaptiveRecoveryTests(unittest.TestCase):
             self.assertLess(weights[i], 0.2)
 
     def test_exit_recovery_restores_normal_weights(self) -> None:
-        from rehab.analytics.adaptive import AdaptiveEngine
+        from finger_rehab.analytics.adaptive import AdaptiveEngine
         eng = AdaptiveEngine()
         eng.enter_recovery()
         eng.exit_recovery()
@@ -468,20 +468,20 @@ class NoNegativeScoreTests(unittest.TestCase):
     """Score must never go below zero. Misses worth 0 by default."""
 
     def test_score_config_defaults_to_zero_miss(self) -> None:
-        from rehab.game.scoring import ScoreConfig
+        from finger_rehab.game.scoring import ScoreConfig
         cfg = ScoreConfig()
         self.assertEqual(cfg.miss_points, 0)
         self.assertEqual(cfg.early_penalty, 0)
 
     def test_classify_offset_miss_defaults_to_zero(self) -> None:
-        from rehab.game.scoring import RhythmWindows, classify_offset
+        from finger_rehab.game.scoring import RhythmWindows, classify_offset
         w = RhythmWindows()
         label, pts = classify_offset(500.0, w)    # 500ms way outside miss window
         self.assertEqual(label, "Miss")
         self.assertEqual(pts, 0)
 
     def test_default_yaml_miss_points_zero(self) -> None:
-        from rehab.config import Config
+        from finger_rehab.config import Config
         cfg = Config.load()
         self.assertEqual(cfg.get("scoring.miss_points"), 0)
         self.assertEqual(cfg.get("scoring.early_penalty"), 0)
@@ -497,7 +497,7 @@ def _bare_engine():
     for the trial logger. Mirrors tests/test_capture_completeness.py's
     helper of the same name."""
     from unittest.mock import MagicMock
-    from rehab.game.engine import GameEngine
+    from finger_rehab.game.engine import GameEngine
     eng = GameEngine.__new__(GameEngine)
     eng.cfg = MagicMock()
     eng.cfg.get = MagicMock(return_value=0)
@@ -554,8 +554,8 @@ class BpmAtTrialSnapshotTests(unittest.TestCase):
 
     def test_bpm_at_trial_uses_the_stim_time_snapshot_not_live_value(
             self) -> None:
-        from rehab.game.modes.classic import PendingTrial
-        from rehab.game.scoring import TrialResult
+        from finger_rehab.game.modes.classic import PendingTrial
+        from finger_rehab.game.scoring import TrialResult
         eng = _bare_engine()
         eng._ensure_metric_state()
 
@@ -591,8 +591,8 @@ class BpmAtTrialSnapshotTests(unittest.TestCase):
             "recovery had not started yet when this trial's stim fired")
 
     def test_next_trial_gets_its_own_fresh_snapshot(self) -> None:
-        from rehab.game.modes.classic import PendingTrial
-        from rehab.game.scoring import TrialResult
+        from finger_rehab.game.modes.classic import PendingTrial
+        from finger_rehab.game.scoring import TrialResult
         eng = _bare_engine()
         eng._ensure_metric_state()
 
@@ -616,9 +616,9 @@ class BpmAtTrialSnapshotTests(unittest.TestCase):
 
 def _mode(engine=None, **overrides):
     from unittest.mock import MagicMock
-    from rehab.analytics.adaptive import AdaptiveConfig
-    from rehab.game.modes.adaptive import AdaptiveMode
-    from rehab.game.scoring import ScoreConfig
+    from finger_rehab.analytics.adaptive import AdaptiveConfig
+    from finger_rehab.game.modes.adaptive import AdaptiveMode
+    from finger_rehab.game.scoring import ScoreConfig
     if engine is None:
         engine = MagicMock()
         engine.cfg = MagicMock()
@@ -643,7 +643,7 @@ def _mode(engine=None, **overrides):
 
 
 def _press(lane: int, t: float):
-    from rehab.hardware.fsr_detector import PressEvent
+    from finger_rehab.hardware.fsr_detector import PressEvent
     return PressEvent(lane=lane, t_perf=t, value=0, baseline=0.0,
                        hand="right")
 
@@ -657,7 +657,7 @@ class CadenceFloorTests(unittest.TestCase):
     caught."""
 
     def test_update_waits_a_full_6s_gap_at_bpm_min_not_3s(self) -> None:
-        import rehab.game.modes.adaptive as adaptive_mod
+        import finger_rehab.game.modes.adaptive as adaptive_mod
         engine, mode = _mode()
         mode.adapter.bpm = mode.adapter.cfg.bpm_min  # 10.0 -> 6s cadence
         mode.completed = 0
@@ -784,7 +784,7 @@ class ColdStartClampTests(unittest.TestCase):
     to bpm_min, letting 2 trials decide the entire block's pace."""
 
     def test_two_opening_misses_do_not_instantly_floor_bpm(self) -> None:
-        from rehab.analytics.adaptive import AdaptiveConfig, AdaptiveEngine
+        from finger_rehab.analytics.adaptive import AdaptiveConfig, AdaptiveEngine
         ac = AdaptiveConfig(target_low=0.65, target_high=0.80,
                              bpm_min=10.0, bpm_max=140.0, bpm_step=10.0,
                              weakness_bias=2.5, min_trials=2)
@@ -801,7 +801,7 @@ class ColdStartClampTests(unittest.TestCase):
     def test_a_sustained_collapse_still_reaches_the_floor(self) -> None:
         # The softening must be temporary -- a genuinely struggling
         # patient still needs to reach bpm_min, just not off 2 trials.
-        from rehab.analytics.adaptive import AdaptiveConfig, AdaptiveEngine
+        from finger_rehab.analytics.adaptive import AdaptiveConfig, AdaptiveEngine
         ac = AdaptiveConfig(target_low=0.65, target_high=0.80,
                              bpm_min=10.0, bpm_max=140.0, bpm_step=10.0,
                              weakness_bias=2.5, min_trials=2)
@@ -900,19 +900,19 @@ class BandCitationTests(unittest.TestCase):
     left implying a different figure than the config actually holds."""
 
     def test_config_defaults_are_65_to_80(self) -> None:
-        from rehab.analytics.adaptive import AdaptiveConfig
+        from finger_rehab.analytics.adaptive import AdaptiveConfig
         cfg = AdaptiveConfig()
         self.assertEqual(cfg.target_low, 0.65)
         self.assertEqual(cfg.target_high, 0.80)
 
     def test_default_yaml_matches_the_engine_defaults(self) -> None:
-        from rehab.config import Config
+        from finger_rehab.config import Config
         cfg = Config.load()
         self.assertEqual(cfg.get("adaptive.target_low"), 0.65)
         self.assertEqual(cfg.get("adaptive.target_high"), 0.80)
 
     def test_no_stray_70_80_band_text_left_in_the_module(self) -> None:
-        import rehab.analytics.adaptive as ad
+        import finger_rehab.analytics.adaptive as ad
         src = Path(ad.__file__).read_text()
         self.assertNotIn("70-80", src)
         self.assertNotIn("70 to 80", src)
@@ -925,7 +925,7 @@ class PaceLabelUnusedDocstringTests(unittest.TestCase):
     doesn't exist."""
 
     def test_docstring_no_longer_claims_the_hud_uses_it(self) -> None:
-        from rehab.analytics.adaptive import AdaptiveEngine
+        from finger_rehab.analytics.adaptive import AdaptiveEngine
         doc = AdaptiveEngine.pace_label.__doc__ or ""
         self.assertNotIn("Used by the HUD", doc)
 

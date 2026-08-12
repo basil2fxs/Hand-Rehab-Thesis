@@ -12,8 +12,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 class ClassicModePauseTests(unittest.TestCase):
     def test_on_resume_shifts_active_trial_stim_time(self) -> None:
-        from rehab.game.modes.classic import ClassicMode, PendingTrial
-        from rehab.game.scoring import ScoreConfig
+        from finger_rehab.game.modes.classic import ClassicMode, PendingTrial
+        from finger_rehab.game.scoring import ScoreConfig
         mode = ClassicMode(
             engine=MagicMock(),
             pattern=[0, 1, 2, 3],
@@ -37,10 +37,10 @@ class ClassicModePauseTests(unittest.TestCase):
 
 class AdaptiveModePauseTests(unittest.TestCase):
     def test_on_resume_shifts_timestamps(self) -> None:
-        from rehab.analytics.adaptive import AdaptiveConfig
-        from rehab.game.modes.adaptive import AdaptiveMode
-        from rehab.game.modes.classic import PendingTrial
-        from rehab.game.scoring import ScoreConfig
+        from finger_rehab.analytics.adaptive import AdaptiveConfig
+        from finger_rehab.game.modes.adaptive import AdaptiveMode
+        from finger_rehab.game.modes.classic import PendingTrial
+        from finger_rehab.game.scoring import ScoreConfig
         mode = AdaptiveMode(
             engine=MagicMock(),
             total_trials=10, block_size=4,
@@ -60,9 +60,9 @@ class AdaptiveModePauseTests(unittest.TestCase):
 
 class RhythmModePauseTests(unittest.TestCase):
     def test_on_resume_shifts_song_clock_fallback(self) -> None:
-        from rehab.audio.beatmap import procedural_beatmap
-        from rehab.game.modes.rhythm import RhythmMode
-        from rehab.game.scoring import RhythmWindows, ScoreConfig
+        from finger_rehab.audio.beatmap import procedural_beatmap
+        from finger_rehab.game.modes.rhythm import RhythmMode
+        from finger_rehab.game.scoring import RhythmWindows, ScoreConfig
         engine = MagicMock()
         engine.audio = None     # force the fallback clock path
         engine.cfg.get = MagicMock(return_value={"q": 0})
@@ -75,9 +75,9 @@ class RhythmModePauseTests(unittest.TestCase):
     def test_on_pause_freezes_song_time(self) -> None:
         # While paused, song_time should hold steady even as real time ticks
         # forward. Otherwise the falling notes keep scrolling visually.
-        from rehab.audio.beatmap import procedural_beatmap
-        from rehab.game.modes.rhythm import RhythmMode
-        from rehab.game.scoring import RhythmWindows, ScoreConfig
+        from finger_rehab.audio.beatmap import procedural_beatmap
+        from finger_rehab.game.modes.rhythm import RhythmMode
+        from finger_rehab.game.scoring import RhythmWindows, ScoreConfig
         engine = MagicMock()
         engine.audio = None
         engine.cfg.get = MagicMock(return_value={"q": 0})
@@ -113,7 +113,7 @@ class RhythmResumeAudioGateTests(unittest.TestCase):
     play_song call when the mode hasn't started audio itself yet."""
 
     def _make_engine(self, mode_audio_started: bool):
-        from rehab.game.engine import GameEngine
+        from finger_rehab.game.engine import GameEngine
         eng = GameEngine.__new__(GameEngine)
         eng.paused = True
         eng._pause_started_at = 0.0
@@ -152,7 +152,7 @@ class EncouragementStreakTests(unittest.TestCase):
     won't re-fire the same one within a block."""
 
     def _make_engine_with_stub_screens(self):
-        from rehab.game.engine import GameEngine
+        from finger_rehab.game.engine import GameEngine
         # Build a minimal engine without invoking pygame. We only need
         # `_update_streak` and the `_streak_thresholds` / `_screens` dict.
         eng = GameEngine.__new__(GameEngine)
@@ -207,7 +207,7 @@ class AudioPlaySongStartOffsetTests(unittest.TestCase):
         # We don't need a real mixer here; the calculation lives in play_song
         # but we can call it via a partial smoke check on the engine class.
         # Just confirm the helper accepts negative start_s without error.
-        from rehab.audio.engine import AudioEngine
+        from finger_rehab.audio.engine import AudioEngine
         a = AudioEngine()
         # Without init, play_song should return False rather than raise.
         self.assertFalse(a.play_song("/nonexistent.mp3", start_s=-3.0))
@@ -221,9 +221,9 @@ class OutcomeColourTests(unittest.TestCase):
     """
 
     def _make_engine(self):
-        from rehab.game.engine import GameEngine
+        from finger_rehab.game.engine import GameEngine
         eng = GameEngine.__new__(GameEngine)
-        from rehab.ui import theme as theme_mod
+        from finger_rehab.ui import theme as theme_mod
         eng.theme = theme_mod.get("clinical")
         return eng
 
@@ -265,10 +265,10 @@ class RhythmLaneNoDarkenOnStimTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.config import Config
-            from rehab.game.engine import GameEngine
-            from rehab.hardware.keyboard_source import KeyboardOnlySource
-            from rehab.ui.screens import GameplayScreen, RhythmScreen
+            from finger_rehab.config import Config
+            from finger_rehab.game.engine import GameEngine
+            from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
+            from finger_rehab.ui.screens import GameplayScreen, RhythmScreen
             cfg = Config.load()
             cfg.data["ui"]["resolution"] = [1280, 800]
             eng = GameEngine(cfg, KeyboardOnlySource())
@@ -295,7 +295,7 @@ class AudioHitChimeTests(unittest.TestCase):
     nothing."""
 
     def test_play_hit_no_op_without_init(self) -> None:
-        from rehab.audio.engine import AudioEngine
+        from finger_rehab.audio.engine import AudioEngine
         a = AudioEngine()
         # Not initialised; should be silent and not raise.
         a.play_hit()

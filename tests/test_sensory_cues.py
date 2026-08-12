@@ -92,7 +92,7 @@ def _engine(show_target=True, cue_ms=250, **cues):
     """A GameEngine built through __new__ with just the state the cue
     paths read. Real construction needs pygame, a serial source and a
     display, none of which say anything about cue routing."""
-    from rehab.game.engine import GameEngine
+    from finger_rehab.game.engine import GameEngine
     e = GameEngine.__new__(GameEngine)
     settings = dict(ALL_ON)
     settings.update(cues)
@@ -158,19 +158,19 @@ def _stims(e) -> list[str]:
 
 
 def _trial(lane: int, incorrect=()):
-    from rehab.game.modes.classic import PendingTrial
+    from finger_rehab.game.modes.classic import PendingTrial
     return PendingTrial(trial_id=1, lane=lane, stim_t_perf=0.0,
                          keys_pressed=[lane],
                          incorrect_presses=list(incorrect))
 
 
 def _result(label: str, rt_ms: float | None = 200.0):
-    from rehab.game.scoring import TrialResult
+    from finger_rehab.game.scoring import TrialResult
     return TrialResult(label=label, points=0, rt_ms=rt_ms)
 
 
 def _note(lane: int, index: int = 0):
-    from rehab.audio.beatmap import Note
+    from finger_rehab.audio.beatmap import Note
     sched = MagicMock()
     sched.note = Note(t=1.0, lane=lane)
     sched.index = index
@@ -268,9 +268,9 @@ class AfterPressOnlyOnACorrectPressTests(unittest.TestCase):
         # Miss before logging it, so the cue never sees it as correct.
         # Driving the mode rather than hand-building the outcome is the
         # point: it checks the downgrade and the cue gate agree.
-        from rehab.game.modes.classic import ClassicMode
-        from rehab.game.scoring import ScoreConfig
-        from rehab.hardware.fsr_detector import PressEvent
+        from finger_rehab.game.modes.classic import ClassicMode
+        from finger_rehab.game.scoring import ScoreConfig
+        from finger_rehab.hardware.fsr_detector import PressEvent
         e = _engine(**ALL_ON)
         mode = ClassicMode(engine=e, pattern=[0], repeat_count=1,
                             trigger_interval_s=0.5, timeout_s=1.0,
@@ -377,9 +377,9 @@ class EveryModeHonoursTheSwitchesTests(unittest.TestCase):
     def test_mirror_mode_passes_both_lanes(self) -> None:
         # The engine can only buzz both hands if the mode tells it
         # which two lanes were pressed, so pin that hand-off.
-        from rehab.game.modes.mirror import MirrorMode
-        from rehab.game.scoring import ScoreConfig
-        from rehab.hardware.fsr_detector import PressEvent
+        from finger_rehab.game.modes.mirror import MirrorMode
+        from finger_rehab.game.scoring import ScoreConfig
+        from finger_rehab.hardware.fsr_detector import PressEvent
         spy = MagicMock()
         spy.cfg = MagicMock()
         spy.cfg.get = MagicMock(return_value=0)
@@ -492,13 +492,13 @@ class CueFlagsColumnTests(unittest.TestCase):
     can split blocks by condition without the config snapshot."""
 
     def test_columns_registered(self) -> None:
-        from rehab.data.logger import TRIAL_COLUMNS
+        from finger_rehab.data.logger import TRIAL_COLUMNS
         self.assertIn("cue_flags", TRIAL_COLUMNS)
         self.assertIn("cue_target_shown", TRIAL_COLUMNS)
         self.assertNotIn("cue_mode", TRIAL_COLUMNS)
 
     def test_all_sixteen_states_are_distinct(self) -> None:
-        from rehab.game.engine import CueSettings
+        from finger_rehab.game.engine import CueSettings
         codes = set()
         for i in range(16):
             codes.add(CueSettings(
@@ -508,7 +508,7 @@ class CueFlagsColumnTests(unittest.TestCase):
         self.assertEqual(len(codes), 16)
 
     def test_code_reads_as_before_slash_after(self) -> None:
-        from rehab.game.engine import CueSettings
+        from finger_rehab.game.engine import CueSettings
         self.assertEqual(CueSettings(True, True, True, True, True).code,
                           "BS/BS")
         self.assertEqual(CueSettings(False, False, False, False, True).code,
@@ -530,7 +530,7 @@ class NoConfigAtAllTests(unittest.TestCase):
         # Only reachable from a __new__-built engine in a test that
         # never set a config up. Not knowing what the therapist chose
         # is a reason to drive nothing, not a reason to buzz.
-        from rehab.game.engine import GameEngine
+        from finger_rehab.game.engine import GameEngine
         e = GameEngine.__new__(GameEngine)
         cues = e.cue_settings()
         self.assertFalse(cues.buzz_before)
@@ -545,7 +545,7 @@ class SensoryCuesMenuTests(unittest.TestCase):
     its rows have to name the keys the engine actually reads."""
 
     def test_the_menu_covers_every_switch(self) -> None:
-        from rehab.ui.screens import DiagnosticsScreen
+        from finger_rehab.ui.screens import DiagnosticsScreen
         keys = [k for k, _l, _h in DiagnosticsScreen.CUE_ROWS if k is not None]
         self.assertEqual(sorted(keys), [
             "cue.buzz_after", "cue.buzz_before", "cue.show_target",
@@ -553,7 +553,7 @@ class SensoryCuesMenuTests(unittest.TestCase):
         ])
 
     def test_every_switch_explains_itself(self) -> None:
-        from rehab.ui.screens import DiagnosticsScreen
+        from finger_rehab.ui.screens import DiagnosticsScreen
         for key, label, help_text in DiagnosticsScreen.CUE_ROWS:
             if key is None:
                 continue
@@ -565,7 +565,7 @@ class SensoryCuesMenuTests(unittest.TestCase):
         # Four switches are normally set as a group, so closing after
         # each one would mean four trips through the menu.
         import pygame
-        from rehab.ui.widgets import ToggleMenu
+        from finger_rehab.ui.widgets import ToggleMenu
         state = {"a": False, "b": True}
         flips: list[tuple[str, bool]] = []
 
@@ -590,7 +590,7 @@ class SensoryCuesMenuTests(unittest.TestCase):
 
     def test_a_click_off_the_menu_closes_it(self) -> None:
         import pygame
-        from rehab.ui.widgets import ToggleMenu
+        from finger_rehab.ui.widgets import ToggleMenu
         menu = ToggleMenu(pygame.Rect(0, 0, 200, 30),
                            [("a", "A", "")],
                            get_value=lambda k: False,
@@ -609,7 +609,7 @@ class ShippedDefaultsTests(unittest.TestCase):
 
     def _shipped(self) -> dict:
         import yaml
-        from rehab.config import DEFAULT_CONFIG
+        from finger_rehab.config import DEFAULT_CONFIG
         with open(DEFAULT_CONFIG) as f:
             return yaml.safe_load(f)
 
@@ -640,7 +640,7 @@ class LegacySettingsMigrationTests(unittest.TestCase):
     after an update and quietly changing on the patient."""
 
     def _migrate(self, overrides: dict) -> dict:
-        from rehab.config import apply_cue_migration
+        from finger_rehab.config import apply_cue_migration
         merged = {"cue": {"buzz_before": True, "sound_before": True,
                            "sound_after": True, "buzz_after": True,
                            "show_target": True}}
@@ -678,7 +678,7 @@ class LegacySettingsMigrationTests(unittest.TestCase):
         self.assertTrue(cue["buzz_before"])
 
     def test_a_file_with_none_of_it_is_left_alone(self) -> None:
-        from rehab.config import apply_cue_migration
+        from finger_rehab.config import apply_cue_migration
         merged = {"cue": {"buzz_before": True}}
         derived = apply_cue_migration(merged, {"serial": {"left_port": None}})
         self.assertEqual(derived, [])
@@ -709,7 +709,7 @@ class OneMotorPerBoardTests(unittest.TestCase):
     """
 
     def _engine(self, hand_mode="right"):
-        from rehab.game.engine import GameEngine
+        from finger_rehab.game.engine import GameEngine
         sent = []
 
         class Src:
@@ -794,8 +794,8 @@ class PinkyBuzzTests(unittest.TestCase):
     compile-time, so buzz length is the only lever the host has left."""
 
     def _engine(self, cfg=None):
-        from rehab.game.engine import GameEngine
-        from rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.config import Config
         sent = []
 
         class Src:
@@ -840,7 +840,7 @@ class PinkyBuzzTests(unittest.TestCase):
         """cue_ms_per_finger ships empty and is there for a rig with a
         dead motor. If someone does set it, a cue still buzzing when the
         next trial starts would be read as that trial's cue."""
-        from rehab.config import Config
+        from finger_rehab.config import Config
         cfg = Config.load()
         cfg.data.setdefault("motor", {})["cue_ms_per_finger"] = [
             250, 250, 250, 5000]
@@ -849,7 +849,7 @@ class PinkyBuzzTests(unittest.TestCase):
         self.assertLessEqual(e.cue_ms_for_lane(3), 0.6 * 1000 * 0.8)
 
     def test_missing_or_malformed_per_finger_falls_back(self):
-        from rehab.config import Config
+        from finger_rehab.config import Config
         for bad in (None, [], [0, 0, 0, 0], "nonsense", [250, 250]):
             cfg = Config.load()
             cfg.data.setdefault("motor", {})["cue_ms_per_finger"] = bad

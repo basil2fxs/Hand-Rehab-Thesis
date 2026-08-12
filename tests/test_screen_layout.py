@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from rehab.data.session import SOFTWARE_VERSION
+from finger_rehab.data.session import SOFTWARE_VERSION
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -30,10 +30,10 @@ def title_screen():
     import pygame
     pygame.init()
     pygame.font.init()
-    from rehab.config import Config
-    from rehab.game.engine import GameEngine
-    from rehab.hardware.keyboard_source import KeyboardOnlySource
-    from rehab.ui.screens import TitleScreen
+    from finger_rehab.config import Config
+    from finger_rehab.game.engine import GameEngine
+    from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
+    from finger_rehab.ui.screens import TitleScreen
     cfg = Config.load()
     cfg.data.setdefault("ui", {})["resolution"] = [1280, 800]
     eng = GameEngine(cfg, KeyboardOnlySource())
@@ -46,10 +46,10 @@ def settings_screen():
     import pygame
     pygame.init()
     pygame.font.init()
-    from rehab.config import Config
-    from rehab.game.engine import GameEngine
-    from rehab.hardware.keyboard_source import KeyboardOnlySource
-    from rehab.ui.screens import DiagnosticsScreen
+    from finger_rehab.config import Config
+    from finger_rehab.game.engine import GameEngine
+    from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
+    from finger_rehab.ui.screens import DiagnosticsScreen
     cfg = Config.load()
     cfg.data.setdefault("ui", {})["resolution"] = [1280, 800]
     eng = GameEngine(cfg, KeyboardOnlySource())
@@ -64,7 +64,7 @@ def captured_text(screen, monkeypatch) -> list[str]:
     the recorder sees the calls the screen itself makes.
     """
     import pygame
-    import rehab.ui.screens as screens_mod
+    import finger_rehab.ui.screens as screens_mod
 
     seen: list[str] = []
     original = screens_mod.draw_text
@@ -94,7 +94,7 @@ class TestVersionIsOneNumber:
             assert value == SOFTWARE_VERSION
 
     def test_session_metadata_carries_it(self):
-        from rehab.data.session import Session
+        from finger_rehab.data.session import Session
         assert Session(participant="T1").software_version == SOFTWARE_VERSION
 
 
@@ -244,7 +244,7 @@ class TestSettingsGroups:
     def test_the_five_group_headings_are_drawn(self, settings_screen,
                                                monkeypatch):
         import pygame
-        import rehab.ui.screens as screens_mod
+        import finger_rehab.ui.screens as screens_mod
         screen, _ = settings_screen
         seen: list[str] = []
         original = screens_mod.DiagnosticsScreen._draw_band
@@ -463,11 +463,11 @@ class TestCuesOnTheResultsScreen:
 
     def _results(self):
         import pygame
-        from rehab.game.engine import GameEngine
-        from rehab.config import Config
-        from rehab.ui.theme import get as get_theme
-        from rehab.ui.widgets import Layout
-        from rehab.ui.screens import ResultsScreen
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.config import Config
+        from finger_rehab.ui.theme import get as get_theme
+        from finger_rehab.ui.widgets import Layout
+        from finger_rehab.ui.screens import ResultsScreen
         pygame.init()
         pygame.font.init()
         pygame.display.set_mode((1280, 800))
@@ -500,7 +500,7 @@ class TestCuesOnTheResultsScreen:
     def test_it_shares_one_definition_with_settings(self):
         """Two copies would drift, and a switch that means one thing on
         one screen and another elsewhere is worse than no switch."""
-        from rehab.ui.screens import CUE_ROWS, DiagnosticsScreen
+        from finger_rehab.ui.screens import CUE_ROWS, DiagnosticsScreen
         r, _ = self._results()
         assert r._cue_menu.rows == list(CUE_ROWS)
         assert DiagnosticsScreen.CUE_ROWS is CUE_ROWS
@@ -580,10 +580,10 @@ def mode_select_screen():
     import pygame
     pygame.init()
     pygame.font.init()
-    from rehab.config import Config
-    from rehab.game.engine import GameEngine
-    from rehab.hardware.keyboard_source import KeyboardOnlySource
-    from rehab.ui.screens import ModeSelectScreen
+    from finger_rehab.config import Config
+    from finger_rehab.game.engine import GameEngine
+    from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
+    from finger_rehab.ui.screens import ModeSelectScreen
     cfg = Config.load()
     cfg.data.setdefault("ui", {})["resolution"] = [1280, 800]
     eng = GameEngine(cfg, KeyboardOnlySource())
@@ -599,7 +599,7 @@ class TestModeSelectCardLayout:
     uses and fails when any card in either column runs out of room."""
 
     def _card_lines(self, sc):
-        from rehab.ui.widgets import FONT_SMALL
+        from finger_rehab.ui.widgets import FONT_SMALL
         for b, (key, title, desc) in zip(sc.buttons, sc.MODES):
             font = sc.layout.font(FONT_SMALL + 2)
             text_x = b.rect.x + 92

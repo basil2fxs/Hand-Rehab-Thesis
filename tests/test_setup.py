@@ -18,8 +18,8 @@ class TextInputTests(unittest.TestCase):
     def _make(self, **kw):
         import pygame
         pygame.init()
-        from rehab.ui.theme import get as get_theme
-        from rehab.ui.widgets import Layout, TextInput
+        from finger_rehab.ui.theme import get as get_theme
+        from finger_rehab.ui.widgets import Layout, TextInput
         layout = Layout(1280, 800)
         theme = get_theme("clinical")
         rect = pygame.Rect(0, 0, 300, 50)
@@ -94,9 +94,9 @@ class TitleScreenNameFlowTests(unittest.TestCase):
     config so every block this app session inherits the same name."""
 
     def _make_engine(self):
-        from rehab.config import Config
-        from rehab.game.engine import GameEngine
-        from rehab.hardware.keyboard_source import KeyboardOnlySource
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
         cfg = Config.load()
         cfg.data["ui"]["resolution"] = [1280, 800]
         return GameEngine(cfg, KeyboardOnlySource())
@@ -105,7 +105,7 @@ class TitleScreenNameFlowTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.ui.screens import TitleScreen
+            from finger_rehab.ui.screens import TitleScreen
             eng = self._make_engine()
             calls = []
             eng.show_mode_select = lambda: calls.append("mode_select")
@@ -122,7 +122,7 @@ class TitleScreenNameFlowTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.ui.screens import TitleScreen
+            from finger_rehab.ui.screens import TitleScreen
             eng = self._make_engine()
             eng.show_mode_select = lambda: None
             screen = TitleScreen(eng)
@@ -142,10 +142,10 @@ class SetupScreenHasNoNameInputTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.config import Config
-            from rehab.game.engine import GameEngine
-            from rehab.hardware.keyboard_source import KeyboardOnlySource
-            from rehab.ui.screens import SetupScreen
+            from finger_rehab.config import Config
+            from finger_rehab.game.engine import GameEngine
+            from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
+            from finger_rehab.ui.screens import SetupScreen
             cfg = Config.load()
             cfg.data["ui"]["resolution"] = [1280, 800]
             eng = GameEngine(cfg, KeyboardOnlySource())
@@ -162,7 +162,7 @@ class SessionPathsUseTypedNameTests(unittest.TestCase):
 
     def test_session_folder_name_uses_typed_participant(self) -> None:
         import tempfile
-        from rehab.data.logger import SessionPaths
+        from finger_rehab.data.logger import SessionPaths
         with tempfile.TemporaryDirectory() as td:
             paths = SessionPaths.for_session(Path(td), "Patient One")
             self.assertIn("Patient_One", paths.root.name)
@@ -173,7 +173,7 @@ class SessionPathsUseTypedNameTests(unittest.TestCase):
         # `mode` was added deliberately so the folder name says which
         # block the data came from without opening metadata.json.
         import inspect
-        from rehab.data.logger import SessionPaths
+        from finger_rehab.data.logger import SessionPaths
         sig = inspect.signature(SessionPaths.for_session)
         params = list(sig.parameters)
         self.assertNotIn("age", params)
@@ -181,7 +181,7 @@ class SessionPathsUseTypedNameTests(unittest.TestCase):
 
     def test_session_folder_name_includes_mode(self) -> None:
         import tempfile
-        from rehab.data.logger import SessionPaths
+        from finger_rehab.data.logger import SessionPaths
         with tempfile.TemporaryDirectory() as td:
             paths = SessionPaths.for_session(Path(td), "Pat",
                                              mode="adaptive")
@@ -192,7 +192,7 @@ class SessionPathsUseTypedNameTests(unittest.TestCase):
         # so a day's recordings all sit in one date folder.
         import re
         import tempfile
-        from rehab.data.logger import SessionPaths
+        from finger_rehab.data.logger import SessionPaths
         with tempfile.TemporaryDirectory() as td:
             paths = SessionPaths.for_session(Path(td), "Pat",
                                              mode="classic")
@@ -214,10 +214,10 @@ class GlobalParticipantPersistenceTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.config import Config
-            from rehab.game.engine import GameEngine
-            from rehab.hardware.keyboard_source import KeyboardOnlySource
-            from rehab.ui.screens import TitleScreen
+            from finger_rehab.config import Config
+            from finger_rehab.game.engine import GameEngine
+            from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
+            from finger_rehab.ui.screens import TitleScreen
             cfg = Config.load()
             cfg.data["ui"]["resolution"] = [1280, 800]
             cfg.data.setdefault("session", {})["participant"] = "Returning"
@@ -235,10 +235,10 @@ class GlobalParticipantPersistenceTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.config import Config
-            from rehab.game.engine import GameEngine
-            from rehab.hardware.keyboard_source import KeyboardOnlySource
-            from rehab.ui.screens import TitleScreen
+            from finger_rehab.config import Config
+            from finger_rehab.game.engine import GameEngine
+            from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
+            from finger_rehab.ui.screens import TitleScreen
             cfg = Config.load()
             cfg.data["ui"]["resolution"] = [1280, 800]
             cfg.data.setdefault("session", {})["age"] = "72"
@@ -255,10 +255,10 @@ class GlobalParticipantPersistenceTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.config import Config
-            from rehab.game.engine import GameEngine
-            from rehab.hardware.keyboard_source import KeyboardOnlySource
-            from rehab.ui.screens import TitleScreen
+            from finger_rehab.config import Config
+            from finger_rehab.game.engine import GameEngine
+            from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
+            from finger_rehab.ui.screens import TitleScreen
             cfg = Config.load()
             cfg.data["ui"]["resolution"] = [1280, 800]
             eng = GameEngine(cfg, KeyboardOnlySource())
@@ -281,7 +281,7 @@ class GlobalParticipantPersistenceTests(unittest.TestCase):
         # rehab outcomes and is cheap to capture on the title screen.
         # The earlier "no_longer_include_age" test asserted the absence
         # of this column, which had to flip when age was re-introduced.
-        from rehab.data.logger import TRIAL_COLUMNS
+        from finger_rehab.data.logger import TRIAL_COLUMNS
         self.assertIn("age", TRIAL_COLUMNS)
         self.assertIn("participant", TRIAL_COLUMNS)
         # Age sits next to participant for readability when a researcher
@@ -299,8 +299,8 @@ class SliderWidgetTests(unittest.TestCase):
     def _make(self, **kw):
         import pygame
         pygame.init()
-        from rehab.ui.theme import get as get_theme
-        from rehab.ui.widgets import Layout, Slider
+        from finger_rehab.ui.theme import get as get_theme
+        from finger_rehab.ui.widgets import Layout, Slider
         layout = Layout(1280, 800)
         theme = get_theme("clinical")
         rect = pygame.Rect(0, 0, 400, 30)
@@ -321,8 +321,8 @@ class SliderWidgetTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.ui.theme import get as get_theme
-            from rehab.ui.widgets import Layout, Slider
+            from finger_rehab.ui.theme import get as get_theme
+            from finger_rehab.ui.widgets import Layout, Slider
             layout = Layout(1280, 800)
             theme = get_theme("clinical")
             sl = Slider(pygame.Rect(0, 0, 400, 30), theme, layout,
@@ -361,10 +361,10 @@ class ClassicPaceFlowTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.config import Config
-            from rehab.game.engine import GameEngine
-            from rehab.hardware.keyboard_source import KeyboardOnlySource
-            from rehab.ui.screens import SetupScreen
+            from finger_rehab.config import Config
+            from finger_rehab.game.engine import GameEngine
+            from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
+            from finger_rehab.ui.screens import SetupScreen
             cfg = Config.load()
             cfg.data["ui"]["resolution"] = [1280, 800]
             cfg.data["game"]["mode"] = "classic"
@@ -388,10 +388,10 @@ class ClassicPaceFlowTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.config import Config
-            from rehab.game.engine import GameEngine
-            from rehab.hardware.keyboard_source import KeyboardOnlySource
-            from rehab.ui.screens import SetupScreen
+            from finger_rehab.config import Config
+            from finger_rehab.game.engine import GameEngine
+            from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
+            from finger_rehab.ui.screens import SetupScreen
             cfg = Config.load()
             cfg.data["ui"]["resolution"] = [1280, 800]
             cfg.data["game"]["mode"] = "adaptive"
@@ -417,10 +417,10 @@ class EscNavigationTests(unittest.TestCase):
     def _make_engine_with_screens(self):
         import pygame
         pygame.init()
-        from rehab.config import Config
-        from rehab.game.engine import GameEngine
-        from rehab.hardware.keyboard_source import KeyboardOnlySource
-        from rehab.ui.screens import (
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
+        from finger_rehab.ui.screens import (
             TitleScreen, ModeSelectScreen, SetupScreen,
             RhythmSetupScreen, GameplayScreen, RhythmScreen, ResultsScreen,
         )
@@ -585,10 +585,10 @@ class DiagnosticsPortPanelTests(unittest.TestCase):
     def _build(self, hand_mode: str = "right"):
         import pygame
         pygame.init()
-        from rehab.config import Config
-        from rehab.game.engine import GameEngine
-        from rehab.hardware.keyboard_source import KeyboardOnlySource
-        from rehab.ui.screens import DiagnosticsScreen
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
+        from finger_rehab.ui.screens import DiagnosticsScreen
         cfg = Config.load()
         cfg.data.setdefault("bilateral", {})["hand"] = hand_mode
         cfg.data["ui"]["resolution"] = [1280, 800]
@@ -599,7 +599,7 @@ class DiagnosticsPortPanelTests(unittest.TestCase):
 
     def test_panel_builds_with_zero_ports(self) -> None:
         from unittest.mock import patch
-        with patch("rehab.hardware.serial_source.list_available_ports",
+        with patch("finger_rehab.hardware.serial_source.list_available_ports",
                     return_value=[]):
             eng, d, pygame = self._build()
             try:
@@ -630,7 +630,7 @@ class DiagnosticsPortPanelTests(unittest.TestCase):
         from unittest import mock
         import tempfile
         from pathlib import Path
-        from rehab.hardware.serial_source import PortInfo
+        from finger_rehab.hardware.serial_source import PortInfo
         fake_ports = [
             PortInfo(device="/dev/cu.usbmodemA",
                       description="", vid=0x2341, pid=0),
@@ -640,9 +640,9 @@ class DiagnosticsPortPanelTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             override = Path(td) / "user_settings.yaml"
             with mock.patch(
-                "rehab.hardware.serial_source.list_available_ports",
+                "finger_rehab.hardware.serial_source.list_available_ports",
                 return_value=fake_ports,
-            ), mock.patch("rehab.config.USER_OVERRIDES", override):
+            ), mock.patch("finger_rehab.config.USER_OVERRIDES", override):
                 eng, d, pygame = self._build()
                 try:
                     d.refresh_ports()
@@ -672,7 +672,7 @@ class DiagnosticsPortPanelTests(unittest.TestCase):
         # the Settings panel onto discover_ports instead of the raw
         # list_available_ports.
         from unittest.mock import patch
-        from rehab.hardware.serial_source import PortInfo
+        from finger_rehab.hardware.serial_source import PortInfo
         ports = [
             PortInfo(device="/dev/cu.debug-console",
                       description="", vid=None, pid=None),
@@ -681,7 +681,7 @@ class DiagnosticsPortPanelTests(unittest.TestCase):
             PortInfo(device="/dev/cu.usbmodem1101",
                       description="Arduino", vid=0x2341, pid=0),
         ]
-        with patch("rehab.hardware.serial_source.list_ports") as lp:
+        with patch("finger_rehab.hardware.serial_source.list_ports") as lp:
             lp.comports.return_value = ports
             eng, d, pygame = self._build()
             try:
@@ -700,7 +700,7 @@ class DiagnosticsPortPanelTests(unittest.TestCase):
 
     def test_start_stim_test_queues_four_pulses(self) -> None:
         from unittest.mock import patch
-        with patch("rehab.hardware.serial_source.list_available_ports",
+        with patch("finger_rehab.hardware.serial_source.list_available_ports",
                     return_value=[]):
             eng, d, pygame = self._build()
             try:
@@ -718,7 +718,7 @@ class DiagnosticsPortPanelTests(unittest.TestCase):
     def test_draw_does_not_crash(self) -> None:
         # Belt-and-braces: build the screen, give it a surface, draw.
         from unittest.mock import patch
-        with patch("rehab.hardware.serial_source.list_available_ports",
+        with patch("finger_rehab.hardware.serial_source.list_available_ports",
                     return_value=[]):
             eng, d, pygame = self._build()
             try:
@@ -737,16 +737,16 @@ class DiagnosticsConnectionStateTests(unittest.TestCase):
         _os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
         import pygame
         pygame.init()
-        from rehab.config import Config
-        from rehab.game.engine import GameEngine
-        from rehab.ui.screens import DiagnosticsScreen
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.ui.screens import DiagnosticsScreen
         cfg = Config.load()
         cfg.data["ui"]["resolution"] = [1280, 800]
         eng = GameEngine(cfg, source)
         return eng, DiagnosticsScreen(eng), pygame
 
     def test_keyboard_source_reads_as_KEYBOARD(self) -> None:
-        from rehab.hardware.keyboard_source import KeyboardOnlySource
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
         eng, d, pygame = self._build_with_source(KeyboardOnlySource())
         try:
             text, _ = d._connection_state()
@@ -757,7 +757,7 @@ class DiagnosticsConnectionStateTests(unittest.TestCase):
     def test_open_port_no_data_reads_as_NO_DATA(self) -> None:
         # FakeArduino: provides_samples=True, is_connected=True, but no
         # has_recent_data => NO DATA. This is the Mac Bluetooth case.
-        from rehab.hardware.source import Source
+        from finger_rehab.hardware.source import Source
 
         class SilentArduino(Source):
             def start(self): pass
@@ -782,7 +782,7 @@ class DiagnosticsConnectionStateTests(unittest.TestCase):
             pygame.quit()
 
     def test_open_port_with_data_reads_as_CONNECTED(self) -> None:
-        from rehab.hardware.source import Source
+        from finger_rehab.hardware.source import Source
 
         class HealthyArduino(Source):
             def start(self): pass
@@ -807,7 +807,7 @@ class DiagnosticsConnectionStateTests(unittest.TestCase):
             pygame.quit()
 
     def test_closed_port_reads_as_DISCONNECTED(self) -> None:
-        from rehab.hardware.source import Source
+        from finger_rehab.hardware.source import Source
 
         class DeadArduino(Source):
             def start(self): pass
@@ -841,9 +841,9 @@ class DiagnosticsAlwaysEightLanesTests(unittest.TestCase):
         os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
         import pygame
         pygame.init()
-        from rehab.config import Config
-        from rehab.game.engine import GameEngine
-        from rehab.hardware.keyboard_source import KeyboardOnlySource
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
         cfg = Config.load()
         cfg.data["ui"]["resolution"] = [1280, 800]
         cfg.data.setdefault("bilateral", {})["hand"] = hand_mode
@@ -854,7 +854,7 @@ class DiagnosticsAlwaysEightLanesTests(unittest.TestCase):
     def test_eight_lanes_when_hand_mode_is_right(self) -> None:
         eng, pygame = self._build("right")
         try:
-            from rehab.ui.screens import DiagnosticsScreen
+            from finger_rehab.ui.screens import DiagnosticsScreen
             d = DiagnosticsScreen(eng)
             self.assertEqual(len(d.lanes), 8)
             # Lanes 0..3 right, 4..7 left.
@@ -867,7 +867,7 @@ class DiagnosticsAlwaysEightLanesTests(unittest.TestCase):
     def test_eight_lanes_when_hand_mode_is_left(self) -> None:
         eng, pygame = self._build("left")
         try:
-            from rehab.ui.screens import DiagnosticsScreen
+            from finger_rehab.ui.screens import DiagnosticsScreen
             d = DiagnosticsScreen(eng)
             self.assertEqual(len(d.lanes), 8)
         finally:
@@ -876,7 +876,7 @@ class DiagnosticsAlwaysEightLanesTests(unittest.TestCase):
     def test_eight_lanes_when_hand_mode_is_both(self) -> None:
         eng, pygame = self._build("both")
         try:
-            from rehab.ui.screens import DiagnosticsScreen
+            from finger_rehab.ui.screens import DiagnosticsScreen
             d = DiagnosticsScreen(eng)
             self.assertEqual(len(d.lanes), 8)
         finally:
@@ -904,10 +904,10 @@ class DiagnosticsAlwaysEightLanesTests(unittest.TestCase):
         import pygame as _pg
         eng, pygame = self._build("right")
         try:
-            from rehab.ui.screens import DiagnosticsScreen
+            from finger_rehab.ui.screens import DiagnosticsScreen
             d = DiagnosticsScreen(eng)
             # Simulate the 'a' key (left little, lane 7) being held.
-            from rehab.game.modes._keys import resolve_key
+            from finger_rehab.game.modes._keys import resolve_key
             a_keycode = resolve_key("a")
             self.assertIsNotNone(a_keycode)
             d._held_keys.add(a_keycode)

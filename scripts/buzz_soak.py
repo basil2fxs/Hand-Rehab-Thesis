@@ -51,7 +51,7 @@ def main() -> int:
 
     port = args.port
     if not port:
-        from rehab.hardware.serial_source import discover_ports
+        from finger_rehab.hardware.serial_source import discover_ports
         found = discover_ports(None)
         if not found:
             print("No Arduino found. Pass --port /dev/cu.something")

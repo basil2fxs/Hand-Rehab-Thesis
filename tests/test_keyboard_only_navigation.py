@@ -26,9 +26,9 @@ def _key_event(key: int):
 def _engine(mode: str | None = None):
     import pygame
     pygame.init()
-    from rehab.config import Config
-    from rehab.game.engine import GameEngine
-    from rehab.hardware.keyboard_source import KeyboardOnlySource
+    from finger_rehab.config import Config
+    from finger_rehab.game.engine import GameEngine
+    from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
     cfg = Config.load()
     cfg.data["ui"]["resolution"] = [1280, 800]
     if mode is not None:
@@ -46,7 +46,7 @@ class TitleScreenKeyboardOnlyTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.ui.screens import TitleScreen
+            from finger_rehab.ui.screens import TitleScreen
             eng = _engine()
             calls = []
             eng.show_mode_select = lambda: calls.append(True)
@@ -62,7 +62,7 @@ class TitleScreenKeyboardOnlyTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.ui.screens import TitleScreen
+            from finger_rehab.ui.screens import TitleScreen
             eng = _engine()
             calls = []
             eng.show_mode_select = lambda: calls.append(True)
@@ -79,7 +79,7 @@ class TitleScreenKeyboardOnlyTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.ui.screens import TitleScreen
+            from finger_rehab.ui.screens import TitleScreen
             sc = TitleScreen(_engine())
             sc.handle_event(_key_event(pygame.K_TAB))
             self.assertTrue(sc.name_input.focused)
@@ -91,7 +91,7 @@ class TitleScreenKeyboardOnlyTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.ui.screens import TitleScreen
+            from finger_rehab.ui.screens import TitleScreen
             sc = TitleScreen(_engine())
             sc.handle_event(_key_event(pygame.K_TAB))  # focuses name
             sc.handle_event(_key_event(pygame.K_TAB))  # name -> age
@@ -107,7 +107,7 @@ class ModeSelectKeyboardOnlyTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.ui.screens import ModeSelectScreen
+            from finger_rehab.ui.screens import ModeSelectScreen
             eng = _engine()
             picked = []
             eng.show_setup = lambda: picked.append(
@@ -123,7 +123,7 @@ class ModeSelectKeyboardOnlyTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.ui.screens import ModeSelectScreen
+            from finger_rehab.ui.screens import ModeSelectScreen
             eng = _engine()
             picked = []
             eng.show_setup = lambda: picked.append(
@@ -142,7 +142,7 @@ class SetupScreenKeyboardOnlyTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.ui.screens import SetupScreen
+            from finger_rehab.ui.screens import SetupScreen
             eng = _engine(mode="reaction")
             started = []
             eng.begin_reaction_block = lambda: started.append(True)
@@ -158,7 +158,7 @@ class SetupScreenKeyboardOnlyTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.ui.screens import SetupScreen
+            from finger_rehab.ui.screens import SetupScreen
             eng = _engine(mode="adaptive")
             eng.begin_adaptive_block = lambda: None
             eng._screens = {"gameplay": None, "rhythm": None}
@@ -177,7 +177,7 @@ class RhythmSetupScreenKeyboardOnlyTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.ui.screens import RhythmSetupScreen
+            from finger_rehab.ui.screens import RhythmSetupScreen
             eng = _engine(mode="rhythm")
             eng.begin_rhythm_block = lambda bm: None
             sc = RhythmSetupScreen(eng)
@@ -204,7 +204,7 @@ class ResultsScreenKeyboardOnlyTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.ui.screens import ResultsScreen
+            from finger_rehab.ui.screens import ResultsScreen
             eng = _engine()
             retried = []
             eng.retry_last_block = lambda: retried.append(True)

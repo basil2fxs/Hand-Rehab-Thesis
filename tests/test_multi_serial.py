@@ -58,7 +58,7 @@ class _FakeSerialSource:
         return f"FakeSerial({self.port})"
 
     def push(self, t_perf: float, values: tuple[int, ...]) -> None:
-        from rehab.hardware.source import Sample
+        from finger_rehab.hardware.source import Sample
         self._q.put(Sample(t_perf=t_perf, values=values))
 
 
@@ -70,16 +70,16 @@ def _make_multi(ports: list[str],
     `hand_assignment` overrides the default plug-order assignment
     (first=right, second=left). Useful for testing the lone-left-hand
     case where only the left Arduino is plugged in."""
-    from rehab.hardware.multi_serial import MultiSerialSource
+    from finger_rehab.hardware.multi_serial import MultiSerialSource
     # We can't construct MultiSerialSource normally without pyserial
     # installed (its __init__ builds SerialSources). Build via __new__
     # and assemble the state manually.
     multi = MultiSerialSource.__new__(MultiSerialSource)
     # super().__init__() does queue setup; emulate it.
-    from rehab.hardware.source import BaseQueueSource
+    from finger_rehab.hardware.source import BaseQueueSource
     BaseQueueSource.__init__(multi)
     fakes = [_FakeSerialSource(p) for p in ports]
-    from rehab.hardware.multi_serial import HandPort
+    from finger_rehab.hardware.multi_serial import HandPort
     if hand_assignment is None:
         hands = ["right"] if len(ports) == 1 else ["right", "left"]
     else:
@@ -351,7 +351,7 @@ class SerialSourceLatencyAccessorTests(unittest.TestCase):
     by hand."""
 
     def _bare_source(self):
-        from rehab.hardware.serial_source import SerialSource
+        from finger_rehab.hardware.serial_source import SerialSource
         s = SerialSource.__new__(SerialSource)
         s._port_open_ts = None
         s._first_sample_ts = None

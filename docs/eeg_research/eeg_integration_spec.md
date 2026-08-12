@@ -7,10 +7,10 @@ re-research. Grounded in code read this session:
 - Old program: `Webler EEG past program/SRT_Sequence_learning_Final_v2.py`.
   One marker (30 at flash onset, ~16.7 ms intent, then 0), COM10, DummySerial
   in test mode.
-- Our engine: `rehab/` package, `main.py` entry, `config/default.yaml`,
-  raw event logging already present in `rehab/data/logger.py`
+- Our engine: `finger_rehab/` package, `main.py` entry, `config/default.yaml`,
+  raw event logging already present in `finger_rehab/data/logger.py`
   (RAW_COLUMNS: iso_ts, t_perf, sample_idx, fsr1-8, hand, event, lane, detail).
-- Already in the repo but wired to NOTHING: `rehab/hardware/eeg.py`
+- Already in the repo but wired to NOTHING: `finger_rehab/hardware/eeg.py`
   (class EEGMarker) plus `tests/test_eeg.py`. No engine call sites, no
   `eeg:` config block. Its code map comes from "Aiden's prototype" and
   CONFLICTS with the lab convention: it uses 30 = miss and 11-18 = stimulus.
@@ -368,7 +368,7 @@ copies, no fork, no second script.
 ### Module layout
 
 ```
-rehab/hardware/eeg_trigger.py   <- rename/evolve of rehab/hardware/eeg.py
+finger_rehab/hardware/eeg_trigger.py   <- rename/evolve of finger_rehab/hardware/eeg.py
     CODES                        # the Section 1 map as one dict,
                                  # the single source of truth
     CODES_VERSION                # bumped when the map changes; logged
@@ -385,7 +385,7 @@ rehab/hardware/eeg_trigger.py   <- rename/evolve of rehab/hardware/eeg.py
                                  # checks
 ```
 
-Engine call sites (all inside `rehab/game/engine.py` and the mode
+Engine call sites (all inside `finger_rehab/game/engine.py` and the mode
 classes, at the points named in Section 3): session start/end, block
 start/end, countdown onset, foreperiod arm, stimulus dispatch, press
 detection in `_feed_detectors`, timeout, feedback presentation,
@@ -472,7 +472,7 @@ The test that keeps the lab path welded to the game:
 5. **Parity**: `config/eeg_lab.yaml` loads over defaults and yields
    eeg.enabled, require_port, a port string; the launcher file contains
    a `main.py --config config/eeg_lab.yaml` invocation and no other
-   Python entry; `rehab.game.engine.GameEngine` is the only engine class
+   Python entry; `finger_rehab.game.engine.GameEngine` is the only engine class
    in the repo (no module whose name or contents fork it).
 6. **Correctness split**: feeding the engine a wrong-finger press, an
    anticipatory press and a timeout yields 110-band, 120-band and 130

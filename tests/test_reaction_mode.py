@@ -25,7 +25,7 @@ os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
 
 def _press(lane: int, t: float = 0.0):
-    from rehab.hardware.fsr_detector import PressEvent
+    from finger_rehab.hardware.fsr_detector import PressEvent
     return PressEvent(lane=lane, t_perf=t, value=0, baseline=0.0,
                        hand="right")
 
@@ -34,8 +34,8 @@ def _build_mode(**overrides):
     """A ReactionMode wired to a MagicMock engine, with timings shrunk
     so tests drive the state machine with explicit `now` values instead
     of sleeping."""
-    from rehab.game.modes.reaction import ReactionMode
-    from rehab.game.scoring import ScoreConfig
+    from finger_rehab.game.modes.reaction import ReactionMode
+    from finger_rehab.game.scoring import ScoreConfig
     engine = MagicMock()
     engine.detectors = {}
     engine._screens = {}
@@ -436,9 +436,9 @@ class EngineIntegrationTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.config import Config
-            from rehab.game.engine import GameEngine
-            from rehab.hardware.keyboard_source import KeyboardOnlySource
+            from finger_rehab.config import Config
+            from finger_rehab.game.engine import GameEngine
+            from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
             with tempfile.TemporaryDirectory() as td:
                 cfg = Config.load()
                 cfg.data["ui"]["resolution"] = [640, 480]
@@ -499,9 +499,9 @@ class BilateralPerTrialHandTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.config import Config
-            from rehab.game.engine import GameEngine
-            from rehab.hardware.keyboard_source import KeyboardOnlySource
+            from finger_rehab.config import Config
+            from finger_rehab.game.engine import GameEngine
+            from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
             td = tempfile.mkdtemp()
             cfg = Config.load()
             cfg.data["ui"]["resolution"] = [640, 480]
@@ -570,10 +570,10 @@ class LevelAndWindowOnScreenTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.config import Config
-            from rehab.game.engine import GameEngine
-            from rehab.hardware.keyboard_source import KeyboardOnlySource
-            import rehab.ui.screens as screens
+            from finger_rehab.config import Config
+            from finger_rehab.game.engine import GameEngine
+            from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
+            import finger_rehab.ui.screens as screens
             cfg = Config.load()
             cfg.data["ui"]["resolution"] = [640, 480]
             cfg.data["audio"]["enabled"] = False
@@ -618,10 +618,10 @@ class ReactionScreenLayerTests(unittest.TestCase):
     def _engine_and_screen(self):
         import pygame
         pygame.init()
-        from rehab.config import Config
-        from rehab.game.engine import GameEngine
-        from rehab.hardware.keyboard_source import KeyboardOnlySource
-        import rehab.ui.screens as screens
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
+        import finger_rehab.ui.screens as screens
         cfg = Config.load()
         cfg.data["ui"]["resolution"] = [1280, 800]
         cfg.data["audio"]["enabled"] = False
@@ -758,10 +758,10 @@ class SetupScreenGatingTests(unittest.TestCase):
         import pygame
         pygame.init()
         try:
-            from rehab.config import Config
-            from rehab.game.engine import GameEngine
-            from rehab.hardware.keyboard_source import KeyboardOnlySource
-            from rehab.ui.screens import SetupScreen
+            from finger_rehab.config import Config
+            from finger_rehab.game.engine import GameEngine
+            from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
+            from finger_rehab.ui.screens import SetupScreen
             cfg = Config.load()
             cfg.data["ui"]["resolution"] = [1280, 800]
             eng = GameEngine(cfg, KeyboardOnlySource())
@@ -789,11 +789,11 @@ class ResultsScreenMedianCardTests(unittest.TestCase):
 
     def _draw_reaction_results(self, block_summary_reaction):
         import pygame
-        from rehab.config import Config
-        from rehab.game.engine import GameEngine
-        from rehab.ui.screens import ResultsScreen
-        from rehab.ui.theme import get as get_theme
-        from rehab.ui.widgets import Layout
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.ui.screens import ResultsScreen
+        from finger_rehab.ui.theme import get as get_theme
+        from finger_rehab.ui.widgets import Layout
         pygame.init()
         pygame.font.init()
         pygame.display.set_mode((1280, 800))

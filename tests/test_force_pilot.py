@@ -44,7 +44,7 @@ DRAW_KW = dict(
 
 
 def _params(**over):
-    from rehab.game.modes.force_pilot import draw_run_params
+    from finger_rehab.game.modes.force_pilot import draw_run_params
     kw = dict(DRAW_KW)
     kw.update(over)
     return draw_run_params(**kw)
@@ -53,7 +53,7 @@ def _params(**over):
 def _engine(hand_mode="right", cfg_extra=None):
     """Engine fixture in the house style: built via __new__, MagicMock
     config, command-recording source, loggable."""
-    from rehab.game.engine import GameEngine
+    from finger_rehab.game.engine import GameEngine
     values = {
         "fsr.num_sensors_per_hand": 4,
         "motor.cue_ms": 150,
@@ -130,7 +130,7 @@ class _ViewStub:
     and the mode reads them like live sensor data."""
 
     def __init__(self):
-        from rehab.game.force_stream import ForceReading
+        from finger_rehab.game.force_stream import ForceReading
         self._reading_cls = ForceReading
         self.counts = 0.0
         self.pct: float | None = None
@@ -150,8 +150,8 @@ class _ViewStub:
 
 
 def _mode(e, hands=None, **over):
-    from rehab.game.modes.force_pilot import ForcePilotMode
-    from rehab.game.scoring import ScoreConfig
+    from finger_rehab.game.modes.force_pilot import ForcePilotMode
+    from finger_rehab.game.scoring import ScoreConfig
     kw = dict(
         engine=e,
         lanes_by_hand=hands or {"right": [0, 1, 2, 3]},
@@ -194,7 +194,7 @@ def _mode(e, hands=None, **over):
 
 
 def _fresh_profile(hand="right"):
-    from rehab.hardware.calibration_profile import CalibrationProfile
+    from finger_rehab.hardware.calibration_profile import CalibrationProfile
     prof = CalibrationProfile(hand=hand, resting=[100.0] * 4,
                               press=[160.0] * 4)
     prof.set_max_press([400.0] * 4)
@@ -214,7 +214,7 @@ def _to_run_phase(m, t0=1000.0):
 
 def _play_run(m, t_start, force_fn, dt=1.0 / 60.0):
     """Feed one full run with force from force_fn(t_run, target)."""
-    from rehab.game.modes.force_pilot import target_pct
+    from finger_rehab.game.modes.force_pilot import target_pct
     t = t_start
     while m.phase == "run":
         t += dt
@@ -240,7 +240,7 @@ class TrajectoryTests(unittest.TestCase):
         # A step between sections would be an uncontrolled stimulus:
         # the corridor is designed with no jumps, and the approach
         # ramp exists exactly to walk into the assessment's start.
-        from rehab.game.modes.force_pilot import (
+        from finger_rehab.game.modes.force_pilot import (
             sections_from_params, target_pct)
         secs = sections_from_params(_params())
         for k in range(1, len(secs)):
@@ -251,7 +251,7 @@ class TrajectoryTests(unittest.TestCase):
 
     def test_duration_inside_the_brief_window(self):
         # 20 to 30 s runs, both configured ramp rates.
-        from rehab.game.modes.force_pilot import (
+        from finger_rehab.game.modes.force_pilot import (
             run_duration_s, sections_from_params)
         for seed in range(12):
             secs = sections_from_params(_params(seed=seed))
@@ -260,7 +260,7 @@ class TrajectoryTests(unittest.TestCase):
             self.assertLessEqual(dur, 30.0)
 
     def test_target_stays_inside_the_span(self):
-        from rehab.game.modes.force_pilot import (
+        from finger_rehab.game.modes.force_pilot import (
             run_duration_s, sections_from_params, target_pct)
         for seed in range(8):
             secs = sections_from_params(_params(seed=seed))
@@ -271,7 +271,7 @@ class TrajectoryTests(unittest.TestCase):
                 self.assertLessEqual(v, 40.0)
 
     def test_frequencies_respect_the_level_band(self):
-        from rehab.game.modes.force_pilot import (
+        from finger_rehab.game.modes.force_pilot import (
             SINE_FREQ_FLOOR_HZ, SOS_FREQ_FLOOR_HZ)
         for seed in range(20):
             p = _params(seed=seed, freq_ceiling_hz=0.45)
@@ -288,9 +288,9 @@ class TrajectoryTests(unittest.TestCase):
         # and rebuilds the target without this module's rng. The
         # packed cell trims floats to 6 significant digits, so the
         # rebuild is exact to well under a hundredth of a percent.
-        from rehab.data.logger import (pack_waveform_params,
+        from finger_rehab.data.logger import (pack_waveform_params,
                                        parse_waveform_params)
-        from rehab.game.modes.force_pilot import (
+        from finger_rehab.game.modes.force_pilot import (
             run_duration_s, sections_from_params, target_pct)
         p = _params()
         secs = sections_from_params(p)
@@ -447,7 +447,7 @@ class RunScoringTests(unittest.TestCase):
         self.assertEqual(rec.stalls, 0)
 
     def test_trial_row_carries_the_reconstruction_contract(self):
-        from rehab.data.logger import (parse_segments,
+        from finger_rehab.data.logger import (parse_segments,
                                        parse_waveform_params)
         m = self._ready_mode()
         t = _to_run_phase(m)
@@ -752,9 +752,9 @@ class ScreenTests(unittest.TestCase):
         """A real screen over a stub engine carrying a scripted mode
         in the run phase."""
         import pygame
-        from rehab.ui.force_pilot_screen import ForcePilotScreen
-        from rehab.ui.theme import get as get_theme
-        from rehab.ui.widgets import Layout
+        from finger_rehab.ui.force_pilot_screen import ForcePilotScreen
+        from finger_rehab.ui.theme import get as get_theme
+        from finger_rehab.ui.widgets import Layout
         e = _engine()
         e.calibration_profiles["right"] = _fresh_profile()
         e.theme = get_theme("clinical")
@@ -792,7 +792,7 @@ class ScreenTests(unittest.TestCase):
         self.assertEqual(calls, [])
 
     def test_active_finger_is_named_on_screen(self):
-        import rehab.ui.force_pilot_screen as fps
+        import finger_rehab.ui.force_pilot_screen as fps
         sc, m, surf, _t = self._screen_and_mode()
         seen = []
         original = fps.draw_text
@@ -833,8 +833,8 @@ class ErrorTypeTests(unittest.TestCase):
         import csv
         import tempfile
         from pathlib import Path
-        from rehab.data.logger import TrialLogger
-        from rehab.game.modes.force_pilot import target_pct
+        from finger_rehab.data.logger import TrialLogger
+        from finger_rehab.game.modes.force_pilot import target_pct
 
         e = _engine()
         e.calibration_profiles["right"] = _fresh_profile()
@@ -872,7 +872,7 @@ class ErrorTypeTests(unittest.TestCase):
         import csv
         import tempfile
         from pathlib import Path
-        from rehab.data.logger import TrialLogger
+        from finger_rehab.data.logger import TrialLogger
 
         e = _engine()
         e.calibration_profiles["right"] = _fresh_profile()
@@ -926,7 +926,7 @@ class DropoutRingGatingTests(unittest.TestCase):
         ring0 = m.ring_times[0]
         self.assertLess(ring0, 3.0)
 
-        from rehab.game.modes.force_pilot import target_pct
+        from finger_rehab.game.modes.force_pilot import target_pct
         dt = 1.0 / 60.0
         t_run = t0
         while m.phase == "run":
@@ -997,11 +997,11 @@ class ResultsScreenLevelAnnotationTests(unittest.TestCase):
 
     def _draw(self, fp_summary):
         import pygame
-        from rehab.config import Config
-        from rehab.game.engine import GameEngine
-        from rehab.ui.screens import ResultsScreen
-        from rehab.ui.theme import get as get_theme
-        from rehab.ui.widgets import Layout
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.ui.screens import ResultsScreen
+        from finger_rehab.ui.theme import get as get_theme
+        from finger_rehab.ui.widgets import Layout
         pygame.init()
         pygame.font.init()
         pygame.display.set_mode((1280, 800))
@@ -1072,11 +1072,11 @@ class ModeSelectHardwareBadgeTests(unittest.TestCase):
     @staticmethod
     def _screen(provides_samples):
         import pygame
-        from rehab.config import Config
-        from rehab.game.engine import GameEngine
-        from rehab.ui.screens import ModeSelectScreen
-        from rehab.ui.theme import get as get_theme
-        from rehab.ui.widgets import Layout
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.ui.screens import ModeSelectScreen
+        from finger_rehab.ui.theme import get as get_theme
+        from finger_rehab.ui.widgets import Layout
         pygame.init()
         pygame.font.init()
         pygame.display.set_mode((1280, 800))
@@ -1100,7 +1100,7 @@ class ModeSelectHardwareBadgeTests(unittest.TestCase):
         import pygame
         surf = pygame.Surface((1280, 800))
         seen = []
-        import rehab.ui.screens as screens_mod
+        import finger_rehab.ui.screens as screens_mod
         original = screens_mod.draw_text
 
         def recorder(s, text, pos, *a, **k):
@@ -1119,7 +1119,7 @@ class ModeSelectHardwareBadgeTests(unittest.TestCase):
         import pygame
         surf = pygame.Surface((1280, 800))
         seen = []
-        import rehab.ui.screens as screens_mod
+        import finger_rehab.ui.screens as screens_mod
         original = screens_mod.draw_text
 
         def recorder(s, text, pos, *a, **k):

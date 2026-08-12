@@ -10,7 +10,7 @@ CODES below is the single source of truth for the map. The full design
 rationale lives in the EEG integration spec (band layout, cue-condition
 coding, response correctness split, collision and failure policy).
 
-WARNING - old map conflict. This module replaces rehab/hardware/eeg.py
+WARNING - old map conflict. This module replaces finger_rehab/hardware/eeg.py
 (Aiden's prototype), whose map CONFLICTED with the lab convention:
 the prototype used 30 = miss/timeout and 11-18 = stimulus per lane,
 while Welber's pipeline epochs on 30 = STIMULUS ONSET. Nothing in this

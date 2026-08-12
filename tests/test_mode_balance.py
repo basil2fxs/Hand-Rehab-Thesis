@@ -37,7 +37,7 @@ N = 4
 
 
 def _engine(hand_mode: str, balance: bool = True):
-    from rehab.game.engine import GameEngine
+    from finger_rehab.game.engine import GameEngine
 
     class Cfg:
         def get(self, key, default=None):
@@ -107,8 +107,8 @@ class TestClassicSequence:
         assert e.build_balanced_sequence(-5) == []
 
     def test_classic_mode_uses_the_sequence_it_is_given(self):
-        from rehab.game.modes.classic import ClassicMode
-        from rehab.game.scoring import ScoreConfig
+        from finger_rehab.game.modes.classic import ClassicMode
+        from finger_rehab.game.scoring import ScoreConfig
         m = ClassicMode.__new__(ClassicMode)
         ClassicMode.__init__(
             m, engine=None, pattern=[0, 1], repeat_count=2,
@@ -117,8 +117,8 @@ class TestClassicSequence:
         assert m.sequence == [3, 2, 1, 0]
 
     def test_classic_falls_back_to_the_pattern_without_a_sequence(self):
-        from rehab.game.modes.classic import ClassicMode
-        from rehab.game.scoring import ScoreConfig
+        from finger_rehab.game.modes.classic import ClassicMode
+        from finger_rehab.game.scoring import ScoreConfig
         m = ClassicMode.__new__(ClassicMode)
         ClassicMode.__init__(
             m, engine=None, pattern=[0, 1], repeat_count=3,
@@ -129,7 +129,7 @@ class TestClassicSequence:
 
 class TestRhythmPattern:
     def test_unilateral_pattern_is_balanced(self):
-        from rehab.audio.beatmap import _default_pattern
+        from finger_rehab.audio.beatmap import _default_pattern
         c = Counter(_default_pattern(4))
         assert max(c.values()) == min(c.values())
 
@@ -137,20 +137,20 @@ class TestRhythmPattern:
         """Was [0,4,1,5,2,6,3,7,1,5,2,6]: middle and ring appeared twice per
         cycle, index and pinky once, so the inner fingers got twice the
         notes on every track."""
-        from rehab.audio.beatmap import _default_pattern
+        from finger_rehab.audio.beatmap import _default_pattern
         pat = _default_pattern(8)
         c = Counter(pat)
         assert set(c) == set(range(8))
         assert max(c.values()) == min(c.values())
 
     def test_bilateral_alternates_hands(self):
-        from rehab.audio.beatmap import _default_pattern
+        from finger_rehab.audio.beatmap import _default_pattern
         pat = _default_pattern(8)
         sides = [0 if x < 4 else 1 for x in pat]
         assert all(a != b for a, b in zip(sides, sides[1:]))
 
     def test_notes_across_a_song_are_balanced(self):
-        from rehab.audio.beatmap import _assign_lanes
+        from finger_rehab.audio.beatmap import _assign_lanes
         for n in (4, 8):
             notes = _assign_lanes([i * 0.5 for i in range(240)], num_lanes=n)
             c = Counter(x.lane for x in notes)
@@ -160,7 +160,7 @@ class TestRhythmPattern:
 
 class TestAdaptiveFloor:
     def _sim(self, min_share, n_lanes=4, hands=False, trials=60, seed=5):
-        from rehab.analytics.adaptive import AdaptiveEngine, AdaptiveConfig
+        from finger_rehab.analytics.adaptive import AdaptiveEngine, AdaptiveConfig
         a = AdaptiveEngine(num_lanes=n_lanes,
                            cfg=AdaptiveConfig(weakness_bias=2.5),
                            min_finger_share=min_share, hands_split=hands)
@@ -183,7 +183,7 @@ class TestAdaptiveFloor:
         assert c[3] == max(c.values())
 
     def test_zero_share_restores_the_old_weighting(self):
-        from rehab.analytics.adaptive import AdaptiveEngine, AdaptiveConfig
+        from finger_rehab.analytics.adaptive import AdaptiveEngine, AdaptiveConfig
         a = AdaptiveEngine(num_lanes=4, cfg=AdaptiveConfig(),
                            min_finger_share=0.0)
         assert a._floor_scheduler() is None
@@ -202,7 +202,7 @@ class TestAdaptiveFloor:
         """pick_lane does a cumulative scan with a silent fall-through to
         the last lane, so a weight vector that does not sum to 1 quietly
         dumps the remainder on the pinky."""
-        from rehab.analytics.adaptive import AdaptiveEngine, AdaptiveConfig
+        from finger_rehab.analytics.adaptive import AdaptiveEngine, AdaptiveConfig
         for recovery in (False, True):
             a = AdaptiveEngine(num_lanes=4, cfg=AdaptiveConfig(),
                                min_finger_share=0.15)
@@ -210,7 +210,7 @@ class TestAdaptiveFloor:
             assert sum(a.lane_weights()) == pytest.approx(1.0)
 
     def test_sequence_length_is_respected(self):
-        from rehab.analytics.adaptive import AdaptiveEngine, AdaptiveConfig
+        from finger_rehab.analytics.adaptive import AdaptiveEngine, AdaptiveConfig
         a = AdaptiveEngine(num_lanes=4, cfg=AdaptiveConfig(),
                            min_finger_share=0.15)
         assert len(a.generate_sequence(9, random.Random(0))) == 9
@@ -223,9 +223,9 @@ class TestAdaptiveFloor:
 
 class TestMirrorFloor:
     def _mode(self, min_share=0.15):
-        from rehab.game.modes.mirror import MirrorMode
-        from rehab.game.scoring import ScoreConfig
-        from rehab.analytics.adaptive import AdaptiveConfig
+        from finger_rehab.game.modes.mirror import MirrorMode
+        from finger_rehab.game.scoring import ScoreConfig
+        from finger_rehab.analytics.adaptive import AdaptiveConfig
         m = MirrorMode.__new__(MirrorMode)
         MirrorMode.__init__(
             m, engine=None, pattern=[0, 1, 2, 3], repeat_count=8,
@@ -247,9 +247,9 @@ class TestMirrorFloor:
         assert c[3] == max(c.values())
 
     def test_only_eligible_fingers_are_picked(self):
-        from rehab.game.modes.mirror import MirrorMode
-        from rehab.game.scoring import ScoreConfig
-        from rehab.analytics.adaptive import AdaptiveConfig
+        from finger_rehab.game.modes.mirror import MirrorMode
+        from finger_rehab.game.scoring import ScoreConfig
+        from finger_rehab.analytics.adaptive import AdaptiveConfig
         m = MirrorMode.__new__(MirrorMode)
         MirrorMode.__init__(
             m, engine=None, pattern=[0, 2], repeat_count=8,
@@ -260,9 +260,9 @@ class TestMirrorFloor:
         assert picks <= {0, 2}
 
     def test_single_eligible_finger_does_not_crash(self):
-        from rehab.game.modes.mirror import MirrorMode
-        from rehab.game.scoring import ScoreConfig
-        from rehab.analytics.adaptive import AdaptiveConfig
+        from finger_rehab.game.modes.mirror import MirrorMode
+        from finger_rehab.game.scoring import ScoreConfig
+        from finger_rehab.analytics.adaptive import AdaptiveConfig
         m = MirrorMode.__new__(MirrorMode)
         MirrorMode.__init__(
             m, engine=None, pattern=[2], repeat_count=4,
@@ -279,7 +279,7 @@ class TestPatternRespect:
     left hand permanently uncued."""
 
     def _engine(self, hand_mode="right", pattern=None):
-        from rehab.game.engine import GameEngine
+        from finger_rehab.game.engine import GameEngine
 
         class Cfg:
             def __init__(self):

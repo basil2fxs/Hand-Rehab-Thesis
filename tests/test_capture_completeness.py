@@ -30,7 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 class TrialColumnsTests(unittest.TestCase):
     def test_new_columns_registered(self) -> None:
-        from rehab.data.logger import TRIAL_COLUMNS
+        from finger_rehab.data.logger import TRIAL_COLUMNS
         for col in ("loud_trial", "timeout_ms",
                      "force_window_sum", "force_window_peaks"):
             self.assertIn(col, TRIAL_COLUMNS)
@@ -39,7 +39,7 @@ class TrialColumnsTests(unittest.TestCase):
 def _bare_engine():
     """GameEngine via __new__ with the state log_trial needs, plus a
     recording stand-in for the trial logger."""
-    from rehab.game.engine import GameEngine
+    from finger_rehab.game.engine import GameEngine
     eng = GameEngine.__new__(GameEngine)
     eng.cfg = MagicMock()
     eng.cfg.get = MagicMock(return_value=0)
@@ -84,7 +84,7 @@ def _bare_engine():
 
 
 def _trial(lane: int, incorrect=()):
-    from rehab.game.modes.classic import PendingTrial
+    from finger_rehab.game.modes.classic import PendingTrial
     return PendingTrial(
         trial_id=1, lane=lane, stim_t_perf=0.0,
         keys_pressed=[lane], incorrect_presses=list(incorrect),
@@ -92,7 +92,7 @@ def _trial(lane: int, incorrect=()):
 
 
 def _result(label: str, rt_ms, points: int = 0):
-    from rehab.game.scoring import TrialResult
+    from finger_rehab.game.scoring import TrialResult
     return TrialResult(label=label, points=points, rt_ms=rt_ms)
 
 
@@ -173,7 +173,7 @@ class LogTrialCaptureTests(unittest.TestCase):
 
 class RhythmCaptureTests(unittest.TestCase):
     def _sched_note(self, lane: int, index: int = 0):
-        from rehab.audio.beatmap import Note
+        from finger_rehab.audio.beatmap import Note
         sched = MagicMock()
         sched.note = Note(t=1.0, lane=lane)
         sched.index = index
@@ -331,7 +331,7 @@ class StimDeliveryCaptureTests(unittest.TestCase):
     simply stopped responding."""
 
     def test_column_registered(self) -> None:
-        from rehab.data.logger import TRIAL_COLUMNS
+        from finger_rehab.data.logger import TRIAL_COLUMNS
         self.assertIn("stim_delivered", TRIAL_COLUMNS)
 
     def _stim_engine(self, send_result):

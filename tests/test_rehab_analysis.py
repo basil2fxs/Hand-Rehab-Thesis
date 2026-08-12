@@ -25,7 +25,7 @@ matplotlib.use("Agg")
 import pandas as pd
 import pytest
 
-from rehab.data.logger import TRIAL_COLUMNS as BUZZ_HUNT_COLS
+from finger_rehab.data.logger import TRIAL_COLUMNS as BUZZ_HUNT_COLS
 
 
 NOTEBOOK = (Path(__file__).resolve().parents[1]
@@ -1372,7 +1372,7 @@ class TestSyllablesStressRatio:
     peaks[stress] / median(ALL peaks including the stressed one). For a
     2-syllable word that median is always the louder tap, so a
     correctly accented word could never clear any criterion above 1.0.
-    The fix mirrors rehab/game/modes/syllables.py's _score_stress: the
+    The fix mirrors finger_rehab/game/modes/syllables.py's _score_stress: the
     reference is the median of the OTHER taps only, on each finger's
     own calibrated light-press gap."""
 
@@ -2423,7 +2423,7 @@ def _write_buzz_hunt_segment_session(root, name, *, day="2026-08-05",
     a folder-filtering bug that let one game's markers be checked
     against every selected game's rows, and buzz_hunt's own
     documented one-frame respond-start offset."""
-    from rehab.data.logger import pack_segments
+    from finger_rehab.data.logger import pack_segments
     folder = Path(root) / day / f"{name}_{clock}_buzz_hunt"
     folder.mkdir(parents=True, exist_ok=True)
     seg_cell = pack_segments([("stim", respond_start - 0.3, respond_start),

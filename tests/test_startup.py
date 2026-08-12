@@ -21,9 +21,9 @@ class ScoreConfigFallbackTests(unittest.TestCase):
     def test_score_cfg_inline_fallbacks_are_zero_for_miss_and_early(self) -> None:
         # Build a Config with NO scoring section at all, then verify the
         # engine's ScoreConfig construction comes out with miss=0 / early=0.
-        from rehab.config import Config
+        from finger_rehab.config import Config
         cfg = Config(data={})
-        from rehab.game.scoring import ScoreConfig
+        from finger_rehab.game.scoring import ScoreConfig
         score_cfg = ScoreConfig(
             great_ms=int(cfg.get("scoring.great_ms", 200)),
             great_points=int(cfg.get("scoring.great_points", 3)),
@@ -88,9 +88,9 @@ class HeadlessEngineBootTests(unittest.TestCase):
     def test_engine_run_returns_zero_in_headless_mode(self) -> None:
         os.environ["SDL_VIDEODRIVER"] = "dummy"
         os.environ["SDL_AUDIODRIVER"] = "dummy"
-        from rehab.config import Config
-        from rehab.game.engine import GameEngine
-        from rehab.hardware.keyboard_source import KeyboardOnlySource
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
         cfg = Config.load()
         # Smaller window so the dummy driver doesn't allocate too much.
         cfg.data["ui"]["resolution"] = [640, 480]
@@ -111,9 +111,9 @@ class HeadlessEngineBootTests(unittest.TestCase):
         os.environ["SDL_VIDEODRIVER"] = "dummy"
         os.environ["SDL_AUDIODRIVER"] = "dummy"
         import pygame
-        from rehab.config import Config
-        from rehab.game.engine import GameEngine
-        from rehab.hardware.keyboard_source import KeyboardOnlySource
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
         cfg = Config.load()
         cfg.data["ui"]["resolution"] = [640, 480]
         cfg.data["audio"]["enabled"] = False
@@ -147,9 +147,9 @@ class HeadlessEngineBootTests(unittest.TestCase):
         os.environ["SDL_VIDEODRIVER"] = "dummy"
         os.environ["SDL_AUDIODRIVER"] = "dummy"
         import pygame
-        from rehab.config import Config
-        from rehab.game.engine import GameEngine
-        from rehab.hardware.keyboard_source import KeyboardOnlySource
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
         cfg = Config.load()
         cfg.data["ui"]["resolution"] = [640, 480]
         cfg.data["audio"]["enabled"] = False
@@ -186,9 +186,9 @@ class HeadlessEngineBootTests(unittest.TestCase):
         os.environ["SDL_VIDEODRIVER"] = "dummy"
         os.environ["SDL_AUDIODRIVER"] = "dummy"
         import pygame
-        from rehab.config import Config
-        from rehab.game.engine import GameEngine
-        from rehab.hardware.keyboard_source import KeyboardOnlySource
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
         cfg = Config.load()
         cfg.data["ui"]["resolution"] = [640, 480]
         cfg.data["audio"]["enabled"] = True   # so _build_audio is exercised
@@ -226,9 +226,9 @@ class HeadlessEngineBootTests(unittest.TestCase):
         # exited cleanly we get frames>=1 and a return code of 0.
         os.environ["SDL_VIDEODRIVER"] = "dummy"
         os.environ["SDL_AUDIODRIVER"] = "dummy"
-        from rehab.config import Config
-        from rehab.game.engine import GameEngine
-        from rehab.hardware.keyboard_source import KeyboardOnlySource
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
         cfg = Config.load()
         cfg.data["ui"]["resolution"] = [640, 480]
         cfg.data["audio"]["enabled"] = False
@@ -296,14 +296,14 @@ class MainEntryPointTests(unittest.TestCase):
         # Force the source builder down the keyboard path and confirm it
         # returns a real KeyboardOnlySource without raising.
         import main as main_mod
-        from rehab.config import Config
+        from finger_rehab.config import Config
         cfg = Config.load()
         ns = type("Args", (), {})()
         ns.source = "keyboard"
         ns.port = None
         src = main_mod._build_source(cfg, ns)
         try:
-            from rehab.hardware.keyboard_source import KeyboardOnlySource
+            from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
             self.assertIsInstance(src, KeyboardOnlySource)
         finally:
             if src is not None:

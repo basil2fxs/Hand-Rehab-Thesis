@@ -25,11 +25,11 @@ def _diag_screen(send_result=True, send_raises=None):
     """Build a DiagnosticsScreen headless with a recording mock source."""
     pygame.init()
     pygame.font.init()
-    from rehab.ui.widgets import Layout
-    from rehab.ui.theme import get as get_theme
-    from rehab.game.engine import GameEngine
-    from rehab.ui.screens import DiagnosticsScreen
-    from rehab.config import Config
+    from finger_rehab.ui.widgets import Layout
+    from finger_rehab.ui.theme import get as get_theme
+    from finger_rehab.game.engine import GameEngine
+    from finger_rehab.ui.screens import DiagnosticsScreen
+    from finger_rehab.config import Config
 
     e = GameEngine.__new__(GameEngine)
     e.layout = Layout(1280, 800, 1.0)

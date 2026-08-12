@@ -21,9 +21,9 @@ class InfoOverlayTests(unittest.TestCase):
         import pygame
         pygame.init()
         pygame.font.init()
-        from rehab.config import Config
-        from rehab.game.engine import GameEngine
-        from rehab.hardware.keyboard_source import KeyboardOnlySource
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
         cfg = Config.load()
         cfg.data["ui"]["resolution"] = [1280, 800]
         cfg.data["audio"]["enabled"] = False
