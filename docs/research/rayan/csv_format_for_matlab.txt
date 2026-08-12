@@ -1,90 +1,27 @@
-CSV FORMAT FOR MATLAB
-=====================
+CSV FORMAT FOR RAYAN
+====================
 
-FILES TO USE
-Per session, two files:
-    sessions/<date>/<name>/raw.csv      200 Hz force stream + events
+Each session folder has the two files you need:
+    sessions/<date>/<name>/raw.csv      the 200 Hz force stream
     sessions/<date>/<name>/trials.csv   one row per trial
-<name> is <participant>_<HHMMSS>_<mode>. Calibration is in
-metadata.json in the same folder if needed.
 
-TWO FIXES YOUR LOADER NEEDS
-1. Stim rows write "trial_id=7", not "trial=7". Change the regex to
-   match "trial_id".
-2. Timestamps arrive in bursts of ~4 samples, so a median-gap sample
-   rate estimate reads ~100 kHz. Use sample count / time span. Real
-   rate is 200 Hz.
-Column names already match your loader (t_perf, fsr1-4, event, lane,
-detail).
+YOUR SCRIPTS RUN ON raw.csv. Same column names as the old files
+(t_perf, fsr1-4, event, lane, detail), plus fsr5-8 for the left hand
+in two-handed sessions. Two fixes needed:
 
-RAW.CSV COLUMNS
-iso_ts       wall clock, ISO 8601 ms
-t_perf       seconds, monotonic, same clock as trials.csv segment_times
-sample_idx   running sample number from the device
-fsr1-fsr4    right hand index/middle/ring/pinky, raw ADC counts
-fsr5-fsr8    left hand, same order; zero unless hand = both
-hand         right, left or both
-event        empty on sample rows; else block_start, block_end, stim,
-             stim_motor, press, release, segment_start, segment_end
-lane         0-based finger on event rows: 0-3 right, 4-7 left
-detail       free text; stim rows carry trial_id=N
+1. My stim rows say "trial_id=7" not "trial=7". Update the regex.
+2. My timestamps come in bursts, so median-gap sample rate estimation
+   breaks. Use sample count / time span. Rate is 200 Hz.
 
-Event rows have ZERO in the fsr cells. Read force at an event from
-the nearest sample row. A press row is the detection threshold
-crossing, not the peak.
+Notes:
+- Event rows (stim, press, ...) have zeros in the fsr cells. Read
+  force from the nearest sample row.
+- Lanes on raw.csv events are 0-based (0-3 right, 4-7 left).
+  trials.csv lane is the same finger + 1.
+- fsr values are raw ADC counts. Newtons: 45 N / 512 counts, or the
+  per-session value in metadata.json under
+  config_snapshot.fsr.force_calibration_n_per_count.
 
-UNITS
-fsr columns are raw ADC counts. Pads idle around 255-315 counts and
-drift, so zero per press. Newtons: use
-metadata.json config_snapshot.fsr.force_calibration_n_per_count if
-set, else 45 N / 512 counts.
-
-TRIALS.CSV COLUMNS
-iso_ts               wall clock at trial close
-block_t_s            seconds since block start
-participant          participant id
-age                  participant age
-hand                 right, left or both
-block                mode name
-trial                trial number, 1-based
-lane                 target finger, 1-BASED: 1-4 right, 5-8 left.
-                     trials.csv lane = raw.csv lane + 1.
-time_difference_ms   RT in ms; for rhythm it is a SIGNED beat offset
-                     (negative = early). Do not pool the two.
-early_late           outcome label
-points               score awarded
-feedback             feedback text shown
-error_type           failure reason (timeout, wrong_finger, ...)
-keys_pressed         lanes pressed, comma separated
-correct_keys         lanes asked for
-num_presses          presses in the trial window
-had_incorrect_press  TRUE if a wrong finger pressed first
-first_incorrect_ms   ms from stim to that wrong press
-first_incorrect_lane which lane
-mirror_right_rt_ms   mirror only: right hand press latency
-mirror_left_rt_ms    mirror only: left hand press latency
-bpm_at_trial         adaptive cadence when the stim fired
-streak_at_trial      hit streak before the trial
-in_recovery          adaptive recovery active
-song_time_s          rhythm: position in song
-peak_force_n         press peak above baseline; newtons if calibrated,
-                     else counts (see force_unit in metadata)
-impulse_n            force-time integral of the press
-phase                pretest / main / aftertest
-loud_trial           TRUE if cues played louder
-timeout_ms           response window for the trial
-force_window_sum     sum of all fingers' peaks above baseline in the
-                     post-stim window
-force_window_peaks   per-finger peaks "lane:peak;...", 1-based lanes
-stim_delivered       FALSE = buzzer command failed; exclude the trial
-cue_flags            cue channels "<before>/<after>", B buzzer,
-                     S sound, - off
-stimulus             extra stimulus detail per mode
-pattern_trial        pattern: TRUE sequence trial, FALSE random probe
-cue_target_shown     TRUE if the screen showed the target finger
-waveform             continuous modes: trajectory type
-waveform_params      numbers that rebuild the trajectory
-waveform_seed        seed for the pseudorandom part
-segment_times        "name:start:end;..." in t_perf seconds
-
-Empty cell = not applicable, never zero.
+trials.csv has the game's own scoring per trial (RT, outcome, points,
+per-finger peak forces). Open it and the headers are self-explanatory;
+ask me if any column is unclear.
