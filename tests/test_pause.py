@@ -306,7 +306,7 @@ class AudioHitChimeTests(unittest.TestCase):
         # tone out. The behavioural coverage is in test_sensory_cues.
         from pathlib import Path
         src = (Path(__file__).resolve().parents[1]
-                / "rehab" / "game" / "engine.py").read_text()
+                / "finger_rehab" / "game" / "engine.py").read_text()
         self.assertIn("self.audio.play_stim(", src,
                        "play_stim must be wired in on_stim for cue tone")
 
@@ -315,7 +315,7 @@ class AudioHitChimeTests(unittest.TestCase):
         # outside the switch, which is what this change removed.
         from pathlib import Path
         src = (Path(__file__).resolve().parents[1]
-                / "rehab" / "game" / "engine.py").read_text()
+                / "finger_rehab" / "game" / "engine.py").read_text()
         self.assertNotIn(
             'current_block in ("classic", "adaptive", "mirror")', src,
             "the cue tone must be gated on cue.sound_before, not on "

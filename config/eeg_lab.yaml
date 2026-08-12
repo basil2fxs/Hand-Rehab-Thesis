@@ -5,7 +5,7 @@
 # the same modes and the same main.py as the shipping build, so every
 # future game change is automatically the lab version too.
 #
-# See docs/eeg_lab_setup.md for the lab-computer checklist.
+# See docs/eeg_lab_setup.txt for the lab-computer checklist.
 
 eeg:
   enabled: true

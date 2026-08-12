@@ -554,22 +554,29 @@ class ParityTests(unittest.TestCase):
         self.assertIsNotNone(cfg.get("game.timeout_s"))
 
     def test_launchers_run_main_py_and_nothing_else(self) -> None:
-        for name in ("EEG Lab.command", "EEG Lab.bat"):
-            text = (REPO / name).read_text()
-            self.assertIn("main.py --config config/eeg_lab.yaml",
-                          text.replace("\\", "/"), name)
-            # No other python entry point may be invoked. The basename
-            # must be exactly main.py: an endswith check would let a
-            # forked lab_main.py through, and the assertIn above is
-            # satisfied by "lab_main.py --config ..." as a substring.
-            for match in re.findall(r"\S+\.py\b", text):
-                base = match.replace("\\", "/").rsplit("/", 1)[-1]
-                self.assertEqual(base, "main.py",
-                                 f"{name} invokes {match}")
+        # Basil removed the root EEG Lab.bat: on Windows the lab runs
+        # the frozen exe from the CI lab package, so the source-based
+        # launcher only exists for the Mac. The package's bat runs the
+        # exe, which is main.py frozen from the same commit.
+        text = (REPO / "EEG Lab.command").read_text()
+        self.assertIn("main.py --config config/eeg_lab.yaml", text)
+        # No other python entry point may be invoked. The basename
+        # must be exactly main.py: an endswith check would let a
+        # forked lab_main.py through, and the assertIn above is
+        # satisfied by "lab_main.py --config ..." as a substring.
+        for match in re.findall(r"\S+\.py\b", text):
+            base = match.replace("\\", "/").rsplit("/", 1)[-1]
+            self.assertEqual(base, "main.py",
+                             f"EEG Lab.command invokes {match}")
+        bat = (REPO / "docs" / "lab_package" / "EEG Lab.bat").read_text()
+        self.assertIn('"Finger Rehab.exe" --config eeg_lab.yaml',
+                      bat.replace("\\", "/"))
+        self.assertNotIn(".py", bat,
+                         "the lab package bat must run the exe, not a script")
 
     def test_exactly_one_game_engine_class_exists(self) -> None:
         hits = []
-        for path in (REPO / "rehab").rglob("*.py"):
+        for path in (REPO / "finger_rehab").rglob("*.py"):
             if "__pycache__" in path.parts:
                 continue
             if re.search(r"^class GameEngine\b", path.read_text(),
@@ -581,7 +588,7 @@ class ParityTests(unittest.TestCase):
     def test_old_prototype_module_is_gone(self) -> None:
         # The conflicting map (30 = miss) must not linger importable
         # next to the new one.
-        self.assertFalse((REPO / "rehab" / "hardware" / "eeg.py").exists())
+        self.assertFalse((REPO / "finger_rehab" / "hardware" / "eeg.py").exists())
 
 
 # ---------------------------------------------------------------------------

@@ -132,6 +132,37 @@ class TestCueFlagsRoundTrip:
         assert 'split("/")' in source or "split('/')" in source
 
 
+class TestCanonicalSignalCopies:
+    """The setup cell carries verbatim copies of teasdale_onset and
+    lookback_baseline from finger_rehab/analytics/signal.py, because
+    the notebook travels alone and cannot import them. Verbatim is
+    checked as AST equality, so an edit that reaches one copy and
+    misses the other fails here before the two detectors can quietly
+    hand out different onsets for the same press."""
+
+    NAMES = ["teasdale_onset", "lookback_baseline"]
+
+    def _package_defs(self):
+        import inspect
+        import finger_rehab.analytics.signal as sig
+        src = inspect.getsource(sig)
+        return {node.name: node for node in ast.parse(src).body
+                if isinstance(node, ast.FunctionDef)
+                and node.name in self.NAMES}
+
+    @pytest.mark.parametrize("name", NAMES)
+    def test_notebook_copy_is_verbatim(self, name, source):
+        pkg = self._package_defs()
+        assert name in pkg, f"signal.py no longer defines {name}"
+        nb = {node.name: node for node in ast.parse(source).body
+              if isinstance(node, ast.FunctionDef) and node.name == name}
+        assert name in nb, f"the notebook no longer defines {name}"
+        assert ast.dump(nb[name]) == ast.dump(pkg[name]), (
+            f"{name} differs between the notebook and signal.py. Edit "
+            f"signal.py and re-copy the function into the setup cell, "
+            f"never one side alone.")
+
+
 def _notebook_functions(source, names):
     """Compile just the named top-level defs out of the notebook
     source. The copies can then be exercised directly, without

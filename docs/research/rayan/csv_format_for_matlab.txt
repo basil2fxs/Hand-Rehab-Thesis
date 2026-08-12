@@ -1,0 +1,112 @@
+CSV FORMAT FOR MATLAB (handover to Rayan)
+=========================================
+
+What to take: for each session, the pair
+    sessions/<date>/<name>/raw.csv      the 200 Hz force stream + events
+    sessions/<date>/<name>/trials.csv   one row per scored trial
+<name> is <participant>_<HHMMSS>_<mode>. Nothing else is needed;
+metadata.json in the same folder has the calibration if you want it.
+
+Your existing loader already matches: raw.csv carries t_perf, fsr1-4,
+event, lane and detail under exactly those names. Two differences to
+know about, both one-line fixes:
+  1. Trial ids in stim rows are written "trial_id=7", not "trial=7",
+     so parse_trial_id's regex never fires here. Match "trial_id".
+  2. Some logs stamp samples at serial-receive time, in bursts of
+     about four samples. estimate_fs (median gap) then reads ~100 kHz.
+     Use sample count over time span instead; both give 200 on clean
+     files.
+
+raw.csv columns
+---------------
+iso_ts       wall-clock timestamp, ISO 8601 with milliseconds
+t_perf       perf-counter seconds; monotonic within the session,
+             arbitrary epoch, shared with trials.csv segment_times
+sample_idx   running sample number from the device
+fsr1-fsr4    right-hand pads index/middle/ring/pinky, raw ADC counts
+fsr5-fsr8    LEFT-hand pads, same finger order; all zero unless the
+             block was bilateral (hand = both)
+hand         which hand mode the block ran: right, left or both
+event        empty on sample rows; on event rows one of block_start,
+             block_end, stim, stim_motor, press, release,
+             segment_start, segment_end (continuous modes add a few
+             mode-specific ones)
+lane         0-based finger for stim/press/release events: 0-3 right
+             hand, 4-7 left hand; empty on sample rows
+detail       free text per event; stim rows carry "trial_id=N" which
+             joins to trials.csv trial
+
+Event-row convention: an event is its own row on the shared t_perf
+clock. The fsr cells on event rows are ZEROS, not a snapshot; read the
+force at an event from the nearest sample row. Rate is a nominal
+200 Hz (5 ms grid); presses fire at threshold crossing, so a press
+row marks detection, not peak force.
+
+Units: fsr columns are always raw ADC counts. Pads idle around 255 to
+315 counts (each pad has its own resting level; it drifts, hence the
+250 ms look-back zeroing). Conversion on this rig is per session:
+metadata.json config_snapshot.fsr.force_calibration_n_per_count when
+set, else the SingleTact equation 45 N / 512 counts (about 11.4
+counts per newton). The flat 51.2 counts/N belongs to your rig.
+
+trials.csv columns (one line each)
+----------------------------------
+iso_ts               wall-clock timestamp at trial close
+block_t_s            seconds since the block started
+participant          participant id as typed at setup
+age                  participant age, often empty
+hand                 right, left or both
+block                mode name (classic, adaptive, rhythm, mirror, ...)
+trial                1-based trial number within the block
+lane                 target finger, 1-BASED here: 1-4 right, 5-8 left.
+                     Careful: raw.csv event lanes are 0-based, so a
+                     trials.csv lane always equals the raw lane + 1.
+time_difference_ms   RT in ms for cued modes; SIGNED beat offset for
+                     rhythm (negative = early), so do not pool them
+early_late           outcome label: Early/Late/Hit band or Miss
+points               score awarded
+feedback             feedback text shown
+error_type           why a trial failed (timeout, wrong_finger, ...)
+keys_pressed         lanes actually pressed, comma separated
+correct_keys         lanes that were asked for
+num_presses          presses counted in the trial window
+had_incorrect_press  TRUE when a non-target finger pressed first
+first_incorrect_ms   ms from stim to that wrong press
+first_incorrect_lane which lane made it
+mirror_right_rt_ms   mirror mode only: right hand's own press latency
+mirror_left_rt_ms    mirror mode only: left hand's own press latency
+bpm_at_trial         adaptive engine cadence when the stim fired
+streak_at_trial      hit streak going into the trial
+in_recovery          adaptive recovery mode active (TRUE/FALSE)
+song_time_s          rhythm mode: position in the song
+peak_force_n         peak force of the press, ABOVE BASELINE (the
+                     engine's per-pad EMA baseline frozen at press
+                     start); newtons if the session logged newtons,
+                     else ADC counts; see force_unit in session.json
+impulse_n            force-time integral over the press: newton-
+                     seconds when calibrated, ADC-count-seconds else
+phase                pretest / main / aftertest when a protocol ran
+loud_trial           TRUE when cues played at boosted loudness
+timeout_ms           response window (RT censoring limit) for the trial
+force_window_sum     sum of every finger's peak above baseline in the
+                     post-stim window (>= 1 s); empty = no FSR data
+force_window_peaks   the per-finger breakdown "lane:peak;..." with
+                     1-indexed lanes; this is the four-finger peak
+                     extraction your script computes, logged live
+stim_delivered       TRUE = buzzer command left the host (not proof
+                     the patient felt it); FALSE = transport failure,
+                     exclude the trial
+cue_flags            which cue channels fired, "<before>/<after>",
+                     B = buzzer, S = sound, - = off (e.g. BS/--)
+stimulus             extra stimulus detail (word, chord lanes, packed
+                     per-mode fields); empty for plain lane cues
+pattern_trial        pattern mode: TRUE = repeating sequence trial,
+                     FALSE = random probe
+cue_target_shown     TRUE when the screen named the target finger
+waveform             continuous modes: trajectory type (ramp, sine...)
+waveform_params      "key=value;..." numbers that rebuild it exactly
+waveform_seed        seed for any pseudorandom part
+segment_times        "name:start:end;..." in t_perf seconds, cuts the
+                     raw stream into the scored windows
+
+Empty cell means not applicable for that mode, never zero.

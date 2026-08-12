@@ -59,50 +59,144 @@ def derivative(x: np.ndarray, fs: float) -> np.ndarray:
     return np.diff(arr, prepend=arr[0]) * fs
 
 
-def detect_onset_teasdale(force: np.ndarray, fs: float,
-                            baseline_window: int = 50,
-                            k: float = 3.0) -> int | None:
-    """Teasdale 1993 onset detection.
+def teasdale_onset(force, fs, min_rise=80.0, vmax_min=30.0,
+                   first_slope_min=25.0, first_step_min=12.0,
+                   slope_frac=0.18, step_s=0.05,
+                   search_from=0, search_to=None, prefer_first=True):
+    """Movement onset on one force segment, Teasdale-style.
 
-    Press onset is the first sample where the smoothed force
-    velocity exceeds `mean(baseline_velocity) + k * std(baseline_velocity)`.
-    Citable to Teasdale, Bard, Fleury, Young and Proteau (1993)
-    "Determining movement onsets from temporal series", Journal of
-    Motor Behavior 25(2), 97-106. The title quoted here previously
-    ("On the measurement of motor initiation") does not exist; the
-    reference check against the journal's index caught it. The
-    technique is the standard one for picking the moment a force
-    trace stops being noise and starts being a deliberate press.
+    Exact port of the reference implementation Rayan sent
+    (docs/research/rayan/process_force_peaks.py), the detector
+    Welber's earlier sessions were processed with, so onsets from
+    this function are directly comparable with that work. The
+    technique is citable to Teasdale, Bard, Fleury, Young and
+    Proteau (1993), "Determining movement onsets from temporal
+    series", Journal of Motor Behavior 25(2), 97-106. An earlier
+    version of this module carried a paraphrase (velocity over
+    mean + k*sd of a baseline window); it and the notebook's own
+    third variant are gone so there is exactly one onset detector.
 
-    Steps:
-      1. Smooth the raw force with the Butterworth low-pass.
-      2. Take the derivative to get force velocity (dF/dt).
-      3. Smooth the velocity with Savitzky-Golay.
-      4. Compute the noise floor (mean + k*std) from the first
-         `baseline_window` samples - assumed to be pre-press idle.
-      5. Return the first sample index where the smoothed
-         velocity stays above that threshold for two consecutive
-         samples (single-sample crossings would be triggered by
-         residual noise).
+    The same function text lives in analysis/session_analysis.ipynb,
+    which travels without this package. Tests pin the two copies to
+    each other and this one to Rayan's file.
 
-    Returns None when the input is too short or the velocity
-    never crosses the threshold.
+    Steps, defaults as in the reference file:
+      1. Low-pass the raw segment (2nd order Butterworth, 20 Hz,
+         filtfilt so the filter delay does not shift the onset).
+      2. Velocity = first difference times fs, then Savitzky-Golay
+         (11/3) and a 10 Hz low-pass, because differentiating
+         amplifies exactly the noise the first filter removed.
+      3. Give up unless the segment rises at least `min_rise` counts
+         over the mean of its first 20 samples: below that there is
+         no press to time.
+      4. First pass: the earliest sample where velocity clears
+         max(first_slope_min, slope_frac * vmax) AND the force
+         itself rises by at least `first_step_min` counts over the
+         next `step_s` seconds. The step check is what stops one
+         noisy velocity spike reading as an onset.
+      5. Fallback (prefer_first False, or nothing passed step 4):
+         walk back from the velocity peak to where velocity drops
+         below 10 percent of that peak minus one sd, the backward
+         search the 1993 paper describes.
+
+    Returns (onset_idx, force_lp, dforce): the onset sample index
+    within `force` (None when nothing convincing happened), plus the
+    filtered force and velocity for callers that plot them.
+    `search_from` and `search_to` are sample indices bounding the
+    search; note dforce is one sample shorter than force_lp because
+    the difference is not padded, exactly as in the reference.
     """
-    arr = np.asarray(force, dtype=float)
-    if arr.size < baseline_window + 4:
-        return None
-    smoothed = butter_lowpass_force(arr, fs)
-    velocity = derivative(smoothed, fs)
-    velocity = savgol(velocity)
-    base = velocity[:baseline_window]
-    threshold = float(base.mean() + k * base.std())
-    above_prev = False
-    for i in range(baseline_window, len(velocity)):
-        above = bool(velocity[i] > threshold)
-        if above and above_prev:
-            # Onset = the FIRST of the two consecutive samples
-            # above threshold, so the patient's perceived press
-            # start aligns with the first detected acceleration.
-            return i - 1
-        above_prev = above
-    return None
+    from scipy.signal import butter, filtfilt, savgol_filter
+    if force is None or len(force) < 20:
+        return None, None, None
+    x = np.asarray(force, dtype=float)
+    baseline = np.mean(x[:min(20, len(x))])
+
+    wn = min(max(20.0 / (fs / 2.0), 1e-6), 0.999999)
+    b, a = butter(2, wn, btype="low")
+    try:
+        force_lp = filtfilt(b, a, x)
+    except ValueError:
+        return None, None, None
+
+    dforce = np.diff(force_lp) * fs
+    if len(dforce) > 11:
+        dforce = savgol_filter(dforce, 11, 3)
+    wn_d = min(max(10.0 / (fs / 2.0), 1e-6), 0.999999)
+    bd, ad = butter(2, wn_d, btype="low")
+    if len(dforce) > 20:
+        dforce = filtfilt(bd, ad, dforce)
+
+    if (np.max(force_lp) - baseline) < min_rise:
+        return None, force_lp, dforce
+
+    lo = max(0, int(search_from))
+    hi = len(force_lp) if search_to is None else max(lo + 5, int(search_to))
+    hi = min(hi, len(force_lp))
+    if hi - lo < 8 or len(dforce) < 5:
+        return None, force_lp, dforce
+
+    if prefer_first:
+        d_seg = dforce[lo:hi - 1]
+        vmax = float(np.max(d_seg)) if len(d_seg) else 0.0
+        thr = max(first_slope_min, slope_frac * vmax)
+        step_k = max(1, int(step_s * fs))
+        for j in range(len(d_seg) - step_k):
+            i = lo + j
+            if d_seg[j] >= thr:
+                if (force_lp[i + step_k] - force_lp[i]) >= first_step_min:
+                    return int(i), force_lp, dforce
+
+    vmax_ind = lo + int(np.argmax(dforce[lo:max(lo + 1, hi - 1)]))
+    vmax = float(dforce[vmax_ind])
+    if vmax <= 0 or vmax < vmax_min:
+        return None, force_lp, dforce
+
+    d_int = dforce[:vmax_ind + 1]
+    d_rev = d_int[::-1]
+    s_level = vmax * 0.1
+    below = np.where(d_rev < s_level)[0]
+    s_ind = int(below[0]) if len(below) else 0
+    if len(d_int) - s_ind > 0:
+        sd = float(np.std(d_int[:len(d_int) - s_ind]))
+        if not np.isfinite(sd) or sd == 0:
+            sd = 1.0
+    else:
+        sd = 1.0
+    candidates = np.where(d_rev[s_ind:] < (s_level - sd))[0]
+    if len(candidates):
+        onset = len(d_int) - int(s_ind + candidates[0])
+    else:
+        onset = vmax_ind
+    onset_idx = int(max(0, min(onset, len(force_lp) - 1)))
+    if not (lo <= onset_idx < hi):
+        return None, force_lp, dforce
+    return onset_idx, force_lp, dforce
+
+
+def lookback_baseline(values, idx, window=50):
+    """Mean of the `window` samples immediately before `values[idx]`.
+
+    The 250 ms look-back zero from Rayan's baseline drift analysis
+    (docs/research/rayan/analyze_baseline_drift_modified_newtons.R):
+    at 200 Hz, 50 samples is the quarter second before a press, so
+    subtracting this mean re-zeroes each press against the level the
+    sensor was actually resting at, instead of against one session
+    constant the baseline has long since drifted away from. The same
+    function text lives in the analysis notebook; tests pin the two
+    copies to each other.
+
+    Truncates at the start of the array rather than failing, matching
+    the reference (start_idx = max(1, row_idx - window)). NaN inside
+    the window is skipped like the reference's na.rm = TRUE, and NaN
+    comes back when nothing finite sits in the window, so a press at
+    sample zero cannot be zeroed against thin air.
+    """
+    arr = np.asarray(values, dtype=float)
+    stop = int(idx)
+    start = max(0, stop - int(window))
+    seg = arr[start:stop]
+    seg = seg[np.isfinite(seg)]
+    if seg.size == 0:
+        return float("nan")
+    return float(seg.mean())

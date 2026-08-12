@@ -70,7 +70,7 @@ jobs:
           Copy-Item "config/eeg_lab.yaml" "$pkg/eeg_lab.yaml"
           Copy-Item "docs/lab_package/EEG Lab.bat" $pkg
           Copy-Item "docs/lab_package/README.txt" $pkg
-          Copy-Item "docs/eeg_lab_setup.md" "$pkg/eeg_lab_setup.md"
+          Copy-Item "docs/eeg_lab_setup.txt" "$pkg/eeg_lab_setup.txt"
           Compress-Archive -Path $pkg -DestinationPath "bin/dist/FingerRehab-EEGLab-Windows.zip"
 
       - name: Upload EEG lab package (Windows)

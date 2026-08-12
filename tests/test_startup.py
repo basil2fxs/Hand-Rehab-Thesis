@@ -40,7 +40,7 @@ class ScoreConfigFallbackTests(unittest.TestCase):
         # Belt-and-braces: a refactor must not silently put -2 back into the
         # inline fallback. We grep the engine source for that exact string.
         src = (Path(__file__).resolve().parents[1]
-                / "rehab" / "game" / "engine.py").read_text()
+                / "finger_rehab" / "game" / "engine.py").read_text()
         self.assertNotIn('scoring.miss_points", -2', src)
         self.assertNotIn('scoring.early_penalty", -2', src)
 
@@ -60,7 +60,7 @@ class AdaptiveFallbackMatchesYamlTests(unittest.TestCase):
     def test_adaptive_fallback_values_match_yaml(self) -> None:
         y = self._load_yaml()["adaptive"]
         src = (Path(__file__).resolve().parents[1]
-                / "rehab" / "game" / "engine.py").read_text()
+                / "finger_rehab" / "game" / "engine.py").read_text()
         # Each tuple is (yaml-key, expected fallback literal we should find).
         cases = [
             ("target_low", str(y["target_low"])),

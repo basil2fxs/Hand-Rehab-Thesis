@@ -62,7 +62,7 @@ exports land inside the session folder they describe
 going to the lab's trigger box (`config/eeg_lab.yaml` is the whole
 difference). The lab needs no install: CI builds
 `FingerRehab-EEGLab-Windows.zip` on every push, one folder with the
-exe, config and launcher inside. Setup notes in `docs/eeg_lab_setup.md`.
+exe, config and launcher inside. Setup notes in `docs/eeg_lab_setup.txt`.
 
 ## Standalone apps
 
