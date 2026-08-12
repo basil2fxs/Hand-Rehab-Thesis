@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import ast
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -466,3 +467,51 @@ class TestContinuousModeContract:
         # percent of max.
         assert worst < 0.01, (
             f"corridor rebuild drifted by {worst:.4f}% of max")
+
+
+
+# --------------------------------------------------------------- report
+# The notebook exports one HTML holding everything it printed and drew.
+# That only stays true while every section goes through keep(), which is
+# what files the section's text and figures. A section added later that
+# skips keep() would silently vanish from the report, so the shape is
+# pinned here rather than trusted.
+
+def _cells():
+    nb = json.loads(NOTEBOOK.read_text())
+    return [("".join(c.get("source", [])), c.get("cell_type"))
+            for c in nb["cells"]]
+
+
+def test_every_section_call_goes_through_keep():
+    offenders = []
+    for src, kind in _cells():
+        if kind != "code" or "def sec_" in src:
+            continue  # the Setup cell defines sections, never calls them
+        if re.search(r"\bsec_\w+\s*\(", src) and "keep(" not in src:
+            offenders.append(src.strip().splitlines()[0][:70])
+    assert offenders == [], (
+        "these cells run a section without keep(), so the report would "
+        "not contain them: " + "; ".join(offenders))
+
+
+def test_keep_files_the_section_for_the_report():
+    setup = _cells()[2][0]
+    assert "_capture_section(name)" in setup
+    for name in ("_wrap_sections", "_capture_reset", "write_report",
+                 "PATIENT_RESULTS"):
+        assert name in setup, f"{name} missing from Setup"
+
+
+def test_patient_results_path_is_not_relative():
+    # A relative "sessions" path resolves against the notebook's own
+    # directory, which creates a second empty sessions tree beside the
+    # notebook and shadows the real recordings on the next run.
+    assert 'PATIENT_RESULTS = Path(SESSIONS_DIR)' in _cells()[2][0]
+
+
+def test_the_export_cell_is_last():
+    code = [src for src, kind in _cells() if kind == "code"]
+    assert "write_report(ctx)" in code[-1], (
+        "the export cell must be the last code cell so it captures "
+        "every section above it")

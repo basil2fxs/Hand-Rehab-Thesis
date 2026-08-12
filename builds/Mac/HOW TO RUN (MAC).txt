@@ -3,10 +3,8 @@ Finger Rehab for Mac
 
 Double-click Finger Rehab.app. That is the whole install.
 
-The first launch on a new Mac shows a security prompt because the app
-is not code-signed: right-click the app, choose Open, then click Open
-again. Only needed once.
+First launch on a new Mac: right-click the app, Open, then Open
+again. Only needed once, because the app is not signed.
 
-Session data is written to a sessions/ folder next to the app.
-To rebuild after source changes: run build_app.sh in the project root;
-it puts the fresh app back into this folder automatically.
+Session data goes to a sessions/ folder next to the app.
+To rebuild after changing the source: run builds/build_app.sh.

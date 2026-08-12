@@ -61,6 +61,12 @@ Open it, run the first cell, pick a save, Run All. Figures and CSV
 exports land inside the session folder they describe
 (`sessions/.../analysis/`), so a session folder is self-contained.
 
+Every run also writes `report.html` there: one file with everything
+the notebook printed and drew, figures included. Analysing one person
+also writes `sessions/individual_patient_results/<name>/summary.html`,
+replaced each run so it is always their latest full analysis, with a
+line added to `runs.txt` beside it.
+
 ## EEG lab
 
 `EEG Lab.bat` / `EEG Lab.command` run the same game with markers
@@ -87,7 +93,7 @@ tab, download the zips). First launch: right-click Open on Mac,
 python -m pytest tests
 ```
 
-61 test files. Run them before trusting a change.
+62 test files. Run them before trusting a change.
 
 ## Folder layout
 

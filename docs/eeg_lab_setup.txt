@@ -1,76 +1,60 @@
 # EEG lab setup
 
-How to run the game as the lab task on the EEG desktop. The lab build
-IS the shipping game: `EEG Lab.bat` (Windows) and `EEG Lab.command`
-(Mac) run the same `main.py` with `config/eeg_lab.yaml` layered over
-the defaults. Nothing is forked, so any game update updates the lab
-task with it.
+The lab task IS the shipping game. `EEG Lab.bat` (Windows) and
+`EEG Lab.command` (Mac) run the same `main.py` with
+`config/eeg_lab.yaml` on top. Nothing is forked, so a game update is
+a lab update.
 
 ## What lab mode changes
 
-- `eeg.enabled: true`: every stimulus, response, boundary and pause
-  writes a single-byte marker to the trigger box (code map in
-  `finger_rehab/hardware/eeg_trigger.py`, `CODES`), 10 ms high then reset
-  to 0, and one `eeg` event row in the session's raw.csv carrying the
-  intended-event time and the actual wire time on the same clock as
-  the force samples.
-- `eeg.require_port: true`: no trigger box, no session. The app exits
-  at launch with a message instead of recording an unmarked block.
-- `reaction.fp_eeg_fixed_s: 2.5`: reaction blocks run a constant
-  2.5 s wait with a visible "Ready" cue at its onset (the CNV
-  variant). Do not pool these RTs with normal reaction blocks.
+- `eeg.enabled`: every stimulus, response, boundary and pause writes
+  a single-byte marker to the trigger box (map in
+  `finger_rehab/hardware/eeg_trigger.py`, CODES), 10 ms high then
+  reset to 0, plus an `eeg` row in raw.csv holding the intended time
+  and the actual wire time on the force-sample clock.
+- `eeg.require_port`: no trigger box, no session. It exits at launch
+  rather than record an unmarked block.
+- `reaction.fp_eeg_fixed_s`: reaction blocks use a fixed 2.5 s wait
+  with a visible Ready cue (the CNV variant). Do not pool these RTs
+  with normal reaction blocks.
 
-## Windows desktop checklist (the lab machine)
+## Lab desktop checklist
 
-1. Plug the trigger box in BEFORE launching. Check Device Manager,
-   Ports (COM and LPT): the box is COM10 on the lab desktop. If it
-   enumerates elsewhere, edit `eeg.port` in `config/eeg_lab.yaml`.
-   COM ports 10 and above are fine; pyserial handles the naming.
-2. If the box is FTDI-based, set its latency timer to 1 ms: Device
-   Manager, the box's COM port, Port Settings, Advanced, Latency
-   Timer. The 16 ms default adds a buffering delay to every marker.
-3. Double-click `Finger Rehab.exe` (it loads the `eeg_lab.yaml`
-   beside it on its own) or `EEG Lab.bat`, which starts the exe the
-   same way but keeps the window open on failure. If it refuses to
-   start, the message says which port failed; that refusal is
-   `require_port` working.
-4. Verify vsync ON for the game's window (GPU control panel). With
-   vsync off, the flip returns before photons and every visual marker
-   leads the screen by an unknown amount.
-5. Session data lands in `sessions/` exactly as normal, plus:
-   raw.csv gains `eeg` event rows, and metadata.json gains an `eeg`
-   section (backend, port, pulse and gap widths, code map version,
+1. Plug the trigger box in before launching. Device Manager, Ports:
+   it is COM10 on the lab desktop. If it lands elsewhere, edit
+   `eeg.port` in eeg_lab.yaml.
+2. FTDI box: set Latency Timer to 1 ms (Device Manager, the port,
+   Port Settings, Advanced). The 16 ms default delays every marker.
+3. Double-click Finger Rehab.exe, or EEG Lab.bat which does the same
+   but keeps the window open on failure. A refusal to start names the
+   port that failed; that is require_port working.
+4. Check vsync is ON for the game window. With it off the flip
+   returns before the screen updates and visual markers lead by an
+   unknown amount.
+5. Data lands in sessions/ as normal, plus eeg rows in raw.csv and an
+   eeg section in metadata.json (backend, port, pulse and gap widths,
    failure counts, degraded flag).
 
-## Marker channel behaviour worth knowing
+## Marker behaviour
 
-- Session-level markers (240 session start, 241 session end) bracket
-  one login: 240 fires when the participant logs in on the title
-  screen, 241 when the session ends on game select (or when the app
-  closes with a session still open, whichever comes first; never
-  both). They fire outside any block, where no raw.csv is open, so
-  they reach the wire and the app log, and each block's own record
-  starts at its 200-band boundary marker.
-- If the box dies mid-session the app keeps running: after 3 failed
-  writes it reopens the port once, and if that fails the HUD shows
-  "EEG markers lost", every intended marker is still logged with a
-  failed flag, and metadata.json marks the block degraded with the
-  first-failure time. The behavioural data stays valid; the block is
-  unusable for ERPs from that timestamp.
-- Two events in the same frame queue by priority (stimulus first);
-  the queued marker goes out 1-2 frames late and its raw.csv row
-  records both its intended time and its wire time, so offline
-  epoching corrects it.
+- 240 fires at login, 241 at session end (or app close, never both).
+  They sit outside any block, so they reach the wire and the app log
+  but no raw.csv.
+- If the box dies mid-session the app keeps going: 3 failed writes
+  trigger one reopen, then the HUD shows "EEG markers lost", markers
+  keep being logged with a failed flag, and metadata marks the block
+  degraded from the first failure. Behavioural data stays valid; ERPs
+  from that point do not.
+- Two events in one frame queue by priority (stimulus first). The
+  late one goes out 1-2 frames later and its row carries both times
+  plus delayed=1. Nothing is dropped without a dropped=1 row.
 
-## Adapting the pipeline: old SRT script versus this game
+## For Welber: old SRT script versus this game
 
-For Welber. The old task
-(`Webler EEG past program/SRT_Sequence_learning_Final_v2.py`) marked
-exactly one thing: code 30 at flash onset, then reset 0. Everything
-else in a recording had to be reconstructed from the behavioural CSV.
-This game keeps that anchor (a stimulus-band code accompanies every
+The old task marked one thing: code 30 at flash onset, then 0. This
+game keeps that anchor (a stimulus-band code accompanies every
 scorable stimulus, so epoch-on-stimulus still sees every trial) and
-marks what the old file could not. Side by side:
+marks what the old file could not.
 
 | Event | Old file | This game |
 | --- | --- | --- |
@@ -84,51 +68,39 @@ marks what the old file could not. Side by side:
 | Reset | 0 after each pulse | same |
 | Lane identity of the stimulus | in the CSV only | same choice, on purpose: 8 lanes x 8 cue conditions does not fit one band. The lane rides the raw.csv eeg row logged with every marker, alignable by timestamp instead of blind row order |
 
-Two places we deliberately do NOT copy the old file, both bugs the
-research pass documented:
+Two deliberate departures from the old file, both bugs found in it:
 
-1. Pulse width. The old script intended a two-frame pulse but held it
-   by frame counting: the reset went out inside the next drawn frame,
-   so the line was actually high for roughly 1-4 ms, shorter on
-   slower monitors. At a 250 Hz amplifier the vendor rule is at least
-   two samples (8 ms), so those pulses risked being missed entirely.
-   Ours holds 10 ms on the wall clock (time.perf_counter), then
-   resets; the contract test measures 10 plus or minus 2 ms on a fake
-   wire, and a new code waits until the line has been low for 10 ms.
-2. Encoding. The old script wrote bytes(chr(code), 'UTF-8'). Fine for
-   30, but any code above 127 becomes TWO bytes on the wire, and
-   every response, block and session code above sits over 127. Ours
-   writes bytes([code]), one raw byte always, and the contract test
-   pins that at code 220.
+1. Pulse width. It intended two frames but counted frames, so the
+   line was really high 1-4 ms, shorter on slower monitors. A 250 Hz
+   amplifier needs at least two samples (8 ms), so those pulses could
+   be missed. Ours holds 10 ms on the wall clock, and a new code
+   waits until the line has been low 10 ms.
+2. Encoding. It wrote bytes(chr(code), 'UTF-8'), which is two bytes
+   for anything above 127, and every response, block and session code
+   is above 127. Ours writes bytes([code]), always one byte.
 
-Practical notes for the epoching script:
+For the epoching script:
 
-- Epoch on the band, not the single value 30. A recording made on the
-  shipping default cue mix carries 33 at stimulus onset, not 30, and
-  the conditions must not be pooled.
-- Counts reconcile exactly: stimulus-band markers match trials.csv
-  rows one for one, and each inter-stimulus span holds exactly one
-  response-band code. The contract test
-  (tests/test_eeg_contract.py) runs that reconciliation on real
-  headless blocks, keyboard and force input both.
-- Response markers can ride the wire up to a frame late: force
-  presses are detected when the frame loop drains the 200 Hz sample
-  queue, so the byte trails the physical crossing by 0-17 ms. The
-  raw.csv eeg row logged with every marker carries t_event (the
-  crossing's own sample timestamp) next to t_wire, so response-locked
-  epochs should re-align to the logged t_event.
-- Two events in one frame queue by priority (stimulus first); the
-  delayed marker's row says delayed=1 and both times. Nothing is
-  silently dropped without a dropped=1 row.
+- Epoch on the band, not the literal 30. The shipping default cue mix
+  writes 33, and conditions must not be pooled.
+- Counts reconcile exactly: stimulus markers match trials.csv rows
+  one for one, and each inter-stimulus span holds exactly one
+  response code. tests/test_eeg_contract.py runs that check on real
+  headless blocks.
+- Response markers can be up to a frame late: presses are detected
+  when the loop drains the 200 Hz queue, so the byte trails the real
+  crossing by 0-17 ms. Each eeg row carries t_event (the sample
+  timestamp of the crossing) next to t_wire, so response-locked
+  epochs should re-align to t_event.
 
 ## Before the first real recording
 
-Run the validation pass and put the numbers in the thesis methods:
+Run the validation pass and put the numbers in the methods section:
 photodiode on a stimulus tile, audio loopback for the tone,
-accelerometer on a pad for the buzzer rise time, and the raw.csv
-versus trigger-channel interval cross-check over a pilot session.
-Also confirm with Welber: the amplifier model and sampling rate (pins
-the pulse-width margin), and whether any pipeline ever consumed the
-old prototype's codes (30 = miss, 11-18 stimulus): recordings made
-under that map must not be pooled with recordings made under this
-one.
+accelerometer on a pad for buzzer rise time, and a raw.csv versus
+trigger-channel interval check over a pilot session.
+
+Confirm with Welber: the amplifier model and sampling rate (sets the
+pulse-width margin), and whether any pipeline ever used the old
+prototype map (30 = miss, 11-18 stimulus). Recordings made under that
+map must not be pooled with these.
