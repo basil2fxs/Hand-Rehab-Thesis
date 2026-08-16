@@ -870,21 +870,24 @@ syllables:
   # light left to right while the matching finger buzzes and a tone
   # plays, then the child taps the beats back on the sensors. Taps
   # always walk left to right like the blocks, on either hand: the
-  # right hand starts at the index, the left hand ends on it. With
-  # both hands connected either hand's finger counts for its beat on
-  # short words (there is no wrong hand in this mode) and the model's
-  # buzzes are shared equally between the hands; long words of 5 to 8
-  # beats lay across BOTH hands as one left-to-right row, centred so
-  # the little fingers only join on the longest words. Long words
+  # right hand starts at the index, the left hand ends on it. The
+  # word sits on a window of side-by-side fingers that slides from
+  # word to word, so every finger of the chosen hand(s) takes a turn
+  # within a block and the blocks themselves show which fingers play.
+  # With both hands connected the window ranges over all eight
+  # fingers and can run off one hand onto the other (words of 5 to 8
+  # beats always do); the taps still walk left to right, handing over
+  # from one hand to the other once, never alternating. Long words
   # only exist with both hands connected, at band C for the longest
   # ones; one hand always keeps the full game. The research case for
-  # every number lives in rehab/game/modes/syllables.py; this block
-  # says what the child experiences. Two cautions carried from that file: this trains
-  # sound skills in the game only, it is NOT a dyslexia treatment or
-  # test and must never be described to a family as one; and the
-  # hardware was scoped for adult rehabilitation, so using it with a
-  # child needs its own ethics approval, a check that small fingers
-  # reach the pads, and cleaning between children.
+  # every number lives in finger_rehab/game/modes/syllables.py; this
+  # block says what the child experiences. Two cautions carried from
+  # that file: this trains sound skills in the game only, it is NOT a
+  # dyslexia treatment or test and must never be described to a
+  # family as one; and the hardware was scoped for adult
+  # rehabilitation, so using it with a child needs its own ethics
+  # approval, a check that small fingers reach the pads, and cleaning
+  # between children.
 
   # Which rung of the ladder this child is on. 1 counts beats with any
   # fingers, 2 maps beats onto fingers in order, 3 taps them in time

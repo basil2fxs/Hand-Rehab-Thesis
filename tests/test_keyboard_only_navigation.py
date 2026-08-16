@@ -215,5 +215,52 @@ class ResultsScreenKeyboardOnlyTests(unittest.TestCase):
             pygame.quit()
 
 
+class EndGameGuardKeyboardOnlyTests(unittest.TestCase):
+    """The mid-game exit guard is a double-press chip: Esc, Esc. No
+    button to click, so the whole in-and-out of a game needs nothing
+    but the keyboard. The session dialog on game select keeps its
+    keyboard path (Tab + Enter) as before."""
+
+    def _engine_in_block(self):
+        import pygame
+        import tempfile
+        pygame.init()
+        eng = _engine()
+        self._td = tempfile.TemporaryDirectory()
+        eng.cfg.data["session"]["data_dir"] = self._td.name
+        eng._screens = eng._build_screens()
+        eng.hand_mode = "right"
+        eng.begin_classic_block()
+        return eng
+
+    def test_esc_esc_ends_the_game_keyboard_only(self) -> None:
+        import pygame
+        eng = self._engine_in_block()
+        try:
+            eng._handle_global_event(_key_event(pygame.K_ESCAPE))
+            self.assertTrue(eng.exit_chip_active)
+            eng._handle_global_event(_key_event(pygame.K_ESCAPE))
+            self.assertFalse(eng.exit_chip_active)
+            self.assertIs(eng.screen_obj, eng._screens["mode_select"])
+        finally:
+            eng._close_loggers()
+            self._td.cleanup()
+            pygame.quit()
+
+    def test_any_key_backs_out_of_the_guard(self) -> None:
+        import pygame
+        eng = self._engine_in_block()
+        try:
+            eng._handle_global_event(_key_event(pygame.K_ESCAPE))
+            eng._handle_global_event(_key_event(pygame.K_SPACE))
+            self.assertFalse(eng.exit_chip_active)
+            self.assertFalse(eng.paused)
+            self.assertIs(eng.screen_obj, eng._screens["gameplay"])
+        finally:
+            eng._close_loggers()
+            self._td.cleanup()
+            pygame.quit()
+
+
 if __name__ == "__main__":
     unittest.main()

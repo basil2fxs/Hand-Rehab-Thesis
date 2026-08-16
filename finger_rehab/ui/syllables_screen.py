@@ -17,11 +17,11 @@ announces itself with one big stage title and one short instruction:
                ticks the child taps on
   YOUR TURN!   the blocks drain to hollow outlines waiting to be
                filled, a big GO! marks the start, and in bilateral
-               play a line says either hand counts; on a spanning
-               word (5-8 units) the line says "both hands, left to
-               right" instead, and the block row opens a wider gap
-               between the two hands' groups so the row visibly
-               reads as two hands
+               play a line names the hand(s) the window sits on:
+               "Left hand this time." on a one-hand window, "Both
+               hands, left to right." when the window crosses the
+               midline, where the block row also opens a wider gap
+               so the word visibly runs off one hand onto the other
   feedback     WONDERFUL! with a green swell on success; a kind SO
                CLOSE! (or HAVE ANOTHER LOOK on no taps) naming the
                one thing to change, then the replay demonstrates it
@@ -32,13 +32,21 @@ read different: model blocks are solid and light up, response blocks
 are hollow outlines that fill as taps land, so a beat to copy and a
 beat already copied cannot be confused.
 
-There is no finger row under the blocks. Keyboard key hints live in
-a small Controls note in the bottom corner, only when the input IS
-the keyboard; with the real sensors the child's fingers sit on the
-pads and a legend would only pull eyes away from the blocks. The
-block-to-finger mapping is taught where it matters: by the buzz on
-the finger while its block lights, and by the fixed finger colours
-the blocks wear everywhere else in the app.
+THE BLOCKS SIT OVER THE FINGERS. The desk row (every playing finger,
+left to right) owns a fixed slot row across the screen, and a word's
+blocks occupy the slots of its sliding window, so WHERE the blocks
+sit says WHICH fingers this word wants and the window visibly moves
+from word to word. Slots the window leaves empty show a small dot in
+the resting finger's idle colour: present and quiet, never a target.
+
+There is no labelled finger row under the blocks. Keyboard key hints
+live in a small Controls note in the bottom corner, only when the
+input IS the keyboard; with the real sensors the child's fingers sit
+on the pads and a legend would only pull eyes away from the blocks.
+The block-to-finger mapping is taught where it matters: by the block
+sitting over its finger's slot, by the buzz on the finger while its
+block lights, and by the fixed finger colours the blocks wear
+everywhere else in the app.
 
 Letters and reading: the block text shows the word's own chunks at
 levels 1 to 5 because showing the word as text IS this build's visual
@@ -80,20 +88,24 @@ log = logging.getLogger(__name__)
 
 class SyllablesScreen(Screen):
 
-    # Block row geometry. The row is centred; heights leave room for
-    # the stage title above and the GO! / count-down slot below.
+    # Slot row geometry. Every playing finger owns a fixed slot; the
+    # word's blocks occupy the slots of its window, so block position
+    # says which finger plays. Heights leave room for the stage title
+    # above and the GO! / count-down slot below.
     BLOCK_H = 150
     STRESS_EXTRA = 36          # stressed block drawn taller from L4 up
     BLOCK_GAP = 18
-    # Extra gap between the two hands' block groups on a spanning
-    # word, so the row visibly reads as two hands meeting in the
-    # middle rather than one long ribbon.
+    # Extra gap between the two hands' slot groups in bilateral play,
+    # so the row visibly reads as two hands meeting in the middle
+    # rather than one long ribbon.
     HAND_GAP = 46
-    BLOCK_MIN_W = 120
-    # Spanning words carry up to 8 blocks; narrower blocks keep an
-    # 8-unit row plus the hand gap inside the 1280 logical width.
-    BLOCK_MIN_W_ROW = 108
+    SIDE_PAD = 40              # slot row inset from the screen edges
+    # A single hand's four slots would each be over 280 px wide on the
+    # 1280 layout; capping them keeps the blocks child-block sized
+    # while the slot POSITIONS still span the row.
+    SLOT_MAX_W = 240
     EXTRA_W = 84               # the grey "you tapped one too many" block
+    SEAT_R = 9                 # resting-finger dot radius
     ROW_CY = 400               # vertical centre of the block row
     TITLE_Y = 168              # stage title ("YOUR TURN!")
     SUB_Y = 222                # one-line instruction under the title
@@ -125,6 +137,9 @@ class SyllablesScreen(Screen):
         # until the child has had the one 3 s prep every mode gets.
         self._countdown_until = 0.0
         self._dim_cache: pygame.Surface | None = None
+        # Block typefaces by point size, so the fit-to-slot shrink in
+        # _draw_blocks does not pay SysFont's lookup cost per frame.
+        self._block_fonts: dict[int, pygame.font.Font] = {}
 
     def start_countdown(self, seconds: float) -> None:
         """Begin the pre-start GET READY countdown. Called by the
@@ -225,19 +240,24 @@ class SyllablesScreen(Screen):
                     f"Shake your {hands} out.", "foreground")
         return ("", "", "muted")
 
-    def _either_hand_line(self, mode) -> str:
-        """The bilateral promise, said where the child acts on it. On
-        a spanning word the promise would be untrue (each block owns
-        one finger of one hand), so the line changes to the row rule
-        instead of hiding: the child still gets one short sentence
-        saying what their hands should do."""
+    def _hands_line(self, mode) -> str:
+        """One short sentence naming the hand(s) this word's window
+        sits on, said where the child acts on it. The window owns its
+        lanes, so the line reports placement, never a choice: a
+        crossing window says both hands, a one-hand window in
+        bilateral play names its hand (the window moves word to word,
+        so the hand is news each time), and a single-hand session
+        needs no line at all."""
         if mode.phase not in ("countin", "respond"):
             return ""
+        if not getattr(mode, "bilateral", False):
+            return ""
         if getattr(mode, "row_mode", False):
-            return "Long word: both hands, left to right."
-        if getattr(mode, "bilateral", False):
-            return "Left or right: either hand counts."
-        return ""
+            return "Both hands, left to right."
+        lanes = mode.window_lanes()
+        if not lanes:
+            return ""
+        return f"{mode._hand_of_lane(lanes[0]).capitalize()} hand this time."
 
     def _stage_colour(self, name: str) -> tuple[int, int, int]:
         if name == "accent":
@@ -256,7 +276,7 @@ class SyllablesScreen(Screen):
             draw_text(surf, sub, (cx, self.SUB_Y), self.theme, self.layout,
                       pt=FONT_BODY + 2, centre=True,
                       colour=self.theme.muted)
-        hint = self._either_hand_line(mode)
+        hint = self._hands_line(mode)
         if hint:
             draw_text(surf, hint, (cx, self.HINT_Y), self.theme,
                       self.layout, pt=FONT_BODY, centre=True,
@@ -291,9 +311,10 @@ class SyllablesScreen(Screen):
         remaining = self._countdown_remaining()
         if remaining > 0:
             self._draw_countdown_card(surf, remaining)
-        # Skipped under the exit dialog (engine draws it above this
-        # screen with its own dim), matching GameplayScreen.
-        if self.engine.paused and not self.engine.exit_confirm_active:
+        # Skipped under either exit guard (the engine draws the
+        # session dialog or the end-game chip above this screen),
+        # matching GameplayScreen.
+        if self.engine.paused and not self.engine.exit_overlay_active:
             self._draw_paused_overlay(surf)
 
     def _draw_countdown_card(self, surf: pygame.Surface,
@@ -460,50 +481,99 @@ class SyllablesScreen(Screen):
         elif phase == "respond":
             self._draw_go(surf, mode, now)
 
-    def _block_rects(self, mode) -> list[pygame.Rect]:
-        """One rect per expected unit, centred as a row. The stressed
-        block is taller from level 4 up; level 5 draws the onset small
-        and the rime large, the standard onset-rime visual. On a
-        spanning word the row splits into the two hands' groups with a
-        wider gap between them (mode.row_split says where the right
-        hand's positions begin), so the child sees the word cross from
-        one hand to the other exactly where their fingers do."""
-        word = mode.word
-        units = mode.units_for(word)
-        split = (mode.row_split()
-                 if hasattr(mode, "row_split") else None)
-        min_w = self.BLOCK_MIN_W_ROW if split is not None \
-            else self.BLOCK_MIN_W
-        font = make_font(int(FONT_TITLE * 1.1), bold=True)
-        widths = []
-        for i, u in enumerate(units):
-            text = u if mode.level != 6 else "  "
-            w = max(min_w, font.size(text)[0] + 56)
-            if mode.level == 5:
-                w = int(w * (0.7 if i == 0 else 1.15))
-            widths.append(w)
-        total = sum(widths) + self.BLOCK_GAP * (len(units) - 1)
-        if split is not None and 0 < split < len(units):
-            total += self.HAND_GAP
-        x = self.layout.width // 2 - total // 2
+    def _slot_rects(self, mode) -> list[pygame.Rect]:
+        """One rect per desk-row slot, fixed for the whole block: the
+        playing fingers in physical left-to-right order, spanning the
+        screen, with the wider HAND_GAP between the two hands' groups
+        in bilateral play. Word blocks land IN these slots, so where
+        a block sits says which finger plays it, and the window is
+        seen to move from word to word."""
+        desk = mode.desk_row()
+        n_slots = max(1, len(desk))
+        # Where the hand changes along the desk row, the gap widens.
+        gap_idx = None
+        if getattr(mode, "bilateral", False):
+            hands = [mode._hand_of_lane(lane) for lane in desk]
+            for i in range(n_slots - 1):
+                if hands[i] != hands[i + 1]:
+                    gap_idx = i
+                    break
+        total_gap = self.BLOCK_GAP * (n_slots - 1)
+        if gap_idx is not None:
+            total_gap += self.HAND_GAP - self.BLOCK_GAP
+        usable = self.layout.width - 2 * self.SIDE_PAD - total_gap
+        slot_w = min(usable // n_slots, self.SLOT_MAX_W)
+        row_w = slot_w * n_slots + total_gap
+        x = (self.layout.width - row_w) // 2
         rects = []
-        for i, w in enumerate(widths):
-            if split is not None and i == split and i > 0:
-                x += self.HAND_GAP
-            h = self.BLOCK_H
-            if mode.level == 5:
-                h = int(h * (0.72 if i == 0 else 1.0))
-            elif mode.level >= 4 and i == word.stress:
-                h += self.STRESS_EXTRA
-            r = pygame.Rect(x, 0, w, h)
+        for i in range(n_slots):
+            r = pygame.Rect(x, 0, slot_w, self.BLOCK_H)
             r.centery = self.ROW_CY
             rects.append(r)
-            x += w + self.BLOCK_GAP
+            x += slot_w + (self.HAND_GAP if gap_idx == i
+                           else self.BLOCK_GAP)
         return rects
+
+    def _block_rects(self, mode) -> list[pygame.Rect]:
+        """One rect per expected unit: the word's window slots. The
+        stressed block is taller from level 4 up; level 5 draws the
+        onset small and the rime large, the standard onset-rime
+        visual. Where the window crosses the midline the slot row's
+        wider hand gap falls between the crossing blocks, so the
+        child sees the word run off one hand onto the other exactly
+        where their fingers do."""
+        word = mode.word
+        units = mode.units_for(word)
+        slots = self._slot_rects(mode)
+        off = mode.window_offset()
+        rects = []
+        for i in range(len(units)):
+            r = pygame.Rect(slots[min(off + i, len(slots) - 1)])
+            if mode.level == 5:
+                r.height = int(r.height * (0.72 if i == 0 else 1.0))
+                if i == 0:
+                    # The onset block is the smaller of the pair.
+                    r = r.inflate(-int(r.width * 0.26), 0)
+            elif mode.level >= 4 and i == word.stress:
+                r.height += self.STRESS_EXTRA
+            r.centery = self.ROW_CY
+            rects.append(r)
+        return rects
+
+    def _fitted_font(self, text: str, max_w: int,
+                     pt: int) -> pygame.font.Font:
+        """The block typeface at the largest size, stepping down from
+        `pt`, whose render of `text` fits `max_w`. Slot-width blocks
+        cannot grow with their text the way the old text-sized blocks
+        did, so a long chunk shrinks instead of overflowing."""
+        while True:
+            font = self._block_fonts.get(pt)
+            if font is None:
+                font = make_font(pt, bold=True)
+                self._block_fonts[pt] = font
+            if pt <= 18 or font.size(text)[0] <= max_w:
+                return font
+            pt -= 4
+
+    def _draw_seats(self, surf: pygame.Surface, mode,
+                    n_units: int) -> None:
+        """A small dot in each desk slot the window leaves empty, in
+        the resting finger's idle colour: the child sees WHERE this
+        word sits on their fingers and which fingers rest, without a
+        labelled finger row pulling their eyes off the blocks."""
+        desk = mode.desk_row()
+        off = mode.window_offset()
+        for i, slot in enumerate(self._slot_rects(mode)):
+            if off <= i < off + n_units or i >= len(desk):
+                continue
+            finger = mode._finger_of_lane(desk[i])
+            pygame.draw.circle(surf, self.theme.lane_idle[finger],
+                               slot.center, self.SEAT_R)
 
     def _draw_blocks(self, surf: pygame.Surface, mode, now: float) -> None:
         word = mode.word
         units = mode.units_for(word)
+        self._draw_seats(surf, mode, len(units))
         rects = self._block_rects(mode)
         phase = mode.phase
         res = mode._last_result or {}
@@ -572,9 +642,9 @@ class SyllablesScreen(Screen):
         for i, (u, rect) in enumerate(zip(units, rects)):
             # The block wears the colour of the finger that plays it
             # (the mode resolves position to finger through the
-            # read-across walks), so a left-hand 2-unit word shows
-            # middle then index, and a spanning word's colours run
-            # little-to-index then index-to-little across the gap.
+            # window's own lanes), so the colours track the window as
+            # it slides, and a crossing window's colours run toward
+            # the midline then away from it across the gap.
             finger = (mode.finger_for_position(i)
                       if hasattr(mode, "finger_for_position")
                       else i % 4)
@@ -642,7 +712,8 @@ class SyllablesScreen(Screen):
                                              self.theme.foreground))
                 pygame.draw.circle(surf, dot, rect.center, 10)
             else:
-                font = make_font(int(FONT_TITLE * 1.1), bold=True)
+                font = self._fitted_font(u, rect.width - 16,
+                                         int(FONT_TITLE * 1.1))
                 colour = _text_colour_for(
                     fill, (255, 255, 255), self.theme.foreground)
                 t = font.render(u, True, colour)

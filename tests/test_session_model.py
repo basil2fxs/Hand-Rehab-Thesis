@@ -8,7 +8,7 @@ session-ending warning lives is leaving game select for the login
 screen, and its confirm finalises the session (summary logged, EEG 241
 sent, identity cleared) so the next player logs in fresh.
 
-The data rule under all of it: every exit path (mid-game confirm,
+The data rule under all of it: every exit path (mid-game double Esc,
 natural end, window close, session end) leaves trials.csv, raw.csv and
 metadata.json complete on disk. Driven through the real engine and the
 real screens, sessions folder in a temp dir.
@@ -148,14 +148,18 @@ class GameSelectHomeBaseTests(_SessionHarness):
         with paths.trials_csv.open() as f:
             self.assertEqual(len(list(csv.DictReader(f))), 1)
 
-    def test_mid_game_confirm_lands_on_game_select_session_intact(
+    def test_mid_game_double_esc_lands_on_game_select_session_intact(
             self) -> None:
+        # Mid-game exit is the light guard: first Esc raises the chip,
+        # second Esc inside its window ends the game. No modal here;
+        # the session keeps its own dialog on game select.
         self._login()
         self.eng.begin_classic_block()
         paths = self.eng.session_paths
         self._log_one_trial()
         self.eng._handle_escape()
-        self._confirm_dialog()
+        self.assertTrue(self.eng.exit_chip_active)
+        self.eng._handle_escape()
         self.assertIs(self.eng.screen_obj,
                       self.eng._screens["mode_select"])
         # The session survives the quit: same identity, still logged

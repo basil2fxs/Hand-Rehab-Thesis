@@ -1,5 +1,5 @@
-"""Quick calibration, run automatically after the hand pick for a
-first-time player.
+"""Quick calibration, run automatically after the hand pick the first
+time a session needs a hand.
 
 Why this exists. The clinical CalibrationScreen on the menu is right
 for a therapist doing a deliberate measurement, but it is the wrong
@@ -34,12 +34,15 @@ strips which put the left hand on the left of the screen.
 
 The skip rules mirror the rest of the app. A keyboard session never
 sees this screen at all (there is no force to calibrate, and the game
-notice for that lives on mode select, not here). A returning player
-with a usable profile for every selected hand skips it too; the
-trigger decision is the engine's, in maybe_start_quick_calibration.
-"Skip for now" is always on screen and leaves whatever profile was
-saved before completely untouched. Esc asks before abandoning, so a
-stray key cannot throw away a half-done run.
+notice for that lives on mode select, not here). Calibration is a
+session event: each hand runs the flow once, the first time a game in
+the session needs it, and every later game in that session skips it,
+hand-mode changes included; the trigger decision is the engine's, in
+maybe_start_quick_calibration, with the per-session memory held on
+the engine and cleared when the session ends. "Skip for now" is
+always on screen and leaves whatever profile was saved before
+completely untouched. Esc asks before abandoning, so a stray key
+cannot throw away a half-done run.
 
 Flash safety: the in-zone glow is state-driven (on while the press sits
 in the band), the completion pop is a one-shot, and nothing else

@@ -417,7 +417,7 @@ def _write_chords_session(root, name, *, day, clock="090000",
 def _write_syllables_session(root, name, *, day, words, gaps=None,
                              clock="090000", hand="right", level=4,
                              nsyll=2, syllables_extra=None, paced=False,
-                             asyn=None, row=False, errs=None):
+                             asyn=None, row=False, errs=None, offs=None):
     """One syllables game folder with words packed into the stimulus
     cell the way syllables.py._pack_stimulus writes them.
 
@@ -432,9 +432,12 @@ def _write_syllables_session(root, name, *, day, words, gaps=None,
     mirroring what SyllablesMode.block_stats() actually returns.
     `paced`/`asyn` pack paced=1 and an asyn= list (one per word, same
     length every word) so the beat-synchronisation branch runs. `row`
-    packs map=row the way _pack_stimulus marks a spanning read-across
-    row trial; `errs` is an optional per-word error-code list (default
-    every word err=ok)."""
+    packs map=row the way legacy builds marked a spanning read-across
+    row trial; `offs` is a per-word window offset list packing
+    map=off<k> the way the sliding window logs its placement (the
+    current format; offs wins over row when both are given); `errs`
+    is an optional per-word error-code list (default every word
+    err=ok)."""
     folder = Path(root) / day / f"{name}_{clock}_syllables"
     folder.mkdir(parents=True, exist_ok=True)
     rows = []
@@ -448,7 +451,9 @@ def _write_syllables_session(root, name, *, day, words, gaps=None,
             word, f"lvl={level}", "band=C", f"nsyll={nsyll}",
             f"stress={stress_idx}",
         ]
-        if row:
+        if offs is not None:
+            parts.append(f"map=off{offs[trial_id - 1]}")
+        elif row:
             parts.append("map=row")
         parts += [
             f"paced={1 if paced else 0}", "ioi=500", "replay=0",
@@ -1551,14 +1556,15 @@ class TestSyllablesClaimLimits:
 
 
 class TestSyllablesReadAcrossRow:
-    """Read-across row regime (2026-08 upgrade): words of 5-8 units
-    span both hands with one lane per position and map=row in the
-    stimulus. The chapter must (a) hold row trials out of the
+    """Legacy read-across rows (map=row, or nsyll >= 5 before the
+    flag): words of 5-8 units spanning both hands with one lane per
+    position. Under the sliding window these are cross-hand trials,
+    and the chapter must keep handling them: (a) hold them out of the
     Liberman-anchored chart even at levels 2-4, because Liberman
     tested 1-3 syllable dowel tapping; (b) report the regimes apart,
-    because the row adds a spatial-mapping demand; and (c) locate
-    each row trial's first wrong position relative to the hand
-    transition, the one new motor event the row introduces."""
+    because the crossing adds a spatial-mapping demand; and (c)
+    locate each trial's first wrong position relative to the hand
+    transition, the one new motor event the crossing introduces."""
 
     # A clean 5-unit row trial: expected 1-indexed row for n=5 is
     # 7,6,5 (left ring/middle/index) then 1,2 (right index/middle).
@@ -1581,10 +1587,10 @@ class TestSyllablesReadAcrossRow:
         ctx = ra.prepare("all", root=tmp_path)
         ra.sec_syllables(ctx["trials"], ctx["metas"], ctx["calset"])
         out = capsys.readouterr().out
-        assert "read-across row word(s) also held out" in out
-        assert "READ-ACROSS ROW" in out
-        assert "either-hand (1-4 units)" in out
-        assert "row (5-8 units)" in out
+        assert "cross-hand word(s) also held out" in out
+        assert "CROSS-HAND WINDOWS" in out
+        assert "one-hand window" in out
+        assert "cross-hand window" in out
 
     def test_row_regime_is_inferred_from_nsyll_without_the_flag(
             self, ra, tmp_path, capsys):
@@ -1597,7 +1603,7 @@ class TestSyllablesReadAcrossRow:
         ctx = ra.prepare("all", root=tmp_path)
         ra.sec_syllables(ctx["trials"], ctx["metas"], ctx["calset"])
         out = capsys.readouterr().out
-        assert "READ-ACROSS ROW" in out
+        assert "CROSS-HAND WINDOWS" in out
 
     def test_transition_errors_are_located_and_named(
             self, ra, tmp_path, capsys):
@@ -1632,6 +1638,91 @@ class TestSyllablesReadAcrossRow:
         ra.sec_syllables(ctx["trials"], ctx["metas"], ctx["calset"])
         out = capsys.readouterr().out
         assert "scaffolding and engagement" in out
+
+
+class TestSyllablesSlidingWindow:
+    """Sliding-window rows (2026-08): every trial packs map=off<k>,
+    the desk-row slot the word's window started at. The chapter must
+    (a) rebuild the exact lanes from the offset on any hand count,
+    (b) treat a short word whose window straddles the midline as a
+    cross-hand trial, and (c) report per-finger participation, the
+    coverage the window exists to deliver."""
+
+    def test_offset_rebuilds_the_exact_lanes(self, ra):
+        # Bilateral 2-unit word at offset 2: desk row 8,7,6,5,1,2,3,4
+        # so the window is 6,5 (left ring then left middle).
+        row = {"nsyll": 2, "off": 2, "hand_mode": "both", "row": False}
+        assert ra.syllable_expected_lanes(row) == [6, 5]
+        # A single LEFT hand reads little to index: desk 4,3,2,1.
+        row = {"nsyll": 2, "off": 1, "hand_mode": "left", "row": False}
+        assert ra.syllable_expected_lanes(row) == [3, 2]
+        # A right hand keeps index outward.
+        row = {"nsyll": 3, "off": 1, "hand_mode": "right", "row": False}
+        assert ra.syllable_expected_lanes(row) == [2, 3, 4]
+        # Legacy spanning rows still rebuild the old centred row.
+        row = {"nsyll": 5, "off": None, "hand_mode": "both", "row": True}
+        assert ra.syllable_expected_lanes(row) == [7, 6, 5, 1, 2]
+        # Legacy short rows had either-hand positions: no single
+        # lane list exists, so no reconstruction is claimed.
+        row = {"nsyll": 2, "off": None, "hand_mode": "both",
+               "row": False}
+        assert ra.syllable_expected_lanes(row) is None
+
+    def test_crossing_short_window_counts_as_cross_hand(
+            self, ra, tmp_path, capsys):
+        # Offset 3 of a bilateral 2-unit word is left index (lane 5)
+        # then right index (lane 1): a midline crossing that must
+        # land in the cross-hand regime although nsyll is only 2.
+        _write_syllables_session(
+            tmp_path, "P1", day="2026-08-01", level=2, nsyll=2,
+            hand="both", offs=[3],
+            words=[("wombat", 0, [(5, 400.0, None), (1, 800.0, None)])])
+        ctx = ra.prepare("all", root=tmp_path)
+        sy = ra.sec_syllables(ctx["trials"], ctx["metas"], ctx["calset"])
+        out = capsys.readouterr().out
+        assert "CROSS-HAND WINDOWS" in out
+        assert list(sy["off"]) == [3]
+        assert bool(sy["row"].iloc[0])
+        assert "no positional mismatches on row trials" in out
+
+    def test_one_hand_window_stays_out_of_the_cross_hand_regime(
+            self, ra, tmp_path, capsys):
+        _write_syllables_session(
+            tmp_path, "P1", day="2026-08-01", level=2, nsyll=2,
+            hand="both", offs=[1],
+            words=[("teddy", 0, [(7, 400.0, None), (6, 800.0, None)])])
+        ctx = ra.prepare("all", root=tmp_path)
+        sy = ra.sec_syllables(ctx["trials"], ctx["metas"], ctx["calset"])
+        out = capsys.readouterr().out
+        assert "CROSS-HAND WINDOWS" not in out
+        assert not bool(sy["row"].iloc[0])
+        # The windowed both-hands split reads as delivered coverage.
+        assert "BOTH HANDS (windowed)" in out
+        assert "delivered coverage" in out
+
+    def test_participation_table_counts_cues_per_finger(
+            self, ra, tmp_path, capsys):
+        # Three 2-unit words sliding across one right hand: offsets
+        # 0, 1, 2 cue lanes 1-2, 2-3, 3-4, so the edge fingers are
+        # cued once and the middle fingers twice, all position
+        # correct except the last word's fumbled second tap.
+        _write_syllables_session(
+            tmp_path, "P1", day="2026-08-01", level=2, nsyll=2,
+            offs=[0, 1, 2], errs=["ok", "ok", "wrong_order"],
+            words=[("teddy", 0, [(1, 400.0, None), (2, 800.0, None)]),
+                   ("puppy", 0, [(2, 400.0, None), (3, 800.0, None)]),
+                   ("water", 0, [(4, 400.0, None), (3, 800.0, None)])])
+        ctx = ra.prepare("all", root=tmp_path)
+        sy = ra.sec_syllables(ctx["trials"], ctx["metas"], ctx["calset"])
+        out = capsys.readouterr().out
+        assert "PER-FINGER PARTICIPATION (3 mappable" in out
+        assert "right index" in out and "right little" in out
+        # Recompute the cued counts the table is built from.
+        cued = {}
+        for _, r in sy.iterrows():
+            for lane1 in ra.syllable_expected_lanes(r) or []:
+                cued[lane1] = cued.get(lane1, 0) + 1
+        assert cued == {1: 1, 2: 2, 3: 2, 4: 1}
 
 
 # ---------------------------------------------------------------------

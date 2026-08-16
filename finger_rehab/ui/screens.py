@@ -1183,11 +1183,12 @@ class SetupScreen(Screen):
             "buzz_hunt": self.engine.begin_buzz_hunt_block,
         }
         start = starters.get(mode, self.engine.begin_adaptive_block)
-        # A hand with no usable calibration gets the quick flow first,
-        # which teaches the light press and measures it in one go; the
-        # block start is handed over as the continuation. A returning
-        # player (or a keyboard session) sails straight through: the
-        # gate returns False without showing anything.
+        # Calibration is a session event: the first game that needs a
+        # hand this session gets the quick flow first, which teaches
+        # the light press and measures it in one go, with the block
+        # start handed over as the continuation. Every later game in
+        # the session (and any keyboard session) sails straight
+        # through: the gate returns False without showing anything.
         if self.engine.maybe_start_quick_calibration(start):
             return
         start()
@@ -1925,10 +1926,11 @@ class GameplayScreen(Screen):
         if remaining > 0:
             self._draw_countdown_card(surf, remaining)
 
-        # The exit dialog (engine-drawn, above this screen) brings its
-        # own dim; stacking PAUSED under it would put two overlays and
-        # two messages on one frozen frame.
-        if self.engine.paused and not self.engine.exit_confirm_active:
+        # Either exit guard (engine-drawn, above this screen) is the
+        # frame's one message; stacking PAUSED under the session
+        # dialog or the end-game chip would put two messages on one
+        # frozen frame.
+        if self.engine.paused and not self.engine.exit_overlay_active:
             self._draw_paused_overlay(surf)
 
     def _draw_controls_note(self, surf: pygame.Surface) -> None:
@@ -3146,9 +3148,9 @@ class RhythmScreen(Screen):
                 surf.blit(t, t.get_rect(topright=(right, y)))
                 y += 18
 
-        # Skipped under the exit dialog, same as GameplayScreen: the
-        # dialog dims the field itself.
-        if self.engine.paused and not self.engine.exit_confirm_active:
+        # Skipped under either exit guard, same as GameplayScreen: the
+        # guard is the frame's one message.
+        if self.engine.paused and not self.engine.exit_overlay_active:
             overlay = pygame.Surface(
                 (self.layout.width, self.layout.height), pygame.SRCALPHA,
             )

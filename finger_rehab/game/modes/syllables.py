@@ -73,7 +73,7 @@ LEVEL LADDER (syllables.level, researcher-set):
   6 phoneme counting: transparent-spelling words, one tap per phoneme,
     graphemes fade into the blocks after a correct response. 2 to 4
     phonemes on one hand; bilateral play widens the pool to 5-6, and
-    band C adds the 7-8 stretch that finally recruits the littles.
+    band C adds the 7-8 grapheme stretch words.
 Band promotion (A to B to C) runs inside a block on the brief's 8 of
 last 10 / under 5 of 10 rule and every firing is logged to raw.csv.
 LEVEL movement is across sessions and needs the session history this
@@ -115,59 +115,78 @@ the stimulus column the way pattern mode rides it):
 - stimulus: semicolon-separated key=value string, documented here
   because the notebook parses it:
     word;lvl=<level>;band=<A|B|C>;nsyll=<target taps>;stress=<idx>;
-    paced=<0|1>;ioi=<ms>;replay=<0|1>;err=<error type or ok>;
-    taps=<lane>:<t_ms>:<peak>,...;asyn=<a1>,<a2>,...
-  taps are 1-indexed lanes with time in ms from RESPOND start and the
-  tap's peak force (counts above baseline; empty in keyboard mode).
-  asyn appears on paced trials only: per-tap signed asynchrony in ms,
-  negative = early, the rhythm-mode sign convention.
+    map=off<k>;paced=<0|1>;ioi=<ms>;replay=<0|1>;
+    err=<error type or ok>;taps=<lane>:<t_ms>:<peak>,...;
+    asyn=<a1>,<a2>,...
+  map=off<k> is the sliding window's start slot in the desk row,
+  0-based (see THE SLIDING WINDOW below); with the playing hands
+  known it rebuilds exactly which lane carried which unit. Rows
+  logged before the window carried map=row on spanning words and no
+  map= key otherwise. taps are 1-indexed lanes with time in ms from
+  RESPOND start and the tap's peak force (counts above baseline;
+  empty in keyboard mode). asyn appears on paced trials only:
+  per-tap signed asynchrony in ms, negative = early, the rhythm-mode
+  sign convention.
 - time_difference_ms: first-tap reaction time on free-paced levels;
   MEAN signed asynchrony on paced levels (the rhythm convention).
-- lane / correct_keys: the trial is keyed on the first required
-  finger, with every required finger in correct_keys. Per-lane charts
-  mean little here because fingers are syllable positions, not
-  targets; the analysis works from the stimulus field.
+- lane / correct_keys: the trial is keyed on the window's first
+  lane, with every window lane in correct_keys. Per-lane charts
+  mean little here because fingers are unit positions, not targets;
+  the analysis works from the stimulus field.
 - error types (err=): timeout, missing_tap, extra_tap, wrong_order,
   off_beat, wrong_stress, ok.
 - outcome labels: Great = every level criterion met, Good = right
   count but a level criterion missed, Miss = wrong count or timeout.
   No penalties are applied anywhere; this mode is for children.
 
-THE READ-ACROSS ROW. One child-sized rule everywhere: the blocks sit
+THE SLIDING WINDOW. One child-sized rule everywhere: the blocks sit
 in a row on screen, your fingers sit in a row on the desk, the first
-block is your leftmost playing finger, and you walk right. The
-representation a dyslexic child must build maps temporal order onto
-LEFT-TO-RIGHT SPACE, because that is what print is: Elkonin boxes lay
-one box per sound left to right (Ross and Joseph 2019), and ordinal
-position in verbal working memory is spontaneously coded left to
-right in left-to-right reading cultures (SPoARC, van Dijck and Fias
-2011; direction follows reading habits, Shaki, Fischer and Petrusic
-2009). So the response scaffold is the physical desk row, not
-anatomical finger identity: on the right hand position 1 starts at
-the index and walks outward (unchanged), and on the LEFT hand the
-same word walks left to right across the n fingers nearest the thumb
-(2 units = middle then index), so taps always travel the way the
-blocks light and the way print runs, on any hand. Which fingers
-play: the most dexterous contiguous set for the word, centred on the
-midline when the word spans both hands.
+block is the leftmost finger the word asks for, and you walk right.
+The representation a dyslexic child must build maps temporal order
+onto LEFT-TO-RIGHT SPACE, because that is what print is: Elkonin
+boxes lay one box per sound left to right (Ross and Joseph 2019),
+and ordinal position in verbal working memory is spontaneously coded
+left to right in left-to-right reading cultures (SPoARC, van Dijck
+and Fias 2011; direction follows reading habits, Shaki, Fischer and
+Petrusic 2009). So the response scaffold is the physical desk row,
+not anatomical finger identity: the playing fingers form one desk
+row read left to right (a single right hand runs index to little, a
+single left hand little to index, both hands are the left hand's
+four then the right hand's four), and a word of n units occupies n
+ADJACENT slots of that row, tapped first slot to last. WHERE the
+window sits slides from word to word: a 2-unit word on one hand can
+sit on fingers 1-2, 2-3 or 3-4, and with both hands anywhere in the
+8-lane row, so across a block every finger of every selected hand
+takes its turn. Under the older fixed mapping position 1 always
+landed on the same leftmost fingers, so the ring and little of a
+single hand only ever played in 4-unit words, and in bilateral play
+one hand could idle through whole rounds of short words. The offset
+comes off a shuffle bag per window size (the BalancedScheduler
+convention the adult modes use), so per-finger participation stays
+near-equal within a block and the child cannot predict the next
+placement. The child is never asked to remember a placement rule:
+the blocks are drawn over the window's own lanes, the model buzzes
+those lanes in order, and the resting fingers' slots stay visibly
+empty, so the word itself shows which fingers it wants.
+Word-relative positions keep their meaning (stress=, per-position
+order checking, every level criterion) no matter where the window
+sits.
 
-BOTH HANDS. A child with both hands on the device can use both. For
-words of 1 to 4 units, position n accepts its finger on EITHER hand
-(each hand's own left-to-right walk), because the levels test WHICH
-beat the child marks and WHEN, never which hand carries it, and the
-canonical segmentation measure (Liberman's tapping task) has no hand
-requirement: demanding a particular hand would add a rule the
-construct does not contain. Order checking is therefore done on
-positions, not lanes, and there is no such thing as a "wrong hand"
-on short words. Words of 5 to 8 units exist only in bilateral play:
-the word spans both hands as one read-across row, centred on the
-midline (5 units = left ring to right middle; 8 = all eight), so
-each position owns exactly ONE lane and correct_keys says so.
-Centring keeps short long-words off the little fingers (weakest,
-highest enslavement) and recruits them only at 7 to 8 units, a motor
-ramp that tracks the linguistic one. Deliberately NOT in this
-design: forced hand alternation within a word (bimanual timing is
-impaired in dyslexia, Wolff, Michel, Ovrut and Drake 1990, and
+BOTH HANDS. A child with both hands on the device uses both: the
+window ranges over all eight fingers as one read-across row, so both
+hands are visited within a round instead of one idling while the
+child favours the other. A window may cross the midline (a 2-unit
+word on left index then right index), and words of 5 to 8 units
+always do; the tap order still runs strictly left to right, so a
+crossing is one ordered hand-over, never alternation. Each position
+owns exactly ONE lane and correct_keys says so. This replaces the
+earlier either-hand rule on short words (either hand's finger could
+satisfy a position): that rule let a child play a whole block on one
+preferred hand, which is exactly the idling the window exists to
+remove, and the window carries no hand rule to know, because the
+blocks and the buzz show which fingers play. Deliberately NOT in
+this design: forced hand alternation within a word (bimanual timing
+is impaired in dyslexia, Wolff, Michel, Ovrut and Drake 1990, and
 asymmetric bimanual patterns mature late in all children, so
 alternation errors would measure the motor system, not
 segmentation), simultaneous two-hand taps (a coordination task with
@@ -175,17 +194,17 @@ no PA construct behind it, and chords-mode territory in this
 project), and any gating of the ladder behind bilateral play: eight
 fingers is a pool extension, never a requirement or a level. The
 model phase still buzzes exactly one finger per syllable (one motor
-per board). On short words WHICH hand carries each model buzz comes
-off a shuffle bag over the hands, so across a block both hands are
-modelled equally, the same paired balance the adult modes use; on
-spanning words the position owns its hand, so the bag is not
-consulted. The modelled lanes ride the stimulus string (model=), and
-spanning trials additionally carry map=row, so the analysis can
-split regimes and hands. On screen the blocks carry the colours of
-the fingers that play them, the model names the hand carrying each
-buzz (model_hand, set per onset), and at respond time the screen
-says either hand counts on short words and "both hands, left to
-right" on spanning words.
+per board, and sequential onsets at the beat interval are exactly
+what that hardware delivers); the buzzing hand is set by the
+window's own lanes, so no hand bag is consulted. The modelled lanes
+ride the stimulus string (model=) in bilateral play, and every
+trial carries its window offset (map=off<k>), so the analysis can
+rebuild exactly which lane carried which unit and split cross-hand
+windows from one-hand ones. On screen the blocks carry the colours
+of the fingers that play them, the model names the hand carrying
+each buzz (model_hand, set per onset), and at respond time the
+screen names the hand the window sits on, or "both hands, left to
+right" when it crosses.
 
 WHAT THIS MODE CANNOT CLAIM. It trains and measures in-task
 behaviour: syllable segmentation, beat synchronisation, stress
@@ -195,12 +214,12 @@ control); it is not a diagnostic instrument and must never label a
 child dyslexic. The tactile channel is engagement and cueing, not a
 claimed active ingredient: the multisensory element of structured
 literacy has no demonstrated additive effect (Stevens et al. 2021,
-meta-analytic null). The same limit applies to the read-across row:
-two-hand play has no demonstrated additive effect on phonological
-awareness, so the row is scaffolding and engagement, never a claimed
-active ingredient, and row trials carry an added spatial-mapping
-demand that makes them non-comparable to short-word trials in the
-analysis. The hardware was built and ethically scoped for
+meta-analytic null). The same limit applies to the sliding window
+and two-hand play: neither has a demonstrated additive effect on
+phonological awareness, so the window is scaffolding, engagement and
+per-finger measurement coverage, never a claimed active ingredient,
+and cross-hand windows carry an added spatial-mapping demand that
+keeps them split from one-hand windows in the analysis. The hardware was built and ethically scoped for
 adult stroke rehabilitation; use with children needs new ethics
 approval, a finger-spacing check and hygiene procedures, and none of
 these parameters have been validated on children with this device, so
@@ -303,12 +322,12 @@ class SyllablesMode:
         self.engine = engine
         # The lanes of each playing hand, in the hand's own order
         # (lanes[0] index through lanes[3] little). Unit positions map
-        # onto lanes per WORD through the read-across walks (see
-        # docstring): _walk_for_hand orders each hand's playing
-        # fingers physically left to right, row_lanes lays a spanning
-        # word across both hands, and _position_of resolves any lane
-        # back to its position for the current word. self.lanes stays
-        # the first hand's four for fallback paths.
+        # onto lanes per WORD through the sliding window (see
+        # docstring): desk_row orders every playing finger physically
+        # left to right, window_lanes cuts the word's n adjacent slots
+        # out of it at the per-word offset, and _position_of resolves
+        # any lane back to its position for the current word.
+        # self.lanes stays the first hand's four for fallback paths.
         if lanes_by_hand and len([h for h, v in lanes_by_hand.items()
                                   if v]) > 1:
             self.hands = {h: list(v)[:4]
@@ -358,21 +377,22 @@ class SyllablesMode:
 
         self.rng = random.Random(int(seed))
         self._bag: list[Word] = []
-        # Which hand carries each model buzz: a shuffle bag over the
-        # hands so both are modelled equally across a block, in an
-        # order the child cannot predict. One entry, one syllable.
-        self._model_hand_order = BalancedScheduler(
-            list(range(len(self.hand_names))), self.rng,
-            avoid_repeats=False)
+        # The sliding window's state: the current word's start slot in
+        # the desk row, plus one offset shuffle bag per window size so
+        # every finger is visited near-equally within a block and the
+        # child cannot predict the next placement (see the docstring's
+        # THE SLIDING WINDOW).
+        self._offset = 0
+        self._offset_bags: dict[int, BalancedScheduler] = {}
         # The lanes the model phase actually buzzed for the current
         # word, in onset order, packed into the stimulus string when
         # both hands play so the analysis can split models by hand.
         self._model_lanes: list[int] = []
         # Which hand the model is buzzing RIGHT NOW, for the screen:
-        # in bilateral play the buzz hops between hands, and a child
-        # (or the parent watching) should see the hop named, not have
-        # to guess why the left hand buzzed when the right one just
-        # did. None outside the model and replay phases.
+        # a window that crosses the midline hands the buzz over from
+        # left to right mid-word, and a child (or the parent watching)
+        # should see that named, not have to guess why the other hand
+        # buzzed. None outside the model and replay phases.
         self.model_hand: str | None = None
 
         # Session flow state. Phases:
@@ -446,113 +466,118 @@ class SyllablesMode:
         # syllable position onto finger order.
         return self.level >= 2
 
-    # ---- the read-across row -----------------------------------------------
-    # Position-to-lane mapping is WORD-relative: the walk always
-    # travels physically left to right (the way the blocks light and
-    # the way print runs), so on the left hand position 0 is not the
-    # index by decree but the leftmost of the word's playing fingers.
+    # ---- the sliding window ------------------------------------------------
+    # Position-to-lane mapping is WORD-relative: a word of n units
+    # occupies n adjacent slots of the desk row (every playing finger
+    # in physical left-to-right order), starting at a per-word offset
+    # dealt from a shuffle bag. The walk always travels left to right
+    # (the way the blocks light and the way print runs) AND every
+    # finger takes its turn across a block.
 
-    def _walk_for_hand(self, hand: str, n: int) -> list[int]:
-        """The lanes carrying positions 0..n-1 on `hand`, in walking
-        order. The playing set is the n fingers nearest the thumb (the
-        most dexterous contiguous set); lane lists run index outward,
-        which IS left to right on the right hand and right to left on
-        the left hand, so the left walk is the reverse of its lanes."""
-        lanes = self.hands.get(hand) or []
-        if not lanes or n <= 0:
+    def desk_row(self) -> list[int]:
+        """Every playing lane in physical desk order, left to right.
+        Lane lists run index outward, which is left to right on the
+        right hand and right to left on the left, so the left hand
+        contributes its lanes reversed, and in bilateral play it
+        comes first because it IS the left of the desk."""
+        row: list[int] = []
+        if "left" in self.hands:
+            row.extend(reversed(self.hands["left"]))
+        for hand in self.hand_names:
+            if hand != "left":
+                row.extend(self.hands[hand])
+        return row
+
+    def _draw_offset(self, n: int) -> None:
+        """Deal the window's start slot for a fresh n-unit word. One
+        shuffle bag per window size: plain random offsets drift (over
+        a block one finger can be visited twice as often as another
+        by chance alone), while a bag deals every offset of a size
+        equally often, which is what keeps per-finger participation
+        near-equal within a block."""
+        n_off = max(1, len(self.desk_row()) - max(1, n) + 1)
+        if n_off <= 1:
+            self._offset = 0
+            return
+        bag = self._offset_bags.get(n_off)
+        if bag is None:
+            bag = BalancedScheduler(list(range(n_off)), self.rng)
+            self._offset_bags[n_off] = bag
+        self._offset = bag.next()
+
+    def window_offset(self) -> int:
+        """The current window's start slot, clamped so the window
+        always fits the desk row even when the word changes under a
+        drawn offset (the test harness swaps words mid-trial): the
+        packed map=off value and the actual lanes must never
+        disagree, so both read this clamp."""
+        desk = self.desk_row()
+        if not desk:
+            return 0
+        n = min(max(1, self.n_expected), len(desk))
+        return max(0, min(self._offset, len(desk) - n))
+
+    def window_lanes(self) -> list[int]:
+        """The lanes carrying positions 0..n-1 of the current word,
+        in walking order: n adjacent desk-row slots from the offset.
+        One lane per position, on any hand count."""
+        desk = self.desk_row()
+        if not desk or self.n_expected <= 0:
             return []
-        picked = list(lanes[:min(n, len(lanes))])
-        if hand == "left":
-            return list(reversed(picked))
-        return picked
+        off = self.window_offset()
+        return desk[off:off + min(self.n_expected, len(desk))]
 
     @property
     def row_mode(self) -> bool:
-        """True when the current word spans both hands: 5 or more
-        units in bilateral play. Each position then owns exactly one
-        lane instead of accepting either hand's finger."""
-        return self.bilateral and self.n_expected >= 5
+        """True when the current window crosses the midline, so the
+        word runs off one hand onto the other (any 5-8 unit word,
+        and short words whose offset straddles the gap). The screen
+        widens the block gap there and names the two-hand rule."""
+        return len({self._hand_of_lane(lane)
+                    for lane in self.window_lanes()}) > 1
 
     def row_split(self) -> int | None:
-        """How many of a spanning word's positions the LEFT hand
+        """How many of a crossing window's positions the LEFT hand
         carries (the index of the first right-hand position, where
-        the screen widens the gap), or None off the row regime. The
-        row is centred on the midline with the odd finger on the
-        left, which keeps 5-6 unit words off the little fingers."""
+        the screen widens the gap), or None when the window sits on
+        one hand."""
         if not self.row_mode:
             return None
-        n = self.n_expected
-        return min(len(self.hands.get("left") or []), (n + 1) // 2)
-
-    def row_lanes(self) -> list[int]:
-        """The read-across row for a spanning word: the left hand's
-        walk then the right hand's, one lane per position, in the
-        physical desk order the child reads across."""
-        n = self.n_expected
-        left_n = self.row_split() or 0
-        right_n = min(len(self.hands.get("right") or []), n - left_n)
-        return (self._walk_for_hand("left", left_n)
-                + self._walk_for_hand("right", right_n))
+        return sum(1 for lane in self.window_lanes()
+                   if self._hand_of_lane(lane) == "left")
 
     def lanes_for_position(self, pos: int) -> list[int]:
         """Every lane that legally carries position `pos` of the
-        current word: exactly one on the row regime, one per playing
-        hand otherwise."""
-        if self.row_mode:
-            row = self.row_lanes()
-            return [row[pos]] if 0 <= pos < len(row) else []
-        out = []
-        for hand in self.hand_names:
-            walk = self._walk_for_hand(hand, self.n_expected)
-            if 0 <= pos < len(walk):
-                out.append(walk[pos])
-        return out
+        current word: exactly one, the window's own."""
+        lanes = self.window_lanes()
+        return [lanes[pos]] if 0 <= pos < len(lanes) else []
 
     def expected_lanes(self) -> list[int]:
-        """One canonical lane per expected position, used where the
-        plumbing wants a single lane: the row itself on spanning
-        words, otherwise the first hand's walk. The press path
-        accepts either hand's walk via _position_of."""
-        if self.row_mode:
-            return self.row_lanes()
-        return self._walk_for_hand(self.hand_names[0], self.n_expected)
+        """One lane per expected position: the window itself."""
+        return self.window_lanes()
 
     def acceptable_lanes(self) -> list[int]:
         """Every lane that can legally carry some expected position.
         This is what the trial's correct_keys records.
 
         Level 1 is counting with ANY finger (order_required is False),
-        so restricting this to positions 0..n-1 overstates the
-        constraint: a tap on lane 4 of a 2-syllable word scores err=ok
-        (acceptable_lanes was never consulted for order, only for the
-        CSV column), but correct_keys would list only lanes 1 and 2,
-        which reads as though lane 4 was wrong. At level 1 every
-        playing lane is acceptable, so every playing lane is listed.
-
-        On the row regime each position owns exactly one lane, so the
-        list is the row itself in POSITION order: correct_keys then
-        reads as the walk, which is what the notebook checks taps
-        against. Short ordered words list both hands' walks, sorted."""
+        so restricting this to the window overstates the constraint:
+        a tap outside the window scores err=ok there (acceptable_
+        lanes is never consulted for order, only for the CSV column),
+        so every playing lane is listed. From level 2 up each
+        position owns one window lane, so the list is the window in
+        POSITION order, which is what the notebook checks taps
+        against."""
         if not self.order_required:
             return sorted(l for hands in self.hands.values() for l in hands)
-        if self.row_mode:
-            return self.row_lanes()
-        return sorted({lane for pos in range(self.n_expected)
-                       for lane in self.lanes_for_position(pos)})
+        return self.window_lanes()
 
     def _position_of(self, lane: int) -> int | None:
-        """Which unit position a lane carries in the CURRENT word, on
-        whichever hand, or None when the lane carries no position (a
-        playing finger with no block this word, or a lane outside the
-        game)."""
-        if self.row_mode:
-            row = self.row_lanes()
-            return row.index(lane) if lane in row else None
-        for hand in self.hand_names:
-            walk = self._walk_for_hand(hand, self.n_expected)
-            if lane in walk:
-                return walk.index(lane)
-        return None
+        """Which unit position a lane carries in the CURRENT word, or
+        None when the lane carries no position (a playing finger
+        resting this word, or a lane outside the game)."""
+        lanes = self.window_lanes()
+        return lanes.index(lane) if lane in lanes else None
 
     def _hand_of_lane(self, lane: int) -> str:
         for hand, lanes in self.hands.items():
@@ -567,9 +592,8 @@ class SyllablesMode:
         """The finger a lane sits under within its hand (0 index to 3
         little), independent of which unit position it carries this
         word. Calibration gaps and block colours are per FINGER; unit
-        positions stopped being finger numbers when the left hand's
-        walk flipped, so the two must never be conflated. Same helper
-        chords.py uses."""
+        positions are window slots, not finger numbers, so the two
+        must never be conflated. Same helper chords.py uses."""
         lanes = self.hands.get(self._hand_of_lane(lane), self.lanes)
         try:
             return max(0, min(3, lanes.index(lane)))
@@ -578,19 +602,14 @@ class SyllablesMode:
 
     def finger_for_position(self, pos: int) -> int:
         """Which finger (0 index to 3 little) colours block `pos`, so
-        a block wears the colour of the finger that plays it. On the
-        row each position owns one lane; a single hand shows its own
-        walk's fingers (a left-hand 2-unit word is middle then
-        index); bilateral short words keep the right-hand convention
-        because either hand's finger may carry the position."""
-        if self.row_mode:
-            row = self.row_lanes()
-            return self._finger_of_lane(row[min(pos, len(row) - 1)])
-        if self.bilateral:
+        a block wears the colour of the finger that plays it: the
+        window's own lane for that position, resolved to its
+        finger."""
+        lanes = self.window_lanes()
+        if not lanes:
             return min(max(pos, 0), 3)
-        walk = self._walk_for_hand(self.hand_names[0],
-                                   max(1, self.n_expected))
-        return self._finger_of_lane(walk[min(pos, len(walk) - 1)])
+        return self._finger_of_lane(
+            lanes[min(max(pos, 0), len(lanes) - 1)])
 
     # ---- per-finger normalisation -------------------------------------------
     def _reference_counts(self, lane: int) -> float:
@@ -601,8 +620,8 @@ class SyllablesMode:
         the shipped fsr.on_delta thresholds when no in-app calibration
         has run, and to 1.0 (no normalisation) when even that cannot be
         read (test doubles with no cfg). Keyed by the lane's FINGER,
-        never its unit position: on the row a left-ring lane can carry
-        position 0, but its calibration gap is still the ring's."""
+        never its unit position: a window can put position 0 on a
+        left-ring lane, but its calibration gap is still the ring's."""
         finger = self._finger_of_lane(lane)
         profs = getattr(self.engine, "calibration_profiles", None)
         if isinstance(profs, dict):
@@ -767,6 +786,10 @@ class SyllablesMode:
             return
         if not reuse_word or self.word is None:
             self.word = self._draw_word()
+            # A fresh word gets a fresh window; a word restarted after
+            # a pause keeps its placement, so it does not jump fingers
+            # on the child mid-word.
+            self._draw_offset(self.n_expected)
         self.trial_counter += 1
         self.taps = []
         self._last_tap_t = {}
@@ -774,10 +797,10 @@ class SyllablesMode:
         self._replayed = False
         self._pending_replay = False
         self._last_result = None
+        window = self.window_lanes()
         self.active = PendingTrial(
             trial_id=self.trial_counter,
-            lane=self.expected_lanes()[0] if self.order_required
-            else self.lanes[0],
+            lane=window[0] if window else self.lanes[0],
             stim_t_perf=now,
             keys_pressed=[],
             incorrect_presses=[],
@@ -867,24 +890,15 @@ class SyllablesMode:
             # rather than burst-fire catch-up syllables a frame apart,
             # which the one-motor-per-board hardware could not deliver.
             self._model_next_t = now + self.ioi_s
-        # Which lane: the position's own on a spanning word (the row
-        # gives each position exactly one hand, so the hand bag is
-        # not consulted and keeps balancing the short words it owns).
-        # On short words the finger comes from the walk and the hand
-        # from the bag, so with both hands connected the model's
-        # buzzes divide equally between them across the block (one
-        # hand connected always draws that hand).
-        pos = (self._model_idx if self.order_required
-               else min(self._model_idx, 3))
-        if self.row_mode:
-            row = self.row_lanes()
-            lane = row[min(pos, len(row) - 1)]
-            hand = self._hand_of_lane(lane)
+        # Which lane: the window's own for this position. The buzzing
+        # hand follows the window, so a crossing window hands the
+        # buzz over exactly where the child's taps will.
+        lanes = self.window_lanes()
+        if lanes:
+            lane = lanes[min(self._model_idx, len(lanes) - 1)]
         else:
-            hand = self.hand_names[self._model_hand_order.next()]
-            walk = self._walk_for_hand(hand, self.n_expected)
-            lane = walk[min(pos, len(walk) - 1)]
-        self.model_hand = hand
+            lane = self.lanes[0]
+        self.model_hand = self._hand_of_lane(lane)
         if self.phase == "model":
             self._model_lanes.append(lane)
         # The replay runs after the trial was scored (self.active is
@@ -929,13 +943,11 @@ class SyllablesMode:
         self.active.keys_pressed.append(ev.lane)
         # Wrong-POSITION taps land in incorrect_presses so the CSV's
         # had_incorrect_press / first_incorrect_lane columns carry
-        # them, without any of the adult modes' penalties. On short
-        # words the check is on the position, never the hand (either
-        # hand's walk satisfies its position, so there is no wrong
-        # hand); on spanning words each position owns one lane, and a
-        # playing finger with no position this word (pos None, e.g. a
-        # little finger during a 5-unit word) is a wrong tap, not an
-        # ignored one: the child pressed and the record must say so.
+        # them, without any of the adult modes' penalties. Each
+        # position owns one window lane, and a playing finger with no
+        # position this word (pos None: a finger the window rests) is
+        # a wrong tap, not an ignored one: the child pressed and the
+        # record must say so.
         pos = self._position_of(ev.lane)
         k = len(self.taps) - 1
         if (self.order_required and
@@ -988,10 +1000,9 @@ class SyllablesMode:
         # Order is checked on the taps that exist; count errors are
         # named first in the taxonomy below, so wrong_order is only
         # ever reported for a right-count trial. The check runs on
-        # unit POSITIONS: on short words either hand's walk satisfies
-        # its position and no hand is ever wrong; on spanning words
-        # each position owns one lane (a tap with no position this
-        # word resolves to None and fails the comparison).
+        # unit POSITIONS: each position owns one window lane, and a
+        # tap with no position this word (a resting finger) resolves
+        # to None and fails the comparison.
         order_correct = (not self.order_required
                          or [self._position_of(t.lane)
                              for t in taps[:n]]
@@ -1080,8 +1091,8 @@ class SyllablesMode:
         self.engine.log_trial(
             trial, outcome, now,
             stimulus=self._pack_stimulus(word, error, asyn, will_replay),
-            # In bilateral play both hands' copies of each expected
-            # position are acceptable, and the CSV says so.
+            # The window's lanes in position order (every playing
+            # lane at level 1, where any finger counts).
             correct_lanes=self.acceptable_lanes(),
             # A Miss here always means a wrong tap COUNT (timeout,
             # extra_tap or missing_tap: the only three ways count_
@@ -1159,11 +1170,12 @@ class SyllablesMode:
             f"nsyll={self.n_expected}",
             f"stress={word.stress}",
         ]
-        if self.row_mode:
-            # The read-across row: each position owned exactly one
-            # lane. The notebook splits regimes on this flag (and can
-            # infer it from nsyll >= 5 in older rows).
-            parts.append("map=row")
+        # The sliding window: the desk-row slot carrying the word's
+        # first unit, 0-based. With the playing hands known this
+        # rebuilds exactly which lane carried which unit (the
+        # notebook does), replacing the older map=row flag that only
+        # marked spanning words.
+        parts.append(f"map=off{self.window_offset()}")
         parts += [
             f"paced={1 if self.paced else 0}",
             f"ioi={self.ioi_s * 1000.0:.0f}",

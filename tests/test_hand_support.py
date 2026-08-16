@@ -713,12 +713,11 @@ class ModeHandMatrixTests(unittest.TestCase):
                 mode = eng.mode
 
                 def respond(clock, mode=mode, hand_mode=hand_mode):
-                    # Tap back the word during respond, alternating
-                    # hands in bilateral play: either hand's finger
-                    # must satisfy its position, through that hand's
-                    # own left-to-right walk (a left-hand 2-unit word
-                    # is middle then index, and on a spanning word
-                    # the position owns exactly one lane).
+                    # Tap back the word during respond. Each position
+                    # owns exactly one lane, the sliding window's own
+                    # (lanes_for_position returns that single lane on
+                    # any hand count), so the walk follows the window
+                    # left to right wherever it sits.
                     if mode.phase != "respond" or mode.active is None:
                         return
                     if len(mode.taps) >= mode.n_expected:

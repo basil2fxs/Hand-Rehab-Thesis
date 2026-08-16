@@ -1,9 +1,13 @@
-"""The gamified quick calibration that gates a first session.
+"""The gamified quick calibration that gates each session's first game.
 
 What has to hold, in order of how expensive it would be to get wrong:
 
-  - the trigger rule: a selected hand with no usable profile runs the
-    flow, a returning player skips it at zero cost, and a keyboard
+  - the trigger rule: calibration is a session event. A hand runs the
+    flow the first time a game in the session needs it (no usable
+    profile, or the session has not put the flow in front of that
+    hand yet) and every later game in the session skips it at zero
+    cost, hand-mode changes included. The memory is session state on
+    the engine, cleared at session end, never disk. A keyboard
     session never sees it at all (there is no force to calibrate);
   - the maths: the profile the game builds is the SAME profile the
     clinical CalibrationScreen would build from the same captures,
@@ -170,24 +174,41 @@ class TestTriggerRule:
         assert eng.screen_obj.hands == ["right"]
         assert calls == []           # the block must wait for the flow
 
-    def test_applied_profile_skips_at_zero_cost(self, tmp_path):
+    def test_applied_profile_still_runs_the_sessions_first_pass(
+            self, tmp_path):
+        # Calibration is a session event: a returning player with a
+        # usable profile still gets the visual flow once, on the
+        # session's first game that needs the hand.
         eng = _engine(tmp_path)
         eng.apply_calibration(_usable_profile("right"))
+        assert eng.maybe_start_quick_calibration(lambda: None)
+        assert eng.screen_obj is eng._screens["quick_cal"]
+
+    def test_session_calibrated_hand_skips_every_later_game(self, tmp_path):
+        eng = _engine(tmp_path)
+        eng.apply_calibration(_usable_profile("right"))
+        eng._session_cal_hands = {"right"}    # first game already ran it
         calls = []
         assert not eng.maybe_start_quick_calibration(lambda: calls.append(1))
         assert eng.screen_obj is not eng._screens["quick_cal"]
 
-    def test_usable_profile_on_disk_skips_and_is_applied(self, tmp_path):
+    def test_usable_profile_on_disk_is_applied_by_the_check(self, tmp_path):
+        # The disk profile feeds the detectors either way; what it no
+        # longer does is stand in for the session's first visual pass.
         eng = _engine(tmp_path)
         prof = _usable_profile("right")
         prof.save(tmp_path / "config/calibration/current_right.json")
-        assert not eng.maybe_start_quick_calibration(lambda: None)
+        assert eng.maybe_start_quick_calibration(lambda: None)
         applied = eng.calibration_profiles.get("right")
         assert applied is not None
         assert applied.on_delta() == prof.on_delta()
         # The detector runs on the loaded thresholds, not the defaults.
         det = eng.detectors["right"]
         assert det.cal.on_delta[:N_FINGERS] == prof.on_delta()
+        # With the session pass done, the disk profile carries the skip.
+        eng._session_cal_hands = {"right"}
+        eng.screen_obj = None
+        assert not eng.maybe_start_quick_calibration(lambda: None)
 
     def test_keyboard_session_skips_with_no_notice(self, tmp_path):
         from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
@@ -196,11 +217,55 @@ class TestTriggerRule:
         assert not eng.maybe_start_quick_calibration(lambda: calls.append(1))
         assert eng.screen_obj is not eng._screens["quick_cal"]
 
-    def test_bilateral_covers_only_the_missing_hand(self, tmp_path):
+    def test_bilateral_covers_only_the_uncalibrated_hand(self, tmp_path):
+        # Session calibrated the right hand in an earlier game; a
+        # later game adds the left, so only the LEFT hand's flow runs.
         eng = _engine(tmp_path, hand="both")
         eng.apply_calibration(_usable_profile("right"))
+        eng._session_cal_hands = {"right"}
         assert eng.maybe_start_quick_calibration(lambda: None)
         assert eng.screen_obj.hands == ["left"]
+
+    def test_flow_marks_hands_as_the_sessions_on_handover(self, tmp_path):
+        # Finishing (or skipping) the gated flow is what stamps the
+        # hands into the session; an Esc abandon must not.
+        eng = _engine(tmp_path)
+        assert eng.maybe_start_quick_calibration(lambda: None)
+        sc = eng.screen_obj
+        assert eng._session_cal_hands == set()
+        sc._skip()
+        assert eng._session_cal_hands == {"right"}
+
+    def test_abandon_does_not_mark_the_session(self, tmp_path):
+        eng = _engine(tmp_path)
+        eng.begin_session("P1", "")
+        assert eng.maybe_start_quick_calibration(lambda: None)
+        eng._handle_escape()
+        eng._handle_escape()
+        assert eng._session_cal_hands == set()
+
+    def test_session_end_clears_the_session_memory(self, tmp_path):
+        eng = _engine(tmp_path)
+        eng.begin_session("P1", "")
+        eng._session_cal_hands = {"left", "right"}
+        eng.end_session()
+        assert eng._session_cal_hands == set()
+        # And the next login starts clean too.
+        eng._session_cal_hands = {"right"}
+        eng.begin_session("P2", "")
+        assert eng._session_cal_hands == set()
+
+    def test_skipped_hand_without_profile_keeps_triggering(self, tmp_path):
+        # Skip is an escape hatch, not a calibration: with no usable
+        # profile behind it there is nothing to run the next game on,
+        # so the flow comes back.
+        eng = _engine(tmp_path)
+        assert eng.maybe_start_quick_calibration(lambda: None)
+        eng.screen_obj._skip()
+        assert eng._session_cal_hands == {"right"}
+        eng.screen_obj = None
+        assert eng.maybe_start_quick_calibration(lambda: None)
+        assert eng.screen_obj is eng._screens["quick_cal"]
 
     def test_unusable_saved_profile_still_triggers(self, tmp_path):
         # A saved file whose gaps are too small to run on must not
@@ -365,11 +430,12 @@ class TestFlowEndToEnd:
 class TestSkipAndEscape:
     def test_skip_writes_nothing_and_keeps_prior_profiles(self, tmp_path):
         eng = _engine(tmp_path, hand="both")
-        # Right hand already calibrated; its saved file must survive
-        # byte for byte.
+        # Right hand already calibrated this session; its saved file
+        # must survive byte for byte.
         prof = _usable_profile("right")
         right_path = tmp_path / "config/calibration/current_right.json"
         prof.save(right_path)
+        eng._session_cal_hands = {"right"}
         before = right_path.read_bytes()
         calls = []
         assert eng.maybe_start_quick_calibration(lambda: calls.append(1))

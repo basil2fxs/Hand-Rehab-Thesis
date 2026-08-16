@@ -184,9 +184,10 @@ class BuzzHuntScreen(Screen):
         remaining = self._countdown_remaining()
         if remaining > 0:
             self._draw_countdown_card(surf, remaining)
-        # Skipped under the exit dialog (engine draws it above this
-        # screen with its own dim), matching GameplayScreen.
-        if self.engine.paused and not self.engine.exit_confirm_active:
+        # Skipped under either exit guard (the engine draws the
+        # session dialog or the end-game chip above this screen),
+        # matching GameplayScreen.
+        if self.engine.paused and not self.engine.exit_overlay_active:
             self._draw_paused_overlay(surf)
 
     # ---- top strip (never drawn during a trial) ----------------------------

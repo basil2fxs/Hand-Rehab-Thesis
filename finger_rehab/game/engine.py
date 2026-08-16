@@ -278,14 +278,28 @@ class GameEngine:
         # analyst can subtract it from the block duration.
         self._block_pause_count = 0
         self._block_paused_s = 0.0
-        # Exit guard. Holds the live ConfirmDialog while "End this
-        # game?" (mid-block) or "End this session?" (game select ->
-        # login) is up; None means no dialog. The was-paused flag
-        # remembers whether the block was already paused (P key) when
-        # the dialog raised, so dismissing it does not silently
-        # un-pause a break the player chose.
+        # Session exit guard. Holds the live ConfirmDialog while "End
+        # this session?" (game select -> login) is up; None means no
+        # dialog. Ending a session throws away nothing that isn't
+        # already on disk, but it logs the next player in fresh, so it
+        # keeps the full modal.
         self._exit_confirm = None
-        self._exit_confirm_was_paused = False
+        # End-game Esc guard. Ending a game mid-block is light by
+        # design (back to game select, session keeps going), so it gets
+        # a double-press chip instead of a modal: the deadline below is
+        # perf_counter time while the "Esc again to end this game" chip
+        # is up, None otherwise. The was-paused flag remembers whether
+        # the block was already paused (P key) when the chip raised, so
+        # dismissing it does not silently un-pause a break the player
+        # chose.
+        self._exit_chip_until: float | None = None
+        self._exit_chip_was_paused = False
+        # Hands the quick calibration flow has covered this session
+        # (finished or deliberately skipped). Session state on purpose,
+        # never disk: calibration is a session event, so the first game
+        # that needs a hand runs the flow and every later game skips
+        # it. Cleared when the session ends.
+        self._session_cal_hands: set[str] = set()
         # Pending buzzer repeat-pulses as (lane, due_perf_counter).
         self._motor_queue: list[tuple[int, float]] = []
         # When the after-press confirmation buzz is due to end, and a
@@ -715,6 +729,11 @@ class GameEngine:
                 if dt > 0.1:
                     dt = 0.1
 
+                # The end-game chip times out on the wall clock here,
+                # not in update(): update() is skipped while paused and
+                # the chip only ever exists over a paused block.
+                self._tick_exit_chip(now)
+
                 if self.paused:
                     # Drain and discard samples so the queue doesn't pile up
                     # during a long pause (otherwise on resume we'd flood
@@ -738,15 +757,26 @@ class GameEngine:
                     if e.type in (pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN,
                                   pygame.MOUSEBUTTONUP) and hasattr(e, "pos"):
                         e.dict["pos"] = self._to_logical(e.pos)
-                    # The exit dialog is modal. Note whether it was up
-                    # BEFORE the global handler runs: the Esc that
-                    # raises or dismisses it must not also leak into
-                    # the screen underneath on the same frame.
+                    # The exit dialog is modal, and the end-game chip
+                    # owns every event while it is up. Note whether
+                    # either was up BEFORE the global handler runs: the
+                    # Esc (or the any-key dismiss) that raises or
+                    # clears them must not also leak into the screen
+                    # underneath on the same frame.
                     exit_dialog_had_event = self._exit_confirm is not None
+                    exit_chip_had_event = self._exit_chip_until is not None
                     self._handle_global_event(e)
                     if exit_dialog_had_event or self._exit_confirm is not None:
                         if self._exit_confirm is not None:
                             self._exit_confirm.handle_event(e)
+                    elif exit_chip_had_event or \
+                            self._exit_chip_until is not None:
+                        # Chip events are already fully handled in the
+                        # global handler (second Esc ended the game,
+                        # any other key or click dismissed and
+                        # resumed). The dismissing key must not double
+                        # as a game input.
+                        pass
                     elif self.screen_obj and not self.paused:
                         self.screen_obj.handle_event(e)
                     elif self.screen_obj and self.paused:
@@ -773,9 +803,14 @@ class GameEngine:
                 if self._exit_confirm is not None:
                     # Exit dialog over the frozen play field. Screens
                     # skip their own PAUSED overlay while it is up (see
-                    # exit_confirm_active) so the dialog's dim is the
+                    # exit_overlay_active) so the dialog's dim is the
                     # only layer between card and lanes.
                     self._exit_confirm.draw(self._screen)
+                if self._exit_chip_until is not None:
+                    # End-game chip over the frozen play field. Same
+                    # overlay rule: the chip is the only message on
+                    # the frame, no PAUSED banner stacked under it.
+                    self._draw_exit_chip(self._screen)
                 self._draw_hud(self._screen, clock)
                 # Scale the logical surface up onto the window and flip.
                 self._present()
@@ -1125,9 +1160,20 @@ class GameEngine:
         if e.type == pygame.QUIT:
             self._abandon_if_in_block()
             self.running = False
+        elif e.type == pygame.MOUSEBUTTONDOWN:
+            # A click is game input: it dismisses the chip and resumes,
+            # same promise as "press any key to keep playing".
+            if self._exit_chip_until is not None:
+                self._dismiss_exit_chip()
         elif e.type == pygame.KEYDOWN:
             if e.key == pygame.K_ESCAPE:
                 self._handle_escape()
+            elif self._exit_chip_until is not None:
+                # Any key except Esc keeps playing, exactly as the
+                # chip says. Handled before the function keys so P or
+                # F10 under the chip reads as "keep playing", not as a
+                # second state change on the same key press.
+                self._dismiss_exit_chip()
             elif e.key == pygame.K_F2:
                 self._show_fps = not self._show_fps
             elif e.key == pygame.K_F3:
@@ -1167,13 +1213,29 @@ class GameEngine:
     _BLOCK_SCREEN_KEYS = ("gameplay", "rhythm", "syllables",
                           "force_pilot", "lighthouse", "buzz_hunt")
 
+    # How long the end-game chip stays up waiting for the second Esc.
+    # Long enough to read one short line, short enough that a stray
+    # Esc costs about two seconds of pause and nothing else.
+    EXIT_CHIP_S = 2.0
+
     @property
     def exit_confirm_active(self) -> bool:
-        """True while an exit dialog (End this game? / End this
-        session?) is up. Screens read this to skip their own PAUSED
-        overlay under the dialog. getattr so an engine built bare via
-        __new__ in a test reads False."""
+        """True while the End-session dialog is up. getattr so an
+        engine built bare via __new__ in a test reads False."""
         return getattr(self, "_exit_confirm", None) is not None
+
+    @property
+    def exit_chip_active(self) -> bool:
+        """True while the end-game Esc chip is up mid-block."""
+        return getattr(self, "_exit_chip_until", None) is not None
+
+    @property
+    def exit_overlay_active(self) -> bool:
+        """True while either exit guard (session dialog or end-game
+        chip) is up. Screens read this to skip their own PAUSED
+        overlay, so the guard is the only message on the frozen
+        frame."""
+        return self.exit_confirm_active or self.exit_chip_active
 
     def _on_block_screen(self) -> bool:
         return any(
@@ -1182,49 +1244,49 @@ class GameEngine:
                        for k in self._BLOCK_SCREEN_KEYS)
             if sc is not None)
 
-    def _raise_exit_confirm(self) -> None:
+    def _raise_exit_chip(self) -> None:
         """Esc landed mid-block: freeze play through the normal pause
-        path and put the question on screen instead of acting. The
-        block stays fully intact underneath (no trial ticks away; the
-        pause tests set that convention)."""
-        if self._exit_confirm is not None:
+        path and put the double-press chip on screen instead of
+        acting. The block stays fully intact underneath (no trial
+        ticks away; the pause tests set that convention). No modal
+        and no mouse target: the second Esc is the confirmation."""
+        if self._exit_chip_until is not None:
             return
-        self._exit_confirm_was_paused = self.paused
+        self._exit_chip_was_paused = self.paused
         if not self.paused:
             self._pause_now()
-        from ..ui.screens import ModeSelectScreen
-        from ..ui.widgets import ConfirmDialog
-        accent = ModeSelectScreen.MODE_ACCENTS.get(
-            str(self.current_block).lower(), self.theme.accent)
-        self._exit_confirm = ConfirmDialog(
-            question="End this game?",
-            detail="Finished trials stay saved; this game is recorded "
-                   "as cut short.\nBack to the game list. The session "
-                   "keeps going.",
-            safe_label="Keep playing",
-            danger_label="End game",
-            on_safe=self._dismiss_exit_confirm,
-            on_danger=self._confirm_exit_to_menu,
-            theme=self.theme, layout=self.layout,
-            accent=accent)
+        self._exit_chip_until = time.perf_counter() + self.EXIT_CHIP_S
 
-    def _dismiss_exit_confirm(self) -> None:
-        """Keep playing: drop the dialog and resume through the normal
-        pause path so in-flight trial timestamps shift forward. A block
-        the player had ALREADY paused before the dialog stays paused;
-        their break is not the dialog's to end."""
-        self._exit_confirm = None
-        if not self._exit_confirm_was_paused:
+    def _dismiss_exit_chip(self) -> None:
+        """Keep playing: any non-Esc key, a click, or the timeout.
+        Resume through the normal pause path so in-flight trial
+        timestamps shift forward. A block the player had ALREADY
+        paused before the chip stays paused; their break is not the
+        chip's to end."""
+        if self._exit_chip_until is None:
+            return
+        self._exit_chip_until = None
+        if not self._exit_chip_was_paused:
             self._resume_now()
 
-    def _confirm_exit_to_menu(self) -> None:
-        """End game, deliberately chosen. Close the dialog's pause
-        bookkeeping first (matched pause/resume pair in the raw CSV,
-        paused seconds into the block summary), then reuse the one
-        existing abandon path so every completed trial is on disk and
-        the metadata marks the block cut short. Lands on game select,
-        never the login screen: the session keeps going."""
-        self._exit_confirm = None
+    def _tick_exit_chip(self, now: float | None = None) -> None:
+        """Expire the chip once its window has passed, resuming play
+        exactly as an any-key dismiss would."""
+        if self._exit_chip_until is None:
+            return
+        if (time.perf_counter() if now is None else now) \
+                >= self._exit_chip_until:
+            self._dismiss_exit_chip()
+
+    def _end_game_now(self) -> None:
+        """End game, deliberately chosen: the second Esc inside the
+        chip's window. Close the chip's pause bookkeeping first
+        (matched pause/resume pair in the raw CSV, paused seconds into
+        the block summary), then reuse the one existing abandon path
+        so every completed trial is on disk and the metadata marks the
+        block cut short. Lands on game select, never the login screen:
+        the session keeps going."""
+        self._exit_chip_until = None
         if self.paused and self._pause_started_at is not None:
             pause_dur = time.perf_counter() - self._pause_started_at
             self._block_paused_s += pause_dur
@@ -1237,6 +1299,49 @@ class GameEngine:
         self._abandon_if_in_block()
         self.show_mode_select()
 
+    def _draw_exit_chip(self, surf) -> None:
+        """The chip itself: one small card, top centre, over the
+        frozen play field. A thin bar under the text drains with the
+        remaining window so the timeout is visible, and the running
+        mode's accent tops the card so the chip visibly belongs to
+        the game it interrupted."""
+        from ..ui.screens import ModeSelectScreen
+        from ..ui.widgets import draw_text, FONT_BODY, FONT_SMALL
+        accent = ModeSelectScreen.MODE_ACCENTS.get(
+            str(self.current_block).lower(), self.theme.accent)
+        w, h = 560, 96
+        x = (self.layout.width - w) // 2
+        y = 56
+        rect = pygame.Rect(x, y, w, h)
+        pygame.draw.rect(surf, self.theme.background, rect,
+                         border_radius=14)
+        pygame.draw.rect(surf, accent, rect, width=2, border_radius=14)
+        pygame.draw.rect(surf, accent,
+                         pygame.Rect(x, y, w, 6),
+                         border_radius=3)
+        cx = self.layout.width // 2
+        draw_text(surf, "Esc again to end this game",
+                  (cx, y + 30), self.theme, self.layout,
+                  pt=FONT_BODY + 2, centre=True)
+        draw_text(surf, "press any key to keep playing",
+                  (cx, y + 58), self.theme, self.layout,
+                  pt=FONT_SMALL + 2, centre=True,
+                  colour=self.theme.muted)
+        if self._exit_chip_until is not None:
+            frac = max(0.0, min(1.0, (self._exit_chip_until
+                                      - time.perf_counter())
+                                / self.EXIT_CHIP_S))
+            bar_w = int((w - 48) * frac)
+            pygame.draw.rect(
+                surf, self.theme.muted,
+                pygame.Rect(x + 24, y + h - 16, w - 48, 4),
+                border_radius=2)
+            if bar_w > 0:
+                pygame.draw.rect(
+                    surf, accent,
+                    pygame.Rect(x + 24, y + h - 16, bar_w, 4),
+                    border_radius=2)
+
     def _handle_escape(self) -> None:
         """Escape walks one level out of the session flow.
 
@@ -1246,20 +1351,25 @@ class GameEngine:
           session and returns to the login screen for the next player
         - Esc on setup / rhythm-setup / results -> back to game select
           (the logged-in identity persists)
-        - Esc during a game (any screen a block runs on) -> the End
-          game dialog. Only a deliberate confirm ends the game (all
-          completed trials already on disk), and it lands on game
-          select, never the login screen.
+        - Esc during a game (any screen a block runs on) -> the light
+          double-press guard. The first Esc pauses the block and shows
+          the chip; a second Esc inside its window ends the game (all
+          completed trials already on disk) and lands on game select,
+          never the login screen. Any other input, or the timeout,
+          keeps playing.
         """
-        # Esc with an exit dialog up backs OUT of it, never through
-        # it. Confirming takes a click on the danger button or an
-        # explicit keyboard move onto it plus Enter.
+        # Esc with the session dialog up backs OUT of it, never
+        # through it. Confirming takes a click on the danger button or
+        # an explicit keyboard move onto it plus Enter.
         if self._exit_confirm is not None:
-            self._dismiss_exit_confirm()
+            self._dismiss_session_end_confirm()
             return
-        # A live block never ends on a bare Esc.
+        # A live block never ends on a single bare Esc.
         if self._on_block_screen() and self.session_paths is not None:
-            self._raise_exit_confirm()
+            if self._exit_chip_until is not None:
+                self._end_game_now()
+            else:
+                self._raise_exit_chip()
             return
         title = self._screens.get("title")
         mode_select = self._screens.get("mode_select")
@@ -1508,6 +1618,10 @@ class GameEngine:
         self._session_active = True
         self._session_started_perf = time.perf_counter()
         self._session_games = 0
+        # A new session starts with no hands calibrated: the first
+        # game that needs a hand runs the quick flow, whatever the
+        # previous session did.
+        self._session_cal_hands = set()
         self.eeg_session_start()
         log.info("Session started: participant=%s age=%s",
                  name, age or "(not given)")
@@ -1540,9 +1654,8 @@ class GameEngine:
         detail = (f"{played}, {self.session_minutes():.0f} min this "
                   "session.\nAll game data is saved; the next player "
                   "logs in fresh.")
-        # Nothing is paused under this dialog (no block is live on
-        # game select), so a dismiss must not walk the resume path.
-        self._exit_confirm_was_paused = True
+        # Nothing is paused under this dialog: no block is live on
+        # game select, so dismissing it never walks the resume path.
         self._exit_confirm = ConfirmDialog(
             question="End this session?",
             detail=detail,
@@ -1581,6 +1694,9 @@ class GameEngine:
         self._session_active = False
         self._session_started_perf = None
         self._session_games = 0
+        # Calibration is a session event, so its memory dies with the
+        # session: the next player's first game runs the flow again.
+        self._session_cal_hands = set()
         self.show_title()
 
     def _pattern_is_configured(self) -> bool:
@@ -1735,15 +1851,22 @@ class GameEngine:
         return None
 
     def quick_cal_hands_needed(self) -> list[str]:
-        """Which of the session's hands still need a calibration before
-        play. Empty means the session can start straight away.
+        """Which of the selected hands still need the quick flow before
+        this game. Empty means the game can start straight away.
+
+        Calibration is a session event: a hand runs the flow the first
+        time a game needs it in the session (no usable profile, or the
+        session has not put the flow in front of that hand yet), and
+        every later game skips it, even across hand-mode changes. The
+        memory lives in _session_cal_hands on the engine, cleared at
+        session end, never on disk: the next session calibrates again.
 
         A keyboard session never needs one: there is no force signal to
         calibrate and the thresholds do not matter for keys, so showing
-        the flow (or any hardware nag) would only be noise. A hand
-        counts as covered when a usable profile is already applied, or
-        when a usable saved one is sitting on disk, in which case it is
-        applied here so the check leaves the session ready to run.
+        the flow (or any hardware nag) would only be noise. A usable
+        profile saved on disk is applied here so the check leaves the
+        game ready to run, but it does not skip the session's first
+        visual pass on its own.
         """
         if not getattr(self.source, "provides_samples", True):
             return []
@@ -1755,28 +1878,42 @@ class GameEngine:
             hands = [self.hand_mode]
         else:
             hands = ["right"]
+        session_done = getattr(self, "_session_cal_hands", set())
         needed = []
         for hand in hands:
             prof = (self.calibration_profiles or {}).get(hand)
-            if prof is not None and prof.usable()[0]:
-                continue
-            saved = self._usable_saved_profile(hand)
-            if saved is not None:
-                self.apply_calibration(saved)
+            usable = prof is not None and prof.usable()[0]
+            if not usable:
+                saved = self._usable_saved_profile(hand)
+                if saved is not None:
+                    self.apply_calibration(saved)
+                    usable = True
+            # Skip only when the session has already covered this hand
+            # AND a usable profile is behind it. A hand skipped without
+            # any profile keeps triggering: there is nothing to run on.
+            if usable and hand in session_done:
                 continue
             needed.append(hand)
         return needed
 
     def maybe_start_quick_calibration(self, continue_cb) -> bool:
-        """Gate a block start on the quick calibration when any selected
-        hand has no usable profile. Returns True when the flow took the
-        screen (continue_cb runs when it finishes or is skipped), False
-        when the session can start immediately. The returning-player
-        skip is this False: it costs nothing and shows nothing."""
+        """Gate a block start on the quick calibration when any
+        selected hand still needs its session pass. Returns True when
+        the flow took the screen (continue_cb runs when it finishes or
+        is skipped), False when the game can start immediately. The
+        later-game skip is this False: it costs nothing and shows
+        nothing. The gated hands are marked as this session's the
+        moment the flow hands over (finish or skip both), and never on
+        an Esc abandon, which discards the run."""
         hands = self.quick_cal_hands_needed()
         if not hands:
             return False
-        self.show_quick_calibration(hands, continue_cb)
+
+        def mark_and_go():
+            self._session_cal_hands.update(hands)
+            continue_cb()
+
+        self.show_quick_calibration(hands, mark_and_go)
         return True
 
     def show_quick_calibration(self, hands=None, continue_cb=None) -> None:
@@ -2378,11 +2515,12 @@ class GameEngine:
         child experiences. This mode renders on its own screen: words
         and syllable blocks are not a lane strip.
 
-        Syllable positions 1 to 4 map to fingers 1 to 4. One hand
-        selected plays that hand; with Both selected either hand's
-        finger satisfies its position and the model's buzzes divide
-        equally between the hands, so a child with both hands on the
-        device uses both and is never told a hand was wrong.
+        A word's unit positions sit on a sliding window of adjacent
+        fingers, tapped left to right; the window's start moves word
+        to word off a shuffle bag, so every finger of the selected
+        hand(s) takes part within a block. With Both selected the
+        window ranges over all eight fingers and may cross the
+        midline, so neither hand can idle through a round.
         """
         from .modes.syllables import SyllablesMode
         hands = self.lanes_by_hand()
