@@ -1,0 +1,409 @@
+{
+  "participant": "NA",
+  "age": "",
+  "hand": "right",
+  "affected_side": "",
+  "dominant_hand": "",
+  "impairment_score": "",
+  "hand_length_mm": "",
+  "hand_breadth_mm": "",
+  "assignment_source": "",
+  "started_at": "2026-08-12T01:05:16",
+  "finished_at": "",
+  "source_name": "KeyboardOnlySource",
+  "config_snapshot": {
+    "session": {
+      "data_dir": "sessions",
+      "participant": null,
+      "age": null,
+      "affected_side": null,
+      "dominant_hand": null,
+      "impairment_score": null,
+      "hand_length_mm": null,
+      "hand_breadth_mm": null
+    },
+    "report": {
+      "enabled": true
+    },
+    "serial": {
+      "port": "auto",
+      "baud": 115200,
+      "read_timeout_s": 0.02,
+      "open_retries": 3,
+      "open_retry_delay_s": 1.0,
+      "left_port": null,
+      "right_port": "/dev/cu.usbserial-130",
+      "vendor_ids": [
+        "0x2341",
+        "0x239A",
+        "0x10C4",
+        "0x1A86",
+        "0x0403"
+      ]
+    },
+    "eeg": {
+      "enabled": false,
+      "port": null,
+      "baud": 115200,
+      "require_port": false,
+      "pulse_ms": 10,
+      "gap_ms": 10,
+      "feedback_markers": false
+    },
+    "fsr": {
+      "num_sensors_per_hand": 4,
+      "sample_rate_hz": 200,
+      "baseline_alpha": 0.0005,
+      "value_alpha": 0.35,
+      "on_delta": [
+        20,
+        13,
+        15,
+        46
+      ],
+      "off_delta": [
+        10,
+        3,
+        5,
+        23
+      ],
+      "abs_on_min": [
+        150,
+        150,
+        150,
+        150
+      ],
+      "abs_off_max": [
+        1000,
+        1000,
+        1000,
+        1000
+      ],
+      "debounce_ms": 100
+    },
+    "quick_cal": {
+      "enabled": true,
+      "rest_capture_s": 2.0,
+      "hold_s": 1.0,
+      "zone_min_counts": 24,
+      "zone_max_counts": 110
+    },
+    "cue": {
+      "buzz_before": true,
+      "sound_before": true,
+      "sound_after": false,
+      "buzz_after": false,
+      "show_target": true
+    },
+    "motor": {
+      "cue_ms": 200,
+      "pulse_interval_ms": 120,
+      "arpeggio_gap_ms": 40,
+      "cue_ms_per_finger": [],
+      "channel_map": [
+        1,
+        2,
+        3,
+        4
+      ]
+    },
+    "bilateral": {
+      "hand": "right",
+      "per_hand_calibration": true
+    },
+    "game": {
+      "balance_targets": true,
+      "mode": "adaptive",
+      "trigger_interval_s": 1.2,
+      "timeout_s": 1.0,
+      "early_window_s": 0.1,
+      "total_trials": 40,
+      "start_countdown_s": 3.0,
+      "test_mode_enabled": false,
+      "test_mode_trials": 6,
+      "keyboard_map": {
+        "j": 0,
+        "k": 1,
+        "l": 2,
+        "semicolon": 3
+      },
+      "keyboard_map_left": {
+        "f": 0,
+        "d": 1,
+        "s": 2,
+        "a": 3
+      },
+      "keyboard_map_bilateral": {
+        "j": 0,
+        "k": 1,
+        "l": 2,
+        "semicolon": 3,
+        "f": 4,
+        "d": 5,
+        "s": 6,
+        "a": 7
+      }
+    },
+    "adaptive": {
+      "min_finger_share": 0.15,
+      "start_bpm": 30,
+      "bpm_min": 10,
+      "bpm_max": 140,
+      "bpm_step": 10,
+      "target_low": 0.65,
+      "target_high": 0.8,
+      "weakness_bias": 2.5,
+      "min_trials": 2,
+      "block_size": 4,
+      "timeout_factor": 0.9
+    },
+    "scoring": {
+      "perfect_ms": 100,
+      "perfect_points": 10,
+      "great_ms": 200,
+      "great_points": 6,
+      "good_ms": 500,
+      "good_points": 3,
+      "late_points": 1,
+      "miss_points": 0,
+      "early_penalty": 0,
+      "wrong_press_penalty": 3,
+      "idle_press_penalty": 1
+    },
+    "metrics": {
+      "miss_force_window_ms": 1000
+    },
+    "mirror": {
+      "start_bpm": 24,
+      "max_async_ms": 350
+    },
+    "reaction": {
+      "seed": 1,
+      "catch_rate": 0.0
+    },
+    "pattern": {
+      "soc_cycles_per_block": 5,
+      "warmup_trials": 20,
+      "random_block_trials": 64,
+      "probe_pool_size": 4,
+      "rsi_ms": 500,
+      "timeout_ms": 2000,
+      "short_session": false,
+      "rest_min_s": 10,
+      "long_rest_s": 30,
+      "fatigue_timeout_run": 5,
+      "fatigue_rest_s": 45,
+      "session_cap_min": 30,
+      "seed": null
+    },
+    "chords": {
+      "timeout_s": 3.0,
+      "sync_windows_ms": [
+        250,
+        200,
+        150,
+        100
+      ],
+      "hold_ms": 200,
+      "baseline_quiet_ms": 500,
+      "settle_prompt_s": 5.0,
+      "iti_min_s": 1.5,
+      "iti_max_s": 2.5,
+      "trials_per_subblock": 20,
+      "subblocks": 5,
+      "rest_between_s": 30,
+      "probe_trials_per_finger": 2,
+      "warmup_iti_s": 0.8,
+      "warmup_cap_s": 60,
+      "fatigue_rest_s": 120,
+      "session_cap_min": 30,
+      "seed": null
+    },
+    "syllables": {
+      "level": 1,
+      "band": "A",
+      "beat_ioi_ms": 500,
+      "words_per_block": 50,
+      "round_size": 10,
+      "break_s": 30,
+      "warmup_taps": 10,
+      "attend_s": 1.5,
+      "free_window_s": 6.0,
+      "count_in_beats": 4,
+      "paced_grace_ms": 1000,
+      "on_beat_window_ms": 150,
+      "stress_ratio": 2.0,
+      "unstressed_max_ratio": 1.5,
+      "tap_debounce_ms": 150,
+      "inter_trial_gap_ms": 800,
+      "session_cap_min": 20,
+      "replay_on_error": true,
+      "speak_words": true,
+      "say_voice": null,
+      "seed": null
+    },
+    "force_pilot": {
+      "runs_per_finger": 2,
+      "min_finger_share": 0.15,
+      "span_pct": 40,
+      "base_pct": 8,
+      "plateau_pct": 28,
+      "ramp_rates_pct_s": [
+        5,
+        10
+      ],
+      "hold_in_s": 3.0,
+      "hold_top_s": 3.0,
+      "sine_amp_pct": 9,
+      "sine_s": 6.0,
+      "sos_amps_pct": [
+        6,
+        3.5,
+        2.5
+      ],
+      "sos_s": 8.0,
+      "pre_assess_s": 1.0,
+      "level": 1,
+      "corridor_halfwidth_pct": [
+        8,
+        6,
+        4
+      ],
+      "bandwidth_hz": [
+        0.3,
+        0.45,
+        0.6
+      ],
+      "promote_frac": 0.8,
+      "demote_frac": 0.4,
+      "visual_gain": 1.0,
+      "ring_interval_s": 1.5,
+      "ring_points": 2,
+      "exit_buzz_ms": 80,
+      "exit_buzz_cooldown_s": 1.0,
+      "probe_presses": 3,
+      "probe_floor_counts": 30,
+      "probe_max_age_s": 21600,
+      "announce_s": 2.5,
+      "rest_s": 10.0,
+      "seed": null
+    },
+    "lighthouse": {
+      "holds_per_finger": 2,
+      "echoes_per_finger": 1,
+      "target_lo_pct": 5,
+      "target_hi_pct": 25,
+      "hold_s": 16.0,
+      "tol_pct": 3.0,
+      "level": 1,
+      "dark_windows": [
+        0,
+        1,
+        2
+      ],
+      "dark_fraction": [
+        0.0,
+        0.25,
+        0.45
+      ],
+      "lit_lead_s": 3.0,
+      "lit_gap_s": 2.0,
+      "lit_tail_s": 2.0,
+      "promote_lit_mae_pct": 1.5,
+      "promote_delta_pct": 1.5,
+      "demote_delta_pct": 6.0,
+      "ignite_hold_s": 0.5,
+      "ignite_timeout_s": 10.0,
+      "echo_show_s": 3.0,
+      "echo_delays_s": [
+        2,
+        5,
+        10,
+        15
+      ],
+      "echo_reproduce_s": 4.0,
+      "echo_settle_s": 2.0,
+      "dark_bonus_points": 2,
+      "probe_presses": 3,
+      "probe_floor_counts": 30,
+      "probe_max_age_s": 21600,
+      "announce_s": 2.5,
+      "rest_s": 6.0,
+      "seed": null
+    },
+    "buzz_hunt": {
+      "loc_trials_per_hand": 32,
+      "catch_rate": 0.1,
+      "start_ms": 300,
+      "step_ms": 40,
+      "floor_ms": 40,
+      "ceil_ms": 500,
+      "threshold_reversals": 6,
+      "distractor_trials_per_hand": 8,
+      "distractor_lead_ms": 150,
+      "span_trials": 10,
+      "span_start": 2,
+      "span_pulse_ms": 150,
+      "span_ioi_ms": 400,
+      "hebb_every": 3,
+      "gap_trials_per_hand": 20,
+      "gap_start_ms": 200,
+      "gap_step_ms": 25,
+      "gap_floor_ms": 35,
+      "gap_short_ms": 80,
+      "wait_lo_s": 0.8,
+      "wait_hi_s": 2.2,
+      "response_window_s": 3.0,
+      "replay_item_s": 1.5,
+      "announce_s": 2.0,
+      "rest_s": 3.0,
+      "stage_intro_s": 5.0,
+      "seed": null
+    },
+    "rhythm": {
+      "difficulty": "medium",
+      "pre_song_lead_s": 2.0,
+      "perfect_ms": 50,
+      "great_ms": 100,
+      "good_ms": 175,
+      "miss_ms": 300,
+      "audio_offset_ms": 40,
+      "metronome_offset_ms": 12
+    },
+    "audio": {
+      "enabled": false,
+      "master_volume": 0.8,
+      "cue_volume": 1.0,
+      "feedback_volume": 1.0,
+      "music_dir": "assets/music",
+      "stim_tone_enabled": true,
+      "loud_trial": {
+        "fraction": 0.1,
+        "boost": 1.35
+      }
+    },
+    "ui": {
+      "resolution": [
+        640,
+        480
+      ],
+      "fullscreen": true,
+      "theme": "clinical",
+      "font_scale": 1.0
+    },
+    "logging": {
+      "level": "INFO",
+      "file": "sessions/rehab.log"
+    },
+    "protocol": {
+      "blocks": []
+    }
+  },
+  "block_summary": {},
+  "calibration": {},
+  "eeg": {},
+  "software_version": "3.2",
+  "python_version": "3.14.3",
+  "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "notes": "block in progress (auto-save)"
+}

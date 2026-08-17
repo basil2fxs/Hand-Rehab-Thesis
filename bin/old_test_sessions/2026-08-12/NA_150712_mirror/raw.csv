@@ -1,0 +1,4 @@
+iso_ts,t_perf,sample_idx,fsr1,fsr2,fsr3,fsr4,fsr5,fsr6,fsr7,fsr8,hand,event,lane,detail
+2026-08-12T15:07:12.803,780163.769808,1,0,0,0,0,0,0,0,0,both,block_start,,mirror
+2026-08-12T15:07:12.803,780163.770427,2,0,0,0,0,0,0,0,0,both,stim,3,trial_id=1
+2026-08-12T15:07:12.803,780163.770427,3,0,0,0,0,0,0,0,0,both,stim,7,trial_id=1
