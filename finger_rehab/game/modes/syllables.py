@@ -161,10 +161,9 @@ takes its turn. Under the older fixed mapping position 1 always
 landed on the same leftmost fingers, so the ring and little of a
 single hand only ever played in 4-unit words, and in bilateral play
 one hand could idle through whole rounds of short words. The offset
-comes off a shuffle bag per window size (the BalancedScheduler
-convention the adult modes use), so per-finger participation stays
-near-equal within a block and the child cannot predict the next
-placement. The child is never asked to remember a placement rule:
+is placed over the least-cued lanes (a deficit draw with a random
+tie-break), so per-finger participation stays near-equal within a
+block and the child cannot predict the next placement. The child is never asked to remember a placement rule:
 the blocks are drawn over the window's own lanes, the model buzzes
 those lanes in order, and the resting fingers' slots stay visibly
 empty, so the word itself shows which fingers it wants.
@@ -240,7 +239,6 @@ from typing import TYPE_CHECKING
 import pygame
 
 from ...hardware.fsr_detector import PressEvent
-from ..scheduling import BalancedScheduler
 from ..scoring import ScoreConfig, TrialResult
 from ._keys import keymap_for_hand, resolve_key
 from .classic import PendingTrial
@@ -378,12 +376,15 @@ class SyllablesMode:
         self.rng = random.Random(int(seed))
         self._bag: list[Word] = []
         # The sliding window's state: the current word's start slot in
-        # the desk row, plus one offset shuffle bag per window size so
-        # every finger is visited near-equally within a block and the
-        # child cannot predict the next placement (see the docstring's
-        # THE SLIDING WINDOW).
+        # the desk row, plus a per-lane cue tally the offset draw
+        # balances against. A shuffle bag over OFFSETS is not enough:
+        # an edge lane sits in only one window position while a middle
+        # lane sits in up to n, so equal offsets still starve the
+        # little fingers (measured 4-to-1 in bilateral play). Placing
+        # each word over the least-cued lanes instead keeps every
+        # finger's count within a word-length of the rest.
         self._offset = 0
-        self._offset_bags: dict[int, BalancedScheduler] = {}
+        self._lane_cues: dict[int, int] = {}
         # The lanes the model phase actually buzzed for the current
         # word, in onset order, packed into the stimulus string when
         # both hands play so the analysis can split models by hand.
@@ -470,7 +471,7 @@ class SyllablesMode:
     # Position-to-lane mapping is WORD-relative: a word of n units
     # occupies n adjacent slots of the desk row (every playing finger
     # in physical left-to-right order), starting at a per-word offset
-    # dealt from a shuffle bag. The walk always travels left to right
+    # placed by the deficit draw. The walk always travels left to right
     # (the way the blocks light and the way print runs) AND every
     # finger takes its turn across a block.
 
@@ -489,21 +490,33 @@ class SyllablesMode:
         return row
 
     def _draw_offset(self, n: int) -> None:
-        """Deal the window's start slot for a fresh n-unit word. One
-        shuffle bag per window size: plain random offsets drift (over
-        a block one finger can be visited twice as often as another
-        by chance alone), while a bag deals every offset of a size
-        equally often, which is what keeps per-finger participation
-        near-equal within a block."""
-        n_off = max(1, len(self.desk_row()) - max(1, n) + 1)
+        """Place a fresh n-unit word over the least-cued lanes.
+
+        Every candidate offset is scored by the cue tally of the lanes
+        its window would cover; the draw picks uniformly among the
+        lowest-scoring offsets. That balances FINGERS rather than
+        offsets, which matters because the two are not the same thing:
+        an edge lane appears in one window position, a middle lane in
+        up to n, so a bag that deals offsets equally still cues the
+        index fingers four times as often as the littles in bilateral
+        play. The random tie-break keeps placement unpredictable, and
+        mixed word lengths share one tally so short and long words
+        cooperate on the same goal."""
+        desk = self.desk_row()
+        n = max(1, n)
+        n_off = max(1, len(desk) - n + 1)
         if n_off <= 1:
             self._offset = 0
-            return
-        bag = self._offset_bags.get(n_off)
-        if bag is None:
-            bag = BalancedScheduler(list(range(n_off)), self.rng)
-            self._offset_bags[n_off] = bag
-        self._offset = bag.next()
+        else:
+            for lane in desk:
+                self._lane_cues.setdefault(lane, 0)
+            scores = [sum(self._lane_cues[l] for l in desk[k:k + n])
+                      for k in range(n_off)]
+            best = min(scores)
+            self._offset = self.rng.choice(
+                [k for k, s in enumerate(scores) if s == best])
+        for lane in desk[self._offset:self._offset + n]:
+            self._lane_cues[lane] = self._lane_cues.get(lane, 0) + 1
 
     def window_offset(self) -> int:
         """The current window's start slot, clamped so the window

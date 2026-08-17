@@ -541,20 +541,44 @@ class WindowSchedulingTests(unittest.TestCase):
             counts[c.args[0]] = counts.get(c.args[0], 0) + 1
         return counts
 
-    def test_offsets_deal_from_a_balanced_bag(self) -> None:
-        # Three full bags of the 2-unit window's three offsets: each
-        # offset must appear exactly three times, in a shuffled order.
-        # No tick first: _begin_word would draw a word of its own and
-        # consume a bag entry before the count starts.
+    def test_offsets_balance_lanes_not_positions(self) -> None:
+        # The deficit draw's whole point: equal OFFSETS still starve
+        # edge lanes (an edge sits in one window position, a middle in
+        # up to n), so the draw balances the per-lane tally instead.
+        # After many 2-unit draws every lane's tally must sit within
+        # one word of every other, and every offset must still get
+        # used (no lane is reachable only through a neglected offset).
         engine, mode = _build_mode(level=2)
         from finger_rehab.game.modes.syllables_words import WORDS
         two = next(w for w in WORDS if w.n_syll == 2)
         offs = []
-        for _ in range(9):
+        for _ in range(30):
             mode.word = two
             mode._draw_offset(2)
             offs.append(mode.window_offset())
-        self.assertEqual(sorted(offs), [0, 0, 0, 1, 1, 1, 2, 2, 2])
+        tally = mode._lane_cues
+        self.assertEqual(set(tally), {0, 1, 2, 3})
+        self.assertLessEqual(max(tally.values()) - min(tally.values()),
+                             2, tally)
+        self.assertEqual(set(offs), {0, 1, 2},
+                         "an offset was never chosen")
+
+    def test_placement_is_not_predictable_across_seeds(self) -> None:
+        # The random tie-break is what stops a child learning the
+        # placement rhythm: different seeds must produce different
+        # offset orders even though every seed balances the lanes.
+        from finger_rehab.game.modes.syllables_words import WORDS
+        two = next(w for w in WORDS if w.n_syll == 2)
+        orders = set()
+        for seed in range(6):
+            engine, mode = _build_mode(level=2, seed=seed)
+            offs = []
+            for _ in range(8):
+                mode.word = two
+                mode._draw_offset(2)
+                offs.append(mode.window_offset())
+            orders.add(tuple(offs))
+        self.assertGreater(len(orders), 2, orders)
 
     def test_every_finger_is_cued_in_a_default_block_one_hand(
             self) -> None:
@@ -564,7 +588,10 @@ class WindowSchedulingTests(unittest.TestCase):
         for lane in (0, 1, 2, 3):
             self.assertIn(lane, counts, f"lane {lane} was never cued")
         spread = max(counts.values()) / min(counts.values())
-        self.assertLessEqual(spread, 3.0, counts)
+        # The deficit draw holds this near 1.1; the bound leaves head
+        # room for word-mix changes without letting the old 3-to-1
+        # gradient back in.
+        self.assertLessEqual(spread, 1.5, counts)
 
     def test_every_finger_is_cued_in_a_default_block_bilateral(
             self) -> None:
@@ -578,7 +605,9 @@ class WindowSchedulingTests(unittest.TestCase):
         for lane in range(8):
             self.assertIn(lane, counts, f"lane {lane} was never cued")
         spread = max(counts.values()) / min(counts.values())
-        self.assertLessEqual(spread, 4.0, counts)
+        # Measured 1.05 under the deficit draw (was 4.0 when offsets
+        # were dealt equally and the littles sat in fewer windows).
+        self.assertLessEqual(spread, 1.5, counts)
 
     def test_offset_round_trips_to_the_exact_lanes(self) -> None:
         """The notebook's contract: desk_row[off:off+n] rebuilt from
