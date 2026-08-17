@@ -15,6 +15,9 @@ in two-handed sessions. Two fixes needed:
    breaks. Use sample count / time span. Rate is 200 Hz.
 
 Note:
+- A session played on KEYBOARD (no device plugged in) has no sample
+  rows at all: there is no force to record, so raw.csv holds only
+  the event rows. Check for sample rows before analysing force.
 - Event rows (stim, press, ...) have zeros in the fsr cells. Read
   force from the nearest sample row.
 - Lanes on raw.csv events are 0-based (0-3 right, 4-7 left).
