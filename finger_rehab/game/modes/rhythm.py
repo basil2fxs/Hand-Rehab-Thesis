@@ -143,6 +143,20 @@ class RhythmMode:
         # the same idea for the countdown.
         if not self._countdown_done:
             return
+        # Same rule for the silent pre-song lead: the GET READY card
+        # is gone but the audio has not started and no note is inside
+        # its matching window yet, so a press here used to be
+        # penalised as a wrong-finger spurious press (-3, red flash,
+        # miss thunk) with nothing on screen saying pressing was still
+        # premature. Dropped, not penalised, until the first note's
+        # own matching window opens (a genuine Early on the first
+        # note still gets through).
+        if not self._audio_started:
+            first = min((s.note.t for s in self.scheduler.scheduled
+                         if s.hit_at is None), default=None)
+            if (first is None or self.song_time
+                    < first - self.windows.miss_ms / 1000.0):
+                return
         self._presses.append(ev)
 
     def on_pause(self) -> None:
@@ -283,17 +297,30 @@ class RhythmMode:
             if s.note.lane != ev.lane:
                 continue
             d = now - s.note.t
-            if d < -self.windows.good_ms / 1000.0 or d > miss_radius_s * 2:
+            # Early floor is -miss_ms so the documented Early tier
+            # (-miss_ms..-good_ms, 1 point) is actually reachable: with
+            # a -good_ms floor an anticipation at -250 ms was penalised
+            # as a spurious wrong-finger press and the note then missed,
+            # truncating the logged offset distribution asymmetrically
+            # (early cut at -good_ms, late kept to +miss_ms) and biasing
+            # the mean asynchrony positive. Anticipating the beat is the
+            # norm in sensorimotor synchronisation, not an error (Repp
+            # 2005). A press earlier than -miss_ms still never consumes
+            # a future note, and nearest-|d| matching still lets a
+            # closer resolved-side note win.
+            if d < -miss_radius_s or d > miss_radius_s * 2:
                 continue
             ad = abs(d)
             if ad < best_d:
                 best_d = ad
                 best = s
         if best is None:
-            self.engine.log_rhythm_unmatched(ev.lane, now)
+            self.engine.log_rhythm_unmatched(ev.lane, now,
+                                             t_press_perf=ev.t_perf)
             return
         offset_ms = (now - best.note.t) * 1000.0
         best.hit_at = now
         best.early_late_ms = offset_ms
         label, points = classify_offset(offset_ms, self.windows, self.score_cfg)
-        self.engine.log_rhythm_hit(best, offset_ms, label, points, now)
+        self.engine.log_rhythm_hit(best, offset_ms, label, points, now,
+                                   t_press_perf=ev.t_perf)

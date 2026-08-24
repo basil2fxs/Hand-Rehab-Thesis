@@ -495,6 +495,10 @@ class ChordsMode:
     STAIRCASE_WINDOW = 10
     PROMOTE_HITS = 8
     DEMOTE_HITS = 5
+    # Minimum trials between level moves. The window slides (see
+    # _staircase), so without a cooldown one hot 10-trial stretch
+    # would promote on every subsequent hit.
+    LEVEL_CHANGE_COOLDOWN = 4
     # Fatigue guard thresholds against the session's first sub-block
     # (Danion 2000/2001: fatigue inflates the very thing being trained).
     FATIGUE_HIT_DROP = 0.30
@@ -629,6 +633,7 @@ class ChordsMode:
         self._chord_sched: dict[str, BalancedScheduler] = {}
         self._sched_tier: int | None = None
         self._stair: deque[bool] = deque(maxlen=self.STAIRCASE_WINDOW)
+        self._since_level_change = 0
         # Cross-hand chords climb their OWN ladder: pooling hit rates
         # across scopes would let a cross-hand artefact drive the
         # within-hand level (or the reverse), and the two ladders
@@ -640,6 +645,7 @@ class ChordsMode:
         self._cross_sched_tier: int | None = None
         self._stair_cross: deque[bool] = deque(
             maxlen=self.STAIRCASE_WINDOW)
+        self._since_level_change_cross = 0
         # Scope-pure sub-blocks in bilateral play: of each five, the
         # third and fifth deal cross-hand chords, in a FIXED order so
         # fatigue trends stay comparable across sessions and the EEG
@@ -884,6 +890,34 @@ class ChordsMode:
             pass
         return self.FALLBACK_REF[finger]
 
+    def _reference_basis(self) -> dict[str, dict]:
+        """Per hand, where _reference_counts gets its normaliser:
+        basis 'profile' with the profile's creation stamp and
+        participant, or 'config_fallback' when no usable profile is
+        applied. Recorded in block_stats so the analysis can tell a
+        session normalised by this patient's own light press from one
+        running on inherited or default numbers."""
+        out: dict[str, dict] = {}
+        profs = getattr(self.engine, "calibration_profiles", None)
+        for hand in self.hand_names:
+            prof = profs.get(hand) if isinstance(profs, dict) else None
+            usable = False
+            try:
+                usable = prof is not None and any(
+                    float(g) > 0 for g in prof.gap())
+            except (AttributeError, TypeError, ValueError):
+                usable = False
+            if usable:
+                out[hand] = {
+                    "basis": "profile",
+                    "created_at": str(getattr(prof, "created_at", "")),
+                    "participant": str(getattr(prof, "participant",
+                                               "") or ""),
+                }
+            else:
+                out[hand] = {"basis": "config_fallback"}
+        return out
+
     def _window_peaks(self) -> dict[int, float] | None:
         """The engine's per-finger force peaks for the trial in flight,
         or None when no FSR samples reached the window (keyboard mode,
@@ -968,18 +1002,121 @@ class ChordsMode:
             self._handle_press(self._presses.popleft(), now)
         if self.phase == "done":
             return
+        # The session cap must fire even when no trial ever closes: a
+        # hand that never settles (or a dropped device that never
+        # reconnects) used to loop 'Relax your hand' forever while the
+        # cap expired silently. Trials in flight still finish first
+        # (stim/hold phases skip this), so the cap never cuts a trial
+        # in half.
+        if (self.phase in ("settle", "rest")
+                and self._t0 is not None
+                and (now - self._t0) > self.session_cap_s):
+            self._set_message("Session complete", 2.0)
+            self._end("time_cap")
+            return
         if self.phase == "rest":
             self._update_rest(now)
             return
         if self.phase == "hold":
+            # Drop check FIRST: the engine clears the pressed latches
+            # on disconnect, so without it a mid-hold drop read as
+            # every finger lifting at once and the patient was told a
+            # finger 'lifted too soon'.
+            if self.active is not None and self._source_dropped():
+                self._finish_device_drop(now)
+                return
             self._update_hold(now)
             return
         if self.phase == "stim":
+            if self.active is not None and self._source_dropped():
+                self._finish_device_drop(now)
+                return
             if (self.active is not None
                     and (now - self.active.stim_t_perf) > self.timeout):
                 self._finish(now, hold_achieved=None)
             return
         self._update_settle(now)
+
+    def _source_dropped(self) -> bool:
+        """Whether the hardware behind the active trial's hand(s) is
+        gone right now. A whole-source drop counts, and so does a
+        one-board drop of a hand the trial needs (engine._hands_down,
+        maintained by the per-frame connection check)."""
+        if not self._fsr:
+            return False
+        src = getattr(self.engine, "source", None)
+        if src is None:
+            return False
+        if not getattr(src, "is_connected", True):
+            return True
+        down = getattr(self.engine, "_hands_down", None)
+        if not isinstance(down, set):
+            down = set()
+        if not down or self.active is None:
+            return False
+        if self.active.scope == "cross":
+            return bool(down & set(self.hand_names))
+        return self.active.hand in down
+
+    def _finish_device_drop(self, now: float) -> None:
+        """Close the in-flight trial as hardware loss, not patient
+        failure. Before this, the disconnect handler's latch clear
+        made a mid-hold drop close as class no_hold with feedback
+        naming a finger that 'lifted too soon', and a sustained drop
+        produced a run of partial misses that demoted the staircase
+        and could end the session labelled as patient fatigue. A
+        device_drop record moves nothing: no staircase step, no
+        sub-block hit rate entry, no fatigue comparison; the trial is
+        re-dealt once the settle gate sees a live, quiet hand."""
+        trial = self.active
+        if trial is None:
+            return
+        self.active = None
+        self._hold_t0 = None
+        self._hold_until = None
+        outcome = TrialResult(label="Miss", points=0, rt_ms=None)
+        log_obj = PendingTrial(
+            trial_id=trial.trial_id,
+            lane=trial.targets[0],
+            stim_t_perf=trial.stim_t_perf,
+            keys_pressed=list(trial.keys_pressed),
+            incorrect_presses=list(trial.incorrect_presses),
+        )
+        stim = "+".join(str(l + 1) for l in trial.targets)
+        if trial.scope == "cross":
+            stim = "x:" + stim
+        self.engine.log_trial(log_obj, outcome, now,
+                              stimulus=stim + ";device_drop",
+                              correct_lanes=list(trial.targets),
+                              hand=(None if trial.scope == "cross"
+                                    else trial.hand),
+                              error_type="device_drop")
+        cross = trial.scope == "cross"
+        self._records.append({
+            "trial": trial.trial_id,
+            "kind": trial.kind,
+            "scope": trial.scope,
+            "hand": "both" if cross else trial.hand,
+            "chord": (cross_label(trial.fingers_left,
+                                  trial.fingers_right) if cross
+                      else chord_label(trial.fingers)),
+            "tier": None if trial.tier is None else trial.tier + 1,
+            "d": None,
+            "w_ms": trial.w_ms,
+            "level": self.level_cross if cross else self.level,
+            "class": "device_drop",
+            "span_ms": None, "rt_ms": None, "complete_ms": None,
+            "er": None, "press_norm": None, "leaks": None,
+            "hold": None, "over_force": False, "light": False,
+            "wrong": False, "settle_ms": None, "subblock": None,
+        })
+        self._set_message("Sensor connection lost", 1.5, kind="warn")
+        # Re-deal rather than advance: the trial produced no evidence
+        # about the patient, and the settle gate will hold until the
+        # hardware is back and the hand is genuinely resting. A probe
+        # budget or sub-block count consumed here would silently
+        # shrink the session's real material.
+        self._arm_next(now)
 
     # ---- settle gate -------------------------------------------------------
     def _update_settle(self, now: float) -> None:
@@ -1277,6 +1414,18 @@ class ChordsMode:
             press_norms = [norms[l] for l in trial.targets]
             mean_press = (sum(press_norms) / len(press_norms)
                           if press_norms else 0.0)
+            # ER only exists on a COMPLETE response: the denominator
+            # averages over every target, so a freeze-partial (one of
+            # two targets landed) halves it and mechanically doubles
+            # er. A hand with a true 0.05 leak recorded er 0.10 on a
+            # 1-of-2 partial, scaling with chord size, and those
+            # inflated values flowed into median_er, the per-chord
+            # table and the across-session ER curve, where early
+            # freeze-heavy sessions read as worse enslaving and later
+            # completer sessions as improvement that was really
+            # response completeness. Partial trials keep their class
+            # and leak evidence; they just carry no er.
+            response_complete = full
             for h in scored_hands:
                 h_lanes = list(self.hands[h])
                 h_press = [norms[l] for l in trial.targets
@@ -1285,7 +1434,7 @@ class ChordsMode:
                            if l not in trial.targets}
                 hp = (sum(h_press) / len(h_press)) if h_press else 0.0
                 press_by_hand[h] = hp
-                if hp > 0 and h_leaks:
+                if response_complete and hp > 0 and h_leaks:
                     er_by_hand[h] = (sum(h_leaks.values())
                                      / len(h_leaks) / hp)
                     worst = max(h_leaks.values()) / hp
@@ -1476,6 +1625,11 @@ class ChordsMode:
             "hold": hold_achieved,
             "over_force": over_force,
             "light": light_press,
+            # A wrong-finger press is a RESPONSE error, not enslaving:
+            # the flag lets the probe matrices (and any offline
+            # consumer) keep cue-misread probes out of the transfer
+            # measure without discarding the genuine-leak leak_fails.
+            "wrong": bool(trial.incorrect_presses),
             "settle_ms": (None if trial.settle_ms is None
                           else round(trial.settle_ms, 1)),
             "subblock": (self._sub_idx + 1
@@ -1578,25 +1732,43 @@ class ChordsMode:
 
     # ---- progression -------------------------------------------------------
     def _staircase(self, hit: bool) -> None:
+        """8-of-10 sliding window with a short cooldown after any
+        level move, instead of the old clear-on-promote. Clearing
+        meant at most one promotion per 10 trials, and with levels
+        reset to 0 every block a flawless player topped out at level
+        10 of 15 unilaterally (6 within / 4 cross bilaterally): the
+        top half of both ladders, including the W=100 ms floor the
+        docstring defends, was unreachable content, and a patient at
+        ceiling repeated the same easy tiers every session. The
+        criterion is unchanged (8 of the last 10 clean hits up, 5 or
+        fewer down); only the evidence window now slides, and the
+        cooldown stops one hot streak cascading through several
+        levels in as many trials."""
         self._stair.append(hit)
+        self._since_level_change += 1
         if len(self._stair) < self.STAIRCASE_WINDOW:
+            return
+        if self._since_level_change < self.LEVEL_CHANGE_COOLDOWN:
             return
         hits = sum(1 for h in self._stair if h)
         if hits >= self.PROMOTE_HITS and self.level < self.max_level:
             self.level += 1
             self.highest_level = max(self.highest_level, self.level)
-            self._stair.clear()
+            self._since_level_change = 0
             self._set_message("Level up", 1.2, kind="best")
         elif hits <= self.DEMOTE_HITS and self.level > 0:
             self.level -= 1
-            self._stair.clear()
+            self._since_level_change = 0
 
     def _staircase_cross(self, hit: bool) -> None:
         """The cross-hand ladder's own staircase, same rule, separate
         state: within and cross hit rates must never pool (see the
         constructor comment)."""
         self._stair_cross.append(hit)
+        self._since_level_change_cross += 1
         if len(self._stair_cross) < self.STAIRCASE_WINDOW:
+            return
+        if self._since_level_change_cross < self.LEVEL_CHANGE_COOLDOWN:
             return
         hits = sum(1 for h in self._stair_cross if h)
         if (hits >= self.PROMOTE_HITS
@@ -1604,11 +1776,11 @@ class ChordsMode:
             self.level_cross += 1
             self.highest_level_cross = max(self.highest_level_cross,
                                            self.level_cross)
-            self._stair_cross.clear()
+            self._since_level_change_cross = 0
             self._set_message("Level up", 1.2, kind="best")
         elif hits <= self.DEMOTE_HITS and self.level_cross > 0:
             self.level_cross -= 1
-            self._stair_cross.clear()
+            self._since_level_change_cross = 0
 
     # ---- session flow ------------------------------------------------------
     def _advance(self, now: float, kind: str) -> None:
@@ -1697,9 +1869,11 @@ class ChordsMode:
             if stats.get("scope") == "cross":
                 self.level_cross = max(0, self.level_cross - 1)
                 self._stair_cross.clear()
+                self._since_level_change_cross = 0
             else:
                 self.level = max(0, self.level - 1)
                 self._stair.clear()
+                self._since_level_change = 0
             self._enter_rest(now, self.fatigue_rest, "fatigue",
                              "Take a longer breather")
         else:
@@ -1806,6 +1980,16 @@ class ChordsMode:
             if (r["kind"] != "probe" or not r.get("leaks")
                     or not r.get("press_norm")):
                 continue
+            # A probe where the WRONG finger pressed is a response
+            # error (cue misread), not enslaving: its full press on a
+            # non-instructed finger wrote a ~100% cell into the
+            # matrix, so a start matrix inflated by early cue errors
+            # made start-to-end improvement overstate individuation
+            # gains. The notebook's crosstalk section already excludes
+            # wrong-press trials for exactly this reason; the mode's
+            # own matrix follows the same rule.
+            if r.get("wrong"):
+                continue
             i = FINGER_LETTERS.index(r["chord"])
             press = float(r["press_norm"])
             for j_str, leak in r["leaks"].items():
@@ -1825,14 +2009,19 @@ class ChordsMode:
         legacy single-hand keys stay for unilateral blocks so older
         analyses keep reading), the fatigue trajectory and the
         per-trial detail the fixed CSV schema cannot carry."""
-        all_chords = [r for r in self._records if r["kind"] == "chord"]
+        # device_drop records are hardware evidence, not performance:
+        # they stay out of every performance aggregate below and are
+        # surfaced separately (outcome_classes and n_device_drops).
+        scored = [r for r in self._records
+                  if r.get("class") != "device_drop"]
+        all_chords = [r for r in scored if r["kind"] == "chord"]
         # Scope is a first-class label: every aggregate below consumes
         # exactly one scope. `chords` (within-hand) keeps its old name
         # so the summary keys older analyses read stay unchanged.
         chords = [r for r in all_chords
                   if r.get("scope", "within") == "within"]
         cross = [r for r in all_chords if r.get("scope") == "cross"]
-        probes = [r for r in self._records if r["kind"] == "probe"]
+        probes = [r for r in scored if r["kind"] == "probe"]
         # Probes before the first chord are the start set; the rest are
         # the end set. Demo blocks have no end set.
         first_chord = all_chords[0]["trial"] if all_chords else None
@@ -1881,9 +2070,13 @@ class ChordsMode:
                                                               kv[1]["d"],
                                                               kv[0][2]))]
 
-        classes: dict[str, int] = {}
-        for r in self._records:
-            classes[r["class"]] = classes.get(r["class"], 0) + 1
+        def _class_counts(rows: list[dict]) -> dict[str, int]:
+            counts: dict[str, int] = {}
+            for r in rows:
+                counts[r["class"]] = counts.get(r["class"], 0) + 1
+            return counts
+
+        classes = _class_counts(self._records)
 
         matrices = {
             h: {
@@ -2000,6 +2193,24 @@ class ChordsMode:
             "n_chords": len(chords),
             "n_probes": len(probes),
             "outcome_classes": classes,
+            # Scope-pure class counts for the results card: the
+            # near-guaranteed single-finger probes and the cross-scope
+            # chords (their own ladder) diluted a CLEAN HIT RATE
+            # computed over every record, so the patient's headline
+            # number moved with the session's probe:chord mix rather
+            # than with skill.
+            "chord_outcome_classes": _class_counts(chords),
+            "cross_outcome_classes": _class_counts(cross),
+            "n_device_drops": sum(1 for r in self._records
+                                  if r.get("class") == "device_drop"),
+            # Which normaliser each hand's forces ran under: a fresh
+            # or saved calibration profile (its creation stamp and
+            # participant), or the config fallback. Every force
+            # quantity in this mode (ER, leak bands, probe matrices)
+            # divides by it, so the C5 across-session ER curve needs
+            # to be able to exclude or flag a mis-referenced session
+            # instead of guessing from the metadata calibration stamp.
+            "reference_basis": self._reference_basis(),
             "median_er": _median([r["er"] for r in chords
                                   if r["er"] is not None]),
             "median_span_ms": _median([r["span_ms"] for r in chords

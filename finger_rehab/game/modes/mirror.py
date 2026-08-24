@@ -461,9 +461,27 @@ class MirrorMode:
         # both copies of the finger, not just the right-hand lane the
         # log row is keyed on. log_trial only fires it on a correct
         # press, so a one-handed trial never reaches this.
+        #
+        # correct_lanes carries BOTH required lanes. Without it the row
+        # defaulted to correct_keys=[right lane] and every downstream
+        # single-target filter (the notebook's individuation index,
+        # pooled crosstalk cells) read the left hand's INSTRUCTED press
+        # as spillover, driving the enslavement index toward 0.5 on
+        # every clean hardware mirror hit.
+        #
+        # error_type "async": a pair downgraded by the synchrony gate
+        # is not a timeout (both presses landed inside the window at
+        # known times) and not a wrong finger; without the override the
+        # row claimed error_type=timeout, breaking the row schema's
+        # promise that only a no-press Miss is a timeout.
         self.engine.log_trial(log_obj, outcome, now,
                                cue_lanes=[finger, finger + 4],
-                               mirror_hand_rts=(right_rt_ms, left_rt_ms))
+                               correct_lanes=[finger, finger + 4],
+                               mirror_hand_rts=(right_rt_ms, left_rt_ms),
+                               error_type=("async" if asynchronous
+                                           and not
+                                           self.active.incorrect_presses
+                                           else None))
         self.active = None
         self.completed += 1
         # Stamp the finish time so the inter-trial rest in update() is

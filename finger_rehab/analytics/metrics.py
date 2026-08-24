@@ -137,6 +137,77 @@ def beat_offset_stats(press_times_s: Sequence[float],
     }
 
 
+def signed_offset_stats(offsets_ms: Sequence[float]) -> dict:
+    """Mean, sample stdev and absolute mean of the game's own matched
+    per-note signed offsets, same keys as beat_offset_stats.
+
+    This exists because re-matching reconstructed press times to the
+    nearest beat regardless of lane (beat_offset_stats) can attribute a
+    Late press to a neighbouring lane's closer beat, making the summary
+    disagree with the true per-note offsets already logged in
+    trials.csv. When the caller has the matched offsets, use them.
+    """
+    offs = [float(o) for o in offsets_ms]
+    if not offs:
+        return {
+            "beat_offset_mean_ms": None,
+            "beat_offset_std_ms": None,
+            "beat_offset_abs_mean_ms": None,
+        }
+    n = len(offs)
+    mean = sum(offs) / n
+    abs_mean = sum(abs(o) for o in offs) / n
+    if n < 2:
+        std = None
+    else:
+        var = sum((o - mean) ** 2 for o in offs) / (n - 1)
+        std = math.sqrt(var)
+    return {
+        "beat_offset_mean_ms": mean,
+        "beat_offset_std_ms": std,
+        "beat_offset_abs_mean_ms": abs_mean,
+    }
+
+
+def relative_tap_variability(press_times_s: Sequence[float],
+                              note_times_s: Sequence[float]
+                              ) -> float | None:
+    """Patient-only interval variability: sd of (press ITI minus the
+    matched notes' IOI) over consecutive hits, divided by the mean
+    matched IOI.
+
+    Plain ITI CV over hits mixes three things: the patient's own
+    consistency, the chart's deliberate spacing (strong-beat charts are
+    non-isochronous by design) and missed notes (one miss doubles one
+    interval). Differencing each press interval against ITS OWN pair of
+    matched note times cancels the last two, because a skipped note
+    stretches ITI and IOI by the same amount. Inputs are the parallel
+    per-hit arrays the engine logs (press time i matched to note time
+    i). Returns None below three hits or on degenerate spacing.
+    """
+    n = min(len(press_times_s), len(note_times_s))
+    if n < 3:
+        return None
+    diffs = []
+    iois = []
+    for i in range(n - 1):
+        iti = press_times_s[i + 1] - press_times_s[i]
+        ioi = note_times_s[i + 1] - note_times_s[i]
+        if ioi <= 0:
+            continue
+        diffs.append(iti - ioi)
+        iois.append(ioi)
+    if len(diffs) < 2 or not iois:
+        return None
+    mean_ioi = sum(iois) / len(iois)
+    if mean_ioi <= 0:
+        return None
+    mean_d = sum(diffs) / len(diffs)
+    var = (sum((d - mean_d) ** 2 for d in diffs)
+           / (len(diffs) - 1))
+    return math.sqrt(var) / mean_ioi
+
+
 def drift_slope(timestamps_min: Sequence[float],
                  baseline_values: Sequence[float]) -> float | None:
     """Slope of `baseline ~ time` in baseline-units per minute. Used

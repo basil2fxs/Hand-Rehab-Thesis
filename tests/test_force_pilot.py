@@ -99,6 +99,10 @@ def _engine(hand_mode="right", cfg_extra=None):
     e.current_block = "force_pilot"
     e.session_paths = None
     e.session = MagicMock()
+    # The probe gate is an identity gate too: the fixtures share one
+    # participant name so a fresh max is reusable, and the mismatch
+    # test can stamp a different name to force probes.
+    e.session.participant = "T"
     e._per_lane_rts = {}
     e._per_lane_misses = {}
     e._per_lane_wrong = {}
@@ -195,7 +199,8 @@ def _mode(e, hands=None, **over):
 
 def _fresh_profile(hand="right"):
     from finger_rehab.hardware.calibration_profile import CalibrationProfile
-    prof = CalibrationProfile(hand=hand, resting=[100.0] * 4,
+    prof = CalibrationProfile(hand=hand, participant="T",
+                              resting=[100.0] * 4,
                               press=[160.0] * 4)
     prof.set_max_press([400.0] * 4)
     return prof
@@ -698,6 +703,16 @@ class PauseAndStatsTests(unittest.TestCase):
         self.assertEqual(m.engine._force_pilot_levels[(m.hand, m.finger)],
                          m.level)
 
+    def test_demo_block_writes_no_level_carry(self):
+        # A supervisor's Test Mode demo must not seed the next real
+        # patient's difficulty.
+        e = _engine()
+        e.calibration_profiles["right"] = _fresh_profile()
+        m = _mode(e, demo_trials=1)
+        m.engine.finish_block = lambda: None
+        m._end("completed")
+        self.assertFalse(hasattr(m.engine, "_force_pilot_levels"))
+
     def test_block_stats_splits_per_lane_and_section_by_level(self):
         # A run at the easiest level and a run at the hardest level
         # earn differently-scaled outcomes for the same real tracking
@@ -887,6 +902,120 @@ class ErrorTypeTests(unittest.TestCase):
                 rows = list(csv.DictReader(f))
         self.assertIn(rows[-1]["early_late"], ("Great", "Good"))
         self.assertEqual(rows[-1]["error_type"], "")
+
+
+class ProbeGuardRailTests(unittest.TestCase):
+    """The probe phase must neither hang forever on a finger that
+    cannot reach the floor, nor silently accept a max so small the
+    percent targets sit inside sensor noise."""
+
+    def _probe_mode(self):
+        e = _engine()
+        # No stored max: probes must run.
+        m = _mode(e)
+        m._tick(1000.0)
+        t = 1000.0 + m.probe_gap_s + 0.01 \
+            if hasattr(m, "probe_gap_s") else 1000.5
+        guard = t + 10.0
+        while m.phase != "probe" and t < guard:
+            t += 0.1
+            m._tick(t)
+        assert m.phase == "probe", m.phase
+        return e, m, t
+
+    def test_stalled_probe_ends_the_block_gently(self):
+        e, m, t = self._probe_mode()
+        e.finish_block = lambda: None
+        # The finger never clears the floor: force sits at 5 counts.
+        end = t + m.PROBE_STALL_S + 2.0
+        while m.phase == "probe" and t < end:
+            t += 0.25
+            m.view.counts = 5.0
+            m.view.pct = 1.0
+            m._tick(t)
+        self.assertEqual(m.phase, "done")
+        self.assertEqual(m.end_reason, "probe_timeout")
+
+    def test_low_max_is_flagged_not_silent(self):
+        e, m, t = self._probe_mode()
+        # Three just-over-floor presses: max lands ~35 counts, far
+        # under LOW_MAX_FLOOR_MULT x floor (150).
+        end = t + 60.0
+        pressing = True
+        flips = 0
+        while m.phase == "probe" and t < end and flips < 40:
+            t += 0.5
+            m.view.counts = 35.0 if pressing else 0.0
+            m.view.pct = 1.0
+            pressing = not pressing
+            flips += 1
+            m._tick(t)
+        events = [ev for ev in e.raw_logger.events
+                  if ev["event"] == "max_press_low"]
+        self.assertGreaterEqual(len(events), 1)
+        self.assertIn("max_counts=35.0", events[0]["detail"])
+
+
+class NoSignalRunTests(unittest.TestCase):
+    """A run whose force signal covered under half the plan is
+    hardware evidence, not tracking: scoring it used to log mae=0.00
+    (a perfect-looking error), pull the per-finger MAE toward zero,
+    show the patient ROUGH RIDE with 'Mean error 0.0% of max', and
+    demote the staircase for a device fault."""
+
+    def _starved_run(self, level=2):
+        e = _engine()
+        e.calibration_profiles["right"] = _fresh_profile()
+        m = _mode(e, level=level)
+        t = _to_run_phase(m)
+        m.view.gone = True
+        t = _play_run(m, t, lambda t_run, target: target)
+        return e, m, t
+
+    def test_starved_run_scores_nothing_and_replays(self):
+        e, m, t = self._starved_run()
+        row = e.trial_logger.rows[-1]
+        self.assertEqual(row["error_type"], "no_signal")
+        self.assertIn("no_signal=True", row["stimulus"])
+        # No RunRecord: the per-finger and overall MAE stay clean.
+        self.assertEqual(m._records, [])
+        self.assertEqual(m.block_stats()["overall"]["mae_pct"], None)
+        self.assertEqual(m.block_stats()["no_signal_runs"], 1)
+        # No staircase move, and the slot replays.
+        self.assertEqual(m.runs_done, 0)
+        self.assertEqual(m._last_result["label"], "NoSignal")
+        t += m.rest_s + 0.05
+        m._tick(t)
+        self.assertEqual(m.phase, "announce")
+
+    def test_dead_device_gives_the_slot_up_eventually(self):
+        e, m, t = self._starved_run()
+        for _ in range(m.MAX_NO_SIGNAL_RETRIES):
+            t += m.rest_s + 0.05
+            m._tick(t)
+            t += m.announce_s + 0.05
+            m._tick(t)
+            self.assertEqual(m.phase, "run")
+            t = _play_run(m, t, lambda t_run, target: target)
+        # After the retries the slot is abandoned and play moves on.
+        self.assertEqual(m.runs_done, 1)
+        self.assertEqual(m._records, [])
+
+    def test_partial_coverage_above_half_still_scores(self):
+        e = _engine()
+        e.calibration_profiles["right"] = _fresh_profile()
+        m = _mode(e)
+        t = _to_run_phase(m)
+        dur = m.duration_s
+
+        def force(t_run, target):
+            m.view.gone = t_run > dur * 0.75    # last quarter lost
+            return target
+
+        _play_run(m, t, force)
+        m.view.gone = False
+        self.assertEqual(len(m._records), 1)
+        self.assertEqual(m.runs_done, 1)
 
 
 class DropoutRingGatingTests(unittest.TestCase):

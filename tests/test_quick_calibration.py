@@ -292,6 +292,33 @@ class TestTriggerRule:
         eng.screen_obj._skip()
         assert begun == [1]
 
+    def test_mirror_pick_gates_the_block_start(self, tmp_path):
+        # Mirror bypasses the setup screen (bilateral-only, no hand
+        # pick), so its start path must run the same session gate
+        # itself. It used to call begin_mirror_block directly, making
+        # a mirror-first hardware session the one flow that never
+        # calibrated either hand.
+        eng = _engine(tmp_path)
+        begun = []
+        eng.begin_mirror_block = lambda: begun.append(1)
+        eng._screens["mode_select"]._pick("mirror")
+        assert eng.screen_obj is eng._screens["quick_cal"]
+        assert begun == []
+        # Both hands are in front of the flow (mirror forces bilateral).
+        assert sorted(eng.screen_obj.hands) == ["left", "right"]
+        # Skipping hands over to the block start exactly once.
+        eng.screen_obj._skip()
+        assert begun == [1]
+
+    def test_mirror_pick_skips_the_gate_on_keyboard(self, tmp_path):
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
+        eng = _engine(tmp_path, source=KeyboardOnlySource())
+        begun = []
+        eng.begin_mirror_block = lambda: begun.append(1)
+        eng._screens["mode_select"]._pick("mirror")
+        assert begun == [1]
+        assert eng.screen_obj is not eng._screens["quick_cal"]
+
     def test_setup_screen_starts_straight_away_on_keyboard(self, tmp_path):
         from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
         eng = _engine(tmp_path, source=KeyboardOnlySource())

@@ -579,10 +579,17 @@ class BuzzHuntMode:
                 setattr(self, attr, v + pause_dur)
         if self.phase == "trial":
             # A pause interrupts the pulse train or the response
-            # window, so the trial is unscoreable: restart it (same
-            # seed, same plan). Nothing was logged for it yet; the
-            # orphaned segment markers are tied off by a trial_restart
-            # event so the notebook can discard them.
+            # window, so the trial is unscoreable: restart it. Nothing
+            # was logged for it yet; the orphaned segment markers are
+            # tied off by a trial_restart event so the notebook can
+            # discard them. The material is REDRAWN, not replayed:
+            # the player may have heard part (or all) of the stimulus
+            # before pausing, and replaying it would grant a second
+            # exposure the score treats as one, which for a gap trial
+            # hands over the answer (the Esc chip made this a
+            # repeatable exploit). Hebb spans keep their hidden
+            # sequence by design; _redraw_interrupted_material only
+            # changes novel spans and gap kinds.
             raw = getattr(self.engine, "raw_logger", None)
             if raw:
                 raw.queue_event(
@@ -590,6 +597,7 @@ class BuzzHuntMode:
                     detail=f"trial_id={self.trial_counter}",
                     hand=self.engine.hand_mode)
             self.engine.stop_all_motors()
+            self._redraw_interrupted_material()
             self._enter_announce(time.perf_counter())
 
     # ---- main tick ---------------------------------------------------------
@@ -769,7 +777,15 @@ class BuzzHuntMode:
         cues = self.engine.cue_settings()
         self.engine._last_cue_code = cues.code
         self.engine._last_target_shown = False
-        self.engine._last_stim_timeout_ms = self.response_window_s * 1000.0
+        # The row's timeout_ms is documented as the RT censoring
+        # limit, so it must be THIS stage's real window: a span trial
+        # extends the base window by replay time per item, and
+        # stamping the bare response_window_s made a 4-item span row
+        # claim 3000 ms when the actual window was 9000 ms. The
+        # material is already drawn by _prepare_trial, so
+        # _respond_window_s answers correctly here.
+        self.engine._last_stim_timeout_ms = (
+            self._respond_window_s() * 1000.0)
         # Delivery tracking for this trial's pulse train: None means
         # no pulse is expected (a catch trial), True until a
         # pulse_motor call reports failure, then sticky False. Set
@@ -905,6 +921,31 @@ class BuzzHuntMode:
         while (self._pulse_idx < len(self._pulse_plan)
                and t >= self._pulse_plan[self._pulse_idx][1]):
             lane, _on, dur = self._pulse_plan[self._pulse_idx]
+            # Timing guard for the pulses AFTER the first: a frame
+            # stall longer than the planned inter-pulse gap dispatches
+            # the overdue STOP and the next STIM in the same frame,
+            # collapsing a gap trial's silent gap to ~0 (one merged
+            # buzz) while the row still logs the requested gap and the
+            # staircase moves on a stimulus that never was two buzzes.
+            # Half the planned spacing is the tolerance: past that the
+            # delivered timing no longer resembles the plan, so the
+            # trial is voided like a dropped pulse (stim_delivered
+            # FALSE keeps it out of every scored aggregate).
+            if self._pulse_idx > 0:
+                prev_lane, prev_on, prev_dur = self._pulse_plan[
+                    self._pulse_idx - 1]
+                spacing = max(0.0, _on - (prev_on + prev_dur / 1000.0))
+                late_s = t - _on
+                if spacing > 0 and late_s > 0.5 * spacing:
+                    self._stim_delivered = False
+                    self.engine._last_stim_delivered = False
+                    raw = getattr(self.engine, "raw_logger", None)
+                    if raw:
+                        raw.queue_event(
+                            "stim_late_pulse", lane=lane,
+                            detail=(f"late_s={late_s:.3f};"
+                                    f"spacing_s={spacing:.3f}"),
+                            hand=self.engine.hand_mode)
             ok = self.engine.pulse_motor(lane, dur)
             if self._pulse_idx == 0:
                 # EEG buzz-as-stimulus marker (38). Anchored to the
@@ -1160,9 +1201,18 @@ class BuzzHuntMode:
             info = ContinuousTrialLog(waveform="buzz", params=self.params,
                                       seed=self.trial_seed,
                                       segments=self._segments(now))
+            # A voided stim-failure trial where the patient DID press
+            # gets its own error_type: the derived 'timeout' next to a
+            # non-empty keys_pressed was internally inconsistent, and
+            # any error_type=='timeout' filter silently pulled these
+            # hardware rows in.
             self.engine.log_trial(trial, outcome, now, stimulus=stimulus,
                                   correct_lanes=[self.lane],
-                                  continuous=info)
+                                  continuous=info,
+                                  error_type=("stim_failed"
+                                              if stim_failed
+                                              and outcome.label == "Miss"
+                                              else None))
         if not stim_failed:
             # A trial whose buzz never fired is not a perception
             # sample: it must not water down (or, on a lucky guess,
@@ -1265,7 +1315,11 @@ class BuzzHuntMode:
                                       segments=self._segments(now))
             self.engine.log_trial(trial, outcome, now, stimulus=stimulus,
                                   correct_lanes=list(self.sequence),
-                                  continuous=info)
+                                  continuous=info,
+                                  error_type=("stim_failed"
+                                              if stim_failed
+                                              and outcome.label == "Miss"
+                                              else None))
         if not stim_failed:
             # A sequence that never played is not a memory sample: it
             # must not enter the span curve or the Hebb slope.
@@ -1344,7 +1398,11 @@ class BuzzHuntMode:
                                       segments=self._segments(now))
             self.engine.log_trial(trial, outcome, now, stimulus=stimulus,
                                   correct_lanes=[self.lane],
-                                  continuous=info)
+                                  continuous=info,
+                                  error_type=("stim_failed"
+                                              if stim_failed
+                                              and outcome.label == "Miss"
+                                              else None))
         if not stim_failed:
             # A stimulus that never played is not a gap-detection
             # sample: it must not enter the gap accuracy or the

@@ -578,9 +578,15 @@ class SyllablesMode:
         a tap outside the window scores err=ok there (acceptable_
         lanes is never consulted for order, only for the CSV column),
         so every playing lane is listed. From level 2 up each
-        position owns one window lane, so the list is the window in
-        POSITION order, which is what the notebook checks taps
-        against."""
+        position owns one window lane, so the list holds exactly the
+        window's lanes.
+
+        A caution for consumers: engine.log_trial SORTS the list
+        before writing, so the CSV's correct_keys is an unordered SET
+        of acceptable lanes, not the walking order (left-hand and
+        cross-midline windows walk descending lane numbers). The
+        position order lives in the stimulus map=off<k> fields plus
+        the desk row, which is what the notebook rebuilds it from."""
         if not self.order_required:
             return sorted(l for hands in self.hands.values() for l in hands)
         return self.window_lanes()
@@ -681,6 +687,19 @@ class SyllablesMode:
         # so the fair move is to restart the word from ATTEND rather
         # than salvage half a trial. Nothing was logged for it yet.
         if self.phase in ("attend", "model", "countin", "respond"):
+            # The restarted word takes a NEW trial id, so the aborted
+            # id's stim rows (and EEG stim markers, when enabled) sit
+            # in raw.csv with no trials.csv row. The event explains
+            # the orphan in the stream instead of leaving a silent
+            # hole in the id sequence for stim-to-trial matchers.
+            raw = getattr(self.engine, "raw_logger", None)
+            if raw:
+                raw.queue_event(
+                    "trial_restart",
+                    detail=(f"old_trial_id={self.trial_counter};"
+                            f"new_trial_id={self.trial_counter + 1};"
+                            f"phase={self.phase}"),
+                    hand=self.engine.hand_mode)
             self.active = None
             self._begin_word(time.perf_counter(), reuse_word=True)
 
@@ -1104,8 +1123,11 @@ class SyllablesMode:
         self.engine.log_trial(
             trial, outcome, now,
             stimulus=self._pack_stimulus(word, error, asyn, will_replay),
-            # The window's lanes in position order (every playing
-            # lane at level 1, where any finger counts).
+            # The window's lanes (every playing lane at level 1,
+            # where any finger counts). log_trial sorts before
+            # writing, so the CSV column is an unordered set; the
+            # walking order is recoverable from map=off in the
+            # stimulus (see acceptable_lanes).
             correct_lanes=self.acceptable_lanes(),
             # A Miss here always means a wrong tap COUNT (timeout,
             # extra_tap or missing_tap: the only three ways count_
@@ -1115,12 +1137,45 @@ class SyllablesMode:
             # extra-tap Miss as a silent timeout. Pass the mode's own
             # code straight through for Miss rows.
             error_type=(error if outcome.label == "Miss" else ""),
+            # The EEG response marker must lock to the child's actual
+            # first press. outcome.rt_ms here is NOT stim-to-press
+            # (first-tap RT from RESPOND start free-paced, mean signed
+            # asynchrony paced), so the engine's stim + rt fallback
+            # would put the marker mid-ATTEND, seconds before the
+            # press. Passing the first tap's own timestamp also stops
+            # a prompt extra-tap Miss from emitting resp_timeout.
+            response_t_perf=(taps[0].t_perf if taps else None),
         )
-        self._recent.append(correct)
-        self._since_band_change += 1
-        self._maybe_move_band()
+        # The band gate only learns from words the child could
+        # actually answer. With the serial link down every word scores
+        # err=timeout, so an unguarded gate demoted the band on
+        # hardware downtime and difficulty responded to the device,
+        # not the child (the engine's connection banner says what is
+        # happening on screen; this keeps the difficulty honest too).
+        if self._source_alive():
+            self._recent.append(correct)
+            self._since_band_change += 1
+            self._maybe_move_band()
         self._pending_replay = will_replay
         self._enter_phase("feedback", now)
+
+    def _source_alive(self) -> bool:
+        """False only when a sample-providing source is disconnected
+        (fully, or this session's playing hands via a one-board
+        drop). Keyboard sessions are always alive."""
+        src = getattr(self.engine, "source", None)
+        if src is None or not getattr(src, "provides_samples", False):
+            return True
+        if not getattr(src, "is_connected", True):
+            return False
+        down = getattr(self.engine, "_hands_down", None)
+        if not isinstance(down, set):
+            down = set()
+        hands = set(getattr(self, "hand_names", None) or [])
+        if not hands:
+            hand = str(getattr(self.engine, "hand_mode", "right"))
+            hands = {"left", "right"} if hand == "both" else {hand}
+        return not (down & hands)
 
     def _score_stress(self, taps: list[Tap],
                       word: Word) -> tuple[bool | None, float | None]:

@@ -196,8 +196,15 @@ class SourceDisconnectionTests(unittest.TestCase):
         eng.raw_logger.queue_event.reset_mock()
         src._is_connected = True
         eng._check_source_connection()
-        # Reconnect should NOT emit a "source_disconnected" event.
-        eng.raw_logger.queue_event.assert_not_called()
+        # Reconnect must NOT emit a "source_disconnected" event, but
+        # it DOES write its own marker now: opening the port resets
+        # the Arduino, whose boot self-test buzzes all four motors,
+        # so trials overlapping that unmarked stimulation used to be
+        # indistinguishable afterwards.
+        events = [c.args[0] for c in
+                  eng.raw_logger.queue_event.call_args_list]
+        self.assertNotIn("source_disconnected", events)
+        self.assertIn("source_reconnected", events)
 
     def test_keyboard_source_does_not_warn(self) -> None:
         # Keyboard-only mode returns provides_samples=False; the check

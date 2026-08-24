@@ -441,6 +441,31 @@ class RetryLastBlockTests(unittest.TestCase):
         eng.retry_last_block()
         eng.begin_adaptive_block.assert_called_once()
 
+    def test_retry_rebuilds_a_songless_rhythm_chart(self) -> None:
+        # A metronome-only rhythm block (procedural map or librosa
+        # fallback) has no song path, and Retry used to fall through
+        # to game select although the chart is fully reproducible.
+        # The pre-shift note snapshot rebuilds it exactly.
+        from unittest.mock import MagicMock
+        from finger_rehab.game.engine import GameEngine
+        eng = GameEngine.__new__(GameEngine)
+        eng.current_block = "rhythm"
+        eng._last_rhythm_song = None
+        eng._last_rhythm_difficulty = "medium"
+        eng._last_rhythm_title = "Procedural"
+        eng._last_rhythm_bpm = 120.0
+        eng._last_rhythm_notes = [(1.0, 0, "tap"), (1.5, 2, "tap")]
+        eng.begin_rhythm_block = MagicMock()
+        eng.show_mode_select = MagicMock()
+        eng.retry_last_block()
+        eng.begin_rhythm_block.assert_called_once()
+        bm = eng.begin_rhythm_block.call_args.args[0]
+        self.assertIsNone(bm.song)
+        self.assertEqual(bm.bpm, 120.0)
+        self.assertEqual([(n.t, n.lane) for n in bm.notes],
+                         [(1.0, 0), (1.5, 2)])
+        eng.show_mode_select.assert_not_called()
+
     def test_retry_without_prior_block_falls_back_to_mode_select(self) -> None:
         from unittest.mock import MagicMock
         from finger_rehab.game.engine import GameEngine

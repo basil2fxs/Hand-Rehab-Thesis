@@ -222,6 +222,28 @@ class ScorableTrialTests(unittest.TestCase):
         self.assertIsNone(outcome.rt_ms)
         self.assertEqual(mode.n_miss, 1)
         self.assertEqual(mode.n_valid, 0)
+        # But the row must not be byte-identical to never pressing:
+        # a response at window+150 ms is an extreme lapse, not an
+        # absence of response. The press stays on the row with its
+        # own error_type and its latency recoverable from
+        # first_incorrect_ms.
+        trial = engine.log_trial.call_args[0][0]
+        self.assertEqual(trial.keys_pressed, [target])
+        self.assertEqual(len(trial.incorrect_presses), 1)
+        self.assertEqual(
+            engine.log_trial.call_args.kwargs.get("error_type"),
+            "late_press")
+
+    def test_true_timeout_carries_no_late_press_marker(self) -> None:
+        engine, mode = _build_mode(response_window_s=2.0)
+        mode._begin_trial(now=10.0)
+        mode._fire(now=12.0)
+        mode.update_to = None
+        mode._close_scorable(None, now=14.5)
+        trial = engine.log_trial.call_args[0][0]
+        self.assertEqual(trial.keys_pressed, [])
+        self.assertIsNone(
+            engine.log_trial.call_args.kwargs.get("error_type"))
 
     def test_choice_wrong_finger_follows_classic_miss_convention(self) -> None:
         # In choice mode a wrong finger consumes the trial (accuracy is
@@ -395,6 +417,33 @@ class LevelProgressionTests(unittest.TestCase):
         self.assertEqual(engine._reaction_level, 1)
         self.assertEqual(engine._reaction_clean_blocks, 0)
 
+    def test_zero_completed_block_is_neutral_for_progression(self) -> None:
+        """A block that ended at the attempt cap on nothing but false
+        starts has no scorable evidence. It must neither count as a
+        clean block (two of those would tighten the window on exactly
+        the impulse-impaired patient it protects) nor wipe an earned
+        clean streak."""
+        engine, mode = _build_mode()
+        engine._reaction_clean_blocks = 1
+        mode.completed = 0
+        mode._update_level_progression()
+        mode._update_level_progression()
+        self.assertEqual(engine._reaction_level, 1)
+        self.assertEqual(engine._reaction_clean_blocks, 1)
+
+    def test_low_evidence_clean_block_does_not_advance(self) -> None:
+        """Three clean presses among a wall of wrong-finger retries in
+        simple sub-mode: the rate looks clean but under half the
+        planned trials completed, so the block is neutral."""
+        engine, mode = _build_mode(scorable_trials=25)
+        mode.completed = 3
+        mode.n_lapse = 0
+        mode.n_miss = 0
+        mode._update_level_progression()
+        mode._update_level_progression()
+        self.assertEqual(engine._reaction_level, 1)
+        self.assertEqual(engine._reaction_clean_blocks, 0)
+
 
 class BlockStatsTests(unittest.TestCase):
     """The block summary is what a researcher reads without opening
@@ -425,6 +474,14 @@ class BlockStatsTests(unittest.TestCase):
         stats = mode.block_stats()
         self.assertIsNone(stats["slope_rt_ms_per_trial"])
         self.assertIsNone(stats["spearman_rho_rt_vs_fp"])
+
+    def test_lapse_like_rate_is_none_with_nothing_completed(self) -> None:
+        # 0.0 would read downstream as a perfectly clean block from a
+        # block that never produced a scorable trial.
+        _, mode = _build_mode()
+        mode.completed = 0
+        stats = mode.block_stats()
+        self.assertIsNone(stats["lapse_like_rate"])
 
 
 class EngineIntegrationTests(unittest.TestCase):

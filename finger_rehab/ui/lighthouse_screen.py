@@ -555,7 +555,13 @@ class LighthouseScreen(Screen):
         self._draw_lantern_frame(surf, dim=True)
         self._draw_flame(surf, 0.0, 0.0, now, ember_only=True)
         if mode.sub == "delay":
-            draw_text(surf, "Let go and remember that glow...",
+            # On a cross echo BOTH fingers must let go: the studying
+            # hand holding on would carry the reference force through
+            # the blind half, so the line names it explicitly.
+            msg = ("Both hands off. Remember that glow..."
+                   if getattr(mode, "cross", False)
+                   else "Let go and remember that glow...")
+            draw_text(surf, msg,
                       (cx, 620), self.theme, self.layout, pt=FONT_H2,
                       centre=True, colour=DARK_TEXT)
             draw_text(surf, f"{mode.delay_left_s:.0f}s",

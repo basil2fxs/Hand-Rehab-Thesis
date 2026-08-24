@@ -85,6 +85,14 @@ class AdaptiveMode:
         # Slide active trial and cadence timestamps forward by the pause length.
         if self.active is not None:
             self.active.stim_t_perf += pause_dur
+            # The recorded wrong presses hold absolute times too:
+            # shifting only stim_t_perf made first_incorrect_ms
+            # (wrong_t - stim_t) shrink by the pause and go negative
+            # (a 10 s pause after a wrong press at +300 ms logged
+            # roughly -9700 ms).
+            self.active.incorrect_presses = [
+                (lane, t + pause_dur)
+                for lane, t in self.active.incorrect_presses]
         if self.last_trigger_t > 0:
             self.last_trigger_t += pause_dur
 
@@ -240,8 +248,42 @@ class AdaptiveMode:
             return 0.0
         return self._QUALITY.get(outcome_label, 0.0)
 
+    def _source_dropped(self) -> bool:
+        """Whether the hardware behind the active trial's lane is gone
+        right now: a whole-source drop, or a one-board drop of the
+        lane's hand (engine._hands_down, maintained by the per-frame
+        connection check). Keyboard sessions are never dropped."""
+        src = getattr(self.engine, "source", None)
+        if src is None or not getattr(src, "provides_samples", False):
+            return False
+        if not getattr(src, "is_connected", True):
+            return True
+        down = getattr(self.engine, "_hands_down", None)
+        if not isinstance(down, set) or not down or self.active is None:
+            return False
+        hand = "left" if self.active.lane >= 4 else "right"
+        return hand in down
+
     def _finish(self, ev: PressEvent | None, now: float) -> None:
         if self.active is None:
+            return
+        # A press-less close while the sensor source is down is
+        # hardware loss, not a patient miss: fed to the adapter it
+        # entered recovery mode, knocked the BPM down and polluted the
+        # EMAs (observed 120 -> 90 across a 6-trial dropout), and the
+        # row's plain 'timeout' made the trials indistinguishable
+        # afterwards. Log it under its own error_type and keep the
+        # controller out of it entirely.
+        if ev is None and not self.active.incorrect_presses \
+                and self._source_dropped():
+            from ..scoring import TrialResult
+            outcome = TrialResult(label="Miss",
+                                  points=self.score_cfg.miss_points,
+                                  rt_ms=None)
+            self.engine.log_trial(self.active, outcome, now,
+                                  error_type="device_drop")
+            self.active = None
+            self.completed += 1
             return
         rt_ms = None
         if ev is not None:

@@ -91,6 +91,15 @@ CODES: dict[str, int] = {
     "stim_pattern_random": 41,
     # Response band (100-131), correctness in the byte, lane added to
     # the bases because hand identity is what the LRP is made of.
+    #
+    # Buzz Hunt is STIM-MARKER-ONLY for scored trials: its closers log
+    # through the continuous-trial path, which sends no response or
+    # feedback markers, so 38 (stim_buzz_hunt) is the only per-trial
+    # marker a scored localisation/span/gap trial emits. Only its
+    # ERROR events (catch false alarms, distractor anticipations) hit
+    # the 120 band via log_reaction_event. An analyst hunting for
+    # missing 100-band responses in a buzz_hunt block is not looking
+    # at a fault; there are none by design.
     "resp_correct_base": 100,    # + lane pressed
     "resp_wrong_base": 110,      # + lane actually pressed
     "resp_anticipation_base": 120,  # + lane (false start / sub-cut press)

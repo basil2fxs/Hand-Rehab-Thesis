@@ -166,3 +166,203 @@ class TestPortChangesApplyLive:
         import inspect
         src = inspect.getsource(main._build_source)
         assert "build_source_from_config" in src
+
+
+class TestOneBoardDropInBilateral:
+    """A one-board drop in a bilateral block used to be invisible:
+    is_connected is any-board-alive, so the engine's drop handler never
+    fired, the merger's zero-fill slid the dead hand's baseline toward
+    0, and the reconnect fired phantom presses on every lane that then
+    latched permanently (the frozen off threshold sits below even an
+    empty pad's reading). All patient-attributed, nothing logged."""
+
+    REST_R = [238.0, 245.0, 248.0, 268.0]
+    REST_L = [242.0, 251.0, 239.0, 260.0]
+
+    class FakeSample:
+        def __init__(self, t, values):
+            self.t_perf = t
+            self.values = values
+
+    class FakeMultiSource:
+        """MultiSerial-shaped: 8-value samples, right then left; a
+        dead left board zero-fills, exactly like the real merger."""
+        provides_samples = True
+        name = "FakeMulti(right@/dev/r,left@/dev/l)"
+
+        def __init__(self):
+            self.queued = []
+            self.left_alive = True
+            self.right_alive = True
+
+        @property
+        def is_connected(self):
+            return self.left_alive or self.right_alive
+
+        @property
+        def hands_connected(self):
+            return {"right": self.right_alive, "left": self.left_alive}
+
+        def start(self): ...
+
+        def stop(self): ...
+
+        def get_sample(self, timeout=0.0):
+            return self.queued.pop(0) if self.queued else None
+
+        def send_command(self, cmd):
+            return True
+
+        def has_recent_data(self, window_s=1.0):
+            return True
+
+    def _engine(self, tmp_path):
+        import os
+        os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+        os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+        import pygame
+        pygame.init()
+        from unittest.mock import MagicMock
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.hardware.calibration_profile import (
+            CalibrationProfile)
+        cfg = Config.load()
+        cfg.data["ui"]["resolution"] = [640, 480]
+        cfg.data["audio"]["enabled"] = False
+        cfg.data["session"]["data_dir"] = str(tmp_path)
+        cfg.data["report"] = {"enabled": False}
+        cfg.data.setdefault("bilateral", {})["hand"] = "both"
+        src = self.FakeMultiSource()
+        eng = GameEngine(cfg, src)
+        gp = MagicMock()
+        gp.lanes = []
+        eng._screens = {"gameplay": gp, "results": MagicMock()}
+        for hand, rest in (("right", self.REST_R), ("left", self.REST_L)):
+            prof = CalibrationProfile(
+                hand=hand, participant="T",
+                empty=[r - 15 for r in rest],
+                empty_noise=[1.1] * 4,
+                resting=list(rest),
+                press=[r + 60 for r in rest])
+            eng.apply_calibration(prof)
+        return eng, src
+
+    def _feed(self, eng, src, t0, secs, left_zero=False):
+        t = t0
+        dt = 1 / 200
+        for _ in range(int(secs * 200)):
+            t += dt
+            left = ((0,) * 4 if left_zero
+                    else tuple(int(v) for v in self.REST_L))
+            right = tuple(int(v) for v in self.REST_R)
+            src.queued.append(self.FakeSample(t, right + left))
+            if len(src.queued) > 30:
+                eng._pump_source()
+        eng._pump_source()
+        return t
+
+    def _events(self, eng):
+        import csv
+        from pathlib import Path
+        root = Path(eng.session_paths.root)
+        eng.raw_logger.flush() if hasattr(eng.raw_logger, "flush") else None
+        eng.finish_block()
+        with (root / "raw.csv").open() as f:
+            return [(r["event"], r.get("hand"))
+                    for r in csv.DictReader(f)
+                    if r.get("event") in ("source_disconnected",
+                                          "source_reconnected")]
+
+    def test_drop_and_reconnect_leave_no_phantoms_and_are_logged(
+            self, tmp_path):
+        import time as _time
+        eng, src = self._engine(tmp_path)
+        eng.begin_classic_block()
+        presses = []
+        for det in eng.detectors.values():
+            orig = det.on_press
+
+            def wrap(ev, _orig=orig):
+                presses.append((ev.hand, ev.lane))
+                return _orig(ev)
+
+            det.on_press = wrap
+        t = _time.perf_counter()
+        t = self._feed(eng, src, t, 2.0)
+        src.left_alive = False
+        t = self._feed(eng, src, t, 2.0, left_zero=True)
+        src.left_alive = True
+        n0 = len(presses)
+        t = self._feed(eng, src, t, 3.0)
+        left = eng.detectors["left"]
+        # No phantom presses at reconnect, nothing latched, baseline
+        # re-primed at the calibrated resting level.
+        assert presses[n0:] == []
+        assert list(left.pressed) == [False] * 4
+        for i, r in enumerate(self.REST_L):
+            assert abs(left.baseline[i] - r) < 1.0
+        # A real press after the reconnect still registers.
+        press_vals = tuple(int(v) for v in self.REST_R) + (
+            int(self.REST_L[0] + 60),) + tuple(
+            int(v) for v in self.REST_L[1:])
+        dt = 1 / 200
+        for _ in range(120):
+            t += dt
+            src.queued.append(self.FakeSample(t, press_vals))
+        eng._pump_source()
+        assert ("left", 0) in presses[n0:]
+        events = self._events(eng)
+        assert ("source_disconnected", "left") in events
+        assert ("source_reconnected", "left") in events
+
+    def test_dead_hand_is_parked_not_fed_zeros(self, tmp_path):
+        import time as _time
+        eng, src = self._engine(tmp_path)
+        eng.begin_classic_block()
+        t = _time.perf_counter()
+        t = self._feed(eng, src, t, 1.0)
+        base_before = list(eng.detectors["left"].baseline)
+        src.left_alive = False
+        self._feed(eng, src, t, 3.0, left_zero=True)
+        base_after = list(eng.detectors["left"].baseline)
+        # The baseline held instead of sliding toward the zero-fill.
+        for b0, b1 in zip(base_before, base_after):
+            assert abs(b0 - b1) < 0.5
+        assert "left" in eng._hands_down
+        eng.finish_block()
+
+    def test_connection_alert_names_the_dead_hand(self, tmp_path):
+        import time as _time
+        eng, src = self._engine(tmp_path)
+        eng.begin_classic_block()
+        t = _time.perf_counter()
+        t = self._feed(eng, src, t, 0.5)
+        assert eng.connection_alert() is None
+        src.left_alive = False
+        self._feed(eng, src, t, 0.5, left_zero=True)
+        alert = eng.connection_alert()
+        assert alert is not None and "LEFT" in alert
+        eng.finish_block()
+        # No block open: nothing to warn over.
+        assert eng.connection_alert() is None
+
+    def test_full_drop_reconnect_writes_the_marker(self, tmp_path):
+        # The reconnect moment matters: opening the port resets the
+        # Arduino, whose boot self-test buzzes all four motors.
+        # Trials overlapping that unmarked stimulation used to be
+        # indistinguishable afterwards.
+        import time as _time
+        eng, src = self._engine(tmp_path)
+        eng.begin_classic_block()
+        t = _time.perf_counter()
+        t = self._feed(eng, src, t, 0.5)
+        src.left_alive = False
+        src.right_alive = False
+        eng._pump_source()
+        src.left_alive = True
+        src.right_alive = True
+        self._feed(eng, src, t, 0.5)
+        events = self._events(eng)
+        assert ("source_disconnected", "both") in events
+        assert ("source_reconnected", "both") in events

@@ -264,6 +264,81 @@ class SessionEndDialogTests(_SessionHarness):
                          self.eng.request_end_session)
 
 
+class SessionCarryStateTests(_SessionHarness):
+    """State a mode parks on the engine for the session (difficulty
+    levels, personal bests, fatigue baselines, applied calibration)
+    must die with the session. The end-session dialog promises "the
+    next player logs in fresh"; before this was pinned, patient B's
+    first reaction block opened at patient A's level with A's best RT
+    as the on-screen target, and B's first block reported a fatigue
+    slope computed from A's blocks."""
+
+    CARRY_ATTRS = ("_reaction_level", "_reaction_clean_blocks",
+                   "_reaction_best_ms", "_force_pilot_levels",
+                   "_lighthouse_level", "_buzz_hunt_start_ms")
+
+    def _plant_carry_state(self) -> None:
+        self.eng._reaction_level = 3
+        self.eng._reaction_clean_blocks = 1
+        self.eng._reaction_best_ms = {("choice", "right"): 145.0}
+        self.eng._force_pilot_levels = {("right", 1): 3}
+        self.eng._lighthouse_level = 3
+        self.eng._buzz_hunt_start_ms = {"right": 60.0}
+        self.eng._across_blocks_mean_rt = [400.0, 350.0]
+        self.eng._across_blocks_mean_peak = [120.0]
+
+    def test_end_session_clears_every_mode_carry(self) -> None:
+        self._login("PatientA", "60")
+        self._plant_carry_state()
+        self.eng.show_mode_select()
+        self.eng.request_end_session()
+        self._confirm_dialog()
+        for attr in self.CARRY_ATTRS:
+            self.assertIsNone(getattr(self.eng, attr, None), attr)
+        self.assertEqual(self.eng._across_blocks_mean_rt, [])
+        self.assertEqual(self.eng._across_blocks_mean_peak, [])
+
+    def test_login_clears_leftovers_from_an_abnormal_end(self) -> None:
+        # Belt and braces: even if a session never reached end_session
+        # (crash path, test harness), a login must start clean.
+        self._plant_carry_state()
+        self._login("PatientB", "72")
+        for attr in self.CARRY_ATTRS:
+            self.assertIsNone(getattr(self.eng, attr, None), attr)
+        self.assertEqual(self.eng._across_blocks_mean_rt, [])
+
+    def test_end_session_drops_applied_calibration_profiles(self) -> None:
+        # A leftover in-memory profile would normalise the next
+        # patient's force quantities by this patient's light-press
+        # gaps if they skip the quick flow.
+        from finger_rehab.hardware.calibration_profile import (
+            CalibrationProfile)
+        self._login("PatientA", "60")
+        self.eng.calibration_profiles = {
+            "right": CalibrationProfile(hand="right",
+                                        participant="PatientA")}
+        self.eng.show_mode_select()
+        self.eng.request_end_session()
+        self._confirm_dialog()
+        self.assertEqual(self.eng.calibration_profiles, {})
+        self.assertIsNone(self.eng.calibration_profile)
+
+    def test_next_patient_reaction_block_opens_at_level_one(self) -> None:
+        self._login("PatientA", "60")
+        self._plant_carry_state()
+        self.eng.show_mode_select()
+        self.eng.request_end_session()
+        self._confirm_dialog()
+        self._login("PatientB", "72")
+        self.eng.begin_reaction_block()
+        mode = self.eng.mode
+        try:
+            self.assertEqual(mode.level, 1)
+            self.assertIsNone(mode.session_best_ms())
+        finally:
+            self.eng._abandon_if_in_block()
+
+
 class EegSessionBoundaryTests(_SessionHarness):
     """240/241 bracket the login, not the app process."""
 
@@ -347,6 +422,31 @@ class ResultsWordingTests(_SessionHarness):
         # Draw must go through without touching the old hard-coded
         # string; a crash here means the title refactor regressed.
         self.eng.screen_obj.draw(surf)
+
+
+class BlockStartMetadataTests(_SessionHarness):
+    """The 'block in progress' metadata.json written at block start
+    must describe THIS block only. It used to carry the PREVIOUS
+    block's block_summary (status 'completed', another mode's
+    aggregates, even another patient's calibration and eeg stamps),
+    so a hard kill left a wrong but plausible forensic record."""
+
+    def test_initial_autosave_never_carries_the_previous_block(
+            self) -> None:
+        import json
+        self._login("Alice", "60")
+        self._play_one_game()          # classic, completed
+        self.eng.end_session()
+        self._login("Bob", "72")
+        self.eng.begin_reaction_block()
+        meta = json.loads(
+            (self.eng.session_paths.root / "metadata.json").read_text())
+        self.assertEqual(meta["participant"], "Bob")
+        summary = meta.get("block_summary") or {}
+        self.assertEqual(summary.get("block"), "reaction")
+        self.assertEqual(summary.get("status"), "in_progress")
+        self.assertNotIn("final_score", summary)
+        self.eng.finish_block()
 
 
 if __name__ == "__main__":

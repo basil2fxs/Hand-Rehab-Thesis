@@ -428,9 +428,16 @@ class GameEngine:
                          if len(vals) >= n * 2 else (0,) * n)
         right_det = self.detectors.get("right")
         left_det = self.detectors.get("left")
-        if right_det is not None:
+        # A hand whose board is down gets NO samples, not zero-fill:
+        # the merger zero-fills a silent board so the live hand keeps
+        # playing, but feeding those zeros to the dead hand's detector
+        # slides its baseline toward 0 and the reconnect then fires
+        # phantom presses that latch permanently. Parking the detector
+        # freezes its baseline at the last honest level instead.
+        down = getattr(self, "_hands_down", None) or set()
+        if right_det is not None and "right" not in down:
             right_det.feed(t_perf, right_vals)
-        if left_det is not None:
+        if left_det is not None and "left" not in down:
             left_det.feed(t_perf, left_vals)
         # Old single-hand fallback: if a hand_mode is set that isn't
         # right or left (e.g. "both") the right/left covers it. The
@@ -448,7 +455,12 @@ class GameEngine:
         # build engines via __new__.
         start = getattr(self, "_force_window_start", None)
         end = getattr(self, "_force_window_end", None)
+        # Paused samples stay out of the window: the trial is frozen
+        # (its deadlines shift on resume, and so does the window), so
+        # force applied while the exit chip is up is not part of the
+        # trial's measurement.
         if (start is not None and end is not None
+                and not getattr(self, "paused", False)
                 and start <= t_perf <= end):
             self._track_force_peaks(right_det, right_vals,
                                      left_det, left_vals, n)
@@ -800,6 +812,11 @@ class GameEngine:
                     # toggle (which re-opens the display) takes effect
                     # without a stale surface reference.
                     self.screen_obj.draw(self._screen)
+                # Sensor-loss banner over any live block screen. The
+                # per-frame check already logs the drop; this is the
+                # therapist-facing half, without which the patient
+                # just looks unable to press anything.
+                self._draw_connection_banner(self._screen)
                 if self._exit_confirm is not None:
                     # Exit dialog over the frozen play field. Screens
                     # skip their own PAUSED overlay while it is up (see
@@ -919,6 +936,16 @@ class GameEngine:
                 self.mode.on_resume(pause_dur)
             except Exception as e:
                 log.warning("mode.on_resume failed: %s", e)
+        # The engine's own per-trial force window must shift with the
+        # mode's deadlines. Left at its original absolute end, every
+        # press and leak after the resume fell OUTSIDE the window, so a
+        # paused chords trial could classify 'hit' with full quiet
+        # points on no force evidence and its probe silently dropped
+        # out of the enslaving matrix.
+        if getattr(self, "_force_window_start", None) is not None:
+            self._force_window_start += pause_dur
+        if getattr(self, "_force_window_end", None) is not None:
+            self._force_window_end += pause_dur
         # Rhythm mode: try to resume the song roughly where we paused so the
         # visuals stay in sync. play_song(start_s=...) uses pygame's seek
         # which works for OGG/WAV; for MP3 it usually still works but may
@@ -936,15 +963,49 @@ class GameEngine:
             bm = getattr(self.mode, "beatmap", None)
             resume_at = self._paused_song_time
             song = self._paused_song_path or (bm.song if bm else None)
+            # start_metronome resets the click phase, so a bare restart
+            # here left the clicks up to half a period off the note
+            # grid for the rest of the block (measured -143 ms constant
+            # click-vs-note error after a 0.37 s pause at 120 bpm).
+            # Phase-align: first click lands on the next note's grid
+            # position. mode.on_resume already ran, so song_time is
+            # live again.
+            first_click = self._metronome_phase_after_resume(bm)
             if song:
                 if not self.audio.play_song(song, start_s=resume_at):
                     if bm:
-                        self.audio.start_metronome(bm.bpm)
+                        self.audio.start_metronome(
+                            bm.bpm, first_click_in_s=first_click)
             elif bm:
-                self.audio.start_metronome(bm.bpm)
+                self.audio.start_metronome(
+                    bm.bpm, first_click_in_s=first_click)
         self.paused = False
         self._pause_started_at = None
         log.info("Block resumed after %.2fs", pause_dur)
+
+    def _metronome_phase_after_resume(self, bm) -> float | None:
+        """Seconds from now until the click that lines up with the note
+        grid, folded into one metronome period so the click stays
+        steady even across a chart gap. None (caller falls back to one
+        full period) when the mode or grid cannot answer."""
+        mode = self.mode
+        if mode is None or bm is None:
+            return None
+        try:
+            period = 60.0 / max(float(bm.bpm), 1.0)
+            now_song = float(mode.song_time)
+            next_t = min((float(s.note.t)
+                          for s in mode.scheduler.scheduled
+                          if float(s.note.t) > now_song),
+                         default=None)
+        except (TypeError, ValueError, AttributeError):
+            return None
+        if next_t is None:
+            return None
+        first = (next_t - now_song) % period
+        if first < 0.01:
+            first += period
+        return first
 
     # ---- EEG marker plumbing -----------------------------------------------
     def _eeg_send(self, code: int | None, lane: int | None = None,
@@ -1299,6 +1360,51 @@ class GameEngine:
         self._abandon_if_in_block()
         self.show_mode_select()
 
+    def connection_alert(self) -> str | None:
+        """One line describing a live sensor problem during a block,
+        None when everything is fine (or the session is keyboard-only,
+        or no block is running). Central because every block screen
+        needs it and none of them had it: a drop mid-block used to be
+        invisible on screen, so the patient's inability to register
+        presses read as impairment until someone opened the app log."""
+        if self.trial_logger is None:
+            return None
+        src = self.source
+        if not getattr(src, "provides_samples", True):
+            return None
+        if not src.is_connected:
+            return "SENSOR CONNECTION LOST - presses are not registering"
+        down = sorted(getattr(self, "_hands_down", None) or set())
+        if down:
+            return (f"{' and '.join(h.upper() for h in down)} HAND "
+                    f"SENSORS LOST - that hand cannot register presses")
+        has_data = getattr(src, "has_recent_data", None)
+        if callable(has_data) and not has_data(1.5):
+            return "NO SENSOR DATA ARRIVING - check the connection"
+        return None
+
+    def _draw_connection_banner(self, surf) -> None:
+        """Red banner, top centre, whenever connection_alert says
+        something is wrong mid-block. Deliberately plain and steady:
+        it must be legible to a therapist at a glance without
+        distracting a patient with flashing."""
+        msg = None
+        try:
+            msg = self.connection_alert()
+        except Exception:
+            return
+        if not msg:
+            return
+        from ..ui.widgets import draw_text, FONT_BODY
+        w, h = min(760, self.layout.width - 40), 44
+        x = (self.layout.width - w) // 2
+        y = 8
+        rect = pygame.Rect(x, y, w, h)
+        pygame.draw.rect(surf, self.theme.error, rect, border_radius=10)
+        draw_text(surf, msg, (self.layout.width // 2, y + h // 2 - 9),
+                  self.theme, self.layout, pt=FONT_BODY, centre=True,
+                  colour=self.theme.background)
+
     def _draw_exit_chip(self, surf) -> None:
         """The chip itself: one small card, top centre, over the
         frozen play field. A thin bar under the text drains with the
@@ -1461,7 +1567,98 @@ class GameEngine:
         elif (not self._source_was_connected) and connected:
             log.info("Source %s reconnected.",
                       getattr(self.source, "name", "?"))
+            # The reconnect moment matters to the data: opening the
+            # port resets the Arduino, whose boot self-test buzzes all
+            # four motors on the patient's fingers. Without a marker
+            # the trials that overlap that unmarked stimulation are
+            # indistinguishable afterwards.
+            if self.raw_logger:
+                try:
+                    self.raw_logger.queue_event(
+                        "source_reconnected",
+                        detail=getattr(self.source, "name", "?"),
+                        hand=self.hand_mode,
+                    )
+                except Exception:
+                    pass
         self._source_was_connected = connected
+        self._check_per_hand_connection()
+
+    def _check_per_hand_connection(self) -> None:
+        """Per-board drop handling for bilateral sources. is_connected
+        is any-board-alive, so a one-board drop never trips the check
+        above; meanwhile the merger keeps zero-filling the dead hand,
+        which slides its detector baseline toward 0 and makes the
+        reconnect fire phantom presses that latch every lane (the
+        frozen off threshold sits below even an empty pad's reading,
+        so no falling edge can ever clear them). Three duties per
+        transition: say so in raw.csv, park the dead hand's detector
+        (skip its zero-fill in _feed_detectors), and on reconnect
+        clear the latches and re-prime the baseline from the applied
+        calibration so play resumes on honest thresholds."""
+        hands_now = getattr(self.source, "hands_connected", None)
+        if not isinstance(hands_now, dict):
+            return
+        prev = getattr(self, "_hand_was_connected", None)
+        if prev is None:
+            prev = {}
+        down = getattr(self, "_hands_down", None)
+        if down is None:
+            down = set()
+            self._hands_down = down
+        for hand, ok in hands_now.items():
+            was = prev.get(hand, True)
+            if was and not ok:
+                log.warning("%s-hand board disconnected mid-session. "
+                            "Its presses will stop registering until "
+                            "it reconnects.", hand)
+                down.add(hand)
+                if self.raw_logger:
+                    try:
+                        self.raw_logger.queue_event(
+                            "source_disconnected",
+                            detail=f"hand={hand}",
+                            hand=hand,
+                        )
+                    except Exception:
+                        pass
+                det = (getattr(self, "detectors", None) or {}).get(hand)
+                pressed = getattr(det, "pressed", None)
+                if pressed:
+                    det.pressed = [False] * len(pressed)
+            elif (not was) and ok:
+                log.info("%s-hand board reconnected.", hand)
+                down.discard(hand)
+                if self.raw_logger:
+                    try:
+                        self.raw_logger.queue_event(
+                            "source_reconnected",
+                            detail=f"hand={hand}",
+                            hand=hand,
+                        )
+                    except Exception:
+                        pass
+                det = (getattr(self, "detectors", None) or {}).get(hand)
+                if det is not None:
+                    pressed = getattr(det, "pressed", None)
+                    if pressed:
+                        det.pressed = [False] * len(pressed)
+                    prof = (getattr(self, "calibration_profiles", None)
+                            or {}).get(hand)
+                    if prof is not None and getattr(prof, "resting", None):
+                        try:
+                            n = det.cal.num_sensors
+                            for i in range(min(n, len(prof.resting))):
+                                det.baseline[i] = float(prof.resting[i])
+                                # The value EMA decayed toward zero on
+                                # the zero-fill; left stale it reads as
+                                # a huge instant rise on the first real
+                                # sample.
+                                det.val_ema[i] = float(prof.resting[i])
+                        except (AttributeError, TypeError, ValueError) as e:
+                            log.warning("could not re-prime %s baselines "
+                                        "after reconnect: %s", hand, e)
+        self._hand_was_connected = dict(hands_now)
 
     def _pump_source(self) -> None:
         self._check_source_connection()
@@ -1604,6 +1801,33 @@ class GameEngine:
         self.screen_obj = ts
 
     # ---- session lifecycle -------------------------------------------------
+    def _clear_session_carry(self) -> None:
+        """Forget every piece of state a mode parks on the engine for
+        the length of a login session: difficulty levels, personal
+        bests and across-block fatigue baselines. These are session
+        memories in the same sense as calibration, so they die with
+        the session. Left in place, the next patient on the same app
+        run inherits the previous patient's response window, level-up
+        credit, bests and fatigue slopes (observed: patient B's first
+        reaction block opened at patient A's level with A's best RT as
+        the on-screen target). Called from begin_session as well as
+        end_session so a login always starts clean even if the
+        previous session ended abnormally."""
+        for attr in ("_reaction_level", "_reaction_clean_blocks",
+                     "_reaction_best_ms", "_force_pilot_levels",
+                     "_lighthouse_level", "_buzz_hunt_start_ms"):
+            if hasattr(self, attr):
+                try:
+                    delattr(self, attr)
+                except AttributeError:
+                    pass
+        # The fatigue-slope baselines compare each block with the same
+        # patient's earlier blocks; across patients the slope is
+        # meaningless (observed: patient B's first block reported a
+        # slope computed entirely from patient A's blocks).
+        self._across_blocks_mean_rt = []
+        self._across_blocks_mean_peak = []
+
     def begin_session(self, name: str, age: str) -> None:
         """Log in: the login screen's commit. One session spans every
         game played from here until end_session (or an app quit), so
@@ -1617,11 +1841,19 @@ class GameEngine:
         self.session.age = age
         self._session_active = True
         self._session_started_perf = time.perf_counter()
+        # Login-session token, stamped onto any max press probed this
+        # session. Anonymous logins all read participant "NA", so the
+        # token is what stops the NEXT anonymous patient inheriting
+        # this one's strength as the denominator of every percent
+        # target (the probe gate requires the token to match for NA).
+        self._session_token = (time.strftime("%Y%m%dT%H%M%S")
+                               + f"-{random.randrange(16 ** 6):06x}")
         self._session_games = 0
         # A new session starts with no hands calibrated: the first
         # game that needs a hand runs the quick flow, whatever the
         # previous session did.
         self._session_cal_hands = set()
+        self._clear_session_carry()
         self.eeg_session_start()
         log.info("Session started: participant=%s age=%s",
                  name, age or "(not given)")
@@ -1697,6 +1929,15 @@ class GameEngine:
         # Calibration is a session event, so its memory dies with the
         # session: the next player's first game runs the flow again.
         self._session_cal_hands = set()
+        # The applied profiles go too: leaving them in memory would let
+        # the next player's force normalisation (chords ER, leak bands,
+        # percent-of-max targets) silently reference this player's
+        # light-press gaps if they skip the quick flow. The quick-cal
+        # gate can still re-apply a saved on-disk profile, but that is
+        # a deliberate, stamped step, not a leftover.
+        self.calibration_profiles = {}
+        self.calibration_profile = None
+        self._clear_session_carry()
         self.show_title()
 
     def _pattern_is_configured(self) -> bool:
@@ -2100,6 +2341,20 @@ class GameEngine:
                          "reference a live-captured baseline, not a "
                          "measured resting level", hand)
         prof.set_max_press(finger_maxes)
+        # Stamp whose strength this is. The probe gate refuses a max
+        # whose profile names a different participant, so without this
+        # stamp a max probed onto an inherited or bare profile would
+        # force a pointless re-probe next block, and with a stale stamp
+        # it would wrongly pass as the previous patient's. Anonymous
+        # sessions stamp "NA": reuse then works within that session and
+        # any named session refuses it.
+        who = str(getattr(getattr(self, "session", None),
+                          "participant", "") or "").strip()
+        prof.participant = who or "NA"
+        # The login token rides along so two anonymous sessions can
+        # never share a max through the matching "NA" name alone.
+        prof.session_token = str(getattr(self, "_session_token", "")
+                                 or "")
         # Keep the legacy single-profile pointer coherent for
         # _stamp_calibration when nothing was applied yet this run.
         if getattr(self, "calibration_profile", None) is None:
@@ -2254,10 +2509,11 @@ class GameEngine:
 
         Reads the reaction.* config block, honours the Test Mode demo
         cap, and carries two pieces of state across blocks within one
-        app session as engine attributes: `_reaction_level` (which
+        login session as engine attributes: `_reaction_level` (which
         response window is in force) and `_reaction_best_ms` (session
         personal bests, shown in the per-trial feedback). Both reset on
-        restart, which fails in the safe direction (widest window).
+        restart and at end_session (via _clear_session_carry), which
+        fails in the safe direction (widest window).
         """
         from .modes.reaction import ReactionMode
         scorable = int(self.cfg.get("reaction.block_trials", 25))
@@ -2401,17 +2657,21 @@ class GameEngine:
                 self.cfg.get("pattern.session_cap_min", 30)),
             short_session=bool(
                 self.cfg.get("pattern.short_session", False)),
-            # Perfect (sub-100 ms) and the anticipation cut the mode's
-            # own RT stats apply (PatternMode.ANTICIPATION_CUT_MS) sit
-            # on the exact same boundary, so the default score_cfg
-            # rewards the response class the analysis discards --
-            # bigger points for guessing the next key than for actually
-            # responding to it. Perfect is capped down to Good's points
-            # for this mode only so the score no longer chases
-            # anticipation (audit finding #11); the tier label and
-            # timing thresholds are unchanged.
+            # Flat tier points for this mode only: every correct press
+            # pays Good's points whatever its speed. The mode's guard
+            # rail (Boyd and Winstein; Abe 2011) is reward accuracy and
+            # completion, never speed, or the speed-accuracy trade-off
+            # contaminates the RT outcome. Capping only Perfect (audit
+            # finding #11) left Great 6 vs Good 3 vs Late 1 on the
+            # patient-visible SCORE, which still paid a 450 ms press
+            # half of what a 150 ms press earned. The tier labels and
+            # timing thresholds are unchanged; only the payout is
+            # flattened.
             score_cfg=dataclasses.replace(
-                self.score_cfg, perfect_points=self.score_cfg.good_points),
+                self.score_cfg,
+                perfect_points=self.score_cfg.good_points,
+                great_points=self.score_cfg.good_points,
+                late_points=self.score_cfg.good_points),
             demo_trials=self._test_mode_trials(),
         )
         self._begin_block("pattern")
@@ -2912,6 +3172,19 @@ class GameEngine:
         cap = self._test_mode_trials()
         if cap is not None:
             total_trials = cap
+        # Fresh seed per block unless adaptive.seed pins one. Without
+        # this the mode always ran random.Random(0): every patient,
+        # every session, every block replayed the identical cue
+        # stream, so a returning patient could anticipate the opening
+        # lanes and cross-session RT gains could be sequence learning
+        # (the stim TIMING is periodic by design, so lane order is the
+        # only unpredictable part). Same pattern as reaction/chords.
+        seed_cfg = self.cfg.get("adaptive.seed", None)
+        try:
+            seed = (int(seed_cfg) if seed_cfg is not None
+                    else random.randrange(2 ** 32))
+        except (TypeError, ValueError):
+            seed = random.randrange(2 ** 32)
         self.mode = AdaptiveMode(
             engine=self,
             num_lanes=self.total_lanes,
@@ -2931,8 +3204,17 @@ class GameEngine:
             # holds above target_high (0.80).
             start_bpm=float(self.cfg.get("adaptive.start_bpm", 30)),
             adaptive_cfg=ac,
+            seed=seed,
         )
         self._begin_block("adaptive")
+        # The seed shaped the whole cue stream, so it lives next to
+        # the data it shaped (same rule as reaction and chords).
+        if self.raw_logger:
+            self.raw_logger.queue_event(
+                "adaptive_config",
+                detail=(f"seed={seed} total_trials={total_trials} "
+                        f"start_bpm={self.cfg.get('adaptive.start_bpm', 30)}"),
+                hand=self.hand_mode)
         self.screen_obj = self._screens["gameplay"]
 
     def begin_mirror_block(self) -> None:
@@ -3038,6 +3320,19 @@ class GameEngine:
         if (cap is not None and getattr(beatmap, "notes", None)
                 and len(beatmap.notes) > cap):
             beatmap.notes = beatmap.notes[:cap]
+        # Pre-shift snapshot for Retry on a songless chart (metronome
+        # click track, librosa fallback or a procedural map): there is
+        # no file to re-extract from, so the chart itself is the only
+        # way to rebuild the block. Taken BEFORE RhythmMode applies
+        # the pre_song_lead shift, so a retry does not compound it.
+        try:
+            self._last_rhythm_bpm = float(getattr(beatmap, "bpm", 0.0))
+            self._last_rhythm_notes = [
+                (float(n.t), int(n.lane), str(getattr(n, "kind", "tap")))
+                for n in (beatmap.notes or [])]
+        except (TypeError, AttributeError, ValueError):
+            self._last_rhythm_bpm = 0.0
+            self._last_rhythm_notes = []
         self.mode = RhythmMode(
             engine=self, beatmap=beatmap, windows=rw, score_cfg=self.score_cfg,
         )
@@ -3047,6 +3342,16 @@ class GameEngine:
         if self._test_mode_trials() is not None:
             self.mode._countdown_s = min(self.mode._countdown_s, 1.5)
         self._begin_block("rhythm")
+        # Snapshot the full note grid (post pre-song-lead shift, so the
+        # times match what log_rhythm_hit records). finish_block uses
+        # it to stamp the chart's own spacing variability next to the
+        # patient's, so a tap-variability number can be read against
+        # the chart it was played on instead of conflating the two.
+        try:
+            self._rhythm_chart_note_times_s = sorted(
+                float(n.t) for n in (beatmap.notes or []))
+        except (TypeError, AttributeError):
+            self._rhythm_chart_note_times_s = []
         self.screen_obj = self._screens["rhythm"]
         # Remember the beatmap so the Retry button on results can
         # rebuild this exact session. Storing the source song path +
@@ -3069,6 +3374,12 @@ class GameEngine:
             self.begin_adaptive_block()
             return
         if kind == "mirror":
+            # Mirror never passes the setup screen, so its retry keeps
+            # the same session calibration gate the pick path has. In
+            # the normal flow the hands are already covered and this
+            # returns False at zero cost.
+            if self.maybe_start_quick_calibration(self.begin_mirror_block):
+                return
             self.begin_mirror_block()
             return
         if kind == "reaction":
@@ -3106,6 +3417,26 @@ class GameEngine:
                     song,
                     difficulty=difficulty,
                     num_lanes=self.total_lanes,
+                )
+                self.begin_rhythm_block(bm)
+                return
+            notes = getattr(self, "_last_rhythm_notes", None)
+            if notes:
+                # No song file (metronome click track or procedural
+                # map): rebuild the exact chart from the pre-shift
+                # snapshot. Falling through to game select here used
+                # to make Retry silently do nothing for click-track
+                # blocks although the chart is fully reproducible.
+                from ..audio.beatmap import Beatmap, Note
+                bm = Beatmap(
+                    title=str(getattr(self, "_last_rhythm_title",
+                                      "Procedural")),
+                    bpm=float(getattr(self, "_last_rhythm_bpm", 0.0)
+                              or 60.0),
+                    song=None,
+                    difficulty=difficulty,
+                    notes=[Note(t=t, lane=lane, kind=k)
+                           for t, lane, k in notes],
                 )
                 self.begin_rhythm_block(bm)
                 return
@@ -3284,6 +3615,16 @@ class GameEngine:
         # the session was abandoned, crashed, or completed.
         self.session.notes = "block in progress (auto-save)"
         self.session.finished_at = ""
+        # The auto-save must only ever describe THIS block. Without
+        # the reset it carried the PREVIOUS block's block_summary,
+        # calibration and eeg snapshot (even across two patients), so
+        # a hard kill left a wrong but plausible forensic record: a
+        # crashed reaction block whose metadata read status
+        # 'completed' with another block's aggregates next to
+        # notes='block in progress'.
+        self.session.block_summary = {"block": self.current_block,
+                                      "status": "in_progress"}
+        self._stamp_calibration()
         try:
             self.session.save(self.session_paths.metadata_json)
         except Exception as e:
@@ -3453,9 +3794,13 @@ class GameEngine:
         # finger collapse onto one row) can show whether the two
         # hands were IN SYNC, only whether the later press was fast.
         # gaps_ms is the |right - left| press-latency gap on every
-        # clean synchronised hit this block (see log_trial), which is
-        # what the Results screen and report.py need to surface it to
-        # the patient/clinician instead of leaving it invisible.
+        # CLEAN BOTH-PRESSED PAIR this block (see log_trial): pairs
+        # the synchrony gate downgraded to Miss are included, because
+        # excluding them would censor every gap over max_async_ms and
+        # bias the measure. That means n_clean_pairs can exceed hits,
+        # which is correct and must be labelled as pairs, not "synced
+        # hits" (the old name claimed a subset of hits and confused
+        # every consumer that compared the two).
         if self.current_block == "mirror":
             gaps = getattr(self, "_mirror_gaps_ms", [])
             r_rts = getattr(self, "_mirror_right_rts_ms", [])
@@ -3463,6 +3808,9 @@ class GameEngine:
             summary["mirror"] = {
                 "mean_gap_ms": (round(sum(gaps) / len(gaps), 1)
                                  if gaps else None),
+                "n_clean_pairs": len(gaps),
+                # Legacy alias kept so anything reading the old key
+                # from fresh metadata keeps working; same number.
                 "n_synced_hits": len(gaps),
                 "right_hand_mean_rt_ms": (
                     round(sum(r_rts) / len(r_rts), 1) if r_rts else None),
@@ -3638,16 +3986,37 @@ class GameEngine:
             self._across_blocks_mean_rt)
         summary["fatigue_slope_force_per_block"] = metrics.fatigue_slope(
             self._across_blocks_mean_peak)
-        # Beat-offset stats for rhythm mode only.
+        # Beat-offset stats for rhythm mode only. Computed straight
+        # from the per-note signed offsets the game already matched
+        # (lane-aware, one press per note), NOT by re-matching press
+        # times to the nearest beat across all lanes: nearest-beat
+        # re-matching attributed a Late press to a neighbouring lane's
+        # closer beat whenever cross-lane gaps were under about twice
+        # the miss window, so the summary disagreed with the true
+        # logged offsets in trials.csv.
         if self.current_block == "rhythm" and self._rhythm_press_times_s:
-            bo = metrics.beat_offset_stats(
-                self._rhythm_press_times_s,
-                self._rhythm_beat_times_s,
-            )
+            offs = [float(o) for o in
+                    getattr(self, "_rhythm_signed_offsets_ms", [])]
+            if not offs:
+                # The three per-hit arrays are appended together in
+                # log_rhythm_hit, so a missing offsets list (older
+                # fixture) still has the matched pairs to difference.
+                offs = [(p - b) * 1000.0
+                        for p, b in zip(self._rhythm_press_times_s,
+                                        self._rhythm_beat_times_s)]
+            bo = metrics.signed_offset_stats(offs)
             summary["beat_offset_stats"] = {
                 k: (round(v, 3) if v is not None else None)
                 for k, v in bo.items()
             }
+            # The chart's own spacing variability (IOI CV over the full
+            # note grid), stored beside the patient numbers so a
+            # non-isochronous chart cannot be misread as an
+            # inconsistent patient.
+            chart_cv = metrics.tap_variability_cv(
+                getattr(self, "_rhythm_chart_note_times_s", []) or [])
+            summary["beat_offset_stats"]["chart_ioi_cv"] = (
+                round(chart_cv, 4) if chart_cv is not None else None)
             # Lag-1 autocorrelation of signed offsets. This is a
             # persistence-vs-alternation measure, not a labelled
             # "tracks the tempo" score: in the standard Wing-
@@ -3672,9 +4041,23 @@ class GameEngine:
             # Only meaningful when the patient is meant to tap to a
             # beat; in random-cadence modes it would conflate patient
             # inconsistency with stimulus inconsistency.
+            #
+            # Caveat kept in the raw number: it runs over hits only, so
+            # a missed note doubles one interval and a strong-beat
+            # chart is non-isochronous by design. The relative figure
+            # below and chart_ioi_cv above exist to read it against.
             tap_cv = metrics.tap_variability_cv(self._rhythm_press_times_s)
             summary["tap_variability_cv"] = (
                 round(tap_cv, 4) if tap_cv is not None else None)
+            # Patient-only variability: sd of (press ITI minus matched
+            # note IOI) over consecutive hits, normalised by the mean
+            # matched IOI. A skipped note doubles ITI and IOI together
+            # so the difference cancels chart spacing and misses,
+            # leaving the patient's own interval consistency.
+            rel_cv = metrics.relative_tap_variability(
+                self._rhythm_press_times_s, self._rhythm_beat_times_s)
+            summary["tap_variability_rel_cv"] = (
+                round(rel_cv, 4) if rel_cv is not None else None)
         # Session-level outcome rates (rolled up from the per-lane
         # counts above). Mirrors metrics.outcome_rates on a flat trial
         # list, but built from cached counts so the rollup matches the
@@ -3828,7 +4211,11 @@ class GameEngine:
         elif mode == "adaptive":
             self.begin_adaptive_block()
         elif mode == "mirror":
-            self.begin_mirror_block()
+            # A protocol whose first step is mirror must not dodge the
+            # session calibration gate the pick path runs.
+            if not self.maybe_start_quick_calibration(
+                    self.begin_mirror_block):
+                self.begin_mirror_block()
         elif mode == "reaction":
             self.begin_reaction_block()
         else:
@@ -3844,14 +4231,18 @@ class GameEngine:
         already safe on disk, so a report failure only logs a warning."""
         if not self.session_paths:
             return
-        if not bool(self.cfg.get("report.enabled", True)):
-            return
         from ..analytics import report
         root = self.session_paths.root
-        try:
-            report.generate(root)
-        except Exception as e:
-            log.warning("Session report generation failed: %s", e)
+        # report.enabled switches off HTML/chart generation only. The
+        # sessions_index row is the researcher's table of contents and
+        # must record every block that produced a folder, so it is
+        # written regardless: turning reports off used to silently
+        # drop blocks from the index while their folders existed.
+        if bool(self.cfg.get("report.enabled", True)):
+            try:
+                report.generate(root)
+            except Exception as e:
+                log.warning("Session report generation failed: %s", e)
         try:
             summary = self.session.block_summary or {}
             data_dir = Path(self.cfg.resolve_path(
@@ -4454,7 +4845,19 @@ class GameEngine:
     def _pace_multiplier(self) -> float:
         bpm = None
         if self.mode is not None and hasattr(self.mode, "adapter"):
-            bpm = getattr(self.mode.adapter, "bpm", None)
+            # The pace the trial was PRESENTED at, not the adapter's
+            # live value: adaptive calls record()+next_bpm() before
+            # log_trial, so the live bpm is already the NEXT trial's
+            # pace. Paying the reward off it made the points disagree
+            # with the row's own bpm_at_trial (a hit at 60 BPM that
+            # nudged the pace to 66 was paid at 1.1x while the log
+            # said 60), so the on-screen score could not be rebuilt
+            # from trials.csv. The stim-time snapshot is the honest
+            # basis; the live value stays as fallback for a mode that
+            # never stamps one.
+            bpm = getattr(self, "_last_stim_bpm", None)
+            if bpm is None:
+                bpm = getattr(self.mode.adapter, "bpm", None)
         elif self.mode is not None:
             bm = getattr(self.mode, "beatmap", None)
             if bm is not None:
@@ -4517,6 +4920,14 @@ class GameEngine:
         # code 131, marked whether or not a score penalty applies (the
         # press happened either way).
         self._eeg_send(eeg_trigger.CODES["resp_idle"])
+        # Count EVERY idle press, whether or not a point came off:
+        # the counter is the "did the patient press between stims"
+        # signal, and gating it on an actual deduction hid exactly
+        # the patient most likely to be doing it (mashing at score 0,
+        # or with the penalty configured 0 - max(0, 0-1) deducts
+        # nothing, so the old counter stayed at zero).
+        self._block_idle_presses = getattr(
+            self, "_block_idle_presses", 0) + 1
         penalty = int(self.cfg.get("scoring.idle_press_penalty", 0))
         if penalty <= 0:
             return 0
@@ -4525,12 +4936,6 @@ class GameEngine:
         self.score = new_score
         if actually > 0:
             self._last_gained = -actually
-            # Bump the spam counter so end-of-block stats record how
-            # often this patient was pressing between stims. Useful
-            # signal for the thesis: high counts may mean the pace is
-            # too slow, or the patient is gaming the system.
-            self._block_idle_presses = getattr(
-                self, "_block_idle_presses", 0) + 1
         return actually
 
     # ---- force + drift helpers --------------------------------------------
@@ -4965,7 +5370,8 @@ class GameEngine:
                    hand: str | None = None,
                    mirror_hand_rts: tuple[float | None, float | None]
                    | None = None,
-                   error_type: str | None = None) -> None:
+                   error_type: str | None = None,
+                   response_t_perf: float | None = None) -> None:
         """Close out one cadence-style trial.
 
         `cue_lanes` is which finger(s) the after-press cue should fire
@@ -5021,6 +5427,17 @@ class GameEngine:
         not a wrong finger and not necessarily a timeout, and the
         derived logic has no way to tell an extra tap from silence.
         None keeps the derived value, which is every other caller.
+
+        `response_t_perf` is the perf_counter time of the physical
+        press the trial's EEG response marker should lock to. It
+        exists for modes whose outcome.rt_ms is NOT stim-to-press
+        (syllables: first-tap RT from RESPOND start free-paced, mean
+        signed asynchrony paced), where stim_t_perf + rt_ms lands
+        seconds before the actual press. None keeps the stim + rt
+        reconstruction, which is exact for the classic-style modes. A
+        caller who passes it on a Miss is also asserting a press
+        happened, so no resp_timeout (130, deadline expired with no
+        press) is fabricated for that trial.
         """
         self._ensure_metric_state()
         gp = self._screens.get("gameplay")
@@ -5092,11 +5509,19 @@ class GameEngine:
         gained = self._score_for(outcome.points, outcome.label)
         self.score += gained
         self._last_gained = gained         # used by the HUD popup
-        self._update_streak(outcome.label != "Miss", "gameplay")
-        if outcome.label == "Miss":
-            self.misses += 1
-        else:
-            self.hits += 1
+        # A hardware-voided close (sensor gone mid-trial, or a run
+        # with no usable signal) is not patient behaviour: it must not
+        # break the streak (three of them would push the adaptive
+        # controller into recovery), and it must not count as a miss
+        # in the block tallies or per-lane charts. The row itself
+        # still logs, carrying its own error_type.
+        hardware_void = error_type in ("device_drop", "no_signal")
+        if not hardware_void:
+            self._update_streak(outcome.label != "Miss", "gameplay")
+            if outcome.label == "Miss":
+                self.misses += 1
+            else:
+                self.hits += 1
         # Close the miss-force window: on a miss, bank the summed
         # per-finger peak into the running total; either way disarm the
         # window and keep the snapshot for this trial's CSV row.
@@ -5133,7 +5558,7 @@ class GameEngine:
         if outcome.rt_ms is not None and outcome.label != "Miss":
             self._per_lane_rts.setdefault(trial.lane, []).append(
                 float(outcome.rt_ms))
-        if outcome.label == "Miss":
+        if outcome.label == "Miss" and not hardware_void:
             self._per_lane_misses[trial.lane] = (
                 self._per_lane_misses.get(trial.lane, 0) + 1)
         # Each wrong-finger press on this trial counts against the
@@ -5195,38 +5620,65 @@ class GameEngine:
         # epoching corrects from the logged t_event. Mirror trials get
         # one marker per hand because hand identity is what the LRP is
         # made of.
-        if outcome.label != "Miss":
+        if continuous is not None:
+            # Continuous rows (force_pilot runs, lighthouse holds) get
+            # NO response or feedback markers: there is no press onset
+            # to lock 100+lane to (the spec defines the response band
+            # as response-locked press markers for LRP/MRCP averaging)
+            # and a low-tracking Miss is not an expired deadline, so
+            # 130 would lie too. force_pilot's corridor-exit buzz
+            # emits its own 141 from the mode instead.
+            pass
+        else:
+            sent_response = False
             if mirror_hand_rts is not None:
+                # One marker per hand, whatever the trial's label:
+                # hand identity is what the LRP is made of, and a pair
+                # downgraded to Miss by the synchrony gate still has
+                # two real presses at known times to lock to.
                 r_rt, l_rt = mirror_hand_rts
                 if r_rt is not None:
                     self._eeg_send(
                         eeg_trigger.response_code("correct", trial.lane),
                         lane=trial.lane,
                         t_event=trial.stim_t_perf + r_rt / 1000.0)
+                    sent_response = True
                 if l_rt is not None:
                     left_lane = trial.lane + 4
                     self._eeg_send(
                         eeg_trigger.response_code("correct", left_lane),
                         lane=left_lane,
                         t_event=trial.stim_t_perf + l_rt / 1000.0)
-            else:
-                self._eeg_send(
-                    eeg_trigger.response_code("correct", trial.lane),
-                    lane=trial.lane,
-                    t_event=(trial.stim_t_perf + outcome.rt_ms / 1000.0
-                             if outcome.rt_ms is not None else now))
-        elif had_incorrect:
-            wrong_lane, wrong_t = trial.incorrect_presses[0]
-            self._eeg_send(eeg_trigger.response_code("wrong", wrong_lane),
-                           lane=wrong_lane, t_event=wrong_t)
-        else:
-            self._eeg_send(eeg_trigger.CODES["resp_timeout"], t_event=now)
-        # Feedback markers are optional (FRN work only): the discrete
-        # moment the outcome flash and chime appear is right here.
-        if getattr(self, "_eeg_feedback_markers", False):
-            self._eeg_send(eeg_trigger.CODES[
-                "feedback_positive" if outcome.label != "Miss"
-                else "feedback_negative"], t_event=now)
+                    sent_response = True
+            if not sent_response:
+                if outcome.label != "Miss":
+                    self._eeg_send(
+                        eeg_trigger.response_code("correct", trial.lane),
+                        lane=trial.lane,
+                        t_event=(response_t_perf
+                                 if response_t_perf is not None
+                                 else (trial.stim_t_perf
+                                       + outcome.rt_ms / 1000.0
+                                       if outcome.rt_ms is not None
+                                       else now)))
+                elif had_incorrect:
+                    wrong_lane, wrong_t = trial.incorrect_presses[0]
+                    self._eeg_send(
+                        eeg_trigger.response_code("wrong", wrong_lane),
+                        lane=wrong_lane, t_event=wrong_t)
+                elif response_t_perf is None:
+                    self._eeg_send(eeg_trigger.CODES["resp_timeout"],
+                                   t_event=now)
+                # else: the caller told us a press happened (syllables
+                # extra/missing-tap Miss), so no marker at all beats a
+                # fabricated deadline-expired code.
+            # Feedback markers are optional (FRN work only): the
+            # discrete moment the outcome flash and chime appear is
+            # right here.
+            if getattr(self, "_eeg_feedback_markers", False):
+                self._eeg_send(eeg_trigger.CODES[
+                    "feedback_positive" if outcome.label != "Miss"
+                    else "feedback_negative"], t_event=now)
         if self.trial_logger:
             row = {
                 "participant": self.session.participant,
@@ -5520,8 +5972,18 @@ class GameEngine:
 
     def log_rhythm_hit(self, sched_note, offset_ms: float, label: str,
                        points: int, now: float,
-                       was_pressed: bool = True) -> None:
+                       was_pressed: bool = True,
+                       t_press_perf: float | None = None) -> None:
         """Log a rhythm trial row.
+
+        `t_press_perf` is the press's own perf_counter timestamp
+        (PressEvent.t_perf). It exists because `now` here is SONG time
+        (seconds since countdown end) while every EEG marker's t_event
+        is defined on the perf_counter clock the 200 Hz samples share;
+        passing `now` to _eeg_send put rhythm response markers seconds
+        of clock-origin away from the sample stream. None (the expiry
+        path, or an old caller) falls back to perf_counter at log
+        time.
 
         `was_pressed` distinguishes the two ways a note can end up as
         a "Miss":
@@ -5595,18 +6057,24 @@ class GameEngine:
         # EEG response marker for the note. Any press on the note's
         # lane is a correct-finger response whatever its timing tier
         # (the row's early_late column carries the timing); a note
-        # that scrolled past unpressed is a timeout. t_event is frame
-        # time: rhythm sessions are never pooled for response-locked
-        # ERPs, so frame granularity is acceptable here.
+        # that scrolled past unpressed is a timeout. t_event must be on
+        # the perf_counter clock the raw samples share; `now` here is
+        # SONG time, so it must never reach _eeg_send. The press path
+        # gets the press's own detector timestamp; the expiry and
+        # feedback paths get perf_counter at log time (frame
+        # granularity, which is fine for bookkeeping codes).
+        t_wall = (t_press_perf if t_press_perf is not None
+                  else time.perf_counter())
         if was_pressed:
             self._eeg_send(eeg_trigger.response_code("correct", lane),
-                           lane=lane, t_event=now)
+                           lane=lane, t_event=t_wall)
         else:
-            self._eeg_send(eeg_trigger.CODES["resp_timeout"], t_event=now)
+            self._eeg_send(eeg_trigger.CODES["resp_timeout"],
+                           t_event=time.perf_counter())
         if getattr(self, "_eeg_feedback_markers", False):
             self._eeg_send(eeg_trigger.CODES[
                 "feedback_positive" if label != "Miss"
-                else "feedback_negative"], t_event=now)
+                else "feedback_negative"], t_event=time.perf_counter())
         if label != "Miss":
             self._per_lane_rts.setdefault(lane, []).append(abs(float(offset_ms)))
             # Capture press time + nearest beat time for the
@@ -5733,7 +6201,8 @@ class GameEngine:
                 self._per_lane_peak_force.setdefault(lane, []).append(p)
         self._maybe_resave_metadata()
 
-    def log_rhythm_unmatched(self, lane: int, now: float) -> None:
+    def log_rhythm_unmatched(self, lane: int, now: float,
+                             t_press_perf: float | None = None) -> None:
         # Block-summary counter so the analyst sees wrong-finger
         # activity without scanning raw.csv.
         self._block_rhythm_spurious_presses += 1
@@ -5747,13 +6216,23 @@ class GameEngine:
         self._per_lane_wrong[lane] = (
             self._per_lane_wrong.get(lane, 0) + 1)
         if self.raw_logger:
-            self.raw_logger.queue_event("rhythm_spurious_press", lane=lane,
-                                         t_perf=now, hand=self.hand_mode)
+            # raw.csv's t_perf column shares the sample clock, so the
+            # event must carry the press's perf timestamp, not song
+            # time.
+            self.raw_logger.queue_event(
+                "rhythm_spurious_press", lane=lane,
+                t_perf=(t_press_perf if t_press_perf is not None
+                        else time.perf_counter()),
+                hand=self.hand_mode)
         # EEG: a press with no scheduled note nearby is an idle press
         # (131, artifact bookkeeping). The wrong-finger band is
         # reserved for presses inside a trial. apply_wrong_press_penalty
         # below only docks score; the marker belongs to this event.
-        self._eeg_send(eeg_trigger.CODES["resp_idle"], t_event=now)
+        # `now` is song time; the marker clock is perf_counter, so use
+        # the press's own timestamp (fall back to perf at log time).
+        self._eeg_send(eeg_trigger.CODES["resp_idle"],
+                       t_event=(t_press_perf if t_press_perf is not None
+                                else time.perf_counter()))
         # Score penalty for the wrong-lane press in rhythm mode. Each
         # unmatched press costs `scoring.wrong_press_penalty` (floored
         # at zero so the score never goes negative).

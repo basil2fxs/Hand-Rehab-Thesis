@@ -214,6 +214,67 @@ class NeedsProbeTests(unittest.TestCase):
         prof.max_press = [200.0] * 4       # bypasses set_max_press
         self.assertTrue(needs_max_press_probe(prof))
 
+    def test_another_patients_max_is_re_probed(self):
+        # The stored max is the denominator of every percent target.
+        # A profile inherited from another patient (quick-cal skip
+        # path) must never supply it, however fresh it is.
+        from finger_rehab.game.force_stream import needs_max_press_probe
+        prof = _profile()
+        prof.participant = "PatientA"
+        prof.set_max_press([200.0] * 4)
+        self.assertFalse(
+            needs_max_press_probe(prof, participant="PatientA"))
+        self.assertFalse(
+            needs_max_press_probe(prof, participant="patienta"))
+        self.assertTrue(
+            needs_max_press_probe(prof, participant="PatientB"))
+
+    def test_unstamped_max_fails_a_named_identity_check(self):
+        # A max with no participant stamp cannot prove whose strength
+        # it was; with a session identity in hand the gate re-probes.
+        from finger_rehab.game.force_stream import needs_max_press_probe
+        prof = _profile()
+        prof.participant = ""
+        prof.set_max_press([200.0] * 4)
+        self.assertTrue(
+            needs_max_press_probe(prof, participant="PatientB"))
+        # Callers with no session identity keep the old behaviour.
+        self.assertFalse(needs_max_press_probe(prof))
+
+    def test_two_anonymous_logins_do_not_share_a_max(self):
+        # Anonymous sessions all stamp participant "NA", so the name
+        # match alone let patient B (second anonymous login inside the
+        # freshness window, quick-cal skipped) train percent targets
+        # of patient A's strength. The login-session token separates
+        # them: same login reuses, a different login re-probes.
+        from finger_rehab.game.force_stream import needs_max_press_probe
+        prof = _profile()
+        prof.participant = "NA"
+        prof.session_token = "20260824T010000-aaaaaa"
+        prof.set_max_press([200.0] * 4)
+        self.assertFalse(needs_max_press_probe(
+            prof, participant="NA",
+            session_token="20260824T010000-aaaaaa"))
+        self.assertTrue(needs_max_press_probe(
+            prof, participant="NA",
+            session_token="20260824T020000-bbbbbb"))
+        # An unstamped anonymous max cannot prove its login either.
+        prof.session_token = ""
+        self.assertTrue(needs_max_press_probe(
+            prof, participant="NA",
+            session_token="20260824T020000-bbbbbb"))
+        # Named identities do not need the token: the name is the
+        # identity, and reuse must survive an app restart mid-day.
+        prof.participant = "PatientA"
+        self.assertFalse(needs_max_press_probe(
+            prof, participant="PatientA",
+            session_token="20260824T020000-bbbbbb"))
+
+    def test_summary_names_the_participant(self):
+        prof = _profile()
+        prof.participant = "PatientA"
+        self.assertEqual(prof.summary().get("participant"), "PatientA")
+
 
 # ---- the probe state machine -------------------------------------------
 

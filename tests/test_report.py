@@ -108,6 +108,47 @@ class ReportGenerationTests(unittest.TestCase):
                             "Loud trials played", "adaptive"):
                 self.assertIn(needle, html_text)
 
+    def test_adaptive_pace_reaches_the_headline(self) -> None:
+        # Pace is adaptive's trained quantity: the controller holds
+        # hit rate in a fixed band by design, so a report without a
+        # BPM row hid the one number that says the patient improved.
+        from finger_rehab.analytics import report
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            _write_session(root)
+            meta = json.loads((root / "metadata.json").read_text())
+            meta["block_summary"]["bpm_final"] = 72.0
+            meta["block_summary"]["bpm_max"] = 90.0
+            meta["block_summary"]["bpm_min"] = 30.0
+            (root / "metadata.json").write_text(json.dumps(meta))
+            report.generate(root)
+            html_text = (root / "report.html").read_text()
+            for needle in ("Final pace (BPM)", "Top pace (BPM)",
+                           "72.0", "90.0"):
+                self.assertIn(needle, html_text)
+
+    def test_mirror_sync_gap_reaches_the_headline(self) -> None:
+        # Mirror's trained quantity is the |right - left| press gap;
+        # the generic Average RT row only ever showed the later of
+        # the two presses.
+        from finger_rehab.analytics import report
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            _write_session(root)
+            meta = json.loads((root / "metadata.json").read_text())
+            meta["block_summary"]["block"] = "mirror"
+            meta["block_summary"]["mirror"] = {
+                "mean_gap_ms": 84.2, "n_synced_hits": 9,
+                "right_hand_mean_rt_ms": 410.0,
+                "left_hand_mean_rt_ms": 460.0,
+            }
+            (root / "metadata.json").write_text(json.dumps(meta))
+            report.generate(root)
+            html_text = (root / "report.html").read_text()
+            for needle in ("Mean gap over clean pairs (ms)", "84.2",
+                           "Right hand mean RT (ms)", "460.0"):
+                self.assertIn(needle, html_text)
+
     def test_summary_csv_is_one_flat_row(self) -> None:
         from finger_rehab.analytics import report
         with tempfile.TemporaryDirectory() as td:
@@ -285,6 +326,38 @@ class ForcePilotPerFingerTableTests(unittest.TestCase):
         self.assertIn("12.5", html_out)
         self.assertIn("0.63", html_out)
         self.assertIn("4.2", html_out)
+
+    def test_force_pilot_table_splits_rows_by_corridor_level(
+            self) -> None:
+        # block_stats keeps a by_level split precisely because pooling
+        # runs from different corridor levels misrepresents both; the
+        # HTML report used to show only the pooled row, hiding a level
+        # change the in-app results screen flags.
+        from finger_rehab.analytics.report import _per_finger_table
+        meta = {
+            "hand": "right",
+            "block_summary": {
+                "block": "force_pilot",
+                "force_pilot": {
+                    "per_lane": {
+                        "1": {"runs": 4, "mae_pct": 8.0,
+                              "time_in_corridor": 0.7,
+                              "by_level": {
+                                  "1": {"runs": 2, "mae_pct": 11.0,
+                                        "time_in_corridor": 0.6},
+                                  "2": {"runs": 2, "mae_pct": 5.0,
+                                        "time_in_corridor": 0.8},
+                              }},
+                    },
+                },
+            },
+        }
+        html_out = _per_finger_table(meta)
+        self.assertIn("<th>Level</th>", html_out)
+        self.assertIn("11.0", html_out)
+        self.assertIn("5.0", html_out)
+        # The pooled 8.0 must not stand alone as if it were one level.
+        self.assertEqual(html_out.count("<td>Right Middle</td>"), 2)
 
     def test_falls_back_to_generic_table_for_old_metadata(self) -> None:
         # Old saves without block_summary.force_pilot.per_lane must

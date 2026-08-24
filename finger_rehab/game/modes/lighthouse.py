@@ -340,6 +340,13 @@ class LighthouseMode:
     # counts as released. Short: a genuine let-go reads as a plain
     # dip, not a held pause.
     RELEASE_QUIET_S = 0.3
+
+    # A dark-window entry or exit force older than this is stale: the
+    # sensor was not delivering samples at the boundary, so no honest
+    # drift can be computed from it. Half a second is many frames at
+    # the 200 Hz stream and far shorter than the shortest scoreable
+    # dark window.
+    DARK_EDGE_STALE_S = 0.5
     # How long the post-dark drift reveal stays on screen. Steady text,
     # no flashing.
     REVEAL_S = 2.5
@@ -499,9 +506,17 @@ class LighthouseMode:
         self._probe_queue: list[tuple[str, int]] = []
         self._probe_maxes: dict[str, list[float]] = {}
         profiles = getattr(engine, "calibration_profiles", None) or {}
+        # Same identity gate as Force Pilot: a stored max from another
+        # patient must be re-probed, not reused as this patient's
+        # percent-of-max reference.
+        who = str(getattr(getattr(engine, "session", None),
+                          "participant", "") or "")
+        token = getattr(engine, "_session_token", None)
         for hand in self.hand_names:
             if needs_max_press_probe(profiles.get(hand),
-                                     max_age_s=self.probe_max_age_s):
+                                     max_age_s=self.probe_max_age_s,
+                                     participant=who,
+                                     session_token=token):
                 self._probe_maxes[hand] = [0.0] * 4
                 self._probe_queue.extend((hand, f) for f in range(4))
 
@@ -568,6 +583,7 @@ class LighthouseMode:
         self._dark_entry_pct: dict[str, float] = {}
         self._dark_exit_pct: dict[str, float] = {}
         self._last_pct: float | None = None
+        self._last_pct_t: float | None = None
         self._err_smooth = 0.0
         self._flut_smooth = 0.0
         self._study_t0: float | None = None
@@ -576,6 +592,16 @@ class LighthouseMode:
         self._press_t0: float | None = None
         self._released = False
         self._release_quiet_s = 0.0
+        # Cross echoes track the STUDY lane's release separately: the
+        # gate must cover both fingers or the study hand can hold the
+        # reference force through the whole blind half.
+        self._set_released = False
+        self._set_release_quiet_s = 0.0
+        # Total seconds the reproduce lane sat below the entry floor
+        # during the delay: the actual rest, logged so a 0.3 s dip
+        # followed by a re-press cannot masquerade as a full memory
+        # delay offline.
+        self._rested_s = 0.0
         self._repro_samples: deque[tuple[float, float]] = deque(maxlen=2048)
         self._reveal_until: float | None = None
 
@@ -666,12 +692,21 @@ class LighthouseMode:
         self.view.rebaseline([self.hands[self.probe_hand]
                               [self.probe_finger]])
 
+    # Same probe guard rails as Force Pilot: a stalled probe (finger
+    # that never reaches the floor, or a dead pad) ends the block
+    # gently instead of hanging on MAX PRESS CHECK, worst here because
+    # the 5-25% target band is aimed at exactly the low-force patients
+    # most likely to sit near the floor.
+    PROBE_STALL_S = 25.0
+
     def _enter_probe(self, now: float) -> None:
         self.phase = "probe"
         self._phase_until = None
         self.probe = MaxPressProbe(n_presses=self.probe_presses,
                                    floor_counts=self.probe_floor_counts)
         self.probe_counts = 0.0
+        self._probe_progress_t = now
+        self._probe_banked_seen = 0
 
     def _probe_frame(self, now: float) -> None:
         lane = self.hands[self.probe_hand][self.probe_finger]
@@ -682,6 +717,18 @@ class LighthouseMode:
         self.probe_counts = reading.counts
         self.probe.update(now, reading.counts)
         if self.probe.state != "done":
+            banked = len(self.probe.peaks)
+            if banked != getattr(self, "_probe_banked_seen", 0):
+                self._probe_banked_seen = banked
+                self._probe_progress_t = now
+            if (now - (getattr(self, "_probe_progress_t", now) or now)
+                    > self.PROBE_STALL_S):
+                log.warning(
+                    "max-press probe stalled on %s finger %d (no attempt "
+                    "banked for %.0f s); ending the block gently",
+                    self.probe_hand, self.probe_finger,
+                    self.PROBE_STALL_S)
+                self._end("probe_timeout")
             return
         result = self.probe.result() or 0.0
         self._probe_maxes[self.probe_hand][self.probe_finger] = result
@@ -797,6 +844,7 @@ class LighthouseMode:
         self._dark_entry_pct = {}
         self._dark_exit_pct = {}
         self._last_pct = None
+        self._last_pct_t = None
         self._err_smooth = 0.0
         self._flut_smooth = 0.0
         self._study_t0 = None
@@ -805,6 +853,9 @@ class LighthouseMode:
         self._press_t0 = None
         self._released = False
         self._release_quiet_s = 0.0
+        self._set_released = False
+        self._set_release_quiet_s = 0.0
+        self._rested_s = 0.0
         self._repro_samples.clear()
         self.reveal_msg = ""
         self._reveal_until = None
@@ -903,6 +954,12 @@ class LighthouseMode:
         if pct is None:
             return
         self._last_pct = pct
+        # When this force was actually read. A dark boundary must not
+        # capture a stale value as the window's entry or exit: during
+        # a sensor dropout _last_pct freezes, and entry == exit would
+        # fabricate a perfect 0.0% drift plus the steady-dark bonus
+        # out of a dead device.
+        self._last_pct_t = now
         self.in_band_now = abs(pct - self.target_pct) <= self.tol_pct
         if self.lit_now:
             self._update_flame(pct - self.target_pct, dt)
@@ -939,17 +996,40 @@ class LighthouseMode:
             t_mark = (self.hold_t0 or 0.0) + b
             self.engine.log_segment_end(name, self.trial_counter,
                                         self.lane, t_mark)
-            if name.startswith("dark") and self._last_pct is not None:
-                self._dark_exit_pct[name] = self._last_pct
-                entry = self._dark_entry_pct.get(name)
-                if entry is not None:
-                    drift = self._last_pct - entry
-                    # The relight reveal: the drift that accumulated
-                    # unseen, said plainly and left up long enough to
-                    # read (steady text, no flashing).
-                    self.reveal_msg = (
-                        f"In the dark your hold drifted {drift:+.1f}% "
-                        f"of max")
+            if name.startswith("dark"):
+                # An honest drift needs three things: the window
+                # actually scored samples, and a FRESH force reading
+                # at both edges. A sensor dropout freezes _last_pct,
+                # so without these checks a dead device produced a
+                # perfect "drifted +0.0%" reveal, collected the
+                # steady-dark bonus, and wrote drift 0.0 into
+                # block_stats.
+                acc = self._win_acc.get(name)
+                win_scored = acc is not None and acc[1] > 0.0
+                fresh = (self._last_pct is not None
+                         and self._last_pct_t is not None
+                         and t_mark - self._last_pct_t
+                         <= self.DARK_EDGE_STALE_S)
+                if win_scored and fresh:
+                    self._dark_exit_pct[name] = self._last_pct
+                    entry = self._dark_entry_pct.get(name)
+                    if entry is not None:
+                        drift = self._last_pct - entry
+                        # The relight reveal: the drift that
+                        # accumulated unseen, said plainly and left up
+                        # long enough to read (steady text, no
+                        # flashing).
+                        self.reveal_msg = (
+                            f"In the dark your hold drifted "
+                            f"{drift:+.1f}% of max")
+                        self._reveal_until = ((self.hold_t0 or 0.0) + b
+                                              + self.REVEAL_S)
+                else:
+                    # Say what happened instead of inventing a number,
+                    # and drop the entry so no drift or bonus can be
+                    # computed for this window.
+                    self._dark_entry_pct.pop(name, None)
+                    self.reveal_msg = "Signal lost in the dark"
                     self._reveal_until = ((self.hold_t0 or 0.0) + b
                                           + self.REVEAL_S)
             self._win_idx += 1
@@ -957,7 +1037,11 @@ class LighthouseMode:
                 nxt = self.hold_windows[self._win_idx][0]
                 self.engine.log_segment_start(nxt, self.trial_counter,
                                               self.lane, t_mark)
-                if nxt.startswith("dark") and self._last_pct is not None:
+                if (nxt.startswith("dark")
+                        and self._last_pct is not None
+                        and self._last_pct_t is not None
+                        and t_mark - self._last_pct_t
+                        <= self.DARK_EDGE_STALE_S):
                     self._dark_entry_pct[nxt] = self._last_pct
 
     # ---- closing a hold ----------------------------------------------------
@@ -1185,14 +1269,32 @@ class LighthouseMode:
             if rel is not None and rel.percent is not None:
                 if rel.percent < self.ENTRY_FLOOR_PCT:
                     self._release_quiet_s += dt
+                    self._rested_s += dt
                 else:
                     self._release_quiet_s = 0.0
                 if self._release_quiet_s >= self.RELEASE_QUIET_S:
                     self._released = True
+            # A cross echo has TWO fingers to let go of. The gate used
+            # to watch only the reproduce lane, so the STUDY finger
+            # could hold the reference force through the whole delay
+            # and blind window: the trial became live hand-to-hand
+            # matching, scored Great, and logged released=True. The
+            # set lane must go quiet too before reproduce can arm.
+            if self.cross:
+                srel = self.view.read(self.set_lane)
+                if srel is not None and srel.percent is not None:
+                    if srel.percent < self.ENTRY_FLOOR_PCT:
+                        self._set_release_quiet_s += dt
+                    else:
+                        self._set_release_quiet_s = 0.0
+                    if self._set_release_quiet_s >= self.RELEASE_QUIET_S:
+                        self._set_released = True
+            else:
+                self._set_released = self._released
             elapsed = now - (self._delay_t0 or now)
             self.delay_left_s = max(0.0, float(p["delay_s"]) - elapsed)
             if self.delay_left_s <= 0.0:
-                if self._released:
+                if self._released and self._set_released:
                     self.sub = "reproduce"
                     self._repro_prompt_t = now
                     self.engine.log_segment_end(
@@ -1213,6 +1315,18 @@ class LighthouseMode:
         # sub == "reproduce". The scored window starts at the press,
         # not at the prompt, so a slow blind start does not eat into
         # the settled window the notebook scores.
+        #
+        # On a cross echo the study finger must STAY released here: a
+        # re-press during the blind window would put the reference
+        # force back under the other hand and turn the reproduction
+        # into concurrent matching, so it gutters the trial the same
+        # way holding through the delay does.
+        if self.cross:
+            srel = self.view.read(self.set_lane)
+            if (srel is not None and srel.percent is not None
+                    and srel.percent >= self.ENTRY_FLOOR_PCT):
+                self._close_echo(now, guttered=True)
+                return
         pct = self._read_lane(self.lane, now)
         self.lit_now = False
         self.pressing_now = pct is not None and pct >= self.ENTRY_FLOOR_PCT
@@ -1273,7 +1387,14 @@ class LighthouseMode:
             f"cross={self.cross};delay_s={float(p['delay_s']):.1f};"
             f"target={self.target_pct:.2f};made={_fmt(made)};"
             f"err={_fmt(signed)};guttered={guttered};"
-            f"released={self._released}")
+            f"released={self._released};"
+            # study_released covers the SET lane (equal to released on
+            # a same-finger echo); rested_s is how long the reproduce
+            # finger actually sat below the floor during the delay, so
+            # the analysis can tell a real memory delay from a brief
+            # dip-and-repress.
+            f"study_released={self._set_released};"
+            f"rested_s={self._rested_s:.2f}")
         segments = [("enter", self.trial_t0 or now,
                      self._study_t0 if self._study_t0 is not None else now)]
         if self._study_t0 is not None:
@@ -1330,9 +1451,12 @@ class LighthouseMode:
     def _end(self, reason: str) -> None:
         self.phase = "done"
         self.end_reason = reason
-        # Next block this app session starts where this one ended,
-        # like Force Pilot's level carry; a restart resets to config.
-        self.engine._lighthouse_level = self.level
+        # Next block this login session starts where this one ended,
+        # like Force Pilot's level carry; a restart or session end
+        # resets to config, and a Test Mode demo never writes it so a
+        # supervisor's demo cannot seed a real patient's difficulty.
+        if not self.demo:
+            self.engine._lighthouse_level = self.level
         self.engine.finish_block()
 
     # ---- block summary -----------------------------------------------------

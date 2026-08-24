@@ -390,6 +390,37 @@ class ScoreMultiplierTests(unittest.TestCase):
         eng.mode = FakeMode()
         self.assertAlmostEqual(eng._pace_multiplier(), 2.0)
 
+    def test_pace_multiplier_uses_the_stim_time_snapshot(self) -> None:
+        # Adaptive calls record()+next_bpm() before log_trial, so the
+        # adapter's live bpm is already the NEXT trial's pace. The
+        # reward must ride the pace the trial was presented at (the
+        # row's own bpm_at_trial), or the logged score cannot be
+        # rebuilt from trials.csv.
+        eng = self._make_engine()
+
+        class FakeMode:
+            class A:
+                bpm = 66.0          # already moved by the hit
+            adapter = A()
+        eng.mode = FakeMode()
+        eng._last_stim_bpm = 60.0   # what the trial was presented at
+        self.assertAlmostEqual(eng._pace_multiplier(), 1.0)
+
+    def test_idle_press_counted_even_at_score_zero(self) -> None:
+        # The counter is the 'pressing between stims' signal; gating
+        # it on an actual deduction hid exactly the patient most
+        # likely to be doing it (mashing at score 0, where max(0,0-1)
+        # deducts nothing).
+        from unittest.mock import MagicMock
+        eng = self._make_engine()
+        eng.cfg = MagicMock()
+        eng.cfg.get = MagicMock(return_value=1)   # penalty 1
+        eng.score = 0
+        eng._eeg_send = lambda *a, **k: None
+        took = eng.apply_idle_press_penalty()
+        self.assertEqual(took, 0)
+        self.assertEqual(eng._block_idle_presses, 1)
+
     def test_streak_multiplier_caps_at_1_5x(self) -> None:
         eng = self._make_engine()
         eng.hit_streak = 99
@@ -928,6 +959,152 @@ class PaceLabelUnusedDocstringTests(unittest.TestCase):
         from finger_rehab.analytics.adaptive import AdaptiveEngine
         doc = AdaptiveEngine.pace_label.__doc__ or ""
         self.assertNotIn("Used by the HUD", doc)
+
+
+class DeviceDropTrialTests(unittest.TestCase):
+    """A press-less trial close while the sensor source is down is
+    hardware loss, not a patient miss: fed to the adapter it entered
+    recovery, knocked the BPM down and polluted the EMAs, and the
+    plain 'timeout' row was indistinguishable afterwards."""
+
+    def _build(self):
+        from unittest.mock import MagicMock
+        from finger_rehab.analytics.adaptive import AdaptiveConfig
+        from finger_rehab.game.modes.adaptive import AdaptiveMode
+        from finger_rehab.game.scoring import ScoreConfig
+        engine = MagicMock()
+        engine.cfg = MagicMock()
+        engine.cfg.get = MagicMock(return_value=0)
+        engine.log_trial = MagicMock()
+        engine.on_stim = MagicMock()
+        engine.source.provides_samples = True
+        engine.source.is_connected = True
+        engine._hands_down = set()
+        ac = AdaptiveConfig(target_low=0.65, target_high=0.80,
+                            bpm_min=10.0, bpm_max=140.0, bpm_step=10.0,
+                            weakness_bias=2.5, min_trials=2)
+        mode = AdaptiveMode(engine=engine, num_lanes=4, total_trials=8,
+                            block_size=4, score_cfg=ScoreConfig(),
+                            timeout_s=1.0, early_window_s=0.1,
+                            start_bpm=60.0, adaptive_cfg=ac)
+        return engine, mode
+
+    def test_timeout_during_dropout_skips_the_adapter(self) -> None:
+        engine, mode = self._build()
+        mode._fire(now=0.0)
+        engine.source.is_connected = False
+        bpm_before = mode.adapter.bpm
+        mode._finish(None, now=2.0)
+        self.assertEqual(mode.adapter.bpm, bpm_before)
+        # The row carries its own error_type instead of 'timeout'.
+        kwargs = engine.log_trial.call_args.kwargs
+        self.assertEqual(kwargs.get("error_type"), "device_drop")
+        # And no per-lane EMA learned anything from the dead trial.
+        self.assertEqual(
+            [st.n_trials for st in mode.adapter.state], [0, 0, 0, 0])
+
+    def test_one_board_drop_of_the_lane_hand_counts(self) -> None:
+        engine, mode = self._build()
+        mode._fire(now=0.0)
+        hand = "left" if mode.active.lane >= 4 else "right"
+        engine._hands_down = {hand}
+        mode._finish(None, now=2.0)
+        kwargs = engine.log_trial.call_args.kwargs
+        self.assertEqual(kwargs.get("error_type"), "device_drop")
+
+    def test_ordinary_timeout_still_feeds_the_adapter(self) -> None:
+        engine, mode = self._build()
+        mode._fire(now=0.0)
+        mode._finish(None, now=2.0)
+        kwargs = engine.log_trial.call_args.kwargs
+        self.assertNotEqual(kwargs.get("error_type"), "device_drop")
+        self.assertEqual(
+            sum(st.n_trials for st in mode.adapter.state), 1)
+
+
+class BlockSeedTests(unittest.TestCase):
+    """begin_adaptive_block used to construct AdaptiveMode without a
+    seed, so every patient, every session, every block ran
+    random.Random(0) and replayed the identical cue stream: a
+    returning patient could anticipate the opening lanes, and
+    cross-session RT gains could be sequence learning. The scheduling
+    module's own header says repeat-avoidance exists because a
+    predictable cue measures anticipation, not response."""
+
+    def _engine(self, td, seed_cfg=None):
+        import os
+        os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+        os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+        import pygame
+        pygame.init()
+        from unittest.mock import MagicMock
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.hardware.keyboard_source import (
+            KeyboardOnlySource)
+        cfg = Config.load()
+        cfg.data["ui"]["resolution"] = [640, 480]
+        cfg.data["audio"]["enabled"] = False
+        cfg.data["session"]["data_dir"] = td
+        cfg.data["report"] = {"enabled": False}
+        if seed_cfg is not None:
+            cfg.data.setdefault("adaptive", {})["seed"] = seed_cfg
+        eng = GameEngine(cfg, KeyboardOnlySource())
+        gp = MagicMock()
+        gp.lanes = []
+        eng._screens = {"gameplay": gp, "results": MagicMock()}
+        return eng
+
+    def _draw_lanes(self, eng, n=24):
+        """The lane stream the block would present, drawn from the
+        mode's own rng and adapter (no trials played, so the weights
+        stay at their cold-start values)."""
+        m = eng.mode
+        lanes = list(m.sequence)
+        while len(lanes) < n:
+            lanes.extend(m.adapter.generate_sequence(4, m.rng))
+        return lanes[:n]
+
+    def test_fresh_blocks_do_not_replay_one_stream(self) -> None:
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            a = self._engine(td)
+            a.begin_adaptive_block()
+            lanes_a = self._draw_lanes(a)
+            a.finish_block()
+            b = self._engine(td)
+            b.begin_adaptive_block()
+            lanes_b = self._draw_lanes(b)
+            b.finish_block()
+            self.assertNotEqual(lanes_a, lanes_b)
+
+    def test_pinned_seed_reproduces_the_block(self) -> None:
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            a = self._engine(td, seed_cfg=123)
+            a.begin_adaptive_block()
+            lanes_a = self._draw_lanes(a)
+            a.finish_block()
+            b = self._engine(td, seed_cfg=123)
+            b.begin_adaptive_block()
+            lanes_b = self._draw_lanes(b)
+            b.finish_block()
+            self.assertEqual(lanes_a, lanes_b)
+
+    def test_seed_is_recorded_next_to_the_data(self) -> None:
+        import csv
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as td:
+            eng = self._engine(td, seed_cfg=777)
+            eng.begin_adaptive_block()
+            root = Path(eng.session_paths.root)
+            eng.finish_block()
+            with (root / "raw.csv").open() as f:
+                events = [r for r in csv.DictReader(f)
+                          if r.get("event") == "adaptive_config"]
+            self.assertEqual(len(events), 1)
+            self.assertIn("seed=777", events[0].get("detail", ""))
 
 
 if __name__ == "__main__":

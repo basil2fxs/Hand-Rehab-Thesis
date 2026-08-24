@@ -664,6 +664,42 @@ class FatigueAndCapTests(unittest.TestCase):
         self.assertGreater(mode.fatigue_rest, mode.rest_min)
         engine.finish_block.assert_not_called()
 
+    def test_forced_rest_position_is_recorded_and_logged(self) -> None:
+        """A mid-take forced rest resumes the same take, so its
+        post-rest trials enter that take's RT mean. The position must
+        therefore land in raw.csv and block_stats, or the analysis can
+        only find it by eyeballing timestamp gaps."""
+        engine, mode = _build_mode()
+        seg_i = _seg_index(mode, "seq")
+        mode._seg_idx = seg_i
+        mode._trial_in_seg = 0
+        self._run_timeouts(mode, 5)
+        self.assertEqual(mode.phase, "rest")
+        label = mode.segments[seg_i].label
+        self.assertEqual(mode._forced_rest_positions,
+                         [{"take": label, "trial_in_seg": 5}])
+        calls = [c for c in engine.raw_logger.queue_event.call_args_list
+                 if c.args and c.args[0] == "fatigue_rest"]
+        self.assertEqual(len(calls), 1)
+        detail = calls[0].kwargs.get("detail", "")
+        self.assertIn(f"take={label}", detail)
+        self.assertIn("trial_in_seg=5", detail)
+        stats = mode.block_stats()
+        self.assertEqual(stats["fatigue_rest_positions"],
+                         mode._forced_rest_positions)
+
+    def test_one_cycle_takes_warn_at_construction(self) -> None:
+        """soc_cycles_per_block 1 makes every trained take exactly one
+        cycle, which the block-start trim then excludes wholesale: the
+        session plays out but produces no take means and no learning
+        score. That configuration must announce itself."""
+        import logging
+        with self.assertLogs("finger_rehab.game.modes.pattern",
+                             level=logging.WARNING) as cm:
+            _build_mode(soc_cycles_per_block=1)
+        self.assertTrue(
+            any("no learning score" in m for m in cm.output), cm.output)
+
     def test_second_fatigue_run_ends_the_session_gracefully(self) -> None:
         engine, mode = _build_mode()
         mode._seg_idx = _seg_index(mode, "seq")
@@ -954,6 +990,15 @@ class ScoreCapTests(unittest.TestCase):
                 fast = classify(50.0, eng.mode.score_cfg)
                 self.assertEqual(fast.label, "Perfect")
                 self.assertEqual(fast.points, eng.mode.score_cfg.good_points)
+                # The whole ladder is flat, not only the top tier: the
+                # guard rail is reward accuracy and completion, never
+                # speed, and Great 6 vs Good 3 vs Late 1 still paid a
+                # fast press double on the patient-visible SCORE.
+                for rt in (150.0, 450.0, 900.0):
+                    out = classify(rt, eng.mode.score_cfg)
+                    self.assertEqual(
+                        out.points, eng.mode.score_cfg.good_points,
+                        f"{out.label} at {rt} ms pays {out.points}")
         finally:
             pygame.quit()
 

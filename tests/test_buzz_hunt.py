@@ -552,6 +552,10 @@ class LocalisationTests(unittest.TestCase):
         self.assertEqual(m._dur_stair[m.hand].level, before)
         self.assertEqual(m._loc_records, [])
         self.assertEqual(m.engine._block_stim_failures, 1)
+        # The patient DID press, so the derived 'timeout' next to a
+        # non-empty keys_pressed was internally inconsistent; the row
+        # carries the hardware taxonomy instead.
+        self.assertEqual(row["error_type"], "stim_failed")
 
 
 # ---- catch trials -------------------------------------------------------
@@ -1150,6 +1154,47 @@ class BlockFlowTests(unittest.TestCase):
         self.assertEqual(stats["span"]["trials"], 0)
         self.assertIn("confusion", stats)
 
+    def test_frame_stall_across_a_gap_voids_the_trial(self):
+        # A stall longer than the silent gap dispatches the overdue
+        # STOP and the next STIM in one frame, delivering one merged
+        # buzz; the trial used to score the patient against 'two' on a
+        # stimulus that was never two buzzes. Late-past-half-the-gap
+        # voids it like a dropped pulse.
+        m = _mode(_engine(), catch_rate=0.0)
+        m = _only_stage(m, "gap", 2)
+        t = _to_trial(m)
+        # Reach the play sub-phase, then stall a whole second: both
+        # pulses of a two-buzz plan dispatch in the same frame.
+        guard = t + 30.0
+        while m.sub != "play" and t < guard:
+            t += 1.0 / 60.0
+            m._tick(t)
+        # Force a two-pulse plan so a gap exists to collapse.
+        if len(m._pulse_plan) < 2:
+            m.gap_two = True
+            m.params["two"] = 1
+            from finger_rehab.game.modes.buzz_hunt import (
+                pulses_from_params)
+            m._pulse_plan = pulses_from_params(m.waveform, m.params)
+        m._tick(t + 1.0)
+        self.assertIs(m._stim_delivered, False)
+        events = [ev for ev in m.engine.raw_logger.events
+                  if ev["event"] == "stim_late_pulse"]
+        self.assertEqual(len(events), 1)
+
+    def test_span_rows_stamp_the_real_response_window(self):
+        # timeout_ms is documented as the RT censoring limit, and a
+        # span trial's real window is response_window_s plus replay
+        # time per item; the bare response_window_s used to be
+        # stamped on every stage.
+        m = _mode(_engine(), catch_rate=0.0)
+        m = _only_stage(m, "span", 1)
+        _to_trial(m)
+        want = (m.response_window_s
+                + m.replay_item_s * len(m.sequence)) * 1000.0
+        self.assertEqual(m.engine._last_stim_timeout_ms, want)
+        self.assertGreater(want, m.response_window_s * 1000.0)
+
     def test_pause_mid_trial_restarts_it(self):
         m = _mode(_engine(), catch_rate=0.0)
         m = _only_stage(m, "loc", 2)
@@ -1163,6 +1208,43 @@ class BlockFlowTests(unittest.TestCase):
         restarts = [ev for ev in m.engine.raw_logger.events
                     if ev["event"] == "trial_restart"]
         self.assertEqual(len(restarts), 1)
+
+    def test_pause_restart_redraws_the_material(self):
+        # The restart used to keep the same seed and plan, so a span
+        # or gap trial could be heard twice and scored as a single
+        # exposure; on a gap trial the replayed kind IS the answer,
+        # making the Esc chip a repeatable exploit. The retry draws
+        # fresh material for the same trial slot, exactly like the
+        # early-press path.
+        m = _mode(_engine(), catch_rate=0.0)
+        m = _only_stage(m, "gap", 2)
+        t = _to_trial(m)
+        t = _to_respond(m, t)
+        seed_before = m.trial_seed
+        m.on_resume(5.0)
+        self.assertEqual(m.phase, "announce")
+        self.assertNotEqual(m.trial_seed, seed_before)
+
+    def test_pause_restart_keeps_a_hebb_sequence(self):
+        # The hidden Hebb sequence is derived from the participant,
+        # not the trial seed: its repetition across the session is the
+        # measurement, so the redraw must not touch it.
+        m = _mode(_engine(), catch_rate=0.0)
+        m = _only_stage(m, "span", 6)
+        t = _to_trial(m)
+        guard = t + 60.0
+        while not m.is_hebb and t < guard:
+            t = _to_respond(m, t)
+            m.queue_press(_press_event(m.sequence[0], t + 0.2))
+            t += 0.3
+            m._tick(t)
+            while m.phase != "trial" and t < guard:
+                t += 1.0 / 60.0
+                m._tick(t)
+        self.assertTrue(m.is_hebb)
+        seq_before = list(m.sequence)
+        m.on_resume(5.0)
+        self.assertEqual(list(m.sequence), seq_before)
 
     def test_keyboard_source_is_refused_plainly(self):
         e = _engine()

@@ -243,13 +243,17 @@ class IdlePressPenaltyTests(unittest.TestCase):
         # 4 idle presses, all counted, score floored at zero on the last.
         self.assertEqual(eng._block_idle_presses, 4)
 
-    def test_zero_idle_penalty_is_noop(self) -> None:
+    def test_zero_idle_penalty_still_counts_the_press(self) -> None:
+        # No points move, but the COUNT must: 'Idle presses' is the
+        # pressing-between-stims signal, and gating it on an actual
+        # deduction hid exactly the patient most likely to be doing
+        # it (penalty configured 0, or mashing at score 0).
         eng = self._make_engine(idle_pen=0)
         eng.score = 5
         actual = eng.apply_idle_press_penalty()
         self.assertEqual(actual, 0)
         self.assertEqual(eng.score, 5)
-        self.assertEqual(eng._block_idle_presses, 0)
+        self.assertEqual(eng._block_idle_presses, 1)
 
     def test_floors_at_zero(self) -> None:
         eng = self._make_engine(idle_pen=5)

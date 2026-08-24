@@ -213,7 +213,15 @@ class AudioEngine:
             log.warning("Could not play %s: %s", p, e)
             return False
 
-    def start_metronome(self, bpm: float) -> None:
+    def start_metronome(self, bpm: float,
+                        first_click_in_s: float | None = None) -> None:
+        """Start the click track. `first_click_in_s` schedules the
+        first click that many seconds from now instead of one full
+        period out. A restart (rhythm resume) needs it: this method
+        resets the click phase, so without it the clicks after a pause
+        land up to half a period away from the beats the game scores,
+        and the patient spends the rest of the block hearing one grid
+        while being marked against another."""
         if not self._initialised:
             return
         if pygame is not None:
@@ -224,7 +232,10 @@ class AudioEngine:
         self._song_path = None
         self._metronome_period = 60.0 / max(bpm, 1.0)
         self._song_start_perf = time.perf_counter()
-        self._next_metronome_t = self._metronome_period
+        if first_click_in_s is not None and first_click_in_s > 0:
+            self._next_metronome_t = float(first_click_in_s)
+        else:
+            self._next_metronome_t = self._metronome_period
 
     def stop(self) -> None:
         # Kill BOTH the music stream AND any in-flight channel sounds (click

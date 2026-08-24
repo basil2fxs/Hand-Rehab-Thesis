@@ -110,6 +110,17 @@ the code rides the same byte, no second pass.
 Lane IS in the byte here because hand identity (right 0-3 vs left 4-7) is
 what the LRP is made of, and per-finger response codes cost nothing.
 
+Continuous-trial rows (force_pilot runs, lighthouse holds) emit NO
+response-band marker at all: a run close has no press onset to lock
+100 + lane to, and a low-tracking miss is not an expired deadline, so
+130 would mislabel it. The same applies to their trial-close feedback
+markers; force_pilot's discrete negative-feedback event is the
+corridor-exit buzz, which emits 141 from the mode itself (see the
+feedback band). Syllables trials lock their response marker to the
+child's actual first tap (the mode's rt is not stim-to-press), and a
+wrong-tap-count miss where the child DID press promptly emits no
+response marker rather than a false 130.
+
 ### Feedback band (140-149)
 
 | Code | Event | Enables | Status |

@@ -469,6 +469,11 @@ class ForcePilotScreen(Screen):
             title, colour = "GREAT FLYING!", self.theme.success
         elif label == "Good":
             title, colour = "GOOD RUN", self._accent()
+        elif label == "NoSignal":
+            # A signal-starved run is a hardware event: showing ROUGH
+            # RIDE with 'Mean error 0.0%' blamed the patient for a
+            # dead sensor.
+            title, colour = "SIGNAL LOST", self.theme.error
         else:
             title, colour = "ROUGH RIDE", self.theme.warning
         draw_text(surf, title, (cx, 170), self.theme, self.layout,
@@ -477,18 +482,24 @@ class ForcePilotScreen(Screen):
                                       int(res.get("finger", 0)))
         draw_text(surf, who, (cx, 232), self.theme, self.layout,
                   pt=FONT_BODY + 2, centre=True, colour=self.theme.muted)
-        tic = res.get("tic", 0.0) * 100.0
-        mae = res.get("mae", 0.0)
-        rings = res.get("rings", 0)
-        rings_total = res.get("rings_total", 0)
-        rel = res.get("release_mae")
-        rows = [
-            ("Time in corridor", f"{tic:.0f}%"),
-            ("Mean error", f"{mae:.1f}% of max"),
-            ("Rings", f"{rings} of {rings_total}"),
-            ("Release control",
-             f"{rel:.1f}% of max" if rel is not None else "n/a"),
-        ]
+        if label == "NoSignal":
+            rows = [
+                ("Sensor data", "missing for this run"),
+                ("The run", "was not scored"),
+            ]
+        else:
+            tic = (res.get("tic") or 0.0) * 100.0
+            mae = res.get("mae") or 0.0
+            rings = res.get("rings", 0)
+            rings_total = res.get("rings_total", 0)
+            rel = res.get("release_mae")
+            rows = [
+                ("Time in corridor", f"{tic:.0f}%"),
+                ("Mean error", f"{mae:.1f}% of max"),
+                ("Rings", f"{rings} of {rings_total}"),
+                ("Release control",
+                 f"{rel:.1f}% of max" if rel is not None else "n/a"),
+            ]
         y = 310
         name_font = self.layout.font(FONT_H2)
         value_font = self.layout.font(FONT_H2, bold=True)

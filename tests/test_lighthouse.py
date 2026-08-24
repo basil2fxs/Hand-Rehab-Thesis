@@ -104,6 +104,10 @@ def _engine(hand_mode="right", cfg_extra=None):
     e.current_block = "lighthouse"
     e.session_paths = None
     e.session = MagicMock()
+    # The probe gate is an identity gate too: the fixtures share one
+    # participant name so a fresh max is reusable, and the mismatch
+    # test can stamp a different name to force probes.
+    e.session.participant = "T"
     e._per_lane_rts = {}
     e._per_lane_misses = {}
     e._per_lane_wrong = {}
@@ -202,7 +206,8 @@ def _mode(e, hands=None, **over):
 
 def _fresh_profile(hand="right"):
     from finger_rehab.hardware.calibration_profile import CalibrationProfile
-    prof = CalibrationProfile(hand=hand, resting=[100.0] * 4,
+    prof = CalibrationProfile(hand=hand, participant="T",
+                              resting=[100.0] * 4,
                               press=[160.0] * 4)
     prof.set_max_press([400.0] * 4)
     return prof
@@ -504,6 +509,61 @@ class HoldScoringTests(unittest.TestCase):
         self.assertFalse(rec.guttered)
         self.assertGreaterEqual(rec.tib_frac, 0.999)
 
+    def test_stalled_probe_ends_the_block_gently(self):
+        # The probe state machine only leaves rest/press on force
+        # crossings, so a finger that cannot produce 30 counts used
+        # to leave the block on MAX PRESS CHECK forever with
+        # Esc-abandon as the only exit; worst here because the 5-25%
+        # band targets exactly the low-force patients.
+        e = _engine()
+        e.finish_block = lambda: None
+        m = _mode(e)          # no stored max: probes must run
+        t = 1000.0
+        m._tick(t)
+        guard = t + 10.0
+        while m.phase != "probe" and t < guard:
+            t += 0.1
+            m._tick(t)
+        self.assertEqual(m.phase, "probe")
+        end = t + m.PROBE_STALL_S + 2.0
+        while m.phase == "probe" and t < end:
+            t += 0.25
+            m.view.counts = 5.0     # never clears the floor
+            m.view.pct = 1.0
+            m._tick(t)
+        self.assertEqual(m.phase, "done")
+        self.assertEqual(m.end_reason, "probe_timeout")
+
+    def test_dropout_through_a_dark_window_fabricates_no_drift(self):
+        # A dropout spanning a whole dark window used to capture the
+        # same stale _last_pct at entry and exit, so the patient was
+        # shown "drifted +0.0%", the steady-dark bonus was paid, and
+        # drift 0.0 flowed into block_stats as real data.
+        m = self._hold_mode()
+        t = _to_trial(m)
+        reveals = []
+
+        def force(t_h, target, lit):
+            if t_h is not None:
+                m.view.gone = not lit    # device gone in every dark
+                if m.reveal_msg and (not reveals
+                                     or reveals[-1] != m.reveal_msg):
+                    reveals.append(m.reveal_msg)
+            return target
+
+        _play_hold(m, t, force)
+        m.view.gone = False
+        rec = m._holds[0]
+        self.assertEqual(rec.drifts_pct, [])
+        self.assertIsNone(rec.drift_rate_pct_s)
+        self.assertIsNone(rec.dark_mae_pct)
+        row = m.engine.trial_logger.rows[0]
+        # No steady-dark bonus: base points only.
+        self.assertEqual(row["points"], m.score_cfg.great_points)
+        # The reveal says what happened instead of inventing a number.
+        self.assertTrue(any("Signal lost" in r for r in reveals))
+        self.assertFalse(any("drifted" in r for r in reveals))
+
     def test_trial_row_carries_the_reconstruction_contract(self):
         from finger_rehab.data.logger import (parse_segments,
                                        parse_waveform_params)
@@ -741,6 +801,79 @@ class EchoTests(unittest.TestCase):
             t += 1.0 / 60.0
             m._tick(t)
         self.assertIn(m.sub, ("study", "delay"))
+
+    def _cross_mode(self):
+        e = _engine(hand_mode="both")
+        e.calibration_profiles["right"] = _fresh_profile()
+        e.calibration_profiles["left"] = _fresh_profile("left")
+        return self._echo_mode(e, hands={"right": [0, 1, 2, 3],
+                                         "left": [4, 5, 6, 7]})
+
+    def _drive_cross(self, m, hold_set_in_delay, press_set_in_repro):
+        """One full cross echo: study normally, then either hold or
+        release the SET lane through the delay and reproduce. The set
+        lane's force is resolved against the LIVE target (the trial
+        draws its target at prep, so a captured-early value would
+        silently feed the wrong lane)."""
+        t = _to_trial(m)
+        self.assertTrue(m.cross)
+        guard = t + 120.0
+        while m.phase == "trial" and t < guard:
+            t += 1.0 / 60.0
+            if m.sub in ("enter", "study"):
+                m.view.pct = 0.0
+                m.view.pct_by_lane = {m.set_lane: m.target_pct,
+                                      m.lane: 0.0}
+            elif m.sub == "delay":
+                m.view.pct_by_lane = {
+                    m.set_lane: (m.target_pct if hold_set_in_delay
+                                 else 0.0),
+                    m.lane: 0.0}
+            else:
+                m.view.pct_by_lane = {
+                    m.set_lane: (m.target_pct if press_set_in_repro
+                                 else 0.0),
+                    m.lane: m.target_pct}
+            m._tick(t)
+        return m.engine.trial_logger.rows[0], m._echoes[0]
+
+    def test_cross_echo_study_hand_holding_through_gutters(self):
+        # The release gate must cover the STUDY lane too. Watching
+        # only the reproduce lane let the study finger hold the
+        # reference force through the delay and the blind window, so
+        # the trial became live hand-to-hand matching, scored Great
+        # with err 0.000, and logged released=True.
+        m = self._cross_mode()
+        row, rec = self._drive_cross(m, hold_set_in_delay=True,
+                                     press_set_in_repro=True)
+        self.assertEqual(row["early_late"], "Miss")
+        self.assertTrue(rec.guttered)
+        self.assertIsNone(rec.signed_err_pct)
+        self.assertIn("study_released=False", row["stimulus"])
+
+    def test_cross_echo_repress_during_reproduce_gutters(self):
+        # Letting go for the delay and then re-pressing the study
+        # finger inside the blind window is the same exploit a beat
+        # later, so it gutters too.
+        m = self._cross_mode()
+        row, rec = self._drive_cross(m, hold_set_in_delay=False,
+                                     press_set_in_repro=True)
+        self.assertEqual(row["early_late"], "Miss")
+        self.assertTrue(rec.guttered)
+        self.assertIn("study_released=True", row["stimulus"])
+
+    def test_cross_echo_honest_release_scores_normally(self):
+        m = self._cross_mode()
+        row, rec = self._drive_cross(m, hold_set_in_delay=False,
+                                     press_set_in_repro=False)
+        self.assertNotEqual(row["early_late"], "Miss")
+        self.assertFalse(rec.guttered)
+        self.assertIn("released=True", row["stimulus"])
+        self.assertIn("study_released=True", row["stimulus"])
+        # The logged rest covers most of the delay, so the analysis
+        # can confirm a real memory gap rather than a brief dip.
+        rested = float(row["stimulus"].split("rested_s=")[1])
+        self.assertGreater(rested, float(m.params["delay_s"]) * 0.8)
 
 
 # ---- hand matrix --------------------------------------------------------
@@ -1097,6 +1230,19 @@ class ResultsCardTests(unittest.TestCase):
         self.assertNotIn("LIT STEADINESS", labels)
         value = dict(cards)["LIT VARIABILITY (CoV)"]
         self.assertEqual(value, "12.0%")
+
+    def test_delta_card_flags_mixed_levels(self):
+        # A block whose ladder moved pools holds measured under
+        # different dark exposure into one delta: say so on the card,
+        # same rule as Force Pilot's pooled cards.
+        cards = self._draw(self._lh_summary())    # trace [1, 2]
+        labels = [lbl for lbl, _val in cards]
+        self.assertIn("LIT VS DARK (mixed levels)", labels)
+        one_level = self._lh_summary()
+        one_level["levels"] = {"start": 2, "final": 2, "trace": [2, 2]}
+        labels = [lbl for lbl, _val in self._draw(one_level)]
+        self.assertIn("LIT VS DARK", labels)
+        self.assertNotIn("LIT VS DARK (mixed levels)", labels)
 
 
 if __name__ == "__main__":

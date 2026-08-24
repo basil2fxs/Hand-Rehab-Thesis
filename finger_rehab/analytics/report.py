@@ -349,26 +349,42 @@ def _per_finger_table_force_pilot(meta: dict) -> str | None:
     if not per_lane:
         return None
     hand = str(meta.get("hand", "right"))
-    head = ("<tr><th>Finger</th><th>Runs</th><th>Mean MAE (% of max)</th>"
+    # One row per (finger, corridor level), using the by_level split
+    # block_stats keeps precisely because pooling runs from different
+    # corridor levels misrepresents both (its own words). The pooled
+    # per-finger row used to be the only thing this table showed, so
+    # the HTML report a researcher keeps hid a level change the in-app
+    # results screen flags.
+    head = ("<tr><th>Finger</th><th>Level</th><th>Runs</th>"
+            "<th>Mean MAE (% of max)</th>"
             "<th>Time in corridor</th><th>Press MAE</th>"
             "<th>Release MAE</th></tr>")
     body = []
     for lane_str in sorted(per_lane, key=lambda s: int(s)):
         d = per_lane[lane_str]
+        by_level = d.get("by_level") or {}
+        # Old saves have no by_level: show the pooled row labelled
+        # "all" so nothing is lost.
+        rows = (sorted(by_level.items(), key=lambda kv: kv[0])
+                if by_level else [("all", d)])
+        label = html.escape(lane_label(int(lane_str), hand,
+                                       mode="force_pilot"))
+        for lvl, ld in rows:
 
-        def cell(key, fmt="{}"):
-            v = d.get(key)
-            return "" if v is None else fmt.format(v)
+            def cell(key, fmt="{}", _ld=ld):
+                v = _ld.get(key)
+                return "" if v is None else fmt.format(v)
 
-        body.append(
-            "<tr>"
-            f"<td>{html.escape(lane_label(int(lane_str), hand, mode='force_pilot'))}</td>"
-            f"<td>{cell('runs')}</td>"
-            f"<td>{cell('mae_pct')}</td>"
-            f"<td>{cell('time_in_corridor')}</td>"
-            f"<td>{cell('press_mae_pct')}</td>"
-            f"<td>{cell('release_mae_pct')}</td>"
-            "</tr>")
+            body.append(
+                "<tr>"
+                f"<td>{label}</td>"
+                f"<td>{html.escape(str(lvl))}</td>"
+                f"<td>{cell('runs')}</td>"
+                f"<td>{cell('mae_pct')}</td>"
+                f"<td>{cell('time_in_corridor')}</td>"
+                f"<td>{cell('press_mae_pct')}</td>"
+                f"<td>{cell('release_mae_pct')}</td>"
+                "</tr>")
     return f"<table><thead>{head}</thead><tbody>{''.join(body)}</tbody></table>"
 
 
@@ -451,6 +467,31 @@ def _write_html(meta: dict, charts: list[Path], out: Path,
         ("Mean miss-trial force per miss", mf.get("mean_per_miss", "")),
         ("Force unit", summary.get("force_unit", "")),
     ]
+    # Adaptive's trained quantity is the pace the controller settled
+    # at (hit rate is regulated to a fixed band by design), so the
+    # headline must carry it or the report reads as if nothing moved.
+    if summary.get("bpm_final") is not None \
+            or summary.get("bpm_max") is not None:
+        headline_pairs.extend([
+            ("Final pace (BPM)", summary.get("bpm_final", "")),
+            ("Top pace (BPM)", summary.get("bpm_max", "")),
+            ("Lowest pace (BPM)", summary.get("bpm_min", "")),
+        ])
+    # Mirror's trained quantity is bimanual synchrony: the mean
+    # |right - left| press gap and the per-hand RTs, which the generic
+    # "Average RT" (later of two presses) never showed.
+    mir = summary.get("mirror") or {}
+    if isinstance(mir, dict) and mir:
+        headline_pairs.extend([
+            ("Mean gap over clean pairs (ms)",
+             mir.get("mean_gap_ms", "")),
+            ("Clean pairs (async Misses included)",
+             mir.get("n_clean_pairs", mir.get("n_synced_hits", ""))),
+            ("Right hand mean RT (ms)",
+             mir.get("right_hand_mean_rt_ms", "")),
+            ("Left hand mean RT (ms)",
+             mir.get("left_hand_mean_rt_ms", "")),
+        ])
 
     charts_html = "\n".join(_img_tag(p) for p in charts if p is not None)
     title = html.escape(

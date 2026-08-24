@@ -324,17 +324,46 @@ class MaxPressProbe:
 
 
 def needs_max_press_probe(profile, max_age_s: float = 6 * 3600.0,
-                           now: float | None = None) -> bool:
+                           now: float | None = None,
+                           participant: str | None = None,
+                           session_token: str | None = None) -> bool:
     """Whether a mode must run the probes before using percent
-    targets. True with no profile, no stored max, or a max older than
+    targets. True with no profile, no stored max, a max older than
     `max_age_s` (default six hours: within one session sitting the
     stored value is reusable, but a value persisted from yesterday
     reflects yesterday's strength and fatigue, so it must be
-    re-measured)."""
+    re-measured), or a max that belongs to somebody else.
+
+    The participant check is the identity gate: the stored max is the
+    denominator of every percent target, and the six-hour rule alone
+    would happily hand patient B percentages of patient A's strength
+    when B skipped the quick calibration and inherited A's on-disk
+    profile. Pass the current session's participant name; a stored max
+    whose profile names a different (or no) participant is treated as
+    stale. `participant=None` skips the check for callers that have no
+    session identity (bench rigs, unit tests on bare profiles)."""
     if profile is None or not getattr(profile, "has_max_press", None):
         return True
     if not profile.has_max_press():
         return True
+    if participant is not None:
+        stored = str(getattr(profile, "participant", "") or "").strip()
+        current = str(participant or "").strip()
+        # An unstamped stored max cannot prove whose strength it was,
+        # so it fails the gate; re-probing costs a minute, trusting a
+        # stranger's max skews every target in the block.
+        if not stored or stored.lower() != current.lower():
+            return True
+        # Anonymous sessions all stamp "NA", so the name alone lets
+        # two different anonymous patients on one machine share a max
+        # inside the freshness window. When the caller supplies its
+        # login-session token, an anonymous max must come from the
+        # SAME login: a missing or different stored token re-probes.
+        if current.lower() == "na" and session_token is not None:
+            stored_tok = str(getattr(profile, "session_token", "")
+                             or "").strip()
+            if not stored_tok or stored_tok != str(session_token):
+                return True
     age = profile.max_press_age_s(now)
     if age is None:
         # Values exist but the timestamp is unreadable, so freshness

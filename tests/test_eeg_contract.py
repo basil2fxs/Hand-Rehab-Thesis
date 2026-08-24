@@ -450,6 +450,216 @@ class CorrectnessSplitTests(_EngineHarness):
         self.assertFalse([c for c in codes if 100 <= c <= 107])
 
 
+class ResponseAnchorTests(_EngineHarness):
+    """The response band's meaning on the wire: markers lock to real
+    presses on the perf clock, and rows without a press onset get no
+    fabricated response code."""
+
+    def _trial(self, lane=0, stim_t=100.0, incorrect=None):
+        from finger_rehab.game.modes.classic import PendingTrial
+        return PendingTrial(trial_id=1, lane=lane, stim_t_perf=stim_t,
+                            keys_pressed=[lane],
+                            incorrect_presses=list(incorrect or []))
+
+    def _run_log_trial(self, eng, **kwargs):
+        trial = kwargs.pop("trial")
+        outcome = kwargs.pop("outcome")
+        eng.log_trial(trial, outcome, now=kwargs.pop("now", 106.0),
+                      **kwargs)
+        eng.markers.drain(0.2)
+
+    def _rows_and_end(self, eng):
+        root = Path(eng.session_paths.root)
+        eng.finish_block()
+        return self._eeg_rows(root)
+
+    def test_response_t_perf_overrides_the_stim_plus_rt_anchor(self) -> None:
+        # Syllables' rt is not stim-to-press, so its response marker
+        # must lock to the tap the mode names, not stim + rt (which
+        # lands mid-attend, seconds before the child pressed).
+        import pygame
+        pygame.init()
+        try:
+            with tempfile.TemporaryDirectory() as td:
+                eng = self._make_engine(td)
+                eng.begin_classic_block()
+                from finger_rehab.game.scoring import TrialResult
+                self._run_log_trial(
+                    eng, trial=self._trial(lane=1, stim_t=100.0),
+                    outcome=TrialResult(label="Great", points=6,
+                                        rt_ms=20.0),
+                    response_t_perf=104.35)
+                rows = self._rows_and_end(eng)
+                resp = [r for r in rows
+                        if _parse_detail(r["detail"])["code"] == "101"]
+                self.assertEqual(len(resp), 1)
+                t_event = float(
+                    _parse_detail(resp[0]["detail"])["t_event"])
+                self.assertAlmostEqual(t_event, 104.35, places=3)
+        finally:
+            pygame.quit()
+
+    def test_miss_with_a_named_press_emits_no_timeout_code(self) -> None:
+        # A syllables extra-tap Miss: the child pressed promptly, so
+        # 130 (deadline expired, no press) must not be fabricated.
+        import pygame
+        pygame.init()
+        try:
+            with tempfile.TemporaryDirectory() as td:
+                eng = self._make_engine(td)
+                eng.begin_classic_block()
+                from finger_rehab.game.scoring import TrialResult
+                self._run_log_trial(
+                    eng, trial=self._trial(lane=1, stim_t=100.0),
+                    outcome=TrialResult(label="Miss", points=0,
+                                        rt_ms=None),
+                    error_type="extra_tap",
+                    response_t_perf=104.35)
+                rows = self._rows_and_end(eng)
+                codes = [_parse_detail(r["detail"])["code"]
+                         for r in rows]
+                self.assertNotIn("130", codes)
+        finally:
+            pygame.quit()
+
+    def test_continuous_rows_emit_no_response_or_feedback_markers(
+            self) -> None:
+        # A force_pilot run close has no press onset: 100+lane there
+        # would corrupt any response-locked average, and a
+        # low-tracking Miss is not an expired deadline.
+        import pygame
+        pygame.init()
+        try:
+            with tempfile.TemporaryDirectory() as td:
+                eng = self._make_engine(td)
+                eng._eeg_feedback_markers = True
+                eng.begin_classic_block()
+                from finger_rehab.data.logger import ContinuousTrialLog
+                from finger_rehab.game.scoring import TrialResult
+                cont = ContinuousTrialLog(waveform="corridor")
+                for label in ("Great", "Miss"):
+                    self._run_log_trial(
+                        eng, trial=self._trial(lane=2, stim_t=100.0),
+                        outcome=TrialResult(label=label, points=0,
+                                            rt_ms=None),
+                        continuous=cont)
+                rows = self._rows_and_end(eng)
+                codes = [int(_parse_detail(r["detail"])["code"])
+                         for r in rows]
+                self.assertFalse(
+                    [c for c in codes if 100 <= c <= 131],
+                    f"continuous rows leaked response markers: {codes}")
+                self.assertFalse(
+                    [c for c in codes if 140 <= c <= 149],
+                    f"continuous rows leaked feedback markers: {codes}")
+        finally:
+            pygame.quit()
+
+    def test_mirror_async_miss_keeps_both_hand_markers_no_timeout(
+            self) -> None:
+        # A pair downgraded to Miss by the synchrony gate still has
+        # two real presses at known times; hand identity is what the
+        # LRP is made of, so both markers must survive the downgrade
+        # and no 130 may pretend nothing was pressed.
+        import pygame
+        pygame.init()
+        try:
+            with tempfile.TemporaryDirectory() as td:
+                eng = self._make_engine(td)
+                eng.begin_classic_block()
+                from finger_rehab.game.scoring import TrialResult
+                self._run_log_trial(
+                    eng, trial=self._trial(lane=1, stim_t=100.0),
+                    outcome=TrialResult(label="Miss", points=0,
+                                        rt_ms=700.0),
+                    mirror_hand_rts=(155.0, 700.0),
+                    error_type="async")
+                rows = self._rows_and_end(eng)
+                data = [_parse_detail(r["detail"]) for r in rows]
+                codes = [int(d["code"]) for d in data]
+                self.assertIn(101, codes)
+                self.assertIn(105, codes)
+                self.assertNotIn(130, codes)
+                right = next(d for d in data if d["code"] == "101")
+                self.assertAlmostEqual(float(right["t_event"]),
+                                       100.155, places=3)
+        finally:
+            pygame.quit()
+
+    def test_rhythm_markers_share_the_perf_clock(self) -> None:
+        # Rhythm's `now` is song time (seconds since countdown end);
+        # its markers must still land on the perf clock the samples
+        # share, or no rhythm epoch can ever be cut.
+        import pygame
+        pygame.init()
+        try:
+            with tempfile.TemporaryDirectory() as td:
+                eng = self._make_engine(td)
+                eng._screens["rhythm"] = MagicMock()
+                # No pre-song lead so the note keeps its t=1.0 and the
+                # song clock below can be lined up by hand.
+                eng.cfg.data["rhythm"] = {"pre_song_lead_s": 0}
+                from finger_rehab.audio.beatmap import Beatmap, Note
+                bm = Beatmap(notes=[Note(t=1.0, lane=0)])
+                eng.begin_rhythm_block(bm)
+                mode = eng.mode
+                eng.markers.drain(0.2)
+                mode._countdown_done = True
+                t_press = time.perf_counter()
+                # Line the song clock up so the press lands on the
+                # note, then score it through the real matcher.
+                mode._countdown_s = 0.0
+                mode._t_start = t_press - 1.0
+                from finger_rehab.hardware.fsr_detector import PressEvent
+                mode._score_press(PressEvent(lane=0, t_perf=t_press,
+                                             value=0, baseline=0.0,
+                                             hand="right"))
+                eng.markers.drain(0.2)
+                root = Path(eng.session_paths.root)
+                eng.finish_block()
+                rows = self._eeg_rows(root)
+                resp = [r for r in rows
+                        if _parse_detail(r["detail"])["code"] == "100"]
+                self.assertEqual(len(resp), 1)
+                t_event = float(
+                    _parse_detail(resp[0]["detail"])["t_event"])
+                self.assertAlmostEqual(t_event, t_press, places=3)
+        finally:
+            pygame.quit()
+
+    def test_force_pilot_exit_buzz_emits_141(self) -> None:
+        # The spec's 141 for force_pilot IS the corridor-exit buzz;
+        # pulse_motor has no marker hook, so the mode emits it.
+        import pygame
+        pygame.init()
+        try:
+            with tempfile.TemporaryDirectory() as td:
+                eng = self._make_engine(td)
+                eng._eeg_feedback_markers = True
+                # The buzz (and so its marker) only exists under the
+                # after-press cue switch.
+                eng.cfg.data["cue"]["buzz_after"] = True
+                eng.begin_classic_block()
+                from finger_rehab.game.modes.force_pilot import (
+                    ForcePilotMode)
+                mode = ForcePilotMode.__new__(ForcePilotMode)
+                mode.engine = eng
+                mode.lane = 0
+                mode._last_buzz_t = None
+                mode.exit_buzz_cooldown_s = 0.5
+                mode.exit_buzz_ms = 60
+                mode._exit_buzz(now=time.perf_counter())
+                eng.markers.drain(0.2)
+                root = Path(eng.session_paths.root)
+                eng.finish_block()
+                rows = self._eeg_rows(root)
+                codes = [int(_parse_detail(r["detail"])["code"])
+                         for r in rows]
+                self.assertIn(141, codes)
+        finally:
+            pygame.quit()
+
+
 class DisabledIsInertTests(_EngineHarness):
     """eeg.enabled false: zero markers, zero raw.csv rows, no backend."""
 

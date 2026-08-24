@@ -538,9 +538,19 @@ class ForcePilotMode:
         self._probe_queue: list[tuple[str, int]] = []
         self._probe_maxes: dict[str, list[float]] = {}
         profiles = getattr(engine, "calibration_profiles", None) or {}
+        # The participant name makes the staleness gate an identity
+        # gate too: a stored max from another patient (skip-path
+        # inheritance of the on-disk profile) must be re-probed, or
+        # every percent target in this block is a percentage of
+        # somebody else's strength.
+        who = str(getattr(getattr(engine, "session", None),
+                          "participant", "") or "")
+        token = getattr(engine, "_session_token", None)
         for hand in self.hand_names:
             if needs_max_press_probe(profiles.get(hand),
-                                     max_age_s=self.probe_max_age_s):
+                                     max_age_s=self.probe_max_age_s,
+                                     participant=who,
+                                     session_token=token):
                 self._probe_maxes[hand] = [0.0] * 4
                 self._probe_queue.extend((hand, f) for f in range(4))
 
@@ -591,6 +601,10 @@ class ForcePilotMode:
         # Per-run scoring accumulators.
         self._sec_idx = 0
         self._scored_s = 0.0
+        # Signal-starved runs: total for block_stats, and the
+        # consecutive streak that decides when a slot is given up.
+        self._no_signal_runs = 0
+        self._no_signal_streak = 0
         self._abs_err_int = 0.0
         self._in_c_s = 0.0
         self._sec_acc: dict[str, list[float]] = {}
@@ -681,12 +695,27 @@ class ForcePilotMode:
         self.view.rebaseline([self.hands[self.probe_hand]
                               [self.probe_finger]])
 
+    # A probe finger that banks nothing for this long ends the block
+    # gently instead of sitting on MAX PRESS CHECK forever: the probe
+    # state machine only leaves rest/press on force crossings, so a
+    # finger that cannot reach the floor (or a dead pad) used to hang
+    # the block with Esc-abandon as the only exit.
+    PROBE_STALL_S = 25.0
+
+    # A probed max under this many multiples of the floor makes the
+    # whole 0-40% target span comparable to sensor noise: the block
+    # would be unplayable and read as severe impairment. Warned and
+    # logged so the researcher can reposition the pad.
+    LOW_MAX_FLOOR_MULT = 5.0
+
     def _enter_probe(self, now: float) -> None:
         self.phase = "probe"
         self._phase_until = None
         self.probe = MaxPressProbe(n_presses=self.probe_presses,
                                    floor_counts=self.probe_floor_counts)
         self.probe_counts = 0.0
+        self._probe_progress_t = now
+        self._probe_banked_seen = 0
 
     def _probe_frame(self, now: float) -> None:
         lane = self.hands[self.probe_hand][self.probe_finger]
@@ -697,8 +726,36 @@ class ForcePilotMode:
         self.probe_counts = reading.counts
         self.probe.update(now, reading.counts)
         if self.probe.state != "done":
+            banked = len(self.probe.peaks)
+            if banked != getattr(self, "_probe_banked_seen", 0):
+                self._probe_banked_seen = banked
+                self._probe_progress_t = now
+            if (now - (getattr(self, "_probe_progress_t", now) or now)
+                    > self.PROBE_STALL_S):
+                log.warning(
+                    "max-press probe stalled on %s finger %d (no attempt "
+                    "banked for %.0f s); ending the block gently",
+                    self.probe_hand, self.probe_finger,
+                    self.PROBE_STALL_S)
+                self._end("probe_timeout")
             return
         result = self.probe.result() or 0.0
+        if result < self.LOW_MAX_FLOOR_MULT * self.probe_floor_counts:
+            log.warning(
+                "probed max for %s finger %d is only %.0f counts "
+                "(under %.0fx the %.0f-count floor): percent targets "
+                "sit inside sensor noise; check the pad placement",
+                self.probe_hand, self.probe_finger, result,
+                self.LOW_MAX_FLOOR_MULT, self.probe_floor_counts)
+            raw = getattr(self.engine, "raw_logger", None)
+            if raw:
+                raw.queue_event(
+                    "max_press_low", lane=lane,
+                    detail=(f"hand={self.probe_hand};"
+                            f"finger={self.probe_finger};"
+                            f"max_counts={result:.1f};"
+                            f"floor_counts={self.probe_floor_counts:.1f}"),
+                    hand=self.probe_hand)
         self._probe_maxes[self.probe_hand][self.probe_finger] = result
         self._probe_queue.pop(0)
         done_hand = all(h != self.probe_hand
@@ -939,6 +996,19 @@ class ForcePilotMode:
                 and now - self._last_buzz_t < self.exit_buzz_cooldown_s):
             return
         self._last_buzz_t = now
+        # The EEG spec's 141 for this mode is DEFINED as the corridor-
+        # exit buzz (negative feedback onset for FRN work). pulse_motor
+        # has no marker hook, and the engine's generic trial-close
+        # feedback markers are suppressed for continuous rows, so the
+        # mode emits it here, gated the same way as every other
+        # feedback marker.
+        if getattr(self.engine, "_eeg_feedback_markers", False):
+            try:
+                from ...hardware import eeg_trigger
+                self.engine._eeg_send(
+                    eeg_trigger.CODES["feedback_negative"], t_event=now)
+            except Exception as e:
+                log.warning("exit-buzz EEG marker failed: %s", e)
         try:
             self.engine.pulse_motor(self.lane, self.exit_buzz_ms)
         except Exception as e:
@@ -955,6 +1025,17 @@ class ForcePilotMode:
         trial = self.active
         self.active = None
         scored = self._scored_s
+        # Coverage floor: a run whose force signal covered under half
+        # the plan is hardware evidence, not tracking. Scoring it fell
+        # back to tic=0 / mae=0.0, which read as a PERFECT error in
+        # the per-finger tables, showed the patient 'ROUGH RIDE ...
+        # Mean error 0.0% of max', and demoted the staircase because
+        # the device dropped, not because the patient tracked badly.
+        plan_s = float(self.duration_s or 0.0)
+        if plan_s > 0 and scored < 0.5 * plan_s:
+            self._close_run_no_signal(trial, now, scored, plan_s)
+            return
+        self._no_signal_streak = 0
         tic = (self._in_c_s / scored) if scored > 0 else 0.0
         mae = (self._abs_err_int / scored) if scored > 0 else 0.0
         press_mae = self._sec_mae("ramp_up")
@@ -1032,6 +1113,60 @@ class ForcePilotMode:
         self._phase_until = now + self.rest_s
         self._prepare_run()
 
+    # How many consecutive signal-starved closes of the same run slot
+    # replay it before the slot is abandoned. Keeps a permanently dead
+    # device from looping one run forever while still giving a brief
+    # glitch a second chance.
+    MAX_NO_SIGNAL_RETRIES = 2
+
+    def _close_run_no_signal(self, trial, now: float, scored: float,
+                             plan_s: float) -> None:
+        """Close a signal-starved run as hardware loss: its own
+        error_type, no RunRecord (so no per-finger MAE dilution), no
+        staircase move, and the run replays like a pause restart.
+        After MAX_NO_SIGNAL_RETRIES consecutive starved closes the
+        slot is given up so a dead device cannot loop forever."""
+        stimulus = (
+            f"corridor;lvl={self.level};hand={self.hand};"
+            f"finger={FINGER_WORDS[self.finger].lower()};"
+            f"tic=;mae=;press_mae=;release_mae=;rings=0/0;"
+            f"stalls={self._stalls};scored_s={scored:.2f};"
+            f"plan_s={plan_s:.2f};no_signal=True")
+        segments = [(s.name, (self.run_t0 or 0.0) + s.start_s,
+                     (self.run_t0 or 0.0) + s.end_s)
+                    for s in self.sections]
+        info = ContinuousTrialLog(waveform="corridor", params=self.params,
+                                  seed=self.run_seed, segments=segments)
+        outcome = TrialResult(label="Miss", points=0, rt_ms=None)
+        if trial is not None:
+            self.engine.log_trial(trial, outcome, now, stimulus=stimulus,
+                                  correct_lanes=[self.lane],
+                                  continuous=info,
+                                  error_type="no_signal")
+        self._no_signal_runs += 1
+        self._no_signal_streak += 1
+        self._last_result = {
+            "label": "NoSignal", "tic": None, "mae": None,
+            "press_mae": None, "release_mae": None,
+            "rings": 0, "rings_total": 0, "stalls": self._stalls,
+            "hand": self.hand, "finger": self.finger,
+        }
+        if self._no_signal_streak <= self.MAX_NO_SIGNAL_RETRIES:
+            # Replay the same run (same seed, same plan), like the
+            # pause path: the slot produced no evidence yet.
+            self.phase = "feedback"
+            self._phase_until = now + self.rest_s
+            return
+        # Give the slot up: move on without touching the staircase.
+        self._no_signal_streak = 0
+        self.runs_done += 1
+        if self.runs_done >= self.total_runs:
+            self._end("completed")
+            return
+        self.phase = "feedback"
+        self._phase_until = now + self.rest_s
+        self._prepare_run()
+
     def _move_level(self, tic: float) -> None:
         """Difficulty on the brief's two axes at once: the level index
         picks both the corridor half-width and the waveform bandwidth.
@@ -1082,12 +1217,16 @@ class ForcePilotMode:
     def _end(self, reason: str) -> None:
         self.phase = "done"
         self.end_reason = reason
-        # Next block this app session starts where this one ended,
+        # Next block this login session starts where this one ended,
         # like reaction's window level, but one level per (hand,
         # finger): the dict shape is the point, since the whole
         # finding this fixes was one shared level flattening that
-        # per-finger state. A restart resets to config.
-        self.engine._force_pilot_levels = dict(self._level_by_hf)
+        # per-finger state. A restart or session end resets to config
+        # (the engine clears the carry in _clear_session_carry), and a
+        # Test Mode demo never writes it: a supervisor's demo must not
+        # seed a real patient's difficulty.
+        if not self.demo:
+            self.engine._force_pilot_levels = dict(self._level_by_hf)
         self.engine.finish_block()
 
     # ---- block summary -----------------------------------------------------
@@ -1177,6 +1316,11 @@ class ForcePilotMode:
             "section_mae_pct": section_mae,
             "section_mae_pct_by_level": section_mae_by_level,
             "best_section": best,
+            # Signal-starved runs (coverage under half the plan):
+            # logged with error_type no_signal, kept out of every
+            # aggregate above, counted here so the analysis can see
+            # the hardware trouble instead of inferring it.
+            "no_signal_runs": self._no_signal_runs,
             "demo": self.demo,
             "end_reason": self.end_reason,
         }

@@ -53,6 +53,14 @@ class TitleScreenKeyboardOnlyTests(unittest.TestCase):
             sc = TitleScreen(eng)
             self.assertFalse(sc.name_input.focused)
             self.assertFalse(sc.age_input.focused)
+            # No name typed: the first Enter warns about the shared
+            # NA identity instead of starting; typing a name (or a
+            # second deliberate Enter) proceeds. Keyboard-only flow
+            # stays fully navigable either way.
+            sc.handle_event(_key_event(pygame.K_RETURN))
+            self.assertEqual(calls, [])
+            self.assertTrue(sc.begin_note)
+            sc.name_input.text = "Mara"
             sc.handle_event(_key_event(pygame.K_RETURN))
             self.assertEqual(calls, [True])
         finally:

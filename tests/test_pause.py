@@ -57,6 +57,35 @@ class AdaptiveModePauseTests(unittest.TestCase):
         self.assertEqual(mode.active.stim_t_perf, 205.0)
         self.assertEqual(mode.last_trigger_t, 205.0)
 
+    def test_on_resume_shifts_recorded_wrong_presses_too(self) -> None:
+        # incorrect_presses hold absolute times; shifting only
+        # stim_t_perf made first_incorrect_ms (wrong_t - stim_t)
+        # shrink by the pause and go negative on a trial paused after
+        # a wrong press (a 10 s pause after a wrong press at +300 ms
+        # logged roughly -9700 ms).
+        from finger_rehab.analytics.adaptive import AdaptiveConfig
+        from finger_rehab.game.modes.adaptive import AdaptiveMode
+        from finger_rehab.game.modes.classic import PendingTrial
+        from finger_rehab.game.scoring import ScoreConfig
+        mode = AdaptiveMode(
+            engine=MagicMock(),
+            total_trials=10, block_size=4,
+            score_cfg=ScoreConfig(),
+            timeout_s=1.0, early_window_s=0.1,
+            adaptive_cfg=AdaptiveConfig(),
+        )
+        mode.active = PendingTrial(
+            trial_id=1, lane=0,
+            stim_t_perf=200.0, keys_pressed=[],
+            incorrect_presses=[(2, 200.3)],
+        )
+        mode.on_resume(10.0)
+        self.assertEqual(mode.active.incorrect_presses, [(2, 210.3)])
+        # The offset the row derives stays +300 ms.
+        wrong_t = mode.active.incorrect_presses[0][1]
+        self.assertAlmostEqual(
+            (wrong_t - mode.active.stim_t_perf) * 1000.0, 300.0)
+
 
 class RhythmModePauseTests(unittest.TestCase):
     def test_on_resume_shifts_song_clock_fallback(self) -> None:

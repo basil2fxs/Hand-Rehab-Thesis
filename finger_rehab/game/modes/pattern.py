@@ -140,8 +140,14 @@ learning (Das et al 2025, PNAS; Gupta and Rickard 2022), and dropping
 block-start trials is standard SRTT hygiene. Accuracy keeps every
 trial, raw rows keep every trial, and the exclusion is counted per
 take (n_start_excluded) so attrition stays reportable. This also
-backstops the rest placement: wherever a rest lands, the trials that
-carry its boost never reach a take mean. A press that lands in the RSI gap between trials
+backstops the BETWEEN-take rest placement: a take's first cycle never
+reaches its mean, so the boost from the rest before it is trimmed. A
+mid-take FORCED fatigue rest is different: the same take resumes and
+its post-rest trials do enter the take mean, so every forced rest
+writes a fatigue_rest event to raw.csv (take label and trial position)
+and block_stats lists the positions (fatigue_rest_positions), letting
+the analysis exclude or flag the affected take instead of guessing
+from timestamp gaps. A press that lands in the RSI gap between trials
 (no cue lit yet) is not penalised and writes no trial row -- there is
 no trial to attach it to -- but is counted per take as
 n_rsi_presses in block_stats, so anticipatory pressing is at least
@@ -162,7 +168,10 @@ overnight and 30-day retention of motor memories (Abe et al 2011,
 Curr Biol), and enhanced expectancies are one of the OPTIMAL theory's
 two levers (Wulf and Lewthwaite 2016, Psychon Bull Rev). The guard
 rail: reward accuracy and completion only, never speed, or the
-speed-accuracy trade-off contaminates the RT outcome.
+speed-accuracy trade-off contaminates the RT outcome. The engine
+enforces it on the SCORE too: this mode's score_cfg flattens the
+Perfect/Great/Good/Late payouts to one value, so every correct press
+earns the same points and the on-screen score cannot pay speed.
 
 SAFETY. Rests between takes are self-paced with a 10 s floor plus the
 30 s rest after B6 (see RESTS above); five consecutive timeouts
@@ -643,6 +652,25 @@ class PatternMode:
         # Demo takes are shorter than a cycle and are not measurements,
         # so the demo keeps every RT and its CSV stays populated.
         self.start_trim = 0 if demo_trials is not None else self.cycle_len
+        # A take no longer than the trim contributes ZERO trials to RT
+        # stats: with soc_cycles_per_block 1 (or 2 halved bimanually)
+        # every trained take is exactly one cycle, so the whole session
+        # plays out and then reports no take means and no learning
+        # score. Say so at construction, where the config change is
+        # findable, instead of letting the primary measurement vanish
+        # silently (same reasoning as the lopsided-random warning).
+        if demo_trials is None:
+            seq_lens = [len(s.fingers) for s in self.segments
+                        if s.kind == "seq"]
+            if seq_lens and max(seq_lens) <= self.start_trim:
+                log.warning(
+                    "pattern: trained takes are %d trials but the "
+                    "block-start trim excludes the first %d, so NO "
+                    "trial can enter the take RT means and the session "
+                    "will produce no learning score; raise "
+                    "pattern.soc_cycles_per_block (bimanual blocks "
+                    "halve it) to at least 2 effective cycles",
+                    max(seq_lens), self.start_trim)
 
         # Trial state machine: play -> rest -> play ... -> done.
         self.phase = "play"
@@ -662,6 +690,11 @@ class PatternMode:
         # non-probe take. Reset by any press and at take boundaries.
         self._timeout_run = 0
         self._fatigue_triggers = 0
+        # Where each forced mid-take rest landed (take label, trial
+        # position), for block_stats: the resumed take's post-rest
+        # trials enter its RT mean, so the analysis needs the position
+        # to exclude or flag the take.
+        self._forced_rest_positions: list[dict] = []
         self.end_reason: str | None = None
 
         # Reward-flavoured, accuracy-only feedback (Abe 2011; Wulf and
@@ -1021,6 +1054,26 @@ class PatternMode:
         send = getattr(self.engine, "_eeg_send", None)
         if callable(send):
             send(EEG_CODES["rest_start"], t_event=now)
+        # A forced fatigue rest lands MID-take and the take resumes, so
+        # its rest-refreshed trials go into that take's RT mean (unlike
+        # a between-take rest, which the block-start trim absorbs). The
+        # EEG marker above writes nothing when eeg.enabled is false, so
+        # the position must be recorded where every session has it:
+        # raw.csv and block_stats. Without this a forced rest inside a
+        # probe flanker could deflate the flanker mean and inflate
+        # learning_score_ms with no recoverable trace.
+        if kind == "forced":
+            seg = self.segments[self._seg_idx]
+            self._forced_rest_positions.append(
+                {"take": seg.label, "trial_in_seg": self._trial_in_seg})
+            raw = getattr(self.engine, "raw_logger", None)
+            if raw:
+                raw.queue_event(
+                    "fatigue_rest",
+                    detail=(f"take={seg.label};"
+                            f"trial_in_seg={self._trial_in_seg}"),
+                    t_perf=now,
+                    hand=getattr(self.engine, "hand_mode", "right"))
         self._rest_kind = kind
         self._rest_min_until = now + max(0.0, min_s)
         self._rest_msg_t = now
@@ -1203,6 +1256,7 @@ class PatternMode:
             "three_star_streak_best": self.best_star_streak,
             "n_trials": len(self._trials),
             "fatigue_rests": self._fatigue_triggers,
+            "fatigue_rest_positions": list(self._forced_rest_positions),
             "end_reason": self.end_reason,
             "per_take": per_take,
             "probe_scores": learning,

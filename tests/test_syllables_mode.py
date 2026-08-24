@@ -1333,6 +1333,55 @@ class BandProgressionTests(unittest.TestCase):
         mode._maybe_move_band()
         self.assertEqual(mode.band, "A")
 
+    def test_pause_restart_explains_the_orphan_trial_id(self) -> None:
+        # A pause during attend/model/countin/respond restarts the
+        # word under a NEW trial id, leaving the old id's stim rows
+        # in raw.csv with no trials.csv row. The stream must carry a
+        # trial_restart event naming both ids so a stim-to-trial
+        # matcher sees why the sequence has a hole.
+        import time as _time
+        engine, mode = _build_mode(level=1)
+        _run_to_respond(mode)
+        old_id = mode.trial_counter
+        engine.raw_logger.queue_event.reset_mock()
+        # The fixture's scripted clock starts at 0; pin _t0 near the
+        # wall clock so the restart's session-cap check (which runs on
+        # perf_counter) does not read the block as hours old.
+        mode._t0 = _time.perf_counter() - 1.0
+        mode.on_resume(5.0)
+        events = [c for c in engine.raw_logger.queue_event.call_args_list
+                  if c.args and c.args[0] == "trial_restart"]
+        self.assertEqual(len(events), 1)
+        detail = events[0].kwargs.get("detail", "")
+        self.assertIn(f"old_trial_id={old_id}", detail)
+        self.assertIn(f"new_trial_id={old_id + 1}", detail)
+        self.assertEqual(mode.trial_counter, old_id + 1)
+
+    def test_disconnected_source_freezes_the_band_gate(self) -> None:
+        # A serial drop mid-block scores every word err=timeout, and
+        # the gate used to demote on them: difficulty responded to the
+        # hardware, not the child. Words closed while the source is
+        # down must not enter the 10-word window at all.
+        engine, mode = _build_mode(level=1, band="B")
+        engine.source.provides_samples = True
+        engine.source.is_connected = False
+        engine._hands_down = set()
+        recent_before = list(mode._recent)
+        t = _run_to_respond(mode)
+        # No taps: the window closes as a timeout Miss.
+        mode._tick(t + mode.free_window_s + mode.grace_s + 0.2)
+        self.assertEqual(list(mode._recent), recent_before)
+        self.assertEqual(mode.band, "B")
+
+    def test_one_board_drop_of_a_playing_hand_freezes_it_too(self) -> None:
+        engine, mode = _build_mode(level=1, band="B")
+        engine.source.provides_samples = True
+        engine.source.is_connected = True
+        engine._hands_down = {"right"}
+        t = _run_to_respond(mode)
+        mode._tick(t + mode.free_window_s + mode.grace_s + 0.2)
+        self.assertEqual(list(mode._recent), [])
+
     def test_band_cannot_leave_the_ladder(self) -> None:
         engine, mode = _build_mode(level=1, band="C")
         mode._recent.extend([True] * 10)

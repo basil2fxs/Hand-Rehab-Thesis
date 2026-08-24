@@ -118,7 +118,10 @@ class TitleScreenNameFlowTests(unittest.TestCase):
         finally:
             pygame.quit()
 
-    def test_empty_name_falls_back_to_NA(self) -> None:
+    def test_empty_name_warns_once_then_falls_back_to_NA(self) -> None:
+        # A blank name pools every anonymous session into one NA
+        # identity, so the first LOG IN warns instead of starting;
+        # a second deliberate click proceeds anonymously.
         import pygame
         pygame.init()
         try:
@@ -128,7 +131,26 @@ class TitleScreenNameFlowTests(unittest.TestCase):
             screen = TitleScreen(eng)
             screen.name_input.text = ""
             screen._begin()
+            self.assertFalse(getattr(eng, "_session_active", False))
+            self.assertIn("pool", screen.begin_note)
+            screen._begin()
+            self.assertTrue(eng._session_active)
             self.assertEqual(eng.session.participant, "NA")
+        finally:
+            pygame.quit()
+
+    def test_named_login_never_sees_the_NA_warning(self) -> None:
+        import pygame
+        pygame.init()
+        try:
+            from finger_rehab.ui.screens import TitleScreen
+            eng = self._make_engine()
+            eng.show_mode_select = lambda: None
+            screen = TitleScreen(eng)
+            screen.name_input.text = "Mara"
+            screen._begin()
+            self.assertEqual(eng.session.participant, "Mara")
+            self.assertEqual(screen.begin_note, "")
         finally:
             pygame.quit()
 
@@ -923,3 +945,82 @@ class DiagnosticsAlwaysEightLanesTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OneBoardBilateralGuardTests(unittest.TestCase):
+    """A hardware source with one board cannot serve both hands: the
+    missing hand's lanes read constant zeros and every trial on it
+    records as an honest-looking miss. Both bilateral entries (the
+    Both hands card and the bilateral-only Mirror card) refuse the
+    pick and wear a badge saying why. Keyboard sources are exempt:
+    both hands live on the keys."""
+
+    class OneBoardSource:
+        provides_samples = True
+        is_connected = True
+        name = "MultiSerial(right@/dev/fake)"
+        port = "/dev/fake"
+        hand_modes_available = {"right"}
+
+        def start(self): ...
+
+        def stop(self): ...
+
+        def get_sample(self, timeout=0.0):
+            return None
+
+        def send_command(self, cmd):
+            return True
+
+    def _engine(self, source):
+        import pygame
+        pygame.init()
+        pygame.font.init()
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        cfg = Config.load()
+        cfg.data["ui"]["resolution"] = [1280, 800]
+        cfg.data.setdefault("bilateral", {})["hand"] = "right"
+        eng = GameEngine(cfg, source)
+        eng._screens = eng._build_screens()
+        return eng
+
+    def test_both_hands_pick_is_refused_on_one_board(self) -> None:
+        eng = self._engine(self.OneBoardSource())
+        begun = []
+        eng.begin_adaptive_block = lambda: begun.append(1)
+        eng.maybe_start_quick_calibration = lambda cb: False
+        setup = eng._screens["setup"]
+        setup._pick("both")
+        self.assertEqual(begun, [])
+        self.assertNotEqual(eng.hand_mode, "both")
+        # A single hand still starts normally.
+        setup._pick("right")
+        self.assertEqual(begun, [1])
+
+    def test_mirror_pick_is_refused_on_one_board(self) -> None:
+        eng = self._engine(self.OneBoardSource())
+        begun = []
+        eng.begin_mirror_block = lambda: begun.append(1)
+        eng.maybe_start_quick_calibration = lambda cb: False
+        eng._screens["mode_select"]._pick("mirror")
+        self.assertEqual(begun, [])
+        self.assertNotEqual(eng.hand_mode, "both")
+
+    def test_two_boards_pass_the_guard(self) -> None:
+        src = self.OneBoardSource()
+        src.hand_modes_available = {"left", "right", "both"}
+        eng = self._engine(src)
+        begun = []
+        eng.begin_mirror_block = lambda: begun.append(1)
+        eng.maybe_start_quick_calibration = lambda cb: False
+        eng._screens["mode_select"]._pick("mirror")
+        self.assertEqual(begun, [1])
+
+    def test_keyboard_source_is_exempt(self) -> None:
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
+        eng = self._engine(KeyboardOnlySource())
+        begun = []
+        eng.begin_mirror_block = lambda: begun.append(1)
+        eng._screens["mode_select"]._pick("mirror")
+        self.assertEqual(begun, [1])

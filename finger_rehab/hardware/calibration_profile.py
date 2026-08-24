@@ -127,6 +127,14 @@ class CalibrationProfile:
     # so a mode deciding whether to reuse or re-probe needs the age,
     # not just the values.
     max_press_measured_at: str = ""
+    # Which login session probed the max. Anonymous logins all stamp
+    # participant "NA", so the name alone cannot stop patient B (also
+    # anonymous, same machine, inside the freshness window) inheriting
+    # patient A's strength as the denominator of every percent
+    # target; the token separates the two logins. Empty on profiles
+    # saved before the field existed, which the gate treats as
+    # not-provable and re-probes.
+    session_token: str = ""
     notes: str = ""
 
     # ---- derived values -------------------------------------------
@@ -273,6 +281,10 @@ class CalibrationProfile:
         return {
             "created_at": self.created_at,
             "device_port": self.device_port,
+            # Whose measurement this is: without it metadata.json
+            # could not reveal a max press inherited from another
+            # patient's profile.
+            "participant": self.participant,
             "hand": self.hand,
             "empty": [round(v, 1) for v in self.empty],
             "resting": [round(v, 1) for v in self.resting],

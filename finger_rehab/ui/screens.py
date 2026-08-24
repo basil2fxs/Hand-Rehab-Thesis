@@ -260,6 +260,11 @@ class TitleScreen(Screen):
             max_len=4,
         )
 
+        # Blank-name guard state: the first LOG IN with no name shows
+        # a warning line instead of starting; the second click
+        # proceeds anonymously (a deliberate choice, not a slip).
+        self._na_warned = False
+        self.begin_note = ""
         # Primary action. Logs the participant in: the identity set
         # here persists across every game until the session ends on
         # game select. Filled in green (independent of the blue theme
@@ -333,6 +338,21 @@ class TitleScreen(Screen):
 
     def _begin(self) -> None:
         name = self.name_input.value or "NA"
+        # A blank name pools this session into the shared NA identity:
+        # every anonymous session on the machine merges into one
+        # improvement trace, so cross-session tracking for this
+        # patient becomes meaningless. Say so ONCE and require a
+        # second deliberate click, rather than silently accepting the
+        # most common data-entry slip in a hurried clinic.
+        if name == "NA" and not self._na_warned:
+            self._na_warned = True
+            self.begin_note = ("No name entered: sessions will pool "
+                               "under NA and cannot be tracked per "
+                               "patient. Begin again to continue "
+                               "anonymously.")
+            return
+        self._na_warned = False
+        self.begin_note = ""
         # Age is optional; an empty string is its own valid value
         # meaning "not provided" (patient declined, or the therapist
         # didn't type it). Stored as a raw string so the CSV column
@@ -425,6 +445,8 @@ class TitleScreen(Screen):
         self.name_input.focused = False
         self.age_input.text = prefill_age
         self.age_input.focused = False
+        self._na_warned = False
+        self.begin_note = ""
 
     def handle_event(self, e: pygame.event.Event) -> None:
         # When the info overlay is open it is modal: any click or Esc
@@ -522,6 +544,13 @@ class TitleScreen(Screen):
         self.name_input.draw(surf)
         self.age_input.draw(surf)
         self.start_btn.draw(surf)
+        if self.begin_note:
+            # The blank-name warning, directly under the card so it
+            # reads as part of the log-in flow.
+            draw_text(surf, self.begin_note,
+                      (cx, self.card_rect.bottom + 16),
+                      self.theme, self.layout, pt=FONT_SMALL + 1,
+                      centre=True, colour=self.theme.warning)
 
         # Utility strip. A hairline rule separates the session job above
         # from the setup actions below, so the bottom row reads as tools
@@ -790,12 +819,29 @@ class ModeSelectScreen(Screen):
             self.theme, self.layout,
         )
 
+    def _second_board_missing(self) -> bool:
+        """True when a hardware source cannot serve both hands (one
+        board attached). Mirror is bilateral-only, and with one board
+        the left lanes can never fire from the sensors: every trial
+        missed on the left and the block recorded as total bimanual
+        failure of the patient. Keyboard sources play mirror fine
+        (both hands live on the keys)."""
+        src = self.engine.source
+        if not getattr(src, "provides_samples", True):
+            return False
+        avail = getattr(src, "hand_modes_available", None)
+        return isinstance(avail, set) and "both" not in avail
+
     def _pick(self, mode_key: str) -> None:
         self.engine.cfg.data.setdefault("game", {})["mode"] = mode_key
         # Mirror mode is bilateral-only, so skip the hand-pick step
         # and go straight into the block. Setting hand_mode here
         # means the gameplay screen builds with 8 lane tiles ready
         # before begin_mirror_block fires.
+        if mode_key == "mirror" and self._second_board_missing():
+            # Refuse before anything is touched: the card wears a
+            # NEEDS SECOND BOARD badge saying why.
+            return
         if mode_key == "mirror":
             self.engine.cfg.data.setdefault(
                 "bilateral", {})["hand"] = "both"
@@ -806,6 +852,16 @@ class ModeSelectScreen(Screen):
                 sc = self.engine._screens.get(key)
                 if sc and hasattr(sc, "rebuild_lanes"):
                     sc.rebuild_lanes()
+            # Same session gate every other game gets via the setup
+            # screen. Mirror skips the hand-pick step, so without this
+            # call it was the ONE start path that never ran quick
+            # calibration: a session whose first game was Mirror ran
+            # both hands on config defaults or the previous session's
+            # saved thresholds, which directly bias the per-hand
+            # latencies the mode measures.
+            if self.engine.maybe_start_quick_calibration(
+                    self.engine.begin_mirror_block):
+                return
             self.engine.begin_mirror_block()
             return
         self.engine.show_setup()
@@ -1080,6 +1136,17 @@ class ModeSelectScreen(Screen):
                           (b.rect.right - 14 - badge_w, b.rect.y + 14),
                           self.theme, self.layout, pt=FONT_SMALL,
                           centre=False, colour=self.theme.error)
+            if key == "mirror" and self._second_board_missing():
+                # Same up-front rule for mirror on a one-board rig:
+                # bilateral-only, so with one board the second hand's
+                # lanes can never fire and the pick is refused.
+                badge = "NEEDS SECOND BOARD"
+                badge_font = self.layout.font(FONT_SMALL)
+                badge_w = badge_font.size(badge)[0]
+                draw_text(surf, badge,
+                          (b.rect.right - 14 - badge_w, b.rect.y + 14),
+                          self.theme, self.layout, pt=FONT_SMALL,
+                          centre=False, colour=self.theme.error)
         self.back_btn.draw(surf)
 
 
@@ -1152,11 +1219,27 @@ class SetupScreen(Screen):
             self.theme, self.layout,
         )
 
+    def _second_board_missing(self) -> bool:
+        """Same rule as the mode-select mirror card: a hardware source
+        that cannot serve both hands (one board) must not start a
+        bilateral block, or the missing hand's lanes read constant
+        zeros and every one of its trials records as an honest-looking
+        patient miss."""
+        src = self.engine.source
+        if not getattr(src, "provides_samples", True):
+            return False
+        avail = getattr(src, "hand_modes_available", None)
+        return isinstance(avail, set) and "both" not in avail
+
     def _pick(self, hand: str) -> None:
         # Update hand mode + rebuild detectors / lane strips for the new
         # layout, then start the block in whichever mode the user picked.
         # Participant name was already pushed into session/config by the
         # title screen so we don't touch it here.
+        if hand == "both" and self._second_board_missing():
+            # Refused up front; the card wears a NEEDS SECOND BOARD
+            # badge saying why.
+            return
         self.engine.cfg.data.setdefault("bilateral", {})["hand"] = hand
         self.engine.hand_mode = hand
         self.engine.session.hand = hand
@@ -1300,6 +1383,14 @@ class SetupScreen(Screen):
                       (b.rect.centerx, b.rect.bottom + 22),
                       self.theme, self.layout, pt=FONT_BODY,
                       centre=True, colour=self.theme.muted)
+            if key == "both" and self._second_board_missing():
+                # Said before the click: one board cannot serve both
+                # hands, so a bilateral pick is refused rather than
+                # recording the missing hand's silence as misses.
+                draw_text(surf, "NEEDS SECOND BOARD",
+                          (b.rect.centerx, b.rect.top - 18),
+                          self.theme, self.layout, pt=FONT_SMALL,
+                          centre=True, colour=self.theme.error)
         self.back_btn.draw(surf)
 
 
@@ -3834,6 +3925,36 @@ class ResultsScreen(Screen):
                 return mir
         return None
 
+    def _adaptive_summary(self) -> dict | None:
+        """The adaptive pace numbers (bpm_final / bpm_max, top level
+        of the block summary), or None for every other mode. Pace is
+        adaptive's trained quantity: the controller holds hit rate in
+        a fixed band by design, so improvement moves BPM, not the hit
+        rate the generic cards showed. Without a pace card the one
+        number that says "you got better" was invisible in the app."""
+        if str(getattr(self.engine, "current_block", "")) != "adaptive":
+            return None
+        summary = getattr(getattr(self.engine, "session", None),
+                          "block_summary", None)
+        if isinstance(summary, dict) and (
+                summary.get("bpm_final") is not None
+                or summary.get("bpm_max") is not None):
+            return summary
+        # Live fallback for a results view drawn before finish_block
+        # persisted the summary.
+        adapter = getattr(getattr(self.engine, "mode", None),
+                          "adapter", None)
+        if adapter is not None:
+            try:
+                return {
+                    "bpm_final": round(float(adapter.bpm), 1),
+                    "bpm_max": getattr(self.engine, "_block_bpm_max",
+                                       None),
+                }
+            except (TypeError, ValueError):
+                return None
+        return None
+
     def _reaction_summary(self) -> dict | None:
         """The reaction section of the block summary, or None for
         every other mode. Same read path as _force_pilot_summary:
@@ -4265,6 +4386,7 @@ class ResultsScreen(Screen):
         ch = self._chords_summary()
         sy = self._syllables_summary()
         mir = self._mirror_summary()
+        adp = self._adaptive_summary()
         avg_rt = self.engine.overall_mean_rt()
         best_rt = self.engine.overall_best_rt()
         avg_str = f"{avg_rt:.0f} ms" if avg_rt > 0 else "n/a"
@@ -4334,6 +4456,14 @@ class ResultsScreen(Screen):
             drift = overall.get("dark_drift_pct")
             delta = overall.get("lit_dark_delta_pct")
             echo_err = echo_all.get("abs_err_pct")
+            # Same rule as Force Pilot's pooled cards: when the level
+            # ladder moved during the block, the pooled lit-dark delta
+            # compares holds measured under different dark exposure
+            # (25% vs 45% dark), so the card says so instead of
+            # reading as one clean measurement.
+            lh_trace = (lh.get("levels") or {}).get("trace") or []
+            lh_note = (" (mixed levels)"
+                       if len(set(lh_trace)) > 1 else "")
             cards = [
                 ("SCORE", f"{int(round(self.engine.score * entry))}",
                  self.theme.accent),
@@ -4352,7 +4482,7 @@ class ResultsScreen(Screen):
                 ("DARK DRIFT",
                  (f"{drift:.1f}%" if drift is not None else "n/a"),
                  self.theme.foreground),
-                ("LIT VS DARK",
+                (f"LIT VS DARK{lh_note}",
                  (f"{delta:+.1f}%" if delta is not None else "n/a"),
                  self.theme.foreground),
                 ("ECHO ERROR",
@@ -4496,7 +4626,15 @@ class ResultsScreen(Screen):
             # the trained cross-talk quantity, and leak fails / over
             # -force are shown as counts rather than folded into a
             # misleadingly generic hit rate.
-            classes = ch.get("outcome_classes") or {}
+            # Within-scope chords only: dividing by every record let
+            # the near-guaranteed single-finger probes (and the cross
+            # chords on their own ladder) dilute the number, so the
+            # headline moved with the session's probe:chord mix, not
+            # skill. chord_outcome_classes is the scope-pure count;
+            # outcome_classes remains as the fallback for summaries
+            # written before it existed.
+            classes = (ch.get("chord_outcome_classes")
+                       or ch.get("outcome_classes") or {})
             n_all = sum(int(v) for v in classes.values())
             clean_hits = int(classes.get("hit", 0))
             clean_rate = (clean_hits / n_all) if n_all else None
@@ -4580,6 +4718,29 @@ class ResultsScreen(Screen):
                  self.theme.error),
                 ("RIGHT HAND RT", r_str, self.theme.foreground),
                 ("LEFT HAND RT", l_str, self.theme.foreground),
+            ]
+        elif adp is not None:
+            # Adaptive's controller holds hit rate in a fixed band by
+            # design, so the trained quantity is the PACE the block
+            # settled at: an improving patient's bpm climbs while the
+            # hit rate stays put. The pace cards replace the two RT
+            # cards, which repeated what the (controller-regulated)
+            # hit rate already said.
+            top = adp.get("bpm_max")
+            fin = adp.get("bpm_final")
+            top_str = f"{float(top):.0f} BPM" if top is not None else "n/a"
+            fin_str = f"{float(fin):.0f} BPM" if fin is not None else "n/a"
+            cards = [
+                ("SCORE", f"{int(round(self.engine.score * entry))}",
+                 self.theme.accent),
+                ("HITS", f"{int(round(self.engine.hits * entry))}",
+                 self.theme.success),
+                ("TOP PACE", top_str, self.theme.success),
+                ("MISSES", f"{int(round(self.engine.misses * entry))}",
+                 self.theme.error),
+                ("FINAL PACE", fin_str, self.theme.foreground),
+                ("HIT RATE", f"{rate * 100 * entry:.0f}%",
+                 self.theme.foreground),
             ]
         else:
             cards = [

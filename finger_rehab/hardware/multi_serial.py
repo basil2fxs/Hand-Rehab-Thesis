@@ -121,6 +121,18 @@ class MultiSerialSource(Source):
         return any(h.source.is_connected for h in self.hands)
 
     @property
+    def hands_connected(self) -> dict[str, bool]:
+        """Per-hand connection state, {hand: alive}. is_connected
+        (any board alive) hides a one-board drop in a bilateral
+        block, and the merger keeps zero-filling the dead hand, so
+        without this view the engine cannot tell a silent board from
+        a resting hand: the zeros slid that hand's baseline down and
+        the reconnect fired phantom presses that latched every lane.
+        The engine's per-frame check reads this to log the drop, park
+        the dead hand's detector and re-prime it on reconnect."""
+        return {h.hand: h.source.is_connected for h in self.hands}
+
+    @property
     def provides_samples(self) -> bool:
         return True
 

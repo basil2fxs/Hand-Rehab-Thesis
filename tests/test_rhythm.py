@@ -306,6 +306,31 @@ class RhythmModePressMatchingTests(unittest.TestCase):
                        if s.note.t == 2.0)
         self.assertIsNone(note_2s.hit_at)
 
+    def test_anticipation_in_the_early_tier_scores_early(self) -> None:
+        """A press 250 ms before its note sits in the documented Early
+        tier (-miss_ms..-good_ms, 1 point). With the old -good_ms
+        matching floor it was penalised as a spurious press and the
+        note then missed, so the Early tier was unreachable in
+        gameplay and the logged offset distribution was truncated
+        asymmetrically (early cut at -175 ms, late kept to +300 ms),
+        biasing the mean asynchrony positive."""
+        import time as _t
+        from finger_rehab.hardware.fsr_detector import PressEvent
+        mode, engine = self._make_mode()
+        # song_time ~1.75: 250 ms early of the lane-0 note at t=2.0,
+        # and 750 ms past the lane-0 note at t=1.0 (outside its late
+        # radius), so the future note is the only candidate.
+        mode._t_start = _t.perf_counter() - 1.75
+        mode._score_press(PressEvent(lane=0, t_perf=_t.perf_counter(),
+                                       value=0, baseline=0.0))
+        engine.log_rhythm_unmatched.assert_not_called()
+        engine.log_rhythm_hit.assert_called_once()
+        args, _ = engine.log_rhythm_hit.call_args
+        offset_ms, label = args[1], args[2]
+        self.assertEqual(label, "Early")
+        self.assertLess(offset_ms, -175.0)
+        self.assertGreaterEqual(offset_ms, -300.0)
+
     def test_early_press_within_good_window_scores_even_before_fired(
             self) -> None:
         """Audit finding #54 (HIGH): a press up to good_ms before an
@@ -530,9 +555,29 @@ class RhythmCountdownPressQueueTests(unittest.TestCase):
         import time as _t
         mode = self._make_mode()
         mode._countdown_done = True
+        mode._audio_started = True
         mode.queue_press(PressEvent(lane=0, t_perf=_t.perf_counter(),
                                       value=0, baseline=0.0))
         self.assertEqual(len(mode._presses), 1)
+
+    def test_press_in_the_silent_lead_is_dropped_not_penalised(
+            self) -> None:
+        # After the countdown card disappears there are still up to
+        # 2 s of silent lead before the audio and the first note. A
+        # press there used to be penalised as a wrong-finger spurious
+        # press (-3, red flash, miss thunk) with nothing on screen
+        # saying pressing was premature. It is dropped instead, until
+        # the first note's own matching window opens.
+        from finger_rehab.hardware.fsr_detector import PressEvent
+        import time as _t
+        mode = self._make_mode()
+        mode._countdown_done = True
+        mode._audio_started = False
+        # Far from the first note: song_time is negative or near zero
+        # in this fixture while the first note sits at t > 0.3.
+        mode.queue_press(PressEvent(lane=0, t_perf=_t.perf_counter(),
+                                      value=0, baseline=0.0))
+        self.assertEqual(len(mode._presses), 0)
 
 
 class RhythmMissWindowCloseRegressionTests(unittest.TestCase):

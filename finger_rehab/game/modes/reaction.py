@@ -61,7 +61,9 @@ raising the press threshold would contaminate the measure, so the only
 lever is the response window: 2.0 s, then 1.5 s, then 1.2 s. Step up
 after two consecutive blocks with a lapse-or-miss rate under 10
 percent, step down after one block over 30 percent. Level and session
-bests live on the engine for the length of the app session.
+bests live on the engine for the length of the login session: they
+are cleared when the session ends, so the next patient on the same
+app run starts at level 1 with no inherited best.
 
 WHAT THIS MODE CANNOT CLAIM. Within-task improvement is expected
 (practice effects appear in nearly every repeated-RT study) but
@@ -562,8 +564,15 @@ class ReactionMode:
         # instead of the timeout branch. Close it the same way the
         # timeout would (a scorable Miss, no RT), so no row's own
         # rt_ms ever exceeds the timeout_ms it was censored against.
+        # The press itself is still RECORDED on the row (keys_pressed,
+        # first_incorrect_ms, error_type late_press): clinically a
+        # response at window+100 ms is an extreme lapse, not an
+        # absence of response, and the old row was byte-identical to
+        # never pressing at all.
         if rt_ms > self.response_window * 1000.0:
-            self._close_scorable(None, now)
+            trial.keys_pressed.append(ev.lane)
+            trial.incorrect_presses.append((ev.lane, ev.t_perf))
+            self._close_scorable(None, now, late_press=True)
             return
         # Sub-cut presses are anticipations whichever finger fired: a
         # press that fast cannot be a response to the stimulus, so the
@@ -625,11 +634,18 @@ class ReactionMode:
         self._set_message("Wrong finger", self.feedback_s, kind="warn")
         self._enter_rest(now, self.feedback_s)
 
-    def _close_scorable(self, ev: PressEvent | None, now: float) -> None:
+    def _close_scorable(self, ev: PressEvent | None, now: float,
+                        late_press: bool = False) -> None:
         """Close a trial that consumes a scorable slot: a valid press
         or a timeout miss. Goes through engine.log_trial so scoring,
         streaks, cues and the trial CSV behave exactly as in Classic
-        and time_difference_ms keeps its meaning downstream."""
+        and time_difference_ms keeps its meaning downstream.
+
+        `late_press` marks a Miss whose press arrived AFTER the
+        response window: scored and gated exactly like a timeout (no
+        RT, points 0), but the row says late_press so a slow-but-
+        present response stays distinguishable from total absence
+        without re-scoring raw.csv."""
         trial = self.active
         if trial is None:
             return
@@ -651,7 +667,8 @@ class ReactionMode:
         self.engine.log_trial(
             trial, outcome, now,
             stimulus=f"{self.sub_mode};fp={self._fp_scheduled:.3f}",
-            hand=self._hand_for_lane(trial.lane))
+            hand=self._hand_for_lane(trial.lane),
+            error_type=("late_press" if late_press else None))
         if rt_ms is not None:
             self._show_rt_feedback(rt_ms)
             self._enter_rest(now, self.feedback_s)
@@ -665,7 +682,8 @@ class ReactionMode:
         """The game hook: the number IS the feedback (the PVT's
         self-motivating loop), plus the session best so "faster" has a
         target. Bests are kept per sub-mode and hand on the engine so
-        they survive across blocks within one app session."""
+        they survive across blocks within one login session; the
+        engine clears them at end_session."""
         store = getattr(self.engine, "_reaction_best_ms", None)
         if not isinstance(store, dict):
             store = {}
@@ -737,23 +755,29 @@ class ReactionMode:
         self._update_level_progression()
         self.engine.finish_block()
 
-    def _lapse_like_rate(self) -> float:
+    def _lapse_like_rate(self) -> float | None:
         """Lapses, misses and wrong-finger presses over scorable trials.
         Misses are counted with lapses because a timeout is the extreme
         lapse, and a window that only ever times out should widen, not
         shrink. Wrong-finger presses in choice sub-mode are counted too:
         a block of fast-but-wrong presses is not a clean block, and must
-        not be treated as one when deciding whether to level up."""
+        not be treated as one when deciding whether to level up.
+
+        None when no scorable trial completed: a block that ended at
+        the attempt cap on nothing but false starts produced no
+        evidence, and reporting 0.0 would read downstream as a clean
+        block from exactly the impulse-impaired patient the window
+        exists to protect."""
         if self.completed <= 0:
-            return 0.0
+            return None
         return ((self.n_lapse + self.n_miss + self.n_wrong_choice)
                 / self.completed)
 
     def _update_level_progression(self) -> None:
         """Two clean blocks step the response window down a level; one
         bad block steps it back up. State lives on the engine so it
-        spans blocks within an app session; a restart re-opens at
-        level 1, which is the safe direction to fail in."""
+        spans blocks within a login session; a restart or session end
+        re-opens at level 1, which is the safe direction to fail in."""
         eng = self.engine
         lvl = getattr(eng, "_reaction_level", 1)
         clean = getattr(eng, "_reaction_clean_blocks", 0)
@@ -762,14 +786,26 @@ class ReactionMode:
         if not isinstance(clean, int) or clean < 0:
             clean = 0
         rate = self._lapse_like_rate()
-        if rate > self.level_down_rate:
+        # A clean block needs evidence: at least half the planned
+        # scorable trials must have completed before a low rate can
+        # count toward a level-up. Without the floor, two blocks that
+        # ended at the attempt cap on nothing but false starts (rate
+        # None, or a handful of clean presses among a wall of
+        # wrong-finger retries) would tighten the window on the
+        # patients least able to handle it. A low-evidence block is
+        # neutral: the clean streak neither grows nor resets.
+        min_evidence = max(1, self.total_trials // 2)
+        if rate is None:
+            pass
+        elif rate > self.level_down_rate:
             lvl = max(1, lvl - 1)
             clean = 0
         elif rate < self.level_up_rate:
-            clean += 1
-            if clean >= 2:
-                lvl = min(self.max_level, lvl + 1)
-                clean = 0
+            if self.completed >= min_evidence:
+                clean += 1
+                if clean >= 2:
+                    lvl = min(self.max_level, lvl + 1)
+                    clean = 0
         else:
             clean = 0
         try:
@@ -885,7 +921,9 @@ class ReactionMode:
             "n_catch": self.n_catch,
             "n_catch_ok": self.n_catch_ok,
             "n_catch_false_start": self.n_catch_false_start,
-            "lapse_like_rate": round(self._lapse_like_rate(), 3),
+            # None (not 0.0) when nothing completed: the metadata must
+            # not claim a clean block that never produced a trial.
+            "lapse_like_rate": _r(self._lapse_like_rate(), 3),
             "median_rt_ms": _r(median),
             "mean_rt_ms": _r(mean),
             "sd_rt_ms": _r(sd),

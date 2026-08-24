@@ -380,13 +380,40 @@ class ProgressionTests(unittest.TestCase):
     clean hits move up, 5 or fewer move down, and the ladder is clamped
     at both ends so a bad run cannot fall off the bottom."""
 
-    def test_eight_of_ten_promotes_and_resets_the_window(self) -> None:
+    def test_eight_of_ten_promotes_on_a_sliding_window(self) -> None:
+        # The window SLIDES rather than clearing on promote: clearing
+        # capped the climb at one level per 10 trials, which left the
+        # top half of both ladders unreachable in a fixed-dose session
+        # (a flawless player topped out at 10 of 15 unilaterally, 6
+        # within / 4 cross bilaterally). The 8-of-10 criterion is
+        # unchanged; a short cooldown spaces consecutive moves.
         _, mode = _build_mode()
         for _ in range(10):
             mode._staircase(True)
         self.assertEqual(mode.level, 1)
-        self.assertEqual(len(mode._stair), 0)
+        self.assertEqual(len(mode._stair), 10)
         self.assertEqual(mode.highest_level, 1)
+
+    def test_cooldown_spaces_promotions(self) -> None:
+        _, mode = _build_mode()
+        for _ in range(10):
+            mode._staircase(True)
+        self.assertEqual(mode.level, 1)
+        # The window is still full of hits, but the next promotion
+        # waits for LEVEL_CHANGE_COOLDOWN more trials.
+        for _ in range(mode.LEVEL_CHANGE_COOLDOWN - 1):
+            mode._staircase(True)
+        self.assertEqual(mode.level, 1)
+        mode._staircase(True)
+        self.assertEqual(mode.level, 2)
+
+    def test_flawless_player_can_reach_the_top_of_the_ladder(self) -> None:
+        # 100 within-hand chords per unilateral session: the whole
+        # 15-level ladder must be reachable, W=100 ms floor included.
+        _, mode = _build_mode()
+        for _ in range(100):
+            mode._staircase(True)
+        self.assertEqual(mode.level, mode.max_level)
 
     def test_five_or_fewer_demotes(self) -> None:
         _, mode = _build_mode()
@@ -1164,6 +1191,22 @@ class ChordsResultsScreenCardsTests(unittest.TestCase):
         self.assertIn("LEAK FAILS", labels)
         self.assertIn("OVER-FORCE", labels)
 
+    def test_clean_hit_rate_prefers_the_scope_pure_count(self) -> None:
+        # The card used to divide by EVERY record, so the 16-32
+        # near-guaranteed probes and the cross-scope chords diluted
+        # it: the headline moved with the session's probe:chord mix,
+        # not skill. 32 probes all hit + 60 within (30 hit) + 40
+        # cross would pool to 47%; the chord-only rate is 50%.
+        cards = self._draw_chords_results({
+            "outcome_classes": {"hit": 62, "late_chord": 30,
+                                "leak_fail": 40},
+            "chord_outcome_classes": {"hit": 30, "late_chord": 30},
+            "median_er": 0.1, "level_highest": 5,
+            "over_force_trials": 0,
+        })
+        values = dict(cards)
+        self.assertEqual(values["CLEAN HIT RATE"], "50%")
+
 
 class DisconnectedSourceTests(unittest.TestCase):
     """Audit finding #27: a dropped serial connection must not freeze
@@ -1739,6 +1782,190 @@ class EngineCrossIntegrationTests(unittest.TestCase):
                 self.assertEqual(stats["n_probes"], 2)
         finally:
             pygame.quit()
+
+
+class MeasurementIntegrityTests(unittest.TestCase):
+    """ER, the probe matrices and the headline card must measure what
+    they claim: enslaving from complete responses, transfer from
+    correctly-cued probes, and a clean-chord rate over chords."""
+
+    def _fsr_chord(self, **over):
+        engine, mode = _build_mode(**over)
+        mode._fsr = True
+        det = MagicMock()
+        det.pressed = [True] * 4
+        engine.detectors = {"right": det}
+        t = _burn_probes_fsr(mode, det)
+        mode._fire(t)
+        while mode.active.kind != "chord":
+            det.pressed = [True] * 4
+            for lane in mode.active.targets:
+                mode._handle_press(_press(lane, t + 0.2), t + 0.2)
+            if mode.phase == "hold":
+                mode._update_hold(t + 0.2 + mode.hold_s + 0.05)
+            det.pressed = [False] * 4
+            t += 1.0
+            mode._fire(t)
+        return engine, mode, det, t
+
+    def test_partial_chord_records_no_er(self) -> None:
+        # The ER denominator averages over EVERY target, so a 1-of-2
+        # partial halved it and mechanically doubled er: a hand with a
+        # true 0.05 leak recorded er 0.10, and those inflated values
+        # drove median_er and the across-session ER curve, where
+        # completeness masqueraded as enslaving change.
+        engine, mode, det, t = self._fsr_chord()
+        trial = mode.active
+        self.assertGreater(len(trial.targets), 1)
+        pressed_lane = trial.targets[0]
+        peaks = {l: 2.5 for l in mode.hands["right"]}
+        peaks[pressed_lane] = 50.0
+        engine._force_window_peak = peaks
+        engine._force_window_saw_samples = True
+        mode._reference_counts = lambda lane: 50.0
+        det.pressed = [False] * 4
+        mode._handle_press(_press(pressed_lane, t + 0.3), t + 0.3)
+        mode._finish(t + 4.0, hold_achieved=None)   # timeout, partial
+        rec = mode._records[-1]
+        self.assertEqual(rec["class"], "partial")
+        self.assertIsNone(rec["er"])
+
+    def test_wrong_press_probe_stays_out_of_the_matrix(self) -> None:
+        # A cue-misread probe with a full press on a non-instructed
+        # finger wrote a ~100% cell into the enslaving matrix, so a
+        # start matrix inflated by early cue errors overstated
+        # start-to-end individuation gains.
+        from finger_rehab.game.modes.chords import ChordsMode
+        rec_wrong = {"kind": "probe", "chord": "I", "press_norm": 1.0,
+                     "leaks": {"1": 1.0, "2": 0.04, "3": 0.04},
+                     "wrong": True}
+        rec_clean = {"kind": "probe", "chord": "I", "press_norm": 1.0,
+                     "leaks": {"1": 0.05, "2": 0.04, "3": 0.04},
+                     "wrong": False}
+        matrix = ChordsMode._probe_matrix([rec_wrong, rec_clean])
+        # Only the clean probe's leaks appear.
+        self.assertAlmostEqual(matrix[0][1], 5.0, places=1)
+        self.assertAlmostEqual(matrix[0][2], 4.0, places=1)
+
+    def test_block_stats_name_the_force_reference_basis(self) -> None:
+        # Every force quantity in this mode divides by the calibrated
+        # light-press gap; the summary says whose numbers those were
+        # (profile stamp + participant) or that the config fallback
+        # ran, so a mis-referenced session is detectable offline.
+        from finger_rehab.hardware.calibration_profile import (
+            CalibrationProfile)
+        engine, mode = _build_mode()
+        basis = mode.block_stats()["reference_basis"]
+        self.assertEqual(basis["right"]["basis"], "config_fallback")
+        prof = CalibrationProfile(hand="right", participant="Pat",
+                                  resting=[100.0] * 4,
+                                  press=[160.0] * 4)
+        engine.calibration_profiles = {"right": prof}
+        basis = mode.block_stats()["reference_basis"]
+        self.assertEqual(basis["right"]["basis"], "profile")
+        self.assertEqual(basis["right"]["participant"], "Pat")
+
+    def test_block_stats_carry_scope_pure_class_counts(self) -> None:
+        engine, mode = _build_mode()
+        t = _burn_probes(mode)
+        mode._fire(t)
+        _complete_chord(mode, t + 0.3, gap_s=0.01)
+        stats = mode.block_stats()
+        # Probes dominate outcome_classes; the chord-only count holds
+        # exactly the one chord played.
+        self.assertEqual(sum(stats["chord_outcome_classes"].values()), 1)
+        self.assertGreater(sum(stats["outcome_classes"].values()), 1)
+
+
+class DeviceDropTests(unittest.TestCase):
+    """A sensor dropout mid-trial is hardware loss, not patient
+    failure: the trial closes as class device_drop, moves neither the
+    staircase nor the sub-block hit rate, and is re-dealt."""
+
+    def _fsr_mode(self):
+        engine, mode = _build_mode()
+        mode._fsr = True
+        engine.source.provides_samples = True
+        engine.source.is_connected = True
+        engine._hands_down = set()
+        det = MagicMock()
+        det.pressed = [True] * 4
+        engine.detectors = {"right": det}
+        t = _burn_probes_fsr(mode, det)
+        mode._fire(t)
+        return engine, mode, det, t
+
+    def _tick(self, mode, now):
+        import time as _time
+        from unittest.mock import patch
+        with patch.object(_time, "perf_counter", return_value=now):
+            mode.update(0.016)
+
+    def test_drop_mid_hold_closes_as_device_drop(self) -> None:
+        engine, mode, det, t = self._fsr_mode()
+        det.pressed = [True] * 4
+        _complete_chord(mode, t + 0.3, gap_s=0.01)
+        self.assertEqual(mode.phase, "hold")
+        sub_done_before = mode._sub_done
+        stair_before = len(mode._stair)
+        # The real drop: source down, engine clears the latches.
+        engine.source.is_connected = False
+        det.pressed = [False] * 4
+        self._tick(mode, t + 0.4)
+        rec = mode._records[-1]
+        self.assertEqual(rec["class"], "device_drop")
+        self.assertEqual(mode.phase, "settle")
+        # Nothing moved: no staircase entry, no sub-block progress.
+        self.assertEqual(len(mode._stair), stair_before)
+        self.assertEqual(mode._sub_done, sub_done_before)
+        stats = mode.block_stats()
+        self.assertEqual(stats["n_device_drops"], 1)
+        self.assertEqual(stats["outcome_classes"].get("device_drop"), 1)
+        # Excluded from the chord performance aggregates.
+        self.assertNotIn("device_drop", stats["chord_outcome_classes"])
+
+    def test_one_board_drop_of_the_trials_hand_counts_too(self) -> None:
+        engine, mode, det, t = self._fsr_mode()
+        det.pressed = [True] * 4
+        _complete_chord(mode, t + 0.3, gap_s=0.01)
+        self.assertEqual(mode.phase, "hold")
+        engine.source.is_connected = True
+        engine._hands_down = {"right"}
+        det.pressed = [False] * 4
+        self._tick(mode, t + 0.4)
+        self.assertEqual(mode._records[-1]["class"], "device_drop")
+
+
+class SessionCapInSettleTests(unittest.TestCase):
+    def test_cap_fires_while_stuck_in_settle(self) -> None:
+        # The 30-minute cap was only consulted at trial close, so a
+        # hand that never quieted (or a dead device) looped 'Relax
+        # your hand' forever past the cap.
+        import time as _time
+        from unittest.mock import patch
+        engine, mode = _build_mode(session_cap_min=0.01)
+        mode._fsr = True
+        det = MagicMock()
+        det.pressed = [True] * 4      # never quiet
+        engine.detectors = {"right": det}
+        engine.finish_block = MagicMock()
+        mode._t0 = 0.0
+        with patch.object(_time, "perf_counter", return_value=120.0):
+            mode.update(0.016)
+        self.assertEqual(mode.phase, "done")
+        self.assertEqual(mode.end_reason, "time_cap")
+
+    def test_cap_fires_while_parked_at_a_rest(self) -> None:
+        import time as _time
+        from unittest.mock import patch
+        engine, mode = _build_mode(session_cap_min=0.01)
+        engine.finish_block = MagicMock()
+        mode._t0 = 0.0
+        mode._enter_rest(1.0, 30.0, "between", "Rest your hand")
+        with patch.object(_time, "perf_counter", return_value=120.0):
+            mode.update(0.016)
+        self.assertEqual(mode.phase, "done")
+        self.assertEqual(mode.end_reason, "time_cap")
 
 
 if __name__ == "__main__":
