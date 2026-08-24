@@ -790,9 +790,14 @@ class QuickCalibrationScreen(Screen):
                     "Let's play", self._finish, th, ly, primary=True))
         # Skip is small and out of the way, but always there: keyboard
         # hands, a hurried clinician, a flaky sensor. It never writes.
+        # On the finished screen it would bin presses the patient has
+        # already given, so there it says that rather than pretending
+        # to be free.
+        skip_label = ("Discard and skip" if self.phase == PHASE_DONE
+                      and not self._problems else "Skip for now")
         self._buttons.append(Button(
-            pygame.Rect(ly.width - 220, ly.height - 70, 180, 48),
-            "Skip for now", self._skip, th, ly, font_pt=FONT_SMALL + 2))
+            pygame.Rect(ly.width - 240, ly.height - 70, 200, 48),
+            skip_label, self._skip, th, ly, font_pt=FONT_SMALL + 2))
 
     def handle_event(self, e: pygame.event.Event) -> None:
         # Esc arrives through the engine's global path (on_escape), so
@@ -1351,9 +1356,14 @@ class QuickCalibrationScreen(Screen):
                        FONT_H2, self._lane_colour(i))
             draw_text(surf, "HOLD", (RING_CENTRE[0], RING_CENTRE[1] + 34),
                       th, ly, pt=FONT_SMALL, centre=True, colour=th.muted)
-        draw_text(surf, f"hold {self._hold_s():.0f}s in the goal",
-                  (RING_CENTRE[0], RING_CENTRE[1] + RING_R + 26), th, ly,
-                  pt=FONT_SMALL, centre=True, colour=th.muted)
+        # Only while there is still a hold to do: after GOT IT the
+        # line was telling the patient to hold a press they had
+        # already banked.
+        if not self._landed:
+            draw_text(surf, f"hold {self._hold_s():.0f}s in the goal",
+                      (RING_CENTRE[0], RING_CENTRE[1] + RING_R + 26),
+                      th, ly, pt=FONT_SMALL, centre=True,
+                      colour=th.muted)
 
         # One-shot completion pop, a ring expanding out of the hold ring.
         now = time.perf_counter()

@@ -183,7 +183,12 @@ class ForcePilotScreen(Screen):
                              pygame.Rect(pad, bar_y, fill_w, bar_h),
                              border_radius=bar_h // 2)
         if mode.phase in ("probe_gap", "probe"):
-            left = f"Max press check: {len(mode._probe_queue)} to go"
+            # Say what is being counted: the centre panel counts
+            # presses for THIS finger, so a bare number here read as
+            # a contradiction of it.
+            n_fingers = len(mode._probe_queue)
+            left = (f"Max press check: {n_fingers} "
+                    f"finger{'s' if n_fingers != 1 else ''} to go")
         else:
             left = f"Run {min(done + 1, total)} of {total}"
         draw_text(surf, left, (pad, 34), self.theme, self.layout,
