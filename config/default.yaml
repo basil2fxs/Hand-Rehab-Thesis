@@ -210,13 +210,13 @@ quick_cal:
   # plateau is what the light-press level is read from, so shortening
   # this below ~0.5 s starts sampling the rise instead of the hold.
   hold_s: 1.0
-  # Target band, counts above resting. The floor is clamped in code to
-  # sit above MIN_USABLE_GAP so any press held in the band yields a
-  # profile the threshold maths accepts. The ceiling teaches "light":
-  # pressing above it stops the hold meter and asks for less. On this
-  # device measured light presses sat between about 40 and 145 counts.
-  zone_min_counts: 24
-  zone_max_counts: 110
+  # There is deliberately no target-band setting here. The band the
+  # screen coaches against comes from calibration_profile.target_gap_band,
+  # built out of the same constants the thresholds are computed from and
+  # fed with the run's own empty and resting captures, so it moves per
+  # finger with how loaded that pad is. A band set here could ask for a
+  # press the threshold maths then rejects, which is the one failure the
+  # screen exists to remove.
 
 cue:
   # WHAT THE PATIENT GETS ON A TRIAL, as four switches that are each

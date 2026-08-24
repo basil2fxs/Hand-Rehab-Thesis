@@ -99,6 +99,81 @@ class Screen:
     def update(self, dt: float) -> None: ...
     def draw(self, surf: pygame.Surface) -> None: ...
 
+    # How far below the last line of content the "next thing in Ns"
+    # line sits, and how close to the bottom edge it may be pushed.
+    NEXT_LINE_GAP = 56
+    NEXT_LINE_FLOOR = 60
+
+    def draw_next_countdown(self, surf: pygame.Surface, text: str,
+                            after_y: int) -> None:
+        """The between-trials countdown, placed under the content.
+
+        Force Pilot, Lighthouse and Buzz Hunt each pinned this line to
+        height - 60 whatever their result block ended at, so a short
+        result (a caught trial, a two-row hold) left 300 to 400 px of
+        blank page between the last number and the countdown, and the
+        two read as unrelated. Anchoring it to the content keeps the
+        card whole; the floor keeps a long result from pushing it off
+        the bottom.
+        """
+        y = min(after_y + self.NEXT_LINE_GAP,
+                self.layout.height - self.NEXT_LINE_FLOOR)
+        draw_text(surf, text, (self.layout.width // 2, y),
+                  self.theme, self.layout, pt=FONT_BODY, centre=True,
+                  colour=self.theme.muted)
+
+    # Size of the paused card, logical pixels. Tall enough for the
+    # word at FONT_TITLE plus the resume line under it with real air
+    # between them, so neither rides the border.
+    PAUSED_CARD = (480, 158)
+
+    def _draw_paused_overlay(self, surf: pygame.Surface) -> None:
+        """The one paused overlay, for every screen a block runs on.
+
+        Two things were wrong with the five hand-written copies this
+        replaces. They painted the bare word at the screen's centre
+        with nothing behind it, so on the max-press probe screens
+        (Force Pilot, Lighthouse) it landed straight across the live
+        "RIGHT INDEX" chip and the presses-to-go dots. And none of
+        them said how to get going again, which on a clinic machine
+        with no keyboard legend is a dead end: the therapist can see
+        the game has stopped and not that P restarts it. A card gives
+        the word its own ground whatever is underneath, and the line
+        under it names the key.
+        """
+        w, h = self.PAUSED_CARD
+        # Through the screen's own allocator where it has one: Force
+        # Pilot, Lighthouse and Buzz Hunt route every Surface they make
+        # through _new_surface so a test can pin that a steady frame
+        # allocates none, and a shared helper reaching past that hook
+        # would put allocations back out of its sight.
+        alloc = getattr(self, "_new_surface", None)
+        size = (self.layout.width, self.layout.height)
+        overlay = (alloc(size, pygame.SRCALPHA) if alloc is not None
+                   else pygame.Surface(size, pygame.SRCALPHA))
+        overlay.fill((0, 0, 0, 160))
+        surf.blit(overlay, (0, 0))
+        card = pygame.Rect(0, 0, w, h)
+        card.center = (self.layout.width // 2, self.layout.height // 2)
+        # Fully opaque, not a tint: the probe screens put a saturated
+        # orange chip right where the card lands, and at any alpha
+        # under 255 its letters read straight through the word on top
+        # of them.
+        panel = (alloc(card.size, pygame.SRCALPHA) if alloc is not None
+                 else pygame.Surface(card.size, pygame.SRCALPHA))
+        pygame.draw.rect(panel, self.theme.background, panel.get_rect(),
+                         border_radius=22)
+        surf.blit(panel, card.topleft)
+        pygame.draw.rect(surf, self.theme.warning, card, 3,
+                         border_radius=22)
+        draw_text(surf, "PAUSED", (card.centerx, card.y + 52),
+                  self.theme, self.layout, pt=FONT_TITLE, centre=True,
+                  colour=self.theme.warning)
+        draw_text(surf, "Press P to carry on",
+                  (card.centerx, card.bottom - 38),
+                  self.theme, self.layout, pt=FONT_BODY, centre=True,
+                  colour=self.theme.muted)
+
 
 def _chip(surf: pygame.Surface, layout: Layout,
            centre: tuple[int, int], text: str,
@@ -171,6 +246,201 @@ def _draw_header(surf: pygame.Surface, title: str, subtitle: str,
         draw_text(surf, subtitle, (cx, title_rect.bottom + 32),
                   theme, layout, pt=FONT_BODY, centre=True,
                   colour=theme.muted)
+
+
+# ---- session continuity helpers ------------------------------------------
+# One login is one session, and a session is meant to FLOW: finish a
+# game, see one suggestion, press once, play it. These helpers are
+# module level because both ends of that loop need them -- the results
+# screen picks the suggestion and draws the strip, game select draws
+# the same strip and ticks the cards already played.
+
+
+def mode_title(key: str) -> str:
+    """Patient-facing name for a mode key. Falls back to the key with
+    underscores opened out, which is what an unknown block (a test
+    double, an old session) should read as."""
+    for k, title, _desc in ModeSelectScreen.MODES:
+        if k == key:
+            return title
+    return str(key).replace("_", " ").title()
+
+
+def mode_accent(key: str, theme: Theme) -> tuple[int, int, int]:
+    """The mode's accent colour, or the theme accent for a key that
+    has none (classic, or a test double's numeric block)."""
+    return ModeSelectScreen.MODE_ACCENTS.get(str(key).lower(),
+                                             theme.accent)
+
+
+def playable_modes(engine) -> list[str]:
+    """Mode keys this rig can actually start right now, in card order.
+
+    The same two refusals the cards badge up front: three modes need
+    real sensor hardware (there is no keyboard-equivalent play for a
+    force trace or a vibration motor), and mirror needs a second
+    board. A suggestion the patient cannot press would be worse than
+    no suggestion.
+    """
+    src = getattr(engine, "source", None)
+    no_hardware = not getattr(src, "provides_samples", True)
+    try:
+        one_board = bool(engine.second_board_missing())
+    except Exception:
+        one_board = False
+    out = []
+    for key, _title, _desc in ModeSelectScreen.MODES:
+        if no_hardware and key in ModeSelectScreen.NEEDS_HARDWARE:
+            continue
+        if key == "mirror" and one_board:
+            continue
+        out.append(key)
+    return out
+
+
+def next_up_mode(engine, after: str | None = None) -> str | None:
+    """Which game to suggest next, or None when nothing is playable.
+
+    Unplayed modes come first: the point of the suggestion is variety
+    across a session, and a patient who has already done Reaction
+    twice gains nothing from being pointed at it a third time. The
+    search starts at the card AFTER the one just played and wraps, so
+    consecutive suggestions rotate through the grid instead of always
+    landing on the first unplayed card. Once every mode has been
+    played the rotation carries on, just never suggesting the game
+    that has only this second finished.
+    """
+    order = playable_modes(engine)
+    if not order:
+        return None
+    try:
+        played = set(engine.session_modes_played())
+    except Exception:
+        played = set()
+    start = order.index(after) + 1 if after in order else 0
+    rotated = order[start:] + order[:start]
+    for key in rotated:
+        if key not in played:
+            return key
+    for key in rotated:
+        if key != after:
+            return key
+    return rotated[0]
+
+
+def _strip_pill(surf: pygame.Surface, layout: Layout, left: int, cy: int,
+                text: str, fg: tuple[int, int, int],
+                font_pt: int = FONT_SMALL,
+                filled: bool = False) -> int:
+    """Left-anchored rounded pill. Returns the width it used, so a row
+    of chips can be laid out by walking x along. (_chip centres on a
+    point, which a run of chips cannot use.)"""
+    font = layout.font(font_pt)
+    label_colour = (255, 255, 255) if filled else fg
+    text_surf = font.render(text, True, label_colour)
+    w = text_surf.get_width() + 20
+    h = text_surf.get_height() + 8
+    rect = pygame.Rect(left, cy - h // 2, w, h)
+    if filled:
+        pygame.draw.rect(surf, fg, rect, border_radius=h // 2)
+    else:
+        tint = pygame.Surface(rect.size, pygame.SRCALPHA)
+        pygame.draw.rect(tint, (*fg, 46), tint.get_rect(),
+                         border_radius=h // 2)
+        surf.blit(tint, rect.topleft)
+        pygame.draw.rect(surf, fg, rect, 1, border_radius=h // 2)
+    surf.blit(text_surf, text_surf.get_rect(center=rect.center))
+    return w
+
+
+# Games played before the strip stops drawing a chip per game and
+# starts counting the overflow. Ten cards on the grid, so a long
+# session can pass this; the tail reads "+3 more" rather than running
+# off the edge.
+STRIP_MAX_CHIPS = 7
+
+# The strip is one row, and both screens size their rect to it.
+SESSION_STRIP_H = 52
+
+
+def draw_session_strip(surf: pygame.Surface, rect: pygame.Rect,
+                       engine, theme: Theme, layout: Layout,
+                       show_flourish: bool = False) -> None:
+    """The quiet session line: what has been played, and the running
+    totals.
+
+    The same drawing on game select and on the results screen, so the
+    patient reads one continuous session rather than a set of
+    unrelated games. Everything it shows comes from the engine's
+    session log, which is written in the same two places that count a
+    game for the End-session dialog, so the chips can never disagree
+    with that count.
+    """
+    body = tuple(max(0, min(255, c - 6)) for c in theme.background)
+    pygame.draw.rect(surf, body, rect, border_radius=14)
+    outline = tuple(max(0, c - 26) for c in theme.background)
+    pygame.draw.rect(surf, outline, rect, 1, border_radius=14)
+
+    try:
+        rows = engine.session_games_log()
+        points = engine.session_points()
+        stars = engine.session_stars()
+    except Exception:
+        # A bare engine (test doubles build one with __new__ and no
+        # session state) must not take the screen down with it.
+        rows, points, stars = [], 0, 0
+
+    cy = rect.centery
+    # Totals first: they hold the right-hand column whatever the chips
+    # do, and the chip run needs to know where to stop. Stars are the
+    # light session-wide progression, the same 0-3 the grade ring
+    # already earned, added up.
+    n_games = len(rows)
+    totals = (f"{n_games} game{'' if n_games == 1 else 's'}"
+              f"   {stars} star{'' if stars == 1 else 's'}"
+              f"   {points} pts")
+    tfont = layout.font(FONT_BODY)
+    tw = tfont.size(totals)[0]
+    totals_x = rect.right - 18 - tw
+    draw_text(surf, totals, (totals_x, cy - tfont.get_height() // 2),
+              theme, layout, pt=FONT_BODY, centre=False,
+              colour=theme.foreground)
+
+    # Three games in is a real session's worth of work for a patient
+    # who tires quickly, so it gets a quiet acknowledgement and
+    # nothing more. This is a clinic tool: no levels, no confetti.
+    right_limit = totals_x - 16
+    if show_flourish and n_games >= 3:
+        note = "Good session"
+        nw = layout.font(FONT_SMALL).size(note)[0] + 20
+        _strip_pill(surf, layout, right_limit - nw, cy, note,
+                    (255, 196, 0), filled=True)
+        right_limit -= nw + 16
+
+    x = rect.x + 18
+    if not rows:
+        draw_text(surf, "No games played yet",
+                  (x, cy - tfont.get_height() // 2),
+                  theme, layout, pt=FONT_BODY, centre=False,
+                  colour=theme.muted)
+        return
+    shown = 0
+    for row in rows[:STRIP_MAX_CHIPS]:
+        key = str(row.get("mode") or "")
+        label = mode_title(key)
+        width = layout.font(FONT_SMALL).size(label)[0] + 20
+        if x + width > right_limit:
+            break
+        # Darkened accent for the chip text: the pale end of the mode
+        # palette (syllables pink, force pilot lime) does not carry
+        # small type on a light page at full chroma.
+        ink = tuple(int(c * 0.68) for c in mode_accent(key, theme))
+        _strip_pill(surf, layout, x, cy, label, ink)
+        x += width + 8
+        shown += 1
+    extra = len(rows) - shown
+    if extra > 0:
+        _strip_pill(surf, layout, x, cy, f"+{extra} more", theme.muted)
 
 
 class TitleScreen(Screen):
@@ -769,15 +1039,22 @@ class ModeSelectScreen(Screen):
         "buzz_hunt": (249, 115, 22),
     }
 
+    # Game select is the session hub, so the header gives its subtitle
+    # line over to the session strip: "every game comes back here"
+    # was a promise, the strip is the evidence. The grid drops to
+    # GRID_TOP to make the room; five rows of 88 + 12 end at 684,
+    # still clear of the buttons at 710.
+    STRIP_TOP = 132
+    GRID_TOP = 196
+
     def __init__(self, engine: "GameEngine") -> None:
         super().__init__(engine)
         self.buttons: list[Button] = []
         cx = engine.layout.width // 2
         # A two-column grid, filled left to right so the reading order
-        # matches the MODES order. Sized for TEN cards (five rows):
-        # rows end at y = 673, clear of the back button at 710. Card
-        # height 88 gives the two-line descriptions (title + what you
-        # do + what it trains) room without shrinking the title.
+        # matches the MODES order. Sized for TEN cards (five rows).
+        # Card height 88 gives the two-line descriptions (title + what
+        # you do + what it trains) room without shrinking the title.
         card_w = 590
         card_h = 88
         gap = 12
@@ -785,7 +1062,7 @@ class ModeSelectScreen(Screen):
             col = i % 2
             row = i // 2
             x0 = cx - card_w - gap // 2 + col * (card_w + gap)
-            y = 185 + row * (card_h + gap)
+            y = self.GRID_TOP + row * (card_h + gap)
             # Each card gets a softened tint of its own mode accent
             # as its rest fill, so the row reads as three clearly
             # different cards instead of three identical muted-grey
@@ -818,52 +1095,59 @@ class ModeSelectScreen(Screen):
             "End session", engine.request_end_session,
             self.theme, self.layout,
         )
+        # Calibration on demand. The automatic gate still runs the
+        # flow once per session per hand before the first game that
+        # needs it; this is for the times a therapist wants it again
+        # (the strap moved, a different patient's hand, a press that
+        # stopped registering) without ending the session. Re-running
+        # re-captures and re-applies through the same path, and marks
+        # the hands as covered so the next game does not ask again.
+        self.cal_btn = Button(
+            pygame.Rect(236, engine.layout.height - 90, 200,
+                        BUTTON_H - 10),
+            "Calibrate", self._calibrate,
+            self.theme, self.layout,
+        )
+        # Set when the button is pressed on a rig that cannot be
+        # calibrated; drawn under the button instead of silently
+        # doing nothing.
+        self.cal_note = ""
+
+    CAL_UNAVAILABLE = "Calibration needs the sensor hardware"
+
+    def _can_calibrate(self) -> bool:
+        try:
+            return bool(self.engine.calibratable_hands())
+        except Exception:
+            return False
+
+    def _calibrate(self) -> None:
+        """Open the quick flow, or say why it cannot run. A keyboard
+        session has no force signal to measure, so the button explains
+        itself instead of opening a screen whose only exit is Skip."""
+        if not self.engine.start_manual_calibration():
+            self.cal_note = self.CAL_UNAVAILABLE
 
     def _second_board_missing(self) -> bool:
         """True when a hardware source cannot serve both hands (one
         board attached). Mirror is bilateral-only, and with one board
         the left lanes can never fire from the sensors: every trial
         missed on the left and the block recorded as total bimanual
-        failure of the patient. Keyboard sources play mirror fine
-        (both hands live on the keys)."""
-        src = self.engine.source
-        if not getattr(src, "provides_samples", True):
-            return False
-        avail = getattr(src, "hand_modes_available", None)
-        return isinstance(avail, set) and "both" not in avail
+        failure of the patient. The rule itself lives on the engine so
+        the cards, the hand picker and the NEXT UP button all read one
+        answer."""
+        return self.engine.second_board_missing()
 
     def _pick(self, mode_key: str) -> None:
-        self.engine.cfg.data.setdefault("game", {})["mode"] = mode_key
-        # Mirror mode is bilateral-only, so skip the hand-pick step
-        # and go straight into the block. Setting hand_mode here
-        # means the gameplay screen builds with 8 lane tiles ready
-        # before begin_mirror_block fires.
-        if mode_key == "mirror" and self._second_board_missing():
-            # Refuse before anything is touched: the card wears a
-            # NEEDS SECOND BOARD badge saying why.
-            return
+        # Mirror is bilateral-only, so it skips the hand-pick step and
+        # goes straight into the block through the shared start path
+        # (which sets both hands, rebuilds the lanes and runs the same
+        # session calibration gate every other game gets). Everything
+        # else still asks which hand first.
         if mode_key == "mirror":
-            self.engine.cfg.data.setdefault(
-                "bilateral", {})["hand"] = "both"
-            self.engine.hand_mode = "both"
-            self.engine.session.hand = "both"
-            self.engine._build_detectors()
-            for key in ("gameplay", "rhythm"):
-                sc = self.engine._screens.get(key)
-                if sc and hasattr(sc, "rebuild_lanes"):
-                    sc.rebuild_lanes()
-            # Same session gate every other game gets via the setup
-            # screen. Mirror skips the hand-pick step, so without this
-            # call it was the ONE start path that never ran quick
-            # calibration: a session whose first game was Mirror ran
-            # both hands on config defaults or the previous session's
-            # saved thresholds, which directly bias the per-hand
-            # latencies the mode measures.
-            if self.engine.maybe_start_quick_calibration(
-                    self.engine.begin_mirror_block):
-                return
-            self.engine.begin_mirror_block()
+            self.engine.begin_game("mirror")
             return
+        self.engine.cfg.data.setdefault("game", {})["mode"] = mode_key
         self.engine.show_setup()
 
     # Number-key shortcuts for the ten cards, 1-9 then 0 for the
@@ -876,12 +1160,18 @@ class ModeSelectScreen(Screen):
     )
 
     def handle_event(self, e: pygame.event.Event) -> None:
-        for b in self.buttons + [self.back_btn]:
+        for b in self.buttons + [self.back_btn, self.cal_btn]:
             b.handle_event(e)
         if e.type == pygame.KEYDOWN and e.key in self._DIGIT_KEYS:
             idx = self._DIGIT_KEYS.index(e.key)
             if idx < len(self.MODES):
                 self._pick(self.MODES[idx][0])
+        # C for calibrate, so the hub is fully keyboard-drivable: the
+        # digits cover the ten cards and Esc raises the End-session
+        # dialog, which left the new button as the only mouse-only
+        # control on the screen.
+        elif e.type == pygame.KEYDOWN and e.key == pygame.K_c:
+            self._calibrate()
 
     # Descriptions render as up to two wrapped lines under the title.
     # The cap is part of the card contract: a description that needs a
@@ -1067,9 +1357,21 @@ class ModeSelectScreen(Screen):
 
     def draw(self, surf: pygame.Surface) -> None:
         surf.fill(self.theme.background)
-        _draw_header(surf, "Pick a game",
-                     "Every game comes back here when it ends.",
-                     self.theme, self.layout)
+        # No subtitle: the strip below says what the old line claimed
+        # ("every game comes back here"), and says it with the games
+        # actually played.
+        _draw_header(surf, "Pick a game", "", self.theme, self.layout)
+        draw_session_strip(
+            surf,
+            pygame.Rect(40, self.STRIP_TOP, self.layout.width - 80,
+                        SESSION_STRIP_H),
+            self.engine, self.theme, self.layout,
+            show_flourish=True,
+        )
+        try:
+            played = set(self.engine.session_modes_played())
+        except Exception:
+            played = set()
         # Only relevant with no live sensor source: a serial device
         # gives every mode real input, so there is nothing to warn
         # about. On a keyboard-only fallback, Force Pilot / Lighthouse
@@ -1147,7 +1449,44 @@ class ModeSelectScreen(Screen):
                           (b.rect.right - 14 - badge_w, b.rect.y + 14),
                           self.theme, self.layout, pt=FONT_SMALL,
                           centre=False, colour=self.theme.error)
+            elif key in played and not (
+                    no_hardware and key in self.NEEDS_HARDWARE):
+                # A tick, not a lock: a played mode is still one press
+                # away, the mark only says the session has covered it.
+                # Small and in the mode's own accent so it reads as
+                # part of the card rather than an alert. Never drawn
+                # over a badge: both live in the card's top-right.
+                self._draw_done_tick(surf, b.rect.right - 26,
+                                     b.rect.y + 22, accent)
         self.back_btn.draw(surf)
+        # Said before the click, the same rule the cards' badges
+        # follow: on a keyboard rig there is nothing to calibrate, so
+        # the button reads inactive and the reason sits beside it
+        # rather than waiting for a press that does nothing.
+        note = self.cal_note
+        if not self._can_calibrate():
+            note = self.CAL_UNAVAILABLE
+            self.cal_btn.colour = tuple(
+                int(c + (255 - c) * 0.55) for c in self.theme.muted)
+        else:
+            self.cal_btn.colour = None
+        self.cal_btn.draw(surf)
+        if note:
+            draw_text(surf, note,
+                      (self.cal_btn.rect.right + 18,
+                       self.cal_btn.rect.centery - 8),
+                      self.theme, self.layout, pt=FONT_SMALL,
+                      centre=False, colour=self.theme.muted)
+
+    @staticmethod
+    def _draw_done_tick(surf: pygame.Surface, cx: int, cy: int,
+                        colour: tuple[int, int, int]) -> None:
+        """Small ringed tick marking a mode already played this
+        session."""
+        pygame.draw.circle(surf, colour, (cx, cy), 11, 2)
+        pygame.draw.lines(surf, colour, False,
+                          [(cx - 5, cy), (cx - 1, cy + 4),
+                           (cx + 6, cy - 5)], 2)
 
 
 class SetupScreen(Screen):
@@ -1224,57 +1563,22 @@ class SetupScreen(Screen):
         that cannot serve both hands (one board) must not start a
         bilateral block, or the missing hand's lanes read constant
         zeros and every one of its trials records as an honest-looking
-        patient miss."""
-        src = self.engine.source
-        if not getattr(src, "provides_samples", True):
-            return False
-        avail = getattr(src, "hand_modes_available", None)
-        return isinstance(avail, set) and "both" not in avail
+        patient miss. Answered by the engine so every screen agrees."""
+        return self.engine.second_board_missing()
 
     def _pick(self, hand: str) -> None:
-        # Update hand mode + rebuild detectors / lane strips for the new
-        # layout, then start the block in whichever mode the user picked.
-        # Participant name was already pushed into session/config by the
-        # title screen so we don't touch it here.
-        if hand == "both" and self._second_board_missing():
-            # Refused up front; the card wears a NEEDS SECOND BOARD
-            # badge saying why.
-            return
-        self.engine.cfg.data.setdefault("bilateral", {})["hand"] = hand
-        self.engine.hand_mode = hand
-        self.engine.session.hand = hand
-        self.engine._build_detectors()
-        for key in ("gameplay", "rhythm"):
-            sc = self.engine._screens.get(key)
-            if sc and hasattr(sc, "rebuild_lanes"):
-                sc.rebuild_lanes()
+        # Participant name was already pushed into session/config by
+        # the title screen so we don't touch it here. Everything after
+        # the pace slider is the shared start path on the engine: hand
+        # mode, detectors, lane strips, the session calibration gate,
+        # then the mode's own starter.
         mode = self.engine.cfg.get("game.mode", "adaptive")
         if mode == "classic":
             # Persist the slider's chosen pace into the config so the
             # ClassicMode constructor reads it back when the block starts.
             self.engine.cfg.data.setdefault("game", {})[
                 "trigger_interval_s"] = self.pace_slider.value
-        starters = {
-            "classic": self.engine.begin_classic_block,
-            "rhythm": self.engine.show_rhythm_setup,
-            "reaction": self.engine.begin_reaction_block,
-            "pattern": self.engine.begin_pattern_block,
-            "chords": self.engine.begin_chords_block,
-            "syllables": self.engine.begin_syllables_block,
-            "force_pilot": self.engine.begin_force_pilot_block,
-            "lighthouse": self.engine.begin_lighthouse_block,
-            "buzz_hunt": self.engine.begin_buzz_hunt_block,
-        }
-        start = starters.get(mode, self.engine.begin_adaptive_block)
-        # Calibration is a session event: the first game that needs a
-        # hand this session gets the quick flow first, which teaches
-        # the light press and measures it in one go, with the block
-        # start handed over as the continuation. Every later game in
-        # the session (and any keyboard session) sails straight
-        # through: the gate returns False without showing anything.
-        if self.engine.maybe_start_quick_calibration(start):
-            return
-        start()
+        self.engine.begin_game(mode, hand)
 
     # Keyboard shortcut for each hand card, first letter of its key
     # (audit finding #113: this screen was mouse-click only, so a
@@ -1441,6 +1745,11 @@ class GameplayScreen(Screen):
         # Full-screen dim behind the countdown card, built once and
         # reused (draw runs at 60 fps; no per-frame surface builds).
         self._dim_cache: pygame.Surface | None = None
+        # Set per frame in draw(): True when the mode message chip took
+        # the bottom band because a pair bracket owns the band above
+        # the tiles. The chords layer reads it so its warm-up counter,
+        # which lives in the same slot, does not land on top.
+        self._msg_in_bottom_band = False
         self.rebuild_lanes()
 
     # How much empty space sits between the two hand blocks in bilateral
@@ -1912,37 +2221,6 @@ class GameplayScreen(Screen):
         surf.blit(mt_label,
                    mt_label.get_rect(center=pill_rect.center))
 
-        # Mode message chip: whatever the mode asked the patient to
-        # read right now ("142 ms  NEW BEST", "Too soon", "Level up",
-        # "Press any finger when ready"). Rendered as a tinted pill
-        # with a short pop-in so the feedback visibly ARRIVES, and the
-        # tint carries the meaning (gold best, amber caution, green
-        # reward) before the words are read. Lives in the gap between
-        # the streak pill and the tallest lane tile. Suppressed while
-        # the pattern rest card is up: the card says the same thing
-        # with more room.
-        block = getattr(self.engine, "current_block", "")
-        pattern_resting = (
-            block == "pattern" and self.engine.mode is not None
-            and getattr(self.engine.mode, "phase", "") == "rest")
-        if (self.message and time.perf_counter() < self.message_until
-                and not pattern_resting):
-            age = time.perf_counter() - self._message_born
-            # Reaction's chip IS the mode's feedback (the RT number is
-            # the PVT's self-motivating loop), so it renders a step
-            # larger and stronger there than the shared default, and
-            # sits a little higher so the bigger chip still clears the
-            # tallest lane tile (top = 220).
-            base_pt = 34 if block == "reaction" else 30
-            chip_cy = 188 if block == "reaction" else 201
-            chip_alpha = 42 if block == "reaction" else 30
-            pt = base_pt
-            if age < 0.18:
-                pt = int(base_pt * (1.0 + 0.22 * (1.0 - age / 0.18)))
-            _chip(surf, self.layout, (cx, chip_cy), self.message,
-                  self._message_colour(), bg_alpha=chip_alpha,
-                  pad_x=24, pad_y=10, font_pt=pt)
-
         # Bilateral mid-divider: thin grey line between the two hand
         # blocks so the eye reads them as separate groups. The LEFT /
         # RIGHT text labels that used to sit above the lanes are gone:
@@ -1957,11 +2235,71 @@ class GameplayScreen(Screen):
         # is the connector that matters here.
         in_mirror = (getattr(self.engine, "current_block", None)
                       == "mirror")
-        if self.engine.hand_mode == "both" and not in_mirror:
+        # Extent comes from the lanes themselves rather than two fixed
+        # numbers. The fixed pair ran from 215 (inside the message
+        # chip, which is centred on the same x, so the line cut its
+        # underside) down to height-80, a good 60 px past the tile
+        # baseline where it dangled into empty space. Tied to the
+        # tiles it can do neither. Drawn ahead of the message chip for
+        # the same reason: painted after it, the line ran across the
+        # chip's underside.
+        if self.engine.hand_mode == "both" and not in_mirror and self.lanes:
             mid_x = self.layout.width // 2
+            top = min(ls.rect.top for ls in self.lanes)
+            bottom = max(ls.rect.bottom for ls in self.lanes)
             pygame.draw.line(surf, self.theme.muted,
-                              (mid_x, 215),
-                              (mid_x, self.layout.height - 80), 2)
+                              (mid_x, top), (mid_x, bottom), 2)
+
+        # Mode message chip: whatever the mode asked the patient to
+        # read right now ("142 ms  NEW BEST", "Too soon", "Level up",
+        # "Press any finger when ready"). Rendered as a tinted pill
+        # with a short pop-in so the feedback visibly ARRIVES, and the
+        # tint carries the meaning (gold best, amber caution, green
+        # reward) before the words are read. Lives in the gap between
+        # the streak pill and the tallest lane tile. Suppressed while
+        # the pattern rest card is up: the card says the same thing
+        # with more room.
+        block = getattr(self.engine, "current_block", "")
+        pattern_resting = (
+            block == "pattern" and self.engine.mode is not None
+            and getattr(self.engine.mode, "phase", "") == "rest")
+        # Two or more lanes lit means _draw_target_indicator will put
+        # a pair bracket over the tiles, and the whole bracket (label,
+        # bar, stubs, chevrons) lives inside the band the centred chip
+        # occupies. Chords hit this on every chord: "Warm-up done.
+        # Chords: press together" rendered straight through the
+        # chevron and the PRESS TOGETHER label, and neither was
+        # readable. The bracket says which tiles to press and cannot
+        # move away from them, so the chip yields and takes the quiet
+        # bottom band instead.
+        bracket_up = sum(1 for ls in self.lanes if ls.active) >= 2
+        self._msg_in_bottom_band = False
+        # Also suppressed under either exit guard. The guard is meant
+        # to be the frozen frame's ONE message; a mode chip left
+        # sitting under it made two.
+        if (self.message and time.perf_counter() < self.message_until
+                and not pattern_resting
+                and not self.engine.exit_overlay_active):
+            age = time.perf_counter() - self._message_born
+            # Reaction's chip IS the mode's feedback (the RT number is
+            # the PVT's self-motivating loop), so it renders a step
+            # larger and stronger there than the shared default, and
+            # sits a little higher so the bigger chip still clears the
+            # tallest lane tile (top = 220).
+            base_pt = 34 if block == "reaction" else 30
+            chip_cy = 188 if block == "reaction" else 201
+            chip_alpha = 42 if block == "reaction" else 30
+            if bracket_up:
+                self._msg_in_bottom_band = True
+                base_pt = 26
+                chip_cy = self.layout.height - 42
+                chip_alpha = 36
+            pt = base_pt
+            if age < 0.18:
+                pt = int(base_pt * (1.0 + 0.22 * (1.0 - age / 0.18)))
+            _chip(surf, self.layout, (cx, chip_cy), self.message,
+                  self._message_colour(), bg_alpha=chip_alpha,
+                  pad_x=24, pad_y=10, font_pt=pt)
 
         now = time.perf_counter()
         for ls in self.lanes:
@@ -1999,9 +2337,14 @@ class GameplayScreen(Screen):
         # always sits on top (no clipping by neighbouring tiles).
         self._draw_target_indicator(surf, now)
 
-        # Floating hit/miss popups
-        for p in self._popups:
-            p.draw(surf, self.layout)
+        # Floating hit/miss popups. Held back while the pattern rest
+        # card is up: the card dims the stage, and a "Miss" from the
+        # last trial floating at full strength over that dim was the
+        # brightest thing on a screen whose whole job is "stop and
+        # rest".
+        if not pattern_resting:
+            for p in self._popups:
+                p.draw(surf, self.layout)
 
         # Corner Controls note: only drawn in keyboard-fallback sessions
         # (see keyboard_controls_lines), silent on the real sensor device
@@ -2330,7 +2673,7 @@ class GameplayScreen(Screen):
         # leaves early reports that chords mode only ever asks for
         # one finger at a time.
         ws_fn = getattr(m, "warmup_state", None)
-        if callable(ws_fn):
+        if callable(ws_fn) and not self._msg_in_bottom_band:
             try:
                 ws = ws_fn()
             except Exception:
@@ -2548,10 +2891,16 @@ class GameplayScreen(Screen):
                         m, seg, accent: tuple[int, int, int]) -> None:
         """Top-left studio chip: pulsing REC dot, take label, and a
         thin bar filling as the take is laid down."""
+        # The bar under the chip is the position WITHIN the take, and
+        # a bare unfilled track next to a black pill read as a
+        # rendering artifact rather than a meter. Putting the same
+        # count in words inside the chip gives the bar a name.
+        total = max(1, len(getattr(seg, "fingers", []) or []))
+        done = min(total, int(getattr(m, "_trial_in_seg", 0) or 0))
         if seg.kind == "warmup":
-            label = "WARM-UP"
+            label = f"WARM-UP  {done}/{total}"
         else:
-            label = f"TAKE {seg.label} OF {m.n_takes}"
+            label = f"TAKE {seg.label} OF {m.n_takes}  {done}/{total}"
         font = self.layout.font(FONT_SMALL + 2)
         text = font.render(label, True, (255, 255, 255))
         dot_r = 6
@@ -2571,19 +2920,22 @@ class GameplayScreen(Screen):
                         chip_rect.centery - dot_r))
         surf.blit(text, (chip_rect.x + pad_x + dot_r * 2 + 8,
                          chip_rect.centery - text.get_height() // 2))
-        # In-take progress under the chip.
-        total = max(1, len(getattr(seg, "fingers", []) or []))
-        done = min(total, int(getattr(m, "_trial_in_seg", 0) or 0))
-        track = pygame.Surface((chip_w, 4), pygame.SRCALPHA)
-        pygame.draw.rect(track, (*self.theme.muted, 80),
-                         track.get_rect(), border_radius=2)
-        surf.blit(track, (chip_rect.x, chip_rect.bottom + 6))
-        fill_w = int(chip_w * done / total)
+        # In-take progress, tucked under the chip and inset to the
+        # chip's own rounded ends so it reads as part of the same
+        # object rather than a line that happens to sit near it.
+        bar_x = chip_rect.x + chip_h // 2
+        bar_w = max(24, chip_w - chip_h)
+        bar_y = chip_rect.bottom + 5
+        track = pygame.Surface((bar_w, 5), pygame.SRCALPHA)
+        pygame.draw.rect(track, (*self.theme.muted, 110),
+                         track.get_rect(), border_radius=3)
+        surf.blit(track, (bar_x, bar_y))
+        fill_w = int(bar_w * done / total)
         if fill_w > 0:
-            fill = pygame.Surface((fill_w, 4), pygame.SRCALPHA)
+            fill = pygame.Surface((fill_w, 5), pygame.SRCALPHA)
             pygame.draw.rect(fill, (*accent, 230), fill.get_rect(),
-                             border_radius=2)
-            surf.blit(fill, (chip_rect.x, chip_rect.bottom + 6))
+                             border_radius=3)
+            surf.blit(fill, (bar_x, bar_y))
 
     def _draw_star_row(self, surf: pygame.Surface, centre_x: int,
                        y: int, earned: int) -> None:
@@ -2618,9 +2970,21 @@ class GameplayScreen(Screen):
                                              pygame.SRCALPHA)
             self._dim_cache.fill((0, 0, 0, 60))
         surf.blit(self._dim_cache, (0, 0))
-        card_w, card_h = 480, 260
+        forced = getattr(m, "_rest_kind", "between") == "forced"
+        # A forced fatigue rest has no stars and no star streak to
+        # show, so the fixed 260 tall card left a 116 px hole between
+        # the title and the countdown. Height follows the rows that
+        # actually render.
+        card_w = 480
+        card_h = 200 if forced else 260
         card_rect = pygame.Rect(0, 0, card_w, card_h)
         card_rect.center = (cx, cy)
+        # Row baselines, measured from the card top. The forced card
+        # drops the two star rows and closes the gap they leave.
+        if forced:
+            y_title, y_status, y_dots = 50, 112, 162
+        else:
+            y_title, y_status, y_dots = 52, 168, 218
         # The breath: a soft accent halo swelling over 4 s.
         breath = (math.sin(now * (2 * math.pi / 4.0)) + 1) * 0.5
         grow = int(10 + 16 * breath)
@@ -2643,14 +3007,13 @@ class GameplayScreen(Screen):
         pygame.draw.rect(body, (*accent, 150), body.get_rect(), 3,
                          border_radius=22)
         surf.blit(body, card_rect.topleft)
-        forced = getattr(m, "_rest_kind", "between") == "forced"
         if forced:
             title = "Take a breather"
         elif seg.kind == "warmup":
             title = "Warm-up done"
         else:
             title = f"Take {seg.label} done"
-        draw_text(surf, title, (cx, card_rect.y + 52), self.theme,
+        draw_text(surf, title, (cx, card_rect.y + y_title), self.theme,
                   self.layout, pt=FONT_H1, centre=True)
         if not forced:
             stars = len(m._stars(seg)) if hasattr(m, "_stars") else 0
@@ -2670,15 +3033,17 @@ class GameplayScreen(Screen):
         if rest_until is not None and now < rest_until:
             left = int(math.ceil(rest_until - now))
             draw_text(surf, f"Rest for {left}s",
-                      (cx, card_rect.y + 168), self.theme, self.layout,
-                      pt=FONT_H2, centre=True, colour=self.theme.muted)
+                      (cx, card_rect.y + y_status), self.theme,
+                      self.layout, pt=FONT_H2, centre=True,
+                      colour=self.theme.muted)
         else:
             pulse = (math.sin(now * (2 * math.pi / 2.0)) + 1) * 0.5
             font = self.layout.font(FONT_H2)
             t = font.render("Press any finger when ready", True,
                             self.theme.foreground)
             t.set_alpha(int(150 + 105 * pulse))
-            surf.blit(t, t.get_rect(center=(cx, card_rect.y + 168)))
+            surf.blit(t, t.get_rect(
+                center=(cx, card_rect.y + y_status)))
         # Take dots: the session at a glance, current position filled.
         takes = [s for s in m.segments if s.kind != "warmup"]
         if takes:
@@ -2689,23 +3054,15 @@ class GameplayScreen(Screen):
                 1 for s in takes
                 if s.n_done >= len(s.fingers) and len(s.fingers) > 0)
             for i in range(n):
-                centre = (x0 + i * gap, card_rect.y + 218)
+                centre = (x0 + i * gap, card_rect.y + y_dots)
                 if i < done_takes:
                     pygame.draw.circle(surf, accent, centre, 6)
                 else:
                     pygame.draw.circle(surf, self.theme.muted, centre,
                                        6, 2)
 
-    def _draw_paused_overlay(self, surf: pygame.Surface) -> None:
-        overlay = pygame.Surface(
-            (self.layout.width, self.layout.height), pygame.SRCALPHA,
-        )
-        overlay.fill((0, 0, 0, 160))
-        surf.blit(overlay, (0, 0))
-        draw_text(surf, "PAUSED",
-                  (self.layout.width // 2, self.layout.height // 2 - 30),
-                  self.theme, self.layout, pt=FONT_TITLE + 20, centre=True,
-                  colour=self.theme.warning)
+    # _draw_paused_overlay comes from Screen: one card, one resume
+    # line, identical on every screen a block runs on.
 
 
 class RhythmScreen(Screen):
@@ -3242,15 +3599,7 @@ class RhythmScreen(Screen):
         # Skipped under either exit guard, same as GameplayScreen: the
         # guard is the frame's one message.
         if self.engine.paused and not self.engine.exit_overlay_active:
-            overlay = pygame.Surface(
-                (self.layout.width, self.layout.height), pygame.SRCALPHA,
-            )
-            overlay.fill((0, 0, 0, 160))
-            surf.blit(overlay, (0, 0))
-            draw_text(surf, "PAUSED",
-                      (cx, self.layout.height // 2 - 30),
-                      self.theme, self.layout, pt=FONT_TITLE + 20,
-                      centre=True, colour=self.theme.warning)
+            self._draw_paused_overlay(surf)
 
 
 class RhythmSetupScreen(Screen):
@@ -3762,14 +4111,10 @@ class ResultsScreen(Screen):
         # the engine's End-session dialog, the same warning game
         # select's own button raises, since leaving for the login
         # screen ends the whole session from here too).
-        btn_w = 210
-        gap = 16
-        total_w = btn_w * 4 + gap * 3
+        btn_w = 190
+        gap = 14
+        total_w = btn_w * 5 + gap * 4
         x = cx - total_w // 2
-        # Buttons pushed down from y=640 -> y=696 to clear the per-lane
-        # histograms that now sit between the stat cards and the
-        # saved-to footer. Bottom margin ~46 px at h=58 keeps them
-        # from feeling glued to the screen edge.
         y = 696
         h = BUTTON_H + 4
         self.retry_btn = Button(
@@ -3777,12 +4122,14 @@ class ResultsScreen(Screen):
             "Retry",
             engine.retry_last_block,
             self.theme, self.layout, font_pt=FONT_H2,
-            primary=True,
         )
         x += btn_w + gap
+        # Named for where it goes, not for what it used to say: the
+        # NEXT UP card is now the "play again" affordance, and this
+        # is the way back to the hub.
         self.again_btn = Button(
             pygame.Rect(x, y, btn_w, h),
-            "Play again", engine.show_mode_select,
+            "Game menu", engine.show_mode_select,
             self.theme, self.layout, font_pt=FONT_H2,
         )
         x += btn_w + gap
@@ -3792,11 +4139,32 @@ class ResultsScreen(Screen):
             self.theme, self.layout, font_pt=FONT_H2,
         )
         x += btn_w + gap
+        self.detail_btn = Button(
+            pygame.Rect(x, y, btn_w, h),
+            "More detail", self._toggle_details,
+            self.theme, self.layout, font_pt=FONT_H2,
+        )
+        x += btn_w + gap
         self.title_btn = Button(
             pygame.Rect(x, y, btn_w, h),
             "End session", engine.request_end_session,
             self.theme, self.layout, font_pt=FONT_H2,
         )
+        # The NEXT UP button lives inside its card, not in the row: it
+        # is the one action the screen is steering towards, and a
+        # sixth button in a row of five would read as just another
+        # option. Label and colour are set per suggestion at draw time.
+        nx, ny, nw, _nh = self.NEXT_CARD_RECT
+        self.next_btn = Button(
+            pygame.Rect(nx + 32, ny + 256, nw - 64, BUTTON_H + 14),
+            "Start", self._start_next_up,
+            self.theme, self.layout, font_pt=FONT_H2,
+            primary=True,
+        )
+        # Slim by default. The full read-out (every card the mode
+        # produces plus the per-finger charts) is one press away and
+        # never sticks: a fresh game lands on the slim screen again.
+        self.show_details = False
 
         # Sensory Cues, here as well as in Settings.
         #
@@ -3828,8 +4196,16 @@ class ResultsScreen(Screen):
 
     def on_show(self) -> None:
         """Engine hook: a block just landed here, restart the entry
-        animation."""
+        animation and fold the detail view away so the next game ends
+        on the slim screen it was designed to end on."""
         self._shown_t = time.perf_counter()
+        self.show_details = False
+        self.detail_btn.label = "More detail"
+
+    def _toggle_details(self) -> None:
+        self.show_details = not self.show_details
+        self.detail_btn.label = ("Hide detail" if self.show_details
+                                 else "More detail")
 
     def _entry_frac(self) -> float:
         """0..1 cubic ease-out over the first 0.8 s on screen."""
@@ -3850,13 +4226,25 @@ class ResultsScreen(Screen):
         self.retry_btn.handle_event(e)
         self.again_btn.handle_event(e)
         self.folder_btn.handle_event(e)
+        self.detail_btn.handle_event(e)
         self.title_btn.handle_event(e)
+        if not self.show_details:
+            self.next_btn.handle_event(e)
         # Enter confirms the primary (Retry) action, same convention as
         # the title screen's START shortcut (audit finding #113: this
         # screen was mouse-click only, so a keyboard-only session could
         # not continue past its own results screen).
         if e.type == pygame.KEYDOWN and e.key == pygame.K_RETURN:
             self.engine.retry_last_block()
+        # Every other control on the screen gets a letter, so a
+        # keyboard-only session can take the NEXT UP suggestion, walk
+        # back to the hub or open the detail view without a mouse.
+        elif e.type == pygame.KEYDOWN and e.key == pygame.K_n:
+            self._start_next_up()
+        elif e.type == pygame.KEYDOWN and e.key == pygame.K_m:
+            self.engine.show_mode_select()
+        elif e.type == pygame.KEYDOWN and e.key == pygame.K_d:
+            self._toggle_details()
 
     # Grade thresholds from hit rate. S+ for near-perfect runs, D for low
     # accuracy. Same letter scheme rhythm games use.
@@ -4249,7 +4637,8 @@ class ResultsScreen(Screen):
 
     def _draw_stat_card(self, surf: pygame.Surface, rect: pygame.Rect,
                          label: str, value: str,
-                         value_colour: tuple[int, int, int]) -> None:
+                         value_colour: tuple[int, int, int],
+                         value_pt: int = FONT_TITLE) -> None:
         # Card body + soft shadow underneath (single pass since the
         # cards are small and on a flat background; the multi-pass
         # Card shadow would be overkill at this scale).
@@ -4262,61 +4651,64 @@ class ResultsScreen(Screen):
         pygame.draw.rect(surf, body, rect, border_radius=14)
         outline = tuple(max(0, c - 30) for c in self.theme.background)
         pygame.draw.rect(surf, outline, rect, 1, border_radius=14)
-        # Small label up top.
+        # Small label up top, shrunk until it fits. A pooled Force
+        # Pilot card carries its "(mixed levels)" flag in the label,
+        # and a label wider than the card silently ran off both edges
+        # rather than dropping the disclosure it exists to make.
+        max_label_w = rect.w - 16
+        label_pt = FONT_BODY
+        while (label_pt > 10
+               and self.layout.font(label_pt).size(label)[0] > max_label_w):
+            label_pt -= 1
         draw_text(surf, label, (rect.centerx, rect.y + 22),
-                  self.theme, self.layout, pt=FONT_BODY,
+                  self.theme, self.layout, pt=label_pt,
                   centre=True, colour=self.theme.muted)
         # Big value, bold so it pops as the stat's headline number.
         # Shrink the font until it fits the card so a value with a unit
         # (e.g. "262 ms") never spills past the card edge the way a bare
         # number like "1840" does.
         max_w = rect.w - 24
-        pt = int(FONT_TITLE * self.layout.font_scale)
+        pt = int(value_pt * self.layout.font_scale)
         val_font = make_font(pt, bold=True)
         val_surf = val_font.render(value, True, value_colour)
         while val_surf.get_width() > max_w and pt > 12:
             pt -= 2
             val_font = make_font(pt, bold=True)
             val_surf = val_font.render(value, True, value_colour)
+        # Value sits at a fixed fraction of the card rather than a
+        # fixed 78 px, so the taller headline card on the slim screen
+        # centres its number instead of hugging the label.
         surf.blit(val_surf,
-                   val_surf.get_rect(center=(rect.centerx, rect.y + 78)))
+                   val_surf.get_rect(
+                       center=(rect.centerx,
+                               rect.y + int(rect.h * 0.71))))
 
-    def draw(self, surf: pygame.Surface) -> None:
-        surf.fill(self.theme.background)
-        cx = self.layout.width // 2
+    # Slim-view geometry. The left column carries the grade and the
+    # three numbers; the right column carries NEXT UP.
+    SLIM_CX = 330
+    SLIM_RING_CENTRE = (330, 252)
+    SLIM_RING_R = 86
+    SLIM_CARD_TOP = 402
+    SLIM_CARD_H = 128
+    NEXT_CARD_RECT = (650, 160, 570, 370)
+    SLIM_STRIP_RECT = (60, 578, 1160, SESSION_STRIP_H)
 
-        total = self.engine.hits + self.engine.misses
-        rate = 0.0 if total == 0 else self.engine.hits / total
-        grade, blurb = self._grade_for(rate)
-        grade_colour = self._grade_colour(grade)
-
-        # Entry animation progress: 1.0 when settled (or in a bare
-        # test draw with no on_show notification).
-        entry = self._entry_frac()
-
-        # Top banner. Bold via the shared SysFont call so the header
-        # matches the rest of the menu screens. The accent bar and the
-        # block pill wear the finished mode's accent so the results
-        # carry the same identity the patient just played under.
-        # str() because a test double can leave current_block as a
-        # non-string; an unknown block just falls back to the theme
-        # accent.
-        block_name = str(self.engine.current_block)
-        mode_accent = ModeSelectScreen.MODE_ACCENTS.get(
-            block_name.lower(), self.theme.accent)
-        title_font = make_font(int((FONT_H1 + 6) * self.layout.font_scale),
-            bold=True,
-        )
+    def _draw_results_header(self, surf: pygame.Surface, cx: int,
+                             block_name: str,
+                             accent: tuple[int, int, int]) -> None:
+        """Title, accent rule and the mode pill. Same furniture as the
+        in-play screens so the results carry the identity the patient
+        just played under."""
+        title_font = make_font(
+            int((FONT_H1 + 6) * self.layout.font_scale), bold=True)
         title_surf = title_font.render(self.RESULTS_TITLE, True,
-                                        self.theme.foreground)
+                                       self.theme.foreground)
         title_rect = title_surf.get_rect(center=(cx, 80))
         surf.blit(title_surf, title_rect)
-        # Accent bar under the title (matches _draw_header).
         bar_w = max(72, title_rect.w // 3)
         bar_rect = pygame.Rect(0, 0, bar_w, 4)
         bar_rect.center = (cx, title_rect.bottom + 12)
-        pygame.draw.rect(surf, mode_accent, bar_rect, border_radius=2)
-        # Mode pill top-right, same furniture as the in-play screens.
+        pygame.draw.rect(surf, accent, bar_rect, border_radius=2)
         # Underscores come out as spaces so force_pilot reads as the
         # mode's on-screen name, not its config key. "pattern" is a
         # special case: the mode-select card is titled "Muscle Memory"
@@ -4330,63 +4722,284 @@ class ResultsScreen(Screen):
         pill_rect = pygame.Rect(0, 0, mt_label.get_width() + 24,
                                 mt_label.get_height() + 8)
         pill_rect.topright = (self.layout.width - 28, 30)
-        pygame.draw.rect(surf, mode_accent, pill_rect,
+        pygame.draw.rect(surf, accent, pill_rect,
                          border_radius=pill_rect.height // 2)
         surf.blit(mt_label, mt_label.get_rect(center=pill_rect.center))
 
-        # Grade letter inside a ring. Big celebratory moment, the part
-        # the patient and therapist see first. The ring sweeps closed
-        # over the entry animation, then the blurb sits directly under
-        # it so the praise reads as part of the grade (it used to
-        # collide with the glow from above).
-        grade_centre = (cx, 240)
-        ring_r = 90
-        # Soft glow behind the ring, fading in with the sweep.
+    def _draw_grade_ring(self, surf: pygame.Surface,
+                         centre: tuple[int, int], ring_r: int,
+                         grade: str, blurb: str,
+                         grade_colour: tuple[int, int, int],
+                         entry: float) -> None:
+        """Grade letter inside a ring: the celebratory moment, and the
+        part the patient and therapist see first. The ring sweeps
+        closed over the entry animation with the blurb directly under
+        it, so the praise reads as part of the grade."""
         glow = pygame.Surface((ring_r * 2 + 40, ring_r * 2 + 40),
-                               pygame.SRCALPHA)
+                              pygame.SRCALPHA)
         for i, alpha in ((20, 30), (12, 50), (4, 80)):
-            pygame.draw.circle(glow, (*grade_colour,
-                                      int(alpha * entry)),
-                                (ring_r + 20, ring_r + 20), ring_r + i)
-        surf.blit(glow, (grade_centre[0] - ring_r - 20,
-                          grade_centre[1] - ring_r - 20))
+            pygame.draw.circle(glow, (*grade_colour, int(alpha * entry)),
+                               (ring_r + 20, ring_r + 20), ring_r + i)
+        surf.blit(glow, (centre[0] - ring_r - 20,
+                         centre[1] - ring_r - 20))
         if entry >= 1.0:
-            pygame.draw.circle(surf, grade_colour, grade_centre,
-                               ring_r, 6)
+            pygame.draw.circle(surf, grade_colour, centre, ring_r, 6)
         else:
             arc_rect = pygame.Rect(0, 0, ring_r * 2, ring_r * 2)
-            arc_rect.center = grade_centre
+            arc_rect.center = centre
             start = math.pi / 2
             pygame.draw.arc(surf, grade_colour, arc_rect,
                             start, start + entry * 2 * math.pi, 6)
-        # Letter itself, oversized + bold so the visual weight matches
-        # the heavy ring around it, fading in with the sweep.
-        gfont = make_font(int(120 * self.layout.font_scale),
-            bold=True,
-        )
+        gfont = make_font(
+            int(ring_r * 1.33 * self.layout.font_scale), bold=True)
         gtext = gfont.render(grade, True, grade_colour)
         if entry < 1.0:
             gtext.set_alpha(int(255 * entry))
-        surf.blit(gtext, gtext.get_rect(center=grade_centre))
-        draw_text(surf, blurb,
-                  (cx, grade_centre[1] + ring_r + 24),
+        surf.blit(gtext, gtext.get_rect(center=centre))
+        draw_text(surf, blurb, (centre[0], centre[1] + ring_r + 24),
                   self.theme, self.layout, pt=FONT_BODY,
                   centre=True, colour=self.theme.muted)
 
+    def _hand_phrase(self, hand: str) -> str:
+        return {"left": "Left hand", "right": "Right hand",
+                "both": "Both hands"}.get(hand, "Right hand")
+
+    def _next_up_plan(self) -> tuple[str | None, str]:
+        """Which game to offer next, and on which hand.
+
+        Same hand as the game that just ended, so the one press really
+        is one press: no hand picker in between. Mirror is the
+        exception the mode itself makes, being bilateral-only.
+        """
+        after = str(getattr(self.engine, "current_block", "") or "")
+        key = next_up_mode(self.engine, after)
+        if key is None:
+            return None, ""
+        hand = str(getattr(self.engine, "hand_mode", "right") or "right")
+        if key == "mirror":
+            hand = "both"
+        return key, hand
+
+    def _start_next_up(self) -> None:
+        """One press from here to the suggested game's prep.
+
+        Straight through engine.begin_game, which is the same path the
+        hand picker takes: same hand-mode switch, same lane rebuild,
+        same session calibration gate, same starter. Nothing about the
+        block (its EEG markers included) can differ from a game
+        started the long way round.
+        """
+        key, hand = self._next_up_plan()
+        if key is None:
+            return
+        self.engine.begin_game(key, hand)
+
+    def _draw_next_up(self, surf: pygame.Surface,
+                      rect: pygame.Rect) -> None:
+        """The continuity card: one suggestion, one button.
+
+        One suggestion rather than a menu on purpose. The patient has
+        just finished a game and is being asked to keep going; a grid
+        of ten is a decision, and a single named game with the hand
+        already set is an invitation.
+        """
+        body = tuple(max(0, min(255, c - 6)) for c in self.theme.background)
+        shadow = pygame.Surface((rect.w + 12, rect.h + 12),
+                                pygame.SRCALPHA)
+        pygame.draw.rect(shadow, (0, 0, 0, 30),
+                         pygame.Rect(6, 8, rect.w, rect.h),
+                         border_radius=18)
+        surf.blit(shadow, (rect.x - 6, rect.y - 6))
+        pygame.draw.rect(surf, body, rect, border_radius=18)
+        outline = tuple(max(0, c - 26) for c in self.theme.background)
+        pygame.draw.rect(surf, outline, rect, 1, border_radius=18)
+
+        key, hand = self._next_up_plan()
+        draw_text(surf, "NEXT UP", (rect.x + 30, rect.y + 26),
+                  self.theme, self.layout, pt=FONT_SMALL,
+                  centre=False, colour=self.theme.muted)
+        if key is None:
+            # A keyboard rig with nothing playable left. Say so rather
+            # than offering a button that refuses.
+            draw_text(surf, "Nothing else this rig can run.",
+                      (rect.x + 30, rect.y + 70),
+                      self.theme, self.layout, pt=FONT_BODY,
+                      centre=False, colour=self.theme.muted)
+            return
+        accent = mode_accent(key, self.theme)
+        strip = pygame.Rect(rect.x + 30, rect.y + 62, 6, 92)
+        pygame.draw.rect(surf, accent, strip, border_radius=3)
+        ModeSelectScreen._draw_mode_icon(
+            surf, key, rect.x + 84, rect.y + 96, 44, accent)
+        title_font = make_font(int(FONT_H1 * self.layout.font_scale),
+                               bold=True)
+        title_surf = title_font.render(mode_title(key), True,
+                                       self.theme.foreground)
+        surf.blit(title_surf,
+                  title_surf.get_rect(midleft=(rect.x + 126,
+                                               rect.y + 88)))
+        desc = next((d for k, _t, d in ModeSelectScreen.MODES
+                     if k == key), "")
+        desc_font = self.layout.font(FONT_SMALL + 2)
+        desc_w = rect.right - 30 - (rect.x + 126)
+        for li, line in enumerate(
+                ModeSelectScreen._wrap_desc(desc_font, desc, desc_w)[:2]):
+            draw_text(surf, line,
+                      (rect.x + 126, rect.y + 110 + li * 22),
+                      self.theme, self.layout, pt=FONT_SMALL + 2,
+                      centre=False, colour=self.theme.muted)
+        # Why this one. The suggestion rotates for variety, so saying
+        # which of the two reasons is in play stops it reading as an
+        # arbitrary pick, and stops a therapist wondering whether the
+        # app is steering the session towards something.
+        try:
+            played = set(self.engine.session_modes_played())
+        except Exception:
+            played = set()
+        reason = ("Not played yet this session" if key not in played
+                  else "Coming round again")
+        _strip_pill(surf, self.layout, rect.x + 30, rect.y + 186,
+                    reason, self.theme.muted)
+        draw_text(surf, f"{self._hand_phrase(hand)}, already set up",
+                  (rect.x + 30, rect.y + 216),
+                  self.theme, self.layout, pt=FONT_BODY,
+                  centre=False, colour=self.theme.foreground)
+        self.next_btn.label = f"Start {mode_title(key)}   (N)"
+        self.next_btn.colour = accent
+        self.next_btn.draw(surf)
+
+    def _draw_slim(self, surf: pygame.Surface, cards: list,
+                   entry: float) -> None:
+        """The finished screen: the mode's headline, at most two
+        supporting numbers, one suggestion, and the session so far."""
+        picks = self._slim_cards(cards)
+        # Headline card wider and taller than the two beside it, so
+        # which number matters is a matter of size rather than of
+        # reading six labels.
+        widths = (230, 145, 145)
+        x = self.SLIM_CX - 270
+        for i, (lbl, val, col) in enumerate(picks[:3]):
+            w = widths[i] if i < len(widths) else 145
+            self._draw_stat_card(
+                surf,
+                pygame.Rect(x, self.SLIM_CARD_TOP, w, self.SLIM_CARD_H),
+                lbl, val, col,
+                value_pt=FONT_TITLE + (14 if i == 0 else -6),
+            )
+            x += w + 10
+        self._draw_next_up(surf, pygame.Rect(*self.NEXT_CARD_RECT))
+        draw_session_strip(surf, pygame.Rect(*self.SLIM_STRIP_RECT),
+                           self.engine, self.theme, self.layout)
+
+    def draw(self, surf: pygame.Surface) -> None:
+        surf.fill(self.theme.background)
+        cx = self.layout.width // 2
+        total = self.engine.hits + self.engine.misses
+        rate = 0.0 if total == 0 else self.engine.hits / total
+        grade, blurb = self._grade_for(rate)
+        grade_colour = self._grade_colour(grade)
+        # Entry animation progress: 1.0 when settled (or in a bare
+        # test draw with no on_show notification).
+        entry = self._entry_frac()
+        # str() because a test double can leave current_block as a
+        # non-string; an unknown block falls back to the theme accent.
+        block_name = str(self.engine.current_block)
+        accent = mode_accent(block_name, self.theme)
+        self._draw_results_header(surf, cx, block_name, accent)
+        cards = self._stat_cards(entry)
+        if self.show_details:
+            self._draw_grade_ring(surf, (cx, 240), 90, grade, blurb,
+                                  grade_colour, entry)
+            self._draw_details(surf, cards, entry)
+        else:
+            self._draw_grade_ring(surf, self.SLIM_RING_CENTRE,
+                                  self.SLIM_RING_R, grade, blurb,
+                                  grade_colour, entry)
+            self._draw_slim(surf, cards, entry)
+
+        self.retry_btn.draw(surf)
+        self.again_btn.draw(surf)
+        self.folder_btn.draw(surf)
+        self.detail_btn.draw(surf)
+        self.title_btn.draw(surf)
+
+        # Sensory-cues menu. Pill first, overlay last so the open rows
+        # sit on top of the buttons they cover.
+        self._cue_menu.draw_closed(surf)
+        self._cue_menu.draw_overlay(surf)
+
+    # Which of _stat_cards' entries reach the finished screen, as
+    # (headline, support, support) indices into that mode's list.
+    #
+    # The choices themselves are unchanged and stay research-driven
+    # (median RT for reaction, accuracy rather than RT for Muscle
+    # Memory, the sync gap for mirror, pace for adaptive): only the
+    # DENSITY changes. A six-card wall after every game buried the one
+    # number that mattered among five that did not, and a patient
+    # reading it had no way to tell which was which. Everything else
+    # each mode measures is still computed below, still written to the
+    # session folder and the report, and still one press away behind
+    # the More detail toggle.
+    SLIM_CARDS = {
+        "force_pilot": (2, 3, 0),     # in corridor | mean error | score
+        "lighthouse": (4, 2, 0),      # lit vs dark | lit variability
+        "buzz_hunt": (1, 2, 0),       # localisation | span | score
+        "pattern": (2, 4, 1),         # accuracy | stars | takes
+        "reaction": (2, 4, 0),        # median RT | accuracy or p10
+        "chords": (1, 2, 0),          # clean hit rate | median ER
+        "syllables": (1, 2, 0),       # words correct | band | score
+        "mirror": (2, 0, 1),          # sync gap | score | hits
+        "adaptive": (2, 4, 0),        # top pace | final pace | score
+    }
+    # Classic, rhythm and anything unrecognised fall on the generic
+    # list: score, then hit rate, then the timing figure.
+    SLIM_CARDS_DEFAULT = (0, 2, 4)
+
+    def _mode_summaries(self) -> dict:
+        """Every mode-specific block summary in one read, keyed by the
+        short names the card branches use. One call so the cards and
+        the detail charts cannot end up looking at different data."""
+        return {
+            "fp": self._force_pilot_summary(),
+            "lh": self._lighthouse_summary(),
+            "bh": self._buzz_hunt_summary(),
+            "rx": self._reaction_summary(),
+            "pat": self._pattern_summary(),
+            "ch": self._chords_summary(),
+            "sy": self._syllables_summary(),
+            "mir": self._mirror_summary(),
+            "adp": self._adaptive_summary(),
+        }
+
+    def _stat_cards(self, entry: float = 1.0
+                    ) -> list[tuple[str, str, tuple[int, int, int]]]:
+        """Every number this block could report, as (label, value,
+        colour), in each mode's own vocabulary.
+
+        `entry` rides the screen's entry ease so counting stats land
+        with the ring sweep; timing readouts stay static because a
+        reaction time counting up through wrong values would read as
+        data. The full list is what the More detail view draws and
+        what the mode tests assert on; the finished screen shows the
+        three SLIM_CARDS picks out of it.
+        """
+        total = self.engine.hits + self.engine.misses
+        rate = 0.0 if total == 0 else self.engine.hits / total
+        _sums = self._mode_summaries()
+        fp = _sums["fp"]
+        lh = _sums["lh"]
+        bh = _sums["bh"]
+        rx = _sums["rx"]
+        pat = _sums["pat"]
+        ch = _sums["ch"]
+        sy = _sums["sy"]
+        mir = _sums["mir"]
+        adp = _sums["adp"]
         # Stat cards row - score, hits, hit rate, misses, plus the two
         # reaction-time cards the patient sees as a game-style headline
         # (average + personal best for the round). Six slimmer cards
         # (180 px) keep the row inside the 1280-wide logical surface.
         is_rhythm = (self.engine.current_block == "rhythm")
-        fp = self._force_pilot_summary()
-        lh = self._lighthouse_summary()
-        bh = self._buzz_hunt_summary()
-        rx = self._reaction_summary()
-        pat = self._pattern_summary()
-        ch = self._chords_summary()
-        sy = self._syllables_summary()
-        mir = self._mirror_summary()
-        adp = self._adaptive_summary()
         avg_rt = self.engine.overall_mean_rt()
         best_rt = self.engine.overall_best_rt()
         avg_str = f"{avg_rt:.0f} ms" if avg_rt > 0 else "n/a"
@@ -4755,6 +5368,47 @@ class ResultsScreen(Screen):
                 (avg_label, avg_str, self.theme.foreground),
                 (best_label, best_str, self.theme.success),
             ]
+        return cards
+
+    def _slim_cards(self, cards: list) -> list:
+        """The three that reach the finished screen: headline first,
+        then at most two supporting numbers. Indices that fall off the
+        end of a shorter list (buzz_hunt grows a card per hand) are
+        skipped rather than clamped onto the wrong number."""
+        picks = self.SLIM_CARDS.get(str(self.engine.current_block).lower(),
+                                    self.SLIM_CARDS_DEFAULT)
+        out = []
+        for idx in picks:
+            if 0 <= idx < len(cards):
+                out.append(cards[idx])
+        if not out:
+            out = cards[:3]
+        return out
+
+    def _draw_details(self, surf: pygame.Surface, cards: list,
+                      entry: float) -> None:
+        """The full read-out: every card the mode produces, plus the
+        per-finger charts and the footers.
+
+        Off by default (the finished screen shows three numbers), but
+        kept in the app rather than sent to the data folder alone,
+        because several of these panels carry disclosures the audit
+        put there on purpose: the mixed-levels flags on the pooled
+        Force Pilot and Lighthouse numbers, the per-hand buzz_hunt
+        thresholds, and the panels that explain why a per-finger chart
+        would be misleading for chords, syllables and Muscle Memory. A
+        clinician mid-session should not have to open a CSV to see
+        them.
+        """
+        cx = self.layout.width // 2
+        _sums = self._mode_summaries()
+        fp = _sums["fp"]
+        lh = _sums["lh"]
+        bh = _sums["bh"]
+        pat = _sums["pat"]
+        ch = _sums["ch"]
+        sy = _sums["sy"]
+        mir = _sums["mir"]
         card_w = 180
         card_h = 110
         gap = 20
@@ -5098,20 +5752,6 @@ class ResultsScreen(Screen):
             draw_text(surf, f"Saved to: {path}",
                       (cx, 666), self.theme, self.layout, pt=FONT_SMALL,
                       centre=True, colour=self.theme.muted)
-
-        self.retry_btn.draw(surf)
-        self.again_btn.draw(surf)
-        self.folder_btn.draw(surf)
-        self.title_btn.draw(surf)
-
-        # Sensory-cues menu. handle_event has routed clicks to this
-        # menu since the pill was added, but the pill itself was never
-        # drawn, leaving an invisible click target floating over the
-        # screen. Pill first, overlay last so the open rows sit on top
-        # of the buttons they cover.
-        self._cue_menu.draw_closed(surf)
-        self._cue_menu.draw_overlay(surf)
-
 
 class DiagnosticsScreen(Screen):
     """Settings + hardware test screen reachable from the title.

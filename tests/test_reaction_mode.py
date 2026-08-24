@@ -871,6 +871,12 @@ class ResultsScreenMedianCardTests(unittest.TestCase):
         e.overall_best_rt = lambda: 202.4
         r = ResultsScreen(e)
         r._shown_t = 1.0  # entry animation already finished
+        # These assertions are about the FULL read-out (every card
+        # this mode produces, plus its per-finger charts), which is
+        # what the More detail view draws. The finished screen shows
+        # the three ResultsScreen.SLIM_CARDS picks out of the same
+        # list; test_session_flow covers that view.
+        r.show_details = True
         seen = []
         r._draw_stat_card = (
             lambda surf, rect, lbl, val, col: seen.append((lbl, val)))

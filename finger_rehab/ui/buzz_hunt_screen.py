@@ -173,9 +173,25 @@ class BuzzHuntScreen(Screen):
             self._draw_top(surf, mode)
             self._draw_announce(surf, mode, now)
         elif phase == "trial":
-            # The near-empty promise: focus point only. No furniture,
-            # no progress bar, nothing that changes with the stimulus.
+            # The near-empty promise still holds around the dot: the
+            # centre of the screen carries the focus point and nothing
+            # else, and nothing drawn here reflects the stimulus or
+            # the response.
+            #
+            # What DID change: a bare dot on an otherwise empty field
+            # left the patient no way to tell a running trial from a
+            # frozen app, no sense of how far through the block they
+            # were, and no reminder of what this stage asks (the
+            # instruction had scrolled by on the announce card a
+            # second earlier). All three now sit at the edges, out of
+            # the fixation zone, and every one of them is constant for
+            # the whole trial: the counter and the bar only step
+            # between trials, and the foot line is the stage's own
+            # sentence, already read on the announce card, so it
+            # reveals nothing the patient was not just told.
+            self._draw_top(surf, mode)
             self._draw_focus_point(surf, now)
+            self._draw_trial_prompt(surf, mode)
         elif phase == "feedback":
             self._draw_top(surf, mode)
             self._draw_feedback(surf, mode, now)
@@ -221,10 +237,21 @@ class BuzzHuntScreen(Screen):
                          border_radius=pill_rect.height // 2)
         surf.blit(pill_label,
                   pill_label.get_rect(center=pill_rect.center))
+        # Score under the pill, with the word that names it. Sitting
+        # beside the pill it was a bare number 16 px off a filled pill
+        # in the same accent, so the two read as one crowded object
+        # and nothing on screen said what the number counted. The lane
+        # modes have always carried a SCORE label; these four now
+        # match, and the band under the pill is empty on all of them.
         sf = self.layout.font(FONT_H2, bold=True)
         score_surf = sf.render(f"{self.engine.score}", True, accent)
-        surf.blit(score_surf, score_surf.get_rect(
-            midright=(pill_rect.left - 16, pill_rect.centery)))
+        lf = self.layout.font(FONT_SMALL)
+        score_label = lf.render("SCORE", True, self.theme.muted)
+        score_rect = score_surf.get_rect(
+            topright=(pill_rect.right, pill_rect.bottom + 10))
+        surf.blit(score_surf, score_rect)
+        surf.blit(score_label, score_label.get_rect(
+            midright=(score_rect.left - 10, score_rect.centery)))
 
     # ---- no input ----------------------------------------------------------
     def _draw_no_input(self, surf: pygame.Surface) -> None:
@@ -261,21 +288,43 @@ class BuzzHuntScreen(Screen):
                   centre=True, colour=self.theme.muted)
 
     # ---- announce ----------------------------------------------------------
-    def _draw_announce(self, surf: pygame.Surface, mode,
-                       now: float) -> None:
-        cx = self.layout.width // 2
-        draw_text(surf, "Get ready...", (cx, 300), self.theme,
-                  self.layout, pt=FONT_H2, centre=True,
-                  colour=self.theme.foreground)
-        line = {
+    def _stage_prompt(self, mode) -> str:
+        """The one sentence this stage asks for. Shared by the
+        announce card and the trial's foot line so the patient reads
+        the same wording in both places, and so neither can drift into
+        naming a finger or a hand (a screen test pins that for the
+        trial frames)."""
+        return {
             "loc": "Press the finger that buzzes. Nothing? Wait.",
             "distractor": "Ignore the first buzz. Press where the "
                           "last one was.",
             "span": f"A pattern of {mode.span_len} buzzes is coming.",
             "gap": "Tap once for one buzz, twice for two.",
         }.get(mode.stage, "")
-        draw_text(surf, line, (cx, 350), self.theme, self.layout,
-                  pt=FONT_BODY, centre=True, colour=self.theme.muted)
+
+    def _draw_trial_prompt(self, surf: pygame.Surface, mode) -> None:
+        """The stage's sentence, quiet, at the foot of the screen.
+
+        Placed 320 px below the focus point so it sits outside the
+        fixation zone, and drawn in the muted tone at small size so it
+        can be read on purpose without pulling the eye off the dot."""
+        line = self._stage_prompt(mode)
+        if not line:
+            return
+        draw_text(surf, line,
+                  (self.layout.width // 2, self.layout.height - 64),
+                  self.theme, self.layout, pt=FONT_BODY, centre=True,
+                  colour=self.theme.muted)
+
+    def _draw_announce(self, surf: pygame.Surface, mode,
+                       now: float) -> None:
+        cx = self.layout.width // 2
+        draw_text(surf, "Get ready...", (cx, 300), self.theme,
+                  self.layout, pt=FONT_H2, centre=True,
+                  colour=self.theme.foreground)
+        draw_text(surf, self._stage_prompt(mode), (cx, 350), self.theme,
+                  self.layout, pt=FONT_BODY, centre=True,
+                  colour=self.theme.muted)
         self._draw_focus_point(surf, now, dim=True)
 
     # ---- the focus point ---------------------------------------------------
@@ -395,10 +444,8 @@ class BuzzHuntScreen(Screen):
             y += 90
         if mode._phase_until is not None:
             left = max(0.0, mode._phase_until - now)
-            draw_text(surf, f"Next trial in {left:.0f}s",
-                      (cx, self.layout.height - 60), self.theme,
-                      self.layout, pt=FONT_BODY, centre=True,
-                      colour=self.theme.muted)
+            self.draw_next_countdown(
+                surf, f"Next trial in {left:.0f}s", y)
 
     def _draw_lane_row(self, surf: pygame.Surface, lanes: list[int],
                        cx: int, cy: int) -> None:
@@ -453,15 +500,8 @@ class BuzzHuntScreen(Screen):
                   self.theme, self.layout, pt=140,
                   centre=True, colour=accent)
 
-    def _draw_paused_overlay(self, surf: pygame.Surface) -> None:
-        overlay = self._new_surface(
-            (self.layout.width, self.layout.height), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 160))
-        surf.blit(overlay, (0, 0))
-        draw_text(surf, "PAUSED",
-                  (self.layout.width // 2, self.layout.height // 2 - 30),
-                  self.theme, self.layout, pt=FONT_TITLE + 20, centre=True,
-                  colour=self.theme.warning)
+    # _draw_paused_overlay comes from Screen: one card, one resume
+    # line, identical on every screen a block runs on.
 
 
 def _text_colour_for(fill: tuple[int, int, int]) -> tuple[int, int, int]:

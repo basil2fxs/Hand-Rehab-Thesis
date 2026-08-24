@@ -46,8 +46,10 @@ from finger_rehab.hardware.source import Source
 EMPTY = [245.0, 250.0, 248.0, 235.0]
 REST = [2.5, 8.9, 11.5, 30.7]
 RESTING = [EMPTY[i] + REST[i] for i in range(N_FINGERS)]
-# A light press 60 counts above resting sits inside the default
-# 24..110 target band on every finger.
+# A light press 60 counts above resting sits inside the goal band on
+# every finger of this device: the three clean pads get 20..80 and the
+# preloaded pinky 44..175, both derived from these captures by
+# target_gap_band.
 PRESS_GAP = 60.0
 
 
@@ -547,3 +549,345 @@ class TestDrawing:
         sc.draw(surf)                        # summary
         sc.on_escape()
         sc.draw(surf)                        # confirm overlay
+
+
+# ---- the goal band -------------------------------------------------------
+
+class TestGoalBand:
+    """The band the screen coaches against is not a visual tuning knob.
+    It is the threshold maths' own answer to "what gap does this finger
+    need", so a press held anywhere in it always yields a profile
+    usable() accepts, and no config key can pull the two apart."""
+
+    def _at_press_phase(self, tmp_path, hand="right"):
+        from finger_rehab.ui import quick_calibration_screen as q
+        eng = _engine(tmp_path, hand=hand)
+        eng.maybe_start_quick_calibration(lambda: None)
+        sc = eng.screen_obj
+        n = 2 if len(sc.hands) > 1 else 1
+        _finish_rest_step(eng, sc, EMPTY * n)
+        _finish_rest_step(eng, sc, RESTING * n)
+        assert sc.phase == q.PHASE_PRESS
+        return eng, sc
+
+    def test_band_is_the_threshold_maths_not_a_second_rule(self, tmp_path):
+        from finger_rehab.hardware.calibration_profile import (
+            target_gap_band,
+        )
+        eng, sc = self._at_press_phase(tmp_path)
+        cap = sc._captures["right"]
+        for i in range(N_FINGERS):
+            preload = cap["resting"][i] - cap["empty"][i]
+            assert sc._band("right", i) == target_gap_band(
+                preload, cap["empty_noise"][i])
+
+    def test_band_rises_with_the_pads_resting_load(self, tmp_path):
+        # The pinky pad carries 30 counts at rest and the index under 3,
+        # so the pinky is asked for a firmer press. That is not a
+        # judgement about pinkies: it is where its trigger has to sit.
+        eng, sc = self._at_press_phase(tmp_path)
+        assert sc._band("right", 3)[0] > sc._band("right", 0)[0]
+        assert sc._band("right", 3)[1] > sc._band("right", 0)[1]
+
+    def test_any_press_inside_the_band_gives_a_usable_profile(self,
+                                                              tmp_path):
+        """The whole point of deriving the band: hitting it cannot
+        produce a profile the maths then rejects."""
+        eng, sc = self._at_press_phase(tmp_path)
+        cap = sc._captures["right"]
+        for where in (0.0, 0.5, 1.0):
+            prof = CalibrationProfile(
+                hand="right", empty=list(cap["empty"]),
+                empty_noise=list(cap["empty_noise"]),
+                resting=list(cap["resting"]),
+                press=[cap["resting"][i]
+                       + sc._band("right", i)[0]
+                       + where * (sc._band("right", i)[1]
+                                  - sc._band("right", i)[0])
+                       for i in range(N_FINGERS)])
+            ok, problems = prof.usable()
+            assert ok, f"press at {where} of the band rejected: {problems}"
+
+    def test_no_config_key_can_move_the_band(self, tmp_path):
+        # The old build took the band from quick_cal.zone_*_counts, which
+        # let a settings edit ask for a press the profile would refuse.
+        eng, sc = self._at_press_phase(tmp_path)
+        before = [sc._band("right", i) for i in range(N_FINGERS)]
+        eng.cfg.data.setdefault("quick_cal", {})["zone_min_counts"] = 400
+        eng.cfg.data["quick_cal"]["zone_max_counts"] = 900
+        assert [sc._band("right", i) for i in range(N_FINGERS)] == before
+
+    def test_capture_refuses_a_press_under_the_band_floor(self, tmp_path):
+        eng, sc = self._at_press_phase(tmp_path)
+        lo, _ = sc._band("right", 0)
+        sc._zone_buffer = [RESTING[0] + lo - 4.0] * 20
+        sc._hold = 1.0
+        sc._capture_press()
+        assert not sc._landed
+        assert sc._captures["right"]["press"][0] == 0.0
+
+
+# ---- what the press step refuses to reward -------------------------------
+
+class TestPressCoaching:
+    def _at_press_phase(self, tmp_path):
+        return TestGoalBand()._at_press_phase(tmp_path)
+
+    def _drive(self, eng, sc, vals, steps=40):
+        t = 0.0
+        for _ in range(steps):
+            eng._feed_detectors(t, tuple(vals))
+            sc.update(0.05)
+            sc.on_sample(t, tuple(vals))
+            t += 0.05
+
+    def test_over_the_ceiling_pauses_instead_of_capturing(self, tmp_path):
+        """A crush press sets a trigger the same finger cannot reach
+        when it is tired, so the hold has to stall rather than bank it."""
+        eng, sc = self._at_press_phase(tmp_path)
+        _, hi = sc._band("right", 0)
+        vals = list(RESTING)
+        vals[0] = RESTING[0] + hi * 2
+        self._drive(eng, sc, vals)
+        assert not sc._in_zone
+        assert not sc._landed
+        assert sc._hold == 0.0
+        assert sc._zone_buffer == []
+        assert sc._captures["right"]["press"][0] == 0.0
+
+    def test_easing_back_into_the_band_then_captures(self, tmp_path):
+        # The pause is a pause, not a lockout.
+        eng, sc = self._at_press_phase(tmp_path)
+        lo, hi = sc._band("right", 0)
+        vals = list(RESTING)
+        vals[0] = RESTING[0] + hi * 2
+        self._drive(eng, sc, vals, steps=20)
+        assert not sc._landed
+        vals[0] = RESTING[0] + (lo + hi) / 2
+        self._drive(eng, sc, vals, steps=80)
+        assert sc._landed
+        gap = sc._captures["right"]["press"][0] - RESTING[0]
+        assert lo <= gap <= hi
+
+    def test_a_wrong_finger_is_named_and_stalls_the_hold(self, tmp_path):
+        """Another finger loaded past its own goal floor is a second
+        force folded into this finger's level, so it stops the capture
+        and the screen says which finger it is."""
+        eng, sc = self._at_press_phase(tmp_path)
+        lo, hi = sc._band("right", 0)
+        vals = list(RESTING)
+        vals[0] = RESTING[0] + (lo + hi) / 2      # correct finger, in band
+        vals[2] = RESTING[2] + sc._band("right", 2)[0] + 20
+        self._drive(eng, sc, vals)
+        assert sc._wrong == 2                     # the ring finger
+        assert not sc._in_zone
+        assert not sc._landed
+        assert sc._hold == 0.0
+
+    def test_a_resting_neighbour_is_not_called_a_wrong_finger(self,
+                                                              tmp_path):
+        eng, sc = self._at_press_phase(tmp_path)
+        lo, hi = sc._band("right", 0)
+        vals = list(RESTING)
+        vals[0] = RESTING[0] + (lo + hi) / 2
+        self._drive(eng, sc, vals, steps=60)
+        assert sc._wrong is None
+        assert sc._landed
+
+    def test_under_the_band_never_fills_the_ring(self, tmp_path):
+        eng, sc = self._at_press_phase(tmp_path)
+        lo, _ = sc._band("right", 0)
+        vals = list(RESTING)
+        vals[0] = RESTING[0] + lo * 0.5
+        self._drive(eng, sc, vals)
+        assert sc._hold == 0.0
+        assert not sc._landed
+
+
+# ---- the quiet gate on the two rest captures -----------------------------
+
+class TestQuietGate:
+    """A rest capture taken while a finger is still down averages that
+    press into the zero, and every threshold in the session is then
+    built on it. So the capture starts itself, and only once the
+    sensors agree nothing is happening."""
+
+    def _screen(self, tmp_path, hand="right"):
+        eng = _engine(tmp_path, hand=hand)
+        eng.maybe_start_quick_calibration(lambda: None)
+        return eng, eng.screen_obj
+
+    def _feed(self, sc, vals, n=90, t0=0.0, dt=0.01):
+        t = t0
+        for _ in range(n):
+            sc.on_sample(t, tuple(vals))
+            t += dt
+        return t
+
+    def test_a_loaded_lane_blocks_the_capture_and_is_named(self, tmp_path):
+        from finger_rehab.ui import quick_calibration_screen as q
+        eng, sc = self._screen(tmp_path)
+        t = self._feed(sc, EMPTY)                 # establishes the floor
+        down = list(EMPTY)
+        down[2] += 40                             # ring finger still on
+        t = self._feed(sc, down, t0=t)
+        assert sc._blockers()[0] == ("right", 2)
+        assert not sc._settled()
+        for _ in range(30):
+            sc.update(0.02)
+        assert not sc._collecting
+        assert sc.phase == q.PHASE_OFF
+
+    def test_it_starts_itself_once_the_lane_comes_off(self, tmp_path):
+        eng, sc = self._screen(tmp_path)
+        t = self._feed(sc, EMPTY)
+        down = list(EMPTY)
+        down[2] += 40
+        t = self._feed(sc, down, t0=t)
+        sc.update(0.02)
+        assert not sc._collecting
+        # Finger lifts, readings settle back onto the floor.
+        t = self._feed(sc, EMPTY, t0=t)
+        assert sc._settled()
+        sc.update(0.02)                           # starts the quiet clock
+        assert sc._quiet_since > 0
+        assert not sc._collecting                 # not long enough yet
+        sc._quiet_since -= q_hold() + 0.1
+        sc.update(0.02)
+        assert sc._collecting
+
+    def test_a_moving_reading_is_not_quiet(self, tmp_path):
+        eng, sc = self._screen(tmp_path)
+        t = 0.0
+        for k in range(90):                       # ramping, not settled
+            sc.on_sample(t, tuple(v + k * 0.5 for v in EMPTY))
+            t += 0.01
+        assert not sc._settled()
+        for _ in range(30):
+            sc.update(0.02)
+        assert not sc._collecting
+
+    def test_a_silent_device_says_so_instead_of_waiting(self, tmp_path):
+        eng, sc = self._screen(tmp_path)
+        assert sc._stale()
+        assert not sc._settled()
+        sc.update(0.02)
+        assert not sc._collecting
+
+    def test_the_resting_step_names_a_finger_that_is_pressing(self,
+                                                              tmp_path):
+        """On step 2 the zero is known, so a pad loaded past what the
+        maths can carry is a press, and it is named rather than
+        averaged in as "rest"."""
+        from finger_rehab.ui import quick_calibration_screen as q
+        eng, sc = self._screen(tmp_path)
+        _finish_rest_step(eng, sc, EMPTY)
+        assert sc.phase == q.PHASE_REST
+        lean = list(RESTING)
+        lean[1] += 90                             # middle finger pushing
+        self._feed(sc, lean)
+        assert sc._blockers()[0] == ("right", 1)
+        assert not sc._settled()
+        for _ in range(30):
+            sc.update(0.02)
+        assert not sc._collecting
+        assert sc.phase == q.PHASE_REST
+        # Relaxed, it goes ahead.
+        self._feed(sc, RESTING)
+        assert sc._blockers() == []
+        assert sc._settled()
+
+    def test_bilateral_blocks_on_either_board(self, tmp_path):
+        eng, sc = self._screen(tmp_path, hand="both")
+        t = self._feed(sc, EMPTY * 2)
+        down = EMPTY * 2
+        down = list(down)
+        down[7] += 40                             # LEFT pinky
+        self._feed(sc, down, t0=t)
+        assert sc._blockers()[0] == ("left", 3)
+        assert not sc._settled()
+
+
+def q_hold() -> float:
+    from finger_rehab.ui import quick_calibration_screen as q
+    return q.QUIET_HOLD_S
+
+
+class TestSettleScope:
+    def test_the_other_hand_cannot_hold_up_this_hands_capture(self,
+                                                              tmp_path):
+        """A bilateral rig sends all eight sensors whichever hand is
+        being calibrated. A left-only run watching the right board would
+        wait on a hand that is not in the run at all."""
+        eng = _engine(tmp_path, hand="both")
+        eng.apply_calibration(_usable_profile("right"))
+        eng._session_cal_hands = {"right"}
+        assert eng.maybe_start_quick_calibration(lambda: None)
+        sc = eng.screen_obj
+        assert sc.hands == ["left"]
+        t = 0.0
+        for k in range(90):
+            vals = list(EMPTY) + list(EMPTY)      # right then left
+            vals[1] += k * 3.0                    # RIGHT middle moving
+            sc.on_sample(t, tuple(vals))
+            t += 0.01
+        assert sc._settled()
+        assert sc._blockers() == []
+
+
+class TestOneMessagePerFrame:
+    """The screen's own rule: it says the ONE thing to do next and
+    nothing else competes with it. Two colour choices used to break
+    that, and both are cheap to get wrong again."""
+
+    def _screen(self, tmp_path, hand="right"):
+        eng = _engine(tmp_path, hand=hand)
+        eng.maybe_start_quick_calibration(lambda: None)
+        return eng, eng.screen_obj
+
+    def test_a_second_finger_down_takes_the_bar_out_of_the_goal(
+            self, tmp_path):
+        """A press sitting inside the band while another finger leans
+        on its pad is not being counted: the hold ring stops and the
+        line says which finger is wrong. So the bar must not read
+        green underneath that. It did, because the fill only looked at
+        the target finger's own level."""
+        eng, sc = self._screen(tmp_path)
+        th = eng.theme
+        lo, hi = 22.0, 88.0
+        mid = (lo + hi) / 2
+        sc._wrong = None
+        assert sc._fill_colour(lo, hi, mid) == th.success
+        sc._wrong = 1
+        assert sc._fill_colour(lo, hi, mid) == th.warning, (
+            "the bar still says 'that's it' while the screen says "
+            "'wrong finger'")
+        # The other two zones are unchanged.
+        sc._wrong = None
+        assert sc._fill_colour(lo, hi, hi + 30) == th.warning
+        assert sc._fill_colour(lo, hi, lo - 10) == sc._too_light_colour()
+
+    def test_a_settled_lane_never_draws_in_the_alert_colour(self,
+                                                            tmp_path):
+        """theme.warning means "this lane is holding the capture up".
+        The pinky's lane colour is byte-identical to theme.warning in
+        both shipped colour themes, so at the old fade a quiet pinky
+        drew in exactly the alert colour and only the tick beside it
+        said otherwise."""
+        from finger_rehab.hardware.calibration_profile import FINGER_NAMES
+        from finger_rehab.ui.theme import THEMES
+        eng, sc = self._screen(tmp_path)
+        for name, theme in THEMES.items():
+            sc.theme = theme
+            for i in range(N_FINGERS):
+                quiet = sc._quiet_trace_colour(i)
+                assert quiet != theme.warning, (
+                    f"{name}: a settled {FINGER_NAMES[i]} draws in the "
+                    "alert colour")
+                # Not a near miss either: the two have to be tellable
+                # apart down a column of four rows at a glance.
+                gap = sum(abs(a - b)
+                          for a, b in zip(quiet, theme.warning))
+                assert gap >= 60, (
+                    f"{name}: settled {FINGER_NAMES[i]} is only {gap} "
+                    "away from the alert colour")

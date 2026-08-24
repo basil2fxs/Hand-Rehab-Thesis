@@ -203,6 +203,12 @@ class GameEngine:
         self._session_active = False
         self._session_started_perf: float | None = None
         self._session_games = 0
+        # One row per game that reached an end this session (finished
+        # or cut short), in the order they were played. This is what
+        # the session strip on game select and the results screen read
+        # from, so the chips and the points total can never disagree
+        # with _session_games: both are written in the same place.
+        self._session_log: list[dict] = []
         self.session_paths: SessionPaths | None = None
         self.last_session_root: str | None = None
         self.trial_logger: TrialLogger | None = None
@@ -793,12 +799,12 @@ class GameEngine:
                         self.screen_obj.handle_event(e)
                     elif self.screen_obj and self.paused:
                         # Still let buttons on pause-friendly screens (results,
-                        # menus) work. Only block the screens a block runs on.
-                        if self.screen_obj not in (
-                            self._screens.get("gameplay"),
-                            self._screens.get("rhythm"),
-                            self._screens.get("syllables"),
-                        ):
+                        # menus) work. Only block the screens a block runs on,
+                        # and read that off the same predicate the pause key
+                        # and the Esc guard use: the list written out by hand
+                        # here missed the three force modes, so a press during
+                        # a pause still reached those modes' screens.
+                        if not self._on_block_screen():
                             self.screen_obj.handle_event(e)
 
                 if not self.paused:
@@ -1256,12 +1262,15 @@ class GameEngine:
                     # falling through here would resume the block
                     # UNDER the card and let trials tick away unseen.
                     return
-                on_block = self.screen_obj in (
-                    self._screens.get("gameplay"),
-                    self._screens.get("rhythm"),
-                    self._screens.get("syllables"),
-                )
-                if on_block:
+                # Same predicate Esc uses, not a second hand-written
+                # list. The hand-written one named gameplay, rhythm and
+                # syllables only, so P did nothing at all in Force
+                # Pilot, Lighthouse and Buzz Hunt: three modes whose
+                # screens each draw a PAUSED overlay the patient could
+                # never reach. Those are also the three longest holds
+                # in the app, which is exactly when someone needs to
+                # stop for a moment.
+                if self._on_block_screen():
                     if not self.paused:
                         self._pause_now()
                     else:
@@ -1405,19 +1414,31 @@ class GameEngine:
                   self.theme, self.layout, pt=FONT_BODY, centre=True,
                   colour=self.theme.background)
 
+    # Top of the end-game chip card. Below the score readout on the
+    # lane screens (the big number is centred at y=96 and its glyph
+    # box reaches about 120) and below the trial counter row the four
+    # full-screen modes put at y=34..90. At the old y=56 the card
+    # covered the score outright: the patient's own running total
+    # vanished behind the question asking whether to stop.
+    EXIT_CHIP_TOP = 132
+
     def _draw_exit_chip(self, surf) -> None:
         """The chip itself: one small card, top centre, over the
         frozen play field. A thin bar under the text drains with the
         remaining window so the timeout is visible, and the running
         mode's accent tops the card so the chip visibly belongs to
-        the game it interrupted."""
+        the game it interrupted.
+
+        Deliberately NOT a dimmed modal: any key resumes, so the frame
+        underneath stays exactly as the frozen screen drew it.
+        """
         from ..ui.screens import ModeSelectScreen
         from ..ui.widgets import draw_text, FONT_BODY, FONT_SMALL
         accent = ModeSelectScreen.MODE_ACCENTS.get(
             str(self.current_block).lower(), self.theme.accent)
         w, h = 560, 96
         x = (self.layout.width - w) // 2
-        y = 56
+        y = self.EXIT_CHIP_TOP
         rect = pygame.Rect(x, y, w, h)
         pygame.draw.rect(surf, self.theme.background, rect,
                          border_radius=14)
@@ -1849,6 +1870,7 @@ class GameEngine:
         self._session_token = (time.strftime("%Y%m%dT%H%M%S")
                                + f"-{random.randrange(16 ** 6):06x}")
         self._session_games = 0
+        self._session_log = []
         # A new session starts with no hands calibrated: the first
         # game that needs a hand runs the quick flow, whatever the
         # previous session did.
@@ -1866,6 +1888,78 @@ class GameEngine:
         if t0 is None:
             return 0.0
         return (time.perf_counter() - t0) / 60.0
+
+    # Star bands for one finished game, from the same hit rate the
+    # results grade reads. The cuts are the A / B / C boundaries of
+    # ResultsScreen._grade_for, repeated here rather than imported so
+    # the engine never depends on the UI package; a test pins the two
+    # tables together so they cannot drift apart.
+    SESSION_STAR_BANDS = (0.85, 0.70, 0.50)
+
+    def _session_stars_for_block(self) -> int:
+        """0 to 3 stars for the game that just ended.
+
+        Deliberately the same quantity the grade ring already shows,
+        not a new score: the strip is a light session-wide tally, and
+        a second, differently-derived number would invite the patient
+        to compare two ratings of the same run.
+        """
+        hits = int(getattr(self, "hits", 0) or 0)
+        misses = int(getattr(self, "misses", 0) or 0)
+        total = hits + misses
+        if total <= 0:
+            return 0
+        rate = hits / total
+        for i, cut in enumerate(self.SESSION_STAR_BANDS):
+            if rate >= cut:
+                return 3 - i
+        return 0
+
+    def _record_session_game(self, status: str) -> None:
+        """Add the game that just ended to this session's log.
+
+        Called from the same two places that bump _session_games
+        (finish_block and the abandon path), so the strip's chip count
+        always equals the End-session dialog's game count. A cut-short
+        game is on the strip too: it produced data and took the
+        participant's time, which is exactly what _session_games
+        already counts.
+        """
+        entry = {
+            "mode": str(getattr(self, "current_block", "") or ""),
+            "hand": str(getattr(self, "hand_mode", "") or ""),
+            "score": int(getattr(self, "score", 0) or 0),
+            "stars": self._session_stars_for_block(),
+            "status": status,
+        }
+        rows = getattr(self, "_session_log", None)
+        if rows is None:
+            rows = self._session_log = []
+        rows.append(entry)
+
+    def session_games_log(self) -> list[dict]:
+        """This session's games, oldest first. A copy, so a screen
+        cannot edit the engine's record while drawing it."""
+        return list(getattr(self, "_session_log", []) or [])
+
+    def session_modes_played(self) -> list[str]:
+        """Mode keys played this session, in order, no repeats."""
+        seen: list[str] = []
+        for row in self.session_games_log():
+            mode = row.get("mode") or ""
+            if mode and mode not in seen:
+                seen.append(mode)
+        return seen
+
+    def session_points(self) -> int:
+        """Points scored across every game this session."""
+        return sum(int(r.get("score") or 0)
+                   for r in self.session_games_log())
+
+    def session_stars(self) -> int:
+        """Stars earned across every game this session."""
+        return sum(int(r.get("stars") or 0)
+                   for r in self.session_games_log())
 
     def request_end_session(self) -> None:
         """Leaving game select for the login screen. This is the one
@@ -1926,6 +2020,7 @@ class GameEngine:
         self._session_active = False
         self._session_started_perf = None
         self._session_games = 0
+        self._session_log = []
         # Calibration is a session event, so its memory dies with the
         # session: the next player's first game runs the flow again.
         self._session_cal_hands = set()
@@ -2445,6 +2540,136 @@ class GameEngine:
         if hasattr(rs, "on_show"):
             rs.on_show()
         self.screen_obj = rs
+
+    # ---- one game, start to finish -----------------------------------------
+    # Mode key -> the method that starts that mode's block. One table,
+    # used by the hand picker, by mirror's skip-the-picker path and by
+    # the results screen's NEXT UP button, so no start path can drift
+    # away from the others (the calibration gate and the GET READY
+    # countdown both hang off these, and a fourth hand-rolled copy
+    # would eventually miss one).
+    _BLOCK_STARTERS = {
+        "classic": "begin_classic_block",
+        "adaptive": "begin_adaptive_block",
+        "mirror": "begin_mirror_block",
+        "reaction": "begin_reaction_block",
+        "pattern": "begin_pattern_block",
+        "chords": "begin_chords_block",
+        "syllables": "begin_syllables_block",
+        "force_pilot": "begin_force_pilot_block",
+        "lighthouse": "begin_lighthouse_block",
+        "buzz_hunt": "begin_buzz_hunt_block",
+        # Rhythm needs a track picked before there is a block to
+        # start, so its "starter" is the song screen. One press still
+        # lands on rhythm's own prep, same as every other mode.
+        "rhythm": "show_rhythm_setup",
+    }
+
+    def block_starter(self, mode_key: str):
+        """The callable that starts one mode, or adaptive's as the
+        fallback for an unknown key (which is what the hand picker
+        already did)."""
+        name = self._BLOCK_STARTERS.get(mode_key, "begin_adaptive_block")
+        return getattr(self, name)
+
+    def second_board_missing(self) -> bool:
+        """True when a hardware source cannot serve both hands.
+
+        With one board the second hand's lanes can never fire from the
+        sensors: every trial on that hand misses and the block records
+        as an honest-looking bimanual failure of the patient. Keyboard
+        sources play bilateral fine (both hands live on the keys).
+        Lives on the engine because three screens and the NEXT UP
+        button all need the same answer.
+        """
+        src = getattr(self, "source", None)
+        if not getattr(src, "provides_samples", True):
+            return False
+        avail = getattr(src, "hand_modes_available", None)
+        return isinstance(avail, set) and "both" not in avail
+
+    def set_hand_mode(self, hand: str) -> None:
+        """Switch the session to left / right / both and bring the
+        detectors and lane strips with it."""
+        self.cfg.data.setdefault("bilateral", {})["hand"] = hand
+        self.hand_mode = hand
+        self.session.hand = hand
+        self._build_detectors()
+        for key in ("gameplay", "rhythm"):
+            sc = (self._screens or {}).get(key)
+            if sc is not None and hasattr(sc, "rebuild_lanes"):
+                sc.rebuild_lanes()
+
+    def begin_game(self, mode_key: str, hand: str | None = None) -> bool:
+        """Start one game: set the mode, set the hand, then run the
+        session calibration gate and the mode's own starter.
+
+        This IS the normal setup path, factored out of the hand
+        picker so the picker, mirror's skip-the-picker pick and the
+        results screen's NEXT UP button all take the identical route.
+        NEXT UP in particular must not shortcut it: the block markers,
+        the GET READY countdown and the quick-calibration gate all
+        hang off the starter this calls.
+
+        Returns False when the pick is refused (bilateral asked for on
+        a one-board rig), which is the same refusal the cards' NEEDS
+        SECOND BOARD badge explains up front.
+        """
+        self.cfg.data.setdefault("game", {})["mode"] = mode_key
+        if mode_key == "mirror":
+            # Bilateral-only by design, so it never asks which hand.
+            hand = "both"
+        if hand is None:
+            hand = self.hand_mode
+        if hand == "both" and self.second_board_missing():
+            return False
+        self.set_hand_mode(hand)
+        start = self.block_starter(mode_key)
+        # Calibration is a session event: the first game that needs a
+        # hand this session gets the quick flow first, with the block
+        # start handed over as the continuation. Every later game
+        # sails straight through at zero cost.
+        if self.maybe_start_quick_calibration(start):
+            return True
+        start()
+        return True
+
+    def calibratable_hands(self) -> list[str]:
+        """Hands the deliberate Calibrate button can measure right
+        now: both on a two-board rig, the attached one on a single
+        board, none at all on a keyboard source (there is no force
+        signal to measure, so the button says so instead of opening a
+        flow that can only be skipped)."""
+        src = getattr(self, "source", None)
+        if not getattr(src, "provides_samples", True):
+            return []
+        avail = getattr(src, "hand_modes_available", None)
+        if isinstance(avail, set) and "both" not in avail:
+            return [h for h in ("right", "left") if h in avail]
+        return ["left", "right"]
+
+    def start_manual_calibration(self) -> bool:
+        """Re-run the quick flow from game select, on demand.
+
+        Same screen, same capture, same threshold maths and same
+        per-hand save as the automatic gate: this only changes WHEN it
+        runs. Finishing (or skipping) marks those hands as covered for
+        the session, so a deliberate calibrate also satisfies the
+        session-once rule and the next game does not ask again.
+        """
+        hands = self.calibratable_hands()
+        if not hands:
+            return False
+
+        def done():
+            covered = getattr(self, "_session_cal_hands", None)
+            if covered is None:
+                covered = self._session_cal_hands = set()
+            covered.update(hands)
+            self.show_mode_select()
+
+        self.show_quick_calibration(hands, done)
+        return True
 
     # ---- block lifecycle ---------------------------------------------------
     def _test_mode_trials(self) -> int | None:
@@ -4734,6 +4959,7 @@ class GameEngine:
         # One more game recorded for this session's End-session
         # summary. getattr-safe for engines built bare in tests.
         self._session_games = getattr(self, "_session_games", 0) + 1
+        self._record_session_game("completed")
         # If a protocol is running, auto-advance to the next step
         # instead of bouncing to the Results screen between blocks.
         # The final Results screen still shows after the LAST step
@@ -4797,6 +5023,7 @@ class GameEngine:
         # A cut-short game still counts in the session summary: it
         # produced data and took the participant's time.
         self._session_games = getattr(self, "_session_games", 0) + 1
+        self._record_session_game("abandoned")
 
     # ---- per-outcome colour --------------------------------------------------
     # Three tiers so the patient knows roughly how well they did at a

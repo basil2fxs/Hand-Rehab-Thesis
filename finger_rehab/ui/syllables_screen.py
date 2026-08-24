@@ -393,10 +393,21 @@ class SyllablesScreen(Screen):
                          border_radius=pill_rect.height // 2)
         surf.blit(pill_label,
                   pill_label.get_rect(center=pill_rect.center))
+        # Score under the pill, with the word that names it. Sitting
+        # beside the pill it was a bare number 16 px off a filled pill
+        # in the same accent, so the two read as one crowded object
+        # and nothing on screen said what the number counted. The lane
+        # modes have always carried a SCORE label; these four now
+        # match, and the band under the pill is empty on all of them.
         sf = self.layout.font(FONT_H2, bold=True)
         score_surf = sf.render(f"{self.engine.score}", True, accent)
-        surf.blit(score_surf, score_surf.get_rect(
-            midright=(pill_rect.left - 16, pill_rect.centery)))
+        lf = self.layout.font(FONT_SMALL)
+        score_label = lf.render("SCORE", True, self.theme.muted)
+        score_rect = score_surf.get_rect(
+            topright=(pill_rect.right, pill_rect.bottom + 10))
+        surf.blit(score_surf, score_rect)
+        surf.blit(score_label, score_label.get_rect(
+            midright=(score_rect.left - 10, score_rect.centery)))
 
     # ---- warm-up -----------------------------------------------------------
     def _draw_warmup(self, surf: pygame.Surface, mode, now: float) -> None:
@@ -824,16 +835,8 @@ class SyllablesScreen(Screen):
             y += 18
 
     # ---- paused ------------------------------------------------------------
-    def _draw_paused_overlay(self, surf: pygame.Surface) -> None:
-        overlay = pygame.Surface(
-            (self.layout.width, self.layout.height), pygame.SRCALPHA,
-        )
-        overlay.fill((0, 0, 0, 160))
-        surf.blit(overlay, (0, 0))
-        draw_text(surf, "PAUSED",
-                  (self.layout.width // 2, self.layout.height // 2 - 30),
-                  self.theme, self.layout, pt=FONT_TITLE + 20, centre=True,
-                  colour=self.theme.warning)
+    # _draw_paused_overlay comes from Screen: one card, one resume
+    # line, identical on every screen a block runs on.
 
 
 def _text_colour_for(fill: tuple[int, int, int],

@@ -342,6 +342,14 @@ class ResultsNavigationUnaffectedTests(_EngineHarness):
 
 
 class ChipDrawTests(_EngineHarness):
+    # Middle of the card body, read off the engine's own top constant
+    # rather than pinned to a pixel: the card moved down once already,
+    # to stop it covering the score readout, and a hard-coded probe
+    # point turns any later nudge into a failure that says nothing
+    # about what actually matters here.
+    def _card_centre(self) -> tuple[int, int]:
+        return (640, self.eng.EXIT_CHIP_TOP + 48)
+
     def test_chip_draws_over_the_frozen_screen(self) -> None:
         import pygame
         surf = pygame.display.set_mode((1280, 800))
@@ -352,7 +360,7 @@ class ChipDrawTests(_EngineHarness):
         self.eng._draw_exit_chip(surf)
         th = self.eng.theme
         # Chip card body is opaque background at its centre...
-        centre = surf.get_at((640, 110))[:3]
+        centre = surf.get_at(self._card_centre())[:3]
         self.assertEqual(centre, th.background)
         # ...and unlike the old modal there is NO full-screen dim: the
         # field below the chip is whatever the frozen screen drew.
@@ -361,6 +369,13 @@ class ChipDrawTests(_EngineHarness):
         self.eng._draw_exit_chip(surf)
         self.assertEqual(surf.get_at((10, 700))[:3], clean)
 
+    def test_the_card_clears_the_score_readout(self) -> None:
+        """The score is centred at y=96 on every lane screen. The card
+        used to start at y=56 and swallow it, so the number the
+        patient is playing for disappeared behind the question about
+        quitting."""
+        self.assertGreater(self.eng.EXIT_CHIP_TOP, 126)
+
     def test_chip_draws_on_syllables_too(self) -> None:
         import pygame
         surf = pygame.display.set_mode((1280, 800))
@@ -368,7 +383,7 @@ class ChipDrawTests(_EngineHarness):
         self.eng._handle_escape()
         self.eng.screen_obj.draw(surf)
         self.eng._draw_exit_chip(surf)
-        self.assertEqual(surf.get_at((640, 110))[:3],
+        self.assertEqual(surf.get_at(self._card_centre())[:3],
                          self.eng.theme.background)
 
     def test_paused_overlay_yields_to_the_chip(self) -> None:

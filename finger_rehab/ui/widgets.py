@@ -1062,8 +1062,16 @@ class LaneStrip:
         # text colour follows the tile fill rather than the theme, so
         # the label stays readable on a dark finger colour (the ring
         # finger's black tile would swallow near-black text).
-        font = self.layout.font(32)
+        # Point size steps down until the word fits inside the tile
+        # with a real margin. A bilateral row is eight tiles wide, and
+        # at the fixed 32 pt "Middle" ran edge to edge with the border
+        # touching both ends of the word.
         label_text = self.FINGER_LABELS[self.finger % 4]
+        max_w = max(24, self.rect.w - 20)
+        for pt in (32, 30, 28, 26, 24, 22, 20, 18):
+            font = self.layout.font(pt)
+            if font.size(label_text)[0] <= max_w:
+                break
         label = font.render(label_text, True, self._label_colour(fill))
         surf.blit(label, label.get_rect(midbottom=(
             self.rect.centerx, self.rect.bottom - 44,

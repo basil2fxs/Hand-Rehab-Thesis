@@ -89,6 +89,60 @@ MIN_USABLE_GAP = 20
 # placement problem and it has to be refused rather than saved.
 MAX_TRIGGER_FRACTION = 0.70
 
+# How many times the smallest usable gap a calibration press may reach
+# before it stops being the LIGHT press these thresholds are meant to be
+# set from. on_delta is PRESS_FRACTION of whatever gap gets measured, so
+# a press four times the floor sets a trigger four times harder to reach,
+# and a finger that is weaker later in the session (fatigue, a bad day)
+# cannot get back to it: every trial on it then logs as a miss. Anything
+# above this is a press the capture should ask to be eased off, not
+# saved.
+LIGHT_PRESS_CEILING_MULTIPLE = 4.0
+
+# on_delta is rounded to whole counts and the gap it is compared against
+# is a measurement, so a target sitting exactly on usable()'s boundary
+# can land the wrong side of it by half a count: the calibration would
+# coach a press, accept it, and then reject the profile built from it.
+# The band asks for this much more than the bare minimum so hitting it is
+# never a near miss.
+BAND_MARGIN_COUNTS = 2.0
+
+
+def press_floor_counts(preload: float, noise: float) -> float:
+    """Lowest press threshold a finger can be given, in counts above the
+    tracked baseline.
+
+    Pulled out of on_delta so the calibration UI can draw the target it
+    is asking for from the same expression the threshold ends up using.
+    Two different expressions here would let the screen coach a press
+    the maths then rejects.
+    """
+    return max(float(MIN_DELTA_COUNTS),
+               float(noise) * MIN_NOISE_MULTIPLE,
+               float(preload) + 3.0 * float(noise))
+
+
+def target_gap_band(preload: float, noise: float) -> tuple[float, float]:
+    """The resting-to-press gap a calibration press should land in, for
+    one finger, given how loaded that finger's pad is at rest and how
+    noisy its sensor is.
+
+    The floor is the smallest gap that survives BOTH checks usable()
+    makes: at least MIN_USABLE_GAP of travel, and a trigger that sits no
+    higher than MAX_TRIGGER_FRACTION of that travel. Dividing the press
+    floor by MAX_TRIGGER_FRACTION is what turns the second check into a
+    gap the player can be asked for. The ceiling is the light-press
+    limit above.
+
+    Both ends therefore move with the pad: a preloaded pinky is asked
+    for a firmer press than a clean index, because that is exactly what
+    its threshold will need.
+    """
+    floor = press_floor_counts(preload, noise)
+    lo = max(float(MIN_USABLE_GAP) + BAND_MARGIN_COUNTS,
+             (floor + BAND_MARGIN_COUNTS) / MAX_TRIGGER_FRACTION)
+    return lo, lo * LIGHT_PRESS_CEILING_MULTIPLE
+
 
 @dataclass
 class CalibrationProfile:
@@ -150,6 +204,14 @@ class CalibrationProfile:
         return [max(0.0, self.resting[i] - self.empty[i])
                 for i in range(N_FINGERS)]
 
+    def target_band(self) -> list[tuple[float, float]]:
+        """Per finger, the gap the calibration press was asked to land
+        in. Derived from this profile's own empty and resting captures,
+        so the summary can say whether a press came in light, on target
+        or firm using the same numbers the capture coached against."""
+        return [target_gap_band(self.preload()[i], self.empty_noise[i])
+                for i in range(N_FINGERS)]
+
     def on_delta(self) -> list[int]:
         """Press threshold per finger, relative to the tracked baseline.
 
@@ -165,9 +227,8 @@ class CalibrationProfile:
             # has not yet absorbed the resting load: a block started
             # with the hand off the device, so the hand landing looks
             # like a rise. Neither normally binds.
-            floor = max(MIN_DELTA_COUNTS,
-                        self.empty_noise[i] * MIN_NOISE_MULTIPLE,
-                        self.preload()[i] + 3.0 * self.empty_noise[i])
+            floor = press_floor_counts(self.preload()[i],
+                                       self.empty_noise[i])
             out.append(int(round(max(floor, self.gap()[i] * PRESS_FRACTION))))
         return out
 

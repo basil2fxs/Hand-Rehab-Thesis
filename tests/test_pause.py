@@ -352,5 +352,105 @@ class AudioHitChimeTests(unittest.TestCase):
         )
 
 
+class PauseKeyReachesEveryBlockScreenTests(unittest.TestCase):
+    """P must pause on every screen a block runs on.
+
+    The handler used to test the live screen against a list of three
+    written out by hand (gameplay, rhythm, syllables), while Esc used
+    _BLOCK_SCREEN_KEYS, which names six. So P did nothing in Force
+    Pilot, Lighthouse and Buzz Hunt: the patient could not pause the
+    three longest-holding modes in the app, and each of those screens
+    carries a PAUSED overlay that nothing could reach.
+    """
+
+    def _engine(self):
+        import os
+        os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+        os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+        import pygame
+        pygame.init()
+        pygame.font.init()
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
+        cfg = Config.load()
+        cfg.data.setdefault("ui", {})["resolution"] = [1280, 800]
+        eng = GameEngine(cfg, KeyboardOnlySource())
+        eng._screens = eng._build_screens()
+        return eng
+
+    def test_every_block_screen_answers_the_pause_key(self) -> None:
+        import pygame
+        eng = self._engine()
+        for key in eng._BLOCK_SCREEN_KEYS:
+            screen = eng._screens.get(key)
+            self.assertIsNotNone(screen, f"no screen for {key}")
+            eng.screen_obj = screen
+            eng.paused = False
+            eng._handle_global_event(pygame.event.Event(
+                pygame.KEYDOWN, key=pygame.K_p, unicode="", mod=0))
+            self.assertTrue(eng.paused, f"P did not pause on {key}")
+            eng._handle_global_event(pygame.event.Event(
+                pygame.KEYDOWN, key=pygame.K_p, unicode="", mod=0))
+            self.assertFalse(eng.paused, f"P did not resume on {key}")
+        pygame.quit()
+
+    def test_the_pause_key_shares_the_esc_guard_predicate(self) -> None:
+        """Source-level: no second hand-written screen list may creep
+        back in beside _BLOCK_SCREEN_KEYS."""
+        from pathlib import Path
+        src = (Path(__file__).resolve().parents[1]
+               / "finger_rehab" / "game" / "engine.py").read_text()
+        self.assertNotIn('self._screens.get("syllables"),\n                )',
+                         src)
+
+    def test_one_paused_overlay_serves_every_block_screen(self) -> None:
+        """Six screens had their own copy of the overlay. Two of them
+        (Force Pilot and Lighthouse, during the max-press probe) drew
+        the bare word straight across the live finger chip and the
+        presses-to-go dots, because nothing owned the space it landed
+        in. Six copies is also six places to forget when the wording
+        changes, which is how none of them ever said how to resume."""
+        from finger_rehab.ui.screens import Screen
+        eng = self._engine()
+        for key in eng._BLOCK_SCREEN_KEYS:
+            screen = eng._screens[key]
+            self.assertIs(
+                type(screen)._draw_paused_overlay,
+                Screen._draw_paused_overlay,
+                f"{key} has grown its own paused overlay again")
+
+    def test_the_paused_card_names_the_key_that_resumes(self) -> None:
+        """A therapist looking at a stopped game with no keyboard
+        legend has to be told what to press; PAUSED on its own is a
+        dead end."""
+        import pygame
+        from finger_rehab.ui.screens import Screen
+        eng = self._engine()
+        drawn: list[str] = []
+        import finger_rehab.ui.screens as screens_mod
+        original = screens_mod.draw_text
+
+        def spy(surf, text, pos, *a, **kw):
+            drawn.append(text)
+            return original(surf, text, pos, *a, **kw)
+
+        screens_mod.draw_text = spy
+        try:
+            screen = eng._screens["gameplay"]
+            screen._draw_paused_overlay(pygame.Surface((1280, 800)))
+        finally:
+            screens_mod.draw_text = original
+        self.assertIn("PAUSED", drawn)
+        self.assertTrue(
+            any("P" in t and t != "PAUSED" for t in drawn),
+            f"nothing on the card names the resume key: {drawn}")
+        # The card has to be big enough to hold the word it frames.
+        w, h = Screen.PAUSED_CARD
+        self.assertGreaterEqual(w, 400)
+        self.assertGreaterEqual(h, 140)
+        pygame.quit()
+
+
 if __name__ == "__main__":
     unittest.main()

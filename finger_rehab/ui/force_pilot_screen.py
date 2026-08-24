@@ -81,6 +81,8 @@ class ForcePilotScreen(Screen):
         # length so the run never grows memory.
         self._trail: deque[float] = deque(maxlen=42)
         self._trail_run: int | None = None
+        # Cached (colour, surface) for the craft halo.
+        self._craft_halo_cache: tuple | None = None
 
     # ---- shared furniture --------------------------------------------------
     def start_countdown(self, seconds: float) -> None:
@@ -99,6 +101,7 @@ class ForcePilotScreen(Screen):
         self._corridor_key = None
         self._trail.clear()
         self._trail_run = None
+        self._craft_halo_cache = None
 
     def _new_surface(self, size: tuple[int, int],
                      flags: int = 0) -> pygame.Surface:
@@ -201,10 +204,21 @@ class ForcePilotScreen(Screen):
                          border_radius=pill_rect.height // 2)
         surf.blit(pill_label,
                   pill_label.get_rect(center=pill_rect.center))
+        # Score under the pill, with the word that names it. Sitting
+        # beside the pill it was a bare number 16 px off a filled pill
+        # in the same accent, so the two read as one crowded object
+        # and nothing on screen said what the number counted. The lane
+        # modes have always carried a SCORE label; these four now
+        # match, and the band under the pill is empty on all of them.
         sf = self.layout.font(FONT_H2, bold=True)
         score_surf = sf.render(f"{self.engine.score}", True, accent)
-        surf.blit(score_surf, score_surf.get_rect(
-            midright=(pill_rect.left - 16, pill_rect.centery)))
+        lf = self.layout.font(FONT_SMALL)
+        score_label = lf.render("SCORE", True, self.theme.muted)
+        score_rect = score_surf.get_rect(
+            topright=(pill_rect.right, pill_rect.bottom + 10))
+        surf.blit(score_surf, score_rect)
+        surf.blit(score_label, score_label.get_rect(
+            midright=(score_rect.left - 10, score_rect.centery)))
 
     def _draw_finger_chip(self, surf: pygame.Surface, hand: str,
                           finger: int, cx: int, cy: int) -> None:
@@ -268,13 +282,19 @@ class ForcePilotScreen(Screen):
             colour = (self.theme.success if filled else self.theme.muted)
             pygame.draw.circle(surf, colour, (x0 + i * dot_gap, 390),
                                12, 0 if filled else 3)
+        # The dots are a count of presses, which nothing said. A row of
+        # circles under a "press as hard as you can" heading could as
+        # easily have been a loading spinner.
+        draw_text(surf, f"{max(0, remaining)} OF {total} PRESSES TO GO",
+                  (cx, 418), self.theme, self.layout, pt=FONT_SMALL,
+                  centre=True, colour=self.theme.muted)
         # Live force bar: how hard the finger is pressing right now,
         # scaled against the best press seen so the bar visibly tops
         # out when the patient beats their own peak.
         counts = getattr(mode, "probe_counts", 0.0)
         peaks = list(probe.peaks) if probe is not None else []
         scale = max([100.0, counts * 1.15] + [p * 1.15 for p in peaks])
-        bar = pygame.Rect(cx - 60, 430, 120, 190)
+        bar = pygame.Rect(cx - 60, 446, 120, 190)
         base = tuple(max(0, c - 22) for c in self.theme.background)
         pygame.draw.rect(surf, base, bar, border_radius=14)
         h = int(bar.h * max(0.0, min(1.0, counts / scale)))
@@ -283,13 +303,29 @@ class ForcePilotScreen(Screen):
             pygame.draw.rect(surf, self._finger_colour(mode.probe_finger),
                              fill, border_radius=14)
         pygame.draw.rect(surf, self.theme.muted, bar, 2, border_radius=14)
+        # Best press so far, marked on the bar with the word for it.
+        # An unlabelled grey column with a coloured fill said nothing
+        # about how hard was hard enough; a line to beat is the whole
+        # point of a maximal-press probe.
+        if peaks:
+            best = max(peaks)
+            by = bar.bottom - int(bar.h * max(0.0, min(1.0,
+                                                       best / scale)))
+            pygame.draw.line(surf, self.theme.foreground,
+                             (bar.left - 14, by), (bar.right + 14, by), 3)
+            draw_text(surf, "BEST", (bar.right + 22, by - 9), self.theme,
+                      self.layout, pt=FONT_SMALL,
+                      colour=self.theme.foreground)
+        draw_text(surf, "YOUR PRESS", (cx, bar.bottom + 12), self.theme,
+                  self.layout, pt=FONT_SMALL, centre=True,
+                  colour=self.theme.muted)
         if getattr(mode, "signal_waiting", False):
             draw_text(surf, "Waiting for sensor data...",
-                      (cx, 650), self.theme, self.layout, pt=FONT_BODY,
+                      (cx, 690), self.theme, self.layout, pt=FONT_BODY,
                       centre=True, colour=self.theme.warning)
         elif mode.phase == "probe_gap":
             draw_text(surf, "Rest for a moment...",
-                      (cx, 650), self.theme, self.layout, pt=FONT_BODY,
+                      (cx, 690), self.theme, self.layout, pt=FONT_BODY,
                       centre=True, colour=self.theme.muted)
 
     # ---- run announcement --------------------------------------------------
@@ -435,14 +471,47 @@ class ForcePilotScreen(Screen):
                              (x0, int(pts[k - 1])), (x1, int(pts[k])), 2)
         colour = (self.theme.error if mode.stalled
                   else self._finger_colour(mode.finger))
-        body = [(self.CRAFT_X - 18, y - 12), (self.CRAFT_X - 18, y + 12),
-                (self.CRAFT_X + 20, y)]
+        # A halo behind the craft. The craft IS the patient on this
+        # screen, and against a full-width corridor a 38 px arrow in
+        # the finger's own colour was the least visible thing in the
+        # frame: on the pale lane colours (pinky yellow, middle light
+        # blue) it all but vanished into the green band.
+        halo_r = 26
+        halo = self._craft_halo(colour)
+        if halo is not None:
+            surf.blit(halo, (self.CRAFT_X - halo_r, y - halo_r))
+        body = [(self.CRAFT_X - 22, y - 15), (self.CRAFT_X - 22, y + 15),
+                (self.CRAFT_X + 24, y)]
         pygame.draw.polygon(surf, colour, body)
-        pygame.draw.polygon(surf, self.theme.foreground, body, 2)
+        pygame.draw.polygon(surf, self.theme.foreground, body, 3)
         if mode.stalled:
-            draw_text(surf, "STALL", (self.CRAFT_X + 34, y - 10),
+            # Above the craft rather than beside it. Beside it, a
+            # stall near the floor of the plot put the word straight
+            # on the run-stats row underneath.
+            draw_text(surf, "STALL", (self.CRAFT_X + 40, y - 40),
                       self.theme, self.layout, pt=FONT_BODY,
                       colour=self.theme.error)
+
+    def _craft_halo(self, colour) -> pygame.Surface | None:
+        """Soft disc behind the craft, cached per colour so the run
+        loop allocates nothing (a screen test pins that)."""
+        cached = getattr(self, "_craft_halo_cache", None)
+        if cached is not None and cached[0] == colour:
+            return cached[1]
+        r = 26
+        halo = self._new_surface((r * 2, r * 2), pygame.SRCALPHA)
+        for radius, alpha in ((r, 40), (int(r * 0.68), 70)):
+            pygame.draw.circle(halo, (*colour, alpha), (r, r), radius)
+        self._craft_halo_cache = (colour, halo)
+        return halo
+
+    # Where the four live run numbers sit, and how far apart. The band
+    # under the plot was 160 px of empty page; the numbers were a
+    # single run-on sentence squeezed onto one line just under the
+    # corridor, four different quantities separated by double spaces.
+    STAT_VALUE_Y = 690
+    STAT_LABEL_Y = 730
+    STAT_STEP = 200
 
     def _draw_run_stats(self, surf: pygame.Surface, mode,
                         t_run: float) -> None:
@@ -450,14 +519,24 @@ class ForcePilotScreen(Screen):
         if mode._scored_s > 0:
             tic = mode._in_c_s / mode._scored_s
         left = max(0.0, mode.duration_s - t_run)
-        line = (f"In corridor {tic * 100.0:.0f}%   "
-                f"Rings {mode._rings_collected}   "
-                f"Stalls {mode._stalls}   "
-                f"{left:.0f}s left")
-        draw_text(surf, line,
-                  (self.layout.width // 2, self.PLOT_BOTTOM + 34),
-                  self.theme, self.layout, pt=FONT_BODY, centre=True,
-                  colour=self.theme.muted)
+        rings_total = len(getattr(mode, "ring_times", ()) or ())
+        cells = [
+            ("IN CORRIDOR", f"{tic * 100.0:.0f}%"),
+            ("RINGS", (f"{mode._rings_collected} of {rings_total}"
+                       if rings_total else f"{mode._rings_collected}")),
+            ("STALLS", f"{mode._stalls}"),
+            ("TIME LEFT", f"{left:.0f}s"),
+        ]
+        cx = self.layout.width // 2
+        x0 = cx - (len(cells) - 1) * self.STAT_STEP // 2
+        value_font = self.layout.font(FONT_H2, bold=True)
+        for i, (label, value) in enumerate(cells):
+            x = x0 + i * self.STAT_STEP
+            v = value_font.render(value, True, self.theme.foreground)
+            surf.blit(v, v.get_rect(center=(x, self.STAT_VALUE_Y)))
+            draw_text(surf, label, (x, self.STAT_LABEL_Y), self.theme,
+                      self.layout, pt=FONT_SMALL, centre=True,
+                      colour=self.theme.muted)
 
     # ---- run feedback ------------------------------------------------------
     def _draw_feedback(self, surf: pygame.Surface, mode,
@@ -520,10 +599,8 @@ class ForcePilotScreen(Screen):
         self._draw_finger_chip(surf, mode.hand, mode.finger, cx, y + 70)
         if mode._phase_until is not None:
             left = max(0.0, mode._phase_until - now)
-            draw_text(surf, f"Next run in {left:.0f}s",
-                      (cx, self.layout.height - 60), self.theme,
-                      self.layout, pt=FONT_BODY, centre=True,
-                      colour=self.theme.muted)
+            self.draw_next_countdown(
+                surf, f"Next run in {left:.0f}s", y + 96)
 
     # ---- countdown card and pause ------------------------------------------
     def _draw_countdown_card(self, surf: pygame.Surface,
@@ -553,15 +630,8 @@ class ForcePilotScreen(Screen):
                   self.theme, self.layout, pt=140,
                   centre=True, colour=accent)
 
-    def _draw_paused_overlay(self, surf: pygame.Surface) -> None:
-        overlay = self._new_surface(
-            (self.layout.width, self.layout.height), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 160))
-        surf.blit(overlay, (0, 0))
-        draw_text(surf, "PAUSED",
-                  (self.layout.width // 2, self.layout.height // 2 - 30),
-                  self.theme, self.layout, pt=FONT_TITLE + 20, centre=True,
-                  colour=self.theme.warning)
+    # _draw_paused_overlay comes from Screen: one card, one resume
+    # line, identical on every screen a block runs on.
 
 
 def _text_colour_for(fill: tuple[int, int, int]) -> tuple[int, int, int]:
