@@ -15,6 +15,18 @@ from pathlib import Path
 log = logging.getLogger(__name__)
 
 
+# Hard ceiling on rows in one raw.csv. A real session samples at
+# fsr.sample_rate_hz (200) and every mode caps itself at ~30 min via
+# session_cap_min, so a legitimate file lands near 360k rows - this sits
+# well above that and is never reached in normal use. It is a backstop:
+# _pump_source drains `while True` until the source returns None, so a
+# source that never empties (a stuck harness, a wedged serial reader)
+# queues rows in an unbounded loop. With no ceiling that silently fills
+# the disk - one such run reached 243 GB of all-zero rows before it was
+# noticed. Overridable per-logger for tests.
+MAX_RAW_ROWS = 20_000_000
+
+
 TRIAL_COLUMNS = [
     # Identity + context.
     "iso_ts",                  # wall-clock timestamp at trial close
@@ -370,9 +382,12 @@ class RawLogger:
     """Threaded raw FSR logger. Producers call queue_sample / queue_event,
     a flusher thread writes to disk so the game loop doesn't block on IO."""
 
-    def __init__(self, path: Path, num_sensors: int = 4) -> None:
+    def __init__(self, path: Path, num_sensors: int = 4,
+                 max_rows: int = MAX_RAW_ROWS) -> None:
         self.path = path
         self.num_sensors = num_sensors      # 4 for one hand, 8 for both
+        self.max_rows = max_rows
+        self._capped = False
         self._queue: deque[tuple] = deque()
         self._lock = threading.Lock()
         self._writer: csv.writer | None = None
@@ -429,10 +444,30 @@ class RawLogger:
             # incomplete - it can still finalise the trial CSV cleanly.
             log.warning("RawLogger stop completed despite hung thread")
 
+    def _cap_reached(self) -> bool:
+        """True once this file has hit its row ceiling.
+
+        Caller must already hold _lock. Logs once on the transition and
+        stays quiet after: a runaway producer reaches this at loop speed,
+        so logging every call would just trade a huge CSV for a huge log.
+        """
+        if self._idx < self.max_rows:
+            return False
+        if not self._capped:
+            self._capped = True
+            log.error(
+                "RawLogger hit its %d-row ceiling for %s and is dropping "
+                "further rows. The sample producer is almost certainly "
+                "stuck draining a source that never returns None.",
+                self.max_rows, self.path)
+        return True
+
     def queue_sample(self, t_perf: float, vals: tuple[int, ...],
                      hand: str = "right") -> None:
         padded = _pad_vals(vals, 8)
         with self._lock:
+            if self._cap_reached():
+                return
             self._idx += 1
             self._queue.append((
                 "sample",
@@ -451,6 +486,8 @@ class RawLogger:
             t_perf = time.perf_counter()
         vals = _pad_vals(fsr_vals or (), 8)
         with self._lock:
+            if self._cap_reached():
+                return
             self._idx += 1
             self._queue.append((
                 "event",
