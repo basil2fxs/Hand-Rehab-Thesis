@@ -1,6 +1,13 @@
 """Force Pilot screen. The corridor is the stimulus, so the mode gets
 its own screen instead of the lane-strip GameplayScreen.
 
+Drawn as a clinical tracking instrument, in the band-and-marker
+grammar quick calibration teaches at login: a goal band, a live
+marker, one focal element per phase. The corridor is the goal band
+scrolled through time; the patient's force is a plain trace ending in
+a marker on a fixed now-line. No craft, no halo: the trace IS the
+patient, and nothing decorative carries data.
+
 Layout jobs, in the order a patient meets them:
 
   MAX PRESS CHECK   one finger named in its colour, presses-remaining
@@ -11,21 +18,27 @@ Layout jobs, in the order a patient meets them:
                     finger's colour, so the active finger is
                     unmistakable before the corridor starts moving.
                     Difficulty moves are announced here in words.
-  THE RUN           the corridor scrolls right to left; the craft sits
-                    at a fixed x and only its altitude answers to the
-                    finger's force. A steady chip keeps naming the
-                    hand and finger for the whole run.
+  THE RUN           the corridor band scrolls right to left under a
+                    percent-of-max grid; the force trace ends at a
+                    fixed now-line. Every section announces itself in
+                    words (LOW HOLD, PRESS RAMP, RELEASE RAMP...),
+                    both as a steady headline and as labels baked
+                    into the scrolling band, and release sections
+                    draw in a visibly different colour. Time in
+                    corridor reads as one large percentage.
   RUN COMPLETE      time in corridor, mean error, rings, release
                     error, then who flies next.
 
-Corridor rendering is cached: the whole run's corridor band is drawn
-ONCE per run onto a wide surface at run start, and every frame after
-that is a single area-blit window onto it, so nothing rebuilds
-per-frame geometry. Rings and the craft are primitive draws on top.
+Corridor rendering is cached: the whole run's corridor band, its
+section boundaries and their word labels are drawn ONCE per run onto
+a wide surface at run start, and every frame after that is a single
+area-blit window onto it, so nothing rebuilds per-frame geometry.
+Rings and the trace are primitive draws on top.
 
-Stall feedback is a steady state change (red craft, STALL tag), not a
-flash: nothing on this screen blinks faster than the 3 Hz limit, and
-the corridor's own waveforms top out at 0.6 Hz by design.
+Stall feedback is a steady state change (red marker, a STALL tag with
+the direction to correct), not a flash: nothing on this screen blinks
+faster than the 3 Hz limit, and the corridor's own waveforms top out
+at 0.6 Hz by design.
 
 Screen conventions match the rest of the app: 1280x800 logical
 layout, theme-aware, Esc and P handled by the engine's global event
@@ -41,7 +54,9 @@ from typing import TYPE_CHECKING
 
 import pygame
 
-from ..game.modes.force_pilot import FINGER_WORDS, target_pct
+from ..game.modes.force_pilot import (
+    FINGER_WORDS, SECTION_LABELS, target_pct,
+)
 from .screens import ModeSelectScreen, Screen, draw_skip_chip
 from .widgets import (
     FONT_BODY, FONT_H1, FONT_H2, FONT_SMALL, FONT_TITLE,
@@ -55,20 +70,40 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
+# What each section asks of the finger, said under the section's name
+# so the announcement is an instruction and not just a label.
+SECTION_COACH = {
+    "hold_in": "hold it steady",
+    "ramp_up": "press a little harder",
+    "hold_top": "hold it steady",
+    "release": "ease off smoothly",
+    "sine": "follow the wave",
+    "pre_assess": "follow the line",
+    "assess_sos": "follow the wave",
+}
+
+
 class ForcePilotScreen(Screen):
 
     # Corridor plot geometry, logical pixels on the 1280x800 surface.
     PLOT_TOP = 170
-    PLOT_BOTTOM = 640
-    CRAFT_X = 300
+    PLOT_BOTTOM = 610
+    MARKER_X = 300
     # Scroll speed. 120 px/s puts about 8 seconds of corridor on screen
-    # ahead of the craft: enough preview to plan a ramp, not so much
+    # ahead of the marker: enough preview to plan a ramp, not so much
     # that the assessment section reads as a memorisable map.
     PX_PER_S = 120
     # Column step for the one-off corridor render. 2 px at 120 px/s is
     # a target sample every ~17 ms, well inside the smoothness the
     # sub-1 Hz waveforms need.
     COL_STEP = 2
+
+    # The results band under the plot: the hero percentage in the
+    # middle, the two side counts, then the label row.
+    HERO_Y = 706
+    HERO_LABEL_Y = 762
+    SIDE_STAT_DX = 340
+    HERO_PT = 62
 
     def __init__(self, engine: "GameEngine") -> None:
         super().__init__(engine)
@@ -77,12 +112,11 @@ class ForcePilotScreen(Screen):
         # The per-run corridor render and the key that owns it.
         self._corridor_surf: pygame.Surface | None = None
         self._corridor_key: tuple | None = None
-        # Craft trail: recent displayed altitudes, newest last. Fixed
-        # length so the run never grows memory.
-        self._trail: deque[float] = deque(maxlen=42)
-        self._trail_run: int | None = None
-        # Cached (colour, surface) for the craft halo.
-        self._craft_halo_cache: tuple | None = None
+        # Force trace: (t_run, pct) pairs, newest last. Fixed length so
+        # the run never grows memory; 200 frames covers the 2.5 s the
+        # 300 px behind the now-line can show at 120 px/s.
+        self._trace: deque[tuple[float, float]] = deque(maxlen=200)
+        self._trace_run: int | None = None
 
     # ---- shared furniture --------------------------------------------------
     def start_countdown(self, seconds: float) -> None:
@@ -99,9 +133,8 @@ class ForcePilotScreen(Screen):
     def on_block_start(self) -> None:
         self._corridor_surf = None
         self._corridor_key = None
-        self._trail.clear()
-        self._trail_run = None
-        self._craft_halo_cache = None
+        self._trace.clear()
+        self._trace_run = None
 
     def _new_surface(self, size: tuple[int, int],
                      flags: int = 0) -> pygame.Surface:
@@ -123,6 +156,13 @@ class ForcePilotScreen(Screen):
             self.engine.mode.update(dt)
 
     # ---- helpers -----------------------------------------------------------
+    @staticmethod
+    def _mix(a, b, t: float) -> tuple[int, int, int]:
+        """Blend a toward b. Every tint here derives from the theme
+        this way, so all three colour themes stay readable without a
+        single per-frame alpha surface."""
+        return tuple(int(a[k] + (b[k] - a[k]) * t) for k in range(3))
+
     def _finger_colour(self, finger: int) -> tuple[int, int, int]:
         pal = self.theme.lane_active
         return pal[finger % len(pal)]
@@ -135,6 +175,16 @@ class ForcePilotScreen(Screen):
 
     def _hand_finger_words(self, hand: str, finger: int) -> str:
         return f"{str(hand).upper()} {FINGER_WORDS[finger % 4]}"
+
+    @staticmethod
+    def _section_at(sections, t: float):
+        """The RunSection the run is inside at run time t."""
+        if not sections:
+            return None
+        for sec in sections:
+            if t < sec.end_s:
+                return sec
+        return sections[-1]
 
     # ---- draw --------------------------------------------------------------
     def draw(self, surf: pygame.Surface) -> None:
@@ -212,12 +262,8 @@ class ForcePilotScreen(Screen):
                          border_radius=pill_rect.height // 2)
         surf.blit(pill_label,
                   pill_label.get_rect(center=pill_rect.center))
-        # Score under the pill, with the word that names it. Sitting
-        # beside the pill it was a bare number 16 px off a filled pill
-        # in the same accent, so the two read as one crowded object
-        # and nothing on screen said what the number counted. The lane
-        # modes have always carried a SCORE label; these four now
-        # match, and the band under the pill is empty on all of them.
+        # Score under the pill, with the word that names it, matching
+        # the lane modes.
         sf = self.layout.font(FONT_H2, bold=True)
         score_surf = sf.render(f"{self.engine.score}", True, accent)
         lf = self.layout.font(FONT_SMALL)
@@ -311,10 +357,8 @@ class ForcePilotScreen(Screen):
             pygame.draw.rect(surf, self._finger_colour(mode.probe_finger),
                              fill, border_radius=14)
         pygame.draw.rect(surf, self.theme.muted, bar, 2, border_radius=14)
-        # Best press so far, marked on the bar with the word for it.
-        # An unlabelled grey column with a coloured fill said nothing
-        # about how hard was hard enough; a line to beat is the whole
-        # point of a maximal-press probe.
+        # Best press so far, marked on the bar with the word for it: a
+        # line to beat is the whole point of a maximal-press probe.
         if peaks:
             best = max(peaks)
             by = bar.bottom - int(bar.h * max(0.0, min(1.0,
@@ -344,12 +388,12 @@ class ForcePilotScreen(Screen):
         t = font.render(self._hand_finger_words(mode.hand, mode.finger),
                         True, colour)
         surf.blit(t, t.get_rect(center=(cx, 300)))
-        draw_text(surf, "Fly the corridor with this finger.",
+        draw_text(surf, "Track the corridor with this finger.",
                   (cx, 390), self.theme, self.layout, pt=FONT_H2,
                   centre=True, colour=self.theme.foreground)
         draw_text(surf,
-                  "Press harder to climb, ease off to descend. "
-                  "Stay between the walls.",
+                  "Press harder to rise, ease off to sink. "
+                  "Keep your line inside the band.",
                   (cx, 436), self.theme, self.layout, pt=FONT_BODY,
                   centre=True, colour=self.theme.muted)
         if mode.level_msg:
@@ -358,44 +402,83 @@ class ForcePilotScreen(Screen):
                       colour=self.theme.warning)
 
     # ---- the corridor run --------------------------------------------------
-    def _corridor_colours(self) -> tuple:
+    def _corridor_colours(self) -> dict:
+        """Corridor tints, all derived from the theme so the band
+        stays quiet on every colour theme. Release sections use the
+        page's own greys instead of the accent: the one visibly
+        different stretch of band is the one asking for the opposite
+        movement."""
         accent = self._accent()
-        band = tuple(int(c * 0.35 + b * 0.65) for c, b in
-                     zip(accent, self.theme.background))
-        edge = accent
-        centre = tuple(min(255, c + 60) for c in accent)
-        return band, edge, centre
+        bg = self.theme.background
+        return {
+            "band": self._mix(accent, bg, 0.82),
+            "edge": self._mix(accent, bg, 0.35),
+            "band_release": self._mix(self.theme.muted, bg, 0.80),
+            "edge_release": self._mix(self.theme.muted, bg, 0.25),
+            "boundary": self._mix(self.theme.muted, bg, 0.55),
+        }
 
     def _build_corridor(self, mode) -> pygame.Surface:
-        """Render the whole run's corridor once. The surface spans the
-        craft's lead-in plus the full run plus one screen of tail, so
+        """Render the whole run's corridor once: band, edges, section
+        boundaries and their word labels. The surface spans the
+        marker's lead-in plus the full run plus one screen of tail, so
         every frame of the run is a plain window onto it."""
         w_screen = self.layout.width
-        lead_s = self.CRAFT_X / self.PX_PER_S
+        lead_s = self.MARKER_X / self.PX_PER_S
         width = int(mode.duration_s * self.PX_PER_S) + w_screen
         height = self.PLOT_BOTTOM - self.PLOT_TOP
         cs = self._new_surface((max(1, width), max(1, height)),
                                pygame.SRCALPHA)
-        band, edge, centre = self._corridor_colours()
+        cols = self._corridor_colours()
         hw = mode.corridor_hw
         span = mode.span_pct
-        pts_c: list[tuple[int, int]] = []
-        pts_u: list[tuple[int, int]] = []
-        pts_l: list[tuple[int, int]] = []
+        sections = mode.sections
+
+        def release_at(t: float) -> bool:
+            sec = self._section_at(sections, t)
+            return sec is not None and sec.name == "release"
+
+        # Band fill plus per-section edge polylines, so the release
+        # stretch changes colour cleanly at its boundaries.
+        edge_pts: list[tuple[bool, list, list]] = []
+        cur_rel: bool | None = None
         for x in range(0, width, self.COL_STEP):
             t = x / self.PX_PER_S - lead_s
-            tgt = target_pct(mode.sections, t)
+            tgt = target_pct(sections, t)
             yu = self._y(tgt + hw, span) - self.PLOT_TOP
             yl = self._y(tgt - hw, span) - self.PLOT_TOP
-            pygame.draw.line(cs, (*band, 200), (x, yu), (x, yl),
-                             self.COL_STEP)
-            pts_u.append((x, yu))
-            pts_l.append((x, yl))
-            pts_c.append((x, self._y(tgt, span) - self.PLOT_TOP))
-        if len(pts_u) > 1:
-            pygame.draw.lines(cs, edge, False, pts_u, 3)
-            pygame.draw.lines(cs, edge, False, pts_l, 3)
-            pygame.draw.lines(cs, (*centre, 130), False, pts_c, 1)
+            rel = release_at(t)
+            band = cols["band_release"] if rel else cols["band"]
+            pygame.draw.line(cs, band, (x, yu), (x, yl), self.COL_STEP)
+            if rel != cur_rel:
+                edge_pts.append((rel, [], []))
+                cur_rel = rel
+            edge_pts[-1][1].append((x, yu))
+            edge_pts[-1][2].append((x, yl))
+        for rel, pts_u, pts_l in edge_pts:
+            edge = cols["edge_release"] if rel else cols["edge"]
+            if len(pts_u) > 1:
+                pygame.draw.lines(cs, edge, False, pts_u, 3)
+                pygame.draw.lines(cs, edge, False, pts_l, 3)
+        # Section boundaries and their names, baked so the words
+        # scroll in with the band they describe. The release label
+        # carries a down arrow: that stretch asks for the opposite
+        # movement and has to read differently at a glance.
+        label_font = make_font(int(FONT_SMALL + 2), bold=True)
+        for sec in sections:
+            x = int((sec.start_s + lead_s) * self.PX_PER_S)
+            if x > 0:
+                pygame.draw.line(cs, cols["boundary"], (x, 0),
+                                 (x, height), 1)
+            word = SECTION_LABELS.get(sec.name, sec.name).upper()
+            t_lab = label_font.render(word, True, self.theme.muted)
+            lx = x + 8
+            cs.blit(t_lab, (lx, 6))
+            if sec.name == "release":
+                ax = lx + t_lab.get_width() + 10
+                pygame.draw.polygon(cs, self.theme.muted,
+                                    [(ax, 8), (ax + 10, 8),
+                                     (ax + 5, 18)])
         return cs
 
     def _ensure_corridor(self, mode) -> pygame.Surface:
@@ -403,36 +486,63 @@ class ForcePilotScreen(Screen):
         if self._corridor_surf is None or self._corridor_key != key:
             self._corridor_surf = self._build_corridor(mode)
             self._corridor_key = key
-            self._trail.clear()
+            self._trace.clear()
         return self._corridor_surf
+
+    def _draw_grid(self, surf: pygame.Surface, span: float,
+                   labels: bool = False) -> None:
+        """Percent-of-max gridlines behind the corridor, labelled on
+        the left, so altitude reads as force and not as arbitrary
+        screen space. Lines go under the band; labels are drawn in a
+        second pass over it, or the band hides them whenever it runs
+        along the left edge."""
+        grid = self._mix(self.theme.muted, self.theme.background, 0.78)
+        step = 10.0
+        v = 0.0
+        while v <= span:
+            y = self._y(v, span)
+            if labels:
+                draw_text(surf, f"{v:.0f}%", (8, y - 18), self.theme,
+                          self.layout, pt=FONT_SMALL,
+                          colour=self.theme.muted)
+            else:
+                pygame.draw.line(surf, grid, (0, y),
+                                 (self.layout.width, y), 1)
+            v += step
 
     def _draw_run(self, surf: pygame.Surface, mode, now: float) -> None:
         corridor = self._ensure_corridor(mode)
         t_run = 0.0
         if mode.run_t0 is not None:
             t_run = max(0.0, now - mode.run_t0)
+        span = mode.span_pct
+        self._draw_grid(surf, span)
         src_x = int(t_run * self.PX_PER_S)
         src_x = max(0, min(src_x, corridor.get_width()
                            - self.layout.width))
         surf.blit(corridor, (0, self.PLOT_TOP),
                   area=pygame.Rect(src_x, 0, self.layout.width,
                                    corridor.get_height()))
-        span = mode.span_pct
-        # Frame lines and the percent scale, so altitude reads as
-        # force and not as arbitrary screen space.
-        frame_col = tuple(max(0, c - 30) for c in self.theme.background)
+        self._draw_grid(surf, span, labels=True)
+        frame_col = self._mix(self.theme.muted, self.theme.background,
+                              0.55)
         pygame.draw.line(surf, frame_col, (0, self.PLOT_TOP - 1),
                          (self.layout.width, self.PLOT_TOP - 1), 1)
         pygame.draw.line(surf, frame_col, (0, self.PLOT_BOTTOM + 1),
                          (self.layout.width, self.PLOT_BOTTOM + 1), 1)
-        draw_text(surf, f"{span:.0f}% of max", (10, self.PLOT_TOP - 24),
-                  self.theme, self.layout, pt=FONT_SMALL,
-                  colour=self.theme.muted)
-        draw_text(surf, "0%", (10, self.PLOT_BOTTOM + 8), self.theme,
-                  self.layout, pt=FONT_SMALL, colour=self.theme.muted)
+        # Run progress along the plot's bottom edge: the time story in
+        # one thin line instead of a competing readout.
+        if mode.duration_s > 0:
+            frac = max(0.0, min(1.0, t_run / mode.duration_s))
+            pygame.draw.line(
+                surf, self._mix(self._accent(), self.theme.background,
+                                0.45),
+                (0, self.PLOT_BOTTOM + 5),
+                (int(self.layout.width * frac), self.PLOT_BOTTOM + 5), 4)
         self._draw_rings(surf, mode, t_run)
-        self._draw_craft(surf, mode)
-        # The steady who-is-flying chip plus live run stats.
+        self._draw_trace(surf, mode, t_run)
+        self._draw_section_words(surf, mode, t_run)
+        # The steady who-is-flying chip plus the results band.
         self._draw_finger_chip(surf, mode.hand, mode.finger, 130, 90)
         self._draw_run_stats(surf, mode, t_run)
         if mode.signal_stale:
@@ -441,110 +551,125 @@ class ForcePilotScreen(Screen):
                       self.theme, self.layout, pt=FONT_BODY, centre=True,
                       colour=self.theme.warning)
 
+    def _draw_section_words(self, surf: pygame.Surface, mode,
+                            t_run: float) -> None:
+        """The current section announced in words, with its coaching
+        line, steady between the top strip and the plot. Changes only
+        at section boundaries, so nothing here can flash."""
+        sec = self._section_at(mode.sections, t_run)
+        if sec is None:
+            return
+        cx = self.layout.width // 2
+        word = SECTION_LABELS.get(sec.name, sec.name).upper()
+        colour = (self.theme.muted if sec.name == "release"
+                  else self.theme.foreground)
+        draw_text(surf, word, (cx, 108), self.theme, self.layout,
+                  pt=FONT_H2 + 4, centre=True, colour=colour)
+        draw_text(surf, SECTION_COACH.get(sec.name, ""), (cx, 142),
+                  self.theme, self.layout, pt=FONT_SMALL + 2,
+                  centre=True, colour=self.theme.muted)
+
     def _draw_rings(self, surf: pygame.Surface, mode,
                     t_run: float) -> None:
+        """Bonus rings as chart checkpoints on the corridor centre:
+        hollow accent ahead, filled green once collected, small grey
+        once missed."""
         span = mode.span_pct
-        gold = (255, 196, 0)
         for i, t_ring in enumerate(mode.ring_times):
-            x = int(self.CRAFT_X + (t_ring - t_run) * self.PX_PER_S)
+            x = int(self.MARKER_X + (t_ring - t_run) * self.PX_PER_S)
             if x < -30 or x > self.layout.width + 30:
                 continue
             y = self._y(target_pct(mode.sections, t_ring), span)
             state = mode.ring_state[i] if i < len(mode.ring_state) else None
             if state is None:
-                pygame.draw.circle(surf, gold, (x, y), 13, 3)
+                # Pulled toward the ink so an upcoming checkpoint
+                # stands clear of the pale band it sits on.
+                ahead = self._mix(self._accent(), self.theme.foreground,
+                                  0.35)
+                pygame.draw.circle(surf, ahead, (x, y), 9, 3)
             elif state:
-                pygame.draw.circle(surf, self.theme.success, (x, y), 13)
+                pygame.draw.circle(surf, self.theme.success, (x, y), 9)
             else:
-                pygame.draw.circle(surf, self.theme.muted, (x, y), 10, 2)
+                pygame.draw.circle(surf, self.theme.muted, (x, y), 6, 2)
 
-    def _draw_craft(self, surf: pygame.Surface, mode) -> None:
+    def _draw_trace(self, surf: pygame.Surface, mode,
+                    t_run: float) -> None:
+        """The patient's force as a plain trace ending in a marker on
+        the fixed now-line. The trace is drawn in the page's own ink;
+        the marker wears the finger's colour so who is flying stays
+        glanceable next to the chip."""
         span = mode.span_pct
-        y = self._y(mode.craft_display_pct, span)
         run_key = mode.trial_counter
-        if self._trail_run != run_key:
-            self._trail.clear()
-            self._trail_run = run_key
-        self._trail.append(float(y))
-        # Trail: one segment per stored frame, stepping back from the
-        # craft. Reads as motion without any surface work.
-        trail_col = self._finger_colour(mode.finger)
-        pts = list(self._trail)
-        for k in range(1, len(pts)):
-            x1 = self.CRAFT_X - (len(pts) - k) * 3
-            x0 = x1 - 3
-            if x0 < 0:
+        if self._trace_run != run_key:
+            self._trace.clear()
+            self._trace_run = run_key
+        pct = mode.craft_display_pct
+        self._trace.append((t_run, float(pct)))
+        # Thin vertical now-line: where scoring happens.
+        now_col = self._mix(self.theme.muted, self.theme.background, 0.6)
+        pygame.draw.line(surf, now_col, (self.MARKER_X, self.PLOT_TOP),
+                         (self.MARKER_X, self.PLOT_BOTTOM), 1)
+        pts = []
+        for t_i, p_i in self._trace:
+            x = int(self.MARKER_X - (t_run - t_i) * self.PX_PER_S)
+            if x < 0:
                 continue
-            pygame.draw.line(surf, trail_col,
-                             (x0, int(pts[k - 1])), (x1, int(pts[k])), 2)
-        colour = (self.theme.error if mode.stalled
+            pts.append((x, self._y(p_i, span)))
+        if len(pts) > 1:
+            pygame.draw.lines(surf, self.theme.foreground, False, pts, 2)
+        y = self._y(pct, span)
+        marker = (self.theme.error if mode.stalled
                   else self._finger_colour(mode.finger))
-        # A halo behind the craft. The craft IS the patient on this
-        # screen, and against a full-width corridor a 38 px arrow in
-        # the finger's own colour was the least visible thing in the
-        # frame: on the pale lane colours (pinky yellow, middle light
-        # blue) it all but vanished into the green band.
-        halo_r = 26
-        halo = self._craft_halo(colour)
-        if halo is not None:
-            surf.blit(halo, (self.CRAFT_X - halo_r, y - halo_r))
-        body = [(self.CRAFT_X - 22, y - 15), (self.CRAFT_X - 22, y + 15),
-                (self.CRAFT_X + 24, y)]
-        pygame.draw.polygon(surf, colour, body)
-        pygame.draw.polygon(surf, self.theme.foreground, body, 3)
+        pygame.draw.line(surf, marker, (self.MARKER_X - 14, y),
+                         (self.MARKER_X + 14, y), 3)
+        pygame.draw.circle(surf, marker, (self.MARKER_X, y), 9)
+        pygame.draw.circle(surf, self.theme.foreground,
+                           (self.MARKER_X, y), 9, 2)
         if mode.stalled:
-            # Above the craft rather than beside it. Beside it, a
-            # stall near the floor of the plot put the word straight
-            # on the run-stats row underneath.
-            draw_text(surf, "STALL", (self.CRAFT_X + 40, y - 40),
-                      self.theme, self.layout, pt=FONT_BODY,
-                      colour=self.theme.error)
-
-    def _craft_halo(self, colour) -> pygame.Surface | None:
-        """Soft disc behind the craft, cached per colour so the run
-        loop allocates nothing (a screen test pins that)."""
-        cached = getattr(self, "_craft_halo_cache", None)
-        if cached is not None and cached[0] == colour:
-            return cached[1]
-        r = 26
-        halo = self._new_surface((r * 2, r * 2), pygame.SRCALPHA)
-        for radius, alpha in ((r, 40), (int(r * 0.68), 70)):
-            pygame.draw.circle(halo, (*colour, alpha), (r, r), radius)
-        self._craft_halo_cache = (colour, halo)
-        return halo
-
-    # Where the four live run numbers sit, and how far apart. The band
-    # under the plot was 160 px of empty page; the numbers were a
-    # single run-on sentence squeezed onto one line just under the
-    # corridor, four different quantities separated by double spaces.
-    STAT_VALUE_Y = 690
-    STAT_LABEL_Y = 730
-    STAT_STEP = 200
+            # Steady tag with the direction to correct. Above or below
+            # the marker, away from the band, so it never sits on the
+            # thing it is talking about.
+            tgt = target_pct(mode.sections, t_run)
+            below = pct < tgt
+            word = ("STALL - press harder" if below
+                    else "STALL - ease off")
+            ty = y - 40 if below else y + 24
+            ty = max(self.PLOT_TOP + 8, min(self.PLOT_BOTTOM - 30, ty))
+            draw_text(surf, word, (self.MARKER_X + 26, ty), self.theme,
+                      self.layout, pt=FONT_BODY, colour=self.theme.error)
 
     def _draw_run_stats(self, surf: pygame.Surface, mode,
                         t_run: float) -> None:
+        """The results band: time in corridor as the one large number,
+        rings and stalls small either side, time left small under the
+        plot's progress line."""
         tic = 0.0
         if mode._scored_s > 0:
             tic = mode._in_c_s / mode._scored_s
-        left = max(0.0, mode.duration_s - t_run)
-        rings_total = len(getattr(mode, "ring_times", ()) or ())
-        cells = [
-            ("IN CORRIDOR", f"{tic * 100.0:.0f}%"),
-            ("RINGS", (f"{mode._rings_collected} of {rings_total}"
-                       if rings_total else f"{mode._rings_collected}")),
-            ("STALLS", f"{mode._stalls}"),
-            ("TIME LEFT", f"{left:.0f}s"),
-        ]
         cx = self.layout.width // 2
-        x0 = cx - (len(cells) - 1) * self.STAT_STEP // 2
-        value_font = self.layout.font(FONT_H2, bold=True)
-        for i, (label, value) in enumerate(cells):
-            x = x0 + i * self.STAT_STEP
-            v = value_font.render(value, True, self.theme.foreground)
-            surf.blit(v, v.get_rect(center=(x, self.STAT_VALUE_Y)))
-            draw_text(surf, label, (x, self.STAT_LABEL_Y), self.theme,
-                      self.layout, pt=FONT_SMALL, centre=True,
+        draw_text(surf, f"{tic * 100.0:.0f}%", (cx, self.HERO_Y),
+                  self.theme, self.layout, pt=self.HERO_PT, centre=True,
+                  colour=self.theme.foreground)
+        draw_text(surf, "TIME IN CORRIDOR", (cx, self.HERO_LABEL_Y),
+                  self.theme, self.layout, pt=FONT_SMALL, centre=True,
+                  colour=self.theme.muted)
+        rings_total = len(getattr(mode, "ring_times", ()) or ())
+        rings = (f"{mode._rings_collected} of {rings_total}"
+                 if rings_total else f"{mode._rings_collected}")
+        for dx, value, label in (
+                (-self.SIDE_STAT_DX, rings, "RINGS"),
+                (self.SIDE_STAT_DX, f"{mode._stalls}", "STALLS")):
+            draw_text(surf, value, (cx + dx, self.HERO_Y + 10),
+                      self.theme, self.layout, pt=FONT_H2, centre=True,
+                      colour=self.theme.foreground)
+            draw_text(surf, label, (cx + dx, self.HERO_LABEL_Y),
+                      self.theme, self.layout, pt=FONT_SMALL, centre=True,
                       colour=self.theme.muted)
+        left = max(0.0, mode.duration_s - t_run)
+        lf = self.layout.font(FONT_SMALL)
+        t_left = lf.render(f"{left:.0f}s left", True, self.theme.muted)
+        surf.blit(t_left, t_left.get_rect(
+            topright=(self.layout.width - 12, self.PLOT_BOTTOM + 12)))
 
     # ---- run feedback ------------------------------------------------------
     def _draw_feedback(self, surf: pygame.Surface, mode,
@@ -553,16 +678,16 @@ class ForcePilotScreen(Screen):
         res = mode._last_result or {}
         label = res.get("label", "")
         if label == "Great":
-            title, colour = "GREAT FLYING!", self.theme.success
+            title, colour = "GREAT RUN", self.theme.success
         elif label == "Good":
             title, colour = "GOOD RUN", self._accent()
         elif label == "NoSignal":
-            # A signal-starved run is a hardware event: showing ROUGH
-            # RIDE with 'Mean error 0.0%' blamed the patient for a
-            # dead sensor.
+            # A signal-starved run is a hardware event: showing a
+            # rough-run title with 'Mean error 0.0%' blamed the
+            # patient for a dead sensor.
             title, colour = "SIGNAL LOST", self.theme.error
         else:
-            title, colour = "ROUGH RIDE", self.theme.warning
+            title, colour = "A ROUGH RUN", self.theme.warning
         draw_text(surf, title, (cx, 170), self.theme, self.layout,
                   pt=FONT_H1 + 10, centre=True, colour=colour)
         who = self._hand_finger_words(res.get("hand", mode.hand),

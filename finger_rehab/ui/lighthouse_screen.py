@@ -1,6 +1,13 @@
-"""Lighthouse screen. One lantern, warm and calm; the flame is the
-feedback channel, so the mode gets its own screen instead of the
-lane-strip GameplayScreen.
+"""Lighthouse screen. A precision hold is the whole game, so the mode
+gets its own screen instead of the lane-strip GameplayScreen.
+
+Drawn in the band-and-marker grammar quick calibration teaches at
+login: one large vertical gauge, the target band on it, the live
+force as a marker, zone words down the side. The old lantern-and-
+flame picture carried the data in a metaphor ("how big is that flame
+exactly?"); the gauge says the same thing without asking the patient
+to decode anything. The mode keeps its name and its warm gold accent;
+nothing decorative carries data any more.
 
 Layout jobs, in the order a patient meets them:
 
@@ -9,25 +16,29 @@ Layout jobs, in the order a patient meets them:
   GET READY         the working hand and finger, huge and in the
                     finger's colour, plus what kind of trial is
                     coming. Level moves are announced here in words.
-  HOLD TRIALS       the lantern burns mid-screen. Flame height tracks
-                    the signed error (too soft and it shrinks, too
-                    hard and it stretches), flicker tracks the
-                    fluctuation. In dark windows the room goes dark
-                    and the lantern shows nothing about the force; on
-                    relight the drift is revealed in plain words.
-  ECHO TRIALS       feel the glow (lit, with feedback), wait out the
-                    delay in the dark, then remake the glow blind.
-                    While blind the screen shows only a fixed-size
+  HOLD TRIALS       the gauge burns mid-screen: target band, live
+                    marker, TOO HARD / TARGET / TOO SOFT zones. A
+                    thin plan strip under it shows the whole hold
+                    with its dark windows and a moving playhead. In
+                    dark windows the gauge visibly shutters: no fill,
+                    no marker, a large HOLD BY FEEL instruction and a
+                    countdown to relight. On relight the drift is
+                    revealed in plain words.
+  ECHO TRIALS       three named stages, SHOW then WAIT then
+                    REPRODUCE, on a steady stage rail. SHOW is the
+                    lit gauge; WAIT and REPRODUCE are shuttered, and
+                    while blind the screen shows only a fixed-size
                     pressing dot, never anything that scales with
                     force.
   TRIAL COMPLETE    the hold or echo numbers in plain words, then who
                     holds next. Failure wording is gentle by design:
-                    the flame gutters, nothing blares.
+                    the hold slips away, nothing blares.
 
-Flame motion is smooth and slow: the sway is a fixed 1.1 Hz sine
-whose amplitude follows the mode's smoothed flicker value, and the
-size follows an EMA of the error, so nothing here blinks anywhere
-near the 3 Hz limit. All alpha scratch surfaces are created once and
+Every colour change here is state-driven (the fill's three zones, the
+stage rail, the coach line) so none of them can oscillate on their
+own, and the marker follows the same smoothed detector value the mode
+scores on; nothing here blinks anywhere near the 3 Hz limit. The two
+alpha surfaces (dark overlay, countdown dim) are created once and
 reused; steady-state frames allocate no new surfaces.
 
 Screen conventions match the rest of the app: 1280x800 logical
@@ -38,7 +49,6 @@ GameplayScreen's.
 from __future__ import annotations
 
 import logging
-import math
 import time
 from typing import TYPE_CHECKING
 
@@ -80,45 +90,37 @@ def _dark_frac_and_windows(mode) -> tuple[float, int]:
         mode.dark_windows_by_level[mode.level - 1]
 
 
-# Warm lantern palette, deliberately independent of the UI theme so
-# the flame reads as firelight on both light and dark themes.
-FLAME_OUTER = (255, 138, 48)
-FLAME_MID = (255, 192, 92)
-FLAME_CORE = (255, 241, 205)
-GLASS_LINE = (176, 138, 78)
-LANTERN_BODY = (92, 74, 52)
-EMBER = (140, 92, 56)
+# Text and line colours for the blind halves. The dark overlay is
+# near-black whatever the theme, so these are fixed warm greys rather
+# than theme colours.
 DARK_TEXT = (196, 176, 150)
+SHUTTER_LINE = (86, 76, 62)
+SHUTTER_EDGE = (120, 106, 86)
 
 
 class LighthouseScreen(Screen):
 
-    # Lantern geometry, logical pixels on the 1280x800 surface.
-    #
-    # Sized up from a 210x280 glass. The lantern is the whole game on
-    # this screen and it used to occupy about a sixth of the frame's
-    # width, with the flame tip (the thing being held steady) a few
-    # dozen pixels tall in the middle of a very large empty page. The
-    # flame span grows with the glass, so a percent of max still maps
-    # to the same fraction of the glass; only the pixels-per-percent
-    # changes, which is what makes a small drift visible.
-    LANTERN_CX = 640
-    GLASS_TOP = 214
-    GLASS_W = 290
-    GLASS_H = 372
-    # Flame height span inside the glass. frac 0.5 (on target) puts
-    # the tip midway between the two target ticks.
-    FLAME_MIN_H = 54
-    FLAME_MAX_H = 266
-    # Glow scratch surface size: big enough for the widest glow.
-    GLOW_SIZE = 460
+    # Gauge geometry, logical pixels on the 1280x800 surface. One
+    # tall bar, centred: the same shape and scale logic as the quick
+    # calibration bar the patient met at login.
+    GAUGE = pygame.Rect(566, 196, 148, 390)
+
+    # The hold plan strip and the rows under the gauge.
+    PLAN_RECT = pygame.Rect(360, 640, 560, 12)
+    ROW_COACH = 690
+    ROW_SUB = 728
+    ROW_TIME = 760
+
+    # Echo stage rail geometry.
+    RAIL_Y = 152
+    RAIL_SEG_W = 150
+    RAIL_GAP = 14
 
     def __init__(self, engine: "GameEngine") -> None:
         super().__init__(engine)
         self._countdown_until = 0.0
         self._dim_cache: pygame.Surface | None = None
         self._dark_cache: pygame.Surface | None = None
-        self._glow_scratch: pygame.Surface | None = None
 
     # ---- shared furniture --------------------------------------------------
     def start_countdown(self, seconds: float) -> None:
@@ -134,7 +136,6 @@ class LighthouseScreen(Screen):
 
     def on_block_start(self) -> None:
         self._dark_cache = None
-        self._glow_scratch = None
 
     def _new_surface(self, size: tuple[int, int],
                      flags: int = 0) -> pygame.Surface:
@@ -156,6 +157,13 @@ class LighthouseScreen(Screen):
             self.engine.mode.update(dt)
 
     # ---- helpers -----------------------------------------------------------
+    @staticmethod
+    def _mix(a, b, t: float) -> tuple[int, int, int]:
+        """Blend a toward b. Every tint here derives from the theme
+        this way, so all three colour themes stay readable without a
+        single per-frame alpha surface."""
+        return tuple(int(a[k] + (b[k] - a[k]) * t) for k in range(3))
+
     def _finger_colour(self, finger: int) -> tuple[int, int, int]:
         pal = self.theme.lane_active
         return pal[finger % len(pal)]
@@ -256,12 +264,8 @@ class LighthouseScreen(Screen):
                          border_radius=pill_rect.height // 2)
         surf.blit(pill_label,
                   pill_label.get_rect(center=pill_rect.center))
-        # Score under the pill, with the word that names it. Sitting
-        # beside the pill it was a bare number 16 px off a filled pill
-        # in the same accent, so the two read as one crowded object
-        # and nothing on screen said what the number counted. The lane
-        # modes have always carried a SCORE label; these four now
-        # match, and the band under the pill is empty on all of them.
+        # Score under the pill, with the word that names it, matching
+        # the lane modes.
         sf = self.layout.font(FONT_H2, bold=True)
         score_surf = sf.render(f"{self.engine.score}", True, accent)
         lf = self.layout.font(FONT_SMALL)
@@ -300,8 +304,8 @@ class LighthouseScreen(Screen):
                   (cx, 212), self.theme, self.layout, pt=FONT_BODY + 2,
                   centre=True, colour=self.theme.muted)
         draw_text(surf,
-                  "Every lantern target is a percentage of what you "
-                  "show here.",
+                  "Every target in this game is a percentage of what "
+                  "you show here.",
                   (cx, 244), self.theme, self.layout, pt=FONT_BODY,
                   centre=True, colour=self.theme.muted)
         self._draw_finger_chip(surf, mode.probe_hand, mode.probe_finger,
@@ -317,10 +321,13 @@ class LighthouseScreen(Screen):
             colour = (self.theme.success if filled else self.theme.muted)
             pygame.draw.circle(surf, colour, (x0 + i * dot_gap, 390),
                                12, 0 if filled else 3)
+        draw_text(surf, f"{max(0, remaining)} OF {total} PRESSES TO GO",
+                  (cx, 418), self.theme, self.layout, pt=FONT_SMALL,
+                  centre=True, colour=self.theme.muted)
         counts = getattr(mode, "probe_counts", 0.0)
         peaks = list(probe.peaks) if probe is not None else []
         scale = max([100.0, counts * 1.15] + [p * 1.15 for p in peaks])
-        bar = pygame.Rect(cx - 60, 430, 120, 190)
+        bar = pygame.Rect(cx - 60, 446, 120, 190)
         base = tuple(max(0, c - 22) for c in self.theme.background)
         pygame.draw.rect(surf, base, bar, border_radius=14)
         h = int(bar.h * max(0.0, min(1.0, counts / scale)))
@@ -329,13 +336,25 @@ class LighthouseScreen(Screen):
             pygame.draw.rect(surf, self._finger_colour(mode.probe_finger),
                              fill, border_radius=14)
         pygame.draw.rect(surf, self.theme.muted, bar, 2, border_radius=14)
+        if peaks:
+            best = max(peaks)
+            by = bar.bottom - int(bar.h * max(0.0, min(1.0,
+                                                       best / scale)))
+            pygame.draw.line(surf, self.theme.foreground,
+                             (bar.left - 14, by), (bar.right + 14, by), 3)
+            draw_text(surf, "BEST", (bar.right + 22, by - 9), self.theme,
+                      self.layout, pt=FONT_SMALL,
+                      colour=self.theme.foreground)
+        draw_text(surf, "YOUR PRESS", (cx, bar.bottom + 12), self.theme,
+                  self.layout, pt=FONT_SMALL, centre=True,
+                  colour=self.theme.muted)
         if getattr(mode, "signal_waiting", False):
             draw_text(surf, "Waiting for sensor data...",
-                      (cx, 650), self.theme, self.layout, pt=FONT_BODY,
+                      (cx, 690), self.theme, self.layout, pt=FONT_BODY,
                       centre=True, colour=self.theme.warning)
         elif mode.phase == "probe_gap":
             draw_text(surf, "Rest for a moment...",
-                      (cx, 650), self.theme, self.layout, pt=FONT_BODY,
+                      (cx, 690), self.theme, self.layout, pt=FONT_BODY,
                       centre=True, colour=self.theme.muted)
 
     # ---- trial announcement ------------------------------------------------
@@ -347,14 +366,14 @@ class LighthouseScreen(Screen):
                         True, colour)
         surf.blit(t, t.get_rect(center=(cx, 290)))
         if mode.kind == "hold":
-            draw_text(surf, "Keep the lantern lit with this finger.",
+            draw_text(surf, "Hold a steady press with this finger.",
                       (cx, 380), self.theme, self.layout, pt=FONT_H2,
                       centre=True, colour=self.theme.foreground)
             _frac_dark, n_dark = _dark_frac_and_windows(mode)
-            line = ("Press gently and hold the flame steady."
+            line = ("Keep the marker inside the target band."
                     if n_dark == 0 else
-                    "Press gently and hold. When the room darkens, "
-                    "keep holding by feel.")
+                    "Keep the marker in the band. When the screen "
+                    "darkens, hold by feel.")
             draw_text(surf, line, (cx, 426), self.theme, self.layout,
                       pt=FONT_BODY, centre=True, colour=self.theme.muted)
         elif mode.cross:
@@ -363,17 +382,17 @@ class LighthouseScreen(Screen):
                       (cx, 380), self.theme, self.layout, pt=FONT_H2,
                       centre=True, colour=self.theme.foreground)
             draw_text(surf,
-                      f"{who} feels the glow first; this finger "
+                      f"{who} feels the press first; this finger "
                       f"repeats it from memory.",
                       (cx, 426), self.theme, self.layout, pt=FONT_BODY,
                       centre=True, colour=self.theme.muted)
         else:
-            draw_text(surf, "Echo trial: remember the glow.",
+            draw_text(surf, "Echo trial: remember the press.",
                       (cx, 380), self.theme, self.layout, pt=FONT_H2,
                       centre=True, colour=self.theme.foreground)
             draw_text(surf,
-                      "Feel the glow, let go, wait, then make the "
-                      "same glow again by feel.",
+                      "Feel the press, let go, wait, then make the "
+                      "same press again by feel.",
                       (cx, 426), self.theme, self.layout, pt=FONT_BODY,
                       centre=True, colour=self.theme.muted)
         if mode.level_msg:
@@ -381,134 +400,179 @@ class LighthouseScreen(Screen):
                       self.layout, pt=FONT_H2, centre=True,
                       colour=self.theme.warning)
 
-    # ---- the lantern -------------------------------------------------------
-    def _glass_rect(self) -> pygame.Rect:
-        return pygame.Rect(self.LANTERN_CX - self.GLASS_W // 2,
-                           self.GLASS_TOP, self.GLASS_W, self.GLASS_H)
+    # ---- the gauge ---------------------------------------------------------
+    def _gauge_span(self, mode) -> float:
+        """Full scale of the gauge in percent of max. Headroom above
+        the band so an overshoot visibly climbs out of the goal
+        instead of pinning at the top with nothing left to show, the
+        same rule the quick calibration bar uses."""
+        return max(12.0, (mode.target_pct + mode.tol_pct) * 1.45)
 
-    def _draw_lantern_frame(self, surf: pygame.Surface,
-                            dim: bool = False) -> None:
-        """The lantern's body: cap, glass and base. `dim` draws the
-        barely-there silhouette used while the room is dark."""
-        glass = self._glass_rect()
-        body = LANTERN_BODY if not dim else (52, 44, 36)
-        line = GLASS_LINE if not dim else (72, 62, 50)
-        cap = [(glass.centerx - 46, glass.top - 8),
-               (glass.centerx + 46, glass.top - 8),
-               (glass.centerx + 26, glass.top - 44),
-               (glass.centerx - 26, glass.top - 44)]
-        pygame.draw.polygon(surf, body, cap)
-        ring = pygame.Rect(0, 0, 40, 18)
-        ring.center = (glass.centerx, glass.top - 52)
-        pygame.draw.ellipse(surf, line, ring, 3)
-        pygame.draw.rect(surf, body,
-                         pygame.Rect(glass.x - 14, glass.bottom,
-                                     glass.w + 28, 26),
-                         border_radius=8)
-        pygame.draw.rect(surf, line, glass, 3, border_radius=10)
+    def _y_pct(self, pct: float, span: float) -> int:
+        frac = max(0.0, min(1.0, pct / max(1.0, span)))
+        return int(self.GAUGE.bottom - frac * self.GAUGE.h)
 
-    # Half-height of the on-target band, in pixels either side of the
-    # mid mark.
-    TARGET_BAND_DY = 20
+    def _draw_gauge_frame(self, surf: pygame.Surface, mode) -> None:
+        """Trough, outline and the percent scale: the parts of the
+        gauge that never depend on the live force."""
+        th = self.theme
+        g = self.GAUGE
+        trough = g.inflate(16, 16)
+        pygame.draw.rect(surf, self._mix(th.muted, th.background, 0.93),
+                         trough, border_radius=22)
+        pygame.draw.rect(surf, self._mix(th.muted, th.background, 0.55),
+                         g, 2, border_radius=16)
+        span = self._gauge_span(mode)
+        step = 5.0 if span <= 32.0 else 10.0
+        grid = self._mix(th.muted, th.background, 0.75)
+        v = step
+        while v < span:
+            y = self._y_pct(v, span)
+            pygame.draw.line(surf, grid, (g.x + 4, y),
+                             (g.right - 4, y), 1)
+            v += step
 
-    # The three status rows under the lantern, derived from the
-    # lantern's own bottom edge rather than fixed. Pinned at 620 they
-    # ran through the base slab as soon as the glass grew.
-    @property
-    def HOLD_ROW_1(self) -> int:
-        return self.GLASS_TOP + self.GLASS_H + 62
+    def _band_rect(self, mode) -> pygame.Rect:
+        span = self._gauge_span(mode)
+        top = self._y_pct(mode.target_pct + mode.tol_pct, span)
+        bot = self._y_pct(mode.target_pct - mode.tol_pct, span)
+        return pygame.Rect(self.GAUGE.x + 3, top,
+                           self.GAUGE.w - 6, max(4, bot - top))
 
-    @property
-    def HOLD_ROW_2(self) -> int:
-        return self.HOLD_ROW_1 + 42
+    def _draw_gauge_lit(self, surf: pygame.Surface, mode,
+                        pct: float | None) -> None:
+        """Band, live fill and marker: the explicit read-out. `pct` is
+        the smoothed force in percent of max, or None when the signal
+        is missing (the fill and marker simply stay away)."""
+        th = self.theme
+        g = self.GAUGE
+        span = self._gauge_span(mode)
+        band = self._band_rect(mode)
+        in_band = (pct is not None
+                   and abs(pct - mode.target_pct) <= mode.tol_pct)
+        over = pct is not None and pct - mode.target_pct > mode.tol_pct
+        under = pct is not None and mode.target_pct - pct > mode.tol_pct
 
-    @property
-    def HOLD_ROW_3(self) -> int:
-        return self.HOLD_ROW_1 + 80
+        # Goal band tint under the fill, outline on top of it, exactly
+        # the quick calibration layering.
+        pygame.draw.rect(surf, self._mix(th.success, th.background,
+                                         0.55 if in_band else 0.80),
+                         band, border_radius=8)
+        zone = (th.warning if over
+                else th.success if in_band else th.accent)
+        if pct is not None:
+            fill_top = self._y_pct(pct, span)
+            if fill_top < g.bottom - 4:
+                pygame.draw.rect(
+                    surf, zone,
+                    pygame.Rect(g.x + 5, fill_top, g.w - 10,
+                                g.bottom - fill_top - 3),
+                    border_radius=12)
+        pygame.draw.rect(surf, th.success if in_band else self._mix(
+            th.success, th.background, 0.25), band, 3, border_radius=8)
+        if pct is not None:
+            fill_top = self._y_pct(pct, span)
+            pygame.draw.line(surf, th.foreground,
+                             (g.x - 8, fill_top), (g.right + 8,
+                                                   fill_top), 3)
+            vf = self.layout.font(FONT_BODY, bold=True)
+            v = vf.render(f"{max(0.0, pct):.0f}%", True, zone)
+            vy = max(g.y + 10, min(g.bottom - 10, fill_top))
+            surf.blit(v, v.get_rect(midright=(g.x - 38, vy)))
 
-    def _draw_target_ticks(self, surf: pygame.Surface) -> None:
-        """The on-target band: a tinted stripe across the glass
-        between two etched marks, with the word that names it.
+        # Zone words down the right, each against its own stretch of
+        # the gauge; the active zone carries its full colour.
+        lx = g.right + 26
+        hard_c = th.warning if over else self._mix(
+            th.warning, th.background, 0.45)
+        soft_c = th.accent if under else self._mix(
+            th.accent, th.background, 0.45)
+        hf = self.layout.font(FONT_SMALL + 4, bold=True)
+        t = hf.render("TOO HARD", True, hard_c)
+        surf.blit(t, (lx, (g.y + band.top) // 2 - 10))
+        tf = self.layout.font(FONT_H2, bold=True)
+        t = tf.render("TARGET", True, th.success)
+        surf.blit(t, (lx, band.centery - 26))
+        draw_text(surf,
+                  f"{mode.target_pct - mode.tol_pct:.0f} to "
+                  f"{mode.target_pct + mode.tol_pct:.0f}% of max",
+                  (lx, band.centery + 6), self.theme, self.layout,
+                  pt=FONT_SMALL + 2, colour=th.muted)
+        t = hf.render("TOO SOFT", True, soft_c)
+        surf.blit(t, (lx, (band.bottom + g.bottom) // 2 - 10))
 
-        Four short dashes at the glass edge said nothing on their own,
-        and the only sentence explaining them ("bring the flame tip
-        between the marks") showed during the ignite step and then
-        disappeared for the whole hold. A shaded band reads as a
-        target without a caption, and the caption is there anyway.
-        """
-        glass = self._glass_rect()
-        base_y = glass.bottom - 26
-        mid_h = (self.FLAME_MIN_H + self.FLAME_MAX_H) // 2
-        dy = self.TARGET_BAND_DY
-        top = base_y - mid_h - dy
-        band = pygame.Surface((glass.w - 6, dy * 2), pygame.SRCALPHA)
-        pygame.draw.rect(band, (*GLASS_LINE, 34), band.get_rect())
-        surf.blit(band, (glass.left + 3, top))
-        for edge_y in (top, top + dy * 2):
-            pygame.draw.line(surf, GLASS_LINE, (glass.left - 12, edge_y),
-                             (glass.left + 18, edge_y), 3)
-            pygame.draw.line(surf, GLASS_LINE, (glass.right - 18, edge_y),
-                             (glass.right + 12, edge_y), 3)
-        draw_text(surf, "TARGET", (glass.right + 22, base_y - mid_h - 8),
-                  self.theme, self.layout, pt=FONT_SMALL,
-                  colour=self.theme.muted)
+    def _draw_gauge_shuttered(self, surf: pygame.Surface, mode) -> None:
+        """The gauge with its shutters down: outline, slats, and the
+        target band as a ghost. Nothing here may depend on the live
+        force; the shape stays so the patient knows exactly what has
+        been taken away and where it will come back."""
+        g = self.GAUGE
+        pygame.draw.rect(surf, SHUTTER_EDGE, g, 2, border_radius=16)
+        for k in range(1, 8):
+            y = g.y + k * g.h // 8
+            pygame.draw.line(surf, SHUTTER_LINE, (g.x + 6, y),
+                             (g.right - 6, y), 3)
+        band = self._band_rect(mode)
+        for edge_y in (band.top, band.bottom):
+            pygame.draw.line(surf, SHUTTER_EDGE, (g.x - 8, edge_y),
+                             (g.x + 22, edge_y), 3)
+            pygame.draw.line(surf, SHUTTER_EDGE, (g.right - 22, edge_y),
+                             (g.right + 8, edge_y), 3)
 
-    def _ensure_glow(self) -> pygame.Surface:
-        if self._glow_scratch is None:
-            self._glow_scratch = self._new_surface(
-                (self.GLOW_SIZE, self.GLOW_SIZE), pygame.SRCALPHA)
-        return self._glow_scratch
-
-    def _draw_flame(self, surf: pygame.Surface, frac: float,
-                    flicker: float, now: float,
-                    ember_only: bool = False) -> None:
-        """The flame itself. `frac` 0..1 sets the height (0.5 = on
-        target), `flicker` 0..1 sets the sway amplitude. The sway is a
-        fixed 1.1 Hz sine, well under the flash limit; nothing else
-        moves faster than the mode's smoothed inputs."""
-        glass = self._glass_rect()
-        base_y = glass.bottom - 26
-        cx = glass.centerx
-        if ember_only:
-            pygame.draw.ellipse(surf, EMBER,
-                                pygame.Rect(cx - 12, base_y - 10, 24, 14))
+    def _draw_plan_strip(self, surf: pygame.Surface, mode, now: float,
+                         dim: bool) -> None:
+        """The whole hold as a thin strip: lit stretches, dark
+        windows, and a playhead. The dark windows stop being an
+        ambush; the patient can see the next one coming and how long
+        it lasts."""
+        windows = getattr(mode, "hold_windows", None)
+        if not windows or mode.params is None:
             return
-        frac = max(0.0, min(1.0, frac))
-        h = int(self.FLAME_MIN_H
-                + frac * (self.FLAME_MAX_H - self.FLAME_MIN_H))
-        sway = math.sin(now * 2.0 * math.pi * 1.1) * (
-            2.0 + 10.0 * max(0.0, min(1.0, flicker)))
-        tip = (int(cx + sway), base_y - h)
-        w = max(18, int(20 + 26 * frac))
-        # Soft glow behind the glass, redrawn onto the reused scratch
-        # surface (clear + three alpha circles, no allocation).
-        glow = self._ensure_glow()
-        glow.fill((0, 0, 0, 0))
-        gc = self.GLOW_SIZE // 2
-        r = int(60 + 90 * frac)
-        for radius, alpha in ((r, 26), (int(r * 0.7), 40),
-                              (int(r * 0.42), 60)):
-            pygame.draw.circle(glow, (*FLAME_MID, alpha), (gc, gc),
-                               max(4, radius))
-        surf.blit(glow, (cx - gc, base_y - h // 2 - gc))
-        # Flame body: three nested teardrops.
-        for colour, wf, hf in ((FLAME_OUTER, 1.0, 1.0),
-                               (FLAME_MID, 0.62, 0.72),
-                               (FLAME_CORE, 0.3, 0.4)):
-            ww = max(6, int(w * wf))
-            hh = max(8, int(h * hf))
-            t = (int(cx + sway * hf), base_y - hh)
-            pts = [
-                t,
-                (cx + ww // 2, base_y - hh // 3),
-                (cx + ww // 3, base_y),
-                (cx - ww // 3, base_y),
-                (cx - ww // 2, base_y - hh // 3),
-            ]
-            pygame.draw.polygon(surf, colour, pts)
-        # Wick.
-        pygame.draw.line(surf, (60, 46, 34), (cx, base_y),
-                         (cx, base_y + 8), 3)
+        hold_s = float(mode.params.get("hold_s", 0.0))
+        if hold_s <= 0:
+            return
+        r = self.PLAN_RECT
+        th = self.theme
+        if dim:
+            lit_c = self._mix(DARK_TEXT, (0, 0, 0), 0.45)
+            dark_c = self._mix(SHUTTER_LINE, (0, 0, 0), 0.2)
+            edge_c = SHUTTER_EDGE
+            text_c = DARK_TEXT
+        else:
+            lit_c = self._mix(self._accent(), th.background, 0.45)
+            dark_c = self._mix(th.foreground, th.background, 0.35)
+            edge_c = self._mix(th.muted, th.background, 0.45)
+            text_c = th.muted
+        for name, a, b in windows:
+            x0 = r.x + int(r.w * max(0.0, a) / hold_s)
+            x1 = r.x + int(r.w * min(hold_s, b) / hold_s)
+            colour = dark_c if name.startswith("dark") else lit_c
+            pygame.draw.rect(surf, colour,
+                             pygame.Rect(x0, r.y, max(1, x1 - x0), r.h))
+        pygame.draw.rect(surf, edge_c, r, 1)
+        t_h = 0.0
+        if mode.hold_t0 is not None:
+            t_h = max(0.0, min(hold_s, now - mode.hold_t0))
+        px = r.x + int(r.w * t_h / hold_s)
+        pygame.draw.line(surf, th.foreground if not dim else DARK_TEXT,
+                         (px, r.y - 4), (px, r.bottom + 4), 2)
+        lf = self.layout.font(FONT_SMALL)
+        lab = lf.render("THIS HOLD", True, text_c)
+        surf.blit(lab, lab.get_rect(midright=(r.x - 14, r.centery)))
+        left = max(0.0, hold_s - t_h)
+        rl = lf.render(f"{left:.0f}s left", True, text_c)
+        surf.blit(rl, rl.get_rect(midleft=(r.right + 14, r.centery)))
+
+    def _relight_in_s(self, mode, now: float) -> float | None:
+        """Seconds until the current dark window ends, or None when
+        that cannot be read. Model-clock maths only; nothing here
+        touches the force."""
+        windows = getattr(mode, "hold_windows", None)
+        if not windows or mode.hold_t0 is None:
+            return None
+        idx = min(int(getattr(mode, "_win_idx", 0)), len(windows) - 1)
+        _name, _a, b = windows[idx]
+        return max(0.0, (mode.hold_t0 + b) - now)
 
     def _ensure_dark(self, surf: pygame.Surface) -> pygame.Surface:
         if (self._dark_cache is None
@@ -530,122 +594,152 @@ class LighthouseScreen(Screen):
                       self.layout, pt=FONT_BODY, centre=True,
                       colour=self.theme.warning)
 
-    def _hold_time_left(self, mode, now: float) -> float | None:
-        if mode.sub != "hold" or mode.hold_t0 is None:
-            return None
-        return max(0.0, float(mode.params["hold_s"])
-                   - (now - mode.hold_t0))
-
     def _draw_hold(self, surf: pygame.Surface, mode, now: float) -> None:
         cx = self.layout.width // 2
         if mode.sub == "hold" and not mode.lit_now:
-            # The room is dark: the flame burns unseen. Nothing on
-            # this branch may depend on the live force.
+            # The screen is dark: the hold continues unseen. Nothing
+            # on this branch may depend on the live force.
             surf.blit(self._ensure_dark(surf), (0, 0))
-            self._draw_lantern_frame(surf, dim=True)
-            draw_text(surf, "Hold steady in the dark",
-                      (cx, self.HOLD_ROW_1), self.theme, self.layout,
-                      pt=FONT_H2, centre=True, colour=DARK_TEXT)
-            draw_text(surf, "The flame is still burning. Trust your "
+            self._draw_gauge_shuttered(surf, mode)
+            self._draw_plan_strip(surf, mode, now, dim=True)
+            draw_text(surf, "HOLD BY FEEL", (cx, self.ROW_COACH),
+                      self.theme, self.layout, pt=FONT_H1, centre=True,
+                      colour=DARK_TEXT)
+            draw_text(surf, "Keep the same press going. Trust your "
                       "finger.",
-                      (cx, self.HOLD_ROW_2), self.theme, self.layout,
+                      (cx, self.ROW_SUB), self.theme, self.layout,
                       pt=FONT_BODY, centre=True, colour=DARK_TEXT)
-            left = self._hold_time_left(mode, now)
-            if left is not None:
-                draw_text(surf, f"{left:.0f}s left",
-                          (cx, self.HOLD_ROW_3),
-                          self.theme, self.layout, pt=FONT_SMALL,
-                          centre=True, colour=DARK_TEXT)
+            relight = self._relight_in_s(mode, now)
+            if relight is not None:
+                draw_text(surf, f"Relight in {relight:.0f}s",
+                          (cx, self.ROW_TIME + 4), self.theme,
+                          self.layout, pt=FONT_BODY, centre=True,
+                          colour=DARK_TEXT)
             return
-        self._draw_lantern_frame(surf)
-        self._draw_target_ticks(surf)
-        self._draw_flame(surf, mode.flame_frac, mode.flicker_frac, now)
+        self._draw_gauge_frame(surf, mode)
+        self._draw_gauge_lit(surf, mode, mode.force_pct_now)
+        self._draw_plan_strip(surf, mode, now, dim=False)
         self._draw_finger_chip(surf, mode.hand, mode.finger, 130, 90)
         if mode.sub == "ignite":
-            draw_text(surf, "Press gently until the flame steadies",
-                      (cx, self.HOLD_ROW_1), self.theme, self.layout,
+            draw_text(surf, "Press gently into the target band",
+                      (cx, self.ROW_COACH), self.theme, self.layout,
                       pt=FONT_H2, centre=True,
                       colour=self.theme.foreground)
             draw_text(surf,
-                      "Bring the flame tip between the marks and "
-                      "keep it there.",
-                      (cx, self.HOLD_ROW_2), self.theme, self.layout,
+                      "Bring the marker into the band and keep it "
+                      "there.",
+                      (cx, self.ROW_SUB), self.theme, self.layout,
                       pt=FONT_BODY, centre=True,
                       colour=self.theme.muted)
             return
-        # Sentence case, like every other line on the screen. The
-        # lowercase run read as a debug string next to the title-case
-        # headings around it.
         word = ("Steady" if mode.in_band_now else
                 ("Ease off a little" if mode.flame_frac > 0.5
                  else "A little more"))
-        draw_text(surf, word, (cx, self.HOLD_ROW_1), self.theme,
+        draw_text(surf, word, (cx, self.ROW_COACH), self.theme,
                   self.layout, pt=FONT_H2, centre=True,
                   colour=(self.theme.success if mode.in_band_now
                           else self.theme.muted))
         if mode.reveal_msg:
-            draw_text(surf, mode.reveal_msg, (cx, self.HOLD_ROW_2),
+            # The relight verdict: what the hand did while the gauge
+            # was shuttered, in plain words.
+            draw_text(surf, mode.reveal_msg, (cx, self.ROW_SUB),
                       self.theme, self.layout, pt=FONT_BODY,
                       centre=True, colour=self._accent())
-        left = self._hold_time_left(mode, now)
-        if left is not None:
-            draw_text(surf, f"{left:.0f}s left", (cx, self.HOLD_ROW_3),
-                      self.theme, self.layout, pt=FONT_SMALL,
-                      centre=True, colour=self.theme.muted)
+
+    # ---- echo trials -------------------------------------------------------
+    _STAGES = ("SHOW", "WAIT", "REPRODUCE")
+
+    def _draw_stage_rail(self, surf: pygame.Surface, here: int,
+                         dim: bool) -> None:
+        """The three echo stages named on a steady rail, so the
+        patient always knows which part of the memory task this is
+        and what comes next."""
+        th = self.theme
+        w, gap = self.RAIL_SEG_W, self.RAIL_GAP
+        total = len(self._STAGES) * w + (len(self._STAGES) - 1) * gap
+        x0 = self.layout.width // 2 - total // 2
+        y = self.RAIL_Y
+        for k, label in enumerate(self._STAGES):
+            x = x0 + k * (w + gap)
+            done = k < here
+            now_ = k == here
+            if dim:
+                colour = DARK_TEXT if now_ else SHUTTER_EDGE
+            else:
+                colour = (th.success if done
+                          else th.accent if now_ else th.muted)
+            bar = pygame.Rect(x, y, w, 5)
+            if dim:
+                bar_c = colour if now_ else SHUTTER_LINE
+            else:
+                bar_c = (colour if (done or now_)
+                         else self._mix(th.muted, th.background, 0.6))
+            pygame.draw.rect(surf, bar_c, bar, border_radius=3)
+            draw_text(surf, label, (x + w // 2, y + 18), self.theme,
+                      self.layout, pt=FONT_SMALL, centre=True,
+                      colour=colour if now_ else (
+                          SHUTTER_EDGE if dim else th.muted))
 
     def _draw_echo(self, surf: pygame.Surface, mode, now: float) -> None:
         cx = self.layout.width // 2
         if mode.sub in ("enter", "study"):
-            self._draw_lantern_frame(surf)
-            self._draw_target_ticks(surf)
-            self._draw_flame(surf, mode.flame_frac, mode.flicker_frac, now)
+            self._draw_gauge_frame(surf, mode)
+            self._draw_gauge_lit(surf, mode, mode.force_pct_now)
+            self._draw_stage_rail(surf, 0, dim=False)
             self._draw_finger_chip(surf, mode.set_hand, mode.set_finger,
                                    130, 90)
             if mode.sub == "enter":
-                draw_text(surf, "Press gently until the flame steadies",
-                          (cx, self.HOLD_ROW_1), self.theme, self.layout,
+                draw_text(surf, "Press gently into the target band",
+                          (cx, self.ROW_COACH), self.theme, self.layout,
                           pt=FONT_H2, centre=True,
                           colour=self.theme.foreground)
             else:
-                draw_text(surf, "Feel this glow. Remember it.",
-                          (cx, self.HOLD_ROW_1), self.theme, self.layout,
+                draw_text(surf, "Feel this press. Remember it.",
+                          (cx, self.ROW_COACH), self.theme, self.layout,
                           pt=FONT_H2, centre=True,
                           colour=self.theme.foreground)
+                t0 = getattr(mode, "_study_t0", None)
+                if t0 is not None:
+                    left = max(0.0, mode.echo_show_s - (now - t0))
+                    draw_text(surf, f"Lights out in {left:.0f}s",
+                              (cx, self.ROW_SUB), self.theme,
+                              self.layout, pt=FONT_SMALL + 2,
+                              centre=True, colour=self.theme.muted)
             return
         # Blind halves: delay and reproduce. Nothing on screen may
         # scale with the live force here.
         surf.blit(self._ensure_dark(surf), (0, 0))
-        self._draw_lantern_frame(surf, dim=True)
-        self._draw_flame(surf, 0.0, 0.0, now, ember_only=True)
+        self._draw_gauge_shuttered(surf, mode)
         if mode.sub == "delay":
+            self._draw_stage_rail(surf, 1, dim=True)
             # On a cross echo BOTH fingers must let go: the studying
             # hand holding on would carry the reference force through
             # the blind half, so the line names it explicitly.
-            msg = ("Both hands off. Remember that glow..."
+            msg = ("Both hands off. Remember that press."
                    if getattr(mode, "cross", False)
-                   else "Let go and remember that glow...")
+                   else "Let go and remember that press.")
             draw_text(surf, msg,
-                      (cx, self.HOLD_ROW_1), self.theme, self.layout,
+                      (cx, self.ROW_COACH), self.theme, self.layout,
                       pt=FONT_H2, centre=True, colour=DARK_TEXT)
             draw_text(surf, f"{mode.delay_left_s:.0f}s",
-                      (cx, self.HOLD_ROW_2 + 6), self.theme, self.layout,
-                      pt=FONT_H2, centre=True, colour=DARK_TEXT)
+                      (cx, self.ROW_SUB + 10), self.theme, self.layout,
+                      pt=FONT_H1, centre=True, colour=DARK_TEXT)
             return
         # reproduce
-        chip_hand, chip_finger = mode.hand, mode.finger
-        self._draw_finger_chip(surf, chip_hand, chip_finger, 130, 90)
-        draw_text(surf, "Make the same glow again, by feel",
-                  (cx, self.HOLD_ROW_1), self.theme, self.layout,
+        self._draw_stage_rail(surf, 2, dim=True)
+        self._draw_finger_chip(surf, mode.hand, mode.finger, 130, 90)
+        draw_text(surf, "Make the same press again, by feel",
+                  (cx, self.ROW_COACH), self.theme, self.layout,
                   pt=FONT_H2, centre=True, colour=DARK_TEXT)
         draw_text(surf, "Press and hold at the strength you remember.",
-                  (cx, self.HOLD_ROW_2), self.theme, self.layout,
+                  (cx, self.ROW_SUB), self.theme, self.layout,
                   pt=FONT_BODY, centre=True, colour=DARK_TEXT)
         # Fixed-size pressing dot: says "your press registers" without
         # saying anything about how hard it is.
         dot_colour = (self.theme.success if mode.pressing_now
                       else (70, 62, 54))
         pygame.draw.circle(surf, dot_colour,
-                           (cx, self.HOLD_ROW_3 + 6), 9)
+                           (cx, self.ROW_TIME + 6), 9)
 
     # ---- trial feedback ----------------------------------------------------
     def _draw_feedback(self, surf: pygame.Surface, mode,
@@ -655,16 +749,16 @@ class LighthouseScreen(Screen):
         label = res.get("label", "")
         guttered = bool(res.get("guttered"))
         if guttered:
-            # Child-safe register: the flame gutters, nothing blares.
-            title, colour = "THE FLAME SLIPPED AWAY", self.theme.muted
+            # Child-safe register: the hold slips away, nothing blares.
+            title, colour = "THE HOLD SLIPPED AWAY", self.theme.muted
         elif label == "Great":
             title, colour = ("STEADY AS A LIGHTHOUSE!"
                             if res.get("kind") == "hold"
                             else "A PERFECT ECHO!"), self.theme.success
         elif label == "Good":
-            title, colour = "A GOOD GLOW", self._accent()
+            title, colour = "A GOOD HOLD", self._accent()
         else:
-            title, colour = "THE FLAME WANDERED", self.theme.muted
+            title, colour = "THE HOLD WANDERED", self.theme.muted
         draw_text(surf, title, (cx, 170), self.theme, self.layout,
                   pt=FONT_H1 + 6, centre=True, colour=colour)
         who = self._hand_finger_words(res.get("hand", mode.hand),
@@ -719,8 +813,8 @@ class LighthouseScreen(Screen):
         err = res.get("signed_err")
         return [
             ("Waited", f"{res.get('delay_s', 0.0):.0f}s"),
-            ("The glow asked", f"{res.get('target', 0.0):.1f}% of max"),
-            ("You made", f"{made:.1f}% of max" if made is not None
+            ("Target", f"{res.get('target', 0.0):.1f}% of max"),
+            ("You held", f"{made:.1f}% of max" if made is not None
              else "n/a"),
             ("Off by", f"{err:+.1f}%" if err is not None else "n/a"),
         ]

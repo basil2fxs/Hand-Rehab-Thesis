@@ -831,6 +831,74 @@ class ScreenTests(unittest.TestCase):
             f"{m.hand.upper()} "
             f"{['INDEX', 'MIDDLE', 'RING', 'LITTLE'][m.finger]}")
 
+    def test_current_section_is_announced_in_words(self):
+        """Half a second into the run the plan is inside hold_in, so
+        the screen must say LOW HOLD and its coaching line."""
+        import time as _time
+        import finger_rehab.ui.force_pilot_screen as fps
+        sc, m, surf, _t = self._screen_and_mode()
+        # The screen reads run time off the wall clock; anchor the
+        # run's start half a second ago so the draw lands in hold_in.
+        m.run_t0 = _time.perf_counter() - 0.5
+        seen = []
+        original = fps.draw_text
+
+        def recorder(s, text, pos, *a, **k):
+            seen.append(str(text))
+            return original(s, text, pos, *a, **k)
+
+        fps.draw_text = recorder
+        try:
+            sc.draw(surf)
+        finally:
+            fps.draw_text = original
+        joined = " | ".join(seen)
+        self.assertIn("LOW HOLD", joined)
+        self.assertIn("hold it steady", joined)
+
+    def test_time_in_corridor_is_the_hero_readout(self):
+        """The in-band share is the one large number on the run
+        screen: a percent drawn at the hero point size."""
+        import finger_rehab.ui.force_pilot_screen as fps
+        from finger_rehab.ui.force_pilot_screen import ForcePilotScreen
+        sc, m, surf, _t = self._screen_and_mode()
+        seen = []
+        original = fps.draw_text
+
+        def recorder(s, text, pos, *a, **k):
+            seen.append((str(text), k.get("pt", 0)))
+            return original(s, text, pos, *a, **k)
+
+        fps.draw_text = recorder
+        try:
+            sc.draw(surf)
+        finally:
+            fps.draw_text = original
+        heroes = [t for t, pt in seen
+                  if t.endswith("%") and pt >= ForcePilotScreen.HERO_PT]
+        self.assertEqual(len(heroes), 1)
+        self.assertIn("TIME IN CORRIDOR",
+                      " | ".join(t for t, _pt in seen))
+
+    def test_release_sections_bake_in_a_distinct_band(self):
+        """The release stretch of the corridor renders in its own
+        colours, so easing off reads differently from pressing on."""
+        from finger_rehab.game.modes.force_pilot import target_pct
+        sc, m, surf, _t = self._screen_and_mode()
+        corridor = sc._build_corridor(m)
+        cols = sc._corridor_colours()
+        lead_s = sc.MARKER_X / sc.PX_PER_S
+        by_name = {sec.name: sec for sec in m.sections}
+        for name, want in (("release", cols["band_release"]),
+                           ("hold_in", cols["band"])):
+            sec = by_name[name]
+            t_mid = sec.start_s + sec.dur_s / 2.0
+            x = int((t_mid + lead_s) * sc.PX_PER_S)
+            y = sc._y(target_pct(m.sections, t_mid), m.span_pct) \
+                - sc.PLOT_TOP
+            got = corridor.get_at((x, y))[:3]
+            self.assertEqual(got, tuple(want), name)
+
 
 # ---- audit fixes: error_type and dropout ring gating ---------------------
 

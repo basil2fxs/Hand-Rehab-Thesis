@@ -1047,7 +1047,7 @@ class ModeSelectScreen(Screen):
          "Same finger, both hands, pressed as one. Practises moving "
          "the hands together."),
         ("force_pilot", "Force Pilot",
-         "Steer a craft with gentle finger pressure. Trains smooth "
+         "Keep your press inside a moving corridor. Trains smooth "
          "force control."),
         ("lighthouse", "Lighthouse",
          "Hold a soft press dead steady, even in the dark. Trains a "

@@ -1137,9 +1137,159 @@ class ScreenTests(unittest.TestCase):
         finally:
             ls.draw_text = original
         joined = " | ".join(seen)
-        self.assertIn("Hold steady in the dark", joined)
+        self.assertIn("HOLD BY FEEL", joined)
+        # The shuttered gauge says when sight comes back.
+        self.assertIn("Relight in", joined)
         # The blind display never prints the live force.
         self.assertNotIn(f"{m.target_pct:.1f}", joined)
+
+    def test_dark_frame_is_force_blind(self):
+        """Two dark frames at the same instant with wildly different
+        live forces must be pixel-identical: nothing on the shuttered
+        display may scale with the force."""
+        import finger_rehab.ui.lighthouse_screen as ls
+        import pygame
+        sc, m, surf, t = self._screen_and_mode()
+        t = self._drive_to(m, t, lit_wanted=False)
+        frozen = 1234.5
+
+        original = ls.time.perf_counter
+        ls.time.perf_counter = lambda: frozen
+        try:
+            m.force_pct_now = 2.0
+            m.flame_frac = 0.1
+            sc.draw(surf)
+            first = pygame.image.tobytes(surf, "RGB")
+            m.force_pct_now = 99.0
+            m.flame_frac = 0.9
+            sc.draw(surf)
+            second = pygame.image.tobytes(surf, "RGB")
+        finally:
+            ls.time.perf_counter = original
+        self.assertEqual(first, second)
+
+    def test_lit_gauge_names_the_target_band(self):
+        import finger_rehab.ui.lighthouse_screen as ls
+        sc, m, surf, t = self._screen_and_mode()
+        seen = []
+        original = ls.draw_text
+
+        def recorder(s, text, pos, *a, **k):
+            seen.append(str(text))
+            return original(s, text, pos, *a, **k)
+
+        ls.draw_text = recorder
+        try:
+            sc.draw(surf)
+        finally:
+            ls.draw_text = original
+        joined = " | ".join(seen)
+        want = (f"{m.target_pct - m.tol_pct:.0f} to "
+                f"{m.target_pct + m.tol_pct:.0f}% of max")
+        self.assertIn(want, joined)
+
+    def test_relight_reveal_shows_the_drift_verdict(self):
+        from finger_rehab.game.modes.lighthouse import feedback_lit
+        import finger_rehab.ui.lighthouse_screen as ls
+        sc, m, surf, t = self._screen_and_mode()
+        guard = t + 40.0
+        while t < guard and m.phase == "trial":
+            t += 1.0 / 60.0
+            drift = 0.0
+            if (m.sub == "hold" and m.hold_t0 is not None
+                    and not feedback_lit(m.params, t - m.hold_t0)):
+                drift = 2.5
+            m.view.pct = m.target_pct + drift
+            m._tick(t)
+            if m.reveal_msg and m.lit_now and m.sub == "hold":
+                break
+        self.assertTrue(m.reveal_msg)
+        seen = []
+        original = ls.draw_text
+
+        def recorder(s, text, pos, *a, **k):
+            seen.append(str(text))
+            return original(s, text, pos, *a, **k)
+
+        ls.draw_text = recorder
+        try:
+            sc.draw(surf)
+        finally:
+            ls.draw_text = original
+        self.assertIn(m.reveal_msg, " | ".join(seen))
+
+    def _echo_screen_at(self, sub_wanted):
+        """A real echo trial driven to the wanted sub-state."""
+        import pygame
+        from finger_rehab.ui.lighthouse_screen import LighthouseScreen
+        from finger_rehab.ui.theme import get as get_theme
+        from finger_rehab.ui.widgets import Layout
+        e = _engine()
+        e.calibration_profiles["right"] = _fresh_profile()
+        e.theme = get_theme("clinical")
+        e.layout = Layout(1280, 800, 1.0)
+        e.paused = False
+        m = _mode(e)
+        m._kind_bag = ["echo"] * m.total_trials
+        e.mode = m
+        sc = LighthouseScreen(e)
+        sc._countdown_until = 0.0
+        t = _to_trial(m)
+        guard = t + 40.0
+        while t < guard and m.sub != sub_wanted:
+            t += 1.0 / 60.0
+            if m.sub in ("enter", "study"):
+                m.view.pct = m.target_pct
+            elif m.sub == "delay":
+                m.view.pct = 0.0
+            else:
+                m.view.pct = m.target_pct
+            m._tick(t)
+        assert m.sub == sub_wanted, m.sub
+        surf = pygame.Surface((1280, 800))
+        return sc, m, surf
+
+    def test_echo_stages_are_named_on_screen(self):
+        import finger_rehab.ui.lighthouse_screen as ls
+        for sub, heading in (("study", "Feel this press"),
+                             ("delay", "remember that press"),
+                             ("reproduce", "Make the same press")):
+            sc, m, surf = self._echo_screen_at(sub)
+            seen = []
+            original = ls.draw_text
+
+            def recorder(s, text, pos, *a, **k):
+                seen.append(str(text))
+                return original(s, text, pos, *a, **k)
+
+            ls.draw_text = recorder
+            try:
+                sc.draw(surf)
+            finally:
+                ls.draw_text = original
+            joined = " | ".join(seen)
+            for stage in ("SHOW", "WAIT", "REPRODUCE"):
+                self.assertIn(stage, joined)
+            self.assertIn(heading, joined)
+
+    def test_reproduce_frame_is_force_blind(self):
+        import pygame
+        import finger_rehab.ui.lighthouse_screen as ls
+        sc, m, surf = self._echo_screen_at("reproduce")
+        frozen = 4321.5
+        original = ls.time.perf_counter
+        ls.time.perf_counter = lambda: frozen
+        try:
+            m.force_pct_now = 2.0
+            m.pressing_now = True
+            sc.draw(surf)
+            first = pygame.image.tobytes(surf, "RGB")
+            m.force_pct_now = 99.0
+            sc.draw(surf)
+            second = pygame.image.tobytes(surf, "RGB")
+        finally:
+            ls.time.perf_counter = original
+        self.assertEqual(first, second)
 
     def test_trial_furniture_names_the_trial(self):
         import finger_rehab.ui.lighthouse_screen as ls
