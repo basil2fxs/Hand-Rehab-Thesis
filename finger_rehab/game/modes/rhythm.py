@@ -39,6 +39,7 @@ import pygame
 from ...audio.beatmap import Beatmap
 from ...audio.scheduler import BeatScheduler, ScheduledNote
 from ...hardware.fsr_detector import PressEvent
+from ..rest_skip import WaitSkip
 from ..scoring import ScoreConfig, RhythmWindows, classify_offset
 from ._keys import keymap_for_hand, resolve_key
 
@@ -49,7 +50,7 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-class RhythmMode:
+class RhythmMode(WaitSkip):
     name = "Rhythm"
 
     def __init__(self, engine: "GameEngine", beatmap: Beatmap,
@@ -111,6 +112,20 @@ class RhythmMode:
         # AudioEngine anyway so we don't lose anything by not switching
         # to audio.song_time().
         return time.perf_counter() - self._t_start - self._countdown_s
+
+    def _skip_lead_in(self, now: float) -> None:
+        """Jump straight to the downbeat. Pulling _t_start back by
+        whatever is left of the countdown and the silent lead moves
+        song_time to zero-plus-lead in one step, which is exactly
+        where the timer would have taken it: the audio start and every
+        beat are read off song_time, so they stay in sync with each
+        other. A frozen (paused) clock is left alone; there is nothing
+        counting down to skip."""
+        if self._frozen_song_t is not None:
+            return
+        remaining = (self._pre_song_lead_s - self.song_time)
+        if remaining > 0:
+            self._t_start -= remaining
 
     def _song_time_for(self, t_perf: float) -> float:
         """Convert a press's own detection time (PressEvent.t_perf) into
@@ -206,6 +221,21 @@ class RhythmMode:
 
     def update(self, dt: float) -> None:
         now = self.song_time
+        # Arm the one wait this mode has: the 3-2-1 countdown welded
+        # to the front of the note-fall timeline plus the silent lead
+        # that follows it. Both are pre-play ramp, not measurement:
+        # every beat time is relative to the song, so pulling the
+        # whole timeline forward changes when play starts and nothing
+        # else. The song has not begun and no note is scoreable yet.
+        if now < self._pre_song_lead_s:
+            self.refresh_wait(
+                "prep",
+                self._t_start + self._countdown_s + self._pre_song_lead_s,
+                on_skip=self._skip_lead_in,
+                started_at=self._t_start,
+                label="Skip countdown")
+        else:
+            self.clear_wait()
         # End of the visual countdown. Notes can now appear on screen
         # (they were filtered out by `upcoming` while song_time was
         # negative) but audio + first press are still pre_song_lead_s

@@ -134,6 +134,7 @@ import pygame
 
 from ...hardware.eeg_trigger import CODES as EEG_CODES
 from ...hardware.fsr_detector import PressEvent
+from ..rest_skip import WaitSkip
 from ..scheduling import BalancedScheduler, PairedBalancedScheduler
 from ..scoring import ScoreConfig, TrialResult, classify
 from ._keys import keymap_for_hand, resolve_key
@@ -146,7 +147,7 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-class ReactionMode:
+class ReactionMode(WaitSkip):
     name = "Reaction"
 
     # Points for surviving a catch trial. Small on purpose: waiting is
@@ -332,7 +333,8 @@ class ReactionMode:
             return
         if self._phase == "rest":
             if self._rest_until is not None and now >= self._rest_until:
-                self._phase = "arm"
+                self.clear_wait()
+                self._leave_rest(now)
             return
         if self._phase == "arm":
             self._update_arm(now)
@@ -384,16 +386,48 @@ class ReactionMode:
         if self._fingers_down():
             self._last_activity_t = now
         if (now - self._last_activity_t) < self.rest_gate:
-            # Throttled prompt so the screen explains the hold-up
-            # without flickering a fresh message every frame.
+            # The stability gate DOES protect a measurement: a finger
+            # still down when the foreperiod opens reads as a false
+            # start the patient never made. It stays skippable so a
+            # twitchy hand cannot trap the block, but the trial it
+            # releases is flagged, because that trial's false-start
+            # class is exactly what the gate was guarding. Held on
+            # screen past its due time: a gate that keeps restarting
+            # is when somebody wants the button.
+            self.refresh_wait("settle",
+                              self._last_activity_t + self.rest_gate,
+                              on_skip=self._force_arm,
+                              started_at=now,
+                              protects="still fingers before the wait",
+                              hold_when_due=True)
             if now - self._rest_msg_t > 0.6:
                 self._rest_msg_t = now
                 self._set_message("Rest your fingers", 0.7)
             return
+        self.clear_wait()
         self._begin_trial(now)
+
+    def _force_arm(self, now: float) -> None:
+        """Release the stability gate now. Backdating the activity
+        clock keeps the trial on the ordinary path, so it still picks
+        up the flag on its way through _begin_trial."""
+        self._last_activity_t = now - self.rest_gate
 
     def _begin_trial(self, now: float) -> None:
         self.trial_counter += 1
+        # Carried onto this trial's row: True when the stability gate
+        # was cut short, so a false start here can be read as the
+        # gate's absence rather than as anticipation.
+        self._trial_gate_skipped = (self.take_skip_flag() == "settle")
+        if self._trial_gate_skipped:
+            raw = getattr(self.engine, "raw_logger", None)
+            if raw:
+                raw.queue_event(
+                    "rest_gate_skipped",
+                    detail=f"trial_id={self.trial_counter}",
+                    t_perf=now,
+                    hand=getattr(self.engine, "hand_mode", "right"))
+            self.n_gate_skipped = getattr(self, "n_gate_skipped", 0) + 1
         if self.catch_rate > 0.0 and self.rng.random() < self.catch_rate:
             self.n_catch += 1
             self._catch_until = now + self.catch_wait
@@ -722,6 +756,16 @@ class ReactionMode:
     def _enter_rest(self, now: float, feedback_dur: float) -> None:
         self._phase = "rest"
         self._rest_until = now + feedback_dur + self.inter_trial_gap
+        # Feedback display plus breathing room. Neither shapes the
+        # next reaction time: the stability gate in _update_arm is
+        # what protects the foreperiod, and it runs after this
+        # regardless of how long this lasted.
+        self.arm_wait("feedback", self._rest_until, self._leave_rest,
+                      started_at=now)
+
+    def _leave_rest(self, now: float) -> None:
+        self._rest_until = None
+        self._phase = "arm"
 
     def _gameplay_screen(self):
         screens = getattr(self.engine, "_screens", None)
@@ -901,6 +945,8 @@ class ReactionMode:
             "sub_mode": self.sub_mode,
             "level": self.level,
             "response_window_s": self.response_window,
+            "n_rest_gate_skipped": getattr(self, "n_gate_skipped", 0),
+            **self.wait_skip_stats(),
             "fp_mode": self.fp_mode,
             "seed": self.seed,
             "n_scorable": self.completed,

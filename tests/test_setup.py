@@ -989,7 +989,6 @@ class OneBoardBilateralGuardTests(unittest.TestCase):
         eng = self._engine(self.OneBoardSource())
         begun = []
         eng.begin_adaptive_block = lambda: begun.append(1)
-        eng.maybe_start_quick_calibration = lambda cb: False
         setup = eng._screens["setup"]
         setup._pick("both")
         self.assertEqual(begun, [])
@@ -1002,7 +1001,6 @@ class OneBoardBilateralGuardTests(unittest.TestCase):
         eng = self._engine(self.OneBoardSource())
         begun = []
         eng.begin_mirror_block = lambda: begun.append(1)
-        eng.maybe_start_quick_calibration = lambda cb: False
         eng._screens["mode_select"]._pick("mirror")
         self.assertEqual(begun, [])
         self.assertNotEqual(eng.hand_mode, "both")
@@ -1013,7 +1011,6 @@ class OneBoardBilateralGuardTests(unittest.TestCase):
         eng = self._engine(src)
         begun = []
         eng.begin_mirror_block = lambda: begun.append(1)
-        eng.maybe_start_quick_calibration = lambda cb: False
         eng._screens["mode_select"]._pick("mirror")
         self.assertEqual(begun, [1])
 

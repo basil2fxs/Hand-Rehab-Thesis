@@ -19,8 +19,7 @@ four:
      from the same log that feeds the End-session dialog's count, so
      the two can never disagree.
   4. Game select can re-run the quick calibration on demand, through
-     the same screen and the same continuation the automatic gate
-     uses.
+     the same screen and the same continuation the login pass uses.
 """
 from __future__ import annotations
 
@@ -383,6 +382,17 @@ class HubCalibrateTests(_EngineHarness):
         self.eng.reapply_calibrations = lambda: None
         return calls
 
+    def _login(self, calls, source) -> None:
+        """Log in on the given rig and let the login calibration pass
+        finish, so whatever is left in `calls` afterwards is the
+        button's own work rather than the session's."""
+        self.eng.source = source
+        self.eng.begin_session("Mara", "58")
+        while calls:
+            _hands, cb = calls.pop()
+            if cb is not None:
+                cb()
+
     def test_the_button_is_wired_to_the_engine_entry(self) -> None:
         hub = self.eng._screens["mode_select"]
         self.assertEqual(hub.cal_btn.label, "Calibrate")
@@ -394,8 +404,7 @@ class HubCalibrateTests(_EngineHarness):
         already covered these hands, and the therapist wants the flow
         again anyway (strap moved, a press stopped registering)."""
         calls = self._fake_quick_cal()
-        self.eng.source = _TwoBoardSource()
-        self.eng.begin_session("Mara", "58")
+        self._login(calls, _TwoBoardSource())
         self.eng._session_cal_hands = {"left", "right"}
         self.assertTrue(self.eng.start_manual_calibration())
         self.assertEqual(len(calls), 1)
@@ -403,45 +412,36 @@ class HubCalibrateTests(_EngineHarness):
         self.assertIs(self.eng.screen_obj,
                       self.eng._screens["quick_cal"])
 
-    def test_it_goes_through_the_same_screen_the_gate_uses(self) -> None:
+    def test_it_goes_through_the_same_screen_the_login_uses(self) -> None:
         """Capture, threshold maths and the per-hand save must not
         fork: the manual entry hands the same screen the same shape of
-        continuation the automatic gate does."""
+        continuation the login pass does."""
         calls = self._fake_quick_cal()
         self.eng.source = _TwoBoardSource()
         self.eng.begin_session("Mara", "58")
-        self.eng._session_cal_hands = set()
-        # Bilateral so the automatic gate covers the same two hands
-        # the deliberate button always covers; the seam under both is
-        # what this is checking.
-        self.eng.hand_mode = "both"
-        self.eng.maybe_start_quick_calibration(lambda: None)
-        gate_hands, gate_cb = calls[0]
+        login_hands, login_cb = calls[0]
+        login_cb()
         self.eng.start_manual_calibration()
         manual_hands, manual_cb = calls[1]
-        self.assertEqual(sorted(gate_hands), sorted(manual_hands))
-        self.assertTrue(callable(gate_cb) and callable(manual_cb))
+        self.assertEqual(sorted(login_hands), sorted(manual_hands))
+        self.assertTrue(callable(login_cb) and callable(manual_cb))
 
     def test_finishing_marks_the_hands_and_returns_to_the_hub(
             self) -> None:
         calls = self._fake_quick_cal()
-        self.eng.source = _TwoBoardSource()
-        self.eng.begin_session("Mara", "58")
+        self._login(calls, _TwoBoardSource())
         self.eng._session_cal_hands = set()
         self.eng.start_manual_calibration()
-        _hands, continue_cb = calls[0]
+        hands, continue_cb = calls[0]
         continue_cb()
+        self.assertEqual(sorted(hands), ["left", "right"])
         self.assertEqual(self.eng._session_cal_hands, {"left", "right"})
         self.assertIs(self.eng.screen_obj,
                       self.eng._screens["mode_select"])
-        # Session-once is unchanged: the next game asks for nothing.
-        self.eng.hand_mode = "right"
-        self.assertEqual(self.eng.quick_cal_hands_needed(), [])
 
     def test_one_board_calibrates_only_the_hand_it_serves(self) -> None:
         calls = self._fake_quick_cal()
-        self.eng.source = _OneBoardSource()
-        self.eng.begin_session("Mara", "58")
+        self._login(calls, _OneBoardSource())
         self.eng.start_manual_calibration()
         self.assertEqual(calls[0][0], ["right"])
 
@@ -458,8 +458,7 @@ class HubCalibrateTests(_EngineHarness):
     def test_c_calibrates_from_the_keyboard(self) -> None:
         import pygame
         calls = self._fake_quick_cal()
-        self.eng.source = _TwoBoardSource()
-        self.eng.begin_session("Mara", "58")
+        self._login(calls, _TwoBoardSource())
         hub = self.eng._screens["mode_select"]
         hub.handle_event(_key_event(pygame.K_c))
         self.assertEqual(len(calls), 1)

@@ -1,14 +1,18 @@
-"""The gamified quick calibration that gates each session's first game.
+"""The gamified quick calibration that runs when a session starts.
 
 What has to hold, in order of how expensive it would be to get wrong:
 
-  - the trigger rule: calibration is a session event. A hand runs the
-    flow the first time a game in the session needs it (no usable
-    profile, or the session has not put the flow in front of that
-    hand yet) and every later game in the session skips it at zero
-    cost, hand-mode changes included. The memory is session state on
-    the engine, cleared at session end, never disk. A keyboard
-    session never sees it at all (there is no force to calibrate);
+  - the trigger rule: calibration is a session event and it runs when
+    the session starts. Logging in measures every hand the attached
+    boards can serve, left first, then hands over to the hub; a board
+    plugged in later in the session runs the same flow for its own
+    hand alone, triggered by the connection. Games never open it. The
+    memory is session state on the engine, cleared at session end,
+    never disk. A keyboard session never sees it at all (there is no
+    force to calibrate);
+  - the guard left on the game path: a hand with no measured profile
+    at all would be scored against config defaults, so the game stops
+    and says so instead of recording it quietly;
   - the maths: the profile the game builds is the SAME profile the
     clinical CalibrationScreen would build from the same captures,
     because both go through CalibrationProfile and neither forks the
@@ -53,14 +57,39 @@ RESTING = [EMPTY[i] + REST[i] for i in range(N_FINGERS)]
 PRESS_GAP = 60.0
 
 
+class _FakeHand:
+    """One board on the fake rig: which hand it drives, on what port."""
+
+    def __init__(self, hand: str, port: str) -> None:
+        self.hand = hand
+        self.port = port
+
+
 class FakeFsrSource(Source):
     """A hardware-shaped source the tests drive by hand. Samples are
     queued by the test and drained by the engine's own pump, so the
-    wiring under test is the real one."""
+    wiring under test is the real one.
 
-    def __init__(self) -> None:
+    hand_modes_available is the boards on the rig, which is what the
+    login pass reads to decide which hands to calibrate: one entry is
+    a single board, all three is a two-board rig.
+    """
+
+    def __init__(self, hands=("right",)) -> None:
         self.queued = []
         self.port = "/dev/fake"
+        self.hands_served = list(hands)
+        # Same shape as MultiSerialSource.hands, so the engine's
+        # hotplug bookkeeping reads this rig the way it reads a real
+        # one.
+        self.hands = [_FakeHand(h, f"/dev/fake-{h}")
+                      for h in self.hands_served]
+
+    @property
+    def hand_modes_available(self) -> set:
+        if len(self.hands_served) == 1:
+            return {self.hands_served[0]}
+        return {"right", "left", "both"}
 
     def start(self) -> None: ...
 
@@ -92,6 +121,8 @@ def _redirect_calibration_files(cfg, tmp_path: Path) -> None:
 
 
 def _engine(tmp_path: Path, hand: str = "right", source=None):
+    """Engine on a rig whose boards match `hand`: one board for left
+    or right, two for both."""
     import pygame
     pygame.init()
     pygame.font.init()
@@ -101,7 +132,8 @@ def _engine(tmp_path: Path, hand: str = "right", source=None):
     cfg.data["ui"]["resolution"] = [1280, 800]
     cfg.data.setdefault("bilateral", {})["hand"] = hand
     cfg.data.setdefault("game", {})["mode"] = "adaptive"
-    eng = GameEngine(cfg, source or FakeFsrSource())
+    boards = ("left", "right") if hand == "both" else (hand,)
+    eng = GameEngine(cfg, source or FakeFsrSource(boards))
     _redirect_calibration_files(cfg, tmp_path)
     eng._screens = eng._build_screens()
     return eng
@@ -165,113 +197,372 @@ def _run_whole_flow(eng, sc) -> None:
     assert sc.phase == q.PHASE_DONE
 
 
-# ---- trigger rule --------------------------------------------------------
+# ---- when the flow runs --------------------------------------------------
 
-class TestTriggerRule:
-    def test_missing_profile_runs_the_flow(self, tmp_path):
-        eng = _engine(tmp_path)
-        calls = []
-        assert eng.maybe_start_quick_calibration(lambda: calls.append(1))
+def _save(tmp_path: Path, hand: str) -> CalibrationProfile:
+    """A usable profile on disk for one hand, as a finished pass would
+    have left it."""
+    prof = _usable_profile(hand)
+    prof.save(tmp_path / f"config/calibration/current_{hand}.json")
+    return prof
+
+
+class TestLoginTrigger:
+    """Calibration is a session event, and this is the session
+    starting. Logging in measures every hand the rig can serve, then
+    hands over to the hub."""
+
+    def test_one_board_calibrates_that_hand_then_hubs(self, tmp_path):
+        eng = _engine(tmp_path, hand="right")
+        eng.begin_session("P1", "63")
         assert eng.screen_obj is eng._screens["quick_cal"]
         assert eng.screen_obj.hands == ["right"]
-        assert calls == []           # the block must wait for the flow
+        # The continuation is the hub, not a game.
+        eng.screen_obj._skip()
+        assert eng.screen_obj is eng._screens["mode_select"]
 
-    def test_applied_profile_still_runs_the_sessions_first_pass(
-            self, tmp_path):
-        # Calibration is a session event: a returning player with a
-        # usable profile still gets the visual flow once, on the
-        # session's first game that needs the hand.
-        eng = _engine(tmp_path)
-        eng.apply_calibration(_usable_profile("right"))
-        assert eng.maybe_start_quick_calibration(lambda: None)
-        assert eng.screen_obj is eng._screens["quick_cal"]
-
-    def test_session_calibrated_hand_skips_every_later_game(self, tmp_path):
-        eng = _engine(tmp_path)
-        eng.apply_calibration(_usable_profile("right"))
-        eng._session_cal_hands = {"right"}    # first game already ran it
-        calls = []
-        assert not eng.maybe_start_quick_calibration(lambda: calls.append(1))
-        assert eng.screen_obj is not eng._screens["quick_cal"]
-
-    def test_usable_profile_on_disk_is_applied_by_the_check(self, tmp_path):
-        # The disk profile feeds the detectors either way; what it no
-        # longer does is stand in for the session's first visual pass.
-        eng = _engine(tmp_path)
-        prof = _usable_profile("right")
-        prof.save(tmp_path / "config/calibration/current_right.json")
-        assert eng.maybe_start_quick_calibration(lambda: None)
-        applied = eng.calibration_profiles.get("right")
-        assert applied is not None
-        assert applied.on_delta() == prof.on_delta()
-        # The detector runs on the loaded thresholds, not the defaults.
-        det = eng.detectors["right"]
-        assert det.cal.on_delta[:N_FINGERS] == prof.on_delta()
-        # With the session pass done, the disk profile carries the skip.
-        eng._session_cal_hands = {"right"}
-        eng.screen_obj = None
-        assert not eng.maybe_start_quick_calibration(lambda: None)
-
-    def test_keyboard_session_skips_with_no_notice(self, tmp_path):
-        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
-        eng = _engine(tmp_path, source=KeyboardOnlySource())
-        calls = []
-        assert not eng.maybe_start_quick_calibration(lambda: calls.append(1))
-        assert eng.screen_obj is not eng._screens["quick_cal"]
-
-    def test_bilateral_covers_only_the_uncalibrated_hand(self, tmp_path):
-        # Session calibrated the right hand in an earlier game; a
-        # later game adds the left, so only the LEFT hand's flow runs.
+    def test_two_boards_calibrate_both_hands_left_first(self, tmp_path):
         eng = _engine(tmp_path, hand="both")
-        eng.apply_calibration(_usable_profile("right"))
-        eng._session_cal_hands = {"right"}
-        assert eng.maybe_start_quick_calibration(lambda: None)
+        eng.begin_session("P1", "63")
+        assert eng.screen_obj is eng._screens["quick_cal"]
+        assert eng.screen_obj.hands == ["left", "right"]
+        eng.screen_obj._skip()
+        assert eng.screen_obj is eng._screens["mode_select"]
+        assert eng._session_cal_hands == {"left", "right"}
+
+    def test_a_left_only_rig_calibrates_the_left_hand(self, tmp_path):
+        eng = _engine(tmp_path, hand="left")
+        eng.begin_session("P1", "")
         assert eng.screen_obj.hands == ["left"]
 
-    def test_flow_marks_hands_as_the_sessions_on_handover(self, tmp_path):
-        # Finishing (or skipping) the gated flow is what stamps the
-        # hands into the session; an Esc abandon must not.
-        eng = _engine(tmp_path)
-        assert eng.maybe_start_quick_calibration(lambda: None)
-        sc = eng.screen_obj
-        assert eng._session_cal_hands == set()
-        sc._skip()
-        assert eng._session_cal_hands == {"right"}
+    def test_the_boards_decide_it_not_the_saved_hand_mode(self, tmp_path):
+        """Both boards attached, config remembering a right-hand
+        session. Both hands still get measured: either could be picked
+        later and neither game may stop to ask."""
+        eng = _engine(tmp_path, hand="both")
+        eng.hand_mode = "right"
+        eng.begin_session("P1", "")
+        assert eng.screen_obj.hands == ["left", "right"]
 
-    def test_abandon_does_not_mark_the_session(self, tmp_path):
+    def test_keyboard_login_skips_silently(self, tmp_path):
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
+        eng = _engine(tmp_path, source=KeyboardOnlySource())
+        eng.begin_session("P1", "")
+        assert eng.screen_obj is eng._screens["mode_select"]
+        assert not (tmp_path / "config/calibration").exists()
+
+    def test_turned_off_in_config_logs_straight_into_the_hub(self, tmp_path):
+        eng = _engine(tmp_path)
+        eng.cfg.data.setdefault("quick_cal", {})["enabled"] = False
+        eng.begin_session("P1", "")
+        assert eng.screen_obj is eng._screens["mode_select"]
+
+    def test_a_returning_player_still_gets_the_pass(self, tmp_path):
+        """A saved profile feeds the detectors on the way past, but it
+        does not stand in for the session's own measurement."""
+        eng = _engine(tmp_path)
+        prof = _save(tmp_path, "right")
+        eng.begin_session("P1", "")
+        assert eng.screen_obj is eng._screens["quick_cal"]
+        det = eng.detectors["right"]
+        assert det.cal.on_delta[:N_FINGERS] == prof.on_delta()
+
+    def test_skip_at_login_proceeds_and_is_remembered(self, tmp_path):
         eng = _engine(tmp_path)
         eng.begin_session("P1", "")
-        assert eng.maybe_start_quick_calibration(lambda: None)
-        eng._handle_escape()
-        eng._handle_escape()
+        eng.screen_obj._skip()
+        assert eng.screen_obj is eng._screens["mode_select"]
+        assert eng._session_cal_hands == {"right"}
+        # Skip writes nothing: any profile saved before is untouched
+        # and none is invented.
+        assert not (tmp_path
+                    / "config/calibration/current_right.json").exists()
+
+    def test_a_skipped_hand_is_not_asked_again_this_session(self, tmp_path):
+        eng = _engine(tmp_path)
+        _save(tmp_path, "right")
+        eng.begin_session("P1", "")
+        eng.screen_obj._skip()
+        # Nothing else in the session re-opens it for that hand.
+        assert eng.quick_cal_hands_needed() == []
+
+    def test_abandoning_the_login_pass_marks_nothing(self, tmp_path):
+        eng = _engine(tmp_path)
+        eng.begin_session("P1", "")
+        eng._handle_escape()          # raises the guard
+        eng._handle_escape()          # confirms
+        assert eng.screen_obj is eng._screens["mode_select"]
         assert eng._session_cal_hands == set()
 
-    def test_session_end_clears_the_session_memory(self, tmp_path):
+    def test_session_end_clears_the_memory_and_the_next_login_runs(
+            self, tmp_path):
         eng = _engine(tmp_path)
         eng.begin_session("P1", "")
         eng._session_cal_hands = {"left", "right"}
         eng.end_session()
         assert eng._session_cal_hands == set()
-        # And the next login starts clean too.
-        eng._session_cal_hands = {"right"}
         eng.begin_session("P2", "")
+        assert eng.screen_obj is eng._screens["quick_cal"]
         assert eng._session_cal_hands == set()
 
-    def test_skipped_hand_without_profile_keeps_triggering(self, tmp_path):
-        # Skip is an escape hatch, not a calibration: with no usable
-        # profile behind it there is nothing to run the next game on,
-        # so the flow comes back.
-        eng = _engine(tmp_path)
-        assert eng.maybe_start_quick_calibration(lambda: None)
-        eng.screen_obj._skip()
-        assert eng._session_cal_hands == {"right"}
-        eng.screen_obj = None
-        assert eng.maybe_start_quick_calibration(lambda: None)
-        assert eng.screen_obj is eng._screens["quick_cal"]
 
-    def test_unusable_saved_profile_still_triggers(self, tmp_path):
-        # A saved file whose gaps are too small to run on must not
-        # count as "has calibrated before".
+class TestBoardJoiningMidSession:
+    """A board plugged in after login could not have been in the login
+    pass, so the connection itself triggers its calibration. One hand,
+    no game involved."""
+
+    def _join(self, eng, hands):
+        """Drive the engine's reaction to a rebuilt source, with the
+        rebuild itself stubbed: what is under test is the reaction."""
+        new_src = FakeFsrSource(tuple(hands))
+
+        def fake_reconnect():
+            eng.source = new_src
+            return "Connected: fake."
+
+        eng.reconnect_source = fake_reconnect
+        eng._apply_autoconnect()
+
+    def test_a_second_board_calibrates_that_hand_alone(self, tmp_path):
+        eng = _engine(tmp_path, hand="right")
+        _save(tmp_path, "right")
+        eng.begin_session("P1", "")
+        eng.screen_obj._skip()
+        assert eng.screen_obj is eng._screens["mode_select"]
+        self._join(eng, ["right", "left"])
+        assert eng.screen_obj is eng._screens["quick_cal"]
+        assert eng.screen_obj.hands == ["left"]
+
+    def test_it_lands_back_on_the_screen_it_interrupted(self, tmp_path):
+        eng = _engine(tmp_path, hand="right")
+        _save(tmp_path, "right")
+        eng.begin_session("P1", "")
+        eng.screen_obj._skip()
+        eng.screen_obj = eng._screens["setup"]
+        self._join(eng, ["right", "left"])
+        eng.screen_obj._skip()
+        assert eng.screen_obj is eng._screens["setup"]
+        assert eng._session_cal_hands == {"left", "right"}
+
+    def test_the_first_board_of_a_keyboard_session_calibrates(self, tmp_path):
+        """Logged in with no hardware, so the login pass had nothing to
+        measure. The board that turns up still gets its pass."""
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
+        eng = _engine(tmp_path, source=KeyboardOnlySource())
+        eng.begin_session("P1", "")
+        assert eng.screen_obj is eng._screens["mode_select"]
+        self._join(eng, ["right"])
+        assert eng.screen_obj is eng._screens["quick_cal"]
+        assert eng.screen_obj.hands == ["right"]
+
+    def test_no_session_means_no_flow(self, tmp_path):
+        """Nobody logged in: the login screen's own pass is seconds
+        away and covers the new board."""
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
+        eng = _engine(tmp_path, source=KeyboardOnlySource())
+        eng.show_title()
+        self._join(eng, ["right"])
+        assert eng.screen_obj is eng._screens["title"]
+        assert eng._session_cal_hands == set()
+
+    class _FakeWatcher:
+        """Stands in for PortWatcher: a port list and a generation the
+        engine can compare against."""
+
+        def __init__(self, ports):
+            self.ports = list(ports)
+            self.generation = 1
+
+    def test_a_board_arriving_mid_calibration_waits_for_it(self, tmp_path):
+        """The running flow is reading live samples off the source the
+        rebuild would swap out, and its captures are half taken. So the
+        join queues and lands the moment the flow hands over."""
+        eng = _engine(tmp_path, hand="right")
+        eng.begin_session("P1", "")
+        assert eng.screen_obj is eng._screens["quick_cal"]
+        applied = []
+        eng._apply_autoconnect = lambda: applied.append(1)
+        eng._autoconnect_wanted = lambda ports: True
+        eng.port_watcher = self._FakeWatcher(["/dev/a", "/dev/b"])
+        eng.maybe_autoconnect()
+        assert applied == []
+        assert eng._pending_autoconnect is True
+        assert "calibration" in eng.autoconnect_notice()
+        eng.screen_obj._skip()
+        eng.maybe_autoconnect()
+        assert applied == [1]
+
+    def test_a_hand_already_measured_this_session_is_left_alone(
+            self, tmp_path):
+        """A board unplugged and plugged back in was calibrated at
+        login; asking again would be a nag."""
+        eng = _engine(tmp_path, hand="right")
+        _save(tmp_path, "right")
+        eng.begin_session("P1", "")
+        eng.screen_obj._skip()
+        eng._calibrate_joined_hands(["right"])
+        assert eng.screen_obj is eng._screens["mode_select"]
+
+
+class TestGamesNeverOpenTheFlow:
+    """The old first-game gate is gone, not moved. After login, no
+    start path opens the calibration screen."""
+
+    def _ready(self, tmp_path, hand="right"):
+        """Logged in with the login pass skipped over saved profiles,
+        which is the ordinary state a game starts in."""
+        eng = _engine(tmp_path, hand=hand)
+        for h in (("left", "right") if hand == "both" else (hand,)):
+            _save(tmp_path, h)
+        eng.begin_session("P1", "")
+        eng.screen_obj._skip()
+        return eng
+
+    def test_the_hand_picker_starts_the_block_straight_away(self, tmp_path):
+        eng = self._ready(tmp_path)
+        begun = []
+        eng.begin_adaptive_block = lambda: begun.append(1)
+        eng._screens["setup"]._pick("right")
+        assert begun == [1]
+        assert eng.screen_obj is not eng._screens["quick_cal"]
+
+    def test_mirror_starts_straight_away(self, tmp_path):
+        eng = self._ready(tmp_path, hand="both")
+        begun = []
+        eng.begin_mirror_block = lambda: begun.append(1)
+        eng._screens["mode_select"]._pick("mirror")
+        assert begun == [1]
+        assert eng.screen_obj is not eng._screens["quick_cal"]
+
+    def test_a_hand_mode_change_mid_session_asks_nothing(self, tmp_path):
+        """The old rule ran the flow the first time a game needed a
+        hand, so a right-handed game followed by a bilateral one
+        opened it again. Login covered both boards, so nothing does."""
+        eng = self._ready(tmp_path, hand="both")
+        begun = []
+        eng.begin_adaptive_block = lambda: begun.append(1)
+        eng._screens["setup"]._pick("right")
+        eng._screens["setup"]._pick("both")
+        assert begun == [1, 1]
+        assert eng.screen_obj is not eng._screens["quick_cal"]
+
+    def test_a_mirror_retry_opens_nothing(self, tmp_path):
+        eng = self._ready(tmp_path, hand="both")
+        begun = []
+        eng.begin_mirror_block = lambda: begun.append(1)
+        eng.current_block = "mirror"
+        eng.retry_last_block()
+        assert begun == [1]
+        assert eng.screen_obj is not eng._screens["quick_cal"]
+
+
+class TestUncalibratedGuard:
+    """The one calibration check left on the game path. A hand with no
+    measured profile at all (login pass skipped, nothing saved) would
+    have its force scored against config defaults measured on somebody
+    else's hand, so the game stops and the clinician chooses."""
+
+    def _skipped_with_nothing_saved(self, tmp_path, hand="right"):
+        eng = _engine(tmp_path, hand=hand)
+        eng.begin_session("P1", "")
+        eng.screen_obj._skip()
+        return eng
+
+    def test_it_stops_the_game_and_names_the_hand(self, tmp_path):
+        eng = self._skipped_with_nothing_saved(tmp_path)
+        begun = []
+        eng.begin_adaptive_block = lambda: begun.append(1)
+        eng._screens["setup"]._pick("right")
+        assert begun == []
+        dlg = eng._exit_confirm
+        assert dlg is not None
+        assert dlg.question == "Right hand has no calibration"
+        assert dlg.safe_btn.label == "Calibrate now"
+        assert dlg.danger_btn.label == "Play anyway"
+
+    def test_calibrate_now_measures_then_starts_the_game(self, tmp_path):
+        eng = self._skipped_with_nothing_saved(tmp_path)
+        begun = []
+        eng.begin_adaptive_block = lambda: begun.append(1)
+        eng._screens["setup"]._pick("right")
+        eng._exit_confirm.safe_btn.on_click()
+        assert eng._exit_confirm is None
+        assert eng.screen_obj is eng._screens["quick_cal"]
+        assert eng.screen_obj.hands == ["right"]
+        assert begun == []
+        # Whatever the flow ends with, the game it was holding starts.
+        eng.screen_obj._skip()
+        assert begun == [1]
+
+    def test_calibrate_now_works_with_the_automatic_pass_switched_off(
+            self, tmp_path):
+        """The click asks for the flow directly, so the config switch
+        that turns the login pass off does not silence it."""
+        eng = _engine(tmp_path)
+        eng.cfg.data.setdefault("quick_cal", {})["enabled"] = False
+        eng.begin_session("P1", "")
+        assert eng.screen_obj is eng._screens["mode_select"]
+        begun = []
+        eng.begin_adaptive_block = lambda: begun.append(1)
+        eng._screens["setup"]._pick("right")
+        eng._exit_confirm.safe_btn.on_click()
+        assert eng.screen_obj is eng._screens["quick_cal"]
+        assert eng.screen_obj.hands == ["right"]
+
+    def test_play_anyway_starts_it_and_asks_once_per_session(self, tmp_path):
+        eng = self._skipped_with_nothing_saved(tmp_path)
+        begun = []
+        eng.begin_adaptive_block = lambda: begun.append(1)
+        eng._screens["setup"]._pick("right")
+        eng._exit_confirm.danger_btn.on_click()
+        assert begun == [1]
+        assert eng._exit_confirm is None
+        eng._screens["setup"]._pick("right")
+        assert begun == [1, 1]
+        assert eng._exit_confirm is None
+
+    def test_esc_backs_out_of_the_question_and_starts_nothing(self, tmp_path):
+        eng = self._skipped_with_nothing_saved(tmp_path)
+        begun = []
+        eng.begin_adaptive_block = lambda: begun.append(1)
+        eng._screens["setup"]._pick("right")
+        eng._handle_escape()
+        assert eng._exit_confirm is None
+        assert begun == []
+
+    def test_a_saved_profile_means_no_question(self, tmp_path):
+        eng = _engine(tmp_path)
+        _save(tmp_path, "right")
+        eng.begin_session("P1", "")
+        eng.screen_obj._skip()
+        begun = []
+        eng.begin_adaptive_block = lambda: begun.append(1)
+        eng._screens["setup"]._pick("right")
+        assert begun == [1]
+        assert eng._exit_confirm is None
+
+    def test_only_the_hand_without_a_profile_is_named(self, tmp_path):
+        eng = _engine(tmp_path, hand="both")
+        _save(tmp_path, "right")
+        eng.begin_session("P1", "")
+        eng.screen_obj._skip()
+        begun = []
+        eng.begin_mirror_block = lambda: begun.append(1)
+        eng._screens["mode_select"]._pick("mirror")
+        assert begun == []
+        assert eng._exit_confirm.question == "Left hand has no calibration"
+
+    def test_a_keyboard_session_is_never_asked(self, tmp_path):
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
+        eng = _engine(tmp_path, source=KeyboardOnlySource())
+        eng.begin_session("P1", "")
+        begun = []
+        eng.begin_adaptive_block = lambda: begun.append(1)
+        eng._screens["setup"]._pick("right")
+        assert begun == [1]
+        assert eng._exit_confirm is None
+
+    def test_an_unusable_saved_profile_does_not_count(self, tmp_path):
         eng = _engine(tmp_path)
         bad = CalibrationProfile(
             hand="right", empty=list(EMPTY),
@@ -280,55 +571,9 @@ class TestTriggerRule:
             press=[RESTING[i] + 5 for i in range(N_FINGERS)])
         assert not bad.usable()[0]
         bad.save(tmp_path / "config/calibration/current_right.json")
-        assert eng.maybe_start_quick_calibration(lambda: None)
-
-    def test_setup_screen_gates_the_block_start(self, tmp_path):
-        eng = _engine(tmp_path)
-        begun = []
-        eng.begin_adaptive_block = lambda: begun.append(1)
-        setup = eng._screens["setup"]
-        setup._pick("right")
-        assert eng.screen_obj is eng._screens["quick_cal"]
-        assert begun == []
-        # Skipping hands over to the block start exactly once.
+        eng.begin_session("P1", "")
         eng.screen_obj._skip()
-        assert begun == [1]
-
-    def test_mirror_pick_gates_the_block_start(self, tmp_path):
-        # Mirror bypasses the setup screen (bilateral-only, no hand
-        # pick), so its start path must run the same session gate
-        # itself. It used to call begin_mirror_block directly, making
-        # a mirror-first hardware session the one flow that never
-        # calibrated either hand.
-        eng = _engine(tmp_path)
-        begun = []
-        eng.begin_mirror_block = lambda: begun.append(1)
-        eng._screens["mode_select"]._pick("mirror")
-        assert eng.screen_obj is eng._screens["quick_cal"]
-        assert begun == []
-        # Both hands are in front of the flow (mirror forces bilateral).
-        assert sorted(eng.screen_obj.hands) == ["left", "right"]
-        # Skipping hands over to the block start exactly once.
-        eng.screen_obj._skip()
-        assert begun == [1]
-
-    def test_mirror_pick_skips_the_gate_on_keyboard(self, tmp_path):
-        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
-        eng = _engine(tmp_path, source=KeyboardOnlySource())
-        begun = []
-        eng.begin_mirror_block = lambda: begun.append(1)
-        eng._screens["mode_select"]._pick("mirror")
-        assert begun == [1]
-        assert eng.screen_obj is not eng._screens["quick_cal"]
-
-    def test_setup_screen_starts_straight_away_on_keyboard(self, tmp_path):
-        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
-        eng = _engine(tmp_path, source=KeyboardOnlySource())
-        begun = []
-        eng.begin_adaptive_block = lambda: begun.append(1)
-        eng._screens["setup"]._pick("right")
-        assert begun == [1]
-        assert eng.screen_obj is not eng._screens["quick_cal"]
+        assert eng.uncalibrated_hands("right") == ["right"]
 
 
 # ---- the flow itself, end to end -----------------------------------------
@@ -379,6 +624,26 @@ class TestFlowEndToEnd:
             assert path.exists(), f"{hand} profile not saved"
             assert eng.calibration_profiles[hand].hand == hand
         assert calls == [1]
+
+    def test_a_login_measurement_survives_a_hand_mode_change(self,
+                                                             tmp_path):
+        """Now that the measuring happens at login, a hand can be
+        measured while the session is set to the other one. The
+        detector rebuild that follows a hand pick must put the
+        measured thresholds back, or the block runs on config
+        defaults while the metadata still records a calibration."""
+        eng = _engine(tmp_path, hand="both")
+        eng.begin_session("P1", "")
+        sc = eng.screen_obj
+        _run_whole_flow(eng, sc)
+        sc._finish()
+        measured = {h: eng.calibration_profiles[h].on_delta()
+                    for h in ("left", "right")}
+        eng.set_hand_mode("right")
+        eng.set_hand_mode("both")
+        for hand in ("left", "right"):
+            det = eng.detectors[hand]
+            assert det.cal.on_delta[:N_FINGERS] == measured[hand]
 
     def test_profile_maths_identical_to_the_clinical_path(self, tmp_path):
         """Feed the SAME captures through the quick flow and through

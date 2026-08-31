@@ -175,6 +175,56 @@ class Screen:
                   colour=self.theme.muted)
 
 
+# Bottom-centre band the skip control sits in, measured up from the
+# bottom edge. Above the mode message chip (height - 42) on the
+# gameplay screen and above Buzz Hunt's own bottom line, so the three
+# never stack on each other.
+SKIP_CHIP_BOTTOM_GAP = 110
+
+
+def draw_skip_chip(surf: pygame.Surface, layout: Layout, theme: Theme,
+                   engine) -> None:
+    """The one skip control, drawn the same on every block screen.
+
+    Reads the wait straight off the engine, so a mode that arms a wait
+    gets the control for free and no screen has to know which waits
+    exist. The rect it draws at is stored on the engine, which is what
+    a click is tested against: what the patient aims at is what
+    answers. Waits too short to aim at draw nothing (see
+    rest_skip.DEFAULT_CHIP_MIN_S), and the keyboard skip still works
+    on those.
+    """
+    engine._skip_chip_rect = None
+    try:
+        view = engine.current_wait_view()
+    except Exception:
+        return
+    if not view or not view.get("show"):
+        return
+    if getattr(engine, "paused", False):
+        # A paused block is already frozen; offering to skip a wait
+        # that is not counting down would be a lie.
+        return
+    remaining = max(0.0, float(view.get("remaining", 0.0) or 0.0))
+    label = f"{view.get('label', 'Skip')}  (Space)   {remaining:.0f}s"
+    font = layout.font(FONT_BODY)
+    text_surf = font.render(label, True, theme.accent)
+    pad_x, pad_y = 20, 10
+    rect = pygame.Rect(0, 0,
+                       text_surf.get_width() + pad_x * 2,
+                       text_surf.get_height() + pad_y * 2)
+    rect.center = (layout.width // 2,
+                   layout.height - SKIP_CHIP_BOTTOM_GAP)
+    pill = pygame.Surface(rect.size, pygame.SRCALPHA)
+    pygame.draw.rect(pill, (*theme.accent, 40), pill.get_rect(),
+                     border_radius=rect.height // 2)
+    pygame.draw.rect(pill, (*theme.accent, 170), pill.get_rect(), 2,
+                     border_radius=rect.height // 2)
+    surf.blit(pill, rect.topleft)
+    surf.blit(text_surf, text_surf.get_rect(center=rect.center))
+    engine._skip_chip_rect = rect
+
+
 def _chip(surf: pygame.Surface, layout: Layout,
            centre: tuple[int, int], text: str,
            fg: tuple[int, int, int],
@@ -1095,13 +1145,12 @@ class ModeSelectScreen(Screen):
             "End session", engine.request_end_session,
             self.theme, self.layout,
         )
-        # Calibration on demand. The automatic gate still runs the
-        # flow once per session per hand before the first game that
-        # needs it; this is for the times a therapist wants it again
-        # (the strap moved, a different patient's hand, a press that
-        # stopped registering) without ending the session. Re-running
-        # re-captures and re-applies through the same path, and marks
-        # the hands as covered so the next game does not ask again.
+        # Calibration on demand. Logging in already put every
+        # attached hand through the flow once; this is for the times a
+        # therapist wants it again (the strap moved, a different
+        # patient's hand, a press that stopped registering) without
+        # ending the session. Re-running re-captures and re-applies
+        # through the same path.
         self.cal_btn = Button(
             pygame.Rect(236, engine.layout.height - 90, 200,
                         BUTTON_H - 10),
@@ -1141,9 +1190,9 @@ class ModeSelectScreen(Screen):
     def _pick(self, mode_key: str) -> None:
         # Mirror is bilateral-only, so it skips the hand-pick step and
         # goes straight into the block through the shared start path
-        # (which sets both hands, rebuilds the lanes and runs the same
-        # session calibration gate every other game gets). Everything
-        # else still asks which hand first.
+        # (which sets both hands and rebuilds the lanes, the same as
+        # every other game). Everything else still asks which hand
+        # first.
         if mode_key == "mirror":
             self.engine.begin_game("mirror")
             return
@@ -1570,8 +1619,9 @@ class SetupScreen(Screen):
         # Participant name was already pushed into session/config by
         # the title screen so we don't touch it here. Everything after
         # the pace slider is the shared start path on the engine: hand
-        # mode, detectors, lane strips, the session calibration gate,
-        # then the mode's own starter.
+        # mode, detectors, lane strips, then the mode's own starter.
+        # No calibration step hangs off this any more: the session
+        # calibrated its hands at login.
         mode = self.engine.cfg.get("game.mode", "adaptive")
         if mode == "classic":
             # Persist the slider's chosen pace into the config so the
@@ -2359,6 +2409,10 @@ class GameplayScreen(Screen):
         remaining = self._countdown_remaining()
         if remaining > 0:
             self._draw_countdown_card(surf, remaining)
+
+        # One skip control for every enforced wait, drawn last so it
+        # sits over the countdown card and the rest material alike.
+        draw_skip_chip(surf, self.layout, self.theme, self.engine)
 
         # Either exit guard (engine-drawn, above this screen) is the
         # frame's one message; stacking PAUSED under the session
@@ -3596,6 +3650,11 @@ class RhythmScreen(Screen):
                 surf.blit(t, t.get_rect(topright=(right, y)))
                 y += 18
 
+        # One skip control for every enforced wait. Rhythm's own wait
+        # is the countdown and silent lead welded to the front of the
+        # note-fall timeline, armed by the mode.
+        draw_skip_chip(surf, self.layout, self.theme, self.engine)
+
         # Skipped under either exit guard, same as GameplayScreen: the
         # guard is the frame's one message.
         if self.engine.paused and not self.engine.exit_overlay_active:
@@ -4785,7 +4844,7 @@ class ResultsScreen(Screen):
 
         Straight through engine.begin_game, which is the same path the
         hand picker takes: same hand-mode switch, same lane rebuild,
-        same session calibration gate, same starter. Nothing about the
+        same starter. Nothing about the
         block (its EEG markers included) can differ from a game
         started the long way round.
         """
@@ -5786,6 +5845,12 @@ class DiagnosticsScreen(Screen):
         # Hardware panel state -------------------------------------------
         self._detected_ports: list[str] = []   # latest port scan
         self._port_status: str = ""             # info / error banner
+        # Last port-watcher generation this panel redrew itself for. The
+        # engine's watcher scans on its own thread; the panel only reads
+        # the counter, so a board plugged in while Settings is open
+        # appears in the dropdowns without a Refresh press and without
+        # the frame ever waiting on the OS.
+        self._port_watch_gen = 0
         # Pending dropdown selections (not written to disk until the
         # user hits Save). Empty = "no changes from saved".
         self._pending_ports: dict[str, str | None] = {}
@@ -5826,6 +5891,10 @@ class DiagnosticsScreen(Screen):
         note = getattr(engine.source, "assignment_note", "")
         if note and not self._port_status:
             self._port_status = note
+        # Open in step with the watcher so the boot note is not wiped by
+        # a "ports changed" line on the very first frame.
+        self._port_watch_gen = getattr(
+            getattr(engine, "port_watcher", None), "generation", 0)
 
     # ---- screen groups ----------------------------------------------------
     # Five labelled panels in three rows: the cue switches beside the
@@ -6383,6 +6452,41 @@ class DiagnosticsScreen(Screen):
             self.theme, self.layout, font_pt=FONT_BODY - 2,
         ))
 
+    def _sync_with_port_watcher(self) -> None:
+        """Redraw the Arduino panel when the watcher says the port list
+        moved. The engine has already done (or queued) the connecting;
+        this is only the panel keeping up with it."""
+        w = getattr(self.engine, "port_watcher", None)
+        if w is None:
+            return
+        gen = w.generation
+        if gen == self._port_watch_gen:
+            return
+        # Hold off while a port dropdown is open. Growing the option
+        # list under an open popup shifts the rows out from under the
+        # cursor, so the click the therapist is halfway through lands
+        # on a different port than the one they aimed at. The refresh
+        # happens on the frame after they close it.
+        if any(dd.is_open for dd in self._port_dropdowns.values()):
+            return
+        self._port_watch_gen = gen
+        self.refresh_ports()
+        self.rebuild_panel()
+        note = ""
+        getter = getattr(self.engine, "autoconnect_notice", None)
+        if callable(getter):
+            note = getter() or ""
+        if note:
+            self._port_status = note
+            return
+        n = len(self._detected_ports)
+        self._port_status = (
+            f"Ports changed. {n} Arduino-family port(s) detected."
+            if n > 0 else
+            "Arduino unplugged. Plug it back in and it reconnects "
+            "on its own."
+        )
+
     def _rescan_ports(self) -> None:
         self.refresh_ports()
         n = len(self._detected_ports)
@@ -6468,6 +6572,8 @@ class DiagnosticsScreen(Screen):
         return False
 
     def update(self, dt: float) -> None:
+        # Keep the port panel current on its own.
+        self._sync_with_port_watcher()
         # Drain any queued STIM test pulses that have come due.
         if self._stim_queue:
             now = time.perf_counter()
@@ -6573,10 +6679,10 @@ class DiagnosticsScreen(Screen):
                 "override below only if needed.")
         if state_text == "KEYBOARD":
             sub = ("Keyboard mode. Press FDSA / JKL; to test each "
-                    "lane, or plug an Arduino in and hit Refresh.")
+                    "lane, or plug an Arduino in: it connects itself.")
         elif state_text == "DISCONNECTED":
-            sub = ("Source not connected. Plug the Arduino in and "
-                    "click Refresh.")
+            sub = ("Source not connected. Plug the Arduino in and it "
+                    "reconnects on its own; Refresh forces a re-scan.")
         elif state_text == "NO DATA":
             sub = ("Port is open but no FSR data is arriving. "
                     "Check the Arduino is sending FSR: lines.")

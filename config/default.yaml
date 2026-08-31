@@ -50,6 +50,20 @@ serial:
   # and a stale entry must not block the session.
   left_port: null
   right_port: null
+  # Watch for boards being plugged in while the app is running. With
+  # this on, an Arduino plugged in at the login screen, on the hub, on
+  # Settings or between two games connects itself and takes the hand
+  # the rules above give it, with no Refresh press. A board that
+  # arrives mid-game waits for the game to end rather than swapping
+  # the source out from under a running trial. Set false on a rig
+  # where scanning the USB bus is unwelcome; the Settings screen's
+  # Refresh button still works either way.
+  autoconnect: true
+  # Seconds between port scans. The scan runs on its own thread so the
+  # frame never waits on it. A second reads as instant to a person and
+  # costs nothing; values under 0.1 are clamped so a typo cannot turn
+  # the watcher into a spin loop.
+  autoconnect_poll_s: 1.0
   vendor_ids:
     - "0x2341"   # Arduino LLC
     - "0x239A"   # Adafruit
@@ -194,13 +208,14 @@ fsr:
   debounce_ms: 100
 
 quick_cal:
-  # The gamified calibration that runs after the hand pick when any
-  # selected hand has no usable saved profile. It collects the same
-  # empty / resting / light-press captures as the menu calibration and
-  # saves through the same CalibrationProfile path; these knobs only
-  # shape the game around that collection. Keyboard sessions never see
-  # it (no force to calibrate), and a session where every selected
-  # hand already has a usable profile skips it at zero cost.
+  # The gamified calibration that runs when a session starts, over
+  # every hand the attached boards can serve, and again for a board
+  # plugged in later in the session. It collects the same empty /
+  # resting / light-press captures as the menu calibration and saves
+  # through the same CalibrationProfile path; these knobs only shape
+  # the game around that collection. Keyboard sessions never see it
+  # (no force to calibrate). Set false to turn the automatic pass off
+  # entirely; the hub's Calibrate button still works.
   enabled: true
   # Seconds each rest capture runs (hands off, then hands resting).
   # Shorter than the menu flow's 3 s because the player is watched
@@ -456,6 +471,19 @@ game:
   # baseline-quiet clock during the card). Test mode trims it to keep
   # quick demos quick.
   start_countdown_s: 3.0
+  # Every enforced wait in every mode can be cut short with Space or
+  # by clicking the skip control (see finger_rehab/game/rest_skip.py).
+  # Waits shorter than this never draw the control: a button that
+  # appears for two seconds cannot be read, let alone aimed at, and
+  # one flashing between every trial of a perception or reaction block
+  # would be a moving distraction next to the thing being measured.
+  # The keyboard skip still works on the short ones. 2.5 is where the
+  # per-trial gaps and the sit-through waits actually separate at
+  # these settings; the mode-by-mode split is written out in
+  # rest_skip.py. Every skip is counted in the block summary and
+  # written to raw.csv, and a skip that shortens a wait protecting a
+  # measurement also flags the trial it released.
+  skip_chip_min_s: 2.5
   # Test Mode is a supervisor-demo shortcut. When enabled, every block
   # (classic / adaptive / rhythm) is capped at test_mode_trials trials
   # so the full pipeline (mode select -> setup -> gameplay -> results)
@@ -909,8 +937,16 @@ syllables:
   beat_ioi_ms: 500
   # Session shape: rounds of words with a proper rest between rounds,
   # and a whole-session ceiling so an engaged child still stops in
-  # time. 50 words in rounds of 10 runs about 15 minutes.
-  words_per_block: 50
+  # time. 40 words in rounds of 10 measures out at about 8 and a half
+  # minutes, which is what a child of this age will actually sit
+  # through. It was 50 (measured at 10 and a half minutes; the old
+  # comment here guessed 15). Nothing in the design rests on the
+  # number of words: the mastery rule is per ROUND (8 of the last 10
+  # promotes, under 5 demotes) and round_size is unchanged, so the
+  # band staircase still gets four full evaluation windows a session,
+  # and the NRP dose window the mode docstring cites is a whole-
+  # program figure across sessions, not a per-session one.
+  words_per_block: 40
   round_size: 10
   break_s: 30
   # Ten free taps along with the tick before the first word: warms the
@@ -1178,8 +1214,14 @@ buzz_hunt:
   response_window_s: 3.0
   replay_item_s: 1.5
   # Between-trial pacing and the stage cards that explain each task.
-  announce_s: 2.0
-  rest_s: 3.0
+  # Neither number protects anything: the wait that has to stay
+  # unpredictable is wait_lo_s to wait_hi_s above, which is the
+  # foreperiod inside the trial. These two only decide how long the
+  # ready card and the result card sit there. Trimmed from 2.0 and
+  # 3.0, which across 62 trials was over five minutes of an eleven
+  # minute block spent reading cards.
+  announce_s: 1.5
+  rest_s: 2.0
   stage_intro_s: 5.0
   # Set an integer to replay a block's exact trial plans (testing, or
   # a deliberately repeated protocol). Empty draws fresh each block

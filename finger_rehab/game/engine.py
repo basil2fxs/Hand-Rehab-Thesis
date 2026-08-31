@@ -225,6 +225,39 @@ class GameEngine:
         # we only log a "disconnected" warning ONCE when the Arduino
         # drops out mid-block instead of spamming every frame.
         self._source_was_connected = True
+        # ---- plug-in autoconnect -----------------------------------------
+        # A board plugged in at ANY screen has to join on its own.
+        # Before this the only way in was the Settings screen's Refresh
+        # button, so a board plugged in at the login screen or between
+        # two games stayed invisible and the session quietly ran with
+        # one hand missing. port_watcher does the scanning on its own
+        # thread (see hardware/discovery.PortWatcher); everything here
+        # is the reaction, and all of it is cheap enough to sit on the
+        # frame path.
+        self.port_watcher = None
+        self._port_watch_gen = 0
+        # A wanted rebuild that has not happened yet because a block is
+        # running. Swapping the source mid-trial would leave the trial
+        # half recorded against a source that no longer exists, so the
+        # rebuild waits for the block to end.
+        self._pending_autoconnect = False
+        self._autoconnect_said = False
+        # {hand: port} for the boards in play, so a board unplugged and
+        # plugged back in returns to the hand it already had instead of
+        # whichever one plug order hands it. In memory only and for
+        # this run only: the persistent version of this idea is the
+        # saved serial.left_port / right_port override.
+        self._hand_port_memory: dict[str, str] = {}
+        for h in (getattr(source, "hands", None) or []):
+            try:
+                self._hand_port_memory[h.hand] = h.port
+            except AttributeError:
+                pass
+        # Short-lived line at the bottom of the frame saying a board
+        # joined (or is waiting for the block to end). Not a modal and
+        # not a nag: it times itself out and never takes a click.
+        self._autoconnect_toast: str = ""
+        self._autoconnect_toast_until: float = 0.0
         # ---- Miss-force metric -------------------------------------------
         # For each trial, track every finger's peak reading above baseline
         # over a fixed window after the go stimulus. On a MISSED trial,
@@ -284,11 +317,27 @@ class GameEngine:
         # analyst can subtract it from the block duration.
         self._block_pause_count = 0
         self._block_paused_s = 0.0
-        # Session exit guard. Holds the live ConfirmDialog while "End
-        # this session?" (game select -> login) is up; None means no
-        # dialog. Ending a session throws away nothing that isn't
-        # already on disk, but it logs the next player in fresh, so it
-        # keeps the full modal.
+        # Skip bookkeeping for the shared GET READY prep. The modes
+        # keep their own tally through the WaitSkip mixin; this pair
+        # covers the one wait the engine owns.
+        self._prep_skips = 0
+        self._prep_skip_events = []
+        self._prep_skipped_s = 0.0
+        # Where the skip chip was last drawn, so a click can be tested
+        # against the pill the patient is actually looking at. None
+        # whenever nothing is waiting.
+        self._skip_chip_rect = None
+        # Set by the global handler when it swallows an event so the
+        # same key or click cannot also reach the mode as game input.
+        self._event_consumed = False
+        # The app's one modal slot. Holds the live ConfirmDialog while
+        # "End this session?" (game select -> login) is up, or the
+        # uncalibrated-hand question a game start raises; None means no
+        # dialog. One slot on purpose: the main loop routes every event
+        # to whatever is in it and draws it over the frame, so a second
+        # dialog stacked on top would be unreachable. Ending a session
+        # throws away nothing that isn't already on disk, but it logs
+        # the next player in fresh, so it keeps the full modal.
         self._exit_confirm = None
         # End-game Esc guard. Ending a game mid-block is light by
         # design (back to game select, session keeps going), so it gets
@@ -302,10 +351,14 @@ class GameEngine:
         self._exit_chip_was_paused = False
         # Hands the quick calibration flow has covered this session
         # (finished or deliberately skipped). Session state on purpose,
-        # never disk: calibration is a session event, so the first game
-        # that needs a hand runs the flow and every later game skips
-        # it. Cleared when the session ends.
+        # never disk: calibration is a session event, so logging in
+        # runs the flow over the attached boards and nothing later in
+        # the session asks again. Cleared when the session ends.
         self._session_cal_hands: set[str] = set()
+        # Hands the clinician chose to play uncalibrated after the
+        # guard on the game start warned about them. Asks once per
+        # session per hand instead of before every game.
+        self._uncal_ack: set[str] = set()
         # Pending buzzer repeat-pulses as (lane, due_perf_counter).
         self._motor_queue: list[tuple[int, float]] = []
         # When the after-press confirmation buzz is due to end, and a
@@ -733,6 +786,10 @@ class GameEngine:
                 log.warning("could not load saved calibration: %s", e)
             self.show_title()
             self.source.start()
+            # Watch for boards arriving from here on. Started after the
+            # first source is up so the watcher's first scan compares
+            # against a rig that is already assigned, not an empty one.
+            self.start_port_watch()
             self.audio = self._build_audio()
             # No session marker here. 240 rides the login
             # (begin_session) and 241 the session end, so the EEG
@@ -751,6 +808,10 @@ class GameEngine:
                 # not in update(): update() is skipped while paused and
                 # the chip only ever exists over a paused block.
                 self._tick_exit_chip(now)
+                # A board plugged in at any screen joins here. Reads a
+                # counter the watcher thread publishes, so a frame with
+                # no port change costs two attribute reads.
+                self.maybe_autoconnect()
 
                 if self.paused:
                     # Drain and discard samples so the queue doesn't pile up
@@ -783,7 +844,12 @@ class GameEngine:
                     # underneath on the same frame.
                     exit_dialog_had_event = self._exit_confirm is not None
                     exit_chip_had_event = self._exit_chip_until is not None
+                    # A Space or a click the skip took must not also
+                    # reach the mode underneath as game input.
+                    self._event_consumed = False
                     self._handle_global_event(e)
+                    if self._event_consumed:
+                        continue
                     if exit_dialog_had_event or self._exit_confirm is not None:
                         if self._exit_confirm is not None:
                             self._exit_confirm.handle_event(e)
@@ -823,6 +889,8 @@ class GameEngine:
                 # therapist-facing half, without which the patient
                 # just looks unable to press anything.
                 self._draw_connection_banner(self._screen)
+                # Board-joined line, under everything else on the frame.
+                self._draw_autoconnect_note(self._screen)
                 if self._exit_confirm is not None:
                     # Exit dialog over the frozen play field. Screens
                     # skip their own PAUSED overlay while it is up (see
@@ -856,6 +924,10 @@ class GameEngine:
                 self._abandon_if_in_block()
             except Exception as e:
                 log.warning("abandon-on-exit: %s", e)
+            try:
+                self.stop_port_watch()
+            except Exception as e:
+                log.warning("port watch stop: %s", e)
             try:
                 self.source.stop()
             except Exception as e:
@@ -942,6 +1014,15 @@ class GameEngine:
                 self.mode.on_resume(pause_dur)
             except Exception as e:
                 log.warning("mode.on_resume failed: %s", e)
+        # An armed skippable wait carries an absolute deadline like the
+        # mode's own timers, so it shifts with them: a rest paused
+        # halfway must come back with the same seconds left on it, not
+        # with the pause counted as rest.
+        if self.mode and hasattr(self.mode, "shift_wait"):
+            try:
+                self.mode.shift_wait(pause_dur)
+            except Exception as e:
+                log.warning("mode.shift_wait failed: %s", e)
         # The engine's own per-trial force window must shift with the
         # mode's deadlines. Left at its original absolute end, every
         # press and leak after the resume fell OUTSIDE the window, so a
@@ -1232,9 +1313,26 @@ class GameEngine:
             # same promise as "press any key to keep playing".
             if self._exit_chip_until is not None:
                 self._dismiss_exit_chip()
+            elif e.button == 1 and self._skip_chip_hit(e.pos):
+                # The chip is the mouse half of the skip; the rect it
+                # was drawn at is the rect that answers, so what the
+                # patient aims at is what they hit. Consumed only when
+                # a wait really was cut short: a rect left over from
+                # the last block screen must never swallow a click on
+                # a menu button sitting at the same coordinates.
+                if self.skip_current_wait():
+                    self._event_consumed = True
         elif e.type == pygame.KEYDOWN:
             if e.key == pygame.K_ESCAPE:
                 self._handle_escape()
+            elif (e.key == pygame.K_SPACE and not self.paused
+                    and self._exit_confirm is None
+                    and self._on_block_screen()):
+                # Space is the keyboard half of the skip. No keymap
+                # binds it to a lane, so it cannot double as a press,
+                # and it does nothing at all when no wait is running.
+                if self.skip_current_wait():
+                    self._event_consumed = True
             elif self._exit_chip_until is not None:
                 # Any key except Esc keeps playing, exactly as the
                 # chip says. Handled before the function keys so P or
@@ -1313,6 +1411,148 @@ class GameEngine:
             for sc in (self._screens.get(k)
                        for k in self._BLOCK_SCREEN_KEYS)
             if sc is not None)
+
+    # ---- skipping an enforced wait -------------------------------------
+    # Space, or a click on the chip the screens draw, cuts short
+    # whatever the block is currently waiting through. Two things can
+    # be waiting: the shared GET READY prep, which every block screen
+    # runs and the engine owns, and the mode's own rest, break or
+    # announce card, which the mode owns through the WaitSkip mixin.
+    # The prep is checked first because while it is up the mode's
+    # update is held back, so the mode cannot be waiting through
+    # anything of its own yet.
+
+    def _skip_chip_hit(self, pos) -> bool:
+        """Whether a click landed on the skip chip. The rect comes
+        from the draw pass, so it is exactly the pill the patient
+        can see; None (nothing waiting, or nothing drawn yet this
+        frame) never claims a click."""
+        rect = getattr(self, "_skip_chip_rect", None)
+        if rect is None or self.paused:
+            return False
+        if getattr(self, "_exit_confirm", None) is not None:
+            return False
+        if self._block_screen_obj() is None:
+            # The rect is only meaningful over the screen that drew
+            # it. Off a block screen it is stale.
+            return False
+        try:
+            return bool(rect.collidepoint(pos))
+        except (TypeError, AttributeError):
+            return False
+
+    def _block_screen_obj(self):
+        """The live block screen, or None when a menu is showing.
+        getattr for engines built bare in tests."""
+        if not getattr(self, "_screens", None):
+            return None
+        return self.screen_obj if self._on_block_screen() else None
+
+    def current_wait_view(self) -> dict | None:
+        """What the block is waiting through right now, or None. The
+        screens draw this; nothing else depends on it."""
+        sc = self._block_screen_obj()
+        if sc is None:
+            return None
+        remaining = 0.0
+        fn = getattr(sc, "_countdown_remaining", None)
+        if callable(fn):
+            try:
+                remaining = float(fn())
+            except (TypeError, ValueError):
+                remaining = 0.0
+        if remaining > 0:
+            from .rest_skip import LABELS
+            try:
+                total = float(self.cfg.get("game.start_countdown_s", 3.0))
+            except (TypeError, ValueError):
+                total = 3.0
+            return {"kind": "prep", "label": LABELS["prep"],
+                    "remaining": remaining, "total": total,
+                    "protects": None, "show": True}
+        view_fn = getattr(self.mode, "wait_view", None) if self.mode else None
+        if callable(view_fn):
+            try:
+                return view_fn()
+            except Exception:
+                log.debug("mode wait_view failed", exc_info=True)
+        return None
+
+    def skip_current_wait(self) -> bool:
+        """Cut the current wait short. False when nothing was waiting,
+        so Space on a live trial is a no-op rather than a surprise."""
+        sc = self._block_screen_obj()
+        if sc is None:
+            return False
+        fn = getattr(sc, "_countdown_remaining", None)
+        remaining = 0.0
+        if callable(fn):
+            try:
+                remaining = float(fn())
+            except (TypeError, ValueError):
+                remaining = 0.0
+        if remaining > 0:
+            now = time.perf_counter()
+            sc._countdown_until = now
+            self._prep_skips = getattr(self, "_prep_skips", 0) + 1
+            self._prep_skipped_s = (
+                getattr(self, "_prep_skipped_s", 0.0) + remaining)
+            events = getattr(self, "_prep_skip_events", None)
+            if events is None:
+                events = []
+                self._prep_skip_events = events
+            events.append({"kind": "prep",
+                           "saved_s": round(remaining, 2),
+                           "planned_s": round(remaining, 2),
+                           "protects": None})
+            if self.raw_logger:
+                self.raw_logger.queue_event(
+                    "rest_skipped",
+                    detail=(f"kind=prep;saved_s={remaining:.2f};"
+                            f"planned_s={remaining:.2f};protects="),
+                    t_perf=now, hand=self.hand_mode)
+            log.info("prep countdown skipped with %.1f s left", remaining)
+            return True
+        skip_fn = getattr(self.mode, "skip_wait", None) if self.mode else None
+        if callable(skip_fn):
+            try:
+                return bool(skip_fn())
+            except Exception:
+                log.exception("mode skip_wait failed")
+        return False
+
+    def skipped_wait_summary(self) -> dict:
+        """Merged prep and mode skip tallies for the block summary."""
+        out = {
+            "skipped_rests": 0,
+            "skipped_rest_s": 0.0,
+            "skipped_rest_kinds": {},
+            "skipped_rest_events": [],
+        }
+        stats_fn = getattr(self.mode, "wait_skip_stats", None) if self.mode \
+            else None
+        if callable(stats_fn):
+            try:
+                out.update(stats_fn())
+            except Exception:
+                log.debug("mode wait_skip_stats failed", exc_info=True)
+        prep_n = getattr(self, "_prep_skips", 0)
+        if prep_n:
+            out["skipped_rests"] = int(out.get("skipped_rests", 0)) + prep_n
+            out["skipped_rest_s"] = round(
+                float(out.get("skipped_rest_s", 0.0))
+                + getattr(self, "_prep_skipped_s", 0.0), 2)
+            kinds = dict(out.get("skipped_rest_kinds") or {})
+            kinds["prep"] = kinds.get("prep", 0) + prep_n
+            out["skipped_rest_kinds"] = kinds
+            # The events list must agree with the tallies: an analyst
+            # reading events alone was undercounting by every prep skip.
+            events = list(out.get("skipped_rest_events") or [])
+            events.extend(getattr(self, "_prep_skip_events", []) or
+                          [{"kind": "prep", "saved_s": None,
+                            "planned_s": None, "protects": None}] * prep_n)
+            out["skipped_rest_events"] = events
+        return out
 
     def _raise_exit_chip(self) -> None:
         """Esc landed mid-block: freeze play through the normal pause
@@ -1485,9 +1725,10 @@ class GameEngine:
           never the login screen. Any other input, or the timeout,
           keeps playing.
         """
-        # Esc with the session dialog up backs OUT of it, never
-        # through it. Confirming takes a click on the danger button or
-        # an explicit keyboard move onto it plus Enter.
+        # Esc with a modal up backs OUT of it, never through it, for
+        # the end-session question and the uncalibrated-hand one
+        # alike. Confirming takes a click on the danger button or an
+        # explicit keyboard move onto it plus Enter.
         if self._exit_confirm is not None:
             self._dismiss_session_end_confirm()
             return
@@ -1871,15 +2112,27 @@ class GameEngine:
                                + f"-{random.randrange(16 ** 6):06x}")
         self._session_games = 0
         self._session_log = []
-        # A new session starts with no hands calibrated: the first
-        # game that needs a hand runs the quick flow, whatever the
+        # A new session starts with no hands calibrated, whatever the
         # previous session did.
         self._session_cal_hands = set()
+        # Hands the clinician chose to play uncalibrated, so the guard
+        # on the game start asks once per session rather than before
+        # every game. Dies with the session like the rest of this.
+        self._uncal_ack = set()
         self._clear_session_carry()
         self.eeg_session_start()
         log.info("Session started: participant=%s age=%s",
                  name, age or "(not given)")
-        self.show_mode_select()
+        # Calibration is a session event, so it runs when the session
+        # starts. Every hand the rig can serve goes through the flow
+        # here, once, and the hub follows when it finishes or is
+        # skipped. Doing it at the first GAME instead put a measuring
+        # step between "I picked a game" and playing it, and left the
+        # answer to "is this rig calibrated?" hanging until someone
+        # started something. A keyboard login has nothing to measure
+        # and goes straight through.
+        if not self.maybe_start_quick_calibration(self.show_mode_select):
+            self.show_mode_select()
 
     def session_minutes(self) -> float:
         """Minutes since login, for the End-session summary line.
@@ -2022,8 +2275,9 @@ class GameEngine:
         self._session_games = 0
         self._session_log = []
         # Calibration is a session event, so its memory dies with the
-        # session: the next player's first game runs the flow again.
+        # session: the next player's login runs the flow again.
         self._session_cal_hands = set()
+        self._uncal_ack = set()
         # The applied profiles go too: leaving them in memory would let
         # the next player's force normalisation (chords ER, leak bands,
         # percent-of-max targets) silently reference this player's
@@ -2100,7 +2354,7 @@ class GameEngine:
         would leave the trial half recorded against a source that no
         longer exists. Returns a line for the screen to show.
         """
-        if getattr(self, "in_block", False):
+        if self.block_is_running():
             return "Not while a block is running. Finish or abandon first."
         old = getattr(self, "source", None)
         try:
@@ -2110,7 +2364,10 @@ class GameEngine:
         if build_source_from_config is None:
             return "Cannot rebuild the connection on this build."
         try:
-            new_source = build_source_from_config(self.cfg)
+            new_source = build_source_from_config(
+                self.cfg,
+                remembered=dict(getattr(self, "_hand_port_memory", None)
+                                or {}))
         except Exception as e:
             log.warning("Could not build a new source: %s", e)
             return f"Could not open that port: {e}"
@@ -2122,6 +2379,10 @@ class GameEngine:
             log.warning("Could not start the new source: %s", e)
             return f"Could not start that port: {e}"
         self.source = new_source
+        # Remember the new hand-to-port map BEFORE anything else can
+        # fail, so a replugged board still comes back to the same hand
+        # next time round.
+        self._remember_hand_ports(new_source)
         # Detectors hold no reference to the source, but their baselines
         # were learned from the old board's readings and mean nothing
         # for a different one.
@@ -2144,6 +2405,234 @@ class GameEngine:
         if note:
             return f"Connected: {note}."
         return "Connected. No restart needed."
+
+    def _remember_hand_ports(self, source) -> None:
+        """Record {hand: port} for the boards now in play, so the next
+        rebuild can put a replugged board back on the hand it had."""
+        mem = getattr(self, "_hand_port_memory", None)
+        if mem is None:
+            mem = {}
+            self._hand_port_memory = mem
+        for h in (getattr(source, "hands", None) or []):
+            try:
+                mem[h.hand] = h.port
+            except AttributeError:
+                continue
+
+    # ---- plug-in autoconnect -------------------------------------------
+
+    def block_is_running(self) -> bool:
+        """True while a block owns the loggers and the session folder.
+
+        reconnect_source used to read an `in_block` attribute that
+        nothing on the engine ever set, so its mid-block guard could
+        never fire. The signal that actually tracks a live block is the
+        open session folder, which _begin_block opens and both
+        finish_block and _abandon_if_in_block clear. `in_block` is
+        still honoured because tests set it by hand to stand in for a
+        running block.
+        """
+        if getattr(self, "in_block", False):
+            return True
+        return getattr(self, "session_paths", None) is not None
+
+    def start_port_watch(self, scan=None) -> None:
+        """Begin watching the OS port list for boards appearing.
+
+        Off when serial.autoconnect is false, which is the escape
+        hatch for a rig where scanning the USB bus is unwelcome.
+        """
+        if getattr(self, "port_watcher", None) is not None:
+            return
+        try:
+            on = bool(self.cfg.get("serial.autoconnect", True))
+        except Exception:
+            on = True
+        if not on:
+            log.info("Arduino autoconnect is off "
+                     "(serial.autoconnect: false)")
+            return
+        from ..hardware.discovery import PortWatcher
+        w = PortWatcher(self.cfg, scan=scan)
+        self.port_watcher = w
+        self._port_watch_gen = w.generation
+        w.start()
+        log.info("Watching for Arduinos every %.1f s", w.interval_s)
+
+    def stop_port_watch(self) -> None:
+        w = getattr(self, "port_watcher", None)
+        if w is None:
+            return
+        self.port_watcher = None
+        try:
+            w.stop()
+        except Exception as e:
+            log.debug("Stopping the port watcher raised: %s", e)
+
+    def maybe_autoconnect(self) -> None:
+        """One frame's worth of autoconnect. Cheap: two attribute reads
+        unless the port set actually changed.
+
+        Called every frame from the main loop, paused or not, so a
+        board plugged in on the title screen, the hub, Settings or
+        between two games all take the same path.
+        """
+        w = getattr(self, "port_watcher", None)
+        if w is None:
+            return
+        gen = w.generation
+        if gen != self._port_watch_gen:
+            self._port_watch_gen = gen
+            if self._autoconnect_wanted(w.ports):
+                self._pending_autoconnect = True
+                self._autoconnect_said = False
+        if not self._pending_autoconnect:
+            return
+        # Queued, not dropped, while something is mid-capture. Say so
+        # once so a therapist who just plugged a board in is not left
+        # wondering.
+        if self.block_is_running():
+            if not self._autoconnect_said:
+                self._autoconnect_said = True
+                self._show_autoconnect_note(
+                    "Arduino found. It joins at the end of this game.")
+            return
+        if self.screen_obj is not None \
+                and self.screen_obj is self._screens.get("quick_cal"):
+            # A calibration run is reading live samples off the source
+            # this would swap out, and its captures are half taken.
+            # Waiting costs a few seconds and the new hand gets its own
+            # pass the moment this one hands over.
+            if not self._autoconnect_said:
+                self._autoconnect_said = True
+                self._show_autoconnect_note(
+                    "Arduino found. It joins after this calibration.")
+            return
+        self._pending_autoconnect = False
+        self._apply_autoconnect()
+
+    def _autoconnect_wanted(self, ports) -> bool:
+        """Would rebuilding on this port list put a board on a hand that
+        does not have one, or move a hand onto a different board?
+
+        Answering no to a shrinking port list is the point: an unplug
+        is already handled by the connection banner and the underlying
+        source's own reopen loop, and tearing the source down over it
+        would drop the OTHER hand's board for no reason.
+        """
+        if not ports:
+            return False
+        try:
+            from ..hardware.discovery import resolve_assignment
+            want = resolve_assignment(
+                self.cfg, ports,
+                remembered=dict(getattr(self, "_hand_port_memory", None)
+                                or {}))
+        except Exception as e:
+            log.debug("Could not resolve the new port list: %s", e)
+            return False
+        if not want.ports:
+            return False
+        have = {}
+        for h in (getattr(self.source, "hands", None) or []):
+            have[getattr(h, "hand", None)] = getattr(h, "port", None)
+        return any(have.get(hand) != port for hand, port in want.pairs())
+
+    def _apply_autoconnect(self) -> None:
+        """Rebuild through the ordinary reconnect path and say what
+        changed. Same code the Settings Save button runs, so an
+        automatic connection and a manual one cannot behave
+        differently."""
+        before = {getattr(h, "hand", None)
+                  for h in (getattr(self.source, "hands", None) or [])}
+        msg = self.reconnect_source()
+        hands_now = getattr(self.source, "hands", None) or []
+        self._remember_hand_ports(self.source)
+        gained = [h.hand for h in hands_now if h.hand not in before]
+        if gained:
+            names = " and ".join(h.capitalize() for h in sorted(gained))
+            self._show_autoconnect_note(
+                f"{names} hand connected" if len(gained) == 1
+                else f"{names} hands connected")
+            self._calibrate_joined_hands(sorted(gained))
+        elif hands_now:
+            self._show_autoconnect_note("Arduino reconnected")
+        else:
+            # The rebuild did not produce a board. Show the reason
+            # rather than a cheerful line that is not true.
+            self._show_autoconnect_note(msg)
+
+    def _calibrate_joined_hands(self, hands) -> None:
+        """A board that arrived mid-session calibrates now.
+
+        The login pass covers every hand the rig had at the time. A
+        hand that joins afterwards could not have been in it, so it
+        gets the same flow the moment it connects, one hand only, and
+        lands back on whatever screen the therapist was looking at.
+        The trigger is the connection, never a game.
+
+        Nothing happens outside a session: with no one logged in the
+        login screen's own pass is a few seconds away and will cover
+        it. Nothing happens mid-block either, because the rebuild
+        itself waits for the block to end (see maybe_autoconnect).
+        """
+        if not getattr(self, "_session_active", False):
+            return
+        back = self.screen_obj
+
+        def done():
+            # Back where they were, unless that was the flow itself
+            # (nothing else can put it there, but a stale reference
+            # would strand the session on a finished screen).
+            if back is not None and back is not self._screens.get("quick_cal"):
+                self.screen_obj = back
+            else:
+                self.show_mode_select()
+
+        self.maybe_start_quick_calibration(done, hands=list(hands))
+
+    # How long the autoconnect line stays up. Long enough to read one
+    # short sentence while looking somewhere else on the screen.
+    AUTOCONNECT_NOTE_S = 4.0
+
+    def _show_autoconnect_note(self, text: str) -> None:
+        self._autoconnect_toast = str(text or "")
+        self._autoconnect_toast_until = (time.perf_counter()
+                                         + self.AUTOCONNECT_NOTE_S)
+
+    def autoconnect_notice(self) -> str:
+        """The live autoconnect line, or empty once it has timed out.
+        The Settings screen reads this too so its status line and the
+        on-screen note always say the same thing."""
+        if not getattr(self, "_autoconnect_toast", ""):
+            return ""
+        if time.perf_counter() >= self._autoconnect_toast_until:
+            return ""
+        return self._autoconnect_toast
+
+    def _draw_autoconnect_note(self, surf) -> None:
+        """The note itself: one quiet pill, top centre.
+
+        Top centre, BELOW the connection banner's slot: at the bottom
+        it painted over the title screen's credit line and button row.
+        Good news still never covers the warning: the banner owns
+        y 0-60 and this pill starts under it.
+        """
+        msg = self.autoconnect_notice()
+        if not msg:
+            return
+        from ..ui.widgets import draw_text, FONT_SMALL
+        w = min(680, self.layout.width - 40)
+        h = 38
+        x = (self.layout.width - w) // 2
+        y = 66 if self.connection_alert() else 16
+        rect = pygame.Rect(x, y, w, h)
+        pygame.draw.rect(surf, self.theme.background, rect,
+                         border_radius=10)
+        pygame.draw.rect(surf, self.theme.success, rect, width=2,
+                         border_radius=10)
+        draw_text(surf, msg, (self.layout.width // 2, y + h // 2 - 8),
+                  self.theme, self.layout, pt=FONT_SMALL + 4, centre=True)
 
     def show_calibration(self) -> None:
         """Open the guided calibration. Reachable from the menu before a
@@ -2186,34 +2675,36 @@ class GameEngine:
                 return prof
         return None
 
-    def quick_cal_hands_needed(self) -> list[str]:
-        """Which of the selected hands still need the quick flow before
-        this game. Empty means the game can start straight away.
+    def quick_cal_hands_needed(self, hands=None) -> list[str]:
+        """Which hands still need the quick flow. Empty means there is
+        nothing to run.
 
-        Calibration is a session event: a hand runs the flow the first
-        time a game needs it in the session (no usable profile, or the
-        session has not put the flow in front of that hand yet), and
-        every later game skips it, even across hand-mode changes. The
-        memory lives in _session_cal_hands on the engine, cleared at
-        session end, never on disk: the next session calibrates again.
+        Calibration is a session event and it happens when the session
+        starts, not when a game does: logging in puts every hand the
+        rig can serve through the flow once, and a board that arrives
+        later in the session runs it the moment it connects. Games
+        never call this. The memory lives in _session_cal_hands on the
+        engine, cleared at session end, never on disk: the next
+        session calibrates again.
+
+        With no hands given the answer covers whatever boards are
+        attached right now, which is the login question. The hotplug
+        path passes the single hand that just joined.
 
         A keyboard session never needs one: there is no force signal to
         calibrate and the thresholds do not matter for keys, so showing
         the flow (or any hardware nag) would only be noise. A usable
         profile saved on disk is applied here so the check leaves the
-        game ready to run, but it does not skip the session's first
-        visual pass on its own.
+        rig ready to play, but it does not skip the session's own
+        visual pass.
         """
         if not getattr(self.source, "provides_samples", True):
             return []
         if not bool(self.cfg.get("quick_cal.enabled", True)):
             return []
-        if self.hand_mode == "both":
-            hands = ["left", "right"]
-        elif self.hand_mode in ("left", "right"):
-            hands = [self.hand_mode]
-        else:
-            hands = ["right"]
+        if hands is None:
+            hands = self.calibratable_hands()
+        hands = [h for h in hands if h in ("left", "right")]
         session_done = getattr(self, "_session_cal_hands", set())
         needed = []
         for hand in hands:
@@ -2232,16 +2723,20 @@ class GameEngine:
             needed.append(hand)
         return needed
 
-    def maybe_start_quick_calibration(self, continue_cb) -> bool:
-        """Gate a block start on the quick calibration when any
-        selected hand still needs its session pass. Returns True when
-        the flow took the screen (continue_cb runs when it finishes or
-        is skipped), False when the game can start immediately. The
-        later-game skip is this False: it costs nothing and shows
-        nothing. The gated hands are marked as this session's the
-        moment the flow hands over (finish or skip both), and never on
-        an Esc abandon, which discards the run."""
-        hands = self.quick_cal_hands_needed()
+    def maybe_start_quick_calibration(self, continue_cb, hands=None) -> bool:
+        """Run the quick flow over every hand that still needs it, then
+        continue. Returns True when the flow took the screen
+        (continue_cb runs when it finishes or is skipped), False when
+        there was nothing to measure and the caller should carry on
+        itself.
+
+        Two callers: the login, which passes nothing and so covers
+        whatever boards are attached, and the hotplug path, which
+        passes the hand that just joined. The hands are marked as this
+        session's the moment the flow hands over (finish or skip
+        both), and never on an Esc abandon, which discards the run.
+        """
+        hands = self.quick_cal_hands_needed(hands)
         if not hands:
             return False
 
@@ -2249,23 +2744,19 @@ class GameEngine:
             self._session_cal_hands.update(hands)
             continue_cb()
 
-        self.show_quick_calibration(hands, mark_and_go)
-        return True
+        return self.show_quick_calibration(hands, mark_and_go)
 
-    def show_quick_calibration(self, hands=None, continue_cb=None) -> None:
+    def show_quick_calibration(self, hands=None, continue_cb=None) -> bool:
         """Open the quick flow directly. With no hands given it covers
-        every hand of the current session, profiles or not, which is
-        what the deliberate menu entry wants."""
+        every hand this rig can serve, profiles or not, which is what
+        the deliberate menu entry wants. False when there is no screen
+        to open, so a caller that has to go somewhere afterwards can
+        still get there."""
         sc = self._screens.get("quick_cal")
         if sc is None:
-            return
+            return False
         if hands is None:
-            if self.hand_mode == "both":
-                hands = ["left", "right"]
-            elif self.hand_mode in ("left", "right"):
-                hands = [self.hand_mode]
-            else:
-                hands = ["right"]
+            hands = self.calibratable_hands() or ["right"]
         # The flow reads live values off each hand's detector, so a
         # menu launch outside a bilateral session may need the second
         # detector built first.
@@ -2274,6 +2765,7 @@ class GameEngine:
             self.reapply_calibrations()
         sc.begin(list(hands), continue_cb)
         self.screen_obj = sc
+        return True
 
     def load_saved_calibration(self) -> bool:
         """Pick up the calibration taken last time, if there is one, so
@@ -2545,7 +3037,7 @@ class GameEngine:
     # Mode key -> the method that starts that mode's block. One table,
     # used by the hand picker, by mirror's skip-the-picker path and by
     # the results screen's NEXT UP button, so no start path can drift
-    # away from the others (the calibration gate and the GET READY
+    # away from the others (the block markers and the GET READY
     # countdown both hang off these, and a fourth hand-rolled copy
     # would eventually miss one).
     _BLOCK_STARTERS = {
@@ -2601,15 +3093,20 @@ class GameEngine:
                 sc.rebuild_lanes()
 
     def begin_game(self, mode_key: str, hand: str | None = None) -> bool:
-        """Start one game: set the mode, set the hand, then run the
-        session calibration gate and the mode's own starter.
+        """Start one game: set the mode, set the hand, then the mode's
+        own starter.
 
         This IS the normal setup path, factored out of the hand
         picker so the picker, mirror's skip-the-picker pick and the
         results screen's NEXT UP button all take the identical route.
-        NEXT UP in particular must not shortcut it: the block markers,
-        the GET READY countdown and the quick-calibration gate all
-        hang off the starter this calls.
+        NEXT UP in particular must not shortcut it: the block markers
+        and the GET READY countdown hang off the starter this calls.
+
+        No calibration flow lives here any more. It runs at login, and
+        again when a board joins mid-session, so by the time a game
+        starts every attached hand has already been offered it. What
+        is left is the guard below, for the one case that can still
+        arrive uncalibrated.
 
         Returns False when the pick is refused (bilateral asked for on
         a one-board rig), which is the same refusal the cards' NEEDS
@@ -2625,13 +3122,115 @@ class GameEngine:
             return False
         self.set_hand_mode(hand)
         start = self.block_starter(mode_key)
-        # Calibration is a session event: the first game that needs a
-        # hand this session gets the quick flow first, with the block
-        # start handed over as the continuation. Every later game
-        # sails straight through at zero cost.
-        if self.maybe_start_quick_calibration(start):
+        if self._warn_uncalibrated(hand, start):
             return True
         start()
+        return True
+
+    def uncalibrated_hands(self, hand: str | None = None) -> list[str]:
+        """Hands this game would score force on with no measured
+        calibration behind them at all.
+
+        Not the session-coverage question. This one asks whether ANY
+        usable profile exists for the hand, in memory or on disk, and
+        a saved one found here is applied on the way past. The only
+        way to answer yes after the login pass is to have skipped that
+        pass on a hand with no saved file: skip writes nothing on
+        purpose. Playing on regardless means every force number in the
+        block is measured against config defaults taken from somebody
+        else's hand, which is not a thing to do quietly.
+
+        Hands with no board attached are not included: there is
+        nothing to measure and nothing to record.
+        """
+        if not getattr(self.source, "provides_samples", True):
+            return []
+        hand = hand or self.hand_mode
+        if hand == "both":
+            wanted = ["left", "right"]
+        elif hand in ("left", "right"):
+            wanted = [hand]
+        else:
+            wanted = ["right"]
+        serves = self.calibratable_hands()
+        out = []
+        for h in wanted:
+            if serves and h not in serves:
+                continue
+            prof = (self.calibration_profiles or {}).get(h)
+            if prof is not None and prof.usable()[0]:
+                continue
+            saved = self._usable_saved_profile(h)
+            if saved is not None:
+                self.apply_calibration(saved)
+                continue
+            out.append(h)
+        return out
+
+    def _warn_uncalibrated(self, hand, start) -> bool:
+        """Stop a game that would score force against nothing, and let
+        the clinician decide what to do about it. True when the
+        question is on screen and the caller must not start anything.
+
+        Calibrate now runs the same quick flow the login runs, over
+        just the offending hands, and starts the game when it lands.
+        Play anyway starts the game on the default thresholds and
+        remembers the choice for the rest of the session, so this asks
+        once per hand rather than before every game. Esc backs out of
+        the question and starts nothing.
+        """
+        if not getattr(self, "_session_active", False):
+            return False
+        if self._exit_confirm is not None:
+            # One modal at a time. Nothing else can be up on the hand
+            # picker, but a stacked dialog would be unreachable.
+            return False
+        acked = getattr(self, "_uncal_ack", None)
+        if acked is None:
+            acked = self._uncal_ack = set()
+        bad = [h for h in self.uncalibrated_hands(hand) if h not in acked]
+        if not bad:
+            return False
+        from ..ui.widgets import ConfirmDialog
+        names = " and ".join(h.capitalize() for h in bad)
+        subject = "hand has" if len(bad) == 1 else "hands have"
+
+        def calibrate_now():
+            self._exit_confirm = None
+
+            def then():
+                self._session_cal_hands.update(bad)
+                start()
+
+            # Straight to the screen rather than through the automatic
+            # trigger: this is a click asking for the flow, so it runs
+            # even on a rig with the automatic pass switched off, the
+            # same as the hub's Calibrate button.
+            if not self.show_quick_calibration(bad, then):
+                start()
+
+        def play_anyway():
+            self._exit_confirm = None
+            acked.update(bad)
+            log.warning("starting %s with %s uncalibrated: force "
+                        "readings are scored against config defaults",
+                        self.cfg.get("game.mode", "?"), ", ".join(bad))
+            start()
+
+        self._exit_confirm = ConfirmDialog(
+            question=f"{names} {subject} no calibration",
+            # Hard-wrapped, not one long sentence: ConfirmDialog splits
+            # on newlines only and a 640-wide card holds about 65
+            # body-font characters, so an unbroken line runs out over
+            # the dimmed screen behind the card.
+            detail=("Nothing has been measured, so presses would be "
+                    "scored\nagainst defaults. Measure it now, or "
+                    "play on them."),
+            safe_label="Calibrate now",
+            danger_label="Play anyway",
+            on_safe=calibrate_now,
+            on_danger=play_anyway,
+            theme=self.theme, layout=self.layout)
         return True
 
     def calibratable_hands(self) -> list[str]:
@@ -2652,10 +3251,12 @@ class GameEngine:
         """Re-run the quick flow from game select, on demand.
 
         Same screen, same capture, same threshold maths and same
-        per-hand save as the automatic gate: this only changes WHEN it
-        runs. Finishing (or skipping) marks those hands as covered for
-        the session, so a deliberate calibrate also satisfies the
-        session-once rule and the next game does not ask again.
+        per-hand save as the login pass: this only changes WHEN it
+        runs. Unconditional on purpose, unlike the login pass: the
+        therapist pressing this has already decided the hand needs
+        measuring again (strap moved, a press stopped registering).
+        Finishing (or skipping) marks those hands as covered for the
+        session.
         """
         hands = self.calibratable_hands()
         if not hands:
@@ -3599,12 +4200,6 @@ class GameEngine:
             self.begin_adaptive_block()
             return
         if kind == "mirror":
-            # Mirror never passes the setup screen, so its retry keeps
-            # the same session calibration gate the pick path has. In
-            # the normal flow the hands are already covered and this
-            # returns False at zero cost.
-            if self.maybe_start_quick_calibration(self.begin_mirror_block):
-                return
             self.begin_mirror_block()
             return
         if kind == "reaction":
@@ -3773,6 +4368,12 @@ class GameEngine:
         self._last_stim_delivered = None
         self._block_pause_count = 0
         self._block_paused_s = 0.0
+        # Prep skips reset per block like the pause counters, so the
+        # summary reports THIS block's skips.
+        self._prep_skips = 0
+        self._prep_skip_events = []
+        self._prep_skipped_s = 0.0
+        self._skip_chip_rect = None
         self._loud_trials_by_id = {}
         self._block_loud_trials = 0
         self._last_stim_timeout_ms = None
@@ -3970,6 +4571,12 @@ class GameEngine:
         summary["pauses"] = getattr(self, "_block_pause_count", 0)
         summary["paused_total_s"] = round(
             getattr(self, "_block_paused_s", 0.0), 3)
+        # Waits somebody cut short: the shared GET READY prep plus
+        # whatever the mode itself was waiting through. A rest that
+        # protects a measurement can be skipped like any other, so
+        # the count has to be here in every block summary, not only
+        # in the modes that happen to report it.
+        summary["skipped_waits"] = self.skipped_wait_summary()
         summary["loud_trials"] = {
             "n": getattr(self, "_block_loud_trials", 0),
             "configured_fraction": getattr(
@@ -4436,11 +5043,7 @@ class GameEngine:
         elif mode == "adaptive":
             self.begin_adaptive_block()
         elif mode == "mirror":
-            # A protocol whose first step is mirror must not dodge the
-            # session calibration gate the pick path runs.
-            if not self.maybe_start_quick_calibration(
-                    self.begin_mirror_block):
-                self.begin_mirror_block()
+            self.begin_mirror_block()
         elif mode == "reaction":
             self.begin_reaction_block()
         else:

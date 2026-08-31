@@ -325,6 +325,7 @@ import pygame
 
 from ...hardware.eeg_trigger import CODES as EEG_CODES
 from ...hardware.fsr_detector import PressEvent
+from ..rest_skip import WaitSkip
 from ..scheduling import BalancedScheduler
 from ..scoring import ScoreConfig, TrialResult, classify
 from ._keys import keymap_for_hand, resolve_key
@@ -463,9 +464,15 @@ class PendingChordTrial:
     incorrect_presses: list[tuple[int, float]] = field(default_factory=list)
     settle_ms: float | None = None
     hold_released: list[int] = field(default_factory=list)
+    # True when somebody cut the quiet-settle gate short before this
+    # chord fired, so the hand had not been still for baseline_quiet_ms
+    # and this trial's leak numbers rest on a shakier baseline than the
+    # rest of the block. Never silently dropped: it rides the per-trial
+    # record into block_stats.
+    settle_skipped: bool = False
 
 
-class ChordsMode:
+class ChordsMode(WaitSkip):
     name = "Chords"
 
     # Scoring split, mirroring the brief's 60/20/20 on the suite's
@@ -1133,6 +1140,23 @@ class ChordsMode:
             self._quiet_since = None
         if (self._quiet_since is None
                 or (now - self._quiet_since) < self.baseline_quiet_s):
+            # The quiet gate is the one wait in this mode that protects
+            # a measurement rather than the patient: the leak numbers
+            # only mean something because the chord launched from a
+            # still hand. It is still skippable (a hand that will not
+            # settle would otherwise trap the block), but the trial it
+            # releases carries settle_skipped so the analysis can see
+            # which baseline is soft. Held on screen past its due time
+            # because a gate that overruns is exactly when somebody
+            # wants the button.
+            due = ((self._quiet_since + self.baseline_quiet_s)
+                   if self._quiet_since is not None
+                   else now + self.baseline_quiet_s)
+            self.refresh_wait("settle", due,
+                              on_skip=self._force_settle,
+                              started_at=self._settle_t0,
+                              protects="a still hand before the chord",
+                              hold_when_due=True)
             if ((now - self._settle_t0) > self.settle_prompt_s
                     and (now - self._prompt_t) > self.PROMPT_EVERY_S):
                 self._prompt_t = now
@@ -1152,7 +1176,16 @@ class ChordsMode:
                 else:
                     self._set_message("Relax your hand", 1.2)
             return
+        self.clear_wait()
         self._fire(now)
+
+    def _force_settle(self, now: float) -> None:
+        """Release the quiet gate now. Backdating the quiet clock is
+        what makes the very next _update_settle fire, so the trial
+        still runs through the ordinary path and picks up the
+        settle_skipped flag on its way."""
+        self._quiet_since = now - self.baseline_quiet_s
+        self._next_ok_t = None
 
     # ---- firing ------------------------------------------------------------
     def _next_targets(self) -> tuple[str, str, str,
@@ -1231,6 +1264,7 @@ class ChordsMode:
             fingers_right=(tuple(sorted(fingers_right))
                            if scope == "cross" else ()),
             settle_ms=settle_ms,
+            settle_skipped=(self.take_skip_flag() == "settle"),
         )
         self.phase = "stim"
         self._quiet_since = None
@@ -1632,6 +1666,7 @@ class ChordsMode:
             "wrong": bool(trial.incorrect_presses),
             "settle_ms": (None if trial.settle_ms is None
                           else round(trial.settle_ms, 1)),
+            "settle_skipped": bool(trial.settle_skipped),
             "subblock": (self._sub_idx + 1
                          if trial.kind == "chord" else None),
         }
@@ -1917,6 +1952,16 @@ class ChordsMode:
         self._rest_kind = kind
         self._rest_until = now + max(0.0, floor_s)
         self._prompt_t = now
+        # Skippable like everything else. The rest between sub-blocks
+        # is recovery, not a measurement guard, so shortening it costs
+        # no trial its meaning; the sub-block that follows records that
+        # it started on a short rest so a fatigue reading can be taken
+        # with that in mind.
+        self.arm_wait("rest" if kind == "between" else "fatigue_rest",
+                      self._rest_until, self._leave_rest,
+                      started_at=now,
+                      protects=("recovery after a fatigued round"
+                                if kind == "fatigue" else None))
         self._set_message(msg, min(3.0, max(1.5, floor_s)))
         self._clear_lanes()
 
@@ -1930,6 +1975,12 @@ class ChordsMode:
         send = getattr(self.engine, "_eeg_send", None)
         if callable(send):
             send(EEG_CODES["rest_end"], t_event=now)
+        self.clear_wait()
+        # A fatigue rest that was cut short means the next round runs
+        # on less recovery than the fatigue rule asked for. Stamp it so
+        # the round's hit rate and RT can be read in that light.
+        if self.take_skip_flag():
+            self._short_rest_before_sub = self._sub_idx + 1
         self._rest_until = None
         self.phase = "settle"
         self._next_ok_t = now + self.REST_LEAD_S
@@ -2256,6 +2307,11 @@ class ChordsMode:
             },
             "subblocks": self._sub_stats,
             "fatigue_triggers": self._fatigue_triggers,
+            "short_rest_before_subblock": getattr(
+                self, "_short_rest_before_sub", None),
+            "settle_skipped_trials": sum(
+                1 for r in self._records if r.get("settle_skipped")),
+            **self.wait_skip_stats(),
             "end_reason": self.end_reason,
             "enslaving_matrices": matrices,
             "trials": self._records,

@@ -137,6 +137,7 @@ from typing import TYPE_CHECKING
 
 from ...data.logger import ContinuousTrialLog
 from ..force_stream import ForceView, MaxPressProbe, needs_max_press_probe
+from ..rest_skip import WaitSkip
 from ..scheduling import BalancedScheduler, FloorWeightedScheduler
 from ..scoring import ScoreConfig, TrialResult
 from .classic import PendingTrial
@@ -382,7 +383,7 @@ class RunRecord:
     section_mae: dict = field(default_factory=dict)
 
 
-class ForcePilotMode:
+class ForcePilotMode(WaitSkip):
     name = "Force Pilot"
 
     # A force reading older than this is a source dropout: scoring
@@ -689,6 +690,10 @@ class ForcePilotMode:
         self.phase = "probe_gap"
         self.probe_hand, self.probe_finger = self._probe_queue[0]
         self._phase_until = now + 1.2
+        # Pure pacing between max-press probes; the tare below is what
+        # the gap is for, and it lands the moment the gap opens.
+        self.arm_wait("gap", self._phase_until, self._enter_probe,
+                      started_at=now)
         # The hand is resting between probes: re-tare so the probe
         # measures counts above the actual resting level, not above
         # whatever drift the last press left behind.
@@ -709,6 +714,7 @@ class ForcePilotMode:
     LOW_MAX_FLOOR_MULT = 5.0
 
     def _enter_probe(self, now: float) -> None:
+        self.clear_wait()
         self.phase = "probe"
         self._phase_until = None
         self.probe = MaxPressProbe(n_presses=self.probe_presses,
@@ -840,6 +846,11 @@ class ForcePilotMode:
             pass  # the run was prepared by the caller
         self.phase = "announce"
         self._phase_until = now + self.announce_s
+        # The announce card names who flies next. Skippable: the tare
+        # below runs on entry, not over the card's lifetime, so
+        # shortening the card takes nothing away from the next run.
+        self.arm_wait("announce", self._phase_until, self._start_run,
+                      started_at=now)
         # Rest tare: the working hand is off the pads or resting during
         # the announcement, which is the moment to absorb drift.
         self.view.rebaseline([self.lane])
@@ -866,6 +877,7 @@ class ForcePilotMode:
         self.signal_stale = False
 
     def _start_run(self, now: float) -> None:
+        self.clear_wait()
         self.phase = "run"
         self._phase_until = None
         self.run_t0 = now
@@ -1111,6 +1123,7 @@ class ForcePilotMode:
             return
         self.phase = "feedback"
         self._phase_until = now + self.rest_s
+        self._arm_run_rest(now)
         self._prepare_run()
 
     # How many consecutive signal-starved closes of the same run slot
@@ -1156,6 +1169,7 @@ class ForcePilotMode:
             # pause path: the slot produced no evidence yet.
             self.phase = "feedback"
             self._phase_until = now + self.rest_s
+            self._arm_run_rest(now)
             return
         # Give the slot up: move on without touching the staircase.
         self._no_signal_streak = 0
@@ -1165,6 +1179,7 @@ class ForcePilotMode:
             return
         self.phase = "feedback"
         self._phase_until = now + self.rest_s
+        self._arm_run_rest(now)
         self._prepare_run()
 
     def _move_level(self, tic: float) -> None:
@@ -1210,7 +1225,17 @@ class ForcePilotMode:
                         f"finger={self.finger + 1}"),
                 hand=self.engine.hand_mode)
 
+    def _arm_run_rest(self, now: float) -> None:
+        """The between-run rest shows the run's numbers and lets the
+        finger recover. Ten seconds of holding a corridor is tiring,
+        so the floor is there for the hand, not for the measurement:
+        the next run re-tares on its own announce card whatever the
+        rest length was."""
+        self.arm_wait("rest", self._phase_until, self._next_run,
+                      started_at=now)
+
     def _next_run(self, now: float) -> None:
+        self.clear_wait()
         self._enter_announce(now)
 
     # ---- end of block ------------------------------------------------------
@@ -1323,4 +1348,5 @@ class ForcePilotMode:
             "no_signal_runs": self._no_signal_runs,
             "demo": self.demo,
             "end_reason": self.end_reason,
+            **self.wait_skip_stats(),
         }

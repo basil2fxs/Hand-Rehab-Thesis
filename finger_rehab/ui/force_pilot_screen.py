@@ -42,7 +42,7 @@ from typing import TYPE_CHECKING
 import pygame
 
 from ..game.modes.force_pilot import FINGER_WORDS, target_pct
-from .screens import ModeSelectScreen, Screen
+from .screens import ModeSelectScreen, Screen, draw_skip_chip
 from .widgets import (
     FONT_BODY, FONT_H1, FONT_H2, FONT_SMALL, FONT_TITLE,
     draw_text, make_font,
@@ -162,6 +162,9 @@ class ForcePilotScreen(Screen):
         remaining = self._countdown_remaining()
         if remaining > 0:
             self._draw_countdown_card(surf, remaining)
+        # One skip control for every enforced wait, drawn last so it
+        # sits over the countdown card and the rest material alike.
+        draw_skip_chip(surf, self.layout, self.theme, self.engine)
         # Skipped under either exit guard (the engine draws the
         # session dialog or the end-game chip above this screen),
         # matching GameplayScreen.

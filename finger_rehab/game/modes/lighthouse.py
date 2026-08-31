@@ -138,6 +138,7 @@ from typing import TYPE_CHECKING
 
 from ...data.logger import ContinuousTrialLog
 from ..force_stream import ForceView, MaxPressProbe, needs_max_press_probe
+from ..rest_skip import WaitSkip
 from ..scheduling import BalancedScheduler, PairedBalancedScheduler
 from ..scoring import ScoreConfig, TrialResult
 from .classic import PendingTrial
@@ -318,7 +319,7 @@ class EchoRecord:
     abs_err_pct: float | None
 
 
-class LighthouseMode:
+class LighthouseMode(WaitSkip):
     name = "Lighthouse"
 
     # A force reading older than this is a source dropout: scoring
@@ -691,6 +692,9 @@ class LighthouseMode:
         # measures counts above the actual resting level.
         self.view.rebaseline([self.hands[self.probe_hand]
                               [self.probe_finger]])
+        # Pure pacing; the tare above already happened.
+        self.arm_wait("gap", self._phase_until, self._enter_probe,
+                      started_at=now)
 
     # Same probe guard rails as Force Pilot: a stalled probe (finger
     # that never reaches the floor, or a dead pad) ends the block
@@ -700,6 +704,7 @@ class LighthouseMode:
     PROBE_STALL_S = 25.0
 
     def _enter_probe(self, now: float) -> None:
+        self.clear_wait()
         self.phase = "probe"
         self._phase_until = None
         self.probe = MaxPressProbe(n_presses=self.probe_presses,
@@ -824,6 +829,11 @@ class LighthouseMode:
     def _enter_announce(self, now: float) -> None:
         self.phase = "announce"
         self._phase_until = now + self.announce_s
+        # The announce card names the finger and the target. The tare
+        # below runs on entry, so cutting the card short costs the
+        # next trial nothing.
+        self.arm_wait("announce", self._phase_until, self._start_trial,
+                      started_at=now)
         # Rest tare: the working hand rests during the announcement,
         # which is the moment to absorb drift. Cross-hand echoes tare
         # both the studying and the matching finger.
@@ -869,6 +879,7 @@ class LighthouseMode:
         self.signal_stale = False
 
     def _start_trial(self, now: float) -> None:
+        self.clear_wait()
         self.phase = "trial"
         self._phase_until = None
         self.trial_t0 = now
@@ -1446,6 +1457,11 @@ class LighthouseMode:
             return
         self.phase = "feedback"
         self._phase_until = now + self.rest_s
+        # Between-trial rest showing the trial's numbers. A sixteen
+        # second hold is tiring, so the floor is for the finger; the
+        # next trial re-tares on its own announce card either way.
+        self.arm_wait("rest", self._phase_until, self._enter_announce,
+                      started_at=now)
         self._prepare_trial()
 
     def _end(self, reason: str) -> None:
@@ -1552,4 +1568,5 @@ class LighthouseMode:
             },
             "demo": self.demo,
             "end_reason": self.end_reason,
+            **self.wait_skip_stats(),
         }

@@ -252,6 +252,7 @@ import pygame
 
 from ...hardware.eeg_trigger import CODES as EEG_CODES
 from ...hardware.fsr_detector import PressEvent
+from ..rest_skip import WaitSkip
 from ..scheduling import BalancedScheduler
 from ..scoring import ScoreConfig, TrialResult, classify
 from ._keys import keymap_for_hand, resolve_key
@@ -549,7 +550,7 @@ class Segment:
     n_correct: int = field(default=0)
 
 
-class PatternMode:
+class PatternMode(WaitSkip):
     name = "Patterns"
 
     # RTs under this cannot be responses to the stimulus (standard SRTT
@@ -1077,6 +1078,21 @@ class PatternMode:
         self._rest_kind = kind
         self._rest_min_until = now + max(0.0, min_s)
         self._rest_msg_t = now
+        # Skippable like every other wait. A between-take rest is for
+        # comfort (rest length does not move the learning; see RESTS
+        # above), so cutting it short costs the measurement nothing and
+        # carries no per-trial flag. A FORCED rest is different: the
+        # same take resumes and its post-rest trials enter that take's
+        # mean, so a shortened one is named in fatigue_rest_positions
+        # and flags the trial that follows.
+        wait_kind = ("fatigue_rest" if kind == "forced"
+                     else "long_rest" if min_s >= self.long_rest
+                     else "rest")
+        self.arm_wait(
+            wait_kind, self._rest_min_until, self._leave_rest,
+            started_at=now,
+            protects=("recovery before the take resumes"
+                      if kind == "forced" else None))
         self._set_message(msg, min(3.0, max(1.5, min_s)))
         self._clear_lanes()
 
@@ -1092,6 +1108,15 @@ class PatternMode:
         send = getattr(self.engine, "_eeg_send", None)
         if callable(send):
             send(EEG_CODES["rest_end"], t_event=now)
+        self.clear_wait()
+        # A forced rest that was cut short leaves the take resuming on
+        # less recovery than the fatigue rule asked for. The position
+        # was already recorded on the way in; mark it shortened so the
+        # notebook can drop or split those trials rather than pooling
+        # them with properly rested ones.
+        if (self._rest_kind == "forced" and self._forced_rest_positions
+                and self.take_skip_flag()):
+            self._forced_rest_positions[-1]["skipped"] = True
         self._rest_min_until = None
         if self._rest_kind == "between":
             self._seg_idx += 1
@@ -1257,6 +1282,7 @@ class PatternMode:
             "n_trials": len(self._trials),
             "fatigue_rests": self._fatigue_triggers,
             "fatigue_rest_positions": list(self._forced_rest_positions),
+            **self.wait_skip_stats(),
             "end_reason": self.end_reason,
             "per_take": per_take,
             "probe_scores": learning,

@@ -1,5 +1,4 @@
-"""Quick calibration, run automatically after the hand pick the first
-time a session needs a hand.
+"""Quick calibration, run automatically when a session starts.
 
 Why this exists. The clinical CalibrationScreen on the menu is right
 for a therapist doing a deliberate measurement, but it is the wrong
@@ -35,7 +34,7 @@ Flow, kept under a minute per hand:
                    learned
     per finger     press the bar into the band, hold the ring round,
                    pop, next finger
-    summary        one warm line per finger, then straight to the game
+    summary        one warm line per finger, then straight to the hub
 
 Both rest captures cover EVERY hand in the run at once: with two
 boards all eight sensors ride in the same sample vector, so a
@@ -54,14 +53,16 @@ named rather than silently ignored.
 The skip rules mirror the rest of the app. A keyboard session never
 sees this screen at all (there is no force to calibrate, and the game
 notice for that lives on mode select, not here). Calibration is a
-session event: each hand runs the flow once, the first time a game in
-the session needs it, and every later game in that session skips it,
-hand-mode changes included; the trigger decision is the engine's, in
-maybe_start_quick_calibration, with the per-session memory held on
-the engine and cleared when the session ends. "Skip for now" is
-always on screen and leaves whatever profile was saved before
-completely untouched. Esc asks before abandoning, so a stray key
-cannot throw away a half-done run.
+session event and the session is where it runs: logging in puts every
+hand the rig can serve through the flow once, left first, and a board
+plugged in later in the session runs it alone the moment it connects.
+Games never open this screen. The trigger decision is the engine's, in
+maybe_start_quick_calibration, with the per-session memory held on the
+engine and cleared when the session ends. "Skip for now" is always on
+screen and leaves whatever profile was saved before completely
+untouched; a hand skipped with nothing saved is warned about when a
+game tries to score force on it. Esc asks before abandoning, so a
+stray key cannot throw away a half-done run.
 
 Flash safety: every colour change here is state-driven (the bar's
 three zones, the band glow, the quiet line) so none of them can
@@ -257,8 +258,9 @@ class QuickCalibrationScreen(Screen):
               continue_cb: Callable[[], None] | None = None) -> None:
         """Start a run over the given hands. continue_cb is what
         happens when the run finishes or is skipped; the engine passes
-        the block start when the flow gates a session, and the menu
-        passes nothing, which lands back on the title."""
+        the hub when the flow runs at login, the screen the therapist
+        was on when a board joins mid-session, and the menu passes
+        nothing, which lands back on the title."""
         wanted = [h for h in hands if h in ("left", "right")]
         # Left first: the lane strips put the left hand on the left of
         # the screen, so the flow reads in the same order the lanes do.
@@ -742,8 +744,8 @@ class QuickCalibrationScreen(Screen):
         """Esc asks before abandoning. First Esc raises the guard,
         Esc again (or the Stop button) confirms; Keep going lowers it.
         Abandoning discards the run and lands where the player came
-        from: game select mid-session (the flow gated a game start),
-        the login screen otherwise (a menu launch before any login)."""
+        from: game select once a session is open, the login screen
+        otherwise (a menu launch before any login)."""
         if self._confirm:
             self._abandon()
         else:

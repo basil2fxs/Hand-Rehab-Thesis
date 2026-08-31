@@ -44,8 +44,10 @@ little on both). Both hands is all 8.
 - Buzz Hunt: a finger buzzes, you press the finger that felt it.
   Needs the buzzers.
 
-First time on the sensors you get a quick calibration game (about 10 s
-per hand) so the game learns what a light press is for each finger.
+Logging in runs a quick calibration game (about 10 s per hand) on
+whichever boards are plugged in, so the software learns what a light
+press is for each finger before any game starts. Plug a second board
+in later and it calibrates that hand on the spot.
 
 ## Data
 

@@ -239,6 +239,7 @@ from typing import TYPE_CHECKING
 import pygame
 
 from ...hardware.fsr_detector import PressEvent
+from ..rest_skip import WaitSkip
 from ..scoring import ScoreConfig, TrialResult
 from ._keys import keymap_for_hand, resolve_key
 from .classic import PendingTrial
@@ -277,7 +278,7 @@ class TrialRecord:
     stress_correct: bool | None = None
 
 
-class SyllablesMode:
+class SyllablesMode(WaitSkip):
     name = "Syllables"
 
     # Once the expected number of taps has landed, wait this long for a
@@ -844,6 +845,8 @@ class SyllablesMode:
         self.phase = phase
         self._phase_t0 = now
         self._phase_until = None
+        # Any wait armed by the phase we are leaving is over.
+        self.clear_wait()
         if phase not in ("model", "replay"):
             self.model_hand = None
         if phase == "warmup":
@@ -873,10 +876,30 @@ class SyllablesMode:
         elif phase == "feedback":
             self._phase_until = now + self.FEEDBACK_S
             self._stop_metronome()
+            self.arm_wait("feedback", self._phase_until,
+                          self._skip_feedback, started_at=now)
         elif phase == "break":
             self._phase_until = now + self.break_s
+            # The between-round break is rest for a child, nothing
+            # more: no measurement leans on its length, so a skip
+            # carries no per-trial flag, only the tally.
+            self.arm_wait("break", self._phase_until,
+                          self._skip_to_next_word, started_at=now)
         elif phase == "gap":
             self._phase_until = now + self.inter_trial_gap_s
+            self.arm_wait("gap", self._phase_until,
+                          self._skip_to_next_word, started_at=now)
+
+    def _skip_to_next_word(self, now: float) -> None:
+        """Cut a break or an inter-word gap short: straight into the
+        next word, exactly where the timer would have taken it."""
+        self._begin_word(now)
+
+    def _skip_feedback(self, now: float) -> None:
+        """Cut the feedback card short. The word has already been
+        scored and logged; this only shortens how long the result
+        stays on screen."""
+        self._after_feedback(now)
 
     def _update_model(self, now: float) -> None:
         """Light the blocks one per beat, left to right. Each onset goes
@@ -1425,4 +1448,5 @@ class SyllablesMode:
                                     if ratios else None),
             "demo": self.demo,
             "end_reason": self.end_reason,
+            **self.wait_skip_stats(),
         }

@@ -163,6 +163,7 @@ from typing import TYPE_CHECKING
 
 from ...data.logger import ContinuousTrialLog
 from ...hardware.eeg_trigger import CODES as EEG_CODES
+from ..rest_skip import WaitSkip
 from ..scheduling import BalancedScheduler, PairedBalancedScheduler
 from ..scoring import ScoreConfig, TrialResult, classify
 from .classic import PendingTrial
@@ -338,7 +339,7 @@ class Staircase:
         return sum(tail) / len(tail)
 
 
-class BuzzHuntMode:
+class BuzzHuntMode(WaitSkip):
     name = "Buzz Hunt"
 
     # Reward for correctly waiting out a catch trial. Small on
@@ -747,10 +748,18 @@ class BuzzHuntMode:
         self.phase = "stage"
         self.stage_shown = self.stage
         self._phase_until = now + self.stage_intro_s
+        # The stage card explains what the next stretch of trials is
+        # asking for. A patient who has read it, or a researcher on
+        # their fifth run, can move on; nothing measures how long the
+        # card was up.
+        self.arm_wait("stage", self._phase_until, self._enter_announce,
+                      started_at=now)
 
     def _enter_announce(self, now: float) -> None:
         self.phase = "announce"
         self._phase_until = now + self.announce_s
+        self.arm_wait("announce", self._phase_until, self._start_trial,
+                      started_at=now)
         self.sub = "wait"
         self._quiet_since = None
         self._pulse_idx = 0
@@ -765,6 +774,12 @@ class BuzzHuntMode:
         self.phase = "trial"
         self.sub = "wait"
         self._phase_until = None
+        # The pre-buzz wait inside a trial is NOT armed. It is the
+        # foreperiod: a jittered, unpredictable delay is what stops
+        # the buzz from being anticipated, and a button that cuts it
+        # short would hand the patient the onset time. It is part of
+        # the stimulus, not a rest.
+        self.clear_wait()
         self.trial_t0 = now
         self._quiet_since = None
         self.active = PendingTrial(
@@ -1428,8 +1443,11 @@ class BuzzHuntMode:
         self.phase = "feedback"
         self._phase_until = now + self.rest_s
         self._presses.clear()
+        self.arm_wait("feedback", self._phase_until, self._next_or_end,
+                      started_at=now)
 
     def _next_or_end(self, now: float) -> None:
+        self.clear_wait()
         if self.trials_done >= self.total_trials:
             self._end("completed")
             return
@@ -1553,4 +1571,5 @@ class BuzzHuntMode:
             },
             "demo": self.demo,
             "end_reason": self.end_reason,
+            **self.wait_skip_stats(),
         }

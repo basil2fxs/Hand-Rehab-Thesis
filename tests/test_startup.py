@@ -95,6 +95,13 @@ class HeadlessEngineBootTests(unittest.TestCase):
         # Smaller window so the dummy driver doesn't allocate too much.
         cfg.data["ui"]["resolution"] = [640, 480]
         cfg.data["audio"]["enabled"] = False
+        # These tests drive the real mainloop, which now watches for
+        # Arduinos being plugged in. Off here so the result does not
+        # depend on what is plugged into the machine running the
+        # suite: with a board attached, run() would open a real port
+        # and tearing it down again outlasts the join this test
+        # allows. Autoconnect has its own tests.
+        cfg.data.setdefault("serial", {})["autoconnect"] = False
         eng = GameEngine(cfg, KeyboardOnlySource())
         # While loop exits immediately because we flip running=False BEFORE
         # entering run(). pygame.init + display.set_mode still happen, which
@@ -117,6 +124,13 @@ class HeadlessEngineBootTests(unittest.TestCase):
         cfg = Config.load()
         cfg.data["ui"]["resolution"] = [640, 480]
         cfg.data["audio"]["enabled"] = False
+        # These tests drive the real mainloop, which now watches for
+        # Arduinos being plugged in. Off here so the result does not
+        # depend on what is plugged into the machine running the
+        # suite: with a board attached, run() would open a real port
+        # and tearing it down again outlasts the join this test
+        # allows. Autoconnect has its own tests.
+        cfg.data.setdefault("serial", {})["autoconnect"] = False
         src = KeyboardOnlySource()
         eng = GameEngine(cfg, src)
 
@@ -153,6 +167,13 @@ class HeadlessEngineBootTests(unittest.TestCase):
         cfg = Config.load()
         cfg.data["ui"]["resolution"] = [640, 480]
         cfg.data["audio"]["enabled"] = False
+        # These tests drive the real mainloop, which now watches for
+        # Arduinos being plugged in. Off here so the result does not
+        # depend on what is plugged into the machine running the
+        # suite: with a board attached, run() would open a real port
+        # and tearing it down again outlasts the join this test
+        # allows. Autoconnect has its own tests.
+        cfg.data.setdefault("serial", {})["autoconnect"] = False
         src = KeyboardOnlySource()
         stop_calls: list[int] = [0]
         original_stop = src.stop
@@ -232,6 +253,13 @@ class HeadlessEngineBootTests(unittest.TestCase):
         cfg = Config.load()
         cfg.data["ui"]["resolution"] = [640, 480]
         cfg.data["audio"]["enabled"] = False
+        # These tests drive the real mainloop, which now watches for
+        # Arduinos being plugged in. Off here so the result does not
+        # depend on what is plugged into the machine running the
+        # suite: with a board attached, run() would open a real port
+        # and tearing it down again outlasts the join this test
+        # allows. Autoconnect has its own tests.
+        cfg.data.setdefault("serial", {})["autoconnect"] = False
         eng = GameEngine(cfg, KeyboardOnlySource())
 
         # Patch the title screen's update so we can intercept iteration
