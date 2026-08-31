@@ -17,6 +17,17 @@ All tracks below are by **Kevin MacLeod** (incompetech.com), licensed under **Cr
 | `Funkorama.mp3` | ~110 BPM | funk groove, clear backbeat | 7.8 MB |
 | `Pixelland.mp3` | ~85 BPM | chiptune, bouncy 8-bit | 7.1 MB |
 | `Volatile_Reaction.mp3` | ~115 BPM | electronic rock, driving beat | 5.0 MB |
+| `Wallpaper.mp3` | ~110 BPM | bright synth pop | 8.8 MB |
+| `Life_of_Riley.mp3` | ~140 BPM | upbeat pop rock | 7.5 MB |
+| `Fluffing_a_Duck.mp3` | ~90 BPM | quirky playful acoustic | 2.7 MB |
+| `Happy_Alley.mp3` | ~130 BPM | fast fiddle klezmer | 3.3 MB |
+| `Beachfront_Celebration.mp3` | ~105 BPM | celebratory latin brass | 7.5 MB |
+| `Vivacity.mp3` | ~120 BPM | light swing electronic | 7.4 MB |
+
+The last six are the menu playlist (see `audio.menu_music_tracks` in
+`config/default.yaml`): they play shuffled on the menu screens and
+fade out when a game starts. They sit in this folder like every other
+track, so rhythm mode can also pick them from its song list.
 
 ## When using this device in published work
 

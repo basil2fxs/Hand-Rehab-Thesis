@@ -76,9 +76,15 @@ class AdaptiveConfig:
     target_high: float = 0.80
     # BPM bounds and step size for the speed-up / slow-down decisions.
     # `bpm_min` 10 prevents the cadence collapsing during long recovery
-    # spirals; `bpm_max` 140 caps difficulty at a realistic upper bound.
+    # spirals. `bpm_max` 180 (333 ms between stimuli, press window
+    # about 300 ms) is set by the band, not by taste: the controller's
+    # one job for a high performer is to shrink the window until their
+    # hit rate falls back into 65-80 percent, and a hand with a fast
+    # 280 ms press needs the window down near 300 ms before that
+    # happens. The old cap of 140 (window 386 ms) parked such a hand
+    # at 100 percent hits forever, measurably outside the band.
     bpm_min: float = 10.0
-    bpm_max: float = 140.0
+    bpm_max: float = 180.0
     bpm_step: float = 10.0
     # Weakness bias on lane selection. Lane weights scale as
     # weakness_bias ** (1 - hit_ema), so a weak lane (hit_ema = 0)
@@ -313,6 +319,27 @@ class AdaptiveEngine:
         if quality_pressure < 0 or rt_pressure < 0:
             # Either side asking for a slow-down. Take the worst.
             combined = min(quality_pressure, rt_pressure)
+            if rt_pressure < 0 <= quality_pressure \
+                    and hr > self.cfg.target_high and qr >= 0.5:
+                # Band-keeping override. The utilisation guard exists
+                # to stop a coping-but-fragile patient being pushed
+                # over the cliff, but ABOVE the band the cliff edge is
+                # the destination: the controller's job is to shrink
+                # the window until the hit rate falls back to 65-80
+                # percent, and utilisation rising through 0.80 is what
+                # that approach looks like. Letting the guard veto
+                # here parked a 96-percent player at util 0.80 for
+                # entire sessions (measured: 300 of 300 trials above
+                # the band, BPM oscillating just under the stall
+                # point). Blend instead of veto: the guard tempers the
+                # climb as it strengthens and only wins outright once
+                # it outweighs the whole quality signal, by which
+                # point the misses it predicted have arrived and hr
+                # itself has dropped back toward the band. The qr
+                # gate keeps the override honest: a 100 percent hit
+                # rate made of Lates (qr under 0.5) is a patient at
+                # their limit, and there the guard keeps its veto.
+                combined = max(0.0, quality_pressure + rt_pressure)
         else:
             # Both non-negative. Use whichever is more confidently
             # asking for a speed-up.

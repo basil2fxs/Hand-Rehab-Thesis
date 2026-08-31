@@ -121,6 +121,13 @@ class GameEngine:
         )
 
         self.audio: AudioEngine | None = None
+        # Built lazily on the first _tick_menu_music once self.audio
+        # exists (audio itself is only built inside run()).
+        self.menu_music = None
+        # The vs-last-time chip for the results screen: None (no chip)
+        # or the dict data/history.chip_for returns. Set at
+        # finish_block, cleared when a new block begins.
+        self.vs_last: dict | None = None
         self.mode = None
         self.screen_obj = None
         self.running = True
@@ -873,6 +880,11 @@ class GameEngine:
                         if not self._on_block_screen():
                             self.screen_obj.handle_event(e)
 
+                # Menu playlist, every frame including paused ones: a
+                # pause only exists over a block, where the player is
+                # silent anyway, and skipping it here could park a
+                # fade-out half-finished for the whole pause.
+                self._tick_menu_music()
                 if not self.paused:
                     if self.audio:
                         self.audio.tick()
@@ -1211,6 +1223,28 @@ class GameEngine:
         )
         a.init()
         return a
+
+    def current_screen_key(self) -> str | None:
+        """The _screens key of the screen showing now, or None for a
+        screen built outside that dict (quick calibration rebuilds,
+        test doubles)."""
+        screens = getattr(self, "_screens", None) or {}
+        for key, sc in screens.items():
+            if sc is self.screen_obj:
+                return key
+        return None
+
+    def _tick_menu_music(self) -> None:
+        """One frame of the menu playlist. Runs every loop pass; the
+        player's own gate keeps it silent everywhere but the menu
+        screens and during any block."""
+        if self.audio is None:
+            return
+        if self.menu_music is None:
+            from ..audio.menu_music import MenuMusicPlayer
+            self.menu_music = MenuMusicPlayer(self.audio, self.cfg)
+        self.menu_music.update(self.current_screen_key(),
+                               self.block_is_running())
 
     # Supersample factor for the on-screen window. The whole UI is drawn
     # to a fixed 1280x800 logical surface, then scaled up to the window
@@ -3514,21 +3548,18 @@ class GameEngine:
 
     def begin_chords_block(self) -> None:
         """Chords block: two to four fingers pressed together, quiet
-        fingers scored on staying quiet. One engine block is a full
-        session (opening probes, five sub-blocks of chords with
-        enforced rests, closing probes). The research case lives in
-        the mode file's docstring; chords.* in the config says what
-        the patient experiences.
+        fingers scored on staying quiet, never a single finger. One
+        engine block is a full session (five sub-blocks of chords
+        with enforced rests). The research case lives in the mode
+        file's docstring; chords.* in the config says what the
+        patient experiences.
 
         A within-hand chord stays inside one hand (cross-talk is a
         within-hand quantity); with Both selected the hands alternate
-        under the paired balance rules, the probes run per hand, and
-        the third and fifth sub-blocks deal CROSS-hand chords spanning
-        both hands, which measure bimanual coordination on their own
-        tier ladder and staircase. One hand selected runs exactly as
-        before. The opening probes are announced as a warm-up and
-        their total time is capped so the first chord always arrives
-        early (chords.warmup_iti_s / chords.warmup_cap_s).
+        under the paired balance rules, and the third and fifth
+        sub-blocks deal CROSS-hand chords spanning both hands, which
+        measure bimanual coordination on their own ladder and
+        staircase. One hand selected runs exactly as before.
         """
         from .modes.chords import ChordsMode
         hands = self.lanes_by_hand()
@@ -3566,8 +3597,6 @@ class GameEngine:
             trials_per_subblock=int(
                 self.cfg.get("chords.trials_per_subblock", 20)),
             subblocks=int(self.cfg.get("chords.subblocks", 5)),
-            probe_trials_per_finger=int(
-                self.cfg.get("chords.probe_trials_per_finger", 2)),
             rest_between_s=float(
                 self.cfg.get("chords.rest_between_s", 30)),
             fatigue_rest_s=float(
@@ -3577,10 +3606,6 @@ class GameEngine:
             score_cfg=self.score_cfg,
             seed=seed,
             demo_trials=self._test_mode_trials(),
-            warmup_iti_s=float(
-                self.cfg.get("chords.warmup_iti_s", 0.8)),
-            warmup_cap_s=float(
-                self.cfg.get("chords.warmup_cap_s", 60)),
         )
         self._begin_block("chords")
         # The seed shaped every chord draw and jitter in this block, so
@@ -4300,6 +4325,10 @@ class GameEngine:
         self.score = 0
         self.hits = 0
         self.misses = 0
+        # The vs-last chip belongs to a FINISHED game; a stale one
+        # from the previous block must not survive into this one's
+        # results if the lookup there fails.
+        self.vs_last = None
         # Fresh streak per block so encouragement popups fire again and a
         # leftover miss streak from the previous block doesn't trigger
         # recovery mode on the first trial.
@@ -5544,6 +5573,31 @@ class GameEngine:
         self._stamp_calibration()
         self.session.block_summary = self._build_block_summary("completed")
         self.session.notes = "block completed"
+        # Vs-last-time chip for the results screen: this game against
+        # the same participant's previous COMPLETED game of the same
+        # mode and hand, read back from the sessions tree. Computed
+        # before the metadata save on purpose: the current game's own
+        # folder is excluded by path, and everything already on disk
+        # (including an earlier game this session) is fair history.
+        self.vs_last = None
+        try:
+            from ..data import history
+            data_dir = self.cfg.resolve_path(
+                self.cfg.get("session.data_dir", "sessions"))
+            prev = history.previous_block_summary(
+                data_dir,
+                participant=self.session.participant,
+                mode=str(self.current_block),
+                hand=str(self.hand_mode),
+                exclude_root=(self.session_paths.root
+                              if self.session_paths else None),
+            )
+            if prev is not None:
+                self.vs_last = history.chip_for(
+                    str(self.current_block),
+                    self.session.block_summary, prev)
+        except Exception as e:
+            log.warning("vs-last lookup failed: %s", e)
         # Wrap the metadata save: if the JSON write fails (disk full,
         # permission denied, weird path) we still need to drop the
         # loggers so the raw-CSV thread + open file handle don't leak.

@@ -1,14 +1,19 @@
 """Tests for Chords mode, the multi-finger co-activation block. The
-guarantees pinned here are the ones the measurement depends on: the
-difficulty ladder follows the enslaving-adjacency formula it claims to,
-every chord lights all its fingers at once and lands in the CSV as
-"1+3+4" with the full target set in correct_keys, the synchrony window
-is what separates a chord from a sequence of taps, cross-talk is scored
-from the force-window peaks and rewarded separately from completion,
-the buzzer cue for a same-board chord is a spaced arpeggio the shared
-driver can actually deliver, and the safety rails (quiet-hand gate,
-enforced rests, fatigue triggers, session cap) end a block rather than
-trap a tired hand in it.
+guarantees pinned here are the ones the measurement depends on: every
+trial in play is a chord of two to four fingers (no single fingers,
+Basil's rule), the deal mixes the whole chord space (sizes off a
+shuffle bag, per-finger participation balanced, never the same chord
+twice running), the difficulty formula still ranks the analysis table
+the way the enslaving-adjacency literature predicts, every chord
+lights all its fingers at once and lands in the CSV as "1+3+4" with
+the full target set in correct_keys, the synchrony window is what
+separates a chord from a sequence of taps, cross-talk is scored from
+the force-window peaks against the quick-cal light-press reference
+and rewarded separately from completion, the buzzer cue for a
+same-board chord is a spaced arpeggio the shared driver can actually
+deliver, and the safety rails (quiet-hand gate, enforced rests,
+fatigue triggers, session cap) end a block rather than trap a tired
+hand in it.
 """
 from __future__ import annotations
 
@@ -64,7 +69,6 @@ def _build_mode(**overrides):
         iti_max_s=2.5,
         trials_per_subblock=20,
         subblocks=5,
-        probe_trials_per_finger=2,
         rest_between_s=30.0,
         fatigue_rest_s=120.0,
         session_cap_min=30.0,
@@ -78,15 +82,11 @@ def _build_mode(**overrides):
     return engine, mode
 
 
-def _burn_probes(mode, t: float = 5.0) -> float:
-    """Complete every remaining opening probe cleanly so the next fire
-    is a chord. Returns a time safely past the presses used."""
-    while mode._probe_left_start > 0:
-        mode._fire(t)
-        for lane in mode.active.targets:
-            mode._handle_press(_press(lane, t + 0.2), t + 0.2)
-        t += 1.0
-    return t
+def _force_pair(mode, hand: str = "right") -> None:
+    """Make the hand's next deal a two-finger chord: tests that press
+    exactly two lanes need a pair, and the size bag's opening size
+    depends on the seed."""
+    mode._deck[hand]._classes._bag.insert(0, 2)
 
 
 def _complete_chord(mode, t0: float, gap_s: float = 0.05) -> float:
@@ -140,15 +140,88 @@ class DifficultyLadderTests(unittest.TestCase):
         self.assertEqual(set(CHORD_TIERS[3]),
                          {(0, 2), (1, 3), (0, 1, 3)})
 
-    def test_levels_run_tiers_within_windows(self) -> None:
+    def test_levels_run_the_window_ladder(self) -> None:
+        # A level IS a synchrony window: the deal mixes the whole
+        # chord space at every level, so W is the only climb.
         _, mode = _build_mode()
-        self.assertEqual(mode.max_level, 15)
+        self.assertEqual(mode.max_level, 3)
+        mode.level = 0
+        self.assertEqual(mode.current_w_ms, 250.0)
+        mode.level = 1
+        self.assertEqual(mode.current_w_ms, 200.0)
         mode.level = 3
-        self.assertEqual((mode.current_tier, mode.current_w_ms), (3, 250.0))
-        mode.level = 4
-        self.assertEqual((mode.current_tier, mode.current_w_ms), (0, 200.0))
-        mode.level = 15
-        self.assertEqual((mode.current_tier, mode.current_w_ms), (3, 100.0))
+        self.assertEqual(mode.current_w_ms, 100.0)
+
+
+class MixedDealTests(unittest.TestCase):
+    """Basil's rule made mechanical: "only for 2 or 3 or 4 fingers at
+    once, no single fingers. make sure always different and mixed
+    combinations." The deal must never ask for a single finger, must
+    interleave the sizes off a shuffle bag, must never repeat a chord
+    back to back, and must keep per-finger participation near-equal
+    via the deficit draw."""
+
+    def _draws(self, n: int = 99, seed: int = 7):
+        from finger_rehab.game.modes.chords import ALL_CHORDS, \
+            MixedChordDeck
+        import random as _random
+        deck = MixedChordDeck(ALL_CHORDS, _random.Random(seed),
+                              class_of=len, keys_of=lambda c: c)
+        return [deck.next() for _ in range(n)]
+
+    def test_every_draw_is_two_to_four_fingers(self) -> None:
+        for c in self._draws():
+            self.assertGreaterEqual(len(c), 2)
+            self.assertLessEqual(len(c), 4)
+
+    def test_sizes_come_off_a_shuffle_bag(self) -> None:
+        draws = self._draws(99)
+        sizes = [len(c) for c in draws]
+        for s in (2, 3, 4):
+            self.assertEqual(sizes.count(s), 33)
+        # The bag refill avoids opening on the size it just dealt, so
+        # two same-size chords never run back to back (which is also
+        # what stops IMRP, the only quad, from repeating).
+        for a, b in zip(sizes, sizes[1:]):
+            self.assertNotEqual(a, b)
+
+    def test_no_chord_repeats_back_to_back(self) -> None:
+        draws = self._draws(300)
+        for a, b in zip(draws, draws[1:]):
+            self.assertNotEqual(a, b)
+
+    def test_participation_stays_balanced(self) -> None:
+        # The deficit draw's whole job: over a session's worth of
+        # draws every finger has been asked a near-equal number of
+        # times, not just every chord dealt equally often.
+        for seed in (1, 7, 42):
+            counts = {f: 0 for f in range(4)}
+            for c in self._draws(100, seed=seed):
+                for f in c:
+                    counts[f] += 1
+            spread = max(counts.values()) - min(counts.values())
+            self.assertLessEqual(spread, 4, counts)
+
+    def test_cross_deck_mixes_symmetry_and_balances_fingers(self) -> None:
+        from finger_rehab.game.modes.chords import ALL_CROSS, \
+            MixedChordDeck
+        import random as _random
+        deck = MixedChordDeck(
+            ALL_CROSS, _random.Random(7),
+            class_of=lambda p: ("mirror" if p[0] == p[1]
+                                else "nonmirror"),
+            keys_of=lambda p: (tuple(("L", f) for f in p[0])
+                               + tuple(("R", f) for f in p[1])))
+        draws = [deck.next() for _ in range(100)]
+        mirror = sum(1 for l, r in draws if l == r)
+        self.assertEqual(mirror, 50)
+        for a, b in zip(draws, draws[1:]):
+            self.assertNotEqual(a, b)
+        # All eight fingers take part.
+        keys = {k for d in draws
+                for k in ([("L", f) for f in d[0]]
+                          + [("R", f) for f in d[1]])}
+        self.assertEqual(len(keys), 8)
 
 
 class TrialFlowTests(unittest.TestCase):
@@ -158,7 +231,7 @@ class TrialFlowTests(unittest.TestCase):
 
     def test_chord_lights_all_targets_in_one_stim(self) -> None:
         engine, mode = _build_mode()
-        t = _burn_probes(mode)
+        t = 5.0
         mode._fire(t)
         lanes_arg = engine.on_stim_multi.call_args[0][0]
         self.assertEqual(sorted(lanes_arg), list(mode.active.targets))
@@ -166,7 +239,7 @@ class TrialFlowTests(unittest.TestCase):
 
     def test_stimulus_and_correct_keys_carry_the_chord(self) -> None:
         engine, mode = _build_mode()
-        t = _burn_probes(mode)
+        t = 5.0
         mode._fire(t)
         targets = mode.active.targets
         _complete_chord(mode, t + 0.3)
@@ -177,7 +250,8 @@ class TrialFlowTests(unittest.TestCase):
 
     def test_presses_inside_the_window_score_all_components(self) -> None:
         engine, mode = _build_mode()
-        t = _burn_probes(mode)
+        t = 5.0
+        _force_pair(mode)
         mode._fire(t)
         # 50 ms span against a 250 ms window: together, near-full
         # togetherness. No force data, so quiet pays in full.
@@ -192,7 +266,7 @@ class TrialFlowTests(unittest.TestCase):
 
     def test_span_past_the_window_is_a_late_chord(self) -> None:
         engine, mode = _build_mode()
-        t = _burn_probes(mode)
+        t = 5.0
         mode._fire(t)
         # 300 ms span against the opening 250 ms window: completed but
         # not together, so completion and quiet pay, togetherness not.
@@ -205,7 +279,7 @@ class TrialFlowTests(unittest.TestCase):
 
     def test_timeout_with_some_fingers_keeps_partial_completion(self) -> None:
         engine, mode = _build_mode()
-        t = _burn_probes(mode)
+        t = 5.0
         mode._fire(t)
         targets = mode.active.targets
         mode._handle_press(_press(targets[0], t + 0.4), t + 0.4)
@@ -222,7 +296,8 @@ class TrialFlowTests(unittest.TestCase):
 
     def test_wrong_finger_downgrades_to_miss(self) -> None:
         engine, mode = _build_mode()
-        t = _burn_probes(mode)
+        t = 5.0
+        _force_pair(mode)
         mode._fire(t)
         quiet = [l for l in mode.lanes
                  if l not in mode.active.targets][0]
@@ -238,7 +313,7 @@ class TrialFlowTests(unittest.TestCase):
 
     def test_double_tap_on_a_target_is_not_a_wrong_press(self) -> None:
         engine, mode = _build_mode()
-        t = _burn_probes(mode)
+        t = 5.0
         mode._fire(t)
         first = mode.active.targets[0]
         mode._handle_press(_press(first, t + 0.2), t + 0.2)
@@ -261,37 +336,43 @@ class CrossTalkTests(unittest.TestCase):
     quiet component of the score, or the mode rewards chords without
     rewarding individuation."""
 
+    REFS = {0: 50.0, 1: 32.5, 2: 37.5, 3: 115.0}
+
+    def _fire_pair(self, engine, mode):
+        """Fire a two-finger chord and return (targets, quiet)."""
+        _force_pair(mode)
+        mode._fire(5.0)
+        targets = list(mode.active.targets)
+        quiet = [l for l in mode.lanes if l not in targets]
+        return targets, quiet
+
     def test_er_is_leak_over_press_normalised_per_finger(self) -> None:
         # References from the shipped thresholds: on_delta / 0.40 =
-        # (50, 32.5, 37.5, 115) counts. The instructed finger presses
-        # exactly its reference (norm 1.0); one quiet finger leaks 10
-        # percent of its own reference. ER = mean leak / mean press =
-        # (0.1 + 0 + 0) / 3 / 1.0.
+        # (50, 32.5, 37.5, 115) counts, the quick-cal light-press
+        # fallback. Both targets press exactly their reference (norm
+        # 1.0); one quiet finger leaks 10 percent of its own
+        # reference. ER = mean leak / mean press = (0.1 + 0) / 2 / 1.
         engine, mode = _build_mode()
-        mode._fire(5.0)
-        lane = mode.active.targets[0]
-        quiet = [l for l in mode.lanes if l != lane]
-        refs = {0: 50.0, 1: 32.5, 2: 37.5, 3: 115.0}
-        peaks = {lane: refs[lane], quiet[0]: 0.1 * refs[quiet[0]]}
+        targets, quiet = self._fire_pair(engine, mode)
+        peaks = {l: self.REFS[l] for l in targets}
+        peaks[quiet[0]] = 0.1 * self.REFS[quiet[0]]
         engine._force_window_peak = peaks
         engine._force_window_saw_samples = True
-        mode._handle_press(_press(lane, 5.4), 5.4)
+        _complete_chord(mode, 5.4, gap_s=0.01)
         rec = mode._records[-1]
-        self.assertAlmostEqual(rec["er"], 0.1 / 3, places=3)
+        self.assertAlmostEqual(rec["er"], 0.1 / 2, places=3)
         self.assertEqual(rec["class"], "hit")
 
     def test_a_leak_past_the_threshold_fails_quiet_and_classes(self) -> None:
         # One quiet finger at 50 percent of the press is 2-3x worse
         # than healthy enslaving: leak_fail, and the quiet points go.
         engine, mode = _build_mode()
-        mode._fire(5.0)
-        lane = mode.active.targets[0]
-        quiet = [l for l in mode.lanes if l != lane]
-        refs = {0: 50.0, 1: 32.5, 2: 37.5, 3: 115.0}
-        engine._force_window_peak = {
-            lane: refs[lane], quiet[0]: 0.5 * refs[quiet[0]]}
+        targets, quiet = self._fire_pair(engine, mode)
+        peaks = {l: self.REFS[l] for l in targets}
+        peaks[quiet[0]] = 0.5 * self.REFS[quiet[0]]
+        engine._force_window_peak = peaks
         engine._force_window_saw_samples = True
-        mode._handle_press(_press(lane, 5.4), 5.4)
+        _complete_chord(mode, 5.4, gap_s=0.01)
         rec = mode._records[-1]
         self.assertEqual(rec["class"], "leak_fail")
         outcome = engine.log_trial.call_args[0][1]
@@ -301,12 +382,12 @@ class CrossTalkTests(unittest.TestCase):
 
     def test_over_force_flags_without_failing_the_trial(self) -> None:
         engine, mode = _build_mode()
-        mode._fire(5.0)
-        lane = mode.active.targets[0]
-        refs = {0: 50.0, 1: 32.5, 2: 37.5, 3: 115.0}
-        engine._force_window_peak = {lane: 3.0 * refs[lane]}
+        targets, _ = self._fire_pair(engine, mode)
+        peaks = {l: self.REFS[l] for l in targets}
+        peaks[targets[0]] = 3.0 * self.REFS[targets[0]]
+        engine._force_window_peak = peaks
         engine._force_window_saw_samples = True
-        mode._handle_press(_press(lane, 5.4), 5.4)
+        _complete_chord(mode, 5.4, gap_s=0.01)
         rec = mode._records[-1]
         self.assertTrue(rec["over_force"])
         self.assertEqual(rec["class"], "over_force")
@@ -318,7 +399,8 @@ class CrossTalkTests(unittest.TestCase):
         # must not be withheld for data the hardware never produced;
         # a pressed quiet finger is still caught as a wrong press.
         engine, mode = _build_mode()
-        t = _burn_probes(mode)
+        t = 5.0
+        _force_pair(mode)
         mode._fire(t)
         _complete_chord(mode, t + 0.3)
         rec = mode._records[-1]
@@ -326,53 +408,85 @@ class CrossTalkTests(unittest.TestCase):
         self.assertEqual(engine.log_trial.call_args[0][1].points, 10)
 
 
-class ProbeAndMatrixTests(unittest.TestCase):
-    """The single-finger probes at the session's edges are what let the
-    analysis build a true enslaving matrix and separate trained-task
-    gains from transfer, so their balance and their arithmetic are
-    load-bearing."""
+class ChordMatrixTests(unittest.TestCase):
+    """The enslaving matrices are now built from the chords
+    themselves, normalised by the quick-cal light-press reference (the
+    single-finger probes are gone from play). The arithmetic is
+    load-bearing: a 10 percent leak on every quiet finger must read
+    10.0 in every measured off-diagonal cell."""
 
-    def test_session_opens_with_balanced_single_finger_probes(self) -> None:
-        _, mode = _build_mode()
-        fired = []
-        t = 5.0
-        while mode._probe_left_start > 0:
-            mode._fire(t)
-            self.assertEqual(mode.active.kind, "probe")
-            self.assertEqual(len(mode.active.targets), 1)
-            fired.append(mode.active.fingers[0])
-            for lane in mode.active.targets:
-                mode._handle_press(_press(lane, t + 0.2), t + 0.2)
-            t += 1.0
-        self.assertEqual(len(fired), 8)
-        for finger in range(4):
-            self.assertEqual(fired.count(finger), 2)
+    REFS = {0: 50.0, 1: 32.5, 2: 37.5, 3: 115.0}
 
-    def test_enslaving_matrix_from_probe_peaks(self) -> None:
-        engine, mode = _build_mode()
-        refs = {0: 50.0, 1: 32.5, 2: 37.5, 3: 115.0}
-        t = 5.0
-        while mode._probe_left_start > 0:
+    def _play_chords(self, engine, mode, n, t=5.0, leak=0.1):
+        for _ in range(n):
+            if mode.phase == "rest":
+                mode._leave_rest(t)
+                t += 2.0
             mode._fire(t)
-            lane = mode.active.targets[0]
-            peaks = {lane: refs[lane]}
-            for q in mode.lanes:
-                if q != lane:
-                    # Every quiet finger leaks 10 percent of its own
-                    # reference while the instructed one presses 100
-                    # percent of its own: every off-diagonal cell
-                    # should read 10.0 percent.
-                    peaks[q] = 0.1 * refs[q]
+            peaks = {}
+            for l in mode.lanes:
+                if l in mode.active.targets:
+                    peaks[l] = self.REFS[l]
+                else:
+                    peaks[l] = leak * self.REFS[l]
             engine._force_window_peak = peaks
             engine._force_window_saw_samples = True
-            mode._handle_press(_press(lane, t + 0.4), t + 0.4)
-            t += 1.0
+            _complete_chord(mode, t + 0.3, gap_s=0.01)
+            t += 1.5
+        return t
+
+    def test_enslaving_matrix_from_chord_peaks(self) -> None:
+        # 20 chords cover every (active, quiet) pair thanks to the
+        # deficit draw; each target presses its own reference (norm
+        # 1.0) and each quiet finger leaks 10 percent of its own.
+        engine, mode = _build_mode()
+        self._play_chords(engine, mode, 20)
         matrix = mode.block_stats()["enslaving_matrix_start"]
+        measured = 0
         for i in range(4):
             self.assertIsNone(matrix[i][i])
             for j in range(4):
-                if i != j:
-                    self.assertAlmostEqual(matrix[i][j], 10.0, places=1)
+                if i != j and matrix[i][j] is not None:
+                    measured += 1
+                    self.assertAlmostEqual(matrix[i][j], 10.0,
+                                           places=1)
+        self.assertEqual(measured, 12)
+
+    def test_start_and_end_matrices_come_from_first_and_last_rounds(
+            self) -> None:
+        # Sub-block 1 leaks 10 percent, the last sub-block 30: the
+        # start matrix must read 10 and the end 30, the Danion-style
+        # start-to-end fatigue contrast the probe sets used to carry.
+        engine, mode = _build_mode(trials_per_subblock=20, subblocks=2)
+        t = self._play_chords(engine, mode, 20, leak=0.1)
+        self._play_chords(engine, mode, 20, t=t + 40.0, leak=0.3)
+        stats = mode.block_stats()
+        start = stats["enslaving_matrix_start"]
+        end = stats["enslaving_matrix_end"]
+        vals_s = [v for row in start for v in row if v is not None]
+        vals_e = [v for row in end for v in row if v is not None]
+        self.assertTrue(vals_s and vals_e)
+        for v in vals_s:
+            self.assertAlmostEqual(v, 10.0, places=1)
+        for v in vals_e:
+            self.assertAlmostEqual(v, 30.0, places=1)
+
+    def test_wrong_press_chord_stays_out_of_the_matrix(self) -> None:
+        # A cue-misread chord with a full press on a non-asked finger
+        # would write a ~100% cell into the matrix; the wrong flag
+        # keeps it out, exactly as it kept probes out before.
+        from finger_rehab.game.modes.chords import ChordsMode
+        rec_wrong = {"kind": "chord", "scope": "within", "chord": "IM",
+                     "press_norms": {"0": 1.0, "1": 1.0},
+                     "leaks": {"2": 1.0, "3": 0.04},
+                     "wrong": True}
+        rec_clean = {"kind": "chord", "scope": "within", "chord": "IM",
+                     "press_norms": {"0": 1.0, "1": 1.0},
+                     "leaks": {"2": 0.05, "3": 0.04},
+                     "wrong": False}
+        matrix = ChordsMode._chord_matrix([rec_wrong, rec_clean])
+        self.assertAlmostEqual(matrix[0][2], 5.0, places=1)
+        self.assertAlmostEqual(matrix[1][3], 4.0, places=1)
 
 
 class ProgressionTests(unittest.TestCase):
@@ -381,12 +495,10 @@ class ProgressionTests(unittest.TestCase):
     at both ends so a bad run cannot fall off the bottom."""
 
     def test_eight_of_ten_promotes_on_a_sliding_window(self) -> None:
-        # The window SLIDES rather than clearing on promote: clearing
-        # capped the climb at one level per 10 trials, which left the
-        # top half of both ladders unreachable in a fixed-dose session
-        # (a flawless player topped out at 10 of 15 unilaterally, 6
-        # within / 4 cross bilaterally). The 8-of-10 criterion is
-        # unchanged; a short cooldown spaces consecutive moves.
+        # The window SLIDES rather than clearing on promote (clearing
+        # capped the climb at one level per 10 trials). The 8-of-10
+        # criterion is unchanged; a short cooldown spaces consecutive
+        # moves.
         _, mode = _build_mode()
         for _ in range(10):
             mode._staircase(True)
@@ -409,11 +521,12 @@ class ProgressionTests(unittest.TestCase):
 
     def test_flawless_player_can_reach_the_top_of_the_ladder(self) -> None:
         # 100 within-hand chords per unilateral session: the whole
-        # 15-level ladder must be reachable, W=100 ms floor included.
+        # window ladder must be reachable, W=100 ms floor included.
         _, mode = _build_mode()
         for _ in range(100):
             mode._staircase(True)
         self.assertEqual(mode.level, mode.max_level)
+        self.assertEqual(mode.current_w_ms, 100.0)
 
     def test_five_or_fewer_demotes(self) -> None:
         _, mode = _build_mode()
@@ -485,7 +598,7 @@ class QuietGateAndHoldTests(unittest.TestCase):
         mode._fsr = True
         det = self._fake_detector([True] * 4)
         engine.detectors = {"right": det}
-        t = _burn_probes_fsr(mode, det)
+        t = 5.0
         mode._fire(t)
         det.pressed = [True] * 4
         _complete_chord(mode, t + 0.3)
@@ -502,7 +615,7 @@ class QuietGateAndHoldTests(unittest.TestCase):
         mode._fsr = True
         det = self._fake_detector([True] * 4)
         engine.detectors = {"right": det}
-        t = _burn_probes_fsr(mode, det)
+        t = 5.0
         mode._fire(t)
         det.pressed = [True] * 4
         _complete_chord(mode, t + 0.3)
@@ -514,29 +627,14 @@ class QuietGateAndHoldTests(unittest.TestCase):
         self.assertEqual(rec["class"], "no_hold")
 
 
-def _burn_probes_fsr(mode, det, t: float = 5.0) -> float:
-    """Probe burner for the FSR harness: keeps the fake detector down
-    through each probe's hold so the probes close cleanly."""
-    while mode._probe_left_start > 0:
-        mode._fire(t)
-        det.pressed = [True] * 4
-        for lane in mode.active.targets:
-            mode._handle_press(_press(lane, t + 0.2), t + 0.2)
-        if mode.phase == "hold":
-            mode._update_hold(t + 0.2 + mode.hold_s + 0.05)
-        det.pressed = [False] * 4
-        t += 1.0
-    return t
-
-
 class SessionFlowTests(unittest.TestCase):
-    """The session shape is the dose: probes at both edges, enforced
-    rests between rounds, a fatigue guard judged against the first
-    round, and a wall-clock ceiling. These are what make 100 chords
-    safe to hand a stroke patient."""
+    """The session shape is the dose: enforced rests between rounds,
+    a fatigue guard judged against the first round, and a wall-clock
+    ceiling. These are what make 100 chords safe to hand a stroke
+    patient."""
 
     def _small_mode(self, **overrides):
-        kwargs = dict(probe_trials_per_finger=1, trials_per_subblock=2,
+        kwargs = dict(trials_per_subblock=2,
                       subblocks=2, iti_min_s=0.0, iti_max_s=0.0)
         kwargs.update(overrides)
         return _build_mode(**kwargs)
@@ -548,7 +646,7 @@ class SessionFlowTests(unittest.TestCase):
 
     def test_rest_between_rounds_gates_on_the_floor(self) -> None:
         engine, mode = self._small_mode()
-        t = _burn_probes(mode)
+        t = 5.0
         self._play_chord(mode, t)
         self._play_chord(mode, t + 2.0)
         self.assertEqual(mode.phase, "rest")
@@ -562,7 +660,7 @@ class SessionFlowTests(unittest.TestCase):
 
     def test_fatigue_drop_forces_a_longer_rest(self) -> None:
         engine, mode = self._small_mode(subblocks=3)
-        t = _burn_probes(mode)
+        t = 5.0
         # First round clean, second round all late chords: hit rate
         # drops 100 points, which is well past the 30-point trigger.
         self._play_chord(mode, t, hit=True)
@@ -576,7 +674,7 @@ class SessionFlowTests(unittest.TestCase):
 
     def test_second_fatigue_trigger_ends_the_session(self) -> None:
         engine, mode = self._small_mode(subblocks=3)
-        t = _burn_probes(mode)
+        t = 5.0
         self._play_chord(mode, t, hit=True)
         self._play_chord(mode, t + 2.0, hit=True)
         mode._fatigue_triggers = 1
@@ -595,9 +693,9 @@ class SessionFlowTests(unittest.TestCase):
         engine.finish_block.assert_called_once()
         self.assertEqual(mode.end_reason, "time_cap")
 
-    def test_full_session_closes_with_probes_then_finishes(self) -> None:
+    def test_full_session_is_chords_only_and_finishes(self) -> None:
         engine, mode = self._small_mode()
-        t = _burn_probes(mode)
+        t = 5.0
         for _ in range(2):
             self._play_chord(mode, t)
             t += 2.0
@@ -606,18 +704,12 @@ class SessionFlowTests(unittest.TestCase):
         for _ in range(2):
             self._play_chord(mode, t)
             t += 2.0
-        # Closing probes: 1 per finger.
-        for _ in range(4):
-            mode._fire(t)
-            self.assertEqual(mode.active.kind, "probe")
-            for lane in mode.active.targets:
-                mode._handle_press(_press(lane, t + 0.2), t + 0.2)
-            t += 1.0
         engine.finish_block.assert_called_once()
         self.assertEqual(mode.end_reason, "completed")
         kinds = [r["kind"] for r in mode._records]
-        self.assertEqual(kinds,
-                         ["probe"] * 4 + ["chord"] * 4 + ["probe"] * 4)
+        self.assertEqual(kinds, ["chord"] * 4)
+        for r in mode._records:
+            self.assertGreaterEqual(r["size"], 2)
 
     def test_pause_shifts_inflight_deadlines(self) -> None:
         # A chord with one finger down and one to go is the worst case
@@ -625,7 +717,7 @@ class SessionFlowTests(unittest.TestCase):
         # slide, or the span and RT measure the pause.
         _, mode = _build_mode()
         mode._t0 = 100.0
-        t = _burn_probes(mode, 105.0)
+        t = 105.0
         mode._fire(t)
         lane = mode.active.targets[0]
         mode._handle_press(_press(lane, t + 0.2), t + 0.2)
@@ -751,9 +843,8 @@ class EngineIntegrationTests(unittest.TestCase):
                 cfg.data["audio"]["enabled"] = False
                 cfg.data["session"]["data_dir"] = td
                 cfg.data["report"] = {"enabled": False}
-                # Test Mode gives the miniature (two probes then
-                # chords) so the demo path a supervisor sees is what
-                # gets exercised.
+                # Test Mode gives the miniature (all chords) so the
+                # demo path a supervisor sees is what gets exercised.
                 cfg.data["game"]["test_mode_enabled"] = True
                 cfg.data["game"]["test_mode_trials"] = 4
                 cfg.data["session"]["participant"] = "Basil"
@@ -766,19 +857,11 @@ class EngineIntegrationTests(unittest.TestCase):
                 self.assertEqual(eng.current_block, "chords")
                 mode = eng.mode
                 mode._t0 = 0.0
-                # The demo miniature opens with two probes; play them
-                # and one chord so both trial kinds land in the CSV.
                 t = 100.0
-                n_probes = mode._probe_left_start
-                while mode._probe_left_start > 0:
-                    mode._fire(t)
-                    self.assertEqual(mode.active.kind, "probe")
-                    for lane in mode.active.targets:
-                        mode._handle_press(_press(lane, t + 0.3), t + 0.3)
-                    t += 2.0
                 mode._fire(t)
                 self.assertEqual(mode.active.kind, "chord")
                 targets = mode.active.targets
+                self.assertGreaterEqual(len(targets), 2)
                 tp = t + 0.3
                 for lane in targets:
                     mode._handle_press(_press(lane, tp), tp)
@@ -787,12 +870,8 @@ class EngineIntegrationTests(unittest.TestCase):
                 eng.finish_block()
                 with (root / "trials.csv").open() as f:
                     rows = list(csv.DictReader(f))
-                self.assertEqual(len(rows), n_probes + 1)
-                probe_row, chord_row = rows[0], rows[-1]
-                self.assertEqual(probe_row["stimulus"],
-                                 str(probe_row["lane"]))
-                self.assertEqual(probe_row["correct_keys"],
-                                 str(probe_row["lane"]))
+                self.assertEqual(len(rows), 1)
+                chord_row = rows[-1]
                 self.assertEqual(chord_row["stimulus"], "+".join(
                     str(l + 1) for l in targets))
                 self.assertEqual(chord_row["correct_keys"], ",".join(
@@ -801,8 +880,8 @@ class EngineIntegrationTests(unittest.TestCase):
                 meta = json.loads((root / "metadata.json").read_text())
                 stats = meta["block_summary"]["chords"]
                 self.assertTrue(stats["demo"])
-                self.assertEqual(stats["n_probes"] + stats["n_chords"],
-                                 n_probes + 1)
+                self.assertEqual(stats["n_chords"], 1)
+                self.assertNotIn("n_probes", stats)
                 self.assertIn("enslaving_matrix_start", stats)
         finally:
             pygame.quit()
@@ -881,7 +960,7 @@ class HoldTraceReplayTests(unittest.TestCase):
     def tearDown(self) -> None:
         self._chords_mod.time = self._real_time
 
-    def _build(self, probes: int):
+    def _build(self, pair: bool = True):
         from finger_rehab.game.modes.chords import ChordsMode
         from finger_rehab.game.scoring import ScoreConfig
         from finger_rehab.hardware.fsr_detector import Calibration, FSRDetector
@@ -901,10 +980,12 @@ class HoldTraceReplayTests(unittest.TestCase):
             timeout_s=3.0, sync_windows_ms=[250, 200, 150, 100],
             hold_ms=200, baseline_quiet_ms=500, settle_prompt_s=5.0,
             iti_min_s=1.5, iti_max_s=2.5, trials_per_subblock=20,
-            subblocks=5, probe_trials_per_finger=probes,
+            subblocks=5,
             rest_between_s=30.0, fatigue_rest_s=120.0,
             session_cap_min=30.0, score_cfg=ScoreConfig(), seed=7,
         )
+        if pair:
+            _force_pair(mode)
         det.on_press = mode.queue_press
         mode._t0 = self.clock.t
         return engine, mode, det, screen
@@ -947,11 +1028,12 @@ class HoldTraceReplayTests(unittest.TestCase):
         return warns[-1] if warns else ""
 
     def test_a_held_press_satisfies_the_hold_with_live_progress(self):
-        engine, mode, det, screen = self._build(probes=2)
+        engine, mode, det, screen = self._build()
 
         def plan(targets, stim_t):
             s = stim_t + 0.30
-            return {targets[0]: [(s, s + 0.40)]}
+            return {l: [(s + 0.01 * i, s + 0.40)]
+                    for i, l in enumerate(targets)}
 
         _, progress, phases = self._replay(mode, det, engine, plan)
         rec = mode._records[-1]
@@ -967,12 +1049,14 @@ class HoldTraceReplayTests(unittest.TestCase):
         self.assertIsNone(mode.hold_progress())
 
     def test_a_tap_names_the_finger_that_lifted(self):
-        engine, mode, det, screen = self._build(probes=2)
+        engine, mode, det, screen = self._build()
 
         def plan(targets, stim_t):
             s = stim_t + 0.30
             self._target = targets[0]
-            return {targets[0]: [(s, s + 0.08)]}
+            d = {l: [(s, s + 0.40)] for l in targets}
+            d[targets[0]] = [(s, s + 0.08)]
+            return d
 
         self._replay(mode, det, engine, plan)
         rec = mode._records[-1]
@@ -990,7 +1074,7 @@ class HoldTraceReplayTests(unittest.TestCase):
         self.assertEqual(outcome.points, 8)
 
     def test_a_lifted_finger_withdraws_its_onset(self):
-        engine, mode, det, screen = self._build(probes=0)
+        engine, mode, det, screen = self._build()
 
         def plan(targets, stim_t):
             a, b = targets[0], targets[1]
@@ -1014,7 +1098,7 @@ class HoldTraceReplayTests(unittest.TestCase):
                          "Press together and keep them down")
 
     def test_relanding_the_lifted_finger_recovers_the_chord(self):
-        engine, mode, det, screen = self._build(probes=0)
+        engine, mode, det, screen = self._build()
 
         def plan(targets, stim_t):
             a, b = targets[0], targets[1]
@@ -1041,7 +1125,8 @@ class RtIsFirstOnsetTests(unittest.TestCase):
 
     def test_rt_ms_is_first_onset_not_last(self) -> None:
         engine, mode = _build_mode()
-        t = _burn_probes(mode)
+        t = 5.0
+        _force_pair(mode)
         mode._fire(t)
         targets = mode.active.targets
         stim_t = mode.active.stim_t_perf
@@ -1063,12 +1148,14 @@ class LeakFeedbackNamesFingerTests(unittest.TestCase):
 
     def test_measured_leak_fail_names_the_worst_finger(self) -> None:
         engine, mode = _build_mode()
+        _force_pair(mode)
         mode._fire(5.0)
-        lane = mode.active.targets[0]
-        quiet = [l for l in mode.lanes if l != lane]
+        targets = list(mode.active.targets)
+        quiet = [l for l in mode.lanes if l not in targets]
         refs = {0: 50.0, 1: 32.5, 2: 37.5, 3: 115.0}
-        engine._force_window_peak = {
-            lane: refs[lane], quiet[0]: 0.5 * refs[quiet[0]]}
+        peaks = {l: refs[l] for l in targets}
+        peaks[quiet[0]] = 0.5 * refs[quiet[0]]
+        engine._force_window_peak = peaks
         engine._force_window_saw_samples = True
         orig = mode._feedback_text
         captured = {}
@@ -1078,7 +1165,7 @@ class LeakFeedbackNamesFingerTests(unittest.TestCase):
             captured["text"] = text
             return text
         mode._feedback_text = wrap
-        mode._handle_press(_press(lane, 5.4), 5.4)
+        _complete_chord(mode, 5.4, gap_s=0.01)
         rec = mode._records[-1]
         self.assertEqual(rec["class"], "leak_fail")
         self.assertIn("leaked, keep it still", captured["text"])
@@ -1094,7 +1181,7 @@ class BilateralHandColumnTests(unittest.TestCase):
         engine, mode = _build_mode(
             hand="right", lanes=[0, 1, 2, 3],
             lanes_by_hand={"right": [0, 1, 2, 3], "left": [4, 5, 6, 7]})
-        t = _burn_probes(mode)
+        t = 5.0
         mode._fire(t)
         fired_hand = mode.active.hand
         _complete_chord(mode, t + 0.3)
@@ -1105,19 +1192,18 @@ class BilateralHandColumnTests(unittest.TestCase):
 
 class PerChordSplitByWindowTests(unittest.TestCase):
     """Audit finding #21: block_stats' per-chord table must split on
-    the synchrony window as well as hand and chord, since the level
-    ladder interleaves tier and window and a skilled player's easy
-    chords are met at wide windows while hard ones are first met at
-    the tightest."""
+    the synchrony window as well as hand and chord, since a chord is
+    met again at tighter windows as the level ladder climbs and
+    pooling would blur the window artefact into the chord effect."""
 
     def test_per_chord_table_carries_w_ms_and_splits_on_it(self) -> None:
         engine, mode = _build_mode()
-        t = _burn_probes(mode)
-        # Two chord hits at different windows for the mode's current
-        # chord, forced by changing the level between fires.
+        t = 5.0
+        # Two chord hits at different windows, forced by changing the
+        # level between fires.
         mode._fire(t)
         _complete_chord(mode, t + 0.3, gap_s=0.01)
-        mode.level = 4          # bumps the window tier down
+        mode.level = 1          # tightens the window
         t2 = t + 2.0
         mode._fire(t2)
         _complete_chord(mode, t2 + 0.3, gap_s=0.01)
@@ -1394,7 +1480,7 @@ class CrossPlayTests(unittest.TestCase):
         kwargs = dict(trials_per_subblock=1, subblocks=5)
         kwargs.update(overrides)
         engine, mode = _build_bilateral(**kwargs)
-        t = _burn_probes(mode)
+        t = 5.0
         for _ in range(2):          # the two within sub-blocks
             self.assertEqual(mode.current_scope, "within")
             mode._fire(t)
@@ -1408,6 +1494,10 @@ class CrossPlayTests(unittest.TestCase):
 
     def test_cross_chord_spans_both_hands(self) -> None:
         engine, mode, t = self._mode_in_cross()
+        # Deal off the mirror class first so the assertion below is
+        # deterministic (the cross deal's class bag mixes mirror and
+        # non-mirror otherwise).
+        mode._cross_deck._classes._bag.insert(0, "mirror")
         mode._fire(t)
         trial = mode.active
         self.assertEqual(trial.kind, "chord")
@@ -1416,8 +1506,7 @@ class CrossPlayTests(unittest.TestCase):
         right = [l for l in trial.targets if l < 4]
         self.assertGreaterEqual(len(left), 1)
         self.assertGreaterEqual(len(right), 1)
-        # Tier XB1: mirror singles, one finger per hand.
-        self.assertEqual(len(trial.targets), 2)
+        self.assertLessEqual(len(trial.targets), 4)
         self.assertEqual(trial.fingers_left, trial.fingers_right)
         # The stim goes out through the shared multi-lane path (the
         # EEG marker layer hangs off it, unchanged).
@@ -1438,13 +1527,21 @@ class CrossPlayTests(unittest.TestCase):
 
     def test_cross_record_carries_the_bimanual_fields(self) -> None:
         engine, mode, t = self._mode_in_cross()
+        mode._cross_deck._classes._bag.insert(0, "mirror")
         mode._fire(t)
         trial = mode.active
-        # Right hand leads by 80 ms.
+        # Right hand leads by 80 ms: every right-hand finger lands
+        # first, the left hand's follow.
         right = [l for l in trial.targets if l < 4]
         left = [l for l in trial.targets if l >= 4]
-        mode._handle_press(_press(right[0], t + 0.30), t + 0.30)
-        mode._handle_press(_press(left[0], t + 0.38), t + 0.38)
+        tp = t + 0.30
+        for lane in right:
+            mode._handle_press(_press(lane, tp), tp)
+            tp += 0.002
+        tp = t + 0.38
+        for lane in left:
+            mode._handle_press(_press(lane, tp), tp)
+            tp += 0.002
         rec = mode._records[-1]
         self.assertEqual(rec["scope"], "cross")
         self.assertEqual(rec["hand"], "both")
@@ -1485,7 +1582,7 @@ class CrossPlayTests(unittest.TestCase):
 
     def test_cross_staircase_is_separate(self) -> None:
         engine, mode = _build_bilateral(trials_per_subblock=30)
-        t = _burn_probes(mode)
+        t = 5.0
         mode._sub_idx = 2           # jump into the cross sub-block
         self.assertEqual(mode.current_scope, "cross")
         level_before = mode.level
@@ -1499,7 +1596,7 @@ class CrossPlayTests(unittest.TestCase):
 
     def test_within_chords_in_bilateral_log_mirror_leak(self) -> None:
         engine, mode = _build_bilateral()
-        t = _burn_probes(mode)
+        t = 5.0
         mode._fire(t)
         trial = mode.active
         own = mode.hands[trial.hand]
@@ -1538,25 +1635,23 @@ class CrossPlayTests(unittest.TestCase):
         self.assertIn("bilateral_deficit", stats["cross"])
 
 
-class WarmupTests(unittest.TestCase):
-    """The diagnosis behind Basil's 'I get 1 finger at a time': the
-    opening probes owned the start of every session with nothing on
-    screen saying warm-up, and the old bilateral Test Mode miniature
-    was two-thirds probes. Pinned here: the announced warm-up state,
-    the demo rebalance, the probe pacing and the hard cap on time to
-    the first chord."""
+class DemoAndAnnouncementTests(unittest.TestCase):
+    """Basil's rule in the miniature and on screen: the Test Mode
+    demo is ALL chords, a bilateral demo shows both scopes, and the
+    first chord announces the game."""
 
-    def test_demo_miniature_is_mostly_chords(self) -> None:
+    def test_demo_miniature_is_all_chords(self) -> None:
         _, mode = _build_mode(demo_trials=6)
-        self.assertEqual(mode._probe_left_start, 1)
-        self.assertEqual(mode.trials_per_subblock, 5)
+        self.assertEqual(mode.trials_per_subblock, 6)
+        self.assertEqual(mode.subblocks, 1)
+        self.assertEqual(mode.total_trials, 6)
         _, mode = _build_bilateral(demo_trials=6)
-        self.assertEqual(mode._probe_left_start, 2)
-        self.assertEqual(mode.trials_per_subblock, 4)
+        self.assertEqual(mode.trials_per_subblock, 6)
+        self.assertEqual(mode.total_trials, 6)
 
     def test_bilateral_demo_alternates_scopes(self) -> None:
         _, mode = _build_bilateral(demo_trials=6)
-        t = _burn_probes(mode)
+        t = 5.0
         scopes = []
         for _ in range(4):
             mode._fire(t)
@@ -1565,73 +1660,22 @@ class WarmupTests(unittest.TestCase):
             t += 2.0
         self.assertEqual(scopes, ["within", "cross", "within", "cross"])
 
-    def test_warmup_state_counts_down_then_clears(self) -> None:
-        _, mode = _build_mode()
-        state = mode.warmup_state()
-        self.assertEqual(state, ("warmup", 0, 8))
-        t = _burn_probes(mode)
-        self.assertIsNone(mode.warmup_state())
-        # Wind-down state appears once training is done.
-        mode._sub_idx = mode.subblocks
-        state = mode.warmup_state()
-        self.assertEqual(state[0], "winddown")
-        self.assertEqual(state[2], 8)
-
-    def test_probes_pace_on_the_warmup_gap(self) -> None:
-        _, mode = _build_mode(warmup_iti_s=0.7)
-        mode._fire(5.0)
-        for lane in mode.active.targets:
-            mode._handle_press(_press(lane, 5.2), 5.2)
-        # Next trial is still a probe: the gap is the fixed warm-up
-        # one, not the jittered chord ITI (1.5-2.5).
-        self.assertAlmostEqual(mode._next_ok_t - 5.2, 0.7, delta=0.01)
-
-    def test_warmup_announcement_reaches_the_screen(self) -> None:
+    def test_first_chord_announcement_reaches_the_screen(self) -> None:
         engine, mode = _build_mode()
         seen = []
         gp = MagicMock()
         gp.set_message = lambda text, dur, kind="info": seen.append(text)
         engine._screens = {"gameplay": gp}
-        t = _burn_probes(mode)
-        self.assertTrue(any(s.startswith("Warm-up 1 of 8")
-                            for s in seen), seen)
-        mode._fire(t)
-        self.assertIn("Warm-up done. Chords: press together", seen)
-
-    def test_warmup_cap_defers_probes_and_starts_chords(self) -> None:
-        _, mode = _build_mode(warmup_cap_s=10.0)
-        mode._t0 = 0.0
-        t = 5.0
-        # Two slow probes, then the budget is gone: the remaining six
-        # move to the closing set and the next fire is a chord.
-        for _ in range(2):
-            mode._fire(t)
-            for lane in mode.active.targets:
-                mode._handle_press(_press(lane, t + 0.2), t + 0.2)
-            t += 6.0
-        self.assertEqual(mode._probe_left_start, 0)
-        self.assertEqual(mode._probe_left_end, 8 + 6)
-        mode._fire(t)
-        self.assertEqual(mode.active.kind, "chord")
-        stats = mode.block_stats()
-        self.assertTrue(stats["warmup_capped"])
-
-    def test_warmup_cap_never_fires_inside_the_budget(self) -> None:
-        _, mode = _build_mode()
-        mode._t0 = 0.0
-        t = _burn_probes(mode, t=5.0)
-        self.assertFalse(mode._warmup_capped)
-        self.assertEqual(mode._probe_left_end, 8)
+        mode._fire(5.0)
+        self.assertIn("Chords: press together", seen)
 
 
-class FirstChordLatencyTests(unittest.TestCase):
-    """The headline regression for the diagnosis, driven through the
-    REAL engine under the shipped default config: a compliant player
-    (RT 650 ms) meets the first chord inside the first minute in the
-    worst case (both hands), and the mode fires exactly the planned
-    probes first. Before the fix a bilateral session took ~53 s of
-    perfect play (longer in real hands) with nothing announcing the
-    warm-up; Test Mode bilateral was 4 probes to 2 chords."""
+class FirstTrialIsAChordTests(unittest.TestCase):
+    """The headline regression for Basil's complaint, driven through
+    the REAL engine under the shipped default config: the very first
+    trial of a session is a chord of two to four fingers, in the
+    worst case (both hands) as well. Before the fix, 16 single-finger
+    probes owned the first ~53 s of a bilateral session."""
 
     def setUp(self) -> None:
         import finger_rehab.game.modes.chords as chords_mod
@@ -1662,67 +1706,29 @@ class FirstChordLatencyTests(unittest.TestCase):
         eng._screens = {"gameplay": gp, "results": MagicMock()}
         return eng
 
-    def _drive_to_first_chord(self, mode, react_s: float | None):
-        """50 Hz update loop against the trace clock with a scripted
-        player. react_s=None never presses (the slowest hand there
-        is). Returns (probes seen, seconds to the first chord stim)."""
-        from finger_rehab.hardware.fsr_detector import PressEvent
+    def _drive_to_first_trial(self, mode):
+        """50 Hz update loop against the trace clock until the first
+        stim fires. Returns (trial, seconds to that stim)."""
         t_start = self.clock.t
-        pending: list[tuple[float, int]] = []
-        seen: int | None = None
-        probes = 0
-        while self.clock.t - t_start < 180.0:
-            for (due, lane) in list(pending):
-                if self.clock.t >= due:
-                    pending.remove((due, lane))
-                    mode.queue_press(PressEvent(
-                        lane=lane, t_perf=due, value=0,
-                        baseline=0.0, hand="both"))
+        while self.clock.t - t_start < 60.0:
             mode.update(0.02)
-            if mode.active is not None and mode.active.trial_id != seen:
-                seen = mode.active.trial_id
-                if mode.active.kind == "chord":
-                    return probes, self.clock.t - t_start
-                probes += 1
-                if react_s is not None:
-                    for i, lane in enumerate(mode.active.targets):
-                        pending.append(
-                            (self.clock.t + react_s + 0.05 * i, lane))
+            if mode.active is not None:
+                return mode.active, self.clock.t - t_start
             self.clock.t += 0.02
-        self.fail("no chord fired inside 180 simulated seconds")
+        self.fail("no trial fired inside 60 simulated seconds")
 
-    def test_bilateral_first_chord_inside_the_first_minute(self) -> None:
+    def test_bilateral_first_trial_is_a_prompt_chord(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             eng = self._engine(td)
             try:
                 eng.begin_chords_block()
-                probes, elapsed = self._drive_to_first_chord(
-                    eng.mode, react_s=0.65)
-                self.assertEqual(probes, 16)
-                self.assertLess(elapsed, 60.0)
-                self.assertFalse(eng.mode._warmup_capped)
-            finally:
-                import pygame
-                pygame.quit()
-
-    def test_never_pressing_hand_still_meets_a_chord_by_the_cap(
-            self) -> None:
-        # The pathological case the cap exists for: every probe times
-        # out. The first chord must still arrive just past the 60 s
-        # budget (one in-flight trial of slack), with the unplayed
-        # probes deferred to the closing set.
-        with tempfile.TemporaryDirectory() as td:
-            eng = self._engine(td)
-            try:
-                eng.begin_chords_block()
-                cap = eng.mode.warmup_cap_s
-                timeout = eng.mode.timeout
-                probes, elapsed = self._drive_to_first_chord(
-                    eng.mode, react_s=None)
-                self.assertLess(probes, 16)
-                self.assertLess(elapsed, cap + timeout + 3.0)
-                self.assertTrue(eng.mode._warmup_capped)
-                self.assertGreater(eng.mode._probe_left_end, 16)
+                trial, elapsed = self._drive_to_first_trial(eng.mode)
+                self.assertEqual(trial.kind, "chord")
+                self.assertGreaterEqual(len(trial.targets), 2)
+                self.assertLessEqual(len(trial.targets), 4)
+                # Settle gate + ITI only: the chord arrives within
+                # seconds, not after a probe warm-up.
+                self.assertLess(elapsed, 10.0)
             finally:
                 import pygame
                 pygame.quit()
@@ -1774,7 +1780,9 @@ class EngineCrossIntegrationTests(unittest.TestCase):
                     rows = list(csv.DictReader(f))
                 cross_rows = [r for r in rows
                               if r["stimulus"].startswith("x:")]
-                self.assertEqual(len(cross_rows), 2)
+                # The 6-trial bilateral demo alternates scopes per
+                # chord: within, cross, within, cross, within, cross.
+                self.assertEqual(len(cross_rows), 3)
                 for r in cross_rows:
                     self.assertEqual(r["hand"], "both")
                     lanes = [int(x) - 1 for x in
@@ -1783,17 +1791,17 @@ class EngineCrossIntegrationTests(unittest.TestCase):
                     self.assertTrue(any(l >= 4 for l in lanes))
                 meta = json.loads((root / "metadata.json").read_text())
                 stats = meta["block_summary"]["chords"]
-                self.assertEqual(stats["cross"]["n_chords"], 2)
-                self.assertEqual(stats["n_chords"], 2)
-                self.assertEqual(stats["n_probes"], 2)
+                self.assertEqual(stats["cross"]["n_chords"], 3)
+                self.assertEqual(stats["n_chords"], 3)
         finally:
             pygame.quit()
 
 
 class MeasurementIntegrityTests(unittest.TestCase):
-    """ER, the probe matrices and the headline card must measure what
-    they claim: enslaving from complete responses, transfer from
-    correctly-cued probes, and a clean-chord rate over chords."""
+    """ER, the enslaving matrices and the headline card must measure
+    what they claim: enslaving from complete responses, correctly
+    cued chords only in the matrix, and a clean-chord rate over
+    chords."""
 
     def _fsr_chord(self, **over):
         engine, mode = _build_mode(**over)
@@ -1801,17 +1809,9 @@ class MeasurementIntegrityTests(unittest.TestCase):
         det = MagicMock()
         det.pressed = [True] * 4
         engine.detectors = {"right": det}
-        t = _burn_probes_fsr(mode, det)
+        t = 5.0
+        _force_pair(mode)
         mode._fire(t)
-        while mode.active.kind != "chord":
-            det.pressed = [True] * 4
-            for lane in mode.active.targets:
-                mode._handle_press(_press(lane, t + 0.2), t + 0.2)
-            if mode.phase == "hold":
-                mode._update_hold(t + 0.2 + mode.hold_s + 0.05)
-            det.pressed = [False] * 4
-            t += 1.0
-            mode._fire(t)
         return engine, mode, det, t
 
     def test_partial_chord_records_no_er(self) -> None:
@@ -1836,23 +1836,6 @@ class MeasurementIntegrityTests(unittest.TestCase):
         self.assertEqual(rec["class"], "partial")
         self.assertIsNone(rec["er"])
 
-    def test_wrong_press_probe_stays_out_of_the_matrix(self) -> None:
-        # A cue-misread probe with a full press on a non-instructed
-        # finger wrote a ~100% cell into the enslaving matrix, so a
-        # start matrix inflated by early cue errors overstated
-        # start-to-end individuation gains.
-        from finger_rehab.game.modes.chords import ChordsMode
-        rec_wrong = {"kind": "probe", "chord": "I", "press_norm": 1.0,
-                     "leaks": {"1": 1.0, "2": 0.04, "3": 0.04},
-                     "wrong": True}
-        rec_clean = {"kind": "probe", "chord": "I", "press_norm": 1.0,
-                     "leaks": {"1": 0.05, "2": 0.04, "3": 0.04},
-                     "wrong": False}
-        matrix = ChordsMode._probe_matrix([rec_wrong, rec_clean])
-        # Only the clean probe's leaks appear.
-        self.assertAlmostEqual(matrix[0][1], 5.0, places=1)
-        self.assertAlmostEqual(matrix[0][2], 4.0, places=1)
-
     def test_block_stats_name_the_force_reference_basis(self) -> None:
         # Every force quantity in this mode divides by the calibrated
         # light-press gap; the summary says whose numbers those were
@@ -1873,14 +1856,15 @@ class MeasurementIntegrityTests(unittest.TestCase):
 
     def test_block_stats_carry_scope_pure_class_counts(self) -> None:
         engine, mode = _build_mode()
-        t = _burn_probes(mode)
+        t = 5.0
         mode._fire(t)
         _complete_chord(mode, t + 0.3, gap_s=0.01)
         stats = mode.block_stats()
-        # Probes dominate outcome_classes; the chord-only count holds
-        # exactly the one chord played.
+        # One within chord played: the scope-pure count holds exactly
+        # it, and no probe rows exist to dilute anything any more.
         self.assertEqual(sum(stats["chord_outcome_classes"].values()), 1)
-        self.assertGreater(sum(stats["outcome_classes"].values()), 1)
+        self.assertEqual(sum(stats["outcome_classes"].values()), 1)
+        self.assertNotIn("n_probes", stats)
 
 
 class DeviceDropTests(unittest.TestCase):
@@ -1897,7 +1881,7 @@ class DeviceDropTests(unittest.TestCase):
         det = MagicMock()
         det.pressed = [True] * 4
         engine.detectors = {"right": det}
-        t = _burn_probes_fsr(mode, det)
+        t = 5.0
         mode._fire(t)
         return engine, mode, det, t
 

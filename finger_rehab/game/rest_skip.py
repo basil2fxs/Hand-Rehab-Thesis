@@ -251,11 +251,28 @@ class WaitSkip:
         # summary asserting a skip that never took effect while the
         # keypress fell through to the mode as input.
         st.armed = None
+        prev_flag = st.pending_flag
+        if w.protects:
+            # The next trial runs with less of this wait than the
+            # design asked for. Flag it so a row in the CSV carries the
+            # fact, not just a count in the block summary. Set BEFORE
+            # the release callback runs: the release is where a mode
+            # hands over to whatever the wait was protecting, and the
+            # fatigue-rest releases in pattern and chords read the flag
+            # right there to stamp the shortened rest on the take or
+            # round record. Booked after the callback, that stamp never
+            # landed. The gate releases (reaction and chords settle)
+            # are unaffected either way: their callbacks only backdate
+            # a clock, and the trial path consumes the flag later.
+            st.pending_flag = w.kind
         try:
             w.on_skip(now)
         except Exception:
             log.exception("skip callback failed for wait %r", w.kind)
             st.armed = w
+            # The wait did not actually end, so no trial is about to
+            # run short of it; put the flag back the way it was.
+            st.pending_flag = prev_flag
             return False
         st.count += 1
         st.seconds += saved
@@ -264,11 +281,6 @@ class WaitSkip:
                           "saved_s": round(saved, 2),
                           "planned_s": round(w.total_s, 2),
                           "protects": w.protects})
-        if w.protects:
-            # The next trial ran with less of this wait than the design
-            # asked for. Flag it so a row in the CSV carries the fact,
-            # not just a count in the block summary.
-            st.pending_flag = w.kind
         self._record_skip(w, saved, now)
         return True
 

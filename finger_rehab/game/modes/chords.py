@@ -4,8 +4,8 @@ that were NOT asked scored on how quiet they stayed.
 WHY TRAIN CHORDS. When one finger presses, force leaks onto the others.
 Zatsiorsky, Li and Latash (2000, Exp Brain Res 131) named this
 enslaving, showed it is largest between neighbouring fingers, and
-formalised the interfinger connection matrix this mode's probe trials
-reconstruct. Healthy hands leak roughly 5-15 percent of the instructed
+formalised the interfinger connection matrix this mode's
+chord-conditioned matrices estimate. Healthy hands leak roughly 5-15 percent of the instructed
 force at light effort (Abolins, Stremoukhov, Walter and Latash 2020, J Neurophysiol, read via
 PMC7814910: 8-10 percent at about 25 percent MVC). Stroke raises the
 leak and lowers individuation (Lang and Schieber 2003/2004,
@@ -38,9 +38,27 @@ that falls out (I=index, M=middle, R=ring, P=pinky):
 
 The hardest chords are exactly the ones that enclose a quiet finger
 between two active neighbours (M quiet in IR; R quiet in MP and IMP),
-which is what the adjacency literature predicts. Within a tier the
-chords are dealt by a shuffle bag (BalancedScheduler) so counts stay
-equal and the order unpredictable.
+which is what the adjacency literature predicts. D is an ANALYSIS
+rank, not a gate: the deal below mixes the whole space every session,
+and the per-chord table orders by D after the fact so the
+difficulty-rank test still runs.
+
+THE DEAL. Every trial asks for 2, 3 or 4 fingers at once; single
+fingers never appear in play (Basil: "only for 2 or 3 or 4 fingers at
+once, no single fingers. make sure always different and mixed
+combinations"). Three rules produce the mix. A shuffle bag over the
+size classes (2, 3, 4) keeps the sizes interleaved and equally dealt,
+and because a fresh bag never starts on the size it just dealt, two
+same-size chords never run back to back. Within the drawn size a
+deficit draw (the same placement rule syllables uses for its word
+windows) picks uniformly among the chords whose fingers have
+participated least so far, so per-finger participation stays
+near-equal without the order becoming predictable. And the chord just
+dealt is barred from the very next draw, so the same combination
+never runs twice. The quad class has one member (IMRP), so it recurs
+more often than any single pair or triple; that is the price of
+dealing the size dimension evenly, and it is the one chord with no
+quiet fingers, so what it trains is pure timing.
 
 THE TRIAL. The hand must be quiet (no finger past its press threshold)
 for baseline_quiet_ms before a chord fires; enslaving is measured from
@@ -113,45 +131,45 @@ star flag in the block summary.
 
 PROGRESSION. Challenge-point staircase in the style of the FINGER
 robot's success-rate control (Taheri et al. 2014, JNER 11:10; Rowe et
-al. 2017 RCT support adaptive challenge): of the last 10 chord trials
-at the current level, 8 or more clean hits move up a level, 5 or fewer
-move down. Levels run the four tiers at W=250, then again at 200, 150,
-100: sixteen levels, floor and ceiling clamped. Levels reset to the
-easiest each block, the safe direction to fail.
+al. 2017 RCT support adaptive challenge): of the last 10 chord trials,
+8 or more clean hits move up a level, 5 or fewer move down. A level
+IS a synchrony window: with the whole chord space dealt at every
+level (THE DEAL above), the one knob left to climb is W, so the
+levels run the window ladder 250, 200, 150, 100 ms, floor and
+ceiling clamped. Levels reset to the widest each block, the safe
+direction to fail.
 
-SESSION SHAPE AND DOSE. One engine block is one session: 8 probe
-trials (2 per finger, single-finger, through the same trial loop),
-5 sub-blocks of 20 chords with an enforced 30 s rest between them
-(self-paced past the floor), then 8 closing probes. That is 100 chords
-or roughly 250-300 individual finger presses, matching the
-300-repetitions-per-session feasibility benchmark for stroke
-(Birkenmeier, Prager and Lang 2010, Neurorehabil Neural Repair), with
-a 30 minute hard cap. The probes are what let the analysis build a
-true enslaving matrix (leak on each finger while one is instructed) at
-the start AND end of the session, separating trained-task gains from
-transfer, the standard criticism of game training (Zondervan et al.
-2016: MusicGlove task gains without superior functional transfer).
+SESSION SHAPE AND DOSE. One engine block is one session: 5 sub-blocks
+of 20 chords with an enforced 30 s rest between them (self-paced past
+the floor). That is 100 chords or roughly 250-300 individual finger
+presses, matching the 300-repetitions-per-session feasibility
+benchmark for stroke (Birkenmeier, Prager and Lang 2010,
+Neurorehabil Neural Repair), with a 30 minute hard cap.
 
-THE WARM-UP IS ANNOUNCED AND CAPPED. The opening probes are eight
-single-finger presses (sixteen with both hands), and played cold they
-read as the game itself: a patient who quits or demos early has seen
-nothing BUT single fingers and concludes chords mode never asks for a
-chord. Three rules keep the probes a warm-up rather than the game.
-First, the screen says so: a persistent WARM-UP banner with a counter
-runs over every opening probe, a WIND-DOWN banner over the closing
-set, and the first chord is announced when it arrives. Second, probes
-run on their own short fixed gap (warmup_iti_s) instead of the
-chord trials' jittered ITI: the jitter exists so a chord cannot be
-timed rather than reacted to, but a probe is an instructed press
-whose measurement (leak while pressing) does not care whether the
-patient saw it coming. Third, a hard budget (warmup_cap_s) bounds the
-time to the first chord: if the opening probes are still running when
-it expires (a hand that will not settle, repeated timeouts), the
-remainder move to the closing set, the block summary records
-warmup_capped, and the chords start. The start matrix then has fewer
-probes behind it, which the analysis can see and say; a session whose
-first minutes are all warm-up is the worse failure, because the
-patient stops playing before the training content ever appears.
+NO SINGLE FINGERS, AND WHERE THE REFERENCE WENT. Earlier builds
+opened and closed the session with single-finger probe trials, and
+the enslaving matrices were built from them: each probe supplied the
+instructed finger's own in-trial press as the denominator under the
+quiet fingers' leak. Played cold the probes read as the game itself,
+and Basil's verdict was final: "only for 2 or 3 or 4 fingers at once,
+no single fingers." The probes are gone from play, and the
+single-press reference the matrices need moved to the quick
+calibration every session starts with: the per-finger light-press
+captures already saved per hand (CalibrationProfile.gap) ARE an
+instructed single light press, on the same sensors, minutes before
+the block. What changed in the normalisation: nothing on the leak
+side, because every peak in this mode was already divided by that
+same capture (_reference_counts); on the press side the probe's
+in-trial press_norm is replaced by the active fingers' press_norm
+within the chord itself, which sits near 1.0 by construction because
+chords instruct the same calibrated light press the probes did. The
+measure survives that swap; what is lost is the single-active-finger
+condition, so a matrix cell is now CHORD-CONDITIONED: the leak on
+quiet finger j while i was active in company, an upper bound on the
+single-finger cell under the additive connection-matrix model
+(Zatsiorsky 2000). The start and end matrices come from the first
+and last chord sub-blocks instead of probe sets, which keeps the
+Danion-style start-to-end fatigue read.
 
 FATIGUE GUARD. Fatigue corrupts exactly what this mode trains (Danion
 2000/2001), so after each sub-block: a clean-hit rate 30 or more
@@ -164,7 +182,7 @@ WHAT THIS MODE CANNOT CLAIM. No functional-outcome claim (Zondervan
 exercise on its primary outcome). No claim that chord practice
 specifically reduces enslaving (Chiang 2004 is feedback practice in
 healthy adults, Thielbar 2014 a pilot; musician evidence is
-cross-sectional only). ER and the probe matrices are device- and
+cross-sectional only). ER and the enslaving matrices are device- and
 posture-specific: literature values are order-of-magnitude context,
 never validation. Calibration in a stroke hand is contaminated by
 synergies and spasticity, so normalised leak inherits that noise; raw
@@ -204,7 +222,7 @@ DEVIATIONS FROM THE RESEARCH BRIEF, where the plumbing wins:
 - Trial points are on the suite's 0-10 scale (6 completion, 2
   together, 2 quiet), mirroring the brief's 60/20/20 split so scores
   stay comparable across modes on the results screen.
-- Span, ER, outcome class and the probe matrices live in the block
+- Span, ER, outcome class and the enslaving matrices live in the block
   summary (metadata.json) and are recoverable from raw.csv; the trial
   CSV's fixed schema carries the chord in `stimulus` ("1+3+4"), the
   target set in `correct_keys` and the peaks in force_window_peaks.
@@ -215,12 +233,11 @@ drawn inside one hand, because enslaving is a within-hand quantity
 Latash, Li and Zatsiorsky 2000, J Appl Biomech 16; Li et al. 2001,
 Exp Brain Res 141), and the two hands alternate under the suite's
 paired balance rules: a shuffle bag over the hands keeps their trial
-counts equal (never apart by more than one) while each hand's own
-shuffle bag keeps its chords equally dealt, the same two-axis
-balancing PairedBalancedScheduler applies elsewhere. Single-finger
-probes run per hand (2 per finger per hand at each session edge), so
-the analysis gets a clean start and end enslaving matrix for EACH
-hand, and every per-trial record carries its hand. The within-hand
+counts equal (never apart by more than one) while each hand runs its
+own deal (THE DEAL above), the same two-axis balancing
+PairedBalancedScheduler applies elsewhere. The chord-conditioned
+enslaving matrices are built per hand from that hand's own chords,
+and every per-trial record carries its hand. The within-hand
 staircase level is shared across the hands: both climb the same
 ladder, so the weaker hand sets the pace, which errs in the safe
 direction. On screen the chord's fingers light inside that hand's own
@@ -273,19 +290,26 @@ Scheduling is scope-pure: of the five training sub-blocks the third
 and fifth deal cross-hand chords, the rest within-hand, in a FIXED
 order so fatigue trends stay comparable across sessions and the EEG
 layer gets clean block-level contrasts. Cross-hand chords run on
-their own staircase (level_cross, same tier-within-window ladder
-shape and the same W values) so a cross-hand artefact can never
-drive the within-hand level or the reverse. In Test Mode's bilateral
-miniature the two scopes simply alternate so a demo shows both.
+their own staircase (level_cross, the same window-only ladder and W
+values) so a cross-hand artefact can never drive the within-hand
+level or the reverse. The cross deal follows THE DEAL's shape with
+one substitution: the class bag runs over SYMMETRY (mirror versus
+non-mirror) rather than size, because symmetry is the contrast this
+scope exists to measure and the class the block summary reports on
+(hit_rate_mirror / hit_rate_nonmirror); the deficit draw balances
+participation over all eight fingers and the pair just dealt never
+repeats. In Test Mode's bilateral miniature the two scopes simply
+alternate so a demo shows both.
 
 Cross-hand measurement, logged per trial in the block summary:
 per-hand ER (each hand's leak against its OWN targets and quiet
 fingers, never pooled with within-hand ER: the other hand moving is
 a coupling confound), mirror flag and mirror-distance (asym),
 lead hand and lag (first-onset difference between the hands, the
-temporal coupling measure), and per-hand press levels so mirror
-singles can be compared against the same finger's unimanual probe
-press for the bilateral deficit ratio (Li 2000/2001). Within-hand
+temporal coupling measure), and per-hand press levels for the
+bilateral deficit ratio (Li 2000/2001): every press is normalised by
+the finger's own unimanual quick-cal light press, so a mirror
+single's press_norm IS that ratio, no probe trial required. Within-hand
 chords in bilateral play additionally log mirror_leak: the resting
 hand's loudest normalised peak against the chord's mean press, the
 silent mirror-force measure (Cincotta and Ziemann 2008), free
@@ -432,6 +456,71 @@ CROSS_TIERS: list[list[tuple[tuple[int, ...], tuple[int, ...]]]] = [
     [((0,), (2,)), ((0,), (1, 2)), ((0,), (3,)), ((0, 1), (2, 3))],
 ]
 
+# The flat spaces the deal draws from. The tiers above stay as the
+# documented D ordering the analysis ranks by; the deal itself mixes
+# the whole space every session (THE DEAL in the module docstring).
+ALL_CHORDS: tuple[tuple[int, ...], ...] = tuple(
+    c for tier in CHORD_TIERS for c in tier)
+ALL_CROSS: tuple[tuple[tuple[int, ...], tuple[int, ...]], ...] = tuple(
+    p for tier in CROSS_TIERS for p in tier)
+
+
+class MixedChordDeck:
+    """The deal: mixed, always different, participation-balanced.
+
+    Three rules, per THE DEAL in the module docstring. A shuffle bag
+    over class labels (BalancedScheduler, whose refill reshuffles so a
+    fresh bag never opens on the class it just dealt) keeps the
+    classes interleaved and equally dealt. Inside the drawn class a
+    deficit draw, the same placement rule syllables uses for its word
+    windows, picks uniformly among the candidates whose fingers have
+    participated LEAST so far, scored by mean tally per participating
+    finger so a small chord cannot look cheaper than a big one. And
+    the item just dealt is barred from the very next draw, so the
+    same chord never runs twice back to back (a single-member class
+    cannot repeat either, because its class cannot be dealt twice
+    running).
+
+    `class_of` maps an item to its class label (chord size within a
+    hand, mirror/nonmirror across hands); `keys_of` maps an item to
+    the participation keys its fingers tally under.
+    """
+
+    def __init__(self, items, rng: random.Random, class_of,
+                 keys_of) -> None:
+        self.rng = rng
+        self._keys_of = keys_of
+        self._by_class: dict = {}
+        for it in items:
+            self._by_class.setdefault(class_of(it), []).append(it)
+        self._classes = BalancedScheduler(sorted(self._by_class),
+                                          self.rng)
+        self.tally: dict = {}
+        self.last = None
+        self.dealt: int = 0
+
+    def next(self):
+        cls = self._classes.next()
+        pool = self._by_class[cls]
+        # The bar on the previous item can only empty the pool if the
+        # class scheduler's 20-reshuffle guard lost (odds under one in
+        # a billion per refill with three classes); the fallback then
+        # accepts the repeat rather than crashing the block.
+        cands = [it for it in pool if it != self.last] or list(pool)
+        scores = []
+        for it in cands:
+            keys = self._keys_of(it)
+            scores.append(sum(self.tally.get(k, 0) for k in keys)
+                          / max(1, len(keys)))
+        best = min(scores)
+        pick = self.rng.choice([it for it, s in zip(cands, scores)
+                                if s - best < 1e-9])
+        for k in self._keys_of(pick):
+            self.tally[k] = self.tally.get(k, 0) + 1
+        self.last = pick
+        self.dealt += 1
+        return pick
+
 
 @dataclass
 class PendingChordTrial:
@@ -449,11 +538,10 @@ class PendingChordTrial:
     hand="both" and keeps each side's fingers in `fingers_left` /
     `fingers_right` (its `fingers` tuple stays empty)."""
     trial_id: int
-    kind: str                       # "probe" | "chord"
+    kind: str                       # always "chord" in play
     fingers: tuple[int, ...]        # within-hand finger indices 0..3
     targets: tuple[int, ...]        # engine-global lanes, ascending
     stim_t_perf: float
-    tier: int | None                # 0-based tier, None for probes
     w_ms: float
     hand: str = "right"
     scope: str = "within"           # "within" | "cross"
@@ -528,14 +616,11 @@ class ChordsMode(WaitSkip):
                  settle_prompt_s: float,
                  iti_min_s: float, iti_max_s: float,
                  trials_per_subblock: int, subblocks: int,
-                 probe_trials_per_finger: int,
                  rest_between_s: float, fatigue_rest_s: float,
                  session_cap_min: float, score_cfg: ScoreConfig,
                  seed: int = 0,
                  demo_trials: int | None = None,
                  lanes_by_hand: dict[str, list[int]] | None = None,
-                 warmup_iti_s: float = 0.8,
-                 warmup_cap_s: float = 60.0,
                  ) -> None:
         self.engine = engine
         self.hand = hand
@@ -571,12 +656,6 @@ class ChordsMode(WaitSkip):
         self.settle_prompt_s = float(settle_prompt_s)
         self.iti_min = float(iti_min_s)
         self.iti_max = max(float(iti_min_s), float(iti_max_s))
-        # Probes pace themselves: a short fixed gap (predictability is
-        # harmless for an instructed press) and a hard budget on the
-        # whole opening warm-up so the first chord is never more than
-        # warmup_cap_s away (see THE WARM-UP IS ANNOUNCED AND CAPPED).
-        self.warmup_iti = max(0.0, float(warmup_iti_s))
-        self.warmup_cap_s = max(0.0, float(warmup_cap_s))
         self.rest_between = float(rest_between_s)
         self.fatigue_rest = float(fatigue_rest_s)
         self.session_cap_s = float(session_cap_min) * 60.0
@@ -584,72 +663,60 @@ class ChordsMode(WaitSkip):
         self.rng = random.Random(seed)
 
         # Session layout counters. Demo (Test Mode) shrinks to a
-        # miniature where the CHORDS are the demo: one probe per hand
-        # so both trial kinds still land in the CSV, then chords for
-        # every remaining trial, rests trimmed. The old miniature gave
-        # the probes 2 per hand, which in a bilateral 6-trial demo made
-        # two thirds of the whole session single-finger presses: a
-        # supervisor (or Basil) walked away believing chords mode never
-        # asks for a chord.
-        # Probes in a full session scale with the hands in play: 2 per
-        # finger PER HAND, so a bilateral session's matrices cover both
-        # hands.
+        # miniature that is ALL chords, rests trimmed; a full session
+        # is subblocks rounds of trials_per_subblock chords and
+        # nothing else. The single-finger probes that used to bracket
+        # the session are gone from play (see NO SINGLE FINGERS in
+        # the docstring).
         n_hands = len(self.hand_names)
         if demo_trials is not None:
-            n = max(2, int(demo_trials))
-            self._probe_left_start = min(n_hands, n - 1)
-            self._probe_left_end = 0
-            self.trials_per_subblock = max(1, n - self._probe_left_start)
+            self.trials_per_subblock = max(2, int(demo_trials))
             self.subblocks = 1
             self.rest_between = min(self.rest_between, 2.0)
             self.fatigue_rest = min(self.fatigue_rest, 2.0)
         else:
-            per = max(0, int(probe_trials_per_finger))
-            self._probe_left_start = 4 * per * n_hands
-            self._probe_left_end = 4 * per * n_hands
             self.trials_per_subblock = max(1, int(trials_per_subblock))
             self.subblocks = max(1, int(subblocks))
         self._sub_idx = 0
         self._sub_done = 0
-        self._probes_planned = self._probe_left_start + self._probe_left_end
-        # Warm-up bookkeeping: the planned opening and closing counts
-        # (the banner's "3 of 16"), whether the opening budget ran out,
-        # and which one-off announcements have fired.
-        self._probes_start_planned = self._probe_left_start
-        self._probes_end_planned = self._probe_left_end
-        self._warmup_capped = False
         self._announced: set[str] = set()
         # Two-axis balance, the PairedBalancedScheduler shape: which
         # hand goes next is its own shuffle bag (counts never drift
-        # apart by more than one), and within each hand the fingers or
-        # chords are dealt from that hand's own bag.
-        self._probe_sched = {h: BalancedScheduler([0, 1, 2, 3], self.rng)
-                             for h in self.hand_names}
-        self._probe_hand_order = BalancedScheduler(
-            list(range(n_hands)), self.rng, avoid_repeats=False)
+        # apart by more than one), and within each hand the chords
+        # come off that hand's own mixed deal.
         self._chord_hand_order = BalancedScheduler(
             list(range(n_hands)), self.rng, avoid_repeats=False)
 
-        # Difficulty state. Level = tier + window combined, easiest
-        # first; resets each block, the safe direction to fail. The
-        # level is shared across the hands in bilateral play (the
-        # weaker hand sets the pace, the safe direction).
+        # Difficulty state. A level IS a synchrony window: the deal
+        # mixes the whole chord space at every level, so the one knob
+        # the staircase climbs is W. Easiest (widest) first; resets
+        # each block, the safe direction to fail. The level is shared
+        # across the hands in bilateral play (the weaker hand sets
+        # the pace, the safe direction).
         self.level = 0
-        self.max_level = 4 * len(self.windows_ms) - 1
+        self.max_level = len(self.windows_ms) - 1
         self.highest_level = 0
-        self._chord_sched: dict[str, BalancedScheduler] = {}
-        self._sched_tier: int | None = None
+        self._deck = {h: MixedChordDeck(ALL_CHORDS, self.rng,
+                                        class_of=len,
+                                        keys_of=lambda c: c)
+                      for h in self.hand_names}
         self._stair: deque[bool] = deque(maxlen=self.STAIRCASE_WINDOW)
         self._since_level_change = 0
         # Cross-hand chords climb their OWN ladder: pooling hit rates
         # across scopes would let a cross-hand artefact drive the
         # within-hand level (or the reverse), and the two ladders
-        # measure different things. Same shape: 4 tiers per window.
+        # measure different things. Their deal's class axis is
+        # symmetry, the contrast this scope measures; participation
+        # balances over all eight fingers.
         self.level_cross = 0
-        self.max_level_cross = 4 * len(self.windows_ms) - 1
+        self.max_level_cross = len(self.windows_ms) - 1
         self.highest_level_cross = 0
-        self._cross_sched: BalancedScheduler | None = None
-        self._cross_sched_tier: int | None = None
+        self._cross_deck = MixedChordDeck(
+            ALL_CROSS, self.rng,
+            class_of=lambda p: ("mirror" if p[0] == p[1]
+                                else "nonmirror"),
+            keys_of=lambda p: (tuple(("L", f) for f in p[0])
+                               + tuple(("R", f) for f in p[1])))
         self._stair_cross: deque[bool] = deque(
             maxlen=self.STAIRCASE_WINDOW)
         self._since_level_change_cross = 0
@@ -711,8 +778,7 @@ class ChordsMode(WaitSkip):
     def total_trials(self) -> int:
         # HUD progress bar. The plan for the whole session; an early
         # end (cap, fatigue) simply leaves the bar unfilled.
-        return (self._probes_planned
-                + self.trials_per_subblock * self.subblocks)
+        return self.trials_per_subblock * self.subblocks
 
     @property
     def current_timeout_s(self) -> float:
@@ -721,21 +787,13 @@ class ChordsMode(WaitSkip):
 
     @property
     def current_w_ms(self) -> float:
-        return self.windows_ms[min(self.level // 4,
+        return self.windows_ms[min(self.level,
                                    len(self.windows_ms) - 1)]
-
-    @property
-    def current_tier(self) -> int:
-        return self.level % 4
 
     @property
     def current_w_cross_ms(self) -> float:
-        return self.windows_ms[min(self.level_cross // 4,
+        return self.windows_ms[min(self.level_cross,
                                    len(self.windows_ms) - 1)]
-
-    @property
-    def current_tier_cross(self) -> int:
-        return self.level_cross % 4
 
     def _plan_scope_sequence(self) -> list[str]:
         """One scope per training sub-block, fixed for the session."""
@@ -758,21 +816,6 @@ class ChordsMode(WaitSkip):
             return "cross" if self._sub_done % 2 else "within"
         idx = min(self._sub_idx, len(self._scope_seq) - 1)
         return self._scope_seq[idx] if self._scope_seq else "within"
-
-    def warmup_state(self) -> tuple[str, int, int] | None:
-        """("warmup" | "winddown", done, planned) while the probe sets
-        run, None during the chords. The gameplay screen draws this as
-        a persistent banner so the single-finger stretch is visibly a
-        warm-up and not the game."""
-        if self._probe_left_start > 0:
-            done = self._probes_start_planned - self._probe_left_start
-            return ("warmup", done, self._probes_start_planned)
-        if (not self._in_training() and self._probe_left_end > 0
-                and self._probes_end_planned > 0
-                and self.phase != "done"):
-            done = self._probes_end_planned - self._probe_left_end
-            return ("winddown", done, self._probes_end_planned)
-        return None
 
     # ---- plumbing shared with the other cadence modes ----------------------
     def queue_press(self, ev: PressEvent) -> None:
@@ -1107,7 +1150,7 @@ class ChordsMode(WaitSkip):
             "chord": (cross_label(trial.fingers_left,
                                   trial.fingers_right) if cross
                       else chord_label(trial.fingers)),
-            "tier": None if trial.tier is None else trial.tier + 1,
+            "size": len(trial.targets),
             "d": None,
             "w_ms": trial.w_ms,
             "level": self.level_cross if cross else self.level,
@@ -1120,9 +1163,9 @@ class ChordsMode(WaitSkip):
         self._set_message("Sensor connection lost", 1.5, kind="warn")
         # Re-deal rather than advance: the trial produced no evidence
         # about the patient, and the settle gate will hold until the
-        # hardware is back and the hand is genuinely resting. A probe
-        # budget or sub-block count consumed here would silently
-        # shrink the session's real material.
+        # hardware is back and the hand is genuinely resting. A
+        # sub-block count consumed here would silently shrink the
+        # session's real material.
         self._arm_next(now)
 
     # ---- settle gate -------------------------------------------------------
@@ -1191,42 +1234,22 @@ class ChordsMode(WaitSkip):
     def _next_targets(self) -> tuple[str, str, str,
                                      tuple[int, ...], tuple[int, ...]]:
         """What the next trial asks for, as (kind, scope, hand,
-        fingers, fingers_right): a single-finger probe at the
-        session's edges, otherwise a chord from the current scope's
-        tier. For probes and within-hand chords `fingers` is the
-        chord within `hand` and `fingers_right` is empty; for a
-        cross-hand chord hand is "both", `fingers` is the LEFT hand's
-        share and `fingers_right` the right's. In bilateral play the
+        fingers, fingers_right): always a chord, off the current
+        scope's mixed deal (THE DEAL in the docstring). For a
+        within-hand chord `fingers` is the chord within `hand` and
+        `fingers_right` is empty; for a cross-hand chord hand is
+        "both", `fingers` is the LEFT hand's share and
+        `fingers_right` the right's. In bilateral play the
         within-hand side comes off its own shuffle bag so the hands'
         trial counts never drift apart by more than one, while each
-        hand's chords or probe fingers come off that hand's own bag;
-        cross-hand chords need no hand bag (every trial uses both) so
-        one bag per tier deals them."""
-        if self._probe_left_start > 0 or not self._in_training():
-            hand = self.hand_names[self._probe_hand_order.next()]
-            return "probe", "within", hand, (
-                self._probe_sched[hand].next(),), ()
+        hand's chords come off that hand's own deck; cross-hand
+        chords need no hand bag (every trial uses both), so one deck
+        deals them."""
         if self.current_scope == "cross":
-            tier = self.current_tier_cross
-            if self._cross_sched_tier != tier:
-                self._cross_sched = BalancedScheduler(
-                    list(range(len(CROSS_TIERS[tier]))), self.rng)
-                self._cross_sched_tier = tier
-            left, right = CROSS_TIERS[tier][self._cross_sched.next()]
+            left, right = self._cross_deck.next()
             return "chord", "cross", "both", left, right
-        tier = self.current_tier
-        if self._sched_tier != tier:
-            # Fresh shuffle bags whenever the tier changes so the
-            # chords of the new tier get equal counts from here, per
-            # hand.
-            self._chord_sched = {
-                h: BalancedScheduler(
-                    list(range(len(CHORD_TIERS[tier]))), self.rng)
-                for h in self.hand_names}
-            self._sched_tier = tier
         hand = self.hand_names[self._chord_hand_order.next()]
-        return ("chord", "within", hand,
-                CHORD_TIERS[tier][self._chord_sched[hand].next()], ())
+        return "chord", "within", hand, self._deck[hand].next(), ()
 
     def _in_training(self) -> bool:
         return self._sub_idx < self.subblocks
@@ -1238,12 +1261,10 @@ class ChordsMode(WaitSkip):
                 [self.hands["left"][f] for f in fingers]
                 + [self.hands["right"][f] for f in fingers_right]))
             w_ms = self.current_w_cross_ms
-            tier = self.current_tier_cross
         else:
             hand_lanes = self.hands[hand]
             targets = tuple(sorted(hand_lanes[f] for f in fingers))
             w_ms = self.current_w_ms
-            tier = None if kind == "probe" else self.current_tier
         self.trial_counter += 1
         settle_ms = None
         if self._settle_t0 is not None:
@@ -1255,7 +1276,6 @@ class ChordsMode(WaitSkip):
                      else tuple(sorted(fingers))),
             targets=targets,
             stim_t_perf=now,
-            tier=tier,
             w_ms=w_ms,
             hand=hand,
             scope=scope,
@@ -1269,46 +1289,27 @@ class ChordsMode(WaitSkip):
         self.phase = "stim"
         self._quiet_since = None
         self._settle_t0 = None
-        self._announce(kind, scope, hand)
+        self._announce(scope, hand)
         # ALL target fingers light at once; with the buzzer channel on,
         # the engine turns a same-board multi-lane stim into the
         # arpeggio (see engine.on_stim_multi). A cross-hand chord is
         # two boards, and two boards buzz together.
         self.engine.on_stim_multi(list(targets), self.trial_counter, now)
 
-    def _announce(self, kind: str, scope: str, hand: str) -> None:
-        """The words that keep the session legible: warm-up and
-        wind-down probes say they are probes (with a counter, so the
-        patient can see the warm-up ending), the first chord announces
-        the game proper, and in bilateral play each chord names its
-        side. Side naming is suppressed when the screen may not name
-        the target: a hand label is half the answer. The warm-up
-        wording itself names no finger, so it always shows."""
+    def _announce(self, scope: str, hand: str) -> None:
+        """The words that keep the session legible: the first chord
+        announces the game, and in bilateral play each chord names
+        its side. Side naming is suppressed when the screen may not
+        name the target: a hand label is half the answer."""
         show_target = True
         try:
             show_target = bool(self.engine.cue_settings().show_target)
         except Exception:
             pass
-        if kind == "probe":
-            state = self.warmup_state()
-            if state is not None:
-                word = ("Warm-up" if state[0] == "warmup"
-                        else "Wind-down")
-                if state[0] == "winddown" and "winddown" not in \
-                        self._announced:
-                    self._announced.add("winddown")
-                    self._set_message(
-                        "Chords done. Single fingers to finish", 1.8)
-                else:
-                    label = f"{word} {state[1] + 1} of {state[2]}"
-                    if self.bilateral and show_target:
-                        label += f": {hand} hand"
-                    self._set_message(label, 1.1)
-            return
         if "chords" not in self._announced:
             self._announced.add("chords")
-            self._set_message("Warm-up done. Chords: press together",
-                              1.8, kind="best")
+            self._set_message("Chords: press together", 1.8,
+                              kind="best")
             return
         if self.bilateral and show_target:
             self._set_message("Both hands" if scope == "cross"
@@ -1631,7 +1632,7 @@ class ChordsMode(WaitSkip):
             "chord": (cross_label(trial.fingers_left,
                                   trial.fingers_right) if cross
                       else chord_label(trial.fingers)),
-            "tier": None if trial.tier is None else trial.tier + 1,
+            "size": len(trial.targets),
             "d": (chord_difficulty_cross(trial.fingers_left,
                                          trial.fingers_right) if cross
                   else chord_difficulty(trial.fingers)),
@@ -1646,23 +1647,32 @@ class ChordsMode(WaitSkip):
             # empty and carry per-hand values instead, so no
             # within-hand aggregate can swallow a cross trial.
             "er": (None if cross or er is None else round(er, 4)),
-            # Probe rows keep the raw material for the enslaving
-            # matrix: the instructed finger's normalised press and
-            # every quiet finger's normalised leak, keyed by the
-            # finger's index within the trial's own hand.
+            # Raw material for the chord-conditioned enslaving matrix
+            # (see NO SINGLE FINGERS in the docstring): each target's
+            # normalised press and each quiet finger's normalised
+            # leak, keyed by finger index within the trial's own
+            # hand, only on a COMPLETE within-hand response (the
+            # denominator means nothing on a partial). The
+            # normaliser under every value is the quick-cal
+            # light-press capture, the single-press reference.
             "press_norm": (round(mean_press, 4)
-                           if trial.kind == "probe" and mean_press > 0
+                           if not cross and full and mean_press > 0
                            else None),
+            "press_norms": ({str(self._finger_of_lane(l)):
+                             round(norms[l], 4)
+                             for l in trial.targets}
+                            if not cross and full and peaks is not None
+                            else None),
             "leaks": ({str(self._finger_of_lane(l)): round(v, 4)
                        for l, v in leak_norms.items()}
-                      if trial.kind == "probe" and leak_norms else None),
+                      if not cross and full and leak_norms else None),
             "hold": hold_achieved,
             "over_force": over_force,
             "light": light_press,
             # A wrong-finger press is a RESPONSE error, not enslaving:
-            # the flag lets the probe matrices (and any offline
-            # consumer) keep cue-misread probes out of the transfer
-            # measure without discarding the genuine-leak leak_fails.
+            # the flag lets the matrices (and any offline consumer)
+            # keep cue-misread trials out of the transfer measure
+            # without discarding the genuine-leak leak_fails.
             "wrong": bool(trial.incorrect_presses),
             "settle_ms": (None if trial.settle_ms is None
                           else round(trial.settle_ms, 1)),
@@ -1698,15 +1708,14 @@ class ChordsMode(WaitSkip):
         self._records.append(rec)
         self.completed += 1
 
-        if trial.kind == "chord":
-            self._sub_hits += 1 if cls == "hit" else 0
-            if rt_ms is not None:
-                self._sub_rts.append(rt_ms)
-            if cross:
-                self._staircase_cross(cls == "hit")
-            else:
-                self._staircase(cls == "hit")
-        self._advance(now, trial.kind)
+        self._sub_hits += 1 if cls == "hit" else 0
+        if rt_ms is not None:
+            self._sub_rts.append(rt_ms)
+        if cross:
+            self._staircase_cross(cls == "hit")
+        else:
+            self._staircase(cls == "hit")
+        self._advance(now)
 
     def _finger_name(self, trial: PendingChordTrial, lane: int) -> str:
         """The finger's name for feedback, hand-prefixed in bilateral
@@ -1768,16 +1777,12 @@ class ChordsMode(WaitSkip):
     # ---- progression -------------------------------------------------------
     def _staircase(self, hit: bool) -> None:
         """8-of-10 sliding window with a short cooldown after any
-        level move, instead of the old clear-on-promote. Clearing
-        meant at most one promotion per 10 trials, and with levels
-        reset to 0 every block a flawless player topped out at level
-        10 of 15 unilaterally (6 within / 4 cross bilaterally): the
-        top half of both ladders, including the W=100 ms floor the
-        docstring defends, was unreachable content, and a patient at
-        ceiling repeated the same easy tiers every session. The
-        criterion is unchanged (8 of the last 10 clean hits up, 5 or
-        fewer down); only the evidence window now slides, and the
-        cooldown stops one hot streak cascading through several
+        level move. A level is a synchrony window (see PROGRESSION in
+        the docstring), so the whole ladder is short and the W=100 ms
+        floor is reachable inside one sub-block for a player who
+        earns it. The window slides rather than clearing on a move
+        (clearing capped the climb at one level per 10 trials), and
+        the cooldown stops one hot streak cascading through several
         levels in as many trials."""
         self._stair.append(hit)
         self._since_level_change += 1
@@ -1818,7 +1823,7 @@ class ChordsMode(WaitSkip):
             self._since_level_change_cross = 0
 
     # ---- session flow ------------------------------------------------------
-    def _advance(self, now: float, kind: str) -> None:
+    def _advance(self, now: float) -> None:
         # Hard session cap, checked at trial close so it never cuts a
         # trial in half.
         if (self._t0 is not None
@@ -1826,46 +1831,18 @@ class ChordsMode(WaitSkip):
             self._set_message("Session complete", 2.0)
             self._end("time_cap")
             return
-        if kind == "probe":
-            if self._probe_left_start > 0:
-                self._probe_left_start -= 1
-                # The warm-up budget: when the opening probes are
-                # still running past warmup_cap_s of session time, the
-                # remainder move to the closing set and the chords
-                # start. The start matrix gets fewer probes behind it,
-                # which the summary records; the alternative is a
-                # session whose first minutes are all warm-up.
-                if (self._probe_left_start > 0
-                        and self._probe_left_end > 0
-                        and self._t0 is not None
-                        and (now - self._t0) > self.warmup_cap_s):
-                    self._warmup_capped = True
-                    self._probe_left_end += self._probe_left_start
-                    self._probes_end_planned += self._probe_left_start
-                    self._probe_left_start = 0
-            else:
-                self._probe_left_end -= 1
-                if self._probe_left_end <= 0:
-                    self._end("completed")
-                    return
-        else:
-            self._sub_done += 1
-            if self._sub_done >= self.trials_per_subblock:
-                self._close_subblock(now)
-                return
+        self._sub_done += 1
+        if self._sub_done >= self.trials_per_subblock:
+            self._close_subblock(now)
+            return
         self._arm_next(now)
 
     def _arm_next(self, now: float) -> None:
         self.phase = "settle"
-        # Probes pace themselves on the short fixed warm-up gap; the
-        # jittered ITI belongs to the chords, whose timing is the
-        # thing being measured (a chord must be reacted to, a probe is
-        # an instructed press).
-        if self._probe_left_start > 0 or not self._in_training():
-            self._next_ok_t = now + self.warmup_iti
-        else:
-            self._next_ok_t = now + self.rng.uniform(self.iti_min,
-                                                     self.iti_max)
+        # The ITI is drawn fresh each trial so the next chord cannot
+        # be timed rather than reacted to.
+        self._next_ok_t = now + self.rng.uniform(self.iti_min,
+                                                 self.iti_max)
         self._quiet_since = None
         self._settle_t0 = None
 
@@ -1892,12 +1869,7 @@ class ChordsMode(WaitSkip):
             self._end("fatigue")
             return
         if not self._in_training():
-            # Straight into the closing probes; the enforced rest
-            # belongs between training sub-blocks.
-            if self._probe_left_end <= 0:
-                self._end("completed")
-            else:
-                self._arm_next(now)
+            self._end("completed")
             return
         if fatigued:
             # Ease the ladder the fatigued sub-block was climbing.
@@ -2019,33 +1991,38 @@ class ChordsMode(WaitSkip):
 
     # ---- block summary -----------------------------------------------------
     @staticmethod
-    def _probe_matrix(records: list[dict]) -> list[list[float | None]]:
-        """4x4 enslaving matrix from probe records: row i, column j is
-        finger j's normalised leak as a percentage of finger i's
-        normalised press, mean over that finger's probes. Diagonal and
-        unmeasured cells are None. Comparable in shape to the matrices
-        of Zatsiorsky 2000 and the individuation slope of Xu 2017, but
-        device-specific: context, never validation."""
+    def _chord_matrix(records: list[dict]) -> list[list[float | None]]:
+        """4x4 chord-conditioned enslaving matrix from within-hand
+        chord records: row i, column j is finger j's normalised leak
+        as a percentage of finger i's normalised press, mean over
+        every chord where i was active and j quiet. The single-press
+        reference under both numbers is the quick-cal light-press
+        capture (see NO SINGLE FINGERS in the docstring); because i
+        is active IN COMPANY, a cell upper-bounds the single-finger
+        cell under the additive connection-matrix model (Zatsiorsky
+        2000). Diagonal and unmeasured cells are None. Context, never
+        validation.
+
+        A trial where a wrong finger PRESSED stays out: that is a
+        response error (cue misread), not enslaving, and its full
+        press on a quiet finger would write a ~100% cell into the
+        matrix. The notebook's crosstalk section excludes wrong-press
+        trials for the same reason."""
         cells: dict[tuple[int, int], list[float]] = {}
         for r in records:
-            if (r["kind"] != "probe" or not r.get("leaks")
-                    or not r.get("press_norm")):
+            if (r["kind"] != "chord"
+                    or r.get("scope", "within") != "within"
+                    or not r.get("leaks") or not r.get("press_norms")):
                 continue
-            # A probe where the WRONG finger pressed is a response
-            # error (cue misread), not enslaving: its full press on a
-            # non-instructed finger wrote a ~100% cell into the
-            # matrix, so a start matrix inflated by early cue errors
-            # made start-to-end improvement overstate individuation
-            # gains. The notebook's crosstalk section already excludes
-            # wrong-press trials for exactly this reason; the mode's
-            # own matrix follows the same rule.
             if r.get("wrong"):
                 continue
-            i = FINGER_LETTERS.index(r["chord"])
-            press = float(r["press_norm"])
-            for j_str, leak in r["leaks"].items():
-                j = int(j_str)
-                cells.setdefault((i, j), []).append(leak / press)
+            for i_str, press in r["press_norms"].items():
+                press = float(press)
+                if press <= 0:
+                    continue
+                for j_str, leak in r["leaks"].items():
+                    cells.setdefault((int(i_str), int(j_str)),
+                                     []).append(float(leak) / press)
         out: list[list[float | None]] = [[None] * 4 for _ in range(4)]
         for (i, j), vals in cells.items():
             if i != j and vals:
@@ -2055,11 +2032,12 @@ class ChordsMode(WaitSkip):
     def block_stats(self) -> dict:
         """What finish_block folds into metadata.json: the ladder
         position reached, per-chord difficulty validation numbers,
-        cross-talk aggregates, the start and end probe matrices (per
-        hand: enslaving_matrices carries every playing hand, and the
-        legacy single-hand keys stay for unilateral blocks so older
-        analyses keep reading), the fatigue trajectory and the
-        per-trial detail the fixed CSV schema cannot carry."""
+        cross-talk aggregates, the start and end chord-conditioned
+        enslaving matrices (per hand: enslaving_matrices carries
+        every playing hand, and the legacy single-hand keys stay for
+        unilateral blocks so older analyses keep reading), the
+        fatigue trajectory and the per-trial detail the fixed CSV
+        schema cannot carry."""
         # device_drop records are hardware evidence, not performance:
         # they stay out of every performance aggregate below and are
         # surfaced separately (outcome_classes and n_device_drops).
@@ -2072,20 +2050,11 @@ class ChordsMode(WaitSkip):
         chords = [r for r in all_chords
                   if r.get("scope", "within") == "within"]
         cross = [r for r in all_chords if r.get("scope") == "cross"]
-        probes = [r for r in scored if r["kind"] == "probe"]
-        # Probes before the first chord are the start set; the rest are
-        # the end set. Demo blocks have no end set.
-        first_chord = all_chords[0]["trial"] if all_chords else None
-        probes_start = [r for r in probes
-                        if first_chord is None or r["trial"] < first_chord]
-        probes_end = [r for r in probes
-                      if first_chord is not None
-                      and r["trial"] > first_chord]
 
         # Per-chord table, split by hand AND by synchrony window: the
-        # level ladder interleaves tier and window (level = window*4 +
-        # tier), so an easy chord is met at wide windows and a hard one
-        # first met at the tightest, and pooling their hit rates lets a
+        # level ladder is the window ladder, so an easy session meets
+        # a chord only at wide windows and a strong one meets it
+        # again at the tightest, and pooling their hit rates lets a
         # window artefact masquerade as the enslaving pattern the
         # difficulty rank test is meant to read off (see docstring
         # CROSS-TALK SCORE and the DIFFICULTY ORDER section above).
@@ -2129,12 +2098,24 @@ class ChordsMode(WaitSkip):
 
         classes = _class_counts(self._records)
 
+        # Start and end matrices from the FIRST and LAST within-hand
+        # sub-blocks, replacing the probe sets that used to bracket
+        # the session: same start-to-end fatigue read (Danion 2000),
+        # chord-conditioned cells (see _chord_matrix). One sub-block
+        # played means a start matrix only.
+        within_subs = sorted({r.get("subblock") for r in chords
+                              if r.get("subblock") is not None})
+        first_sub = within_subs[0] if within_subs else None
+        last_sub = within_subs[-1] if len(within_subs) > 1 else None
         matrices = {
             h: {
-                "start": self._probe_matrix(
-                    [r for r in probes_start if r["hand"] == h]),
-                "end": self._probe_matrix(
-                    [r for r in probes_end if r["hand"] == h]),
+                "start": self._chord_matrix(
+                    [r for r in chords if r["hand"] == h
+                     and r.get("subblock") == first_sub]),
+                "end": self._chord_matrix(
+                    [r for r in chords if r["hand"] == h
+                     and last_sub is not None
+                     and r.get("subblock") == last_sub]),
             }
             for h in self.hand_names
         }
@@ -2161,7 +2142,7 @@ class ChordsMode(WaitSkip):
         # cannot pollute the within-hand per_chord consumers), and the
         # summary contrasts the bimanual analysis reads: mirror vs
         # non-mirror, lead-lag, and the bilateral deficit ratio from
-        # mirror singles against the same finger's unimanual probes.
+        # mirror singles (per unit of the quick-cal light press).
         per_cross: dict[tuple[str, float], dict] = {}
         for r in cross:
             d = per_cross.setdefault((r["chord"], r["w_ms"]), {
@@ -2204,10 +2185,13 @@ class ChordsMode(WaitSkip):
                                    and r.get("lag_ms") is not None])
                        for h in self.hand_names}
         # Bilateral deficit per hand and finger (Li 2000/2001): the
-        # finger's press in mirror singles over the same finger's
-        # unimanual probe press, both normalised the same way. Only
-        # mirror singles qualify: one finger per hand, so the per-hand
-        # press IS that finger's press.
+        # finger's press in mirror singles, per unit of the same
+        # finger's unimanual quick-cal light press. Every press_norm
+        # is already normalised by that capture, so the mirror
+        # single's per-hand press IS the ratio: no probe trial in the
+        # denominator any more (see NO SINGLE FINGERS in the
+        # docstring). Only mirror singles qualify: one finger per
+        # hand, so the per-hand press is that finger's press.
         deficit: dict[str, dict[str, float]] = {}
         for h, key in (("left", "press_left"), ("right", "press_right")):
             if h not in self.hand_names:
@@ -2219,15 +2203,9 @@ class ChordsMode(WaitSkip):
                     if r.get("chord_left") == letter
                     and r.get("chord_right") == letter
                     and r.get(key) is not None]
-                probe_presses = [
-                    r["press_norm"] for r in probes
-                    if r["hand"] == h and r["chord"] == letter
-                    and r.get("press_norm")]
                 m_bi = _median(mirror_presses)
-                m_uni = _median(probe_presses)
-                if m_bi is not None and m_uni:
-                    deficit.setdefault(h, {})[letter] = round(
-                        m_bi / m_uni, 3)
+                if m_bi is not None:
+                    deficit.setdefault(h, {})[letter] = m_bi
 
         out = {
             "hand": self.hand_label,
@@ -2237,19 +2215,16 @@ class ChordsMode(WaitSkip):
             "level_final": self.level,
             "level_highest": self.highest_level,
             "w_final_ms": self.current_w_ms,
-            "tier_final": self.current_tier + 1,
             # n_chords stays the WITHIN-hand count, matching every
             # other aggregate at this level (median_er, per_chord);
             # the cross section carries its own counts.
             "n_chords": len(chords),
-            "n_probes": len(probes),
             "outcome_classes": classes,
             # Scope-pure class counts for the results card: the
-            # near-guaranteed single-finger probes and the cross-scope
-            # chords (their own ladder) diluted a CLEAN HIT RATE
-            # computed over every record, so the patient's headline
-            # number moved with the session's probe:chord mix rather
-            # than with skill.
+            # cross-scope chords (their own ladder) would dilute a
+            # CLEAN HIT RATE computed over every record, so the
+            # patient's headline number moved with the session's
+            # scope mix rather than with skill.
             "chord_outcome_classes": _class_counts(chords),
             "cross_outcome_classes": _class_counts(cross),
             "n_device_drops": sum(1 for r in self._records
@@ -2257,7 +2232,7 @@ class ChordsMode(WaitSkip):
             # Which normaliser each hand's forces ran under: a fresh
             # or saved calibration profile (its creation stamp and
             # participant), or the config fallback. Every force
-            # quantity in this mode (ER, leak bands, probe matrices)
+            # quantity in this mode (ER, leak bands, the matrices)
             # divides by it, so the C5 across-session ER curve needs
             # to be able to exclude or flag a mis-referenced session
             # instead of guessing from the metadata calibration stamp.
@@ -2273,7 +2248,6 @@ class ChordsMode(WaitSkip):
                                      if r["over_force"]),
             "light_press_trials": sum(1 for r in all_chords
                                       if r["light"]),
-            "warmup_capped": self._warmup_capped,
             "scope_sequence": self._scope_seq,
             "per_chord": chord_table,
             "per_chord_cross": cross_table,
@@ -2283,7 +2257,6 @@ class ChordsMode(WaitSkip):
                 "level_final": self.level_cross,
                 "level_highest": self.highest_level_cross,
                 "w_final_ms": self.current_w_cross_ms,
-                "tier_final": self.current_tier_cross + 1,
                 "hit_rate_mirror": _rate(mirror_rows),
                 "hit_rate_nonmirror": _rate(nonmirror_rows),
                 "median_span_mirror_ms": _median(

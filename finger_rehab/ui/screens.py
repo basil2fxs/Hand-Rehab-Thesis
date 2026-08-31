@@ -1797,8 +1797,8 @@ class GameplayScreen(Screen):
         self._dim_cache: pygame.Surface | None = None
         # Set per frame in draw(): True when the mode message chip took
         # the bottom band because a pair bracket owns the band above
-        # the tiles. The chords layer reads it so its warm-up counter,
-        # which lives in the same slot, does not land on top.
+        # the tiles. Anything else that parks in that slot reads it
+        # so the two never land on top of each other.
         self._msg_in_bottom_band = False
         self.rebuild_lanes()
 
@@ -2720,26 +2720,6 @@ class GameplayScreen(Screen):
             return
         accent = ModeSelectScreen.MODE_ACCENTS.get(
             "chords", self.theme.accent)
-        # Warm-up / wind-down banner: while the single-finger probes
-        # run, a persistent counter pill says so, bottom-centre (the
-        # same spot reaction parks its SESSION BEST chip). Without it
-        # the probes look like the game itself, and a player who
-        # leaves early reports that chords mode only ever asks for
-        # one finger at a time.
-        ws_fn = getattr(m, "warmup_state", None)
-        if callable(ws_fn) and not self._msg_in_bottom_band:
-            try:
-                ws = ws_fn()
-            except Exception:
-                ws = None
-            if ws:
-                word = "WARM-UP" if ws[0] == "warmup" else "WIND-DOWN"
-                label = (f"{word}  SINGLE FINGERS  "
-                         f"{min(ws[1] + 1, ws[2])} OF {ws[2]}")
-                _chip(surf, self.layout,
-                      (self.layout.width // 2, self.layout.height - 42),
-                      label, accent, bg_alpha=36, pad_x=16, pad_y=6,
-                      font_pt=FONT_SMALL + 2)
         targets = [ls for ls in self.lanes if ls.active]
         trial = getattr(m, "active", None)
         self._draw_chord_hold(surf, m, trial, targets, accent)
@@ -4946,6 +4926,20 @@ class ResultsScreen(Screen):
                 value_pt=FONT_TITLE + (14 if i == 0 else -6),
             )
             x += w + 10
+        # Vs-last-time chip under the headline card: this game against
+        # the same participant's previous completed game of the same
+        # mode and hand (engine.finish_block computed it from the
+        # sessions tree). One chip, not a table: the slim screen's one
+        # job is the headline, and the chip is its trend arrow. A
+        # first-time game has no chip at all rather than an empty one.
+        chip = getattr(self.engine, "vs_last", None)
+        if isinstance(chip, dict) and chip.get("text"):
+            chip_colour = (self.theme.success if chip.get("better")
+                           else self.theme.warning)
+            _strip_pill(surf, self.layout, self.SLIM_CX - 270,
+                        self.SLIM_CARD_TOP + self.SLIM_CARD_H + 24,
+                        str(chip["text"]), chip_colour,
+                        font_pt=FONT_SMALL + 2)
         self._draw_next_up(surf, pygame.Rect(*self.NEXT_CARD_RECT))
         draw_session_strip(surf, pygame.Rect(*self.SLIM_STRIP_RECT),
                            self.engine, self.theme, self.layout)
@@ -5871,6 +5865,9 @@ class DiagnosticsScreen(Screen):
         # flag. Storing it as an instance var keeps the click test
         # consistent with what was drawn last frame.
         self._test_mode_rect: pygame.Rect = pygame.Rect(0, 0, 0, 0)
+        # Menu-music on/off pill, same pattern: rect cached from the
+        # draw pass, hit-tested in handle_event.
+        self._menu_music_rect: pygame.Rect = pygame.Rect(0, 0, 0, 0)
         # Sensory Cues menu: the four cue.* switches plus the screen
         # reveal, each on or off on its own. Replaces the old buzzer
         # on/off pill and the both/visual/vibration cycling pill, which
@@ -6024,6 +6021,9 @@ class DiagnosticsScreen(Screen):
             ("master", "MASTER", "audio.master_volume", 0.8),
             ("cue", "CUE", "audio.cue_volume", 1.0),
             ("feedback", "FEEDBACK", "audio.feedback_volume", 1.0),
+            # Menu playlist level. The on/off switch for it is the
+            # MENU MUSIC pill in the top-right metadata column.
+            ("music", "MUSIC", "audio.menu_music_volume", 0.5),
         )
         n = len(specs) + 1     # + the buzzer cue-length slider
         gap = self.SLIDER_GAP
@@ -6073,6 +6073,9 @@ class DiagnosticsScreen(Screen):
         au["master_volume"] = m
         au["cue_volume"] = c
         au["feedback_volume"] = f
+        # The menu player reads this off cfg on every tick, so writing
+        # it here is the whole live path.
+        au["menu_music_volume"] = self._vol_sliders["music"].value
         if self.engine.audio is not None:
             self.engine.audio.set_volumes(master=m, cue=c, feedback=f)
         # Buzzer cue length lives under motor.*, not audio.*.
@@ -6088,6 +6091,7 @@ class DiagnosticsScreen(Screen):
                 "audio.master_volume": self._vol_sliders["master"].value,
                 "audio.cue_volume": self._vol_sliders["cue"].value,
                 "audio.feedback_volume": self._vol_sliders["feedback"].value,
+                "audio.menu_music_volume": self._vol_sliders["music"].value,
                 "motor.cue_ms": int(self._vol_sliders["buzz"].value),
             })
             self._vol_dirty = False
@@ -6166,6 +6170,30 @@ class DiagnosticsScreen(Screen):
             f"demo the full pipeline in under a minute."
             if new_value else
             "Test Mode OFF. Blocks run their normal full length."
+        )
+
+    def _toggle_menu_music(self) -> None:
+        """Flip audio.menu_music_enabled and persist it the same way
+        Test Mode persists. The playlist itself follows on its next
+        tick (it reads cfg live); the stop_now here is only so OFF is
+        heard the instant it is clicked rather than a fade later."""
+        new_value = not bool(
+            self.engine.cfg.get("audio.menu_music_enabled", True))
+        self.engine.cfg.data.setdefault(
+            "audio", {})["menu_music_enabled"] = new_value
+        try:
+            self.engine.cfg.save_user_overrides({
+                "audio.menu_music_enabled": new_value,
+            })
+        except Exception as e:
+            self._port_status = f"Menu music save failed: {e}"
+            return
+        player = getattr(self.engine, "menu_music", None)
+        if not new_value and player is not None:
+            player.stop_now()
+        self._port_status = (
+            "Menu music ON. Plays on the menu screens, never in a game."
+            if new_value else "Menu music OFF."
         )
 
     def _lanes_bottom_y(self) -> int:
@@ -6545,6 +6573,12 @@ class DiagnosticsScreen(Screen):
                 and self._test_mode_rect.collidepoint(e.pos)):
             self._toggle_test_mode()
             return
+        # Menu-music on/off pill, directly below Test Mode.
+        if (e.type == pygame.MOUSEBUTTONDOWN and e.button == 1
+                and self._menu_music_rect.w > 0
+                and self._menu_music_rect.collidepoint(e.pos)):
+            self._toggle_menu_music()
+            return
         # Track held keys so the visual responds even when the source
         # doesn't push samples (keyboard mode).
         if e.type == pygame.KEYDOWN:
@@ -6730,6 +6764,26 @@ class DiagnosticsScreen(Screen):
         surf.blit(tm_text, tm_text.get_rect(center=tm_rect.center))
         # Cache rect for the hit-test in handle_event.
         self._test_mode_rect = tm_rect
+        # Menu-music pill, same visual language directly underneath:
+        # filled accent when the playlist is on, muted outline when
+        # off. The level lives on the MUSIC slider in the levels
+        # panel; this is only the switch.
+        mm_on = bool(self.engine.cfg.get("audio.menu_music_enabled", True))
+        mm_label = "MENU MUSIC  ON" if mm_on else "MENU MUSIC  OFF"
+        mm_text = tm_font.render(
+            mm_label, True,
+            (255, 255, 255) if mm_on else self.theme.foreground)
+        mm_rect = pygame.Rect(0, 0, mm_text.get_width() + tm_pad_x * 2,
+                              mm_text.get_height() + tm_pad_y * 2)
+        mm_rect.topright = (self.layout.width - 30, tm_rect.bottom + 8)
+        if mm_on:
+            pygame.draw.rect(surf, self.theme.accent, mm_rect,
+                             border_radius=mm_rect.h // 2)
+        else:
+            pygame.draw.rect(surf, self.theme.muted, mm_rect,
+                             width=2, border_radius=mm_rect.h // 2)
+        surf.blit(mm_text, mm_text.get_rect(center=mm_rect.center))
+        self._menu_music_rect = mm_rect
         # Group 1, what the patient feels and hears. The five switches
         # live behind one pill because the panel has to leave room for
         # the tiles below; the pill carries the on-count so the state is

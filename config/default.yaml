@@ -807,20 +807,20 @@ pattern:
 
 chords:
   # Chords mode: two, three or four fingers pressed together, and the
-  # fingers that were NOT asked are scored on staying still. The
-  # research case for every number lives in rehab/game/modes/chords.py;
-  # this file says what the patient experiences. One engine block is a
-  # whole session: a short announced warm-up of single-finger presses,
-  # five rounds of chords with proper rests, then the same
-  # single-finger presses again to close. With Both hands selected the
-  # hands take turns on within-hand chords with equal counts, the
-  # warm-up and closing presses run per hand, and the third and fifth
-  # rounds ask for chords that SPAN the hands (one or two fingers per
-  # hand, mirrored pairs first), so both hands play the whole session
-  # and the session also measures how well the hands work together.
-  # Light presses only, everywhere: the game never rewards pressing
-  # harder, and pressing much harder than the calibrated light press
-  # earns a "press lighter" prompt.
+  # fingers that were NOT asked are scored on staying still. Single
+  # fingers never appear: every trial is a chord, the sizes are dealt
+  # evenly and shuffled, no combination repeats twice running, and
+  # every finger gets a fair share of work. The research case for
+  # every number lives in rehab/game/modes/chords.py; this file says
+  # what the patient experiences. One engine block is a whole
+  # session: five rounds of chords with proper rests. With Both hands
+  # selected the hands take turns on within-hand chords with equal
+  # counts, and the third and fifth rounds ask for chords that SPAN
+  # the hands (one or two fingers per hand), so both hands play the
+  # whole session and the session also measures how well the hands
+  # work together. Light presses only, everywhere: the game never
+  # rewards pressing harder, and pressing much harder than the
+  # calibrated light press earns a "press lighter" prompt.
 
   # How long the fingers have to land the chord once it lights up.
   # Generous on purpose: a slow chord still teaches the shape, and the
@@ -860,24 +860,10 @@ chords:
   trials_per_subblock: 20
   subblocks: 5
   rest_between_s: 30
-  # Single-finger presses at the session's start AND end, per finger.
-  # These are what let the analysis measure how much each finger leaks
-  # onto the others before and after the chords, so do not set this to
-  # 0 for a real participant.
-  probe_trials_per_finger: 2
-  # The warm-up presses pace themselves on this short fixed gap
-  # instead of the jittered gap the chords use: a warm-up press is an
-  # instructed press, not a reaction test, so there is nothing to
-  # protect from being predictable. Keeps the single-finger stretch
-  # short so the chords start quickly.
-  warmup_iti_s: 0.8
-  # Hard budget on the whole opening warm-up, in seconds. If the
-  # single-finger presses are still running when it expires (a hand
-  # that will not settle, repeated timeouts), the remaining ones move
-  # to the end of the session and the chords start; the session
-  # summary records that it happened. The first chord is therefore
-  # never more than about a minute away.
-  warmup_cap_s: 60
+  # There are no single-finger warm-up presses any more: the whole
+  # session is chords, and the per-finger reference the leak numbers
+  # divide by comes from the quick calibration at login (the light
+  # press each finger demonstrated there).
   # If a round goes clearly worse than the session's first round (hit
   # rate down 30 points, or presses 30 percent slower), the game
   # inserts this longer rest and eases the difficulty one step. A
@@ -1277,6 +1263,28 @@ audio:
   # Post-press feedback level: the hit chime + miss thunk after a press.
   feedback_volume: 1.0
   music_dir: assets/music
+  # Menu music: a shuffled playlist that plays on the menu screens
+  # only (login, game select, the hand picker and results). It fades
+  # out when any block starts and never plays during gameplay, because
+  # gameplay audio is a recorded condition and a background track
+  # under a block would be an uncontrolled stimulus. Rhythm mode's own
+  # songs are separate and unaffected. Both keys are set from the
+  # Settings screen and persist to user_settings.yaml.
+  menu_music_enabled: true
+  # Sits on top of master_volume like the other category levels.
+  menu_music_volume: 0.5
+  # Which files from music_dir the menu playlist draws on. Named
+  # explicitly rather than "everything in the folder" so the rhythm
+  # library can grow without the menus picking up a slow ambient track
+  # that was added for gameplay pacing. Missing files are skipped with
+  # a log line, so a renamed track cannot stop the app.
+  menu_music_tracks:
+    - Wallpaper.mp3
+    - Life_of_Riley.mp3
+    - Fluffing_a_Duck.mp3
+    - Happy_Alley.mp3
+    - Beachfront_Celebration.mp3
+    - Vivacity.mp3
   # Per-lane stim cue tone (C, E, G, C, repeating for bilateral) that
   # fires the moment a stim is dispatched. SUPERSEDED by
   # cue.sound_before, which is the switch the game reads now and the

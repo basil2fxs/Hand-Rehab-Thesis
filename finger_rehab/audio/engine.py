@@ -57,6 +57,14 @@ class AudioEngine:
         self._song_start_perf: float | None = None
         self._metronome_period: float | None = None
         self._next_metronome_t: float | None = None
+        # Whether the mixer.music stream currently belongs to the MENU
+        # playlist rather than to a game. There is only one music
+        # stream, so this flag is how the two users stay out of each
+        # other's way: the menu player refuses to start while a game
+        # owns the stream (see menu_play), and every game-side entry
+        # point (play_song, start_metronome, stop) takes the stream
+        # back by clearing the flag.
+        self._menu_active = False
         self._initialised = False
 
     def init(self) -> bool:
@@ -136,6 +144,7 @@ class AudioEngine:
         self._song_start_perf = None
         self._metronome_period = None
         self._next_metronome_t = None
+        self._menu_active = False
         self._initialised = False
 
     @staticmethod
@@ -200,6 +209,9 @@ class AudioEngine:
             # backing track.
             pygame.mixer.music.set_volume(self._clamp01(self.master_volume))
             pygame.mixer.music.play(loops=loops, start=max(0.0, start_s))
+            # The game owns the one music stream from here; any menu
+            # track that was on it has just been replaced.
+            self._menu_active = False
             self._song_path = str(p)
             # Adjust the song-start anchor so song_time() returns roughly
             # `start_s` seconds right away, keeping the visuals in sync with
@@ -230,6 +242,7 @@ class AudioEngine:
             except Exception:
                 pass
         self._song_path = None
+        self._menu_active = False
         self._metronome_period = 60.0 / max(bpm, 1.0)
         self._song_start_perf = time.perf_counter()
         if first_click_in_s is not None and first_click_in_s > 0:
@@ -255,6 +268,7 @@ class AudioEngine:
         self._song_start_perf = None
         self._metronome_period = None
         self._next_metronome_t = None
+        self._menu_active = False
 
     @property
     def is_playing(self) -> bool:
@@ -339,6 +353,84 @@ class AudioEngine:
             self._miss_thunk.play()
         except Exception:
             pass
+
+    # ---- menu music -------------------------------------------------------
+    # The menu playlist and the game share the ONE mixer.music stream,
+    # so these four methods are written so the menu side can never win
+    # a fight over it: menu_play refuses while a game song or the
+    # metronome is live, and the game-side entry points above reclaim
+    # the stream by clearing _menu_active. The player that drives them
+    # (audio/menu_music.py) decides WHEN menu music should run; this
+    # layer only guarantees it cannot run over gameplay audio.
+
+    def game_stream_active(self) -> bool:
+        """Whether gameplay owns the music stream right now (a rhythm
+        song is loaded or the metronome is clicking)."""
+        return (self._song_path is not None
+                or self._metronome_period is not None)
+
+    def menu_play(self, path: str | Path, volume: float = 1.0) -> bool:
+        """Start one menu track at `volume` (0..1, scaled by master).
+        Returns False without touching the mixer when the engine is
+        not initialised, the file is missing, or gameplay owns the
+        stream."""
+        if not self._initialised or pygame is None:
+            return False
+        if self.game_stream_active():
+            return False
+        p = Path(path)
+        if not p.exists():
+            log.warning("Menu track not found: %s", p)
+            return False
+        try:
+            pygame.mixer.music.load(str(p))
+            pygame.mixer.music.set_volume(
+                self._clamp01(self.master_volume * volume))
+            pygame.mixer.music.play()
+            self._menu_active = True
+            return True
+        except Exception as e:
+            log.warning("Could not play menu track %s: %s", p, e)
+            self._menu_active = False
+            return False
+
+    def menu_stop(self) -> None:
+        """Stop the menu track. Touches the mixer only while the menu
+        still owns the stream, so a game song that took over is never
+        stopped from here."""
+        was_ours = self._menu_active
+        self._menu_active = False
+        if not was_ours or pygame is None or not self._initialised:
+            return
+        if self.game_stream_active():
+            return
+        try:
+            pygame.mixer.music.stop()
+        except Exception:
+            pass
+
+    def menu_set_volume(self, volume: float) -> None:
+        """Live level for the playing menu track (0..1 on top of
+        master). No-op unless the menu owns the stream."""
+        if (not self._menu_active or pygame is None
+                or not self._initialised or self.game_stream_active()):
+            return
+        try:
+            pygame.mixer.music.set_volume(
+                self._clamp01(self.master_volume * volume))
+        except Exception:
+            pass
+
+    def menu_busy(self) -> bool:
+        """Whether the menu track is still sounding. False the moment
+        a game takes the stream or the track runs out."""
+        if (not self._menu_active or pygame is None
+                or not self._initialised or self.game_stream_active()):
+            return False
+        try:
+            return bool(pygame.mixer.music.get_busy())
+        except Exception:
+            return False
 
     def _play_click(self) -> None:
         if self._click is not None:
