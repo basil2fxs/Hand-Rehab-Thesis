@@ -803,5 +803,142 @@ class SchedulerEdgeCaseTests(unittest.TestCase):
         self.assertEqual(len(list(sched.notes_due(1.0))), 1)
 
 
+class CueOnTheBeatTests(unittest.TestCase):
+    """The cue (buzz, tone, EEG marker all ride on_stim) must land on
+    the SCORED ZERO: note time plus the audio-path latency, the moment
+    a press scores 0 ms. It used to dispatch on the first frame after
+    the raw note time, which was always a frame late against the
+    schedule and a whole audio offset away from the beat the patient
+    hears (measured on a fake wire: -31 ms for a song). These tests
+    drive update() on a fake clock stepped in 17 ms frames and pin the
+    new dispatch: against the scored zero, frame-centred, and with the
+    scheduled cue moment as the logged timestamp."""
+
+    FRAME_S = 0.017
+
+    def _make_mode(self, song=True, rise_comp_ms=0.0):
+        from unittest.mock import MagicMock
+        from finger_rehab.audio.beatmap import Beatmap, Note
+        from finger_rehab.game.modes.rhythm import RhythmMode
+        from finger_rehab.game.scoring import RhythmWindows, ScoreConfig
+        bm = Beatmap(notes=[Note(t=1.0, lane=0), Note(t=2.0, lane=1),
+                            Note(t=3.0, lane=2)],
+                     song=("song.mp3" if song else None))
+        engine = MagicMock()
+        cfg = {
+            "rhythm.pre_song_lead_s": 0,
+            "game.start_countdown_s": 0,
+            "rhythm.audio_offset_ms": 40,
+            "rhythm.metronome_offset_ms": 12,
+            "rhythm.buzz_rise_comp_ms": rise_comp_ms,
+        }
+        engine.cfg.get = MagicMock(
+            side_effect=lambda k, d=None: cfg.get(k, d))
+        if song:
+            engine.audio._song_path = "song.mp3"
+            engine.audio._metronome_period = None
+        else:
+            engine.audio._song_path = None
+            engine.audio._metronome_period = 0.5
+        engine.audio.play_song = MagicMock(return_value=True)
+        mode = RhythmMode(engine, bm, RhythmWindows(), ScoreConfig())
+        return mode, engine, bm
+
+    def _drive(self, mode, clock, until_song_t):
+        end = mode._t_start + until_song_t
+        while clock.t < end:
+            clock.t += self.FRAME_S
+            mode.update(self.FRAME_S)
+
+    class _Clock:
+        def __init__(self, t0: float) -> None:
+            self.t = t0
+
+        def perf_counter(self) -> float:
+            return self.t
+
+    def _with_fake_clock(self, fn):
+        import finger_rehab.game.modes.rhythm as rhythm_mod
+        real_time = rhythm_mod.time
+        clock = self._Clock(1000.0)
+        rhythm_mod.time = clock
+        try:
+            return fn(clock)
+        finally:
+            rhythm_mod.time = real_time
+
+    def test_cue_fires_at_the_scored_zero_with_a_song(self) -> None:
+        # Tracks the dispatch wall time per call via a side effect so
+        # both halves are pinned: the logged timestamp is the
+        # scheduled cue moment, and the dispatch frame is centred on
+        # it (within half a frame either side, never a full frame
+        # late).
+        def go(clock):
+            mode, engine, bm = self._make_mode(song=True)
+            dispatched = []
+            engine.on_stim.side_effect = (
+                lambda lane, idx, t_perf: dispatched.append(clock.t))
+            self._drive(mode, clock, 2.5)
+            calls = engine.on_stim.call_args_list
+            self.assertEqual(len(calls), 2, "two notes were due by 2.5s")
+            for call, at, note in zip(calls, dispatched, bm.notes[:2]):
+                _lane, _idx, t_perf = call[0]
+                target = mode._t_start + note.t + 0.040
+                self.assertAlmostEqual(t_perf, target, places=9)
+                err_ms = (at - target) * 1000.0
+                self.assertLessEqual(abs(err_ms),
+                                     self.FRAME_S * 1000.0 / 2 + 0.5,
+                    f"dispatch missed the beat by {err_ms:.1f} ms")
+
+        self._with_fake_clock(go)
+
+    def test_metronome_uses_its_own_smaller_offset(self) -> None:
+        def go(clock):
+            mode, engine, bm = self._make_mode(song=False)
+            self._drive(mode, clock, 1.5)
+            calls = engine.on_stim.call_args_list
+            self.assertEqual(len(calls), 1)
+            _lane, _idx, t_perf = calls[0][0]
+            self.assertAlmostEqual(
+                t_perf, mode._t_start + bm.notes[0].t + 0.012, places=9)
+
+        self._with_fake_clock(go)
+
+    def test_press_exactly_at_the_cue_scores_zero_offset(self) -> None:
+        # The whole point of the move: the buzz and the scored zero
+        # are now the same moment, so a press right at the buzz is a
+        # 0 ms asynchrony, not an artefact of the audio offset.
+        def go(clock):
+            from finger_rehab.hardware.fsr_detector import PressEvent
+            mode, engine, bm = self._make_mode(song=True)
+            self._drive(mode, clock, 1.2)
+            self.assertEqual(engine.on_stim.call_count, 1)
+            _lane, _idx, cue_t = engine.on_stim.call_args[0]
+            mode.queue_press(PressEvent(lane=0, t_perf=cue_t,
+                                        value=0, baseline=0.0))
+            clock.t += self.FRAME_S
+            mode.update(self.FRAME_S)
+            engine.log_rhythm_hit.assert_called_once()
+            offset_ms = engine.log_rhythm_hit.call_args[0][1]
+            self.assertLess(abs(offset_ms), 1.0,
+                f"press at the cue scored {offset_ms:.1f} ms, not 0")
+
+        self._with_fake_clock(go)
+
+    def test_rise_comp_pulls_the_cue_earlier(self) -> None:
+        # A rig that has bench-measured its motors can subtract the
+        # rise time; the command then leads the scored zero by it.
+        def go(clock):
+            mode, engine, bm = self._make_mode(song=True,
+                                               rise_comp_ms=20.0)
+            self._drive(mode, clock, 1.2)
+            _lane, _idx, t_perf = engine.on_stim.call_args[0]
+            self.assertAlmostEqual(
+                t_perf, mode._t_start + bm.notes[0].t + 0.040 - 0.020,
+                places=9)
+
+        self._with_fake_clock(go)
+
+
 if __name__ == "__main__":
     unittest.main()

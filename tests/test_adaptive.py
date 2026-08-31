@@ -136,32 +136,37 @@ class RtAwareSlowDownTests(unittest.TestCase):
         self.assertGreater(eng.rt_utilisation, 0.8)
         self.assertLess(eng.rt_utilisation, 1.0)
 
-    def test_slow_rt_pushes_bpm_down_even_with_decent_quality(self) -> None:
-        # Patient is hitting (quality 0.6 = somewhere between Good and
-        # Great) but their RT is eating most of the window. The adapter
-        # should still slow down because they're cutting it fine.
+    def test_slow_rt_pushes_bpm_down_when_quality_is_lates(self) -> None:
+        # Patient is technically hitting but the presses are Lates
+        # (quality 0.4, qr under the 0.5 override gate) and their RT
+        # is eating most of the window: a patient at their limit. The
+        # utilisation guard keeps its veto here and the pace comes
+        # down. This test used to feed quality 0.6, which now falls
+        # on the band-keeping side of the gate (see the class below).
         from finger_rehab.analytics.adaptive import AdaptiveConfig, AdaptiveEngine
         eng = AdaptiveEngine(cfg=AdaptiveConfig(min_trials=2))
         eng.bpm = 60.0     # window ~900ms
         for _ in range(30):
             for lane in range(4):
-                eng.record(lane, hit=True, rt_ms=820.0, quality=0.6)
-        # qr ~ 0.6 (just under target_low 0.65) AND util high -> slow down.
+                eng.record(lane, hit=True, rt_ms=820.0, quality=0.4)
         self.assertLess(eng.next_bpm(), 60.0)
 
-    def test_high_quality_with_high_rt_does_not_speed_up(self) -> None:
-        # qr above target_high should normally speed up, but if RT is
-        # eating > 80% of the window the engine should hold steady (or
-        # slow, but at minimum not speed up).
+    def test_in_band_hit_rate_with_high_rt_does_not_speed_up(self) -> None:
+        # INSIDE the 65-80 percent band the utilisation guard still
+        # rules: a patient coping but burning the window must not be
+        # pushed. (Above the band the guard blends instead of vetoes;
+        # that behaviour is pinned by BandKeepingTests below.)
         from finger_rehab.analytics.adaptive import AdaptiveConfig, AdaptiveEngine
         eng = AdaptiveEngine(cfg=AdaptiveConfig(min_trials=2))
         eng.bpm = 60.0
-        for _ in range(40):
-            for lane in range(4):
-                # Quality 0.95 (Great-ish) but RT 820ms / 900ms window.
-                eng.record(lane, hit=True, rt_ms=820.0, quality=0.95)
+        for s in eng.state:
+            s.hit_ema = 0.72          # in band
+            s.quality_ema = 0.72
+            s.n_trials = 10
+            s.rt_ema_ms = 820.0       # util ~0.91 of the 900ms window
+        eng.current_streak = 5
         self.assertLessEqual(eng.next_bpm(), 60.0,
-            "engine should not speed up when RT is near the window edge")
+            "engine should not speed up in band when RT is near the edge")
 
     def test_bpm_can_drop_below_old_floor_of_20(self) -> None:
         # bpm_min was lowered from 20 to 10 (3s -> 6s per stim) so a
@@ -326,6 +331,124 @@ class ClosedLoopEquilibriumTests(unittest.TestCase):
         final_bpm = self._drive(1500.0, start_bpm=80.0)
         self.assertLess(final_bpm, 50.0,
             f"slow patient BPM should drop well below 50, got {final_bpm}")
+
+
+class BandKeepingTests(unittest.TestCase):
+    """A high performer must be brought back into the 65-80 percent
+    band promptly, not parked above it. Two things used to stop that:
+    the utilisation guard vetoed every speed-up once RT used 0.80 of
+    the window (for a fast hand that is what approaching the band
+    looks like, so the veto froze the climb exactly when it mattered),
+    and adaptive.bpm_max 140 capped the window at 386 ms, which a
+    280 ms press clears every time. Measured on the headless player
+    below: before the fix the trailing hit rate never re-entered the
+    band in 300 trials (100 percent hits throughout); after it, the
+    rate is back inside the band around trial 53 and the last hundred
+    trials average near the band top. Both halves are needed: the
+    blend without the cap parks at 140, the cap without the blend
+    oscillates under 180 at 100 percent hits."""
+
+    def _drive_fast_player(self, bpm_max: float, n_trials: int = 300):
+        """The AdaptiveMode loop headless: record then next_bpm once
+        per trial (the order _finish uses), shipped knob values, a
+        fast hand pressing at ~280 ms (sd 25, clipped 220-360)."""
+        import random
+        from finger_rehab.analytics.adaptive import (AdaptiveConfig,
+                                                     AdaptiveEngine)
+        rng = random.Random(7)
+        eng = AdaptiveEngine(cfg=AdaptiveConfig(
+            min_trials=2, bpm_min=10.0, bpm_max=bpm_max, bpm_step=10.0))
+        eng.bpm = 30.0                     # shipped start_bpm
+        hits: list[int] = []
+        for i in range(n_trials):
+            window_ms = eng.current_timeout_s * 1000.0
+            rt = min(360.0, max(220.0, rng.gauss(280.0, 25.0)))
+            hit = rt <= window_ms
+            # Shipped scoring bands through AdaptiveMode._QUALITY:
+            # great <= 350 ms is 1.0, good <= 650 ms is 0.75.
+            q = 1.0 if rt <= 350.0 else 0.75
+            eng.record(i % 4, hit=hit, rt_ms=(rt if hit else None),
+                       quality=(q if hit else 0.0))
+            eng.next_bpm()
+            hits.append(1 if hit else 0)
+        return eng, hits
+
+    @staticmethod
+    def _trailing(hits: list[int], j: int, w: int = 30) -> float:
+        seg = hits[max(0, j - w + 1):j + 1]
+        return sum(seg) / len(seg)
+
+    def test_fast_player_settles_back_into_the_band(self) -> None:
+        eng, hits = self._drive_fast_player(bpm_max=180.0)
+        settle = None
+        for j in range(30, len(hits)):
+            rest = hits[j:]
+            if (self._trailing(hits, j) <= 0.85
+                    and sum(rest) / len(rest) <= 0.87):
+                settle = j
+                break
+        self.assertIsNotNone(settle,
+            "trailing hit rate never came back to the band")
+        self.assertLess(settle, 80,
+            f"settling took {settle} trials; the fix pulled it to ~53")
+        tail = sum(hits[-100:]) / 100.0
+        self.assertLessEqual(tail, 0.90,
+            f"equilibrium hit rate {tail:.2f} still sits above the band")
+        self.assertGreaterEqual(tail, 0.60,
+            f"equilibrium hit rate {tail:.2f} overshot below the band")
+
+    def test_old_cap_documents_the_bug_it_replaced(self) -> None:
+        # The same player under the old 140 cap: the window can never
+        # shrink past 386 ms, so a 280 ms press never misses and the
+        # controller sits at 100 percent hits forever. Kept as the
+        # measured statement of why bpm_max moved to 180.
+        eng, hits = self._drive_fast_player(bpm_max=140.0)
+        self.assertGreaterEqual(sum(hits[-100:]) / 100.0, 0.97)
+
+    def test_above_band_blend_climbs_while_quality_holds(self) -> None:
+        # hr above the band with qr >= 0.5: the utilisation guard
+        # tempers the climb instead of vetoing it, so the pace still
+        # rises even at util ~0.91. This is the behaviour change the
+        # band-keeping fix made; before it, this exact state froze.
+        from finger_rehab.analytics.adaptive import (AdaptiveConfig,
+                                                     AdaptiveEngine)
+        eng = AdaptiveEngine(cfg=AdaptiveConfig(min_trials=2))
+        eng.bpm = 60.0
+        for s in eng.state:
+            s.hit_ema = 0.96
+            s.quality_ema = 0.95
+            s.n_trials = 10
+            s.rt_ema_ms = 820.0        # util ~0.91 of the 900ms window
+        eng.current_streak = 6
+        before = eng.bpm
+        eng.next_bpm()
+        self.assertGreater(eng.bpm, before,
+            "above the band the guard must temper, not veto")
+
+    def test_above_band_all_lates_keeps_the_veto(self) -> None:
+        # A 100 percent hit rate made of Lates (qr under 0.5) is a
+        # patient at their limit: there the guard keeps its veto and
+        # the pace does not rise.
+        from finger_rehab.analytics.adaptive import (AdaptiveConfig,
+                                                     AdaptiveEngine)
+        eng = AdaptiveEngine(cfg=AdaptiveConfig(min_trials=2))
+        eng.bpm = 60.0
+        for s in eng.state:
+            s.hit_ema = 0.96
+            s.quality_ema = 0.30
+            s.n_trials = 10
+            s.rt_ema_ms = 820.0
+        eng.current_streak = 6
+        before = eng.bpm
+        eng.next_bpm()
+        self.assertLessEqual(eng.bpm, before)
+
+    def test_config_and_dataclass_carry_the_180_cap(self) -> None:
+        from finger_rehab.analytics.adaptive import AdaptiveConfig
+        from finger_rehab.config import Config
+        self.assertEqual(AdaptiveConfig().bpm_max, 180.0)
+        self.assertEqual(float(Config.load().get("adaptive.bpm_max")),
+                         180.0)
 
 
 class ProbeStepTests(unittest.TestCase):

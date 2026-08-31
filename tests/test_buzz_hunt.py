@@ -287,6 +287,87 @@ class StaircaseTests(unittest.TestCase):
         self.assertIsNotNone(s.estimate(6))
 
 
+class FastStartTests(unittest.TestCase):
+    """The accelerated approach (Levitt 1971 section IV; Leek 2001):
+    until the first reversal a single correct steps down and the step
+    is doubled, then the plain 2-down 1-up takes over at the base
+    step. Measured on the shipped localisation stage this moved the
+    first 8-trial bin from a mean of 240 ms dealt to 120, and the
+    loc trials spent within 1.5x of a simulated 90 ms observer's
+    threshold from 6 of 28 to 25 of 28."""
+
+    def _stair(self, **over):
+        from finger_rehab.game.modes.buzz_hunt import Staircase
+        kw = dict(start=300.0, step=40.0, floor=40.0, ceiling=500.0,
+                  fast_start=True)
+        kw.update(over)
+        return Staircase(**kw)
+
+    def test_single_correct_steps_double_until_first_reversal(self):
+        s = self._stair()
+        s.record(True)
+        self.assertEqual(s.level, 220.0)     # one correct, double step
+        s.record(True)
+        self.assertEqual(s.level, 140.0)
+
+    def test_first_error_reverses_at_the_base_step(self):
+        s = self._stair()
+        s.record(True)
+        s.record(True)                        # 300 -> 220 -> 140
+        rev = s.record(False)
+        self.assertTrue(rev)
+        self.assertEqual(s.reversals, [140.0])
+        # The recovery step is the BASE step: a doubled climb would
+        # overshoot the region the descent just found.
+        self.assertEqual(s.level, 180.0)
+
+    def test_after_first_reversal_the_plain_rule_runs(self):
+        s = self._stair()
+        s.record(True)
+        s.record(True)
+        s.record(False)                       # reversal, level 180
+        s.record(True)
+        self.assertEqual(s.level, 180.0)      # one correct holds now
+        s.record(True)
+        self.assertEqual(s.level, 140.0)      # two correct: base step
+
+    def test_default_stays_the_plain_rule(self):
+        from finger_rehab.game.modes.buzz_hunt import Staircase
+        s = Staircase(start=300.0, step=40.0, floor=40.0, ceiling=500.0)
+        s.record(True)
+        self.assertEqual(s.level, 300.0)      # one correct holds
+
+    def test_reaches_the_threshold_region_in_fewer_trials(self):
+        import random
+
+        def trials_to_region(fast: bool) -> int:
+            rng = random.Random(5)
+            s = self._stair(fast_start=fast)
+            true_ms = 90.0
+            for i in range(60):
+                if s.level <= 1.5 * true_ms:
+                    return i
+                p = 0.97 if s.level >= true_ms else 0.25
+                s.record(rng.random() < p)
+            return 60
+
+        self.assertLess(trials_to_region(True),
+                        trials_to_region(False))
+        self.assertLessEqual(trials_to_region(True), 4)
+
+    def test_still_converges_near_a_simulated_observer(self):
+        import random
+        rng = random.Random(3)
+        true_ms = 140.0
+        s = self._stair()
+        for _ in range(120):
+            p = 0.97 if s.level >= true_ms else 0.25
+            s.record(rng.random() < p)
+        est = s.estimate(8)
+        self.assertIsNotNone(est)
+        self.assertLess(abs(est - true_ms), 2.5 * s.step)
+
+
 # ---- pure stimulus reconstruction ---------------------------------------
 
 
@@ -449,6 +530,9 @@ class LocalisationTests(unittest.TestCase):
         self.assertFalse(m._loc_records[0]["correct"])
 
     def test_timeout_raises_the_staircase(self):
+        # Still inside the accelerated approach (no reversal yet), so
+        # the up-move runs at the doubled step; FastStartTests pins
+        # the rule itself.
         m = self._loc_mode()
         t = _to_trial(m)
         t = _to_respond(m, t)
@@ -456,11 +540,17 @@ class LocalisationTests(unittest.TestCase):
         t += m.response_window_s + 0.05
         m._tick(t)
         self.assertEqual(m.phase, "feedback")
-        self.assertEqual(m._dur_stair[m.hand].level, before + m.step_ms)
+        self.assertEqual(m._dur_stair[m.hand].level,
+                         before + 2 * m.step_ms)
         self.assertEqual(m._confusion[str(m._loc_records[0]['lane'])]
                          ["none"], 1)
 
-    def test_two_correct_lower_the_duration(self):
+    def test_correct_answers_lower_the_duration(self):
+        # During the accelerated approach every single correct steps
+        # down at double size, so two corrects descend four base
+        # steps: the stage reaches the threshold region inside a few
+        # trials instead of burning a third of its trials on the way
+        # down (see Staircase.fast_start).
         m = self._loc_mode(n=3)
         t = _to_trial(m)
         start = m._dur_stair["right"].level
@@ -469,7 +559,8 @@ class LocalisationTests(unittest.TestCase):
             m.queue_press(_press_event(m.lane, t + 0.2))
             m._tick(t + 0.21)
             t = _next_trial(m, t + 0.21) if i < 1 else t + 0.21
-        self.assertEqual(m._dur_stair["right"].level, start - m.step_ms)
+        self.assertEqual(m._dur_stair["right"].level,
+                         start - 4 * m.step_ms)
 
     def test_reversal_is_logged_as_an_event(self):
         m = self._loc_mode(n=6)
@@ -1028,8 +1119,10 @@ class GapTests(unittest.TestCase):
         self._run_gap_trial(m, t, taps=1 if two else 2)
         rec = m._gap_records[0]
         self.assertFalse(rec["correct"])
+        # First move of the block sits in the accelerated approach,
+        # so the wrong answer climbs at the doubled step.
         self.assertEqual(m._gap_stair[rec["hand"]].level,
-                         before + m.gap_step_ms)
+                         before + 2 * m.gap_step_ms)
         row = m.engine.trial_logger.rows[0]
         self.assertEqual(row["early_late"], "Miss")
         self.assertEqual(row["waveform"], "buzz_gap")
@@ -1194,6 +1287,77 @@ class BlockFlowTests(unittest.TestCase):
                 + m.replay_item_s * len(m.sequence)) * 1000.0
         self.assertEqual(m.engine._last_stim_timeout_ms, want)
         self.assertGreater(want, m.response_window_s * 1000.0)
+
+    def test_session_cap_ends_between_trials_data_kept(self):
+        # The cap fires at a card, never mid-trial: a trial in flight
+        # finishes and is scored, then the block ends with everything
+        # played kept and end_reason time_cap. The constructor floors
+        # the cap at one minute, so the fake clock jumps past that.
+        m = _mode(_engine(), catch_rate=0.0, session_cap_min=1.0)
+        m = _only_stage(m, "loc", 50)
+        finished = []
+        m.engine.finish_block = lambda: finished.append(True)
+        t = _to_trial(m)
+        t = _to_respond(m, t)
+        # Past the cap mid-trial: the trial must still close normally.
+        t += 61.0
+        m.queue_press(_press_event(m.lane, t + 0.2))
+        m._tick(t + 0.21)
+        self.assertEqual(m.phase, "feedback",
+            "the in-flight trial must finish and be scored first")
+        self.assertEqual(len(m.engine.trial_logger.rows), 1)
+        # The next between-trial tick ends the block instead of
+        # dealing trial two.
+        m._tick(t + 0.21 + m.rest_s + 0.05)
+        self.assertEqual(m.phase, "done")
+        self.assertEqual(m.end_reason, "time_cap")
+        self.assertTrue(finished)
+        self.assertEqual(m.block_stats()["end_reason"], "time_cap")
+        self.assertEqual(m.block_stats()["loc"]["trials"], 1)
+
+    def test_session_cap_fires_on_a_parked_card_too(self):
+        # Nobody at the pads: the block sits on the stage card
+        # forever. The cap must end it anyway (the lesson chords
+        # learnt: a cap that only ticks at trial closes never fires
+        # when no trial ever closes).
+        m = _mode(_engine(), catch_rate=0.0, session_cap_min=1.0)
+        m = _only_stage(m, "loc", 50)
+        m.engine.finish_block = lambda: None
+        m._tick(1000.0)
+        self.assertEqual(m.phase, "stage")
+        m._tick(1000.0 + 61.0)
+        self.assertEqual(m.phase, "done")
+        self.assertEqual(m.end_reason, "time_cap")
+
+    def test_config_ships_the_cap(self):
+        from finger_rehab.config import Config
+        self.assertEqual(
+            float(Config.load().get("buzz_hunt.session_cap_min")), 15.0)
+
+    def test_distractor_overlap_is_not_voided_at_sixty_hz(self):
+        # A distractor trial's two pulses sit on different boards and
+        # their planned silence shrinks below one display frame as
+        # the staircase nears 150 ms; the same-board void guard used
+        # to void these on every ordinary frame (measured: half the
+        # distractor stage voided at just-above-threshold levels).
+        # Cross-board plans skip the void; the gap trial's same-board
+        # guard is pinned by test_frame_stall_across_a_gap_voids.
+        hands = {"right": [0, 1, 2, 3], "left": [4, 5, 6, 7]}
+        m = _mode(_engine("both"), hands=hands, catch_rate=0.0)
+        for stair in m._dur_stair.values():
+            stair.level = 140.0       # silence 10 ms < one frame
+        m = _only_stage(m, "distractor", 2)
+        t = _to_trial(m)
+        t = _to_respond(m, t)
+        self.assertEqual(m._pulse_idx, 2, "both pulses dispatched")
+        self.assertIs(m._stim_delivered, True)
+        late = [ev for ev in m.engine.raw_logger.events
+                if ev["event"] == "stim_late_pulse"]
+        self.assertEqual(late, [])
+        m.queue_press(_press_event(m.lane, t + 0.2))
+        m._tick(t + 0.21)
+        self.assertEqual(len(m._dis_records), 1,
+            "the trial must land in the distractor records, not void")
 
     def test_pause_mid_trial_restarts_it(self):
         m = _mode(_engine(), catch_rate=0.0)

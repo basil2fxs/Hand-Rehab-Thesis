@@ -3984,6 +3984,8 @@ class GameEngine:
             score_cfg=self.score_cfg,
             seed=seed,
             demo_trials=self._test_mode_trials(),
+            session_cap_min=float(
+                self.cfg.get("buzz_hunt.session_cap_min", 15.0)),
         )
         self._begin_block("buzz_hunt")
         # Both seeds shaped this block's stimuli (the block seed drew
@@ -4009,7 +4011,7 @@ class GameEngine:
             target_low=float(self.cfg.get("adaptive.target_low", 0.65)),
             target_high=float(self.cfg.get("adaptive.target_high", 0.80)),
             bpm_min=float(self.cfg.get("adaptive.bpm_min", 10.0)),
-            bpm_max=float(self.cfg.get("adaptive.bpm_max", 140.0)),
+            bpm_max=float(self.cfg.get("adaptive.bpm_max", 180.0)),
             bpm_step=float(self.cfg.get("adaptive.bpm_step", 10.0)),
             weakness_bias=float(self.cfg.get("adaptive.weakness_bias", 2.5)),
             min_trials=int(self.cfg.get("adaptive.min_trials", 2)),
@@ -4121,7 +4123,7 @@ class GameEngine:
             target_low=float(self.cfg.get("adaptive.target_low", 0.65)),
             target_high=float(self.cfg.get("adaptive.target_high", 0.80)),
             bpm_min=float(self.cfg.get("adaptive.bpm_min", 10.0)),
-            bpm_max=float(self.cfg.get("adaptive.bpm_max", 140.0)),
+            bpm_max=float(self.cfg.get("adaptive.bpm_max", 180.0)),
             bpm_step=float(self.cfg.get("adaptive.bpm_step", 10.0)),
             weakness_bias=float(self.cfg.get("adaptive.weakness_bias", 2.5)),
             min_trials=int(self.cfg.get("adaptive.min_trials", 2)),

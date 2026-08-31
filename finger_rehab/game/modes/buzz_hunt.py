@@ -132,6 +132,22 @@ hand and per finger by the paired scheduler, and the confusion
 matrix gains its cross-hand cells. The distractor stage only exists
 bilaterally, because it needs an other hand.
 
+PACING. Two rules keep the block from going on too long while still
+getting hard quickly (both measured on a headless simulated block at
+the shipped settings). The staircases open with the standard
+accelerated approach (single-correct steps at double size until the
+first reversal, then plain 2-down 1-up; Levitt 1971, Leek 2001):
+without it the first third of the localisation stage ran at 200-300
+ms, trivially easy for an ordinary hand, and the unilateral gap
+stage often closed with too few reversals for any threshold
+estimate at all. And the whole block sits under
+buzz_hunt.session_cap_min (shipped 15 minutes), enforced only
+between trials so a trial in flight always finishes: the measured
+worst case was 9.9 minutes for one hand but 19.7 bilaterally, and
+past a quarter hour of sustained tactile attention the tail trials
+measure fatigue more than perception. A capped block keeps
+everything already played and writes end_reason time_cap.
+
 LOGGING. Localisation and distractor rows: waveform "buzz",
 waveform_params carrying the target lane, requested duration, catch
 flag and any distractor lane / lead, and segment_times bracketing
@@ -295,10 +311,25 @@ class Staircase:
     log steps buy nothing, and an additive step is what the frame
     quantisation argument is stated in. Every reversal is recorded;
     the threshold estimate is the mean of the last few reversals,
-    which is the standard readout."""
+    which is the standard readout.
+
+    `fast_start` prepends the standard accelerated approach (Levitt
+    1971 section IV; Leek 2001 review): until the FIRST reversal a
+    single correct steps down and the step is doubled, so the level
+    reaches the threshold region in a handful of trials instead of
+    burning a third of the stage getting there. From the first error
+    on, the rule above takes over at the base step. Measured on the
+    shipped localisation stage with a simulated 90 ms observer, the
+    plain rule dealt its first eight trials at a mean of 240 ms (well
+    above threshold, trivially easy) and put 6 of 28 staircased
+    trials within 1.5x of the observer's threshold; fast_start put
+    the approach inside the first four trials and roughly tripled the
+    time spent near threshold. The up-step after the first error uses
+    the base step (a doubled recovery step would overshoot the region
+    the descent just found)."""
 
     def __init__(self, start: float, step: float, floor: float,
-                 ceiling: float) -> None:
+                 ceiling: float, fast_start: bool = False) -> None:
         self.level = float(start)
         self.step = max(MIN_STEP_MS, float(step))
         self.floor = float(floor)
@@ -307,6 +338,7 @@ class Staircase:
         self.reversals: list[float] = []
         self._run = 0                 # consecutive correct at this level
         self._direction = 0           # -1 falling, +1 rising, 0 unmoved
+        self._fast = bool(fast_start)  # accelerated approach phase
 
     def record(self, correct: bool) -> bool:
         """Apply one response. Returns True when this response caused
@@ -314,7 +346,7 @@ class Staircase:
         move = 0
         if correct:
             self._run += 1
-            if self._run >= 2:
+            if self._run >= (1 if self._fast else 2):
                 self._run = 0
                 move = -1
         else:
@@ -325,8 +357,12 @@ class Staircase:
         reversal = self._direction != 0 and move != self._direction
         if reversal:
             self.reversals.append(self.level)
+            # The first reversal ends the accelerated approach; the
+            # up-step it triggers already runs at the base step.
+            self._fast = False
+        step = self.step * (2.0 if self._fast else 1.0)
         self._direction = move
-        self.level = min(max(self.level + move * self.step, self.floor),
+        self.level = min(max(self.level + move * step, self.floor),
                          self.ceiling)
         return reversal
 
@@ -393,7 +429,8 @@ class BuzzHuntMode(WaitSkip):
                  stage_intro_s: float,
                  score_cfg: ScoreConfig,
                  seed: int = 0,
-                 demo_trials: int | None = None) -> None:
+                 demo_trials: int | None = None,
+                 session_cap_min: float = 15.0) -> None:
         self.engine = engine
         self.hands = {h: list(v)[:4] for h, v in lanes_by_hand.items() if v}
         if not self.hands:
@@ -427,6 +464,14 @@ class BuzzHuntMode(WaitSkip):
         self.announce_s = max(0.5, float(announce_s))
         self.rest_s = max(0.5, float(rest_s))
         self.stage_intro_s = max(self.announce_s, float(stage_intro_s))
+        # Hard wall-clock cap on the block, enforced between trials
+        # only (a trial in flight always finishes and is scored).
+        # Sustained tactile discrimination is attention-heavy, and the
+        # measured shipped envelope ran to ~20 minutes bilaterally in
+        # the worst case; past the cap the tail trials measure fatigue
+        # more than perception. Everything already played is kept and
+        # summarised; end_reason says time_cap.
+        self.session_cap_s = max(60.0, float(session_cap_min) * 60.0)
         self.score_cfg = score_cfg
         self.rng = random.Random(int(seed))
         self.demo = demo_trials is not None
@@ -493,11 +538,15 @@ class BuzzHuntMode(WaitSkip):
                 except (TypeError, ValueError):
                     start = self.start_ms
             self._dur_start[hand] = start
+            # fast_start on both stairs: the accelerated approach is
+            # what makes a 32-trial stage spend its trials near
+            # threshold instead of on the descent (see Staircase).
             self._dur_stair[hand] = Staircase(
-                start, self.step_ms, self.floor_ms, self.ceil_ms)
+                start, self.step_ms, self.floor_ms, self.ceil_ms,
+                fast_start=True)
             self._gap_stair[hand] = Staircase(
                 self.gap_start_ms, self.gap_step_ms, self.gap_floor_ms,
-                self.gap_start_ms * 2)
+                self.gap_start_ms * 2, fast_start=True)
 
         # Phase machine:
         #   no_input -> (parked; the buzz needs the hardware)
@@ -611,6 +660,16 @@ class BuzzHuntMode(WaitSkip):
             self._start(now)
         if self.phase in ("done", "no_input"):
             self._presses.clear()
+            return
+        # Session cap, checked only between trials (stage card, ready
+        # card, result card) so a trial in flight always finishes and
+        # is scored. It also fires on a block parked on a card with
+        # nobody at the pads, the same lesson chords learnt: a cap
+        # that only ticks at trial closes never fires when no trial
+        # ever closes.
+        if (self.phase in ("stage", "announce", "feedback")
+                and (now - self._t0) > self.session_cap_s):
+            self._end("time_cap")
             return
         if self.phase in ("stage", "announce"):
             self._presses.clear()
@@ -946,7 +1005,23 @@ class BuzzHuntMode(WaitSkip):
             # delivered timing no longer resembles the plan, so the
             # trial is voided like a dropped pulse (stim_delivered
             # FALSE keeps it out of every scored aggregate).
-            if self._pulse_idx > 0:
+            #
+            # SAME BOARD ONLY. The guard protects silence on a shared
+            # motor driver; a distractor trial's two pulses sit on
+            # DIFFERENT boards, overlap on purpose (the overlap is
+            # what makes the decoy hard to gate out) and their
+            # planned silence shrinks below one display frame as the
+            # staircase approaches 150 ms duration, at which point
+            # this guard voided the trial on every ordinary 60 Hz
+            # frame (measured: half the distractor stage voided at
+            # just-above-threshold levels, exactly the trials the
+            # stage exists for). A frame-late target pulse distorts
+            # the fixed 150 ms lead by about a tenth, is recorded in
+            # the raw pulse_motor events either way, and moves no
+            # staircase, so cross-board plans skip the void.
+            if self._pulse_idx > 0 and self._lane_owner(lane)[0] == \
+                    self._lane_owner(self._pulse_plan[
+                        self._pulse_idx - 1][0])[0]:
                 prev_lane, prev_on, prev_dur = self._pulse_plan[
                     self._pulse_idx - 1]
                 spacing = max(0.0, _on - (prev_on + prev_dur / 1000.0))
@@ -1450,6 +1525,12 @@ class BuzzHuntMode(WaitSkip):
         self.clear_wait()
         if self.trials_done >= self.total_trials:
             self._end("completed")
+            return
+        # Same cap as _tick's between-trial check; here it also covers
+        # the skip button's direct route out of the result card, which
+        # never passes through the phase check above.
+        if self._t0 is not None and (now - self._t0) > self.session_cap_s:
+            self._end("time_cap")
             return
         prev_stage = self.stage
         self._prepare_trial()

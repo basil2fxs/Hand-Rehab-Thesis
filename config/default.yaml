@@ -314,10 +314,11 @@ cue:
   # Turn it on when the point is to reinforce a correct press rather
   # than to measure the response to a cue.
   #
-  # One thing to watch once it is on: adaptive can reach 140 BPM,
-  # which is 430 ms between stimuli, so a 250 ms confirmation buzz
-  # sits close to the next trial's cue buzz. Shorten motor.cue_ms or
-  # turn this back off if the two start to blur together.
+  # One thing to watch once it is on: adaptive can reach 180 BPM,
+  # which is 333 ms between stimuli, so a confirmation buzz of any
+  # length runs straight into the next trial's cue buzz at the top of
+  # the range. Shorten motor.cue_ms or turn this back off if the two
+  # start to blur together.
   buzz_after: false
 
   # SCREEN REVEAL. Not one of the four switches: this is whether the
@@ -546,7 +547,16 @@ adaptive:
   # sees a sustained hit rate above target_high.
   start_bpm: 30
   bpm_min: 10                 # crawl mode for severe weakness (6s gap)
-  bpm_max: 140
+  # Raised from 140 with the band-keeping fix. The cap is set by the
+  # band, not by taste: for a hand with a fast 280 ms press the hit
+  # rate only falls back into the 65-80% band once the press window
+  # shrinks near 300 ms, which is 180 BPM (window = cadence * 0.90).
+  # At 140 (window 386 ms) that hand sat at 100% hits for whole
+  # sessions, measurably outside the band the controller exists to
+  # hold. Measured on a headless 280 ms simulated player: at 140 the
+  # trailing hit rate never re-entered the band in 300 trials; at 180
+  # it settled back inside it around trial 53 (about half a minute).
+  bpm_max: 180
   bpm_step: 10                # base step. Scaled up when hit rate is far off.
   target_low: 0.65            # aim for the 65-80% band around the 70% target
   target_high: 0.80
@@ -1209,6 +1219,19 @@ buzz_hunt:
   announce_s: 1.5
   rest_s: 2.0
   stage_intro_s: 5.0
+  # Hard cap on the whole block, minutes. Enforced between trials
+  # only, so a trial in flight always finishes and is scored; the
+  # block ends at the next card with everything already played kept
+  # and end_reason time_cap in the summary. Measured on a headless
+  # simulated block at these settings: one hand runs about 8.5
+  # minutes for an ordinary responder and 9.9 in the worst case
+  # (nobody responds, every window expires); both hands about 16.8
+  # and 19.7. Sustained tactile discrimination is attention-heavy,
+  # and past a quarter hour the tail trials measure fatigue more
+  # than perception, so 15 leaves one-hand blocks untouched and
+  # trims only the slowest bilateral tail. Raise it for a protocol
+  # that must have every bilateral gap trial.
+  session_cap_min: 15
   # Set an integer to replay a block's exact trial plans (testing, or
   # a deliberately repeated protocol). Empty draws fresh each block
   # and records it in raw.csv. The hidden repeating sequence comes
@@ -1247,6 +1270,16 @@ rhythm:
   # The metronome uses the same 512-sample mixer buffer, ~12 ms at
   # 44.1 kHz, far less than a decoded song's latency.
   metronome_offset_ms: 12
+  # The cue path (buzz, tone, EEG marker) dispatches against the
+  # scored beat: note time PLUS the offset above, so the tactile
+  # pulse lands on the moment a press scores 0 ms, the beat the
+  # patient hears. This knob subtracts a bench-measured motor rise
+  # time from that target so the felt vibration, not just the
+  # command, sits on the beat. Ships 0 because the ERM rise (~20 ms)
+  # is uncharacterised on this rig and an unverified constant would
+  # move the cue by a guess; set it only from an accelerometer
+  # measurement of your own motors.
+  buzz_rise_comp_ms: 0
 
 audio:
   enabled: true
