@@ -933,7 +933,13 @@ syllables:
   beat_ioi_ms: 500
   # Session shape: rounds of words with a proper rest between rounds,
   # and a whole-session ceiling so an engaged child still stops in
-  # time. 40 words in rounds of 10 measures out at about 8 and a half
+  # time. Each finished round stamps a sticker onto the session's
+  # walking strip on the rest screen, runs of fully right words light
+  # up to three corner stars (3, 5 and 8 in a row), and moving up a
+  # word band shows a one-shot Bigger words card. All of it is fixed
+  # and earned, never random, and nothing is ever taken away; the
+  # research case lives in the mode file's REWARD LAYER section.
+  # 40 words in rounds of 10 measures out at about 8 and a half
   # minutes, which is what a child of this age will actually sit
   # through. It was 50 (measured at 10 and a half minutes; the old
   # comment here guessed 15). Nothing in the design rests on the
@@ -1237,6 +1243,58 @@ buzz_hunt:
   # and records it in raw.csv. The hidden repeating sequence comes
   # from the participant name, not from this seed.
   seed: null
+
+echo:
+  # Echo: the Simon-says span game. The rig plays a growing sequence
+  # (tile light plus a buzz on that finger), the patient replays it,
+  # and the longest echo is the headline. The research case for
+  # every number lives in rehab/game/modes/echo.py; this block says
+  # what the patient experiences. Plays fine on a keyboard: the
+  # stimulus is on screen, the buzz reinforces it.
+
+  # The ladder (the Kessels 2000 Corsi standard, the digit-span twin
+  # of the same rule): start at 2 items, two different sequences per
+  # length, up one length while at least one of the two comes back
+  # right, block over when both fail, ceiling 9. runs adds extra
+  # ladders per block for more trials; the standard is one.
+  start_len: 2
+  trials_per_len: 2
+  max_len: 9
+  runs: 1
+  # Presentation: 500 ms lit, 1000 ms onset to onset, the eCorsi
+  # pinning of the one-item-per-second standard. NEVER speeds up
+  # with success (the toy accelerates; a measure must not). Changing
+  # these is a protocol deviation the analysis splits out, so leave
+  # them unless the deviation is deliberate.
+  item_on_ms: 500
+  ioi_ms: 1000
+  # Every Nth trial secretly replays the participant's hidden
+  # sequence (derived from the name, stable across sessions). Do not
+  # mention it to players.
+  hebb_every: 3
+  # Reproduction is self-paced and never scored on speed; this is
+  # only how long a silent hand gets before the trial closes as a
+  # timeout.
+  idle_timeout_s: 10.0
+  # Short breather between trials, skippable like every wait.
+  rest_s: 2.0
+  # Two straight timeouts force a rest of fatigue_rest_s; a second
+  # forced rest ends the block gracefully.
+  fatigue_timeout_run: 2
+  fatigue_rest_s: 20.0
+  # Hard cap on the whole block, minutes, enforced at trial close. A
+  # ladder to span 6 is about 12 trials and a few minutes; the cap
+  # only catches a run that keeps passing at long lengths.
+  session_cap_min: 10
+  # Set an integer to replay a block's exact novel sequences. Empty
+  # draws fresh each block and records the seed in raw.csv. The
+  # hidden sequence comes from the participant name, not from this.
+  seed: null
+  # Classic Simon appending (one sequence growing by one item per
+  # success, over on the first slip). Play value only: rehearsed
+  # prefixes inflate the span, so cumulative blocks are marked in
+  # the data and never comparable to ladder blocks.
+  cumulative: false
 
 rhythm:
   difficulty: medium     # easy | medium | hard

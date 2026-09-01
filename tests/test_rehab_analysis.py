@@ -417,7 +417,8 @@ def _write_chords_session(root, name, *, day, clock="090000",
 def _write_syllables_session(root, name, *, day, words, gaps=None,
                              clock="090000", hand="right", level=4,
                              nsyll=2, syllables_extra=None, paced=False,
-                             asyn=None, row=False, errs=None, offs=None):
+                             asyn=None, row=False, errs=None, offs=None,
+                             ease=None, streaks=None):
     """One syllables game folder with words packed into the stimulus
     cell the way syllables.py._pack_stimulus writes them.
 
@@ -437,7 +438,10 @@ def _write_syllables_session(root, name, *, day, words, gaps=None,
     map=off<k> the way the sliding window logs its placement (the
     current format; offs wins over row when both are given); `errs`
     is an optional per-word error-code list (default every word
-    err=ok)."""
+    err=ok). `ease` is a per-word bool list packing ease=1 on the
+    reward layer's biased draws, `streaks` a per-word int list
+    packing streak=<n>; both default to absent, which is what every
+    session from before the reward layer looks like."""
     folder = Path(root) / day / f"{name}_{clock}_syllables"
     folder.mkdir(parents=True, exist_ok=True)
     rows = []
@@ -457,6 +461,12 @@ def _write_syllables_session(root, name, *, day, words, gaps=None,
             parts.append("map=row")
         parts += [
             f"paced={1 if paced else 0}", "ioi=500", "replay=0",
+        ]
+        if ease is not None and ease[trial_id - 1]:
+            parts.append("ease=1")
+        if streaks is not None:
+            parts.append(f"streak={streaks[trial_id - 1]}")
+        parts += [
             f"err={err}", f"taps={taps_s}",
         ]
         if paced and asyn:
@@ -1500,6 +1510,103 @@ class TestSyllablesWarmupProbe:
         ra.sec_syllables(ctx["trials"], ctx["metas"], ctx["calset"])
         out = capsys.readouterr().out
         assert "No stored warm-up asynchrony yet" in out
+
+
+class TestSyllablesRewardLayer:
+    """The reward layer's notebook additions (2026-09): ease-in draws
+    are held out of the accuracy-by-count chart (the draw is biased,
+    pooling it would flatter the curve), the within-block learning
+    curve appears once a session has the 10 words its rolling window
+    needs, the engagement panel reads the stored block summary and
+    never dresses itself up as a skill measure, and sessions from
+    before the reward layer (no ease=, no streak=, no stored keys)
+    run every branch unchanged."""
+
+    W2 = [("cat", 0, [(1, 400.0, None), (2, 800.0, None)])]
+
+    def _many(self, n, word="cat"):
+        return [(word, 0, [(1, 400.0, None), (2, 800.0, None)])
+                for _ in range(n)]
+
+    def test_ease_words_are_held_out_of_the_count_chart(
+            self, ra, tmp_path, capsys):
+        _write_syllables_session(
+            tmp_path, "P1", day="2026-08-01", level=2, nsyll=2,
+            words=self._many(3), ease=[False, True, False],
+            streaks=[1, 2, 3])
+        ctx = ra.prepare("all", root=tmp_path)
+        ra.sec_syllables(ctx["trials"], ctx["metas"], ctx["calset"])
+        out = capsys.readouterr().out
+        assert "1 ease-in word(s) held out" in out
+
+    def test_sessions_without_the_new_keys_run_unchanged(
+            self, ra, tmp_path, capsys):
+        # The exact shape every pre-reward-layer session has: no
+        # ease=, no streak=, no engagement keys in the summary.
+        _write_syllables_session(
+            tmp_path, "P1", day="2026-08-01", level=2, nsyll=2,
+            words=self.W2)
+        ctx = ra.prepare("all", root=tmp_path)
+        ra.sec_syllables(ctx["trials"], ctx["metas"], ctx["calset"])
+        out = capsys.readouterr().out
+        assert "ease-in word(s) held out" not in out
+        assert "ENGAGEMENT (reward layer)" in out
+        assert "predates the reward layer" in out
+
+    def test_learning_curve_waits_for_ten_words(
+            self, ra, tmp_path, capsys):
+        _write_syllables_session(
+            tmp_path, "P1", day="2026-08-01", level=2, nsyll=2,
+            words=self._many(3))
+        ctx = ra.prepare("all", root=tmp_path)
+        ra.sec_syllables(ctx["trials"], ctx["metas"], ctx["calset"])
+        out = capsys.readouterr().out
+        assert "learning curve needs yet" in out
+
+    def test_learning_curve_draws_with_a_full_round(
+            self, ra, tmp_path, capsys):
+        _write_syllables_session(
+            tmp_path, "P1", day="2026-08-01", level=2, nsyll=2,
+            words=self._many(12))
+        ctx = ra.prepare("all", root=tmp_path)
+        ra.sec_syllables(ctx["trials"], ctx["metas"], ctx["calset"])
+        out = capsys.readouterr().out
+        assert "learning curve needs yet" not in out
+
+    def test_engagement_panel_reads_the_stored_summary(
+            self, ra, tmp_path, capsys):
+        _write_syllables_session(
+            tmp_path, "P1", day="2026-08-01", level=2, nsyll=2,
+            words=self.W2,
+            syllables_extra={
+                "max_streak": 5, "stickers": 4, "n_ease_in": 1,
+                "end_reason": "completed",
+                "skipped_rest_kinds": {"break": 2}})
+        ctx = ra.prepare("all", root=tmp_path)
+        ra.sec_syllables(ctx["trials"], ctx["metas"], ctx["calset"])
+        out = capsys.readouterr().out
+        assert "ENGAGEMENT (reward layer)" in out
+        assert "max_streak" in out
+        # The caution that keeps engagement and learning apart.
+        assert "never a skill measure" in out
+        assert "Ronimus" in out
+
+    def test_streak_run_table_needs_more_than_one_session(
+            self, ra, tmp_path, capsys):
+        _write_syllables_session(
+            tmp_path, "P1", day="2026-08-01", level=2, nsyll=2,
+            words=self._many(4), streaks=[1, 2, 0, 1])
+        ctx = ra.prepare("all", root=tmp_path)
+        ra.sec_syllables(ctx["trials"], ctx["metas"], ctx["calset"])
+        out = capsys.readouterr().out
+        assert "streak run lengths" not in out
+        _write_syllables_session(
+            tmp_path, "P1", day="2026-08-02", level=2, nsyll=2,
+            words=self._many(4), streaks=[1, 0, 1, 2])
+        ctx = ra.prepare("all", root=tmp_path)
+        ra.sec_syllables(ctx["trials"], ctx["metas"], ctx["calset"])
+        out = capsys.readouterr().out
+        assert "streak run lengths" in out
 
 
 class TestSyllablesLatencyCaveat:

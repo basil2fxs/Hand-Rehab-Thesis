@@ -101,8 +101,12 @@ class MapIntegrityTests(unittest.TestCase):
         for mode in MODE_IDS:
             start = block_code(mode, "start")
             end = block_code(mode, "end")
-            self.assertTrue(200 <= start <= 211, mode)
-            self.assertTrue(220 <= end <= 231, mode)
+            # Start codes must stay under the reserved 219
+            # (block_abandoned) and end codes clear of the session
+            # band at 240, which caps mode ids at 18. Echo's id 12
+            # (212/232) was the first to pass the old 0..11 bounds.
+            self.assertTrue(200 <= start <= 218, mode)
+            self.assertTrue(220 <= end <= 238, mode)
             emitted.update((start, end))
         self.assertNotIn(CODES["block_abandoned"], emitted)
         self.assertEqual(block_code("reaction", "abandoned"), 219)

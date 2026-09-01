@@ -160,7 +160,10 @@ found explicit knowledge of the sequence IMPAIRS implicit motor
 learning after stroke, so nothing on screen or in this mode's messages
 mentions that a pattern exists, probe takes render identically to
 trained takes, and between-take stars reward accuracy only (3 stars at
-95 percent, 2 at 85, 1 at 70). RT numbers are never shown. Within
+95 percent, 2 at 85, 1 at 70). Echo mode (echo.py) is the deliberate
+opposite: explicit memorising is the task there. Keeping the two as
+separate modes is what protects this one's implicit measure; neither
+folds into the other. RT numbers are never shown. Within
 that constraint the feedback is deliberately reward-flavoured: take
 progress, a running 3-star streak across takes, and an end-of-session
 recap of stars and takes. Reward tied to performance improves

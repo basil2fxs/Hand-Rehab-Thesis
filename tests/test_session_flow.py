@@ -95,9 +95,9 @@ class NextUpChoiceTests(unittest.TestCase):
     def test_it_skips_played_modes_even_when_they_come_first(self) -> None:
         from finger_rehab.ui.screens import next_up_mode
         eng = self._Eng(_TwoBoardSource(), ["reaction", "adaptive"])
-        # Just finished buzz_hunt (the last card), so the rotation
-        # wraps to the top and has to step over both played modes.
-        self.assertEqual(next_up_mode(eng, "buzz_hunt"), "pattern")
+        # Just finished echo (the last card), so the rotation wraps to
+        # the top and has to step over both played modes.
+        self.assertEqual(next_up_mode(eng, "echo"), "pattern")
 
     def test_it_rotates_rather_than_repeating_one_card(self) -> None:
         from finger_rehab.ui.screens import next_up_mode

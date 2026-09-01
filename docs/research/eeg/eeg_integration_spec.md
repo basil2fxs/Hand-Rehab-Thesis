@@ -151,6 +151,7 @@ feedback marker; FRN needs discrete time-locked events (Miltner et al.
 | 9 | lighthouse |
 | 10 | buzz_hunt |
 | 11 | syllables_words |
+| 12 | echo |
 
 219 = block abandoned (maps the old eeg.py CODE_BLOCK_ABANDONED).
 Start/end: REQUIRED for any mode used under EEG (segmentation, per-block

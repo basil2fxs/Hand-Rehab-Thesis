@@ -509,7 +509,7 @@ class TitleScreen(Screen):
         "      Mirror  (40 trials, both hands together)",
         "3. Training modes as prescribed for the participant:",
         "      Muscle Memory, Chords, Syllables, Force Pilot, Lighthouse,",
-        "      Buzz Hunt",
+        "      Buzz Hunt, Echo",
         "4. Finish every block. Quitting early leaves gaps in the data.",
     ]
     INFO_FOOTER = ("The four core blocks give the comparable data; the "
@@ -1055,6 +1055,13 @@ class ModeSelectScreen(Screen):
         ("buzz_hunt", "Buzz Hunt",
          "Feel which finger buzzed and press it. Measures and trains "
          "the sense of touch."),
+        # Echo is measurement-first like Reaction and Buzz Hunt, so
+        # the card says "measures" and promises nothing therapeutic.
+        # Unlike the pattern card there is no secret to keep: explicit
+        # memorising IS the task here.
+        ("echo", "Echo",
+         "Watch the keys light up, then play them back in order. "
+         "Measures memory span."),
     ]
     # Every stage of these three needs a real analogue signal (a
     # continuous force trace or the vibration motors themselves) --
@@ -1087,27 +1094,34 @@ class ModeSelectScreen(Screen):
         # Orange for the buzz: warm and tactile, and the only strong
         # orange on the grid so the tenth card reads distinct.
         "buzz_hunt": (249, 115, 22),
+        # Indigo for Echo: classic's retired colour returns to the
+        # grid, and nothing else on it sits between the sky blue and
+        # the purple, so the eleventh card reads distinct.
+        "echo": (99, 102, 241),
     }
 
     # Game select is the session hub, so the header gives its subtitle
     # line over to the session strip: "every game comes back here"
     # was a promise, the strip is the evidence. The grid drops to
-    # GRID_TOP to make the room; five rows of 88 + 12 end at 684,
-    # still clear of the buttons at 710.
+    # GRID_TOP to make the room. Eleven cards need six rows, so the
+    # cards run 86 tall with a 6 px gap (six rows end at 734) and the
+    # bottom buttons sit at 742; 86 is the floor for a card that
+    # still fits a two-line description at the shared type sizes.
     STRIP_TOP = 132
-    GRID_TOP = 196
+    GRID_TOP = 188
 
     def __init__(self, engine: "GameEngine") -> None:
         super().__init__(engine)
         self.buttons: list[Button] = []
         cx = engine.layout.width // 2
         # A two-column grid, filled left to right so the reading order
-        # matches the MODES order. Sized for TEN cards (five rows).
-        # Card height 88 gives the two-line descriptions (title + what
-        # you do + what it trains) room without shrinking the title.
+        # matches the MODES order. Sized for ELEVEN cards (six rows).
+        # Card height 86 is the minimum that still holds a title plus
+        # a two-line description at the shared type sizes; the layout
+        # test renders every description and fails below that.
         card_w = 590
-        card_h = 88
-        gap = 12
+        card_h = 86
+        gap = 6
         for i, (key, _title, _desc) in enumerate(self.MODES):
             col = i % 2
             row = i // 2
@@ -1140,8 +1154,12 @@ class ModeSelectScreen(Screen):
         # session, so the button says so and routes through the
         # engine's End-session dialog rather than jumping straight
         # out. Mid-game quits land back HERE, never on the login.
+        # The button row sits at height - 58 with a slightly shorter
+        # button since the six-row grid took the old row's space; the
+        # layout test keeps the two apart.
         self.back_btn = Button(
-            pygame.Rect(40, engine.layout.height - 90, 180, BUTTON_H - 10),
+            pygame.Rect(40, engine.layout.height - 58, 180,
+                        BUTTON_H - 16),
             "End session", engine.request_end_session,
             self.theme, self.layout,
         )
@@ -1152,8 +1170,8 @@ class ModeSelectScreen(Screen):
         # ending the session. Re-running re-captures and re-applies
         # through the same path.
         self.cal_btn = Button(
-            pygame.Rect(236, engine.layout.height - 90, 200,
-                        BUTTON_H - 10),
+            pygame.Rect(236, engine.layout.height - 58, 200,
+                        BUTTON_H - 16),
             "Calibrate", self._calibrate,
             self.theme, self.layout,
         )
@@ -1199,10 +1217,11 @@ class ModeSelectScreen(Screen):
         self.engine.cfg.data.setdefault("game", {})["mode"] = mode_key
         self.engine.show_setup()
 
-    # Number-key shortcuts for the ten cards, 1-9 then 0 for the
-    # tenth, matching reading order (audit finding #113: mode select
-    # was mouse-click only, so a keyboard-only session could not get
-    # past this screen at all).
+    # Number-key shortcuts for the first ten cards, 1-9 then 0,
+    # matching reading order (audit finding #113: mode select was
+    # mouse-click only, so a keyboard-only session could not get past
+    # this screen at all). The digits ran out at ten, so the eleventh
+    # card answers to its initial: E for Echo, below.
     _DIGIT_KEYS = (
         pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4, pygame.K_5,
         pygame.K_6, pygame.K_7, pygame.K_8, pygame.K_9, pygame.K_0,
@@ -1215,10 +1234,13 @@ class ModeSelectScreen(Screen):
             idx = self._DIGIT_KEYS.index(e.key)
             if idx < len(self.MODES):
                 self._pick(self.MODES[idx][0])
+        # E for Echo, the card the digits could not reach.
+        elif e.type == pygame.KEYDOWN and e.key == pygame.K_e:
+            self._pick("echo")
         # C for calibrate, so the hub is fully keyboard-drivable: the
-        # digits cover the ten cards and Esc raises the End-session
-        # dialog, which left the new button as the only mouse-only
-        # control on the screen.
+        # digits and E cover the eleven cards and Esc raises the
+        # End-session dialog, which left the new button as the only
+        # mouse-only control on the screen.
         elif e.type == pygame.KEYDOWN and e.key == pygame.K_c:
             self._calibrate()
 
@@ -1403,6 +1425,24 @@ class ModeSelectScreen(Screen):
                 pygame.draw.arc(surf, colour, arc, -span, span, 2)
                 pygame.draw.arc(surf, colour, arc, 3.14159 - span,
                                 3.14159 + span, 2)
+        elif kind == "echo":
+            # Three tiles fading left to right: a sequence just
+            # played, hanging in memory. Filled, then outlined twice,
+            # so the repeat reads as an echo rather than a bar chart.
+            blk = size // 3
+            y0 = cy - blk // 2
+            x = cx - size // 2
+            gap3 = size // 8
+            pygame.draw.rect(surf, colour,
+                             pygame.Rect(x, y0, blk, blk),
+                             border_radius=4)
+            pygame.draw.rect(surf, colour,
+                             pygame.Rect(x + blk + gap3, y0, blk, blk),
+                             2, border_radius=4)
+            pygame.draw.rect(surf, colour,
+                             pygame.Rect(x + 2 * (blk + gap3), y0,
+                                         blk, blk),
+                             1, border_radius=4)
 
     def draw(self, surf: pygame.Surface) -> None:
         surf.fill(self.theme.background)
@@ -4514,6 +4554,82 @@ class ResultsScreen(Screen):
                 return None
         return None
 
+    @staticmethod
+    def _syllables_advice(sy: dict) -> str | None:
+        """One supervisor-facing line off the block's accuracy:
+        outside the productive 60 to 95 percent zone the next
+        session's settings deserve a look (the band gate steers
+        toward the 80-85 percent region the learning literature
+        marks as optimal, and a block landing far outside it means
+        the researcher-set knobs are fighting the gate). Advice
+        only: the level stays a researcher decision under the
+        brief's unlock rule."""
+        acc = sy.get("accuracy")
+        if acc is None:
+            return None
+        if acc < 0.60:
+            return ("Supervisor: consider an easier band or a "
+                    "slower beat next session.")
+        if acc > 0.95:
+            return ("Supervisor: consider the next band or level "
+                    "next session.")
+        return None
+
+    def _draw_sticker_strip(self, surf: pygame.Surface) -> None:
+        """Today's stickers on the finished screen: the last round's
+        sticker has no break screen after it, so the full strip is
+        shown here, once, before the session moves on. Session-local
+        by design (the app keeps no cross-session history), which is
+        why the label says today."""
+        sy = self._syllables_summary()
+        n = min(8, int((sy or {}).get("stickers") or 0))
+        if n <= 0:
+            return
+        # Runtime import: syllables_screen imports this module at
+        # load, so the stamp shape (shared so the sticker looks the
+        # same here as on the break screen) has to come in here at
+        # call time.
+        from .syllables_screen import _star_points
+        accent = mode_accent("syllables", self.theme)
+        nx, ny, nw, nh = self.NEXT_CARD_RECT
+        cy = ny + nh + 24
+        r = 17
+        spacing = 46
+        label = self.layout.font(FONT_SMALL).render(
+            "TODAY'S STICKERS", True, self.theme.muted)
+        total = label.get_width() + 16 + 2 * r + spacing * (n - 1)
+        x = nx + nw // 2 - total // 2
+        surf.blit(label, label.get_rect(midleft=(x, cy)))
+        x += label.get_width() + 16 + r
+        for _ in range(n):
+            pygame.draw.circle(surf, accent, (x, cy), r)
+            pygame.draw.polygon(
+                surf, (255, 255, 255),
+                _star_points(x, cy, r * 0.55, r * 0.25))
+            x += spacing
+
+    def _echo_summary(self) -> dict | None:
+        """The echo section of the block summary, or None for every
+        other mode. Same read path as _force_pilot_summary:
+        session.block_summary first, live mode stats as fallback."""
+        if str(getattr(self.engine, "current_block", "")) != "echo":
+            return None
+        summary = getattr(getattr(self.engine, "session", None),
+                          "block_summary", None)
+        if isinstance(summary, dict):
+            ec = summary.get("echo")
+            if isinstance(ec, dict):
+                return ec
+        stats_fn = getattr(getattr(self.engine, "mode", None),
+                           "block_stats", None)
+        if callable(stats_fn):
+            try:
+                ec = stats_fn()
+                return ec if isinstance(ec, dict) else None
+            except Exception:
+                return None
+        return None
+
     def _buzz_hunt_hand_cards(self, label: str,
                                entries: dict) -> list[tuple]:
         """One stat card per hand for a buzz_hunt staircase (the
@@ -4941,6 +5057,8 @@ class ResultsScreen(Screen):
                         str(chip["text"]), chip_colour,
                         font_pt=FONT_SMALL + 2)
         self._draw_next_up(surf, pygame.Rect(*self.NEXT_CARD_RECT))
+        if str(self.engine.current_block) == "syllables":
+            self._draw_sticker_strip(surf)
         draw_session_strip(surf, pygame.Rect(*self.SLIM_STRIP_RECT),
                            self.engine, self.theme, self.layout)
 
@@ -4970,6 +5088,17 @@ class ResultsScreen(Screen):
                                   grade_colour, entry)
             self._draw_slim(surf, cards, entry)
 
+        # The syllables supervisor nudge sits under either view: one
+        # line, drawn only when the block's accuracy landed outside
+        # the productive zone, so most sessions never see it.
+        if block_name == "syllables":
+            sy_note = self._syllables_advice(
+                self._syllables_summary() or {})
+            if sy_note:
+                draw_text(surf, sy_note, (cx, 658), self.theme,
+                          self.layout, pt=FONT_SMALL + 2, centre=True,
+                          colour=self.theme.warning)
+
         self.retry_btn.draw(surf)
         self.again_btn.draw(surf)
         self.folder_btn.draw(surf)
@@ -4997,6 +5126,7 @@ class ResultsScreen(Screen):
         "force_pilot": (2, 3, 0),     # in corridor | mean error | score
         "lighthouse": (4, 2, 0),      # lit vs dark | lit variability
         "buzz_hunt": (1, 2, 0),       # localisation | span | score
+        "echo": (1, 2, 0),            # longest echo | sequences | score
         "pattern": (2, 4, 1),         # accuracy | stars | takes
         "reaction": (2, 4, 0),        # median RT | accuracy or p10
         "chords": (1, 2, 0),          # clean hit rate | median ER
@@ -5016,6 +5146,7 @@ class ResultsScreen(Screen):
             "fp": self._force_pilot_summary(),
             "lh": self._lighthouse_summary(),
             "bh": self._buzz_hunt_summary(),
+            "ec": self._echo_summary(),
             "rx": self._reaction_summary(),
             "pat": self._pattern_summary(),
             "ch": self._chords_summary(),
@@ -5042,6 +5173,7 @@ class ResultsScreen(Screen):
         fp = _sums["fp"]
         lh = _sums["lh"]
         bh = _sums["bh"]
+        ec = _sums["ec"]
         rx = _sums["rx"]
         pat = _sums["pat"]
         ch = _sums["ch"]
@@ -5188,6 +5320,29 @@ class ResultsScreen(Screen):
                 "THRESHOLD", bh.get("threshold") or {})
             cards += self._buzz_hunt_hand_cards(
                 "GAP", (bh.get("gap") or {}).get("threshold") or {})
+        elif ec is not None:
+            # Echo's own vocabulary: the longest echo (span) is the
+            # headline, then the Kessels pair (correct sequences and
+            # the span x correct product). Nothing here reads speed:
+            # reproduction is untimed by design, so no RT card can
+            # exist for this mode. Counts stay static rather than
+            # riding the entry ease: "3 of 7" counting up through
+            # wrong ratios would read as data.
+            span = ec.get("span") or 0
+            n_ok = ec.get("total_correct") or 0
+            n_tr = ec.get("n_trials") or 0
+            cards = [
+                ("SCORE", f"{int(round(self.engine.score * entry))}",
+                 self.theme.accent),
+                ("LONGEST ECHO", (f"{span}" if span else "n/a"),
+                 self.theme.success),
+                ("SEQUENCES", f"{n_ok} of {n_tr}",
+                 self.theme.foreground),
+                ("SPAN x CORRECT", f"{ec.get('product_score') or 0}",
+                 self.theme.foreground),
+                ("TIMEOUTS", f"{ec.get('n_omissions') or 0}",
+                 self.theme.error),
+            ]
         elif pat is not None:
             # Pattern's own docstring (WHAT THE PATIENT SEES) is
             # explicit that "RT numbers are never shown": Boyd and

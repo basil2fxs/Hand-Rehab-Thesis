@@ -586,7 +586,7 @@ class EngineMenuMusicTests(unittest.TestCase):
         from finger_rehab.audio.menu_music import MenuMusicPlayer
         starters = ["classic", "adaptive", "mirror", "reaction",
                     "pattern", "chords", "syllables", "force_pilot",
-                    "lighthouse", "buzz_hunt", "rhythm"]
+                    "lighthouse", "buzz_hunt", "echo", "rhythm"]
         with tempfile.TemporaryDirectory() as td:
             eng = _engine_with_fake_audio(source=_motor_source())
             eng.cfg.data["session"]["data_dir"] = td

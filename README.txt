@@ -43,6 +43,8 @@ little on both). Both hands is all 8.
   the screen stops helping you. Needs the sensors.
 - Buzz Hunt: a finger buzzes, you press the finger that felt it.
   Needs the buzzers.
+- Echo: the keys light up in a growing order, you play them back.
+  Plays fine on the keyboard.
 
 Logging in runs a quick calibration game (about 10 s per hand) on
 whichever boards are plugged in, so the software learns what a light

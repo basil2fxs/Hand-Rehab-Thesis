@@ -769,6 +769,63 @@ class ModeHandMatrixTests(unittest.TestCase):
                 self._assert_boards_match_lanes(eng, hand_mode)
                 self._assert_block_end_clean(eng)
 
+    def test_echo_matrix(self) -> None:
+        # Echo drives the boards through pulse_motor (the buzz is
+        # half of the bimodal stimulus), not on_stim_multi, so the
+        # cued lanes are read from the mode's own trial records and
+        # the routing from the fake board handles directly:
+        # _assert_boards_match_lanes keys off the on_stim_multi
+        # recorder, which never fires here.
+        for hand_mode in ("left", "right", "both"):
+            with self.subTest(hand=hand_mode), \
+                    tempfile.TemporaryDirectory() as td, \
+                    patched_clock() as clock:
+                eng = self._matrix_engine(hand_mode, td, 6)
+                if hand_mode == "both":
+                    # Pin the block seed so the bilateral demo's
+                    # material is reproducible and the both-hands
+                    # assertion cannot ride on a lucky draw.
+                    eng.cfg.data.setdefault("echo", {})["seed"] = 977
+                eng.begin_echo_block()
+                mode = eng.mode
+                self.assertEqual(mode.n_lanes,
+                                 8 if hand_mode == "both" else 4)
+                answered = {"n": 0}
+
+                def respond(clk, mode=mode, hand_mode=hand_mode):
+                    if mode.phase != "respond" or mode.active is None:
+                        return
+                    if mode.trial_counter == answered["n"]:
+                        return
+                    answered["n"] = mode.trial_counter
+                    for lane in mode.sequence:
+                        hand = (("left" if lane >= 4 else "right")
+                                if hand_mode == "both" else hand_mode)
+                        mode.queue_press(_press(lane, clk.t, hand=hand))
+
+                drive(eng, clock, responder=respond,
+                      stop=lambda: eng.trial_logger is None)
+                cued = [l for r in mode._records for l in r["played"]]
+                self.assertTrue(cued, "no echo items played")
+                self.assertTrue(
+                    set(cued) <= self._expected_lanes(hand_mode), cued)
+                stims = {h: [c for c in b.commands
+                             if c.startswith("STIM")]
+                         for h, b in eng._fake_boards.items()}
+                if hand_mode == "both":
+                    self.assertEqual(hands_of(cued), {"left", "right"})
+                    # Items cross hands mid-sequence, so both boards
+                    # must have buzzed their own lanes.
+                    self.assertTrue(stims["right"], "right board silent")
+                    self.assertTrue(stims["left"], "left board silent")
+                else:
+                    self.assertTrue(stims[hand_mode],
+                                    f"{hand_mode} board got no stims")
+                    for h, got in stims.items():
+                        if h != hand_mode:
+                            self.assertEqual(got, [])
+                self._assert_block_end_clean(eng)
+
     def test_mirror_forces_both_and_pairs_the_hands(self) -> None:
         # Mirror stays bilateral-only: starting it from a unilateral
         # config must flip the session to both hands.
@@ -869,6 +926,7 @@ class PrepCountdownTests(unittest.TestCase):
             "adaptive": lambda e: e.begin_adaptive_block(),
             "pattern": lambda e: e.begin_pattern_block(),
             "chords": lambda e: e.begin_chords_block(),
+            "echo": lambda e: e.begin_echo_block(),
         }
         for name, begin in cases.items():
             with self.subTest(mode=name), \

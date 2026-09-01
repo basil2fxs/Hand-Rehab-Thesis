@@ -137,9 +137,27 @@ class ModeSelectKeyboardOnlyTests(unittest.TestCase):
             eng.show_setup = lambda: picked.append(
                 eng.cfg.get("game.mode"))
             sc = ModeSelectScreen(eng)
-            self.assertEqual(len(sc.MODES), 10)
+            self.assertEqual(len(sc.MODES), 11)
             sc.handle_event(_key_event(pygame.K_0))
             self.assertEqual(picked, [sc.MODES[9][0]])
+        finally:
+            pygame.quit()
+
+    def test_e_key_picks_the_echo_card(self) -> None:
+        # The digits ran out at ten cards, so the eleventh answers to
+        # its initial; without this the hub's newest card would be the
+        # one thing a keyboard-only session could not reach.
+        import pygame
+        pygame.init()
+        try:
+            from finger_rehab.ui.screens import ModeSelectScreen
+            eng = _engine()
+            picked = []
+            eng.show_setup = lambda: picked.append(
+                eng.cfg.get("game.mode"))
+            sc = ModeSelectScreen(eng)
+            sc.handle_event(_key_event(pygame.K_e))
+            self.assertEqual(picked, ["echo"])
         finally:
             pygame.quit()
 

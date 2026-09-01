@@ -20,11 +20,13 @@ is a natural fit: the canonical measure IS tapping. The temporal
 sampling framework (Goswami 2011, Trends Cogn Sci) ties dyslexia to
 impaired entrainment at slow speech rhythms; Thomson and Goswami
 (2008, J Physiol Paris) found dyslexic children tap less accurately
-to metronomes at 1.5 to 2.5 Hz with 2 Hz the key marker, and rhythm
-training has transferred to PA and reading in two RCTs (Flaugnacco et
-al. 2015, PLOS ONE; Descamps et al. 2025, Scientific Reports,
-Mila-Learn), though the wider music-transfer literature is mixed
-(Dumont et al. 2017), so transfer is plausible, not proven.
+to metronomes at 1.5 to 2.5 Hz with 2 Hz the key marker. Rhythm
+training transferred to PA and reading in one RCT (Flaugnacco et al.
+2015, PLOS ONE); the closest product trial (Descamps et al. 2025,
+Scientific Reports, Mila-Learn) was null on its primary decoding
+outcome, with reading gains only in secondary per-protocol analyses,
+and the wider music-transfer literature is mixed (Dumont et al.
+2017), so transfer is plausible, not proven.
 
 PARAMETER DEFENCES, in the order they appear in config:
 - 500 ms beat interval (2 Hz): the Thomson and Goswami deficit marker,
@@ -110,14 +112,70 @@ Warm-up before the first word is 10 paced taps to the metronome with
 no word: a tap threshold check and a per-session sensorimotor
 synchronisation probe, logged to raw.csv.
 
+THE REWARD LAYER (2026-09). One game, deepened, never split into
+rotating sub-games: focused one-or-two-skill PA programs beat
+multi-skill ones in the NRP meta-analysis (Ehri et al. 2001), task
+mixing is expensive at 6 to 10 (Cepeda, Kramer and Gonzalez de
+Sather 2001), procedural learning is impaired in dyslexia so
+repetitions of one loop respect the deficit (Lum, Ullman and
+Conti-Ramsden 2013), and 40 words per block is the whole per-session
+sample the analysis lives on. Every reward is deterministic and
+informational, the one cell of the reward literature that does not
+undermine children's intrinsic motivation (Deci, Koestner and Ryan
+1999); random jackpots are excluded on three separate grounds
+(motivational undermining, uncontrolled reward-prediction-error in
+the EEG record, ethics optics of slot-machine mechanics in a child
+study). The schedule:
+- per-tap: a correct-for-position tap fills its block with a brief
+  sparkle, and on paced levels an on-beat tap adds a small ring
+  flash (tap_marks exposes what scoring already computes; the
+  screen draws it, nothing new is measured and no sound plays
+  during RESPOND);
+- per-word: Great keeps its chime and pulse, points stay 6/3/0;
+- streaks: consecutive Greats light one, two, three stars at fixed
+  milestones of 3, 5 and 8, at feedback time; a non-Great resets
+  the counter silently and earned stars stay lit until the round
+  ends (no penalties anywhere);
+- per-round: finishing a round earns exactly one sticker, stamped
+  onto the journey strip on the break screen. Completion-contingent
+  on showing up, never on score, and session-local by design (the
+  app keeps no cross-session history);
+- band promotion: already logged, now also celebrated with a
+  one-shot "Bigger words!" card on the next between-word screen;
+  demotion stays silent (kindness rule);
+- fiction: one light journey shell per session (rounds are stops on
+  a walk, the sticker stamps the stop), per the fiction moderator
+  of Sailer and Homner (2020); never rotated mid-session.
+Rewards are engagement scaffolding, not an active ingredient: the
+direct experiment in this game family (Ronimus et al. 2014,
+GraphoGame rewards RCT) found token rewards raised session length
+only temporarily, with better in-session concentration the one
+durable report, so this layer exists to sharpen the 8.5 minutes,
+and no analysis may present streaks or stickers as training. The
+ease-in draw (below) and the streak both ride the stimulus string
+so the notebook can separate engagement from learning.
+
+EASE-IN DRAW. After two consecutive Miss words the next draw is
+biased to the child's best unit count so far this block (ties to
+the lower count), one word only, never twice in a row, from the
+current band pool. It breaks failure spirals inside a round without
+touching the band rule: the word still enters _recent like any
+other, but its row carries ease=1 so the accuracy-by-count chart
+can hold the biased draw out instead of flattering itself.
+
 WHAT ONE TRIAL LOGS (fixed CSV schema, so the word-level detail rides
 the stimulus column the way pattern mode rides it):
 - stimulus: semicolon-separated key=value string, documented here
   because the notebook parses it:
     word;lvl=<level>;band=<A|B|C>;nsyll=<target taps>;stress=<idx>;
-    map=off<k>;paced=<0|1>;ioi=<ms>;replay=<0|1>;
-    err=<error type or ok>;taps=<lane>:<t_ms>:<peak>,...;
+    map=off<k>;paced=<0|1>;ioi=<ms>;replay=<0|1>;ease=1;
+    streak=<n>;err=<error type or ok>;taps=<lane>:<t_ms>:<peak>,...;
     asyn=<a1>,<a2>,...
+  ease=1 appears only on ease-in draws (see EASE-IN DRAW above), so
+  the notebook can hold those biased words out of the accuracy-by-
+  count chart. streak=<n> is on every row: the consecutive-Great
+  count AFTER this word (0 on any non-Great), the engagement trace
+  the reward layer logs.
   map=off<k> is the sliding window's start slot in the desk row,
   0-based (see THE SLIDING WINDOW below); with the playing hands
   known it rebuilds exactly which lane carried which unit. Rows
@@ -290,6 +348,13 @@ class SyllablesMode(WaitSkip):
     # replay or the next word. Long enough for a child to see every
     # block's fill state, short enough that 10 words stay lively.
     FEEDBACK_S = 1.4
+    # Fixed streak milestones: consecutive Greats light the first,
+    # second and third star. Fixed and transparent rather than a
+    # variable-ratio schedule, so the reward carries no
+    # reward-prediction-error surprise into the EEG record and no
+    # slot-machine mechanics into a child study (docstring: THE
+    # REWARD LAYER).
+    STREAK_MILESTONES = (3, 5, 8)
 
     def __init__(self, engine: "GameEngine",
                  lanes: list[int],
@@ -433,6 +498,22 @@ class SyllablesMode(WaitSkip):
         self._recent: deque[bool] = deque(maxlen=10)
         self._since_band_change = 0
 
+        # Reward-layer state (see THE REWARD LAYER in the docstring).
+        # All of it is deterministic bookkeeping the screen reads;
+        # nothing here touches the attend/model/countin/respond
+        # phases, whose cue timing and EEG markers are pinned by
+        # tests. Public names are what the screen draws from.
+        self._streak = 0            # consecutive Great words
+        self._max_streak = 0
+        self.round_stars = 0        # milestones lit this round, 0-3
+        self.star_flash_t: float | None = None   # newest star's moment
+        self._stickers = 0          # completed rounds so far
+        self.sticker_flash_t: float | None = None
+        self.band_celebrate: str | None = None   # promoted band to show
+        self._miss_run = 0          # consecutive Misses (ease trigger)
+        self._ease_word = False     # current word came from the bias
+        self._n_ease_in = 0
+
     # ---- material ----------------------------------------------------------
     def _draw_word(self) -> Word:
         """Shuffle-bag draw over the current level and band pool, so a
@@ -443,6 +524,39 @@ class SyllablesMode(WaitSkip):
                                        bilateral=self.bilateral))
             self.rng.shuffle(self._bag)
         return self._bag.pop()
+
+    def _best_unit_count(self) -> int | None:
+        """The unit count the child has done best on so far this
+        block, ties to the LOWER count (the kinder direction). None
+        before any word has closed."""
+        by_count: dict[int, list[bool]] = {}
+        for r in self._records:
+            by_count.setdefault(r.n_syll, []).append(r.correct)
+        best, best_acc = None, -1.0
+        for n in sorted(by_count):
+            acc = sum(by_count[n]) / len(by_count[n])
+            if acc > best_acc:
+                best, best_acc = n, acc
+        return best
+
+    def _draw_ease_word(self) -> Word | None:
+        """One word from the current band pool at the child's best
+        unit count, bypassing the shuffle bag (the bag's fairness is
+        about material coverage; this draw is about breaking a
+        failure spiral, and it must not eat the bag's remaining
+        words). None when no best count exists yet or the pool holds
+        no word at it, in which case the normal draw runs."""
+        best = self._best_unit_count()
+        if best is None:
+            return None
+        pool = [w for w in words_for(self.level, self.band,
+                                     bilateral=self.bilateral)
+                if len(self.units_for(w)) == best]
+        if not pool:
+            return None
+        prev = self.word.word if self.word is not None else None
+        fresh = [w for w in pool if w.word != prev]
+        return self.rng.choice(fresh or pool)
 
     def units_for(self, word: Word) -> list[str]:
         """The text chunks the child taps out, one per block: syllables
@@ -818,11 +932,27 @@ class SyllablesMode(WaitSkip):
             self._end("time_cap")
             return
         if not reuse_word or self.word is None:
-            self.word = self._draw_word()
+            # Ease-in: two Misses in a row bias ONE draw toward the
+            # child's best unit count so far, never two ease draws
+            # back to back (docstring: EASE-IN DRAW). A word restarted
+            # after a pause keeps its draw, so the flag survives too.
+            ease = (self._draw_ease_word()
+                    if self._miss_run >= 2 and not self._ease_word
+                    else None)
+            if ease is not None:
+                self.word = ease
+                self._ease_word = True
+                self._n_ease_in += 1
+            else:
+                self.word = self._draw_word()
+                self._ease_word = False
             # A fresh word gets a fresh window; a word restarted after
             # a pause keeps its placement, so it does not jump fingers
             # on the child mid-word.
             self._draw_offset(self.n_expected)
+        # Whatever between-word screen carried the band celebration,
+        # the moment a new word starts the card's moment is over.
+        self.band_celebrate = None
         self.trial_counter += 1
         self.taps = []
         self._last_tap_t = {}
@@ -930,6 +1060,7 @@ class SyllablesMode(WaitSkip):
                 # scored and logged, so move on.
                 self._enter_phase("gap", now)
                 self.words_done += 1
+                self._round_rewards(now)
                 self._maybe_break(now)
             elif self.paced:
                 # Hand the grid deadline over, not the frame time, so
@@ -1042,6 +1173,41 @@ class SyllablesMode(WaitSkip):
             if live is not None and (tap.peak is None or live > tap.peak):
                 tap.peak = live
 
+    def tap_marks(self) -> list[dict]:
+        """Read-side per-tap quality for the screen's reward layer,
+        derived from what scoring already computes and nothing else:
+        pos_ok mirrors the incorrect_presses predicate in
+        _handle_press (any finger counts while order is not
+        required), on_beat mirrors the paced window test in
+        _score_word. One dict per landed tap, in tap order, so the
+        screen can sparkle a correct fill and ring an on-beat tap
+        without measuring anything of its own."""
+        marks: list[dict] = []
+        n = self.n_expected
+        for k, tap in enumerate(self.taps):
+            pos = self._position_of(tap.lane)
+            pos_ok = (k < n and (not self.order_required or pos == k))
+            on_beat = None
+            if self.paced and k < len(self._beat_times):
+                a_ms = (tap.t_perf - self._beat_times[k]) * 1000.0
+                on_beat = abs(a_ms) <= self.on_beat_window_s * 1000.0
+            marks.append({"pos_ok": pos_ok, "on_beat": on_beat})
+        return marks
+
+    @property
+    def stickers(self) -> int:
+        """Completed rounds so far: the sticker count the break and
+        results screens draw."""
+        return self._stickers
+
+    @property
+    def n_rounds(self) -> int:
+        """How many stops the session's journey has: one per full
+        round, plus the partial round a non-multiple word count
+        leaves (its completion still earns no sticker, but the strip
+        must show the stop the child is walking toward)."""
+        return max(1, -(-self.words_total // self.round_size))
+
     # ---- scoring -----------------------------------------------------------
     def _score_word(self, now: float) -> None:
         trial = self.active
@@ -1135,6 +1301,30 @@ class SyllablesMode(WaitSkip):
             stress_ratio=stress_ratio_val,
             stress_correct=stress_correct,
         ))
+        # Streak and ease-in bookkeeping, BEFORE the trial is packed:
+        # the row's streak= is the count AFTER this word (docstring),
+        # so the update has to land first. A non-Great resets the
+        # counter silently; earned stars stay lit (round_stars is only
+        # cleared when the round ends), which is the no-penalty rule
+        # applied to the reward layer.
+        if outcome.label == "Great":
+            self._streak += 1
+            self._max_streak = max(self._max_streak, self._streak)
+            if self._streak in self.STREAK_MILESTONES:
+                stars = self.STREAK_MILESTONES.index(self._streak) + 1
+                self.round_stars = max(self.round_stars, stars)
+                self.star_flash_t = now
+                raw = getattr(self.engine, "raw_logger", None)
+                if raw:
+                    raw.queue_event(
+                        "syllables_streak",
+                        detail=(f"n={self._streak} "
+                                f"word_idx={self.words_done}"),
+                        hand=self.engine.hand_mode)
+        else:
+            self._streak = 0
+        self._miss_run = (self._miss_run + 1
+                          if outcome.label == "Miss" else 0)
         # The replay decision the row's replay= flag must report: it is
         # made AFTER this trial closes (in _after_feedback, once the
         # word's outcome and self._replayed are both final), so pack it
@@ -1271,6 +1461,18 @@ class SyllablesMode(WaitSkip):
             f"paced={1 if self.paced else 0}",
             f"ioi={self.ioi_s * 1000.0:.0f}",
             f"replay={1 if replay else 0}",
+        ]
+        if self._ease_word:
+            # Only on biased draws: the notebook holds these out of
+            # the accuracy-by-count chart, because a draw steered to
+            # the child's best count would flatter it.
+            parts.append("ease=1")
+        # The consecutive-Great count AFTER this word, on every row:
+        # the notebook's engagement trace, kept apart from the
+        # accuracy measures because streak length correlates with
+        # band and word length by construction.
+        parts.append(f"streak={self._streak}")
+        parts += [
             f"err={error}",
             f"taps={taps_s}",
         ]
@@ -1290,8 +1492,32 @@ class SyllablesMode(WaitSkip):
             self._enter_phase("replay", now)
             return
         self.words_done += 1
+        self._round_rewards(now)
         self._enter_phase("gap", now)
         self._maybe_break(now)
+
+    def _round_rewards(self, now: float) -> None:
+        """One sticker the moment a round's last word closes, before
+        any break screen, so the break shows the sticker being
+        stamped. Earned by finishing the round, never by scoring in
+        it (completion-contingent is the reward cell closest to
+        harmless in Deci 1999, and the 30 s rest gets a ritual out of
+        it). A block the time cap ends mid-round earns nothing here
+        because no round completed. The round's stars go dark with
+        the round; the reset is silent and lands under the break or
+        results screen, so no child watches a star disappear."""
+        if self.words_done <= 0 or self.words_done % self.round_size:
+            return
+        self._stickers += 1
+        self.sticker_flash_t = now
+        self.round_stars = 0
+        self.star_flash_t = None
+        raw = getattr(self.engine, "raw_logger", None)
+        if raw:
+            raw.queue_event(
+                "syllables_sticker",
+                detail=f"round={self._stickers}",
+                hand=self.engine.hand_mode)
 
     def _maybe_break(self, now: float) -> None:
         # A rest lands after every full round, except when the block is
@@ -1330,17 +1556,32 @@ class SyllablesMode(WaitSkip):
             new_idx = idx - 1
         if new_idx == idx:
             return
+        promoted = new_idx > idx
         self.band = BANDS[new_idx]
         self._band_trace.append(self.band)
         self._since_band_change = 0
         self._recent.clear()
         self._bag = []          # refill from the new band's pool
+        # Promotion was earned and is now SEEN: the next between-word
+        # screen shows a one-shot "Bigger words!" card in the new
+        # band's colour, converting the adaptive gate into visible
+        # competence feedback at zero measurement cost. Demotion stays
+        # silent: difficulty easing is a kindness, never an
+        # announcement.
+        if promoted:
+            self.band_celebrate = self.band
+        detail = (f"band={self.band} wins={wins}/10 "
+                  f"word_idx={self.words_done}")
+        if promoted:
+            # shown=1 marks the firings whose celebration card is
+            # armed for display, so the notebook can tell celebrated
+            # promotions from silent demotions without inferring
+            # direction from the trace.
+            detail += " shown=1"
         raw = getattr(self.engine, "raw_logger", None)
         if raw:
             raw.queue_event(
-                "syllables_band",
-                detail=f"band={self.band} wins={wins}/10 "
-                       f"word_idx={self.words_done}",
+                "syllables_band", detail=detail,
                 hand=self.engine.hand_mode)
 
     # ---- audio and speech helpers ------------------------------------------
@@ -1446,6 +1687,14 @@ class SyllablesMode(WaitSkip):
             "warmup_asyn_sd_ms": _sd(self._warmup_asyn),
             "stress_ratio_median": (round(sorted(ratios)[len(ratios) // 2], 2)
                                     if ratios else None),
+            # The reward layer's engagement numbers, kept apart from
+            # the accuracy measures above so the notebook can show
+            # engagement and learning separately (streak length
+            # correlates with band and word length by construction,
+            # so it is never a skill measure).
+            "max_streak": self._max_streak,
+            "stickers": self._stickers,
+            "n_ease_in": self._n_ease_in,
             "demo": self.demo,
             "end_reason": self.end_reason,
             **self.wait_skip_stats(),

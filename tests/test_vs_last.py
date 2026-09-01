@@ -261,6 +261,28 @@ class ChipDirectionTests(unittest.TestCase):
                          "5% more accurate than last time")
         self.assertTrue(chip["better"])
 
+    def test_echo_longer_span_is_better(self) -> None:
+        chip = self._chip("echo",
+                          {"echo": {"span": 5}},
+                          {"echo": {"span": 4}})
+        self.assertEqual(chip["text"],
+                         "longest echo up 1 on last time")
+        self.assertTrue(chip["better"])
+
+    def test_echo_cumulative_blocks_never_compare(self) -> None:
+        # A cumulative (classic Simon) block rehearses every prefix,
+        # so its span is inflated by the game rule; a chip comparing
+        # it against a ladder block would report the rule change as
+        # patient change, in either direction.
+        self.assertIsNone(self._chip(
+            "echo",
+            {"echo": {"span": 7, "cumulative": True}},
+            {"echo": {"span": 5}}))
+        self.assertIsNone(self._chip(
+            "echo",
+            {"echo": {"span": 5}},
+            {"echo": {"span": 7, "cumulative": True}}))
+
     def test_chords_clean_rate_up_is_better(self) -> None:
         chip = self._chip(
             "chords",

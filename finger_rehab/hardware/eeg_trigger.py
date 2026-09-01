@@ -59,7 +59,9 @@ except ImportError:
 
 # Bumped whenever the map changes, logged into metadata.json so a
 # recording can always be decoded with the map it was made under.
-CODES_VERSION = "1.0"
+# 1.1: echo mode id 12 added, so block bytes 212 and 232 now occur;
+# every code that existed under 1.0 is unchanged.
+CODES_VERSION = "1.1"
 
 # 0 is the idle line, written after every pulse and in every shutdown
 # path. It never labels an event, so it lives outside CODES.
@@ -126,7 +128,8 @@ CODES: dict[str, int] = {
 # Mode ids for the block-boundary bands. The engine's block names are
 # the keys. syllables_words currently runs under the "syllables" block
 # name in the engine, so id 11 is reserved but unused until that mode
-# gets its own block name.
+# gets its own block name. Ids can grow to 18 before the start band
+# reaches the reserved 219; see the block_ band note below.
 MODE_IDS: dict[str, int] = {
     "reaction": 0,
     "classic": 1,
@@ -140,6 +143,7 @@ MODE_IDS: dict[str, int] = {
     "lighthouse": 9,
     "buzz_hunt": 10,
     "syllables_words": 11,
+    "echo": 12,
 }
 
 # Documented bands, keyed by the CODES-name prefix that must sit inside
@@ -150,7 +154,11 @@ BANDS: dict[str, tuple[int, int]] = {
     "stim_": (30, 39),
     "resp_": (100, 131),
     "feedback_": (140, 149),
-    "block_": (200, 231),
+    # Widened from 231 when echo took id 12: block-end 220 + 12 = 232.
+    # Start codes stay under the reserved 219 (block_abandoned) until
+    # id 19, and end codes stay clear of the session band (240) until
+    # id 20, so ids up to 18 fit without another change.
+    "block_": (200, 238),
     "session_": (240, 249),
     "pause": (240, 249),
     "resume": (240, 249),

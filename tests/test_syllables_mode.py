@@ -2007,5 +2007,446 @@ class SyllablesResultsScreenCardsTests(unittest.TestCase):
         self.assertNotIn("AVG OFFSET", labels)
 
 
+def _next_attend(mode, t: float, guard: int = 200) -> float:
+    """Tick until the next word's ATTEND opens (so a test can force
+    the word), from a gap, break or cold start."""
+    n = 0
+    while mode.phase != "attend":
+        mode._tick(t)
+        t += 0.1
+        n += 1
+        if n > guard:
+            raise AssertionError(f"never reached attend, at {mode.phase}")
+    return t
+
+
+def _force_word(mode, n_syll: int):
+    from finger_rehab.game.modes.syllables_words import WORDS
+    mode.word = next(w for w in WORDS if w.n_syll == n_syll)
+    mode._offset = 0
+
+
+def _play_forced_word(mode, t: float, n_syll: int,
+                      lanes: list[int]) -> float:
+    """Force an n_syll word at attend, tap `lanes`, tick through the
+    feedback card. Returns a time just after feedback ends. Assumes
+    replay_on_error is off in the fixture."""
+    t = _next_attend(mode, t)
+    _force_word(mode, n_syll)
+    t = _run_to_respond(mode, t)
+    t = _tap_out(mode, lanes, t + 0.3)
+    t += mode.FEEDBACK_S + 0.15
+    mode._tick(t)
+    return t + 0.05
+
+
+def _reward_events(engine, name: str) -> list[str]:
+    """The detail strings of every queued raw.csv event named
+    `name`, in firing order."""
+    return [c.kwargs.get("detail", "")
+            for c in engine.raw_logger.queue_event.call_args_list
+            if c.args and c.args[0] == name]
+
+
+class RewardStreakTests(unittest.TestCase):
+    """The reward layer's streak rule: consecutive Greats count up,
+    any non-Great resets the counter silently, the fixed milestones
+    at 3, 5 and 8 fire one event each and light the round's stars at
+    feedback time, and the packed streak= mirrors the counter after
+    every word. Deterministic and informational only: no variable
+    ratio anywhere, per the mode docstring's REWARD LAYER section."""
+
+    def test_streak_counts_greats_and_resets_on_good_and_miss(
+            self) -> None:
+        engine, mode = _build_mode(level=2, replay_on_error=False)
+        t = _play_forced_word(mode, 0.0, 2, [0, 1])        # Great
+        self.assertEqual(mode._streak, 1)
+        self.assertIn("streak=1", _logged_stimulus(engine))
+        t = _play_forced_word(mode, t, 2, [1, 0])          # Good
+        self.assertEqual(_logged_outcome(engine).label, "Good")
+        self.assertEqual(mode._streak, 0)
+        self.assertIn("streak=0", _logged_stimulus(engine))
+        t = _play_forced_word(mode, t, 2, [0, 1])          # Great
+        self.assertEqual(mode._streak, 1)
+        t = _play_forced_word(mode, t, 2, [0, 1, 0])       # Miss
+        self.assertEqual(_logged_outcome(engine).label, "Miss")
+        self.assertEqual(mode._streak, 0)
+        self.assertIn("streak=0", _logged_stimulus(engine))
+
+    def test_milestones_fire_once_each_at_three_five_eight(
+            self) -> None:
+        engine, mode = _build_mode(level=2, replay_on_error=False)
+        t = 0.0
+        for k in range(8):
+            t = _play_forced_word(mode, t, 2, [0, 1])
+            if k == 2:
+                # The first milestone lights the first star at the
+                # milestone word's feedback moment.
+                self.assertEqual(mode.round_stars, 1)
+                self.assertIsNotNone(mode.star_flash_t)
+        details = _reward_events(engine, "syllables_streak")
+        self.assertEqual([d.split()[0] for d in details],
+                         ["n=3", "n=5", "n=8"])
+        self.assertEqual(mode.round_stars, 3)
+        self.assertEqual(mode._max_streak, 8)
+
+    def test_streak_survives_a_band_change(self) -> None:
+        engine, mode = _build_mode(level=2, band="A",
+                                   replay_on_error=False)
+        t = _play_forced_word(mode, 0.0, 2, [0, 1])
+        t = _play_forced_word(mode, t, 2, [0, 1])
+        self.assertEqual(mode._streak, 2)
+        mode._recent.clear()
+        mode._recent.extend([True] * 8 + [False] * 2)
+        mode._since_band_change = 10
+        mode._maybe_move_band()
+        self.assertEqual(mode.band, "B")
+        t = _play_forced_word(mode, t, 2, [0, 1])
+        self.assertEqual(mode._streak, 3)
+        self.assertTrue(
+            any(d.startswith("n=3")
+                for d in _reward_events(engine, "syllables_streak")))
+
+    def test_rewards_add_no_stim_or_sound_to_the_pinned_phases(
+            self) -> None:
+        """The cue timing and EEG marker layer are pinned: every
+        engine.on_stim of a block must come from the model or replay
+        phases exactly as before the reward layer, and the mode may
+        touch the audio engine only through the metronome it always
+        ran. A milestone word (the third Great) is the moment most
+        at risk, so the run goes through one."""
+        engine, mode = _build_mode(level=2, replay_on_error=False)
+        phases: list[str] = []
+        engine.on_stim.side_effect = (
+            lambda *a, **k: phases.append(mode.phase))
+        t = 0.0
+        for _ in range(3):
+            t = _play_forced_word(mode, t, 2, [0, 1])
+        self.assertTrue(phases)
+        self.assertLessEqual(set(phases), {"model", "replay"})
+        audio_calls = {c[0] for c in engine.audio.method_calls}
+        self.assertLessEqual(audio_calls, {"start_metronome", "stop"})
+
+
+class EaseInDrawTests(unittest.TestCase):
+    """The ease-in draw: after two consecutive Miss words, exactly
+    one draw is biased to the child's best unit count so far (ties
+    to the lower count), marked ease=1 for the notebook's holdout,
+    and never fired twice in a row. The band gate's own counters see
+    the word exactly like any other."""
+
+    def test_fires_after_two_misses_marks_the_row_never_twice(
+            self) -> None:
+        engine, mode = _build_mode(level=2, replay_on_error=False)
+        t = _play_forced_word(mode, 0.0, 2, [0, 1])        # Great at 2
+        t = _play_forced_word(mode, t, 3, [0] * 4)         # Miss at 3
+        self.assertEqual(mode._miss_run, 1)
+        self.assertFalse(mode._ease_word)
+        t = _play_forced_word(mode, t, 3, [0] * 4)         # Miss at 3
+        self.assertEqual(mode._miss_run, 2)
+        # The next draw is the biased one: best count is 2 (100%
+        # there against 0% at 3), from the current band pool.
+        t = _next_attend(mode, t)
+        self.assertTrue(mode._ease_word)
+        self.assertEqual(mode.n_expected, 2)
+        from finger_rehab.game.modes.syllables_words import words_for
+        pool = {w.word for w in words_for(mode.level, mode.band)}
+        self.assertIn(mode.word.word, pool)
+        # Missing the ease word too must NOT chain a second ease.
+        t = _run_to_respond(mode, t)
+        t = _tap_out(mode, [0, 1, 0], t + 0.3)             # Miss
+        self.assertIn("ease=1", _logged_stimulus(engine))
+        t += mode.FEEDBACK_S + 0.15
+        mode._tick(t)
+        t = _next_attend(mode, t + 0.05)
+        self.assertFalse(mode._ease_word)
+        _force_word(mode, 2)
+        t = _run_to_respond(mode, t)
+        _tap_out(mode, [0, 1], t + 0.3)
+        self.assertNotIn("ease=", _logged_stimulus(engine))
+        self.assertEqual(mode._n_ease_in, 1)
+
+    def test_band_counters_record_the_ease_word_normally(self) -> None:
+        engine, mode = _build_mode(level=2, replay_on_error=False)
+        t = _play_forced_word(mode, 0.0, 2, [0, 1])
+        t = _play_forced_word(mode, t, 3, [0] * 4)
+        t = _play_forced_word(mode, t, 3, [0] * 4)
+        recent_before = len(mode._recent)
+        since_before = mode._since_band_change
+        t = _next_attend(mode, t)
+        self.assertTrue(mode._ease_word)
+        t = _run_to_respond(mode, t)
+        _tap_out(mode, mode.window_lanes(), t + 0.3)
+        self.assertEqual(len(mode._recent), recent_before + 1)
+        self.assertEqual(mode._since_band_change, since_before + 1)
+
+    def test_best_count_tie_goes_to_the_lower_count(self) -> None:
+        engine, mode = _build_mode(level=2)
+        from finger_rehab.game.modes.syllables import TrialRecord
+        for n, ok in ((2, True), (2, False), (3, True), (3, False)):
+            mode._records.append(TrialRecord(
+                word="x", n_syll=n, band="A", correct=ok, error="ok"))
+        self.assertEqual(mode._best_unit_count(), 2)
+
+    def test_no_records_means_no_ease_draw(self) -> None:
+        engine, mode = _build_mode(level=2)
+        mode._miss_run = 2
+        self.assertIsNone(mode._draw_ease_word())
+
+
+class StickerTests(unittest.TestCase):
+    """One sticker per COMPLETED round, earned by finishing (never by
+    score), logged as its own event, with the round's stars going
+    dark at the same boundary. A block the cap ends mid-round earns
+    nothing for the partial round."""
+
+    def test_sticker_per_round_and_stars_reset_at_the_boundary(
+            self) -> None:
+        engine, mode = _build_mode(level=2, words_total=8,
+                                   round_size=4, break_s=5.0,
+                                   replay_on_error=False)
+        t = 0.0
+        for _ in range(3):
+            t = _play_forced_word(mode, t, 2, [0, 1])
+        self.assertEqual(mode.round_stars, 1)     # 3-Great milestone
+        self.assertEqual(mode.stickers, 0)
+        t = _play_forced_word(mode, t, 2, [0, 1])  # round completes
+        self.assertEqual(mode.stickers, 1)
+        self.assertEqual(mode.round_stars, 0)
+        self.assertIsNotNone(mode.sticker_flash_t)
+        self.assertEqual(_reward_events(engine, "syllables_sticker"),
+                         ["round=1"])
+        self.assertEqual(mode.phase, "break")
+
+    def test_no_sticker_when_the_cap_ends_a_block_mid_round(
+            self) -> None:
+        engine, mode = _build_mode(level=2, words_total=50,
+                                   round_size=10,
+                                   session_cap_min=0.01,
+                                   replay_on_error=False)
+        t = _play_forced_word(mode, 0.0, 2, [0, 1])
+        mode._tick(t + 1.5)
+        self.assertEqual(mode.end_reason, "time_cap")
+        self.assertEqual(_reward_events(engine, "syllables_sticker"),
+                         [])
+        self.assertEqual(mode.block_stats()["stickers"], 0)
+
+    def test_final_round_sticker_lands_at_block_completion(
+            self) -> None:
+        engine, mode = _build_mode(level=2, words_total=2,
+                                   round_size=2,
+                                   replay_on_error=False)
+        t = _play_forced_word(mode, 0.0, 2, [0, 1])
+        t = _play_forced_word(mode, t, 2, [0, 1])
+        mode._tick(t + 0.2)
+        engine.finish_block.assert_called_once()
+        self.assertEqual(_reward_events(engine, "syllables_sticker"),
+                         ["round=1"])
+        self.assertEqual(mode.block_stats()["stickers"], 1)
+
+
+class BandCelebrationTests(unittest.TestCase):
+    """Promotion becomes visible (one-shot card on the next
+    between-word screen, shown=1 on the logged event); demotion
+    stays silent, the kindness rule."""
+
+    def test_promotion_arms_the_card_and_logs_shown(self) -> None:
+        engine, mode = _build_mode(level=1, band="A")
+        mode._recent.extend([True] * 8 + [False] * 2)
+        mode._since_band_change = 10
+        mode._maybe_move_band()
+        self.assertEqual(mode.band_celebrate, "B")
+        detail = engine.raw_logger.queue_event.call_args.kwargs["detail"]
+        self.assertIn("shown=1", detail)
+
+    def test_demotion_shows_nothing(self) -> None:
+        engine, mode = _build_mode(level=1, band="B")
+        mode._recent.extend([True] * 4 + [False] * 6)
+        mode._since_band_change = 10
+        mode._maybe_move_band()
+        self.assertEqual(mode.band, "A")
+        self.assertIsNone(mode.band_celebrate)
+        detail = engine.raw_logger.queue_event.call_args.kwargs["detail"]
+        self.assertNotIn("shown", detail)
+
+    def test_card_clears_when_the_next_word_begins(self) -> None:
+        engine, mode = _build_mode(level=2, replay_on_error=False)
+        t = _play_forced_word(mode, 0.0, 2, [0, 1])
+        mode.band_celebrate = "B"
+        self.assertEqual(mode.phase, "gap")
+        _next_attend(mode, t)
+        self.assertIsNone(mode.band_celebrate)
+
+
+class TapMarksTests(unittest.TestCase):
+    """tap_marks is the screen's read-side source for the per-tap
+    sparkle and on-beat ring: it must mirror what scoring already
+    computes (position correctness, the on-beat window) and never
+    invent its own measurement."""
+
+    def test_marks_mirror_position_correctness(self) -> None:
+        engine, mode = _build_mode(level=2)
+        mode._tick(0.0)
+        _force_word(mode, 2)
+        t = _run_to_respond(mode, 0.1)
+        mode.queue_press(_press(1, t + 0.3))   # wrong position first
+        mode._tick(t + 0.3)
+        mode.queue_press(_press(0, t + 0.7))
+        mode._tick(t + 0.7)
+        marks = mode.tap_marks()
+        self.assertEqual([m["pos_ok"] for m in marks], [False, False])
+        self.assertTrue(all(m["on_beat"] is None for m in marks),
+                        "free-paced taps carry no beat verdict")
+
+    def test_paced_marks_use_the_on_beat_window(self) -> None:
+        engine, mode = _build_mode(level=3)
+        mode._tick(0.0)
+        _force_word(mode, 2)
+        t0 = _run_to_respond(mode, 0.1)
+        beats = mode._beat_times
+        mode.queue_press(_press(0, beats[0] + 0.05))    # inside 150 ms
+        mode._tick(beats[0] + 0.05)
+        mode.queue_press(_press(1, beats[1] + 0.4))     # outside
+        mode._tick(beats[1] + 0.4)
+        marks = mode.tap_marks()
+        self.assertEqual([m["on_beat"] for m in marks], [True, False])
+        self.assertEqual([m["pos_ok"] for m in marks], [True, True])
+
+
+class RewardBlockStatsTests(unittest.TestCase):
+    """block_stats carries the engagement numbers, present and zero
+    on an empty block so old-session tooling can tell 'nothing
+    earned' from 'key missing'."""
+
+    def test_keys_present_and_zero_on_an_empty_block(self) -> None:
+        engine, mode = _build_mode(level=1)
+        stats = mode.block_stats()
+        self.assertEqual(stats["max_streak"], 0)
+        self.assertEqual(stats["stickers"], 0)
+        self.assertEqual(stats["n_ease_in"], 0)
+
+
+class RewardScreenTests(unittest.TestCase):
+    """The reward visuals: the break screen is the journey (stops,
+    stamps, the earned line), the gap carries the one-shot promotion
+    card, and the streak stars draw in their corner. One fiction
+    shell, fixed stop names, no rotation API to rotate with."""
+
+    def _screen(self, engine):
+        import pygame
+        pygame.init()
+        pygame.font.init()
+        from finger_rehab.ui.syllables_screen import SyllablesScreen
+        from finger_rehab.ui.theme import get as get_theme
+        from finger_rehab.ui.widgets import Layout
+        engine.layout = Layout(1280, 800, 1.0)
+        engine.theme = get_theme("clinical")
+        return SyllablesScreen(engine)
+
+    def _texts(self, fn):
+        import pygame
+        from unittest.mock import patch
+        texts = []
+
+        def rec(_s, text, _pos, _t, _l, **kw):
+            texts.append(text)
+            return pygame.Rect(0, 0, 1, 1)
+
+        with patch("finger_rehab.ui.syllables_screen.draw_text",
+                   side_effect=rec):
+            fn()
+        return texts
+
+    def test_the_journey_shell_is_fixed(self) -> None:
+        engine, mode = _build_mode(level=1)
+        scr = self._screen(engine)
+        self.assertEqual([scr.stop_name(k) for k in range(4)],
+                         ["The Creek", "Big Rock", "The Lookout",
+                          "The Waterfall"])
+
+    def test_break_screen_stamps_the_stop_and_names_the_sticker(
+            self) -> None:
+        import pygame
+        engine, mode = _build_mode(level=1, words_total=40,
+                                   round_size=10)
+        scr = self._screen(engine)
+        mode._tick(0.0)
+        mode.phase = "break"
+        mode._phase_until = 10.0
+        mode._stickers = 1
+        texts = self._texts(lambda: scr._draw_break(
+            pygame.Surface((1280, 800)), mode, 1.0))
+        self.assertTrue(any("Sticker earned! The Creek" in s
+                            for s in texts), texts)
+        self.assertTrue(any(s.startswith("Next round in")
+                            for s in texts))
+        # All four stops are on the strip, named.
+        for name in ("The Creek", "Big Rock", "The Lookout",
+                     "The Waterfall"):
+            self.assertIn(name, texts)
+
+    def test_gap_shows_the_promotion_card_once_armed(self) -> None:
+        import pygame
+        engine, mode = _build_mode(level=1)
+        scr = self._screen(engine)
+        mode._tick(0.0)
+        mode.phase = "gap"
+        mode._phase_t0 = 1.0
+        mode.band_celebrate = "B"
+        texts = self._texts(lambda: scr._draw_gap(
+            pygame.Surface((1280, 800)), mode, 1.2))
+        self.assertIn("BIGGER WORDS!", texts)
+        # Without the armed card the gap keeps its coming-up line.
+        mode.band_celebrate = None
+        texts = self._texts(lambda: scr._draw_gap(
+            pygame.Surface((1280, 800)), mode, 1.2))
+        self.assertTrue(any(s.startswith("Here comes word")
+                            for s in texts), texts)
+
+    def test_streak_stars_draw_only_when_earned(self) -> None:
+        import pygame
+        from unittest.mock import patch
+        engine, mode = _build_mode(level=1)
+        scr = self._screen(engine)
+        mode._tick(0.0)
+        surf = pygame.Surface((1280, 800))
+        polys = []
+        with patch("pygame.draw.polygon",
+                   side_effect=lambda _s, _c, pts: polys.append(pts)):
+            scr._draw_streak_stars(surf, mode, 1.0)
+        self.assertEqual(polys, [])
+        mode.round_stars = 2
+        with patch("pygame.draw.polygon",
+                   side_effect=lambda _s, _c, pts: polys.append(pts)):
+            scr._draw_streak_stars(surf, mode, 1.0)
+        self.assertEqual(len(polys), 2)
+
+
+class SyllablesResultsAdviceTests(unittest.TestCase):
+    """The supervisor nudge on the results screen: one line, only
+    when the block's accuracy landed outside the productive 60-95
+    percent zone. Advice only, and silent for the healthy middle."""
+
+    def _advice(self, sy):
+        from finger_rehab.ui.screens import ResultsScreen
+        return ResultsScreen._syllables_advice(sy)
+
+    def test_low_accuracy_suggests_easing(self) -> None:
+        line = self._advice({"accuracy": 0.5})
+        self.assertIsNotNone(line)
+        self.assertIn("easier band or a slower beat", line)
+
+    def test_high_accuracy_suggests_stepping_up(self) -> None:
+        line = self._advice({"accuracy": 0.97})
+        self.assertIsNotNone(line)
+        self.assertIn("next band or level", line)
+
+    def test_the_healthy_middle_stays_silent(self) -> None:
+        self.assertIsNone(self._advice({"accuracy": 0.8}))
+        self.assertIsNone(self._advice({"accuracy": 0.60}))
+        self.assertIsNone(self._advice({"accuracy": 0.95}))
+        self.assertIsNone(self._advice({}))
+
+
 if __name__ == "__main__":
     unittest.main()

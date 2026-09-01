@@ -116,6 +116,16 @@ def comparable_value(mode: str, summary: dict) -> float | None:
     if mode == "buzz_hunt":
         return _num(((summary.get("buzz_hunt") or {})
                      .get("loc") or {}).get("accuracy"))
+    if mode == "echo":
+        # The span headline, but never across the ladder / cumulative
+        # divide: a cumulative (classic Simon) block rehearses every
+        # prefix and its span is inflated by design, so comparing one
+        # against a ladder block would report the game rule change as
+        # patient change.
+        ec = summary.get("echo") or {}
+        if not isinstance(ec, dict) or ec.get("cumulative"):
+            return None
+        return _num(ec.get("span"))
     if mode == "rhythm":
         return _num((summary.get("beat_offset_stats") or {})
                     .get("beat_offset_abs_mean_ms"))
@@ -150,6 +160,9 @@ _RULES: dict[str, tuple[bool, float, int, str, str]] = {
                    "{d}% steadier in the dark than last time",
                    "{d}% more drift in the dark than last time"),
     "buzz_hunt": (False, 100.0, 0, *_ACC),
+    "echo": (False, 1.0, 0,
+             "longest echo up {d} on last time",
+             "longest echo down {d} on last time"),
     "rhythm": (True, 1.0, 0,
                "{d} ms tighter timing than last time",
                "{d} ms looser timing than last time"),

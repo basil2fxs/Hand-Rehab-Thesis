@@ -3085,6 +3085,7 @@ class GameEngine:
         "force_pilot": "begin_force_pilot_block",
         "lighthouse": "begin_lighthouse_block",
         "buzz_hunt": "begin_buzz_hunt_block",
+        "echo": "begin_echo_block",
         # Rhythm needs a track picked before there is a block to
         # start, so its "starter" is the song screen. One press still
         # lands on rhythm's own prep, same as every other mode.
@@ -4002,6 +4003,72 @@ class GameEngine:
             sc.on_block_start()
         self.screen_obj = self._screens["buzz_hunt"]
 
+    def begin_echo_block(self) -> None:
+        """Echo block: the explicit visuospatial span game (Simon
+        says on the finger lanes). The rig plays a growing sequence,
+        tile light plus buzz per item, and the patient replays it;
+        growth and termination follow the Kessels 2000 Corsi
+        standard, with a hidden name-seeded Hebb sequence every third
+        trial. The research case lives in the mode file's docstring;
+        echo.* in the config says what the patient experiences. One
+        hand plays its four lanes; Both plays sequences over all
+        eight (a distinct bimanual construct the analysis never pools
+        with unilateral spans). Keyboard play is a full equal: the
+        stimulus is on screen, so nothing here needs the sensors.
+        """
+        from .modes.echo import EchoMode, participant_echo_seed
+        hands = self.lanes_by_hand()
+        if self.hand_mode == "both":
+            lanes = (hands.get("right") or []) + (hands.get("left") or [])
+        else:
+            lanes = hands.get(self.hand_mode) or [0, 1, 2, 3]
+        p_seed = participant_echo_seed(
+            str(self.session.participant or ""))
+        seed_cfg = self.cfg.get("echo.seed", None)
+        try:
+            block_seed = (int(seed_cfg) if seed_cfg is not None
+                          else random.randrange(2 ** 32))
+        except (TypeError, ValueError):
+            block_seed = random.randrange(2 ** 32)
+        self.mode = EchoMode(
+            engine=self,
+            lanes=lanes,
+            p_seed=p_seed,
+            block_seed=block_seed,
+            start_len=int(self.cfg.get("echo.start_len", 2)),
+            trials_per_len=int(self.cfg.get("echo.trials_per_len", 2)),
+            max_len=int(self.cfg.get("echo.max_len", 9)),
+            runs=int(self.cfg.get("echo.runs", 1)),
+            item_on_ms=float(self.cfg.get("echo.item_on_ms", 500)),
+            ioi_ms=float(self.cfg.get("echo.ioi_ms", 1000)),
+            hebb_every=int(self.cfg.get("echo.hebb_every", 3)),
+            idle_timeout_s=float(
+                self.cfg.get("echo.idle_timeout_s", 10.0)),
+            rest_s=float(self.cfg.get("echo.rest_s", 2.0)),
+            fatigue_timeout_run=int(
+                self.cfg.get("echo.fatigue_timeout_run", 2)),
+            fatigue_rest_s=float(
+                self.cfg.get("echo.fatigue_rest_s", 20.0)),
+            session_cap_min=float(
+                self.cfg.get("echo.session_cap_min", 10.0)),
+            cumulative=bool(self.cfg.get("echo.cumulative", False)),
+            score_cfg=self.score_cfg,
+            demo_trials=self._test_mode_trials(),
+        )
+        self._begin_block("echo")
+        # Both seeds shaped this block's material (the block seed drew
+        # the novel sequences, the participant seed the hidden
+        # stream), so they live next to the data they shaped.
+        if self.raw_logger:
+            self.raw_logger.queue_event(
+                "echo_config",
+                detail=(f"block_seed={block_seed} "
+                        f"participant_seed={p_seed} "
+                        f"hand={self.hand_mode} "
+                        f"cumulative={self.mode.cumulative}"),
+                hand=self.hand_mode)
+        self.screen_obj = self._screens["gameplay"]
+
     def begin_adaptive_block(self) -> None:
         from .modes.adaptive import AdaptiveMode
         from ..analytics.adaptive import AdaptiveConfig
@@ -4250,6 +4317,9 @@ class GameEngine:
         if kind == "buzz_hunt":
             self.begin_buzz_hunt_block()
             return
+        if kind == "echo":
+            self.begin_echo_block()
+            return
         if kind == "rhythm":
             song = getattr(self, "_last_rhythm_song", None)
             difficulty = getattr(self, "_last_rhythm_difficulty", "medium")
@@ -4308,7 +4378,7 @@ class GameEngine:
         countdown_t: float | None = None
         if name in ("classic", "adaptive", "mirror", "reaction",
                     "pattern", "chords", "syllables", "force_pilot",
-                    "lighthouse", "buzz_hunt"):
+                    "lighthouse", "buzz_hunt", "echo"):
             secs = float(self.cfg.get("game.start_countdown_s", 3.0))
             if self._test_mode_trials() is not None:
                 secs = min(secs, 1.5)
@@ -4751,6 +4821,19 @@ class GameEngine:
                     summary["buzz_hunt"] = stats_fn()
                 except Exception as e:
                     log.warning("buzz hunt block stats failed: %s", e)
+        # Echo context: the span ladder's Kessels numbers, per-length
+        # outcomes, hidden-trial indices and the presentation
+        # parameters actually used. These cannot be rebuilt from
+        # hits / misses because the ladder position and the trial
+        # kinds live in the mode's per-trial records, and the results
+        # screen and the vs-last chip read this section.
+        if self.current_block == "echo" and self.mode is not None:
+            stats_fn = getattr(self.mode, "block_stats", None)
+            if callable(stats_fn):
+                try:
+                    summary["echo"] = stats_fn()
+                except Exception as e:
+                    log.warning("echo block stats failed: %s", e)
         # Adaptive-only context.
         bpm_min = getattr(self, "_block_bpm_min", None)
         bpm_max = getattr(self, "_block_bpm_max", None)

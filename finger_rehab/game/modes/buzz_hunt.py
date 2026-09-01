@@ -111,7 +111,13 @@ counts come from buzz_hunt.* in the config.
                  told a sequence repeats. Within-hand pulses are
                  sequential by hardware; the docstring's constraint
                  is also the paradigm's: a span sequence is
-                 sequential by definition.
+                 sequential by definition. This stage is a
+                 PERCEPTION measure (can the hand read the buzzes,
+                 which is why playback is buzz-only and nothing on
+                 screen names the finger); echo.py is the explicit
+                 span GAME, light plus buzz on the Kessels ladder.
+                 The two must never be pooled: tactile-only span
+                 caps far below visual span in healthy adults.
   GAP DETECTION  one long buzz, or two short buzzes separated by a
                  silent gap, on one finger; tap that finger once for
                  one, twice for two. The long buzz lasts exactly two
