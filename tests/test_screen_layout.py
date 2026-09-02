@@ -221,10 +221,14 @@ class TestTitleClicks:
         eng.show_mode_select = lambda: went.append("modes")
         screen.name_input.text = "P07"
         screen.age_input.text = "64"
+        # P07 is a study code, and a code logs in only with its
+        # dominant hand picked (tests/test_intake.py has the refusal).
+        screen.hand_seg.set("right")
         self._click(screen, screen.start_btn.rect.center)
         assert went == ["modes"]
         assert eng.session.participant == "P07"
         assert eng.session.age == "64"
+        assert eng.session.dominant_hand == "right"
 
     def test_the_info_overlay_swallows_the_next_click(self, title_screen):
         """The overlay is modal, so a click that closes it must not also

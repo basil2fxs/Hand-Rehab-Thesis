@@ -27,6 +27,24 @@ session:
   # the chassis sizing objective.
   hand_length_mm: null
   hand_breadth_mm: null
+  # ---- intake fields the login screen collects ----------------------
+  # Every one of these is typed or picked on the login screen and
+  # lands in metadata.json; set them here only to pre-fill the screen
+  # (a per-participant yaml passed as --config, say). The login value
+  # always wins over the file.
+  sex: null                  # female | male | other | null (not said)
+  edinburgh_lq: null         # Edinburgh short-form LQ, -100 to 100
+  visit: null                # visit number in a repeated study
+  # Whether the login pre-fills the participant field with the next
+  # free study code (P01, P02, ...) read off the sessions tree.
+  #   auto    pre-fill once a coded participant exists on this machine,
+  #           so a clinic install that only ever types names never
+  #           sees a code it did not ask for
+  #   always  pre-fill from P01 on an empty tree (a study laptop)
+  #   never   leave the field blank
+  # Typing over the suggestion replaces it, so a name is one keystroke
+  # away either way.
+  suggest_code: auto
 
 report:
   # Build researcher outputs at the end of every block: report.html,
@@ -1425,3 +1443,103 @@ logging:
 #       - {mode: classic,  phase: aftertest}
 protocol:
   blocks: []
+
+  # Named presets the hub can start with one button. A preset is a
+  # protocol with three things blocks: [] does not have: a fixed
+  # block ORDER chosen per participant (counterbalanced by the code),
+  # a HAND per step resolved against the dominant hand entered at
+  # login, and per-mode OVERRIDES applied for the length of the run
+  # and put back afterwards. Between steps the results screen shows
+  # as normal and NEXT UP offers the next step, so every block still
+  # gets its GET READY countdown and the participant a breather.
+  #
+  # The study_battery preset is the healthy baseline battery from
+  # docs/research/healthy_baseline_study.txt, Sections 2.2 to 2.4.
+  # Every override below changes a COUNT or freezes a difficulty
+  # ladder; none changes a threshold, a window or a scoring rule, so
+  # every metric a battery block writes is the metric the standard
+  # block writes, just from fewer trials.
+  presets:
+    study_battery:
+      id: healthy_baseline_v1
+      # The design's minute budget for one visit, login to last
+      # block. scripts/measure_battery.py measures the battery
+      # headless against it.
+      budget_min: 50
+      # Steps that carry stretch_before get a 60 s stretch note on
+      # the results screen before they start (the set boundary).
+      stretch_s: 60
+      # hand values: hand1 / hand2 are the counterbalanced order
+      # (which one is dominant comes from the cell); dominant,
+      # non_dominant, both, left and right are literal.
+      orders:
+        A:
+          - {mode: reaction, hand: hand1}
+          - {mode: reaction, hand: hand2}
+          - {mode: mirror, hand: both}
+          - {mode: rhythm, hand: both, track: Easy_Lemon.mp3,
+             difficulty: medium}
+          - {mode: echo, hand: both}
+          - {mode: force_pilot, hand: both, stretch_before: true}
+          - {mode: lighthouse, hand: both}
+          - {mode: chords, hand: both}
+          - {mode: buzz_hunt, hand: both}
+          - {mode: pattern, hand: dominant}
+        B:
+          - {mode: force_pilot, hand: both}
+          - {mode: lighthouse, hand: both}
+          - {mode: chords, hand: both}
+          - {mode: buzz_hunt, hand: both}
+          - {mode: reaction, hand: hand1, stretch_before: true}
+          - {mode: reaction, hand: hand2}
+          - {mode: mirror, hand: both}
+          - {mode: rhythm, hand: both, track: Easy_Lemon.mp3,
+             difficulty: medium}
+          - {mode: echo, hand: both}
+          - {mode: pattern, hand: dominant}
+      # Code number mod 4 -> which order and which hand goes first.
+      # data/intake.cell_for applies the same table; a name with no
+      # number hashes into it so the cell is still fixed per person.
+      cells:
+        1: {order: A, hand1: dominant}
+        2: {order: B, hand1: dominant}
+        3: {order: A, hand1: non_dominant}
+        0: {order: B, hand1: non_dominant}
+      # Short forms and frozen ladders, exact keys, applied on top of
+      # whatever config is loaded while the battery runs.
+      overrides:
+        reaction:
+          sub_mode: choice
+          block_trials: 25
+          response_windows_s: [2.0]   # one rung: the window never moves
+        force_pilot:
+          runs_per_finger: 1          # 8 runs bilaterally
+          rest_s: 5.0
+          level: 1
+          promote_frac: 1.01          # never promotes
+          demote_frac: 0.0            # never demotes
+        lighthouse:
+          holds_per_finger: 1
+          echoes_per_finger: 1
+          echo_delays_s: [2, 10]
+          rest_s: 4.0
+          level: 3                    # two dark windows, 45 percent
+          promote_lit_mae_pct: -1     # never promotes
+          promote_delta_pct: -1
+          demote_delta_pct: 1000      # never demotes
+        chords:
+          subblocks: 3                # within, within, cross
+          trials_per_subblock: 20
+          sync_windows_ms: [150]      # one rung: W fixed at 150 ms
+        buzz_hunt:
+          loc_trials_per_hand: 16
+          distractor_trials_per_hand: 0
+          span_trials: 8
+          gap_trials_per_hand: 0
+          catch_rate: 0.1
+        pattern:
+          short_session: true
+          soc_cycles_per_block: 3
+          random_block_trials: 32
+        rhythm:
+          difficulty: medium

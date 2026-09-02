@@ -47,6 +47,26 @@ class Session:
     # the chassis sizing objective rests on.
     hand_length_mm: str = ""
     hand_breadth_mm: str = ""
+    # ---- intake fields from the login screen ------------------------
+    # Sex as the participant reported it: "female", "male", "other",
+    # or empty for prefer not to say (the login default). Stays out of
+    # every file name and every seed; it is a cohort descriptor only.
+    sex: str = ""
+    # Edinburgh Handedness Inventory short form laterality quotient,
+    # -100 to +100, as typed. Empty when the form was not taken. The
+    # dominant_hand label above is the one the software acts on; the
+    # LQ is recorded so the analysis can check the two agree.
+    edinburgh_lq: str = ""
+    # Visit number for a repeated-measures study ("1", "2"), as typed.
+    # The login suggests it from the days this identity has already
+    # played on; empty for a clinic session that has no visit plan.
+    visit: str = ""
+    # The study battery this block belongs to, or {} for a free pick.
+    # Written at block start from the engine's battery state: the
+    # battery id, the counterbalancing cell, this block's position
+    # and the step it fulfils. Lets the analysis pool battery blocks
+    # by position without re-deriving the cell from the code.
+    battery: dict = field(default_factory=dict)
     # Whether the left/right port assignment came from auto-detection
     # or a manual Settings override, which is what the zero-setup
     # objective is measured on.

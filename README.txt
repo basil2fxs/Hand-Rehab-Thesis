@@ -16,6 +16,33 @@ No Arduino plugged in? It falls back to keyboard. Log in with a name
 and age, pick a game, play. A session is as many games as you want;
 data saves even if you quit a game halfway.
 
+The login screen is also the study intake. A participant code (P01,
+P02, ...) goes in the same field as a name; the screen suggests the
+next free code off the sessions folder and the visit number from the
+days that code has already played. Age, sex, dominant hand, the
+Edinburgh handedness score and hand length and breadth are the other
+fields; a code needs its dominant hand, a name does not. Tab moves
+between fields, Enter logs in. Everything typed lands in
+`metadata.json`, and the code keys the session folders, the index,
+the vs-last-time chip and the notebook.
+
+## Study battery
+
+The hub has a STUDY BATTERY button (B on the keyboard). It runs the
+healthy baseline battery from `docs/research/healthy_baseline_study.txt`
+through the protocol runner: ten blocks in an order counterbalanced by
+the participant code (code mod 4 picks the mode order and which hand
+goes first), each hand resolved against the dominant hand from login,
+short-form counts and frozen difficulty ladders applied for the run
+and put back afterwards. Every block still gets its GET READY
+countdown and its own rests; between blocks the results screen shows
+as usual and NEXT UP offers the next step. The session strip shows
+the battery position, and each block's `metadata.json` carries the
+battery id, cell and position. The preset lives in
+`config/default.yaml` under `protocol.presets.study_battery`;
+`scripts/measure_battery.py` plays it headless and reports the
+minutes.
+
 Two boards: the first one detected is the right hand, the second is
 the left. The login screen and Settings both show which port went to
 which hand. Settings can pin a port to a hand instead; a pinned port
@@ -70,6 +97,13 @@ the notebook printed and drew, figures included. Analysing one person
 also writes `sessions/individual_patient_results/<name>/summary.html`,
 replaced each run so it is always their latest full analysis, with a
 line added to `runs.txt` beside it.
+
+The Cohort cells near the end read the whole tree instead of the
+pick: every participant code with a visit number, both visits, both
+hands. They write `sessions/cohort_results/cohort_metrics.csv` (one
+row per participant, visit, hand, mode and metric) and a cohort
+`report.html` beside it. Statistics print from the study's n of 28;
+below that the cells show coverage only.
 
 ## EEG lab
 

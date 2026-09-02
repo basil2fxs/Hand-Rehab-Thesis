@@ -19,12 +19,14 @@ log = logging.getLogger(__name__)
 
 from .theme import Theme
 from .widgets import (
-    Button, Card, FloatingText, LaneStrip, Layout, Slider, TextInput,
-    ToggleMenu,
+    Button, Card, FloatingText, LaneStrip, Layout, Segmented, Slider,
+    TextInput, ToggleMenu,
     FONT_TITLE, FONT_H1, FONT_H2, FONT_BODY, FONT_SMALL,
     BUTTON_H, BUTTON_W, PADDING, draw_text, keyboard_controls_lines,
     make_font,
 )
+
+from ..game.battery import HARDWARE_MODES
 
 if TYPE_CHECKING:
     from ..game.engine import GameEngine
@@ -468,6 +470,23 @@ def draw_session_strip(surf: pygame.Surface, rect: pygame.Rect,
         right_limit -= nw + 16
 
     x = rect.x + 18
+    # Battery progress leads the strip while a study battery is
+    # running: the one line the RA checks against the run sheet.
+    # Filled so it reads as status, not as another game chip.
+    try:
+        progress = engine.battery_progress()
+    except Exception:
+        progress = None
+    if isinstance(progress, dict):
+        if progress.get("finished"):
+            text = f"BATTERY DONE {progress['done']}/{progress['of']}"
+        else:
+            text = f"BATTERY {progress['done']}/{progress['of']}"
+            nxt = progress.get("next")
+            if isinstance(nxt, dict) and nxt.get("mode"):
+                text += f"  next {mode_title(str(nxt['mode']))}"
+        x += _strip_pill(surf, layout, x, cy, text, theme.accent,
+                         filled=True) + 12
     if not rows:
         draw_text(surf, "No games played yet",
                   (x, cy - tfont.get_height() // 2),
@@ -501,7 +520,8 @@ class TitleScreen(Screen):
     # seconds, so half of what it measured was anticipation.
     INFO_TITLE = "Session protocol"
     INFO_STEPS = [
-        "1. Enter the participant name and age, then press LOG IN.",
+        "1. Enter the participant code (or name), age and dominant hand,",
+        "      then press LOG IN. A study visit starts the battery from the hub.",
         "2. Run the four core modes in this order, once each per session:",
         "      Reaction  (baseline eye-to-hand speed, random waits)",
         "      Adaptive  (40 trials, pace adjusts to the participant)",
@@ -516,69 +536,118 @@ class TitleScreen(Screen):
                    "training modes add their own measures on top.")
 
     # Vertical rhythm, in logical pixels against the 1280x800 render
-    # surface. Held as constants because the card, the two inputs and the
-    # start button have to move together: the card is drawn from these and
-    # so are the controls inside it, so neither can drift from the other.
-    ICON_Y = 110
-    WORDMARK_Y = 234
-    TAGLINE_Y = 300
-    CARD_TOP = 348
-    CARD_W = 660
-    CARD_H = 262
+    # surface. Held as constants because the card, the inputs and the
+    # start button have to move together: the card is drawn from these
+    # and so are the controls inside it, so neither can drift from the
+    # other. The intake card is two rows of fields plus the button, so
+    # the wordmark sits higher than it did with one row.
+    ICON_Y = 92
+    WORDMARK_Y = 196
+    TAGLINE_Y = 246
+    CARD_TOP = 282
+    CARD_W = 940
+    CARD_H = 372
+    # Field rows inside the card, offsets from CARD_TOP. Labels draw 26
+    # px above each field.
+    ROW1_Y = 70
+    ROW2_Y = 160
+    BUTTON_Y = 240
+    NOTE_Y = 330
+    FIELD_H = 54
     # Utility strip along the bottom: one row of equal-height pills on a
     # single baseline, with a hairline rule above it.
     PILL_H = 44
     PILL_W = 150
     EDGE = 28
 
+    # Sex options: key is what metadata records, caption what the RA
+    # reads. Empty key is "prefer not to say", the default, so a
+    # participant who declines costs no keystroke.
+    SEX_OPTIONS = [("", "Not said"), ("female", "Female"),
+                   ("male", "Male"), ("other", "Other")]
+    SEX_HOTKEYS = {"n": "", "f": "female", "m": "male", "o": "other"}
+    HAND_OPTIONS = [("left", "Left"), ("right", "Right")]
+    HAND_HOTKEYS = {"l": "left", "r": "right"}
+
     def __init__(self, engine: "GameEngine") -> None:
         super().__init__(engine)
         cx = engine.layout.width // 2
         w, h = engine.layout.width, engine.layout.height
 
-        # Participant name + age inputs. Set once on the title screen
-        # and reused for every block the patient plays this app
-        # session, so every CSV row + every session folder is tagged
-        # with the same name. Pre-fill from any persisted values so
-        # quitting and reopening the title screen doesn't blank them
-        # out.
-        prefill_name = str(engine.cfg.get("session.participant") or "")
-        if prefill_name in ("None", "NA"):
-            prefill_name = ""
-        prefill_age = str(engine.cfg.get("session.age") or "")
-        if prefill_age in ("None", "NA"):
-            prefill_age = ""
-        # The two fields and the start button sit inside one card, so the
-        # screen reads as "fill this in, then press go" rather than as
-        # three unrelated controls floating on a background.
+        # The intake card. Row one is the identity (code or name, age,
+        # sex); row two is what the study needs per person (dominant
+        # hand, Edinburgh LQ, visit, hand size). Everything is set
+        # once here and reused for every block the participant plays
+        # this session, so every CSV row and every session folder is
+        # tagged the same way.
         self.card_rect = pygame.Rect(cx - self.CARD_W // 2, self.CARD_TOP,
                                      self.CARD_W, self.CARD_H)
-        # Side-by-side row: wide name field + compact age field. The
-        # age input is a research-metadata field (demographic cohort
-        # matters for stroke rehab outcomes), so it's smaller and
-        # paired with the name rather than getting its own row.
-        name_w = 400
-        age_w = 140
-        gap = 20
-        row_w = name_w + gap + age_w
-        row_x = cx - row_w // 2
-        field_y = self.CARD_TOP + 70
+        x0 = self.card_rect.x + 40
+        r1 = self.CARD_TOP + self.ROW1_Y
+        r2 = self.CARD_TOP + self.ROW2_Y
+        fh = self.FIELD_H
+        # `name_input` keeps its name: the identity field is the same
+        # field it always was, it just accepts a study code as well.
         self.name_input = TextInput(
-            pygame.Rect(row_x, field_y, name_w, 54),
+            pygame.Rect(x0, r1, 330, fh),
             self.theme, self.layout,
-            label="PARTICIPANT NAME",
-            placeholder="Name for this session",
-            initial=prefill_name,
+            label="PARTICIPANT CODE OR NAME",
+            placeholder="P01, or a name",
             max_len=40,
         )
         self.age_input = TextInput(
-            pygame.Rect(row_x + name_w + gap, field_y, age_w, 54),
+            pygame.Rect(x0 + 346, r1, 110, fh),
             self.theme, self.layout,
             label="AGE",
             placeholder="Years",
-            initial=prefill_age,
             max_len=4,
         )
+        self.sex_seg = Segmented(
+            pygame.Rect(x0 + 472, r1, 388, fh),
+            self.theme, self.layout,
+            options=self.SEX_OPTIONS, label="SEX  (optional)",
+            initial="", hotkeys=self.SEX_HOTKEYS,
+        )
+        self.hand_seg = Segmented(
+            pygame.Rect(x0, r2, 210, fh),
+            self.theme, self.layout,
+            options=self.HAND_OPTIONS, label="DOMINANT HAND",
+            initial=None, hotkeys=self.HAND_HOTKEYS,
+        )
+        self.ehi_input = TextInput(
+            pygame.Rect(x0 + 224, r2, 150, fh),
+            self.theme, self.layout,
+            label="EDINBURGH LQ", placeholder="-100 to 100",
+            max_len=4, numeric=True, signed=True,
+        )
+        self.visit_input = TextInput(
+            pygame.Rect(x0 + 388, r2, 100, fh),
+            self.theme, self.layout,
+            label="VISIT", placeholder="1",
+            max_len=2, numeric=True,
+        )
+        self.length_input = TextInput(
+            pygame.Rect(x0 + 502, r2, 172, fh),
+            self.theme, self.layout,
+            label="HAND LENGTH mm", placeholder="optional",
+            max_len=3, numeric=True,
+        )
+        self.breadth_input = TextInput(
+            pygame.Rect(x0 + 688, r2, 172, fh),
+            self.theme, self.layout,
+            label="HAND BREADTH mm", placeholder="optional",
+            max_len=3, numeric=True,
+        )
+        # One focus order for Tab, text fields and pickers alike.
+        self._fields = [self.name_input, self.age_input, self.sex_seg,
+                        self.hand_seg, self.ehi_input, self.visit_input,
+                        self.length_input, self.breadth_input]
+        # Visit auto-suggestion bookkeeping: the code the last
+        # suggestion was made for, and the text it wrote, so a visit
+        # the RA typed by hand is never overwritten.
+        self._visit_for: str | None = None
+        self._visit_suggested_text = ""
+        self.refresh()
 
         # Blank-name guard state: the first LOG IN with no name shows
         # a warning line instead of starting; the second click
@@ -590,7 +659,7 @@ class TitleScreen(Screen):
         # game select. Filled in green (independent of the blue theme
         # accent) so it reads as a "go" action.
         self.start_btn = Button(
-            pygame.Rect(cx - BUTTON_W // 2, self.CARD_TOP + 152,
+            pygame.Rect(cx - BUTTON_W // 2, self.CARD_TOP + self.BUTTON_Y,
                         BUTTON_W, BUTTON_H + 12),
             "LOG IN", self._begin,
             self.theme, self.layout,
@@ -656,8 +725,63 @@ class TitleScreen(Screen):
                     self.theme.warning)
         return (f"Arduino: {bits}", self.theme.muted)
 
+    # ---- intake helpers ---------------------------------------------------
+    def _data_dir(self):
+        """The sessions tree the suggestions read, or None on an
+        engine with no config (a bare test double)."""
+        try:
+            cfg = self.engine.cfg
+            return cfg.resolve_path(cfg.get("session.data_dir", "sessions"))
+        except Exception:
+            return None
+
+    def _cfg_str(self, key: str) -> str:
+        try:
+            v = self.engine.cfg.get(key)
+        except Exception:
+            return ""
+        s = str(v if v is not None else "").strip()
+        return "" if s in ("None", "NA") else s
+
+    def _suggested_code(self) -> str:
+        """The next free study code, or '' when the config says not to
+        suggest one (or, in auto mode, when nobody on this machine has
+        ever logged in with a code, so a clinic never sees one)."""
+        from ..data.intake import known_codes, suggest_next_code
+        mode = self._cfg_str("session.suggest_code").lower() or "auto"
+        if mode == "never":
+            return ""
+        data_dir = self._data_dir()
+        if mode == "auto" and not known_codes(data_dir):
+            return ""
+        return suggest_next_code(data_dir)
+
+    def _refresh_visit_suggestion(self) -> None:
+        """Keep the visit field one ahead of this identity's history
+        unless the RA has typed a visit by hand."""
+        from ..data.intake import suggest_visit
+        code = self.name_input.value
+        if code == self._visit_for:
+            return
+        if self.visit_input.text not in ("", self._visit_suggested_text):
+            # Hand-edited: leave it alone for the rest of this login.
+            self._visit_for = code
+            return
+        self._visit_for = code
+        if not code:
+            self._visit_suggested_text = ""
+            self.visit_input.text = ""
+            return
+        self._visit_suggested_text = str(suggest_visit(self._data_dir(),
+                                                       code))
+        self.visit_input.text = self._visit_suggested_text
+
+    def update(self, dt: float) -> None:
+        self._refresh_visit_suggestion()
+
     def _begin(self) -> None:
-        name = self.name_input.value or "NA"
+        from ..data.intake import is_study_code, normalise_code
+        name = normalise_code(self.name_input.value) or "NA"
         # A blank name pools this session into the shared NA identity:
         # every anonymous session on the machine merges into one
         # improvement trace, so cross-session tracking for this
@@ -671,6 +795,15 @@ class TitleScreen(Screen):
                                "patient. Begin again to continue "
                                "anonymously.")
             return
+        # A study code needs the dominant hand: the battery's hand
+        # order and the analysis's dominance contrast both hang off
+        # it, and it cannot be recovered after the visit. A name (the
+        # clinic path) is not held to this.
+        if is_study_code(name) and self.hand_seg.value is None:
+            self.begin_note = ("Pick the dominant hand for a study code "
+                               "(click Left or Right, or Tab to the "
+                               "field and press L or R).")
+            return
         self._na_warned = False
         self.begin_note = ""
         # Age is optional; an empty string is its own valid value
@@ -679,10 +812,19 @@ class TitleScreen(Screen):
         # round-trips whatever was typed instead of coercing to int
         # and rejecting unusual inputs like "65y".
         age = self.age_input.value or ""
+        self._refresh_visit_suggestion()
         # The engine owns the session lifecycle: identity into cfg +
         # session metadata, the EEG session-start marker, then game
         # select as home base for as many games as the player wants.
-        self.engine.begin_session(name, age)
+        self.engine.begin_session(
+            name, age,
+            sex=self.sex_seg.value or "",
+            dominant_hand=self.hand_seg.value or "",
+            edinburgh_lq=self.ehi_input.value,
+            visit=self.visit_input.value,
+            hand_length_mm=self.length_input.value,
+            hand_breadth_mm=self.breadth_input.value,
+        )
 
     def _draw_device_icon(self, surf: pygame.Surface,
                            cx: int, cy: int) -> None:
@@ -750,23 +892,48 @@ class TitleScreen(Screen):
                           1)
 
     def refresh(self) -> None:
-        """Re-sync the name + age fields with the current cfg values.
-        Called by engine.show_title() so coming BACK to the login
-        screen (a session just ended, which clears the participant)
-        shows the cleared state instead of the stale text from last
-        time."""
-        prefill_name = str(self.engine.cfg.get("session.participant") or "")
-        if prefill_name in ("None", "NA"):
-            prefill_name = ""
-        prefill_age = str(self.engine.cfg.get("session.age") or "")
-        if prefill_age in ("None", "NA"):
-            prefill_age = ""
+        """Re-sync every field with the current cfg values. Called by
+        engine.show_title() so coming BACK to the login screen (a
+        session just ended, which clears the participant) shows the
+        cleared state instead of the stale text from last time, and
+        re-reads the sessions tree for the next free code."""
+        prefill_name = self._cfg_str("session.participant")
+        self.name_input.select_all = False
+        if not prefill_name:
+            prefill_name = self._suggested_code()
+            # A suggestion is typed over, not appended to.
+            self.name_input.select_all = bool(prefill_name)
         self.name_input.text = prefill_name
-        self.name_input.focused = False
-        self.age_input.text = prefill_age
-        self.age_input.focused = False
+        self.age_input.text = self._cfg_str("session.age")
+        self.sex_seg.set(self._cfg_str("session.sex").lower())
+        hand = self._cfg_str("session.dominant_hand").lower()
+        self.hand_seg.set(hand if hand in ("left", "right") else None)
+        self.ehi_input.text = self._cfg_str("session.edinburgh_lq")
+        self.length_input.text = self._cfg_str("session.hand_length_mm")
+        self.breadth_input.text = self._cfg_str("session.hand_breadth_mm")
+        visit = self._cfg_str("session.visit")
+        self._visit_for = None
+        self._visit_suggested_text = ""
+        self.visit_input.text = visit
+        if not visit:
+            self._refresh_visit_suggestion()
+        for f in self._fields:
+            f.focused = False
         self._na_warned = False
         self.begin_note = ""
+
+    def _focus_move(self, step: int) -> None:
+        """Tab (step 1) or Shift+Tab (step -1) through the fields, in
+        reading order; off the end lands on nothing, ready for Enter."""
+        cur = next((i for i, f in enumerate(self._fields) if f.focused), -1)
+        for f in self._fields:
+            f.focused = False
+        if cur < 0:
+            nxt = 0 if step > 0 else len(self._fields) - 1
+        else:
+            nxt = cur + step
+        if 0 <= nxt < len(self._fields):
+            self._fields[nxt].focused = True
 
     def handle_event(self, e: pygame.event.Event) -> None:
         # When the info overlay is open it is modal: any click or Esc
@@ -777,34 +944,20 @@ class TitleScreen(Screen):
                     e.type == pygame.KEYDOWN and e.key == pygame.K_ESCAPE):
                 self._show_info = False
             return
-        # Tab, pressed with neither field focused, is the only way a
+        # Tab walks the focus order, claimed here before dispatch so a
         # keyboard-only session (no mouse at all, audit finding #113)
-        # can reach the name field: TextInput.handle_event only
-        # accepts KEYDOWN while self.focused is already True, and the
-        # only way to SET focused=True is a mouse click inside the
-        # rect. Claim it here, before dispatch, so the field the Tab
-        # was meant for gets it instead of the keystroke being
-        # silently dropped.
-        tab_pressed = e.type == pygame.KEYDOWN and e.key == pygame.K_TAB
-        was_name_focused = self.name_input.focused
-        was_age_focused = self.age_input.focused
-        if tab_pressed and not (was_name_focused or was_age_focused):
-            self.name_input.focused = True
+        # can reach every field: a field only takes keys once focused,
+        # and a click used to be the only way to focus one.
+        if e.type == pygame.KEYDOWN and e.key == pygame.K_TAB:
+            shift = bool(getattr(e, "mod", 0) & pygame.KMOD_SHIFT)
+            self._focus_move(-1 if shift else 1)
             return
-        # Text inputs first so a click in either field claims focus
-        # before any button hit-test runs underneath. Order matters
-        # only in that whichever input handles the event first will
-        # also be the one to GET focus; we dispatch to both so a
-        # second click outside the field can still defocus it.
-        self.name_input.handle_event(e)
-        self.age_input.handle_event(e)
+        # Fields first so a click in one claims focus before any button
+        # hit-test runs underneath; every field sees the event so a
+        # click outside can defocus the one that had it.
+        for f in self._fields:
+            f.handle_event(e)
         self.start_btn.handle_event(e)
-        # Tab cycles name -> age -> (defocused, ready for Enter).
-        # TextInput's own Tab handling above already defocused
-        # whichever field had it; pick up the baton and focus the
-        # next one in the row.
-        if tab_pressed and was_name_focused and not self.age_input.focused:
-            self.age_input.focused = True
         if e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
             for rect, _label, _icon, action in self._pills:
                 if rect.collidepoint(e.pos):
@@ -861,16 +1014,22 @@ class TitleScreen(Screen):
         draw_text(surf, "SESSION LOG IN",
                   (cx, self.card_rect.y + 20), self.theme, self.layout,
                   pt=FONT_SMALL + 2, centre=True, colour=self.theme.muted)
-        self.name_input.draw(surf)
-        self.age_input.draw(surf)
+        for f in self._fields:
+            f.draw(surf)
         self.start_btn.draw(surf)
         if self.begin_note:
-            # The blank-name warning, directly under the card so it
-            # reads as part of the log-in flow.
+            # The blank-name or missing-hand warning, inside the card
+            # under the button so it reads as part of the log-in flow.
             draw_text(surf, self.begin_note,
-                      (cx, self.card_rect.bottom + 16),
+                      (cx, self.card_rect.y + self.NOTE_Y),
                       self.theme, self.layout, pt=FONT_SMALL + 1,
                       centre=True, colour=self.theme.warning)
+        elif self.name_input.select_all and self.name_input.text:
+            draw_text(surf, f"Next free code {self.name_input.text} "
+                      "suggested. Type to replace it, Enter to use it.",
+                      (cx, self.card_rect.y + self.NOTE_Y),
+                      self.theme, self.layout, pt=FONT_SMALL + 1,
+                      centre=True, colour=self.theme.muted)
 
         # Utility strip. A hairline rule separates the session job above
         # from the setup actions below, so the bottom row reads as tools
@@ -1071,7 +1230,7 @@ class ModeSelectScreen(Screen):
     # the mode's own first-tick refusal, leaving an abandoned session
     # folder behind with zero trial rows and no warning before the
     # click (audit finding #111). Badged on the card instead.
-    NEEDS_HARDWARE = {"force_pilot", "lighthouse", "buzz_hunt"}
+    NEEDS_HARDWARE = set(HARDWARE_MODES)
     # Per-mode accent colours. The vertical strip on the left of each
     # card uses these, plus the icon takes the same colour as a subtle
     # repeated cue.
@@ -1179,8 +1338,62 @@ class ModeSelectScreen(Screen):
         # calibrated; drawn under the button instead of silently
         # doing nothing.
         self.cal_note = ""
+        # The study battery: one press runs the fixed block order for
+        # this participant (game/battery.py), stopping at results
+        # between blocks. Sits right of the calibrate note's room so
+        # the two never overlap on a keyboard rig. Skip only shows
+        # while a step is pending, for a block that cannot be run.
+        self.battery_btn = Button(
+            pygame.Rect(720, engine.layout.height - 58, 300,
+                        BUTTON_H - 16),
+            "Study battery  (B)", self._battery,
+            self.theme, self.layout,
+        )
+        self.skip_btn = Button(
+            pygame.Rect(1036, engine.layout.height - 58, 150,
+                        BUTTON_H - 16),
+            "Skip step  (S)", self._skip_step,
+            self.theme, self.layout,
+        )
+        self.battery_note = ""
 
     CAL_UNAVAILABLE = "Calibration needs the sensor hardware"
+
+    def _battery_pending(self) -> bool:
+        try:
+            return self.engine.pending_protocol_step() is not None
+        except Exception:
+            return False
+
+    def _battery_state(self) -> tuple[bool, str, str]:
+        """(available, label, reason) for the battery button."""
+        try:
+            progress = self.engine.battery_progress()
+        except Exception:
+            progress = None
+        if isinstance(progress, dict):
+            if progress.get("finished"):
+                return False, "Battery done", ""
+            return (True, f"Continue battery {progress['done']}/"
+                          f"{progress['of']}  (B)", "")
+        try:
+            ok, reason = self.engine.battery_available()
+        except Exception as e:
+            ok, reason = False, str(e)
+        return ok, "Study battery  (B)", ("" if ok else reason)
+
+    def _battery(self) -> None:
+        ok, _label, reason = self._battery_state()
+        if not ok:
+            self.battery_note = reason
+            return
+        self.battery_note = ""
+        if not self.engine.start_battery():
+            self.battery_note = "Battery could not start"
+
+    def _skip_step(self) -> None:
+        if self._battery_pending():
+            self.engine.skip_protocol_step()
 
     def _can_calibrate(self) -> bool:
         try:
@@ -1228,7 +1441,11 @@ class ModeSelectScreen(Screen):
     )
 
     def handle_event(self, e: pygame.event.Event) -> None:
-        for b in self.buttons + [self.back_btn, self.cal_btn]:
+        controls = self.buttons + [self.back_btn, self.cal_btn,
+                                   self.battery_btn]
+        if self._battery_pending():
+            controls.append(self.skip_btn)
+        for b in controls:
             b.handle_event(e)
         if e.type == pygame.KEYDOWN and e.key in self._DIGIT_KEYS:
             idx = self._DIGIT_KEYS.index(e.key)
@@ -1243,6 +1460,12 @@ class ModeSelectScreen(Screen):
         # mouse-only control on the screen.
         elif e.type == pygame.KEYDOWN and e.key == pygame.K_c:
             self._calibrate()
+        # B starts or continues the study battery, S skips its
+        # pending step, so the study path is keyboard-only too.
+        elif e.type == pygame.KEYDOWN and e.key == pygame.K_b:
+            self._battery()
+        elif e.type == pygame.KEYDOWN and e.key == pygame.K_s:
+            self._skip_step()
 
     # Descriptions render as up to two wrapped lines under the title.
     # The cap is part of the card contract: a description that needs a
@@ -1566,6 +1789,29 @@ class ModeSelectScreen(Screen):
                        self.cal_btn.rect.centery - 8),
                       self.theme, self.layout, pt=FONT_SMALL,
                       centre=False, colour=self.theme.muted)
+        # Battery button: label follows the battery's state, and an
+        # unavailable battery reads inactive with its reason beside
+        # it, the same rule the calibrate button follows.
+        ok, label, reason = self._battery_state()
+        self.battery_btn.label = label
+        if ok:
+            self.battery_btn.colour = None
+            self.battery_btn.primary = self._battery_pending()
+        else:
+            self.battery_btn.primary = False
+            self.battery_btn.colour = tuple(
+                int(c + (255 - c) * 0.55) for c in self.theme.muted)
+        self.battery_btn.draw(surf)
+        if self._battery_pending():
+            self.skip_btn.draw(surf)
+        else:
+            bnote = self.battery_note or reason
+            if bnote:
+                draw_text(surf, bnote,
+                          (self.battery_btn.rect.right + 16,
+                           self.battery_btn.rect.centery - 8),
+                          self.theme, self.layout, pt=FONT_SMALL,
+                          centre=False, colour=self.theme.muted)
 
     @staticmethod
     def _draw_done_tick(surf: pygame.Surface, cx: int, cy: int,
@@ -4919,13 +5165,29 @@ class ResultsScreen(Screen):
         return {"left": "Left hand", "right": "Right hand",
                 "both": "Both hands"}.get(hand, "Right hand")
 
+    def _pending_step(self) -> dict | None:
+        """The battery step waiting to run, if a battery is mid-way.
+        It takes the NEXT UP card over: the suggestion is the study's,
+        not the rotation's, until the battery is done."""
+        try:
+            step = self.engine.pending_protocol_step()
+        except Exception:
+            return None
+        return step if isinstance(step, dict) else None
+
     def _next_up_plan(self) -> tuple[str | None, str]:
         """Which game to offer next, and on which hand.
 
-        Same hand as the game that just ended, so the one press really
-        is one press: no hand picker in between. Mirror is the
+        A pending battery step wins outright, hand included. Otherwise
+        the same hand as the game that just ended, so the one press
+        really is one press: no hand picker in between. Mirror is the
         exception the mode itself makes, being bilateral-only.
         """
+        step = self._pending_step()
+        if step is not None:
+            hand = str(step.get("hand") or getattr(self.engine, "hand_mode",
+                                                   "right") or "right")
+            return str(step["mode"]), hand
         after = str(getattr(self.engine, "current_block", "") or "")
         key = next_up_mode(self.engine, after)
         if key is None:
@@ -4938,16 +5200,50 @@ class ResultsScreen(Screen):
     def _start_next_up(self) -> None:
         """One press from here to the suggested game's prep.
 
-        Straight through engine.begin_game, which is the same path the
+        A pending battery step continues the protocol, which starts
+        the block through engine.begin_game. A free suggestion goes
+        straight through engine.begin_game itself, the same path the
         hand picker takes: same hand-mode switch, same lane rebuild,
-        same starter. Nothing about the
-        block (its EEG markers included) can differ from a game
-        started the long way round.
+        same starter. Nothing about the block (its EEG markers
+        included) can differ from a game started the long way round.
         """
+        if self._pending_step() is not None:
+            self.engine.continue_protocol()
+            return
         key, hand = self._next_up_plan()
         if key is None:
             return
         self.engine.begin_game(key, hand)
+
+    def _battery_card_lines(self, step: dict) -> tuple[str, str, str]:
+        """(heading, reason pill, stretch line) for a pending battery
+        step. The stretch line counts down from the moment this screen
+        was shown, so the RA can see when the 60 s are up; the button
+        is never locked, a participant who is ready may go on."""
+        try:
+            progress = self.engine.battery_progress() or {}
+        except Exception:
+            progress = {}
+        of = int(progress.get("of") or 0)
+        pos = int(step.get("position") or 0)
+        heading = f"STUDY BATTERY  step {pos} of {of}" if of else "STUDY BATTERY"
+        requested = str(step.get("hand_requested") or "")
+        role = {"hand1": "hand 1", "hand2": "hand 2",
+                "dominant": "dominant hand",
+                "non_dominant": "non-dominant hand"}.get(requested, "")
+        reason = f"Battery step {pos}" + (f", {role}" if role else "")
+        stretch = ""
+        try:
+            stretch_s = float(step.get("stretch_s") or 0.0)
+        except (TypeError, ValueError):
+            stretch_s = 0.0
+        if stretch_s > 0:
+            elapsed = (time.perf_counter() - self._shown_t
+                       if self._shown_t > 0 else 0.0)
+            left = max(0.0, stretch_s - elapsed)
+            stretch = (f"Stretch break first: {left:.0f} s left"
+                       if left > 0 else "Stretch break done")
+        return heading, reason, stretch
 
     def _draw_next_up(self, surf: pygame.Surface,
                       rect: pygame.Rect) -> None:
@@ -4970,9 +5266,15 @@ class ResultsScreen(Screen):
         pygame.draw.rect(surf, outline, rect, 1, border_radius=18)
 
         key, hand = self._next_up_plan()
-        draw_text(surf, "NEXT UP", (rect.x + 30, rect.y + 26),
+        step = self._pending_step()
+        heading, step_reason, stretch = "NEXT UP", "", ""
+        if step is not None:
+            heading, step_reason, stretch = self._battery_card_lines(step)
+        draw_text(surf, heading, (rect.x + 30, rect.y + 26),
                   self.theme, self.layout, pt=FONT_SMALL,
-                  centre=False, colour=self.theme.muted)
+                  centre=False,
+                  colour=(self.theme.accent if step is not None
+                          else self.theme.muted))
         if key is None:
             # A keyboard rig with nothing playable left. Say so rather
             # than offering a button that refuses.
@@ -5013,8 +5315,15 @@ class ResultsScreen(Screen):
             played = set()
         reason = ("Not played yet this session" if key not in played
                   else "Coming round again")
-        _strip_pill(surf, self.layout, rect.x + 30, rect.y + 186,
-                    reason, self.theme.muted)
+        if step_reason:
+            reason = step_reason
+        pill_w = _strip_pill(surf, self.layout, rect.x + 30, rect.y + 186,
+                             reason,
+                             self.theme.accent if step_reason
+                             else self.theme.muted)
+        if stretch:
+            _strip_pill(surf, self.layout, rect.x + 30 + pill_w + 10,
+                        rect.y + 186, stretch, self.theme.warning)
         draw_text(surf, f"{self._hand_phrase(hand)}, already set up",
                   (rect.x + 30, rect.y + 216),
                   self.theme, self.layout, pt=FONT_BODY,

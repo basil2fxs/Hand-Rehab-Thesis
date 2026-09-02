@@ -1204,6 +1204,50 @@ class BlockFlowTests(unittest.TestCase):
                   gap_trials_per_hand=1)
         self.assertEqual(m._stage_plan, ["loc", "span", "gap"])
 
+    def test_zero_count_stages_are_skipped_and_the_block_still_ends(self):
+        """The study battery's short form runs localisation and span
+        only (distractor and gap counts of zero). The block has to
+        walk loc into span without a distractor card in between, end
+        after the last span trial, and write block_stats with the
+        empty stages reported as zero rather than missing or raising
+        on an untouched gap staircase."""
+        m = _mode(_engine(), catch_rate=0.0, loc_trials_per_hand=1,
+                  distractor_trials_per_hand=0, span_trials=1,
+                  gap_trials_per_hand=0)
+        self.assertEqual(m._stage_plan, ["loc", "span"])
+        self.assertEqual(m.total_trials, 2)
+        finished = []
+        m.engine.finish_block = lambda: finished.append(True)
+        # Localisation trial: one correct press.
+        t = _to_trial(m)
+        self.assertEqual(m.stage, "loc")
+        t = _to_respond(m, t)
+        m.queue_press(_press_event(m.lane, t + 0.2))
+        m._tick(t + 0.21)
+        self.assertEqual(m.phase, "feedback")
+        # Straight to the span stage card, no distractor stage.
+        t = _next_trial(m, t + 0.21)
+        self.assertEqual(m.stage, "span")
+        self.assertEqual(m.stage_shown, "span")
+        t = _to_respond(m, t)
+        seq = list(m.sequence)
+        for i, lane in enumerate(seq):
+            m.queue_press(_press_event(lane, t + 0.2 + i * 0.1))
+        m._tick(t + 0.2 + len(seq) * 0.1 + 0.01)
+        self.assertEqual(m.phase, "feedback")
+        m._tick(t + 0.2 + len(seq) * 0.1 + 0.01 + m.rest_s + 0.05)
+        self.assertEqual(m.phase, "done")
+        self.assertTrue(finished)
+        stats = m.block_stats()
+        self.assertEqual(stats["stages"], {"loc": 1, "distractor": 0,
+                                           "span": 1, "gap": 0})
+        self.assertEqual(stats["loc"]["trials"], 1)
+        self.assertEqual(stats["distractor"]["trials"], 0)
+        self.assertEqual(stats["span"]["trials"], 1)
+        self.assertEqual(stats["gap"]["trials"], 0)
+        self.assertEqual(stats["gap"]["threshold"]["right"]["n_reversals"],
+                         0)
+
     def test_block_ends_and_carries_the_staircase(self):
         m = _mode(_engine(), catch_rate=0.0)
         m = _only_stage(m, "loc", 1)

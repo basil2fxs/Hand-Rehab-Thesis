@@ -1258,7 +1258,8 @@ class TextInput:
                  initial: str = "",
                  max_len: int = 32,
                  numeric: bool = False,
-                 font_pt: int = FONT_BODY + 2) -> None:
+                 font_pt: int = FONT_BODY + 2,
+                 signed: bool = False) -> None:
         self.rect = rect
         self.theme = theme
         self.layout = layout
@@ -1267,9 +1268,18 @@ class TextInput:
         self.text = str(initial)
         self.max_len = max_len
         self.numeric = numeric
+        # A numeric field that may start with a minus sign (the
+        # Edinburgh laterality quotient runs -100 to +100).
+        self.signed = signed
         self.font_pt = font_pt
         self.focused = False
         self.hover = False
+        # Type-over state for a field pre-filled with a SUGGESTION (the
+        # next free participant code): the first character typed
+        # replaces the whole text instead of appending to it, so a
+        # name is one keystroke away from a suggested code. Cleared by
+        # any edit, and by a click into the field.
+        self.select_all = False
         self._born = time.perf_counter()
 
     @property
@@ -1281,9 +1291,12 @@ class TextInput:
             self.hover = self.rect.collidepoint(e.pos)
         elif e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
             self.focused = self.rect.collidepoint(e.pos)
+            if self.focused:
+                self.select_all = False
         elif e.type == pygame.KEYDOWN and self.focused:
             if e.key == pygame.K_BACKSPACE:
-                self.text = self.text[:-1]
+                self.text = "" if self.select_all else self.text[:-1]
+                self.select_all = False
             elif e.key in (pygame.K_RETURN, pygame.K_TAB, pygame.K_ESCAPE):
                 # Defocus on Enter / Tab / Esc so global handlers can
                 # still react to those keys.
@@ -1293,9 +1306,16 @@ class TextInput:
                 # Filter to printable ASCII + space for safety. Names can
                 # technically contain unicode but the CSV layer keeps
                 # things simple if we stick to ASCII.
-                if ch and ch.isprintable() and len(self.text) < self.max_len:
-                    if self.numeric and not ch.isdigit():
+                if not ch or not ch.isprintable():
+                    return
+                if self.numeric and not ch.isdigit():
+                    if not (self.signed and ch == "-"
+                            and (self.select_all or not self.text)):
                         return
+                if self.select_all:
+                    self.text = ""
+                    self.select_all = False
+                if len(self.text) < self.max_len:
                     self.text += ch
 
     def draw(self, surf: pygame.Surface) -> None:
@@ -1346,6 +1366,115 @@ class TextInput:
                     (caret_x, self.rect.bottom - 10),
                     width=2,
                 )
+
+
+class Segmented:
+    """A row of mutually exclusive options, one lit: sex and dominant
+    hand on the login screen.
+
+    Click a segment to pick it. When the control has keyboard focus
+    (Tab reaches it like a text field) Left and Right move the pick,
+    each option's hotkey letter picks it outright, and Enter, Tab or
+    Esc hand focus back, the same contract TextInput keeps so the
+    login screen can walk one focus order across both kinds of field.
+    `value` is the picked option's key, or None while nothing is
+    picked, which is what a required field starts as.
+    """
+
+    BORDER_RADIUS = 10
+
+    def __init__(self, rect: pygame.Rect, theme: Theme, layout: Layout,
+                 options: list[tuple[str, str]],
+                 label: str = "",
+                 initial: str | None = None,
+                 hotkeys: dict[str, str] | None = None,
+                 font_pt: int = FONT_BODY) -> None:
+        self.rect = rect
+        self.theme = theme
+        self.layout = layout
+        self.options = list(options)          # (key, caption)
+        self.label = label
+        self.value: str | None = (initial if any(k == initial for k, _c
+                                                 in self.options)
+                                  else None)
+        # hotkey character -> option key
+        self.hotkeys = dict(hotkeys or {})
+        self.font_pt = font_pt
+        self.focused = False
+        self.hover = False
+
+    def _index(self) -> int:
+        for i, (k, _c) in enumerate(self.options):
+            if k == self.value:
+                return i
+        return -1
+
+    def _segment_rects(self) -> list[pygame.Rect]:
+        n = max(1, len(self.options))
+        w = self.rect.w / n
+        return [pygame.Rect(int(self.rect.x + i * w), self.rect.y,
+                            int(w) if i < n - 1
+                            else self.rect.right - int(self.rect.x + i * w),
+                            self.rect.h)
+                for i in range(n)]
+
+    def set(self, key: str | None) -> None:
+        self.value = key if any(k == key for k, _c in self.options) else None
+
+    def handle_event(self, e: pygame.event.Event) -> None:
+        if e.type == pygame.MOUSEMOTION:
+            self.hover = self.rect.collidepoint(e.pos)
+        elif e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
+            self.focused = self.rect.collidepoint(e.pos)
+            if self.focused:
+                for r, (k, _c) in zip(self._segment_rects(), self.options):
+                    if r.collidepoint(e.pos):
+                        self.value = k
+                        break
+        elif e.type == pygame.KEYDOWN and self.focused:
+            if e.key in (pygame.K_RETURN, pygame.K_TAB, pygame.K_ESCAPE):
+                self.focused = False
+            elif e.key in (pygame.K_LEFT, pygame.K_RIGHT):
+                i = self._index()
+                step = 1 if e.key == pygame.K_RIGHT else -1
+                if i < 0:
+                    i = 0 if step > 0 else len(self.options) - 1
+                else:
+                    i = (i + step) % len(self.options)
+                self.value = self.options[i][0]
+            else:
+                ch = (e.unicode or "").lower()
+                if ch and ch in self.hotkeys:
+                    self.set(self.hotkeys[ch])
+
+    def draw(self, surf: pygame.Surface) -> None:
+        if self.label:
+            lbl_font = self.layout.font(FONT_SMALL + 4)
+            lbl = lbl_font.render(self.label, True, self.theme.muted)
+            surf.blit(lbl, (self.rect.x, self.rect.y - 26))
+        body_colour = tuple(
+            max(0, min(255, c - 14)) for c in self.theme.background)
+        pygame.draw.rect(surf, body_colour, self.rect,
+                         border_radius=self.BORDER_RADIUS)
+        font = self.layout.font(self.font_pt)
+        rects = self._segment_rects()
+        for r, (k, caption) in zip(rects, self.options):
+            picked = (k == self.value)
+            if picked:
+                pygame.draw.rect(surf, self.theme.accent, r.inflate(-4, -6),
+                                 border_radius=self.BORDER_RADIUS - 2)
+            colour = (255, 255, 255) if picked else self.theme.foreground
+            text = font.render(caption, True, colour)
+            prev_clip = surf.get_clip()
+            surf.set_clip(r.inflate(-4, -4))
+            surf.blit(text, text.get_rect(center=r.center))
+            surf.set_clip(prev_clip)
+        border = (self.theme.accent if self.focused
+                  else self.theme.foreground if self.hover
+                  else self.theme.muted)
+        pygame.draw.rect(surf, border, self.rect,
+                         width=2 if self.focused else 1,
+                         border_radius=self.BORDER_RADIUS)
 
 
 class Slider:

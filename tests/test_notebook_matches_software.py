@@ -515,3 +515,105 @@ def test_the_export_cell_is_last():
     assert "write_report(ctx)" in code[-1], (
         "the export cell must be the last code cell so it captures "
         "every section above it")
+
+
+# --------------------------------------------------------------- cohort
+# The cohort chapter (docs/research/healthy_baseline_study.txt, Section
+# 4) reads the whole sessions tree and writes its own report. Its
+# contract with the rest of the notebook is pinned here; the numbers
+# it produces are pinned in tests/test_cohort_notebook.py on a cohort
+# the real engine wrote.
+
+class TestCohortChapterContract:
+    SECTIONS = ["sec_cohort_selection", "sec_cohort_describe",
+                "sec_cohort_hands", "sec_cohort_retest",
+                "sec_cohort_practice", "sec_cohort_validity",
+                "sec_cohort_export"]
+    HELPERS = ["write_cohort_report", "icc_ci", "cohort_long_table",
+               "cohort_catalogue", "cohort_paired", "cohort_values",
+               "is_study_code", "cohort_hand_role"]
+    BATTERY_MODES = {"reaction", "mirror", "rhythm", "echo", "force_pilot",
+                     "lighthouse", "chords", "buzz_hunt", "pattern"}
+
+    def test_setup_defines_every_cohort_name(self, source):
+        tree = ast.parse(source)
+        defined = {node.name for node in tree.body
+                   if isinstance(node, ast.FunctionDef)}
+        missing = [n for n in self.SECTIONS + self.HELPERS
+                   if n not in defined]
+        assert missing == [], f"the setup cell no longer defines {missing}"
+
+    def test_long_table_columns_match_the_design(self, source):
+        (cols,) = _notebook_names(source, ["COHORT_LONG_COLS"])
+        assert cols == ["participant", "visit", "day", "hand", "hand_role",
+                        "mode", "metric", "value", "n_trials",
+                        "block_folder", "config_hash"]
+
+    def test_registry_covers_the_nine_battery_modes(self, source):
+        floor, registry, modes = _notebook_names(
+            source, ["COHORT_BH_FLOOR_MS", "COHORT_METRICS", "COHORT_MODES"])
+        assert {mode for mode, _m in registry} == self.BATTERY_MODES
+        assert set(modes) == self.BATTERY_MODES
+        # Syllables and adaptive are excluded from the battery by design.
+        assert "syllables" not in {m for m, _ in registry}
+        assert "adaptive" not in {m for m, _ in registry}
+        # Every mode has exactly one headline metric for the figures.
+        for mode in self.BATTERY_MODES:
+            heads = [m for (md, m), s in registry.items()
+                     if md == mode and s.get("headline")]
+            assert len(heads) == 1, f"{mode} headline metrics: {heads}"
+        assert floor == 40.0
+
+    def test_the_design_minimum_is_the_analysed_sample(self, source):
+        n_design, min_n = _notebook_names(
+            source, ["COHORT_N_DESIGN", "COHORT_MIN_N"])
+        assert n_design == 28
+        assert min_n == 28
+
+    def test_icc_ci_matches_the_shrout_fleiss_example(self, source):
+        """Shrout and Fleiss 1979, Table 2, six targets by four raters:
+        ICC(2,1) 0.29 with 0.019 to 0.761, ICC(3,1) 0.71 with 0.342 to
+        0.946, the values the R psych package and pingouin print for
+        the same data (McGraw and Wong 1996 intervals)."""
+        (icc_ci,) = _notebook_functions(source, ["icc_ci"])
+        import numpy as np
+        sf = np.array([[9, 2, 5, 8], [6, 1, 3, 2], [8, 4, 6, 8],
+                       [7, 1, 2, 6], [10, 5, 6, 9], [6, 2, 4, 7]], float)
+        out = icc_ci(sf)
+        assert out["n"] == 6 and out["k"] == 4
+        assert out["icc21"] == pytest.approx(0.29, abs=0.005)
+        assert out["lo21"] == pytest.approx(0.019, abs=0.001)
+        assert out["hi21"] == pytest.approx(0.761, abs=0.001)
+        assert out["icc31"] == pytest.approx(0.715, abs=0.001)
+        assert out["lo31"] == pytest.approx(0.342, abs=0.001)
+        assert out["hi31"] == pytest.approx(0.946, abs=0.001)
+        # Degenerate input refuses with NaNs rather than raising.
+        flat = icc_ci(np.ones((6, 2)))
+        assert flat["icc21"] != flat["icc21"]
+
+    def test_cohort_cells_run_every_section_through_keep(self):
+        code = [src for src, kind in _cells() if kind == "code"]
+        cohort_cells = [c for c in code if "sec_cohort_" in c
+                        and "def sec_cohort_" not in c]
+        called = set()
+        for cell in cohort_cells:
+            assert "keep(" in cell, cell
+            called |= set(re.findall(r"\b(sec_cohort_\w+)\s*\(", cell))
+        assert called == set(self.SECTIONS)
+        # The cohort report cell sits before the per-session export
+        # cell, which must stay last.
+        report_cells = [i for i, c in enumerate(code)
+                        if "write_cohort_report(ctx, cohort)" in c
+                        and "def write_cohort_report" not in c]
+        assert len(report_cells) == 1
+        assert 0 < report_cells[0] < len(code) - 1
+
+    def test_the_two_reports_stay_apart(self):
+        setup = _cells()[2][0]
+        assert 'COHORT_RESULTS = Path(SESSIONS_DIR)' in setup
+        assert 'if not s["name"].startswith("cohort_")]' in setup
+        assert 'if s["name"].startswith("cohort_")]' in setup
+        # Figures are filed by absolute path so the per-session report
+        # written after the cohort cells still finds its own.
+        assert '"figures": [str(FIGDIR / n)' in setup
+        assert "_img_tag(Path(fig))" in setup

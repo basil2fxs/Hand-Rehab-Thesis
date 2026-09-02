@@ -99,6 +99,11 @@ class GameEngine:
             impairment_score=str(cfg.get("session.impairment_score", "") or ""),
             hand_length_mm=str(cfg.get("session.hand_length_mm", "") or ""),
             hand_breadth_mm=str(cfg.get("session.hand_breadth_mm", "") or ""),
+            # Intake fields. The login screen overwrites these through
+            # begin_session; a config value is only ever a pre-fill.
+            sex=str(cfg.get("session.sex", "") or ""),
+            edinburgh_lq=str(cfg.get("session.edinburgh_lq", "") or ""),
+            visit=str(cfg.get("session.visit", "") or ""),
             config_snapshot=copy.deepcopy(cfg.data),
         )
         # Fallbacks here MUST match config/default.yaml + ScoreConfig defaults.
@@ -180,10 +185,23 @@ class GameEngine:
         # The current phase ("pretest" / "main" / "aftertest" or
         # empty) is what gets written into the trial CSV's `phase`
         # column.
-        self._protocol_steps: list[tuple[str, str]] = []
+        self._protocol_steps: list[dict] = []
         self._protocol_index: int = 0
         self._protocol_active: bool = False
         self._current_phase: str = ""
+        # The legacy protocol chains blocks back to back with no
+        # results screen between them. The study battery runs on the
+        # same steps but stops at results after every block, where
+        # NEXT UP offers the next step: the participant gets the
+        # breather and the RA the check that the design's run sheet
+        # asks for. `_protocol_current` is the step whose block is
+        # live (or just ended), so an abandon can offer it again.
+        self._protocol_auto_advance: bool = True
+        self._protocol_current: dict | None = None
+        # Study battery state (game/battery.py): the plan, the config
+        # snapshot the overrides replaced, and one row per step that
+        # reached an end. None when no battery is running.
+        self._battery: dict | None = None
         # `hit_streak` counts consecutive hits in a row. We fire an
         # encouragement popup when it hits one of the thresholds below.
         # `miss_streak` is the opposite - when it hits the recovery
@@ -2124,17 +2142,58 @@ class GameEngine:
         self._across_blocks_mean_rt = []
         self._across_blocks_mean_peak = []
 
-    def begin_session(self, name: str, age: str) -> None:
+    # Intake fields the login commits alongside name and age. Each is
+    # a Session attribute and a session.* config key with the same
+    # name, so begin_session can write both in one loop.
+    INTAKE_FIELDS = ("sex", "dominant_hand", "edinburgh_lq", "visit",
+                     "hand_length_mm", "hand_breadth_mm")
+
+    def begin_session(self, name: str, age: str, *,
+                      sex: str | None = None,
+                      dominant_hand: str | None = None,
+                      edinburgh_lq: str | None = None,
+                      visit: str | None = None,
+                      hand_length_mm: str | None = None,
+                      hand_breadth_mm: str | None = None) -> None:
         """Log in: the login screen's commit. One session spans every
         game played from here until end_session (or an app quit), so
         the identity typed once tags every block's files and no game
         ever re-asks for it. Age is free text, same rule as the input
-        field: empty means not provided."""
+        field: empty means not provided.
+
+        The intake keywords follow the same rule: a string (empty
+        included) is what the screen collected and lands in the
+        session and the config; None means the caller had no field
+        for it and whatever the config already holds stands, so a
+        per-participant yaml that sets session.dominant_hand still
+        works for a login that never showed the toggle.
+        """
         name = name or "NA"
         self.cfg.data.setdefault("session", {})["participant"] = name
         self.cfg.data["session"]["age"] = age
         self.session.participant = name
         self.session.age = age
+        given = {"sex": sex, "dominant_hand": dominant_hand,
+                 "edinburgh_lq": edinburgh_lq, "visit": visit,
+                 "hand_length_mm": hand_length_mm,
+                 "hand_breadth_mm": hand_breadth_mm}
+        for key in self.INTAKE_FIELDS:
+            value = given.get(key)
+            if value is None:
+                # Not offered by the caller: the config's value (a
+                # per-participant yaml, or nothing) is the answer, and
+                # it is re-read here because the Session was built at
+                # boot, before any config edit this run.
+                value = self.cfg.get(f"session.{key}")
+                setattr(self.session, key,
+                        "" if value is None else str(value).strip())
+                continue
+            value = str(value).strip()
+            self.cfg.data["session"][key] = value or None
+            setattr(self.session, key, value)
+        # A battery left over from an abnormal end must not carry its
+        # overrides or its position into the next person's session.
+        self._cancel_battery()
         self._session_active = True
         self._session_started_perf = time.perf_counter()
         # Login-session token, stamped onto any max press probed this
@@ -2155,8 +2214,11 @@ class GameEngine:
         self._uncal_ack = set()
         self._clear_session_carry()
         self.eeg_session_start()
-        log.info("Session started: participant=%s age=%s",
-                 name, age or "(not given)")
+        log.info("Session started: participant=%s age=%s visit=%s "
+                 "dominant=%s",
+                 name, age or "(not given)",
+                 self.session.visit or "(not given)",
+                 self.session.dominant_hand or "(not given)")
         # Calibration is a session event, so it runs when the session
         # starts. Every hand the rig can serve goes through the flow
         # here, once, and the hub follows when it finishes or is
@@ -2212,12 +2274,24 @@ class GameEngine:
         participant's time, which is exactly what _session_games
         already counts.
         """
+        # Battery position (1-based) when this game fulfilled a battery
+        # step, else 0, so the strip can tell the two apart without
+        # reading metadata. Guarded: test doubles hand in a bare or
+        # mocked session.
+        battery_pos = 0
+        stamp = getattr(getattr(self, "session", None), "battery", None)
+        if isinstance(stamp, dict):
+            try:
+                battery_pos = int(stamp.get("position", 0) or 0)
+            except (TypeError, ValueError):
+                battery_pos = 0
         entry = {
             "mode": str(getattr(self, "current_block", "") or ""),
             "hand": str(getattr(self, "hand_mode", "") or ""),
             "score": int(getattr(self, "score", 0) or 0),
             "stars": self._session_stars_for_block(),
             "status": status,
+            "battery_pos": battery_pos,
         }
         rows = getattr(self, "_session_log", None)
         if rows is None:
@@ -2300,10 +2374,19 @@ class GameEngine:
                  int(getattr(self, "_session_games", 0)),
                  self.session_minutes())
         self.eeg_session_end()
+        # A battery that did not finish ends with the session: its
+        # overrides come off the config here, so the next login plays
+        # standard-length blocks again.
+        self._cancel_battery()
         self.session.participant = "NA"
         self.session.age = ""
         self.cfg.data.setdefault("session", {})["participant"] = None
         self.cfg.data["session"]["age"] = None
+        # The intake fields are this person's, not the machine's.
+        for key in self.INTAKE_FIELDS:
+            setattr(self.session, key, "")
+            self.cfg.data["session"][key] = None
+        self.session.battery = {}
         self._session_active = False
         self._session_started_perf = None
         self._session_games = 0
@@ -4394,6 +4477,18 @@ class GameEngine:
                 # but its t_event must be the real countdown onset.
                 countdown_t = time.perf_counter()
         self.session.started_at = time.strftime("%Y-%m-%dT%H:%M:%S")
+        # Which battery step this block fulfils, if any. Stamped here,
+        # in the one path every starter takes, so NEXT UP, the hub and
+        # Retry all record the same thing. A battery block also
+        # refreshes the config snapshot: the short-form keys are on
+        # the live config and the block's own metadata must show
+        # them, not the standard counts the engine booted with.
+        try:
+            self.session.battery = self._battery_stamp()
+        except Exception:
+            self.session.battery = {}
+        if self.session.battery:
+            self.session.config_snapshot = copy.deepcopy(self.cfg.data)
         self.score = 0
         self.hits = 0
         self.misses = 0
@@ -5109,61 +5204,356 @@ class GameEngine:
         """Kick off the pretest / main / aftertest sequence defined by
         cfg.protocol.blocks. Returns True if a protocol started, False
         if no protocol is configured (caller falls back to single-
-        block flow). Each step is a (mode, phase) tuple; mode picks
-        which begin_*_block to call, phase becomes the trial CSV's
-        `phase` column for that block. Rhythm in a protocol isn't
-        supported here because rhythm needs a beatmap picked first;
-        if a researcher really wants rhythm in a protocol they can
-        rerun rhythm manually."""
+        block flow). Each step is a mapping with `mode` and `phase`
+        (or a (mode, phase) pair); mode picks which begin_*_block to
+        call, phase becomes the trial CSV's `phase` column for that
+        block. A step may also name a `hand` (left / right / both);
+        without one the block runs on whatever hand is set, as it
+        always did. Rhythm needs a `track` (a file in the music dir)
+        or it opens the song screen instead."""
         steps_raw = self.cfg.get("protocol.blocks") or []
         if not steps_raw:
             return False
-        parsed: list[tuple[str, str]] = []
+        parsed: list[dict] = []
         for entry in steps_raw:
-            if isinstance(entry, dict):
-                mode = str(entry.get("mode") or "").lower()
-                phase = str(entry.get("phase") or "").lower()
-            elif (isinstance(entry, (list, tuple))
-                    and len(entry) >= 2):
-                mode = str(entry[0]).lower()
-                phase = str(entry[1]).lower()
-            else:
-                continue
-            if mode in ("classic", "adaptive", "mirror", "reaction"):
-                parsed.append((mode, phase))
+            step = self._parse_protocol_step(entry)
+            if step is not None:
+                parsed.append(step)
         if not parsed:
             return False
         self._protocol_steps = parsed
         self._protocol_index = 0
         self._protocol_active = True
+        self._protocol_auto_advance = True
+        self._protocol_current = None
         self._begin_next_protocol_step()
         return True
 
+    def _parse_protocol_step(self, entry) -> dict | None:
+        """One protocol step as a dict, or None for an entry that
+        names no mode this engine can start (dropped, so the rest of
+        the protocol still runs)."""
+        hand = None
+        extra: dict = {}
+        if isinstance(entry, dict):
+            mode = str(entry.get("mode") or "").lower()
+            phase = str(entry.get("phase") or "").lower()
+            if entry.get("hand"):
+                hand = str(entry["hand"]).lower()
+            for key in ("track", "difficulty", "stretch_s", "position",
+                        "hand_requested"):
+                if entry.get(key) is not None:
+                    extra[key] = entry[key]
+        elif isinstance(entry, (list, tuple)) and len(entry) >= 2:
+            mode = str(entry[0]).lower()
+            phase = str(entry[1]).lower()
+        else:
+            return None
+        if mode not in self._BLOCK_STARTERS:
+            return None
+        if hand is not None and hand not in ("left", "right", "both"):
+            return None
+        return {"mode": mode, "phase": phase, "hand": hand, **extra}
+
     def _begin_next_protocol_step(self) -> None:
         """Start the protocol step at `_protocol_index`. Called from
-        start_protocol for the first block and from finish_block when
-        the previous block ends. Falls back to results / mode-select
-        when the protocol has run out of steps."""
-        if (not self._protocol_active
-                or self._protocol_index >= len(self._protocol_steps)):
-            self._protocol_active = False
-            self._current_phase = ""
-            return
-        mode, phase = self._protocol_steps[self._protocol_index]
-        self._current_phase = phase
+        start_protocol for the first block, from finish_block when the
+        previous block ends (auto-advance) and from continue_protocol
+        when NEXT UP or the hub takes the next battery step. Falls
+        back to results / mode-select when the protocol has run out of
+        steps. A battery step this rig cannot run is skipped here and
+        recorded as such, rather than opened and abandoned."""
+        while True:
+            if (not self._protocol_active
+                    or self._protocol_index >= len(self._protocol_steps)):
+                self._protocol_active = False
+                self._current_phase = ""
+                self._protocol_current = None
+                if self._battery is not None:
+                    self._finish_battery()
+                return
+            step = self._protocol_steps[self._protocol_index]
+            reason = self._protocol_step_refusal(step)
+            if reason:
+                self._protocol_index += 1
+                self._log_battery_step(step, "skipped", reason)
+                continue
+            break
+        self._current_phase = str(step.get("phase") or "")
         self._protocol_index += 1
-        if mode == "classic":
-            self.begin_classic_block()
-        elif mode == "adaptive":
-            self.begin_adaptive_block()
-        elif mode == "mirror":
-            self.begin_mirror_block()
-        elif mode == "reaction":
-            self.begin_reaction_block()
-        else:
-            # Shouldn't reach here; start_protocol filters by mode.
+        self._protocol_current = step
+        mode = step["mode"]
+        hand = step.get("hand")
+        if hand is None:
+            # The legacy path: no hand named, so the block runs on the
+            # hand already set, through the starter directly.
+            self.block_starter(mode)()
+            return
+        if mode == "rhythm":
+            self._begin_protocol_rhythm(step)
+            return
+        if not self.begin_game(mode, hand):
+            # Refused at the last moment (a board dropped between the
+            # check above and here). Say so and offer the next step.
+            self._log_battery_step(step, "skipped", "refused by rig")
+            self._protocol_current = None
+            self._begin_next_protocol_step()
+
+    def _protocol_step_refusal(self, step: dict) -> str:
+        """Why this rig cannot run the step right now, or ''. Only
+        battery steps are screened: the legacy protocol never named a
+        hand and is left to its own behaviour."""
+        if self._battery is None:
+            return ""
+        from .battery import BatteryStep, unplayable_reason
+        probe = BatteryStep(mode=step["mode"], hand=step.get("hand")
+                            or self.hand_mode,
+                            hand_requested=str(step.get("hand_requested")
+                                               or ""))
+        return unplayable_reason(probe, getattr(self, "source", None),
+                                 self.second_board_missing())
+
+    def _begin_protocol_rhythm(self, step: dict) -> None:
+        """Rhythm inside a protocol: the pinned track, the pinned
+        difficulty, straight into the block. Without a findable track
+        the song screen opens so the RA can pick, and the step still
+        counts as this one when the block starts from there."""
+        from .battery import find_track
+        hand = step.get("hand") or self.hand_mode
+        self.set_hand_mode(hand)
+        track = find_track(self.cfg, step.get("track"))
+        difficulty = str(step.get("difficulty")
+                         or self.cfg.get("rhythm.difficulty", "medium"))
+        if track is None:
+            log.warning("protocol rhythm track %r not found; opening "
+                        "the song screen", step.get("track"))
+            self.show_rhythm_setup()
+            return
+        from ..audio.beatmap import extract_beatmap
+        bm = extract_beatmap(str(track), difficulty=difficulty,
+                             num_lanes=self.total_lanes)
+        self.cfg.data.setdefault("rhythm", {})["difficulty"] = difficulty
+        self.begin_rhythm_block(bm)
+
+    def continue_protocol(self) -> bool:
+        """Take the next pending step of a protocol that stops at
+        results between blocks (the battery). False when nothing is
+        pending, so a caller can fall back to the ordinary flow."""
+        if self.pending_protocol_step() is None:
+            return False
+        self._begin_next_protocol_step()
+        return True
+
+    def pending_protocol_step(self) -> dict | None:
+        """The step NEXT UP should offer, or None. Only a protocol
+        that waits at results has a pending step to show; the legacy
+        chain never lands on results mid-way."""
+        if (not self._protocol_active or self._protocol_auto_advance
+                or self._protocol_index >= len(self._protocol_steps)):
+            return None
+        if self.block_is_running():
+            return None
+        return dict(self._protocol_steps[self._protocol_index])
+
+    def skip_protocol_step(self) -> bool:
+        """Drop the pending step (a board that will not come back, a
+        participant who declines a block) and move on. Recorded in the
+        battery log so the notebook sees a skip, not a silence."""
+        step = self.pending_protocol_step()
+        if step is None:
+            return False
+        self._protocol_index += 1
+        self._log_battery_step(step, "skipped", "skipped by researcher")
+        if self._protocol_index >= len(self._protocol_steps):
             self._protocol_active = False
             self._current_phase = ""
+            self._protocol_current = None
+            if self._battery is not None:
+                self._finish_battery()
+        return True
+
+    # ---- study battery ------------------------------------------------------
+    def battery_available(self, preset: str = "study_battery"
+                          ) -> tuple[bool, str]:
+        """Whether the hub may start the battery, and if not, the one
+        line that says why."""
+        from .battery import build_plan, BatteryError, load_preset
+        if load_preset(self.cfg, preset) is None:
+            return False, "No study battery preset in the config"
+        if not getattr(self, "_session_active", False):
+            return False, "Log in first"
+        if self._battery is not None:
+            return True, ""
+        try:
+            build_plan(self.cfg, self.session.participant,
+                       self.session.dominant_hand, preset)
+        except BatteryError as e:
+            return False, str(e)
+        return True, ""
+
+    def start_battery(self, preset: str = "study_battery") -> bool:
+        """Start the study battery for the logged-in participant.
+
+        The plan comes from game/battery.build_plan: the cell from the
+        code, the hands from the dominant hand entered at login, the
+        block order from the preset. The preset's overrides go onto
+        the live config now and come off when the battery ends (last
+        block, skip past the end, or the session ending), so a free
+        pick after the battery plays a standard-length block again.
+        Returns False, with the reason logged, when no plan can be
+        built; the hub asks battery_available first so this is only
+        a guard.
+        """
+        from .battery import build_plan, BatteryError, apply_overrides
+        if self._battery is not None:
+            return self.continue_protocol()
+        try:
+            plan = build_plan(self.cfg, self.session.participant,
+                              self.session.dominant_hand, preset)
+        except BatteryError as e:
+            log.warning("battery not started: %s", e)
+            return False
+        snapshot = apply_overrides(self.cfg.data, plan.overrides)
+        steps = []
+        for st in plan.steps:
+            steps.append({
+                "mode": st.mode, "phase": st.phase, "hand": st.hand,
+                "hand_requested": st.hand_requested,
+                "track": st.track, "difficulty": st.difficulty,
+                "stretch_s": st.stretch_before_s,
+                "position": st.position,
+            })
+        self._battery = {
+            "id": plan.id,
+            "preset": plan.preset,
+            "cell": dict(plan.cell),
+            "dominant_hand": plan.dominant_hand,
+            "of": len(steps),
+            "budget_min": plan.budget_min,
+            "overrides_snapshot": snapshot,
+            "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "started_perf": time.perf_counter(),
+            "log": [],
+            "done": False,
+        }
+        self._protocol_steps = steps
+        self._protocol_index = 0
+        self._protocol_active = True
+        self._protocol_auto_advance = False
+        self._protocol_current = None
+        log.info("Battery %s started for %s: cell %s%s, %d steps",
+                 plan.id, self.session.participant,
+                 plan.cell.get("mode_order"),
+                 "" if plan.cell.get("hand_first") == "dominant"
+                 else " non-dominant first", len(steps))
+        self._begin_next_protocol_step()
+        return True
+
+    def _battery_stamp(self) -> dict:
+        """What metadata.json records for the block that is starting:
+        {} for a free pick, else the battery id, cell and position.
+        A block matches a step when it is the step's mode on the
+        step's hand, so a Retry after an abandon and a NEXT UP start
+        stamp the same position."""
+        bat = self._battery
+        step = self._protocol_current
+        if bat is None or step is None:
+            return {}
+        if (str(step.get("mode")) != str(self.current_block)
+                or str(step.get("hand") or self.hand_mode)
+                != str(self.hand_mode)):
+            return {}
+        return {
+            "id": bat["id"],
+            "preset": bat["preset"],
+            "cell": dict(bat["cell"]),
+            "position": int(step.get("position") or 0),
+            "of": int(bat["of"]),
+            "step": f"{step['mode']}_{step.get('hand') or self.hand_mode}",
+            "hand_requested": str(step.get("hand_requested") or ""),
+            "phase": str(step.get("phase") or ""),
+        }
+
+    def _log_battery_step(self, step: dict, status: str,
+                          reason: str = "") -> None:
+        if self._battery is None:
+            return
+        self._battery["log"].append({
+            "position": int(step.get("position") or 0),
+            "mode": step.get("mode"),
+            "hand": step.get("hand"),
+            "status": status,
+            "reason": reason,
+            "folder": (str(self.last_session_root)
+                       if status in ("completed", "abandoned") else ""),
+        })
+
+    def battery_progress(self) -> dict | None:
+        """The one line the session strip and the cards read: which
+        battery, how far along, what comes next. None when no battery
+        is running or has just finished this session."""
+        bat = self._battery
+        if bat is None:
+            return None
+        done = sum(1 for r in bat["log"] if r["status"] != "abandoned")
+        pending = self.pending_protocol_step()
+        current = self._protocol_current if self.block_is_running() else None
+        return {
+            "id": bat["id"],
+            "cell": dict(bat["cell"]),
+            "done": min(done, bat["of"]),
+            "of": bat["of"],
+            "finished": bool(bat.get("done")),
+            "next": pending,
+            "current": current,
+            "minutes": ((time.perf_counter() - bat["started_perf"]) / 60.0
+                        if bat.get("started_perf") else 0.0),
+            "budget_min": bat.get("budget_min", 0.0),
+            "log": list(bat["log"]),
+        }
+
+    def _finish_battery(self) -> None:
+        """The last step ended: put the config back and keep the
+        record for the results card. The record stays until the next
+        login so the hub can say the battery is done."""
+        from .battery import restore_overrides
+        bat = self._battery
+        if bat is None:
+            return
+        if not bat.get("done"):
+            restore_overrides(self.cfg.data, bat.get("overrides_snapshot")
+                              or {})
+            bat["overrides_snapshot"] = {}
+            bat["done"] = True
+            bat["finished_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+            log.info("Battery %s finished: %d of %d steps completed, "
+                     "%.1f min", bat["id"],
+                     sum(1 for r in bat["log"]
+                         if r["status"] == "completed"),
+                     bat["of"],
+                     (time.perf_counter() - bat["started_perf"]) / 60.0)
+        self._protocol_active = False
+        self._protocol_auto_advance = True
+        self._protocol_current = None
+        self._current_phase = ""
+
+    def _cancel_battery(self) -> None:
+        """Forget the battery entirely (session end, a new login),
+        restoring the config if the overrides are still on."""
+        bat = getattr(self, "_battery", None)
+        if bat is None:
+            return
+        from .battery import restore_overrides
+        if not bat.get("done"):
+            restore_overrides(self.cfg.data, bat.get("overrides_snapshot")
+                              or {})
+        self._battery = None
+        self._protocol_steps = []
+        self._protocol_index = 0
+        self._protocol_active = False
+        self._protocol_auto_advance = True
+        self._protocol_current = None
+        self._current_phase = ""
 
     def _generate_session_report(self) -> None:
         """Build the researcher outputs (report.html, summary.csv,
@@ -5702,19 +6092,32 @@ class GameEngine:
         # summary. getattr-safe for engines built bare in tests.
         self._session_games = getattr(self, "_session_games", 0) + 1
         self._record_session_game("completed")
+        stamp = getattr(self.session, "battery", None)
+        current_step = getattr(self, "_protocol_current", None)
+        if isinstance(stamp, dict) and stamp and current_step is not None:
+            self._log_battery_step(current_step, "completed")
+            self._protocol_current = None
         # If a protocol is running, auto-advance to the next step
         # instead of bouncing to the Results screen between blocks.
         # The final Results screen still shows after the LAST step
         # finishes (no more entries -> _protocol_active flips False).
+        # A battery stops at results between steps instead: NEXT UP
+        # carries the next one.
         if (self._protocol_active
                 and self._protocol_index < len(self._protocol_steps)):
-            self._begin_next_protocol_step()
+            if getattr(self, "_protocol_auto_advance", True):
+                self._begin_next_protocol_step()
+                return
+            self.show_results()
             return
         # Protocol just finished its final step -> clear the phase
         # so subsequent free-play blocks aren't labelled "aftertest".
         if self._protocol_active:
             self._protocol_active = False
             self._current_phase = ""
+            self._protocol_current = None
+            if getattr(self, "_battery", None) is not None:
+                self._finish_battery()
         self.show_results()
 
     def _abandon_if_in_block(self) -> None:
@@ -5766,6 +6169,19 @@ class GameEngine:
         # produced data and took the participant's time.
         self._session_games = getattr(self, "_session_games", 0) + 1
         self._record_session_game("abandoned")
+        # A battery step cut short is offered again: the index steps
+        # back so NEXT UP and the hub show the same step, and the
+        # abandoned folder is in the log for the record. The RA can
+        # skip it deliberately from the hub if it cannot be redone.
+        stamp = getattr(self.session, "battery", None)
+        current_step = getattr(self, "_protocol_current", None)
+        if (isinstance(stamp, dict) and stamp and current_step is not None
+                and getattr(self, "_battery", None) is not None):
+            self._log_battery_step(current_step, "abandoned")
+            self._protocol_index = max(0, self._protocol_index - 1)
+            self._protocol_current = None
+        if isinstance(stamp, dict):
+            self.session.battery = {}
 
     # ---- per-outcome colour --------------------------------------------------
     # Three tiers so the patient knows roughly how well they did at a
