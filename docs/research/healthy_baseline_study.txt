@@ -382,8 +382,9 @@ floor), adaptive (bpm cap). Wrong population: syllables.
 ---------------------
 Within-subject, both hands, two visits. Every participant does the
 same ten blocks at each visit. Hand is a within-subject factor
-(dominant, non-dominant) mapped from the Edinburgh score; visit is
-the retest factor.
+(dominant, non-dominant) taken from the main hand picked at login,
+with the Edinburgh short form on the paper intake sheet as the
+check; visit is the retest factor.
 
 N = 28 analysed; recruit 32 to absorb about 10 percent loss to
 no-show at visit 2 or hardware failure.
@@ -542,7 +543,7 @@ therefore examples, and the distribution below is the measurement.
 
 Simulated cohort (scripts/simulate_cohort.py, 2026-09-02): 28 codes
 x 2 visits, all 560 blocks completed, each visit run the way the RA
-runs it (login with the intake, STUDY BATTERY, every NEXT UP step,
+runs it (login with the intake, PLAY ALL, every NEXT UP step,
 end session), on the same model participant with a per-person
 reaction time (mean 300 ms, SD 35 ms between people) and the rests
 taken as above. Minutes per visit, login and calibration allowance
@@ -573,8 +574,9 @@ pattern (6.4 against 6.0), both within half a minute.
 -----------------------------------------------------
 Implemented: the battery is a protocol preset in config/default.yaml
 (protocol.presets.study_battery, id healthy_baseline_v1). The hub's
-STUDY BATTERY button (or B) builds the plan for the logged-in code
-(cell from the code, hands from the dominant hand entered at login)
+PLAY ALL button (or A; the preset id stays study_battery) builds the
+plan for the logged-in code (cell from the code, hands from the main
+hand picked at login)
 and runs it through the engine's protocol runner, laying the keys
 below over the live config for the length of the run and putting
 them back when the last block ends or the session ends. Between
@@ -733,30 +735,41 @@ writes them into every block's metadata.json:
   sex                      login picker: female, male, other, not
                            said (the default); metadata sex, empty
                            for not said
-  self-reported dominant   login picker, required for a code;
-    hand                   metadata dominant_hand (left / right)
-  Edinburgh Handedness     login field; metadata edinburgh_lq, LQ
-    Inventory short form   from -100 to +100 (Veale 2014,
-    (4 items: writing,     Laterality 19:164-177; four items,
-    throwing, toothbrush,  five-point response). The software acts
-    spoon)                 on the dominant-hand picker, not on the
-                           LQ, so the RA sets the picker from the
-                           LQ sign (above 0 right, below 0 left)
-                           when self-report and LQ disagree, and
-                           the analysis flags any block where the
-                           two do not match. Ambidextrous (LQ
-                           within -40 to +40) is recorded, kept in
-                           the sample and flagged.
+  main hand                login picker MAIN HAND, Left or Right,
+                           required for a code; metadata
+                           dominant_hand (left / right). The
+                           software acts on this pick.
+  Edinburgh Handedness     intake SHEET only, not the login screen
+    Inventory short form   (Basil dropped the field: one number
+    (4 items: writing,     fewer to type at the laptop). LQ from
+    throwing, toothbrush,  -100 to +100 (Veale 2014, Laterality
+    spoon)                 19:164-177; four items, five-point
+                           response). The RA sets MAIN HAND from
+                           the LQ sign (above 0 right, below 0
+                           left) when self-report and LQ disagree.
+                           Ambidextrous (LQ within -40 to +40) is
+                           noted on the sheet, kept in the sample
+                           and flagged by hand. metadata
+                           edinburgh_lq stays in the file, empty
+                           for new sessions, so old data reads on.
   hand length, mm          login field; metadata hand_length_mm
-                           (dominant hand; the sheet keeps both)
-  hand breadth, mm         login field; metadata hand_breadth_mm
+                           (main hand; the sheet keeps both). At
+                           visit 2 the login fills it from visit 1
+                           when the code (or name and age) matches
+                           an earlier session, tagged "from before"
+                           on screen; typing over replaces it.
+  hand breadth, mm         login field; metadata hand_breadth_mm,
+                           filled from the last visit the same way
+                           (so are main hand and sex)
   cell (A/B, hand first)   derived from the code (data/intake.py
                            cell_for); written as battery.cell in
                            every battery block's metadata
-  visit number and date    login field, suggested as one more than
-                           the earlier days that code has played
-                           (today excluded, so a relaunch mid-visit
-                           keeps the number); metadata visit
+  visit number and date    not typed: the app records one more
+                           than the earlier days that code has
+                           played (today excluded, so a relaunch
+                           mid-visit keeps the number); metadata
+                           visit. A yaml passed as --config can pin
+                           session.visit instead.
   rhythm track chosen      pinned by the battery (Easy_Lemon.mp3,
                            medium); intake sheet only for a free
                            rhythm block
@@ -779,17 +792,18 @@ sec_hand_size check against the chassis sizing range.
 --------------------------
 None is needed. The login intake replaced the per-participant yaml
 idea: the RA launches the app as shipped, the login suggests the
-code and the visit, the fields above take a few seconds, and the
-STUDY BATTERY button does the rest. The config keys session.sex,
+code and works out the visit, the fields above take a few seconds,
+and the PLAY ALL button does the rest. The config keys session.sex,
 session.edinburgh_lq and session.visit still exist so a yaml passed
-as --config can pre-fill the screen, and a value entered on the
-screen always wins over the file.
+as --config can pre-fill the screen (or record an LQ), and a value
+entered on the screen always wins over the file.
 
 3.4 session.visit
 -----------------
-Implemented as a login field written to metadata.json ("1", "2"),
-next to the day-order rule the notebook already uses. Old sessions
-have no visit key and still load (tests/test_intake.py).
+Written to metadata.json ("1", "2") by the login without a field:
+one more than the earlier days the code has played on, next to the
+day-order rule the notebook already uses. Old sessions have no visit
+key and still load (tests/test_intake.py).
 
 3.5 Where the data lives
 ------------------------
@@ -1100,15 +1114,17 @@ ARRIVAL (visit 1: 15 min; visit 2: 3 min)
       mention sequences or patterns again.
 
 CLOCK STARTS (50 min hard stop)
-  [ ] Check the login: code, age, sex, dominant hand (Left or
-      Right, required), EHI score, visit, hand length and breadth.
-      LOG IN. Quick calibration runs for both hands: hands off,
+  [ ] Check the login: code, age, sex, MAIN HAND (Left or Right,
+      required), hand length and breadth (filled from visit 1 at
+      visit 2, tagged "from before"; check them). The EHI score
+      stays on the sheet and the visit number is worked out by the
+      app. LOG IN. Quick calibration runs for both hands: hands off,
       hands resting, then a light press per finger. If a finger
       fails, redo once, then continue and note it.
-  [ ] Press STUDY BATTERY on the hub (or B). The app plays the
+  [ ] Press PLAY ALL on the hub (or A). The app plays the
       cell's order below; after each block press Start on the NEXT
       UP card (or N). The card names the step, the hand and the
-      stretch break; the strip reads BATTERY k/10. A block that
+      stretch break; the strip reads PLAY ALL k/10. A block that
       cannot be run (a board dropped) is skipped from the hub with
       Skip step (S) and the reason written on the sheet; a block
       ended early is offered again, Retry redoes it.

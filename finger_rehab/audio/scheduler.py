@@ -13,6 +13,11 @@ class ScheduledNote:
     index: int
     note: Note
     fired: bool = False
+    # The leading tactile pulse, dispatched ahead of the beat by the
+    # rhythm mode's buzz lead. Its own flag because it runs on its own
+    # cursor: the lead for note N+1 can be due before the beat of note
+    # N on a fast chart, so one shared cursor would fire it late.
+    lead_fired: bool = False
     hit_at: float | None = None
     early_late_ms: float | None = None
 
@@ -24,13 +29,16 @@ class BeatScheduler:
             ScheduledNote(index=i, note=n) for i, n in enumerate(beatmap.notes)
         ]
         self._next = 0
+        self._next_lead = 0
 
     def reset(self) -> None:
         for s in self._sched:
             s.fired = False
+            s.lead_fired = False
             s.hit_at = None
             s.early_late_ms = None
         self._next = 0
+        self._next_lead = 0
 
     @property
     def scheduled(self) -> list[ScheduledNote]:
@@ -49,6 +57,23 @@ class BeatScheduler:
                     s.fired = True
                     yield s
                 self._next += 1
+            else:
+                return
+
+    def leads_due(self, song_t: float) -> Iterator[ScheduledNote]:
+        """Notes whose LEADING BUZZ is due, each yielded once, in
+        order. The caller passes the song time already shifted by the
+        lead, so this is the same rule as notes_due on a separate
+        cursor. Independent of notes_due on purpose: the cursors move
+        at different offsets and neither may skip a note the other
+        has not reached."""
+        while self._next_lead < len(self._sched):
+            s = self._sched[self._next_lead]
+            if s.note.t <= song_t:
+                if not s.lead_fired:
+                    s.lead_fired = True
+                    yield s
+                self._next_lead += 1
             else:
                 return
 

@@ -266,6 +266,9 @@ class Config:
         writable_part_prefixes: tuple[tuple[str, ...], ...] = (
             ("sessions",),
             ("config", "calibration"),
+            # Per-participant preferences (data/prefs.py): written by
+            # the app, so it lives next to the exe, not in the bundle.
+            ("config", "participant_prefs.json"),
             ("logs",),
         )
         parts = p.parts

@@ -812,7 +812,12 @@ class CueOnTheBeatTests(unittest.TestCase):
     hears (measured on a fake wire: -31 ms for a song). These tests
     drive update() on a fake clock stepped in 17 ms frames and pin the
     new dispatch: against the scored zero, frame-centred, and with the
-    scheduled cue moment as the logged timestamp."""
+    scheduled cue moment as the logged timestamp.
+
+    They run under rhythm.tactile_mode on_beat with a zero buzzer
+    latency, the pre-September condition where the buzz rides the beat
+    dispatch: one on_stim per note carries everything. Lead mode and
+    the latency split are pinned in tests/test_rhythm_tactile.py."""
 
     FRAME_S = 0.017
 
@@ -825,12 +830,16 @@ class CueOnTheBeatTests(unittest.TestCase):
                             Note(t=3.0, lane=2)],
                      song=("song.mp3" if song else None))
         engine = MagicMock()
+        engine._rhythm_buzz_lead_ms = None
         cfg = {
             "rhythm.pre_song_lead_s": 0,
             "game.start_countdown_s": 0,
             "rhythm.audio_offset_ms": 40,
             "rhythm.metronome_offset_ms": 12,
             "rhythm.buzz_rise_comp_ms": rise_comp_ms,
+            "rhythm.tactile_mode": "on_beat",
+            "latency.buzzer_ms": 0,
+            "latency.visual_ms": 0,
         }
         engine.cfg.get = MagicMock(
             side_effect=lambda k, d=None: cfg.get(k, d))
@@ -877,7 +886,8 @@ class CueOnTheBeatTests(unittest.TestCase):
             mode, engine, bm = self._make_mode(song=True)
             dispatched = []
             engine.on_stim.side_effect = (
-                lambda lane, idx, t_perf: dispatched.append(clock.t))
+                lambda lane, idx, t_perf, buzz=True:
+                dispatched.append(clock.t))
             self._drive(mode, clock, 2.5)
             calls = engine.on_stim.call_args_list
             self.assertEqual(len(calls), 2, "two notes were due by 2.5s")
@@ -925,17 +935,39 @@ class CueOnTheBeatTests(unittest.TestCase):
 
         self._with_fake_clock(go)
 
-    def test_rise_comp_pulls_the_cue_earlier(self) -> None:
-        # A rig that has bench-measured its motors can subtract the
-        # rise time; the command then leads the scored zero by it.
+    def test_rise_comp_pulls_only_the_buzz_earlier(self) -> None:
+        # A rig that has bench-measured its motors subtracts the rise
+        # time from the BUZZ: the STIM command leads the scored zero
+        # by it through on_tactile_lead, while the tone, the screen
+        # and the stimulus marker (on_stim, now with buzz=False) stay
+        # on the scored zero. Before September the whole cue moved.
         def go(clock):
             mode, engine, bm = self._make_mode(song=True,
                                                rise_comp_ms=20.0)
             self._drive(mode, clock, 1.2)
             _lane, _idx, t_perf = engine.on_stim.call_args[0]
             self.assertAlmostEqual(
-                t_perf, mode._t_start + bm.notes[0].t + 0.040 - 0.020,
+                t_perf, mode._t_start + bm.notes[0].t + 0.040, places=9)
+            self.assertFalse(engine.on_stim.call_args[1]["buzz"])
+            engine.on_tactile_lead.assert_called_once()
+            _lane, _idx, t_buzz = engine.on_tactile_lead.call_args[0]
+            self.assertAlmostEqual(
+                t_buzz, mode._t_start + bm.notes[0].t + 0.040 - 0.020,
                 places=9)
+
+        self._with_fake_clock(go)
+
+    def test_on_beat_with_no_rise_keeps_one_event_per_note(self) -> None:
+        # The pre-September shape: with nothing to lead by, the buzz
+        # rides on_stim (buzz=True) and no lead call is made, so the
+        # wire and the EEG see one event per note.
+        def go(clock):
+            mode, engine, bm = self._make_mode(song=True)
+            self._drive(mode, clock, 2.5)
+            self.assertEqual(engine.on_stim.call_count, 2)
+            for call in engine.on_stim.call_args_list:
+                self.assertTrue(call[1]["buzz"])
+            engine.on_tactile_lead.assert_not_called()
 
         self._with_fake_clock(go)
 

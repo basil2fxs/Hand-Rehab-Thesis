@@ -18,7 +18,10 @@ freeze a frame for most of a second at block start.
 
 The volume and on/off switch are read live from the config every
 update, so the Settings screen only has to write cfg and save; there
-is no wiring between the two and no state to fall out of sync.
+is no wiring between the two and no state to fall out of sync. The
+per-participant mute is the one input that is not config: the engine
+passes it into update() from data/prefs.py, so a person who muted
+the menus at their last visit gets silence from the first frame.
 """
 from __future__ import annotations
 
@@ -29,6 +32,31 @@ from pathlib import Path
 
 
 log = logging.getLogger(__name__)
+
+
+# Amplitude factor that makes a track HALF AS LOUD as the game music.
+# Loudness halves per 10 dB (the sone scale: Stevens 1956, J Acoust
+# Soc Am 28:807, and ISO 532), and 10 dB down is an amplitude of
+# 10 ** (-10 / 20) = 0.316. An amplitude of 0.5 is only 6 dB down and
+# reads as roughly two thirds as loud, which is what the menus used to
+# ship at. The rhythm song plays at master_volume, so this factor on
+# top of master IS "half the game music", and it follows master when
+# the Settings slider moves.
+HALF_LOUDNESS = 0.316
+
+
+def menu_music_level(cfg) -> float:
+    """The menu playlist level as a fraction of master_volume: the
+    number in audio.menu_music_volume when one is set (the Settings
+    MUSIC slider writes one), else half the game music's loudness."""
+    raw = cfg.get("audio.menu_music_volume", None)
+    if raw is None or raw == "":
+        return HALF_LOUDNESS
+    try:
+        v = float(raw)
+    except (TypeError, ValueError):
+        return HALF_LOUDNESS
+    return max(0.0, min(1.0, v))
 
 
 class MenuMusicPlayer:
@@ -82,11 +110,7 @@ class MenuMusicPlayer:
         return bool(self.cfg.get("audio.menu_music_enabled", True))
 
     def volume(self) -> float:
-        try:
-            v = float(self.cfg.get("audio.menu_music_volume", 0.5))
-        except (TypeError, ValueError):
-            v = 0.5
-        return max(0.0, min(1.0, v))
+        return menu_music_level(self.cfg)
 
     def _resolve_tracks(self) -> list[Path]:
         """The playlist files that actually exist on disk. Names come
@@ -116,16 +140,20 @@ class MenuMusicPlayer:
         self._index = 0
 
     # ---- the one entry point ------------------------------------------
-    def update(self, screen_key: str | None, block_running: bool) -> None:
+    def update(self, screen_key: str | None, block_running: bool,
+               muted: bool = False) -> None:
         """Advance the state machine one frame. `screen_key` is the
         engine's current screen; `block_running` is
-        engine.block_is_running(). Safe to call from anywhere at any
-        rate."""
+        engine.block_is_running(); `muted` is the logged-in person's
+        own mute (data/prefs.py), which fades the track out like a
+        block start does and keeps it off until it clears. Safe to
+        call from anywhere at any rate."""
         if self.audio is None:
             self.state = "idle"
             return
         now = self._clock()
         want = (self.enabled()
+                and not muted
                 and not block_running
                 and screen_key in self.MENU_SCREENS
                 and bool(self._tracks))

@@ -50,15 +50,52 @@ closest to the target, half a measured frame early rather than
 always a full frame late), so the residual is jitter around zero
 instead of one-sided lag. Measured after the change on the same
 fake wire: mean -0.1 ms against the scored zero for a song, +1.5 ms
-for the metronome, range about -11..+14 either way. The
-motor's own mechanical rise (~20 ms for these ERM motors,
-uncharacterised on this rig) still sits on top as a constant;
-rhythm.buzz_rise_comp_ms ships 0 and exists for a rig that has
-bench-measured it.
+for the metronome, range about -11..+14 either way.
+
+THE BUZZ LEADS THE BEAT (September). A command on the beat is not a
+buzz on the beat: the serial path and the motor's own lag put the
+felt vibration about 45 ms AFTER the command (latency.buzzer_ms, a
+10 mm coin ERM class value until this rig is measured), and a
+player who treats the buzz as a go signal then presses a reaction
+time after that. Basil's report: "the buzzer goes off noticeably
+late and only buzzes exactly when the press should have happened".
+Synchronisation to a pacing beat is prediction, not reaction (Repp
+2005; Aschersleben 2002: taps precede the click by tens of ms), so a
+buzz ON the beat is right for a predictor and wrong for a reactor.
+rhythm.tactile_mode settles it per block:
+
+  lead      the STIM command goes out buzz_lead_ms (150, the fastest
+            healthy touch reaction time, Robinson 1934 via Kosinski
+            2013) plus the motor rise BEFORE the scored zero, so a
+            reaction to the felt buzz lands on the beat. The lead
+            then adapts to the player: every buzz_lead_every scored
+            hits the median of the last buzz_lead_window hit offsets
+            moves the lead by buzz_lead_gain times itself, at most
+            buzz_lead_step_ms per update, clamped to 0 and
+            buzz_lead_max_ms. A predictor's lead walks to 0 (the
+            buzz back on the beat); a reactor's settles at their
+            reaction time. Carried across blocks within a login.
+  on_beat   lead 0, no adaptation: the command goes out on the beat
+            minus the motor rise only. The pre-September behaviour
+            once the rise is 0.
+  feedback  no cue buzz; the pressed finger buzzes the instant a
+            press scores Perfect, Great or Good. The fallback Basil
+            named for a player the lead does not suit.
+
+Only the buzz moves. The tone, the falling note and the scoring zero
+stay on the audible beat, and the EEG stimulus marker stays on the
+event the response is scored against: with the buzz split off, the
+beat byte drops its buzzer bit (33 becomes 31) and the buzz is its
+own marker, 22, written at the STIM command. The falling note is
+drawn against display_song_time, which runs latency.visual_ms ahead
+and the audio offset behind song_time, so the note reaches the strike
+line on the retina on the audible beat rather than a frame's worth of
+panel lag late.
 """
 from __future__ import annotations
 
 import logging
+import statistics
 import time
 from collections import deque
 from typing import TYPE_CHECKING
@@ -129,22 +166,133 @@ class RhythmMode(WaitSkip):
         # around zero. Seeded at 60 Hz; clamped when updated so a
         # stalled frame cannot fire cues far ahead of the beat.
         self._frame_s = 1.0 / 60.0
-        # Bench-measured motor rise compensation, subtracted from the
-        # tactile cue target. Ships 0: the ERM rise (~20 ms) is
-        # uncharacterised on this rig, and shipping a guess would move
-        # the cue by an unverified constant. A rig that has measured
-        # its motors sets this to that number.
-        try:
-            self._buzz_rise_comp_s = float(
-                engine.cfg.get("rhythm.buzz_rise_comp_ms", 0.0)) / 1000.0
-        except (TypeError, ValueError):
-            self._buzz_rise_comp_s = 0.0
+        # Command-to-felt time of the buzz, subtracted from the tactile
+        # target in every mode so the felt vibration sits where the
+        # mode wants it. rhythm.buzz_rise_comp_ms is a bench number
+        # for THIS rig and wins when set; 0 falls back to the
+        # datasheet-class latency.buzzer_ms. A hand-built config with
+        # neither key gets 0, which keeps the tone-and-buzz-together
+        # dispatch of the older tests.
+        rise_ms = self._cfg_float("rhythm.buzz_rise_comp_ms", 0.0)
+        if rise_ms <= 0.0:
+            rise_ms = self._cfg_float("latency.buzzer_ms", 0.0)
+        self._buzz_rise_comp_s = max(0.0, rise_ms) / 1000.0
+        # Panel lag for the falling note, see display_song_time.
+        self._visual_latency_s = max(
+            0.0, self._cfg_float("latency.visual_ms", 0.0)) / 1000.0
+        # Tactile mode and the adaptive lead (THE BUZZ LEADS THE BEAT
+        # in the module docstring). Unknown values fall back to the
+        # shipped default rather than silently changing the cue.
+        mode_name = engine.cfg.get("rhythm.tactile_mode", "lead")
+        mode_name = str(mode_name).strip().lower() \
+            if isinstance(mode_name, str) else "lead"
+        if mode_name not in ("lead", "on_beat", "feedback"):
+            log.warning("rhythm.tactile_mode %r unknown; using lead",
+                        mode_name)
+            mode_name = "lead"
+        self.tactile_mode = mode_name
+        self._lead_adapt = (mode_name == "lead" and bool(
+            self._cfg_value("rhythm.buzz_lead_adapt", True)))
+        self._lead_window = max(1, int(
+            self._cfg_float("rhythm.buzz_lead_window", 8)))
+        self._lead_every = max(1, int(
+            self._cfg_float("rhythm.buzz_lead_every", 4)))
+        self._lead_gain = self._cfg_float("rhythm.buzz_lead_gain", 0.5)
+        self._lead_max_ms = max(
+            0.0, self._cfg_float("rhythm.buzz_lead_max_ms", 400.0))
+        self._lead_step_ms = max(
+            0.0, self._cfg_float("rhythm.buzz_lead_step_ms", 25.0))
+        lead_ms = (self._cfg_float("rhythm.buzz_lead_ms", 150.0)
+                   if mode_name == "lead" else 0.0)
+        # Carried within the login session (engine attribute, the same
+        # pattern as the other per-session mode state) so block two
+        # starts where block one's adaptation ended.
+        carried = getattr(engine, "_rhythm_buzz_lead_ms", None)
+        if self._lead_adapt and isinstance(carried, (int, float)):
+            lead_ms = float(carried)
+        self._buzz_lead_ms = min(max(0.0, lead_ms), self._lead_max_ms)
+        self._buzz_lead_start_ms = self._buzz_lead_ms
+        self._lead_offsets: deque[float] = deque(maxlen=self._lead_window)
+        self._lead_hits_since_update = 0
+        self._lead_updates = 0
+        # The lead each note was actually cued with, by note index, so
+        # the trial row records the offset in force when the buzz
+        # went out rather than whatever the lead had become by the
+        # time the note resolved.
+        self._lead_by_note: dict[int, float] = {}
         # True once audio.play_song / start_metronome has been kicked off.
         self._audio_started = False
         # Snapshot of song_time at the moment we paused. While paused the
         # property returns this fixed value so the falling notes don't keep
         # scrolling across the screen during the pause.
         self._frozen_song_t: float | None = None
+
+    def _cfg_float(self, key: str, default: float) -> float:
+        """A numeric config read that survives the MagicMock cfg the
+        older fixtures pass (float() of one raises TypeError)."""
+        try:
+            return float(self.engine.cfg.get(key, default))
+        except (TypeError, ValueError):
+            return float(default)
+
+    def _cfg_value(self, key: str, default):
+        """A non-numeric config read with the same fallback rule: a
+        value that is not a plain bool, number or string is treated
+        as missing."""
+        try:
+            v = self.engine.cfg.get(key, default)
+        except Exception:
+            return default
+        if isinstance(v, (bool, int, float, str)):
+            return v
+        return default
+
+    @property
+    def buzz_lead_ms(self) -> float:
+        """The reaction allowance in force, ms (0 outside lead mode)."""
+        return self._buzz_lead_ms
+
+    def lead_total_s(self) -> float:
+        """How far ahead of the scored zero the STIM command goes:
+        the reaction allowance plus the motor's command-to-felt time.
+        0 means the buzz rides the beat dispatch itself."""
+        if self.tactile_mode == "feedback":
+            return 0.0
+        return self._buzz_lead_ms / 1000.0 + self._buzz_rise_comp_s
+
+    @property
+    def display_song_time(self) -> float:
+        """The clock the falling notes are drawn against. A note drawn
+        on the strike line when this equals its time reaches the
+        retina on the audible beat: the drawing runs latency.visual_ms
+        ahead of song_time (the panel takes that long to show a
+        frame) and the audio-path offset behind it (the beat is heard
+        that long after the scheduled time)."""
+        return (self.song_time - self._audio_latency_s(predict=True)
+                + self._visual_latency_s)
+
+    def tactile_params(self, note_index: int) -> dict:
+        """The tactile cue parameters a trial row records for one
+        note: the mode, the lead the note was cued with, and the rise
+        compensation applied."""
+        lead = self._lead_by_note.get(note_index, self._buzz_lead_ms)
+        return {
+            "tactile_mode": self.tactile_mode,
+            "buzz_lead_ms": round(float(lead), 1),
+            "buzz_rise_comp_ms": round(self._buzz_rise_comp_s * 1000.0, 1),
+        }
+
+    def tactile_summary(self) -> dict:
+        """Block-summary record of where the buzz sat and how the
+        adaptive lead moved."""
+        return {
+            "mode": self.tactile_mode,
+            "buzz_lead_start_ms": round(self._buzz_lead_start_ms, 1),
+            "buzz_lead_end_ms": round(self._buzz_lead_ms, 1),
+            "buzz_lead_adapt": bool(self._lead_adapt),
+            "buzz_lead_updates": int(self._lead_updates),
+            "buzz_rise_comp_ms": round(self._buzz_rise_comp_s * 1000.0, 1),
+        }
 
     @property
     def song_time(self) -> float:
@@ -314,23 +462,40 @@ class RhythmMode(WaitSkip):
 
         # Fire the cue for notes whose CUE TIME has been reached. The
         # cue time is the scored zero, note.t plus the audio-path
-        # latency, so the buzz, the tone and the EEG marker land on
-        # the beat the patient hears and is scored against, not on
-        # the silent scheduled time a frame late (CUES LAND ON THE
-        # BEAT in the module docstring). Dispatch is frame-centred:
-        # firing on the frame closest to the target (half a frame of
-        # lead) turns the old one-sided frame lag into jitter around
-        # zero. The timestamp handed to on_stim is the scheduled cue
-        # moment itself, so raw.csv's stim rows carry the cue time
-        # rather than whichever frame happened to dispatch it.
-        cue_shift = self._audio_latency_s(predict=True) \
-            - self._buzz_rise_comp_s
-        for due in self.scheduler.notes_due(
-                now - cue_shift + 0.5 * self._frame_s):
+        # latency, so the tone and the EEG marker land on the beat
+        # the patient hears and is scored against, not on the silent
+        # scheduled time a frame late (CUES LAND ON THE BEAT in the
+        # module docstring). Dispatch is frame-centred: firing on the
+        # frame closest to the target (half a frame of lead) turns
+        # the old one-sided frame lag into jitter around zero. The
+        # timestamp handed to on_stim is the scheduled cue moment
+        # itself, so raw.csv's stim rows carry the cue time rather
+        # than whichever frame happened to dispatch it.
+        #
+        # The buzz has its own cursor and its own target, lead_total_s
+        # ahead of the beat (THE BUZZ LEADS THE BEAT): it goes out
+        # through on_tactile_lead and the beat then dispatches with
+        # buzz=False. With no lead at all the buzz rides the beat
+        # dispatch as before, one event on the wire and in the EEG.
+        audio_s = self._audio_latency_s(predict=True)
+        half_frame = 0.5 * self._frame_s
+        lead_s = self.lead_total_s()
+        split = self.tactile_mode == "feedback" or lead_s > 0.0
+        if split and self.tactile_mode != "feedback":
+            for due in self.scheduler.leads_due(
+                    now - audio_s + lead_s + half_frame):
+                self._lead_by_note[due.index] = self._buzz_lead_ms
+                self.engine.on_tactile_lead(
+                    due.note.lane, due.index,
+                    self._t_start + self._countdown_s + due.note.t
+                    + audio_s - lead_s)
+        for due in self.scheduler.notes_due(now - audio_s + half_frame):
+            if not split:
+                self._lead_by_note[due.index] = 0.0
             self.engine.on_stim(
                 due.note.lane, due.index,
-                self._t_start + self._countdown_s + due.note.t
-                + cue_shift)
+                self._t_start + self._countdown_s + due.note.t + audio_s,
+                buzz=not split)
 
         # Score any queued press inputs.
         while self._presses:
@@ -440,5 +605,40 @@ class RhythmMode(WaitSkip):
         best.hit_at = now
         best.early_late_ms = offset_ms
         label, points = classify_offset(offset_ms, self.windows, self.score_cfg)
+        if label in ("Perfect", "Great", "Good"):
+            self._adapt_lead(offset_ms)
         self.engine.log_rhythm_hit(best, offset_ms, label, points, now,
                                    t_press_perf=ev.t_perf)
+
+    def _adapt_lead(self, offset_ms: float) -> None:
+        """Move the buzz lead toward the player, one scored hit at a
+        time (THE BUZZ LEADS THE BEAT in the module docstring).
+
+        Median, not mean, of the last window of hit offsets: tapping
+        asynchronies carry outliers and one wild press must not move
+        the cue. A positive median (late) raises the lead, a negative
+        one (early) lowers it, by gain times the median and never by
+        more than one step, clamped to 0 and the maximum. No update
+        before the first period of hits. The result is parked on the
+        engine so the next block of this login starts from it."""
+        if not self._lead_adapt:
+            return
+        self._lead_offsets.append(float(offset_ms))
+        self._lead_hits_since_update += 1
+        if self._lead_hits_since_update < self._lead_every:
+            return
+        self._lead_hits_since_update = 0
+        median = statistics.median(self._lead_offsets)
+        delta = self._lead_gain * median
+        delta = max(-self._lead_step_ms, min(self._lead_step_ms, delta))
+        new_lead = min(self._lead_max_ms,
+                       max(0.0, self._buzz_lead_ms + delta))
+        if new_lead != self._buzz_lead_ms:
+            log.info("rhythm buzz lead %.0f -> %.0f ms (median offset "
+                     "%+.0f ms)", self._buzz_lead_ms, new_lead, median)
+        self._buzz_lead_ms = new_lead
+        self._lead_updates += 1
+        try:
+            self.engine._rhythm_buzz_lead_ms = new_lead
+        except Exception:
+            pass

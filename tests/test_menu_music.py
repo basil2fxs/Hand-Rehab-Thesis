@@ -68,20 +68,46 @@ class _FakeAudio:
     def menu_busy(self) -> bool:
         return self.menu_path is not None
 
+    # -- the Force Pilot background track (audio/block_music.py) -----
+    block_path: str | None = None
+    block_volume: float | None = None
+    block_log: list = []
+
+    def block_music_play(self, path, volume=1.0) -> bool:
+        if self.game_stream_active():
+            return False
+        self.menu_path = None
+        self.block_path = str(path)
+        self.block_volume = volume
+        self.block_log = list(self.block_log) + [Path(str(path)).name]
+        return True
+
+    def block_music_stop(self) -> None:
+        self.block_path = None
+
+    def block_music_set_volume(self, volume) -> None:
+        self.block_volume = volume
+
+    def block_music_busy(self) -> bool:
+        return self.block_path is not None
+
     # -- surface the game engine uses during a block -----------------
     def play_song(self, path, loops=0, start_s=0.0) -> bool:
         self.menu_path = None
+        self.block_path = None
         self.game_song = str(path)
         return True
 
     def start_metronome(self, bpm, first_click_in_s=None) -> None:
         self.menu_path = None
+        self.block_path = None
         self.metronome = True
 
     def stop(self) -> None:
         self.game_song = None
         self.metronome = False
         self.menu_path = None
+        self.block_path = None
 
     def song_time(self) -> float:
         return 0.0
@@ -354,6 +380,56 @@ class MenuMusicPlayerFadeTests(unittest.TestCase):
 
 
 class MenuMusicPlayerVolumeTests(unittest.TestCase):
+
+    def test_default_level_is_half_as_loud_as_the_game_music(self) -> None:
+        """No number in the config means the derived level: 10 dB
+        under the rhythm song (which plays at master), an amplitude
+        of 0.32 on top of master. Not 0.5, which is only 6 dB down."""
+        from finger_rehab.audio.menu_music import (HALF_LOUDNESS,
+                                                   MenuMusicPlayer,
+                                                   menu_music_level)
+        self.assertAlmostEqual(HALF_LOUDNESS, 10 ** (-10 / 20), places=2)
+        self.assertLess(HALF_LOUDNESS, 0.5)
+        with tempfile.TemporaryDirectory() as td:
+            p, audio, cfg, clock = _player(td, volume=None)
+            self.assertAlmostEqual(menu_music_level(cfg), HALF_LOUDNESS)
+            p.update("title", False)
+            clock.step(MenuMusicPlayer.FADE_IN_S + 0.1)
+            p.update("title", False)
+            self.assertAlmostEqual(audio.menu_volume, HALF_LOUDNESS,
+                                   places=3)
+            # A number pins it; a broken value falls back.
+            cfg.data["audio"]["menu_music_volume"] = 0.7
+            self.assertAlmostEqual(menu_music_level(cfg), 0.7)
+            cfg.data["audio"]["menu_music_volume"] = "loud"
+            self.assertAlmostEqual(menu_music_level(cfg), HALF_LOUDNESS)
+
+    def test_shipped_config_derives_the_level(self) -> None:
+        import yaml
+        repo = Path(__file__).resolve().parents[1]
+        cfg = yaml.safe_load(
+            (repo / "config" / "default.yaml").read_text())
+        self.assertIsNone(cfg["audio"]["menu_music_volume"])
+
+    def test_the_mute_fades_the_track_out_and_keeps_it_off(self) -> None:
+        from finger_rehab.audio.menu_music import MenuMusicPlayer
+        with tempfile.TemporaryDirectory() as td:
+            p, audio, _cfg, clock = _player(td)
+            p.update("title", False)
+            self.assertTrue(p.is_playing)
+            p.update("title", False, muted=True)
+            self.assertEqual(p.state, "fading")
+            clock.step(MenuMusicPlayer.FADE_OUT_S + 0.1)
+            p.update("title", False, muted=True)
+            self.assertEqual(p.state, "idle")
+            self.assertIsNone(audio.menu_path)
+            for _ in range(3):
+                clock.step(1.0)
+                p.update("mode_select", False, muted=True)
+            self.assertFalse(p.is_playing)
+            # Unmuted: back on.
+            p.update("mode_select", False, muted=False)
+            self.assertTrue(p.is_playing)
 
     def test_volume_reaches_the_slider_level_after_fade_in(self) -> None:
         from finger_rehab.audio.menu_music import MenuMusicPlayer
@@ -699,6 +775,15 @@ class SettingsMenuMusicControlTests(unittest.TestCase):
         # And back on.
         self.screen._toggle_menu_music()
         self.assertTrue(self.eng.cfg.get("audio.menu_music_enabled"))
+
+    def test_music_slider_opens_on_the_derived_level(self) -> None:
+        from finger_rehab.audio.menu_music import menu_music_level
+        self.eng.cfg.data["audio"]["menu_music_volume"] = None
+        from finger_rehab.ui.screens import DiagnosticsScreen
+        screen = DiagnosticsScreen(self.eng)
+        # The knob snaps to 5 percent steps, so within one step.
+        self.assertAlmostEqual(screen._vol_sliders["music"].value,
+                               menu_music_level(self.eng.cfg), delta=0.03)
 
     def test_music_slider_exists_and_saves_its_key(self) -> None:
         self.assertIn("music", self.screen._vol_sliders)

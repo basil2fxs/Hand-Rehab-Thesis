@@ -28,6 +28,9 @@ FONT_BUTTON = 22
 BUTTON_H = 60         # default touch-target height
 BUTTON_W = 320
 PADDING = 24
+# Tag drawn on a login field whose value was carried over from an
+# earlier visit rather than typed today (TextInput and Segmented).
+PREFILLED_TAG = "from before"
 
 # Single source of truth for the app's typeface. SysFont walks this comma
 # list and uses the first family installed on the host, so the app lands on
@@ -1280,11 +1283,22 @@ class TextInput:
         # name is one keystroke away from a suggested code. Cleared by
         # any edit, and by a click into the field.
         self.select_all = False
+        # Filled from an earlier visit's metadata (hand size on the
+        # login screen). Drawn with a small tag so the RA can see the
+        # value was not typed today, and typed over as a whole, the
+        # same way a suggestion is. Cleared by any edit.
+        self.prefilled = False
         self._born = time.perf_counter()
 
     @property
     def value(self) -> str:
         return self.text.strip()
+
+    def set_prefilled(self, text: str) -> None:
+        """Fill the field from an earlier record and mark it so."""
+        self.text = str(text)
+        self.prefilled = bool(self.text)
+        self.select_all = False
 
     def handle_event(self, e: pygame.event.Event) -> None:
         if e.type == pygame.MOUSEMOTION:
@@ -1294,9 +1308,11 @@ class TextInput:
             if self.focused:
                 self.select_all = False
         elif e.type == pygame.KEYDOWN and self.focused:
+            replace_whole = self.select_all or self.prefilled
             if e.key == pygame.K_BACKSPACE:
-                self.text = "" if self.select_all else self.text[:-1]
+                self.text = "" if replace_whole else self.text[:-1]
                 self.select_all = False
+                self.prefilled = False
             elif e.key in (pygame.K_RETURN, pygame.K_TAB, pygame.K_ESCAPE):
                 # Defocus on Enter / Tab / Esc so global handlers can
                 # still react to those keys.
@@ -1310,11 +1326,12 @@ class TextInput:
                     return
                 if self.numeric and not ch.isdigit():
                     if not (self.signed and ch == "-"
-                            and (self.select_all or not self.text)):
+                            and (replace_whole or not self.text)):
                         return
-                if self.select_all:
+                if replace_whole:
                     self.text = ""
                     self.select_all = False
+                    self.prefilled = False
                 if len(self.text) < self.max_len:
                     self.text += ch
 
@@ -1352,6 +1369,15 @@ class TextInput:
         prev_clip = surf.get_clip()
         surf.set_clip(self.rect.inflate(-6, -6))
         surf.blit(text_surf, text_rect)
+        if self.prefilled and self.text:
+            # Where the value came from, inside the field at the right,
+            # so an RA reading the screen sees it was carried over and
+            # not measured today.
+            tag_font = self.layout.font(FONT_SMALL)
+            tag = tag_font.render(PREFILLED_TAG, True, self.theme.muted)
+            surf.blit(tag, tag.get_rect(
+                midright=(self.rect.right - self.PADDING_X,
+                          self.rect.centery)))
         surf.set_clip(prev_clip)
         # Blinking caret at the end of the text when focused.
         if self.focused:
@@ -1402,6 +1428,14 @@ class Segmented:
         self.font_pt = font_pt
         self.focused = False
         self.hover = False
+        # Picked from an earlier visit's record rather than by a click
+        # today (main hand and sex on the login screen). Any pick
+        # clears it; the tag beside the label says where it came from.
+        self.prefilled = False
+
+    def set_prefilled(self, key: str | None) -> None:
+        self.set(key)
+        self.prefilled = self.value is not None
 
     def _index(self) -> int:
         for i, (k, _c) in enumerate(self.options):
@@ -1430,6 +1464,7 @@ class Segmented:
                 for r, (k, _c) in zip(self._segment_rects(), self.options):
                     if r.collidepoint(e.pos):
                         self.value = k
+                        self.prefilled = False
                         break
         elif e.type == pygame.KEYDOWN and self.focused:
             if e.key in (pygame.K_RETURN, pygame.K_TAB, pygame.K_ESCAPE):
@@ -1442,16 +1477,25 @@ class Segmented:
                 else:
                     i = (i + step) % len(self.options)
                 self.value = self.options[i][0]
+                self.prefilled = False
             else:
                 ch = (e.unicode or "").lower()
                 if ch and ch in self.hotkeys:
                     self.set(self.hotkeys[ch])
+                    self.prefilled = False
 
     def draw(self, surf: pygame.Surface) -> None:
         if self.label:
             lbl_font = self.layout.font(FONT_SMALL + 4)
             lbl = lbl_font.render(self.label, True, self.theme.muted)
             surf.blit(lbl, (self.rect.x, self.rect.y - 26))
+        if self.prefilled and self.value is not None:
+            # Same tag TextInput draws, on the label row so the
+            # segments themselves stay uncluttered.
+            tag_font = self.layout.font(FONT_SMALL)
+            tag = tag_font.render(PREFILLED_TAG, True, self.theme.muted)
+            surf.blit(tag, tag.get_rect(
+                topright=(self.rect.right, self.rect.y - 24)))
         body_colour = tuple(
             max(0, min(255, c - 14)) for c in self.theme.background)
         pygame.draw.rect(surf, body_colour, self.rect,

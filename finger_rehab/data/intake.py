@@ -1,5 +1,6 @@
 """Participant intake: study codes, the next free code, the visit
-number and the counterbalancing cell.
+number, the counterbalancing cell, and the carry-over of hand size
+and pickers from an identity's last game.
 
 The login screen asks for a participant code or a name. A study
 participant is a code (P01, P02, ...) and never a name: the code keys
@@ -22,6 +23,7 @@ only identity the study path uses.
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import time
 from pathlib import Path
@@ -196,3 +198,95 @@ def cell_for(participant: str | None) -> dict:
         "hand_first": hand_first,
         "source": source,
     }
+
+
+# Intake fields worth carrying from one visit to the next. Hand size
+# does not change between visits, the main hand and sex do not either,
+# so an RA should not have to look them up on the intake sheet twice.
+# Age is left out on purpose: it is part of the match key for a name.
+CARRY_FIELDS = ("hand_length_mm", "hand_breadth_mm", "dominant_hand",
+                "sex")
+
+
+def _folder_identity(text: str) -> str:
+    """How a typed identity appears in a game folder name: the logger
+    writes spaces as underscores (data/logger.SessionPaths)."""
+    return normalise_code(text).replace("/", "_").replace(" ", "_")
+
+
+def previous_intake(data_dir: Path | str | None, participant: str | None,
+                    age: str | None = None) -> dict | None:
+    """The carry-over intake of this identity's most recent earlier
+    game, or None when there is none.
+
+    A study code matches on the code alone. A name is not unique, so a
+    name matches only when the age typed matches the age recorded:
+    two Sams of different ages stay two people, and the wrong hand
+    size never lands on the wrong person. Match failures cost
+    nothing; only folders belonging to the identity are opened, so a
+    large tree of other people is never read.
+
+    Returns the CARRY_FIELDS that were recorded (empty ones skipped),
+    plus "day" (the folder day it came from) and "who". Newest game
+    first, by folder day and clock, so a corrected hand size on a
+    later visit wins over the first entry.
+    """
+    who = normalise_code(participant)
+    if not who or who == "NA" or not data_dir:
+        return None
+    root = Path(data_dir)
+    try:
+        if not root.is_dir():
+            return None
+        day_dirs = sorted((d for d in root.iterdir()
+                           if d.is_dir() and DAY_RE.match(d.name)),
+                          key=lambda d: d.name, reverse=True)
+    except OSError:
+        return None
+    coded = is_study_code(who)
+    want_folder = _folder_identity(who)
+    want_age = str(age or "").strip()
+    for day_dir in day_dirs:
+        try:
+            games = sorted((g for g in day_dir.iterdir() if g.is_dir()),
+                           key=lambda g: g.name, reverse=True)
+        except OSError:
+            continue
+        for game in games:
+            m = GAME_RE.match(game.name)
+            if not m:
+                continue
+            folder_who = m.group(1)
+            if coded:
+                if normalise_code(folder_who) != who:
+                    continue
+            elif folder_who.casefold() != want_folder.casefold():
+                continue
+            meta_path = game / "metadata.json"
+            try:
+                meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError, UnicodeDecodeError):
+                continue
+            if not isinstance(meta, dict):
+                continue
+            if not coded:
+                # A name: the recorded name and age both have to match.
+                rec_who = str(meta.get("participant") or "").strip()
+                rec_age = str(meta.get("age") or "").strip()
+                if rec_who.casefold() != who.casefold():
+                    continue
+                if rec_age != want_age:
+                    continue
+            found = {}
+            for key in CARRY_FIELDS:
+                val = str(meta.get(key) or "").strip()
+                if val:
+                    found[key] = val
+            if not found:
+                # An older game with no intake recorded; keep looking
+                # back for one that has it.
+                continue
+            found["day"] = day_dir.name
+            found["who"] = str(meta.get("participant") or who)
+            return found
+    return None

@@ -74,7 +74,8 @@ class BatteryPlan:
 
 class BatteryError(ValueError):
     """The preset cannot be turned into a plan for this participant.
-    The message is written for the hub's note line."""
+    The message is written for the hub's note line, under the PLAY ALL
+    button (the hub's name for the battery)."""
 
 
 def load_preset(cfg, preset: str = DEFAULT_PRESET) -> dict | None:
@@ -101,7 +102,8 @@ def resolve_hand(requested: str, dominant_hand: str,
     if word in ("both", "left", "right"):
         return word
     if dom not in ("left", "right"):
-        raise BatteryError("Battery needs the dominant hand set at login")
+        # Worded for the hub's note line, in the login screen's words.
+        raise BatteryError("Play all needs a main hand: pick one at login")
     first = dom if hand_first == "dominant" else other_hand(dom)
     if word == "hand1":
         return first

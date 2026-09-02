@@ -16,7 +16,8 @@ from typing import NamedTuple
 import pygame
 
 from ..audio.engine import AudioEngine
-from ..data.logger import RawLogger, SessionPaths, TrialLogger
+from ..data.logger import (RawLogger, SessionPaths, TrialLogger,
+                           pack_waveform_params)
 from ..data.session import Session
 from ..hardware import eeg_trigger
 from ..hardware.fsr_detector import (
@@ -68,6 +69,28 @@ class CueSettings(NamedTuple):
 # not drive the hardware. The screen stays on because it is not a cue
 # channel and something has to be drawn.
 NO_CUES = CueSettings(False, False, False, False, True)
+
+
+class LatencySettings(NamedTuple):
+    """The stimulus-path delays in force, read from the latency.*
+    config block: how long after the software commands each stimulus
+    the patient actually gets it. buzzer_ms is command to first felt
+    motion, visual_ms flip return to a mid-screen pixel changing,
+    tone_ms cue-tone dispatch to sound. `measured` says whether the
+    numbers came from this rig's own bench or from datasheet-class
+    estimates; metadata.json carries all four so an analyst can tell.
+    """
+
+    buzzer_ms: float
+    visual_ms: float
+    tone_ms: float
+    measured: bool
+    measured_on: str | None
+
+
+# Mirrors the latency block in config/default.yaml; see the comments
+# there for where each number comes from.
+DEFAULT_LATENCY = LatencySettings(45.0, 20.0, 12.0, False, None)
 
 
 class GameEngine:
@@ -127,8 +150,10 @@ class GameEngine:
 
         self.audio: AudioEngine | None = None
         # Built lazily on the first _tick_menu_music once self.audio
-        # exists (audio itself is only built inside run()).
+        # exists (audio itself is only built inside run()). The Force
+        # Pilot background track has its own player, built the same way.
         self.menu_music = None
+        self.block_music = None
         # The vs-last-time chip for the results screen: None (no chip)
         # or the dict data/history.chip_for returns. Set at
         # finish_block, cleared when a new block begins.
@@ -333,6 +358,10 @@ class GameEngine:
         # summary can flag a session where cues silently stopped.
         self._last_stim_delivered: bool | None = None
         self._block_stim_failures = 0
+        # Rhythm's leading buzz goes out before the beat it belongs
+        # to, so its delivery flag is parked here by trial id until
+        # the beat's on_stim picks it up for the trial row.
+        self._lead_stim_delivered: dict[int, bool | None] = {}
         # Sensory-cue state for the current trial, logged per row: the
         # four-channel code and whether the screen named the finger.
         self._last_cue_code = self.cue_settings().code
@@ -685,6 +714,8 @@ class GameEngine:
             self._last_stim_delivered = None
         if not hasattr(self, "_block_stim_failures"):
             self._block_stim_failures = 0
+        if not hasattr(self, "_lead_stim_delivered"):
+            self._lead_stim_delivered = {}
         # Placeholders only: on_stim_multi stamps the real cue state on
         # every trial before any row is written.
         if not hasattr(self, "_last_cue_code"):
@@ -903,6 +934,7 @@ class GameEngine:
                 # silent anyway, and skipping it here could park a
                 # fade-out half-finished for the whole pause.
                 self._tick_menu_music()
+                self._tick_block_music()
                 if not self.paused:
                     if self.audio:
                         self.audio.tick()
@@ -1255,14 +1287,77 @@ class GameEngine:
     def _tick_menu_music(self) -> None:
         """One frame of the menu playlist. Runs every loop pass; the
         player's own gate keeps it silent everywhere but the menu
-        screens and during any block."""
+        screens and during any block, and the logged-in person's own
+        mute (data/prefs.py) keeps it silent for them."""
         if self.audio is None:
             return
         if self.menu_music is None:
             from ..audio.menu_music import MenuMusicPlayer
             self.menu_music = MenuMusicPlayer(self.audio, self.cfg)
         self.menu_music.update(self.current_screen_key(),
-                               self.block_is_running())
+                               self.block_is_running(),
+                               muted=self.menu_music_muted())
+
+    # ---- per-participant preferences -------------------------------------
+    @property
+    def participant_prefs(self):
+        """The prefs store (data/prefs.py), built on first use from
+        session.prefs_file. getattr-safe for a bare test engine."""
+        prefs = getattr(self, "_participant_prefs", None)
+        if prefs is None:
+            from ..data.prefs import prefs_from_config
+            prefs = prefs_from_config(self.cfg)
+            self._participant_prefs = prefs
+        return prefs
+
+    def pref_identity(self) -> str:
+        """Whose preferences apply right now: the logged-in
+        participant, or before login whoever is typed into the login
+        field (so an RA can set P03's mute while entering P03), or NA
+        for a blank field. The same identity rule the session folders
+        and the vs-last-time chip use."""
+        from ..data.prefs import identity_key
+        if getattr(self, "_session_active", False):
+            return identity_key(self.session.participant)
+        title = (getattr(self, "_screens", None) or {}).get("title")
+        typed = getattr(title, "pending_identity", None)
+        if callable(typed):
+            return identity_key(typed())
+        return identity_key(None)
+
+    def menu_music_muted(self) -> bool:
+        try:
+            return self.participant_prefs.menu_muted(self.pref_identity())
+        except Exception:
+            return False
+
+    def toggle_menu_music_mute(self) -> bool:
+        """Flip the current identity's menu mute, save it, and make
+        OFF heard now rather than a fade later. Returns the new
+        muted state."""
+        who = self.pref_identity()
+        muted = not self.menu_music_muted()
+        self.participant_prefs.set_menu_muted(who, muted)
+        player = getattr(self, "menu_music", None)
+        if muted and player is not None:
+            player.stop_now()
+        log.info("Menu music %s for %s", "muted" if muted else "on", who)
+        return muted
+
+    def _tick_block_music(self) -> None:
+        """One frame of the Force Pilot background track
+        (audio/block_music.py). The player's own gate keeps it to that
+        one mode and off until the menu playlist has faded."""
+        if self.audio is None or not hasattr(self.audio, "block_music_play"):
+            return
+        if getattr(self, "block_music", None) is None:
+            from ..audio.block_music import BlockMusicPlayer
+            self.block_music = BlockMusicPlayer(self.audio, self.cfg)
+        menu = getattr(self, "menu_music", None)
+        self.block_music.update(
+            str(self.current_block or "") if self.block_is_running() else None,
+            paused=bool(self.paused),
+            menu_state=(menu.state if menu is not None else "idle"))
 
     # Supersample factor for the on-screen window. The whole UI is drawn
     # to a fixed 1280x800 logical surface, then scaled up to the window
@@ -2129,7 +2224,8 @@ class GameEngine:
         previous session ended abnormally."""
         for attr in ("_reaction_level", "_reaction_clean_blocks",
                      "_reaction_best_ms", "_force_pilot_levels",
-                     "_lighthouse_level", "_buzz_hunt_start_ms"):
+                     "_lighthouse_level", "_buzz_hunt_start_ms",
+                     "_rhythm_buzz_lead_ms"):
             if hasattr(self, attr):
                 try:
                     delattr(self, attr)
@@ -4677,6 +4773,20 @@ class GameEngine:
         # record is trustworthy or degraded, and from when.
         markers = getattr(self, "markers", None)
         self.session.eeg = markers.status() if markers is not None else {}
+        # The stimulus-path delays and the marker-to-stimulus offset
+        # per event class, so an epoch locked to a byte can be shifted
+        # to the stimulus the patient got. Recorded for every block,
+        # EEG or not: the same constants say when the buzz was felt.
+        lat = self.latency_settings()
+        self.session.eeg["latency"] = {
+            "buzzer_ms": lat.buzzer_ms,
+            "visual_ms": lat.visual_ms,
+            "tone_ms": lat.tone_ms,
+            "measured": lat.measured,
+            "measured_on": lat.measured_on,
+        }
+        self.session.eeg["marker_offsets_ms"] = eeg_trigger.marker_offsets(
+            lat.buzzer_ms, lat.visual_ms, lat.tone_ms)
         prof = getattr(self, "calibration_profile", None)
         if prof is None:
             self.session.calibration = {}
@@ -4805,6 +4915,17 @@ class GameEngine:
                 "song_path": (str(getattr(bm, "song", "") or "")
                                or None),
             }
+            # Where the buzz sat relative to the beat this block, and
+            # where the adaptive lead started and ended, so the
+            # notebook can recover the real buzz-to-beat offset per
+            # note without re-deriving it from config.
+            tactile = getattr(self.mode, "tactile_summary", None) \
+                if self.mode else None
+            if callable(tactile):
+                try:
+                    summary["tactile_cue"] = tactile()
+                except Exception as e:
+                    log.warning("rhythm tactile summary failed: %s", e)
         # Reaction-only context: the mode's own outcome tallies and
         # distribution stats (median, anticipation diagnostic, seed).
         # These cannot be rebuilt from hits / misses because false
@@ -5379,7 +5500,7 @@ class GameEngine:
         line that says why."""
         from .battery import build_plan, BatteryError, load_preset
         if load_preset(self.cfg, preset) is None:
-            return False, "No study battery preset in the config"
+            return False, "No play all preset in the config"
         if not getattr(self, "_session_active", False):
             return False, "Log in first"
         if self._battery is not None:
@@ -5632,6 +5753,30 @@ class GameEngine:
             show_target=bool(g("cue.show_target", True)),
         )
 
+    def latency_settings(self) -> LatencySettings:
+        """The latency.* block as one tuple, with the shipped defaults
+        for a config that lacks it (a hand-built test config). Read
+        at use, not cached, so the Settings screen could change it."""
+        cfg = getattr(self, "cfg", None)
+        if cfg is None:
+            return DEFAULT_LATENCY
+        g = cfg.get
+
+        def num(key: str, default: float) -> float:
+            try:
+                return float(g(key, default))
+            except (TypeError, ValueError):
+                return float(default)
+
+        measured_on = g("latency.measured_on", None)
+        return LatencySettings(
+            buzzer_ms=num("latency.buzzer_ms", DEFAULT_LATENCY.buzzer_ms),
+            visual_ms=num("latency.visual_ms", DEFAULT_LATENCY.visual_ms),
+            tone_ms=num("latency.tone_ms", DEFAULT_LATENCY.tone_ms),
+            measured=bool(g("latency.measured", False)),
+            measured_on=(str(measured_on) if measured_on else None),
+        )
+
     # ---- buzzer cue -------------------------------------------------------
     # The firmware holds a motor on for a fixed 150 ms per STIM command
     # and its drive strength is a compile-time constant, so the only
@@ -5790,9 +5935,11 @@ class GameEngine:
     # ms. Requests below the floor are clamped to it rather than
     # recorded as levels the hardware never produced. On real
     # hardware the USB serial write adds a few ms each way, and the
-    # ERM motor itself needs roughly 20 ms to spin up and at least as
-    # long to stop (ranked brief, Buzz Hunt risk note), which the
-    # host cannot see at all. Buzz Hunt's duration staircases must
+    # ERM motor itself takes about 40 ms to start moving, 87 ms to
+    # reach full amplitude and 115 ms to stop after current off (10 mm
+    # coin ERM datasheet class, Precision Microdrives 310-103; see the
+    # latency block in default.yaml), which the host cannot see at
+    # all. Buzz Hunt's duration staircases must
     # therefore keep their step size at or above one frame (17 ms),
     # treat levels under about 40 ms as a single terminal level, and
     # not compare thresholds against published norms until the
@@ -6480,21 +6627,76 @@ class GameEngine:
             sc.add_encouragement(text)
 
     # ---- mode callbacks ----------------------------------------------------
-    def on_stim(self, lane: int, trial_id: int, t_perf: float) -> None:
+    def on_stim(self, lane: int, trial_id: int, t_perf: float,
+                buzz: bool = True) -> None:
         # Single-lane wrapper for the multi-lane path. Mirror mode
         # uses on_stim_multi to light up both hands at once; classic,
         # adaptive, and rhythm all hit one finger at a time and go
         # through this convenience wrapper.
-        self.on_stim_multi([lane], trial_id, t_perf)
+        self.on_stim_multi([lane], trial_id, t_perf, buzz=buzz)
+
+    def on_tactile_lead(self, lane: int, trial_id: int,
+                        t_perf: float) -> None:
+        """The tactile half of a beat cue, sent AHEAD of the beat.
+
+        Rhythm calls this when its buzz leads the beat (a reaction
+        allowance, the motor's rise, or both): the STIM goes out now,
+        stretched to motor.cue_ms like any pre-press cue, and the beat
+        itself follows through on_stim with buzz=False so the tone,
+        the screen and the stimulus marker still sit on the scored
+        zero. The EEG marker for the buzz is 22, written at the STIM
+        command itself (there is no flip to anchor to), so the felt
+        vibration follows the byte by latency.buzzer_ms.
+
+        `t_perf` is the scheduled buzz moment, logged on the raw row
+        the way on_stim logs the scheduled cue moment. Delivery is
+        parked by trial id for the beat's trial row: the row is
+        written when the note resolves, long after this call.
+        """
+        self._ensure_metric_state()
+        cues = self.cue_settings()
+        delivered: bool | None = None
+        if cues.buzz_before and self.source.provides_samples:
+            # Same housekeeping as a beat cue: a held-back STOP or a
+            # timed-pulse stop from the previous note would cut this
+            # pulse short.
+            self._motor_stop_at = None
+            self._after_cue_until = None
+            self._pulse_stops = {}
+            ok = self._send_stim(lane)
+            if self.raw_logger:
+                self.raw_logger.queue_event(
+                    "stim_motor", lane=lane, t_perf=t_perf,
+                    detail=(f"lead;delivered={'yes' if ok else 'NO'};"
+                            f"trial_id={trial_id}"),
+                    hand=self.hand_mode)
+            self._schedule_cue_pulses(lane)
+            delivered = ok
+            if not ok:
+                self._block_stim_failures += 1
+                log.warning("Leading buzz not delivered for note %s. "
+                            "Check the Arduino connection.", trial_id)
+            # The command is the physical event here; the felt buzz is
+            # latency.buzzer_ms later and metadata says so.
+            self._eeg_send(eeg_trigger.CODES["prep_buzz_lead"],
+                           lane=lane, t_event=time.perf_counter())
+        self._lead_stim_delivered[trial_id] = delivered
 
     def on_stim_multi(self, lanes: list[int], trial_id: int,
-                       t_perf: float) -> None:
+                       t_perf: float, buzz: bool = True) -> None:
         # Light up every lane in `lanes` and arm timing bars on the
         # gameplay screen. Mirror mode passes two same-finger lanes
         # (e.g. right index + left index) so the patient sees both
         # tiles go active at the same moment. In bilateral mode the
         # lane numbering is global (0..7) and each strip's enumerate
         # index matches that.
+        #
+        # `buzz` is whether the buzzer channel fires WITH this
+        # stimulus. Rhythm passes False when its buzz already went out
+        # ahead of the beat through on_tactile_lead, or never fires
+        # before the beat (feedback mode): the tone and the screen
+        # still announce the beat, the stimulus byte drops the buzzer
+        # bit, and the trial row's delivery flag comes from the lead.
         targets = set(int(l) for l in lanes)
         # Which cue channels the patient gets before the press, and
         # whether the screen is allowed to name the finger. Both halves
@@ -6604,7 +6806,11 @@ class GameEngine:
         # real hardware, so a keyboard session does not fabricate a
         # hardware-cue-failure signal for every trial.
         self._last_stim_delivered = None
-        if cues.buzz_before and self.source.provides_samples:
+        if not buzz:
+            lead_flags = getattr(self, "_lead_stim_delivered", None)
+            if lead_flags:
+                self._last_stim_delivered = lead_flags.pop(trial_id, None)
+        if buzz and cues.buzz_before and self.source.provides_samples:
             # Buzz the TARGET fingers so the patient feels which to
             # press. One board runs one motor at a time (_send_stim
             # stops a board before switching fingers), so the targets
@@ -6713,7 +6919,8 @@ class GameEngine:
             if eeg_code is None:
                 eeg_code = eeg_trigger.stim_code(cues.sound_before,
                                                  cues.buzz_before,
-                                                 cues.show_target)
+                                                 cues.show_target,
+                                                 buzz_now=buzz)
             pending = getattr(self, "_pending_eeg_stim", None)
             if pending is None:
                 pending = self._pending_eeg_stim = []
@@ -7421,7 +7628,16 @@ class GameEngine:
                     self.audio.play_miss()
             except Exception:
                 pass
-        if correct_press and cues.buzz_after:
+        # rhythm.tactile_mode feedback owns the after-press buzz
+        # regardless of cue.buzz_after: no buzz announces the beat, so
+        # the confirmation IS the tactile channel. Hit tiers only
+        # (Perfect, Great, Good): the buzz says "that was on the beat",
+        # and an Early or Late press was not.
+        tactile_mode = (getattr(self.mode, "tactile_mode", None)
+                        if self.mode else None)
+        feedback_buzz = (tactile_mode == "feedback" and was_pressed
+                         and label in ("Perfect", "Great", "Good"))
+        if (correct_press and cues.buzz_after) or feedback_buzz:
             self._fire_after_press_cue([sched_note.note.lane])
         if label in ("Miss",):
             self.misses += 1
@@ -7568,6 +7784,18 @@ class GameEngine:
             sd = getattr(self, "_last_stim_delivered", None)
             row["stim_delivered"] = ("" if sd is None
                                       else ("TRUE" if sd else "FALSE"))
+            # Where the buzz sat for THIS note: the tactile mode and
+            # the lead in force when the note was cued. The lead
+            # adapts within the block, so a per-row record is the only
+            # way to recover the real buzz-to-beat offset per note.
+            params = (getattr(self.mode, "tactile_params", None)
+                      if self.mode else None)
+            if callable(params):
+                try:
+                    row["waveform_params"] = pack_waveform_params(
+                        params(sched_note.index))
+                except Exception as e:
+                    log.warning("rhythm tactile params failed: %s", e)
             row.update(self._trial_context(streak_before,
                                             song_time_s=song_time))
             self.trial_logger.write(row)

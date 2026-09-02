@@ -65,6 +65,9 @@ class AudioEngine:
         # point (play_song, start_metronome, stop) takes the stream
         # back by clearing the flag.
         self._menu_active = False
+        # Same idea for the Force Pilot background track; see the
+        # block_music_* methods at the end.
+        self._block_music_active = False
         self._initialised = False
 
     def init(self) -> bool:
@@ -145,6 +148,7 @@ class AudioEngine:
         self._metronome_period = None
         self._next_metronome_t = None
         self._menu_active = False
+        self._block_music_active = False
         self._initialised = False
 
     @staticmethod
@@ -210,8 +214,9 @@ class AudioEngine:
             pygame.mixer.music.set_volume(self._clamp01(self.master_volume))
             pygame.mixer.music.play(loops=loops, start=max(0.0, start_s))
             # The game owns the one music stream from here; any menu
-            # track that was on it has just been replaced.
+            # or block track that was on it has just been replaced.
             self._menu_active = False
+            self._block_music_active = False
             self._song_path = str(p)
             # Adjust the song-start anchor so song_time() returns roughly
             # `start_s` seconds right away, keeping the visuals in sync with
@@ -243,6 +248,7 @@ class AudioEngine:
                 pass
         self._song_path = None
         self._menu_active = False
+        self._block_music_active = False
         self._metronome_period = 60.0 / max(bpm, 1.0)
         self._song_start_perf = time.perf_counter()
         if first_click_in_s is not None and first_click_in_s > 0:
@@ -269,6 +275,7 @@ class AudioEngine:
         self._metronome_period = None
         self._next_metronome_t = None
         self._menu_active = False
+        self._block_music_active = False
 
     @property
     def is_playing(self) -> bool:
@@ -426,6 +433,73 @@ class AudioEngine:
         a game takes the stream or the track runs out."""
         if (not self._menu_active or pygame is None
                 or not self._initialised or self.game_stream_active()):
+            return False
+        try:
+            return bool(pygame.mixer.music.get_busy())
+        except Exception:
+            return False
+
+    # ---- block background music --------------------------------------
+    # The Force Pilot background track (audio/block_music.py) is the
+    # one piece of music allowed under a block, and it rides the same
+    # single stream. It is kept apart from the menu flag so the menu
+    # player's fade-out can never stop it and it can never be mistaken
+    # for a menu track. It yields to the game exactly as the menu does:
+    # play_song / start_metronome / stop all clear the flag, and it
+    # refuses to start while a rhythm song or the metronome is live.
+
+    def block_music_play(self, path: str | Path, volume: float = 1.0
+                         ) -> bool:
+        if not self._initialised or pygame is None:
+            return False
+        if self.game_stream_active():
+            return False
+        p = Path(path)
+        if not p.exists():
+            log.warning("Block track not found: %s", p)
+            return False
+        try:
+            pygame.mixer.music.load(str(p))
+            pygame.mixer.music.set_volume(
+                self._clamp01(self.master_volume * volume))
+            pygame.mixer.music.play()
+            self._menu_active = False
+            self._block_music_active = True
+            return True
+        except Exception as e:
+            log.warning("Could not play block track %s: %s", p, e)
+            self._block_music_active = False
+            return False
+
+    def block_music_stop(self) -> None:
+        was_ours = getattr(self, "_block_music_active", False)
+        self._block_music_active = False
+        if not was_ours or pygame is None or not self._initialised:
+            return
+        if self.game_stream_active():
+            return
+        try:
+            pygame.mixer.music.stop()
+        except Exception:
+            pass
+
+    def block_music_set_volume(self, volume: float) -> None:
+        """Live level for the block track (0..1 on top of master).
+        No-op unless the block track owns the stream."""
+        if (not getattr(self, "_block_music_active", False)
+                or pygame is None or not self._initialised
+                or self.game_stream_active()):
+            return
+        try:
+            pygame.mixer.music.set_volume(
+                self._clamp01(self.master_volume * volume))
+        except Exception:
+            pass
+
+    def block_music_busy(self) -> bool:
+        if (not getattr(self, "_block_music_active", False)
+                or pygame is None or not self._initialised
+                or self.game_stream_active()):
             return False
         try:
             return bool(pygame.mixer.music.get_busy())

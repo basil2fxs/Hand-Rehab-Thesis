@@ -9,31 +9,99 @@ a lab update.
 
 - `eeg.enabled`: every stimulus, response, boundary and pause writes
   a single-byte marker to the trigger box (map in
-  `finger_rehab/hardware/eeg_trigger.py`, CODES), 10 ms high then
+  `finger_rehab/hardware/eeg_trigger.py`, CODES), held high then
   reset to 0, plus an `eeg` row in raw.csv holding the intended time
   and the actual wire time on the force-sample clock.
 - `eeg.require_port`: no trigger box, no session. It exits at launch
   rather than record an unmarked block.
+- `eeg.pulse_ms` 8 and `eeg.gap_ms` 12: what the NeuroSpec box does
+  on the wire (see The trigger chain below).
 - `reaction.fp_eeg_fixed_s`: reaction blocks use a fixed 2.5 s wait
   with a visible Ready cue (the CNV variant). Do not pool these RTs
   with normal reaction blocks.
+- `force_pilot.music_enabled` off: no background track in the lab.
+
+## The trigger chain
+
+Game -> USB -> NeuroSpec MMBT-S trigger box (Tobii Pro edition,
+orange case; other than the case it is the standard MMBT-S) ->
+NeuroSpec D-Sub 25 to D-Sub 37 cable -> BioSemi ActiveTwo USB
+receiver (the box the optical fibre plugs into) -> ActiView.
+
+- The box is a virtual COM port, not a parallel port and not an
+  FTDI chip (it is a USB CDC device, so there is no latency-timer
+  setting to change; that step in older notes only applies to an
+  FTDI-based box).
+- One byte per write sets its 8 output lines (TTL, 5 V high). The
+  cable puts those 8 lines on BioSemi trigger inputs 1 to 8, the low
+  byte of the Status channel, and holds inputs 9 to 16 low. Every
+  code this game sends (1 to 245) lives in that low byte.
+- Baud: 9600, the rate in the box's manual and the rate Welber's old
+  script used (pyserial's default). The speed does not matter on a
+  virtual port, but 1200 does: opening the port at 1200 RESETS the
+  box and it drops off the bus. The game refuses to start with
+  eeg.baud 1200.
+- Zero-reset. The switch beside the USB socket picks the mode. At P
+  (Pulse Mode, the factory setting) the box holds every code for 8 ms
+  and then pulls all lines to 0 by itself; a 0 we write is ignored,
+  and codes sent faster than 8 ms apart queue inside the box (nothing
+  lost, each delayed 8 ms). At S (Simple Mode) the lines stay high
+  until the software writes 0 or another code. The game writes an
+  explicit 0 after every code and on every shutdown path, so it is
+  correct in both modes; pulse_ms 8 describes the P wire. Check the
+  switch with the box unplugged. If it reads S, set pulse_ms 10 and
+  box_mode simple in eeg_lab.yaml.
+- Pulse width against sampling. BioSemi samples the trigger inputs
+  at the EEG rate, so a pulse needs at least two samples to be sure
+  of being seen. 8 ms is 16 samples at 2048 Hz and 2 at 256 Hz; at
+  256 Hz or below use Simple Mode and pulse_ms 10 or more. The old
+  script's frame-counted pulses were 1 to 4 ms and would have been
+  invisible at 256 Hz if the box had been in Simple Mode.
+- The box's output is inactive until a program opens the port, and
+  the BioSemi inputs have 10 kohm pull-ups to 3.3 V. So ActiView
+  reads the low byte as 255 before the game starts and 0 the moment
+  the game opens COM10. That drop is the "box is alive" check.
 
 ## Lab desktop checklist
 
-1. Plug the trigger box in before launching. Device Manager, Ports:
-   it is COM10 on the lab desktop. If it lands elsewhere, edit
-   `eeg.port` in eeg_lab.yaml.
-2. FTDI box: set Latency Timer to 1 ms (Device Manager, the port,
-   Port Settings, Advanced). The 16 ms default delays every marker.
-3. Double-click Finger Rehab.exe, or EEG Lab.bat which does the same
+1. Plug the trigger box in before launching.
+2. Find its COM port: Device Manager, Ports (COM & LPT). It shows as
+   the MMBT-S or as "USB Serial Device (COMn)". Unsure which entry is
+   the box: unplug it, watch which entry vanishes, plug it back in.
+   On the lab desktop it has been COM10. If it is elsewhere, put the
+   COMn in `eeg.port` in eeg_lab.yaml (Notepad is fine).
+3. Do not change the port's settings in Device Manager. Never set
+   1200 baud anywhere.
+4. Check the switch beside the USB socket reads P. If it reads S,
+   change pulse_ms to 10 and box_mode to simple in eeg_lab.yaml.
+5. Start the EEG recording in ActiView. The trigger low byte should
+   read 255.
+6. Double-click Finger Rehab.exe, or EEG Lab.bat which does the same
    but keeps the window open on failure. A refusal to start names the
    port that failed; that is require_port working.
-4. Check vsync is ON for the game window. With it off the flip
+7. Check vsync is ON for the game window. With it off the flip
    returns before the screen updates and visual markers lead by an
    unknown amount.
-5. Data lands in sessions/ as normal, plus eeg rows in raw.csv and an
+8. Data lands in sessions/ as normal, plus eeg rows in raw.csv and an
    eeg section in metadata.json (backend, port, pulse and gap widths,
-   failure counts, degraded flag).
+   box and box mode, the latency constants and the marker-to-stimulus
+   offsets, failure counts, degraded flag).
+
+## What to expect when running
+
+1. Before the game opens the port the trigger low byte reads 255; it
+   drops to 0 the instant the game starts. If it stays 255, the game
+   did not open the port (wrong COMn) or the cable is out.
+2. At login one jump to 240. Each block: 200+mode at start, 20 at the
+   GET READY card, 220+mode at the end.
+3. Each stimulus: a jump to 30-38 (40 or 41 in pattern blocks), each
+   press 100-131, and in rhythm blocks a 22 about 200 ms before each
+   beat's 31. Each jump lasts 8 ms (about 16 samples at 2048 Hz) and
+   returns to 0. Decimal display shows the code in the low group;
+   Analog display shows the matching bits going high.
+4. The box's green LED flashes for odd codes only (31, 33, 101, 241
+   and so on). A dark LED on 30, 32, 200 or 240 is not a fault.
+5. Pauses are 242 and 243; the session ends with one 241.
 
 ## Marker behaviour
 
@@ -49,6 +117,57 @@ a lab update.
   late one goes out 1-2 frames later and its row carries both times
   plus delayed=1. Nothing is dropped without a dropped=1 row.
 
+## Marker to stimulus: the latency constants
+
+The byte marks when the software acted; the patient gets the
+stimulus later. metadata.json records the constants in force
+(`eeg.latency`) and the offset per event class
+(`eeg.marker_offsets_ms`, positive = stimulus follows the byte).
+The shipped values are datasheet-class estimates until the rig has
+been measured (`latency.measured` false); scripts/latency_check.py
+carries the bench procedure.
+
+| Byte | Written at | Stimulus follows the byte by |
+| --- | --- | --- |
+| 30, 31, 34, 35, 40, 41 (no buzz bit) | the flip that shows the stimulus | latency.visual_ms (20: half a scan plus panel response) for the screen; latency.tone_ms (12: mixer buffer) for the tone |
+| 32, 33, 36, 37 (buzz bit set) | the flip | the STIM command left in the same frame BEFORE the flip; felt vibration is latency.buzzer_ms (45: serial path plus ERM lag) after the command, so between buzzer_ms minus one frame and buzzer_ms after the byte |
+| 22 (rhythm's leading buzz) | the STIM command itself | latency.buzzer_ms |
+| 38 (Buzz Hunt pulse) | the pulse_motor command | latency.buzzer_ms |
+| 100-131 (responses) | when the frame loop drained the press | 0: the row's t_event is the crossing sample; the byte trails it by 0 to one frame and the row carries both |
+
+Rhythm's beat byte in lead mode is 31 (tone and screen), never 33:
+the buzz went out about 195 ms earlier as a 22 on the same lane, so
+the somatosensory epoch locks to 22 plus buzzer_ms and the auditory
+and visual epochs lock to 31. Rhythm's scoring zero is unchanged
+(the audible beat); the trial row's waveform_params carries the lead
+each note was cued with.
+
+## Validating marker latency against the trigger box
+
+Do this once before the first real recording, with the game in lab
+mode and ActiView recording.
+
+1. Box alone. Open a Python shell on the lab desktop:
+   `import serial; s = serial.Serial("COM10", 9600); s.write(bytes([30]))`.
+   ActiView shows a single 30 (8 ms) in the low byte. This proves the
+   port, the cable and the input mapping.
+2. Software delay. Run one reaction block. In raw.csv every eeg row
+   has t_event and t_wire; t_wire minus t_event is the software's own
+   delay (typically under 2 ms, one frame at most for a queued
+   marker). The box adds about 0.1 ms.
+3. Interval check. From the same block, take the intervals between
+   consecutive stimulus bytes in the BDF Status channel and the
+   intervals between the matching t_wire values in raw.csv. They must
+   agree to within one EEG sample plus 1 ms over the whole block; a
+   drift says the two clocks are not the same clock and the raw.csv
+   times cannot be used to re-align.
+4. Photodiode and piezo, if the equipment is there. A photodiode on a
+   stimulus tile against the 30-band byte gives the real
+   latency.visual_ms; a piezo disc on a pad against a 22 or 38 byte
+   gives the real latency.buzzer_ms (scripts/latency_check.py does
+   the same off-line with a phone camera). Put the medians in the
+   config, set latency.measured true, and quote them in the methods.
+
 ## For Welber: old SRT script versus this game
 
 The old task marked one thing: code 30 at flash onset, then 0. This
@@ -60,21 +179,23 @@ marks what the old file could not.
 | --- | --- | --- |
 | Stimulus onset | 30 on every flash, written straight after the flip, one code whatever the cues | 30-38, cue condition in the byte: 30 screen highlight only, 31 +tone, 32 +buzzer, 33 +both (the shipping default), 34 uncued, 35 tone only, 36 buzzer only, 37 buzzer+tone, 38 buzz-as-stimulus. Written straight after the flip, same anchor |
 | Stimulus onset, pattern blocks | n/a (one condition) | 40 trained-sequence item, 41 random or probe item; cue condition is fixed per block and recoverable from the trial CSV's cue_flags |
+| Rhythm's leading buzz | n/a | 22 at the STIM command, about 195 ms before the beat's own byte, which is then 31 (no buzzer bit) |
 | Response / press | never marked | at response onset: 100+lane correct, 110+lane wrong finger (lane = finger actually pressed), 120+lane anticipation or false start, 130 timeout (bookkeeping only, never epoch response-locked on it), 131 idle press |
 | Correctness | never marked; recovered offline from the CSV | in the byte, known at detection time |
 | Block boundaries | never marked | 200+mode start, 220+mode end, 219 abandoned (reaction=0, classic=1, adaptive=2, rhythm=3, mirror=4, pattern=5, chords=6, syllables=7, force_pilot=8, lighthouse=9, buzz_hunt=10, echo=12; 11 reserved for syllables_words) |
 | Session and flow | never marked | 240 session start, 241 session end, 242 pause, 243 resume, 244/245 rest bounds |
-| Preparation | never marked | 20 GET READY onset, 21 foreperiod armed (CNV S1), 25 catch-trial virtual onset |
+| Preparation | never marked | 20 GET READY onset, 21 foreperiod armed (CNV S1), 22 rhythm leading buzz, 25 catch-trial virtual onset |
 | Reset | 0 after each pulse | same |
 | Lane identity of the stimulus | in the CSV only | same choice, on purpose: 8 lanes x 8 cue conditions does not fit one band. The lane rides the raw.csv eeg row logged with every marker, alignable by timestamp instead of blind row order |
 
 Two deliberate departures from the old file, both bugs found in it:
 
 1. Pulse width. It intended two frames but counted frames, so the
-   line was really high 1-4 ms, shorter on slower monitors. A 250 Hz
-   amplifier needs at least two samples (8 ms), so those pulses could
-   be missed. Ours holds 10 ms on the wall clock, and a new code
-   waits until the line has been low 10 ms.
+   line was really high 1-4 ms, shorter on slower monitors. In Pulse
+   Mode the box stretched those to 8 ms anyway; in Simple Mode a
+   250 Hz amplifier could have missed them. Ours holds the code on
+   the wall clock (8 ms in the lab preset, matching the box) and a
+   new code waits until the line has been low 12 ms.
 2. Encoding. It wrote bytes(chr(code), 'UTF-8'), which is two bytes
    for anything above 127, and every response, block and session code
    is above 127. Ours writes bytes([code]), always one byte.
@@ -82,7 +203,8 @@ Two deliberate departures from the old file, both bugs found in it:
 For the epoching script:
 
 - Epoch on the band, not the literal 30. The shipping default cue mix
-  writes 33, and conditions must not be pooled.
+  writes 33 (31 in rhythm, with a 22 ahead of it), and conditions
+  must not be pooled.
 - Counts reconcile exactly: stimulus markers match trials.csv rows
   one for one, and each inter-stimulus span holds exactly one
   response code. tests/test_eeg_contract.py runs that check on real
@@ -92,15 +214,18 @@ For the epoching script:
   crossing by 0-17 ms. Each eeg row carries t_event (the sample
   timestamp of the crossing) next to t_wire, so response-locked
   epochs should re-align to t_event.
+- Shift stimulus-locked epochs by eeg.marker_offsets_ms from
+  metadata.json (table above) to lock to the stimulus rather than
+  the byte.
 
 ## Before the first real recording
 
-Run the validation pass and put the numbers in the methods section:
-photodiode on a stimulus tile, audio loopback for the tone,
-accelerometer on a pad for buzzer rise time, and a raw.csv versus
+Run the validation pass above and put the numbers in the methods
+section: photodiode on a stimulus tile, audio loopback for the tone,
+piezo or camera on a pad for buzzer lag, and the raw.csv versus
 trigger-channel interval check over a pilot session.
 
-Confirm with Welber: the amplifier model and sampling rate (sets the
-pulse-width margin), and whether any pipeline ever used the old
-prototype map (30 = miss, 11-18 stimulus). Recordings made under that
-map must not be pooled with these.
+Confirm with Welber: the ActiView sampling rate (sets the pulse-width
+margin), and whether any pipeline ever used the old prototype map
+(30 = miss, 11-18 stimulus). Recordings made under that map must not
+be pooled with these.

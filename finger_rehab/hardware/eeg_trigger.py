@@ -61,7 +61,10 @@ except ImportError:
 # recording can always be decoded with the map it was made under.
 # 1.1: echo mode id 12 added, so block bytes 212 and 232 now occur;
 # every code that existed under 1.0 is unchanged.
-CODES_VERSION = "1.1"
+# 1.2: prep_buzz_lead 22 added for rhythm's leading buzz, and a beat
+# whose buzz went out earlier carries the stimulus code WITHOUT the
+# buzzer bit (33 becomes 31). No existing code changed meaning.
+CODES_VERSION = "1.2"
 
 # 0 is the idle line, written after every pulse and in every shutdown
 # path. It never labels an event, so it lives outside CODES.
@@ -77,6 +80,14 @@ CODES: dict[str, int] = {
     # Preparation band (20-29).
     "prep_countdown": 20,        # block GET READY onset
     "prep_foreperiod": 21,       # reaction: wait armed (CNV S1)
+    # Rhythm: the tactile pulse sent AHEAD of the beat (rhythm.tactile_mode
+    # lead, or any non-zero motor rise compensation). Marked at the
+    # STIM command, so the felt vibration follows it by the buzzer
+    # latency recorded in metadata.json (eeg.marker_offsets_ms). The
+    # beat's own stimulus code then drops the buzzer bit: the
+    # somatosensory ERP locks here, the auditory and visual ERPs lock
+    # to the 30-band, and the two are never pooled.
+    "prep_buzz_lead": 22,
     "prep_catch_onset": 25,      # reaction: virtual go on a catch trial
     # Stimulus band (30-39), cue condition in the byte.
     "stim_visual": 30,           # screen highlight only
@@ -167,7 +178,7 @@ BANDS: dict[str, tuple[int, int]] = {
 
 
 def stim_code(sound_before: bool, buzz_before: bool,
-              show_target: bool) -> int:
+              show_target: bool, buzz_now: bool = True) -> int:
     """Stimulus code for the cue condition in force.
 
     The offsets map straight onto the cue_flags switches so the byte
@@ -175,11 +186,59 @@ def stim_code(sound_before: bool, buzz_before: bool,
     auditory and tactile stimuli produce different ERPs and must never
     be pooled, which is why the condition rides the byte and the lane
     rides the log row instead.
+
+    `buzz_now` is whether the buzzer fired WITH this stimulus. Rhythm
+    sends its buzz ahead of the beat (marked separately as 22), so the
+    beat byte must not claim a tactile onset that happened earlier:
+    the bit is set only when the buzzer channel is on AND it fired at
+    this onset.
     """
     return (CODES["stim_visual"]
             + (1 if sound_before else 0)
-            + (2 if buzz_before else 0)
+            + (2 if (buzz_before and buzz_now) else 0)
             + (4 if not show_target else 0))
+
+
+def marker_offsets(buzzer_ms: float, visual_ms: float,
+                   tone_ms: float) -> dict:
+    """Marker-to-stimulus offsets per event class, for metadata.json.
+
+    Positive means the physical stimulus FOLLOWS the wire byte by that
+    many milliseconds, so an epoch locked to the byte shifts later by
+    the value to lock to the stimulus. The constants come from the
+    latency.* config block; whether they were bench-measured on this
+    rig rides next to them in the same metadata section.
+
+    stim_visual   30-band and 40-band bytes go out straight after the
+                  flip that shows the stimulus; the panel then takes
+                  visual_ms to change (scan to mid-screen plus pixel
+                  response).
+    stim_tone     the cue tone is queued at dispatch and heard after
+                  the mixer buffer, tone_ms.
+    stim_buzz     bytes with the buzzer bit set (32, 33, 36, 37): the
+                  STIM command left in the same frame BEFORE the flip,
+                  so the felt vibration is buzzer_ms after the command
+                  and between buzzer_ms minus one frame and buzzer_ms
+                  after the byte. Rhythm's beat bytes never carry the
+                  bit when the buzz was sent earlier.
+    prep_buzz_lead  22 is written at the STIM command itself, so the
+                  felt vibration is buzzer_ms after the byte.
+    stim_buzz_hunt  38 is written at the pulse_motor command, same
+                  rule as 22.
+    response      t_event on the eeg row is the crossing sample; the
+                  byte trails it by the queue drain (0 to one frame)
+                  and the row carries both times, so 0 here.
+    """
+    return {
+        "stim_visual": round(float(visual_ms), 1),
+        "stim_tone": round(float(tone_ms), 1),
+        "stim_buzz": round(float(buzzer_ms), 1),
+        "stim_buzz_frame_note": "buzz command precedes the byte by the "
+                                "draw time, 0 to one frame",
+        "prep_buzz_lead": round(float(buzzer_ms), 1),
+        "stim_buzz_hunt": round(float(buzzer_ms), 1),
+        "response": 0.0,
+    }
 
 
 def response_code(kind: str, lane: int) -> int | None:
@@ -387,11 +446,20 @@ class MarkerWriter:
                  enabled: bool = False,
                  pulse_ms: float = 10.0, gap_ms: float = 10.0,
                  on_emit=None, clock=time.perf_counter,
-                 max_queue: int = 3) -> None:
+                 max_queue: int = 3,
+                 box: str | None = None,
+                 box_mode: str | None = None) -> None:
         self.backend = backend
         self.enabled = bool(enabled)
         self.pulse_s = float(pulse_ms) / 1000.0
         self.gap_s = float(gap_ms) / 1000.0
+        # Documentation only, copied into metadata.json: which trigger
+        # box and which switch position the session was recorded
+        # with. The MMBT-S in Pulse Mode holds every code 8 ms and
+        # resets itself whatever pulse_ms says; recording the mode is
+        # what lets an analyst know which number the wire obeyed.
+        self.box = box
+        self.box_mode = box_mode
         self.on_emit = on_emit
         self.max_queue = int(max_queue)
         self._clock = clock
@@ -509,6 +577,8 @@ class MarkerWriter:
             "enabled": self.enabled,
             "pulse_ms": round(self.pulse_s * 1000.0, 3),
             "gap_ms": round(self.gap_s * 1000.0, 3),
+            "box": self.box,
+            "box_mode": self.box_mode,
             "codes_version": CODES_VERSION,
             "failure_count": self.failure_count,
             "delayed_count": self.delayed_count,
@@ -619,12 +689,26 @@ def writer_from_config(get, on_emit=None) -> MarkerWriter:
     enabled = bool(get("eeg.enabled", False))
     pulse_ms = float(get("eeg.pulse_ms", 10))
     gap_ms = float(get("eeg.gap_ms", 10))
+    box = get("eeg.box", None)
+    box_mode = get("eeg.box_mode", None)
+    box = str(box) if box else None
+    box_mode = str(box_mode) if box_mode else None
     if not enabled:
         return MarkerWriter(backend=None, enabled=False,
                             pulse_ms=pulse_ms, gap_ms=gap_ms,
-                            on_emit=on_emit)
+                            on_emit=on_emit, box=box, box_mode=box_mode)
     port = get("eeg.port", None)
     baud = int(get("eeg.baud", 115200))
+    if baud == 1200:
+        # The NeuroSpec MMBT-S manual (section 3.3): setting the baud
+        # to 1200 RESETS the box, which then drops off the bus. On a
+        # virtual COM port the baud never sets the speed, so there is
+        # no reason to send this value and one very good reason not to.
+        raise TriggerPortError(
+            "eeg.baud 1200 is refused: the MMBT-S trigger box resets "
+            "and disappears from Device Manager when a port opens at "
+            "1200 baud. Use 9600 (the documented rate) or leave the "
+            "default.")
     require = bool(get("eeg.require_port", False))
     backend: TriggerBackend | None = None
     reason = "no eeg.port configured"
@@ -647,4 +731,4 @@ def writer_from_config(get, on_emit=None) -> MarkerWriter:
         log.info("EEG markers live on %s", port)
     return MarkerWriter(backend=backend, enabled=True,
                         pulse_ms=pulse_ms, gap_ms=gap_ms,
-                        on_emit=on_emit)
+                        on_emit=on_emit, box=box, box_mode=box_mode)

@@ -125,7 +125,7 @@ class PlanTests(unittest.TestCase):
         from finger_rehab.game.battery import build_plan, BatteryError
         with self.assertRaises(BatteryError) as ctx:
             build_plan(self._cfg(), "P01", "")
-        self.assertIn("dominant hand", str(ctx.exception))
+        self.assertIn("main hand", str(ctx.exception))
 
     def test_a_name_gets_a_fixed_cell_too(self) -> None:
         from finger_rehab.game.battery import build_plan
@@ -532,11 +532,11 @@ class BatteryFlowTests(_BatteryHarness):
         hub = eng._screens["mode_select"]
         ok, label, reason = hub._battery_state()
         self.assertTrue(ok, reason)
-        self.assertIn("Study battery", label)
-        # B starts it from the hub.
+        self.assertEqual(label, "PLAY ALL  (A)")
+        # A starts it from the hub.
         eng.show_mode_select()
         hub.handle_event(pygame.event.Event(
-            pygame.KEYDOWN, {"key": pygame.K_b, "mod": 0, "unicode": "b",
+            pygame.KEYDOWN, {"key": pygame.K_a, "mod": 0, "unicode": "a",
                              "scancode": 0}))
         self.assertTrue(eng.block_is_running())
         self.assertEqual(eng.current_block, "reaction")
@@ -547,7 +547,8 @@ class BatteryFlowTests(_BatteryHarness):
         self.assertEqual((key, hand), ("reaction", "left"))
         heading, pill, stretch = results._battery_card_lines(
             eng.pending_protocol_step())
-        self.assertIn("step 2 of 10", heading)
+        self.assertEqual(heading, "PLAY ALL  step 2 of 10")
+        self.assertEqual(pill, "Play all step 2, hand 2")
         self.assertEqual(stretch, "")
         results.draw(pygame.Surface((1280, 800)))
         # N takes the step.
@@ -558,7 +559,7 @@ class BatteryFlowTests(_BatteryHarness):
                          ("reaction", "left"))
         eng.finish_block()
         _ok, label, _reason = hub._battery_state()
-        self.assertIn("2/10", label)
+        self.assertEqual(label, "PLAY ALL 2/10  (A)")
         hub.draw(pygame.Surface((1280, 800)))
 
     def test_the_stretch_step_says_so_on_the_card(self) -> None:
@@ -577,12 +578,13 @@ class BatteryFlowTests(_BatteryHarness):
         self.assertIn("step 6 of 10", heading)
         self.assertIn("Stretch", stretch)
 
-    def test_without_a_dominant_hand_the_hub_says_why(self) -> None:
+    def test_without_a_main_hand_the_hub_says_why(self) -> None:
         eng = self._engine(_Rig())
         eng.begin_session("Mara", "40")
         ok, reason = eng.battery_available()
         self.assertFalse(ok)
-        self.assertIn("dominant hand", reason)
+        self.assertEqual(reason,
+                         "Play all needs a main hand: pick one at login")
         self.assertFalse(eng.start_battery())
         self.assertEqual(eng._screens["mode_select"]._battery_state()[0],
                          False)

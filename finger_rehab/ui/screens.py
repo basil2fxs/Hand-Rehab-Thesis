@@ -300,6 +300,92 @@ def _draw_header(surf: pygame.Surface, title: str, subtitle: str,
                   colour=theme.muted)
 
 
+class MuteButton:
+    """The menu-music mute, one small pill in a corner of every menu
+    screen (login, hub, hand picker, results, Settings).
+
+    It flips the logged-in person's own mute (engine.toggle_menu_music_mute,
+    remembered per participant in data/prefs.py), not the machine-wide
+    switch in Settings: a participant who wants quiet menus gets them
+    at every visit without the RA changing the laptop's setup. Sound
+    is on by default. The pill draws its state from the engine every
+    frame, so five screens can never disagree about it. M toggles it
+    from the keyboard on every screen that hosts one; the login screen
+    passes M through to a focused field first, since M is also the
+    letter that types "male" or a name.
+    """
+
+    # Wide enough for "MUSIC OFF  (M)" with the glyph, so the label
+    # never hangs past the pill.
+    W = 168
+    H = 34
+    HOTKEY = pygame.K_m
+
+    def __init__(self, engine, rect: pygame.Rect) -> None:
+        self.engine = engine
+        self.rect = rect
+        self.hover = False
+
+    def muted(self) -> bool:
+        try:
+            return bool(self.engine.menu_music_muted())
+        except Exception:
+            return False
+
+    def toggle(self) -> None:
+        try:
+            self.engine.toggle_menu_music_mute()
+        except Exception as e:
+            log.warning("menu mute toggle failed: %s", e)
+
+    def handle_event(self, e: pygame.event.Event,
+                     allow_key: bool = True) -> bool:
+        """True when the event was the pill's (a click on it, or M)."""
+        if e.type == pygame.MOUSEMOTION:
+            self.hover = self.rect.collidepoint(e.pos)
+            return False
+        if (e.type == pygame.MOUSEBUTTONDOWN and e.button == 1
+                and self.rect.collidepoint(e.pos)):
+            self.toggle()
+            return True
+        if (allow_key and e.type == pygame.KEYDOWN
+                and e.key == self.HOTKEY):
+            self.toggle()
+            return True
+        return False
+
+    def draw(self, surf: pygame.Surface, theme: Theme,
+             layout: Layout) -> None:
+        muted = self.muted()
+        label = "MUSIC OFF  (M)" if muted else "MUSIC ON  (M)"
+        r = self.rect
+        if muted:
+            bg = tuple(max(0, c - 30) for c in theme.background)
+            fg = theme.muted
+        else:
+            bg = theme.accent if self.hover else tuple(
+                max(0, c - 30) for c in theme.background)
+            fg = (255, 255, 255) if self.hover else theme.foreground
+        if muted and self.hover:
+            bg = tuple(max(0, c - 48) for c in theme.background)
+        pygame.draw.rect(surf, bg, r, border_radius=r.h // 2)
+        font = layout.font(FONT_SMALL + 1)
+        text = font.render(label, True, fg)
+        # A small speaker glyph, crossed when muted, then the label.
+        gx = r.x + 14
+        gy = r.centery
+        pygame.draw.polygon(surf, fg, [(gx, gy - 3), (gx + 4, gy - 3),
+                                       (gx + 9, gy - 8), (gx + 9, gy + 8),
+                                       (gx + 4, gy + 3), (gx, gy + 3)])
+        if muted:
+            pygame.draw.line(surf, fg, (gx - 1, gy - 9), (gx + 12, gy + 9),
+                             2)
+        else:
+            pygame.draw.arc(surf, fg, pygame.Rect(gx + 6, gy - 7, 12, 14),
+                            -0.9, 0.9, 2)
+        surf.blit(text, text.get_rect(midleft=(gx + 24, gy)))
+
+
 # ---- session continuity helpers ------------------------------------------
 # One login is one session, and a session is meant to FLOW: finish a
 # game, see one suggestion, press once, play it. These helpers are
@@ -470,18 +556,18 @@ def draw_session_strip(surf: pygame.Surface, rect: pygame.Rect,
         right_limit -= nw + 16
 
     x = rect.x + 18
-    # Battery progress leads the strip while a study battery is
-    # running: the one line the RA checks against the run sheet.
-    # Filled so it reads as status, not as another game chip.
+    # PLAY ALL progress leads the strip while the battery is running:
+    # the one line the RA checks against the run sheet. Filled so it
+    # reads as status, not as another game chip.
     try:
         progress = engine.battery_progress()
     except Exception:
         progress = None
     if isinstance(progress, dict):
         if progress.get("finished"):
-            text = f"BATTERY DONE {progress['done']}/{progress['of']}"
+            text = f"PLAY ALL DONE {progress['done']}/{progress['of']}"
         else:
-            text = f"BATTERY {progress['done']}/{progress['of']}"
+            text = f"PLAY ALL {progress['done']}/{progress['of']}"
             nxt = progress.get("next")
             if isinstance(nxt, dict) and nxt.get("mode"):
                 text += f"  next {mode_title(str(nxt['mode']))}"
@@ -520,8 +606,8 @@ class TitleScreen(Screen):
     # seconds, so half of what it measured was anticipation.
     INFO_TITLE = "Session protocol"
     INFO_STEPS = [
-        "1. Enter the participant code (or name), age and dominant hand,",
-        "      then press LOG IN. A study visit starts the battery from the hub.",
+        "1. Enter the participant code (or name), age and main hand,",
+        "      then press LOG IN. A study visit presses PLAY ALL on the hub.",
         "2. Run the four core modes in this order, once each per session:",
         "      Reaction  (baseline eye-to-hand speed, random waits)",
         "      Adaptive  (40 trials, pace adjusts to the participant)",
@@ -575,11 +661,15 @@ class TitleScreen(Screen):
         w, h = engine.layout.width, engine.layout.height
 
         # The intake card. Row one is the identity (code or name, age,
-        # sex); row two is what the study needs per person (dominant
-        # hand, Edinburgh LQ, visit, hand size). Everything is set
-        # once here and reused for every block the participant plays
-        # this session, so every CSV row and every session folder is
-        # tagged the same way.
+        # sex); row two is what the study needs per person (main hand,
+        # hand size). Everything is set once here and reused for every
+        # block the participant plays this session, so every CSV row
+        # and every session folder is tagged the same way. The visit
+        # number is not a field: it is worked out from the days this
+        # identity has already played on and recorded on its own, and
+        # the Edinburgh score is not asked at all (the Session keeps
+        # the column for old data). Basil's call: fewer fields, and
+        # the main hand as a plain left / right choice.
         self.card_rect = pygame.Rect(cx - self.CARD_W // 2, self.CARD_TOP,
                                      self.CARD_W, self.CARD_H)
         x0 = self.card_rect.x + 40
@@ -608,45 +698,36 @@ class TitleScreen(Screen):
             options=self.SEX_OPTIONS, label="SEX  (optional)",
             initial="", hotkeys=self.SEX_HOTKEYS,
         )
+        # `hand_seg` keeps its name and the metadata key stays
+        # dominant_hand, so old sessions and the analysis read on.
         self.hand_seg = Segmented(
-            pygame.Rect(x0, r2, 210, fh),
+            pygame.Rect(x0, r2, 260, fh),
             self.theme, self.layout,
-            options=self.HAND_OPTIONS, label="DOMINANT HAND",
+            options=self.HAND_OPTIONS, label="MAIN HAND",
             initial=None, hotkeys=self.HAND_HOTKEYS,
         )
-        self.ehi_input = TextInput(
-            pygame.Rect(x0 + 224, r2, 150, fh),
-            self.theme, self.layout,
-            label="EDINBURGH LQ", placeholder="-100 to 100",
-            max_len=4, numeric=True, signed=True,
-        )
-        self.visit_input = TextInput(
-            pygame.Rect(x0 + 388, r2, 100, fh),
-            self.theme, self.layout,
-            label="VISIT", placeholder="1",
-            max_len=2, numeric=True,
-        )
         self.length_input = TextInput(
-            pygame.Rect(x0 + 502, r2, 172, fh),
+            pygame.Rect(x0 + 300, r2, 260, fh),
             self.theme, self.layout,
             label="HAND LENGTH mm", placeholder="optional",
             max_len=3, numeric=True,
         )
         self.breadth_input = TextInput(
-            pygame.Rect(x0 + 688, r2, 172, fh),
+            pygame.Rect(x0 + 600, r2, 260, fh),
             self.theme, self.layout,
             label="HAND BREADTH mm", placeholder="optional",
             max_len=3, numeric=True,
         )
         # One focus order for Tab, text fields and pickers alike.
         self._fields = [self.name_input, self.age_input, self.sex_seg,
-                        self.hand_seg, self.ehi_input, self.visit_input,
-                        self.length_input, self.breadth_input]
-        # Visit auto-suggestion bookkeeping: the code the last
-        # suggestion was made for, and the text it wrote, so a visit
-        # the RA typed by hand is never overwritten.
-        self._visit_for: str | None = None
-        self._visit_suggested_text = ""
+                        self.hand_seg, self.length_input,
+                        self.breadth_input]
+        # Carry-over bookkeeping: the (identity, age) the fields were
+        # last filled for, and what was written, so a value the RA
+        # typed by hand is never overwritten by the lookup and a
+        # carried value is dropped again when the identity changes.
+        self._prefill_for: tuple[str, str] | None = None
+        self._prefill_source: dict | None = None
         self.refresh()
 
         # Blank-name guard state: the first LOG IN with no name shows
@@ -699,6 +780,15 @@ class TitleScreen(Screen):
         # Whether the info overlay is currently open. Click the Info
         # pill (or anywhere on the overlay, or Esc) to toggle it.
         self._show_info = False
+        # Menu-music mute, top-left corner, the same pill every menu
+        # screen carries. Before login it applies to whoever is typed
+        # into the identity field (engine.pref_identity).
+        self.mute_btn = MuteButton(
+            engine, pygame.Rect(self.EDGE, 26, MuteButton.W, MuteButton.H))
+
+    def pending_identity(self) -> str:
+        """The identity typed so far, for preferences before login."""
+        return self.name_input.value
 
     def _open_info(self) -> None:
         self._show_info = True
@@ -756,28 +846,82 @@ class TitleScreen(Screen):
             return ""
         return suggest_next_code(data_dir)
 
-    def _refresh_visit_suggestion(self) -> None:
-        """Keep the visit field one ahead of this identity's history
-        unless the RA has typed a visit by hand."""
+    # Which login field carries each carried-over intake key.
+    def _carry_targets(self) -> dict:
+        return {"hand_length_mm": self.length_input,
+                "hand_breadth_mm": self.breadth_input,
+                "dominant_hand": self.hand_seg,
+                "sex": self.sex_seg}
+
+    def _refresh_prefill(self) -> None:
+        """Fill hand size, main hand and sex from this identity's last
+        recorded game, and take the fill back when the identity
+        changes to someone with no record.
+
+        Runs once per change of (identity, age), never per frame. A
+        field only takes a carried value while it is empty or still
+        holding the last carried value: anything the RA typed stands.
+        The lookup is data/intake.previous_intake, which opens only
+        this identity's own folders.
+        """
+        from ..data.intake import previous_intake
+        key = (self.name_input.value, self.age_input.value)
+        if key == self._prefill_for:
+            return
+        self._prefill_for = key
+        found = previous_intake(self._data_dir(), key[0], key[1])
+        for name, field in self._carry_targets().items():
+            carried = bool(getattr(field, "prefilled", False))
+            if isinstance(field, Segmented):
+                # Sex's "not said" is the empty key; the hand has no
+                # pick at all until one is made.
+                blank = "" if name == "sex" else None
+                empty = field.value in (None, "")
+            else:
+                blank = ""
+                empty = not field.text
+            if not (empty or carried):
+                continue          # typed by hand today: leave it
+            value = (found or {}).get(name, "")
+            if value:
+                field.set_prefilled(value)
+            elif carried:
+                if isinstance(field, Segmented):
+                    field.set(blank)
+                else:
+                    field.text = blank
+                field.prefilled = False
+        self._prefill_source = found
+
+    def _prefill_note(self) -> str:
+        """One line under the button saying what was carried over and
+        from when, or '' when nothing on screen is carried."""
+        src = self._prefill_source
+        if not src:
+            return ""
+        words = {"hand_length_mm": "hand length",
+                 "hand_breadth_mm": "hand breadth",
+                 "dominant_hand": "main hand", "sex": "sex"}
+        carried = [words[k] for k, f in self._carry_targets().items()
+                   if getattr(f, "prefilled", False)]
+        if not carried:
+            return ""
+        return (", ".join(carried).capitalize()
+                + f" filled from {src.get('who', '')}'s last visit "
+                + f"({src.get('day', '')}). Type over to change.")
+
+    def _derived_visit(self, name: str) -> str:
+        """The visit this login is: a pre-fill from a yaml passed as
+        --config wins, otherwise one more than the earlier days this
+        identity has played on (data/intake.suggest_visit)."""
         from ..data.intake import suggest_visit
-        code = self.name_input.value
-        if code == self._visit_for:
-            return
-        if self.visit_input.text not in ("", self._visit_suggested_text):
-            # Hand-edited: leave it alone for the rest of this login.
-            self._visit_for = code
-            return
-        self._visit_for = code
-        if not code:
-            self._visit_suggested_text = ""
-            self.visit_input.text = ""
-            return
-        self._visit_suggested_text = str(suggest_visit(self._data_dir(),
-                                                       code))
-        self.visit_input.text = self._visit_suggested_text
+        pre = self._cfg_str("session.visit")
+        if pre:
+            return pre
+        return str(suggest_visit(self._data_dir(), name))
 
     def update(self, dt: float) -> None:
-        self._refresh_visit_suggestion()
+        self._refresh_prefill()
 
     def _begin(self) -> None:
         from ..data.intake import is_study_code, normalise_code
@@ -795,12 +939,16 @@ class TitleScreen(Screen):
                                "patient. Begin again to continue "
                                "anonymously.")
             return
-        # A study code needs the dominant hand: the battery's hand
-        # order and the analysis's dominance contrast both hang off
-        # it, and it cannot be recovered after the visit. A name (the
-        # clinic path) is not held to this.
+        # The RA may type the code and press Enter inside one frame;
+        # the carry-over (main hand included) has to land before the
+        # checks below and before the commit.
+        self._refresh_prefill()
+        # A study code needs the main hand: the play-all hand order
+        # and the analysis's hand contrast both hang off it, and it
+        # cannot be recovered after the visit. A name (the clinic
+        # path) is not held to this.
         if is_study_code(name) and self.hand_seg.value is None:
-            self.begin_note = ("Pick the dominant hand for a study code "
+            self.begin_note = ("Pick the main hand for a study code "
                                "(click Left or Right, or Tab to the "
                                "field and press L or R).")
             return
@@ -812,16 +960,17 @@ class TitleScreen(Screen):
         # round-trips whatever was typed instead of coercing to int
         # and rejecting unusual inputs like "65y".
         age = self.age_input.value or ""
-        self._refresh_visit_suggestion()
         # The engine owns the session lifecycle: identity into cfg +
         # session metadata, the EEG session-start marker, then game
         # select as home base for as many games as the player wants.
+        # Nothing is passed for edinburgh_lq: the screen no longer
+        # asks it, so the config's value (a yaml pre-fill, or nothing)
+        # is what the Session records.
         self.engine.begin_session(
             name, age,
             sex=self.sex_seg.value or "",
             dominant_hand=self.hand_seg.value or "",
-            edinburgh_lq=self.ehi_input.value,
-            visit=self.visit_input.value,
+            visit=self._derived_visit(name),
             hand_length_mm=self.length_input.value,
             hand_breadth_mm=self.breadth_input.value,
         )
@@ -908,17 +1057,16 @@ class TitleScreen(Screen):
         self.sex_seg.set(self._cfg_str("session.sex").lower())
         hand = self._cfg_str("session.dominant_hand").lower()
         self.hand_seg.set(hand if hand in ("left", "right") else None)
-        self.ehi_input.text = self._cfg_str("session.edinburgh_lq")
         self.length_input.text = self._cfg_str("session.hand_length_mm")
         self.breadth_input.text = self._cfg_str("session.hand_breadth_mm")
-        visit = self._cfg_str("session.visit")
-        self._visit_for = None
-        self._visit_suggested_text = ""
-        self.visit_input.text = visit
-        if not visit:
-            self._refresh_visit_suggestion()
         for f in self._fields:
             f.focused = False
+            f.prefilled = False
+        # A fresh screen carries nothing yet; the first update fills
+        # from the tree for whatever identity the field opens with.
+        self._prefill_for = None
+        self._prefill_source = None
+        self._refresh_prefill()
         self._na_warned = False
         self.begin_note = ""
 
@@ -951,6 +1099,11 @@ class TitleScreen(Screen):
         if e.type == pygame.KEYDOWN and e.key == pygame.K_TAB:
             shift = bool(getattr(e, "mod", 0) & pygame.KMOD_SHIFT)
             self._focus_move(-1 if shift else 1)
+            return
+        # The mute pill: a click on it is its own, and M is its key
+        # only while no field has focus (a focused field is typing).
+        field_focused = any(f.focused for f in self._fields)
+        if self.mute_btn.handle_event(e, allow_key=not field_focused):
             return
         # Fields first so a click in one claims focus before any button
         # hit-test runs underneath; every field sees the event so a
@@ -1030,6 +1183,11 @@ class TitleScreen(Screen):
                       (cx, self.card_rect.y + self.NOTE_Y),
                       self.theme, self.layout, pt=FONT_SMALL + 1,
                       centre=True, colour=self.theme.muted)
+        elif self._prefill_note():
+            draw_text(surf, self._prefill_note(),
+                      (cx, self.card_rect.y + self.NOTE_Y),
+                      self.theme, self.layout, pt=FONT_SMALL + 1,
+                      centre=True, colour=self.theme.muted)
 
         # Utility strip. A hairline rule separates the session job above
         # from the setup actions below, so the bottom row reads as tools
@@ -1051,6 +1209,7 @@ class TitleScreen(Screen):
         for rect, label, icon, _action in self._pills:
             self._draw_pill(surf, rect, label, icon,
                             rect.collidepoint(mouse))
+        self.mute_btn.draw(surf, self.theme, self.layout)
 
         # Footer: author, institution and the version this build records
         # into every session's metadata.
@@ -1338,15 +1497,18 @@ class ModeSelectScreen(Screen):
         # calibrated; drawn under the button instead of silently
         # doing nothing.
         self.cal_note = ""
-        # The study battery: one press runs the fixed block order for
-        # this participant (game/battery.py), stopping at results
-        # between blocks. Sits right of the calibrate note's room so
-        # the two never overlap on a keyboard rig. Skip only shows
-        # while a step is pending, for a block that cannot be run.
+        # PLAY ALL: one press runs the fixed block order for this
+        # participant (game/battery.py, the study battery; the button
+        # says "play all" because that is what it does, and the study
+        # wording stays in the config and the docs), stopping at
+        # results between blocks. Sits right of the calibrate note's
+        # room so the two never overlap on a keyboard rig. Skip only
+        # shows while a step is pending, for a block that cannot be
+        # run.
         self.battery_btn = Button(
             pygame.Rect(720, engine.layout.height - 58, 300,
                         BUTTON_H - 16),
-            "Study battery  (B)", self._battery,
+            "PLAY ALL  (A)", self._battery,
             self.theme, self.layout,
         )
         self.skip_btn = Button(
@@ -1356,6 +1518,9 @@ class ModeSelectScreen(Screen):
             self.theme, self.layout,
         )
         self.battery_note = ""
+        # Menu-music mute, top-left, the same pill as the login screen.
+        self.mute_btn = MuteButton(
+            engine, pygame.Rect(28, 26, MuteButton.W, MuteButton.H))
 
     CAL_UNAVAILABLE = "Calibration needs the sensor hardware"
 
@@ -1373,14 +1538,14 @@ class ModeSelectScreen(Screen):
             progress = None
         if isinstance(progress, dict):
             if progress.get("finished"):
-                return False, "Battery done", ""
-            return (True, f"Continue battery {progress['done']}/"
-                          f"{progress['of']}  (B)", "")
+                return False, "PLAY ALL DONE", ""
+            return (True, f"PLAY ALL {progress['done']}/"
+                          f"{progress['of']}  (A)", "")
         try:
             ok, reason = self.engine.battery_available()
         except Exception as e:
             ok, reason = False, str(e)
-        return ok, "Study battery  (B)", ("" if ok else reason)
+        return ok, "PLAY ALL  (A)", ("" if ok else reason)
 
     def _battery(self) -> None:
         ok, _label, reason = self._battery_state()
@@ -1389,7 +1554,7 @@ class ModeSelectScreen(Screen):
             return
         self.battery_note = ""
         if not self.engine.start_battery():
-            self.battery_note = "Battery could not start"
+            self.battery_note = "Play all could not start"
 
     def _skip_step(self) -> None:
         if self._battery_pending():
@@ -1441,6 +1606,8 @@ class ModeSelectScreen(Screen):
     )
 
     def handle_event(self, e: pygame.event.Event) -> None:
+        if self.mute_btn.handle_event(e):
+            return
         controls = self.buttons + [self.back_btn, self.cal_btn,
                                    self.battery_btn]
         if self._battery_pending():
@@ -1460,9 +1627,9 @@ class ModeSelectScreen(Screen):
         # mouse-only control on the screen.
         elif e.type == pygame.KEYDOWN and e.key == pygame.K_c:
             self._calibrate()
-        # B starts or continues the study battery, S skips its
-        # pending step, so the study path is keyboard-only too.
-        elif e.type == pygame.KEYDOWN and e.key == pygame.K_b:
+        # A starts or continues PLAY ALL, S skips its pending step, so
+        # the study path is keyboard-only too.
+        elif e.type == pygame.KEYDOWN and e.key == pygame.K_a:
             self._battery()
         elif e.type == pygame.KEYDOWN and e.key == pygame.K_s:
             self._skip_step()
@@ -1812,6 +1979,7 @@ class ModeSelectScreen(Screen):
                            self.battery_btn.rect.centery - 8),
                           self.theme, self.layout, pt=FONT_SMALL,
                           centre=False, colour=self.theme.muted)
+        self.mute_btn.draw(surf, self.theme, self.layout)
 
     @staticmethod
     def _draw_done_tick(surf: pygame.Surface, cx: int, cy: int,
@@ -1892,6 +2060,9 @@ class SetupScreen(Screen):
             "Back", engine.show_mode_select,
             self.theme, self.layout,
         )
+        # Menu-music mute, top-left, the same pill as the hub.
+        self.mute_btn = MuteButton(
+            engine, pygame.Rect(28, 26, MuteButton.W, MuteButton.H))
 
     def _second_board_missing(self) -> bool:
         """Same rule as the mode-select mirror card: a hardware source
@@ -1924,6 +2095,8 @@ class SetupScreen(Screen):
     }
 
     def handle_event(self, e: pygame.event.Event) -> None:
+        if self.mute_btn.handle_event(e):
+            return
         # Slider first so a click on the knob isn't intercepted by an
         # adjacent button hit-test. Only let it respond when classic
         # mode is the active pick.
@@ -2032,6 +2205,7 @@ class SetupScreen(Screen):
                           self.theme, self.layout, pt=FONT_SMALL,
                           centre=True, colour=self.theme.error)
         self.back_btn.draw(surf)
+        self.mute_btn.draw(surf, self.theme, self.layout)
 
 
 class GameplayScreen(Screen):
@@ -3728,7 +3902,12 @@ class RhythmScreen(Screen):
         # tests.
         if self.engine.mode and hasattr(self.engine.mode, "upcoming"):
             upcoming = self.engine.mode.upcoming(self.LOOKAHEAD_S)
-            song_t = self.engine.mode.song_time
+            # display_song_time, not song_time: the note has to reach
+            # the strike line on the RETINA on the audible beat, so
+            # the drawing clock runs ahead by the panel's lag and
+            # behind by the audio path (see RhythmMode).
+            song_t = getattr(self.engine.mode, "display_song_time",
+                             self.engine.mode.song_time)
             for s in upcoming:
                 ahead = s.note.t - song_t
                 frac = 1.0 - max(0.0, min(1.0, ahead / self.LOOKAHEAD_S))
@@ -3792,7 +3971,9 @@ class RhythmScreen(Screen):
                 upcoming = self.engine.mode.upcoming(self.LOOKAHEAD_S)
                 close = [s for s in upcoming if s.note.lane == ls.lane]
                 if close:
-                    song_t = self.engine.mode.song_time
+                    song_t = getattr(self.engine.mode,
+                                     "display_song_time",
+                                     self.engine.mode.song_time)
                     ahead = close[0].note.t - song_t
                     if -0.2 <= ahead <= 0.4:
                         ring_r = TARGET_R + 5
@@ -3934,7 +4115,11 @@ class RhythmSetupScreen(Screen):
     I tried them. No BPM clutter, the track's own tempo is used."""
 
     DIFFICULTIES = ("easy", "medium", "hard")
-    PREVIEW_S = 8.0
+    # The selected song plays itself for this long, then stops: on
+    # entry (the default pick included), and again on every pick.
+    # Four seconds says which song it is without playing the intro
+    # the block is about to play. Basil's number.
+    PREVIEW_S = 4.0
 
     def __init__(self, engine: "GameEngine") -> None:
         super().__init__(engine)
@@ -3944,6 +4129,13 @@ class RhythmSetupScreen(Screen):
         self._selected_difficulty = engine.cfg.get("rhythm.difficulty", "medium")
         self._previewing: bool = False
         self._preview_stop_at: float = 0.0
+        # A preview owed to the current pick that has not started yet:
+        # it waits for the menu playlist to finish fading (the two
+        # share one stream, and a hard cut over the fade is what
+        # "colliding" sounds like). update() starts it.
+        self._preview_pending: bool = False
+        # Swappable clock so tests can step past the four seconds.
+        self._clock = time.perf_counter
         self._scroll_y = 0
         # Scrollbar drag state. Rect is set every frame by
         # _draw_track_list so handle_event can collide against it; None
@@ -4035,6 +4227,11 @@ class RhythmSetupScreen(Screen):
         # up across many tracks). Rows show "..." until the worker
         # fills the cache.
         self._spawn_duration_worker()
+        # Landing here (or a rescan) owes the pick a preview, the
+        # default pick included: the RA hears which song START will
+        # play without having to press anything.
+        self._stop_preview()
+        self._preview_pending = bool(self._selected_track)
 
     def _spawn_duration_worker(self) -> None:
         # Already running? Skip - the existing worker will pick up new
@@ -4096,6 +4293,7 @@ class RhythmSetupScreen(Screen):
             self._selected_difficulty = d
 
     def _stop_preview(self) -> None:
+        self._preview_pending = False
         if self.engine.audio and self._previewing:
             try:
                 self.engine.audio.stop()
@@ -4108,16 +4306,31 @@ class RhythmSetupScreen(Screen):
         self._previewing = False
         self._preview_stop_at = 0.0
 
-    def _toggle_preview(self) -> None:
-        # Already playing? Cut it short.
-        if self._previewing:
-            self._stop_preview()
-            return
+    def _menu_music_faded(self) -> bool:
+        """Whether the menu playlist has left the stream. The preview
+        waits for this so it never lands over the fade."""
+        player = getattr(self.engine, "menu_music", None)
+        return player is None or getattr(player, "state", "idle") == "idle"
+
+    def _start_preview(self) -> None:
+        """Play the selected song from the top for PREVIEW_S. A pick
+        while one is playing starts over from the new pick."""
+        self._stop_preview()
         if not self._selected_track or self.engine.audio is None:
+            return
+        if not self._menu_music_faded():
+            self._preview_pending = True
             return
         if self.engine.audio.play_song(self._selected_track):
             self._previewing = True
-            self._preview_stop_at = time.perf_counter() + self.PREVIEW_S
+            self._preview_stop_at = self._clock() + self.PREVIEW_S
+
+    def _toggle_preview(self) -> None:
+        # The button: stop a running preview, or play the pick again.
+        if self._previewing:
+            self._stop_preview()
+            return
+        self._start_preview()
 
     def _back_to_modes(self) -> None:
         self._stop_preview()
@@ -4139,8 +4352,12 @@ class RhythmSetupScreen(Screen):
         self.engine.begin_rhythm_block(bm)
 
     def update(self, dt: float) -> None:
+        # A preview owed to the pick starts once the menu playlist has
+        # faded off the shared stream.
+        if self._preview_pending and self._menu_music_faded():
+            self._start_preview()
         # Auto-stop the preview after PREVIEW_S seconds.
-        if self._previewing and time.perf_counter() >= self._preview_stop_at:
+        if self._previewing and self._clock() >= self._preview_stop_at:
             self._stop_preview()
 
     def _max_scroll(self) -> int:
@@ -4194,10 +4411,11 @@ class RhythmSetupScreen(Screen):
         if e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
             for rect, path in self._track_rects:
                 if rect.collidepoint(e.pos):
-                    new_selection = str(path) if path is not None else None
-                    if new_selection != self._selected_track:
-                        self._stop_preview()
-                    self._selected_track = new_selection
+                    # Any pick, the same song included, plays its
+                    # preview again from the top.
+                    self._selected_track = (str(path) if path is not None
+                                            else None)
+                    self._start_preview()
                     return
 
     def _scroll_y_for_mouse_y(self, mouse_y: int) -> int:
@@ -4218,7 +4436,8 @@ class RhythmSetupScreen(Screen):
     def draw(self, surf: pygame.Surface) -> None:
         surf.fill(self.theme.background)
         _draw_header(surf, "Pick a song",
-                     "Choose a track and difficulty, then press START.",
+                     "The picked song plays a 4 second preview. Choose "
+                     "a difficulty, then press START.",
                      self.theme, self.layout)
         self._draw_track_list(surf)
         self._draw_detail_panel(surf)
@@ -4512,6 +4731,11 @@ class ResultsScreen(Screen):
             theme=self.theme, layout=self.layout,
             title="Cues for the next block",
         )
+        # Menu-music mute, on the same top row right of the cue pill
+        # (the corner itself is the pill's).
+        self.mute_btn = MuteButton(
+            engine, pygame.Rect(28 + 306 + 12, 31, MuteButton.W,
+                                MuteButton.H))
 
         # When the screen was last entered, for the one-shot entry
         # animation (ring sweep + stat count-up). Zero means "never
@@ -4548,6 +4772,8 @@ class ResultsScreen(Screen):
         # and start a block at the same time.
         if self._cue_menu.handle_event(e):
             return
+        if self.mute_btn.handle_event(e):
+            return
         self.retry_btn.handle_event(e)
         self.again_btn.handle_event(e)
         self.folder_btn.handle_event(e)
@@ -4563,10 +4789,11 @@ class ResultsScreen(Screen):
             self.engine.retry_last_block()
         # Every other control on the screen gets a letter, so a
         # keyboard-only session can take the NEXT UP suggestion, walk
-        # back to the hub or open the detail view without a mouse.
+        # back to the hub or open the detail view without a mouse. G
+        # for the game menu: M is the mute on every menu screen.
         elif e.type == pygame.KEYDOWN and e.key == pygame.K_n:
             self._start_next_up()
-        elif e.type == pygame.KEYDOWN and e.key == pygame.K_m:
+        elif e.type == pygame.KEYDOWN and e.key == pygame.K_g:
             self.engine.show_mode_select()
         elif e.type == pygame.KEYDOWN and e.key == pygame.K_d:
             self._toggle_details()
@@ -5226,12 +5453,12 @@ class ResultsScreen(Screen):
             progress = {}
         of = int(progress.get("of") or 0)
         pos = int(step.get("position") or 0)
-        heading = f"STUDY BATTERY  step {pos} of {of}" if of else "STUDY BATTERY"
+        heading = f"PLAY ALL  step {pos} of {of}" if of else "PLAY ALL"
         requested = str(step.get("hand_requested") or "")
         role = {"hand1": "hand 1", "hand2": "hand 2",
-                "dominant": "dominant hand",
-                "non_dominant": "non-dominant hand"}.get(requested, "")
-        reason = f"Battery step {pos}" + (f", {role}" if role else "")
+                "dominant": "main hand",
+                "non_dominant": "other hand"}.get(requested, "")
+        reason = f"Play all step {pos}" + (f", {role}" if role else "")
         stretch = ""
         try:
             stretch_s = float(step.get("stretch_s") or 0.0)
@@ -5417,6 +5644,7 @@ class ResultsScreen(Screen):
         # Sensory-cues menu. Pill first, overlay last so the open rows
         # sit on top of the buttons they cover.
         self._cue_menu.draw_closed(surf)
+        self.mute_btn.draw(surf, self.theme, self.layout)
         self._cue_menu.draw_overlay(surf)
 
     # Which of _stat_cards' entries reach the finished screen, as
@@ -6330,8 +6558,12 @@ class DiagnosticsScreen(Screen):
         # consistent with what was drawn last frame.
         self._test_mode_rect: pygame.Rect = pygame.Rect(0, 0, 0, 0)
         # Menu-music on/off pill, same pattern: rect cached from the
-        # draw pass, hit-tested in handle_event.
+        # draw pass, hit-tested in handle_event. That pill is the
+        # machine's switch; the corner MuteButton below is the logged-
+        # in person's own mute, the same pill every menu screen has.
         self._menu_music_rect: pygame.Rect = pygame.Rect(0, 0, 0, 0)
+        self.mute_btn = MuteButton(
+            engine, pygame.Rect(28, 26, MuteButton.W, MuteButton.H))
         # Sensory Cues menu: the four cue.* switches plus the screen
         # reveal, each on or off on its own. Replaces the old buzzer
         # on/off pill and the both/visual/vibration cycling pill, which
@@ -6500,13 +6732,21 @@ class DiagnosticsScreen(Screen):
         # stacks that nearly line up.
         track_y = self.CUES_ROW_MID - self.SLIDER_H // 2
         self._vol_sliders = {}
+        from ..audio.menu_music import menu_music_level
         for i, (key, label, cfgkey, dflt) in enumerate(specs):
             rect = pygame.Rect(x0 + i * (sw + gap), track_y, sw,
                                self.SLIDER_H)
+            if key == "music":
+                # The shipped default is derived (half as loud as the
+                # game music), so the knob opens on that level rather
+                # than on a number the config does not hold.
+                initial = menu_music_level(self.engine.cfg)
+            else:
+                initial = float(self.engine.cfg.get(cfgkey, dflt))
             self._vol_sliders[key] = Slider(
                 rect, self.theme, self.layout,
                 min_value=0.0, max_value=1.0,
-                initial=float(self.engine.cfg.get(cfgkey, dflt)),
+                initial=initial,
                 step=0.05, label=label, value_format="{:.0%}",
             )
         # Buzzer cue length. Vibration STRENGTH is fixed in the firmware
@@ -7007,6 +7247,8 @@ class DiagnosticsScreen(Screen):
         # behind the popup would also fire).
         if consumed:
             return
+        if self.mute_btn.handle_event(e):
+            return
         # Volume sliders. Snapshot values so we only apply / save when a
         # level actually moved (a stray click on the track still counts).
         before = {k: s.value for k, s in self._vol_sliders.items()}
@@ -7382,6 +7624,7 @@ class DiagnosticsScreen(Screen):
         # everything else, including the back button.
         for dd in self._port_dropdowns.values():
             dd.draw_overlay(surf)
+        self.mute_btn.draw(surf, self.theme, self.layout)
         self._cue_menu.draw_overlay(surf)
         # Footer hint.
         draw_text(surf, "Esc returns to the title screen",

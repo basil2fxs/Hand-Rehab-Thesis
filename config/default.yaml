@@ -45,6 +45,13 @@ session:
   # Typing over the suggestion replaces it, so a name is one keystroke
   # away either way.
   suggest_code: auto
+  # Per-participant preferences (today: the menu music mute), keyed by
+  # the same identity the session folders use. Kept apart from
+  # user_settings.yaml because that file describes the machine and is
+  # snapshotted into every session's metadata; a mute is one person's
+  # choice and follows that person. Written by the app; see
+  # finger_rehab/data/prefs.py.
+  prefs_file: config/participant_prefs.json
 
 report:
   # Build researcher outputs at the end of every block: report.html,
@@ -108,6 +115,9 @@ eeg:
   # ports; null plus enabled true runs the logging-only dummy backend.
   port: null
   # Virtual COM trigger boxes ignore baud; real UARTs need it to match.
+  # Never 1200: the NeuroSpec MMBT-S resets and drops off the bus at
+  # that rate (its manual, section 3.3), so the writer refuses it. The
+  # lab preset sets the box's documented 9600.
   baud: 115200
   # true (the lab preset): refuse to start without an openable trigger
   # box, so a lab session can never run silently unmarked. false: fall
@@ -123,6 +133,13 @@ eeg:
   # in the thesis methods before changing these.
   pulse_ms: 10
   gap_ms: 10
+  # Which trigger box and which of its modes the session ran with,
+  # copied into metadata.json and otherwise unused. The lab preset
+  # names the MMBT-S in Pulse Mode, where the box itself holds every
+  # code 8 ms and ignores pulse_ms; null here because the shipping
+  # game has no box.
+  box: null
+  box_mode: null
   # Feedback-onset markers (140 positive / 141 negative) for FRN
   # analyses. Off until an FRN analysis is actually planned; the
   # response and stimulus bands carry everything else regardless.
@@ -1094,6 +1111,20 @@ force_pilot:
   # deliberately repeated protocol). Empty draws fresh each block and
   # records it in raw.csv.
   seed: null
+  # Quiet background music during a Force Pilot block, and only there.
+  # Basil asked for it: the runs are long silent holds and a track
+  # keeps a block from dragging. It draws on the licensed menu
+  # playlist (audio.menu_music_tracks), starts once the menu music
+  # has faded, and stops with the block. Gameplay audio is otherwise
+  # a recorded condition, so no other mode reads these keys, and
+  # config/eeg_lab.yaml turns it off so the lab records in silence.
+  # The mode never reads the stream: scoring is the same with it on
+  # or off (tests/test_force_pilot_music.py pins the rows).
+  music_enabled: true
+  # Fraction of master_volume. Kept under the menu level (0.32 of
+  # master by default) so the track sits behind the exit buzz and the
+  # ring chime rather than beside them.
+  music_volume: 0.2
 
 lighthouse:
   # Lighthouse: hold a low force to keep a lantern lit, with the
@@ -1346,16 +1377,106 @@ rhythm:
   # The metronome uses the same 512-sample mixer buffer, ~12 ms at
   # 44.1 kHz, far less than a decoded song's latency.
   metronome_offset_ms: 12
-  # The cue path (buzz, tone, EEG marker) dispatches against the
-  # scored beat: note time PLUS the offset above, so the tactile
-  # pulse lands on the moment a press scores 0 ms, the beat the
-  # patient hears. This knob subtracts a bench-measured motor rise
-  # time from that target so the felt vibration, not just the
-  # command, sits on the beat. Ships 0 because the ERM rise (~20 ms)
-  # is uncharacterised on this rig and an unverified constant would
-  # move the cue by a guess; set it only from an accelerometer
-  # measurement of your own motors.
+  # WHEN THE BUZZ HAPPENS, relative to the beat. The tone, the
+  # falling note and the EEG stimulus marker always sit on the scored
+  # beat (note time plus the audio offset above); this switch only
+  # moves the buzzer.
+  #
+  #   lead      the STIM command goes out buzz_lead_ms plus the motor's
+  #             rise (latency.buzzer_ms) BEFORE the beat, so a player
+  #             who REACTS to the buzz lands on the beat instead of a
+  #             reaction time behind it. Adaptation below then tunes
+  #             the lead to the player: a predictor's lead shrinks to
+  #             0 (buzz on the beat), a reactor's settles at their own
+  #             reaction time. The buzz is marked as its own EEG event
+  #             (22) and the beat byte drops the buzzer bit.
+  #   on_beat   the STIM command goes out on the beat minus the motor
+  #             rise only, no lead and no adaptation. This is the
+  #             pre-September behaviour once the rise is 0.
+  #   feedback  no cue buzz at all; the pressed finger buzzes for
+  #             motor.cue_ms the instant a press scores a hit
+  #             (Perfect, Great or Good). The fallback if leading the
+  #             beat does not suit a player.
+  #
+  # Measured on a fake wire at 60 Hz with the shipping numbers (lead
+  # 150, buzzer latency 45): the STIM command led the scored beat by
+  # 195 ms, jitter within half a frame either side; in feedback mode
+  # the STIM followed the press by the frame drain, under one frame.
+  tactile_mode: lead
+  # Reaction allowance for lead mode, in ms. 150 is the fastest
+  # healthy touch reaction time in the literature (Robinson 1934,
+  # via Kosinski's 2013 review); Bao et al. 2019 put vibrotactile
+  # simple RT at about 200 ms in young adults and 250 ms in older
+  # adults with coin ERM tactors, so a reactor starts a little late
+  # and adaptation raises the lead toward them within three updates.
+  buzz_lead_ms: 150
+  # Adaptation: every buzz_lead_every scored hits, take the median of
+  # the last buzz_lead_window hit offsets (Perfect, Great, Good only;
+  # Early, Late and Miss are excluded so one wild press cannot move
+  # the cue) and move the lead by buzz_lead_gain times that median,
+  # at most buzz_lead_step_ms per update, clamped to 0 and
+  # buzz_lead_max_ms. A late median raises the lead, an early one
+  # lowers it. Gain 0.5 on a 4-hit period converges in about three
+  # updates without overshoot; 25 ms is under the Great window so one
+  # update cannot flip a hit into a miss. The lead in force is written
+  # on every trial row (waveform_params) and carried across blocks
+  # within a login session, so block two starts where block one
+  # ended.
+  buzz_lead_adapt: true
+  buzz_lead_window: 8
+  buzz_lead_every: 4
+  buzz_lead_gain: 0.5
+  buzz_lead_max_ms: 400
+  buzz_lead_step_ms: 25
+  # Bench-measured command-to-felt time for THIS rig's motors, in ms,
+  # subtracted from the buzz target in every tactile mode so the felt
+  # vibration, not just the command, sits where the mode wants it.
+  # 0 (shipping) means "use latency.buzzer_ms", the datasheet-class
+  # estimate documented in the latency block; set a number here only
+  # from your own measurement (scripts/latency_check.py).
   buzz_rise_comp_ms: 0
+
+latency:
+  # HOW LONG EACH STIMULUS TAKES TO REACH THE PATIENT after the
+  # software commands it. The software cannot see any of these; they
+  # are constants the rig owner measures once. Used in three places:
+  # rhythm sends the buzz command buzzer_ms early so the felt
+  # vibration lands where the mode wants it (rhythm.tactile_mode);
+  # rhythm draws the falling note visual_ms early so the note reaches
+  # the strike line on the retina on the audible beat; and every EEG
+  # block copies the four values below and the derived
+  # marker-to-stimulus offsets into metadata.json (eeg.latency and
+  # eeg.marker_offsets_ms) so epochs can be shifted from the byte to
+  # the stimulus.
+  #
+  # measured: false means every number here is a datasheet or
+  # first-principles estimate for this class of hardware, not a
+  # measurement of this rig. Run scripts/latency_check.py with a phone
+  # at 240 fps or a piezo disc (procedure in the script), put the
+  # medians here, set measured true and the date.
+  measured: false
+  measured_on: null
+  # Host STIM command to first FELT motion of the pad, in ms.
+  #   USB write plus 7 bytes at 115200 baud       about 1 ms
+  #   one firmware loop (200 Hz sample block)      0 to 5 ms, mean 2.5
+  #   10 mm coin ERM lag to first motion           about 40 ms
+  # (Precision Microdrives 310-103 class values: lag 40 ms, rise to
+  # full amplitude 87 ms, stop 115 ms after current off). So about 45
+  # ms to the first felt motion and about 95 ms to full amplitude;
+  # the first number is the one a reaction is timed from.
+  buzzer_ms: 45
+  # Flip return to a mid-screen tile changing on a 60 Hz monitor with
+  # vsync, in ms: half a scan (8 ms of the 16.7 ms frame) plus pixel
+  # response (4 to 10 ms TN, 8 to 16 ms IPS), no signal-processing
+  # lag assumed. A television or a monitor with processing on adds
+  # tens of ms; only a photodiode gives the real number.
+  visual_ms: 20
+  # Cue tone dispatch to sound, in ms: the mixer's 512-sample buffer
+  # at 44.1 kHz, the same path rhythm.metronome_offset_ms compensates.
+  # A decoded song carries more (rhythm.audio_offset_ms); this is the
+  # short-sound path the stim tone takes. Measure with an audio
+  # loopback if the tone ERP is analysed.
+  tone_ms: 12
 
 audio:
   enabled: true
@@ -1378,10 +1499,20 @@ audio:
   # gameplay audio is a recorded condition and a background track
   # under a block would be an uncontrolled stimulus. Rhythm mode's own
   # songs are separate and unaffected. Both keys are set from the
-  # Settings screen and persist to user_settings.yaml.
+  # Settings screen and persist to user_settings.yaml. Each person can
+  # also mute the menus for themselves with the corner button on any
+  # menu screen (M); that choice is remembered per participant in
+  # session.prefs_file, not here.
   menu_music_enabled: true
-  # Sits on top of master_volume like the other category levels.
-  menu_music_volume: 0.5
+  # Level as a fraction of master_volume, like the other category
+  # levels. null (the default) means half as loud as the game music:
+  # Basil found the menus too loud against the rhythm songs, which
+  # play at master_volume. Half as LOUD is 10 dB down, an amplitude of
+  # 0.32, not 0.5: perceived loudness halves per 10 dB (the sone
+  # scale), and the old 0.5 was only 6 dB down, about two thirds as
+  # loud. Deriving it keeps the ratio when master moves. A number 0 to
+  # 1 pins the level instead; the Settings MUSIC slider writes one.
+  menu_music_volume: null
   # Which files from music_dir the menu playlist draws on. Named
   # explicitly rather than "everything in the folder" so the rhythm
   # library can grow without the menus picking up a slow ambient track

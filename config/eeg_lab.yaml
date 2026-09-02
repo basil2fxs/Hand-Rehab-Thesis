@@ -12,15 +12,41 @@
 
 eeg:
   enabled: true
-  # The trigger box on the lab's Windows desktop. Change here if the
-  # box enumerates on a different COM port (Device Manager shows it).
+  # The trigger box on the lab's Windows desktop: the NeuroSpec MMBT-S
+  # (Tobii Pro edition, orange case), a virtual COM port. Change here
+  # if it enumerates on a different COM port: Device Manager, Ports
+  # (COM & LPT), unplug it and watch which entry vanishes.
   port: COM10
+  # MMBT-S manual, Table 1. A virtual COM port ignores baud for speed;
+  # 1200 RESETS the box (manual section 3.3), so the writer refuses
+  # it. Welber's old script opened the port at pyserial's default,
+  # which is this same 9600.
+  baud: 9600
   # Refuse to start without the box: a lab block recorded with no
   # markers is worthless, so failing loudly at launch is the feature.
   require_port: true
+  # The box in Pulse Mode (switch beside the USB socket at P, the
+  # factory setting) holds every code 8 ms and resets itself; 8 here
+  # makes metadata.json say what the wire does. 8 ms is 16 samples at
+  # 2048 Hz on the BioSemi, 2 at 256 Hz. If the switch reads S
+  # (Simple Mode) the box holds until our own 0 byte: set 10 here and
+  # box_mode: simple.
+  pulse_ms: 8
+  # One full 8 ms box cycle after our own 0 byte, plus margin, so the
+  # next code never queues inside the box.
+  gap_ms: 12
+  # Documentation only, copied into metadata.json: which box and
+  # which switch position the session was recorded with.
+  box: mmbt-s
+  box_mode: pulse
 
 reaction:
   # Fixed-foreperiod CNV variant with the visible ready cue. See the
   # fp_eeg_fixed_s comment in config/default.yaml for why EEG blocks
   # trade the flat hazard away.
   fp_eeg_fixed_s: 2.5
+
+force_pilot:
+  # No background track in the lab: an EEG block is recorded in
+  # silence so the only sounds in the record are the cues themselves.
+  music_enabled: false

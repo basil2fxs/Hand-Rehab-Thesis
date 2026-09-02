@@ -124,6 +124,10 @@ class TestTitleLayout:
         assert screen.start_btn.label == "LOG IN"
         labels = {label for _r, label, _i, _a in screen._pills}
         assert labels == {"Quit", "Info", "Calibrate", "Settings"}
+        # The menu-music mute pill sits in the top-left corner, off
+        # the card and off the utility strip.
+        assert screen.mute_btn.rect.top < screen.card_rect.top
+        assert screen.mute_btn.rect.right < screen.layout.width // 3
 
     def test_the_session_controls_sit_inside_the_card(self, title_screen):
         """The card is drawn from CARD_TOP/CARD_H and the fields are
@@ -146,17 +150,21 @@ class TestTitleLayout:
         screen, _ = title_screen
         rects = [("name", screen.name_input.rect),
                  ("age", screen.age_input.rect),
-                 ("start", screen.start_btn.rect)]
+                 ("start", screen.start_btn.rect),
+                 ("mute", screen.mute_btn.rect)]
         rects += [(label, r) for r, label, _i, _a in screen._pills]
         for i, (an, ar) in enumerate(rects):
             for bn, br in rects[i + 1:]:
                 assert not ar.colliderect(br), f"{an} overlaps {bn}"
+        # The mute pill is the one control outside the card.
+        assert not screen.mute_btn.rect.colliderect(screen.card_rect)
 
     def test_everything_stays_on_screen(self, title_screen):
         screen, _ = title_screen
         w, h = screen.layout.width, screen.layout.height
         rects = [screen.card_rect, screen.name_input.rect,
-                 screen.age_input.rect, screen.start_btn.rect]
+                 screen.age_input.rect, screen.start_btn.rect,
+                 screen.mute_btn.rect]
         rects += [r for r, _l, _i, _a in screen._pills]
         for r in rects:
             assert r.left >= 0 and r.right <= w

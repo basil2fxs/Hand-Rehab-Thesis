@@ -129,3 +129,48 @@ def _real_sessions_tree_is_untouched():
             "the run wrote into the real sessions/ tree: "
             + ", ".join(sorted(new)[:5])
             + ". Redirect session.data_dir to a temp path.")
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _tests_never_write_the_real_participant_prefs(tmp_path_factory):
+    """Point the DEFAULT session.prefs_file at a temp file for the run.
+
+    The per-participant preferences (data/prefs.py) are written by the
+    menu mute button, which the screen tests press. Same rule as the
+    sessions tree above: the default itself is redirected at load, so
+    a test that forgets cannot reach config/participant_prefs.json.
+    """
+    import finger_rehab.config as fconfig
+    from finger_rehab.data.prefs import DEFAULT_PREFS_FILE
+
+    fake = str(tmp_path_factory.mktemp("test-prefs") / "prefs.json")
+    orig_load = fconfig.Config.load
+
+    def load_with_temp_prefs(*args, **kwargs):
+        cfg = orig_load(*args, **kwargs)
+        sess = cfg.data.setdefault("session", {})
+        if sess.get("prefs_file", DEFAULT_PREFS_FILE) == DEFAULT_PREFS_FILE:
+            sess["prefs_file"] = fake
+        return cfg
+
+    fconfig.Config.load = load_with_temp_prefs
+    yield
+    fconfig.Config.load = orig_load
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _real_participant_prefs_is_untouched():
+    """Fail loudly if the run wrote the real prefs file anyway."""
+    real = (Path(__file__).resolve().parents[1] / "config"
+            / "participant_prefs.json")
+    before = real.read_text() if real.exists() else None
+    yield
+    after = real.read_text() if real.exists() else None
+    if before != after:
+        if before is None:
+            real.unlink(missing_ok=True)
+        else:
+            real.write_text(before)
+        pytest.fail("the run wrote config/participant_prefs.json. It has "
+                    "been restored; redirect session.prefs_file to a "
+                    "temp path.")

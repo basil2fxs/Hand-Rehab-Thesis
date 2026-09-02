@@ -84,6 +84,37 @@ class MapIntegrityTests(unittest.TestCase):
         self.assertEqual(stim_code(True, True, True), 33)
         self.assertEqual(stim_code(False, True, False), 36)
 
+    def test_22_is_the_leading_buzz_inside_the_prep_band(self) -> None:
+        # Rhythm's buzz goes out ahead of the beat; it is its own
+        # event (somatosensory ERP) and must sit in the preparation
+        # band, clear of 20, 21 and 25.
+        from finger_rehab.hardware.eeg_trigger import BANDS, CODES
+        self.assertEqual(CODES["prep_buzz_lead"], 22)
+        lo, hi = BANDS["prep_"]
+        self.assertTrue(lo <= 22 <= hi)
+        self.assertEqual(list(CODES.values()).count(22), 1)
+
+    def test_stim_code_drops_the_buzz_bit_when_the_buzz_went_earlier(self):
+        # The beat byte must not claim a tactile onset that happened
+        # 195 ms before it: buzz_now False clears bit 2 whatever the
+        # buzzer switch says, and changes nothing else.
+        from finger_rehab.hardware.eeg_trigger import stim_code
+        self.assertEqual(stim_code(True, True, True, buzz_now=False), 31)
+        self.assertEqual(stim_code(False, True, True, buzz_now=False), 30)
+        self.assertEqual(stim_code(True, True, False, buzz_now=False), 35)
+        self.assertEqual(stim_code(True, True, True, buzz_now=True), 33)
+        self.assertEqual(stim_code(True, False, True, buzz_now=False), 31)
+
+    def test_marker_offsets_name_every_event_class(self) -> None:
+        from finger_rehab.hardware.eeg_trigger import marker_offsets
+        offs = marker_offsets(45, 20, 12)
+        self.assertEqual(offs["prep_buzz_lead"], 45.0)
+        self.assertEqual(offs["stim_buzz"], 45.0)
+        self.assertEqual(offs["stim_buzz_hunt"], 45.0)
+        self.assertEqual(offs["stim_visual"], 20.0)
+        self.assertEqual(offs["stim_tone"], 12.0)
+        self.assertEqual(offs["response"], 0.0)
+
     def test_response_codes_carry_lane_and_reject_bad_lanes(self) -> None:
         from finger_rehab.hardware.eeg_trigger import response_code
         self.assertEqual(response_code("correct", 0), 100)
@@ -214,6 +245,47 @@ class ProtocolTests(unittest.TestCase):
         writer.send(101)
         self.assertEqual(records[-1].code, 101)
         self.assertTrue(records[-1].failed)
+
+
+class WriterConfigTests(unittest.TestCase):
+    """writer_from_config against the MMBT-S manual."""
+
+    @staticmethod
+    def _get(values: dict):
+        return lambda key, default=None: values.get(key, default)
+
+    def test_baud_1200_is_refused(self) -> None:
+        # Manual section 3.3: opening the port at 1200 resets the box
+        # and it drops off the bus. Never send it.
+        from finger_rehab.hardware.eeg_trigger import (TriggerPortError,
+                                                       writer_from_config)
+        with self.assertRaises(TriggerPortError):
+            writer_from_config(self._get({"eeg.enabled": True,
+                                          "eeg.port": None,
+                                          "eeg.baud": 1200,
+                                          "eeg.require_port": False}))
+
+    def test_disabled_writer_ignores_the_baud(self) -> None:
+        from finger_rehab.hardware.eeg_trigger import writer_from_config
+        w = writer_from_config(self._get({"eeg.enabled": False,
+                                          "eeg.baud": 1200}))
+        self.assertFalse(w.active)
+
+    def test_box_and_mode_reach_the_status_record(self) -> None:
+        from finger_rehab.hardware.eeg_trigger import writer_from_config
+        w = writer_from_config(self._get({"eeg.enabled": True,
+                                          "eeg.port": None,
+                                          "eeg.require_port": False,
+                                          "eeg.pulse_ms": 8,
+                                          "eeg.gap_ms": 12,
+                                          "eeg.box": "mmbt-s",
+                                          "eeg.box_mode": "pulse"}))
+        st = w.status()
+        self.assertEqual(st["box"], "mmbt-s")
+        self.assertEqual(st["box_mode"], "pulse")
+        self.assertEqual(st["pulse_ms"], 8.0)
+        self.assertEqual(st["gap_ms"], 12.0)
+        self.assertEqual(st["codes_version"], "1.2")
 
 
 class _EngineHarness(unittest.TestCase):
@@ -664,6 +736,140 @@ class ResponseAnchorTests(_EngineHarness):
             pygame.quit()
 
 
+class RhythmLeadMarkerTests(_EngineHarness):
+    """The buzz that leads the beat is its own marker (22) and the
+    beat byte drops the buzzer bit; with nothing to lead by, one byte
+    per note carries everything, as before."""
+
+    def _rhythm_engine(self, td: str, rhythm: dict, latency: dict):
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        cfg = Config.load()
+        cfg.data["ui"]["resolution"] = [640, 480]
+        cfg.data["audio"]["enabled"] = False
+        cfg.data["session"]["data_dir"] = td
+        cfg.data["report"] = {"enabled": False}
+        # The shipping cue mix, so the beat byte is 33 with the buzz
+        # and 31 without it.
+        cfg.data["cue"] = {"buzz_before": True, "sound_before": True,
+                           "sound_after": False, "buzz_after": False,
+                           "show_target": True}
+        cfg.data["eeg"] = {"enabled": True, "port": None,
+                           "require_port": False,
+                           "pulse_ms": 2, "gap_ms": 2}
+        cfg.data["game"]["start_countdown_s"] = 0
+        cfg.data["rhythm"].update({"pre_song_lead_s": 0})
+        cfg.data["rhythm"].update(rhythm)
+        cfg.data["latency"] = latency
+        # A sensor source, so the buzz path is live (keyboard has no
+        # motors and would send no tactile event at all).
+        eng = GameEngine(cfg, _fake_sensor_source())
+        eng._screens = {"gameplay": MagicMock(lanes=[]),
+                        "rhythm": MagicMock(lanes=[]),
+                        "results": MagicMock()}
+        return eng
+
+    def _run(self, rhythm: dict, latency: dict) -> tuple[list, list]:
+        import pygame
+        pygame.init()
+        try:
+            with tempfile.TemporaryDirectory() as td:
+                eng = self._rhythm_engine(td, rhythm, latency)
+                from finger_rehab.audio.beatmap import Beatmap, Note
+                bm = Beatmap(notes=[Note(t=0.5, lane=0), Note(t=1.0, lane=1),
+                                    Note(t=1.5, lane=2)], bpm=120.0)
+                eng.begin_rhythm_block(bm)
+                self._settle(eng)
+                end = time.perf_counter() + 2.0
+                last = time.perf_counter()
+                while time.perf_counter() < end and eng.mode is not None:
+                    now = time.perf_counter()
+                    eng.mode.update(now - last)
+                    last = now
+                    eng._drain_motor_queue()
+                    eng._flush_eeg_stim()
+                    eng.markers.tick()
+                    time.sleep(0.005)
+                root = Path(eng.session_paths.root)
+                eng.finish_block()
+                rows = self._eeg_rows(root)
+                return self._wire_codes(eng), rows
+        finally:
+            pygame.quit()
+
+    def test_lead_mode_marks_the_buzz_as_22_and_the_beat_as_31(self):
+        codes, rows = self._run({"tactile_mode": "lead",
+                                 "buzz_lead_ms": 150,
+                                 "buzz_lead_adapt": False},
+                                {"buzzer_ms": 45, "visual_ms": 20,
+                                 "tone_ms": 12})
+        self.assertEqual(codes.count(22), 3, codes)
+        self.assertEqual(codes.count(31), 3, codes)
+        for taken in (32, 33, 36, 37):
+            self.assertNotIn(taken, codes)
+        # Each 22 precedes its 31, on the same lane, by the lead
+        # total: 150 ms allowance plus the 45 ms motor rise.
+        by_code = {}
+        for r in rows:
+            d = _parse_detail(r["detail"])
+            by_code.setdefault(int(d["code"]), []).append(
+                (float(d["t_event"]), int(r["lane"])))
+        for (t_buzz, lane_b), (t_beat, lane_s) in zip(by_code[22],
+                                                      by_code[31]):
+            self.assertEqual(lane_b, lane_s)
+            gap_ms = (t_beat - t_buzz) * 1000.0
+            self.assertGreater(gap_ms, 195.0 - 25.0, gap_ms)
+            self.assertLess(gap_ms, 195.0 + 25.0, gap_ms)
+        self.assertEqual([lane for _t, lane in by_code[22]], [0, 1, 2])
+
+    def test_no_lead_keeps_one_byte_per_note_with_the_buzz_bit(self):
+        codes, _rows = self._run({"tactile_mode": "on_beat",
+                                  "buzz_rise_comp_ms": 0},
+                                 {"buzzer_ms": 0, "visual_ms": 0,
+                                  "tone_ms": 0})
+        self.assertNotIn(22, codes)
+        self.assertEqual(codes.count(33), 3, codes)
+
+    def test_feedback_mode_sends_no_tactile_marker_before_the_beat(self):
+        codes, _rows = self._run({"tactile_mode": "feedback"},
+                                 {"buzzer_ms": 45, "visual_ms": 20,
+                                  "tone_ms": 12})
+        self.assertNotIn(22, codes)
+        self.assertEqual(codes.count(31), 3, codes)
+
+    def test_metadata_carries_the_latency_and_the_offsets(self) -> None:
+        import json
+        import pygame
+        pygame.init()
+        try:
+            with tempfile.TemporaryDirectory() as td:
+                eng = self._rhythm_engine(td, {"tactile_mode": "lead"},
+                                          {"buzzer_ms": 45, "visual_ms": 20,
+                                           "tone_ms": 12,
+                                           "measured": False,
+                                           "measured_on": None})
+                from finger_rehab.audio.beatmap import Beatmap, Note
+                eng.begin_rhythm_block(Beatmap(notes=[Note(t=0.5, lane=0)],
+                                               bpm=120.0))
+                root = Path(eng.session_paths.root)
+                eng.finish_block()
+                meta = json.loads((root / "metadata.json").read_text())
+                eeg = meta["eeg"]
+                self.assertEqual(eeg["codes_version"], "1.2")
+                self.assertEqual(eeg["latency"]["buzzer_ms"], 45.0)
+                self.assertEqual(eeg["latency"]["visual_ms"], 20.0)
+                self.assertEqual(eeg["latency"]["tone_ms"], 12.0)
+                self.assertFalse(eeg["latency"]["measured"])
+                self.assertEqual(eeg["marker_offsets_ms"]["prep_buzz_lead"],
+                                 45.0)
+                self.assertEqual(eeg["marker_offsets_ms"]["stim_visual"],
+                                 20.0)
+                self.assertIn("box", eeg)
+                self.assertIn("box_mode", eeg)
+        finally:
+            pygame.quit()
+
+
 class DisabledIsInertTests(_EngineHarness):
     """eeg.enabled false: zero markers, zero raw.csv rows, no backend."""
 
@@ -763,6 +969,17 @@ class ParityTests(unittest.TestCase):
         self.assertIsInstance(port, str)
         self.assertTrue(port)
         self.assertGreater(float(cfg.get("reaction.fp_eeg_fixed_s")), 0)
+        # The MMBT-S chain: an 8 ms pulse is what the box does in Pulse
+        # Mode (16 samples at 2048 Hz, 2 at 256 Hz), the gap clears one
+        # box cycle, 1200 baud would reset the box, and the recorded
+        # switch position is one of the two the box has.
+        self.assertGreaterEqual(float(cfg.get("eeg.pulse_ms")), 8.0)
+        self.assertGreaterEqual(float(cfg.get("eeg.gap_ms")),
+                                float(cfg.get("eeg.pulse_ms")))
+        self.assertNotEqual(int(cfg.get("eeg.baud")), 1200)
+        self.assertEqual(int(cfg.get("eeg.baud")), 9600)
+        self.assertIn(cfg.get("eeg.box_mode"), ("pulse", "simple"))
+        self.assertEqual(cfg.get("eeg.box"), "mmbt-s")
         # The overlay must not fork gameplay settings: defaults still
         # supply everything it does not name.
         self.assertIsNotNone(cfg.get("game.timeout_s"))
