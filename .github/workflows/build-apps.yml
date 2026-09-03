@@ -56,26 +56,18 @@ jobs:
         shell: pwsh
         run: Compress-Archive -Path "bin/dist/Finger Rehab.exe" -DestinationPath "bin/dist/${{ matrix.artefact }}.zip"
 
-      # The lab package is the exe plus the lab config and launcher in
-      # one folder: copy to the lab desktop, double-click the bat, no
-      # Python or PsychoPy install. Built from the same commit as the
-      # exe, so the lab version can never lag the game.
+      # The lab package: the exe, eeg_lab.yaml, run_in_psychopy.py and
+      # a fresh source/ copy of the game, nothing else. The same script
+      # build_app.bat runs locally assembles it, so the zip and the
+      # folder never fork. Built from the same commit as the exe, so
+      # the lab version can never lag the game.
       - name: Assemble EEG lab package (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $pkg = "bin/dist/Finger Rehab EEG Lab"
-          New-Item -ItemType Directory -Path $pkg | Out-Null
-          # Everything committed in docs/lab_package ships as-is (the
-          # bat, README and run_from_source.py); the exe and the two
-          # generated copies come from this build and the sources of
-          # truth, exactly what build_app.bat drops into the folder
-          # locally, so the zip and the folder never fork.
-          Copy-Item "docs/lab_package/*" $pkg
-          Copy-Item "bin/dist/Finger Rehab.exe" $pkg
-          Copy-Item "config/eeg_lab.yaml" "$pkg/eeg_lab.yaml"
-          Copy-Item "docs/eeg_lab_setup.txt" "$pkg/eeg_lab_setup.txt"
-          Compress-Archive -Path $pkg -DestinationPath "bin/dist/FingerRehab-EEGLab-Windows.zip"
+          python scripts/build_lab_package.py --exe "bin/dist/Finger Rehab.exe" --out "bin/dist/Finger Rehab EEG Lab"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          Compress-Archive -Path "bin/dist/Finger Rehab EEG Lab" -DestinationPath "bin/dist/FingerRehab-EEGLab-Windows.zip"
 
       - name: Upload EEG lab package (Windows)
         if: runner.os == 'Windows'

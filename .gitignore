@@ -32,13 +32,13 @@ builds/Windows/Finger Rehab.exe
 builds/Windows/Finger Rehab/
 
 # The EEG lab package's build products. The exe is hundreds of MB,
-# far past the nightly backup's 99 MB guard; the yaml and setup notes
-# are build-time copies of config/eeg_lab.yaml and
-# docs/eeg_lab_setup.txt, and committing a copy would fork it from
-# its source. The build scripts regenerate all three.
+# far past the nightly backup's 99 MB guard; eeg_lab.yaml is a
+# build-time copy of config/eeg_lab.yaml and source/ a copy of the
+# game, and committing either would fork it from its source.
+# scripts/build_lab_package.py regenerates all three.
 docs/lab_package/*.exe
 docs/lab_package/eeg_lab.yaml
-docs/lab_package/eeg_lab_setup.txt
+docs/lab_package/source/
 
 # Per-session output. Don't publish.
 sessions/

@@ -108,11 +108,12 @@ below that the cells show coverage only.
 
 ## EEG lab
 
-`EEG Lab.bat` / `EEG Lab.command` run the same game with markers
-going to the lab's trigger box (`config/eeg_lab.yaml` is the whole
-difference). The lab needs no install: CI builds
-`FingerRehab-EEGLab-Windows.zip` on every push, one folder with the
-exe, config and launcher inside. Setup notes in `docs/eeg_lab_setup.txt`.
+`EEG Lab.command` runs the same game with markers going to the lab's
+trigger box (`config/eeg_lab.yaml` is the whole difference). The lab
+needs no install: CI builds `FingerRehab-EEGLab-Windows.zip` on every
+push, one folder with the exe, the config, `run_in_psychopy.py` (runs
+the game from PsychoPy Coder) and a `source/` copy inside. Setup notes
+in `docs/eeg_lab_setup.txt`.
 
 ## Standalone apps
 

@@ -30,15 +30,15 @@ if errorlevel 1 (
 if not exist builds\Windows mkdir builds\Windows
 copy /y "bin\dist\Finger Rehab.exe" "builds\Windows\Finger Rehab.exe" >nul
 
-rem Refresh the EEG lab package: the one folder that gets copied to
-rem the lab desktop. The exe, the lab config and the setup notes all
-rem come from this build, so the folder can never carry a stale
-rem pairing. The exe and the two copies are gitignored; the sources
-rem of truth stay in config\ and docs\.
-if not exist docs\lab_package mkdir docs\lab_package
-copy /y "bin\dist\Finger Rehab.exe" "docs\lab_package\Finger Rehab.exe" >nul
-copy /y "config\eeg_lab.yaml" "docs\lab_package\eeg_lab.yaml" >nul
-copy /y "docs\eeg_lab_setup.txt" "docs\lab_package\eeg_lab_setup.txt" >nul
+rem Refresh the EEG lab package, the one folder that gets copied to
+rem the lab desktop. The script copies in this build's exe, refreshes
+rem eeg_lab.yaml, rebuilds source\ and clears old text files, so the
+rem folder can never carry a stale pairing.
+py scripts\build_lab_package.py --exe "bin\dist\Finger Rehab.exe"
+if errorlevel 1 (
+    echo Lab package assembly failed
+    exit /b 1
+)
 
 echo.
 echo Build complete.
