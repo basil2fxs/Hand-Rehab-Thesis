@@ -84,6 +84,7 @@ def _make_mode(cfg_extra: dict | None = None, notes=None, song=True,
         "rhythm.buzz_lead_gain": 0.5,
         "rhythm.buzz_lead_max_ms": 400,
         "rhythm.buzz_lead_step_ms": 25,
+        "rhythm.buzz_lead_deadband_ms": 5,
         "latency.buzzer_ms": 45,
         "latency.visual_ms": 20,
     }
@@ -321,6 +322,21 @@ class LeadAdaptationTests(unittest.TestCase):
             seq = iter([0.0, 0.0, 170.0, 0.0])
             leads = self._play(mode, clock, lambda lead: next(seq), 4)
             self.assertEqual(leads[-1], 150.0)
+
+        _fake_clock(go)
+
+    def test_median_inside_the_deadband_moves_nothing(self) -> None:
+        # Four presses 4 ms late are on the beat (a quarter of a
+        # frame); the lead stays and no update is counted. Four more
+        # at 16 ms put the window median at 10, outside the 5 ms
+        # dead-band, and the lead moves by gain times that, 5 ms.
+        def go(clock):
+            mode, engine, _bm = _make_mode()
+            seq = iter([4.0] * 4 + [16.0] * 4)
+            leads = self._play(mode, clock, lambda lead: next(seq), 8)
+            self.assertEqual(leads[3], 150.0)
+            self.assertEqual(leads[7], 155.0)
+            self.assertEqual(mode.tactile_summary()["buzz_lead_updates"], 1)
 
         _fake_clock(go)
 

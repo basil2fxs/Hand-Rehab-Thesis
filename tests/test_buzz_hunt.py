@@ -4,7 +4,10 @@ What is pinned here, in dependency order:
 
   - the staircase: 2-down 1-up mechanics, floor and ceiling clamps,
     reversal recording, and convergence near a simulated observer's
-    true threshold
+    true threshold (the gap stage still runs one; localisation only
+    under the legacy flag)
+  - the window ladder (2026-09): promote on 6 of the last 8, demote
+    on 2 of the last 4, clamped at both ends, the trace per trial
   - pure stimulus reconstruction: pulses_from_params rebuilds every
     waveform (buzz, catch, distractor, sequence, gap) from the params
     dict alone, matched-envelope gap trials included, and the packed
@@ -13,9 +16,14 @@ What is pinned here, in dependency order:
     case-folded, sequences avoid immediate repeats and stay inside
     the lane pool
   - localisation trials: the buzz goes out through pulse_motor
-    (bypassing the cue switches by design), a correct press scores,
-    a wrong finger logs a Miss with the confusion matrix updated,
-    a timeout raises the staircase, and cue_target_shown is FALSE
+    (bypassing the cue switches by design) at ONE fixed pulse that
+    success never shortens, a correct press scores, a wrong finger
+    logs a Miss with the confusion matrix updated, a timeout is a
+    miss on the ladder, the row carries the window and the level,
+    and cue_target_shown is FALSE
+  - the legacy duration staircase (buzz_hunt.duration_staircase)
+    reproduces the recorded level sequence of the pre-2026-09 build
+    exactly, so an earlier block can be replayed
   - catch trials: no STIM is ever sent, waiting is rewarded through
     log_reaction_event, a press is a false alarm in the matrix
   - the hand matrix: one hand rotates its four fingers at equal
@@ -164,9 +172,37 @@ def _mode(e, hands=None, **over):
         score_cfg=ScoreConfig(),
         seed=7,
         demo_trials=None,
+        # The 2026-09 shape: a fixed pulse and a window ladder whose
+        # first level equals response_window_s, so the timeouts the
+        # older tests drive with response_window_s still time out.
+        loc_pulse_ms=150.0,
+        window_levels_s=[2.0, 1.5, 1.2, 1.0],
+        duration_staircase=False,
     )
     kw.update(over)
     return BuzzHuntMode(**kw)
+
+
+def _stim_requests(m) -> list[float]:
+    """Every pulse length asked of the motor so far, from the raw
+    log's pulse_motor events (one per delivered pulse)."""
+    out = []
+    for ev in m.engine.raw_logger.events:
+        if ev["event"] != "pulse_motor":
+            continue
+        fields = dict(p.partition("=")[::2] for p in ev["detail"].split(";"))
+        out.append(float(fields["requested_ms"]))
+    return out
+
+
+def _answer_loc(m, t, correct=True, rt=0.3):
+    """One localisation answer at the open window: the right finger
+    or a wrong one, then the tick that closes the trial."""
+    lane = m.lane if correct else next(
+        l for l in m.hands[m.hand] if l != m.lane)
+    m.queue_press(_press_event(lane, t + rt))
+    m._tick(t + rt + 0.01)
+    return t + rt + 0.01
 
 
 def _only_stage(m, stage, n):
@@ -529,57 +565,99 @@ class LocalisationTests(unittest.TestCase):
         self.assertEqual(m._confusion[str(lane)][str(wrong)], 1)
         self.assertFalse(m._loc_records[0]["correct"])
 
-    def test_timeout_raises_the_staircase(self):
-        # Still inside the accelerated approach (no reversal yet), so
-        # the up-move runs at the doubled step; FastStartTests pins
-        # the rule itself.
+    def test_timeout_is_a_miss_on_the_ladder_and_the_row_says_the_window(
+            self):
+        # A silent window is a miss for the ladder (one miss alone
+        # moves nothing; two in four demote), the confusion matrix
+        # gets its "none" cell, and the row carries the window it ran
+        # under plus the level, with timeout_ms stamped from the
+        # window.
         m = self._loc_mode()
         t = _to_trial(m)
+        self.assertEqual(m.engine._last_stim_timeout_ms,
+                         m.window_levels_s[0] * 1000.0)
         t = _to_respond(m, t)
-        before = m._dur_stair[m.hand].level
-        t += m.response_window_s + 0.05
+        t += m._respond_window_s() + 0.05
         m._tick(t)
         self.assertEqual(m.phase, "feedback")
-        self.assertEqual(m._dur_stair[m.hand].level,
-                         before + 2 * m.step_ms)
+        self.assertEqual(m._window[m.hand].level, 0)
         self.assertEqual(m._confusion[str(m._loc_records[0]['lane'])]
                          ["none"], 1)
+        row = m.engine.trial_logger.rows[0]
+        self.assertIn("window_ms=2000", row["stimulus"])
+        self.assertIn("level=0", row["stimulus"])
+        self.assertNotIn("stair_ms", row["stimulus"])
+        self.assertEqual(row["timeout_ms"], "2000")
 
-    def test_correct_answers_lower_the_duration(self):
-        # During the accelerated approach every single correct steps
-        # down at double size, so two corrects descend four base
-        # steps: the stage reaches the threshold region inside a few
-        # trials instead of burning a third of its trials on the way
-        # down (see Staircase.fast_start).
-        m = self._loc_mode(n=3)
+    def test_the_pulse_never_shortens_with_success(self):
+        # The 2026-09 rule: a run of correct answers used to walk the
+        # staircase down until the buzz could not be felt. Now every
+        # localisation pulse the motor is asked for is loc_pulse_ms,
+        # eight correct answers in a row included.
+        m = self._loc_mode(n=8)
         t = _to_trial(m)
-        start = m._dur_stair["right"].level
-        for i in range(2):
+        for i in range(8):
             t = _to_respond(m, t)
-            m.queue_press(_press_event(m.lane, t + 0.2))
-            m._tick(t + 0.21)
-            t = _next_trial(m, t + 0.21) if i < 1 else t + 0.21
-        self.assertEqual(m._dur_stair["right"].level,
-                         start - 4 * m.step_ms)
+            self.assertEqual(float(m.params["dur_ms"]), 150.0)
+            t = _answer_loc(m, t, correct=True)
+            if i < 7:
+                t = _next_trial(m, t)
+        self.assertEqual(_stim_requests(m), [150.0] * 8)
+        stims = [c for c in m.engine._sent if str(c).startswith("STIM")]
+        self.assertEqual(len(stims), 8)
+        self.assertEqual(m._dur_stair["right"].level, m.start_ms,
+                         "the legacy staircase must not have moved")
 
-    def test_reversal_is_logged_as_an_event(self):
-        m = self._loc_mode(n=6)
+    def test_six_of_eight_promote_and_the_row_carries_the_level(self):
+        m = self._loc_mode(n=8)
         t = _to_trial(m)
-        # Two correct (down), then a timeout (up): that turn is the
-        # first reversal and must land in the raw log.
-        for i in range(3):
+        for i in range(7):
             t = _to_respond(m, t)
-            if i < 2:
-                m.queue_press(_press_event(m.lane, t + 0.2))
-                m._tick(t + 0.21)
-                t = _next_trial(m, t + 0.21)
-            else:
-                t += m.response_window_s + 0.05
-                m._tick(t)
-        revs = [ev for ev in m.engine.raw_logger.events
-                if ev["event"] == "buzz_hunt_reversal"]
-        self.assertEqual(len(revs), 1)
-        self.assertIn("stair=duration", revs[0]["detail"])
+            t = _answer_loc(m, t, correct=True)
+            if i < 6:
+                t = _next_trial(m, t)
+        rows = m.engine.trial_logger.rows
+        self.assertEqual(len(rows), 7)
+        for row in rows[:6]:
+            self.assertIn("level=0", row["stimulus"])
+            self.assertIn("window_ms=2000", row["stimulus"])
+        # The sixth correct answer promoted, so the seventh trial
+        # ran at level 1 and its shorter window.
+        self.assertIn("level=1", rows[6]["stimulus"])
+        self.assertIn("window_ms=1500", rows[6]["stimulus"])
+        self.assertEqual(m._window["right"].level, 1)
+        moves = [ev for ev in m.engine.raw_logger.events
+                 if ev["event"] == "buzz_hunt_window"]
+        self.assertEqual(len(moves), 1)
+        self.assertIn("move=up", moves[0]["detail"])
+        self.assertIn("level=1", moves[0]["detail"])
+        self.assertEqual(m._window["right"].trace, [0] * 6 + [1])
+
+    def test_two_misses_in_four_demote(self):
+        m = self._loc_mode(n=10)
+        t = _to_trial(m)
+        # Climb one level, then miss twice: back down, logged.
+        for i in range(6):
+            t = _to_respond(m, t)
+            t = _answer_loc(m, t, correct=True)
+            t = _next_trial(m, t)
+        self.assertEqual(m._window["right"].level, 1)
+        t = _to_respond(m, t)
+        t = _answer_loc(m, t, correct=False)
+        self.assertEqual(m._window["right"].level, 1)
+        t = _next_trial(m, t)
+        t = _to_respond(m, t)
+        t += m._respond_window_s() + 0.05        # timeout: a miss too
+        m._tick(t)
+        self.assertEqual(m._window["right"].level, 0)
+        moves = [ev["detail"] for ev in m.engine.raw_logger.events
+                 if ev["event"] == "buzz_hunt_window"]
+        self.assertEqual(len(moves), 2)
+        self.assertIn("move=down", moves[1])
+        self.assertEqual(m._window["right"].n_demotions, 1)
+        # No duration reversal was ever logged: the staircase is off.
+        self.assertEqual([ev for ev in m.engine.raw_logger.events
+                          if ev["event"] == "buzz_hunt_reversal"], [])
 
     def test_early_press_restarts_the_wait_without_a_trial(self):
         m = self._loc_mode()
@@ -632,7 +710,7 @@ class LocalisationTests(unittest.TestCase):
         m = _only_stage(m, "loc", 1)
         t = _to_trial(m)
         t = _to_respond(m, t)
-        before = m._dur_stair[m.hand].level
+        before = m._window[m.hand].level
         # Even a press on the correct lane must not read as a hit:
         # nothing buzzed for it to correctly localise.
         m.queue_press(_press_event(m.lane, t + 0.1))
@@ -640,7 +718,9 @@ class LocalisationTests(unittest.TestCase):
         row = m.engine.trial_logger.rows[0]
         self.assertEqual(row["stim_delivered"], "FALSE")
         self.assertEqual(row["early_late"], "Miss")
-        self.assertEqual(m._dur_stair[m.hand].level, before)
+        self.assertEqual(m._window[m.hand].level, before)
+        self.assertEqual(m._window[m.hand].trace, [],
+                         "a voided trial never reaches the ladder")
         self.assertEqual(m._loc_records, [])
         self.assertEqual(m.engine._block_stim_failures, 1)
         # The patient DID press, so the derived 'timeout' next to a
@@ -803,22 +883,32 @@ class HandMatrixTests(unittest.TestCase):
             d_lane = int(m.params["distractor_lane"])
             self.assertNotEqual(d_lane in (0, 1, 2, 3), target_right)
 
-    def test_distractor_trials_hold_the_staircase_still(self):
+    def test_distractor_trials_hold_the_ladder_at_the_fixed_pulse(self):
         e = _engine(hand_mode="both")
         m = _mode(e, hands={"right": [0, 1, 2, 3], "left": [4, 5, 6, 7]})
+        for ladder in m._window.values():
+            ladder.level = 2                   # a level the loc stage reached
         m._stage_plan = ["distractor"] * 2
         m.total_trials = 2
         t = _to_trial(m)
+        # Decoy and target at the fixed pulse, under the held window.
+        self.assertEqual(float(m.params["dur_ms"]), 150.0)
+        self.assertEqual(float(m.params["distractor_ms"]), 150.0)
+        self.assertEqual(float(m.params["window_ms"]), 1200.0)
+        self.assertEqual(int(m.params["level"]), 2)
         t = _to_respond(m, t)
-        before = {h: s.level for h, s in m._dur_stair.items()}
         m.queue_press(_press_event(m.lane, t + 0.3))
         m._tick(t + 0.31)
-        self.assertEqual({h: s.level for h, s in m._dur_stair.items()},
-                         before)
+        self.assertEqual({h: w.level for h, w in m._window.items()},
+                         {"right": 2, "left": 2})
+        self.assertEqual({h: w.trace for h, w in m._window.items()},
+                         {"right": [], "left": []})
         self.assertEqual(len(m._dis_records), 1)
+        self.assertEqual(m._dis_records[0]["level"], 2)
         # Both pulses went out: the decoy and the target.
         stims = [c for c in m.engine._sent if str(c).startswith("STIM")]
         self.assertEqual(len(stims), 2)
+        self.assertEqual(_stim_requests(m), [150.0, 150.0])
 
     def test_pressing_the_decoy_finger_counts_as_lured(self):
         e = _engine(hand_mode="both")
@@ -1248,9 +1338,10 @@ class BlockFlowTests(unittest.TestCase):
         self.assertEqual(stats["gap"]["threshold"]["right"]["n_reversals"],
                          0)
 
-    def test_block_ends_and_carries_the_staircase(self):
+    def test_block_ends_and_carries_the_window_level(self):
         m = _mode(_engine(), catch_rate=0.0)
         m = _only_stage(m, "loc", 1)
+        m._window["right"].level = 2
         finished = []
         m.engine.finish_block = lambda: finished.append(True)
         t = _to_trial(m)
@@ -1260,14 +1351,20 @@ class BlockFlowTests(unittest.TestCase):
         m._tick(t + 0.21 + m.rest_s + 0.05)
         self.assertEqual(m.phase, "done")
         self.assertTrue(finished)
-        self.assertEqual(m.engine._buzz_hunt_start_ms["right"],
-                         m._dur_stair["right"].level)
+        self.assertEqual(m.engine._buzz_hunt_window_level, {"right": 2})
+        # The duration carry belongs to the legacy flag only, so a
+        # window block can never seed a staircase block.
+        self.assertFalse(hasattr(m.engine, "_buzz_hunt_start_ms"))
 
-    def test_carried_start_seeds_the_next_block(self):
+    def test_carried_level_seeds_the_next_block(self):
         e = _engine()
-        e._buzz_hunt_start_ms = {"right": 180.0}
+        e._buzz_hunt_window_level = {"right": 2}
         m = _mode(e)
-        self.assertEqual(m._dur_stair["right"].level, 180.0)
+        self.assertEqual(m._window["right"].level, 2)
+        self.assertEqual(m._window["right"].window_s, 1.2)
+        # An out-of-range carry clamps to the ladder.
+        e._buzz_hunt_window_level = {"right": 9}
+        self.assertEqual(_mode(e)._window["right"].level, 3)
 
     def test_block_stats_carry_the_results_summary(self):
         m = _mode(_engine(), catch_rate=0.0)
@@ -1285,11 +1382,60 @@ class BlockFlowTests(unittest.TestCase):
         stats = m.block_stats()
         self.assertEqual(stats["loc"]["trials"], 2)
         self.assertEqual(stats["loc"]["accuracy"], 0.5)
-        self.assertIn("right", stats["threshold"])
-        self.assertIn("reversals_ms", stats["threshold"]["right"])
         self.assertIsNotNone(stats["loc"]["median_rt_ms"])
         self.assertEqual(stats["span"]["trials"], 0)
         self.assertIn("confusion", stats)
+        # The 2026-09 summary: the pulse, the window ladder per hand,
+        # the per-hand localisation block, and NO threshold dict (an
+        # untouched staircase start must never read as a measurement).
+        self.assertEqual(stats["pulse_ms"], 150.0)
+        self.assertFalse(stats["duration_staircase"])
+        self.assertEqual(stats["threshold"], {})
+        self.assertTrue(stats["window"]["active"])
+        self.assertEqual(stats["window"]["levels_s"], [2.0, 1.5, 1.2, 1.0])
+        right = stats["window"]["per_hand"]["right"]
+        self.assertEqual(right["top_level"], 0)
+        self.assertEqual(right["trace"], [0, 0])
+        self.assertEqual(stats["window"]["top_level"], 0)
+        loc_r = stats["loc"]["per_hand"]["right"]
+        self.assertEqual(loc_r["trials"], 2)
+        self.assertEqual(loc_r["accuracy"], 0.5)
+        self.assertEqual(loc_r["by_level"]["0"]["n"], 2)
+        self.assertEqual(loc_r["by_level"]["0"]["window_s"], 2.0)
+        # No catch trials, so no false-alarm rate and no d-prime.
+        self.assertIsNone(loc_r["d_prime"])
+        self.assertIsNone(stats["loc"]["d_prime"])
+
+    def test_d_prime_comes_from_the_catch_trials_per_hand(self):
+        from statistics import NormalDist
+        m = _mode(_engine(), catch_rate=0.0)
+        m = _only_stage(m, "loc", 3)
+        m.engine.finish_block = lambda: None
+        t = _to_trial(m)
+        t = _to_respond(m, t)
+        t = _answer_loc(m, t, correct=True)
+        # The next two trials are catch trials (the rate is read at
+        # draw time): one waited out, one false alarm.
+        m.catch_rate = 1.0
+        t = _next_trial(m, t)
+        self.assertTrue(m.catch)
+        t = _to_respond(m, t)
+        t += m._respond_window_s() + 0.05
+        m._tick(t)
+        t = _next_trial(m, t)
+        self.assertTrue(m.catch)
+        t = _to_respond(m, t)
+        m.queue_press(_press_event(2, t + 0.4))
+        m._tick(t + 0.41)
+        stats = m.block_stats()
+        loc_r = stats["loc"]["per_hand"]["right"]
+        self.assertEqual(loc_r["catch_n"], 2)
+        self.assertEqual(loc_r["false_alarms"], 1)
+        self.assertEqual(loc_r["fa_rate"], 0.5)
+        z = NormalDist().inv_cdf
+        want = round(z((1 + 0.5) / 2.0) - z((1 + 0.5) / 3.0), 3)
+        self.assertEqual(loc_r["d_prime"], want)
+        self.assertEqual(stats["loc"]["d_prime"], want)
 
     def test_frame_stall_across_a_gap_voids_the_trial(self):
         # A stall longer than the silent gap dispatches the overdue
@@ -1380,16 +1526,15 @@ class BlockFlowTests(unittest.TestCase):
 
     def test_distractor_overlap_is_not_voided_at_sixty_hz(self):
         # A distractor trial's two pulses sit on different boards and
-        # their planned silence shrinks below one display frame as
-        # the staircase nears 150 ms; the same-board void guard used
-        # to void these on every ordinary frame (measured: half the
-        # distractor stage voided at just-above-threshold levels).
-        # Cross-board plans skip the void; the gap trial's same-board
-        # guard is pinned by test_frame_stall_across_a_gap_voids.
+        # at the fixed 150 ms pulse with the 150 ms lead their planned
+        # silence is zero, well under one display frame; the
+        # same-board void guard used to void these on every ordinary
+        # frame (measured: half the distractor stage voided when the
+        # old staircase sat near 150 ms). Cross-board plans skip the
+        # void; the gap trial's same-board guard is pinned by
+        # test_frame_stall_across_a_gap_voids.
         hands = {"right": [0, 1, 2, 3], "left": [4, 5, 6, 7]}
         m = _mode(_engine("both"), hands=hands, catch_rate=0.0)
-        for stair in m._dur_stair.values():
-            stair.level = 140.0       # silence 10 ms < one frame
         m = _only_stage(m, "distractor", 2)
         t = _to_trial(m)
         t = _to_respond(m, t)
@@ -1471,6 +1616,246 @@ class BlockFlowTests(unittest.TestCase):
         from finger_rehab.game.modes.buzz_hunt import LEVEL_FLOOR_MS
         m = _mode(_engine(), floor_ms=5.0, start_ms=50.0)
         self.assertEqual(m.floor_ms, LEVEL_FLOOR_MS)
+
+    def test_fixed_pulses_and_the_gap_floor_respect_the_motor(self):
+        # Every fixed pulse is a felt pulse (Kaaresoja and Linjama's
+        # 50 ms) and a silent gap is never shorter than the motor's
+        # spin-down (120 ms), whatever the config asks for.
+        from finger_rehab.game.modes.buzz_hunt import (FELT_PULSE_FLOOR_MS,
+                                                        GAP_FLOOR_MS)
+        m = _mode(_engine(), loc_pulse_ms=20.0, span_pulse_ms=30.0,
+                  gap_short_ms=25.0, gap_floor_ms=35.0, gap_start_ms=60.0)
+        self.assertEqual(m.loc_pulse_ms, FELT_PULSE_FLOOR_MS)
+        self.assertEqual(m.span_pulse_ms, FELT_PULSE_FLOOR_MS)
+        self.assertEqual(m.gap_short_ms, FELT_PULSE_FLOOR_MS)
+        self.assertEqual(m.gap_floor_ms, GAP_FLOOR_MS)
+        self.assertEqual(m.gap_start_ms, GAP_FLOOR_MS)
+        self.assertEqual(m._gap_stair["right"].floor, GAP_FLOOR_MS)
+
+    def test_config_ships_the_fixed_pulse_and_the_ladder(self):
+        from finger_rehab.config import Config
+        cfg = Config.load()
+        self.assertEqual(float(cfg.get("buzz_hunt.loc_pulse_ms")), 150.0)
+        self.assertEqual([float(v) for v in
+                          cfg.get("buzz_hunt.window_levels_s")],
+                         [3.0, 2.0, 1.5, 1.2])
+        self.assertEqual(list(cfg.get("buzz_hunt.window_promote")), [6, 8])
+        self.assertEqual(list(cfg.get("buzz_hunt.window_demote")), [2, 4])
+        self.assertFalse(bool(cfg.get("buzz_hunt.duration_staircase")))
+        self.assertEqual(float(cfg.get("buzz_hunt.gap_floor_ms")), 120.0)
+        self.assertEqual(float(cfg.get("buzz_hunt.gap_short_ms")), 150.0)
+        self.assertGreater(float(cfg.get("buzz_hunt.gap_start_ms")),
+                           float(cfg.get("buzz_hunt.gap_floor_ms")))
+
+
+# ---- the window ladder --------------------------------------------------
+
+
+class WindowLadderTests(unittest.TestCase):
+    """The mastery rule that replaced the duration staircase for
+    localisation: promote on 6 correct of the last 8 at a level,
+    demote on 2 misses in the last 4, clamped at both ends, history
+    cleared on every move, the level traced per trial."""
+
+    def _ladder(self, **over):
+        from finger_rehab.game.modes.buzz_hunt import WindowLadder
+        kw = dict(levels_s=[3.0, 2.0, 1.5, 1.2])
+        kw.update(over)
+        return WindowLadder(**kw)
+
+    def test_six_straight_corrects_promote(self):
+        w = self._ladder()
+        moves = [w.record(True) for _ in range(6)]
+        self.assertEqual(moves, [None] * 5 + ["up"])
+        self.assertEqual(w.level, 1)
+        self.assertEqual(w.window_s, 2.0)
+        self.assertEqual(w.trace, [0] * 6)
+
+    def test_six_of_eight_promote_with_misses_spread_out(self):
+        w = self._ladder()
+        # Two misses inside eight, never two within four.
+        pattern = [True, True, False, True, True, True, False, True]
+        moves = [w.record(c) for c in pattern]
+        self.assertEqual(w.level, 1)
+        self.assertEqual(moves[-1], "up")
+
+    def test_two_misses_in_four_demote_and_the_bottom_holds(self):
+        w = self._ladder(start_level=1)
+        self.assertEqual([w.record(c) for c in (True, False, True, False)],
+                         [None, None, None, "down"])
+        self.assertEqual(w.level, 0)
+        self.assertEqual([w.record(False) for _ in range(4)],
+                         [None] * 4)
+        self.assertEqual(w.level, 0)
+        self.assertEqual(w.n_demotions, 1)
+
+    def test_the_top_holds(self):
+        w = self._ladder(start_level=3)
+        self.assertTrue(w.top)
+        self.assertEqual([w.record(True) for _ in range(8)], [None] * 8)
+        self.assertEqual(w.level, 3)
+        self.assertEqual(w.top_level, 3)
+
+    def test_history_clears_on_a_move(self):
+        w = self._ladder()
+        for _ in range(6):
+            w.record(True)
+        self.assertEqual(w.level, 1)
+        # A fresh level starts from nothing: six more are needed.
+        self.assertEqual([w.record(True) for _ in range(5)], [None] * 5)
+        self.assertEqual(w.record(True), "up")
+        self.assertEqual(w.level, 2)
+        self.assertEqual(w.n_promotions, 2)
+
+    def test_summary_names_the_shape(self):
+        w = self._ladder()
+        for c in (True,) * 6 + (False, False):
+            w.record(c)
+        s = w.summary()
+        self.assertEqual(s["start_level"], 0)
+        self.assertEqual(s["top_level"], 1)
+        self.assertEqual(s["final_level"], 0)
+        self.assertEqual(s["top_window_s"], 2.0)
+        self.assertEqual(s["final_window_s"], 3.0)
+        self.assertEqual(s["trace"], [0] * 6 + [1, 1])
+
+    def test_start_level_clamps_and_levels_sort_longest_first(self):
+        w = self._ladder(start_level=7)
+        self.assertEqual(w.level, 3)
+        m = _mode(_engine(), window_levels_s=[1.0, 3.0, 2.0])
+        self.assertEqual(m.window_levels_s, [3.0, 2.0, 1.0])
+        self.assertEqual(m._window["right"].window_s, 3.0)
+
+
+# ---- the legacy duration staircase --------------------------------------
+
+
+class LegacyDurationStaircaseTests(unittest.TestCase):
+    """buzz_hunt.duration_staircase true replays the pre-2026-09
+    localisation exactly: the pulse walks the 2-down 1-up staircase,
+    the window stays flat, rows carry stair_ms and the reversal flag,
+    block_stats carries the threshold dict and the duration carry.
+    The recorded level sequence below was captured on the build that
+    shipped the staircase (tests/test_buzz_hunt.py at 2811166, seed
+    7, one hand, 24 trials: correct except a wrong finger on trials
+    3, 8, 13, 18, 23 and a timeout on trials 7, 14, 21)."""
+
+    RECORDED_LEVELS = [300.0, 220.0, 140.0, 180.0, 180.0, 140.0, 140.0,
+                       180.0, 220.0, 220.0, 180.0, 180.0, 140.0, 180.0,
+                       220.0, 220.0, 180.0, 180.0, 220.0, 220.0, 180.0,
+                       220.0, 220.0, 260.0]
+    RECORDED_REVERSALS = [140.0, 180.0, 140.0, 220.0, 140.0, 220.0,
+                          180.0, 220.0, 180.0]
+
+    def _legacy(self, e=None, n=4, **over):
+        over.setdefault("duration_staircase", True)
+        m = _mode(e or _engine(), **over)
+        return _only_stage(m, "loc", n)
+
+    def test_flag_reproduces_the_recorded_level_sequence(self):
+        m = self._legacy(n=24, seed=7, catch_rate=0.0)
+        m.engine.finish_block = lambda: None
+        t = _to_trial(m)
+        levels = []
+        for i in range(24):
+            levels.append(float(m.params["dur_ms"]))
+            t = _to_respond(m, t)
+            if i % 7 == 6:
+                t += m.response_window_s + 0.05
+                m._tick(t)
+            else:
+                t = _answer_loc(m, t, correct=(i % 5 != 2))
+            if i < 23:
+                t = _next_trial(m, t)
+        self.assertEqual(levels, self.RECORDED_LEVELS)
+        stats = m.block_stats()
+        thr = stats["threshold"]["right"]
+        self.assertEqual(thr["final_ms"], 260.0)
+        self.assertEqual(thr["estimate_ms"], 193.3)
+        self.assertEqual(thr["reversals_ms"], self.RECORDED_REVERSALS)
+        self.assertTrue(stats["duration_staircase"])
+        self.assertFalse(stats["window"]["active"])
+        self.assertEqual(_stim_requests(m), self.RECORDED_LEVELS)
+
+    def test_timeout_raises_the_staircase(self):
+        # Still inside the accelerated approach (no reversal yet), so
+        # the up-move runs at the doubled step; FastStartTests pins
+        # the rule itself.
+        m = self._legacy()
+        t = _to_trial(m)
+        t = _to_respond(m, t)
+        before = m._dur_stair[m.hand].level
+        t += m.response_window_s + 0.05
+        m._tick(t)
+        self.assertEqual(m.phase, "feedback")
+        self.assertEqual(m._dur_stair[m.hand].level,
+                         before + 2 * m.step_ms)
+        row = m.engine.trial_logger.rows[0]
+        self.assertIn("stair_ms=", row["stimulus"])
+        self.assertIn("reversal=False", row["stimulus"])
+        self.assertNotIn("level=", row["stimulus"])
+
+    def test_correct_answers_lower_the_duration(self):
+        # During the accelerated approach every single correct steps
+        # down at double size, so two corrects descend four base
+        # steps (see Staircase.fast_start).
+        m = self._legacy(n=3)
+        t = _to_trial(m)
+        start = m._dur_stair["right"].level
+        for i in range(2):
+            t = _to_respond(m, t)
+            t = _answer_loc(m, t, correct=True, rt=0.2)
+            if i < 1:
+                t = _next_trial(m, t)
+        self.assertEqual(m._dur_stair["right"].level,
+                         start - 4 * m.step_ms)
+        # And the window ladder never moved: the flag owns difficulty.
+        self.assertEqual(m._window["right"].trace, [])
+
+    def test_reversal_is_logged_as_an_event(self):
+        m = self._legacy(n=6)
+        t = _to_trial(m)
+        for i in range(3):
+            t = _to_respond(m, t)
+            if i < 2:
+                t = _answer_loc(m, t, correct=True, rt=0.2)
+                t = _next_trial(m, t)
+            else:
+                t += m.response_window_s + 0.05
+                m._tick(t)
+        revs = [ev for ev in m.engine.raw_logger.events
+                if ev["event"] == "buzz_hunt_reversal"]
+        self.assertEqual(len(revs), 1)
+        self.assertIn("stair=duration", revs[0]["detail"])
+
+    def test_distractor_trials_hold_the_staircase_still(self):
+        e = _engine(hand_mode="both")
+        m = _mode(e, hands={"right": [0, 1, 2, 3], "left": [4, 5, 6, 7]},
+                  duration_staircase=True)
+        m._stage_plan = ["distractor"] * 2
+        m.total_trials = 2
+        t = _to_trial(m)
+        t = _to_respond(m, t)
+        before = {h: s.level for h, s in m._dur_stair.items()}
+        m.queue_press(_press_event(m.lane, t + 0.3))
+        m._tick(t + 0.31)
+        self.assertEqual({h: s.level for h, s in m._dur_stair.items()},
+                         before)
+        self.assertEqual(len(m._dis_records), 1)
+
+    def test_block_carries_the_duration_and_seeds_the_next(self):
+        m = self._legacy(n=1, catch_rate=0.0)
+        m.engine.finish_block = lambda: None
+        t = _to_trial(m)
+        t = _to_respond(m, t)
+        t = _answer_loc(m, t, correct=True, rt=0.2)
+        m._tick(t + m.rest_s + 0.05)
+        self.assertEqual(m.phase, "done")
+        self.assertEqual(m.engine._buzz_hunt_start_ms["right"],
+                         m._dur_stair["right"].level)
+        e = _engine()
+        e._buzz_hunt_start_ms = {"right": 180.0}
+        self.assertEqual(self._legacy(e)._dur_stair["right"].level, 180.0)
 
 
 # ---- the screen ---------------------------------------------------------
@@ -1661,6 +2046,34 @@ class ResultsCardTests(unittest.TestCase):
         self.assertEqual(cards.get("THRESHOLD L"), "120 ms")
         self.assertNotIn("THRESHOLD", cards)
         self.assertNotIn("210 ms", cards.values())
+
+    def test_a_window_ladder_block_gets_window_cards_not_thresholds(self):
+        # 2026-09: the difficulty summary is the shortest window each
+        # hand reached; the THRESHOLD card only exists for a block
+        # that ran the legacy staircase.
+        bh = {
+            "hands": ["right", "left"],
+            "loc": {"accuracy": 0.95, "catch": {"false_alarms": 1}},
+            "pulse_ms": 150.0,
+            "duration_staircase": False,
+            "threshold": {},
+            "window": {
+                "levels_s": [3.0, 2.0, 1.5, 1.2], "active": True,
+                "top_level": 3,
+                "per_hand": {
+                    "right": {"top_level": 3, "top_window_s": 1.2,
+                              "final_level": 2, "final_window_s": 1.5},
+                    "left": {"top_level": 1, "top_window_s": 2.0,
+                             "final_level": 1, "final_window_s": 2.0},
+                },
+            },
+            "span": {"max_correct": 4},
+            "gap": {"threshold": {}},
+        }
+        cards = dict(self._draw(bh, hand_mode="both"))
+        self.assertEqual(cards.get("WINDOW R"), "1.2 s (L4/4)")
+        self.assertEqual(cards.get("WINDOW L"), "2.0 s (L2/4)")
+        self.assertFalse(any(k.startswith("THRESHOLD") for k in cards))
 
 
 if __name__ == "__main__":

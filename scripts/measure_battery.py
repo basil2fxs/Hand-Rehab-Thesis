@@ -1,6 +1,6 @@
 """Measure the study battery's clock cost headless.
 
-The healthy baseline design budgets 50 minutes per visit (docs/
+The healthy baseline design budgets 44 minutes per visit (docs/
 research/healthy_baseline_study.txt, Section 2.3) from arithmetic
 over the config. This script plays the whole battery through the
 real engine, real modes and real loggers with a simulated
@@ -274,30 +274,6 @@ class Participant:
         else:
             self.hand.force_pct = {}
 
-    def _lighthouse(self, m, now, eng) -> None:
-        if self._probe(m, now):
-            return
-        if getattr(m, "phase", "") != "trial":
-            self.hand.force_pct = {}
-            return
-        target = float(getattr(m, "target_pct", 0.0) or 0.0)
-        if m.kind == "hold":
-            self.hand.force_pct = {int(m.lane): target}
-            return
-        # An echo studies the force on set_lane and reproduces it on
-        # lane (the mirror finger when the trial is cross-hand).
-        sub = getattr(m, "sub", "")
-        study_lane = int(getattr(m, "set_lane", m.lane))
-        repro_lane = int(m.lane)
-        if sub in ("enter", "study"):
-            self.hand.force_pct = {study_lane: target}
-        elif sub == "delay":
-            self.hand.force_pct = {}
-        elif sub == "reproduce":
-            self.hand.force_pct = {repro_lane: target + 1.5}
-        else:
-            self.hand.force_pct = {}
-
     def _buzz_hunt(self, m, now, eng) -> None:
         if getattr(m, "phase", "") != "trial" or getattr(m, "sub", "") != "respond":
             return
@@ -446,7 +422,7 @@ def main() -> int:
             eng.continue_protocol()
         blocks_s = sum(r[3] for r in rows)
         total_s = LOGIN_S + QUICK_CAL_S + blocks_s + transitions_s
-        budget = float((eng._battery or {}).get("budget_min", 50.0))
+        budget = float((eng._battery or {}).get("budget_min", 44.0))
         print()
         print(f"  blocks       {blocks_s / 60.0:6.2f} min over {len(rows)} blocks")
         print(f"  transitions  {transitions_s / 60.0:6.2f} min "

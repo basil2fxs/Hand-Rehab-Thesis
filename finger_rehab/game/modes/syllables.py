@@ -59,8 +59,10 @@ PARAMETER DEFENCES, in the order they appear in config:
   2012).
 
 LEVEL LADDER (syllables.level, researcher-set):
-  1 counting: free pace, any fingers, 1 to 3 syllable words; success
-    is tap count = syllable count.
+  1 counting: free pace, any fingers, 2 to 3 syllable words; success
+    is tap count = syllable count. No level from 1 to 4 ever draws a
+    one-syllable word: one tap has nothing to segment (the reasoning
+    and the band ladder it leaves are in syllables_words.py).
   2 finger-mapped: one finger per syllable, walking physically LEFT
     TO RIGHT like the blocks (the read-across row rule below); adds
     4-syllable words, and 5-syllable band C words in bilateral play.
@@ -108,9 +110,12 @@ syllable) -> COUNT-IN (paced levels only, metronome ticks) -> RESPOND
 the 200 Hz sample stream, not the frame clock) -> FEEDBACK (blocks
 fill or hollow; full success pulses and chimes through the shared
 after-press cue path) -> one model REPLAY on error -> next word.
-Warm-up before the first word is 10 paced taps to the metronome with
-no word: a tap threshold check and a per-session sensorimotor
-synchronisation probe, logged to raw.csv.
+Warm-up before the first word is a few paced taps to the metronome
+with no word (syllables.warmup_taps, never more than WARMUP_TAPS_MAX):
+a tap threshold check and a per-session sensorimotor synchronisation
+probe, logged to raw.csv. It was ten taps; the first tester found ten
+tedious before the game had started, and five still gives the probe
+five asynchronies and the sensors a check.
 
 THE REWARD LAYER (2026-09). One game, deepened, never split into
 rotating sub-games: focused one-or-two-skill PA programs beat
@@ -355,6 +360,11 @@ class SyllablesMode(WaitSkip):
     # slot-machine mechanics into a child study (docstring: THE
     # REWARD LAYER).
     STREAK_MILESTONES = (3, 5, 8)
+    # Hard cap on the warm-up taps whatever the config asks for: the
+    # probe needs a handful of taps, not a drill, and a child sitting
+    # through ten before the first word is a child losing interest
+    # before the game starts (docstring: TRIAL LOOP).
+    WARMUP_TAPS_MAX = 5
 
     def __init__(self, engine: "GameEngine",
                  lanes: list[int],
@@ -414,7 +424,8 @@ class SyllablesMode(WaitSkip):
         self.ioi_s = max(0.2, float(ioi_ms) / 1000.0)
         self.round_size = max(1, int(round_size))
         self.break_s = max(0.0, float(break_s))
-        self.warmup_total = max(0, int(warmup_taps))
+        self.warmup_total = max(0, min(self.WARMUP_TAPS_MAX,
+                                       int(warmup_taps)))
         self.attend_s = max(0.2, float(attend_s))
         self.free_window_s = float(free_window_s)
         self.count_in_beats = max(0, int(count_in_beats))

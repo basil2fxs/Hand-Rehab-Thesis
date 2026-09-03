@@ -414,7 +414,7 @@ class ForceViewTests(unittest.TestCase):
 
     def test_sustained_hold_is_not_absorbed(self):
         # The detector's baseline EMA follows a sub-threshold hold, so
-        # subtracting the LIVE baseline would sag a Lighthouse hold to
+        # subtracting the LIVE baseline would sag a low hold to
         # zero within a second. The view's frozen reference must not.
         e = _engine()
         det = _add_detector(e, "right")
@@ -443,7 +443,7 @@ class ForceViewTests(unittest.TestCase):
         # sub-threshold hold it still carries much of the held force
         # through a 6 s rest. Taring from that EMA froze part of the
         # previous trial's press into the next trial's reference
-        # (about 25 counts after one Lighthouse hold in the headless
+        # (about 25 counts after one 16 s low hold in the headless
         # drive). The tare must come from the resting hand's smoothed
         # value instead, which sheds the hold within a fraction of a
         # second of the release.

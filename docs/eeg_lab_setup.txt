@@ -182,7 +182,7 @@ marks what the old file could not.
 | Rhythm's leading buzz | n/a | 22 at the STIM command, about 195 ms before the beat's own byte, which is then 31 (no buzzer bit) |
 | Response / press | never marked | at response onset: 100+lane correct, 110+lane wrong finger (lane = finger actually pressed), 120+lane anticipation or false start, 130 timeout (bookkeeping only, never epoch response-locked on it), 131 idle press |
 | Correctness | never marked; recovered offline from the CSV | in the byte, known at detection time |
-| Block boundaries | never marked | 200+mode start, 220+mode end, 219 abandoned (reaction=0, classic=1, adaptive=2, rhythm=3, mirror=4, pattern=5, chords=6, syllables=7, force_pilot=8, lighthouse=9, buzz_hunt=10, echo=12; 11 reserved for syllables_words) |
+| Block boundaries | never marked | 200+mode start, 220+mode end, 219 abandoned (reaction=0, classic=1, adaptive=2, rhythm=3, mirror=4, pattern=5, chords=6, syllables=7, force_pilot=8, buzz_hunt=10, echo=12; 9 retired with Lighthouse in September 2026 and never reissued, 11 reserved for syllables_words) |
 | Session and flow | never marked | 240 session start, 241 session end, 242 pause, 243 resume, 244/245 rest bounds |
 | Preparation | never marked | 20 GET READY onset, 21 foreperiod armed (CNV S1), 22 rhythm leading buzz, 25 catch-trial virtual onset |
 | Reset | 0 after each pulse | same |

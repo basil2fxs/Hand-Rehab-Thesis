@@ -316,6 +316,12 @@ transfer), PD, CTS, MS, older adults.
 
 ### Mode B: Lighthouse (precision hold with feedback fade)
 
+RETIRED, September 2026. Built and tested, then removed from the app:
+Basil found it impractical to play (a 16 s hold at a few percent of
+max on a flat pad, with the feedback blanked, was not something a
+hand would do twice). The design is kept here as a record; nothing
+below is in the software.
+
 Per trial: press and hold one finger at a low target (5, 15, 25 percent
 MVC) for 15 to 20 s to keep a lantern burning. Flame size tracks error;
 flicker tracks fluctuation. At higher levels the room goes dark mid

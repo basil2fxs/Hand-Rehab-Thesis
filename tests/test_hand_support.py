@@ -147,9 +147,12 @@ def make_engine(hand_mode: str, data_dir: str):
     stims: list[list[int]] = []
     orig = eng.on_stim_multi
 
-    def recording(lanes, trial_id, t_perf):
+    def recording(lanes, trial_id, t_perf, **kwargs):
+        # Pass-through wrapper: on_stim adds keyword flags (buzz for
+        # rhythm's split cue), and this recorder must not turn a new
+        # flag into a TypeError in every mode.
         stims.append([int(l) for l in lanes])
-        return orig(lanes, trial_id, t_perf)
+        return orig(lanes, trial_id, t_perf, **kwargs)
 
     eng.on_stim_multi = recording
     eng._stim_record = stims

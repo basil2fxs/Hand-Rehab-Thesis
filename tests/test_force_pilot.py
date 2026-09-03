@@ -1266,7 +1266,7 @@ class ResultsScreenLevelAnnotationTests(unittest.TestCase):
 
 
 class ModeSelectHardwareBadgeTests(unittest.TestCase):
-    """Audit finding #111: Force Pilot (with Lighthouse and Buzz Hunt)
+    """Audit finding #111: Force Pilot (with Buzz Hunt)
     gave no needs-hardware indication until after a keyboard-only
     block had already run setup and the GET READY countdown, leaving
     behind an abandoned session folder. The mode-select card must say
@@ -1296,7 +1296,7 @@ class ModeSelectHardwareBadgeTests(unittest.TestCase):
             self):
         sc = self._screen(True)
         self.assertEqual(sc.NEEDS_HARDWARE,
-                         {"force_pilot", "lighthouse", "buzz_hunt"})
+                         {"force_pilot", "buzz_hunt"})
 
     def test_badge_drawn_on_keyboard_only_source(self):
         sc = self._screen(False)

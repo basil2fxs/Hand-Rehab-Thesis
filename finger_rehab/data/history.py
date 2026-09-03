@@ -80,14 +80,6 @@ def _chords_clean_rate(summary: dict) -> float | None:
     return int(classes.get("hit", 0)) / n_all
 
 
-def _lighthouse_abs_delta(summary: dict) -> float | None:
-    lh = summary.get("lighthouse")
-    if not isinstance(lh, dict):
-        return None
-    delta = _num((lh.get("overall") or {}).get("lit_dark_delta_pct"))
-    return abs(delta) if delta is not None else None
-
-
 def comparable_value(mode: str, summary: dict) -> float | None:
     """The one number a game of `mode` is compared on, pulled from its
     block_summary, or None when the block did not produce it."""
@@ -111,8 +103,6 @@ def comparable_value(mode: str, summary: dict) -> float | None:
     if mode == "force_pilot":
         return _num(((summary.get("force_pilot") or {})
                      .get("overall") or {}).get("time_in_corridor"))
-    if mode == "lighthouse":
-        return _lighthouse_abs_delta(summary)
     if mode == "buzz_hunt":
         return _num(((summary.get("buzz_hunt") or {})
                      .get("loc") or {}).get("accuracy"))
@@ -156,9 +146,6 @@ _RULES: dict[str, tuple[bool, float, int, str, str]] = {
     "force_pilot": (False, 100.0, 0,
                     "{d}% steadier than last time",
                     "{d}% less steady than last time"),
-    "lighthouse": (True, 1.0, 1,
-                   "{d}% steadier in the dark than last time",
-                   "{d}% more drift in the dark than last time"),
     "buzz_hunt": (False, 100.0, 0, *_ACC),
     "echo": (False, 1.0, 0,
              "longest echo up {d} on last time",

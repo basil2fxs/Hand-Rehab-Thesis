@@ -110,7 +110,7 @@ the code rides the same byte, no second pass.
 Lane IS in the byte here because hand identity (right 0-3 vs left 4-7) is
 what the LRP is made of, and per-finger response codes cost nothing.
 
-Continuous-trial rows (force_pilot runs, lighthouse holds) emit NO
+Continuous-trial rows (force_pilot runs) emit NO
 response-band marker at all: a run close has no press onset to lock
 100 + lane to, and a low-tracking miss is not an expired deadline, so
 130 would mislabel it. The same applies to their trial-close feedback
@@ -148,7 +148,7 @@ feedback marker; FRN needs discrete time-locked events (Miltner et al.
 | 6 | chords |
 | 7 | syllables |
 | 8 | force_pilot |
-| 9 | lighthouse |
+| 9 | retired (Lighthouse, removed September 2026; the id is never reissued so old recordings cannot be confused with a new mode) |
 | 10 | buzz_hunt |
 | 11 | syllables_words |
 | 12 | echo |
@@ -331,7 +331,7 @@ Trial counts are artifact-free trials per participant per condition.
 | ERN/Pe (correct vs wrong press, Basil's question 3) | -500 to +800 ms around 100-127; state the baseline window and keep it fixed | stable from 6-8 errors (Olvet and Hajcak 2009), plan 20+ errors; at 5-10 percent error rates that means 200-400 scored trials, so an EEG session stacks several blocks | error-rich modes: adaptive at speed (wrong-finger presses), rhythm hard, chords (wrong-finger leaks), classic with a tightened window; reaction simple-mode barely errs, do not use it for ERN | Solid, the strongest single claim this project can make; misses (130) are excluded, they have no response onset |
 | CNV (preparation, Basil's question 4a) | 21 (S1) to stimulus, 0 to ~3 s; needs 0.05 Hz or DC high-pass, an acquisition-software setting to agree with the lab | visible from 6-12 trials, plan 30+ per condition (2024 Neuromethods chapter) | reaction mode, with TWO additions this spec requires: (a) a visible ready cue at foreperiod onset carrying code 21, (b) a fixed-foreperiod EEG variant (constant 2.5-3.0 s wait, config flag) because the shipped exponential foreperiod keeps the hazard flat ON PURPOSE and a flat hazard suppresses exactly the expectancy ramp the CNV is (preparation_attention.md Section 3); catch trials (25) give stimulus-free preparation epochs | Solid with the fixed-foreperiod variant; exploratory without it |
 | RP/MRCP and LRP (motor preparation) | -1500 to +500 ms around response onset | LRP: 100+ per hand per condition, it is ~1 uV (Eimer 1998); MRCP: several tens | LRP strictly needs left-versus-right responding: mirror mode and bilateral pattern/classic blocks only; four fingers of one hand cannot produce an LRP; strict self-initiated BP would need a free-press block that does not currently exist (NICE: a trivial "press when you like, every 5+ s" block) | LRP solid in bilateral blocks with the trial budget; strict BP not available without the new block |
-| Mu/beta ERD and post-movement beta rebound | -2 to +3 s around response onset, band power vs pre-event baseline | 30+ (Pfurtscheller and Lopes da Silva 1999) | sparse-press modes only: reaction (~6 s cycle, ideal), chords (quiet-baseline gate, generous ITI), lighthouse holds; fast modes (rhythm, adaptive at speed) smear ERD and rebound together, do not use them for oscillatory measures (2025 Frontiers ISI paper) | Solid in the sparse modes |
+| Mu/beta ERD and post-movement beta rebound | -2 to +3 s around response onset, band power vs pre-event baseline | 30+ (Pfurtscheller and Lopes da Silva 1999) | sparse-press modes only: reaction (~6 s cycle, ideal), chords (quiet-baseline gate, generous ITI); fast modes (rhythm, adaptive at speed) smear ERD and rebound together, do not use them for oscillatory measures (2025 Frontiers ISI paper) | Solid in the sparse modes |
 | Sequence-learning ERPs (N2b/P3b to random vs sequence items) | stimulus-locked epochs on 40 vs 41, binned by block via 200/220 codes | enough probe items per bin: pattern's random takes supply 64-trial probe blocks | pattern mode, unchanged; the hidden-sequence design is exactly the Eimer et al. (1996) logic | Solid |
 | FRN / reward positivity | -200 to +800 ms around 140/141 | 20+ per valence | any mode with discrete hit/miss feedback moments; needs the feedback markers implemented | Solid if implemented; NICE overall |
 | Alpha attention index (Basil's question 4b) | continuous, block-averaged band power over posterior sites, baselined at session start, smoothed over tens of seconds | not trial-based; needs block boundaries and pause codes only | any mode; reaction's lapse counter (RT over 500 ms) is the behavioural partner | Partially defensible ONLY as below |

@@ -18,19 +18,22 @@ data saves even if you quit a game halfway.
 
 The login screen is also the study intake. A participant code (P01,
 P02, ...) goes in the same field as a name; the screen suggests the
-next free code off the sessions folder and the visit number from the
-days that code has already played. Age, sex, dominant hand, the
-Edinburgh handedness score and hand length and breadth are the other
-fields; a code needs its dominant hand, a name does not. Tab moves
-between fields, Enter logs in. Everything typed lands in
-`metadata.json`, and the code keys the session folders, the index,
-the vs-last-time chip and the notebook.
+next free code off the sessions folder. Age, sex, main hand (Left or
+Right) and hand length and breadth are the other fields; a code needs
+its main hand, a name does not. Hand size, main hand and sex fill
+themselves from the same identity's last visit (a code matches on the
+code, a name on name and age) and can be typed over. The visit number
+is not asked: it is one more than the days that identity has already
+played on, and it lands in `metadata.json` with the rest. Tab moves
+between fields, L and R pick the hand, Enter logs in. The code keys
+the session folders, the index, the vs-last-time chip and the
+notebook.
 
-## Study battery
+## Play all (the study battery)
 
-The hub has a STUDY BATTERY button (B on the keyboard). It runs the
+The hub has a PLAY ALL button (A on the keyboard). It runs the
 healthy baseline battery from `docs/research/healthy_baseline_study.txt`
-through the protocol runner: ten blocks in an order counterbalanced by
+through the protocol runner: nine blocks in an order counterbalanced by
 the participant code (code mod 4 picks the mode order and which hand
 goes first), each hand resolved against the dominant hand from login,
 short-form counts and frozen difficulty ladders applied for the run
@@ -66,8 +69,6 @@ little on both). Both hands is all 8.
 - Mirror: both hands press the same finger together.
 - Force Pilot: your finger's pressure flies a craft through a
   corridor. Needs the sensors.
-- Lighthouse: hold a gentle press steady, then keep it steady when
-  the screen stops helping you. Needs the sensors.
 - Buzz Hunt: a finger buzzes, you press the finger that felt it.
   Needs the buzzers.
 - Echo: the keys light up in a growing order, you play them back.
@@ -131,7 +132,7 @@ tab, download the zips). First launch: right-click Open on Mac,
 python -m pytest tests
 ```
 
-62 test files. Run them before trusting a change.
+78 test files. Run them before trusting a change.
 
 ## Folder layout
 

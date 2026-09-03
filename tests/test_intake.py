@@ -775,7 +775,7 @@ class CodeKeysTheHistoryTests(_LoginHarness):
 
 def _load_ra():
     """The notebook's definitions as a namespace, the pattern
-    tests/test_lighthouse_notebook_icc.py uses."""
+    tests/test_echo_notebook_span.py uses."""
     from tests.test_rehab_analysis import (FUTURE_FLAGS, MODULE_NAME,
                                            _code_cells, _definitions)
     name = MODULE_NAME + "_intake"

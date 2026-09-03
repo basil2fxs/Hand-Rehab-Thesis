@@ -26,8 +26,8 @@ from ..data.intake import cell_for, normalise_code
 # On a keyboard-only source they refuse at their first tick, so a
 # battery skips them up front and says so, rather than opening a
 # block that can only be abandoned. The hub's cards badge the same
-# three (ModeSelectScreen.NEEDS_HARDWARE reads this constant).
-HARDWARE_MODES = frozenset({"force_pilot", "lighthouse", "buzz_hunt"})
+# two (ModeSelectScreen.NEEDS_HARDWARE reads this constant).
+HARDWARE_MODES = frozenset({"force_pilot", "buzz_hunt"})
 
 HAND_WORDS = ("hand1", "hand2", "dominant", "non_dominant",
               "both", "left", "right")

@@ -125,7 +125,7 @@ class NextUpChoiceTests(unittest.TestCase):
         from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
         keys = self._Eng(KeyboardOnlySource())
         playable = playable_modes(keys)
-        for key in ("force_pilot", "lighthouse", "buzz_hunt"):
+        for key in ("force_pilot", "buzz_hunt"):
             self.assertNotIn(key, playable)
         for _ in range(12):
             pick = next_up_mode(keys, None)
@@ -497,12 +497,6 @@ _MODE_CASES = {
         "overall": {"mae_pct": 3.5, "time_in_corridor": 0.75,
                     "stalls": 0},
         "best_section": "sine"}}, "IN CORRIDOR"),
-    "lighthouse": ({"lighthouse": {
-        "levels": {"trace": [1, 1]},
-        "per_lane": {"0": {"lit_cov": 0.1, "delta_pct": 2.0}},
-        "overall": {"lit_cov": 0.12, "dark_drift_pct": 3.0,
-                    "lit_dark_delta_pct": 2.0},
-        "echo": {"overall": {"abs_err_pct": 1.1}}}}, "LIT VS DARK"),
     "buzz_hunt": ({"buzz_hunt": {
         "hands": ["right"],
         "loc": {"accuracy": 0.9, "catch": {"false_alarms": 0},

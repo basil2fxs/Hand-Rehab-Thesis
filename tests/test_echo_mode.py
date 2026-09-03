@@ -261,19 +261,57 @@ class LadderTests(unittest.TestCase):
         self.assertEqual(stats["run_end_reasons"], ["ceiling"])
         self.assertEqual(stats["span"], 4)
 
-    def test_presentation_never_speeds_up(self) -> None:
+    def test_presentation_is_a_function_of_length_not_success(
+            self) -> None:
         # The classic toy accelerates with success; a measure must
         # not (Berch: rate drift is what made 25 years of Corsi data
-        # incomparable). The pinned rate is also what block_stats
-        # reports, so the analysis can hold every block to it.
-        eng, mode = _build_mode(max_len=4)
-        ioi_before = mode.ioi_s
+        # incomparable). The 2026-09 schedule keeps that rule in the
+        # form that matters: the rate is pinned per LENGTH, so both
+        # trials at a length run at one rate whether the first one
+        # failed or not, the start rate is what block_stats reports,
+        # and the whole schedule sits next to it.
+        eng, mode = _build_mode(max_len=5, item_on_ms=400.0, ioi_ms=800.0,
+                                ioi_step_ms=50.0, ioi_floor_ms=600.0)
         with patched_clock() as clock:
-            _drive(mode, clock, _perfect(mode, clock))
-        self.assertEqual(mode.ioi_s, ioi_before)
+            _drive(mode, clock, _perfect(mode, clock, fail_at={2, 3, 4}))
+        by_len: dict[int, set[float]] = {}
+        for r in mode._records:
+            by_len.setdefault(r["len"], set()).add(r["ioi_ms"])
+        self.assertEqual(by_len, {2: {800.0}, 3: {750.0}, 4: {700.0},
+                                  5: {650.0}})
         stats = mode.block_stats()
-        self.assertEqual(stats["ioi_ms"], 1000.0)
-        self.assertEqual(stats["item_on_ms"], 500.0)
+        self.assertEqual(stats["ioi_ms"], 800.0)
+        self.assertEqual(stats["item_on_ms"], 400.0)
+        self.assertEqual(stats["ioi_step_ms"], 50.0)
+        self.assertEqual(stats["ioi_floor_ms"], 600.0)
+        self.assertEqual(stats["ioi_schedule_ms"],
+                         {"2": 800.0, "3": 750.0, "4": 700.0, "5": 650.0})
+
+    def test_the_schedule_floors_at_the_motor_and_step_zero_is_fixed_rate(
+            self) -> None:
+        from finger_rehab.game.modes.echo import EchoMode
+        _e, mode = _build_mode(max_len=9, item_on_ms=400.0, ioi_ms=800.0,
+                               ioi_step_ms=50.0, ioi_floor_ms=600.0)
+        self.assertEqual([round(mode.ioi_for(n), 3) for n in range(2, 10)],
+                         [0.8, 0.75, 0.7, 0.65, 0.6, 0.6, 0.6, 0.6])
+        # A floor under item_on plus the motor's spin-down is raised
+        # to it: the next finger must have stopped before the next
+        # item starts.
+        _e, tight = _build_mode(item_on_ms=400.0, ioi_ms=800.0,
+                                ioi_step_ms=100.0, ioi_floor_ms=100.0)
+        self.assertAlmostEqual(tight.ioi_floor_s,
+                               0.4 + EchoMode.MOTOR_CLEAR_S)
+        self.assertAlmostEqual(tight.ioi_for(9), 0.55)
+        # Step zero is the fixed-rate Corsi protocol again.
+        _e, flat = _build_mode(item_on_ms=500.0, ioi_ms=1000.0)
+        self.assertEqual({flat.ioi_for(n) for n in range(2, 10)}, {1.0})
+        # The shipped config is the tightened schedule.
+        from finger_rehab.config import Config
+        cfg = Config.load()
+        self.assertEqual(float(cfg.get("echo.item_on_ms")), 400.0)
+        self.assertEqual(float(cfg.get("echo.ioi_ms")), 800.0)
+        self.assertEqual(float(cfg.get("echo.ioi_step_ms")), 50.0)
+        self.assertEqual(float(cfg.get("echo.ioi_floor_ms")), 600.0)
 
     def test_hebb_trials_are_the_hidden_prefix_and_count_for_the_ladder(
             self) -> None:
@@ -386,6 +424,65 @@ class ReproductionTests(unittest.TestCase):
         self.assertEqual(stats["end_reason"], "fatigue")
         self.assertEqual(stats["fatigue_rests"], 2)
 
+    def test_a_fast_reply_at_the_last_offset_counts(self) -> None:
+        # Reproduction opens on the grid, the moment the last item's
+        # light is due off, so a reply stamped there is a reply even
+        # if the frame that would have noticed has not run yet. A
+        # press stamped while the last item is still lit stays a
+        # playback press.
+        eng, mode = _build_mode(item_on_ms=400.0, ioi_ms=800.0)
+        with patched_clock() as clock:
+            for _ in range(400):
+                clock.t += 0.05
+                mode.update(0.05)
+                if (mode.phase == "play"
+                        and mode._item_idx >= len(mode.sequence)):
+                    break
+            self.assertEqual(mode.phase, "play")
+            last_off = mode._last_offset_due()
+            # Still lit: a playback press, let go.
+            early = last_off - 0.05
+            mode.queue_press(_press(mode.sequence[0], early))
+            clock.t = early
+            mode.update(0.0)
+            self.assertEqual(mode.phase, "play")
+            self.assertEqual(mode.playback_presses, 1)
+            self.assertEqual(mode._entered, [])
+            # Light due off, frame not yet run: the press is a reply.
+            clock.t = last_off + 0.01
+            mode.queue_press(_press(mode.sequence[0], clock.t))
+            mode.update(0.0)
+            self.assertEqual(mode.phase, "respond")
+            self.assertEqual([l for l, _t in mode._entered],
+                             [mode.sequence[0]])
+            self.assertEqual(mode._match, 1)
+
+    def test_no_buzz_answers_a_press_in_reproduction(self) -> None:
+        # The MagicMock engine records every pulse_motor call: after
+        # the show phase there must be none, whatever a correct press
+        # used to earn.
+        eng, mode = _build_mode()
+        eng.source.provides_samples = True
+        eng.cue_settings.return_value.buzz_before = True
+        with patched_clock() as clock:
+            for _ in range(400):
+                clock.t += 0.05
+                mode.update(0.05)
+                if mode.phase == "respond":
+                    break
+            self.assertEqual(mode.phase, "respond")
+            n_show = eng.pulse_motor.call_count
+            self.assertEqual(n_show, len(mode.sequence))
+            for lane in mode.sequence:
+                mode.queue_press(_press(lane, clock.t))
+                clock.t += 0.2
+                mode.update(0.2)
+        self.assertEqual(mode._records[0]["outcome"], "correct")
+        self.assertEqual(eng.pulse_motor.call_count, n_show)
+        # The trial close declined the engine's after-press cue too.
+        _args, kwargs = eng.log_trial.call_args
+        self.assertIs(kwargs.get("after_press_cue"), False)
+
 
 # ---------------------------------------------------------------------
 # cumulative (classic Simon) mode
@@ -479,10 +576,15 @@ class EndToEndTests(unittest.TestCase):
             self.assertEqual(echo["total_correct"], 3)
             self.assertEqual(echo["product_score"], 9)
             self.assertEqual(echo["n_lanes"], 4)
-            # The Berch parameters, pinned next to the data.
-            for key in ("item_on_ms", "ioi_ms", "idle_timeout_s",
+            # The Berch parameters, pinned next to the data, the
+            # length schedule included.
+            for key in ("item_on_ms", "ioi_ms", "ioi_step_ms",
+                        "ioi_floor_ms", "ioi_schedule_ms",
+                        "motor_clear_ms", "idle_timeout_s",
                         "hebb_every", "start_len", "max_len"):
                 self.assertIn(key, echo)
+            self.assertEqual(echo["ioi_schedule_ms"]["2"], 800.0)
+            self.assertEqual(echo["ioi_schedule_ms"]["3"], 750.0)
             with (root / "trials.csv").open(encoding="utf-8") as fh:
                 rows = list(csv.DictReader(fh))
             self.assertEqual(len(rows), 3)
@@ -534,6 +636,181 @@ class EndToEndTests(unittest.TestCase):
         self.assertEqual(MODE_IDS["echo"], 12)
         self.assertEqual(block_code("echo", "start"), 212)
         self.assertEqual(block_code("echo", "end"), 232)
+
+
+# ---------------------------------------------------------------------
+# the wire: a sample-providing rig through the real engine
+# ---------------------------------------------------------------------
+RESTING = 100
+TAP = 400
+
+
+class _WireRig:
+    """A fake board the real engine drives: 200 Hz samples the test
+    pushes, every command recorded with the fake clock's time."""
+
+    def __init__(self, clock) -> None:
+        from collections import deque
+        self.clock = clock
+        self.commands: list[tuple[float, str]] = []
+        self._q = deque()
+
+    def start(self) -> None: ...
+    def stop(self) -> None: ...
+
+    def push(self, t: float, values) -> None:
+        from finger_rehab.hardware.source import Sample
+        self._q.append(Sample(t_perf=t, values=tuple(values)))
+
+    def get_sample(self, timeout: float = 0.0):
+        return self._q.popleft() if self._q else None
+
+    def send_command(self, cmd: str) -> bool:
+        self.commands.append((self.clock.t, cmd))
+        return True
+
+    @property
+    def is_connected(self) -> bool:
+        return True
+
+    @property
+    def provides_samples(self) -> bool:
+        return True
+
+    @property
+    def name(self) -> str:
+        return "WireRig"
+
+
+def _make_wire_engine(data_dir: str, clock, buzz_after: bool = True):
+    """The real engine on a _WireRig with both buzz switches ON, so
+    any buzz the mode or the engine's after-press path could fire
+    would show on the wire. Calibration profiles are installed the
+    way scripts/measure_battery.py installs them."""
+    from finger_rehab.config import Config
+    from finger_rehab.game.engine import GameEngine
+    from finger_rehab.hardware.calibration_profile import CalibrationProfile
+    cfg = Config.load()
+    cfg.data["ui"]["resolution"] = [1280, 800]
+    cfg.data.setdefault("session", {})["data_dir"] = data_dir
+    cfg.data["session"]["participant"] = "EchoWire"
+    cfg.data.setdefault("report", {})["enabled"] = False
+    cfg.data.setdefault("audio", {})["enabled"] = False
+    cfg.data["eeg"] = {"enabled": False}
+    cfg.data.setdefault("quick_cal", {})["enabled"] = False
+    cfg.data.setdefault("serial", {})["watch_ports"] = False
+    cfg.data["cue"]["buzz_before"] = True
+    cfg.data["cue"]["buzz_after"] = buzz_after
+    cfg.data["game"]["test_mode_enabled"] = True
+    cfg.data["game"]["test_mode_trials"] = 6
+    rig = _WireRig(clock)
+    eng = GameEngine(cfg, rig)
+    eng._screens = eng._build_screens()
+    eng.show_results = lambda: None
+    eng.begin_session("EchoWire", "30", dominant_hand="right", visit="1")
+    prof = CalibrationProfile(hand="right", participant="EchoWire",
+                              resting=[RESTING] * 4,
+                              press=[RESTING + 60] * 4)
+    prof.set_max_press([RESTING + 300] * 4)
+    prof.session_token = str(getattr(eng, "_session_token", ""))
+    eng.apply_calibration(prof)
+    eng._uncal_ack = {"left", "right"}
+    return eng, rig
+
+
+class _Pump:
+    """Frames at 60 Hz with a 200 Hz sample stream under them: every
+    lane rests unless a tap is in flight on it."""
+
+    def __init__(self, eng, rig, clock) -> None:
+        self.eng, self.rig, self.clock = eng, rig, clock
+        self.next_sample = clock.t
+        self.press_until: dict[int, float] = {}
+
+    def tap(self, lane: int, dur_s: float) -> None:
+        self.press_until[lane] = self.clock.t + dur_s
+
+    def frame(self) -> None:
+        self.clock.t += 1.0 / 60.0
+        while self.next_sample <= self.clock.t:
+            t = self.next_sample
+            vals = [TAP if self.press_until.get(l, -1.0) > t else RESTING
+                    for l in range(4)]
+            self.rig.push(t, vals)
+            self.next_sample += 1.0 / 200.0
+        self.eng._pump_source()
+        self.eng.screen_obj.update(1.0 / 60.0)
+        self.eng._drain_motor_queue()
+
+    def until(self, pred, max_frames: int = 6000) -> None:
+        for _ in range(max_frames):
+            if pred():
+                return
+            self.frame()
+        raise AssertionError("condition never met")
+
+
+class WireTests(unittest.TestCase):
+    """What a rig sees in an echo trial, through the real engine,
+    the real detectors and the real gameplay screen."""
+
+    def test_stim_leaves_the_rig_only_during_the_show_phase(self) -> None:
+        with tempfile.TemporaryDirectory() as td, \
+                patched_clock() as clock:
+            eng, rig = _make_wire_engine(td, clock, buzz_after=True)
+            pump = _Pump(eng, rig, clock)
+            pump.until(lambda: eng.detectors.get("right") is not None
+                       and eng.detectors["right"].baseline[0] is not None,
+                       300)
+            eng.begin_echo_block()
+            mode = eng.mode
+            rig.commands.clear()
+            pump.until(lambda: mode.phase == "play")
+            play_t0 = mode._play_t0
+            pump.until(lambda: mode.phase == "respond")
+            respond_t0 = mode._respond_t0
+            show_stims = [t for t, c in rig.commands if c.startswith("STIM")]
+            self.assertGreaterEqual(len(show_stims), len(mode.sequence))
+            self.assertTrue(all(play_t0 - 1e-9 <= t < respond_t0
+                                for t in show_stims), show_stims)
+            marker = len(rig.commands)
+            # Reproduce the whole sequence with real taps on the pads.
+            for lane in mode.sequence:
+                pump.tap(lane, 0.10)
+                pump.until(lambda l=lane: any(e == l for e, _t
+                                              in mode._entered), 120)
+                for _ in range(20):
+                    pump.frame()
+            pump.until(lambda: len(mode._records) >= 1, 600)
+            self.assertEqual(mode._records[0]["outcome"], "correct")
+            for _ in range(30):
+                pump.frame()
+            after = [c for _t, c in rig.commands[marker:]
+                     if c.startswith("STIM") or c.startswith("RIGHT:STIM")]
+            self.assertEqual(after, [],
+                             "no STIM may leave the rig once the show "
+                             "phase is over, buzz_after on included")
+
+    def test_a_fifteen_millisecond_tap_counts_as_a_reply(self) -> None:
+        # No minimum hold anywhere: three samples above threshold at
+        # 200 Hz is a press to the detector and a reply to the mode.
+        with tempfile.TemporaryDirectory() as td, \
+                patched_clock() as clock:
+            eng, rig = _make_wire_engine(td, clock, buzz_after=False)
+            pump = _Pump(eng, rig, clock)
+            pump.until(lambda: eng.detectors.get("right") is not None
+                       and eng.detectors["right"].baseline[0] is not None,
+                       300)
+            eng.begin_echo_block()
+            mode = eng.mode
+            pump.until(lambda: mode.phase == "respond")
+            lane = mode.sequence[0]
+            pump.tap(lane, 0.015)
+            for _ in range(6):
+                pump.frame()
+            self.assertEqual([l for l, _t in mode._entered], [lane])
+            self.assertEqual(mode._match, 1)
+            self.assertIsNotNone(mode.active)
 
 
 if __name__ == "__main__":

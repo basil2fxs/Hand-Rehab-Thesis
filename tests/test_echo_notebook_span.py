@@ -10,7 +10,7 @@ keeps these spans away from Corsi norms actually prints. The session
 folder is written by the REAL GameEngine and EchoMode through the
 real TrialLogger, then handed to the REAL notebook functions
 (build_catalogue / load_games / load_metas / echo_frame / sec_echo),
-the same path test_lighthouse_notebook_icc.py walks for Lighthouse.
+the same path test_force_pilot_notebook_levels.py walks for Force Pilot.
 """
 from __future__ import annotations
 

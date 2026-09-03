@@ -2559,7 +2559,13 @@ class TestBuzzHuntGapFitFloorFromMeasuredBias:
     def test_gamma_floor_is_not_the_fixed_constant(self):
         src = NOTEBOOK.read_text()
         start = src.index('"def sec_tactile(folders')
-        section = src[start:start + 20000]
+        # The whole of sec_tactile: up to the next top-level def in
+        # the cell source (a nested def is indented, so its JSON line
+        # never starts with the quote-def pair). A fixed slice used to
+        # do this and fell short once the window-ladder section
+        # landed ahead of the gap fit.
+        end = src.index('"def ', start + 1)
+        section = src[start:end]
         assert "gamma=0.1" not in section
         assert "gamma = fa if np.isfinite(fa)" in section
 

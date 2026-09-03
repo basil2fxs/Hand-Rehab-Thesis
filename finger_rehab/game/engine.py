@@ -1243,7 +1243,6 @@ class GameEngine:
         from ..ui.buzz_hunt_screen import BuzzHuntScreen
         from ..ui.calibration_screen import CalibrationScreen
         from ..ui.force_pilot_screen import ForcePilotScreen
-        from ..ui.lighthouse_screen import LighthouseScreen
         from ..ui.quick_calibration_screen import QuickCalibrationScreen
         from ..ui.syllables_screen import SyllablesScreen
         return {
@@ -1255,7 +1254,6 @@ class GameEngine:
             "rhythm": RhythmScreen(self),
             "syllables": SyllablesScreen(self),
             "force_pilot": ForcePilotScreen(self),
-            "lighthouse": LighthouseScreen(self),
             "buzz_hunt": BuzzHuntScreen(self),
             "results": ResultsScreen(self),
             "diagnostics": DiagnosticsScreen(self),
@@ -1510,11 +1508,10 @@ class GameEngine:
                 # Same predicate Esc uses, not a second hand-written
                 # list. The hand-written one named gameplay, rhythm and
                 # syllables only, so P did nothing at all in Force
-                # Pilot, Lighthouse and Buzz Hunt: three modes whose
-                # screens each draw a PAUSED overlay the patient could
-                # never reach. Those are also the three longest holds
-                # in the app, which is exactly when someone needs to
-                # stop for a moment.
+                # Pilot and Buzz Hunt: modes whose screens each draw a
+                # PAUSED overlay the patient could never reach. Those
+                # are also among the longest holds in the app, which is
+                # exactly when someone needs to stop for a moment.
                 if self._on_block_screen():
                     if not self.paused:
                         self._pause_now()
@@ -1526,7 +1523,7 @@ class GameEngine:
     # one stray key press ending a patient's session is exactly the
     # accident the exit dialog exists to stop.
     _BLOCK_SCREEN_KEYS = ("gameplay", "rhythm", "syllables",
-                          "force_pilot", "lighthouse", "buzz_hunt")
+                          "force_pilot", "buzz_hunt")
 
     # How long the end-game chip stays up waiting for the second Esc.
     # Long enough to read one short line, short enough that a stray
@@ -2224,8 +2221,8 @@ class GameEngine:
         previous session ended abnormally."""
         for attr in ("_reaction_level", "_reaction_clean_blocks",
                      "_reaction_best_ms", "_force_pilot_levels",
-                     "_lighthouse_level", "_buzz_hunt_start_ms",
-                     "_rhythm_buzz_lead_ms"):
+                     "_buzz_hunt_start_ms",
+                     "_buzz_hunt_window_level", "_rhythm_buzz_lead_ms"):
             if hasattr(self, attr):
                 try:
                     delattr(self, attr)
@@ -3262,7 +3259,6 @@ class GameEngine:
         "chords": "begin_chords_block",
         "syllables": "begin_syllables_block",
         "force_pilot": "begin_force_pilot_block",
-        "lighthouse": "begin_lighthouse_block",
         "buzz_hunt": "begin_buzz_hunt_block",
         "echo": "begin_echo_block",
         # Rhythm needs a track picked before there is a block to
@@ -3839,7 +3835,7 @@ class GameEngine:
             words_total=int(self.cfg.get("syllables.words_per_block", 50)),
             round_size=int(self.cfg.get("syllables.round_size", 10)),
             break_s=float(self.cfg.get("syllables.break_s", 30)),
-            warmup_taps=int(self.cfg.get("syllables.warmup_taps", 10)),
+            warmup_taps=int(self.cfg.get("syllables.warmup_taps", 5)),
             attend_s=float(self.cfg.get("syllables.attend_s", 1.5)),
             free_window_s=float(
                 self.cfg.get("syllables.free_window_s", 6.0)),
@@ -3990,101 +3986,6 @@ class GameEngine:
             sc.on_block_start()
         self.screen_obj = self._screens["force_pilot"]
 
-    def begin_lighthouse_block(self) -> None:
-        """Lighthouse block: precision hold with feedback fade, plus
-        blind force reproduction. One engine block is a full session
-        (max-press probes where needed, then hold and echo trials
-        across the selected hands' fingers). The research case lives
-        in the mode file's docstring; lighthouse.* in the config says
-        what the patient experiences. Renders on its own screen: a
-        lantern is not a lane strip.
-
-        The difficulty level carries across blocks within one app
-        session as `_lighthouse_level` (same pattern as Force Pilot's
-        level carry) and resets on restart, which fails in the safe
-        direction (the configured starting level).
-        """
-        from .modes.lighthouse import LighthouseMode
-        hands = self.lanes_by_hand()
-        seed_cfg = self.cfg.get("lighthouse.seed", None)
-        try:
-            seed = (int(seed_cfg) if seed_cfg is not None
-                    else random.randrange(2 ** 32))
-        except (TypeError, ValueError):
-            seed = random.randrange(2 ** 32)
-        ndark = [int(x) for x in (self.cfg.get(
-            "lighthouse.dark_windows", None) or [0, 1, 2])]
-        dfrac = [float(x) for x in (self.cfg.get(
-            "lighthouse.dark_fraction", None) or [0.0, 0.25, 0.45])]
-        level = getattr(self, "_lighthouse_level", None)
-        if not isinstance(level, int) or level < 1:
-            level = int(self.cfg.get("lighthouse.level", 1))
-        level = max(1, min(level, len(ndark), len(dfrac)))
-        self.mode = LighthouseMode(
-            engine=self,
-            lanes_by_hand=hands,
-            level=level,
-            dark_windows_by_level=ndark,
-            dark_frac_by_level=dfrac,
-            holds_per_finger=int(
-                self.cfg.get("lighthouse.holds_per_finger", 2)),
-            echoes_per_finger=int(
-                self.cfg.get("lighthouse.echoes_per_finger", 1)),
-            target_lo_pct=float(
-                self.cfg.get("lighthouse.target_lo_pct", 5.0)),
-            target_hi_pct=float(
-                self.cfg.get("lighthouse.target_hi_pct", 25.0)),
-            hold_s=float(self.cfg.get("lighthouse.hold_s", 16.0)),
-            tol_pct=float(self.cfg.get("lighthouse.tol_pct", 3.0)),
-            lit_lead_s=float(self.cfg.get("lighthouse.lit_lead_s", 3.0)),
-            lit_gap_s=float(self.cfg.get("lighthouse.lit_gap_s", 2.0)),
-            lit_tail_s=float(self.cfg.get("lighthouse.lit_tail_s", 2.0)),
-            ignite_hold_s=float(
-                self.cfg.get("lighthouse.ignite_hold_s", 0.5)),
-            ignite_timeout_s=float(
-                self.cfg.get("lighthouse.ignite_timeout_s", 10.0)),
-            echo_show_s=float(self.cfg.get("lighthouse.echo_show_s", 3.0)),
-            echo_delays_s=[float(d) for d in (self.cfg.get(
-                "lighthouse.echo_delays_s", None)
-                or [2.0, 5.0, 10.0, 15.0])],
-            echo_reproduce_s=float(
-                self.cfg.get("lighthouse.echo_reproduce_s", 4.0)),
-            echo_settle_s=float(
-                self.cfg.get("lighthouse.echo_settle_s", 2.0)),
-            promote_lit_mae_pct=float(
-                self.cfg.get("lighthouse.promote_lit_mae_pct", 1.5)),
-            promote_delta_pct=float(
-                self.cfg.get("lighthouse.promote_delta_pct", 1.5)),
-            demote_delta_pct=float(
-                self.cfg.get("lighthouse.demote_delta_pct", 6.0)),
-            dark_bonus_points=int(
-                self.cfg.get("lighthouse.dark_bonus_points", 2)),
-            probe_presses=int(
-                self.cfg.get("lighthouse.probe_presses", 3)),
-            probe_floor_counts=float(
-                self.cfg.get("lighthouse.probe_floor_counts", 30.0)),
-            probe_max_age_s=float(
-                self.cfg.get("lighthouse.probe_max_age_s", 6 * 3600.0)),
-            announce_s=float(self.cfg.get("lighthouse.announce_s", 2.5)),
-            rest_s=float(self.cfg.get("lighthouse.rest_s", 6.0)),
-            score_cfg=self.score_cfg,
-            seed=seed,
-            demo_trials=self._test_mode_trials(),
-        )
-        self._begin_block("lighthouse")
-        # The seed shaped every trial plan in this block, so it lives
-        # next to the data it shaped, not only in the app log.
-        if self.raw_logger:
-            self.raw_logger.queue_event(
-                "lighthouse_config",
-                detail=(f"seed={seed} level={level} "
-                        f"hand={self.hand_mode}"),
-                hand=self.hand_mode)
-        sc = self._screens.get("lighthouse")
-        if sc is not None and hasattr(sc, "on_block_start"):
-            sc.on_block_start()
-        self.screen_obj = self._screens["lighthouse"]
-
     def begin_buzz_hunt_block(self) -> None:
         """Buzz Hunt block: the vibrotactile perception suite, where
         the motors are the stimulus rather than a cue channel. One
@@ -4166,6 +4067,19 @@ class GameEngine:
             demo_trials=self._test_mode_trials(),
             session_cap_min=float(
                 self.cfg.get("buzz_hunt.session_cap_min", 15.0)),
+            loc_pulse_ms=float(
+                self.cfg.get("buzz_hunt.loc_pulse_ms", 150.0)),
+            window_levels_s=self._float_list(
+                self.cfg.get("buzz_hunt.window_levels_s",
+                             [3.0, 2.0, 1.5, 1.2])),
+            window_promote=self._int_pair(
+                self.cfg.get("buzz_hunt.window_promote", [6, 8]),
+                (6, 8)),
+            window_demote=self._int_pair(
+                self.cfg.get("buzz_hunt.window_demote", [2, 4]),
+                (2, 4)),
+            duration_staircase=bool(
+                self.cfg.get("buzz_hunt.duration_staircase", False)),
         )
         self._begin_block("buzz_hunt")
         # Both seeds shaped this block's stimuli (the block seed drew
@@ -4181,6 +4095,33 @@ class GameEngine:
         if sc is not None and hasattr(sc, "on_block_start"):
             sc.on_block_start()
         self.screen_obj = self._screens["buzz_hunt"]
+
+    @staticmethod
+    def _float_list(raw) -> list[float]:
+        """A yaml list of numbers as floats, dropping anything that
+        is not one; a scalar becomes a one-item list. Empty means
+        "use the mode's own default"."""
+        if raw is None:
+            return []
+        if not isinstance(raw, (list, tuple)):
+            raw = [raw]
+        out: list[float] = []
+        for v in raw:
+            try:
+                out.append(float(v))
+            except (TypeError, ValueError):
+                continue
+        return out
+
+    @staticmethod
+    def _int_pair(raw, default: tuple[int, int]) -> tuple[int, int]:
+        """A yaml two-item list as an int pair, or the default when
+        it is anything else."""
+        try:
+            a, b = raw
+            return (int(a), int(b))
+        except (TypeError, ValueError):
+            return default
 
     def begin_echo_block(self) -> None:
         """Echo block: the explicit visuospatial span game (Simon
@@ -4218,8 +4159,10 @@ class GameEngine:
             trials_per_len=int(self.cfg.get("echo.trials_per_len", 2)),
             max_len=int(self.cfg.get("echo.max_len", 9)),
             runs=int(self.cfg.get("echo.runs", 1)),
-            item_on_ms=float(self.cfg.get("echo.item_on_ms", 500)),
-            ioi_ms=float(self.cfg.get("echo.ioi_ms", 1000)),
+            item_on_ms=float(self.cfg.get("echo.item_on_ms", 400)),
+            ioi_ms=float(self.cfg.get("echo.ioi_ms", 800)),
+            ioi_step_ms=float(self.cfg.get("echo.ioi_step_ms", 50)),
+            ioi_floor_ms=float(self.cfg.get("echo.ioi_floor_ms", 600)),
             hebb_every=int(self.cfg.get("echo.hebb_every", 3)),
             idle_timeout_s=float(
                 self.cfg.get("echo.idle_timeout_s", 10.0)),
@@ -4490,9 +4433,6 @@ class GameEngine:
         if kind == "force_pilot":
             self.begin_force_pilot_block()
             return
-        if kind == "lighthouse":
-            self.begin_lighthouse_block()
-            return
         if kind == "buzz_hunt":
             self.begin_buzz_hunt_block()
             return
@@ -4557,13 +4497,12 @@ class GameEngine:
         countdown_t: float | None = None
         if name in ("classic", "adaptive", "mirror", "reaction",
                     "pattern", "chords", "syllables", "force_pilot",
-                    "lighthouse", "buzz_hunt", "echo"):
+                    "buzz_hunt", "echo"):
             secs = float(self.cfg.get("game.start_countdown_s", 3.0))
             if self._test_mode_trials() is not None:
                 secs = min(secs, 1.5)
             key = {"syllables": "syllables",
                    "force_pilot": "force_pilot",
-                   "lighthouse": "lighthouse",
                    "buzz_hunt": "buzz_hunt"}.get(name, "gameplay")
             sc = self._screens.get(key)
             if sc is not None and hasattr(sc, "start_countdown"):
@@ -5012,18 +4951,6 @@ class GameEngine:
                     summary["force_pilot"] = stats_fn()
                 except Exception as e:
                     log.warning("force pilot block stats failed: %s", e)
-        # Lighthouse context: lit steadiness, dark drift, the lit-dark
-        # delta headline and echo reproduction error by delay. These
-        # cannot be rebuilt from hits / misses because the window
-        # scoring lives in the mode's per-trial records, and the
-        # results screen reads this section for its cards and charts.
-        if self.current_block == "lighthouse" and self.mode is not None:
-            stats_fn = getattr(self.mode, "block_stats", None)
-            if callable(stats_fn):
-                try:
-                    summary["lighthouse"] = stats_fn()
-                except Exception as e:
-                    log.warning("lighthouse block stats failed: %s", e)
         # Buzz Hunt context: the confusion matrix, staircase reversals
         # and thresholds, catch-trial false alarms, span and Hebb
         # splits. These cannot be rebuilt from hits / misses because
@@ -6963,12 +6890,18 @@ class GameEngine:
                    mirror_hand_rts: tuple[float | None, float | None]
                    | None = None,
                    error_type: str | None = None,
-                   response_t_perf: float | None = None) -> None:
+                   response_t_perf: float | None = None,
+                   after_press_cue: bool = True) -> None:
         """Close out one cadence-style trial.
 
         `cue_lanes` is which finger(s) the after-press cue should fire
         on, defaulting to the single target lane. Mirror mode passes
         both hands' copies because the patient pressed both.
+        `after_press_cue` False declines the confirmation buzz for
+        this row whatever cue.buzz_after says: echo's motors are
+        show-phase only by design, so a buzz on the finger that just
+        finished the reproduction is exactly what that mode promises
+        never happens. The chime is not affected.
 
         `stimulus` is anything shown beyond a lane highlight: the word
         in syllables mode, the chord in chords mode. `pattern_trial`
@@ -7088,7 +7021,7 @@ class GameEngine:
             # A loud trial has now played its feedback at the boosted
             # gain; drop it back so the next non-loud trial is normal.
             self.audio.set_trial_gain(1.0)
-        if correct_press and cues.buzz_after:
+        if correct_press and cues.buzz_after and after_press_cue:
             self._fire_after_press_cue(
                 list(cue_lanes) if cue_lanes else [trial.lane])
         # Capture streak BEFORE _update_streak runs so the trial row
@@ -7213,7 +7146,7 @@ class GameEngine:
         # one marker per hand because hand identity is what the LRP is
         # made of.
         if continuous is not None:
-            # Continuous rows (force_pilot runs, lighthouse holds) get
+            # Continuous rows (force_pilot runs) get
             # NO response or feedback markers: there is no press onset
             # to lock 100+lane to (the spec defines the response band
             # as response-locked press markers for LRP/MRCP averaging)

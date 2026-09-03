@@ -141,6 +141,10 @@ CODES: dict[str, int] = {
 # name in the engine, so id 11 is reserved but unused until that mode
 # gets its own block name. Ids can grow to 18 before the start band
 # reaches the reserved 219; see the block_ band note below.
+#
+# Id 9 belonged to Lighthouse, retired in September 2026. It stays
+# reserved so no later mode inherits 209 / 229 and a recording made
+# under the old map can never be confused with a new mode's block.
 MODE_IDS: dict[str, int] = {
     "reaction": 0,
     "classic": 1,
@@ -151,10 +155,15 @@ MODE_IDS: dict[str, int] = {
     "chords": 6,
     "syllables": 7,
     "force_pilot": 8,
-    "lighthouse": 9,
     "buzz_hunt": 10,
     "syllables_words": 11,
     "echo": 12,
+}
+
+# Ids that once belonged to a mode and must never be reissued. The
+# contract test checks no live mode sits on one of these.
+RETIRED_MODE_IDS: dict[str, int] = {
+    "lighthouse": 9,
 }
 
 # Documented bands, keyed by the CODES-name prefix that must sit inside

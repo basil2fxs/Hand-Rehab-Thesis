@@ -25,8 +25,8 @@ os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
 
 ORDER_A = ["reaction", "reaction", "mirror", "rhythm", "echo",
-           "force_pilot", "lighthouse", "chords", "buzz_hunt", "pattern"]
-ORDER_B = ["force_pilot", "lighthouse", "chords", "buzz_hunt",
+           "force_pilot", "chords", "buzz_hunt", "pattern"]
+ORDER_B = ["force_pilot", "chords", "buzz_hunt",
            "reaction", "reaction", "mirror", "rhythm", "echo", "pattern"]
 
 
@@ -74,7 +74,7 @@ class PlanTests(unittest.TestCase):
             plan = build_plan(cfg, code, "right")
             self.assertEqual([s.mode for s in plan.steps], order, code)
             self.assertEqual(plan.id, "healthy_baseline_v1")
-            self.assertEqual(len(plan.steps), 10)
+            self.assertEqual(len(plan.steps), 9)
             hand1 = next(s for s in plan.steps
                          if s.hand_requested == "hand1")
             hand2 = next(s for s in plan.steps
@@ -87,7 +87,7 @@ class PlanTests(unittest.TestCase):
                 if s.hand_requested == "both":
                     self.assertEqual(s.hand, "both")
             self.assertEqual([s.position for s in plan.steps],
-                             list(range(1, 11)))
+                             list(range(1, 10)))
 
     def test_hands_follow_the_dominant_hand(self) -> None:
         from finger_rehab.game.battery import build_plan
@@ -109,7 +109,7 @@ class PlanTests(unittest.TestCase):
         self.assertEqual([s.mode for s in b.steps if s.stretch_before_s],
                          ["reaction"])
         self.assertEqual(a.stretch_s, 60.0)
-        self.assertEqual(a.budget_min, 50.0)
+        self.assertEqual(a.budget_min, 44.0)
 
     def test_rhythm_carries_its_pinned_track(self) -> None:
         from finger_rehab.game.battery import build_plan, find_track
@@ -153,10 +153,6 @@ class OverrideTests(unittest.TestCase):
             "force_pilot.runs_per_finger", "force_pilot.rest_s",
             "force_pilot.level", "force_pilot.promote_frac",
             "force_pilot.demote_frac",
-            "lighthouse.holds_per_finger", "lighthouse.echoes_per_finger",
-            "lighthouse.echo_delays_s", "lighthouse.rest_s",
-            "lighthouse.level", "lighthouse.promote_lit_mae_pct",
-            "lighthouse.promote_delta_pct", "lighthouse.demote_delta_pct",
             "chords.subblocks", "chords.trials_per_subblock",
             "chords.sync_windows_ms",
             "buzz_hunt.loc_trials_per_hand",
@@ -181,17 +177,17 @@ class OverrideTests(unittest.TestCase):
         snap = apply_overrides(data, {
             "reaction": {"block_trials": 10, "response_windows_s": [2.0],
                          "brand_new": True},
-            "lighthouse": {"level": 3}})
+            "chords": {"subblocks": 3}})
         self.assertEqual(data["reaction"]["block_trials"], 10)
         self.assertEqual(data["reaction"]["response_windows_s"], [2.0])
         self.assertEqual(data["reaction"]["lapse_ms"], 500)
         self.assertTrue(data["reaction"]["brand_new"])
-        self.assertEqual(data["lighthouse"], {"level": 3})
+        self.assertEqual(data["chords"], {"subblocks": 3})
         restore_overrides(data, snap)
         self.assertEqual(data["reaction"], {
             "block_trials": 25, "response_windows_s": [2.0, 1.5, 1.2],
             "lapse_ms": 500})
-        self.assertEqual(data["lighthouse"], {})
+        self.assertEqual(data["chords"], {})
         self.assertEqual(data["scoring"], {"perfect_ms": 100})
 
 
@@ -279,7 +275,7 @@ class BatteryOrderTests(_BatteryHarness):
         self.assertEqual([m for m, _h, _f in played], ORDER_A)
         self.assertEqual([h for _m, h, _f in played],
                          ["right", "left", "both", "both", "both",
-                          "both", "both", "both", "both", "right"])
+                          "both", "both", "both", "right"])
 
     def test_even_code_runs_order_b_non_dominant_first(self) -> None:
         self._stub_rhythm()
@@ -288,7 +284,7 @@ class BatteryOrderTests(_BatteryHarness):
         played = self._run_battery(eng)
         self.assertEqual([m for m, _h, _f in played], ORDER_B)
         self.assertEqual([h for _m, h, _f in played],
-                         ["both", "both", "both", "both",
+                         ["both", "both", "both",
                           "left", "right", "both", "both", "both", "right"])
 
     def test_left_dominant_flips_the_hands(self) -> None:
@@ -297,7 +293,7 @@ class BatteryOrderTests(_BatteryHarness):
         self._login(eng, "P02", "left")     # B, dominant first
         played = self._run_battery(eng)
         self.assertEqual([m for m, _h, _f in played], ORDER_B)
-        self.assertEqual([h for _m, h, _f in played][4:6], ["left", "right"])
+        self.assertEqual([h for _m, h, _f in played][3:5], ["left", "right"])
         self.assertEqual(played[-1][1], "left")
 
     def test_every_block_carries_the_battery_stamp(self) -> None:
@@ -305,14 +301,14 @@ class BatteryOrderTests(_BatteryHarness):
         eng = self._engine(_Rig())
         self._login(eng, "P03", "right")
         played = self._run_battery(eng)
-        self.assertEqual(len(played), 10)
+        self.assertEqual(len(played), 9)
         for pos, (mode, hand, folder) in enumerate(played, start=1):
             meta = json.loads((folder / "metadata.json").read_text(
                 encoding="utf-8"))
             bat = meta["battery"]
             self.assertEqual(bat["id"], "healthy_baseline_v1", mode)
             self.assertEqual(bat["position"], pos, mode)
-            self.assertEqual(bat["of"], 10)
+            self.assertEqual(bat["of"], 9)
             self.assertEqual(bat["step"], f"{mode}_{hand}")
             self.assertEqual(bat["cell"]["mode_order"], "A")
             self.assertEqual(bat["cell"]["hand_first"], "non_dominant")
@@ -331,11 +327,11 @@ class BatteryOrderTests(_BatteryHarness):
         self.assertEqual(eng._current_phase, "")
         progress = eng.battery_progress()
         self.assertTrue(progress["finished"])
-        self.assertEqual(progress["done"], 10)
+        self.assertEqual(progress["done"], 9)
         self.assertEqual([r["status"] for r in progress["log"]],
-                         ["completed"] * 10)
+                         ["completed"] * 9)
         self.assertEqual([r["battery_pos"] for r in eng.session_games_log()],
-                         list(range(1, 11)))
+                         list(range(1, 10)))
 
     @staticmethod
     def _config_text(eng) -> str:
@@ -407,7 +403,7 @@ class ShortFormTests(_BatteryHarness):
         # Scoring is untouched.
         self.assertEqual(eng.score_cfg.perfect_ms, 100)
 
-    def test_force_pilot_and_lighthouse_ladders_are_frozen(self) -> None:
+    def test_force_pilot_ladder_is_frozen(self) -> None:
         self._stub_rhythm()
         eng = self._engine(_Rig())
         self._login(eng, "P01", "right")
@@ -417,15 +413,6 @@ class ShortFormTests(_BatteryHarness):
         self.assertGreater(fp.promote_frac, 1.0)
         self.assertEqual(fp.demote_frac, 0.0)
         self.assertEqual(fp.rest_s, 5.0)
-        lh = self._step_to(eng, "lighthouse")
-        # One hold and one echo per finger over eight fingers.
-        self.assertEqual(lh._kind_bag.count("hold"), 8)
-        self.assertEqual(lh._kind_bag.count("echo"), 8)
-        self.assertEqual(lh.total_trials, 16)
-        self.assertEqual(lh.echo_delays_s, [2.0, 10.0])
-        self.assertEqual(lh.level, 3)
-        self.assertLess(lh.promote_delta_pct, 0)
-        self.assertGreater(lh.demote_delta_pct, 100)
 
     def test_chords_buzz_hunt_and_pattern_counts(self) -> None:
         self._stub_rhythm()
@@ -547,7 +534,7 @@ class BatteryFlowTests(_BatteryHarness):
         self.assertEqual((key, hand), ("reaction", "left"))
         heading, pill, stretch = results._battery_card_lines(
             eng.pending_protocol_step())
-        self.assertEqual(heading, "PLAY ALL  step 2 of 10")
+        self.assertEqual(heading, "PLAY ALL  step 2 of 9")
         self.assertEqual(pill, "Play all step 2, hand 2")
         self.assertEqual(stretch, "")
         results.draw(pygame.Surface((1280, 800)))
@@ -559,7 +546,7 @@ class BatteryFlowTests(_BatteryHarness):
                          ("reaction", "left"))
         eng.finish_block()
         _ok, label, _reason = hub._battery_state()
-        self.assertEqual(label, "PLAY ALL 2/10  (A)")
+        self.assertEqual(label, "PLAY ALL 2/9  (A)")
         hub.draw(pygame.Surface((1280, 800)))
 
     def test_the_stretch_step_says_so_on_the_card(self) -> None:
@@ -575,7 +562,7 @@ class BatteryFlowTests(_BatteryHarness):
         results = eng._screens["results"]
         heading, _pill, stretch = results._battery_card_lines(
             eng.pending_protocol_step())
-        self.assertIn("step 6 of 10", heading)
+        self.assertIn("step 6 of 9", heading)
         self.assertIn("Stretch", stretch)
 
     def test_without_a_main_hand_the_hub_says_why(self) -> None:
@@ -620,7 +607,7 @@ class KeyboardRigTests(_BatteryHarness):
         eng = self._engine()          # KeyboardOnlySource
         self._login(eng, "P01", "right")
         played = self._run_battery(eng)
-        # Chords plays on the keys; the three sensor modes do not.
+        # Chords plays on the keys; the two sensor modes do not.
         self.assertEqual([m for m, _h, _f in played],
                          ["reaction", "reaction", "mirror", "rhythm",
                           "echo", "chords", "pattern"])
@@ -629,13 +616,12 @@ class KeyboardRigTests(_BatteryHarness):
                    if r["status"] == "skipped"]
         self.assertEqual(skipped, [
             ("force_pilot", "needs sensor hardware"),
-            ("lighthouse", "needs sensor hardware"),
             ("buzz_hunt", "needs sensor hardware")])
         self.assertTrue(eng.battery_progress()["finished"])
         # Position numbering is the design's, skips included.
         meta = json.loads((played[-1][2] / "metadata.json").read_text(
             encoding="utf-8"))
-        self.assertEqual(meta["battery"]["position"], 10)
+        self.assertEqual(meta["battery"]["position"], 9)
 
 
 if __name__ == "__main__":

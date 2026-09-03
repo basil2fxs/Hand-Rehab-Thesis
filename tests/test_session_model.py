@@ -275,15 +275,16 @@ class SessionCarryStateTests(_SessionHarness):
 
     CARRY_ATTRS = ("_reaction_level", "_reaction_clean_blocks",
                    "_reaction_best_ms", "_force_pilot_levels",
-                   "_lighthouse_level", "_buzz_hunt_start_ms")
+                   "_buzz_hunt_start_ms",
+                   "_buzz_hunt_window_level")
 
     def _plant_carry_state(self) -> None:
         self.eng._reaction_level = 3
         self.eng._reaction_clean_blocks = 1
         self.eng._reaction_best_ms = {("choice", "right"): 145.0}
         self.eng._force_pilot_levels = {("right", 1): 3}
-        self.eng._lighthouse_level = 3
         self.eng._buzz_hunt_start_ms = {"right": 60.0}
+        self.eng._buzz_hunt_window_level = {"right": 2}
         self.eng._across_blocks_mean_rt = [400.0, 350.0]
         self.eng._across_blocks_mean_peak = [120.0]
 

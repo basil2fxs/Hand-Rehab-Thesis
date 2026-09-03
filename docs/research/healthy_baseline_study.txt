@@ -1,7 +1,9 @@
 HEALTHY BASELINE STUDY
 Design for the psychology-student cohort, Thesis Project A
 
-Status: 2026-09-02. The software side is built and tested (the
+Status: 2026-09-03. Lighthouse retired from the battery (nine
+blocks, 44 minutes; Sections 1.9 and 2.3). 2026-09-02: the
+software side is built and tested (the
 intake, the battery preset, the cohort chapter of the notebook, the
 headless timing script and a simulated cohort run through the real
 engine; Sections 2.3, 2.4 and 4.8 say what each one showed). No
@@ -45,9 +47,10 @@ DECISIONS IN ONE SCREEN
 
 - Within-subject, both hands, N = 28 analysed (recruit 32), two
   visits 7 days apart (window 5 to 9), same time of day within 2 h.
-- Per-visit battery of ten blocks, 50 minutes including login,
+- Per-visit battery of nine blocks, 44 minutes including login,
   calibration and rests. Identical at both visits.
-- Nine modes in the battery. Syllables is excluded (paediatric).
+- Eight modes in the battery. Syllables is excluded (paediatric).
+  Lighthouse was retired in September 2026 (Section 1.9).
   Adaptive is excluded (ceiling at bpm_max in a healthy hand, and a
   40-trial block is too short for the controller to converge; the
   controller check stays headless).
@@ -278,46 +281,38 @@ first participant; force_pilot.py says so and the thesis owns it);
 research numbers come from the offline re-score, never the in-game
 score.
 
-1.9 Lighthouse (both hands, short form, level frozen at 3)
-----------------------------------------------------------
-Primary (notebook sec_precision_hold, offline): lit CoV and MAE,
-dark MAE, lit-dark delta (percent of max), post-fade drift rate and
-direction, time in band; echo trials: constant, variable and
-absolute reproduction error at 2 s and 10 s delay. Block level:
-lighthouse.overall.lit_mae_pct, dark_mae_pct, lit_dark_delta_pct,
-drift_rate_pct_s, echo.by_delay.
-Known effects to reproduce:
-  L1 Dark error above lit error (delta above zero, paired
-     one-sided) but small: in Li et al. 2015 controls "barely moved"
-     when feedback was removed while carpal tunnel patients
-     collapsed (cited in lighthouse.py). A healthy delta that is
-     positive and small is the validity result.
-  L2 Reproduction error grows with delay: absolute error at 10 s
-     above 2 s (delay is the memory load; standard force-sense
-     paradigm, lighthouse.py).
-  L3 Steadiness worse at lower targets: lit CoV correlates
-     negatively with target percent across trials (steadiness
-     deficits live at the low end, Camacho-Villa 2025 range 5 to 25
-     percent MVC).
-Reliability class: good for lit CoV and MAE (published pinch force
-sense ICCs 0.6 to 0.9, Scientific Reports 2024 and BMC Musculoskelet
-Disord 2020 in docs/research/new_modes/force-control.md); moderate
-for the delta (a difference of two noisy numbers) and for echo error
-at one trial per finger per delay.
-Claim limits: flat-finger normal force, not thumb-finger pinch (the
-CTS literature's grip); the bilateral echo is cross-hand by design
-(one hand studies, the other reproduces), so echo error carries a
-transfer component and is reported as cross-hand matching, not
-same-finger reproduction.
+1.9 Lighthouse (retired)
+------------------------
+Retired 2026-09-03, before any participant was run: Basil found the
+mode impractical to play (a 16 s low-force hold on a flat pad with
+the feedback blanked). The mode, its screen, its notebook chapter
+and its checks L1 to L3 are gone from the software; the block came
+off the battery and its minutes off the budget (Section 2.3). The
+design record stays in docs/research/new_modes/force-control.md.
 
 1.10 Buzz Hunt (both hands, short form: localisation and span only)
 -------------------------------------------------------------------
-Primary: loc.accuracy per hand and per lane, the confusion matrix
-(adjacent-finger error share), catch false-alarm rate and d-prime,
-threshold.<hand>.final_ms and estimate_ms with the floor flag, span
-max_correct and novel versus Hebb accuracy.
+Primary: loc.accuracy per hand and per lane at the fixed 150 ms
+pulse, the confusion matrix (adjacent-finger error share), catch
+false-alarm rate and d-prime, median localisation RT, the top
+response-window level reached per hand (window.<hand>.top_level,
+levels 3.0, 2.0, 1.5, 1.2 s), span max_correct and novel versus
+Hebb accuracy.
+2026-09 change, and why the threshold is gone: the localisation
+pulse used to run a duration staircase and every correct answer
+shortened the buzz until it could not be felt; the 40 ms floor was
+the host's, not a perceptual one, and a coin ERM has barely started
+moving when a 40 ms command ends (lag about 40 ms, rise about 87 ms,
+Precision Microdrives 310-103 class values in config latency.*). The
+pulse is now fixed at 150 ms (one firmware hold, inside the 50 to
+200 ms band Kaaresoja and Linjama 2005 found usable on a phone
+motor) and difficulty moves the response window instead: up a level
+after 6 correct of the last 8 trials, down after 2 misses in the
+last 4, level stamped on every row. threshold.* in block_summary is
+empty unless buzz_hunt.duration_staircase was on for that block.
 Known effects to reproduce:
-  B1 Localisation near ceiling: accuracy above 90 percent per hand.
+  B1 Localisation near ceiling: accuracy above 90 percent per hand
+     at the 150 ms pulse.
   B2 Errors cluster on neighbouring fingers: adjacent share of
      errors above 0.5 (mislocalisations fall on nearer fingers,
      Schweizer, Maier, Braun and Birbaumer 2000, Somatosensory and
@@ -327,17 +322,26 @@ Known effects to reproduce:
   B4 Tactile-only span around 4 items, well below visual span
      (buzz_hunt.py and echo.py both state the ceiling); Hebb trials
      at least as accurate as novel trials.
+  B5 The window ladder climbs: a healthy hand plays at level 1 (the
+     2.0 s window) or higher inside its 16 trials, and usually
+     reaches level 2 (a 92 percent responder reaches the top in
+     about 22 trials on the headless simulation, so 16 trials allow
+     two promotions; top_level counts the highest level a trial
+     was played at, final_level where the ladder ended).
 Reliability class: poor for accuracy (ceiling restricts range),
-moderate for span; the duration threshold is expected to sit at the
-40 ms floor for most healthy hands and is reported as a censored
-proportion, not an ICC.
-Claim limits: ERM rise and stop time about 20 ms is uncharacterised,
-so thresholds are within-device only; the gap stage is dropped from
-the battery because its 35 ms floor sits inside the healthy temporal
+moderate for span; the top window level is an ordinal with four
+values and 16 trials per hand, so it is reported as a distribution
+and a proportion at each level, not an ICC. Median RT at the fixed
+pulse is the continuous localisation number and gets the ICC.
+Claim limits: ERM lag, rise and stop time are datasheet class
+values until scripts/latency_check.py has been run on this rig, so
+the gap threshold (not in the battery) is within-device only; the
+gap stage is dropped from the battery because at its 120 ms floor
+(the motor's spin-down) it cannot reach the healthy temporal
 discrimination range (about 30 to 50 ms, Borngraber 2022 in
-docs/research/new_modes/carpal-nerve.md) and would be censored; the
-distractor stage is dropped for time. For carpal tunnel this suite
-is measurement, not therapy (Jerosch-Herold 2016).
+docs/research/new_modes/carpal-nerve.md); the distractor stage is
+dropped for time. For carpal tunnel this suite is measurement, not
+therapy (Jerosch-Herold 2016).
 
 1.11 Echo (one bilateral 8-lane block)
 --------------------------------------
@@ -368,11 +372,12 @@ the closest this rig gets to Corsi's nine.
 1.12 Cross-mode summary
 -----------------------
 Strong for a healthy cohort (known effect, expected good
-reliability): reaction, rhythm, lighthouse, force pilot, chords
+reliability): reaction, rhythm, force pilot, chords
 (C1 to C4), echo. Group-level only: pattern (P1, P2 reliable at the
 group level, individual score unreliable by published meta-analysis).
-Ceiling or floor limited: buzz hunt (accuracy ceiling, threshold
-floor), adaptive (bpm cap). Wrong population: syllables.
+Ceiling or floor limited: buzz hunt (accuracy ceiling; the window
+ladder tops out at level 3), adaptive (bpm cap). Wrong population:
+syllables.
 
 
 2. STUDY DESIGN
@@ -381,7 +386,7 @@ floor), adaptive (bpm cap). Wrong population: syllables.
 2.1 Design and sample
 ---------------------
 Within-subject, both hands, two visits. Every participant does the
-same ten blocks at each visit. Hand is a within-subject factor
+same nine blocks at each visit. Hand is a within-subject factor
 (dominant, non-dominant) taken from the main hand picked at login,
 with the Edinburgh short form on the paper intake sheet as the
 check; visit is the retest factor.
@@ -444,15 +449,12 @@ the ICC is not diluted by an order change.
 
   Timing set (fixed internal order): reaction hand 1, reaction hand
   2, mirror, rhythm, echo.
-  Force set (fixed internal order): force pilot, lighthouse, chords,
-  buzz hunt. Force pilot goes first inside the set so the max-press
-  probe is taken once and reused by lighthouse (probe_max_age_s is
-  21600 s, so a probe taken this visit is reused).
+  Force set (fixed internal order): force pilot, chords, buzz hunt.
 
 Pattern is always last because it is the longest single block, the
 only single-hand block, and the one whose individual score is least
 reliable (Section 1.2); if a visit runs over, pattern is the block
-that is dropped and logged as missed. A full Latin square over ten
+that is dropped and logged as missed. A full Latin square over nine
 blocks is not feasible at n = 28 and would not buy anything the two
 set orders do not already control (the fatigue gradient across the
 visit).
@@ -476,14 +478,17 @@ adult's pace.
                                     (track 126 s)
   Echo, both (8 lanes)              echo defaults           3.0  A
   Force Pilot, both, short          study.force_pilot       6.5  A
-  Lighthouse, both, short           study.lighthouse        6.0  A
   Chords, both, short               study.chords            5.5  A
   Buzz Hunt, both, short            study.buzz_hunt         5.5  A
   Pattern, dominant, short          study.pattern           6.0  A
-  Transitions: 9 x 10 s NEXT UP,                            2.5
+  Transitions: 8 x 10 s NEXT UP,                            2.3
     plus a 60 s stretch at the set boundary
   ----------------------------------------------------------------
-  Total                                                    50.0
+  Total                                                    43.8
+
+The budget is 44 minutes (protocol.presets.study_battery.budget_min).
+It was 50 with Lighthouse's 6.0 min and its transition in; the
+retirement took those off and nothing else moved.
 
 Reference full-form durations, for the thesis to state what was
 shortened: reaction 25 trials about 3 min (config comment, M);
@@ -491,17 +496,16 @@ pattern 10 takes 12 to 25 min in patients (config, M) and about 11
 min for a healthy adult (A); chords 100 chords about 8.5 min (A);
 syllables 40 words 8.5 min (M, excluded); buzz hunt one hand 8.5 min
 and both hands 16.8 min, capped at 15 (M); force pilot two runs per
-finger both hands about 13 min (A); lighthouse two holds and one
-echo per finger both hands about 11 min (A); echo ladder to span 6
+finger both hands about 13 min (A); echo ladder to span 6
 about 12 trials, a few minutes (config, M); adaptive 40 trials 30 to
 43 s in the recorded test blocks on disk (M, excluded).
 
-Visit 1 booking is 65 minutes (15 minutes before the clock starts:
+Visit 1 booking is 60 minutes (15 minutes before the clock starts:
 consent, Edinburgh short form, hand measurement, code assignment).
-Visit 2 booking is 55 minutes.
+Visit 2 booking is 50 minutes.
 
-The 50 minute figure has no slack. The run sheet's hard stop is at
-50 minutes: whatever block is in progress finishes (every mode
+The 44 minute figure has no slack. The run sheet's hard stop is at
+44 minutes: whatever block is in progress finishes (every mode
 keeps its data on an early end), the remainder is logged as missed
 on the intake sheet, and the analysis treats it as missing for that
 metric only.
@@ -522,15 +526,20 @@ block, one run per cell:
   Rhythm (Easy_Lemon)       2.1      2.1      2.1      2.1     2.5
   Echo, 8 lanes             3.2      3.2      3.2      3.2     3.0
   Force Pilot, short        5.0      4.9      5.2      5.0     6.5
-  Lighthouse, short         5.7      5.7      5.7      5.7     6.0
   Chords, short             4.3      4.3      4.3      4.3     5.5
   Buzz Hunt, short          4.9      4.8      5.2      5.0     5.5
   Pattern, short            6.4      6.4      6.4      6.4     6.0
   ---------------------------------------------------------------
-  Blocks                   38.1     37.5     37.6     38.2    42.5
-  Transitions and stretch   2.5      2.5      2.5      2.5     2.5
+  Blocks                   32.4     31.8     31.9     32.5    36.5
+  Transitions and stretch   2.3      2.3      2.3      2.3     2.3
   Login and calibration     5.0      5.0      5.0      5.0     5.0
-  Total                    45.6     45.0     45.1     45.7    50.0
+  Total                    39.7     39.1     39.2     39.8    43.8
+
+These runs were measured with Lighthouse still in the battery (one
+hold and one echo per finger, 5.7 min in every cell); that row and
+its 10 s transition are subtracted here, the other rows are as
+measured, so the totals are arithmetic on a measurement (A on M).
+Nothing else in the battery changed with the retirement.
 
 P01 and P04 ran with --seed 1, P02 with --seed 3, P03 with --seed
 5; P04 was measured left-dominant, the other three right-dominant.
@@ -547,13 +556,16 @@ runs it (login with the intake, PLAY ALL, every NEXT UP step,
 end session), on the same model participant with a per-person
 reaction time (mean 300 ms, SD 35 ms between people) and the rests
 taken as above. Minutes per visit, login and calibration allowance
-included: minimum 41.9, 5th percentile 42.7, median 43.9, 95th
-percentile 45.4, maximum 45.9; visit 1 and visit 2 the same within
-0.1 min at the median; no visit over 50. Per block (median, range):
-reaction 2.8 (2.2 to 3.7), mirror 0.55 (0.5 to 0.7), rhythm 2.05,
-echo 2.0 (1.1 to 3.0, shorter when the ladder ends at a low span),
-force pilot 5.1 (4.8 to 5.2), lighthouse 5.7, chords 4.3 (4.2 to
-4.4), buzz hunt 5.1 (4.9 to 5.3), pattern 5.9 (5.5 to 6.5).
+included, as run with the ten-block battery: minimum 41.9, 5th
+percentile 42.7, median 43.9, 95th percentile 45.4, maximum 45.9;
+visit 1 and visit 2 the same within 0.1 min at the median. With the
+retired Lighthouse block (5.7 min in every visit) and its 10 s
+transition taken off, the same visits are 36.0 to 40.0, median 38.0
+(A on M); none over 44. Per block (median, range): reaction 2.8 (2.2
+to 3.7), mirror 0.55 (0.5 to 0.7), rhythm 2.05, echo 2.0 (1.1 to
+3.0, shorter when the ladder ends at a low span), force pilot 5.1
+(4.8 to 5.2), chords 4.3 (4.2 to 4.4), buzz hunt 5.1 (4.9 to 5.3),
+pattern 5.9 (5.5 to 6.5).
 
 Two things the measurement leaves out: the max-press probe (the
 model's calibration carries a fresh max, so force pilot runs its
@@ -563,9 +575,10 @@ pressing Start (the 10 s per transition is the design's allowance,
 not a measurement). The model is also a lower bound on the human
 parts of a visit: it never asks a question, never needs a rest
 repeated and releases every self-paced rest 1.5 s after its floor.
-With the probe added the simulated visits land at about 43.5 to
-47.5 minutes, inside the budget with two and a half to six minutes
-of slack for the parts a model cannot stand in for. Mirror at 0.6 min is 32 trials at the mode's
+With the probe added the simulated visits land at about 37.5 to
+41.5 minutes, inside the 44 minute budget with two and a half to six
+and a half minutes of slack for the parts a model cannot stand in
+for. Mirror at 0.6 min is 32 trials at the mode's
 pace, well under the 1.5 min allowed; every other block came in at
 or under its design figure except echo (3.2 against 3.0) and
 pattern (6.4 against 6.0), both within half a minute.
@@ -582,7 +595,7 @@ below over the live config for the length of the run and putting
 them back when the last block ends or the session ends. Between
 blocks the results screen shows as usual and NEXT UP carries the
 next step, so every block keeps its GET READY countdown and its own
-rests; the session strip reads BATTERY k/10. Each block's
+rests; the session strip reads BATTERY k/9. Each block's
 metadata.json carries battery.id, battery.cell and battery.position,
 and its config_snapshot shows the short-form keys it ran under.
 No --config file and no per-participant yaml is needed; a study
@@ -605,15 +618,6 @@ in through the preset):
     level: 1
     promote_frac: 1.01            # never promotes
     demote_frac: 0.0              # never demotes
-  lighthouse:
-    holds_per_finger: 1
-    echoes_per_finger: 1
-    echo_delays_s: [2, 10]
-    rest_s: 4.0
-    level: 3                      # two dark windows, 45 percent
-    promote_lit_mae_pct: -1       # never promotes
-    promote_delta_pct: -1
-    demote_delta_pct: 1000        # never demotes
   chords:
     subblocks: 3                  # within, within, cross
     trials_per_subblock: 20
@@ -650,9 +654,8 @@ sheet, not into metadata.json.
 
 Ladder freezes were checked against the code: force_pilot promotes
 when the last two runs are at or above promote_frac and demotes when
-time in corridor is below demote_frac; lighthouse promotes when the
-delta is at or under promote_delta_pct and demotes at or over
-demote_delta_pct; chords and reaction take the window ladder as a
+time in corridor is below demote_frac; chords and reaction take the
+window ladder as a
 list and clamp the level to its length, so a one-entry list is a
 fixed window. Each of these needs a regression test through the
 real engine before visit 1 (Section 4.6).
@@ -665,13 +668,6 @@ Statistical cost of each short form:
   the unit. Error versus level is not measurable (level pilot,
   Section 1.8).
 
-  Lighthouse, one hold and one echo per finger, two delays. The
-  lit-dark delta per finger comes off one hold; the delay slope is a
-  two-point contrast; hand-level pooling over four fingers is the
-  unit. Lit CoV per finger still comes off about 8.8 s of lit hold
-  (16 s x 55 percent lit at level 3), about 1760 samples at 200 Hz,
-  which is enough for a steadiness estimate.
-
   Chords, 60 chords. About 20 within-hand chords per hand per visit
   across 11 chord types, so per-chord cells are cohort-pooled (about
   28 x 20 per hand); the start and end enslaving matrices are
@@ -680,9 +676,10 @@ Statistical cost of each short form:
   side.
 
   Buzz Hunt, 16 localisation trials per hand, 8 span trials, no gap
-  or distractor stage. The duration staircase may close with fewer
-  than the six reversals the estimate needs (estimate_ms then reads
-  None); the notebook reports final_ms and the floor flag. Four
+  or distractor stage. The window ladder promotes on six correct of
+  the last eight, so 16 trials allow at most two promotions per
+  hand and the top level is censored at level 2 for a hand that
+  never misses; the notebook reports the level distribution. Four
   localisation trials per finger per visit, so the confusion matrix
   is cohort-pooled.
 
@@ -862,15 +859,14 @@ sessions/cohort_results/ and is the file JASP or R reads.
               press_mae_pct, release_mae_pct, section_mae_pct x 6,
               lodha_ratio (per hand; per finger reported without
               MDC)
-  lighthouse  lit_cov, lit_mae_pct, dark_mae_pct, lit_dark_delta_
-              pct, drift_rate_pct_s, time_in_band, echo_abs_err_2s,
-              echo_abs_err_10s, echo_const_err_pct, echo_var_err_pct
   chords      median_er, median_span_ms, clean_hit_rate,
               over_force_rate (per hand); cross: hit_rate_mirror,
               hit_rate_nonmirror, median_lag_ms, bilateral_deficit
   buzz_hunt   loc_accuracy, adjacent_error_share, catch_fa_rate,
-              d_prime, threshold_final_ms, at_floor (0/1),
-              span_max_correct, hebb_minus_novel_acc
+              d_prime, loc_median_rt_ms, window_top_level (0 to 3),
+              span_max_correct, hebb_minus_novel_acc;
+              threshold_final_ms and at_floor (0/1) only for a block
+              that ran the legacy duration staircase
   pattern     learning_score_ms, accuracy_rebound_pct, random_take_
               rt_ms, trained_take_rt_ms (dominant hand only)
 
@@ -916,8 +912,8 @@ Per metric and hand_role, participants with both visits:
   paired dz and CI on it. Expected: none for reaction (R3), a
   positive shift for pattern (P2, by design), small gains elsewhere.
   Metrics flagged in Section 1 as poor by construction (pattern
-  learning score, buzz hunt accuracy at ceiling, thresholds at
-  floor) get their ICC printed with the reason and no MDC.
+  learning score, buzz hunt accuracy at ceiling, the four-valued
+  window level) get their ICC printed with the reason and no MDC.
 
 4.6 Known-effect validity checks (pre-specified)
 ------------------------------------------------
@@ -946,10 +942,10 @@ else is descriptive with CIs.
     rebounds, visit 1 and 2 overlaid; chords per-chord hit rate
     against D rank and the cohort-mean enslaving matrix; rhythm
     asynchrony histogram per hand with zero marked; mirror gap
-    distribution; force pilot section MAE bars; lighthouse lit
-    versus dark MAE paired lines and echo error by delay; buzz
-    hunt cohort confusion matrix and the at-floor proportion; echo
-    span histogram against 6.2 and the error taxonomy bar.
+    distribution; force pilot section MAE bars; buzz
+    hunt cohort confusion matrix and the top-window-level
+    distribution; echo span histogram against 6.2 and the error
+    taxonomy bar.
   6 Practice-effect dumbbell plot, visit 1 to visit 2 per metric,
     standardised.
   7 Level pilot (Section 1.8): force pilot MAE by corridor level.
@@ -960,12 +956,11 @@ else is descriptive with CIs.
     config/default.yaml), the plan builder (finger_rehab/game/
     battery.py) and the hub button, in place of a per-participant
     yaml; tests/test_study_battery.py drives the real engine through
-    all ten blocks for even and odd codes into a temp tree and reads
+    all nine blocks for even and odd codes into a temp tree and reads
     the stamps back out of metadata.json.
   b DONE in tests/test_study_battery.py (ShortFormTests): the
     reaction window list of one, force pilot promote_frac above 1
-    and demote_frac 0, lighthouse promote thresholds below zero and
-    demote above 100, chords one-window list, all read off the live
+    and demote_frac 0, chords one-window list, all read off the live
     mode objects a battery block builds.
   c DONE. tests/test_study_battery.py checks the stage plan holds
     32 localisation and 8 span trials and no gap or distractor
@@ -1041,7 +1036,7 @@ Participants: adults 18 and over from the psychology participant
 pool, credit per the pool's standard rate; students of the
 supervisor or the student researcher are excluded to avoid a
 dependent relationship. Inclusion: normal or corrected vision,
-able to sit at a laptop for 50 minutes. Exclusion: current hand,
+able to sit at a laptop for 45 minutes. Exclusion: current hand,
 wrist or forearm injury or pain; diagnosed neurological or
 musculoskeletal condition affecting the hands; skin condition or
 open wound on the hands; known sensitivity to vibration.
@@ -1113,7 +1108,7 @@ ARRIVAL (visit 1: 15 min; visit 2: 3 min)
       hidden rule; do not try to work it out, just play." Never
       mention sequences or patterns again.
 
-CLOCK STARTS (50 min hard stop)
+CLOCK STARTS (44 min hard stop)
   [ ] Check the login: code, age, sex, MAIN HAND (Left or Right,
       required), hand length and breadth (filled from visit 1 at
       visit 2, tagged "from before"; check them). The EHI score
@@ -1124,24 +1119,23 @@ CLOCK STARTS (50 min hard stop)
   [ ] Press PLAY ALL on the hub (or A). The app plays the
       cell's order below; after each block press Start on the NEXT
       UP card (or N). The card names the step, the hand and the
-      stretch break; the strip reads PLAY ALL k/10. A block that
+      stretch break; the strip reads PLAY ALL k/9. A block that
       cannot be run (a board dropped) is skipped from the hub with
       Skip step (S) and the reason written on the sheet; a block
       ended early is offered again, Retry redoes it.
 
   Order A                          Order B
   1 Reaction, hand 1               1 Force Pilot, both
-  2 Reaction, hand 2               2 Lighthouse, both
-  3 Mirror, both                   3 Chords, both
-  4 Rhythm, both, Easy_Lemon,      4 Buzz Hunt, both
-    Medium                         5 Reaction, hand 1
-  5 Echo, both                     6 Reaction, hand 2
-  (60 s stretch)                   (60 s stretch)
-  6 Force Pilot, both              7 Mirror, both
-  7 Lighthouse, both               8 Rhythm, both, Easy_Lemon,
-  8 Chords, both                     Medium
-  9 Buzz Hunt, both                9 Echo, both
-  10 Pattern, dominant hand        10 Pattern, dominant hand
+  2 Reaction, hand 2               2 Chords, both
+  3 Mirror, both                   3 Buzz Hunt, both
+  4 Rhythm, both, Easy_Lemon,      4 Reaction, hand 1
+    Medium                         5 Reaction, hand 2
+  5 Echo, both                     (60 s stretch)
+  (60 s stretch)                   6 Mirror, both
+  6 Force Pilot, both              7 Rhythm, both, Easy_Lemon,
+  7 Chords, both                     Medium
+  8 Buzz Hunt, both                8 Echo, both
+  9 Pattern, dominant hand         9 Pattern, dominant hand
 
   Hand 1 is the dominant hand for codes ending 1 and 2 in each
   group of four (P01, P02, P05, P06, ...), the non-dominant hand
@@ -1150,11 +1144,11 @@ CLOCK STARTS (50 min hard stop)
   Per block: read the on-screen card, confirm the participant is
   ready, start. Do not coach during a block. Let the participant
   skip rests with Space only when they say they are ready. Force
-  Pilot and Lighthouse refuse to start without the boards; if a
+  Pilot and Buzz Hunt refuse to start without the boards; if a
   board has dropped, reconnect and note the block.
   [ ] Tick each block on the sheet as it ends; write the reason for
       any early end or skip.
-  [ ] At 50 minutes: let the current block finish, stop, record
+  [ ] At 44 minutes: let the current block finish, stop, record
       what was missed.
 
 END
@@ -1228,9 +1222,6 @@ verified when the mode was written (see the file named):
   force_pilot.py and docs/research/new_modes/force-control.md:
     Lodha 2013; Kurillo 2005; Naik 2011; Davidson 2026; Archer
     2017; Pennati 2020.
-  lighthouse.py: Li, Evans, Seitz and Li 2015; Camacho-Villa 2025;
-    pinch force sense ICCs (Scientific Reports 2024; BMC
-    Musculoskeletal Disorders 2020).
   buzz_hunt.py and docs/research/new_modes/carpal-nerve.md: Carey
     2011; Weber 2023; Jerosch-Herold 2016; Borngraber 2022; Levitt
     1971.

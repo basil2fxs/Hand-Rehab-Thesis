@@ -619,11 +619,11 @@ class TestModeSelectCardLayout:
             lines = sc._wrap_desc(font, desc, max_w)
             yield key, b, font, max_w, lines
 
-    def test_eleven_cards_and_every_mode_described(self,
-                                                   mode_select_screen):
+    def test_ten_cards_and_every_mode_described(self,
+                                                mode_select_screen):
         sc, _ = mode_select_screen
-        assert len(sc.MODES) == 11
-        assert len(sc.buttons) == 11
+        assert len(sc.MODES) == 10
+        assert len(sc.buttons) == 10
         for _key, _title, desc in sc.MODES:
             assert desc.strip(), "a card without a description tells "
             "the clinician nothing"

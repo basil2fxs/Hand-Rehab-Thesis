@@ -67,7 +67,7 @@ class BlockMusicPlayerTests(unittest.TestCase):
     def test_every_other_mode_stays_silent(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             p, audio, _cfg, _clock = _player(td)
-            for mode in ("rhythm", "reaction", "lighthouse", "buzz_hunt",
+            for mode in ("rhythm", "reaction", "buzz_hunt",
                          "chords", "echo", "pattern", "mirror",
                          "adaptive", "syllables", "classic", None):
                 p.update(mode, menu_state="idle")
@@ -136,7 +136,7 @@ class BlockMusicPlayerTests(unittest.TestCase):
             (repo / "config" / "default.yaml").read_text())
         self.assertTrue(default["force_pilot"]["music_enabled"])
         self.assertLess(default["force_pilot"]["music_volume"], 0.316)
-        for mode in ("rhythm", "reaction", "lighthouse", "buzz_hunt",
+        for mode in ("rhythm", "reaction", "buzz_hunt",
                      "chords", "echo", "pattern", "mirror", "adaptive",
                      "syllables"):
             self.assertNotIn("music_enabled", default.get(mode, {}), mode)
@@ -305,8 +305,7 @@ class EngineBlockMusicTests(unittest.TestCase):
 
     def test_no_other_block_gets_a_track(self) -> None:
         from finger_rehab.audio.menu_music import MenuMusicPlayer
-        for mode in ("reaction", "lighthouse", "buzz_hunt", "chords",
-                     "echo"):
+        for mode in ("reaction", "buzz_hunt", "chords", "echo"):
             self._hub()
             self.assertTrue(self.eng.begin_game(mode, "right"), mode)
             self.eng.block_music._clock = self.clock

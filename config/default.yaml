@@ -148,6 +148,35 @@ eeg:
 fsr:
   num_sensors_per_hand: 4
   sample_rate_hz: 200
+  # NEWTONS. The pads are SingleTact CS8-10N: calibrated 8 mm, 10 N
+  # full scale, the calibration stored on the matched electronics.
+  # The firmware forwards the sensor's 10-bit output untouched. The
+  # SingleTact manual gives the conversion
+  #     Load (N) = (counts - baseline counts) / 512 counts x rating (N)
+  # so one count is 10 / 512 = 0.01953 N (51.2 counts per newton).
+  # The baseline term is the detector's tracked resting level (the
+  # EMA below, primed from the calibration profile and frozen at each
+  # press's rising edge), so the constant is a slope only: the
+  # sensor's 256-count zero offset, the pad's chassis preload and the
+  # finger's resting load never reach a newton figure. The raw fsr1-8
+  # columns stay raw counts; peak_force_n and impulse_n in trials.csv
+  # and peak_force_mean / impulse_mean in the block summary are in
+  # newtons whenever this key is set, and block_summary.force_unit
+  # says so. Leave the key out and everything reports counts, which
+  # is how sessions recorded before September 2026 read.
+  #
+  # Manufacturer accuracy (CS8-10N product page): linearity under 2
+  # percent, repeatability under 1 percent, hysteresis under 4
+  # percent, drift 2 percent of full scale per minute at half load.
+  # So absolute force is good to about 0.4 N and within-session
+  # comparisons to about 0.2 N; docs/research/force_units.txt has
+  # the sentence for the thesis. scripts/force_check.py checks the
+  # slope with known masses and can write a fitted value here.
+  # Bench check: not yet run on this rig (fill in the date and slope
+  # from the script's JSON when it is).
+  force_calibration_n_per_count: 0.019531
+  sensor_rating_n: 10.0
+  counts_full_scale: 512
   # Baseline tracker. This is an EMA per sample; at the device's 200 Hz
   # the time constant is 1 / (alpha * 200) seconds. It exists to absorb
   # slow thermal and mechanical drift, NOT to follow a press.
@@ -191,10 +220,13 @@ fsr:
   # An earlier set added the resting load on top of a fraction of the
   # gap, which counted that load twice: the baseline had already
   # absorbed it. The pinky suffered worst, ending up needing 67% of its
-  # available gap against 45% for the index, and 6.77 N in absolute
-  # terms. That is above the 5.60 N maximum Demouche recorded for a
-  # HEALTHY little finger, so the trigger was out of reach of the
-  # patients the device is for.
+  # available gap against 45% for the index: 77 counts, 1.50 N on the
+  # 10 N pads. (An earlier version of this comment put that at 6.77 N
+  # by assuming a 45 N part; the pads are 10 N, see the NEWTONS note
+  # above.) In newtons the old trigger sat under Demouche's 2.66 N
+  # healthy little-finger mean, so the fault was proportional rather
+  # than absolute: a finger that had to spend two thirds of its
+  # usable gap to register is a finger that misses gentle presses.
   #
   # Each trigger is now 40% of that finger's gap, with a floor of
   # (resting load + 3 SD of noise). The floor only matters in one case:
@@ -204,20 +236,21 @@ fsr:
   # finger only, and it does NOT inflate the pinky, whose 40%-of-gap
   # value already clears its resting load comfortably.
   #
-  #   finger   gap   trigger   % of gap   force
-  #   index     49      20        40%     1.72 N
-  #   middle    32      13        40%     1.13 N
-  #   ring      30      15        49%     1.30 N
-  #   pinky    115      46        40%     4.04 N
+  #   finger   gap   trigger   % of gap   force (10 N pads)
+  #   index     49      20        40%     0.39 N
+  #   middle    32      13        40%     0.25 N
+  #   ring      30      15        49%     0.29 N
+  #   pinky    115      46        40%     0.90 N
   #
-  # HONEST LIMIT on the pinky. 4.04 N is a real improvement on 6.77 N
-  # and is now under Demouche's healthy maximum, but it is still above
-  # the 2.66 N healthy MEAN. The pinky pad reads 115 counts for a press
-  # described as gentle, three to four times the other fingers, which
-  # is a pad placement problem rather than a patient problem. Two things
-  # fix it properly: reduce the resting load on that pad in hardware, or
-  # run the in-app calibration with the actual patient, which sets every
-  # trigger from THEIR light press instead of from these figures.
+  # HONEST LIMIT on the pinky. 0.90 N is a third of Demouche's 2.66 N
+  # healthy little-finger mean, so the trigger is within reach in
+  # absolute terms; the imbalance is what remains. The pinky pad reads
+  # 115 counts for a press described as gentle, three to four times
+  # the other fingers, which is a pad placement problem rather than a
+  # patient problem. Two things fix it properly: reduce the resting
+  # load on that pad in hardware, or run the in-app calibration with
+  # the actual patient, which sets every trigger from THEIR light
+  # press instead of from these figures.
   #
   # Anything measured by the in-app calibration overrides these. Treat
   # them as the starting point for an uncalibrated device.
@@ -959,7 +992,11 @@ syllables:
   # Word difficulty the block starts at: A everyday words, B less
   # common, C rare and long ones. Moves on its own during a block
   # (8 of the last 10 right goes up, under 5 of 10 comes down) and
-  # every move is recorded.
+  # every move is recorded. Every word the syllable levels (1 to 4)
+  # play has two or more syllables: A is mostly 2-syllable words, B
+  # mixes 2 and 3, C is the 4-syllable words, so the bands walk 2, 3,
+  # 4+ syllables. One-syllable words only appear at levels 5 and 6,
+  # where the unit tapped is smaller than a syllable.
   band: A
   # Milliseconds between beats. 500 is two beats a second, the pace
   # children this age tap most naturally and the pace the research
@@ -974,10 +1011,16 @@ syllables:
   # word band shows a one-shot Bigger words card. All of it is fixed
   # and earned, never random, and nothing is ever taken away; the
   # research case lives in the mode file's REWARD LAYER section.
-  # 40 words in rounds of 10 measures out at about 8 and a half
-  # minutes, which is what a child of this age will actually sit
-  # through. It was 50 (measured at 10 and a half minutes; the old
-  # comment here guessed 15). Nothing in the design rests on the
+  # 40 words in rounds of 10 measured out at about 8 and a half
+  # minutes with the old word bank, which is what a child of this
+  # age will actually sit through. It was 50 (measured at 10 and a
+  # half minutes; the old comment here guessed 15). Since the bank
+  # went to two-plus-syllable words in every band (September 2026)
+  # the same 40 words measure 10.2 minutes headless
+  # (tests/test_rest_skip.py, a compliant child at 1.2 s per tap);
+  # whether to drop to 32 words or accept the longer block is
+  # Basil's call, and the test's cap sits at 10.5 until it is made.
+  # Nothing in the design rests on the
   # number of words: the mastery rule is per ROUND (8 of the last 10
   # promotes, under 5 demotes) and round_size is unchanged, so the
   # band staircase still gets four full evaluation windows a session,
@@ -986,10 +1029,13 @@ syllables:
   words_per_block: 40
   round_size: 10
   break_s: 30
-  # Ten free taps along with the tick before the first word: warms the
+  # Free taps along with the tick before the first word: warms the
   # hand up, checks the sensors are seeing the child's taps, and gives
-  # the analysis a tapping-steadiness reading every session.
-  warmup_taps: 10
+  # the analysis a tapping-steadiness reading every session. Five is
+  # also the ceiling (the mode clamps anything higher): it was ten,
+  # and ten taps before the first word was found tedious in testing;
+  # five still gives the probe five asynchronies.
+  warmup_taps: 5
   # Seconds the word is shown (and spoken, on a Mac) before the blocks
   # start lighting.
   attend_s: 1.5
@@ -1126,81 +1172,6 @@ force_pilot:
   # ring chime rather than beside them.
   music_volume: 0.2
 
-lighthouse:
-  # Lighthouse: hold a low force to keep a lantern lit, with the
-  # visual feedback fading out mid-hold at higher levels, plus echo
-  # trials that reproduce a remembered force after a delay. The
-  # research case for every number lives in
-  # rehab/game/modes/lighthouse.py; this block says what the patient
-  # experiences. Needs the force pads (no keyboard fallback), probes
-  # session max presses when missing or stale, and every force target
-  # below is a PERCENTAGE of that probed max, never a raw sensor
-  # value. This mode never buzzes during a trial: a buzz inside a
-  # hold would hand the patient a tactile reference exactly when the
-  # design removes the visual one. The only motor event is the shared
-  # after-press confirmation at trial close (cue.buzz_after), and
-  # failures never buzz at all.
-
-  # How many hold and echo trials each finger is owed. Counts stay
-  # equal per finger and per hand (paired balancing): the lit-dark
-  # comparison needs the same amount of data from every finger.
-  holds_per_finger: 2
-  echoes_per_finger: 1
-  # Target band, percent of the finger's probed max. 5 to 25 percent
-  # is where the cited steadiness and CTS hold deficits live.
-  target_lo_pct: 5
-  target_hi_pct: 25
-  # One hold's length and the in-band tolerance either side of the
-  # target (the band the flame reads as steady, and the ignite band).
-  hold_s: 16.0
-  tol_pct: 3.0
-  # Feedback fade ladder: level n blanks dark_windows[n-1] windows
-  # totalling dark_fraction[n-1] of the hold. Every hold keeps a lit
-  # lead-in, lit gaps between dark windows and a lit tail so the
-  # relight can reveal the drift. Level 1 is fully lit.
-  level: 1
-  dark_windows: [0, 1, 2]
-  dark_fraction: [0.0, 0.25, 0.45]
-  lit_lead_s: 3.0
-  lit_gap_s: 2.0
-  lit_tail_s: 2.0
-  # The ladder moves on the lit-dark error delta (the Li 2015
-  # discriminator): two holds at or under promote_delta_pct promote,
-  # one hold at or over demote_delta_pct drops back. Level 1 has no
-  # dark data, so it promotes on lit accuracy alone.
-  promote_lit_mae_pct: 1.5
-  promote_delta_pct: 1.5
-  demote_delta_pct: 6.0
-  # Igniting the lantern: the flame must sit in the band this long to
-  # light, and a trial that never ignites gutters gently after the
-  # timeout (no buzzer, no klaxon; the flame just slips away).
-  ignite_hold_s: 0.5
-  ignite_timeout_s: 10.0
-  # Echo trials: match the shown glow for show_s, wait one of the
-  # delays (each delay gets equal trials), then remake it blind; the
-  # settled tail of the reproduce window is what gets scored. With
-  # both hands connected the echo goes cross-hand: one hand studies
-  # the glow, the same finger on the other hand repeats it.
-  echo_show_s: 3.0
-  echo_delays_s: [2, 5, 10, 15]
-  echo_reproduce_s: 4.0
-  echo_settle_s: 2.0
-  # Points for a dark window held within tolerance, on top of the
-  # trial outcome.
-  dark_bonus_points: 2
-  # Max-press probe: same flow and meaning as force_pilot's.
-  probe_presses: 3
-  probe_floor_counts: 30
-  probe_max_age_s: 21600
-  # Between-trial pacing: the who-holds-next announcement and the
-  # rest that shows the trial's numbers.
-  announce_s: 2.5
-  rest_s: 6.0
-  # Set an integer to replay a block's exact trial plans (testing, or
-  # a deliberately repeated protocol). Empty draws fresh each block
-  # and records it in raw.csv.
-  seed: null
-
 buzz_hunt:
   # Buzz Hunt: the vibrotactile perception suite. The buzz IS the
   # stimulus, so these pulses bypass the cue.* before-press switches
@@ -1219,23 +1190,50 @@ buzz_hunt:
   # makes the accuracy numbers readable.
   loc_trials_per_hand: 32
   catch_rate: 0.1
-  # Pulse duration staircase (2-down 1-up per hand, converging on
-  # 70.7 percent correct). All in ms of REQUESTED duration; delivered
-  # pulses stretch by up to about a frame and the motor's rise time
-  # sits on top, which is why the floor is 40 (the measured region
-  # where shorter requests stop being distinguishable) and the step
-  # never goes below 17 (one display frame). Thresholds are
-  # within-person measures only; see the mode docstring.
+  # THE PULSE IS FIXED. Every localisation and distractor buzz is
+  # loc_pulse_ms long, and getting answers right never shortens it.
+  # It used to: a duration staircase walked the pulse down with every
+  # correct answer until the player could not feel it, which is what
+  # a coin ERM does with a command shorter than its own start-up (lag
+  # about 40 ms, rise about 87 ms, Precision Microdrives 310-103
+  # class; latency.* in this file). 150 is one firmware hold, so it
+  # is delivered with no host-side quantisation, it reaches full
+  # amplitude, and it sits inside the 50 to 200 ms band Kaaresoja and
+  # Linjama (2005) found usable on a phone motor. The mode clamps
+  # anything under 50. Same length as the span stage's pulses, and
+  # under motor.cue_ms so it reads as a stimulus, not a cue.
+  loc_pulse_ms: 150
+  # What gets harder instead: the response window, in seconds,
+  # longest first. Up a level after window_promote[0] correct of the
+  # last window_promote[1] trials at the level, down a level after
+  # window_demote[0] misses in the last window_demote[1] (a timeout
+  # is a miss), one ladder per hand, starting at the longest window.
+  # The level is stamped on every trial row and the top level reached
+  # is the block's difficulty summary, next to accuracy at the fixed
+  # pulse, d-prime from the catch trials and median RT.
+  window_levels_s: [3.0, 2.0, 1.5, 1.2]
+  window_promote: [6, 8]
+  window_demote: [2, 4]
+  # LEGACY: the duration staircase (2-down 1-up per hand on the pulse
+  # length, 70.7 percent point). Off by default and only here so an
+  # earlier block can be reproduced exactly; with it on the window
+  # stays at response_window_s and the four keys below run the
+  # staircase as they always did (ms of REQUESTED duration; the floor
+  # is the host's 40 ms, not a perceptual number, see the mode
+  # docstring: WHY THE PULSE IS FIXED).
+  duration_staircase: false
   start_ms: 300
   step_ms: 40
   floor_ms: 40
   ceil_ms: 500
-  # How many of the last reversals average into the threshold
-  # estimate.
+  # How many of the last reversals average into a staircase's
+  # threshold estimate (the gap stage, and the legacy duration
+  # staircase).
   threshold_reversals: 6
   # Distractor stage (both hands only): trials per hand, and how far
   # ahead of the target the other hand's decoy pulse starts. These
-  # trials run at the staircase's current level without moving it.
+  # trials run at the fixed pulse and the window the ladder has
+  # reached, without moving it.
   distractor_trials_per_hand: 8
   distractor_lead_ms: 150
   # Sequence span: total trials, the opening sequence length, the
@@ -1250,16 +1248,25 @@ buzz_hunt:
   hebb_every: 3
   # Gap detection: trials per hand; one long buzz (two shorts plus
   # the gap, so length never gives it away) or two shorts with a
-  # silent gap between. The gap staircases down as above; the floor
-  # respects the frame-quantised stop-start path.
+  # silent gap between. The gap runs a 2-down 1-up staircase per
+  # hand (a gap IS a duration, and a silence has no amplitude to
+  # lose). The floor is the motor's spin-down: a coin ERM keeps
+  # ringing for about 115 ms after current off, so a gap under 120
+  # is not silent and the two shorts merge into one buzz; the mode
+  # clamps anything lower. The shorts are felt pulses (150, one
+  # firmware hold), not the 80 ms twitch they were. Set
+  # gap_trials_per_hand 0 to drop the stage, as the study battery
+  # does.
   gap_trials_per_hand: 20
-  gap_start_ms: 200
-  gap_step_ms: 25
-  gap_floor_ms: 35
-  gap_short_ms: 80
+  gap_start_ms: 320
+  gap_step_ms: 40
+  gap_floor_ms: 120
+  gap_short_ms: 150
   # Trial pacing: the unpredictable quiet wait before each stimulus
   # (uniform draw between these bounds, so the buzz cannot be timed),
-  # the response window, and the extra replay time per span item.
+  # the response window for the span and gap stages (localisation
+  # takes its window from window_levels_s), and the extra replay time
+  # per span item.
   wait_lo_s: 0.8
   wait_hi_s: 2.2
   response_window_s: 3.0
@@ -1278,14 +1285,16 @@ buzz_hunt:
   # only, so a trial in flight always finishes and is scored; the
   # block ends at the next card with everything already played kept
   # and end_reason time_cap in the summary. Measured on a headless
-  # simulated block at these settings: one hand runs about 8.5
-  # minutes for an ordinary responder and 9.9 in the worst case
-  # (nobody responds, every window expires); both hands about 16.8
-  # and 19.7. Sustained tactile discrimination is attention-heavy,
-  # and past a quarter hour the tail trials measure fatigue more
-  # than perception, so 15 leaves one-hand blocks untouched and
-  # trims only the slowest bilateral tail. Raise it for a protocol
-  # that must have every bilateral gap trial.
+  # simulated block at these settings (2026-09, window ladder and
+  # the longer gap stimuli): one hand runs about 8.4 minutes for an
+  # ordinary responder and 10.0 in the worst case (nobody responds,
+  # every window expires); both hands about 16.2 and 19.9. Sustained
+  # tactile discrimination is attention-heavy, and past a quarter
+  # hour the tail trials measure fatigue more than perception, so 15
+  # leaves one-hand blocks untouched and trims only the bilateral
+  # gap tail (an ordinary responder plays 123 of 130 trials). Raise
+  # it to 17 for a protocol that must have every bilateral gap
+  # trial.
   session_cap_min: 15
   # Set an integer to replay a block's exact trial plans (testing, or
   # a deliberately repeated protocol). Empty draws fresh each block
@@ -1310,13 +1319,28 @@ echo:
   trials_per_len: 2
   max_len: 9
   runs: 1
-  # Presentation: 500 ms lit, 1000 ms onset to onset, the eCorsi
-  # pinning of the one-item-per-second standard. NEVER speeds up
-  # with success (the toy accelerates; a measure must not). Changing
-  # these is a protocol deviation the analysis splits out, so leave
-  # them unless the deviation is deliberate.
-  item_on_ms: 500
-  ioi_ms: 1000
+  # Presentation. The Corsi standard is one item a second (eCorsi:
+  # 500 ms lit, 1000 ms onset to onset), and that rate played as
+  # slow and stale on the rig, so the schedule sits between the
+  # standard rate and the hardware floor: each item is lit and
+  # buzzed for item_on_ms; the onset-to-onset interval is ioi_ms
+  # for the shortest sequence and shrinks by ioi_step_ms for every
+  # extra item of length, never below ioi_floor_ms (2 items at 800
+  # ms, 3 at 750, 4 at 700, 5 at 650, 6 and up at 600). The rate is
+  # a function of LENGTH only: it never moves with success inside a
+  # length, both trials at a length share it, and every trial row
+  # records the interval it ran at, which is what keeps blocks
+  # comparable (Berch 1998 in the mode file). ioi_step_ms 0 is the
+  # fixed-rate protocol. The floor is the motors': a coin ERM of the
+  # class on this rig needs about 130 ms to reach full amplitude and
+  # spins down for about 115 ms after current off (latency.*), so
+  # the mode never lets the interval under item_on_ms plus 150 ms
+  # whatever is written here. Changing these is a protocol deviation
+  # the analysis names, so leave them unless it is deliberate.
+  item_on_ms: 400
+  ioi_ms: 800
+  ioi_step_ms: 50
+  ioi_floor_ms: 600
   # Every Nth trial secretly replays the participant's hidden
   # sequence (derived from the name, stable across sessions). Do not
   # mention it to players.
@@ -1398,10 +1422,19 @@ rhythm:
   #             (Perfect, Great or Good). The fallback if leading the
   #             beat does not suit a player.
   #
-  # Measured on a fake wire at 60 Hz with the shipping numbers (lead
-  # 150, buzzer latency 45): the STIM command led the scored beat by
-  # 195 ms, jitter within half a frame either side; in feedback mode
-  # the STIM followed the press by the frame drain, under one frame.
+  # Measured on a fake wire at 60 Hz through the real engine with the
+  # shipping numbers (lead 150, buzzer latency 45): the STIM command
+  # led the scored beat by 196 ms on average (range 187 to 206, so
+  # jitter within one frame either side) while the tone stayed on the
+  # beat. A simulated reactor pressing 200 ms after the felt buzz
+  # scored +237 to +254 ms (every note Late) on the old on-the-beat
+  # wire, +39 to +60 ms (Perfect or Great) under a fixed 150 ms lead,
+  # and settled within +/-13 ms once the lead had adapted to about
+  # 200 ms after three updates (12 notes); a 250 ms reactor took
+  # five. A predictor pressing 30 ms early kept scoring -30 whatever
+  # the buzz did and the lead walked down 15 ms per update toward 0.
+  # In feedback mode the STIM followed the press by 8 to 23 ms: the
+  # press is scored on the next frame and the command leaves then.
   tactile_mode: lead
   # Reaction allowance for lead mode, in ms. 150 is the fastest
   # healthy touch reaction time in the literature (Robinson 1934,
@@ -1418,16 +1451,22 @@ rhythm:
   # buzz_lead_max_ms. A late median raises the lead, an early one
   # lowers it. Gain 0.5 on a 4-hit period converges in about three
   # updates without overshoot; 25 ms is under the Great window so one
-  # update cannot flip a hit into a miss. The lead in force is written
-  # on every trial row (waveform_params) and carried across blocks
-  # within a login session, so block two starts where block one
-  # ended.
+  # update cannot flip a hit into a miss. A median inside
+  # buzz_lead_deadband_ms is on the beat and moves nothing: dispatch
+  # jitters by a third of a frame on its own, and because the window
+  # is twice the update period the estimate lags the lead by one
+  # update, so without the dead-band a reactor's lead overshot by 2
+  # to 3 ms and then hunted back in sub-millisecond steps all block.
+  # The lead in force is written on every trial row (waveform_params)
+  # and carried across blocks within a login session, so block two
+  # starts where block one ended.
   buzz_lead_adapt: true
   buzz_lead_window: 8
   buzz_lead_every: 4
   buzz_lead_gain: 0.5
   buzz_lead_max_ms: 400
   buzz_lead_step_ms: 25
+  buzz_lead_deadband_ms: 5
   # Bench-measured command-to-felt time for THIS rig's motors, in ms,
   # subtracted from the buzz target in every tactile mode so the felt
   # vibration, not just the command, sits where the mode wants it.
@@ -1595,8 +1634,10 @@ protocol:
       id: healthy_baseline_v1
       # The design's minute budget for one visit, login to last
       # block. scripts/measure_battery.py measures the battery
-      # headless against it.
-      budget_min: 50
+      # headless against it. 50 with Lighthouse in the battery; the
+      # mode was retired in September 2026 and its 6 minutes plus one
+      # NEXT UP transition came off the budget (Section 2.3).
+      budget_min: 44
       # Steps that carry stretch_before get a 60 s stretch note on
       # the results screen before they start (the set boundary).
       stretch_s: 60
@@ -1612,13 +1653,11 @@ protocol:
              difficulty: medium}
           - {mode: echo, hand: both}
           - {mode: force_pilot, hand: both, stretch_before: true}
-          - {mode: lighthouse, hand: both}
           - {mode: chords, hand: both}
           - {mode: buzz_hunt, hand: both}
           - {mode: pattern, hand: dominant}
         B:
           - {mode: force_pilot, hand: both}
-          - {mode: lighthouse, hand: both}
           - {mode: chords, hand: both}
           - {mode: buzz_hunt, hand: both}
           - {mode: reaction, hand: hand1, stretch_before: true}
@@ -1649,15 +1688,6 @@ protocol:
           level: 1
           promote_frac: 1.01          # never promotes
           demote_frac: 0.0            # never demotes
-        lighthouse:
-          holds_per_finger: 1
-          echoes_per_finger: 1
-          echo_delays_s: [2, 10]
-          rest_s: 4.0
-          level: 3                    # two dark windows, 45 percent
-          promote_lit_mae_pct: -1     # never promotes
-          promote_delta_pct: -1
-          demote_delta_pct: 1000      # never demotes
         chords:
           subblocks: 3                # within, within, cross
           trials_per_subblock: 20

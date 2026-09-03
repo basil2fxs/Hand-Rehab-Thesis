@@ -73,6 +73,9 @@ as a thesis instrumentation section).
 
 ## Rank 2: Lighthouse (precision hold, feedback fade, force sense)
 
+RETIRED, September 2026: built, tested and then removed from the app
+as impractical to play. Kept here as the record of the idea.
+
 Pitch: hold a low target force to keep a lantern lit, then the room
 goes dark and you hold by feel; blind reproduction trials extend the
 same mechanic to force memory. The lit-versus-blind error delta is a
@@ -166,6 +169,24 @@ curves, ICC across sessions.
 Biggest risk: ERM motor rise and stop time (around 20 ms or more)
 biases every temporal threshold; an accelerometer characterisation of
 the motors must precede data collection.
+
+As built, 2026-09 revision. The duration staircase on localisation
+was played on the rig and failed in exactly the way the risk above
+predicts: each correct answer shortened the pulse until it could not
+be felt, because the 10 mm coin ERM class on the rig has a lag of
+about 40 ms and a rise of about 87 ms (Precision Microdrives 310-103
+datasheet), so commands under about 100 ms are fainter twitches, not
+shorter buzzes. Localisation now plays one fixed 150 ms pulse (inside
+the 50 to 200 ms usable band Kaaresoja and Linjama 2005 found on a
+phone motor) and the difficulty ladder moves the response window
+(3.0, 2.0, 1.5, 1.2 s; up on 6 correct of the last 8, down on 2
+misses in the last 4). The summary metrics are accuracy at the fixed
+pulse, d-prime against the catch trials, median RT and the top window
+level; the duration staircase survives behind
+buzz_hunt.duration_staircase for reproducing earlier blocks. The gap
+stage keeps its staircase with a 120 ms floor (the motor's 115 ms
+spin-down) and 150 ms shorts. finger_rehab/game/modes/buzz_hunt.py,
+section WHY THE PULSE IS FIXED, carries the sources.
 
 ## Rank 4: Load Split (bimanual asymmetric force sharing)
 

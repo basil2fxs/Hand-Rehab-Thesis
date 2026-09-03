@@ -1,0 +1,117 @@
+FORCE UNITS
+===========
+
+Written 2026-09-03. What the newton figures in this software mean,
+where the constant comes from, and how accurate they are.
+
+The pads
+--------
+SingleTact CS8-10N: calibrated 8 mm diameter, 10 N full scale. The
+calibration is stored on the matched electronics; the Arduino
+firmware (arduino/, read only) reads the sensor's 10-bit output over
+I2C every 5 ms and forwards it untouched as FSR: v1,v2,v3,v4.
+
+The manual's register map puts the sensor output at 10 bits, 0 to
+0x3FF for 0 to 2 V, with the working range 0x100 to 0x2FF (0.5 to
+1.5 V), so zero force sits near 256 counts and full scale near 767.
+This matches the resting readings the rig has always shown (about
+235 to 260 counts unloaded; the sub-256 readings are slight tension
+in the pad mounting). The conversion the manual gives is
+
+    Load (N) = (counts - baseline counts) / 512 counts x rating (N)
+
+so for a 10 N part one count is 10 / 512 = 0.01953 N, or 51.2
+counts per newton. That is config fsr.force_calibration_n_per_count
+(with fsr.sensor_rating_n and fsr.counts_full_scale beside it so the
+three cannot drift apart; a test pins the ratio).
+
+An earlier version of the analysis notebook and of the fsr comment
+in config/default.yaml assumed a 45 N part (0.0879 N per count),
+which put every newton figure 4.5 times too high. Rayan's flat
+"51.2 counts per newton" was the 10 N figure all along.
+
+What is baseline-subtracted
+---------------------------
+The constant is a slope only. The baseline term in the manual's
+equation is the detector's tracked resting level: an EMA with a
+time constant near 10 s at 200 Hz, primed from the calibration
+profile's resting capture and frozen at each press's rising edge.
+So the sensor's 256-count zero offset, the pad's chassis preload and
+the finger's resting load are all in the baseline and none of them
+reach a newton figure. This is the manual's "tare before measuring",
+done continuously instead of once.
+
+The raw fsr1 to fsr8 columns in raw.csv stay raw counts, offset
+included, so the notebook can re-tare its own way. peak_force_n and
+impulse_n in trials.csv, and peak_force_mean and impulse_mean in the
+block summary, are in newtons (and newton-seconds) whenever the
+constant is configured; block_summary.force_unit says "N". Sessions
+recorded before September 2026 have no constant and read "counts";
+the notebook converts those on the 10 N fallback and every later
+session on its own config_snapshot.
+
+Percent-of-max targets (Force Pilot, the quick calibration's light
+and max presses, the press thresholds) stay in counts. They are
+ratios of counts to counts on the same pad, so the constant cancels
+and nothing about them changed.
+
+Accuracy: the honest sentence for the thesis
+--------------------------------------------
+Force is reported in newtons from the SingleTact CS8-10N factory
+calibration (512 counts per 10 N, 19.5 mN per count) after a
+per-session software tare that subtracts each pad's tracked resting
+level. The manufacturer specifies linearity under 2 percent,
+hysteresis under 4 percent and drift up to 4 percent of full scale
+over ten minutes at half load, so absolute force is accurate to
+about +/- 0.4 N and within-session comparisons to about +/- 0.2 N; a
+bench check with 100 g to 1 kg masses (scripts/force_check.py, date
+to be filled in) found a slope of <x> counts per newton, <y> percent
+from the nominal value.
+
+Fill in <x>, <y> and the date from the JSON the script writes to
+config/calibration/force_check_<date>.json. Until the check has been
+run the sentence stops at "about +/- 0.2 N" and says the bench check
+is pending; do not quote a slope that was not measured.
+
+Two things the sentence does not cover, said plainly:
+- Resolution. One count is 0.02 N, and resting noise is about 1.1
+  counts SD, so a single sample resolves about 0.02 N and a 2 s mean
+  about 0.002 N. The sensor updates at 50 to 120 Hz while the board
+  polls at 200 Hz, so consecutive identical counts are normal.
+- Drift during a hold. At 2 percent of full scale per minute, a 5 s
+  hold can drift 0.02 N, one count; the games report nothing finer
+  than that. Longer holds are re-tared between trials by the force
+  view's rebaseline.
+
+The bench check
+---------------
+scripts/force_check.py puts known masses (100, 200, 500, 1000 g by
+default, through a rigid puck no wider than the pad) on each pad,
+tares over 5 s, averages 2 s per mass ascending then descending, and
+holds 500 g for 60 s. Expected counts above tare at g = 9.81:
+
+    mass     newtons   10 N part   45 N part
+    100 g     0.98        50.2        11.2
+    200 g     1.96       100.4        22.3
+    500 g     4.91       251.1        55.8
+   1000 g     9.81       502.3       111.6
+
+Acceptance: each point within 20 counts of expected, slope within 2
+percent of 51.2 counts per newton, ascending against descending at
+500 g within 20 counts, drift over the hold at most 10 counts,
+return to tare within 10 counts. A slope near 11.4 counts per
+newton is reported as a part mismatch (a 45 N part), not a failure.
+--write-slope --config-out <path> writes the fitted constant into
+the yaml named; the script never writes config/user_settings.yaml
+or anything under sessions/.
+
+Sources
+-------
+SingleTact user manual (register map, 10-bit output, the load
+equation and the tare advice) and the CS8-10N product page
+(linearity, repeatability, hysteresis, drift, update rate, overload),
+both read 2026-09-03 and listed in the September research notes.
+Demouche 2025 (healthy fingertip force on the 2025 button device) is
+the comparison the fsr threshold comment now reads against: the
+pinky trigger of 46 counts is 0.90 N, a third of the 2.66 N healthy
+little-finger mean.

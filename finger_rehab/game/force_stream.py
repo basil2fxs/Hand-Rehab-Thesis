@@ -1,7 +1,7 @@
 """Continuous force access and the max-press probe flow.
 
-Research case. The three continuous-force modes (Force Pilot,
-Lighthouse, Buzz Hunt's press responses) score the 200 Hz force signal
+Research case. The continuous-force modes (Force Pilot and Buzz
+Hunt's press responses) score the 200 Hz force signal
 itself, not threshold crossings. Every paradigm they implement sets
 targets as a percentage of the finger's maximal voluntary press: Lodha
 2013 (PLOS ONE 8(12):e83468) held 5 / 25 / 50 percent MVC, Li 2015
@@ -33,7 +33,7 @@ characterisation exists.
 Why the view freezes its reference instead of tracking the detector's
 live baseline: the detector's baseline EMA exists to absorb slow
 sensor drift, and it only holds still while the finger is PRESSED
-(above the on threshold). A Lighthouse hold at 10 percent of max sits
+(above the on threshold). A hold at 10 percent of max sits
 well below that threshold, so the live baseline absorbs a large share
 of the held force over a 15 to 20 s hold (the shipped baseline alpha
 of 0.0005 at 200 Hz is a time constant near 10 s) and the reading

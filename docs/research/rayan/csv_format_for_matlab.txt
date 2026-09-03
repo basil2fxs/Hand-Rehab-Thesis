@@ -22,9 +22,11 @@ Note:
   force from the nearest sample row.
 - Lanes on raw.csv events are 0-based (0-3 right, 4-7 left).
   trials.csv lane is the same finger + 1.
-- fsr values are raw ADC counts. Newtons: 45 N / 512 counts, or the
+- fsr values are raw ADC counts. Newtons: 10 N / 512 counts (the
+  pads are SingleTact CS8-10N, 0.01953 N per count), or the
   per-session value in metadata.json under
-  config_snapshot.fsr.force_calibration_n_per_count.
+  config_snapshot.fsr.force_calibration_n_per_count. An earlier
+  version of this note said 45 N; that was the wrong part number.
 
 trials.csv has the game's own scoring per trial (RT, outcome, points,
 per-finger peak forces). Open it and the headers are self-explanatory;
@@ -75,7 +77,11 @@ metadata.json:
 config_snapshot.fsr.force_calibration_n_per_count
 
 If this is missing, use:
-45 N / 512 counts
+10 N / 512 counts = 0.01953 N per count
+
+Sessions recorded from September 2026 carry the key and log
+peak_force_n and impulse_n in newtons already
+(block_summary.force_unit says "N"); older sessions log counts.
 
 
 TRIALS.CSV

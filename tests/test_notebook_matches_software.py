@@ -409,10 +409,6 @@ class TestContinuousModeContract:
     TOKENS = [
         ('waveform="corridor"', "finger_rehab/game/modes/force_pilot.py",
          '== "corridor"'),
-        ('waveform="hold"', "finger_rehab/game/modes/lighthouse.py",
-         '"hold"'),
-        ('waveform="reproduce"', "finger_rehab/game/modes/lighthouse.py",
-         '"reproduce"'),
         ('"loc"', "finger_rehab/game/modes/buzz_hunt.py", '"loc"'),
         ('"distractor"', "finger_rehab/game/modes/buzz_hunt.py",
          '"distractor"'),
@@ -533,7 +529,7 @@ class TestCohortChapterContract:
                "cohort_catalogue", "cohort_paired", "cohort_values",
                "is_study_code", "cohort_hand_role"]
     BATTERY_MODES = {"reaction", "mirror", "rhythm", "echo", "force_pilot",
-                     "lighthouse", "chords", "buzz_hunt", "pattern"}
+                     "chords", "buzz_hunt", "pattern"}
 
     def test_setup_defines_every_cohort_name(self, source):
         tree = ast.parse(source)
@@ -549,7 +545,7 @@ class TestCohortChapterContract:
                         "mode", "metric", "value", "n_trials",
                         "block_folder", "config_hash"]
 
-    def test_registry_covers_the_nine_battery_modes(self, source):
+    def test_registry_covers_the_eight_battery_modes(self, source):
         floor, registry, modes = _notebook_names(
             source, ["COHORT_BH_FLOOR_MS", "COHORT_METRICS", "COHORT_MODES"])
         assert {mode for mode, _m in registry} == self.BATTERY_MODES

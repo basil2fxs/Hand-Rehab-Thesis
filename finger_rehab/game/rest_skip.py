@@ -58,8 +58,8 @@ log = logging.getLogger(__name__)
 # gap (0.8), the force modes' probe gap (1.2). At or above it sit the
 # waits somebody genuinely sits through: the announce cards on the two
 # force modes (2.5), the GET READY prep (3.0), Buzz Hunt's stage card
-# (5.0), Lighthouse's between-trial rest (6.0), Force Pilot's
-# between-run rest (10), Patterns' rests (10/30/45), Chords' rests
+# (5.0), Force Pilot's between-run rest (10), Patterns' rests
+# (10/30/45), Chords' rests
 # (30/120) and Syllables' break (30). A gate that overruns, like the
 # Chords quiet-settle, grows past the threshold on its own and takes
 # the control when it does. Overridable through game.skip_chip_min_s.

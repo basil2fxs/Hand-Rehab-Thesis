@@ -2,8 +2,8 @@
 
 The game is pygame, not PsychoPy, so there is no .psyexp to open.
 PsychoPy's Runner runs any Python script, so it can run this one, as
-can any Python 3.10+. It needs the source checkout and four packages;
-the exe next to this file needs neither.
+can any Python 3.10+. It needs the source checkout and the packages
+listed below; the exe next to this file needs neither.
 
 Source: https://github.com/basil2fxs/Hand-Rehab-Thesis
 This file must sit at docs/lab_package inside that checkout. If you
@@ -14,9 +14,17 @@ import sys
 import subprocess
 from pathlib import Path
 
-# import name -> pip install name
+# import name -> pip install name. Everything the game imports at run
+# time, not just what it needs to open: rhythm's beat tracking loads
+# librosa (and soundfile to decode), the block report draws with
+# matplotlib, and the block metrics and the force trace filters use
+# scipy. Those imports are lazy, so a Python missing one would open
+# the game and then fail at the end of the first block or the first
+# rhythm pick, with the lab session already under way.
 PACKAGES = {"pygame": "pygame-ce", "serial": "pyserial",
-            "yaml": "pyyaml", "numpy": "numpy"}
+            "yaml": "pyyaml", "numpy": "numpy", "scipy": "scipy",
+            "librosa": "librosa", "soundfile": "soundfile",
+            "matplotlib": "matplotlib"}
 
 
 def _pygame_is_ce() -> bool:

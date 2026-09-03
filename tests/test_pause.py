@@ -357,9 +357,9 @@ class PauseKeyReachesEveryBlockScreenTests(unittest.TestCase):
 
     The handler used to test the live screen against a list of three
     written out by hand (gameplay, rhythm, syllables), while Esc used
-    _BLOCK_SCREEN_KEYS, which names six. So P did nothing in Force
-    Pilot, Lighthouse and Buzz Hunt: the patient could not pause the
-    three longest-holding modes in the app, and each of those screens
+    _BLOCK_SCREEN_KEYS, which names every block screen. So P did
+    nothing in Force Pilot and Buzz Hunt: the patient could not pause
+    the longest-holding modes in the app, and each of those screens
     carries a PAUSED overlay that nothing could reach.
     """
 
@@ -405,11 +405,11 @@ class PauseKeyReachesEveryBlockScreenTests(unittest.TestCase):
                          src)
 
     def test_one_paused_overlay_serves_every_block_screen(self) -> None:
-        """Six screens had their own copy of the overlay. Two of them
-        (Force Pilot and Lighthouse, during the max-press probe) drew
-        the bare word straight across the live finger chip and the
-        presses-to-go dots, because nothing owned the space it landed
-        in. Six copies is also six places to forget when the wording
+        """Every block screen had its own copy of the overlay. Force
+        Pilot's, during the max-press probe, drew the bare word
+        straight across the live finger chip and the presses-to-go
+        dots, because nothing owned the space it landed in. Several
+        copies is also several places to forget when the wording
         changes, which is how none of them ever said how to resume."""
         from finger_rehab.ui.screens import Screen
         eng = self._engine()

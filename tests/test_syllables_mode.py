@@ -176,6 +176,55 @@ class WordListTests(unittest.TestCase):
         self.assertTrue(all(w.onset_rime for w in words_for(5, "A")))
         self.assertTrue(all(w.graphemes for w in words_for(6, "A")))
 
+    def test_syllable_levels_never_draw_a_one_syllable_word(self) -> None:
+        # 2026-09: one tap has nothing to segment, so levels 1 to 4
+        # draw words of two or more syllables only, in every band and
+        # on one hand or both. The sub-syllable levels keep the short
+        # words, which are their whole material.
+        from finger_rehab.game.modes.syllables_words import (
+            MIN_SYLLABLES, words_for)
+        self.assertEqual(MIN_SYLLABLES, 2)
+        for level in (1, 2, 3, 4):
+            for band in ("A", "B", "C"):
+                for bilateral in (False, True):
+                    pool = words_for(level, band, bilateral=bilateral)
+                    self.assertGreaterEqual(len(pool), 8,
+                                            (level, band, bilateral))
+                    self.assertTrue(
+                        all(w.n_syll >= MIN_SYLLABLES for w in pool),
+                        (level, band, bilateral))
+        self.assertTrue(any(w.n_syll == 1 for w in words_for(5, "A")))
+        self.assertTrue(any(w.n_syll == 1 for w in words_for(6, "A")))
+
+    def test_bands_walk_up_the_syllable_ladder(self) -> None:
+        # With the one-syllable words gone the bands read as a
+        # syllable ladder: A leans on 2, B is an even 2/3 mix, C is
+        # the 4-syllable words. The 8-of-10 promotion therefore moves
+        # the child through 2, 3 and 4+ syllables.
+        from finger_rehab.game.modes.syllables_words import WORDS
+
+        def share(band, n):
+            pool = [w for w in WORDS if w.band == band and w.n_syll >= 2]
+            return sum(1 for w in pool if w.n_syll == n) / len(pool)
+
+        self.assertGreater(share("A", 2), 0.6)
+        self.assertGreater(share("B", 3), 0.4)
+        self.assertGreater(share("C", 4), 0.6)
+
+    def test_a_block_deals_no_one_syllable_word(self) -> None:
+        engine, mode = _build_mode(level=1, band="A")
+        drawn = [mode._draw_word() for _ in range(60)]
+        self.assertTrue(all(w.n_syll >= 2 for w in drawn),
+                        [w.word for w in drawn if w.n_syll < 2])
+        # And the ease-in draw obeys the same pool.
+        from finger_rehab.game.modes.syllables import TrialRecord
+        mode._records.append(TrialRecord(word="wombat", n_syll=2,
+                                         band="A", correct=True,
+                                         error="ok"))
+        ease = mode._draw_ease_word()
+        self.assertIsNotNone(ease)
+        self.assertGreaterEqual(ease.n_syll, 2)
+
     def test_thin_bands_top_up_from_easier_bands(self) -> None:
         # Band C at level 1 holds only the rare 3-syllable words; the
         # pool must borrow downward rather than cycle a handful of
@@ -1434,6 +1483,28 @@ class WarmupProbeTests(unittest.TestCase):
         end = mode._warmup_beats[-1] + mode.ioi_s + 0.1
         mode._tick(end)
         self.assertNotEqual(mode.phase, "warmup")
+
+    def test_warmup_is_capped_at_five_taps(self) -> None:
+        # 2026-09: ten taps before the first word was found tedious;
+        # the mode clamps whatever the config asks for to five, and
+        # the shipped config asks for five.
+        from finger_rehab.config import Config
+        from finger_rehab.game.modes.syllables import SyllablesMode
+        self.assertEqual(SyllablesMode.WARMUP_TAPS_MAX, 5)
+        self.assertEqual(int(Config.load().get("syllables.warmup_taps")),
+                         5)
+        _engine, mode = _build_mode(level=1, warmup_taps=10)
+        self.assertEqual(mode.warmup_total, 5)
+        _engine, mode = _build_mode(level=1, warmup_taps=3)
+        self.assertEqual(mode.warmup_total, 3)
+        # The beat grid the warm-up lays down is count-in plus the
+        # capped count, so the probe ends when five taps have had
+        # their beat, not ten.
+        mode = _build_mode(level=1, warmup_taps=10)[1]
+        mode._tick(0.0)
+        mode._tick(0.1)
+        self.assertEqual(len(mode._warmup_beats),
+                         mode.count_in_beats + 5)
 
 
 class LoggingContractTests(unittest.TestCase):

@@ -418,7 +418,8 @@ def main() -> int:
                                    "completed": completed,
                                    "minutes": round(total_min, 2)})
                 print(f"{code} visit {visit} {t['dominant']:5s} "
-                      f"{total_min:6.2f} min  {completed}/10 completed",
+                      f"{total_min:6.2f} min  {completed}/{len(rows)} "
+                      f"completed",
                       flush=True)
             if visit == 1:
                 move_day(root, today, day1, set(todo))

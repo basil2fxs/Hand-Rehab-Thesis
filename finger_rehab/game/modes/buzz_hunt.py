@@ -1,8 +1,8 @@
 """Buzz Hunt: the vibrotactile perception suite. The vibration motors
 stop being a cue channel and become the stimulus itself: a pulse fires
 on one finger and the player presses the finger that buzzed, then the
-suite tightens the screws with shorter pulses, cross-hand distractors,
-buzz sequences to replay, and one-buzz-or-two gap trials.
+suite tightens the screws with a shrinking response window, cross-hand
+distractors, buzz sequences to replay, and one-buzz-or-two gap trials.
 
 WHY THIS DESIGN. Roughly half of stroke survivors carry a
 somatosensory deficit, and the one intervention with RCT support is
@@ -36,21 +36,71 @@ responded to home training at 1.5 and 3 years after nerve repair.
 Auld 2014 names the evidence gap in children with unilateral cerebral
 palsy: no proven tactile intervention exists for them. Duration
 staircases are legitimate psychophysics (duration difference limens
-follow Weber's law, PMC4439551), which matters because the motors
-have fixed intensity and duration is the only stimulus dimension this
-host can vary.
+follow Weber's law, PMC4439551); the gap stage still runs one, and the
+reason localisation no longer does is the next section.
+
+WHY THE PULSE IS FIXED (2026-09). Localisation used to run a 2-down
+1-up staircase on pulse DURATION, the only stimulus dimension this
+host can vary. Played on the rig, every correct answer made the buzz
+shorter until it could not be felt at all, and the player's report
+was exactly that: "the motor buzzer goes less and less each time
+until eventually I can't feel the buzz". The staircase was doing what
+it was built to do, walking the request into a region the hardware
+cannot honestly deliver. A 10 mm coin ERM of the class on this rig
+(Precision Microdrives 310-103 datasheet: lag about 40 ms, rise to
+full amplitude about 87 ms, stop about 115 ms after current off) has
+barely started moving when a 40 ms command ends, so the levels under
+about 100 ms are not shorter buzzes, they are fainter twitches of
+falling amplitude, and the 40 ms floor was the host's floor (the 20 ms
+command clamp plus one frame), not a perceptual one. Two verified
+numbers set the pulse instead: Kaaresoja and Linjama (2005, World
+Haptics, pp. 471-472) found phone-ERM control signals of 50 to 200 ms
+the usable band, shorter ones missed and longer ones irritating; and
+Remache-Vinueza, Trujillo-Leon and Vidal-Verdu (2025, Scientific
+Reports) put the minimum duration for a fingertip stimulus to read as
+vibration at 25 to 30 ms on a clean voice-coil actuator, which is the
+floor for an actuator with no rise time and so a lower bound here.
+The shipped pulse is buzz_hunt.loc_pulse_ms, 150 ms: one firmware
+hold, so it is delivered with no host-side STOP quantisation, it
+reaches full amplitude, and it sits inside the Kaaresoja band. It is
+the same length as the span stage's pulses and shorter than the
+motor.cue_ms cue, so it reads as a stimulus, not a cue.
+
+Localisation is a reaction: the player feels a buzz and presses the
+finger it was on, and a healthy hand does that at ceiling whatever
+the pulse length. So difficulty now moves the RESPONSE WINDOW
+(buzz_hunt.window_levels_s, 3.0, 2.0, 1.5 and 1.2 s): promote after
+6 correct of the last 8 trials at a level, demote after 2 misses in
+the last 4, start at the longest window, level logged on every trial
+row, one ladder per hand as the staircase was. Distractor trials run
+at the held level and never move it. The summary metrics are what the
+threshold used to be: localisation accuracy at the fixed pulse,
+d-prime against the catch trials, median RT, and the top window level
+reached. The old behaviour survives behind buzz_hunt.duration_
+staircase (default false) for anyone reproducing an earlier block;
+under the flag the localisation rows carry stair_ms and reversal as
+they always did and block_stats carries the threshold dict, and with
+the flag off the threshold dict is empty rather than a start level
+dressed as a measurement. The gap stage keeps its staircase because a
+gap IS a duration and a silent gap has no amplitude to lose, but its
+floor is the motor's spin-down (GAP_FLOOR_MS, 120 ms: under that the
+motor is still ringing, so the two shorts merge) and its shorts are
+felt pulses (gap_short_ms 150), so the stage now measures gap
+detection on top of a real silence rather than on top of a twitch.
 
 WHAT THIS MODE CANNOT CLAIM, said plainly:
-- The ERM motors have a mechanical rise and stop time around 20 ms
-  that is UNCHARACTERISED on this rig. Every duration and gap
-  threshold inherits that bias, so thresholds here are within-person
-  measures for tracking change, never comparable to published
-  electrical-stimulus norms, until an accelerometer characterisation
-  of the motors is done. The software adds its own floor on top:
-  requests below GameEngine.MIN_PULSE_MS (20 ms) are clamped, each
-  delivered pulse stretches by up to about one display frame, so the
-  staircases here step by at least 17 ms and stop at a 40 ms floor
-  (the measured region where levels stop being distinguishable).
+- The ERM motors' lag, rise and stop times on THIS rig are datasheet
+  class values, not bench measurements (latency.measured in the
+  config says which). Every gap threshold inherits that bias, so gap
+  thresholds are within-person measures for tracking change, never
+  comparable to published electrical-stimulus norms, until the
+  accelerometer or piezo characterisation in scripts/latency_check.py
+  has been run. The software adds its own floor on top: requests
+  below GameEngine.MIN_PULSE_MS (20 ms) are clamped and each early
+  STOP stretches the delivered pulse by up to about one display
+  frame, which is why the legacy duration staircase stepped by at
+  least 17 ms and stopped at 40 ms, and why nothing in the shipped
+  block asks pulse_motor for less than 150 ms.
 - For carpal tunnel syndrome this suite is MEASUREMENT, not therapy:
   the definitive RCT of sensory relearning after carpal tunnel
   release was negative on tactile outcomes (Jerosch-Herold 2016,
@@ -73,19 +123,21 @@ cue.sound_after says to.
 STAGES, in play order. One block runs the suite as a fixed ladder;
 counts come from buzz_hunt.* in the config.
 
-  LOCALISATION   hands flat, eyes on the focus point. One pulse on
-                 one finger; press the finger that buzzed. About one
-                 trial in ten is a catch trial: no buzz fires, and
-                 the right response is to wait, which prices guessing
-                 (the false-alarm rate for d-prime lives here). Pulse
-                 duration runs a 2-down 1-up staircase per hand,
-                 converging on the 70.7 percent point; every reversal
-                 is logged. One staircase per HAND, interleaved
-                 across that hand's fingers, not one per finger: a
-                 per-finger staircase cannot collect enough trials to
-                 converge inside one session, and the per-finger
-                 spatial story is carried by the confusion matrix
-                 instead.
+  LOCALISATION   hands flat, eyes on the focus point. One pulse of
+                 loc_pulse_ms on one finger; press the finger that
+                 buzzed inside the response window. About one trial
+                 in ten is a catch trial: no buzz fires, and the
+                 right response is to wait, which prices guessing
+                 (the false-alarm rate for d-prime lives here). The
+                 window runs the ladder in WHY THE PULSE IS FIXED
+                 (promote on 6 of the last 8, demote on 2 of the
+                 last 4, a timeout is a miss), one ladder per HAND,
+                 interleaved across that hand's fingers, not one per
+                 finger: a per-finger ladder cannot collect enough
+                 trials to move inside one session, and the
+                 per-finger spatial story is carried by the confusion
+                 matrix instead. Every move is logged as a
+                 buzz_hunt_window event.
   DISTRACTOR     bilateral sessions only. A distractor pulse fires on
                  a finger of the OTHER hand just before the target
                  pulse; press where the LAST buzz was. The distractor
@@ -93,12 +145,11 @@ counts come from buzz_hunt.* in the config.
                  motor driver, so within-hand stimuli are strictly
                  sequential; only cross-hand pulses can overlap in
                  time, and the overlap is what makes the distractor
-                 hard to gate out. These trials hold the duration at
-                 the staircase's current level and do not move it, so
-                 they measure selective attention at a fixed,
-                 just-above-threshold intensity (the SENSe grading
-                 principle) rather than folding two conditions into
-                 one threshold.
+                 hard to gate out. These trials run at the fixed
+                 pulse and the window the ladder has reached, and do
+                 not move it, so they measure selective attention at
+                 a held difficulty (the SENSe grading principle)
+                 rather than folding two conditions into one ladder.
   SEQUENCE SPAN  the pads play a buzz sequence; replay it in order.
                  Span grows by one after each correct replay and
                  shrinks by one after a miss. Every third span trial
@@ -140,39 +191,47 @@ bilaterally, because it needs an other hand.
 
 PACING. Two rules keep the block from going on too long while still
 getting hard quickly (both measured on a headless simulated block at
-the shipped settings). The staircases open with the standard
-accelerated approach (single-correct steps at double size until the
-first reversal, then plain 2-down 1-up; Levitt 1971, Leek 2001):
-without it the first third of the localisation stage ran at 200-300
-ms, trivially easy for an ordinary hand, and the unilateral gap
-stage often closed with too few reversals for any threshold
-estimate at all. And the whole block sits under
+the shipped settings, re-measured 2026-09 after the window ladder
+replaced the localisation staircase). The gap staircase opens with
+the standard accelerated approach (single-correct steps at double
+size until the first reversal, then plain 2-down 1-up; Levitt 1971,
+Leek 2001): without it the unilateral gap stage often closed with
+too few reversals for any threshold estimate at all. The window
+ladder needs no such trick: with a 92 percent responder it climbs
+from the 3.0 s window to the 1.2 s top in about 22 trials per hand
+(six correct per step), so the second half of a 32-trial hand runs
+at the top level. And the whole block sits under
 buzz_hunt.session_cap_min (shipped 15 minutes), enforced only
-between trials so a trial in flight always finishes: the measured
-worst case was 9.9 minutes for one hand but 19.7 bilaterally, and
-past a quarter hour of sustained tactile attention the tail trials
-measure fatigue more than perception. A capped block keeps
-everything already played and writes end_reason time_cap.
+between trials so a trial in flight always finishes: measured, one
+hand runs 8.4 minutes for an ordinary responder and 10.0 when
+nobody responds; both hands 16.2 and 19.9 uncapped, so the cap
+trims the last few bilateral gap trials (123 of 130 played for an
+ordinary responder, 99 of 130 for silence). Past a quarter hour of
+sustained tactile attention the tail trials measure fatigue more
+than perception. A capped block keeps everything already played and
+writes end_reason time_cap.
 
 LOGGING. Localisation and distractor rows: waveform "buzz",
-waveform_params carrying the target lane, requested duration, catch
-flag and any distractor lane / lead, and segment_times bracketing
-the stimulus and the response window in raw-stream seconds. Span
-rows: waveform "buzz_seq" with the full sequence packed in params
-plus the hebb flag. Gap rows: waveform "buzz_gap" with kind, short
-length and gap. pulses_from_params rebuilds the exact pulse train
-(lane, onset, duration) from any of these rows without this module's
-rng, which is the notebook contract; the raw log's pulse_motor
-events, one per delivered pulse, are the cross-check. Requested
-durations are logged as the stimulus level; the delivered duration
-is the request stretched by up to about a frame plus the motor's
-mechanical response, which is the honest uncertainty statement.
-Staircase reversals are logged as buzz_hunt_reversal events as they
-happen. Catch outcomes go through engine.log_reaction_event exactly
-like reaction mode's, so a survived catch never inflates the hit
-counters. cue_target_shown is FALSE on every row (nothing on screen
-names the finger); cue_flags records the block's switch state as
-ever.
+waveform_params carrying the target lane, requested duration, the
+response window in ms and the ladder level, catch flag and any
+distractor lane / lead, and segment_times bracketing the stimulus
+and the response window in raw-stream seconds. Span rows: waveform
+"buzz_seq" with the full sequence packed in params plus the hebb
+flag. Gap rows: waveform "buzz_gap" with kind, short length and gap.
+pulses_from_params rebuilds the exact pulse train (lane, onset,
+duration) from any of these rows without this module's rng, which is
+the notebook contract; the raw log's pulse_motor events, one per
+delivered pulse, are the cross-check. Requested durations are logged;
+the delivered duration is the request plus the motor's mechanical
+response (and, for any request that is not a whole firmware hold, up
+to about a frame of STOP stretch), which is the honest uncertainty
+statement. Window moves are logged as buzz_hunt_window events and
+staircase reversals (gap stage, or localisation under the legacy
+flag) as buzz_hunt_reversal events as they happen. Catch outcomes go
+through engine.log_reaction_event exactly like reaction mode's, so a
+survived catch never inflates the hit counters. cue_target_shown is
+FALSE on every row (nothing on screen names the finger); cue_flags
+records the block's switch state as ever.
 """
 from __future__ import annotations
 
@@ -198,14 +257,35 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-# The measured floor of distinguishable pulse levels on this rig: the
-# 20 ms command floor plus one-frame stretch means requests under
-# about 40 ms all deliver much the same buzz, so no staircase is
-# allowed below it (foundation contract, measured 2026-08).
+# The shortest command a fixed-amplitude ERM reliably delivers as a
+# felt pulse. Kaaresoja and Linjama (2005, World Haptics Conference,
+# pp. 471-472) rated phone-motor control signals and put the usable
+# band at 50 to 200 ms; under 50 ms the rotor has barely started
+# (lag about 40 ms for the 10 mm coin ERM class on this rig, Precision
+# Microdrives 310-103 datasheet) before current stops. Every FIXED
+# pulse this mode plays is clamped to it: loc_pulse_ms, span_pulse_ms
+# and gap_short_ms.
+FELT_PULSE_FLOOR_MS = 50.0
+# A silent gap shorter than the motor's spin-down is not silent: the
+# 310-103 class stop time is about 115 ms after current off, so the
+# gap staircase never asks for a gap under 120 ms.
+GAP_FLOOR_MS = 120.0
+# The LEGACY duration staircase's floor (buzz_hunt.duration_staircase
+# true): the 20 ms command floor plus one-frame stretch means requests
+# under about 40 ms all deliver much the same twitch (measured
+# 2026-08). Kept exactly as it was so the flag reproduces earlier
+# blocks. It is a host-side floor, not a perceptual one, which is the
+# reason localisation no longer runs a duration staircase (module
+# docstring: WHY THE PULSE IS FIXED).
 LEVEL_FLOOR_MS = 40.0
 # Frame quantisation on the early-STOP path: steps below one display
 # frame ask for differences the hardware cannot express.
 MIN_STEP_MS = 17.0
+# The response-window ladder's shipped shape (config
+# buzz_hunt.window_*): promote after this many correct of the last N
+# trials at a level, demote after this many misses in the last M.
+WINDOW_PROMOTE = (6, 8)
+WINDOW_DEMOTE = (2, 4)
 
 
 # ---- participant-stable material -------------------------------------------
@@ -381,6 +461,93 @@ class Staircase:
         return sum(tail) / len(tail)
 
 
+# ---- the response-window ladder --------------------------------------------
+class WindowLadder:
+    """Localisation difficulty, 2026-09: the response window shrinks
+    and the pulse never does. Levels are response windows in seconds,
+    longest first; the ladder starts at level 0, promotes after
+    `promote` = (hits, of the last N) correct trials at the level and
+    demotes after `demote` = (misses, of the last M). A move clears
+    the history so one lucky run cannot promote twice. The level is
+    recorded per trial (trace) because the analysis reads accuracy
+    and RT by level, and the top level reached is the block's
+    difficulty summary in place of the old duration threshold.
+
+    Why a mastery rule rather than a staircase: the window is a time
+    limit on a response the player either knows or does not (the
+    localisation judgement itself is at ceiling for a healthy hand at
+    a 150 ms pulse), so the quantity that moves is speed under
+    pressure, and a 6-of-8 / 2-of-4 rule is the same shape the other
+    modes' ladders use (reaction's windows, chords' sync windows),
+    which keeps the cross-mode difficulty story one story."""
+
+    def __init__(self, levels_s: list[float],
+                 promote: tuple[int, int] = WINDOW_PROMOTE,
+                 demote: tuple[int, int] = WINDOW_DEMOTE,
+                 start_level: int = 0) -> None:
+        self.levels = [max(0.3, float(v)) for v in levels_s] or [3.0]
+        self.promote_hits = max(1, int(promote[0]))
+        self.promote_window = max(self.promote_hits, int(promote[1]))
+        self.demote_misses = max(1, int(demote[0]))
+        self.demote_window = max(self.demote_misses, int(demote[1]))
+        self.level = min(max(0, int(start_level)), len(self.levels) - 1)
+        self.start_level = self.level
+        self.top_level = self.level
+        self.n_promotions = 0
+        self.n_demotions = 0
+        self.trace: list[int] = []
+        self._history: deque[bool] = deque(
+            maxlen=max(self.promote_window, self.demote_window))
+
+    @property
+    def window_s(self) -> float:
+        return self.levels[self.level]
+
+    @property
+    def top(self) -> bool:
+        return self.level >= len(self.levels) - 1
+
+    def record(self, correct: bool) -> str | None:
+        """Apply one scored localisation trial at the current level.
+        Returns "up", "down" or None (the caller logs a move)."""
+        self.trace.append(self.level)
+        self._history.append(bool(correct))
+        recent = list(self._history)
+        misses = sum(1 for c in recent[-self.demote_window:] if not c)
+        if misses >= self.demote_misses and self.level > 0:
+            self.level -= 1
+            self.n_demotions += 1
+            self._history.clear()
+            return "down"
+        hits = sum(1 for c in recent[-self.promote_window:] if c)
+        if (len(recent) >= self.promote_hits
+                and hits >= self.promote_hits and not self.top):
+            self.level += 1
+            self.n_promotions += 1
+            self.top_level = max(self.top_level, self.level)
+            self._history.clear()
+            return "up"
+        return None
+
+    def summary(self) -> dict:
+        """top_level is the highest level any trial was PLAYED at,
+        which is what the rows carry and what the notebook reads;
+        final_level is where the ladder stands at the end, which can
+        be one higher when the last trial earned a promotion nothing
+        played at (it still seeds the next block)."""
+        played_top = max(self.trace) if self.trace else self.level
+        return {
+            "start_level": self.start_level,
+            "final_level": self.level,
+            "top_level": played_top,
+            "final_window_s": round(self.window_s, 2),
+            "top_window_s": round(self.levels[played_top], 2),
+            "n_promotions": self.n_promotions,
+            "n_demotions": self.n_demotions,
+            "trace": list(self.trace),
+        }
+
+
 class BuzzHuntMode(WaitSkip):
     name = "Buzz Hunt"
 
@@ -436,7 +603,12 @@ class BuzzHuntMode(WaitSkip):
                  score_cfg: ScoreConfig,
                  seed: int = 0,
                  demo_trials: int | None = None,
-                 session_cap_min: float = 15.0) -> None:
+                 session_cap_min: float = 15.0,
+                 loc_pulse_ms: float = 150.0,
+                 window_levels_s: list[float] | None = None,
+                 window_promote: tuple[int, int] = WINDOW_PROMOTE,
+                 window_demote: tuple[int, int] = WINDOW_DEMOTE,
+                 duration_staircase: bool = False) -> None:
         self.engine = engine
         self.hands = {h: list(v)[:4] for h, v in lanes_by_hand.items() if v}
         if not self.hands:
@@ -445,8 +617,22 @@ class BuzzHuntMode(WaitSkip):
         self.bilateral = len(self.hand_names) > 1
         self.p_seed = int(participant_seed)
         self.catch_rate = min(max(float(catch_rate), 0.0), 0.5)
-        # Duration staircase knobs, clamped to what the hardware can
-        # honestly express (see the docstring's claim limits).
+        # Localisation runs at ONE fixed, comfortably felt pulse and
+        # the difficulty ladder moves the response window (docstring:
+        # WHY THE PULSE IS FIXED). The duration staircase survives
+        # behind a flag for reproducing earlier blocks only.
+        self.duration_staircase = bool(duration_staircase)
+        self.loc_pulse_ms = max(FELT_PULSE_FLOOR_MS, float(loc_pulse_ms))
+        levels = [float(v) for v in (window_levels_s or [])
+                  if v is not None]
+        self.window_levels_s = (sorted(levels, reverse=True)
+                                if levels else [float(response_window_s)])
+        self.window_promote = (int(window_promote[0]),
+                               int(window_promote[1]))
+        self.window_demote = (int(window_demote[0]), int(window_demote[1]))
+        # Legacy duration staircase knobs, clamped to what the
+        # hardware can honestly express (see the docstring's claim
+        # limits). Unused unless duration_staircase is on.
         self.floor_ms = max(LEVEL_FLOOR_MS, float(floor_ms))
         self.ceil_ms = max(self.floor_ms, float(ceil_ms))
         self.start_ms = min(max(float(start_ms), self.floor_ms),
@@ -455,12 +641,15 @@ class BuzzHuntMode(WaitSkip):
         self.threshold_reversals = max(2, int(threshold_reversals))
         self.distractor_lead_ms = max(0.0, float(distractor_lead_ms))
         self.span_start = max(2, int(span_start))
-        self.span_pulse_ms = max(LEVEL_FLOOR_MS, float(span_pulse_ms))
+        self.span_pulse_ms = max(FELT_PULSE_FLOOR_MS, float(span_pulse_ms))
         self.span_ioi_ms = max(self.span_pulse_ms + 100.0,
                                float(span_ioi_ms))
         self.hebb_every = max(2, int(hebb_every))
-        self.gap_short_ms = max(LEVEL_FLOOR_MS, float(gap_short_ms))
-        self.gap_floor_ms = max(MIN_STEP_MS * 2, float(gap_floor_ms))
+        # The gap stage keeps its staircase (a gap IS a duration), but
+        # its floor is the motor's spin-down and its shorts are felt
+        # pulses, never the host's 40 ms twitch.
+        self.gap_short_ms = max(FELT_PULSE_FLOOR_MS, float(gap_short_ms))
+        self.gap_floor_ms = max(GAP_FLOOR_MS, float(gap_floor_ms))
         self.gap_start_ms = max(self.gap_floor_ms, float(gap_start_ms))
         self.gap_step_ms = max(MIN_STEP_MS, float(gap_step_ms))
         self.wait_lo_s = max(0.3, float(wait_lo_s))
@@ -527,13 +716,16 @@ class BuzzHuntMode(WaitSkip):
         self._gap_kind_bag = BalancedScheduler([0, 1], self.rng,
                                                avoid_repeats=False)
 
-        # Per-hand staircases. Duration starts where the previous
-        # block in this app session ended (near threshold), which the
-        # engine carries the same way it carries the other modes'
-        # levels; a restart falls back to the config start.
+        # Per-hand ladders. The window level (or, under the legacy
+        # flag, the duration) starts where the previous block in this
+        # app session ended, which the engine carries the same way it
+        # carries the other modes' levels; a restart falls back to
+        # the config start, the easy direction.
         carried = getattr(engine, "_buzz_hunt_start_ms", None)
+        carried_lvl = getattr(engine, "_buzz_hunt_window_level", None)
         self._dur_stair: dict[str, Staircase] = {}
         self._gap_stair: dict[str, Staircase] = {}
+        self._window: dict[str, WindowLadder] = {}
         self._dur_start: dict[str, float] = {}
         for hand in self.hand_names:
             start = self.start_ms
@@ -553,6 +745,19 @@ class BuzzHuntMode(WaitSkip):
             self._gap_stair[hand] = Staircase(
                 self.gap_start_ms, self.gap_step_ms, self.gap_floor_ms,
                 self.gap_start_ms * 2, fast_start=True)
+            lvl = 0
+            if isinstance(carried_lvl, dict) and hand in carried_lvl:
+                try:
+                    lvl = int(carried_lvl[hand])
+                except (TypeError, ValueError):
+                    lvl = 0
+            self._window[hand] = WindowLadder(
+                self.window_levels_s, self.window_promote,
+                self.window_demote, start_level=lvl)
+        # Catch trials per hand, for the per-hand false-alarm rate and
+        # d-prime in block_stats: [dealt, false alarms].
+        self._catch_by_hand: dict[str, list[int]] = {
+            hand: [0, 0] for hand in self.hand_names}
 
         # Phase machine:
         #   no_input -> (parked; the buzz needs the hardware)
@@ -724,6 +929,32 @@ class BuzzHuntMode(WaitSkip):
     def _active_lanes(self) -> list[int]:
         return [ln for h in self.hand_names for ln in self.hands[h]]
 
+    # ---- the localisation level -------------------------------------------
+    def _loc_dur_ms(self, hand: str) -> float:
+        """The pulse a localisation or distractor trial plays on this
+        hand: the fixed pulse, or the staircase level under the
+        legacy flag."""
+        if self.duration_staircase:
+            return float(self._dur_stair[hand].level)
+        return self.loc_pulse_ms
+
+    def _loc_window_s(self, hand: str) -> float:
+        """The response window for this hand's next localisation or
+        distractor trial: the ladder's current level, or the flat
+        config window under the legacy flag."""
+        if self.duration_staircase:
+            return self.response_window_s
+        return self._window[hand].window_s
+
+    def _loc_params(self, hand: str) -> dict:
+        """The per-trial difficulty stamps every buzz row carries:
+        the window it ran under, and the ladder level when the
+        ladder is what moves."""
+        p = {"window_ms": self._loc_window_s(hand) * 1000.0}
+        if not self.duration_staircase:
+            p["level"] = self._window[hand].level
+        return p
+
     def _prepare_trial(self) -> None:
         """Draw the next trial's whole plan into self.params. The
         params dict is the single source of truth: playback runs from
@@ -753,27 +984,30 @@ class BuzzHuntMode(WaitSkip):
                 # is silently undercounted.
                 self.hand = (draw.choice(self.hand_names)
                              if self.bilateral else self.hand_names[0])
-                self.params = {"catch": 1,
-                               "window_ms": self.response_window_s * 1000.0}
+                self._catch_by_hand[self.hand][0] += 1
+                self.params = {"catch": 1, **self._loc_params(self.hand)}
             else:
                 self.lane = self._next_lane(self._loc_sched)
                 self.hand, _f = self._lane_owner(self.lane)
                 self.params = {
                     "catch": 0, "lane": self.lane,
-                    "dur_ms": self._dur_stair[self.hand].level,
-                    "window_ms": self.response_window_s * 1000.0,
+                    "dur_ms": self._loc_dur_ms(self.hand),
+                    **self._loc_params(self.hand),
                 }
         elif self.stage == "distractor":
             self.waveform = "buzz"
             self.lane = self._next_lane(self._dis_sched or self._loc_sched)
             self.hand, _f = self._lane_owner(self.lane)
+            # Decoy and target at the same fixed pulse, and the window
+            # the ladder has reached: attention at a held difficulty.
+            dur = self._loc_dur_ms(self.hand)
             self.params = {
                 "catch": 0, "lane": self.lane,
-                "dur_ms": self._dur_stair[self.hand].level,
+                "dur_ms": dur,
                 "distractor_lane": self._other_hand_lane(self.hand),
-                "distractor_ms": self._dur_stair[self.hand].level,
+                "distractor_ms": dur,
                 "distractor_lead_ms": self.distractor_lead_ms,
-                "window_ms": self.response_window_s * 1000.0,
+                **self._loc_params(self.hand),
             }
         elif self.stage == "span":
             self.waveform = "buzz_seq"
@@ -1167,6 +1401,14 @@ class BuzzHuntMode(WaitSkip):
         if self.waveform == "buzz_seq":
             return self.response_window_s + self.replay_item_s * len(
                 self.sequence)
+        if self.waveform == "buzz":
+            # Localisation, distractor and catch trials run under the
+            # window stamped on the trial (the ladder level), so the
+            # params dict is the single source of truth here too.
+            try:
+                return float(self.params["window_ms"]) / 1000.0
+            except (KeyError, TypeError, ValueError):
+                return self.response_window_s
         return self.response_window_s
 
     def _respond_frame(self, now: float) -> None:
@@ -1260,23 +1502,37 @@ class BuzzHuntMode(WaitSkip):
                 row[resp_key] = row.get(resp_key, 0) + 1
             else:
                 self._bump_confusion(str(self.lane), resp_key)
+        ladder = self._window[self.hand]
+        level_before = ladder.level
+        moved: str | None = None
         if stim_failed or distractor:
-            # Distractor trials run AT the staircase level but do not
-            # move it (see the docstring): they measure attention at a
-            # fixed just-above-threshold duration. A failed delivery
-            # never moves the staircase either, for the reason above.
+            # Distractor trials run at the held difficulty (the fixed
+            # pulse and the window the ladder has reached) and never
+            # move it: they measure attention at a fixed level. A
+            # failed delivery never moves anything either: nothing
+            # was felt or missed.
             reversal = False
-        else:
+        elif self.duration_staircase:
             reversal = stair.record(correct)
-        if reversal:
-            raw = getattr(self.engine, "raw_logger", None)
-            if raw:
-                raw.queue_event(
-                    "buzz_hunt_reversal", lane=self.lane,
-                    detail=(f"stair=duration;hand={self.hand};"
-                            f"level_ms={stair.reversals[-1]:.0f};"
-                            f"n={len(stair.reversals)}"),
-                    hand=self.engine.hand_mode)
+        else:
+            reversal = False
+            moved = ladder.record(correct)
+        raw = getattr(self.engine, "raw_logger", None)
+        if reversal and raw:
+            raw.queue_event(
+                "buzz_hunt_reversal", lane=self.lane,
+                detail=(f"stair=duration;hand={self.hand};"
+                        f"level_ms={stair.reversals[-1]:.0f};"
+                        f"n={len(stair.reversals)}"),
+                hand=self.engine.hand_mode)
+        if moved and raw:
+            raw.queue_event(
+                "buzz_hunt_window", lane=self.lane,
+                detail=(f"hand={self.hand};move={moved};"
+                        f"level={ladder.level};"
+                        f"window_s={ladder.window_s:.2f};"
+                        f"trial_id={self.trial_counter}"),
+                hand=self.engine.hand_mode)
         if correct:
             outcome = classify(rt_ms, self.score_cfg)
         else:
@@ -1288,11 +1544,18 @@ class BuzzHuntMode(WaitSkip):
                 trial.keys_pressed.append(press_lane)
                 if press_lane != self.lane and rt_ms is not None:
                     trial.incorrect_presses.append((press_lane, press_t))
+            # The difficulty stamps: the pulse and the window every row
+            # ran under, the ladder level (window ladder) or the
+            # staircase level and reversal flag (legacy flag).
+            level_txt = (f"level={level_before};"
+                         if not self.duration_staircase else
+                         f"stair_ms={stair.level:.0f};reversal={reversal};")
             stimulus = (
                 f"{self.stage};hand={self.hand};"
                 f"finger={FINGER_WORDS[self.lane % 4].lower()};"
                 f"dur_ms={float(self.params['dur_ms']):.0f};"
-                f"stair_ms={stair.level:.0f};reversal={reversal};"
+                f"window_ms={float(self.params['window_ms']):.0f};"
+                f"{level_txt}"
                 f"lured={lured};stim_failed={stim_failed}")
             info = ContinuousTrialLog(waveform="buzz", params=self.params,
                                       seed=self.trial_seed,
@@ -1317,6 +1580,8 @@ class BuzzHuntMode(WaitSkip):
             # against the raw pulse_motor delivered=NO events.
             rec = {"hand": self.hand, "lane": self.lane,
                    "dur_ms": float(self.params["dur_ms"]),
+                   "window_s": float(self.params["window_ms"]) / 1000.0,
+                   "level": level_before,
                    "correct": correct, "rt_ms": rt_ms,
                    "press_lane": press_lane, "lured": lured}
             (self._dis_records if distractor
@@ -1327,7 +1592,8 @@ class BuzzHuntMode(WaitSkip):
             "hand": self.hand, "lane": self.lane,
             "press_lane": press_lane, "rt_ms": rt_ms,
             "dur_ms": float(self.params["dur_ms"]), "lured": lured,
-            "stim_failed": stim_failed,
+            "stim_failed": stim_failed, "level": level_before,
+            "moved": moved,
         }
         self._finish_trial(now)
 
@@ -1336,6 +1602,7 @@ class BuzzHuntMode(WaitSkip):
                                if self._resp_presses else (None, None))
         if responded and press_lane is not None:
             self._catch_fa += 1
+            self._catch_by_hand.setdefault(self.hand, [0, 0])[1] += 1
             self._bump_confusion("none", str(press_lane))
             self.engine.log_reaction_event(
                 trial_id=self.trial_counter, lane=None,
@@ -1548,13 +1815,38 @@ class BuzzHuntMode(WaitSkip):
     def _end(self, reason: str) -> None:
         self.phase = "done"
         self.end_reason = reason
-        # The next block this app session starts its duration
-        # staircases where these ended (near threshold), same carry
-        # pattern as the other modes' levels; a restart resets to the
-        # config start, which fails in the safe (easy) direction.
-        self.engine._buzz_hunt_start_ms = {
-            hand: stair.level for hand, stair in self._dur_stair.items()}
+        # The next block this app session starts its ladders where
+        # these ended, same carry pattern as the other modes' levels;
+        # a restart resets to the config start, which fails in the
+        # safe (easy) direction. The duration carry only exists under
+        # the legacy flag, so a flagged block cannot seed a window
+        # block or the other way round.
+        self.engine._buzz_hunt_window_level = {
+            hand: ladder.level for hand, ladder in self._window.items()}
+        if self.duration_staircase:
+            self.engine._buzz_hunt_start_ms = {
+                hand: stair.level
+                for hand, stair in self._dur_stair.items()}
         self.engine.finish_block()
+
+    # ---- detection statistics ----------------------------------------------
+    @staticmethod
+    def _d_prime(n_real: int, n_responded: int, n_catch: int,
+                 n_fa: int) -> float | None:
+        """Detection d-prime from the catch trials: hit = any press on
+        a real trial, false alarm = a press on a catch trial, with
+        the log-linear correction (Hautus 1995) so a perfect block
+        stays finite. None without catch trials, because without a
+        false-alarm rate the number is not d-prime. The notebook
+        computes the same quantity from the rows; this is the
+        on-device cross-check."""
+        if n_real <= 0 or n_catch <= 0:
+            return None
+        from statistics import NormalDist
+        z = NormalDist().inv_cdf
+        hit = (n_responded + 0.5) / (n_real + 1.0)
+        fa = (n_fa + 0.5) / (n_catch + 1.0)
+        return round(z(hit) - z(fa), 3)
 
     # ---- block summary -----------------------------------------------------
     def block_stats(self) -> dict:
@@ -1588,16 +1880,55 @@ class BuzzHuntMode(WaitSkip):
                 "median_rt_ms": _median([r["rt_ms"] for r in rs
                                          if r["correct"]]),
             }
+        # The legacy duration thresholds only exist when the flag ran
+        # the staircase; an empty dict says "no threshold was
+        # measured" rather than reporting an untouched start level.
         thresholds: dict[str, dict] = {}
-        for hand, stair in self._dur_stair.items():
-            thresholds[hand] = {
-                "start_ms": round(self._dur_start.get(hand,
-                                                      self.start_ms), 1),
-                "final_ms": round(stair.level, 1),
-                "estimate_ms": (round(est, 1) if (est := stair.estimate(
-                    self.threshold_reversals)) is not None else None),
-                "n_reversals": len(stair.reversals),
-                "reversals_ms": [round(r, 1) for r in stair.reversals],
+        if self.duration_staircase:
+            for hand, stair in self._dur_stair.items():
+                thresholds[hand] = {
+                    "start_ms": round(self._dur_start.get(
+                        hand, self.start_ms), 1),
+                    "final_ms": round(stair.level, 1),
+                    "estimate_ms": (round(est, 1) if (
+                        est := stair.estimate(self.threshold_reversals))
+                        is not None else None),
+                    "n_reversals": len(stair.reversals),
+                    "reversals_ms": [round(r, 1) for r in stair.reversals],
+                }
+        # The window ladder per hand, plus the per-hand localisation
+        # summary the ladder replaces the threshold with: accuracy at
+        # the fixed pulse, median RT, d-prime against that hand's
+        # catch trials, accuracy by level.
+        window_per_hand = {hand: ladder.summary()
+                           for hand, ladder in self._window.items()}
+        loc_per_hand: dict[str, dict] = {}
+        for hand in self.hand_names:
+            rs = [r for r in self._loc_records if r["hand"] == hand]
+            n_catch, n_fa = self._catch_by_hand.get(hand, [0, 0])
+            by_level: dict[str, dict] = {}
+            for lvl in sorted({r.get("level") for r in rs
+                               if r.get("level") is not None}):
+                at = [r for r in rs if r.get("level") == lvl]
+                by_level[str(lvl)] = {
+                    "n": len(at), "accuracy": _acc(at),
+                    "window_s": round(at[0]["window_s"], 2),
+                    "median_rt_ms": _median([r["rt_ms"] for r in at
+                                             if r["correct"]]),
+                }
+            loc_per_hand[hand] = {
+                "trials": len(rs),
+                "accuracy": _acc(rs),
+                "median_rt_ms": _median([r["rt_ms"] for r in rs
+                                         if r["correct"]]),
+                "catch_n": n_catch,
+                "false_alarms": n_fa,
+                "fa_rate": (round(n_fa / n_catch, 3) if n_catch else None),
+                "d_prime": self._d_prime(
+                    len(rs),
+                    sum(1 for r in rs if r["press_lane"] is not None),
+                    n_catch, n_fa),
+                "by_level": by_level,
             }
         gap_thresholds: dict[str, dict] = {}
         for hand, stair in self._gap_stair.items():
@@ -1613,6 +1944,12 @@ class BuzzHuntMode(WaitSkip):
         return {
             "hands": self.hand_names,
             "stages": dict(self._stage_counts),
+            # The localisation pulse every loc and distractor trial
+            # played (the ladder never touches it); under the legacy
+            # flag the staircase level varies and this is its start.
+            "pulse_ms": (self.loc_pulse_ms if not self.duration_staircase
+                         else round(self.start_ms, 1)),
+            "duration_staircase": self.duration_staircase,
             "loc": {
                 "trials": len(self._loc_records),
                 "accuracy": _acc(self._loc_records),
@@ -1626,9 +1963,25 @@ class BuzzHuntMode(WaitSkip):
                     "fa_rate": (round(self._catch_fa / self._catch_n, 3)
                                 if self._catch_n else None),
                 },
+                "d_prime": self._d_prime(
+                    len(self._loc_records),
+                    sum(1 for r in self._loc_records
+                        if r["press_lane"] is not None),
+                    self._catch_n, self._catch_fa),
+                "per_hand": loc_per_hand,
                 "early_presses": self._early_presses.get("loc", 0),
             },
             "confusion": {k: dict(v) for k, v in self._confusion.items()},
+            "window": {
+                "levels_s": list(self.window_levels_s),
+                "promote": list(self.window_promote),
+                "demote": list(self.window_demote),
+                "active": not self.duration_staircase,
+                "top_level": max((w["top_level"]
+                                  for w in window_per_hand.values()),
+                                 default=0),
+                "per_hand": window_per_hand,
+            },
             "threshold": thresholds,
             "distractor": {
                 "trials": len(self._dis_records),

@@ -72,7 +72,9 @@ rhythm.tactile_mode settles it per block:
             hits the median of the last buzz_lead_window hit offsets
             moves the lead by buzz_lead_gain times itself, at most
             buzz_lead_step_ms per update, clamped to 0 and
-            buzz_lead_max_ms. A predictor's lead walks to 0 (the
+            buzz_lead_max_ms; a median inside buzz_lead_deadband_ms
+            is on the beat and moves nothing. A predictor's lead
+            walks to 0 (the
             buzz back on the beat); a reactor's settles at their
             reaction time. Carried across blocks within a login.
   on_beat   lead 0, no adaptation: the command goes out on the beat
@@ -202,6 +204,12 @@ class RhythmMode(WaitSkip):
             0.0, self._cfg_float("rhythm.buzz_lead_max_ms", 400.0))
         self._lead_step_ms = max(
             0.0, self._cfg_float("rhythm.buzz_lead_step_ms", 25.0))
+        # A median this close to the beat is ON the beat: dispatch
+        # alone jitters by a third of a frame, so moving the lead on
+        # it would chase noise and the lead would hunt around the
+        # player's true asynchrony by a few ms for the whole block.
+        self._lead_deadband_ms = max(
+            0.0, self._cfg_float("rhythm.buzz_lead_deadband_ms", 5.0))
         lead_ms = (self._cfg_float("rhythm.buzz_lead_ms", 150.0)
                    if mode_name == "lead" else 0.0)
         # Carried within the login session (engine attribute, the same
@@ -619,8 +627,17 @@ class RhythmMode(WaitSkip):
         the cue. A positive median (late) raises the lead, a negative
         one (early) lowers it, by gain times the median and never by
         more than one step, clamped to 0 and the maximum. No update
-        before the first period of hits. The result is parked on the
-        engine so the next block of this login starts from it."""
+        before the first period of hits, and none while the median
+        sits inside the dead-band: the window is twice the update
+        period, so half of it was scored under the previous lead and
+        the estimate lags the lead by one update. Without the
+        dead-band a reactor's lead overshot by 2 to 3 ms and then
+        hunted back through sub-millisecond corrections for the rest
+        of the block, moving on nothing but dispatch jitter. The lead
+        is kept to 0.1 ms, the resolution the trial row records, so
+        float residue from the offset arithmetic cannot creep into
+        it. The result is parked on the engine so the next block of
+        this login starts from it."""
         if not self._lead_adapt:
             return
         self._lead_offsets.append(float(offset_ms))
@@ -629,13 +646,17 @@ class RhythmMode(WaitSkip):
             return
         self._lead_hits_since_update = 0
         median = statistics.median(self._lead_offsets)
+        if abs(median) < self._lead_deadband_ms:
+            return
         delta = self._lead_gain * median
         delta = max(-self._lead_step_ms, min(self._lead_step_ms, delta))
         new_lead = min(self._lead_max_ms,
                        max(0.0, self._buzz_lead_ms + delta))
-        if new_lead != self._buzz_lead_ms:
-            log.info("rhythm buzz lead %.0f -> %.0f ms (median offset "
-                     "%+.0f ms)", self._buzz_lead_ms, new_lead, median)
+        new_lead = round(new_lead, 1)
+        if new_lead == self._buzz_lead_ms:
+            return
+        log.info("rhythm buzz lead %.0f -> %.0f ms (median offset "
+                 "%+.0f ms)", self._buzz_lead_ms, new_lead, median)
         self._buzz_lead_ms = new_lead
         self._lead_updates += 1
         try:

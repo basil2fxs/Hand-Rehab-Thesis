@@ -110,7 +110,7 @@ class Screen:
                             after_y: int) -> None:
         """The between-trials countdown, placed under the content.
 
-        Force Pilot, Lighthouse and Buzz Hunt each pinned this line to
+        Force Pilot and Buzz Hunt each pinned this line to
         height - 60 whatever their result block ended at, so a short
         result (a caught trial, a two-row hold) left 300 to 400 px of
         blank page between the last number and the countdown, and the
@@ -134,8 +134,8 @@ class Screen:
 
         Two things were wrong with the five hand-written copies this
         replaces. They painted the bare word at the screen's centre
-        with nothing behind it, so on the max-press probe screens
-        (Force Pilot, Lighthouse) it landed straight across the live
+        with nothing behind it, so on the max-press probe screen
+        (Force Pilot) it landed straight across the live
         "RIGHT INDEX" chip and the presses-to-go dots. And none of
         them said how to get going again, which on a clinic machine
         with no keyboard legend is a dead end: the therapist can see
@@ -145,7 +145,7 @@ class Screen:
         """
         w, h = self.PAUSED_CARD
         # Through the screen's own allocator where it has one: Force
-        # Pilot, Lighthouse and Buzz Hunt route every Surface they make
+        # Pilot and Buzz Hunt route every Surface they make
         # through _new_surface so a test can pin that a steady frame
         # allocates none, and a shared helper reaching past that hook
         # would put allocations back out of its sight.
@@ -614,7 +614,7 @@ class TitleScreen(Screen):
         "      Rhythm  (one full song, press on the beat)",
         "      Mirror  (40 trials, both hands together)",
         "3. Training modes as prescribed for the participant:",
-        "      Muscle Memory, Chords, Syllables, Force Pilot, Lighthouse,",
+        "      Muscle Memory, Chords, Syllables, Force Pilot,",
         "      Buzz Hunt, Echo",
         "4. Finish every block. Quitting early leaves gaps in the data.",
     ]
@@ -1367,9 +1367,6 @@ class ModeSelectScreen(Screen):
         ("force_pilot", "Force Pilot",
          "Keep your press inside a moving corridor. Trains smooth "
          "force control."),
-        ("lighthouse", "Lighthouse",
-         "Hold a soft press dead steady, even in the dark. Trains a "
-         "steady touch by feel."),
         ("buzz_hunt", "Buzz Hunt",
          "Feel which finger buzzed and press it. Measures and trains "
          "the sense of touch."),
@@ -1381,7 +1378,7 @@ class ModeSelectScreen(Screen):
          "Watch the keys light up, then play them back in order. "
          "Measures memory span."),
     ]
-    # Every stage of these three needs a real analogue signal (a
+    # Every stage of these two needs a real analogue signal (a
     # continuous force trace or the vibration motors themselves) --
     # there is no keyboard-equivalent play for any of them, by design
     # (see each mode's docstring). On a keyboard-only source, picking
@@ -1406,25 +1403,24 @@ class ModeSelectScreen(Screen):
         "chords":   (14, 165, 233),   # sky blue - "keys together"
         "syllables": (236, 72, 153),  # pink - "language, playful"
         "force_pilot": (132, 204, 22),  # lime - "altitude, lift"
-        # Warm lantern gold, kept gentle on purpose: the mode itself
-        # is calm and low-force, so its accent must not shout.
-        "lighthouse": (214, 158, 46),
         # Orange for the buzz: warm and tactile, and the only strong
-        # orange on the grid so the tenth card reads distinct.
+        # orange on the grid so the card reads distinct.
         "buzz_hunt": (249, 115, 22),
         # Indigo for Echo: classic's retired colour returns to the
         # grid, and nothing else on it sits between the sky blue and
-        # the purple, so the eleventh card reads distinct.
+        # the purple, so the card reads distinct.
         "echo": (99, 102, 241),
     }
 
     # Game select is the session hub, so the header gives its subtitle
     # line over to the session strip: "every game comes back here"
     # was a promise, the strip is the evidence. The grid drops to
-    # GRID_TOP to make the room. Eleven cards need six rows, so the
-    # cards run 86 tall with a 6 px gap (six rows end at 734) and the
-    # bottom buttons sit at 742; 86 is the floor for a card that
-    # still fits a two-line description at the shared type sizes.
+    # GRID_TOP to make the room. Ten cards need five rows; the cards
+    # keep the 86 px height and 6 px gap sized for the six-row grid
+    # they used to fill (five rows end at 642, the bottom buttons sit
+    # at 742), because 86 is the floor for a card that still fits a
+    # two-line description at the shared type sizes and a taller card
+    # would only add empty pastel.
     STRIP_TOP = 132
     GRID_TOP = 188
 
@@ -1433,7 +1429,7 @@ class ModeSelectScreen(Screen):
         self.buttons: list[Button] = []
         cx = engine.layout.width // 2
         # A two-column grid, filled left to right so the reading order
-        # matches the MODES order. Sized for ELEVEN cards (six rows).
+        # matches the MODES order. Sized for TEN cards (five rows).
         # Card height 86 is the minimum that still holds a title plus
         # a two-line description at the shared type sizes; the layout
         # test renders every description and fails below that.
@@ -1595,11 +1591,12 @@ class ModeSelectScreen(Screen):
         self.engine.cfg.data.setdefault("game", {})["mode"] = mode_key
         self.engine.show_setup()
 
-    # Number-key shortcuts for the first ten cards, 1-9 then 0,
-    # matching reading order (audit finding #113: mode select was
-    # mouse-click only, so a keyboard-only session could not get past
-    # this screen at all). The digits ran out at ten, so the eleventh
-    # card answers to its initial: E for Echo, below.
+    # Number-key shortcuts for the ten cards, 1-9 then 0, matching
+    # reading order (audit finding #113: mode select was mouse-click
+    # only, so a keyboard-only session could not get past this screen
+    # at all). Echo also answers to its initial, E, below: it was the
+    # eleventh card before Lighthouse was retired and the key stays so
+    # a hand that learned it still works.
     _DIGIT_KEYS = (
         pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4, pygame.K_5,
         pygame.K_6, pygame.K_7, pygame.K_8, pygame.K_9, pygame.K_0,
@@ -1618,13 +1615,13 @@ class ModeSelectScreen(Screen):
             idx = self._DIGIT_KEYS.index(e.key)
             if idx < len(self.MODES):
                 self._pick(self.MODES[idx][0])
-        # E for Echo, the card the digits could not reach.
+        # E for Echo, kept alongside its digit.
         elif e.type == pygame.KEYDOWN and e.key == pygame.K_e:
             self._pick("echo")
         # C for calibrate, so the hub is fully keyboard-drivable: the
-        # digits and E cover the eleven cards and Esc raises the
-        # End-session dialog, which left the new button as the only
-        # mouse-only control on the screen.
+        # digits cover the ten cards and Esc raises the End-session
+        # dialog, which left the new button as the only mouse-only
+        # control on the screen.
         elif e.type == pygame.KEYDOWN and e.key == pygame.K_c:
             self._calibrate()
         # A starts or continues PLAY ALL, S skips its pending step, so
@@ -1789,21 +1786,6 @@ class ModeSelectScreen(Screen):
                    (cx - size // 5, cy + size // 8),
                    (cx + size // 4, cy)]
             pygame.draw.polygon(surf, colour, tri)
-        elif kind == "lighthouse":
-            # A lantern: glass box with a teardrop flame inside.
-            box = pygame.Rect(0, 0, size * 2 // 3, size * 3 // 4)
-            box.center = (cx, cy + size // 12)
-            pygame.draw.rect(surf, colour, box, 2, border_radius=4)
-            pygame.draw.line(surf, colour,
-                             (box.left + 4, box.top - size // 6),
-                             (box.right - 4, box.top - size // 6), 2)
-            pygame.draw.line(surf, colour, (cx, box.top - size // 6),
-                             (cx, box.top), 2)
-            flame = [(cx, box.centery - size // 4),
-                     (cx + size // 8, box.centery + size // 12),
-                     (cx, box.centery + size // 5),
-                     (cx - size // 8, box.centery + size // 12)]
-            pygame.draw.polygon(surf, colour, flame)
         elif kind == "buzz_hunt":
             # A dot with vibration ripples either side: the buzz as
             # the thing itself, not a decoration on a tile.
@@ -1853,8 +1835,8 @@ class ModeSelectScreen(Screen):
             played = set()
         # Only relevant with no live sensor source: a serial device
         # gives every mode real input, so there is nothing to warn
-        # about. On a keyboard-only fallback, Force Pilot / Lighthouse
-        # / Buzz Hunt cannot be played at all (finding #111).
+        # about. On a keyboard-only fallback, Force Pilot and Buzz
+        # Hunt cannot be played at all (finding #111).
         src = getattr(self.engine, "source", None)
         no_hardware = not getattr(src, "provides_samples", True)
         for b, (key, title, desc) in zip(self.buttons, self.MODES):
@@ -4917,28 +4899,6 @@ class ResultsScreen(Screen):
                 return None
         return None
 
-    def _lighthouse_summary(self) -> dict | None:
-        """The lighthouse section of the block summary, or None for
-        every other mode. Same read path as _force_pilot_summary:
-        session.block_summary first, live mode stats as fallback."""
-        if str(getattr(self.engine, "current_block", "")) != "lighthouse":
-            return None
-        summary = getattr(getattr(self.engine, "session", None),
-                          "block_summary", None)
-        if isinstance(summary, dict):
-            lh = summary.get("lighthouse")
-            if isinstance(lh, dict):
-                return lh
-        stats_fn = getattr(getattr(self.engine, "mode", None),
-                           "block_stats", None)
-        if callable(stats_fn):
-            try:
-                lh = stats_fn()
-                return lh if isinstance(lh, dict) else None
-            except Exception:
-                return None
-        return None
-
     def _buzz_hunt_summary(self) -> dict | None:
         """The buzz_hunt section of the block summary, or None for
         every other mode. Same read path as _force_pilot_summary:
@@ -5132,6 +5092,32 @@ class ResultsScreen(Screen):
                 out.append((tag, "not reached", self.theme.muted))
         if not out:
             out.append((label, "n/a", self.theme.foreground))
+        return out
+
+    def _buzz_hunt_window_cards(self, window: dict) -> list[tuple]:
+        """One WINDOW card per hand for the response-window ladder
+        (2026-09, the localisation difficulty in place of the pulse
+        staircase): the shortest window the hand reached, with the
+        level it stands for. Per hand for the same reason the
+        threshold cards were: bilateral hands climb independently and
+        an average represents neither."""
+        per_hand = window.get("per_hand") or {}
+        levels = window.get("levels_s") or []
+        hands = sorted(h for h, e in per_hand.items()
+                       if isinstance(e, dict))
+        out = []
+        for hand in hands:
+            e = per_hand[hand]
+            tag = f"WINDOW {hand[0].upper()}" if len(hands) > 1 else "WINDOW"
+            top = e.get("top_window_s")
+            lvl = e.get("top_level")
+            if top is None:
+                out.append((tag, "n/a", self.theme.foreground))
+                continue
+            text = f"{float(top):.1f} s"
+            if lvl is not None and levels:
+                text += f" (L{int(lvl) + 1}/{len(levels)})"
+            out.append((tag, text, self.theme.foreground))
         return out
 
     # Per-finger labels for the histogram x-axis. Order matches the
@@ -5661,7 +5647,6 @@ class ResultsScreen(Screen):
     # the More detail toggle.
     SLIM_CARDS = {
         "force_pilot": (2, 3, 0),     # in corridor | mean error | score
-        "lighthouse": (4, 2, 0),      # lit vs dark | lit variability
         "buzz_hunt": (1, 2, 0),       # localisation | span | score
         "echo": (1, 2, 0),            # longest echo | sequences | score
         "pattern": (2, 4, 1),         # accuracy | stars | takes
@@ -5681,7 +5666,6 @@ class ResultsScreen(Screen):
         the detail charts cannot end up looking at different data."""
         return {
             "fp": self._force_pilot_summary(),
-            "lh": self._lighthouse_summary(),
             "bh": self._buzz_hunt_summary(),
             "ec": self._echo_summary(),
             "rx": self._reaction_summary(),
@@ -5708,7 +5692,6 @@ class ResultsScreen(Screen):
         rate = 0.0 if total == 0 else self.engine.hits / total
         _sums = self._mode_summaries()
         fp = _sums["fp"]
-        lh = _sums["lh"]
         bh = _sums["bh"]
         ec = _sums["ec"]
         rx = _sums["rx"]
@@ -5780,50 +5763,6 @@ class ResultsScreen(Screen):
                  self.theme.error),
                 ("BEST SECTION", str(best_sec), self.theme.success),
             ]
-        elif lh is not None:
-            # Lighthouse has no reaction times, so the cards say what
-            # a hold block actually measured: lit steadiness, drift in
-            # the dark, the lit-dark delta headline and the echo
-            # reproduction error.
-            overall = lh.get("overall") or {}
-            echo_all = (lh.get("echo") or {}).get("overall") or {}
-            cov = overall.get("lit_cov")
-            drift = overall.get("dark_drift_pct")
-            delta = overall.get("lit_dark_delta_pct")
-            echo_err = echo_all.get("abs_err_pct")
-            # Same rule as Force Pilot's pooled cards: when the level
-            # ladder moved during the block, the pooled lit-dark delta
-            # compares holds measured under different dark exposure
-            # (25% vs 45% dark), so the card says so instead of
-            # reading as one clean measurement.
-            lh_trace = (lh.get("levels") or {}).get("trace") or []
-            lh_note = (" (mixed levels)"
-                       if len(set(lh_trace)) > 1 else "")
-            cards = [
-                ("SCORE", f"{int(round(self.engine.score * entry))}",
-                 self.theme.accent),
-                ("HOLDS",
-                 f"{int(round((lh.get('holds') or 0) * entry))}",
-                 self.theme.success),
-                # cov is the coefficient of variation: HIGHER means
-                # LESS steady. "LIT STEADINESS" alone reads as
-                # higher-is-better, the opposite of what the number
-                # means (audit finding #107); the per-lane chart below
-                # already carries the "(CoV)" qualifier this card was
-                # missing.
-                ("LIT VARIABILITY (CoV)",
-                 (f"{cov * 100:.1f}%" if cov is not None else "n/a"),
-                 self.theme.foreground),
-                ("DARK DRIFT",
-                 (f"{drift:.1f}%" if drift is not None else "n/a"),
-                 self.theme.foreground),
-                (f"LIT VS DARK{lh_note}",
-                 (f"{delta:+.1f}%" if delta is not None else "n/a"),
-                 self.theme.foreground),
-                ("ECHO ERROR",
-                 (f"{echo_err:.1f}%" if echo_err is not None else "n/a"),
-                 self.theme.success),
-            ]
         elif bh is not None:
             # Buzz Hunt has its own outcome vocabulary: localisation
             # accuracy, the duration threshold estimate, the span
@@ -5853,8 +5792,16 @@ class ResultsScreen(Screen):
                  (f"{fa}" if fa is not None else "n/a"),
                  self.theme.error),
             ]
-            cards += self._buzz_hunt_hand_cards(
-                "THRESHOLD", bh.get("threshold") or {})
+            # The window ladder is the localisation difficulty now;
+            # the THRESHOLD cards only exist for a block that ran the
+            # legacy duration staircase (block_stats then carries a
+            # non-empty threshold dict and no active window).
+            window = bh.get("window") or {}
+            if window.get("active", False) and window.get("per_hand"):
+                cards += self._buzz_hunt_window_cards(window)
+            else:
+                cards += self._buzz_hunt_hand_cards(
+                    "THRESHOLD", bh.get("threshold") or {})
             cards += self._buzz_hunt_hand_cards(
                 "GAP", (bh.get("gap") or {}).get("threshold") or {})
         elif ec is not None:
@@ -6138,8 +6085,8 @@ class ResultsScreen(Screen):
         Off by default (the finished screen shows three numbers), but
         kept in the app rather than sent to the data folder alone,
         because several of these panels carry disclosures the audit
-        put there on purpose: the mixed-levels flags on the pooled
-        Force Pilot and Lighthouse numbers, the per-hand buzz_hunt
+        put there on purpose: the mixed-levels flag on the pooled
+        Force Pilot numbers, the per-hand buzz_hunt
         thresholds, and the panels that explain why a per-finger chart
         would be misleading for chords, syllables and Muscle Memory. A
         clinician mid-session should not have to open a CSV to see
@@ -6148,7 +6095,6 @@ class ResultsScreen(Screen):
         cx = self.layout.width // 2
         _sums = self._mode_summaries()
         fp = _sums["fp"]
-        lh = _sums["lh"]
         bh = _sums["bh"]
         pat = _sums["pat"]
         ch = _sums["ch"]
@@ -6226,38 +6172,6 @@ class ResultsScreen(Screen):
                 "TIME IN CORRIDOR PER FINGER",
                 tics, unit="%", high_is_bad=False,
                 levels=fp_levels,
-            )
-        elif lh is not None:
-            # Lighthouse charts: lit steadiness per finger and the
-            # lit-dark delta per finger, the mode's headline metric.
-            # A negative delta (steadier in the dark) draws as zero;
-            # the exact value lives in metadata.json.
-            per_lane = lh.get("per_lane") or {}
-            covs = [0.0] * n_lanes
-            deltas = [0.0] * n_lanes
-            for key, stats in per_lane.items():
-                try:
-                    lane = int(key)
-                except (TypeError, ValueError):
-                    continue
-                if 0 <= lane < n_lanes and isinstance(stats, dict):
-                    cov_val = stats.get("lit_cov")
-                    covs[lane] = (float(cov_val) * 100.0
-                                  if cov_val is not None else 0.0)
-                    delta_val = stats.get("delta_pct")
-                    deltas[lane] = max(0.0, float(delta_val or 0.0))
-            self._draw_per_lane_chart(
-                surf,
-                pygame.Rect(left_x, chart_y, chart_w, chart_h),
-                "LIT STEADINESS PER FINGER (CoV)",
-                covs, unit="%", high_is_bad=True,
-            )
-            self._draw_per_lane_chart(
-                surf,
-                pygame.Rect(left_x + chart_w + chart_gap, chart_y,
-                             chart_w, chart_h),
-                "LIT-DARK ERROR DELTA PER FINGER",
-                deltas, unit="% of max", high_is_bad=True,
             )
         elif bh is not None:
             # Buzz Hunt charts: localisation accuracy per finger and

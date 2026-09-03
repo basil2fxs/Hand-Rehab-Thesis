@@ -620,8 +620,8 @@ class LevelAndWindowOnScreenTests(unittest.TestCase):
     named the level or the window in force, so a block feeling harder
     had no visible cause for patient or clinician. Drives the real
     engine and the real GameplayScreen; only draw_text is intercepted,
-    the same pattern test_force_pilot.py and test_lighthouse.py use to
-    pin their own on-screen difficulty indicators."""
+    the same pattern test_force_pilot.py uses to pin its own on-screen
+    difficulty indicator."""
 
     def test_level_and_window_are_drawn(self) -> None:
         import pygame

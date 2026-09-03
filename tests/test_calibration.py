@@ -57,13 +57,20 @@ class TestProfileMaths:
             double_counted = REST[i] + PRESS_FRACTION * p.gap()[i]
             assert p.on_delta()[i] < double_counted + 0.5
 
-    def test_pinky_trigger_is_under_the_healthy_maximum(self):
-        """Demouche records 5.60 N as the maximum for a HEALTHY little
-        finger. A trigger above that cannot be reached by the patients
-        this device is for. The old 77-count value was 6.77 N."""
+    def test_pinky_trigger_is_under_the_healthy_mean(self):
+        """Demouche records 2.66 N as the MEAN for a healthy little
+        finger and 5.60 N as the maximum. A trigger near the maximum
+        cannot be reached by the patients this device is for, so the
+        bar here is the mean. The conversion is the shipped 10 N pad
+        constant (config fsr.force_calibration_n_per_count, 0.0195 N
+        per count); an earlier version of this test used 0.0879, a
+        45 N part the rig never had, and checked against the
+        maximum."""
+        from finger_rehab.config import Config
+        n_per_count = float(Config.load().get(
+            "fsr.force_calibration_n_per_count"))
         p = make_profile()
-        n_per_count = 0.0879
-        assert p.on_delta()[3] * n_per_count < 5.60
+        assert p.on_delta()[3] * n_per_count < 2.66
 
     def test_release_point_never_falls_to_or_below_the_baseline(self):
         """Regression. FSRDetector clamps off_thr to (on_thr - 10). If

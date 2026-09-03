@@ -309,7 +309,7 @@ class MenuMusicPlayerScreenTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             for key in ("gameplay", "rhythm", "rhythm_setup", "quick_cal",
                         "calibration", "diagnostics", "syllables",
-                        "force_pilot", "lighthouse", "buzz_hunt", None):
+                        "force_pilot", "buzz_hunt", None):
                 p, audio, _cfg, _clock = _player(td)
                 p.update(key, False)
                 self.assertFalse(p.is_playing, str(key))
@@ -587,12 +587,12 @@ def _engine_with_fake_audio(source=None):
     cfg = Config.load()
     cfg.data["ui"]["resolution"] = [1280, 800]
     # Keep block teardown fast: the HTML report + charts are not what
-    # these tests measure, and the sweep below closes eleven blocks.
+    # these tests measure, and the sweep below closes ten blocks.
     cfg.data.setdefault("report", {})["enabled"] = False
     eng = GameEngine(cfg, source or KeyboardOnlySource())
     eng._screens = {k: MagicMock() for k in (
         "title", "mode_select", "setup", "rhythm_setup", "gameplay",
-        "rhythm", "syllables", "force_pilot", "lighthouse", "buzz_hunt",
+        "rhythm", "syllables", "force_pilot", "buzz_hunt",
         "results", "diagnostics", "calibration", "quick_cal")}
     eng.audio = _FakeAudio()
     return eng
@@ -662,7 +662,7 @@ class EngineMenuMusicTests(unittest.TestCase):
         from finger_rehab.audio.menu_music import MenuMusicPlayer
         starters = ["classic", "adaptive", "mirror", "reaction",
                     "pattern", "chords", "syllables", "force_pilot",
-                    "lighthouse", "buzz_hunt", "echo", "rhythm"]
+                    "buzz_hunt", "echo", "rhythm"]
         with tempfile.TemporaryDirectory() as td:
             eng = _engine_with_fake_audio(source=_motor_source())
             eng.cfg.data["session"]["data_dir"] = td

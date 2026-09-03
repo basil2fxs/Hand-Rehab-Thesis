@@ -86,7 +86,7 @@ def _engine(hand_mode: str = "right", motors: bool = False,
     eng = GameEngine(cfg, KeyboardOnlySource())
     eng._screens = {k: MagicMock() for k in
                     ("gameplay", "syllables", "force_pilot",
-                     "lighthouse", "buzz_hunt", "rhythm")}
+                     "buzz_hunt", "rhythm")}
     eng._begin_block = lambda *a, **kw: None
     eng._finished = []
     eng.finish_block = lambda *a, **kw: eng._finished.append(1)
@@ -711,21 +711,6 @@ class ModeWaitSkipTests(unittest.TestCase):
             self.assertEqual(m.phase, "run")
             self.assertEqual(m.wait_skip_stats()["skipped_rests"], 1)
 
-    def test_lighthouse_announce(self) -> None:
-        clock = _Clock()
-        with patch.object(time, "perf_counter", clock):
-            eng = _engine()
-            eng.source = MagicMock()
-            eng.source.provides_samples = True
-            eng.begin_lighthouse_block()
-            m = eng.mode
-            m._probe_queue.clear()
-            m._prepare_trial()
-            m._enter_announce(clock.t)
-            self.assertEqual(m.wait_view()["kind"], "announce")
-            self.assertTrue(m.skip_wait())
-            self.assertEqual(m.phase, "trial")
-
     def test_rhythm_lead_in_jumps_straight_to_the_downbeat(self) -> None:
         # Every beat time is relative to the song, so pulling the whole
         # timeline forward moves when play starts and nothing else.
@@ -766,9 +751,12 @@ class BlockDurationTests(unittest.TestCase):
     CAPS_MIN = {
         "pattern": 30.0,
         "force_pilot": 7.0,
-        "lighthouse": 7.0,
         "chords": 14.0,
-        "syllables": 10.0,
+        # 10.0 with the old word bank (8.5 min measured). The
+        # two-plus-syllable bank of September 2026 measures 10.2 min
+        # here at 40 words; the config comment on words_per_block
+        # says whose call the word count now is.
+        "syllables": 10.5,
         "buzz_hunt": 10.5,
         "reaction": 5.0,
         "classic": 2.0,
@@ -781,7 +769,7 @@ class BlockDurationTests(unittest.TestCase):
         "pattern": 1.9, "chords": 2.9, "syllables": 1.2,
         "buzz_hunt": 2.9, "reaction": 1.9, "classic": 0.95,
         "adaptive": 0.95, "mirror": 0.9,
-        "force_pilot": 0.0, "lighthouse": 0.0,
+        "force_pilot": 0.0,
     }
     PREP_S = 3.0
 
@@ -858,8 +846,8 @@ class BlockDurationTests(unittest.TestCase):
         self._check("mirror", "begin_mirror_block", hand="both")
 
     def _force_engine(self):
-        """Force Pilot and Lighthouse take a force trace, not presses,
-        so they need a rig that provides samples and a probed max
+        """Force Pilot takes a force trace, not presses,
+        so it needs a rig that provides samples and a probed max
         already on file (a fresh probe is its own measured stage, and
         a stale one belongs to somebody else)."""
         from finger_rehab.hardware.calibration_profile import (
@@ -926,27 +914,6 @@ class BlockDurationTests(unittest.TestCase):
             self.assertEqual(m.runs_done, m.total_runs)
             self.assertLessEqual(mins, self.CAPS_MIN["force_pilot"],
                                  f"force_pilot runs {mins:.1f} min")
-
-    def test_lighthouse_duration(self) -> None:
-        clock = _Clock()
-        with patch.object(time, "perf_counter", clock):
-            eng = self._force_engine()
-            eng.begin_lighthouse_block()
-            m = eng.mode
-            m.view = self._force_view()
-            start = clock.t
-            while clock.t - start < 4000.0:
-                if eng._finished or m.phase in ("done", "no_input"):
-                    break
-                clock.advance(DT)
-                # Hold the target, and let go through an echo delay.
-                m.view.pct = (0.0 if getattr(m, "sub", None) == "delay"
-                              else (m.target_pct or 0.0))
-                m.update(DT)
-            mins = (clock.t - start + self.PREP_S) / 60.0
-            self.assertEqual(m.trials_done, m.total_trials)
-            self.assertLessEqual(mins, self.CAPS_MIN["lighthouse"],
-                                 f"lighthouse runs {mins:.1f} min")
 
     def test_rhythm_is_bounded_by_the_longest_song(self) -> None:
         # Rhythm's length is the track, not a trial count. The

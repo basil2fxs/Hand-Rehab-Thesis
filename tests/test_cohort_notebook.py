@@ -7,7 +7,7 @@ one bilateral echo block, with a named person and a code-less visit
 mixed into the same tree to prove the selection leaves them out. The
 folders are then handed to the real notebook functions
 (build_catalogue, sec_cohort_selection and the sections after it),
-the same path tests/test_lighthouse_notebook_icc.py walks.
+the same path tests/test_force_pilot_notebook_levels.py walks.
 
 What this pins: the long table's shape and hand roles, the ICC path
 (interval, SEM, MDC), the paired hand comparison and its wording, the
@@ -364,8 +364,8 @@ class CohortNotebookTests(unittest.TestCase):
     def test_validity_verdicts_are_plain_and_decided(self) -> None:
         v = self.validity.set_index("id")
         for cid in ("R1", "R2", "R3", "P1", "P2", "P3", "C1", "C2", "C3",
-                    "C4", "Rh2", "M1", "M2", "F1", "F2", "F3", "F4", "L1",
-                    "L2", "L3", "B1", "B2", "B3", "B4", "E1", "E2", "E3"):
+                    "C4", "Rh2", "M1", "M2", "F1", "F2", "F3", "F4",
+                    "B1", "B2", "B3", "B4", "E1", "E2", "E3"):
             self.assertIn(cid, v.index, cid)
         self.assertEqual(v.loc["R2", "verdict"], "pass")
         self.assertLess(v.loc["R2", "value"], 0)
@@ -375,7 +375,10 @@ class CohortNotebookTests(unittest.TestCase):
         # Modes with no blocks are not testable, and say so.
         self.assertEqual(v.loc["P1", "verdict"], "not testable")
         self.assertEqual(v.loc["P1", "detail"], "no data")
-        self.assertEqual(v.loc["L1", "verdict"], "not testable")
+        # The retired Lighthouse checks L1 to L3 are gone, not "not
+        # testable": a row for a mode the app no longer has would be a
+        # verdict on nothing.
+        self.assertNotIn("L1", v.index)
         self.assertIn("R2  pass", self.out)
         self.assertIn("reference 0.0", self.out)
         self.assertIn("not testable", self.out)

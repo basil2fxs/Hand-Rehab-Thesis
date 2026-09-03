@@ -11,10 +11,27 @@ words in any young child's daily vocabulary (dog, apple, banana), B is
 words a child knows but meets less often (lizard, umbrella, cockatoo),
 and C is the rarer words plus, per the brief's rule, every 4-syllable
 word regardless of how common it is. Distribution keeps the brief's
-shape scaled down: heaviest on 2-syllable words, then 3, then 1, then
-4. Where the list leans local on purpose (wombat, kookaburra, galah,
+shape scaled down: heaviest on 2-syllable words, then 3, then 4, with
+the one-syllable words kept only for the sub-syllable levels (below).
+Where the list leans local on purpose (wombat, kookaburra, galah,
 billabong) it is because these are the imageable animals and things an
 Australian child actually meets in books and backyards.
+
+ONE-SYLLABLE WORDS NEVER REACH THE SYLLABLE LEVELS (2026-09). Levels
+1 to 4 draw only words of MIN_SYLLABLES (two) or more syllables. A
+one-syllable word asks for one tap, and one tap has no boundary to
+find: the child is detecting a word, not segmenting it, so the trial
+measures tap detection and the first tester found the items dull. The
+one-syllable words stay in WORDS because the sub-syllable levels are
+built on them: level 5 (onset-rime) cuts inside a syllable by
+definition, and level 6 (phonemes) on one hand needs the 2 to 4
+grapheme words, which are all one syllable. With the short words gone
+the band ladder reads as a syllable ladder too: band A is mostly
+2-syllable words with a handful of easy 3s, band B is an even mix of
+2 and 3, band C is the 4-syllable words (plus the 5s bilaterally),
+so promotion from A to C walks 2, 3, 4+ syllables the way the brief's
+8-of-10 rule intends. Level 1 keeps its 3-syllable counting cap, so
+its pool is the 2 and 3 syllable words of the band.
 
 SYLLABLE SPLITS AND STRESS follow spoken Australian pronunciation in
 the Macquarie Dictionary's convention, one convention for the whole
@@ -266,19 +283,26 @@ TRANSPARENT_WORDS_STRETCH: tuple[Word, ...] = tuple(
 # skill. Bands that come up short borrow from the band below.
 _MIN_POOL = 8
 
+# The shortest word the syllable levels (1 to 4) ever draw. One tap
+# has nothing to segment (module docstring), so the one-syllable
+# entries serve only the onset-rime and phoneme levels.
+MIN_SYLLABLES = 2
+
 
 def words_for(level: int, band: str,
               bilateral: bool = False) -> tuple[Word, ...]:
     """The draw pool for a level at a band.
 
-    Levels 1 to 4 draw whole words from the current band: level 1 stops
-    at 3 syllables (the counting entry point), level 2 up adds the
-    4-syllable words, which only exist in band C. A band whose pool is
-    thin for the level (band C at level 1 holds only the rare 3-syllable
-    words) tops up from the easier bands so a round of 10 words never
-    cycles a handful of items. Level 5 is the onset-rime subset and
-    level 6 the transparent subset; level 5 ignores the band because
-    that subset is already the easy end of the list, and thinning it
+    Levels 1 to 4 draw whole words of MIN_SYLLABLES or more syllables
+    from the current band: level 1 stops at 3 syllables (the counting
+    entry point), level 2 up adds the 4-syllable words, which only
+    exist in band C. A band whose pool is thin for the level (band C
+    at level 1 holds only the rare 3-syllable words) tops up from the
+    easier bands so a round of 10 words never cycles a handful of
+    items. Level 5 is the onset-rime subset and level 6 the
+    transparent subset, both built on the one-syllable words the
+    syllable levels leave out; level 5 ignores the band because that
+    subset is already the easy end of the list, and thinning it
     further would leave too few words to fill a session without
     immediate repeats.
 
@@ -308,9 +332,11 @@ def words_for(level: int, band: str,
     # Walk from the asked band down toward A until the pool is usable.
     for b in reversed(ladder[:start + 1]):
         pool.extend(w for w in WORDS
-                    if w.band == b and w.n_syll <= max_syll)
+                    if w.band == b
+                    and MIN_SYLLABLES <= w.n_syll <= max_syll)
         if len(pool) >= _MIN_POOL:
             break
     if not pool:
-        pool = [w for w in WORDS if w.n_syll <= max_syll]
+        pool = [w for w in WORDS
+                if MIN_SYLLABLES <= w.n_syll <= max_syll]
     return tuple(pool)

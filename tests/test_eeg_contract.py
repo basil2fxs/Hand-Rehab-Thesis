@@ -125,6 +125,21 @@ class MapIntegrityTests(unittest.TestCase):
             self.assertIsNone(response_code("correct", lane))
         self.assertIsNone(response_code("nonsense", 0))
 
+    def test_retired_mode_ids_are_never_reissued(self) -> None:
+        """Lighthouse held id 9 until it was retired. A recording made
+        under the old map carries 209 / 229 for those blocks, so no
+        live mode may take the id and the name must emit nothing."""
+        from finger_rehab.hardware.eeg_trigger import (MODE_IDS,
+                                                RETIRED_MODE_IDS,
+                                                block_code)
+        self.assertEqual(RETIRED_MODE_IDS, {"lighthouse": 9})
+        for name, mode_id in RETIRED_MODE_IDS.items():
+            self.assertNotIn(name, MODE_IDS)
+            self.assertNotIn(mode_id, MODE_IDS.values())
+            self.assertIsNone(block_code(name, "start"))
+            self.assertIsNone(block_code(name, "end"))
+        self.assertEqual(block_code("buzz_hunt", "start"), 210)
+
     def test_block_codes_cover_every_mode_without_hitting_219(self) -> None:
         from finger_rehab.hardware.eeg_trigger import (CODES, MODE_IDS,
                                                 block_code)
@@ -812,6 +827,10 @@ class RhythmLeadMarkerTests(_EngineHarness):
         by_code = {}
         for r in rows:
             d = _parse_detail(r["detail"])
+            # Boundary and preparation rows (200+mode, 20) carry no
+            # lane; only the per-note markers are paired below.
+            if r["lane"] in ("", None):
+                continue
             by_code.setdefault(int(d["code"]), []).append(
                 (float(d["t_event"]), int(r["lane"])))
         for (t_buzz, lane_b), (t_beat, lane_s) in zip(by_code[22],
@@ -1271,13 +1290,25 @@ class _WireResponder:
             self._press(0, now)
 
 
-def _pump_block(eng, responder, timeout_s: float) -> None:
+def _pump_block(eng, responder, timeout_s: float) -> list[tuple[float, float]]:
     """The frame loop, minus the drawing: input, mode update, then the
     flip-anchored stimulus flush and the marker tick, exactly the
     order run() uses. No sleep, so tick() runs at sub-millisecond
     cadence and the measured pulse width reflects the writer's wall
-    clock hold rather than a test-loop artefact."""
+    clock hold rather than a test-loop artefact.
+
+    Returns the loop's own stalls, every iteration that took over
+    1 ms, as (start, end) pairs. A trial row being written or the OS
+    scheduling another process can hold one iteration for 10 ms or
+    more; the writer can only reset on the next tick, so a pulse
+    whose reset fell inside such an iteration measures the loop, not
+    the writer, and the pulse-width test needs to know which. 1 ms
+    because a pulse can only exceed the 12 ms limit when the reset
+    iteration ran over 2 ms, and a stall that long must be on record
+    whatever preemption did to the write timestamps around it."""
     deadline = time.perf_counter() + timeout_s
+    stalls: list[tuple[float, float]] = []
+    last = time.perf_counter()
     while time.perf_counter() < deadline:
         mode = eng.mode
         if mode is None:
@@ -1289,7 +1320,12 @@ def _pump_block(eng, responder, timeout_s: float) -> None:
         mode.update(0.0)
         eng._flush_eeg_stim()
         eng.markers.tick()
+        now = time.perf_counter()
+        if now - last > 0.001:
+            stalls.append((last, now))
+        last = now
     eng.markers.drain(0.5)
+    return stalls
 
 
 def _run_wire_block(mode_name: str, input_kind: str) -> dict:
@@ -1358,7 +1394,7 @@ def _run_wire_block(mode_name: str, input_kind: str) -> dict:
                 eng.begin_pattern_block()
             root = Path(eng.session_paths.root)
             responder = _WireResponder(eng, script, input_kind)
-            _pump_block(eng, responder, timeout_s=30.0)
+            stalls = _pump_block(eng, responder, timeout_s=30.0)
             done_phase = (getattr(eng.mode, "_phase", None)
                           or getattr(eng.mode, "phase", None))
             eng._eeg_shutdown()
@@ -1371,7 +1407,7 @@ def _run_wire_block(mode_name: str, input_kind: str) -> dict:
                 "mode": mode_name, "input": input_kind,
                 "script": script, "writes": list(port.writes),
                 "trial_rows": trial_rows, "eeg_rows": eeg_rows,
-                "done_phase": done_phase,
+                "done_phase": done_phase, "stalls": stalls,
             }
     finally:
         pygame.quit()
@@ -1450,14 +1486,29 @@ class WireProtocolTests(_WireHarness):
         # delivered 1-4 ms; the spec's fix is 10 ms on the wall clock.
         # Measured on the wire: marker write to the reset that follows
         # it. The pump ticks at sub-millisecond cadence, so anything
-        # outside 10 +/- 2 ms is the writer's fault, not the loop's.
+        # outside 10 +/- 2 ms is the writer's fault, not the loop's,
+        # with one exception: a reset that fell inside an iteration
+        # the loop itself held for over 1 ms (a trial row being
+        # written, the OS running something else) was late because
+        # the writer could not tick sooner. Those pulses are excused,
+        # but never more than half of them, so the pin still bites.
         for scn in self._each():
             codes = self._codes(scn)
+            stalls = scn["stalls"]
             widths = []
+            excused = 0
             for i, (t, code) in enumerate(codes):
                 if code != 0 and i + 1 < len(codes):
-                    widths.append(codes[i + 1][0] - t)
+                    t_reset = codes[i + 1][0]
+                    w = t_reset - t
+                    if w > 0.012 and any(a < t_reset <= b for a, b in stalls):
+                        excused += 1
+                        continue
+                    widths.append(w)
             self.assertTrue(widths)
+            self.assertLessEqual(excused, len(widths),
+                                 f"{excused} of {excused + len(widths)} "
+                                 "pulses were reset late by a stalled loop")
             for w in widths:
                 self.assertGreaterEqual(w, 0.008, f"pulse {w * 1000:.1f} ms")
                 self.assertLessEqual(w, 0.012, f"pulse {w * 1000:.1f} ms")

@@ -201,22 +201,6 @@ class ChipDirectionTests(unittest.TestCase):
                          "10 ms tighter sync than last time")
         self.assertTrue(chip["better"])
 
-    def test_lighthouse_compares_magnitude_of_lit_dark_delta(self) -> None:
-        chip = self._chip(
-            "lighthouse",
-            {"lighthouse": {"overall": {"lit_dark_delta_pct": 2.8}}},
-            {"lighthouse": {"overall": {"lit_dark_delta_pct": 4.0}}})
-        self.assertEqual(chip["text"],
-                         "1.2% steadier in the dark than last time")
-        self.assertTrue(chip["better"])
-        # Sign of the delta must not matter: -3.0 is a 3-point gap,
-        # not an improvement over +2.8.
-        signed = self._chip(
-            "lighthouse",
-            {"lighthouse": {"overall": {"lit_dark_delta_pct": -5.0}}},
-            {"lighthouse": {"overall": {"lit_dark_delta_pct": 4.0}}})
-        self.assertFalse(signed["better"])
-
     # -- higher is better ------------------------------------------------
     def test_classic_hit_rate_up_is_better(self) -> None:
         chip = self._chip("classic", {"hit_rate": 0.83},

@@ -25,24 +25,46 @@ Berch, Krikorian and Huha (1998, Brain and Cognition 38:317-338)
 reviewed 25 years of Corsi use and found administration parameters
 (tapping rate, discontinuance rule, scoring) varied so much across labs
 that results could not be compared. That is why every presentation
-parameter here is pinned in config, logged in block_stats, and NEVER
-changes with success: the classic Simon toy speeds up as you survive,
-and that acceleration is exactly the kind of drift Berch catalogued.
+parameter here is pinned in config, logged per trial and in
+block_stats, and never depends on how the player is doing: the classic
+Simon toy speeds up as you survive, and that acceleration is exactly
+the kind of drift Berch catalogued.
 
 PRESENTATION RATE. One item per second is the standard administration
 (Kessels 2000; WAIS digit span); eCorsi (Brunetti, Del Gatto and Delogu
 2014, Frontiers in Psychology 5:939) pins the digital timing that turns
-into: 500 ms on, 1000 ms onset to onset. Those are the shipped
-defaults. No verified source supports a SLOWER presentation for
-motor-impaired players (searched for and not found; the honest gap is
-named in the research notes), and the literature puts the load of motor
-impairment on the RESPONSE side: Corsi recall is untimed by convention
-and ran under standard presentation in Kessels' own cerebral-lesion
-sample. So presentation stays standard, REPRODUCTION is self-paced up
-to a generous idle timeout, and reproduction speed is never scored. A
-config deviation (say for paediatric use, where presentation pacing
-measurably moves performance: Simpson 2021, PMC8366059) is allowed but
-lands in block_stats so the analysis can split those blocks out.
+into: 500 ms on, 1000 ms onset to onset. That rate is the SLOW end of
+what this mode plays. Played on the rig at the standard rate the game
+was reported as slow and stale (2026-09 testing), so the shipped
+schedule sits between the standard rate and the hardware floor: the
+item stays lit and buzzing for echo.item_on_ms, the onset-to-onset
+interval starts at echo.ioi_ms for the shortest sequence and shrinks
+by echo.ioi_step_ms per extra item of length, never below
+echo.ioi_floor_ms. Two things keep this honest against Berch. First,
+the rate is a pinned function of SEQUENCE LENGTH, identical for every
+player at every length under the same config; it is not a function of
+success within a length, both trials at a length run at the same
+rate, and a block with ioi_step_ms 0 is the fixed-rate protocol again.
+Second, every trial row carries the ioi it actually ran at (params
+ioi_ms) and block_stats carries the whole schedule, so blocks under
+different schedules are separable and are never pooled. The floor is
+the motor's, not a psychological number: a 10 mm coin ERM of the
+class on this rig reaches full amplitude about 130 ms after current
+on and spins down for about 115 ms after current off (Precision
+Microdrives 310-103 datasheet values; latency.* in the config), so
+the item must stay on long enough to reach amplitude and the next
+item must not start until the previous finger has stopped, which is
+MOTOR_CLEAR_S after the light goes off. No verified source supports
+a SLOWER presentation for motor-impaired players (searched for and
+not found; the honest gap is named in the research notes), and the
+literature puts the load of motor impairment on the RESPONSE side:
+Corsi recall is untimed by convention and ran under standard
+presentation in Kessels' own cerebral-lesion sample. So REPRODUCTION
+is self-paced up to a generous idle timeout and reproduction speed is
+never scored. A config deviation (say for paediatric use, where
+presentation pacing measurably moves performance: Simpson 2021,
+PMC8366059) is allowed but lands in block_stats so the analysis can
+split those blocks out.
 
 BIMODAL PRESENTATION. Each playback item lights the lane tile AND
 buzzes that finger with simultaneous onset: spatially and temporally
@@ -53,14 +75,35 @@ post-stroke cognitive rehab (Cheng 2022, J Clin Med 11:6324; Johansson
 2012). Two honest limits: no study directly compares light-plus-buzz
 against light-only in a span game, so the bimodal choice rests on the
 general multisensory-learning literature, not a task-level trial; and
-the ERM motors' mechanical rise time is uncharacterised (see
-buzz_hunt.py), so onset simultaneity is nominal. The buzz REINFORCES
-the light here; buzz_hunt's SEQUENCE SPAN stage is where the tactile
-channel is tested ALONE (tactile-only span caps out around 4 items in
-healthy adults, far under the visual 6.2), and the two modes must not
-be collapsed: that stage measures whether the hand can READ the buzzes,
-Echo measures how much explicit sequence the player can HOLD. Both
+the ERM motors' mechanical rise time on this rig is a datasheet class
+value, not a bench measurement (latency.measured), so onset
+simultaneity is nominal. The buzz REINFORCES the light here;
+buzz_hunt's SEQUENCE SPAN stage is where the tactile channel is tested
+ALONE (tactile-only span caps out around 4 items in healthy adults,
+far under the visual 6.2), and the two modes must not be collapsed:
+that stage measures whether the hand can READ the buzzes, Echo
+measures how much explicit sequence the player can HOLD. Both
 docstrings say so.
+
+THE MOTORS ARE SHOW-PHASE ONLY (2026-09). The rig buzzes during
+playback and at no other time in a trial: a correct press during
+reproduction gets a flash on its tile and nothing on its finger, the
+trial close fires no confirmation buzz whatever cue.buzz_after says
+(the engine's after-press cue is declined for every echo row), and no
+feedback buzz exists. The tester's report was that a motor firing
+under the finger being pressed reads as the rig answering back, not as
+confirmation, and it muddles the one thing the buzz is for here, which
+is marking the items to be remembered. The tone channel is untouched.
+
+REPRODUCTION INPUT. Nothing in this mode asks for a held press: the
+press detector reports a press at its rising edge and the mode scores
+that event, so a tap of any length counts, on the sensors and on the
+keyboard alike. Reproduction opens the moment the last item's light
+goes off (its offset on the presentation grid), so a fast reply that
+starts while the "Your turn" prompt is still appearing is a reply,
+not a discarded playback press; presses that land while an item is
+still being shown are logged as playback presses and let go, as
+before.
 
 SEQUENCE MATERIAL. Uniform random over the lanes in play with no
 back-to-back repeats (a doubled item is indistinguishable from a
@@ -118,8 +161,9 @@ guard rail pattern mode enforces). A wrong press ends the attempt (the
 sequence is either reproduced or it is not; playing on after an error
 would change the task) but the wrong press is logged with its position
 so the notebook can tell a transposition from an intrusion. Feedback
-stays warm: a correct echo gets a cheerful flash, a wrong one gets a
-neutral "almost" card, and a longest-echo banner marks new bests.
+stays warm and stays on the screen: a correct-so-far press flashes its
+tile, a correct echo gets a cheerful card, a wrong one gets a neutral
+"almost" card, and a longest-echo banner marks new bests.
 
 WHAT THIS MODE CANNOT CLAIM. Not a Corsi test: four or eight lanes
 with revisits, bimodal presentation, press response instead of
@@ -234,10 +278,17 @@ class EchoMode(WaitSkip):
     # Conway 2005) plus the completed-sequence bonus taken from the
     # shared score config. Nothing here reads speed.
     ITEM_POINTS = 2
-    # Gap between the "Watch the echo" card and the first item, and
-    # between the last item's offset and the "Your turn" prompt.
-    LEAD_S = 1.5
-    TURN_GAP_S = 0.4
+    # Gap between the "Watch the echo" card and the first item. The
+    # turn hand-over has no gap of its own: reproduction opens at the
+    # last item's offset (docstring: REPRODUCTION INPUT).
+    LEAD_S = 1.0
+    # The shortest silence between one item's light going off and the
+    # next item's onset. A 10 mm coin ERM keeps vibrating for about
+    # 115 ms after current off (Precision Microdrives 310-103 class
+    # value, latency.* in the config), so a gap under that has two
+    # fingers buzzing at once; one display frame of slack on top. The
+    # ioi floor can never be tighter than item_on_s plus this.
+    MOTOR_CLEAR_S = 0.15
     # Redraw budget for the second novel trial at a length: the two
     # trials per length must be different sequences (Kessels), and at
     # length 2 over four lanes identical draws are common enough to
@@ -256,7 +307,9 @@ class EchoMode(WaitSkip):
                  session_cap_min: float,
                  cumulative: bool,
                  score_cfg: ScoreConfig,
-                 demo_trials: int | None = None) -> None:
+                 demo_trials: int | None = None,
+                 ioi_step_ms: float = 0.0,
+                 ioi_floor_ms: float | None = None) -> None:
         self.engine = engine
         # Lanes in play: one hand's four, or all eight bilaterally
         # (right 0..3 then left 4..7, engine global numbering). Same
@@ -277,10 +330,22 @@ class EchoMode(WaitSkip):
         self.max_len = max(self.start_len, int(max_len))
         self.runs = max(1, int(runs))
         # Presentation rate is a pinned administration parameter, the
-        # Berch lesson: it NEVER speeds up with success, and the
-        # values actually used are recorded in block_stats.
+        # Berch lesson: a function of sequence length only (docstring:
+        # PRESENTATION RATE), never of success within a length, and
+        # the schedule actually used is recorded in block_stats. The
+        # floor is the motor's: an item must be lit and buzzing long
+        # enough to reach amplitude, and the next onset must wait for
+        # the previous finger to stop (MOTOR_CLEAR_S).
         self.item_on_s = max(0.05, float(item_on_ms) / 1000.0)
-        self.ioi_s = max(self.item_on_s + 0.05, float(ioi_ms) / 1000.0)
+        motor_floor_s = self.item_on_s + self.MOTOR_CLEAR_S
+        self.ioi_s = max(motor_floor_s, float(ioi_ms) / 1000.0)
+        self.ioi_step_s = max(0.0, float(ioi_step_ms) / 1000.0)
+        floor = (self.ioi_s if ioi_floor_ms is None
+                 else float(ioi_floor_ms) / 1000.0)
+        self.ioi_floor_s = min(self.ioi_s, max(motor_floor_s, floor))
+        # The ioi of the trial in flight, set per trial from the
+        # schedule; ioi_s above is the start-length value.
+        self._trial_ioi_s = self.ioi_s
         self.hebb_every = max(2, int(hebb_every))
         self.idle_timeout_s = max(1.0, float(idle_timeout_s))
         self.rest_s = max(0.0, float(rest_s))
@@ -349,6 +414,22 @@ class EchoMode(WaitSkip):
         self._fatigue_triggers = 0
         self._run_end_reasons: list[str] = []
         self.end_reason: str | None = None
+
+    # ---- the presentation schedule -----------------------------------------
+    def ioi_for(self, length: int) -> float:
+        """Onset-to-onset interval, seconds, for a sequence of this
+        length: the start-length ioi less one step per extra item,
+        never under the floor. A pure function of length and config,
+        so two blocks under one config present every length at the
+        same rate whatever their players did."""
+        extra = max(0, int(length) - self.start_len)
+        return max(self.ioi_floor_s, self.ioi_s - extra * self.ioi_step_s)
+
+    def ioi_schedule_ms(self) -> dict[str, float]:
+        """The whole schedule, start length to ceiling, in ms, for
+        block_stats and the notebook's protocol check."""
+        return {str(n): round(self.ioi_for(n) * 1000.0, 1)
+                for n in range(self.start_len, self.max_len + 1)}
 
     # ---- plumbing ----------------------------------------------------------
     def queue_press(self, ev: PressEvent) -> None:
@@ -531,10 +612,20 @@ class EchoMode(WaitSkip):
         self._item_idx = 0
         self._item_off_due = None
         self._turn_due = None
+        self._trial_ioi_s = self.ioi_for(len(self.sequence))
         if self.active is not None:
             self.active.stim_t_perf = now
         self.engine.log_segment_start("stim", self.trial_counter,
                                       self.sequence[0], now)
+
+    def _last_offset_due(self) -> float | None:
+        """When the final item's light is due off, on the grid: the
+        moment reproduction opens. None before playback starts."""
+        if self._play_t0 is None or not self.sequence:
+            return None
+        return (self._play_t0
+                + (len(self.sequence) - 1) * self._trial_ioi_s
+                + self.item_on_s)
 
     def _play_frame(self, now: float) -> None:
         # Absolute item deadlines off the playback anchor, the
@@ -542,30 +633,34 @@ class EchoMode(WaitSkip):
         # adds the frame delay to every interval and stretches the
         # presentation grid the whole design pins.
         assert self._play_t0 is not None
-        # Item offset first, so a 500 ms flash ends on its own grid.
+        # Item offset first, so a flash ends on its own grid.
         if (self._item_off_due is not None and now >= self._item_off_due):
             self._item_off_due = None
             self._light_lane(None)
         n = len(self.sequence)
         if self._item_idx < n:
-            due = self._play_t0 + self._item_idx * self.ioi_s
+            due = self._play_t0 + self._item_idx * self._trial_ioi_s
             if now >= due:
                 lane = self.sequence[self._item_idx]
                 self._fire_item(lane, self._item_idx, now)
                 self._item_off_due = now + self.item_on_s
                 self._item_idx += 1
             return
-        # All items played: close the stim segment at the last offset,
-        # then hand over to the patient after a short gap.
+        # All items played and the last light off: the show is over
+        # and it is the patient's turn, with no gap of its own.
         if self._item_off_due is not None:
             return
-        if self._turn_due is None:
-            self.engine.log_segment_end("stim", self.trial_counter,
-                                        self.sequence[-1], now)
-            self._turn_due = now + self.TURN_GAP_S
-            return
-        if now >= self._turn_due:
-            self._begin_respond(now)
+        self._end_play(now)
+
+    def _end_play(self, now: float) -> None:
+        """Close the show phase and open reproduction. Reached from
+        the play frame when the last light goes off, or from a press
+        that lands at or after that offset (a fast reply)."""
+        self._item_off_due = None
+        self._light_lane(None)
+        self.engine.log_segment_end("stim", self.trial_counter,
+                                    self.sequence[-1], now)
+        self._begin_respond(now)
 
     def _fire_item(self, lane: int, idx: int, now: float) -> None:
         """One playback item: tile light plus buzz, simultaneous
@@ -626,6 +721,15 @@ class EchoMode(WaitSkip):
             self._close(now, "omission")
 
     def _handle_press(self, ev: PressEvent, now: float) -> None:
+        if self.phase == "play":
+            # A press stamped at or after the last item's offset is a
+            # fast reply, not a playback press: the show is over on
+            # the grid even if this frame has not yet noticed. Open
+            # reproduction and score the press below.
+            last_off = self._last_offset_due()
+            if (last_off is not None and self._item_idx >= len(self.sequence)
+                    and ev.t_perf >= last_off):
+                self._end_play(now)
         if self.phase in ("announce", "play"):
             # A press while the rig is presenting is logged and let
             # go: the target is on screen anyway, so buzz_hunt's
@@ -660,9 +764,9 @@ class EchoMode(WaitSkip):
                  lane=ev.lane, t_event=ev.t_perf)
         if correct:
             self._match += 1
-            # The game IS the feedback loop: a correct-so-far press
-            # gives the same flash-plus-buzz the playback gave, so
-            # encoding stays bimodal on the response side too.
+            # A correct-so-far press is answered on the screen only:
+            # the motors are show-phase only (docstring: THE MOTORS
+            # ARE SHOW-PHASE ONLY).
             self._echo_back(ev.lane, now)
             if self._match >= len(self.sequence):
                 self._close(now, "correct")
@@ -671,6 +775,10 @@ class EchoMode(WaitSkip):
             self._close(now, "wrong")
 
     def _echo_back(self, lane: int, now: float) -> None:
+        """Screen-side acknowledgement of a correct-so-far press: a
+        tile flash, plus the cue tone where the shared switch asks
+        for it. Never a buzz: no STIM leaves this mode outside the
+        show phase."""
         gp = self._gameplay_screen()
         if gp is not None and hasattr(gp, "lanes"):
             for ls in gp.lanes:
@@ -680,8 +788,6 @@ class EchoMode(WaitSkip):
                     # bare test engine may not carry.
                     ls.flash((34, 197, 94), 0.25, now)
         cues = self.engine.cue_settings()
-        if cues.buzz_before and self.engine.source.provides_samples:
-            self.engine.pulse_motor(lane, self.item_on_s * 1000.0)
         if self.engine.audio is not None and cues.sound_before:
             try:
                 self.engine.audio.play_stim(lane)
@@ -746,19 +852,24 @@ class EchoMode(WaitSkip):
             f"n_right={n_right};outcome={kind};"
             f"pt={press_offsets}")
         play_t0 = self._play_t0 if self._play_t0 is not None else now
-        stim_end = (play_t0 + (length - 1) * self.ioi_s
+        stim_end = (play_t0 + (length - 1) * self._trial_ioi_s
                     + self.item_on_s)
         info = ContinuousTrialLog(
             waveform="echo_seq",
             params={"seq": pack_lanes(self.sequence),
                     "pulse_ms": round(self.item_on_s * 1000.0, 1),
-                    "ioi_ms": round(self.ioi_s * 1000.0, 1),
+                    # The ioi THIS trial ran at (the length schedule),
+                    # so a row is auditable on its own.
+                    "ioi_ms": round(self._trial_ioi_s * 1000.0, 1),
                     "hebb": 1 if self.is_hebb else 0},
             seed=self.block_seed,
             segments=[("stim", play_t0, stim_end), ("respond", r0, now)])
+        # after_press_cue False: the trial close must not buzz the
+        # finger either, whatever cue.buzz_after says (docstring: THE
+        # MOTORS ARE SHOW-PHASE ONLY).
         self.engine.log_trial(trial, outcome, now, stimulus=stimulus,
                               correct_lanes=list(self.sequence),
-                              continuous=info)
+                              continuous=info, after_press_cue=False)
         # Feedback markers, optional as everywhere (FRN work only).
         # The mode emits them itself because continuous rows skip the
         # engine's feedback path by contract.
@@ -777,6 +888,7 @@ class EchoMode(WaitSkip):
             "n_right": n_right,
             "played": list(self.sequence),
             "pressed": [l for l, _t in self._entered],
+            "ioi_ms": round(self._trial_ioi_s * 1000.0, 1),
         })
         self._after_trial(now, kind, correct)
 
@@ -962,7 +1074,14 @@ class EchoMode(WaitSkip):
             "max_len": self.max_len,
             "runs": self.runs,
             "item_on_ms": round(self.item_on_s * 1000.0, 1),
+            # ioi_ms is the START-length interval; the schedule below
+            # is what every length actually ran at (docstring:
+            # PRESENTATION RATE), and motor_clear_ms the floor rule.
             "ioi_ms": round(self.ioi_s * 1000.0, 1),
+            "ioi_step_ms": round(self.ioi_step_s * 1000.0, 1),
+            "ioi_floor_ms": round(self.ioi_floor_s * 1000.0, 1),
+            "ioi_schedule_ms": self.ioi_schedule_ms(),
+            "motor_clear_ms": round(self.MOTOR_CLEAR_S * 1000.0, 1),
             "idle_timeout_s": self.idle_timeout_s,
             "rest_s": self.rest_s,
             "hebb_every": self.hebb_every,
