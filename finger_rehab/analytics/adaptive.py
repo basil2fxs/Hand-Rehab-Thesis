@@ -131,6 +131,18 @@ class AdaptiveEngine:
     # limit for the first few decisions -- see next_bpm().
     bpm_decisions: int = 0
 
+    # Smallest speed-up signal next_bpm() will send while the hit rate
+    # is above target_high and quality is holding up. Deliberately not
+    # in AdaptiveConfig: it is the shape of the controller, not a
+    # protocol number an RA should be turning between participants.
+    # At bpm_step 10 it works out to 0.6 BPM per trial before the
+    # streak scaling, so a player already inside the band never feels
+    # it, and one sitting above the band creeps down into it over
+    # roughly a minute rather than stalling short of it forever. No
+    # annotation on purpose: that keeps it a plain class attribute
+    # rather than a dataclass field, so it stays off the constructor.
+    ABOVE_BAND_PROBE = 0.15
+
     def __post_init__(self) -> None:
         if self.num_lanes < 1:
             raise ValueError(
@@ -245,6 +257,10 @@ class AdaptiveEngine:
         Combination rule: the WORST signal wins. If either pressure says
         slow down, slow down. We don't speed up just because quality is
         great if the patient is also burning the window on every press.
+        One exception, the band-keeping override below: hit rate is the
+        signal the protocol is written around, so once it is at or above
+        target_low the utilisation guard tempers the pace instead of
+        vetoing it.
 
         Streak gate on positive signal: a single fluke press cannot
         speed the pace up. Need streak >= 2 for a soft probe nudge and
@@ -259,10 +275,11 @@ class AdaptiveEngine:
         natural equilibrium.
 
         The 65-80 percent target band is a stable equilibrium: in band
-        + comfortable RT yields combined = 0 and BPM holds. Performance
-        creeping up either signal pushes BPM up; creeping down on
-        either signal pushes BPM down. No discrete state machine, no
-        gotchas, just a smooth controller.
+        with quality holding up yields combined = 0 and BPM holds.
+        Above the band the pace keeps climbing until the hit rate falls
+        back into it; below the band, or once quality collapses, it
+        drops. No discrete state machine, no gotchas, just a smooth
+        controller.
         """
         # Don't react before we have enough data to be confident.
         if sum(s.n_trials for s in self.state) < self.cfg.min_trials:
@@ -320,26 +337,45 @@ class AdaptiveEngine:
             # Either side asking for a slow-down. Take the worst.
             combined = min(quality_pressure, rt_pressure)
             if rt_pressure < 0 <= quality_pressure \
-                    and hr > self.cfg.target_high and qr >= 0.5:
+                    and hr >= self.cfg.target_low and qr >= 0.5:
                 # Band-keeping override. The utilisation guard exists
                 # to stop a coping-but-fragile patient being pushed
-                # over the cliff, but ABOVE the band the cliff edge is
-                # the destination: the controller's job is to shrink
-                # the window until the hit rate falls back to 65-80
-                # percent, and utilisation rising through 0.80 is what
-                # that approach looks like. Letting the guard veto
-                # here parked a 96-percent player at util 0.80 for
+                # over the cliff. But hit rate is the signal the
+                # protocol is written around, and at or above
+                # target_low the patient is meeting it, so the guard
+                # tempers the pace here rather than vetoing it. Letting
+                # it veto parked a 96-percent player at util 0.80 for
                 # entire sessions (measured: 300 of 300 trials above
                 # the band, BPM oscillating just under the stall
-                # point). Blend instead of veto: the guard tempers the
-                # climb as it strengthens and only wins outright once
-                # it outweighs the whole quality signal, by which
-                # point the misses it predicted have arrived and hr
-                # itself has dropped back toward the band. The qr
-                # gate keeps the override honest: a 100 percent hit
-                # rate made of Lates (qr under 0.5) is a patient at
+                # point). The qr gate keeps the override honest: a high
+                # hit rate made of Lates (qr under 0.5) is a patient at
                 # their limit, and there the guard keeps its veto.
+                #
+                # Inside the band the blend comes out at 0 whenever the
+                # guard is pulling, which is the intent: the patient is
+                # where the protocol wants them, so hold the pace. High
+                # utilisation inside the band is what a consistent
+                # patient at their challenge point looks like, not a
+                # warning. Before this, the guard dragged the pace down
+                # from inside the band, that pushed the hit rate back
+                # out the top, and the loop settled a few points above
+                # target_high instead of inside it. Measured over 480
+                # simulated 400-trial blocks (six mean press times from
+                # 280 to 1200 ms, four spreads, 20 seeds each): 223 of
+                # 480 tails sat outside 65-80 percent before, 9 after,
+                # and those 9 are the bpm_max ceiling case below.
                 combined = max(0.0, quality_pressure + rt_pressure)
+                if hr > self.cfg.target_high:
+                    # Above the band the cliff edge is the destination:
+                    # the job is to keep shrinking the window until the
+                    # hit rate falls back into 65-80 percent. Without a
+                    # floor the climb stalls the moment the guard grows
+                    # enough to cancel the quality signal, which is a
+                    # little short of the band every time. The probe is
+                    # small enough that a patient who is genuinely at
+                    # their limit reaches qr < 0.5 and gets the veto
+                    # back before the pace runs away.
+                    combined = max(self.ABOVE_BAND_PROBE, combined)
         else:
             # Both non-negative. Use whichever is more confidently
             # asking for a speed-up.

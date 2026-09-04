@@ -939,3 +939,44 @@ class StyleConfigTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TargetSlotTests(unittest.TestCase):
+    """A pool whose caller always passes a finger name must never hold
+    a variant that drops it. One such variant in chords' no_hold pool
+    made the feedback name a finger only two runs in three, which read
+    as a flaky test rather than as the patient losing the one piece of
+    information the line carries."""
+
+    def test_every_variant_keeps_the_target(self):
+        from finger_rehab.ui import feedback_bank
+        bad = []
+        checked = 0
+        # MODE_LINES is the per-mode table: mode -> situation ->
+        # variants. LINE and POPUP are the generic pools and are
+        # deliberately allowed to mix (see below).
+        tables = [("MODE_LINES", feedback_bank.MODE_LINES)]
+        for name, table in tables:
+            for key, value in table.items():
+                # Only the mode-specific pools are checked. A top-level
+                # generic pool is allowed to mix: "Clean press." is a
+                # fine thing to say on a hit in a mode that has no one
+                # finger to name. The rule bites where the line exists
+                # to identify a finger, which is the mode pools.
+                if isinstance(value, (tuple, list)):
+                    continue
+                pools = value
+                for situation, variants in pools.items():
+                    if not isinstance(variants, (tuple, list)):
+                        continue
+                    checked += 1
+                    uses = [v for v in variants if "{target}" in v]
+                    if uses and len(uses) != len(variants):
+                        missing = [v for v in variants
+                                   if "{target}" not in v]
+                        bad.append((name, key, situation, missing))
+        # Guard the guard: if the tables are ever restructured so that
+        # nothing is checked, this test must fail rather than pass
+        # vacuously.
+        self.assertGreater(checked, 10, "no mode pools were checked")
+        self.assertEqual(bad, [], f"variants drop the finger name: {bad}")

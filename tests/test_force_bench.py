@@ -751,6 +751,45 @@ class TestTheNotebookChapter:
         assert "keep(ctx, \"rayan_bench\"" in source \
             or "keep(ctx, 'rayan_bench'" in source
 
+    def test_the_chapter_draws_every_sensor_he_drew(self, source):
+        """His folders hold one drift figure, one stim-response figure
+        and one waveform figure PER PAD. Drawing fsr1 alone dropped
+        three quarters of his output."""
+        assert "for sensor in fbench.fsr_columns(raw):" in source
+        for name in ("drift_newtons", "plot_force_trends",
+                     "stim_response_levels", "plot_stim_response",
+                     "response_waveforms", "plot_response_waveforms"):
+            assert f"fbench.{name}(" in source, name
+
+    def test_the_chapter_prints_his_average_diff(self, source):
+        """AVERAGE DIFF was the headline console number of
+        analyze_baseline_drift_modified_newtons.R, and the port threw
+        it away."""
+        assert "AVERAGE DIFF" in source
+        assert "mean_diff" in source
+
+    def test_the_chapter_shows_the_holm_table_and_the_means_plot(
+            self, source):
+        assert "fbench.plot_block_means(" in source
+        assert "p_holm" in source or "pairs" in source
+        assert "fbench.bench_counts(" in source
+
+    def test_the_trial_peak_chapter_draws_every_board(self, source):
+        """A both-hands session used to lose the left board's four
+        panels, and the finger-by-block heatmap averaged the two hands
+        into one cell."""
+        assert "for board in (boards or [0]):" in source
+        assert 'wide["side"]' in source
+        assert 'sg.pivot_table(index="finger"' in source
+
+    def test_the_per_finger_chapter_calls_the_orphaned_plotter(
+            self, source):
+        """plot_finger_peaks was defined and tested and called by
+        nothing; it is the only per-finger view of repeatability."""
+        assert "def sec_rayan_fingers" in source
+        assert "fbench.plot_finger_peaks(" in source
+        assert "fbench.pooled_snr_summary(" in source
+
     def test_every_function_the_chapter_calls_still_exists(self, source):
         called = set(re.findall(r"fbench\.([A-Za-z_][A-Za-z0-9_]*)", source))
         assert called, "the chapter no longer calls the module"
@@ -758,3 +797,105 @@ class TestTheNotebookChapter:
         assert not missing, (
             f"the notebook's bench chapter calls {missing}, which "
             f"force_bench.py no longer defines")
+
+
+# ------------------------------------------------- pooling across files
+
+class TestPoolingAcrossStreams:
+    """His two sensor scripts pool differently and both of them had one
+    file, so the difference never showed. Max_Peak_Analysis.R pools the
+    presses and then groups by pad; Noise_Analysis.R averages the
+    per-file signal and the per-file noise and then divides. A second
+    bench stream would have picked one convention per table at random,
+    so both are written out and both are pinned here."""
+
+    def test_one_stream_gives_the_same_answer_as_the_single_file_call(
+            self):
+        frame = _our_frame()
+        offsets = fb.resting_offsets(frame)
+        peaks = fb.stim_peaks(frame, offset=offsets, rows="samples")
+        noise = fb.baseline_noise(frame, offset=offsets)
+        pooled = fb.pooled_peak_summary([peaks])
+        pd.testing.assert_frame_equal(pooled, fb.peak_summary(peaks))
+        one = fb.snr_summary(peaks, noise)
+        many = fb.pooled_snr_summary([(peaks, noise)])
+        assert list(many["sensor"]) == list(one["sensor"])
+        for sensor in one["sensor"]:
+            a = one.loc[one["sensor"] == sensor, "grand_snr"].iloc[0]
+            b = many.loc[many["sensor"] == sensor, "grand_snr"].iloc[0]
+            assert a == pytest.approx(b, rel=1e-9)
+        assert set(many["n_files"]) == {1}
+
+    def test_the_two_conventions_differ_when_the_files_differ_in_length(
+            self):
+        """A short file and a long one: peaks pool by press, so the long
+        file dominates; the SNR pools by file, so both weigh the same.
+        The two answers must not be the same number."""
+        short = _our_frame(n_cues=4, lanes=(0,), rest=(258,),
+                           bump=120.0)
+        long = _our_frame(n_cues=20, lanes=(0,), rest=(258,),
+                          bump=260.0)
+        pairs = []
+        peaks = []
+        for frame in (short, long):
+            offsets = fb.resting_offsets(frame)
+            p = fb.stim_peaks(frame, offset=offsets, rows="samples")
+            n = fb.baseline_noise(frame, offset=offsets)
+            peaks.append(p)
+            pairs.append((p, n))
+        by_press = fb.pooled_peak_summary(peaks)
+        by_file = fb.pooled_snr_summary(pairs)
+        assert len(by_press) == 1 and len(by_file) == 1
+        assert by_file["n_files"].iloc[0] == 2
+        assert by_press["n_presses"].iloc[0] == sum(len(p) for p in peaks)
+        # The press-weighted mean sits nearer the long file's level than
+        # the file-weighted one does.
+        assert by_press["overall_avg_peak"].iloc[0] != \
+            pytest.approx(by_file["grand_avg_signal"].iloc[0], rel=1e-6)
+
+    def test_empty_input_returns_the_named_columns_not_an_exception(self):
+        assert list(fb.pooled_snr_summary([]).columns) == [
+            "sensor", "grand_avg_signal", "grand_avg_noise", "grand_snr",
+            "n_files"]
+        assert fb.pooled_peak_summary([]).empty
+
+
+class TestBenchCounts:
+    """The console diagnostics his scripts printed: how many cues, how
+    many onsets, how big each block was. A log that went short shows up
+    here rather than as a puzzling mean."""
+
+    def test_counts_come_back_for_our_own_frame(self):
+        frame = _our_frame()
+        processed = fb.processed_peaks(frame,
+                                       offset=fb.resting_offsets(frame),
+                                       fs_mode="span")
+        counts = fb.bench_counts(processed)
+        assert counts["cues"] == len(processed)
+        assert "onsets_found" in counts
+        assert counts["blocks"]
+
+    @needs_fixtures
+    def test_block_labels_survive_whether_they_are_numbers_or_words(self):
+        trials = fb.load_bench_trials(sorted(FIXTURES.glob("trials_*.csv")))
+        analytic = fb.block_table(trials)
+        counts = fb.bench_counts(None, analytic)
+        assert counts["analytic_trials"] == len(analytic)
+        assert sum(counts["trials_per_block"].values()) == len(analytic)
+        # Ours label blocks with phase words, so the keys are strings
+        # either way and nothing is coerced to int.
+        assert all(isinstance(k, str) for k in counts["trials_per_block"])
+
+
+class TestBothBoardsAreDrawn:
+    """A both-hands run collected peaks on eight pads. Drawing only the
+    board of the first cue lost the second hand's four panels."""
+
+    def test_a_two_board_frame_draws_every_cued_board(self):
+        frame = _our_frame(lanes=(0, 1, 4, 5), rest=(258, 262, 270, 275))
+        processed = fb.processed_peaks(frame,
+                                       offset=fb.resting_offsets(frame),
+                                       fs_mode="span")
+        figure = fb.plot_trial_peaks(processed)
+        assert len(figure.axes) == 8
+        plt.close(figure)

@@ -1,0 +1,795 @@
+{
+  "participant": "NA",
+  "age": "",
+  "hand": "right",
+  "affected_side": "",
+  "dominant_hand": "",
+  "impairment_score": "",
+  "hand_length_mm": "",
+  "hand_breadth_mm": "",
+  "sex": "",
+  "edinburgh_lq": "",
+  "visit": "",
+  "battery": {},
+  "assignment_source": "",
+  "started_at": "2026-09-04T16:47:15",
+  "finished_at": "",
+  "source_name": "KeyboardOnlySource",
+  "config_snapshot": {
+    "session": {
+      "data_dir": "sessions",
+      "participant": null,
+      "age": null,
+      "affected_side": null,
+      "dominant_hand": null,
+      "impairment_score": null,
+      "hand_length_mm": null,
+      "hand_breadth_mm": null,
+      "sex": null,
+      "edinburgh_lq": null,
+      "visit": null,
+      "suggest_code": "auto",
+      "prefs_file": "config/participant_prefs.json"
+    },
+    "report": {
+      "enabled": true
+    },
+    "serial": {
+      "port": "auto",
+      "baud": 115200,
+      "read_timeout_s": 0.02,
+      "open_retries": 3,
+      "open_retry_delay_s": 1.0,
+      "left_port": null,
+      "right_port": "/dev/cu.usbserial-140",
+      "autoconnect": true,
+      "autoconnect_poll_s": 1.0,
+      "vendor_ids": [
+        "0x2341",
+        "0x239A",
+        "0x10C4",
+        "0x1A86",
+        "0x0403"
+      ]
+    },
+    "firmware": {
+      "game_hex": "assets/firmware/finger_rehab_nano.hex",
+      "addr_tool_hex": "assets/firmware/singletact_address_change.hex",
+      "avrdude": "auto",
+      "baud_order": [
+        115200,
+        57600
+      ],
+      "preferred_baud": null,
+      "flash_timeout_s": 90,
+      "banner_timeout_s": 6.0,
+      "game_banner": "### Setup Complete ###",
+      "tool_banner": "### ADDR TOOL"
+    },
+    "eeg": {
+      "enabled": false,
+      "port": null,
+      "baud": 115200,
+      "require_port": false,
+      "pulse_ms": 10,
+      "gap_ms": 10,
+      "box": null,
+      "box_mode": null,
+      "feedback_markers": false
+    },
+    "fsr": {
+      "num_sensors_per_hand": 4,
+      "sample_rate_hz": 200,
+      "force_calibration_n_per_count": 0.019531,
+      "sensor_rating_n": 10.0,
+      "counts_full_scale": 512,
+      "baseline_alpha": 0.0005,
+      "value_alpha": 0.35,
+      "on_delta": [
+        20,
+        13,
+        15,
+        46
+      ],
+      "off_delta": [
+        10,
+        3,
+        5,
+        23
+      ],
+      "abs_on_min": [
+        150,
+        150,
+        150,
+        150
+      ],
+      "abs_off_max": [
+        1000,
+        1000,
+        1000,
+        1000
+      ],
+      "debounce_ms": 100
+    },
+    "quick_cal": {
+      "enabled": true,
+      "rest_capture_s": 2.0,
+      "lead_s": 3.0,
+      "hold_s": 1.0
+    },
+    "cue": {
+      "buzz_before": true,
+      "sound_before": true,
+      "sound_after": false,
+      "buzz_after": false,
+      "show_target": true
+    },
+    "motor": {
+      "cue_ms": 200,
+      "pulse_interval_ms": 120,
+      "arpeggio_gap_ms": 40,
+      "cue_ms_per_finger": [],
+      "channel_map": [
+        1,
+        2,
+        3,
+        4
+      ]
+    },
+    "bilateral": {
+      "hand": "right",
+      "per_hand_calibration": true
+    },
+    "game": {
+      "balance_targets": true,
+      "mode": "adaptive",
+      "trigger_interval_s": 1.2,
+      "timeout_s": 1.0,
+      "early_window_s": 0.1,
+      "total_trials": 40,
+      "start_countdown_s": 3.0,
+      "skip_chip_min_s": 2.5,
+      "test_mode_enabled": false,
+      "test_mode_trials": 6,
+      "keyboard_map": {
+        "j": 0,
+        "k": 1,
+        "l": 2,
+        "semicolon": 3
+      },
+      "keyboard_map_left": {
+        "f": 0,
+        "d": 1,
+        "s": 2,
+        "a": 3
+      },
+      "keyboard_map_bilateral": {
+        "j": 0,
+        "k": 1,
+        "l": 2,
+        "semicolon": 3,
+        "f": 4,
+        "d": 5,
+        "s": 6,
+        "a": 7
+      }
+    },
+    "adaptive": {
+      "min_finger_share": 0.15,
+      "start_bpm": 30,
+      "bpm_min": 10,
+      "bpm_max": 180,
+      "bpm_step": 10,
+      "target_low": 0.65,
+      "target_high": 0.8,
+      "weakness_bias": 2.5,
+      "min_trials": 2,
+      "block_size": 4,
+      "timeout_factor": 0.9
+    },
+    "scoring": {
+      "perfect_ms": 100,
+      "perfect_points": 10,
+      "great_ms": 200,
+      "great_points": 6,
+      "good_ms": 500,
+      "good_points": 3,
+      "late_points": 1,
+      "miss_points": 0,
+      "early_penalty": 0,
+      "wrong_press_penalty": 3,
+      "idle_press_penalty": 1
+    },
+    "metrics": {
+      "miss_force_window_ms": 1000
+    },
+    "mirror": {
+      "start_bpm": 24,
+      "max_async_ms": 350
+    },
+    "reaction": {
+      "seed": 3,
+      "catch_rate": 0.0
+    },
+    "pattern": {
+      "soc_cycles_per_block": 5,
+      "warmup_trials": 20,
+      "random_block_trials": 64,
+      "probe_pool_size": 4,
+      "rsi_ms": 500,
+      "timeout_ms": 2000,
+      "short_session": false,
+      "rest_min_s": 10,
+      "long_rest_s": 30,
+      "fatigue_timeout_run": 5,
+      "fatigue_rest_s": 45,
+      "session_cap_min": 30,
+      "seed": null,
+      "sequence_file": "config/pattern_sequence.yaml",
+      "sequence_pointer": "config/pattern_sequence.json",
+      "sequence_drop_dir": "config/pattern_sequences",
+      "sequence_file_enabled": true
+    },
+    "chords": {
+      "timeout_s": 3.0,
+      "sync_windows_ms": [
+        250,
+        200,
+        150,
+        100
+      ],
+      "hold_ms": 200,
+      "baseline_quiet_ms": 500,
+      "settle_prompt_s": 5.0,
+      "iti_min_s": 1.5,
+      "iti_max_s": 2.5,
+      "trials_per_subblock": 20,
+      "subblocks": 5,
+      "rest_between_s": 30,
+      "fatigue_rest_s": 120,
+      "session_cap_min": 30,
+      "seed": null
+    },
+    "syllables": {
+      "band": "A",
+      "beat_ioi_ms": 500,
+      "words_per_block": 40,
+      "round_size": 10,
+      "break_s": 30,
+      "warmup_taps": 5,
+      "attend_s": 1.5,
+      "tap_debounce_ms": 150,
+      "inter_trial_gap_ms": 800,
+      "session_cap_min": 20,
+      "rung": 1,
+      "rung_min": 1,
+      "rung_max": 8,
+      "fall_s": [
+        4.0,
+        4.0,
+        3.5,
+        3.5,
+        3.0,
+        3.0,
+        2.5,
+        2.5
+      ],
+      "set_gap_s": 0.4,
+      "spawn_lockout_s": 0.25,
+      "respeak_rungs": [
+        1,
+        2,
+        3
+      ],
+      "return_after": [
+        2,
+        4
+      ],
+      "complete_s": 1.4,
+      "homophone_foils": false,
+      "alternate_hands": true,
+      "supervised": true,
+      "speech": {
+        "backend": "auto",
+        "dir": "assets/speech",
+        "volume": 1.0
+      },
+      "seed": null
+    },
+    "force_pilot": {
+      "ladder": "waves_v1",
+      "passes": 1,
+      "span_pct": 40,
+      "base_pct": 8,
+      "step_grace_s": 0.6,
+      "demo_levels": [
+        1,
+        4,
+        7,
+        12
+      ],
+      "visual_gain": 1.0,
+      "ring_interval_s": 1.5,
+      "ring_points": 2,
+      "exit_buzz_ms": 80,
+      "exit_buzz_cooldown_s": 1.0,
+      "probe_presses": 3,
+      "probe_floor_counts": 30,
+      "probe_max_age_s": 21600,
+      "announce_s": 1.8,
+      "mid_rest_s": 15.0,
+      "seed": null,
+      "music_enabled": true,
+      "music_volume": 0.2
+    },
+    "buzz_hunt": {
+      "loc_trials_per_hand": 32,
+      "catch_rate": 0.1,
+      "loc_pulse_ms": 150,
+      "window_levels_s": [
+        3.0,
+        2.0,
+        1.5,
+        1.2
+      ],
+      "window_promote": [
+        6,
+        8
+      ],
+      "window_demote": [
+        2,
+        4
+      ],
+      "duration_staircase": false,
+      "start_ms": 300,
+      "step_ms": 40,
+      "floor_ms": 40,
+      "ceil_ms": 500,
+      "threshold_reversals": 6,
+      "distractor_trials_per_hand": 8,
+      "distractor_lead_ms": 150,
+      "span_trials": 10,
+      "span_start": 2,
+      "span_pulse_ms": 150,
+      "span_ioi_ms": 400,
+      "hebb_every": 3,
+      "gap_trials_per_hand": 20,
+      "gap_start_ms": 320,
+      "gap_step_ms": 40,
+      "gap_floor_ms": 150,
+      "gap_short_ms": 150,
+      "wait_lo_s": 0.8,
+      "wait_hi_s": 2.2,
+      "response_window_s": 3.0,
+      "replay_item_s": 1.5,
+      "announce_s": 1.5,
+      "rest_s": 2.0,
+      "stage_intro_s": 5.0,
+      "session_cap_min": 15,
+      "seed": null
+    },
+    "echo": {
+      "rule": "simon",
+      "games": 1,
+      "lives": 1,
+      "start_len": 1,
+      "max_len": 20,
+      "trials_per_len": 2,
+      "runs": 1,
+      "item_on_ms": 400,
+      "ioi_ms": 800,
+      "ioi_step_ms": 50,
+      "ioi_floor_ms": 600,
+      "ioi_anchor_len": 2,
+      "hebb_every": 3,
+      "idle_timeout_s": 10.0,
+      "rest_s": 2.0,
+      "fatigue_timeout_run": 2,
+      "fatigue_rest_s": 20.0,
+      "session_cap_min": 10,
+      "seed": null
+    },
+    "rhythm": {
+      "difficulty": "medium",
+      "pre_song_lead_s": 2.0,
+      "perfect_ms": 50,
+      "great_ms": 100,
+      "good_ms": 175,
+      "miss_ms": 300,
+      "audio_offset_ms": 40,
+      "metronome_offset_ms": 12,
+      "tactile_mode": "lead",
+      "buzz_lead_ms": 150,
+      "buzz_lead_adapt": true,
+      "buzz_lead_window": 8,
+      "buzz_lead_every": 4,
+      "buzz_lead_gain": 0.5,
+      "buzz_lead_max_ms": 400,
+      "buzz_lead_step_ms": 25,
+      "buzz_lead_deadband_ms": 5,
+      "buzz_rise_comp_ms": 0
+    },
+    "latency": {
+      "measured": false,
+      "measured_on": null,
+      "buzzer_ms": 45,
+      "visual_ms": 20,
+      "tone_ms": 12
+    },
+    "audio": {
+      "enabled": false,
+      "master_volume": 0.8,
+      "cue_volume": 1.0,
+      "feedback_volume": 1.0,
+      "music_dir": "assets/music",
+      "menu_music_enabled": true,
+      "menu_music_volume": null,
+      "menu_music_tracks": [
+        "Wallpaper.mp3",
+        "Life_of_Riley.mp3",
+        "Fluffing_a_Duck.mp3",
+        "Happy_Alley.mp3",
+        "Beachfront_Celebration.mp3",
+        "Vivacity.mp3"
+      ],
+      "stim_tone_enabled": true,
+      "loud_trial": {
+        "fraction": 0.1,
+        "boost": 1.35
+      }
+    },
+    "ui": {
+      "resolution": [
+        1440,
+        780
+      ],
+      "fullscreen": true,
+      "theme": "clinical",
+      "font_scale": 1.0,
+      "feedback_style": "encouraging",
+      "feedback_delay_ms": 0
+    },
+    "logging": {
+      "level": "INFO",
+      "file": "sessions/rehab.log"
+    },
+    "protocol": {
+      "blocks": [],
+      "presets": {
+        "study_battery": {
+          "id": "healthy_single_session_v1",
+          "budget_min": 85,
+          "hard_stop_min": 90,
+          "stretch_s": 60,
+          "rest_s": 180,
+          "rest_min_s": 60,
+          "orders": {
+            "A": [
+              {
+                "mode": "reaction",
+                "hand": "hand1",
+                "phase": "pre"
+              },
+              {
+                "mode": "reaction",
+                "hand": "hand2",
+                "phase": "pre"
+              },
+              {
+                "mode": "mirror",
+                "hand": "both",
+                "phase": "pre"
+              },
+              {
+                "mode": "rhythm",
+                "hand": "both",
+                "phase": "pre",
+                "track": "Easy_Lemon.mp3",
+                "difficulty": "medium"
+              },
+              {
+                "mode": "echo",
+                "hand": "both",
+                "phase": "pre"
+              },
+              {
+                "mode": "force_pilot",
+                "hand": "both",
+                "phase": "pre",
+                "stretch_before": true
+              },
+              {
+                "mode": "chords",
+                "hand": "both",
+                "phase": "pre"
+              },
+              {
+                "mode": "buzz_hunt",
+                "hand": "both",
+                "phase": "pre"
+              },
+              {
+                "mode": "pattern",
+                "hand": "dominant",
+                "phase": "pre"
+              },
+              {
+                "mode": "adaptive",
+                "hand": "dominant",
+                "phase": "mid",
+                "rest_before": true
+              },
+              {
+                "mode": "syllables",
+                "hand": "both",
+                "phase": "mid"
+              },
+              {
+                "mode": "reaction",
+                "hand": "hand1",
+                "phase": "post"
+              },
+              {
+                "mode": "reaction",
+                "hand": "hand2",
+                "phase": "post"
+              },
+              {
+                "mode": "mirror",
+                "hand": "both",
+                "phase": "post"
+              },
+              {
+                "mode": "rhythm",
+                "hand": "both",
+                "phase": "post",
+                "track": "Easy_Lemon.mp3",
+                "difficulty": "medium"
+              },
+              {
+                "mode": "echo",
+                "hand": "both",
+                "phase": "post"
+              },
+              {
+                "mode": "force_pilot",
+                "hand": "both",
+                "phase": "post",
+                "rest_before": true
+              },
+              {
+                "mode": "chords",
+                "hand": "both",
+                "phase": "post"
+              },
+              {
+                "mode": "buzz_hunt",
+                "hand": "both",
+                "phase": "post"
+              },
+              {
+                "mode": "pattern",
+                "hand": "dominant",
+                "phase": "post"
+              }
+            ],
+            "B": [
+              {
+                "mode": "force_pilot",
+                "hand": "both",
+                "phase": "pre"
+              },
+              {
+                "mode": "chords",
+                "hand": "both",
+                "phase": "pre"
+              },
+              {
+                "mode": "buzz_hunt",
+                "hand": "both",
+                "phase": "pre"
+              },
+              {
+                "mode": "reaction",
+                "hand": "hand1",
+                "phase": "pre",
+                "stretch_before": true
+              },
+              {
+                "mode": "reaction",
+                "hand": "hand2",
+                "phase": "pre"
+              },
+              {
+                "mode": "mirror",
+                "hand": "both",
+                "phase": "pre"
+              },
+              {
+                "mode": "rhythm",
+                "hand": "both",
+                "phase": "pre",
+                "track": "Easy_Lemon.mp3",
+                "difficulty": "medium"
+              },
+              {
+                "mode": "echo",
+                "hand": "both",
+                "phase": "pre"
+              },
+              {
+                "mode": "pattern",
+                "hand": "dominant",
+                "phase": "pre"
+              },
+              {
+                "mode": "adaptive",
+                "hand": "dominant",
+                "phase": "mid",
+                "rest_before": true
+              },
+              {
+                "mode": "syllables",
+                "hand": "both",
+                "phase": "mid"
+              },
+              {
+                "mode": "force_pilot",
+                "hand": "both",
+                "phase": "post"
+              },
+              {
+                "mode": "chords",
+                "hand": "both",
+                "phase": "post"
+              },
+              {
+                "mode": "buzz_hunt",
+                "hand": "both",
+                "phase": "post"
+              },
+              {
+                "mode": "reaction",
+                "hand": "hand1",
+                "phase": "post",
+                "rest_before": true
+              },
+              {
+                "mode": "reaction",
+                "hand": "hand2",
+                "phase": "post"
+              },
+              {
+                "mode": "mirror",
+                "hand": "both",
+                "phase": "post"
+              },
+              {
+                "mode": "rhythm",
+                "hand": "both",
+                "phase": "post",
+                "track": "Easy_Lemon.mp3",
+                "difficulty": "medium"
+              },
+              {
+                "mode": "echo",
+                "hand": "both",
+                "phase": "post"
+              },
+              {
+                "mode": "pattern",
+                "hand": "dominant",
+                "phase": "post"
+              }
+            ]
+          },
+          "cells": {
+            "1": {
+              "order": "A",
+              "hand1": "dominant"
+            },
+            "2": {
+              "order": "B",
+              "hand1": "dominant"
+            },
+            "3": {
+              "order": "A",
+              "hand1": "non_dominant"
+            },
+            "0": {
+              "order": "B",
+              "hand1": "non_dominant"
+            }
+          },
+          "overrides": {
+            "reaction": {
+              "sub_mode": "choice",
+              "block_trials": 20,
+              "response_windows_s": [
+                2.0
+              ]
+            },
+            "force_pilot": {
+              "passes": 1
+            },
+            "chords": {
+              "subblocks": 3,
+              "trials_per_subblock": 20,
+              "sync_windows_ms": [
+                150
+              ]
+            },
+            "buzz_hunt": {
+              "loc_trials_per_hand": 12,
+              "distractor_trials_per_hand": 0,
+              "span_trials": 4,
+              "gap_trials_per_hand": 0,
+              "catch_rate": 0.1
+            },
+            "pattern": {
+              "short_session": true,
+              "soc_cycles_per_block": 3,
+              "random_block_trials": 32
+            },
+            "rhythm": {
+              "difficulty": "medium"
+            },
+            "echo": {
+              "games": 2,
+              "max_len": 10
+            },
+            "syllables": {
+              "rung": 3,
+              "words_per_block": 12,
+              "round_size": 6,
+              "break_s": 10
+            },
+            "game": {
+              "total_trials": 40
+            }
+          }
+        }
+      }
+    }
+  },
+  "block_summary": {
+    "block": "reaction",
+    "status": "in_progress"
+  },
+  "calibration": {},
+  "eeg": {
+    "backend": "none",
+    "port": null,
+    "enabled": false,
+    "pulse_ms": 10.0,
+    "gap_ms": 10.0,
+    "box": null,
+    "box_mode": null,
+    "codes_version": "1.3",
+    "failure_count": 0,
+    "delayed_count": 0,
+    "dropped_count": 0,
+    "degraded": false,
+    "first_failure_t": null,
+    "latency": {
+      "buzzer_ms": 45.0,
+      "visual_ms": 20.0,
+      "tone_ms": 12.0,
+      "measured": false,
+      "measured_on": null
+    },
+    "marker_offsets_ms": {
+      "stim_visual": 20.0,
+      "stim_tone": 12.0,
+      "stim_buzz": 45.0,
+      "stim_buzz_frame_note": "buzz command precedes the byte by the draw time, 0 to one frame",
+      "prep_buzz_lead": 45.0,
+      "stim_buzz_hunt": 45.0,
+      "response": 0.0
+    }
+  },
+  "software_version": "3.2",
+  "python_version": "3.14.3",
+  "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "notes": "block in progress (auto-save)"
+}

@@ -239,7 +239,7 @@ MODE_LINES: dict[str, dict[str, tuple[str, ...]]] = {
                        "{target} came in behind. All at once.",
                        "Bring the {target} in with the rest."),
         "no_hold": ("{target} lifted first. Keep it down.",
-                    "Hold all of them a moment longer.",
+                    "Keep {target} down a moment longer.",
                     "{target} let go. Keep them down together."),
         # Every entry names the finger, because the caller always has
         # one: a variant without {target} would quietly drop the one

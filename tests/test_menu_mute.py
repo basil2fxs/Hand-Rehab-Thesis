@@ -9,8 +9,9 @@ Three layers:
      identity typed on the login screen before login), the toggle
      that saves and silences at once, and the menu player reading it.
   3. The screens: the pill is on the login, the hub, the hand picker,
-     the results screen and Settings; a click on it or M flips it;
-     on the login screen M types into a focused field instead.
+     the results screen, Settings and the song picker; a click on it
+     or M flips it; on the login screen M types into a focused field
+     instead.
 """
 from __future__ import annotations
 
@@ -196,7 +197,12 @@ class EngineMuteTests(_Harness):
 # 3. the screens
 # ---------------------------------------------------------------------
 class ScreenMuteTests(_Harness):
-    MENU_KEYS = ("title", "mode_select", "setup", "results", "diagnostics")
+    # The song picker is on this list even though the menu playlist
+    # does not run there: it previews tracks on the same stream, so it
+    # is the one menu that can make noise on its own and it needs the
+    # same control. See MutedPreviewTests in test_rhythm_preview.py.
+    MENU_KEYS = ("title", "mode_select", "setup", "results", "diagnostics",
+                 "rhythm_setup")
 
     def test_every_menu_screen_has_the_pill_and_draws_it(self) -> None:
         import pygame

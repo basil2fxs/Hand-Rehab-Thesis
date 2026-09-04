@@ -517,9 +517,16 @@ class EndToEndTests(unittest.TestCase):
                          & (wide["on_target"] < 200)).all())
         self.assertTrue((wide["off_share"] < 0.15).all())
         self.assertEqual(set(wide["block"]), {"main 1"})
+        # The heatmap and the panels are per HAND, not pooled: pivoting
+        # on the finger alone put lane 0 and lane 4 in one row, so a
+        # both-hands session averaged its two hands into one cell.
+        self.assertIn("side", wide.columns)
+        self.assertEqual(set(wide["side"]), {"right"})
         figs = {p.name for p in ns.FIGDIR.glob("*.png")}
-        self.assertIn("rayan_finger_block_heatmap.png", figs)
-        self.assertTrue(any(n.startswith("rayan_trial_peaks_") for n in figs))
+        self.assertIn("rayan_finger_block_heatmap_right.png", figs)
+        self.assertNotIn("rayan_finger_block_heatmap.png", figs)
+        self.assertTrue(any(n.startswith("rayan_trial_peaks_right_")
+                            for n in figs))
 
     def test_blocks_section_says_why_one_chunk_is_not_enough(self):
         ns, ctx = self.ns, self.ctx

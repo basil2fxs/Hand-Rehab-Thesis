@@ -817,14 +817,19 @@ class TestCohortChapterContract:
     SECTIONS = ["sec_cohort_selection", "sec_cohort_describe",
                 "sec_cohort_hands", "sec_cohort_within_session",
                 "sec_cohort_learning", "sec_cohort_curves",
-                "sec_cohort_validity", "sec_cohort_export"]
+                "sec_cohort_one_pass", "sec_cohort_validity",
+                "sec_cohort_export"]
     HELPERS = ["write_cohort_report", "icc_ci", "cohort_long_table",
                "cohort_catalogue", "cohort_paired", "cohort_values",
                "is_study_code", "cohort_hand_role", "split_half",
                "tost_paired", "wilson_ci", "log_linear_slope",
-               "exp_fit", "fine_series", "rolling_median"]
+               "exp_fit", "fine_series", "rolling_median",
+               "cohort_within_block_curves", "_binned_curve"]
+    # The eight played twice in the sitting, then the two the design
+    # plays once in the middle pass and describes without pairing.
     BATTERY_MODES = {"reaction", "mirror", "rhythm", "echo", "force_pilot",
                      "chords", "buzz_hunt", "pattern"}
+    ONCE_MODES = {"adaptive", "syllables"}
 
     def test_setup_defines_every_cohort_name(self, source):
         tree = ast.parse(source)
@@ -867,20 +872,68 @@ class TestCohortChapterContract:
         assert modes <= set(better), modes - set(better)
         assert set(better.values()) <= {"lower", "higher"}
 
-    def test_registry_covers_the_eight_battery_modes(self, source):
+    def test_registry_covers_every_mode_the_sitting_plays(self, source):
         floor, registry, modes = _notebook_names(
             source, ["COHORT_BH_FLOOR_MS", "COHORT_METRICS", "COHORT_MODES"])
-        assert {mode for mode, _m in registry} == self.BATTERY_MODES
-        assert set(modes) == self.BATTERY_MODES
-        # Syllables and adaptive are excluded from the battery by design.
-        assert "syllables" not in {m for m, _ in registry}
-        assert "adaptive" not in {m for m, _ in registry}
+        every = self.BATTERY_MODES | self.ONCE_MODES
+        assert {mode for mode, _m in registry} == every
+        assert set(modes) == every
         # Every mode has exactly one headline metric for the figures.
-        for mode in self.BATTERY_MODES:
+        for mode in every:
             heads = [m for (md, m), s in registry.items()
                      if md == mode and s.get("headline")]
             assert len(heads) == 1, f"{mode} headline metrics: {heads}"
         assert floor == 40.0
+
+    def test_the_once_played_modes_are_descriptive_only(self, source):
+        """Adaptive and syllables are played once in the middle pass.
+
+        Every one of their rows has to be marked descriptive and has to
+        carry the reason it gets no MDC, because there is no second go
+        to correlate them with; a row that lost the flag would walk
+        into the reliability table and print a coefficient off a single
+        measurement.
+        """
+        _floor, registry = _notebook_names(
+            source, ["COHORT_BH_FLOOR_MS", "COHORT_METRICS"])
+        for mode in self.ONCE_MODES:
+            rows = {m: s for (md, m), s in registry.items() if md == mode}
+            assert rows, f"{mode} has no registry rows"
+            for metric, spec in rows.items():
+                assert spec.get("descriptive"), f"{mode}.{metric}"
+                assert spec.get("no_mdc"), f"{mode}.{metric} has no reason"
+        # No mode played twice may be marked descriptive: that flag is
+        # what keeps a row out of the reliability and change tables.
+        for (mode, metric), spec in registry.items():
+            if mode in self.BATTERY_MODES:
+                assert not spec.get("descriptive"), f"{mode}.{metric}"
+
+    def test_the_builders_cover_every_mode_in_the_registry(self, source):
+        """A registry row with no builder emits nothing, so the metric
+        would print as missing data rather than as a coding gap."""
+        tree = ast.parse(source)
+        builders = None
+        for node in tree.body:
+            if isinstance(node, ast.Assign) and any(
+                    isinstance(t, ast.Name) and t.id == "COHORT_BUILDERS"
+                    for t in node.targets):
+                builders = {k.value for k in node.value.keys}
+        assert builders is not None, "COHORT_BUILDERS is gone"
+        _floor, registry = _notebook_names(
+            source, ["COHORT_BH_FLOOR_MS", "COHORT_METRICS"])
+        assert builders == {mode for mode, _m in registry}
+
+    def test_the_reliability_table_skips_the_descriptive_rows(self, source):
+        assert 'if spec.get("descriptive"):' in source, (
+            "sec_cohort_within_session must skip the once-played modes")
+
+    def test_the_curves_walk_every_phase_of_the_sitting(self, source):
+        """The MID modes only exist in the mid phase, so a curve loop
+        over the paired phases alone draws neither of them. The paired
+        loop stays where it belongs, in the dominance chapter."""
+        curves = _section_source(source, "sec_cohort_curves")
+        assert "for phase in COHORT_PHASES:" in curves
+        assert "COHORT_PAIR_PHASES" not in curves
 
     def test_the_design_minimum_is_the_analysed_sample(self, source):
         n_design, min_n = _notebook_names(
@@ -935,3 +988,201 @@ class TestCohortChapterContract:
         # written after the cohort cells still finds its own.
         assert '"figures": [str(FIGDIR / n)' in setup
         assert "_img_tag(Path(fig))" in setup
+
+
+# ------------------------------------------- per-mode literature checks
+# Every one of the ten live modes has to carry, in the notebook: the
+# checks the design pre-specifies for it, a section that prints them
+# with the reference and the source beside the number, a per-finger
+# cut, a both-hands cut where the mode uses both hands, and a paragraph
+# saying what its numbers cannot claim. A mode that loses any of those
+# leaves the thesis with a number and nothing to read it against.
+
+class TestPerModeLiteratureChecks:
+    MODES = ("reaction", "pattern", "chords", "syllables", "adaptive",
+             "rhythm", "mirror", "force_pilot", "buzz_hunt", "echo")
+    # The section that decides each mode's checks. Some are the mode's
+    # only chapter (mirror, adaptive), the rest sit beside one.
+    SECTION = {
+        "reaction": "sec_reaction_checks",
+        "pattern": "sec_pattern_checks",
+        "chords": "sec_chords_checks",
+        "syllables": "sec_syllables_checks",
+        "adaptive": "sec_adaptive",
+        "rhythm": "sec_rhythm_checks",
+        "mirror": "sec_mirror",
+        "force_pilot": "sec_force_pilot_checks",
+        "buzz_hunt": "sec_buzz_hunt_checks",
+        "echo": "sec_echo_checks",
+    }
+    # The ids docs/research/healthy_baseline_study.txt Section 1 names.
+    # E2 is Hebb there, so it is Hebb here.
+    DESIGN_IDS = {
+        "reaction": {"R1", "R2"},
+        "pattern": {"P1", "P3"},
+        "chords": {"C1", "C2", "C3", "C4", "C5"},
+        "rhythm": {"Rh1", "Rh2", "Rh3"},
+        "mirror": {"M1", "M2"},
+        "force_pilot": {"F1", "F2", "F3", "F4"},
+        "buzz_hunt": {"B1", "B2", "B3", "B4", "B5"},
+        "echo": {"E1", "E2", "E3"},
+    }
+
+    def test_every_mode_has_a_check_registry(self, source):
+        (lit,) = _notebook_names(source, ["MODE_LIT"])
+        assert set(lit) == set(self.MODES), set(lit) ^ set(self.MODES)
+
+    @pytest.mark.parametrize("mode", MODES)
+    def test_every_check_names_a_reference_and_a_source(self, mode, source):
+        (lit,) = _notebook_names(source, ["MODE_LIT"])
+        for spec in lit[mode]:
+            for field in ("id", "claim", "reference", "source"):
+                assert spec.get(field), f"{mode} {spec.get('id')}: {field}"
+            # A source has to be citable: a name and a year, or the
+            # project file the rule comes from.
+            src = spec["source"]
+            assert re.search(r"(19|20)\d\d", src) or ".py" in src \
+                or "design Section" in src, f"{mode} {spec['id']}: {src}"
+
+    @pytest.mark.parametrize("mode", sorted(DESIGN_IDS))
+    def test_the_design_ids_all_have_a_row(self, mode, source):
+        (lit,) = _notebook_names(source, ["MODE_LIT"])
+        have = {spec["id"] for spec in lit[mode]}
+        missing = self.DESIGN_IDS[mode] - have
+        assert missing == set(), f"{mode} is missing {sorted(missing)}"
+
+    def test_echo_e2_is_hebb_the_way_the_design_numbers_it(self, source):
+        (lit,) = _notebook_names(source, ["MODE_LIT"])
+        by_id = {spec["id"]: spec for spec in lit["echo"]}
+        assert "Hebb" in by_id["E2"]["claim"] or \
+            "repeated" in by_id["E2"]["claim"]
+        assert "E2p" in by_id, "the prefix-miss check lost its own id"
+        assert "E2b" not in by_id
+
+    @pytest.mark.parametrize("mode", MODES)
+    def test_each_mode_has_a_section_and_it_runs_through_keep(self, mode,
+                                                              source):
+        name = self.SECTION[mode]
+        tree = ast.parse(source)
+        defined = {n.name for n in tree.body
+                   if isinstance(n, ast.FunctionDef)}
+        assert name in defined, f"{name} is not defined"
+        called = [src for src, kind in _cells()
+                  if kind == "code" and f"{name}(" in src
+                  and f"def {name}(" not in src]
+        assert called, f"{name} is never called from a cell"
+        for cell in called:
+            assert "keep(" in cell, f"{name} runs outside keep()"
+
+    @pytest.mark.parametrize("mode", MODES)
+    def test_each_mode_prints_its_claim_limits(self, mode, source):
+        """print_claim_limits is the one heading a reader looks for, so
+        every mode has to call it (syllables also keeps its older
+        WHAT THIS CHAPTER CANNOT SAY block, which is the same thing)."""
+        body = _section_source(source, self.SECTION[mode])
+        assert "print_claim_limits(" in body, self.SECTION[mode]
+
+    @pytest.mark.parametrize("mode", MODES)
+    def test_each_mode_cuts_by_finger(self, mode, source):
+        body = _section_source(source, self.SECTION[mode])
+        assert ("per_finger_table(" in body or "FINGERS[" in body
+                or 'groupby(["hand", "finger"])' in body
+                or '"finger"' in body), self.SECTION[mode]
+
+    BOTH_HANDS = ("reaction", "chords", "syllables", "rhythm", "mirror",
+                  "force_pilot", "buzz_hunt", "echo")
+
+    @pytest.mark.parametrize("mode", BOTH_HANDS)
+    def test_the_bimanual_modes_split_by_hand(self, mode, source):
+        body = _section_source(source, self.SECTION[mode])
+        assert ("per_hand_pair(" in body or '"side"' in body
+                or 'groupby("hand")' in body
+                or 'groupby("h")' in body
+                or 'groupby(["side"' in body
+                # mirror carries both hands as two columns of one
+                # trial, so its split is right_rt against left_rt.
+                or ('"right_rt"' in body and '"left_rt"' in body)), \
+            self.SECTION[mode]
+
+    def test_every_source_named_in_a_check_is_in_the_reference_list(
+            self, source):
+        """A verdict that cites a paper the reference list has never
+        heard of is the citation an examiner checks first."""
+        lit, refs = _notebook_names(source, ["MODE_LIT", "REFERENCES"])
+        listed = " ".join(entry for _group, entries in refs
+                          for entry in entries)
+        missing = []
+        for mode, specs in lit.items():
+            for spec in specs:
+                for surname in re.findall(r"\b([A-Z][a-z]{3,})(?= \d{4}| et al| and |,)",
+                                          spec["source"]):
+                    if surname in ("Section", "Journal", "Proceedings",
+                                   "Psychological", "Perceptual",
+                                   "Experimental", "Quarterly", "Nature",
+                                   "Scientific", "Canadian", "American",
+                                   "Behavioral", "Applied", "Clinical",
+                                   "Biological", "Cognitive", "Motor",
+                                   "Somatosensory", "World", "Brain",
+                                   "Memory", "Reading", "Research",
+                                   "Neuropsychologia", "Communications",
+                                   "Bulletin", "Cybernetics", "Physiology",
+                                   "Neuroscience", "Skills", "Sleep",
+                                   "Aging", "Psychonomic", "Review",
+                                   "Behaviour", "Speech", "Language",
+                                   "Hearing", "Biomechanics", "Report",
+                                   "Reports", "Acoustical", "America",
+                                   "Conference", "Mechanisms", "Learning",
+                                   "Disease", "Neurological", "Sciences",
+                                   "Psychophysics", "Perception",
+                                   "Physical", "Therapy", "Chiropractic",
+                                   "Medicine", "Strength", "Conditioning",
+                                   "Society", "Open", "Science",
+                                   "Neurophysiology", "Frontiers",
+                                   "Education", "Computers", "Technology",
+                                   "Human", "Oxford", "University",
+                                   "Press"):
+                        continue
+                    if surname not in listed:
+                        missing.append((mode, spec["id"], surname))
+        assert missing == [], f"cited but not in REFERENCES: {missing}"
+
+
+def _section_source(source, name):
+    """The source text of one top-level function, for the coverage
+    assertions above."""
+    tree = ast.parse(source)
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef) and node.name == name:
+            return ast.get_source_segment(source, node) or ""
+    raise AssertionError(f"{name} is not defined in the notebook")
+
+
+def test_every_name_the_notebook_cites_is_in_the_reference_list():
+    """A citation in the prose with no entry in REFERENCES is the one
+    an examiner checks first. The scan is over the whole notebook, not
+    just the per-mode checks, because the statistical toolkit the
+    cohort chapter runs on was cited in prose and listed nowhere.
+    """
+    source = _notebook_source()
+    (refs,) = _notebook_names(source, ["REFERENCES"])
+    listed = " ".join(entry for _group, entries in refs
+                      for entry in entries)
+    # "Surname 1999", "Surname et al 2019", "Surname and Other 2004".
+    pattern = (r"\b([A-Z][a-zA-Z-]{3,})"
+               r"(?:,? (?:et al\.?|and [A-Z][a-zA-Z]+))? \(?((?:19|20)\d\d)\)?")
+    # Words that start a sentence in front of a year and are not names.
+    not_names = {
+        "Section", "Setup", "Every", "Sessions", "September", "August",
+        "January", "The", "This", "That", "Read", "Run", "Cell",
+        "Basil", "Curtin", "Notebook", "Force", "Buzz", "Echo",
+        "Rhythm", "Chords", "Reaction", "Pattern", "Mirror", "Adaptive",
+        "Syllables", "Note", "NOTE", "What", "Where", "When", "Since",
+        "With", "From", "Both", "Only", "Their", "There", "These",
+        "Those", "Which", "While", "After", "Before", "Under", "Above",
+        "Below", "Table", "Figure", "Design", "Study", "Amendment",
+        "Anything", "Everything",
+    }
+    missing = sorted({name for name, _year in re.findall(pattern, source)
+                      if name not in listed and name not in not_names})
+    assert missing == [], (
+        f"cited in the notebook but absent from REFERENCES: {missing}")

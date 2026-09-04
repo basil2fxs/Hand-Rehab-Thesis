@@ -1,0 +1,4 @@
+iso_ts,t_perf,sample_idx,fsr1,fsr2,fsr3,fsr4,fsr5,fsr6,fsr7,fsr8,hand,event,lane,detail
+2026-09-04T16:47:15.428,245431.792407,1,0,0,0,0,0,0,0,0,right,block_start,,reaction
+2026-09-04T16:47:15.429,245431.793712,2,0,0,0,0,0,0,0,0,right,reaction_config,,seed=3 sub_mode=choice level=1 window_s=2.0
+2026-09-04T16:47:17.915,245434.279653,3,0,0,0,0,0,0,0,0,right,stim,0,trial_id=1

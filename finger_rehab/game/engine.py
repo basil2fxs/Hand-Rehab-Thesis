@@ -3496,10 +3496,29 @@ class GameEngine:
         is left is the guard below, for the one case that can still
         arrive uncalibrated.
 
-        Returns False when the pick is refused (bilateral asked for on
-        a one-board rig), which is the same refusal the cards' NEEDS
-        SECOND BOARD badge explains up front.
+        Returns False when the pick is refused: bilateral asked for on
+        a one-board rig, or a mode that needs the sensor hardware asked
+        for on a keyboard rig. Those are the same two refusals the
+        cards' NEEDS SECOND BOARD and NEEDS SENSOR HARDWARE badges
+        explain up front.
         """
+        from .battery import HARDWARE_MODES
+        src = getattr(self, "source", None)
+        if (mode_key in HARDWARE_MODES
+                and not getattr(src, "provides_samples", True)):
+            # Force Pilot needs a continuous force trace and Buzz Hunt
+            # needs the motors; a keyboard can produce neither, so both
+            # refuse at their first tick. Without this guard the badge
+            # on the card was only advice: picking one anyway walked
+            # through the hand picker into a block that opened a
+            # session folder, wrote metadata.json and raw.csv, and then
+            # could never record a single trial. Refuse before the
+            # folder exists instead. The guard sits here rather than on
+            # the card because this is the one route every entry point
+            # takes (the hand picker, mirror's skip-the-picker pick and
+            # the results screen's NEXT UP button).
+            log.info("Refused %s: no sensor hardware attached", mode_key)
+            return False
         self.cfg.data.setdefault("game", {})["mode"] = mode_key
         if mode_key == "mirror":
             # Bilateral-only by design, so it never asks which hand.

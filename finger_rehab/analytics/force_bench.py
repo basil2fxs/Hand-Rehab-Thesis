@@ -1222,8 +1222,17 @@ def plot_trial_peaks(processed: pd.DataFrame, title: str = "",
     cued and the small ones are the other three, so the spill is visible
     straight away: a flat line of small dots means the press stayed on
     the target finger, and small dots that track the big ones mean it
-    did not. His version showed the unwired pads as a flat line at -255;
-    here an unwired or unpressed pad is flat at zero.
+    did not.
+
+    Where the flat line sits depends on the offset the peaks were built
+    with. On his bench data, scanned with the flat RAYAN_STATIC_OFFSET,
+    an unwired pad sits at -255, exactly as on his own figures. On our
+    sessions, where the offset comes from resting_offsets, an unwired
+    or unpressed pad sits near zero.
+
+    lanes chooses the panels. The default draws every board that was
+    cued in this frame, so a both-hands run keeps its second board
+    instead of losing four panels; pass lanes to narrow it.
     """
     import matplotlib.pyplot as plt
 
@@ -1231,9 +1240,9 @@ def plot_trial_peaks(processed: pd.DataFrame, title: str = "",
                  if c.startswith("peak_fsr") and c.endswith("_raw")]
     all_lanes = [int(c[len("peak_fsr"):-len("_raw")]) - 1 for c in peak_cols]
     if lanes is None:
-        board = int(processed["stim_lane"].iloc[0]) // 4 \
-            if len(processed) else 0
-        lanes = [l for l in all_lanes if l // 4 == board] or all_lanes
+        boards = {int(l) // 4 for l in processed["stim_lane"].dropna()} \
+            if len(processed) else set()
+        lanes = [l for l in all_lanes if l // 4 in boards] or all_lanes
     key = "stim_order" if "stim_order" in processed.columns else "trial_id"
     fig, axes = plt.subplots(len(lanes), 1, figsize=(11, 2.0 * len(lanes)),
                              sharex=True, squeeze=False)
@@ -1617,3 +1626,98 @@ def bench_report(raw: pd.DataFrame, offset=RAYAN_STATIC_OFFSET,
             "noise": noise, "snr": summary, "repeatability": rep,
             "segment_trials": seg, "saturation": saturation(peaks),
             "baseline_shift": shifts}
+
+
+# ------------------------------------------------- pooling across files
+
+# His two sensor scripts pool differently and both of them had one file
+# to work on, so the difference never showed. Max_Peak_Analysis.R reads
+# every CSV, concatenates the presses and then groups by pad, so one
+# long file weighs more than one short file. Noise_Analysis.R takes the
+# mean peak and the noise sd PER FILE first and averages those, so every
+# file weighs the same and the ratio is a ratio of averages. Adding a
+# second bench stream would silently pick one convention per table, so
+# both are written out here and each says which of his scripts it is.
+
+def pooled_peak_summary(peaks_per_file) -> pd.DataFrame:
+    """Max_Peak_Analysis.R across several streams: pool the presses,
+    then group by pad.
+
+    peaks_per_file is any iterable of stim_peaks frames. Every press
+    counts once, so a longer recording contributes more presses, which
+    is what his script does when it globs a folder.
+    """
+    frames = [f for f in peaks_per_file if f is not None and len(f)]
+    if not frames:
+        return peak_summary(pd.DataFrame(columns=["lane", "peak_counts"]))
+    return peak_summary(pd.concat(frames, ignore_index=True))
+
+
+def pooled_snr_summary(pairs) -> pd.DataFrame:
+    """Noise_Analysis.R across several streams: average the per-file
+    signal and the per-file noise, then divide.
+
+    pairs is an iterable of (peaks, noise) frames, one pair per file.
+    The grand average is over FILES, not over presses, so a file with
+    twice the presses does not pull the ratio twice as hard. That is
+    his convention and it differs from pooled_peak_summary above; on a
+    single stream the two agree exactly.
+    """
+    columns = ["sensor", "grand_avg_signal", "grand_avg_noise",
+               "grand_snr", "n_files"]
+    signal, noise_sd = {}, {}
+    for peaks, noise in pairs:
+        if peaks is None or not len(peaks) or noise is None \
+                or not len(noise):
+            continue
+        per_lane = peaks.groupby("lane")["peak_counts"].mean()
+        floors = dict(zip(noise["sensor"], noise["baseline_noise_sd"]))
+        for lane, mean_peak in per_lane.items():
+            col = lane_column(int(lane))
+            if col not in floors or not np.isfinite(floors[col]):
+                continue
+            signal.setdefault(int(lane), []).append(float(mean_peak))
+            noise_sd.setdefault(int(lane), []).append(float(floors[col]))
+    if not signal:
+        return pd.DataFrame(columns=columns)
+    rows = []
+    for lane in sorted(signal):
+        sig = float(np.mean(signal[lane]))
+        nse = float(np.mean(noise_sd[lane]))
+        rows.append({"sensor": f"FS{lane + 1}", "grand_avg_signal": sig,
+                     "grand_avg_noise": nse,
+                     "grand_snr": sig / nse if nse else np.nan,
+                     "n_files": len(signal[lane])})
+    return pd.DataFrame(rows, columns=columns)
+
+
+def bench_counts(processed: pd.DataFrame, analytic: pd.DataFrame | None
+                 = None) -> dict:
+    """The diagnostic counts his scripts printed to the console.
+
+    He printed how many blocks each file held, how big the main chunk
+    was before filtering and how many trials each block kept, and used
+    them to spot a log that had gone short. The means table's own n
+    column covers the last of the three; the other two are here so a
+    short log is visible at a glance rather than after a puzzled look
+    at a mean.
+    """
+    out = {"cues": int(len(processed)) if processed is not None else 0}
+    if processed is not None and len(processed):
+        out["onsets_found"] = int(processed["reaction_time_ms"]
+                                  .notna().sum())
+        out["blocks"] = {label: int(len(part)) for label, part
+                         in block_slices(processed).items()}
+    if analytic is not None and len(analytic):
+        out["analytic_trials"] = int(len(analytic))
+        # Block labels are his 0 to 6 chunk numbers on his data and
+        # phase words ("pre", "main", "after") on ours, so they stay
+        # as they were written rather than being coerced to int.
+        out["trials_per_block"] = {str(b): int(n) for b, n
+                                   in analytic["block"].value_counts()
+                                   .sort_index().items()}
+        if "participant" in analytic.columns:
+            out["trials_per_participant"] = {
+                str(p): int(n) for p, n
+                in analytic["participant"].value_counts().items()}
+    return out

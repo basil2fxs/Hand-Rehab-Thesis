@@ -302,17 +302,22 @@ def _draw_header(surf: pygame.Surface, title: str, subtitle: str,
 
 class MuteButton:
     """The menu-music mute, one small pill in a corner of every menu
-    screen (login, hub, hand picker, results, Settings).
+    screen (login, hub, hand picker, results, Settings, song picker).
 
     It flips the logged-in person's own mute (engine.toggle_menu_music_mute,
     remembered per participant in data/prefs.py), not the machine-wide
     switch in Settings: a participant who wants quiet menus gets them
     at every visit without the RA changing the laptop's setup. Sound
     is on by default. The pill draws its state from the engine every
-    frame, so five screens can never disagree about it. M toggles it
+    frame, so the screens can never disagree about it. M toggles it
     from the keyboard on every screen that hosts one; the login screen
     passes M through to a focused field first, since M is also the
     letter that types "male" or a name.
+
+    The song picker is the odd one out: the menu playlist does not run
+    there (MenuMusicPlayer.MENU_SCREENS leaves it out, the two would
+    fight over one stream), but the screen previews tracks on its own,
+    so it reads the same pill to decide whether to.
     """
 
     # Wide enough for "MUSIC OFF  (M)" with the glyph, so the label
@@ -1536,11 +1541,21 @@ class ModeSelectScreen(Screen):
             self.theme, self.layout,
         )
         self.battery_note = ""
+        # Set when a pick is refused, cleared by the next pick that is
+        # not. Sits under the header where the subtitle would be.
+        self.pick_note = ""
         # Menu-music mute, top-left, the same pill as the login screen.
         self.mute_btn = MuteButton(
             engine, pygame.Rect(28, 26, MuteButton.W, MuteButton.H))
 
     CAL_UNAVAILABLE = "Calibration needs the sensor hardware"
+    # The refusals, worded so they read as a fact about the rig rather
+    # than a fault of the person clicking.
+    NO_HARDWARE_NOTE = ("This game needs the sensor hardware. "
+                        "Plug the device in, or pick another game.")
+    NO_SECOND_BOARD_NOTE = ("Mirror trains both hands, so it needs the "
+                            "second board. Plug it in, or pick another "
+                            "game.")
 
     def _battery_pending(self) -> bool:
         try:
@@ -1601,7 +1616,33 @@ class ModeSelectScreen(Screen):
         answer."""
         return self.engine.second_board_missing()
 
+    def unavailable_reason(self, mode_key: str) -> str:
+        """Why this card cannot start on this rig, or "" when it can.
+
+        Same two rules the badges draw, in one place so the badge and
+        the click can never disagree.
+        """
+        src = getattr(self.engine, "source", None)
+        if (not getattr(src, "provides_samples", True)
+                and mode_key in self.NEEDS_HARDWARE):
+            return self.NO_HARDWARE_NOTE
+        if mode_key == "mirror" and self._second_board_missing():
+            return self.NO_SECOND_BOARD_NOTE
+        return ""
+
     def _pick(self, mode_key: str) -> None:
+        # A badged card is refused here rather than on the way in. The
+        # badge alone was only advice: the pick still walked through
+        # the hand picker into a block that opened a session folder and
+        # could never record a trial. The engine refuses it too (that
+        # is the guard that matters, since NEXT UP and the hand picker
+        # reach begin_game without passing through here); this is what
+        # says so on screen.
+        reason = self.unavailable_reason(mode_key)
+        if reason:
+            self.pick_note = reason
+            return
+        self.pick_note = ""
         # Mirror is bilateral-only, so it skips the hand-pick step and
         # goes straight into the block through the shared start path
         # (which sets both hands and rebuilds the lanes, the same as
@@ -1842,8 +1883,10 @@ class ModeSelectScreen(Screen):
         surf.fill(self.theme.background)
         # No subtitle: the strip below says what the old line claimed
         # ("every game comes back here"), and says it with the games
-        # actually played.
-        _draw_header(surf, "Pick a game", "", self.theme, self.layout)
+        # actually played. The slot is used for a refused pick, which
+        # is the one time this screen has something to say back.
+        _draw_header(surf, "Pick a game", self.pick_note,
+                     self.theme, self.layout)
         draw_session_strip(
             surf,
             pygame.Rect(40, self.STRIP_TOP, self.layout.width - 80,
@@ -1933,11 +1976,13 @@ class ModeSelectScreen(Screen):
                           self.theme, self.layout, pt=FONT_SMALL,
                           centre=False, colour=self.theme.foreground)
             if no_hardware and key in self.NEEDS_HARDWARE:
-                # Said up front, before the click: these three cannot
+                # Said up front, before the click: these two cannot
                 # run on a keyboard-only source at all (every stage
                 # needs the sensor pads or the vibration motors), so
                 # picking one used to run all the way to the mode's
                 # own refusal screen with nothing said here first.
+                # _pick refuses the click as well, so the badge and the
+                # behaviour agree.
                 badge = "NEEDS SENSOR HARDWARE"
                 badge_font = self.layout.font(FONT_SMALL)
                 badge_w = badge_font.size(badge)[0]
@@ -2057,6 +2102,9 @@ class SetupScreen(Screen):
             value_format="{:.1f} s",
         )
 
+        # Set when begin_game refuses the hand pick, cleared by the
+        # next pick it accepts. Drawn under the header.
+        self.pick_note = ""
         self.buttons: list[Button] = []
         button_w = 290
         button_gap = 32
@@ -2113,7 +2161,17 @@ class SetupScreen(Screen):
             # ClassicMode constructor reads it back when the block starts.
             self.engine.cfg.data.setdefault("game", {})[
                 "trigger_interval_s"] = self.pace_slider.value
-        self.engine.begin_game(mode, hand)
+        # begin_game refuses a pick the rig cannot serve: bilateral on
+        # one board, or a sensor-only game on a keyboard. Say which,
+        # because a card that just does nothing when pressed reads as
+        # a broken button.
+        if self.engine.begin_game(mode, hand):
+            self.pick_note = ""
+            return
+        if mode in ModeSelectScreen.NEEDS_HARDWARE:
+            self.pick_note = ModeSelectScreen.NO_HARDWARE_NOTE
+        else:
+            self.pick_note = ModeSelectScreen.NO_SECOND_BOARD_NOTE
 
     # Keyboard shortcut for each hand card, first letter of its key
     # (audit finding #113: this screen was mouse-click only, so a
@@ -2196,7 +2254,8 @@ class SetupScreen(Screen):
         # every pass through setup, and a session can mix games and
         # hands. Saying session here implied the pick was locked in.
         _draw_header(surf, "Choose your hand",
-                     f"{greeting}  Which hand will you train this game?",
+                     (self.pick_note or
+                      f"{greeting}  Which hand will you train this game?"),
                      self.theme, self.layout)
         # Classic mode gets a pace slider above the hand buttons so the
         # therapist can tune trigger_interval_s without editing YAML.
@@ -4368,7 +4427,9 @@ class RhythmSetupScreen(Screen):
     # The selected song plays itself for this long, then stops: on
     # entry (the default pick included), and again on every pick.
     # Four seconds says which song it is without playing the intro
-    # the block is about to play. Basil's number.
+    # the block is about to play. Basil's number. Silent while the
+    # participant's menu-music mute is on, except for the Play preview
+    # button, which is an explicit ask.
     PREVIEW_S = 4.0
 
     def __init__(self, engine: "GameEngine") -> None:
@@ -4384,6 +4445,9 @@ class RhythmSetupScreen(Screen):
         # share one stream, and a hard cut over the fade is what
         # "colliding" sounds like). update() starts it.
         self._preview_pending: bool = False
+        # Whether that owed preview was asked for by the Play preview
+        # button, which is the one preview the mute does not silence.
+        self._preview_asked: bool = False
         # Swappable clock so tests can step past the four seconds.
         self._clock = time.perf_counter
         self._scroll_y = 0
@@ -4392,6 +4456,16 @@ class RhythmSetupScreen(Screen):
         # means the list fits on screen and no bar is shown.
         self._scrollbar_track_rect: pygame.Rect | None = None
         self._scrollbar_dragging = False
+        # Menu-music mute, top-left, the same pill as the hub. Built
+        # before refresh() because refresh() decides whether the pick
+        # owes itself a preview, and that decision reads the pill.
+        # This screen is the one place a menu can make noise on its
+        # own without the playlist (MenuMusicPlayer.MENU_SCREENS leaves
+        # it out on purpose), so it needs its own control: without one
+        # a participant who set MUSIC OFF got the automatic preview
+        # anyway and had nothing on screen to stop it.
+        self.mute_btn = MuteButton(
+            engine, pygame.Rect(28, 26, MuteButton.W, MuteButton.H))
         self.refresh()
         # Layout: left half is the track list card, right half is the
         # song-detail panel with difficulty + preview + start.
@@ -4544,6 +4618,7 @@ class RhythmSetupScreen(Screen):
 
     def _stop_preview(self) -> None:
         self._preview_pending = False
+        self._preview_asked = False
         if self.engine.audio and self._previewing:
             try:
                 self.engine.audio.stop()
@@ -4562,14 +4637,30 @@ class RhythmSetupScreen(Screen):
         player = getattr(self.engine, "menu_music", None)
         return player is None or getattr(player, "state", "idle") == "idle"
 
-    def _start_preview(self) -> None:
+    def _start_preview(self, *, asked_for: bool = False) -> None:
         """Play the selected song from the top for PREVIEW_S. A pick
-        while one is playing starts over from the new pick."""
+        while one is playing starts over from the new pick.
+
+        `asked_for` means the participant pressed Play preview. Every
+        other caller is the screen starting a preview on its own
+        (landing here, a rescan, picking a track off the list), and
+        those obey the mute: MUSIC OFF has to mean the machine stays
+        quiet unless asked, or the pill is decoration. The button
+        still works while muted, so a muted participant can hear a
+        track on purpose without turning the playlist back on.
+        """
         self._stop_preview()
         if not self._selected_track or self.engine.audio is None:
             return
+        if not asked_for and self.mute_btn.muted():
+            return
         if not self._menu_music_faded():
             self._preview_pending = True
+            # Carry the ask across the wait, so a Play preview pressed
+            # over the tail of the playlist fade still plays when the
+            # stream frees up rather than being dropped by the mute
+            # check above on the retry.
+            self._preview_asked = asked_for
             return
         if self.engine.audio.play_song(self._selected_track):
             self._previewing = True
@@ -4580,7 +4671,7 @@ class RhythmSetupScreen(Screen):
         if self._previewing:
             self._stop_preview()
             return
-        self._start_preview()
+        self._start_preview(asked_for=True)
 
     def _back_to_modes(self) -> None:
         self._stop_preview()
@@ -4605,7 +4696,7 @@ class RhythmSetupScreen(Screen):
         # A preview owed to the pick starts once the menu playlist has
         # faded off the shared stream.
         if self._preview_pending and self._menu_music_faded():
-            self._start_preview()
+            self._start_preview(asked_for=self._preview_asked)
         # Auto-stop the preview after PREVIEW_S seconds.
         if self._previewing and self._clock() >= self._preview_stop_at:
             self._stop_preview()
@@ -4620,6 +4711,12 @@ class RhythmSetupScreen(Screen):
         return max(0, content_h - inner_h)
 
     def handle_event(self, e: pygame.event.Event) -> None:
+        if self.mute_btn.handle_event(e):
+            # Muting with a preview playing has to stop it, or the pill
+            # says MUSIC OFF over the top of a song.
+            if self.mute_btn.muted():
+                self._stop_preview()
+            return
         for b in (self.easy_btn, self.med_btn, self.hard_btn,
                   self.preview_btn, self.start_btn,
                   self.back_btn, self.refresh_btn):
@@ -4685,14 +4782,21 @@ class RhythmSetupScreen(Screen):
 
     def draw(self, surf: pygame.Surface) -> None:
         surf.fill(self.theme.background)
-        _draw_header(surf, "Pick a song",
-                     "The picked song plays a 4 second preview. Choose "
-                     "a difficulty, then press START.",
-                     self.theme, self.layout)
+        # The subtitle has to match what the screen will actually do,
+        # otherwise a muted participant reads a promise of a preview
+        # that never comes and thinks the audio is broken.
+        if self.mute_btn.muted():
+            sub = ("Music is off, so press Play preview to hear a track. "
+                   "Choose a difficulty, then press START.")
+        else:
+            sub = ("The picked song plays a 4 second preview. Choose "
+                   "a difficulty, then press START.")
+        _draw_header(surf, "Pick a song", sub, self.theme, self.layout)
         self._draw_track_list(surf)
         self._draw_detail_panel(surf)
         self.back_btn.draw(surf)
         self.refresh_btn.draw(surf)
+        self.mute_btn.draw(surf, self.theme, self.layout)
 
     def _draw_track_list(self, surf: pygame.Surface) -> None:
         # Left-half card with a scrolling track list. Each row is a card-

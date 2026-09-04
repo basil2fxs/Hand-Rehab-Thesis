@@ -316,6 +316,8 @@ class CohortNotebookTests(unittest.TestCase):
                 ra.sec_cohort_learning(cls.cohort, cls.within))
             cls.curves = ra.keep(cls.ctx, "cohort_curves",
                                  ra.sec_cohort_curves(cls.cohort))
+            cls.one_pass = ra.keep(cls.ctx, "cohort_one_pass",
+                                   ra.sec_cohort_one_pass(cls.cohort))
             cls.validity = ra.keep(cls.ctx, "cohort_validity",
                                    ra.sec_cohort_validity(cls.cohort))
             cls.written = ra.keep(
@@ -777,6 +779,85 @@ class CohortNotebookTests(unittest.TestCase):
         self.assertEqual(row["band"], "excellent")
         self.assertIn("ICC exact", row["note"])
         self.assertNotIn("undefined", row["note"])
+
+    # ---- the ONE PASS chapter ---------------------------------------
+    # The design's amendment drops every POST block, and with it every
+    # test-retest statistic. What survives has to be in the notebook
+    # and has to be labelled for what it is: the curve inside a single
+    # block with an interval, the first third of that block against
+    # its last, and split-half reliability on the PRE block alone.
+
+    def test_the_chapter_says_what_one_pass_cannot_give(self) -> None:
+        self.assertIn("COHORT: WHAT ONE PASS CAN SAY", self.out)
+        low = self.out.lower()
+        self.assertIn("no test-retest coefficient", low)
+        self.assertIn("internal consistency", low)
+
+    def test_the_within_block_curve_carries_an_interval(self) -> None:
+        curves = self.one_pass["curves"]
+        self.assertFalse(curves.empty, "no within-block curve at all")
+        for col in ("mode", "slice", "n", "mean", "ci_lo", "ci_hi",
+                    "better"):
+            self.assertIn(col, curves.columns)
+        rows = curves.dropna(subset=["ci_lo", "ci_hi"])
+        self.assertTrue(len(rows))
+        self.assertTrue(
+            ((rows["ci_lo"] <= rows["mean"])
+             & (rows["mean"] <= rows["ci_hi"])).all())
+
+    def test_first_against_last_is_paired_with_an_effect_size(self) -> None:
+        ends = self.one_pass["ends"]
+        self.assertFalse(ends.empty, "no first-against-last contrast")
+        for col in ("mode", "n", "first_third", "last_third", "diff",
+                    "dz", "dz_lo", "dz_hi", "test", "improved", "gate"):
+            self.assertIn(col, ends.columns)
+        reaction = ends[ends["mode"] == "reaction"]
+        self.assertTrue(len(reaction), "reaction has no contrast")
+        row = reaction.iloc[0]
+        self.assertEqual(row["gate"], "reported")
+        self.assertTrue(row["dz_lo"] <= row["dz"] <= row["dz_hi"])
+
+    def test_split_half_is_computed_without_a_post_block(self) -> None:
+        sh = self.one_pass["split_half"]
+        self.assertFalse(sh.empty, "no split-half rows")
+        self.assertIn(("reaction", "median_rt_ms"),
+                      set(zip(sh["mode"], sh["metric"])))
+        for _i, r in sh[sh["gate"] == "reported"].iterrows():
+            self.assertTrue(-1.0 <= float(r["r_split"]) <= 1.0)
+
+    def test_the_checks_that_need_a_repeated_block_are_named(self) -> None:
+        needs = self.ra.COHORT_NEEDS_POST
+        for cid in ("R3", "P2", "L1", "L8"):
+            self.assertIn(cid, needs)
+
+    def test_the_once_played_modes_have_builders_and_rows(self) -> None:
+        """Adaptive and syllables are played once in the middle pass.
+        Without a builder and a registry row the cohort cannot report
+        them at all, which is what the audit found."""
+        self.assertIn("adaptive", self.ra.COHORT_BUILDERS)
+        self.assertIn("syllables", self.ra.COHORT_BUILDERS)
+        for mode in ("adaptive", "syllables"):
+            rows = {m for (md, m) in self.ra.COHORT_METRICS if md == mode}
+            self.assertTrue(rows, f"{mode} has no registry rows")
+
+    def test_a_descriptive_metric_never_reaches_the_reliability_table(
+            self) -> None:
+        table = self.within["table"]
+        if len(table):
+            self.assertEqual(
+                set(table["mode"]) & {"adaptive", "syllables"}, set())
+
+    def test_the_validity_table_has_the_three_added_rows(self) -> None:
+        ids = set(self.validity["id"])
+        for cid in ("C5", "Rh3", "B5"):
+            self.assertIn(cid, ids, f"{cid} has no verdict row")
+
+    def test_echo_e2_is_the_hebb_row(self) -> None:
+        rows = self.validity.set_index("id")
+        self.assertIn("E2", rows.index)
+        self.assertIn("E2p", rows.index)
+        self.assertNotIn("E2b", rows.index)
+        self.assertIn("Hebb", str(rows.loc["E2", "check"]))
 
 
 class CohortStatisticsHelperTests(unittest.TestCase):

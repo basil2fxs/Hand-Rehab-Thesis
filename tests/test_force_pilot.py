@@ -1621,8 +1621,9 @@ class ModeSelectHardwareBadgeTests(unittest.TestCase):
         e.source = src
         return ModeSelectScreen(e)
 
-    def test_needs_hardware_set_names_all_three_hardware_only_modes(
+    def test_needs_hardware_set_names_both_hardware_only_modes(
             self):
+        # Two, not three: Lighthouse was the third and is retired.
         sc = self._screen(True)
         self.assertEqual(sc.NEEDS_HARDWARE,
                          {"force_pilot", "buzz_hunt"})

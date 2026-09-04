@@ -1767,11 +1767,18 @@ class ChordsMode(WaitSkip):
             return "Press together"
         if cls == "no_hold":
             lifted = list(trial.hold_released)
-            if len(lifted) == 1:
+            if lifted:
+                # Name the first target that came up even when more than
+                # one did. Naming a finger is the whole reason the lifted
+                # lanes are recorded; "hold all of them" told the patient
+                # nothing about which one slipped, and which fingers are
+                # still down at the moment of the check varies run to run,
+                # so the generic line also made the feedback
+                # unreproducible.
                 return self._phrase(
                     "no_hold",
                     target=self._finger_name(trial, lifted[0]))
-            return "Hold all of them a moment longer."
+            return "Hold them a moment longer."
         if cls == "leak_fail":
             quiet = [f for f in range(4) if f not in trial.fingers]
             if trial.incorrect_presses:

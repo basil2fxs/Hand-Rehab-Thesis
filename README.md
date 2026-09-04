@@ -1,19 +1,47 @@
-<h1 align="center">Finger Rehab</h1>
+# Finger Rehab
 
-<p align="center">
-  Ten finger games that measure and train the hand, run from a laptop with an Arduino hand device.
-</p>
-
-<p align="center">
-  <a href="https://github.com/basil2fxs/Hand-Rehab-Thesis/actions/workflows/build-apps.yml"><img alt="build" src="https://github.com/basil2fxs/Hand-Rehab-Thesis/actions/workflows/build-apps.yml/badge.svg"></a>
-  <a href="tests"><img alt="tests" src="https://img.shields.io/badge/tests-pytest-4c1"></a>
-  <img alt="platforms" src="https://img.shields.io/badge/platforms-macOS%20%7C%20Windows-lightgrey">
-  <img alt="python" src="https://img.shields.io/badge/python-3.12%2B-blue">
-</p>
+A hand device and a laptop game for measuring and training finger movement. Four force pads and four
+vibration motors sit under the fingers of each hand, wired to an Arduino Nano that streams force to the
+laptop over USB. Ten games run on that signal, and every press is logged with its timing and its force,
+so a hand can be compared week to week.
 
 ![The hub, with all ten games](docs/images/hub.png)
+![Reaction, one trial lit](docs/images/reaction.png)
 
-## Quick start
+## How it works
+
+```mermaid
+flowchart LR
+  H["Fingers on four pads"] --> S["SingleTact 10 N sensors<br>I2C 0x05 to 0x08"]
+  S --> A["Arduino Nano<br>samples at 200 Hz"]
+  A -->|"FSR: a,b,c,d at 115200 baud"| G["Game on the laptop"]
+  G -->|"STIM:n"| A
+  A --> M["Four vibration motors<br>D11 D10 D9 D6"]
+  G --> F["sessions folder<br>trials.csv, raw.csv, metadata.json"]
+  F --> N["analysis/session_analysis.ipynb"]
+```
+
+**The sensors.** Each finger rests on a SingleTact CS8-10N pad, 10 N full scale, read over I2C at 0x05
+index, 0x06 middle, 0x07 ring, 0x08 pinky and sent at 200 Hz as `FSR: a,b,c,d`. A failed read is sent as
+0, so a dead pad and a loose plug look the same. One count is 0.019531 N.
+
+**The buzzers.** Four vibration motors, one per finger, on pins D11 D10 D9 D6. The laptop sends `STIM:n`
+for lane 1 to 4 and the board pulses that motor. At boot every board buzzes all four in turn as a self
+test, about 1.6 s of buzzing. That is normal.
+
+**The game loop.** A press is found in the force stream, not by a switch. Each sensor keeps a slow
+baseline that absorbs drift without following a press, and a press crosses the gap between that person's
+resting level and their light press. Logging in measures that gap once per hand, about a minute. A mode
+then cues a finger, waits, scores it and repeats.
+
+**What gets logged.** Every block writes one row per trial, every raw force sample, the calibration and
+settings it ran under, and a small HTML report. Nothing is overwritten.
+
+**Where sessions land.** Beside the app, or in the repo when run from source, under
+`sessions/<date>/<person>_<time>_<mode>/`. If that folder cannot be written the app falls back to
+`~/Finger Rehab Data`, and Settings has an Open data folder button for whichever is in use.
+
+## Run it
 
 ```
 pip install -r requirements.txt
@@ -21,92 +49,115 @@ python main.py
 python -m pytest tests
 ```
 
-Nothing plugged in? It falls back to the keyboard: `J K L ;` for the
-right hand, `F D S A` for the left, index to little on both. Log in,
-play a game, or press PLAY ALL to run the whole study battery in order.
+Nothing plugged in? It falls back to the keyboard: `J K L ;` right hand, `F D S A` left, index to little.
+Force Pilot and Buzz Hunt need the device; the other eight play on the keyboard.
 
-Prebuilt apps: `./builds/build_app.sh` on macOS, `builds\build_app.bat`
-on Windows, or download the zips from the Actions tab.
+Windows: run `builds\Windows\Finger Rehab.exe`, or build it with `builds\build_app.bat`. macOS:
+`builds/build_app.sh`. The EEG lab gets one folder, `docs/lab_package`: the exe, `eeg_lab.yaml`,
+`run_in_psychopy.py` and a `source/` copy. Notes in [docs/eeg_lab_setup.txt](docs/eeg_lab_setup.txt).
 
 ## The ten games
 
-| Game | What it is |
+| Game | What the patient does, and what it measures |
 | --- | --- |
-| **Reaction** | Press the key that lights up, fast. Measures eye-to-hand speed. |
-| **Adaptive** | Hit cued keys as the pace adapts to you. Keeps practice at the right challenge. |
-| **Muscle Memory** | Record takes of a piano riff, session by session. Builds muscle memory. |
-| **Chords** | Press 2-4 keys as one chord. Trains fingers to move together, and to stay still. |
-| **Rhythm** | Press in time with a song. Practises movement timing to a beat. |
-| **Syllables** | Catch the right part of the word as it falls. Builds the sound skills reading rests on. |
-| **Mirror** | Same finger, both hands, pressed as one. Practises moving the hands together. |
-| **Force Pilot** | Keep your press inside a moving corridor. Trains smooth force control. |
-| **Buzz Hunt** | Feel which finger buzzed and press it. Measures and trains the sense of touch. |
-| **Echo** | Watch the keys light up, then play them back in order. Measures memory span. |
+| **Reaction** | Press the finger that lights up. Measures how fast the hand answers the eye. |
+| **Adaptive** | The same, with the pace following the player. Measures speed at a held difficulty. |
+| **Muscle Memory** | Play a piano riff, take after take. Measures learning of a repeated sequence. |
+| **Chords** | Press two to four fingers at once. Measures moving fingers together and holding the rest still. |
+| **Rhythm** | Press on the beat of a song. Measures timing error against the beat. |
+| **Syllables** | Catch the right part of a spoken word. Measures reading by sound. |
+| **Mirror** | Press the same finger on both hands at once. Measures how well the hands stay together. |
+| **Force Pilot** | Hold a press inside a moving corridor. Measures steady control of force. |
+| **Buzz Hunt** | Feel which finger buzzed, then press it. Measures the sense of touch. |
+| **Echo** | Watch a sequence light up, then repeat it back. Measures memory span. |
 
-Force Pilot and Buzz Hunt need the device. The other eight play on the
-keyboard.
+## Troubleshooting
 
-Muscle Memory can run a riff file: a YAML file naming the blocks, the
-finger order, the pause after every press and the rests. Load one from
-Settings (Riff file), by dragging it onto the window on a menu screen,
-or by saving it into `config/pattern_sequences/` as `current.yaml`. It
-then runs for every Muscle Memory game until you load another or press
-Use built-in riff. Examples and the format live in
-[docs/pattern_sequences](docs/pattern_sequences), and Settings writes a
-commented template you can fill in.
+Settings is the cog at the bottom right of the login screen: live finger readout, port dropdowns, Test
+STIM per hand, Flash firmware, Sensor address, Open data folder. Calibrate sits beside it.
 
-## Hardware
+**A sensor reads nothing, or sits at zero.** Its tile in Settings never moves while the others do. A
+failed I2C read is sent as 0, so a loose lead, a dead pad and a pad on the wrong address all look the
+same. Reseat both ends of the lead, then use Settings, Sensor address, Scan to list which addresses
+answer. Calibration refuses a pad that reads zero on an empty device.
 
-One Arduino per hand, up to two hands, each board carrying four
-SingleTact force sensors and four vibration motors (index to little).
-The firmware in `arduino/firmware_on_device` samples the sensors at
-200 Hz and drives the motors on D11 D10 D9 D6, speaking `FSR: a,b,c,d`
-out and taking `STIM:n` and `STOP` in at 115200 baud. Presses are
-reported in newtons off the 10 N sensor calibration, and logging in
-runs a short per-finger calibration so the software knows what a light
-press feels like for that person. The first board found is the right
-hand and the second the left; Settings can pin a port to a hand
-instead. On connect each motor buzzes once as a self-test, which is
-normal.
+**A sensor drifts, or reads high at rest.** The finger triggers on its own, or calibration says the
+trigger sits across most of that finger's travel. Thresholds come from the gap between resting and
+pressing, so a pad squashed by the strap eats the gap, and under 20 counts of travel is refused. The
+baseline absorbs slow drift over about ten seconds, not a preload. Reposition the pad flat and calibrate
+again.
 
-Settings has two firmware buttons. Flash firmware writes the game
-firmware to the board with a bundled avrdude, no developer tools
-needed. Sensor address moves one SingleTact to a new I2C address, and
-only ever with one sensor wired up: every board also answers 0x04, so a
-change from 0x04 would re-address the lot. Details in
+**The board is not found, or the port keeps changing.** Ports are picked by USB vendor id, then any port
+with a vendor id, ignoring the Mac virtual ports. First board found is the right hand, second the left,
+and the login screen prints what each hand got. To pin one: Settings, Refresh, pick the port per hand,
+Save, which writes `config/user_settings.yaml`. A saved port that no longer exists is ignored and that
+hand falls back to plug order, which the login screen says out loud.
+
+**Calibration is asked for every time.** Once per hand per session is the design. Repeats inside one
+session mean the profile was refused: under 20 counts between resting and pressing, a trigger too high in
+that finger's travel, or a pad reading zero when empty. It saves to
+`config/calibration/current_<hand>.json`; if that file never appears, the app cannot write beside itself
+and is using `~/Finger Rehab Data`.
+
+**A buzzer does not buzz.** Settings, Test LEFT STIM or Test RIGHT STIM fires that hand's four motors in
+order. If none fire on a board that streams data fine, it is the wiring or the motor driver, not the
+software. If the test works but the buzz before a cue is missing, that cue is switched off in Sensory
+Cues.
+
+**Presses register on the wrong finger.** Two pads are answering the same I2C address. Every SingleTact
+answers 0x04 as well as its own address, so a write to 0x04 hits every sensor at once. Fix it in Settings,
+Sensor address, with only that sensor connected: 0x05 index, 0x06 middle, 0x07 ring, 0x08 pinky. Never
+move a sensor off 0x04 with the others wired in. Two whole hands swapped is the port assignment above.
+
+**The board needs re-flashing.** Settings, Flash firmware writes `assets/firmware/finger_rehab_nano.hex`
+with a bundled avrdude, so no developer tools are needed. A Nano runs one of two bootloaders, 115200 or
+57600; the app tries one, then the other, and remembers which worked. See
 [docs/flashing.txt](docs/flashing.txt).
 
-## Lab package
+**The game runs but no data lands.** Settings, Open data folder opens the folder actually in use, which
+is `~/Finger Rehab Data` when the app cannot write beside itself. Also check Test Mode is off in Settings
+(`game.test_mode_enabled`), because it caps every block at six trials.
 
-`docs/lab_package` is the one folder the EEG lab gets: the exe,
-`eeg_lab.yaml`, `run_in_psychopy.py` and a `source/` copy of the game.
-CI rebuilds it as `FingerRehab-EEGLab-Windows.zip` on every push; setup
-notes are in `docs/eeg_lab_setup.txt`.
+**The EEG box does not appear.** Markers are off in the shipped game. The lab preset `config/eeg_lab.yaml`
+turns them on and is what "EEG Lab.command" and the lab package launch; set `eeg.port` to the box's port.
+With `eeg.require_port` true the session refuses to start without an openable box, and with it false it
+falls back to a logging-only dummy that reaches no amplifier. Never set `eeg.baud` to 1200: it resets the
+MMBT-S off the bus, and the writer refuses that value.
+
+**Sessions look empty in the notebook.** It walks for `trials.csv` from the first `sessions` folder beside
+it or up to four levels above, so a notebook copied elsewhere finds nothing until `SESSIONS_DIR` is set in
+the setup cell. A folder holding only a header row is a block quit before the first trial closed.
 
 ## Data and analysis
 
-Every game writes `sessions/<date>/<participant>_<time>_<mode>/` with
-`trials.csv` (one row per trial), `raw.csv` (every force sample),
-`metadata.json` and a `report.html`. `sessions_index.csv` is the table
-of contents.
+`trials.csv` is one row per trial: timestamp, seconds into the block, participant, hand, block, trial,
+lane, the outcome (reaction time or timing offset, points, feedback, error type), which keys were pressed
+and any wrong finger, and the press's peak force and force-time integral. `raw.csv` is every sample at 200
+Hz: timestamps, sample index, `fsr1` to `fsr8`, plus event rows for presses, cues and EEG markers on the
+same clock. `metadata.json` holds the block summary, the calibration and the software version;
+`report.html` is the readable version.
 
-`analysis/session_analysis.ipynb` is the whole analysis in one file.
-Open it, run the first cell, pick a session, Run All. Figures and CSV
-exports land inside the session folder they describe, so each folder
-stands on its own. The cohort cells near the end read the whole tree
-and write `sessions/cohort_results/`.
+Open `analysis/session_analysis.ipynb`, run the Setup cell, pick a save, then Run All. Figures and CSV
+exports land in the session folder they describe, a per-person summary in
+`sessions/individual_patient_results/<person>/`, cohort output in `sessions/cohort_results/`.
+
+## If you are taking this over
+
+- Settings live in `config/default.yaml`, one block per mode, with the reason for each number in the
+  comments. `config/user_settings.yaml` is written by the Settings screen and overrides them.
+- To change a mode's difficulty, edit its block: Reaction uses `reaction.block_trials: 25` and
+  `reaction.response_windows_s: [2.0, 1.5, 1.2]`.
+- To add a word to Syllables, add a line to `assets/words/syllables_source.txt` (band, then the word split
+  by hyphens, stressed syllable in capitals) and run `python scripts/build_syllables_bank.py`, which
+  checks every line and writes nothing if one fails.
+- Firmware source is `arduino/firmware_on_device`, read only here. The hex the app flashes is
+  `assets/firmware/finger_rehab_nano.hex`.
+- Tests are `python -m pytest tests`. Run the whole suite before any commit.
 
 ## Licence
 
-Thesis work by Basil Toufexis, Curtin University, 2026. No licence file
-yet, so ask before reusing the code. It is built on Satoru Nakayama's
-2025 thesis software, whose serial protocol and press detection are
-kept so the old patient data still loads.
-
-Third-party assets carry their own terms: music by Kevin MacLeod under
-CC BY 4.0 (`assets/music/ATTRIBUTION.md`), the hand icon from Google
-Material Icons under Apache 2.0 (`assets/icons/LICENSE`), the syllable
-word bank written for this project (`assets/words/LICENCE.txt`), and
-avrdude 8.0-arduino.1 under GPL-2.0-or-later, run as a separate program
-and shipped with its licence and a source pointer in
-[tools/avrdude](tools/avrdude).
+Thesis work by Basil Toufexis, Curtin University, 2026. No licence file yet, so ask before reusing the
+code. It builds on Satoru Nakayama's 2025 thesis software, whose serial protocol and press detection are
+kept so the old patient data still loads. Third-party terms live with the files:
+[music](assets/music/ATTRIBUTION.md), [icons](assets/icons/LICENSE), [words](assets/words/LICENCE.txt) and
+[avrdude](tools/avrdude).
