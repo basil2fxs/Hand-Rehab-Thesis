@@ -20,7 +20,8 @@ Every analysis function names the file it came from in its docstring:
     raw/process_force_peaks.py                processed_peaks
     raw/FingerRawforEachBlock.R               block_slices,
                                               plot_trial_peaks
-    Data_analysis_Final.R                     block_table, block_model
+    Data_analysis_Final.R                     block_chunks, block_table,
+                                              block_model, bench_counts
 
 Two log layouts go in, one set of frames comes out:
 
@@ -946,6 +947,56 @@ def session_trials_as_bench(trials: pd.DataFrame) -> pd.DataFrame:
     return frame
 
 
+def block_chunks(trials: pd.DataFrame, chunk: int = CHUNK_TRIALS,
+                 enforce_five: bool = False) -> pd.DataFrame:
+    """Data_analysis_Final.R steps 1 and 2 on their own: dedupe, then
+    number the main block into chunks of `chunk`. Nothing is filtered.
+
+    Split out of `block_table` because his console printed two counts
+    off exactly this frame before a single trial was dropped, the block
+    counts per file and participant and the main chunk sizes, and used
+    them to tell a log that went short from a log that got filtered
+    hard. `bench_counts` reads both off the frame this returns.
+
+    Adds row_idx (the order the rows were read in), is_miss_flag (the
+    dedupe key, true when the row is a miss), row_in_group and chunk.
+    """
+    if trials is None or trials.empty:
+        return pd.DataFrame()
+    frame = trials.copy()
+    frame["row_idx"] = np.arange(len(frame))
+    outcome = frame.get("early_late", pd.Series("", index=frame.index))
+    error = frame.get("error_type", pd.Series("", index=frame.index))
+    miss = (outcome.fillna("").astype(str).str.lower() == "miss") | \
+        error.fillna("").astype(str).str.lower().isin(["miss", "timeout"])
+    frame["is_miss_flag"] = miss
+    keys = ["source_file", "participant", "block", "trial"]
+    keys = [k for k in keys if k in frame.columns]
+    frame = (frame.sort_values(keys + ["is_miss_flag", "row_idx"],
+                               kind="stable")
+             .drop_duplicates(keys, keep="first")
+             .sort_values("row_idx", kind="stable"))
+    group = [k for k in ("source_file", "participant", "block")
+             if k in frame.columns]
+    # A frame that never went through session_trials_as_bench has no
+    # block column. Everything in it is one continuous run, which is
+    # his main block, so the chunking still means something.
+    is_main = (frame["block"] == "main" if "block" in frame.columns
+               else pd.Series(True, index=frame.index))
+    if enforce_five:
+        # His enforce_five_blocks switch, off by default: throw away
+        # anything past the fifth chunk instead of clipping it into it.
+        over = frame.groupby(group).cumcount() + 1 if group \
+            else pd.Series(np.arange(len(frame)) + 1, index=frame.index)
+        frame = frame[~(is_main & (over > 5 * chunk))]
+        is_main = is_main.loc[frame.index]
+    frame["row_in_group"] = (frame.groupby(group).cumcount() + 1 if group
+                             else np.arange(len(frame)) + 1)
+    frame["chunk"] = np.where(
+        is_main, np.ceil(frame["row_in_group"] / chunk).astype(int), 1)
+    return frame
+
+
 def block_table(trials: pd.DataFrame, chunk: int = CHUNK_TRIALS,
                 rt_min: float = RT_MIN_MS, rt_max: float = RT_MAX_MS,
                 enforce_five: bool = False) -> pd.DataFrame:
@@ -966,38 +1017,17 @@ def block_table(trials: pd.DataFrame, chunk: int = CHUNK_TRIALS,
       4. Map to his block_all: 0 pretest, 1 to 5 main chunks, 6
          aftertest, with is_random true for the two untrained blocks.
 
-    Needs his column names, so pass our trials through
-    `session_trials_as_bench` first.
+    Steps 1 and 2 are `block_chunks`, because his console printed
+    counts off that frame before anything was filtered. Needs his
+    column names, so pass our trials through `session_trials_as_bench`
+    first.
     """
     columns = ["source_file", "participant", "block", "trial", "block_all",
                "is_random", "time_difference_ms", "lane"]
     if trials is None or trials.empty \
             or "time_difference_ms" not in trials.columns:
         return pd.DataFrame(columns=columns)
-    frame = trials.copy()
-    frame["row_idx"] = np.arange(len(frame))
-    outcome = frame.get("early_late", pd.Series("", index=frame.index))
-    error = frame.get("error_type", pd.Series("", index=frame.index))
-    miss = (outcome.fillna("").astype(str).str.lower() == "miss") | \
-        error.fillna("").astype(str).str.lower().isin(["miss", "timeout"])
-    frame["is_miss_flag"] = miss
-    keys = ["source_file", "participant", "block", "trial"]
-    keys = [k for k in keys if k in frame.columns]
-    frame = (frame.sort_values(keys + ["is_miss_flag", "row_idx"],
-                               kind="stable")
-             .drop_duplicates(keys, keep="first")
-             .sort_values("row_idx", kind="stable"))
-    group = [k for k in ("source_file", "participant", "block")
-             if k in frame.columns]
-    if enforce_five:
-        # His enforce_five_blocks switch, off by default: throw away
-        # anything past the fifth chunk instead of clipping it into it.
-        over = frame.groupby(group).cumcount() + 1
-        frame = frame[~((frame["block"] == "main") & (over > 5 * chunk))]
-    frame["row_in_group"] = frame.groupby(group).cumcount() + 1
-    frame["chunk"] = np.where(
-        frame["block"] == "main",
-        np.ceil(frame["row_in_group"] / chunk).astype(int), 1)
+    frame = block_chunks(trials, chunk=chunk, enforce_five=enforce_five)
     wrong = (_as_bool(frame["had_incorrect_press"]).fillna(False).astype(bool)
              if "had_incorrect_press" in frame.columns
              else pd.Series(False, index=frame.index))
@@ -1215,7 +1245,7 @@ def plot_finger_peaks(peaks: pd.DataFrame, lane: int, rep=None,
 
 
 def plot_trial_peaks(processed: pd.DataFrame, title: str = "",
-                     lanes=None):
+                     lanes=None, hand_mode: str = "right"):
     """raw/FingerRawforEachBlock.R: one panel per pad, peak per trial.
 
     Every pad is drawn on every trial. The big dot is the pad that was
@@ -1233,6 +1263,13 @@ def plot_trial_peaks(processed: pd.DataFrame, title: str = "",
     lanes chooses the panels. The default draws every board that was
     cued in this frame, so a both-hands run keeps its second board
     instead of losing four panels; pass lanes to narrow it.
+
+    hand_mode is the block's own hand setting. It only changes the
+    labels, and it matters in one case: a left-only block writes its
+    four pads on lanes 0 to 3, the same lanes a right-handed block
+    uses, so the lane number alone would call every panel a right
+    finger. Panels name their side whenever two boards are drawn or
+    the block was played left-handed.
     """
     import matplotlib.pyplot as plt
 
@@ -1244,18 +1281,22 @@ def plot_trial_peaks(processed: pd.DataFrame, title: str = "",
             if len(processed) else set()
         lanes = [l for l in all_lanes if l // 4 in boards] or all_lanes
     key = "stim_order" if "stim_order" in processed.columns else "trial_id"
+    name_side = len({int(l) // 4 for l in lanes}) > 1 \
+        or str(hand_mode).lower() == "left"
     fig, axes = plt.subplots(len(lanes), 1, figsize=(11, 2.0 * len(lanes)),
                              sharex=True, squeeze=False)
     for ax, lane in zip(axes[:, 0], lanes):
         col = f"peak_{lane_column(lane)}_raw"
         finger = lane_finger(lane)
+        label = f"{lane_side(lane, hand_mode)} {finger}" if name_side \
+            else finger
         ax.plot(processed[key], processed[col], color=TRACE_COLOUR, lw=0.8)
         cued = processed["stim_lane"] == lane
         ax.scatter(processed.loc[~cued, key], processed.loc[~cued, col],
                    s=9, color=FINGER_COLOUR[finger], alpha=0.55)
         ax.scatter(processed.loc[cued, key], processed.loc[cued, col],
                    s=30, color=FINGER_COLOUR[finger])
-        ax.set_ylabel(f"{finger}\ncounts", fontsize=8)
+        ax.set_ylabel(f"{label}\ncounts", fontsize=8)
         ax.grid(True, color="#e2e8f0", linewidth=0.8)
         ax.set_axisbelow(True)
         for side in ("top", "right"):
@@ -1692,15 +1733,21 @@ def pooled_snr_summary(pairs) -> pd.DataFrame:
 
 
 def bench_counts(processed: pd.DataFrame, analytic: pd.DataFrame | None
-                 = None) -> dict:
+                 = None, trials: pd.DataFrame | None = None) -> dict:
     """The diagnostic counts his scripts printed to the console.
 
-    He printed how many blocks each file held, how big the main chunk
-    was before filtering and how many trials each block kept, and used
-    them to spot a log that had gone short. The means table's own n
-    column covers the last of the three; the other two are here so a
-    short log is visible at a glance rather than after a puzzled look
-    at a mean.
+    Data_analysis_Final.R printed three tables around its model, and
+    each one answers a different question about a log that looks wrong:
+
+      count(source_file, participant, block)    blocks_per_file
+      count(source_file, block100) on main      main_chunks_before_filter
+      count(participant, block_all)             trials_per_block
+
+    The first two come off the post-dedupe, pre-filter frame, so pass
+    `trials` (what `load_bench_trials` returned) as well as the
+    analytic set to get them. Together they separate a log that
+    recorded fewer trials from a log that recorded them and then lost
+    them to the reaction-time filter.
     """
     out = {"cues": int(len(processed)) if processed is not None else 0}
     if processed is not None and len(processed):
@@ -1710,14 +1757,37 @@ def bench_counts(processed: pd.DataFrame, analytic: pd.DataFrame | None
                          in block_slices(processed).items()}
     if analytic is not None and len(analytic):
         out["analytic_trials"] = int(len(analytic))
-        # Block labels are his 0 to 6 chunk numbers on his data and
-        # phase words ("pre", "main", "after") on ours, so they stay
-        # as they were written rather than being coerced to int.
+        # His block_all, the 0 to 6 numbering the model was fitted on,
+        # not the pretest/main/posttest word in `block`: three numbers
+        # under a phase heading hid the chunk sizes his diagnostic was
+        # printed for. Keys are strings either way so a phase-only
+        # frame still prints.
+        key = "block_all" if "block_all" in analytic.columns else "block"
         out["trials_per_block"] = {str(b): int(n) for b, n
-                                   in analytic["block"].value_counts()
+                                   in analytic[key].value_counts()
                                    .sort_index().items()}
+        if key != "block" and "block" in analytic.columns:
+            out["trials_per_phase"] = {str(b): int(n) for b, n
+                                       in analytic["block"].value_counts()
+                                       .sort_index().items()}
         if "participant" in analytic.columns:
             out["trials_per_participant"] = {
                 str(p): int(n) for p, n
                 in analytic["participant"].value_counts().items()}
+    if trials is not None and len(trials):
+        pre = block_chunks(trials)
+        out["rows_before_filter"] = int(len(pre))
+        if "block" in pre.columns:
+            per_file = ("source_file" if "source_file" in pre.columns
+                        else "participant")
+            if per_file in pre.columns:
+                out["blocks_per_file"] = {
+                    f"{a} {b}": int(n) for (a, b), n
+                    in pre.groupby([per_file, "block"]).size().items()}
+                main = pre[pre["block"] == "main"]
+                out["main_chunks_before_filter"] = {
+                    f"{a} chunk {int(c)}": int(n) for (a, c), n
+                    in main.groupby([per_file, "chunk"]).size().items()}
+        if analytic is not None:
+            out["dropped_by_filter"] = int(len(pre) - len(analytic))
     return out

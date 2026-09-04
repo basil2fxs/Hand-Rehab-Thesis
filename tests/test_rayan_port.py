@@ -516,12 +516,22 @@ class EndToEndTests(unittest.TestCase):
         self.assertTrue(((wide["on_target"] > 150)
                          & (wide["on_target"] < 200)).all())
         self.assertTrue((wide["off_share"] < 0.15).all())
-        self.assertEqual(set(wide["block"]), {"main 1"})
+        # His chunks of 100 collapse a battery block into one cell,
+        # because no block of the one-pass battery comes near 100
+        # trials. Under his threshold the game is cut into thirds of
+        # itself instead, which is a WITHIN-block axis.
+        self.assertEqual(set(wide["block"]), {"start", "middle", "end"})
+        by_slice = wide.groupby("block").size()
+        self.assertEqual(set(by_slice), {4})
+        self.assertIn("within-block", buf.getvalue().lower())
         # The heatmap and the panels are per HAND, not pooled: pivoting
         # on the finger alone put lane 0 and lane 4 in one row, so a
         # both-hands session averaged its two hands into one cell.
         self.assertIn("side", wide.columns)
         self.assertEqual(set(wide["side"]), {"right"})
+        # And the hand comes off the block's own metadata, not off the
+        # lane number: a left-only block writes lanes 0 to 3 too.
+        self.assertIn("presses", buf.getvalue())
         figs = {p.name for p in ns.FIGDIR.glob("*.png")}
         self.assertIn("rayan_finger_block_heatmap_right.png", figs)
         self.assertNotIn("rayan_finger_block_heatmap.png", figs)

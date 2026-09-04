@@ -1,13 +1,19 @@
 """Measure the study battery's clock cost headless.
 
-The healthy baseline design is one long sitting: nine blocks early,
-two played-once modes in the middle, the same nine blocks late, with
-two scheduled rests. It targets 85 minutes and stops at 90 (docs/
-research/healthy_baseline_study.txt, Section 2.3). This script plays
-the whole plan through the real engine, real modes and real loggers
-with a simulated participant, on a simulated clock, and reports what
-the blocks actually cost in seconds. No display, no audio, no
-hardware.
+The healthy baseline design is ONE PASS in one sitting: eleven
+blocks, ten modes, every mode played once (reaction twice, once per
+hand), one scheduled stretch and one scheduled mid-session rest. It
+targets 45 minutes on the rig and stops at 50 (Data Collection Plan,
+4 September 2026, "Where the 45 minutes goes"). This script plays the
+whole plan through the real engine, real modes and real loggers with
+a simulated participant, on a simulated clock, and reports what the
+blocks actually cost in seconds. No display, no audio, no hardware.
+
+The plan file's block table came out of this script, so a run that
+disagrees with it means the config moved and the plan file's minutes
+are stale. Re-run it after any change to protocol.presets.
+study_battery and put the measured numbers, not an estimate, into
+whatever quotes them.
 
 The participant is a model hand on a fake sensor stream: every mode
 is driven the way the boards drive it, through 200 Hz samples into
@@ -47,9 +53,10 @@ MAX_PRESS = 400.0        # counts above resting at a maximal press
 PRESS_COUNTS = 260.0     # a firm tap, well over the on threshold
 SAMPLE_HZ = 200.0
 
-# Fixed allowances the design counts outside the blocks (Section
-# 2.3): login, seating and hand placement; the quick calibration for
-# both hands; and the NEXT UP moment between blocks.
+# Fixed allowances the design counts outside the blocks: login,
+# seating and hand placement; the quick calibration for both hands;
+# and the NEXT UP moment between blocks. The first two are the plan
+# file's five minute "Login, seating, quick calibration" row.
 LOGIN_S = 3 * 60.0
 QUICK_CAL_S = 2 * 60.0
 TRANSITION_S = 10.0
@@ -150,6 +157,15 @@ class Participant:
         self.answered: set = set()
         self.pending: list[tuple[float, int, float]] = []   # (t, lane, hold)
         self._probe_phase_t0: float | None = None
+
+    def begin_block(self) -> None:
+        """A new block is about to open. Trial ids restart at 1 in
+        every block, so the answered set has to as well or the second
+        reaction block times out every trial. A subclass with
+        within-block state (scripts/simulate_cohort.py counts trials
+        inside a block to inject a learning drift) resets it here."""
+        self.answered.clear()
+        self.pending.clear()
 
     def _rt(self) -> float:
         return max(0.18, self.rng.gauss(self.RT_S, 0.06))
@@ -392,10 +408,7 @@ def run_block(eng, rig: FakeRig, hand: HandModel, who: Participant,
     next_sample = clock.t
     hand.press_until.clear()
     hand.force_pct = {}
-    who.pending.clear()
-    # Trial ids restart at 1 in every block, so the answered set must
-    # too, or the second reaction block times out every trial.
-    who.answered.clear()
+    who.begin_block()
     while eng.block_is_running():
         clock.t += dt
         now = clock.t
@@ -471,8 +484,7 @@ def main() -> int:
                          summary.get("status", "?"),
                          summary.get("trials", ""),
                          str(step.get("phase") or "")))
-            print(f"  {step.get('position', 0):2d} {str(step.get('phase') or ''):5s}"
-                  f" {mode:12s} {hand_mode:6s}"
+            print(f"  {step.get('position', 0):2d} {mode:12s} {hand_mode:6s}"
                   f" {secs / 60.0:6.2f} min  {summary.get('status', '?')}"
                   f"  trials={summary.get('trials', '')}", flush=True)
             nxt = eng.pending_protocol_step()
@@ -493,16 +505,20 @@ def main() -> int:
         total_s = (LOGIN_S + QUICK_CAL_S + blocks_s + transitions_s
                    + rests_s)
         battery = eng._battery or {}
-        budget = float(battery.get("budget_min", 85.0))
+        budget = float(battery.get("budget_min", 45.0))
         hard_stop = float(battery.get("hard_stop_min", 0.0))
-        by_phase: dict[str, float] = {}
+        # Per mode, because with one pass a mode is the unit the plan
+        # file's block table is written in. The phase column would say
+        # "battery" eleven times over and separate nothing.
+        by_mode: dict[str, float] = {}
         for r in rows:
-            by_phase[r[6]] = by_phase.get(r[6], 0.0) + r[3]
+            by_mode[r[1]] = by_mode.get(r[1], 0.0) + r[3]
+        print()
+        print("  per mode, the plan file's block table:")
+        for mode, secs in sorted(by_mode.items(), key=lambda kv: -kv[1]):
+            print(f"    {mode:12s} {secs / 60.0:6.2f} min")
         print()
         print(f"  blocks       {blocks_s / 60.0:6.2f} min over {len(rows)} blocks")
-        for phase in ("pre", "mid", "post"):
-            if phase in by_phase:
-                print(f"    {phase:9s}{by_phase[phase] / 60.0:6.2f} min")
         print(f"  rests        {rests_s / 60.0:6.2f} min (scheduled, taken "
               "in full)")
         print(f"  transitions  {transitions_s / 60.0:6.2f} min "
@@ -512,6 +528,11 @@ def main() -> int:
         print(f"  TOTAL        {total_s / 60.0:6.2f} min against a "
               f"{budget:.0f} min target "
               f"({'inside' if total_s <= budget * 60 else 'OVER'})")
+        # The plan file quotes the sitting both ways, because a
+        # participant who waves the rest off is a real run of the
+        # battery and not a protocol violation.
+        print(f"  no rest      {(total_s - rests_s) / 60.0:6.2f} min "
+              "(a participant who skips the rest at its floor)")
         if hard_stop > 0:
             print(f"  hard stop    {hard_stop:.0f} min "
                   f"({'inside' if total_s <= hard_stop * 60 else 'OVER'})")

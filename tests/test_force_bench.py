@@ -876,15 +876,58 @@ class TestBenchCounts:
         assert counts["blocks"]
 
     @needs_fixtures
-    def test_block_labels_survive_whether_they_are_numbers_or_words(self):
+    def test_trials_per_block_is_his_numbering_not_the_phase_word(self):
+        """count(participant, block_all) in his script: the 0 to 6
+        numbering the model was fitted on. Reading the `block` column
+        instead gave three phase words and hid every chunk size."""
         trials = fb.load_bench_trials(sorted(FIXTURES.glob("trials_*.csv")))
         analytic = fb.block_table(trials)
         counts = fb.bench_counts(None, analytic)
-        assert counts["analytic_trials"] == len(analytic)
+        assert counts["analytic_trials"] == len(analytic) == 1582
+        assert counts["trials_per_block"] == {
+            "0": 89, "1": 300, "2": 300, "3": 300, "4": 298, "5": 295}
+        # No block 6: every aftertest trial in all three logs timed out,
+        # which is why his post-versus-pre contrast could not be run.
+        assert "6" not in counts["trials_per_block"]
         assert sum(counts["trials_per_block"].values()) == len(analytic)
-        # Ours label blocks with phase words, so the keys are strings
-        # either way and nothing is coerced to int.
+        assert counts["trials_per_phase"] == {"main": 1493, "pretest": 89}
+        # Keys stay strings so a frame that only carries phase words
+        # still prints under the same heading.
         assert all(isinstance(k, str) for k in counts["trials_per_block"])
+
+    @needs_fixtures
+    def test_the_pre_filter_counts_match_his_console(self):
+        """His other two tables, both off the post-dedupe pre-filter
+        frame: blocks per file and the main chunk sizes. They are what
+        separates a log that recorded fewer trials from one that
+        recorded them and lost them to the reaction-time filter."""
+        trials = fb.load_bench_trials(sorted(FIXTURES.glob("trials_*.csv")))
+        analytic = fb.block_table(trials)
+        counts = fb.bench_counts(None, analytic, trials)
+        assert counts["rows_before_filter"] == 1800
+        # Three logs, each 50 pretest, 500 main and 50 aftertest.
+        assert len(counts["blocks_per_file"]) == 9
+        assert set(counts["blocks_per_file"].values()) == {50, 500}
+        assert sum(counts["blocks_per_file"].values()) == 1800
+        # Five full chunks of 100 in each log's main block.
+        assert len(counts["main_chunks_before_filter"]) == 15
+        assert set(counts["main_chunks_before_filter"].values()) == {100}
+        # 218 rows lost, 150 of them the aftertest that timed out.
+        assert counts["dropped_by_filter"] == 1800 - len(analytic) == 218
+
+    @needs_fixtures
+    def test_block_chunks_is_the_frame_block_table_filters(self):
+        """The split that made the two counts above possible: the same
+        dedupe and chunking, stopping before the filter."""
+        trials = fb.load_bench_trials(sorted(FIXTURES.glob("trials_*.csv")))
+        pre = fb.block_chunks(trials)
+        assert len(pre) == 1800
+        assert set(pre["chunk"][pre["block"] == "main"]) == {1, 2, 3, 4, 5}
+        # Every analytic trial came from this frame, none was invented.
+        analytic = fb.block_table(trials)
+        assert len(analytic) <= len(pre)
+        for column in ("participant", "block", "trial"):
+            assert set(analytic[column]) <= set(pre[column])
 
 
 class TestBothBoardsAreDrawn:
@@ -898,4 +941,30 @@ class TestBothBoardsAreDrawn:
                                        fs_mode="span")
         figure = fb.plot_trial_peaks(processed)
         assert len(figure.axes) == 8
+        # Eight panels labelled Index, Middle, Ring, Pinky twice would
+        # not say which hand each one is.
+        labels = [ax.get_ylabel().split("\n")[0] for ax in figure.axes]
+        assert labels[:4] == ["right Index", "right Middle", "right Ring",
+                              "right Pinky"]
+        assert labels[4:] == ["left Index", "left Middle", "left Ring",
+                              "left Pinky"]
         plt.close(figure)
+
+    def test_a_left_only_block_is_not_labelled_right(self):
+        """A left-handed block writes its four pads on lanes 0 to 3, the
+        same lanes a right-handed block uses, so the lane number alone
+        calls every panel a right finger."""
+        frame = _our_frame(lanes=(0, 1), rest=(258, 262))
+        processed = fb.processed_peaks(frame,
+                                       offset=fb.resting_offsets(frame),
+                                       fs_mode="span")
+        figure = fb.plot_trial_peaks(processed, hand_mode="left")
+        labels = [ax.get_ylabel().split("\n")[0] for ax in figure.axes]
+        assert all(l.startswith("left ") for l in labels), labels
+        plt.close(figure)
+        # One board, right-handed: the side adds nothing, so the panels
+        # stay as his were, one finger name each.
+        plain = fb.plot_trial_peaks(processed)
+        assert [ax.get_ylabel().split("\n")[0] for ax in plain.axes] == \
+            ["Index", "Middle", "Ring", "Pinky"]
+        plt.close(plain)

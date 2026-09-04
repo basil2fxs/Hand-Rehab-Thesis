@@ -9,9 +9,17 @@ at login, the overrides as a nested dict the engine lays over its
 config, plus the snapshot needed to put the config back afterwards.
 
 Pure functions over dicts so the plan can be tested without a screen
-and the engine's part stays small: start, continue, finish. The
-design the shipped preset implements is docs/research/
-healthy_baseline_study.txt, Sections 2.2 to 2.4.
+and the engine's part stays small: start, continue, finish.
+
+The design the shipped preset implements is ONE PASS in one sitting:
+eleven blocks, ten modes, every mode played once. Data Collection
+Plan.md of 4 September 2026, and the amendment at the top of
+docs/research/healthy_baseline_study.txt. Section 1 of that document,
+what each mode measures, still carries the design; its Sections 2, 4
+Sections 2 to 5 describe this one-pass design.
+module knows about passes or phases beyond copying the preset's phase
+word onto the step, so a design change is a config edit, not a code
+change.
 """
 from __future__ import annotations
 
@@ -302,15 +310,24 @@ def find_track(cfg, name: str | None) -> Path | None:
 # ---------------------------------------------------------------------
 # Session so far: first go against latest go, per mode and hand
 # ---------------------------------------------------------------------
-# The single long session exists so a participant can watch their own
-# numbers move inside one sitting. That needs one comparison, made the
-# same way everywhere: the mode's own headline number from the FIRST
-# completed block of the session against the LATEST one, on the same
-# hand, with the direction and the wording the vs-last-time chip
-# already uses (data/history). Nothing here reads the disk: the
-# session log the engine keeps is this session and only this session,
-# so "your first go today" cannot quietly become a block from a week
-# ago.
+# One comparison, made the same way everywhere: the mode's own
+# headline number from the FIRST completed block of the session
+# against the LATEST one, on the same hand, with the direction and the
+# wording the vs-last-time chip already uses (data/history). Nothing
+# here reads the disk: the session log the engine keeps is this
+# session and only this session, so "your first go today" cannot
+# quietly become a block from a week ago.
+#
+# Under the one-pass battery this has less to say than it used to.
+# Every mode and hand is played exactly once, so inside the battery
+# every row comes back n = 1 with no comparison, and the SO FAR strip
+# stays empty until somebody replays a mode freely from the hub. That
+# is the honest reading of one pass: there is no second block to
+# compare against. Showing a participant their own improvement inside
+# a single block would need a first-trials-against-last-trials split
+# written into each mode's block summary, which no mode writes today
+# (only pattern's per_take is ordered), so the within-block story
+# currently lives in the analysis notebook and not on this screen.
 #
 # The wording tails in data/history end in "than last time" / "on last
 # time" because that chip compares across sessions. Inside one sitting

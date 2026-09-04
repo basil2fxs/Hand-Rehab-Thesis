@@ -180,7 +180,8 @@ def cell_for(participant: str | None) -> dict:
     hashes (SHA-256 of the trimmed, case-folded name, the same seed
     rule the hidden sequences use) and the hash takes the number's
     place. Either way the cell is fixed for the identity across visits,
-    which is what the test-retest design needs.
+    so one participant always meets the modes in the
+    same order, which is what the counterbalancing needs.
     """
     parsed = parse_code(participant)
     if parsed is not None:

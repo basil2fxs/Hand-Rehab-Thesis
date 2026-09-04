@@ -815,19 +815,25 @@ class TestPatternSequenceFileChapter:
 
 class TestCohortChapterContract:
     SECTIONS = ["sec_cohort_selection", "sec_cohort_describe",
-                "sec_cohort_hands", "sec_cohort_within_session",
-                "sec_cohort_learning", "sec_cohort_curves",
-                "sec_cohort_one_pass", "sec_cohort_validity",
-                "sec_cohort_export"]
+                "sec_cohort_hands", "sec_cohort_within_block",
+                "sec_cohort_consistency", "sec_cohort_feasibility",
+                "sec_cohort_validity", "sec_cohort_export"]
     HELPERS = ["write_cohort_report", "icc_ci", "cohort_long_table",
                "cohort_catalogue", "cohort_paired", "cohort_values",
+               "cohort_battery_rows", "median_order_ci",
                "is_study_code", "cohort_hand_role", "split_half",
                "tost_paired", "wilson_ci", "log_linear_slope",
                "exp_fit", "fine_series", "rolling_median",
-               "cohort_within_block_curves", "_binned_curve"]
-    # The eight played twice in the sitting, then the two the design
-    # plays once in the middle pass and describes without pairing.
-    BATTERY_MODES = {"reaction", "mirror", "rhythm", "echo", "force_pilot",
+               "cohort_within_block_curves", "cohort_series_table",
+               "_binned_curve", "_slope_ci", "_dropped_row",
+               "_within_block_row", "_bh_fixed_level_series",
+               "_fp_level_residual"]
+    # Every mode is played once in the one pass. The split below is not
+    # how often a mode is played any more, it is whether the design
+    # makes a directional claim on it: adaptive and syllables are
+    # described and never claimed on, because the staircase moves the
+    # task under the hand.
+    CLAIMED_MODES = {"reaction", "mirror", "rhythm", "echo", "force_pilot",
                      "chords", "buzz_hunt", "pattern"}
     ONCE_MODES = {"adaptive", "syllables"}
 
@@ -851,17 +857,57 @@ class TestCohortChapterContract:
 
     def test_the_phases_are_the_ones_the_shipped_preset_writes(
             self, source):
-        """A preset change must not silently break the pairing: the
-        notebook's phase words are read back off config/default.yaml."""
+        """The one pass writes a single phase word on every step, and
+        the notebook has to carry the same one: a battery block is told
+        from a free pick by having a phase at all."""
         from finger_rehab.config import Config
-        phases, pair = _notebook_names(
-            source, ["COHORT_PHASES", "COHORT_PAIR_PHASES"])
+        one, phases = _notebook_names(
+            source, ["COHORT_PHASE", "COHORT_PHASES"])
         preset = Config.load().get("protocol.presets.study_battery") or {}
         shipped = {str(step.get("phase") or "").strip().lower()
                    for order in (preset.get("orders") or {}).values()
                    for step in order}
         assert set(phases) == shipped
-        assert set(pair) == {"pre", "post"}
+        assert len(shipped) == 1, (
+            "the shipped preset writes more than one phase word, so the "
+            "battery repeats a block and this is no longer one pass")
+        assert one in shipped
+
+    def test_no_paired_phase_machinery_survives(self, source):
+        """The one pass repeats nothing, so a pre-against-post pairing
+        key, a retest interval and an MDC file would all be machinery
+        for data that is never collected."""
+        for gone in ("COHORT_PAIR_PHASES", "COHORT_INTERVAL_DAYS",
+                     "COHORT_ANCHOR_BAND_MS", "COHORT_NEEDS_POST",
+                     '"progress_mdc.yaml"', "sec_cohort_within_session",
+                     "sec_cohort_learning", "_equivalence_check",
+                     "_change_check", "_cohort_post_rest"):
+            assert gone not in source, f"{gone} outlived the one pass"
+
+    def test_the_dropped_checks_are_named_with_their_reason(self, source):
+        """R3 and P2 are in Section 1 of the design and cannot be run
+        here. They print as DROPPED with the reason, so a reader who
+        meets them there finds out what happened to them."""
+        (dropped,) = _notebook_names(source, ["COHORT_DROPPED_CHECKS"])
+        assert set(dropped) == {"R3", "P2"}
+        for cid, (mode, _check, reason) in dropped.items():
+            assert mode in ("reaction", "pattern"), cid
+            assert "twice" in reason, cid
+
+    def test_every_mode_says_how_its_within_block_trend_reads(
+            self, source):
+        """A mode missing from the table would have its trend read as
+        improvement by default, and for four of them a later trial is a
+        harder trial."""
+        reading, modes = _notebook_names(
+            source, ["COHORT_WITHIN_BLOCK_READING", "COHORT_MODES"])
+        assert set(reading) == set(modes)
+        assert reading["reaction"][0] == "anchor"
+        harder = {m for m, (kind, _why) in reading.items()
+                  if kind == "harder"}
+        assert harder == {"echo", "force_pilot", "buzz_hunt", "adaptive"}
+        for mode, (_kind, why) in reading.items():
+            assert why, f"{mode} says nothing about why"
 
     def test_the_fine_series_covers_every_shipped_mode(self, source):
         """Every mode on the hub has a watched series, or the curve
@@ -875,7 +921,7 @@ class TestCohortChapterContract:
     def test_registry_covers_every_mode_the_sitting_plays(self, source):
         floor, registry, modes = _notebook_names(
             source, ["COHORT_BH_FLOOR_MS", "COHORT_METRICS", "COHORT_MODES"])
-        every = self.BATTERY_MODES | self.ONCE_MODES
+        every = self.CLAIMED_MODES | self.ONCE_MODES
         assert {mode for mode, _m in registry} == every
         assert set(modes) == every
         # Every mode has exactly one headline metric for the figures.
@@ -885,15 +931,12 @@ class TestCohortChapterContract:
             assert len(heads) == 1, f"{mode} headline metrics: {heads}"
         assert floor == 40.0
 
-    def test_the_once_played_modes_are_descriptive_only(self, source):
-        """Adaptive and syllables are played once in the middle pass.
-
-        Every one of their rows has to be marked descriptive and has to
-        carry the reason it gets no MDC, because there is no second go
-        to correlate them with; a row that lost the flag would walk
-        into the reliability table and print a coefficient off a single
-        measurement.
-        """
+    def test_the_described_modes_carry_their_caveat(self, source):
+        """Adaptive and syllables are described and never claimed on:
+        their staircases move the task under the hand, so the number is
+        the ladder as much as the finger. Every one of their rows has
+        to be marked descriptive and has to carry the reason, or it
+        walks into a table that makes a claim about it."""
         _floor, registry = _notebook_names(
             source, ["COHORT_BH_FLOOR_MS", "COHORT_METRICS"])
         for mode in self.ONCE_MODES:
@@ -901,12 +944,16 @@ class TestCohortChapterContract:
             assert rows, f"{mode} has no registry rows"
             for metric, spec in rows.items():
                 assert spec.get("descriptive"), f"{mode}.{metric}"
-                assert spec.get("no_mdc"), f"{mode}.{metric} has no reason"
-        # No mode played twice may be marked descriptive: that flag is
-        # what keeps a row out of the reliability and change tables.
+                assert spec.get("caveat"), f"{mode}.{metric} has no reason"
         for (mode, metric), spec in registry.items():
-            if mode in self.BATTERY_MODES:
+            if mode in self.CLAIMED_MODES:
                 assert not spec.get("descriptive"), f"{mode}.{metric}"
+        # "played once" is true of every mode now, so it cannot be a
+        # reason for anything.
+        for (mode, metric), spec in registry.items():
+            assert "played once" not in str(spec.get("caveat", "")), (
+                f"{mode}.{metric} still explains itself by being played "
+                f"once, which is now true of all ten modes")
 
     def test_the_builders_cover_every_mode_in_the_registry(self, source):
         """A registry row with no builder emits nothing, so the metric
@@ -923,23 +970,34 @@ class TestCohortChapterContract:
             source, ["COHORT_BH_FLOOR_MS", "COHORT_METRICS"])
         assert builders == {mode for mode, _m in registry}
 
-    def test_the_reliability_table_skips_the_descriptive_rows(self, source):
-        assert 'if spec.get("descriptive"):' in source, (
-            "sec_cohort_within_session must skip the once-played modes")
+    def test_the_within_block_chapter_carries_its_own_limitation(
+            self, source):
+        """The result and the caveat go in the same breath or the
+        caveat is not there at all."""
+        chapter = _section_source(source, "sec_cohort_within_block")
+        low = chapter.lower()
+        for phrase in ("warm-up", "fatigue", "noise floor",
+                       "kantak and winstein", "heathcote"):
+            assert phrase in low, f"the chapter never says {phrase!r}"
 
-    def test_the_curves_walk_every_phase_of_the_sitting(self, source):
-        """The MID modes only exist in the mid phase, so a curve loop
-        over the paired phases alone draws neither of them. The paired
-        loop stays where it belongs, in the dominance chapter."""
-        curves = _section_source(source, "sec_cohort_curves")
-        assert "for phase in COHORT_PHASES:" in curves
-        assert "COHORT_PAIR_PHASES" not in curves
+    def test_the_consistency_chapter_refuses_to_derive_an_mdc(
+            self, source):
+        chapter = _section_source(source, "sec_cohort_consistency")
+        low = chapter.lower()
+        assert "internal consistency" in low
+        assert "not test-retest" in low
+        assert "too tight" in low
 
-    def test_the_design_minimum_is_the_analysed_sample(self, source):
-        n_design, min_n = _notebook_names(
-            source, ["COHORT_N_DESIGN", "COHORT_MIN_N"])
-        assert n_design == 28
-        assert min_n == 28
+    def test_the_design_minimum_is_the_collection_day(self, source):
+        """Section 2.1: the sample is set by the day, not by a power
+        calculation. Ten students for a ten-hour day, and the eight-hour
+        day is the floor nothing inferential prints below."""
+        n_design, min_n, pct = _notebook_names(
+            source, ["COHORT_N_DESIGN", "COHORT_MIN_N",
+                     "COHORT_PERCENTILE_MIN_N"])
+        assert n_design == 10
+        assert min_n == 8
+        assert pct == 20
 
     def test_icc_ci_matches_the_shrout_fleiss_example(self, source):
         """Shrout and Fleiss 1979, Table 2, six targets by four raters:
@@ -971,6 +1029,12 @@ class TestCohortChapterContract:
             assert "keep(" in cell, cell
             called |= set(re.findall(r"\b(sec_cohort_\w+)\s*\(", cell))
         assert called == set(self.SECTIONS)
+        # The within-block result feeds the validity table's W rows,
+        # so the two cannot be run out of order.
+        assert any("sec_cohort_validity(cohort, within)" in c
+                   for c in cohort_cells), (
+            "the validity cell no longer takes the within-block result, "
+            "so W1 to W6 would print as not testable")
         # The cohort report cell sits before the per-session export
         # cell, which must stay last.
         report_cells = [i for i, c in enumerate(code)
