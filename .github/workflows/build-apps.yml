@@ -21,7 +21,44 @@ on:
       - "v*"
 
 jobs:
+  # Compile the two Arduino hexes once, on Linux, and hand them to both
+  # app builds. The clinic PC never compiles anything: the app flashes a
+  # prebuilt hex with a bundled avrdude. Building here (rather than
+  # committing the hexes) is what stops a hex forking from the source it
+  # was built from.
+  firmware:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # The AVR toolchain is about 200 MB and does not change between
+      # runs, so caching it turns a two-minute job into a ten-second one.
+      - name: Cache the PlatformIO toolchain
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio/.cache
+            ~/.platformio/packages
+          key: pio-${{ hashFiles('arduino/*/platformio.ini') }}
+
+      - name: Install PlatformIO
+        run: python -m pip install --upgrade platformio
+
+      - name: Build the hexes
+        run: python builds/build_firmware.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware-hex
+          path: assets/firmware
+          retention-days: 30
+
   build:
+    needs: firmware
     strategy:
       matrix:
         include:
@@ -43,6 +80,22 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt pyinstaller
+
+      # The hexes the firmware job just compiled, from this same commit,
+      # so a released app can never carry firmware from a different one.
+      # v4 artefacts are scoped to the run, so no token is needed.
+      - name: Fetch the firmware hexes
+        uses: actions/download-artifact@v4
+        with:
+          name: firmware-hex
+          path: assets/firmware
+
+      # avrdude, the uploader the app spawns. Verified against Arduino's
+      # published checksum; a failure here only means the Settings panel
+      # says avrdude is missing, so it must not fail the build.
+      - name: Fetch avrdude
+        continue-on-error: true
+        run: python builds/fetch_avrdude.py
 
       - name: Build
         run: python -m PyInstaller --noconfirm --workpath bin/build --distpath bin/dist finger_rehab.spec

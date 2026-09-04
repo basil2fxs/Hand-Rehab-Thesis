@@ -3,23 +3,87 @@ growing sequence on the lanes (tile light plus a buzz on that finger),
 the patient plays it back in order, and the longest echo they can hold
 is the block's headline. Simon says, scored like a span test.
 
-WHY THIS DESIGN. The parent paradigm is the Corsi block-tapping task
-(Corsi 1972, McGill PhD thesis; Milner 1971), the standard visuospatial
-span measure and the nonverbal twin of digit span. Kessels, van
-Zandvoort, Postma, Kappelle and de Haan (2000, Applied Neuropsychology
-7:252-258) is the standardisation everyone implements, and its skeleton
-agrees with WAIS digit span administration, which is why Echo adopts it
-rather than the arcade rule:
+THE RULE (echo.rule: simon, the default). One sequence per game, drawn
+once at game start and revealed one item longer each trial: trial 1
+plays its first item, trial 2 replays that item and adds the second,
+and so on. Start at length 1. A correct reproduction adds an item; a
+miss (wrong press or idle timeout) spends the game's ONE spare life
+and replays the same sequence at the same length once; a second miss
+ends the game. That is the 1978 Milton Bradley SIMON rule (Game 1 of
+the manual: the device repeats the sequence and adds one signal, a
+wrong press or five seconds of silence ends it, and the LONGEST button
+reads back the best run) with a two-error discontinue rule applied
+once per game.
 
-  - sequence length starts at 2, TWO trials (different sequences) per
-    length, both always administered;
-  - length advances by one while at least one of the two is correct;
-    the ladder ends when BOTH trials at a length fail;
-  - ceiling 9 (the Corsi ceiling; far above expected spans on four
-    lanes anyway);
-  - span = longest length with a correct reproduction; the Kessels
-    total score is span x number of correct sequences, a compound
-    with a better distribution than span alone.
+WHY THE SPARE LIFE. Classic Simon is the strictest stop rule there
+is: one trial per length, one miss ends everything, so a single motor
+slip costs the whole measurement. Woods, Kishiyama, Yund, Herron,
+Edwards, Poliva, Hink and Reed (2011, Journal of Clinical and
+Experimental Neuropsychology 33:101-111) showed exactly this on digit
+span: the maximum-length score retested at r = 0.68 while the
+two-error discontinue score managed r = 0.39, because a rule that
+stops at the first errors throws away the trials that carry the
+information. Conway, Kane, Bunting, Hambrick, Wilhelm and Engle (2005,
+Psychonomic Bulletin and Review 12:769-786) make the same argument for
+partial credit over all-or-nothing scoring, which is why a failed
+attempt here still pays per item. A toy Monte Carlo over this rule
+(20 000 games per cell, per-trial success a logistic in length with
+the true span at p = 0.5) puts a true span of 6 at a mean of 5.14
+(SD 1.05) with no life and 5.81 (SD 0.81) with one, against 5.95
+(SD 0.83) for the full Kessels ladder at about 1.5 times the trials.
+One life removes most of the single-shot downward bias and its fat
+lower tail. It does not make a one-game span as stable as a ladder,
+which is why the study battery plays two games and reports the best
+and the mean.
+
+WHY ONE SEQUENCE PER GAME, AND WHAT THAT COSTS. Growing one sequence
+means every prefix is presented again on every trial, so the score
+mixes span with sequence learning. Chekaf, Gauvrit, Guida and Mathy
+(2015, CogSci; 2018, Cognitive Science 42 Suppl 3:904-922) built their
+chunking-span task on the SIMON frame and deliberately showed each
+sequence whole, once, "so there was no sequence of increasing length
+that could have favored a long-term memory process". That is the
+clearest statement of what this rule adds. Echo keeps it anyway
+because Basil's ask is the toy people recognise, and because the
+learning it adds is measurable rather than hidden: the growing prefix
+is overt, every trial logs where the attempt failed, and the notebook
+reads miss position and replay success as descriptives of prefix
+retention. Musfeld, Souza and Oberauer (2023, PNAS 120:e2218042120)
+found repetition learning to be explicit and abrupt rather than
+gradual and implicit, so nothing here is claimed as implicit learning.
+The consequence for the numbers: a Simon span is NOT a Corsi span and
+the two never pool. Gendle and Ransom (2006, Journal of Behavioral and
+Neuroscience Research 4:1-7) ran the retail SIMON with 94 college
+students over four games with 30 s rests, found no habituation,
+practice or interference across the games, and reported spans around
+seven on four buttons (quoted via Mathy, Fartoukh, Gauvrit and Guida
+2016, Frontiers in Psychology 7:201, the primary PDF being unobtainable)
+against the Corsi mean of 6.2 on nine blocks.
+
+MATERIAL PER GAME. The sequence is drawn from
+sha256(participant name normalised | "echo_simon_v1" | game_index),
+where game_index counts the participant's earlier Simon games in the
+sessions tree plus the game's number inside this block. Same person,
+same game count, same sequence, so any game is replayable in analysis;
+different games get different material. echo.seed overrides it for a
+deliberate replay, and Test Mode uses game_index -1 and never advances
+the count.
+
+THE LEGACY LADDER (echo.rule: ladder). The Kessels 2000 Corsi ladder
+is kept behind the config switch so old configs, old sessions and the
+Hebb repetition design still run. Its rule: sequence length starts at
+2, TWO different sequences per length, both always administered;
+length advances while at least one of the two is correct; the ladder
+ends when BOTH trials at a length fail; ceiling 9; span is the longest
+length with a correct reproduction and the Kessels total score is span
+x number of correct sequences. Kessels, van Zandvoort, Postma, Kappelle
+and de Haan (2000, Applied Neuropsychology 7:252-258) is the
+standardisation everyone implements, and Arce and McMullen (2021,
+Computers in Human Behavior Reports 4:100099) name its values as the
+standard after finding start levels of 1 to 3 and five different stop
+criteria across 39 recent studies. A stricter stop rule lowers the
+score, so ladder spans and Simon spans are two tests and the analysis
+never pools them.
 
 Berch, Krikorian and Huha (1998, Brain and Cognition 38:317-338)
 reviewed 25 years of Corsi use and found administration parameters
@@ -113,28 +177,31 @@ necessary above length 4: the stock SIMON toy has four lanes and
 usable spans around 7 (Gendle and Ransom 2006, J Behav Neurosci Res
 4:1-7), so revisiting material works as span material. This is a named
 deviation from Corsi's nine distinct blocks, one more reason these
-spans are within-person numbers only. Fresh sequences every trial:
-SIMON grows ONE sequence by appending, so every prefix is rehearsed
-many times before it fails, which inflates span and mixes repetition
-learning into the measure. The ladder keeps the Simon feel; the
-appending does not. (echo.cumulative turns classic appending back on
-for play value; it is logged loudly and its numbers are not comparable
-to ladder blocks.)
+spans are within-person numbers only. Under the Simon rule the game's
+sequence is drawn once and truncated per trial, so it is prefix-stable
+by construction; under the ladder rule every trial draws fresh, and
+the second sequence at a length is redrawn if it duplicates the first
+(Kessels administers two DIFFERENT sequences per length).
 
-HEBB REPETITION. Every third trial secretly replays the participant's
-hidden sequence (Hebb 1961; visuospatial confirmation Couture and
-Tremblay 2007), the same schedule and name-seed recipe as buzz_hunt's
-span stage (tag "echo_v1"), so the two modes' repetition-learning
-slopes are comparable. Unlike buzz_hunt's per-length draws, the hidden
-material here is PREFIX-STABLE: one fixed participant stream, and the
-length-L hidden sequence is its first L items, so repeated material
-keeps accumulating exposure as the ladder climbs and across sessions.
-Repetition learning needs items to keep their serial positions and
-neighbours (the chunking literature), which a prefix-stable stream
-preserves and per-length redraws would not. Hebb trials render
-identically to novel ones and count equally for the ladder; the
-notebook separates them (span_all against span_novel) so the learned
-sequence cannot silently inflate the span trajectory.
+HEBB REPETITION (ladder rule only). Every third ladder trial secretly
+replays the participant's hidden sequence (Hebb 1961; visuospatial
+confirmation Couture and Tremblay 2006), the same schedule and
+name-seed recipe as buzz_hunt's span stage (tag "echo_v1"), so the two
+modes' repetition-learning slopes are comparable. Unlike buzz_hunt's
+per-length draws, the hidden material there is PREFIX-STABLE: one
+fixed participant stream, and the length-L hidden sequence is its
+first L items, so repeated material keeps accumulating exposure as the
+ladder climbs and across sessions. Repetition learning needs items to
+keep their serial positions and neighbours (the chunking literature),
+which a prefix-stable stream preserves and per-length redraws would
+not. Hebb trials render identically to novel ones and count equally
+for the ladder; the notebook separates them (span_all against
+span_novel) so the learned sequence cannot silently inflate the span
+trajectory. The Simon rule has no hidden trials and cannot have any:
+every trial repeats the same material by design, so there is nothing
+to hide a repeat among. Its repetition measure is the life replay (an
+immediate repeat of the same list, logged as life=1) and the serial
+position of each miss.
 
 RELATION TO PATTERN MODE. pattern.py actively SUPPRESSES explicit
 sequence knowledge (Boyd and Winstein: explicit knowledge impairs
@@ -167,8 +234,13 @@ tile, a correct echo gets a cheerful card, a wrong one gets a neutral
 
 WHAT THIS MODE CANNOT CLAIM. Not a Corsi test: four or eight lanes
 with revisits, bimodal presentation, press response instead of
-pointing. Spans here are within-person tracking numbers and must never
-be read against Kessels 2000 or Farrell Pagulayan 2006 norms. Span
+pointing, and under the Simon rule one trial per length, a spare life
+and an overtly re-presented prefix on every trial. Spans here are
+within-person tracking numbers and must never be read against Kessels
+2000 or Farrell Pagulayan 2006 norms. With one session there is no
+test-retest coefficient either; two games in a block give a
+between-game agreement inside one sitting, which is a weaker number
+and is labelled as one. Span
 games measure; they are not proven therapy, and no transfer claim is
 made (working-memory training transfer is a contested literature). In
 motor-impaired players a wrong press can be a motor slip rather than a
@@ -180,10 +252,12 @@ Display timing is 60 Hz quantised as everywhere in this app.
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import random
 import time
 from collections import deque
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pygame
@@ -192,6 +266,7 @@ from ...data.logger import ContinuousTrialLog
 from ...hardware.eeg_trigger import (CODES as EEG_CODES, response_code,
                                      stim_code)
 from ...hardware.fsr_detector import PressEvent
+from ...ui import feedback_bank
 from ..rest_skip import WaitSkip
 from ..scoring import ScoreConfig, TrialResult
 from ._keys import keymap_for_hand, resolve_key
@@ -239,6 +314,108 @@ def echo_stream(p_seed: int, lanes: list[int], length: int) -> list[int]:
             continue
         out.append(pick)
     return out
+
+
+def participant_simon_seed(name: str, game_index: int) -> int:
+    """The seed for ONE Simon game: the participant's name plus the
+    number of Simon games they have already played. Same convention as
+    participant_echo_seed (trimmed, case-folded, version-tagged) with
+    the game count folded in, so the same person on their third game
+    always meets the same sequence and any game in the sessions tree
+    can be redrawn in analysis, while no two games of a session share
+    material. Test Mode passes game_index -1, which is a real index
+    here and simply never collides with a played game."""
+    norm = (name or "").strip().lower() or "anonymous"
+    digest = hashlib.sha256(
+        f"{norm}|echo_simon_v1|{int(game_index)}".encode("utf-8")).digest()
+    return int.from_bytes(digest[:8], "big")
+
+
+def simon_stream(game_seed: int, lanes: list[int],
+                 max_len: int) -> list[int]:
+    """The whole sequence for one Simon game, drawn once at game start
+    and truncated per trial (trial t plays the first t items). Same
+    generator as echo_stream so both rules' material has the identical
+    shape: uniform over the lane pool, no back-to-back repeats,
+    revisits allowed. Prefix-stable by construction, which is the
+    Simon rule itself: the length-5 trial extends the length-4 one by
+    exactly one item."""
+    pool = sorted(int(x) for x in lanes)
+    tag = f"{int(game_seed)}|{'-'.join(str(x) for x in pool)}"
+    rng = random.Random(
+        int.from_bytes(hashlib.sha256(tag.encode()).digest()[:8], "big"))
+    out: list[int] = []
+    while len(out) < max(0, int(max_len)):
+        pick = pool[rng.randrange(len(pool))]
+        if out and pick == out[-1] and len(pool) > 1:
+            continue
+        out.append(pick)
+    return out
+
+
+def count_prior_echo_games(data_dir, participant: str,
+                           exclude_root=None) -> int:
+    """How many Simon games this participant has already played in the
+    sessions tree, so the next game's seed carries on rather than
+    repeating a sequence they have seen.
+
+    Walks metadata.json the way data/history.previous_block_summary
+    does, with two deliberate differences: status does not matter (an
+    abandoned block still showed its sequence, so its material is
+    used up), and the hand does not either (the same person meeting
+    the same sequence on the other hand is still a repeat). An
+    unfinished game inside an abandoned block counts too, since its
+    sequence was on the rig. Any read failure counts as nothing: this
+    feeds a seed, and a broken folder must not stop a block from
+    starting."""
+    try:
+        root = Path(data_dir)
+        if not root.exists():
+            return 0
+        exclude = Path(exclude_root).resolve() if exclude_root else None
+        total = 0
+        for meta_path in root.rglob("metadata.json"):
+            try:
+                if exclude is not None and meta_path.parent.resolve() == exclude:
+                    continue
+                meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+                continue
+            if not isinstance(meta, dict):
+                continue
+            if str(meta.get("participant") or "") != str(participant):
+                continue
+            summary = meta.get("block_summary")
+            if not isinstance(summary, dict):
+                continue
+            if str(summary.get("block") or "") != "echo":
+                continue
+            echo = summary.get("echo")
+            if not isinstance(echo, dict):
+                continue
+            if str(echo.get("rule") or "ladder") != "simon":
+                continue
+            played = echo.get("games_played")
+            if not isinstance(played, list):
+                total += 1
+                continue
+            total += len(played)
+            # A block abandoned part way through a game records no
+            # summary for that game, but the sequence was still shown,
+            # so it is used up. More trials than the finished games
+            # account for is exactly that case.
+            logged = sum(int(g.get("n_trials") or 0) for g in played
+                         if isinstance(g, dict))
+            try:
+                n_trials = int(echo.get("n_trials") or 0)
+            except (TypeError, ValueError):
+                n_trials = 0
+            if n_trials > logged:
+                total += 1
+        return total
+    except Exception:
+        log.debug("echo: could not count prior games", exc_info=True)
+        return 0
 
 
 def draw_echo_sequence(rng: random.Random, length: int,
@@ -294,6 +471,14 @@ class EchoMode(WaitSkip):
     # length 2 over four lanes identical draws are common enough to
     # guard against. Deterministic given the block rng.
     _REDRAW_TRIES = 40
+    # Where the presentation schedule starts stepping. Lengths at or
+    # under the anchor all run at ioi_ms, so a Simon game's length-1
+    # and length-2 trials play at the same rate the ladder's opening
+    # length always played at, and one schedule serves both rules.
+    IOI_ANCHOR_LEN = 2
+    # The demo miniature's ceiling under the Simon rule (Test Mode):
+    # three items is enough to write a real row of every kind.
+    DEMO_MAX_LEN = 3
 
     def __init__(self, engine: "GameEngine",
                  lanes: list[int],
@@ -309,7 +494,14 @@ class EchoMode(WaitSkip):
                  score_cfg: ScoreConfig,
                  demo_trials: int | None = None,
                  ioi_step_ms: float = 0.0,
-                 ioi_floor_ms: float | None = None) -> None:
+                 ioi_floor_ms: float | None = None,
+                 rule: str = "simon",
+                 games: int = 1,
+                 lives: int = 1,
+                 participant: str = "",
+                 game_index_base: int = 0,
+                 forced_seed: int | None = None,
+                 ioi_anchor_len: int | None = None) -> None:
         self.engine = engine
         # Lanes in play: one hand's four, or all eight bilaterally
         # (right 0..3 then left 4..7, engine global numbering). Same
@@ -325,6 +517,19 @@ class EchoMode(WaitSkip):
         self.p_seed = int(p_seed)
         self.block_seed = int(block_seed)
         self.score_cfg = score_cfg
+        self.participant = str(participant or "")
+        # echo.cumulative is retired: the classic appending rule IS
+        # the Simon rule now, with a spare life and per-game seeding
+        # on top, so an old config asking for it gets the real thing
+        # and a line in the log saying where it went.
+        if bool(cumulative):
+            log.warning("echo: cumulative is retired; running rule "
+                        "'simon' (one sequence per game, one spare "
+                        "life). Set echo.rule instead.")
+            rule = "simon"
+        self.rule = "ladder" if str(rule).lower() == "ladder" else "simon"
+        self.games = max(1, int(games))
+        self.lives = max(0, int(lives))
         self.start_len = max(1, int(start_len))
         self.trials_per_len = max(1, int(trials_per_len))
         self.max_len = max(self.start_len, int(max_len))
@@ -336,6 +541,9 @@ class EchoMode(WaitSkip):
         # floor is the motor's: an item must be lit and buzzing long
         # enough to reach amplitude, and the next onset must wait for
         # the previous finger to stop (MOTOR_CLEAR_S).
+        self.ioi_anchor_len = (self.IOI_ANCHOR_LEN
+                               if ioi_anchor_len is None
+                               else max(1, int(ioi_anchor_len)))
         self.item_on_s = max(0.05, float(item_on_ms) / 1000.0)
         motor_floor_s = self.item_on_s + self.MOTOR_CLEAR_S
         self.ioi_s = max(motor_floor_s, float(ioi_ms) / 1000.0)
@@ -352,36 +560,55 @@ class EchoMode(WaitSkip):
         self.fatigue_run = max(1, int(fatigue_timeout_run))
         self.fatigue_rest_s = max(0.0, float(fatigue_rest_s))
         self.session_cap_s = float(session_cap_min) * 60.0
-        self.cumulative = bool(cumulative) and demo_trials is None
         self.demo_trials = demo_trials
-        if self.cumulative:
-            # Play-value mode, said loudly at the one place the config
-            # change is findable: appended material rehearses every
-            # prefix, so cumulative spans are inflated and must never
-            # be pooled with ladder spans (Gendle and Ransom's SIMON
-            # spans of about 7 on four lanes against Corsi's 6.2 on
-            # nine blocks).
-            log.warning("echo: cumulative (classic Simon) mode is on; "
-                        "this block's numbers are play value only and "
-                        "not comparable to ladder blocks")
 
         self.block_rng = random.Random(self.block_seed)
 
-        # Demo miniature (Test Mode): a fixed 3-trial ladder so a demo
-        # still writes real rows of both trial kinds (trial 3 is the
-        # hidden sequence under the shipped hebb_every), with rests
-        # cut, matching the pattern / buzz_hunt demo convention.
+        # Demo miniature (Test Mode): under the ladder rule a fixed
+        # 3-trial climb so a demo still writes real rows of both trial
+        # kinds (trial 3 is the hidden sequence under the shipped
+        # hebb_every); under the Simon rule one game to a ceiling of
+        # three items, which writes a first trial, a growth and a
+        # ceiling close. Rests cut either way, the pattern /
+        # buzz_hunt demo convention.
         self._demo_plan: list[int] | None = None
         if demo_trials is not None:
-            self._demo_plan = [2, 3, 3]
             self.rest_s = min(self.rest_s, 1.0)
             self.fatigue_rest_s = min(self.fatigue_rest_s, 1.0)
+            if self.rule == "ladder":
+                self._demo_plan = [2, 3, 3]
+            else:
+                self.games = 1
+                self.max_len = min(self.max_len, self.DEMO_MAX_LEN)
 
-        # Ladder state.
+        # Game state. run_idx is the 0-based game number under either
+        # rule (a ladder "run" and a Simon "game" are the same slot in
+        # the CSV and in per_length), so the row format did not have
+        # to grow a second counter.
         self.run_idx = 0
         self.length = self.start_len
         self.trial_in_len = 0                  # 0-based within length
         self._len_results: list[bool] = []
+        # Simon state: the whole sequence for this game, the spare
+        # life, and whether this trial is the replay the life bought.
+        self.game_index_base = int(game_index_base)
+        self.forced_seed = (None if forced_seed is None
+                            else int(forced_seed))
+        self.game_index = -1 if demo_trials is not None else int(
+            game_index_base)
+        self.game_seed = 0
+        self.game_seq: list[int] = []
+        self.lives_left = self.lives
+        self.life_trial = False
+        self.misses: list[dict] = []
+        self.game_records: list[dict] = []
+        self._game_best = 0
+        self._game_items = 0
+        self._game_trials = 0
+        self._life_used_at: int | None = None
+        self._game_logged = True
+        if self.rule == "simon":
+            self._draw_game()
         # Trial state machine: announce -> play -> respond -> rest ...
         self.phase = "announce"
         self._announced = False
@@ -415,14 +642,56 @@ class EchoMode(WaitSkip):
         self._run_end_reasons: list[str] = []
         self.end_reason: str | None = None
 
+    # ---- material ----------------------------------------------------------
+    def _draw_game(self) -> None:
+        """Draw the whole sequence for the game about to start. Under
+        the Simon rule this happens once per game and trial t plays
+        its first t items, so the material a player meets is fixed
+        before their first press. echo.seed pins it for a deliberate
+        replay (offset by the game number so two games in one block
+        still differ); otherwise the seed is the participant's name
+        and their game count."""
+        self.game_index = (-1 if self.demo_trials is not None
+                           else self.game_index_base + self.run_idx)
+        if self.forced_seed is not None:
+            self.game_seed = self.forced_seed + self.run_idx
+        else:
+            self.game_seed = participant_simon_seed(
+                self.participant, self.game_index)
+        self.game_seq = simon_stream(self.game_seed, self.lanes,
+                                     self.max_len)
+        self._game_logged = False
+
+    def _log_game_start(self) -> None:
+        """Write the game's index and seed to raw.csv, once per game.
+        Deferred to the first trial rather than done in _draw_game
+        because the block's raw logger does not exist yet while the
+        mode is being constructed."""
+        if self._game_logged:
+            return
+        self._game_logged = True
+        raw = getattr(self.engine, "raw_logger", None)
+        if raw:
+            raw.queue_event(
+                "echo_game",
+                detail=(f"game={self.run_idx + 1};"
+                        f"game_index={self.game_index};"
+                        f"game_seed={self.game_seed};"
+                        f"lives={self.lives};"
+                        f"seq={pack_lanes(self.game_seq)}"),
+                hand=getattr(self.engine, "hand_mode", "right"))
+
     # ---- the presentation schedule -----------------------------------------
     def ioi_for(self, length: int) -> float:
         """Onset-to-onset interval, seconds, for a sequence of this
-        length: the start-length ioi less one step per extra item,
+        length: the anchor-length ioi less one step per extra item,
         never under the floor. A pure function of length and config,
         so two blocks under one config present every length at the
-        same rate whatever their players did."""
-        extra = max(0, int(length) - self.start_len)
+        same rate whatever their players did. Lengths at or under the
+        anchor share the opening rate, which is what lets a Simon
+        game start at one item without playing its first trial faster
+        than the ladder's first trial."""
+        extra = max(0, int(length) - self.ioi_anchor_len)
         return max(self.ioi_floor_s, self.ioi_s - extra * self.ioi_step_s)
 
     def ioi_schedule_ms(self) -> dict[str, float]:
@@ -511,7 +780,12 @@ class EchoMode(WaitSkip):
     def _begin_announce(self, now: float) -> None:
         self._announced = True
         self._prepare_trial(now)
-        self._set_message("Watch the echo...", 1.2)
+        # The replay the spare life bought says so as it starts, so
+        # the same sequence coming back reads as a second chance
+        # rather than the rig having lost its place.
+        self._set_message(
+            "One more go" if self.life_trial else "Watch the echo...",
+            1.2)
         # _turn_due doubles as the announce deadline: one absolute
         # clock per phase transition keeps on_resume's shifting simple.
         self._turn_due = now + self.LEAD_S
@@ -525,12 +799,17 @@ class EchoMode(WaitSkip):
         trial_no = len(self._records) + 1
         # Hidden-sequence schedule: every hebb_every-th trial of the
         # block, the Hebb 1961 spacing, same counter shape as
-        # buzz_hunt so the two modes' slopes line up. Cumulative mode
-        # has no fresh draws to hide repeats among, so no Hebb trials.
-        self.is_hebb = (not self.cumulative
+        # buzz_hunt so the two modes' slopes line up. The Simon rule
+        # has no fresh draws to hide a repeat among, so no Hebb
+        # trials (docstring: HEBB REPETITION).
+        self.is_hebb = (self.rule == "ladder"
                         and trial_no % self.hebb_every == 0)
-        if self.cumulative:
-            self.sequence = self._cumulative_sequence(length)
+        if self.rule == "simon":
+            # Trial t of a game is the first t items of the sequence
+            # drawn at game start. That IS the Simon rule.
+            self._log_game_start()
+            self.sequence = list(self.game_seq[:length])
+            self.trial_in_len = 1 if self.life_trial else 0
         elif self.is_hebb:
             self.sequence = echo_stream(self.p_seed, self.lanes, length)
             self._hebb_trials.append(trial_no)
@@ -572,7 +851,9 @@ class EchoMode(WaitSkip):
                 detail=(f"trial_id={self.trial_counter};"
                         f"len={len(self.sequence)};"
                         f"hebb={1 if self.is_hebb else 0};"
-                        f"run={self.run_idx + 1}"
+                        f"run={self.run_idx + 1};"
+                        f"life={1 if self.life_trial else 0};"
+                        f"lives_left={self.lives_left}"
                         + (f";short_rest={skipped}" if skipped else "")),
                 hand=self.engine.hand_mode)
 
@@ -588,21 +869,6 @@ class EchoMode(WaitSkip):
                 break
         self._novel_at_len.append(cand)
         return cand
-
-    def _cumulative_sequence(self, length: int) -> list[int]:
-        """Classic Simon material: one growing sequence per run,
-        extended by one fresh item after each success, so every prefix
-        is rehearsed. Non-comparable by design; see the docstring."""
-        prev = self._records[-1]["played"] if self._records else []
-        if prev and len(prev) + 1 == length:
-            grown = list(prev)
-            while True:
-                pick = self.lanes[
-                    self.block_rng.randrange(self.n_lanes)]
-                if pick != grown[-1] or self.n_lanes == 1:
-                    grown.append(pick)
-                    return grown
-        return draw_echo_sequence(self.block_rng, length, self.lanes)
 
     # ---- playback ----------------------------------------------------------
     def _begin_play(self, now: float) -> None:
@@ -813,8 +1079,9 @@ class EchoMode(WaitSkip):
                         + self.ITEM_POINTS * length),
                 rt_ms=None)
             self.total_correct += 1
-            if length > self.best_len:
-                self.best_len = length
+            self.best_len = max(self.best_len, length)
+            if length > self._game_best:
+                self._game_best = length
                 self._set_message(f"Longest echo: {length}", 2.0,
                                   kind="best")
             else:
@@ -828,9 +1095,20 @@ class EchoMode(WaitSkip):
                 points=(self.score_cfg.miss_points
                         + self.ITEM_POINTS * n_right),
                 rt_ms=None)
+            # The card stays short on purpose: the gameplay screen
+            # centres it over the trial's own Miss label, and a
+            # longer line hides that label. The spare life is
+            # announced on the replay itself instead, which is the
+            # moment the player needs to know (_begin_announce).
             if kind == "omission":
+                # The count is the credit; the words are not a
+                # buzzer going off. Drawn from the bank so the same
+                # phrasing does not land every round.
+                line = feedback_bank.phrase_via(
+                    self.engine, "omission", "line", "echo",
+                    n=n_right, of=length)
                 self._set_message(
-                    f"Time's up. {n_right} of {length}", 1.8)
+                    line or f"{n_right} of {length}", 1.8)
             else:
                 self._set_message(
                     f"Almost! {n_right} of {length}", 1.8)
@@ -843,6 +1121,16 @@ class EchoMode(WaitSkip):
             f"{(t - r0) * 1000.0:.0f}" for _l, t in self._entered)
         trial_idx = (self.trial_in_len + 1
                      if self._demo_plan is None else 1)
+        # Where the attempt failed, 1-based on the serial position:
+        # the wrong press's own position on a wrong trial, the
+        # position the hand never reached on an omission, 0 when
+        # nothing failed. With a growing sequence this is the number
+        # the analysis lives on, because "the newest item" and "an
+        # item learned three trials ago" are different failures.
+        pos = 0 if correct else n_right + 1
+        miss_class = ("none" if correct
+                      else self._miss_class(kind,
+                                            [l for l, _t in self._entered]))
         stimulus = (
             f"echo;len={length};trial={trial_idx};"
             f"run={self.run_idx + 1};"
@@ -850,7 +1138,14 @@ class EchoMode(WaitSkip):
             f"played={pack_lanes(self.sequence)};"
             f"pressed={pack_lanes([l for l, _t in self._entered])};"
             f"n_right={n_right};outcome={kind};"
-            f"pt={press_offsets}")
+            f"pt={press_offsets};"
+            f"rule={self.rule}")
+        if self.rule == "simon":
+            stimulus += (
+                f";game={self.run_idx + 1};seed={self.game_seed};"
+                f"life={1 if self.life_trial else 0};"
+                f"lives_left={self.lives_left};"
+                f"pos={pos};miss={miss_class}")
         play_t0 = self._play_t0 if self._play_t0 is not None else now
         stim_end = (play_t0 + (length - 1) * self._trial_ioi_s
                     + self.item_on_s)
@@ -861,7 +1156,12 @@ class EchoMode(WaitSkip):
                     # The ioi THIS trial ran at (the length schedule),
                     # so a row is auditable on its own.
                     "ioi_ms": round(self._trial_ioi_s * 1000.0, 1),
-                    "hebb": 1 if self.is_hebb else 0},
+                    "hebb": 1 if self.is_hebb else 0,
+                    # The rule and the game seed ride the params so a
+                    # row can be redrawn from its own columns, the
+                    # same audit contract the pulse train honours.
+                    "rule": self.rule,
+                    "game_seed": self.game_seed},
             seed=self.block_seed,
             segments=[("stim", play_t0, stim_end), ("respond", r0, now)])
         # after_press_cue False: the trial close must not buzz the
@@ -889,10 +1189,41 @@ class EchoMode(WaitSkip):
             "played": list(self.sequence),
             "pressed": [l for l, _t in self._entered],
             "ioi_ms": round(self._trial_ioi_s * 1000.0, 1),
+            "life": self.life_trial,
+            "pos": pos,
+            "miss": miss_class,
         })
+        self._game_trials += 1
+        self._game_items += n_right
+        if not correct:
+            self.misses.append({
+                "len": length,
+                "pos": pos,
+                "kind": kind,
+                "lane_expected": (self.sequence[n_right]
+                                  if n_right < length else None),
+                "lane_pressed": (self._entered[-1][0]
+                                 if self._entered else None),
+                "life_trial": self.life_trial,
+            })
         self._after_trial(now, kind, correct)
 
+    def _miss_class(self, kind: str, pressed: list[int]) -> str:
+        """The serial-recall taxonomy for one failed attempt, computed
+        the same way the notebook computes it so the CSV and the
+        chapter cannot disagree: a silent trial is an omission, a
+        wrong press of a lane the sequence holds somewhere is a
+        transposition (the dominant spatial-span error), and a lane
+        the sequence never held is an intrusion."""
+        if kind == "omission" or not pressed:
+            return "omission"
+        return ("transposition" if pressed[-1] in self.sequence
+                else "intrusion")
+
     def _after_trial(self, now: float, kind: str, correct: bool) -> None:
+        if self.rule == "simon":
+            self._after_trial_simon(now, kind, correct)
+            return
         # Fatigue guard first: two straight omissions is a hand that
         # has stopped answering, not two memory samples. Only a press
         # resets the streak (in _handle_press); the forced rest does
@@ -930,13 +1261,6 @@ class EchoMode(WaitSkip):
             else:
                 self._enter_rest(now, self.rest_s, "between", "")
             return
-        if self.cumulative:
-            if correct:
-                self.length = len(self.sequence) + 1
-                self._enter_rest(now, self.rest_s, "between", "")
-            else:
-                self._finish_run(now, "cumulative_miss")
-            return
         # The Kessels ladder: both trials at a length always run;
         # at least one correct advances, both failing ends the run.
         self._len_results.append(correct)
@@ -954,6 +1278,98 @@ class EchoMode(WaitSkip):
         else:
             self.length += 1
             self._enter_rest(now, self.rest_s, "between", "")
+
+    def _after_trial_simon(self, now: float, kind: str,
+                           correct: bool) -> None:
+        """The Simon rule: grow by one on a correct reproduction, and
+        end the game on the SECOND miss. The first miss spends the
+        game's spare life and replays the same sequence at the same
+        length once, which is a two-error discontinue rule applied
+        once per game (Woods 2011 on why a first-error stop throws
+        information away; the mode docstring carries the argument).
+        No other path ends a game: no ladder bookkeeping, and the old
+        fatigue-streak guard is not used because a pair of omissions
+        already ends the game through the life rule below."""
+        # Session cap first, at a trial close as everywhere else: a
+        # block that has run out of its minutes stops even mid-game,
+        # and the game record still lands so the trials are scored.
+        if (self._t0 is not None
+                and (now - self._t0) > self.session_cap_s):
+            self._set_message("Great effort. Session done", 2.0)
+            self._finish_game(now, "time_cap")
+            return
+        if correct:
+            self.life_trial = False
+            self.length += 1
+            if self.length > self.max_len:
+                self._finish_game(now, "ceiling")
+            else:
+                self._enter_rest(now, self.rest_s, "between", "")
+            return
+        if self.lives_left > 0:
+            # Spend the life: same sequence, same length, one more
+            # go. An omission gets the long rest instead of the short
+            # one, because a hand that answered nothing needs the
+            # recovery a wrong press does not.
+            self.lives_left -= 1
+            self.life_trial = True
+            self._life_used_at = len(self.sequence)
+            if kind == "omission":
+                self._enter_rest(now, self.fatigue_rest_s, "forced",
+                                 "Take a breather")
+            else:
+                self._enter_rest(now, self.rest_s, "between", "")
+            return
+        # Second miss: the game is over. Two omissions in a row is a
+        # hand that stopped answering rather than a memory limit, so
+        # it ends the whole block as fatigue instead of opening
+        # another game the player cannot play.
+        both_silent = (kind == "omission"
+                       and len(self.misses) >= 2
+                       and self.misses[-2]["kind"] == "omission")
+        if both_silent:
+            self._set_message("Great effort. Session done", 2.0)
+        self._finish_game(now, "fatigue" if both_silent
+                          else "second_miss")
+
+    def _finish_game(self, now: float, reason: str) -> None:
+        """Close one Simon game, record it, and either start the next
+        or end the block. time_cap and fatigue end the block whatever
+        games are left: both mean the player has had enough."""
+        self._run_end_reasons.append(reason)
+        self.game_records.append({
+            "game_index": self.game_index,
+            "game_seed": self.game_seed,
+            "span": self._game_best,
+            "total_items": self._game_items,
+            "n_trials": self._game_trials,
+            "life_used_at": self._life_used_at,
+            # Did the replay the life bought come back right? The
+            # replay is the only trial of a game that carries life,
+            # so this is simply whether it was reproduced.
+            "recovered": any(r["life"] and r["outcome"] == "correct"
+                             for r in self._records
+                             if r["run"] == self.run_idx + 1),
+            "end_reason": reason,
+            "misses": list(self.misses),
+        })
+        self.run_idx += 1
+        if self.run_idx >= self.games or reason in ("time_cap", "fatigue"):
+            self._end("completed" if reason not in ("time_cap", "fatigue")
+                      else reason)
+            return
+        # Next game: fresh sequence, fresh life, back to one item.
+        self.length = self.start_len
+        self.lives_left = self.lives
+        self.life_trial = False
+        self.misses = []
+        self._game_best = 0
+        self._game_items = 0
+        self._game_trials = 0
+        self._life_used_at = None
+        self._draw_game()
+        self._enter_rest(now, max(self.rest_s, 2.0), "between",
+                         "New game")
 
     def _finish_run(self, now: float, reason: str) -> None:
         self._run_end_reasons.append(reason)
@@ -1048,13 +1464,20 @@ class EchoMode(WaitSkip):
 
     # ---- block summary -----------------------------------------------------
     def block_stats(self) -> dict:
-        """What finish_block folds into metadata.json: the Kessels
-        numbers, per-length outcomes, the hidden-trial indices, and
-        every presentation parameter actually used (the Berch lesson:
-        the parameters that varied across 25 years of Corsi labs are
-        exactly the ones a block must pin next to its data)."""
+        """What finish_block folds into metadata.json: the span
+        numbers, per-game and per-length outcomes, and every
+        presentation parameter actually used (the Berch lesson: the
+        parameters that varied across 25 years of Corsi labs are
+        exactly the ones a block must pin next to its data).
+
+        rule is the first key an analysis must read. A Simon span and
+        a ladder span are two different tests and never pool, so the
+        Kessels product score is emitted only for a ladder block: with
+        one trial per length and a spare life, span x correct
+        sequences means nothing."""
         span = max((r["len"] for r in self._records
                     if r["outcome"] == "correct"), default=0)
+        spans = [g["span"] for g in self.game_records]
         per_length: list[dict] = []
         for r in self._records:
             key = (r["run"], r["len"])
@@ -1066,6 +1489,15 @@ class EchoMode(WaitSkip):
                 per_length.append(slot)
             slot["outcomes"].append(r["outcome"])
         return {
+            "rule": self.rule,
+            "games": self.games,
+            "lives": self.lives,
+            "game_index_base": self.game_index_base,
+            "games_played": list(self.game_records),
+            "span_mean": (round(sum(spans) / len(spans), 2)
+                          if spans else None),
+            "total_items": sum(r["n_right"] for r in self._records),
+            "ioi_anchor_len": self.ioi_anchor_len,
             "participant_seed": self.p_seed,
             "block_seed": self.block_seed,
             "n_lanes": self.n_lanes,
@@ -1085,12 +1517,13 @@ class EchoMode(WaitSkip):
             "idle_timeout_s": self.idle_timeout_s,
             "rest_s": self.rest_s,
             "hebb_every": self.hebb_every,
-            "cumulative": self.cumulative,
             "demo": self.demo_trials is not None,
             "span": span,
             "total_correct": self.total_correct,
             # The Kessels product score: span x correct sequences.
-            "product_score": span * self.total_correct,
+            # Ladder blocks only, by construction (see the docstring).
+            "product_score": (span * self.total_correct
+                              if self.rule == "ladder" else None),
             "n_trials": len(self._records),
             "n_omissions": sum(1 for r in self._records
                                if r["outcome"] == "omission"),

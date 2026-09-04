@@ -82,7 +82,15 @@ receiver (the box the optical fibre plugs into) -> ActiView.
 7. Check vsync is ON for the game window. With it off the flip
    returns before the screen updates and visual markers lead by an
    unknown amount.
-8. Data lands in sessions/ as normal, plus eeg rows in raw.csv and an
+8. Reaction blocks run on a still screen. From the frame the wait
+   arms (code 21) to a second after the response, the only pixels
+   that change are inside the tile that was cued: no dimming of the
+   stage, no pulsing halo, no chevron, no score animation, no timing
+   bar. The score, streak, progress bar and feedback chip all update
+   together in the gap between trials. If you see any of that moving
+   during a trial, the block is not the one this file describes;
+   tests/test_reaction_mode.py holds the frame-by-frame contract.
+9. Data lands in sessions/ as normal, plus eeg rows in raw.csv and an
    eeg section in metadata.json (backend, port, pulse and gap widths,
    box and box mode, the latency constants and the marker-to-stimulus
    offsets, failure counts, degraded flag).
@@ -94,7 +102,8 @@ receiver (the box the optical fibre plugs into) -> ActiView.
    did not open the port (wrong COMn) or the cable is out.
 2. At login one jump to 240. Each block: 200+mode at start, 20 at the
    GET READY card, 220+mode at the end.
-3. Each stimulus: a jump to 30-38 (40 or 41 in pattern blocks), each
+3. Each stimulus: a jump to 30-38 (40 or 41 in pattern blocks, 50 or
+   51 for a syllables option set), each
    press 100-131, and in rhythm blocks a 22 about 200 ms before each
    beat's 31. Each jump lasts 8 ms (about 16 samples at 2048 Hz) and
    returns to 0. Decimal display shows the code in the low group;
@@ -102,6 +111,49 @@ receiver (the box the optical fibre plugs into) -> ActiView.
 4. The box's green LED flashes for odd codes only (31, 33, 101, 241
    and so on). A dark LED on 30, 32, 200 or 240 is not a fault.
 5. Pauses are 242 and 243; the session ends with one 241.
+
+## Feedback in the lab: the neutral style
+
+eeg_lab.yaml sets `ui.feedback_style: neutral`. The shipping game
+tells the patient what happened in words ("Got there. Go on the buzz",
+"Ring next"), and words are the one thing a feedback ERP cannot have:
+an emotional word makes an early posterior negativity of its own at
+200 to 300 ms, which is the same window the feedback-related
+negativity sits in, so the two cannot be separated in one record.
+
+What the lab sees instead:
+
+- One ring above the lane that was cued, and nothing else. Filled for
+  any hit tier, half filled for Late or Early, an open outline for a
+  Miss (a timeout and a different-finger press included). Same 28 px
+  diameter, same 3 px stroke, same position, same colour, same 0.9 s
+  fade in all three states, so the only thing that differs between a
+  hit and a miss is the fill.
+- The ring appears `ui.feedback_delay_ms` after the press, 800 ms in
+  the shipped lab file, so the feedback epoch is clear of the
+  response-locked activity. The 140 / 141 marker is written on the
+  flip that draws the ring, not when the trial was scored.
+- No streak banners, no "Level up" chip, no "NEW BEST" in gold.
+  Reaction shows the plain "212 ms" in the same colour on every valid
+  press.
+- `cue.sound_after: false`, so neither the hit chime nor the
+  streak-break thunk sounds. Both are auditory events at 100 to
+  200 ms, inside the feedback window, and the thunk only ever fired on
+  one half of the hit / miss contrast. Force Pilot's corridor-exit
+  buzz stays: it is the tactile knowledge of performance the mode is
+  built on, and it is already documented as 141.
+
+Do NOT switch the style part way through a study. It moves the
+feedback epoch and changes what the participant sees, so blocks
+recorded either side of the change are not comparable. Nothing about
+scoring, the trial CSV or any marker code changes between the two
+styles: tests/test_feedback_wording.py drives the same trials under
+both and asserts the rows are identical.
+
+For FRN analysis, drop error_type "timeout" rows: no action means no
+prediction error to be wrong about. Report the hit to miss ratio per
+block alongside any FRN amplitude, because the amplitude scales with
+how unexpected the outcome was.
 
 ## Marker behaviour
 
@@ -179,6 +231,8 @@ marks what the old file could not.
 | --- | --- | --- |
 | Stimulus onset | 30 on every flash, written straight after the flip, one code whatever the cues | 30-38, cue condition in the byte: 30 screen highlight only, 31 +tone, 32 +buzzer, 33 +both (the shipping default), 34 uncued, 35 tone only, 36 buzzer only, 37 buzzer+tone, 38 buzz-as-stimulus. Written straight after the flip, same anchor |
 | Stimulus onset, pattern blocks | n/a (one condition) | 40 trained-sequence item, 41 random or probe item; cue condition is fixed per block and recoverable from the trial CSV's cue_flags |
+| Stimulus onset, syllables choice sets | n/a | 50 an option set on a word's first attempt, 51 an option set on a word that came back after a miss. Four written syllables fall over four fingers and NOTHING names the target finger, so these are not cued stimuli and must never be pooled with the 30-band. One 50 or 51 per trials.csv row, each followed by exactly one response code |
+| Syllables model roll | n/a | the ordinary 30-band cue-condition byte, once per syllable while the word is modelled, with no trials.csv row. The tactile pulse is a four-finger arpeggio across the playing hand, never one finger: a single buzz there would name the lane that answers the set to come |
 | Rhythm's leading buzz | n/a | 22 at the STIM command, about 195 ms before the beat's own byte, which is then 31 (no buzzer bit) |
 | Response / press | never marked | at response onset: 100+lane correct, 110+lane wrong finger (lane = finger actually pressed), 120+lane anticipation or false start, 130 timeout (bookkeeping only, never epoch response-locked on it), 131 idle press |
 | Correctness | never marked; recovered offline from the CSV | in the byte, known at detection time |

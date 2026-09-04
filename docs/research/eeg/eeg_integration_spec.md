@@ -133,6 +133,19 @@ Continuous displays (score counters, the force corridor itself) get no
 feedback marker; FRN needs discrete time-locked events (Miltner et al.
 1997, see erp.md Section 6).
 
+Under `ui.feedback_style: neutral` (config/eeg_lab.yaml) the feedback
+event is one ring glyph, physically identical for every outcome except
+its fill, and 140 / 141 is written on the flip that draws it, which is
+the response plus `ui.feedback_delay_ms` (800 ms in the lab file), not
+at log_trial time. The words the shipping game shows are off in that
+style, along with the streak banners and the hit chime and thunk: an
+emotional word makes an early posterior negativity at 200 to 300 ms,
+which overlaps the FRN window. Exclude error_type "timeout" rows from
+FRN epochs (no action, so no prediction to be wrong about) and report
+the hit to miss ratio per block, since FRN amplitude scales with how
+unexpected the outcome was. No code changes: the codes and their
+meanings are the same in both styles.
+
 ### Block boundaries (200-231)
 
 `code = 200 + mode_id` at block start, `220 + mode_id` at block end.

@@ -50,3 +50,28 @@ force_pilot:
   # No background track in the lab: an EEG block is recorded in
   # silence so the only sounds in the record are the cues themselves.
   music_enabled: false
+
+ui:
+  # Minimal feedback for the lab. No words after a trial: one ring
+  # glyph per outcome (filled for a hit, half for Late or Early, open
+  # for a Miss), identical size, position, colour and lifetime, so the
+  # only thing that differs between outcomes in the visual record is
+  # the fill. Words carry emotion, and emotional words produce an ERP
+  # of their own at 200 to 300 ms (the early posterior negativity),
+  # right on top of the feedback-related negativity at 230 to 350 ms.
+  # No streak banners and no NEW BEST chip either: both are
+  # unscheduled visual events in the middle of a trial sequence.
+  feedback_style: neutral
+  # Fixed gap between the press and the glyph so the feedback ERP is
+  # not smeared into the response-locked activity. The 140 / 141
+  # marker is written on the flip that draws the glyph, not at log
+  # time. Do not change this mid-study: it moves the feedback epoch.
+  feedback_delay_ms: 800
+
+cue:
+  # No chime and no thunk after a press. Both are auditory events at
+  # 100 to 200 ms, inside the feedback window, and the thunk only ever
+  # fires on a miss, so leaving it on would put an auditory ERP on
+  # exactly one half of the hit / miss contrast. The before-press cue
+  # switches are untouched: the stimulus still buzzes and sounds.
+  sound_after: false

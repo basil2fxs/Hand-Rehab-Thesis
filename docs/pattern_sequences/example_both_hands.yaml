@@ -1,0 +1,44 @@
+# Hidden riff over both hands, serial reaction time style. Drop this
+# file on the game window, or save it as
+# config/pattern_sequences/current.yaml.
+pattern_file: 1
+name: Hidden riff, both hands
+hands: both             # 1..4 right hand (J K L ;), 5..8 left hand (F D S A), index to little
+explicit: false         # the participant is never told a riff exists
+timeout_ms: 2000
+defaults:
+  gaps_ms: 500
+  rest_after_s: 10
+
+blocks:
+  - name: warm
+    kind: warmup
+    trials: 16
+
+  - name: base
+    kind: random
+    trials: 32          # a multiple of 8 keeps the hands balanced
+
+  - name: riff_1
+    kind: seq
+    sequence: [1, 5, 2, 6, 3, 7, 4, 8, 1, 6, 2, 7, 3, 8, 4, 5]   # every lane twice, hands alternate
+    gaps_ms: 600        # one number: the same gap after every press
+    repeats: 4          # 64 presses
+
+  - name: riff_2
+    kind: seq
+    sequence: [1, 5, 2, 6, 3, 7, 4, 8, 1, 6, 2, 7, 3, 8, 4, 5]
+    gaps_ms: 600
+    repeats: 4
+
+  - name: fresh
+    kind: probe
+    sequence: [5, 1, 6, 2, 7, 3, 8, 4, 6, 1, 7, 2, 8, 3, 5, 4]   # same lane counts, new order
+    gaps_ms: 600
+    repeats: 4
+
+  - name: riff_3
+    kind: seq
+    sequence: [1, 5, 2, 6, 3, 7, 4, 8, 1, 6, 2, 7, 3, 8, 4, 5]
+    gaps_ms: 600
+    repeats: 4

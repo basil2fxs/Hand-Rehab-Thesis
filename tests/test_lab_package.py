@@ -41,10 +41,23 @@ STALE = ("README.txt", "eeg_lab_setup.txt", "EEG Lab.bat",
 
 
 def _load(path: Path):
-    """Import a script by path (neither folder is a package)."""
+    """Import a script by path (neither folder is a package).
+
+    Bytecode writing is off for the duration. Importing the launcher
+    normally drops docs/lab_package/__pycache__ next to it, and that
+    folder is the one copied to the EEG lab: its top level must hold
+    exactly the four entries and nothing else. The stray cache made
+    test_eeg_contract's completeness check fail on the second run of
+    the suite, and would have been handed to the lab either way.
+    """
     spec = importlib.util.spec_from_file_location(path.stem, path)
     mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+    was = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        spec.loader.exec_module(mod)
+    finally:
+        sys.dont_write_bytecode = was
     return mod
 
 

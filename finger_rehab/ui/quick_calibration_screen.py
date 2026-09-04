@@ -28,10 +28,11 @@ them.
 
 Flow, kept under a minute per hand:
 
-    hands off      sensors must read QUIET before this captures, and
-                   the screen names the finger that is still down
-    hands resting  the tare point, with the rest level drawn as it is
-                   learned
+    hands off      a countdown ring gives the player time to get
+                   clear before anything is captured, then the capture
+                   runs itself once the sensors read QUIET; a lane
+                   still carrying load is named instead
+    hands resting  the tare point, same lead, same ring, same rule
     per finger     press the bar into the band, hold the ring round,
                    pop, next finger
     summary        one warm line per finger, then straight to the hub
@@ -65,10 +66,10 @@ game tries to score force on it. Esc asks before abandoning, so a
 stray key cannot throw away a half-done run.
 
 Flash safety: every colour change here is state-driven (the bar's
-three zones, the band glow, the quiet line) so none of them can
+three zones, the band glow, the ring's own colour) so none of them can
 oscillate on their own; the capture pop and the chip pop are one-shots
-of 0.7 s; the countdown arc and the live traces sweep continuously.
-Nothing repeats at any rate, let alone above 3 Hz. Screen conventions
+of 0.7 s; the countdown arcs sweep continuously. Nothing repeats at
+any rate, let alone above 3 Hz. Screen conventions
 match the rest of the app: 1280x800 logical layout, theme-aware, Esc
 handled through the engine's global event path.
 """
@@ -84,7 +85,7 @@ import pygame
 
 from .screens import Screen, _draw_header
 from .widgets import (
-    Button, FONT_BODY, FONT_H1, FONT_H2, FONT_SMALL,
+    Button, FONT_BODY, FONT_H1, FONT_H2, FONT_SMALL, FONT_TITLE,
     draw_text, make_font,
 )
 from .calibration_screen import _percentile
@@ -134,20 +135,31 @@ STALE_S = 1.0
 # or above it is a load the empty capture must not include.
 LANE_DOWN_COUNTS = float(MIN_DELTA_COUNTS)
 
-# Full-scale of the quiet line, in counts above each lane's own floor.
-QUIET_TRACE_COUNTS = 80.0
-
-# How far a settled lane's trace is pulled toward the page colour. The
-# alert amber is drawn at full strength, so every quiet trace has to
-# sit clearly under it; see the note where it is used for why 0.15 was
-# not enough.
+# How far a settled lane's colour is pulled toward the page. The alert
+# amber is drawn at full strength, so every quiet lane has to sit
+# clearly under it; see the note where it is used for why 0.15 was not
+# enough.
 QUIET_TRACE_FADE = 0.45
 
+# Seconds the player is GIVEN before a rest capture may start, on each
+# of the two rest steps. The capture still waits for the sensors to
+# agree nothing is happening, but with hands already off the pads that
+# agreement is instant, and a capture that starts before the
+# instruction has been read is a capture nobody was ready for.
+LEAD_S = 3.0
+
 # ---- press-phase geometry, 1280x800 logical -----------------------------
-BAR = pygame.Rect(500, 300, 160, 352)
-HAND_MAP = pygame.Rect(168, 322, 216, 250)
-RING_CENTRE = (990, 462)
-RING_R = 78
+# Sized to be read at arm's length with a finger already on a pad: the
+# player cannot lean in to check a small bar without changing the press
+# the bar is measuring.
+BAR = pygame.Rect(508, 282, 208, 376)
+HAND_MAP = pygame.Rect(104, 332, 276, 262)
+RING_CENTRE = (1010, 462)
+RING_R = 116
+
+# ---- rest-phase geometry, same logical screen ---------------------------
+REST_RING_CENTRE = (640, 400)
+REST_RING_R = 100
 
 
 class QuickCalibrationScreen(Screen):
@@ -226,6 +238,15 @@ class QuickCalibrationScreen(Screen):
 
     def _hold_s(self) -> float:
         return max(0.3, self._cfgf("hold_s", 1.0))
+
+    def _lead_s(self) -> float:
+        """Seconds a rest step gives the player before it may capture."""
+        return max(0.0, self._cfgf("lead_s", LEAD_S))
+
+    def _lead_left(self) -> float:
+        """Seconds still owed on the current step's lead."""
+        return max(0.0, (self._phase_started_at + self._lead_s())
+                   - time.perf_counter())
 
     # ---- the goal band ---------------------------------------------------
 
@@ -327,9 +348,9 @@ class QuickCalibrationScreen(Screen):
         measure the idle right board while the player presses with
         their left, the same fault the clinical screen documents.
 
-        Split out from _hand_slice because the live traces re-slice a
-        few hundred buffered samples every frame, and re-deriving this
-        (a config lookup each time) per sample is the one thing on this
+        Split out from _hand_slice because the settle test re-slices
+        the whole buffered window every frame, and re-deriving this (a
+        config lookup each time) per sample is the one thing on this
         screen that could cost frames.
         """
         n = self._per_hand()
@@ -563,6 +584,14 @@ class QuickCalibrationScreen(Screen):
         press gets averaged into the zero, and every threshold in the
         session is built on it. Waiting for the sensors to agree makes
         that impossible.
+
+        The lead is the other half of it. Sensors agreeing is not the
+        same as a person being ready, and with hands already off the
+        pads the agreement is there before the instruction has been
+        read: the step would flash up and be measuring inside a frame.
+        So the step owes the player LEAD_S seconds, counted down on the
+        ring, before it may capture at all. The quiet clock runs
+        through the lead, so a hand that came off early costs nothing.
         """
         now = time.perf_counter()
         if not self._settled():
@@ -570,7 +599,8 @@ class QuickCalibrationScreen(Screen):
             return
         if self._quiet_since <= 0.0:
             self._quiet_since = now
-        elif now - self._quiet_since >= QUIET_HOLD_S:
+        elif (now - self._quiet_since >= QUIET_HOLD_S
+                and self._lead_left() <= 0.0):
             self._quiet_since = 0.0
             self._start_collecting()
 
@@ -785,7 +815,7 @@ class QuickCalibrationScreen(Screen):
             if self._problems:
                 self._buttons.append(Button(
                     pygame.Rect(cx - 170, ly.height - 118, 340, 64),
-                    "Try again", self._retry, th, ly, primary=True))
+                    "Another go", self._retry, th, ly, primary=True))
             else:
                 self._buttons.append(Button(
                     pygame.Rect(cx - 170, ly.height - 118, 340, 64),
@@ -826,7 +856,7 @@ class QuickCalibrationScreen(Screen):
         return (th.lane_active[i] if i < len(th.lane_active) else th.accent)
 
     def _quiet_trace_colour(self, i: int) -> tuple[int, int, int]:
-        """Trace colour for a sensor that is settled where it should be.
+        """Colour for a sensor that is settled where it should be.
 
         Amber at full strength is reserved for the one lane holding the
         capture up, so a settled lane has to sit clearly under it
@@ -834,9 +864,8 @@ class QuickCalibrationScreen(Screen):
         manage that for the pinky: its lane colour IS theme.warning to
         the byte in both shipped colour themes (202,138,4 clinical,
         250,204,21 dark), so a quiet pinky drew in exactly the alert
-        colour and only the green tick beside it said otherwise. The
-        finger keeps its identity regardless, because every row is
-        named in text.
+        colour and nothing but its position said otherwise. The finger
+        keeps its identity regardless, because it is named under it.
         """
         return self._mix(self._lane_colour(i), self.theme.background,
                          QUIET_TRACE_FADE)
@@ -934,220 +963,157 @@ class QuickCalibrationScreen(Screen):
             self._draw_confirm(surf)
 
     def _draw_step_rail(self, surf: pygame.Surface) -> None:
-        """Four dots along the top so the run always says where it is
-        and how much is left."""
+        """Four bars along the top, and only the step the run is ON
+        carries a word.
+
+        The rail used to spell all four steps out at once, which put
+        three instructions on a screen whose one rule is that it says
+        the single thing to do next. The bars still say how far
+        through the run this is; the word says where.
+        """
         th, ly = self.theme, self.layout
         order = (PHASE_OFF, PHASE_REST, PHASE_PRESS, PHASE_DONE)
         here = order.index(self.phase)
-        w, gap = 150, 14
+        w, gap = 118, 16
         total = len(order) * w + (len(order) - 1) * gap
         x0 = ly.width // 2 - total // 2
-        y = 174
+        y = 172
         for k, label in enumerate(self._STEPS):
             x = x0 + k * (w + gap)
             done = k < here
             now = k == here
-            colour = (th.success if done
-                      else th.accent if now else th.muted)
-            bar = pygame.Rect(x, y, w, 5)
-            pygame.draw.rect(surf, colour if (done or now)
-                             else self._mix(th.muted, th.background, 0.6),
-                             bar, border_radius=3)
-            draw_text(surf, label, (x + w // 2, y + 18), th, ly,
-                      pt=FONT_SMALL, centre=True,
-                      colour=colour if now else th.muted)
+            colour = (th.success if done else th.accent if now
+                      else self._mix(th.muted, th.background, 0.6))
+            pygame.draw.rect(surf, colour, pygame.Rect(x, y, w, 6),
+                             border_radius=3)
+            if now:
+                draw_text(surf, label, (x + w // 2, y + 16), th, ly,
+                          pt=FONT_SMALL, centre=True, colour=th.accent)
 
     # ---- phases 1 and 2: the rest captures -------------------------------
 
+    def _rest_words(self) -> tuple[str, str, tuple[int, int, int]]:
+        """(headline, the short line under it, colour) for whatever
+        state the rest step is in.
+
+        Four words is the entire budget, deliberately. Somebody
+        holding their hands off a pad, or resting them on one without
+        pressing, cannot read a paragraph while doing it. So each
+        state here is a thing to DO plus at most two words saying how,
+        and the two things a sentence would have carried are carried
+        by pictures instead: the ring says how long, the hand says
+        which finger.
+        """
+        th = self.theme
+        if self._stale():
+            return ("NO SIGNAL", "check Settings", th.warning)
+        blockers = self._blockers()
+        if blockers:
+            # No hand word even on a bilateral run: the hand picture
+            # below lights the finger on the hand it belongs to, and
+            # "lift your left ring finger" is a fifth word for
+            # something the player can already see.
+            _, i = blockers[0]
+            verb = "LIFT" if self.phase == PHASE_OFF else "RELAX"
+            return (f"{verb} YOUR {FINGER_NAMES[i].upper()} FINGER",
+                    "", th.warning)
+        under = "hold still" if self._collecting else None
+        if self.phase == PHASE_OFF:
+            return ("HANDS OFF", under or "nothing touching",
+                    th.foreground)
+        return ("HANDS RESTING", under or "no pressure", th.foreground)
+
     def _draw_rest_step(self, surf: pygame.Surface) -> None:
+        """One state, centred, big enough to read from the chair.
+
+        What used to be here was a headline, a body line, a hand
+        picture, a panel of four live sensor traces with a number and
+        a tick on each, and a status strip: six things competing on a
+        step whose whole content is "put your hands somewhere and wait".
+        The traces were a therapist's diagnostic on a patient's screen,
+        and the clinical calibration on the menu is where that job
+        belongs. What is left is the state, the time, and the hand.
+        """
         th, ly = self.theme, self.layout
         cx = ly.width // 2
-        blockers = self._blockers()
-        stale = self._stale()
+        head, sub, colour = self._rest_words()
+        self._bold(surf, head, (cx, 232), FONT_TITLE - 8, colour)
+        if sub:
+            draw_text(surf, sub, (cx, 284), th, ly, pt=FONT_H2,
+                      centre=True, colour=th.muted)
+        self._draw_countdown_ring(surf)
 
-        # ONE instruction, and it changes to name the exact problem the
-        # moment there is one. Nothing else on this screen is bigger.
-        if self.phase == PHASE_OFF:
-            head = "Hands right off the pads"
-            body = "Nothing touching. This reads the sensors' zero."
-        else:
-            head = ("Rest your hands on the pads" if len(self.hands) > 1
-                    else f"Rest your {self.hands[0]} hand on the pads")
-            body = "Relax. No pressing. This is your starting level."
-        colour = th.foreground
-        if stale:
-            head = "Waiting for the device"
-            body = "No readings are arriving. Check it on Settings."
-            colour = th.warning
-        elif blockers:
-            hand, i = blockers[0]
-            side = f"{hand} " if len(self.hands) > 1 else ""
-            if self.phase == PHASE_OFF:
-                head = f"Lift your {side}{FINGER_NAMES[i]} finger"
-                body = "That pad is still carrying something."
-            else:
-                head = f"Relax your {side}{FINGER_NAMES[i]} finger"
-                body = "It is pressing. Let it sit without pushing."
-            colour = th.warning
-
-        self._bold(surf, head, (cx, 240), FONT_H1, colour)
-        draw_text(surf, body, (cx, 284), th, ly, pt=FONT_BODY,
-                  centre=True, colour=th.muted)
-
-        # Picture of the hand on the left so "ring finger" never has to
-        # be worked out, traces of every sensor on the right.
-        hot = {h: {i for hh, i in blockers if hh == h} for h in self.hands}
+        # The hand picture, under the ring, carrying the one thing the
+        # words gave up: which finger, on which hand.
+        # Nothing is lit while the device is silent: the last readings
+        # before it went quiet are not news about the hand, and a
+        # finger glowing amber under "NO SIGNAL" asks the player to
+        # lift something the screen cannot see.
+        blockers = [] if self._stale() else self._blockers()
+        hot = {h: {i for hh, i in blockers if hh == h}
+               for h in self.hands}
         on_pads = self.phase == PHASE_REST
         if len(self.hands) > 1:
-            self._draw_hand_map(surf, pygame.Rect(122, 340, 146, 190),
+            self._draw_hand_map(surf, pygame.Rect(398, 546, 200, 152),
                                 self.hands[0], None, hot[self.hands[0]],
                                 on_pads)
-            self._draw_hand_map(surf, pygame.Rect(302, 340, 146, 190),
+            self._draw_hand_map(surf, pygame.Rect(682, 546, 200, 152),
                                 self.hands[1], None, hot[self.hands[1]],
                                 on_pads)
-            panel = pygame.Rect(500, 316, 640, 300)
         else:
-            self._draw_hand_map(surf, pygame.Rect(160, 336, 200, 210),
+            self._draw_hand_map(surf, pygame.Rect(540, 546, 200, 152),
                                 self.hands[0], None, hot[self.hands[0]],
                                 on_pads)
-            panel = pygame.Rect(430, 316, 710, 300)
-        self._draw_sensor_rows(surf, panel)
-        self._draw_state_strip(surf, pygame.Rect(panel.x, panel.bottom + 18,
-                                                 panel.w, 54),
-                               stale, bool(blockers))
 
         if self._status:
-            draw_text(surf, self._status, (cx, ly.height - 92), th, ly,
-                      pt=FONT_BODY, centre=True, colour=th.warning)
+            draw_text(surf, self._status, (cx, 742), th, ly,
+                      pt=FONT_SMALL + 2, centre=True, colour=th.warning)
         elif (not self._collecting
                 and time.perf_counter() - self._phase_started_at > 15.0):
             draw_text(surf, "Not settling? Skip for now keeps the saved "
-                      "settings.", (cx, ly.height - 92), th, ly,
-                      pt=FONT_SMALL + 2, centre=True, colour=th.muted)
+                      "settings.", (cx, 742), th, ly, pt=FONT_SMALL + 2,
+                      centre=True, colour=th.muted)
 
-    def _draw_state_strip(self, surf: pygame.Surface, rect: pygame.Rect,
-                          stale: bool, blocked: bool) -> None:
-        """One strip that says what the capture is doing right now.
-        While measuring it doubles as the progress bar, so the wait has
-        a visible end."""
+    def _ring_state(self) -> tuple[float, float, tuple[int, int, int]]:
+        """(seconds left, seconds the whole span is, ring colour).
+
+        Two spans wear the same ring on purpose: first the lead the
+        player is given to get their hands where they belong, then the
+        capture itself. Both drain toward zero, so the ring means one
+        thing throughout: this much longer. A span of zero is the
+        state with no clock at all, a lane holding the step up or a
+        device saying nothing.
+        """
         th = self.theme
         if self._collecting:
-            span = self._rest_capture_s()
-            frac = (1.0 - self._seconds_left() / span) if span > 0 else 1.0
-            colour, text = th.accent, (
-                f"MEASURING, HOLD STILL   {self._seconds_left():.1f}s")
-        elif stale:
-            colour, frac, text = th.warning, 0.0, "NO SIGNAL"
-        elif blocked:
-            colour, frac, text = th.warning, 0.0, "WAITING FOR A CLEAR PAD"
-        elif self._settled():
-            colour, frac, text = th.success, 0.0, "ALL QUIET, STARTING"
-        else:
-            colour, frac, text = th.muted, 0.0, "SETTLING..."
-        self._panel(surf, rect, tint=colour, alpha=30, radius=16)
-        w = int(rect.w * max(0.0, min(1.0, frac)))
-        if w > 0:
-            # Clipped out of a full-width rounded rect rather than drawn
-            # as its own rect, so the growing edge stays a straight cut
-            # instead of a lozenge sliding across the words.
-            layer = pygame.Surface(rect.size, pygame.SRCALPHA)
-            pygame.draw.rect(layer, (colour[0], colour[1], colour[2], 70),
-                             layer.get_rect(), border_radius=16)
-            surf.blit(layer, rect.topleft, pygame.Rect(0, 0, w, rect.h))
-        pygame.draw.rect(surf, colour, rect, 2, border_radius=16)
-        self._bold(surf, text, rect.center, FONT_BODY, colour)
+            return (self._seconds_left(), self._rest_capture_s(),
+                    th.accent)
+        if self._stale() or self._blockers():
+            return (0.0, 0.0, th.warning)
+        left = self._lead_left()
+        return (left, self._lead_s(), th.accent if left > 0 else th.success)
 
-    def _draw_sensor_rows(self, surf: pygame.Surface,
-                          rect: pygame.Rect) -> None:
-        """One live trace per sensor, each against its own reference.
-
-        Small multiples rather than one shared graph because the whole
-        job of this panel is to attribute movement to a named finger,
-        and overlaid lines on a shared axis do the opposite. A row that
-        sits flat on its base is a settled sensor; a row that climbs is
-        the finger the instruction above is talking about.
-        """
-        th, ly = self.theme, self.layout
-        self._panel(surf, rect)
-        lanes = [(h, i) for h in self.hands for i in range(N_FINGERS)]
-        rh = min(66, (rect.h - 20) // max(1, len(lanes)))
-        rows = self._hist
-        blocked = set(self._blockers())
-
-        if len(rows) < 2:
-            draw_text(surf, "no readings yet",
-                      (rect.centerx, rect.centery), th, ly, pt=FONT_BODY,
-                      centre=True, colour=th.muted)
-            return
-
-        t1 = rows[-1][0]
-        width = max(1e-6, max(t1 - rows[0][0], HIST_S))
-        # Sliced once per hand for the whole buffer, not once per point.
-        cols: dict[str, list[list[float]]] = {}
-        for hand in self.hands:
-            off = self._hand_offset(hand, len(rows[-1][1]))
-            cols[hand] = [[float(v[off + i]) if off + i < len(v) else 0.0
-                           for _, v in rows] for i in range(N_FINGERS)]
-        xs = [0.0] * len(rows)
-        for k, (t, _) in enumerate(rows):
-            xs[k] = t
-
-        for k, (hand, i) in enumerate(lanes):
-            row = pygame.Rect(rect.x + 14, rect.y + 12 + k * rh,
-                              rect.w - 28, rh - 6)
-            hot = (hand, i) in blocked
-            label = FINGER_NAMES[i]
-            if len(self.hands) > 1:
-                label = f"{hand[0].upper()}  {label}"
-            self._bold(surf, label, (row.x + 6, row.centery - 8),
-                       FONT_SMALL + 2, th.warning if hot else th.muted,
-                       centre=False)
-            track = pygame.Rect(row.x + 104, row.y + 2,
-                                row.w - 104 - 76, row.h - 4)
-            base = track.bottom - 2
-            span = max(6, track.h - 6)
-            pygame.draw.line(surf, self._mix(th.muted, th.background,
-                                             0.45),
-                             (track.x, base), (track.right, base), 1)
-            if self.phase == PHASE_OFF:
-                ref = self._hand_slice(self._floor, hand)[i] if self._floor \
-                    else cols[hand][i][0]
-            else:
-                ref = self._captures[hand]["empty"][i]
-            pts = []
-            for k2, v in enumerate(cols[hand][i]):
-                f = max(0.0, min(1.0, (v - ref) / QUIET_TRACE_COUNTS))
-                x = track.right - (t1 - xs[k2]) / width * track.w
-                pts.append((x, base - f * span))
-            colour = th.warning if hot else self._quiet_trace_colour(i)
-            if len(pts) >= 2:
-                pygame.draw.lines(surf, colour, False, pts, 3 if hot else 2)
-                pygame.draw.circle(surf, colour,
-                                   (int(pts[-1][0]), int(pts[-1][1])),
-                                   5 if hot else 3)
-            now_v = cols[hand][i][-1] - ref
-            draw_text(surf, f"{now_v:+.0f}", (track.right + 14,
-                                              row.centery - 9), th, ly,
-                      pt=FONT_SMALL + 2,
-                      colour=th.warning if hot else th.muted)
-            # Green tick once this sensor is sitting still where it
-            # should, so "which ones are ready" needs no reading.
-            if not hot:
-                tx, ty = track.right + 58, row.centery
-                pygame.draw.lines(surf, th.success, False,
-                                  [(tx - 7, ty), (tx - 2, ty + 5),
-                                   (tx + 8, ty - 6)], 3)
-            # The mean being learned during the resting capture is what
-            # the profile actually stores, so it is drawn as it lands.
-            if self._collecting and self.phase == PHASE_REST:
-                buf = self._rest_buffers.get(hand) or []
-                if buf:
-                    lvl = statistics.fmean([r[i] for r in buf]) - ref
-                    f = max(0.0, min(1.0, lvl / QUIET_TRACE_COUNTS))
-                    y = int(base - f * span)
-                    pygame.draw.line(surf, self._lane_colour(i),
-                                     (track.right - 70, y),
-                                     (track.right, y), 3)
+    def _draw_countdown_ring(self, surf: pygame.Surface) -> None:
+        """The one moving thing on a rest step, and the reason the
+        step feels like it has an end: a ring draining round with the
+        seconds left in the middle of it."""
+        th = self.theme
+        c, r = REST_RING_CENTRE, REST_RING_R
+        left, span, colour = self._ring_state()
+        self._ring(surf, c, r, self._mix(th.muted, th.background, 0.62),
+                   16)
+        frac = (left / span) if span > 0 else 0.0
+        self._arc(surf, c, r, max(0.0, min(1.0, frac)), colour, 16)
+        if left > 0.0:
+            self._bold(surf, f"{int(math.ceil(left - 1e-6))}", c,
+                       FONT_TITLE + 10, colour)
+        elif span > 0.0 or not (self._stale() or self._blockers()):
+            # Nothing left to wait for, so the ring says so rather
+            # than sitting on a zero: the capture is a breath away.
+            pygame.draw.lines(surf, th.success, False,
+                              [(c[0] - 30, c[1] + 2),
+                               (c[0] - 8, c[1] + 24),
+                               (c[0] + 32, c[1] - 24)], 10)
 
     # ---- phase 3: the press ----------------------------------------------
 
@@ -1166,19 +1132,19 @@ class QuickCalibrationScreen(Screen):
         over = me > hi
         under = me < lo
 
-        # Which hand, named large, whenever the run covers more than one.
+        # The instruction owns the centre line on its own. Which hand
+        # and how far through sit out at the margins, one on each
+        # side, because stacking the hand word over the instruction
+        # put two headlines in the same place and the taller type
+        # made them touch.
         if len(self.hands) > 1:
-            self._bold(surf, f"{hand.upper()} HAND", (cx, 226), FONT_H2,
-                       th.accent)
-            head_y = 268
-        else:
-            head_y = 244
-
+            self._pill(surf, (152, 224), f"{hand.upper()} HAND",
+                       th.accent, pt=FONT_BODY)
         self._bold(surf, f"Press your {FINGER_NAMES[i].upper()} finger",
-                   (cx, head_y), FONT_H1, th.foreground)
+                   (cx, 246), FONT_H1 + 6, th.foreground)
         cur, total = self._finger_no()
-        draw_text(surf, f"Finger {cur} of {total}", (ly.width - 140, 226),
-                  th, ly, pt=FONT_SMALL + 2, centre=True, colour=th.muted)
+        draw_text(surf, f"Finger {cur} of {total}", (ly.width - 132, 224),
+                  th, ly, pt=FONT_BODY, centre=True, colour=th.muted)
 
         self._draw_hand_map(surf, HAND_MAP, hand, i,
                             {self._wrong} if self._wrong is not None
@@ -1256,28 +1222,29 @@ class QuickCalibrationScreen(Screen):
             pygame.draw.line(surf, th.foreground,
                              (BAR.x - 4, fill_top), (BAR.right + 4,
                                                      fill_top), 3)
-        py = max(BAR.y + 18, min(BAR.bottom - 18, fill_top))
-        self._pill(surf, (BAR.x - 64, py),
+        py = max(BAR.y + 22, min(BAR.bottom - 22, fill_top))
+        self._pill(surf, (BAR.x - 76, py),
                    f"{max(0.0, me):.0f}", colour if me > 0.4 else th.muted,
-                   pt=FONT_BODY)
+                   pt=FONT_H2)
 
         # Zone labels down the right of the bar, each against its own
-        # slice, so "too hard" and "too light" are places on the bar and
-        # not just words that appear after the fact.
-        lx = BAR.right + 24
-        self._bold(surf, "TOO HARD", (lx, (BAR.y + zone_top) // 2 - 8),
-                   FONT_SMALL + 4,
+        # slice, so above and below the goal are places on the bar and
+        # not just words that appear after the fact. They name where
+        # the press landed, not a verdict on the press.
+        lx = BAR.right + 26
+        self._bold(surf, "ABOVE GOAL", (lx, (BAR.y + zone_top) // 2 - 12),
+                   FONT_BODY + 2,
                    th.warning if me > hi else self._mix(
                        th.warning, th.background, 0.45), centre=False)
-        self._bold(surf, "GOAL", (lx, band.centery - 20), FONT_H2,
+        self._bold(surf, "GOAL", (lx, band.centery - 30), FONT_H2 + 8,
                    th.success, centre=False)
         draw_text(surf, f"{lo:.0f} to {hi:.0f}",
-                  (lx, band.centery + 10), th, ly, pt=FONT_SMALL + 2,
+                  (lx, band.centery + 14), th, ly, pt=FONT_BODY,
                   colour=th.muted)
-        draw_text(surf, "counts above rest", (lx, band.centery + 32),
-                  th, ly, pt=FONT_SMALL, colour=th.muted)
-        self._bold(surf, "TOO LIGHT",
-                   (lx, (zone_bot + BAR.bottom) // 2 - 8), FONT_SMALL + 4,
+        draw_text(surf, "counts above rest", (lx, band.centery + 40),
+                  th, ly, pt=FONT_SMALL + 1, colour=th.muted)
+        self._bold(surf, "BELOW GOAL",
+                   (lx, (zone_bot + BAR.bottom) // 2 - 12), FONT_BODY + 2,
                    self._too_light_colour() if me < lo else self._mix(
                        self._too_light_colour(), th.background, 0.45),
                    centre=False)
@@ -1316,21 +1283,26 @@ class QuickCalibrationScreen(Screen):
             elif on_pads:
                 # Hand is meant to be ON the pads for this step, so the
                 # picture says so: the fingers carry their own colours
-                # instead of the greyed-out "lift off" look.
-                pygame.draw.rect(surf, th.lane_idle[i] if i < len(
-                    th.lane_idle) else th.muted, r, border_radius=rad)
+                # instead of the greyed-out "lift off" look. Faded to
+                # the settled tint for the same reason the traces were,
+                # so a quiet pinky can never draw in the alert amber.
+                pygame.draw.rect(surf, self._quiet_trace_colour(i), r,
+                                 border_radius=rad)
             else:
                 pygame.draw.rect(surf, self._mix(
                     th.muted, th.background, 0.72), r, border_radius=rad)
+            # Type scales with the picture: the press step's map is
+            # half the screen tall, the rest step's sits under the ring.
+            name_pt = FONT_BODY if rect.w >= 240 else FONT_SMALL
             name = FINGER_NAMES[i] if fw >= 40 else FINGER_NAMES[i][:3]
             draw_text(surf, name, (r.centerx, base_y + 8),
-                      th, ly, pt=FONT_SMALL, centre=True,
+                      th, ly, pt=name_pt, centre=True,
                       colour=(th.warning if i in hot
                               else th.foreground if i == target
                               else th.muted))
             if i == target or i in hot:
                 self._bold(surf, FINGER_NAMES[i].upper(),
-                           (r.centerx, r.y - 16), FONT_SMALL + 2,
+                           (r.centerx, r.y - 18), name_pt + 2,
                            th.warning if i in hot else th.accent)
         palm = pygame.Rect(rect.x, base_y + 28, rect.w, 44)
         pygame.draw.rect(surf, self._mix(th.muted, th.background, 0.78),
@@ -1342,29 +1314,29 @@ class QuickCalibrationScreen(Screen):
         than a punishment."""
         th, ly = self.theme, self.layout
         self._ring(surf, RING_CENTRE, RING_R,
-                   self._mix(th.muted, th.background, 0.6), 12)
+                   self._mix(th.muted, th.background, 0.6), 18)
         colour = th.success if (self._in_zone or self._landed) else th.muted
         self._arc(surf, RING_CENTRE, RING_R,
-                  1.0 if self._landed else self._hold, colour, 12)
+                  1.0 if self._landed else self._hold, colour, 18)
         if self._landed:
             cxr, cyr = RING_CENTRE
             pygame.draw.lines(surf, th.success, False,
-                              [(cxr - 26, cyr), (cxr - 8, cyr + 20),
-                               (cxr + 28, cyr - 22)], 9)
-            self._bold(surf, "GOT IT", (cxr, cyr + 46), FONT_BODY,
+                              [(cxr - 38, cyr), (cxr - 12, cyr + 28),
+                               (cxr + 40, cyr - 32)], 12)
+            self._bold(surf, "GOT IT", (cxr, cyr + 64), FONT_H2,
                        th.success)
         else:
             self._bold(surf, FINGER_NAMES[i].upper(), RING_CENTRE,
-                       FONT_H2, self._lane_colour(i))
-            draw_text(surf, "HOLD", (RING_CENTRE[0], RING_CENTRE[1] + 34),
-                      th, ly, pt=FONT_SMALL, centre=True, colour=th.muted)
+                       FONT_H2 + 8, self._lane_colour(i))
+            draw_text(surf, "HOLD", (RING_CENTRE[0], RING_CENTRE[1] + 44),
+                      th, ly, pt=FONT_BODY, centre=True, colour=th.muted)
         # Only while there is still a hold to do: after GOT IT the
         # line was telling the patient to hold a press they had
         # already banked.
         if not self._landed:
             draw_text(surf, f"hold {self._hold_s():.0f}s in the goal",
-                      (RING_CENTRE[0], RING_CENTRE[1] + RING_R + 26),
-                      th, ly, pt=FONT_SMALL, centre=True,
+                      (RING_CENTRE[0], RING_CENTRE[1] + RING_R + 24),
+                      th, ly, pt=FONT_SMALL + 2, centre=True,
                       colour=th.muted)
 
         # One-shot completion pop, a ring expanding out of the hold ring.
@@ -1382,7 +1354,7 @@ class QuickCalibrationScreen(Screen):
         th, ly = self.theme, self.layout
         cx = ly.width // 2
         i = self._finger_idx
-        y = 692
+        y = 700
         if self._landed:
             msg, colour = f"Got your {FINGER_NAMES[i]} press.", th.success
         elif self._status:
@@ -1400,11 +1372,11 @@ class QuickCalibrationScreen(Screen):
             colour = self._too_light_colour()
         else:
             msg, colour = "Press a little harder", self._too_light_colour()
-        self._bold(surf, msg, (cx, y), FONT_H2 + 4, colour)
+        self._bold(surf, msg, (cx, y), FONT_H2 + 8, colour)
         if (not self._landed
                 and time.perf_counter() - self._started_finger_at > 12.0):
             draw_text(surf, "Nothing happening? Skip for now keeps the "
-                      "saved settings.", (cx, y + 30), th, ly,
+                      "saved settings.", (cx, y + 32), th, ly,
                       pt=FONT_SMALL + 2, centre=True, colour=th.muted)
 
     def _draw_tick_row(self, surf: pygame.Surface) -> None:
@@ -1413,10 +1385,10 @@ class QuickCalibrationScreen(Screen):
         landed pops, once."""
         th, ly = self.theme, self.layout
         total = len(self.hands) * N_FINGERS
-        cw, gap = (86, 8) if total > 4 else (120, 14)
+        cw, gap = (88, 8) if total > 4 else (132, 16)
         row_w = total * cw + (total - 1) * gap
         x0 = ly.width // 2 - row_w // 2
-        y = ly.height - 62
+        y = ly.height - 56
         done_upto = self._hand_idx * N_FINGERS + self._finger_idx
         now = time.perf_counter()
         for k in range(total):

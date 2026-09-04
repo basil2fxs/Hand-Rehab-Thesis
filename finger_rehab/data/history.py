@@ -107,13 +107,14 @@ def comparable_value(mode: str, summary: dict) -> float | None:
         return _num(((summary.get("buzz_hunt") or {})
                      .get("loc") or {}).get("accuracy"))
     if mode == "echo":
-        # The span headline, but never across the ladder / cumulative
-        # divide: a cumulative (classic Simon) block rehearses every
-        # prefix and its span is inflated by design, so comparing one
-        # against a ladder block would report the game rule change as
-        # patient change.
+        # The span headline, Simon blocks only. A Simon game grows one
+        # sequence and re-presents every prefix, so its span sits
+        # above a Kessels ladder span from the same person; comparing
+        # the two would report the game rule change as patient change.
+        # Legacy ladder blocks (and pre-2026-09 blocks, which carry no
+        # rule at all) therefore have nothing to say in this chip.
         ec = summary.get("echo") or {}
-        if not isinstance(ec, dict) or ec.get("cumulative"):
+        if not isinstance(ec, dict) or str(ec.get("rule") or "") != "simon":
             return None
         return _num(ec.get("span"))
     if mode == "rhythm":
@@ -125,34 +126,47 @@ def comparable_value(mode: str, summary: dict) -> float | None:
 # mode -> (lower_is_better, to display units, decimals,
 #          better wording, worse wording). {d} is the magnitude of the
 # change in display units.
+#
+# The down-side wording says the DIRECTION and nothing else. "22 ms
+# slower than last time" and "5% less accurate than last time" are
+# verdicts on the round, and a verdict on the results screen is the
+# thing most likely to stop someone coming back; "22 ms down on last
+# time" carries the same number without one. Feedback aimed at the
+# person, rather than at the task, is the kind that makes performance
+# worse (Kluger and DeNisi 1996, Psychological Bulletin).
+#
+# Every string here has to END in one of battery._HISTORY_TAILS
+# (" than last time" / " on last time"): the study-battery panel
+# retails the same words with "than your first go" and with no tail
+# at all, so the two are made from one string and cannot drift.
 _ACC = ("{d}% more accurate than last time",
-        "{d}% less accurate than last time")
+        "{d}% down on last time")
 _RULES: dict[str, tuple[bool, float, int, str, str]] = {
     "classic": (False, 100.0, 0, *_ACC),
     "adaptive": (False, 1.0, 0,
                  "{d} BPM faster pace than last time",
-                 "{d} BPM slower pace than last time"),
+                 "{d} BPM easier pace on last time"),
     "mirror": (True, 1.0, 0,
                "{d} ms tighter sync than last time",
-               "{d} ms looser sync than last time"),
+               "{d} ms wider sync on last time"),
     "reaction": (True, 1.0, 0,
                  "{d} ms faster than last time",
-                 "{d} ms slower than last time"),
+                 "{d} ms behind on last time"),
     "pattern": (False, 100.0, 0, *_ACC),
     "chords": (False, 100.0, 0,
                "{d}% more clean hits than last time",
-               "{d}% fewer clean hits than last time"),
+               "clean hits {d}% down on last time"),
     "syllables": (False, 100.0, 0, *_ACC),
     "force_pilot": (False, 100.0, 0,
                     "{d}% steadier than last time",
-                    "{d}% less steady than last time"),
+                    "{d}% wider of the line on last time"),
     "buzz_hunt": (False, 100.0, 0, *_ACC),
     "echo": (False, 1.0, 0,
              "longest echo up {d} on last time",
              "longest echo down {d} on last time"),
     "rhythm": (True, 1.0, 0,
                "{d} ms tighter timing than last time",
-               "{d} ms looser timing than last time"),
+               "{d} ms wider of the beat on last time"),
 }
 
 

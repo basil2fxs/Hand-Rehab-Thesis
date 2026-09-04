@@ -251,10 +251,10 @@ class TestTitleClicks:
 
 
 class TestSettingsGroups:
-    """Five labelled panels, every control inside the one it belongs to."""
+    """Six labelled panels, every control inside the one it belongs to."""
 
-    def test_the_five_group_headings_are_drawn(self, settings_screen,
-                                               monkeypatch):
+    def test_the_group_headings_are_drawn(self, settings_screen,
+                                          monkeypatch):
         import pygame
         import finger_rehab.ui.screens as screens_mod
         screen, _ = settings_screen
@@ -269,7 +269,8 @@ class TestSettingsGroups:
                             "_draw_band", recorder)
         screen.draw(pygame.Surface((1280, 800)))
         assert seen == ["SENSORY CUES", "LEVELS", "FINGER TEST",
-                        "ARDUINO PORTS", "SESSION DATA"]
+                        "ARDUINO PORTS", "SESSION DATA",
+                        "ARDUINO FIRMWARE"]
 
     def test_the_groups_do_not_overlap(self, settings_screen):
         screen, _ = settings_screen
@@ -279,6 +280,7 @@ class TestSettingsGroups:
             "fingers": screen._fingers_rect(),
             "ports": screen._ports_rect(),
             "data": screen._data_rect(),
+            "firmware": screen._firmware_rect(),
         }
         names = list(groups)
         for i, a in enumerate(names):
@@ -291,7 +293,7 @@ class TestSettingsGroups:
         w, h = screen.layout.width, screen.layout.height
         for rect in (screen._cues_rect(), screen._levels_rect(),
                      screen._fingers_rect(), screen._ports_rect(),
-                     screen._data_rect()):
+                     screen._data_rect(), screen._firmware_rect()):
             assert rect.left >= 0 and rect.right <= w
             assert rect.top >= 0 and rect.bottom <= h
 
@@ -317,11 +319,13 @@ class TestSettingsGroups:
         panel = screen._ports_rect()
         for dd in screen._port_dropdowns.values():
             assert panel.contains(dd.rect)
+        homes = {
+            "Open data folder": screen._data_rect(),
+            "Flash firmware": screen._firmware_rect(),
+            "Sensor address": screen._firmware_rect(),
+        }
         for b in screen._panel_buttons:
-            if b.label == "Open data folder":
-                assert screen._data_rect().contains(b.rect)
-            else:
-                assert panel.contains(b.rect), b.label
+            assert homes.get(b.label, panel).contains(b.rect), b.label
 
     def test_the_sliders_do_not_reach_into_the_finger_tiles(
             self, settings_screen):

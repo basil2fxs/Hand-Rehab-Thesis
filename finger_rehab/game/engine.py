@@ -18,12 +18,14 @@ import pygame
 from ..audio.engine import AudioEngine
 from ..data.logger import (RawLogger, SessionPaths, TrialLogger,
                            pack_waveform_params)
+from ..data import pattern_file
 from ..data.session import Session
 from ..hardware import eeg_trigger
 from ..hardware.fsr_detector import (
     Calibration, FSRDetector, PressEvent, ReleaseEvent,
 )
 from ..hardware.source import Source
+from ..ui import feedback_bank
 from ..ui.theme import get as get_theme
 from ..ui.widgets import Layout
 from .scoring import ScoreConfig, RhythmWindows, TrialResult
@@ -94,6 +96,12 @@ DEFAULT_LATENCY = LatencySettings(45.0, 20.0, 12.0, False, None)
 
 
 class GameEngine:
+    # Class-level defaults so an engine built with __new__ (several
+    # tests do that to skip hardware setup) still answers the feedback
+    # questions with the shipping behaviour.
+    feedback_style = "encouraging"
+    feedback_delay_ms = 0
+
     def __init__(self, cfg, source: Source) -> None:
         self.cfg = cfg
         self.source = source
@@ -147,6 +155,21 @@ class GameEngine:
             miss_points=int(cfg.get("scoring.miss_points", 0)),
             early_penalty=int(cfg.get("scoring.early_penalty", 0)),
         )
+
+        # Feedback wording. The scoring labels stay as data; what the
+        # patient reads comes from the phrase bank, drawn through a
+        # shuffle deck so the same line never lands twice running. The
+        # rng is reseeded per block (see _begin_block) so replaying a
+        # seeded block shows the same words in the same order.
+        self._phrases = feedback_bank.PhraseDeck()
+        self._phrase_rng = random.Random()
+        self.feedback_style = feedback_bank.style(cfg)
+        self.feedback_delay_ms = feedback_bank.delay_ms(cfg)
+        # Parked neutral-style glyphs waiting out feedback_delay_ms.
+        # Each entry is (due_perf, screen_key, lane, glyph, colour,
+        # eeg_code). Drained in update() on the first frame at or past
+        # due_perf so the marker lands on the flip that draws it.
+        self._pending_feedback: list[tuple] = []
 
         self.audio: AudioEngine | None = None
         # Built lazily on the first _tick_menu_music once self.audio
@@ -227,6 +250,12 @@ class GameEngine:
         # snapshot the overrides replaced, and one row per step that
         # reached an end. None when no battery is running.
         self._battery: dict | None = None
+        # Patterns sequence file (data/pattern_file.py): the last
+        # import or sync result for the Settings status line, and the
+        # refusal when a loaded file does not match the hand picked.
+        # Both are display state; the file on disk is the truth.
+        self.pattern_file_note: str = ""
+        self.pattern_refusal: str = ""
         # `hit_streak` counts consecutive hits in a row. We fire an
         # encouragement popup when it hits one of the thresholds below.
         # `miss_streak` is the opposite - when it hits the recovery
@@ -938,6 +967,10 @@ class GameEngine:
                 if not self.paused:
                     if self.audio:
                         self.audio.tick()
+                    # Delayed feedback (lab style) is spawned here so
+                    # the glyph lands on this frame's flip and the
+                    # 140/141 marker goes out with it.
+                    self._drain_feedback()
                     if self.screen_obj:
                         self.screen_obj.update(dt)
                 if self.screen_obj:
@@ -1453,6 +1486,12 @@ class GameEngine:
         if e.type == pygame.QUIT:
             self._abandon_if_in_block()
             self.running = False
+        elif e.type == getattr(pygame, "DROPFILE", -1):
+            # Dragging a sequence file onto the window is the shortest
+            # route in. Ignored while a block is running: swapping the
+            # material out from under a take would ruin it, and a file
+            # dropped by accident mid-session must cost nothing.
+            self._handle_dropped_file(getattr(e, "file", ""))
         elif e.type == pygame.MOUSEBUTTONDOWN:
             # A click is game input: it dismisses the chip and resumes,
             # same promise as "press any key to keep playing".
@@ -1919,6 +1958,15 @@ class GameEngine:
         if qc is not None and self.screen_obj is qc:
             qc.on_escape()
             return
+        # A firmware dialog on Settings gets first refusal on Esc, the
+        # same way the quick calibration does above. Closing Settings
+        # out from under a running flash would leave the port, the
+        # source and the board in three different states.
+        diag = self._screens.get("diagnostics")
+        if diag is not None and self.screen_obj is diag:
+            handler = getattr(diag, "on_escape", None)
+            if callable(handler) and handler():
+                return
         # Diagnostics returns straight to title without abandoning any
         # block (none could be in-flight on this screen).
         if self.screen_obj in (self._screens.get("diagnostics"),
@@ -2196,6 +2244,72 @@ class GameEngine:
                     out.append(r)
         return out
 
+    # ---- Patterns sequence file -------------------------------------------
+    def _handle_dropped_file(self, path: str) -> str:
+        """A file dropped on the window. Only .yaml and .yml are ours,
+        and only outside a block; anything else is ignored in silence
+        so a stray drag never interrupts a session."""
+        if not path or self.block_is_running():
+            return ""
+        if Path(path).suffix.lower() not in (".yaml", ".yml"):
+            return ""
+        note = self.import_pattern_sequence_file(path)
+        screen = getattr(self, "screen_obj", None)
+        setter = getattr(screen, "set_status", None)
+        if callable(setter):
+            setter(note)
+        return note
+
+    def _pattern_plan(self):
+        """The sequence file a Patterns block should run, or (None,
+        reason). One place, because the setup screen, the hub card and
+        begin_pattern_block must all agree about what is loaded."""
+        if not pattern_file.is_enabled(self.cfg):
+            return None, ""
+        try:
+            return pattern_file.load_active_plan(self.cfg)
+        except Exception as e:
+            # A sequence file must never be able to stop a session.
+            # Worst case the built-in riff runs and the reason is
+            # stamped in the block summary.
+            log.warning("pattern sequence file could not be read: %s", e)
+            return None, f"sequence file could not be read: {e}"
+
+    def sync_pattern_sequence_file(self) -> str:
+        """Import config/pattern_sequences/current.yaml when it differs
+        from what is already active, and return a status line (empty
+        when nothing changed). Called on the menu screens so a file
+        saved into the folder is picked up without a restart and
+        without a click."""
+        if not pattern_file.is_enabled(self.cfg):
+            return ""
+        try:
+            res = pattern_file.sync_drop_folder(self.cfg)
+        except Exception as e:
+            log.warning("pattern sequence drop folder not synced: %s", e)
+            return ""
+        if res is None:
+            return ""
+        self.pattern_file_note = res.message()
+        return self.pattern_file_note
+
+    def import_pattern_sequence_file(self, path) -> str:
+        """Load a file the researcher pointed at (Settings button, or
+        dropped on the window). Returns the status line."""
+        try:
+            res = pattern_file.import_file(Path(path), self.cfg)
+        except Exception as e:
+            log.warning("pattern sequence file import failed: %s", e)
+            return f"{Path(path).name} not loaded: {e}"
+        self.pattern_file_note = res.message()
+        return self.pattern_file_note
+
+    def pattern_plan_headline(self) -> str:
+        """One line naming the active file for the hub card and the
+        setup screen, or "" when the built-in riff is running."""
+        plan, _reason = self._pattern_plan()
+        return plan.headline() if plan is not None else ""
+
     # ---- screen helpers ----------------------------------------------------
     def show_title(self) -> None:
         ts = self._screens["title"]
@@ -2378,6 +2492,13 @@ class GameEngine:
                 battery_pos = int(stamp.get("position", 0) or 0)
             except (TypeError, ValueError):
                 battery_pos = 0
+        # The block's own summary rides along so the results screen can
+        # show this session's first go against its latest one without
+        # going back to the disk (game/battery.progress_rows). It is
+        # the same dict metadata.json holds, not a copy, so this costs
+        # a reference per block.
+        summary = getattr(getattr(self, "session", None),
+                          "block_summary", None)
         entry = {
             "mode": str(getattr(self, "current_block", "") or ""),
             "hand": str(getattr(self, "hand_mode", "") or ""),
@@ -2385,6 +2506,9 @@ class GameEngine:
             "stars": self._session_stars_for_block(),
             "status": status,
             "battery_pos": battery_pos,
+            "phase": (str(stamp.get("phase") or "")
+                      if isinstance(stamp, dict) else ""),
+            "summary": summary if isinstance(summary, dict) else None,
         }
         rows = getattr(self, "_session_log", None)
         if rows is None:
@@ -2615,6 +2739,52 @@ class GameEngine:
         if note:
             return f"Connected: {note}."
         return "Connected. No restart needed."
+
+    # ---- firmware flashing ----------------------------------------------
+    # Settings can write the Arduino's firmware and change a sensor's
+    # I2C address. Both need avrdude to own the serial port for a few
+    # seconds, which means the app's own reader has to let go of it
+    # first: on Windows a COM port is exclusive and the second open
+    # fails, and on macOS both processes can open it and then split the
+    # incoming bytes so the bootloader handshake breaks in confusing
+    # ways. These three sit next to reconnect_source because they are
+    # the same teardown and rebuild, with a subprocess in the middle.
+
+    def firmware_job_allowed(self) -> str | None:
+        """None when a flash may start, else the reason it may not."""
+        if self.block_is_running():
+            return "Not while a block is running. Finish or abandon first."
+        return None
+
+    def begin_firmware_job(self) -> None:
+        """Hand the serial port over to avrdude.
+
+        The port watcher stops first: with it running, the board
+        disappearing and reappearing across a flash would look like a
+        plug event and autoconnect would reopen the port halfway
+        through the write.
+        """
+        self.stop_port_watch()
+        self._firmware_job_active = True
+        src = getattr(self, "source", None)
+        # No stop_all_motors first: the port is about to close, so a
+        # STOP would be a write into a stream nobody is reading, and the
+        # board is about to be reset by the flash anyway.
+        if src is not None and getattr(src, "provides_samples", False):
+            try:
+                src.stop()
+            except Exception as e:
+                log.warning("Stopping the source for a flash raised: %s", e)
+
+    def end_firmware_job(self) -> str:
+        """Take the port back. Returns a line for the screen."""
+        self._firmware_job_active = False
+        self.start_port_watch()
+        try:
+            return self.reconnect_source()
+        except Exception as e:
+            log.warning("Reconnect after a flash failed: %s", e)
+            return f"Could not reconnect after the flash: {e}"
 
     def _remember_hand_ports(self, source) -> None:
         """Record {hand: port} for the boards now in play, so the next
@@ -3222,6 +3392,10 @@ class GameEngine:
             self.detectors[hand] = det
 
     def show_mode_select(self) -> None:
+        # Pick up a sequence file saved into the drop folder since the
+        # last time a menu was open, so the no-click route works
+        # without a restart.
+        self.sync_pattern_sequence_file()
         self.screen_obj = self._screens["mode_select"]
 
     def show_setup(self) -> None:
@@ -3237,6 +3411,10 @@ class GameEngine:
 
     def show_results(self) -> None:
         rs = self._screens["results"]
+        # When the between-blocks card went up. A scheduled rest is
+        # measured from here, so the battery log can say what the
+        # participant really took.
+        self._step_card_t = time.perf_counter()
         # Let the screen restart its entry animation (grade-ring sweep,
         # stat count-up) each time a block lands here.
         if hasattr(rs, "on_show"):
@@ -3661,6 +3839,23 @@ class GameEngine:
         else:
             hand = self.hand_mode
             lanes = hands.get(hand) or [0, 1, 2, 3]
+        # A researcher's sequence file, if one is loaded, replaces the
+        # generated riff and the ten-take layout. Re-read at every
+        # block start, never cached: someone can edit the active file
+        # between blocks, and a block must run what is on disk now or
+        # say plainly that it fell back.
+        plan, plan_reason = self._pattern_plan()
+        refusal = pattern_file.hand_mismatch(plan, self.hand_mode)
+        if refusal:
+            # Refused, never remapped: a both-hands riff squeezed onto
+            # four lanes is different material, and quietly changing
+            # the task under a participant is how a cohort ends up
+            # unusable. No block opens and no session folder is made.
+            log.warning("pattern: %s", refusal)
+            self.pattern_refusal = refusal
+            self.show_setup()
+            return
+        self.pattern_refusal = ""
         p_seed = participant_seed(str(self.session.participant or ""))
         seed_cfg = self.cfg.get("pattern.seed", None)
         try:
@@ -3709,16 +3904,26 @@ class GameEngine:
                 great_points=self.score_cfg.good_points,
                 late_points=self.score_cfg.good_points),
             demo_trials=self._test_mode_trials(),
+            plan=plan,
+            sequence_file_error=(plan_reason if plan is None
+                                 and plan_reason else None),
+            battery_overrides_ignored=(plan is not None
+                                       and self._battery is not None),
         )
         self._begin_block("pattern")
         # Both seeds shaped this block's material, so they live next to
-        # the data they shaped, not only in the app log.
+        # the data they shaped, not only in the app log. So does the
+        # schedule: which file ran is as much a property of the block
+        # as the seeds are.
         if self.raw_logger:
             self.raw_logger.queue_event(
                 "pattern_config",
                 detail=(f"participant_seed={p_seed} "
                         f"block_seed={block_seed} hand={hand} "
-                        f"short={self.mode.short_session}"),
+                        f"short={self.mode.short_session} "
+                        f"material={self.mode.block_material()} "
+                        f"schedule={self.mode.schedule_id()} "
+                        f"file={plan.file_name if plan else ''}"),
                 hand=self.hand_mode)
         self.screen_obj = self._screens["gameplay"]
 
@@ -3794,20 +3999,19 @@ class GameEngine:
         self.screen_obj = self._screens["gameplay"]
 
     def begin_syllables_block(self) -> None:
-        """Syllable Beats block: phonological awareness training for
-        children, tapping the beats inside words. One engine block is
-        a full session (warm-up tapping probe, rounds of words with
-        breaks, hard time cap). The research case lives in the mode
-        file's docstring; syllables.* in the config says what the
-        child experiences. This mode renders on its own screen: words
-        and syllable blocks are not a lane strip.
+        """Syllables block: a syllable-matching game for children.
+        One engine block is a full session (warm-up tapping probe,
+        rounds of words with breaks, hard time cap). The research case
+        lives in the mode file's docstring; syllables.* in the config
+        says what the child experiences. This mode renders on its own
+        screen: a word strip and falling tiles are not a lane strip.
 
-        A word's unit positions sit on a sliding window of adjacent
-        fingers, tapped left to right; the window's start moves word
-        to word off a shuffle bag, so every finger of the selected
-        hand(s) takes part within a block. With Both selected the
-        window ranges over all eight fingers and may cross the
-        midline, so neither hand can idle through a round.
+        The word is heard and seen, then for each syllable in turn
+        four written options fall down four lanes over the four
+        fingers of the playing hand and the child presses the finger
+        under the right one. With Both selected the hands alternate
+        per WORD, so neither hand idles through a round and no word
+        ever asks for both.
         """
         from .modes.syllables import SyllablesMode
         hands = self.lanes_by_hand()
@@ -3829,35 +4033,37 @@ class GameEngine:
             engine=self,
             lanes=lanes,
             lanes_by_hand=hands if self.hand_mode == "both" else None,
-            level=int(self.cfg.get("syllables.level", 1)),
             band=str(self.cfg.get("syllables.band", "A")),
             ioi_ms=float(self.cfg.get("syllables.beat_ioi_ms", 500)),
-            words_total=int(self.cfg.get("syllables.words_per_block", 50)),
+            words_total=int(self.cfg.get("syllables.words_per_block", 40)),
             round_size=int(self.cfg.get("syllables.round_size", 10)),
             break_s=float(self.cfg.get("syllables.break_s", 30)),
             warmup_taps=int(self.cfg.get("syllables.warmup_taps", 5)),
             attend_s=float(self.cfg.get("syllables.attend_s", 1.5)),
-            free_window_s=float(
-                self.cfg.get("syllables.free_window_s", 6.0)),
-            count_in_beats=int(
-                self.cfg.get("syllables.count_in_beats", 4)),
-            grace_ms=float(self.cfg.get("syllables.paced_grace_ms", 1000)),
-            on_beat_window_ms=float(
-                self.cfg.get("syllables.on_beat_window_ms", 150)),
-            stress_ratio=float(
-                self.cfg.get("syllables.stress_ratio", 2.0)),
-            unstressed_max_ratio=float(
-                self.cfg.get("syllables.unstressed_max_ratio", 1.5)),
             tap_debounce_ms=float(
                 self.cfg.get("syllables.tap_debounce_ms", 150)),
             inter_trial_gap_ms=float(
                 self.cfg.get("syllables.inter_trial_gap_ms", 800)),
             session_cap_min=float(
                 self.cfg.get("syllables.session_cap_min", 20)),
-            replay_on_error=bool(
-                self.cfg.get("syllables.replay_on_error", True)),
-            speak_words=bool(self.cfg.get("syllables.speak_words", True)),
-            say_voice=self.cfg.get("syllables.say_voice", None),
+            rung=int(self.cfg.get("syllables.rung", 1)),
+            rung_min=int(self.cfg.get("syllables.rung_min", 1)),
+            rung_max=int(self.cfg.get("syllables.rung_max", 8)),
+            fall_s=list(self.cfg.get("syllables.fall_s", None) or []) or None,
+            set_gap_s=float(self.cfg.get("syllables.set_gap_s", 0.4)),
+            spawn_lockout_s=float(
+                self.cfg.get("syllables.spawn_lockout_s", 0.25)),
+            respeak_rungs=list(
+                self.cfg.get("syllables.respeak_rungs", None) or []) or None,
+            return_after=list(
+                self.cfg.get("syllables.return_after", None) or []) or None,
+            complete_s=float(self.cfg.get("syllables.complete_s", 1.4)),
+            homophone_foils=bool(
+                self.cfg.get("syllables.homophone_foils", False)),
+            alternate_hands=bool(
+                self.cfg.get("syllables.alternate_hands", True)),
+            supervised=bool(self.cfg.get("syllables.supervised", True)),
+            speech=dict(self.cfg.get("syllables.speech", {}) or {}),
             score_cfg=self.score_cfg,
             seed=seed,
             demo_trials=self._test_mode_trials(),
@@ -3869,7 +4075,8 @@ class GameEngine:
             self.raw_logger.queue_event(
                 "syllables_config",
                 detail=(f"seed={seed} hand={hand} "
-                        f"level={self.mode.level} band={self.mode.band} "
+                        f"band={self.mode.band} rung={self.mode.rung} "
+                        f"supervised={1 if self.mode.supervised else 0} "
                         f"ioi_ms={self.mode.ioi_s * 1000.0:.0f}"),
                 hand=self.hand_mode)
         sc = self._screens.get("syllables")
@@ -3886,14 +4093,12 @@ class GameEngine:
         patient experiences. Renders on its own screen: a corridor is
         not a lane strip.
 
-        The difficulty level carries across blocks within one app
-        session as `_force_pilot_levels`, a dict keyed by (hand,
-        finger) (same carry-across-blocks pattern as reaction's
-        window level, but per finger rather than one shared value --
-        see the mode file's docstring for why one shared level
-        defeated the adaptive-weighting intent). Resets on restart,
-        which fails in the safe direction (the configured starting
-        level for every finger).
+        Nothing adapts and nothing carries between blocks: the mode
+        flies a fixed ladder of twelve named waves in the same order
+        every time, which is what makes a second play comparable with
+        the first. `_force_pilot_levels` is left empty for the same
+        reason (the mode clears it), and the block seed only feeds the
+        one deliberately novel level.
         """
         from .modes.force_pilot import ForcePilotMode
         hands = self.lanes_by_hand()
@@ -3903,45 +4108,14 @@ class GameEngine:
                     else random.randrange(2 ** 32))
         except (TypeError, ValueError):
             seed = random.randrange(2 ** 32)
-        hw = [float(x) for x in (self.cfg.get(
-            "force_pilot.corridor_halfwidth_pct", None)
-            or [8.0, 6.0, 4.0])]
-        bw = [float(x) for x in (self.cfg.get(
-            "force_pilot.bandwidth_hz", None) or [0.3, 0.45, 0.6])]
-        level_by_hf = getattr(self, "_force_pilot_levels", None)
-        if not isinstance(level_by_hf, dict):
-            level_by_hf = {}
-        level = int(self.cfg.get("force_pilot.level", 1))
-        level = max(1, min(level, len(hw), len(bw)))
         gain = float(self.cfg.get("force_pilot.visual_gain", 1.0))
+        demo_levels = [int(n) for n in (self.cfg.get(
+            "force_pilot.demo_levels", None) or [1, 4, 7, 12])]
         self.mode = ForcePilotMode(
             engine=self,
             lanes_by_hand=hands,
-            level=level,
-            level_by_hf=level_by_hf,
-            corridor_hw_by_level=hw,
-            freq_ceiling_by_level=bw,
-            runs_per_finger=int(
-                self.cfg.get("force_pilot.runs_per_finger", 2)),
-            min_finger_share=float(
-                self.cfg.get("force_pilot.min_finger_share", 0.15)),
             span_pct=float(self.cfg.get("force_pilot.span_pct", 40.0)),
             base_pct=float(self.cfg.get("force_pilot.base_pct", 8.0)),
-            plateau_pct=float(
-                self.cfg.get("force_pilot.plateau_pct", 28.0)),
-            ramp_rates_pct_s=[float(r) for r in (self.cfg.get(
-                "force_pilot.ramp_rates_pct_s", None) or [5.0, 10.0])],
-            sine_amp_pct=float(
-                self.cfg.get("force_pilot.sine_amp_pct", 9.0)),
-            sine_s=float(self.cfg.get("force_pilot.sine_s", 6.0)),
-            sos_amps_pct=[float(a) for a in (self.cfg.get(
-                "force_pilot.sos_amps_pct", None) or [6.0, 3.5, 2.5])],
-            sos_s=float(self.cfg.get("force_pilot.sos_s", 8.0)),
-            hold_in_s=float(self.cfg.get("force_pilot.hold_in_s", 3.0)),
-            hold_top_s=float(
-                self.cfg.get("force_pilot.hold_top_s", 3.0)),
-            pre_assess_s=float(
-                self.cfg.get("force_pilot.pre_assess_s", 1.0)),
             visual_gain=gain,
             ring_interval_s=float(
                 self.cfg.get("force_pilot.ring_interval_s", 1.5)),
@@ -3950,10 +4124,6 @@ class GameEngine:
                 self.cfg.get("force_pilot.exit_buzz_ms", 80.0)),
             exit_buzz_cooldown_s=float(
                 self.cfg.get("force_pilot.exit_buzz_cooldown_s", 1.0)),
-            promote_frac=float(
-                self.cfg.get("force_pilot.promote_frac", 0.8)),
-            demote_frac=float(
-                self.cfg.get("force_pilot.demote_frac", 0.4)),
             probe_presses=int(
                 self.cfg.get("force_pilot.probe_presses", 3)),
             probe_floor_counts=float(
@@ -3961,25 +4131,29 @@ class GameEngine:
             probe_max_age_s=float(
                 self.cfg.get("force_pilot.probe_max_age_s", 6 * 3600.0)),
             announce_s=float(
-                self.cfg.get("force_pilot.announce_s", 2.5)),
-            rest_s=float(self.cfg.get("force_pilot.rest_s", 10.0)),
+                self.cfg.get("force_pilot.announce_s", 1.8)),
+            mid_rest_s=float(
+                self.cfg.get("force_pilot.mid_rest_s", 15.0)),
+            step_grace_s=float(
+                self.cfg.get("force_pilot.step_grace_s", 0.6)),
+            passes=int(self.cfg.get("force_pilot.passes", 1)),
             score_cfg=self.score_cfg,
             seed=seed,
             demo_trials=self._test_mode_trials(),
+            demo_levels=demo_levels,
         )
         self._begin_block("force_pilot")
-        # The seed shaped every run plan in this block, so it lives
-        # next to the data it shaped, not only in the app log. Levels
-        # are logged per (hand, finger) since that is the real carried
-        # state now, not the single config default.
+        # The ladder identity, the hand order and the seed that drew
+        # the one novel level all live next to the data they shaped,
+        # not only in the app log.
         if self.raw_logger:
-            starting = ",".join(
-                f"{k}={v}" for k, v in sorted(level_by_hf.items())
-            ) or "none carried"
+            mode = self.mode
             self.raw_logger.queue_event(
                 "force_pilot_config",
-                detail=(f"seed={seed} default_level={level} gain={gain} "
-                        f"hand={self.hand_mode} carried_levels=[{starting}]"),
+                detail=(f"seed={seed} ladder={mode.ladder_id} "
+                        f"levels={len(mode.levels)} passes={mode.passes} "
+                        f"gain={gain} hand={self.hand_mode} "
+                        f"hand_order={'/'.join(mode.hand_order)}"),
                 hand=self.hand_mode)
         sc = self._screens.get("force_pilot")
         if sc is not None and hasattr(sc, "on_block_start"):
@@ -4125,39 +4299,61 @@ class GameEngine:
 
     def begin_echo_block(self) -> None:
         """Echo block: the explicit visuospatial span game (Simon
-        says on the finger lanes). The rig plays a growing sequence,
-        tile light plus buzz per item, and the patient replays it;
-        growth and termination follow the Kessels 2000 Corsi
-        standard, with a hidden name-seeded Hebb sequence every third
-        trial. The research case lives in the mode file's docstring;
-        echo.* in the config says what the patient experiences. One
-        hand plays its four lanes; Both plays sequences over all
-        eight (a distinct bimanual construct the analysis never pools
-        with unilateral spans). Keyboard play is a full equal: the
-        stimulus is on screen, so nothing here needs the sensors.
+        says on the finger lanes). The rig plays one sequence that
+        grows by an item every time the patient replays it right,
+        tile light plus buzz per item, starting at one item and
+        ending on the second miss (the first miss spends the game's
+        spare life and replays the same length once). echo.rule
+        'ladder' runs the legacy Kessels 2000 Corsi climb with its
+        hidden Hebb sequence instead. The research case lives in the
+        mode file's docstring; echo.* in the config says what the
+        patient experiences. One hand plays its four lanes; Both
+        plays sequences over all eight (a distinct bimanual construct
+        the analysis never pools with unilateral spans). Keyboard
+        play is a full equal: the stimulus is on screen, so nothing
+        here needs the sensors.
         """
-        from .modes.echo import EchoMode, participant_echo_seed
+        from .modes.echo import (EchoMode, count_prior_echo_games,
+                                 participant_echo_seed)
         hands = self.lanes_by_hand()
         if self.hand_mode == "both":
             lanes = (hands.get("right") or []) + (hands.get("left") or [])
         else:
             lanes = hands.get(self.hand_mode) or [0, 1, 2, 3]
-        p_seed = participant_echo_seed(
-            str(self.session.participant or ""))
+        participant = str(self.session.participant or "")
+        p_seed = participant_echo_seed(participant)
         seed_cfg = self.cfg.get("echo.seed", None)
         try:
-            block_seed = (int(seed_cfg) if seed_cfg is not None
-                          else random.randrange(2 ** 32))
+            forced_seed = int(seed_cfg) if seed_cfg is not None else None
         except (TypeError, ValueError):
-            block_seed = random.randrange(2 ** 32)
+            forced_seed = None
+        block_seed = (forced_seed if forced_seed is not None
+                      else random.randrange(2 ** 32))
+        rule = str(self.cfg.get("echo.rule", "simon") or "simon").lower()
+        # Where this block's Simon games sit in the participant's
+        # history, so the next game draws material they have not seen
+        # rather than replaying game one forever. The session folder
+        # this block is about to write is excluded: metadata lands at
+        # block start, so without that it would count itself.
+        game_index_base = 0
+        if rule == "simon" and self._test_mode_trials() is None:
+            game_index_base = count_prior_echo_games(
+                self.cfg.resolve_path(
+                    self.cfg.get("session.data_dir", "sessions")),
+                participant,
+                exclude_root=(self.session_paths.root
+                              if self.session_paths else None))
         self.mode = EchoMode(
             engine=self,
             lanes=lanes,
             p_seed=p_seed,
             block_seed=block_seed,
-            start_len=int(self.cfg.get("echo.start_len", 2)),
+            # Fallbacks mirror config/default.yaml, which now ships the
+            # Simon rule: one item to start, a ceiling nobody reaches.
+            # A ladder config carries its own 2 and 9.
+            start_len=int(self.cfg.get("echo.start_len", 1)),
             trials_per_len=int(self.cfg.get("echo.trials_per_len", 2)),
-            max_len=int(self.cfg.get("echo.max_len", 9)),
+            max_len=int(self.cfg.get("echo.max_len", 20)),
             runs=int(self.cfg.get("echo.runs", 1)),
             item_on_ms=float(self.cfg.get("echo.item_on_ms", 400)),
             ioi_ms=float(self.cfg.get("echo.ioi_ms", 800)),
@@ -4176,18 +4372,30 @@ class GameEngine:
             cumulative=bool(self.cfg.get("echo.cumulative", False)),
             score_cfg=self.score_cfg,
             demo_trials=self._test_mode_trials(),
+            rule=rule,
+            games=int(self.cfg.get("echo.games", 1)),
+            lives=int(self.cfg.get("echo.lives", 1)),
+            participant=participant,
+            game_index_base=game_index_base,
+            forced_seed=forced_seed,
+            ioi_anchor_len=int(self.cfg.get("echo.ioi_anchor_len", 2)),
         )
         self._begin_block("echo")
-        # Both seeds shaped this block's material (the block seed drew
-        # the novel sequences, the participant seed the hidden
-        # stream), so they live next to the data they shaped.
+        # What shaped this block's material, next to the data it
+        # shaped: the rule, the block seed (the ladder's novel draws),
+        # the participant seed (the ladder's hidden stream), and the
+        # game count the Simon seeds carry on from. Each game logs its
+        # own index and seed as it starts (raw event echo_game).
         if self.raw_logger:
             self.raw_logger.queue_event(
                 "echo_config",
-                detail=(f"block_seed={block_seed} "
+                detail=(f"rule={self.mode.rule} "
+                        f"games={self.mode.games} "
+                        f"lives={self.mode.lives} "
+                        f"game_index_base={game_index_base} "
+                        f"block_seed={block_seed} "
                         f"participant_seed={p_seed} "
-                        f"hand={self.hand_mode} "
-                        f"cumulative={self.mode.cumulative}"),
+                        f"hand={self.hand_mode}"),
                 hand=self.hand_mode)
         self.screen_obj = self._screens["gameplay"]
 
@@ -4482,6 +4690,16 @@ class GameEngine:
 
     def _begin_block(self, name: str) -> None:
         self.current_block = name
+        # Fresh phrase deck per block, seeded from who is playing and
+        # which block this is, so the same participant replaying the
+        # same block sees the same wording in the same order. A
+        # session that is analysed later can therefore be reproduced
+        # down to the words that were on the screen.
+        self._phrase_block_n = getattr(self, "_phrase_block_n", 0) + 1
+        self._phrases = feedback_bank.PhraseDeck()
+        self._phrase_rng = random.Random(
+            f"{self.session.participant}|{name}|{self._phrase_block_n}")
+        self._pending_feedback = []
         # ONE pre-play prep, every mode: a single 3-second GET READY
         # countdown between pressing start and the game beginning.
         # Gameplay-screen modes (classic / adaptive / mirror /
@@ -5289,7 +5507,7 @@ class GameEngine:
             if entry.get("hand"):
                 hand = str(entry["hand"]).lower()
             for key in ("track", "difficulty", "stretch_s", "position",
-                        "hand_requested"):
+                        "hand_requested", "rest_s", "rest_min_s"):
                 if entry.get(key) is not None:
                     extra[key] = entry[key]
         elif isinstance(entry, (list, tuple)) and len(entry) >= 2:
@@ -5330,6 +5548,17 @@ class GameEngine:
         self._current_phase = str(step.get("phase") or "")
         self._protocol_index += 1
         self._protocol_current = step
+        # How long the participant actually rested before this step.
+        # The rest is the time the NEXT UP card was on screen, which
+        # the results screen stamps in show_results. A rest cut to its
+        # floor and a rest taken in full mean different things for the
+        # block that follows, so the number is logged rather than
+        # assumed (design doc Section 2.5).
+        self._rest_taken_s = 0.0
+        if float(step.get("rest_s") or 0.0) > 0:
+            shown = float(getattr(self, "_step_card_t", 0.0) or 0.0)
+            if shown > 0:
+                self._rest_taken_s = max(0.0, time.perf_counter() - shown)
         mode = step["mode"]
         hand = step.get("hand")
         if hand is None:
@@ -5469,6 +5698,8 @@ class GameEngine:
                 "hand_requested": st.hand_requested,
                 "track": st.track, "difficulty": st.difficulty,
                 "stretch_s": st.stretch_before_s,
+                "rest_s": st.rest_before_s,
+                "rest_min_s": st.rest_min_s,
                 "position": st.position,
             })
         self._battery = {
@@ -5478,6 +5709,7 @@ class GameEngine:
             "dominant_hand": plan.dominant_hand,
             "of": len(steps),
             "budget_min": plan.budget_min,
+            "hard_stop_min": plan.hard_stop_min,
             "overrides_snapshot": snapshot,
             "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
             "started_perf": time.perf_counter(),
@@ -5520,18 +5752,26 @@ class GameEngine:
             "step": f"{step['mode']}_{step.get('hand') or self.hand_mode}",
             "hand_requested": str(step.get("hand_requested") or ""),
             "phase": str(step.get("phase") or ""),
+            **({"rest_before_s":
+                round(float(getattr(self, "_rest_taken_s", 0.0)), 2)}
+               if float(step.get("rest_s") or 0.0) > 0 else {}),
         }
 
     def _log_battery_step(self, step: dict, status: str,
                           reason: str = "") -> None:
         if self._battery is None:
             return
+        rest_s = float(step.get("rest_s") or 0.0)
         self._battery["log"].append({
             "position": int(step.get("position") or 0),
             "mode": step.get("mode"),
             "hand": step.get("hand"),
             "status": status,
             "reason": reason,
+            "rest_s": rest_s,
+            "rest_taken_s": (round(float(getattr(self, "_rest_taken_s",
+                                                 0.0)), 2)
+                             if rest_s > 0 and status != "skipped" else 0.0),
             "folder": (str(self.last_session_root)
                        if status in ("completed", "abandoned") else ""),
         })
@@ -5557,6 +5797,7 @@ class GameEngine:
             "minutes": ((time.perf_counter() - bat["started_perf"]) / 60.0
                         if bat.get("started_perf") else 0.0),
             "budget_min": bat.get("budget_min", 0.0),
+            "hard_stop_min": bat.get("hard_stop_min", 0.0),
             "log": list(bat["log"]),
         }
 
@@ -5929,6 +6170,14 @@ class GameEngine:
         duration_ms = max(float(duration_ms), float(self.MIN_PULSE_MS))
         hand = self._lane_hand(lane) or (self.hand_mode or "right")
         self._pulse_stops.pop(hand, None)
+        # A global STOP held back for a previous trial's confirmation
+        # buzz (stop_all_motors with allow_after_cue parks it in
+        # _motor_stop_at) would fire in the middle of this pulse and
+        # cut it to a blip. Both cue paths clear it before they fire;
+        # the stimulus path needs it more, because here the buzz IS
+        # the trial and a clipped one is a different stimulus.
+        self._motor_stop_at = None
+        self._after_cue_until = None
         self._motor_queue = [
             (ln, due) for (ln, due) in self._motor_queue
             if self._lane_hand(ln) != hand]
@@ -5991,17 +6240,57 @@ class GameEngine:
     def _drain_motor_queue(self) -> None:
         """Send any cue repeat-pulses that have come due, and any STOP
         that was held back for an after-press buzz. Called once per
-        frame from the main loop, including on the results screen."""
+        frame from the main loop, including on the results screen.
+
+        A re-arm only continues a buzz if it lands INSIDE the previous
+        firmware hold. A pulse longer than FIRMWARE_STIM_MS is built
+        out of re-arms spaced under the 150 ms hold, so one frame
+        longer than motor.pulse_interval_ms skips a re-arm, the
+        firmware's own auto-off runs, and the motor falls silent
+        mid-buzz. Sending the stale re-arms on the next frame restarts
+        it: the finger feels TWO buzzes where one was asked for, or,
+        if the pulse's own stop is due in the same drain, a 0 ms blip.
+        Measured on a replayed wire: a 940 ms request with one 250 ms
+        frame came out as buzzes of 400 ms and 383 ms. In Buzz Hunt's
+        gap stage that is the wrong answer to "one buzz or two", and
+        nothing reported it, because a one-long-buzz plan has a single
+        entry and the mode's late-pulse guard only inspects pulses
+        after the first.
+
+        A buzz with a hole in it cannot be un-broken, so the drain
+        gives up on it rather than restarting the motor: drop the
+        remaining re-arms for that hand, stop it now, and report the
+        delivery as failed so the mode voids the trial through the
+        path it already has for a dropped STIM.
+        """
         now = time.perf_counter()
         q = getattr(self, "_motor_queue", None)
         if q:
             still = []
+            broken: set[str] = set()
             for lane, due in q:
-                if now >= due:
-                    self._send_stim(lane)
-                else:
+                if now < due:
                     still.append((lane, due))
-            self._motor_queue = still
+                    continue
+                hand = self._lane_hand(lane) or (self.hand_mode or "right")
+                busy = getattr(self, "_motor_busy", {}).get(hand)
+                if busy is not None and busy[0] == lane and now >= busy[1]:
+                    broken.add(hand)
+                    continue
+                self._send_stim(lane)
+            self._motor_queue = [
+                (ln, due) for (ln, due) in still
+                if (self._lane_hand(ln)
+                    or (self.hand_mode or "right")) not in broken]
+            for hand in broken:
+                (getattr(self, "_pulse_stops", None) or {}).pop(hand, None)
+                self._scoped_stop(hand)
+                self._last_stim_delivered = False
+                raw = getattr(self, "raw_logger", None)
+                if raw:
+                    raw.queue_event(
+                        "pulse_broken", detail=f"hand={hand}",
+                        hand=self.hand_mode)
         # Timed-pulse early stops, per hand. Deleted before sending so
         # a send that raises cannot loop the same stop every frame.
         stops = getattr(self, "_pulse_stops", None)
@@ -6512,15 +6801,108 @@ class GameEngine:
                 self._drift_samples.setdefault(
                     (hand, idx), []).append((t_min, float(base)))
 
+    # ---- feedback wording -------------------------------------------------
+    def feedback_phrase(self, situation: str, form: str = "line",
+                        mode: str | None = None, **slots) -> str:
+        """One phrase from the bank for `situation`.
+
+        Everything patient-facing goes through here so the wording is
+        checkable in one place (tests/test_feedback_wording.py) and so
+        the block seed makes a replayed block show the same words.
+        """
+        # Built lazily as well as in __init__: several tests build an
+        # engine with __new__ to skip hardware setup and still drive a
+        # mode through it.
+        if getattr(self, "_phrases", None) is None:
+            self._phrases = feedback_bank.PhraseDeck()
+            self._phrase_rng = random.Random()
+        return feedback_bank.phrase(
+            self._phrases, situation, form, self._phrase_rng, mode,
+            **slots)
+
+    def _feedback_popup(self, situation: str, lane: int,
+                        pressed_lane: int | None = None) -> dict:
+        """flash_lane kwargs for one outcome.
+
+        Encouraging style hands back words; neutral style hands back a
+        ring glyph instead, identical in size, colour and lifetime for
+        every outcome so the only thing that differs between a hit and
+        a miss in the EEG record is the fill.
+        """
+        if self.feedback_style == "neutral":
+            glyph = feedback_bank.NEUTRAL_GLYPH.get(situation, "open")
+            return {"popup_glyph": glyph}
+        # Title case for the popup: it is 42 pt on its own above the
+        # tile, not part of a sentence, and a lower-case "ring" up
+        # there reads as a stray word rather than a finger.
+        target = feedback_bank.finger_words(lane).title()
+        pressed = feedback_bank.finger_words(pressed_lane).title() or target
+        text = self.feedback_phrase(situation, "popup",
+                                     target=target, pressed=pressed)
+        return {"popup_text": text} if text else {}
+
+    def _park_feedback(self, screen_key: str, lane: int, popup: dict,
+                       colour, label: str) -> None:
+        """Hold a feedback glyph until feedback_delay_ms has passed.
+
+        The lab style puts a fixed gap between the press and the
+        feedback so the feedback ERP is not smeared into the
+        response-locked activity. The 140/141 marker rides with the
+        glyph, not with log_trial, so the marker marks the moment the
+        participant actually saw something.
+        """
+        due = time.perf_counter() + self.feedback_delay_ms / 1000.0
+        code = None
+        if getattr(self, "_eeg_feedback_markers", False):
+            code = eeg_trigger.CODES[
+                "feedback_positive" if label != "Miss"
+                else "feedback_negative"]
+        if not isinstance(getattr(self, "_pending_feedback", None), list):
+            self._pending_feedback = []
+        self._pending_feedback.append(
+            (due, screen_key, lane, dict(popup), colour, code))
+
+    def _drain_feedback(self) -> None:
+        """Spawn every parked glyph whose delay has expired.
+
+        Called once per frame from the main loop, so the glyph appears
+        on the first flip at or after its due time and the marker goes
+        out on that same flip.
+        """
+        if not getattr(self, "_pending_feedback", None):
+            return
+        now_perf = time.perf_counter()
+        still: list[tuple] = []
+        for entry in self._pending_feedback:
+            due, screen_key, lane, popup, colour, code = entry
+            if now_perf < due:
+                still.append(entry)
+                continue
+            sc = self._screens.get(screen_key)
+            if sc and hasattr(sc, "flash_lane"):
+                try:
+                    sc.flash_lane(lane, colour, 0.4, now_perf, **popup)
+                except TypeError:
+                    # A screen without the glyph keyword still gets
+                    # its flash; the feedback is then colour only.
+                    sc.flash_lane(lane, colour, 0.4, now_perf)
+            if code is not None:
+                self._eeg_send(code, t_event=now_perf)
+        self._pending_feedback = still
+
     # ---- encouragement popups ---------------------------------------------
+    # Process praise with the count in it: what the patient did, not
+    # what the patient is. Trait praise ("Unstoppable!") reads as a
+    # verdict on the person and makes people give up sooner after a
+    # setback (Mueller and Dweck 1998, J Pers Soc Psychol).
     _ENCOURAGEMENT = {
-        3:  "Nice!",
-        5:  "Keep going!",
-        8:  "Great job!",
-        12: "Smooth!",
-        20: "You're flying!",
-        30: "Incredible!",
-        50: "Unstoppable!",
+        3:  "3 in a row",
+        5:  "5 in a row, nice",
+        8:  "8 in a row, steady hands",
+        12: "12 straight",
+        20: "20 in a row, in the groove",
+        30: "30 straight, that's rhythm",
+        50: "50 in a row",
     }
 
     def _update_streak(self, was_hit: bool, screen_key: str) -> None:
@@ -6548,6 +6930,10 @@ class GameEngine:
         if self.hit_streak in self._streak_fired:
             return
         self._streak_fired.add(self.hit_streak)
+        if self.feedback_style == "neutral":
+            # No banners in the lab: a streak banner is an unscheduled
+            # visual event in the middle of a trial sequence.
+            return
         text = self._ENCOURAGEMENT[self.hit_streak]
         sc = self._screens.get(screen_key)
         if sc and hasattr(sc, "add_encouragement"):
@@ -6632,7 +7018,15 @@ class GameEngine:
         cues = self.cue_settings()
         self._last_cue_code = cues.code
         self._last_target_shown = cues.show_target
-        show_on_screen = cues.show_target
+        # A SILENT stimulus: the mode wants the bookkeeping half of
+        # this call (force window, timeout, raw row, EEG marker) with
+        # none of the cue half. Syllables' option sets need it, because
+        # the four falling tiles ARE the stimulus and any tone, screen
+        # highlight or buzz here would name the finger that answers
+        # them, which is the one thing that mode promises never
+        # happens. Read per call so the flag can never stick on.
+        silent = bool(getattr(self.mode, "silent_stim", False))
+        show_on_screen = cues.show_target and not silent
         # A stim cancels any STOP held back for the previous trial's
         # after-press buzz, or it would fire mid-cue. Timed-pulse stops
         # go too: a cue firing means the pulse they belonged to is
@@ -6737,7 +7131,8 @@ class GameEngine:
             lead_flags = getattr(self, "_lead_stim_delivered", None)
             if lead_flags:
                 self._last_stim_delivered = lead_flags.pop(trial_id, None)
-        if buzz and cues.buzz_before and self.source.provides_samples:
+        if (buzz and cues.buzz_before and self.source.provides_samples
+                and not silent):
             # Buzz the TARGET fingers so the patient feels which to
             # press. One board runs one motor at a time (_send_stim
             # stops a board before switching fingers), so the targets
@@ -6813,7 +7208,7 @@ class GameEngine:
         # block, for whatever reason the researcher has. play_stim only
         # fires for the lowest target lane in a multi-lane stim so two
         # finger tones don't pile into one beat in mirror mode.
-        if self.audio is not None and cues.sound_before:
+        if self.audio is not None and cues.sound_before and not silent:
             try:
                 self.audio.play_stim(min(targets))
             except Exception:
@@ -6977,8 +7372,31 @@ class GameEngine:
             # the previous trial, and the message line stays free for
             # mode-authored text (reaction's RT readout, level-ups)
             # so the same words are never on screen twice.
-            gp.flash_lane(trial.lane, colour, 0.4, now,
-                           popup_text=outcome.label)
+            # The raw label is data, not words for a patient: "Miss"
+            # in 42 pt above the lane is exactly the feedback a
+            # rehabilitation tool should never give. feedback_bank
+            # turns the label plus the trial's shape (pressed at all?
+            # a different finger?) into wording that keeps the
+            # information and drops the verdict.
+            situation = feedback_bank.situation_for(
+                outcome.label,
+                pressed=bool(trial.keys_pressed),
+                incorrect=bool(trial.incorrect_presses),
+                rt_ms=outcome.rt_ms,
+                mode=self.current_block)
+            popup = self._feedback_popup(
+                situation, trial.lane,
+                trial.incorrect_presses[0][0]
+                if trial.incorrect_presses else None)
+            if self.feedback_delay_ms > 0:
+                # Neutral (lab) style: nothing appears until the fixed
+                # delay is up, so the glyph is not a response-locked
+                # visual event. Park it and let update() spawn it.
+                gp.flash_lane(trial.lane, colour, 0.4, now)
+                self._park_feedback("gameplay", trial.lane, popup,
+                                     colour, outcome.label)
+            else:
+                gp.flash_lane(trial.lane, colour, 0.4, now, **popup)
             # Clear the timing bar + deactivate every strip now that the
             # trial is done. The next stim will re-arm the right lane.
             for ls in gp.lanes:
@@ -7200,7 +7618,11 @@ class GameEngine:
             # Feedback markers are optional (FRN work only): the
             # discrete moment the outcome flash and chime appear is
             # right here.
-            if getattr(self, "_eeg_feedback_markers", False):
+            # With a feedback delay set (lab style) the marker rides
+            # with the glyph instead, on the flip the participant
+            # actually saw it: see _park_feedback / _drain_feedback.
+            if (getattr(self, "_eeg_feedback_markers", False)
+                    and self.feedback_delay_ms <= 0):
                 self._eeg_send(eeg_trigger.CODES[
                     "feedback_positive" if outcome.label != "Miss"
                     else "feedback_negative"], t_event=now)
@@ -7535,10 +7957,26 @@ class GameEngine:
         rs = self._screens.get("rhythm")
         if rs and hasattr(rs, "flash_lane"):
             colour = self._outcome_colour(label)
-            rs.set_message(label, 0.6)
+            # Same rule as the cadence modes: the label is data, the
+            # patient reads the bank's wording. RhythmScreen floats
+            # whatever is in self.message above the strike ring, so the
+            # popup form goes there and nothing else changes.
+            situation = feedback_bank.situation_for(
+                label, pressed=was_pressed, incorrect=False,
+                rt_ms=offset_ms, mode="rhythm")
+            lane = sched_note.note.lane
+            popup = self._feedback_popup(situation, lane)
             # Bolder flash for rhythm: 0.6 s so the green / orange / red
             # has time to register against fast falling notes.
-            rs.flash_lane(sched_note.note.lane, colour, 0.6, now)
+            if self.feedback_delay_ms > 0:
+                rs.set_message("", 0.0)
+                rs.flash_lane(lane, colour, 0.6, now)
+                self._park_feedback("rhythm", lane, popup, colour, label)
+            else:
+                # RhythmScreen floats self.message above the strike
+                # ring, so the popup wording goes through the message.
+                rs.set_message(popup.get("popup_text", ""), 0.6)
+                rs.flash_lane(lane, colour, 0.6, now, **popup)
         # After-press cues, same rule as the cadence modes. A note the
         # patient actually pressed and landed inside the window is a
         # correct press; a note that scrolled past unpressed arrives
@@ -7605,7 +8043,8 @@ class GameEngine:
         else:
             self._eeg_send(eeg_trigger.CODES["resp_timeout"],
                            t_event=time.perf_counter())
-        if getattr(self, "_eeg_feedback_markers", False):
+        if (getattr(self, "_eeg_feedback_markers", False)
+                and self.feedback_delay_ms <= 0):
             self._eeg_send(eeg_trigger.CODES[
                 "feedback_positive" if label != "Miss"
                 else "feedback_negative"], t_event=time.perf_counter())

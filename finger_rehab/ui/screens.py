@@ -56,10 +56,10 @@ CUE_ROWS: tuple[tuple[str | None, str, str], ...] = (
         (None, "After a correct press", ""),
         ("cue.buzz_after", "Cue Buzzer after press",
          "The finger that was just pressed correctly buzzes back. "
-         "Nothing on a timeout or a wrong finger."),
+         "Nothing when no press lands, or when another finger goes."),
         ("cue.sound_after", "Cue Sound after press",
          "A chime confirms a correct press. Off also silences the "
-         "thunk that a miss makes, so nothing is heard after a press."),
+         "thunk when a streak ends, so nothing sounds after a press."),
         # Note row, not a switch: in Buzz Hunt the buzz IS the
         # stimulus, so its pulses ignore the before-press switches by
         # design (the after-press switches still apply there).
@@ -573,6 +573,23 @@ def draw_session_strip(surf: pygame.Surface, rect: pygame.Rect,
                 text += f"  next {mode_title(str(nxt['mode']))}"
         x += _strip_pill(surf, layout, x, cy, text, theme.accent,
                          filled=True) + 12
+        # The session clock, next to the step count. One long sitting
+        # has a design target and a hard stop (the preset's budget_min
+        # and hard_stop_min), and the RA's only cue that the session is
+        # running late used to be their own watch. Muted inside the
+        # budget, amber past it, red past the hard stop.
+        minutes = float(progress.get("minutes") or 0.0)
+        budget = float(progress.get("budget_min") or 0.0)
+        hard_stop = float(progress.get("hard_stop_min") or 0.0)
+        if budget > 0 or minutes > 0:
+            if hard_stop > 0 and minutes > hard_stop:
+                clock_colour = theme.error
+            elif budget > 0 and minutes > budget:
+                clock_colour = theme.warning
+            else:
+                clock_colour = theme.muted
+            x += _strip_pill(surf, layout, x, cy,
+                             f"{minutes:.0f} min", clock_colour) + 12
     if not rows:
         draw_text(surf, "No games played yet",
                   (x, cy - tfont.get_height() // 2),
@@ -580,11 +597,16 @@ def draw_session_strip(surf: pygame.Surface, rect: pygame.Rect,
                   colour=theme.muted)
         return
     shown = 0
-    for row in rows[:STRIP_MAX_CHIPS]:
+    # Room kept back for the overflow chip, so a long session's last
+    # chips are replaced by "+3 more" rather than running over the
+    # totals on the right.
+    tail_w = layout.font(FONT_SMALL).size("+99 more")[0] + 28
+    for i, row in enumerate(rows[:STRIP_MAX_CHIPS]):
         key = str(row.get("mode") or "")
         label = mode_title(key)
         width = layout.font(FONT_SMALL).size(label)[0] + 20
-        if x + width > right_limit:
+        last = i == len(rows) - 1
+        if x + width > (right_limit if last else right_limit - tail_w):
             break
         # Darkened accent for the chip text: the pale end of the mode
         # palette (syllables pink, force pilot lime) does not carry
@@ -1359,8 +1381,8 @@ class ModeSelectScreen(Screen):
          "Press in time with a song. Practises movement timing to "
          "a beat."),
         ("syllables", "Syllables",
-         "Tap the beats inside spoken words. Builds the sound "
-         "awareness reading rests on."),
+         "Catch the right part of the word as it falls. Builds the "
+         "sound skills reading rests on."),
         ("mirror", "Mirror",
          "Same finger, both hands, pressed as one. Practises moving "
          "the hands together."),
@@ -1839,6 +1861,13 @@ class ModeSelectScreen(Screen):
         # Hunt cannot be played at all (finding #111).
         src = getattr(self.engine, "source", None)
         no_hardware = not getattr(src, "provides_samples", True)
+        # Read once per frame, not once per card: it stats a file.
+        riff_name = ""
+        try:
+            line = self.engine.pattern_plan_headline()
+            riff_name = line.split(" (", 1)[0] if line else ""
+        except Exception:
+            riff_name = ""
         for b, (key, title, desc) in zip(self.buttons, self.MODES):
             b.draw(surf)
             accent = self.MODE_ACCENTS.get(key, self.theme.accent)
@@ -1886,6 +1915,23 @@ class ModeSelectScreen(Screen):
                           (text_x, b.rect.y + 44 + li * 20),
                           self.theme, self.layout, pt=FONT_SMALL + 2,
                           centre=False, colour=muted_fg)
+            if key == "pattern" and riff_name:
+                # A researcher's sequence file is running, so this card
+                # is not the shipped game any more and the RA should
+                # see that before pressing it. "riff" and not
+                # "sequence": the patient reads this screen too, and
+                # naming a sequence is the one thing this mode must
+                # never do (Boyd and Winstein; see modes/pattern.py).
+                tag_font = self.layout.font(FONT_SMALL)
+                # Top-right, where the hardware badges sit. Under the
+                # card it would land on the second line of the
+                # description, which wraps on this card.
+                tag = _fit_text(f"custom riff: {riff_name}", tag_font, 260)
+                draw_text(surf, tag,
+                          (b.rect.right - 14 - tag_font.size(tag)[0],
+                           b.rect.y + 14),
+                          self.theme, self.layout, pt=FONT_SMALL,
+                          centre=False, colour=self.theme.foreground)
             if no_hardware and key in self.NEEDS_HARDWARE:
                 # Said up front, before the click: these three cannot
                 # run on a keyboard-only source at all (every stage
@@ -2158,6 +2204,24 @@ class SetupScreen(Screen):
         # purpose, so it must not offer a pace control (see __init__).
         if self.engine.cfg.get("game.mode") == "classic":
             self.pace_slider.draw(surf)
+        # A Muscle Memory riff file, when one is loaded and this pick is
+        # for that mode. Read once per frame: it stats a file.
+        riff_line = ""
+        riff_blocked: set[str] = set()
+        riff_hand_tag = ""
+        if self.engine.cfg.get("game.mode") == "pattern":
+            try:
+                plan, _reason = self.engine._pattern_plan()
+            except Exception:
+                plan = None
+            if plan is not None:
+                riff_line = f"Riff file: {plan.headline()}"
+                if plan.hands == "both":
+                    riff_blocked = {"left", "right"}
+                    riff_hand_tag = "RIFF FILE NEEDS BOTH HANDS"
+                else:
+                    riff_blocked = {"both"}
+                    riff_hand_tag = "RIFF FILE IS FOR ONE HAND"
         for b, (key, label, desc) in zip(self.buttons, self.HANDS):
             b.draw(surf)
             # Hand icon centred in the upper ~60% of the button.
@@ -2186,6 +2250,29 @@ class SetupScreen(Screen):
                           (b.rect.centerx, b.rect.top - 18),
                           self.theme, self.layout, pt=FONT_SMALL,
                           centre=True, colour=self.theme.error)
+            if key in riff_blocked:
+                # A loaded Muscle Memory riff file is for one hand or
+                # for both, and Patterns refuses the mismatch rather
+                # than remapping the material. Said here, before the
+                # click, for the same reason the second-board warning
+                # is: a refusal after the click is a dead end.
+                draw_text(surf, riff_hand_tag,
+                          (b.rect.centerx, b.rect.top - 18),
+                          self.theme, self.layout, pt=FONT_SMALL,
+                          centre=True, colour=self.theme.warning)
+        if riff_line:
+            draw_text(surf, riff_line,
+                      (self.layout.width // 2, self.buttons[0].rect.top - 44),
+                      self.theme, self.layout, pt=FONT_SMALL + 2,
+                      centre=True, colour=self.theme.muted)
+        refusal = (getattr(self.engine, "pattern_refusal", "")
+                   if self.engine.cfg.get("game.mode") == "pattern" else "")
+        if refusal:
+            draw_text(surf, refusal,
+                      (self.layout.width // 2,
+                       self.buttons[0].rect.bottom + 56),
+                      self.theme, self.layout, pt=FONT_BODY,
+                      centre=True, colour=self.theme.warning)
         self.back_btn.draw(surf)
         self.mute_btn.draw(surf, self.theme, self.layout)
 
@@ -2215,9 +2302,13 @@ class GameplayScreen(Screen):
         # edge never happens and nothing on screen names the finger.
         self._prev_active: dict[int, bool] = {}
         self._ignitions: list[tuple[int, float]] = []
-        # Cached translucent overlay for the reaction hold state (a
-        # full-width band is an allocation too big for the draw loop).
-        self._hold_dim: pygame.Surface | None = None
+        # Reaction's static stage. From the frame the mode arms a wait
+        # to a beat after the response, every number the HUD draws is
+        # read out of this snapshot instead of live off the engine, so
+        # the frame cannot move while an EEG epoch is open. None means
+        # not holding; see _update_reaction_hold.
+        self._react_hold: dict | None = None
+        self._react_hold_until = 0.0
         # Score pulse: when the score jumps we kick off a short scale-up
         # animation on the big number so the patient sees a real reaction.
         self._last_score_seen = 0
@@ -2402,10 +2493,23 @@ class GameplayScreen(Screen):
 
     def flash_lane(self, lane: int, colour: tuple[int, int, int],
                    duration_s: float, now: float,
-                   popup_text: str | None = None) -> None:
+                   popup_text: str | None = None,
+                   popup_glyph: str | None = None) -> None:
         for ls in self.lanes:
             if ls.lane == lane:
                 ls.flash(colour, duration_s, now)
+                # Lab style: one ring glyph per outcome instead of
+                # words. Handled before the text path so the neutral
+                # popup can never pick up a stale message. Always the
+                # page ink, never the outcome colour: this glyph is
+                # the feedback event the ERP is measured on, so the
+                # only thing that may differ between outcomes is its
+                # fill. The tile flash keeps its colour, as it always
+                # did, and is a separate event.
+                if popup_glyph:
+                    self._spawn_popup(ls, self.theme.foreground, "",
+                                       glyph=popup_glyph)
+                    continue
                 # Float a quick popup above the lane that just scored.
                 # `popup_text` (the outcome label) wins over whatever
                 # message happens to be live, so the popup always
@@ -2421,8 +2525,8 @@ class GameplayScreen(Screen):
 
     def _spawn_popup(self, lane: LaneStrip,
                       colour: tuple[int, int, int],
-                      text: str) -> None:
-        if not text:
+                      text: str, glyph: str | None = None) -> None:
+        if not text and not glyph:
             return
         # Points appended to the label make the feedback feel chunky and
         # game-like rather than clinical only.
@@ -2431,7 +2535,8 @@ class GameplayScreen(Screen):
         # popup landed on the outcome flash in its own colour (green
         # text on a green tile) and vanished.
         y = lane.rect.top - 28
-        self._popups.append(FloatingText(text, (x, y), colour, font_pt=42))
+        self._popups.append(FloatingText(text, (x, y), colour, font_pt=42,
+                                          glyph=glyph))
 
     def set_message(self, text: str, duration_s: float,
                     kind: str = "info") -> None:
@@ -2459,13 +2564,23 @@ class GameplayScreen(Screen):
         # streak pill at the exact moment both fire (a streak
         # threshold is always a fresh pill render too). Down here the
         # banner has the whole strip to itself.
+        # One banner at a time. The thresholds sit two trials apart at
+        # the bottom of the table (3 then 5), which at rhythm's cadence
+        # is inside the 1.8 s lifetime, so the second banner used to
+        # land on top of the first at this exact point and render both
+        # as one unreadable smear. The newest count is the true one, so
+        # the older banner retires rather than sharing the strip.
         cx = self.layout.width // 2
-        self._popups.append(FloatingText(
+        self._popups = [p for p in self._popups
+                        if not getattr(p, "is_banner", False)]
+        banner = FloatingText(
             text, (cx, self.layout.height - 88), self.theme.success,
             font_pt=FONT_TITLE - 4,
             lifetime_s=1.8,
             rise_px=30,
-        ))
+        )
+        banner.is_banner = True
+        self._popups.append(banner)
 
     def update(self, dt: float) -> None:
         if self.engine.paused:
@@ -2537,6 +2652,92 @@ class GameplayScreen(Screen):
             return (int(m.idx), len(m.sequence))
         return (0, 0)
 
+    # ---- reaction's static stage ------------------------------------------
+    # Seconds the frozen frame is held AFTER the trial closes. The
+    # response lands inside the stimulus phase, so unfreezing on the
+    # phase change would move the screen a few hundred ms after the
+    # press, which is the middle of the epoch the press is being read
+    # in. A beat later is out of it.
+    REACT_EPOCH_TAIL_S = 1.0
+
+    def _reaction_stage(self) -> bool:
+        """Whether this block gets the static treatment.
+
+        Reaction only. Every other mode wants the score to jump, the
+        chevron to bob and the ring to fly out of the tile, because
+        nothing downstream of them is reading microvolts. Here the
+        screen IS the stimulus apparatus: anything else that changes
+        brightness while a trial is open lands in the same epoch as
+        the cue and cannot be told apart from it afterwards.
+        """
+        return getattr(self.engine, "current_block", "") == "reaction"
+
+    def _reaction_trial_open(self) -> bool:
+        """True from the frame the mode arms a wait (the S1 marker) to
+        the frame the trial closes, catch trials included."""
+        return getattr(self.engine.mode, "_phase", "") in (
+            "foreperiod", "catch", "stim")
+
+    def _reaction_best(self) -> float | None:
+        m = self.engine.mode
+        if not hasattr(m, "session_best_ms"):
+            return None
+        try:
+            best = m.session_best_ms()
+        except Exception:
+            return None
+        # isinstance rather than truthiness: a test double's mode
+        # returns a MagicMock here, which must not reach the format.
+        return best if isinstance(best, (int, float)) else None
+
+    def _reaction_snapshot(self) -> dict:
+        """Every mutable number the stage draws, frozen as one."""
+        done, total = self._progress()
+        # Same shifted window the stage draws with, or a chip inside
+        # the shift would blink off the moment the snapshot was taken.
+        live_msg = (self.message
+                    if self.message and time.perf_counter()
+                    < self.message_until + self.REACT_EPOCH_TAIL_S else "")
+        return {
+            "score": self.engine.score,
+            "streak": self.engine.hit_streak,
+            "done": done,
+            "total": total,
+            "msg": live_msg,
+            "msg_colour": self._message_colour(),
+            "best": self._reaction_best(),
+        }
+
+    def _update_reaction_hold(self, now: float) -> None:
+        """Take the snapshot when a trial opens, drop it a beat after
+        it closes. Called once at the top of draw so any render path,
+        headless included, goes through the same state machine."""
+        if not self._reaction_stage():
+            self._react_hold = None
+            self._react_hold_until = 0.0
+            return
+        if self._reaction_trial_open():
+            if self._react_hold is None:
+                self._react_hold = self._reaction_snapshot()
+            self._react_hold_until = 0.0
+        elif self._react_hold is not None:
+            if self._react_hold_until <= 0.0:
+                self._react_hold_until = now + self.REACT_EPOCH_TAIL_S
+            elif now >= self._react_hold_until:
+                self._react_hold = None
+                self._react_hold_until = 0.0
+
+    def _held(self, key: str, live):
+        """The frozen value while a trial is open, the live one
+        otherwise. Every mutable thing the reaction stage draws goes
+        through here, which is what makes the frame-difference
+        contract in tests/test_reaction_mode.py provable rather than a
+        list of things somebody remembered to suppress."""
+        hold = self._react_hold
+        if hold is not None and key in hold:
+            return hold[key]
+        return live
+
     def _draw_chip(self, surf: pygame.Surface,
                     centre: tuple[int, int],
                     text: str,
@@ -2584,11 +2785,22 @@ class GameplayScreen(Screen):
     def draw(self, surf: pygame.Surface) -> None:
         surf.fill(self.theme.background)
         cx = self.layout.width // 2
+        block = getattr(self.engine, "current_block", "")
+        # Reaction runs on a frame that must not move while a trial is
+        # open. `static` says this is that block at all; `frozen` says
+        # a trial is open right now, which is when every HUD number
+        # comes out of the snapshot instead of off the engine.
+        static = self._reaction_stage()
+        self._update_reaction_hold(time.perf_counter())
+        frozen = static and self._react_hold is not None
 
         # Score-pulse trigger: kick the animation any time the engine's
         # score actually changes so the patient sees the number react.
+        # Never in reaction: a number that grows and shrinks is a
+        # brightness change with no marker behind it.
         if self.engine.score != self._last_score_seen:
-            self._score_pulse_t = time.perf_counter()
+            if not static:
+                self._score_pulse_t = time.perf_counter()
             self._last_score_seen = self.engine.score
 
         # ---- Top HUD ----
@@ -2600,6 +2812,8 @@ class GameplayScreen(Screen):
         # Results screen anyway. Less noise on screen means more
         # focus on the lane tiles where the actual work happens.
         done, total = self._progress()
+        done = self._held("done", done)
+        total = self._held("total", total)
 
         # The mode's accent colour (the same one its mode-select card
         # uses) tints the progress bar, streak pill and countdown so
@@ -2624,7 +2838,7 @@ class GameplayScreen(Screen):
             score_pt = int(FONT_TITLE * pulse_scale)
         else:
             score_pt = FONT_TITLE
-        draw_text(surf, f"{self.engine.score}",
+        draw_text(surf, f"{self._held('score', self.engine.score)}",
                   (cx, 96), self.theme, self.layout, pt=score_pt,
                   centre=True, colour=self.theme.accent)
 
@@ -2641,7 +2855,7 @@ class GameplayScreen(Screen):
         # sitting just above the lane tiles in bilateral layout. All
         # other modes keep the centred chip - the bracket only
         # appears when 2+ lanes are lit at once.
-        streak = self.engine.hit_streak
+        streak = self._held("streak", self.engine.hit_streak)
         if streak >= 2:
             streak_label = f"x{streak} STREAK"
             if streak >= 10:
@@ -2751,7 +2965,6 @@ class GameplayScreen(Screen):
         # the streak pill and the tallest lane tile. Suppressed while
         # the pattern rest card is up: the card says the same thing
         # with more room.
-        block = getattr(self.engine, "current_block", "")
         pattern_resting = (
             block == "pattern" and self.engine.mode is not None
             and getattr(self.engine.mode, "phase", "") == "rest")
@@ -2769,8 +2982,27 @@ class GameplayScreen(Screen):
         # Also suppressed under either exit guard. The guard is meant
         # to be the frozen frame's ONE message; a mode chip left
         # sitting under it made two.
-        if (self.message and time.perf_counter() < self.message_until
-                and not pattern_resting
+        # Reaction's feedback is set ON the response and the stage
+        # stays frozen for a beat after that, so its window has to
+        # start when the freeze lets go or the RT number would show
+        # for whatever fraction of a second was left of it. Shifted,
+        # not shortened.
+        msg_until = self.message_until + (
+            self.REACT_EPOCH_TAIL_S if static else 0.0)
+        msg_text = (self.message
+                    if self.message and time.perf_counter() < msg_until
+                    else "")
+        msg_colour = self._message_colour()
+        if static:
+            # Held from the moment the wait armed. A chip that arrives
+            # or times out mid-trial is a luminance step in the middle
+            # of the epoch, and the record cannot tell it from the
+            # stimulus afterwards. In the EEG variant the chip carries
+            # the visible S1, so holding it also stops the ready cue
+            # vanishing 800 ms into a 2.5 s wait.
+            msg_text = self._held("msg", msg_text)
+            msg_colour = self._held("msg_colour", msg_colour)
+        if (msg_text and not pattern_resting
                 and not self.engine.exit_overlay_active):
             age = time.perf_counter() - self._message_born
             # Reaction's chip IS the mode's feedback (the RT number is
@@ -2787,14 +3019,26 @@ class GameplayScreen(Screen):
                 chip_cy = self.layout.height - 42
                 chip_alpha = 36
             pt = base_pt
-            if age < 0.18:
+            # The pop-in is a scale animation, so reaction never gets
+            # it: the chip is drawn at one size or not at all.
+            if age < 0.18 and not static:
                 pt = int(base_pt * (1.0 + 0.22 * (1.0 - age / 0.18)))
-            _chip(surf, self.layout, (cx, chip_cy), self.message,
-                  self._message_colour(), bg_alpha=chip_alpha,
+            _chip(surf, self.layout, (cx, chip_cy), msg_text,
+                  msg_colour, bg_alpha=chip_alpha,
                   pad_x=24, pad_y=10, font_pt=pt)
 
         now = time.perf_counter()
         for ls in self.lanes:
+            # Halos, glows and the target pulse all render OUTSIDE the
+            # tile rect, and the target pulse is a sine on top of that.
+            # In reaction the lit tile has to be the whole of what
+            # changed, and it has to change once.
+            ls.show_halos = not static
+            # The window bar drains and sweeps colour inside the tile
+            # for the whole response window. Reaction states its
+            # window in words at the top of the screen instead, so the
+            # lit tile is a step and then nothing.
+            ls.show_timing_bar = not static
             ls.draw(surf, now)
 
         # Stim ignition: catch the frame a lane goes active and fire a
@@ -2820,21 +3064,31 @@ class GameplayScreen(Screen):
         elif block == "pattern":
             self._draw_pattern_layer(surf, now)
 
-        self._draw_ignitions(surf, now)
+        # Both of these live outside the tile and both are animated:
+        # the ignition ring grows out past the rect, the chevron bobs
+        # on a sine. Reaction gets neither, so the tile going from its
+        # idle colour to its active one is the only thing that moves.
+        if not static:
+            self._draw_ignitions(surf, now)
 
-        # Downward chevron + PRESS label above the target lane so the
-        # patient never has to guess which tile to push. The chevron
-        # bobs vertically a few pixels per cycle to draw the eye
-        # without being distracting. Drawn AFTER the lanes so it
-        # always sits on top (no clipping by neighbouring tiles).
-        self._draw_target_indicator(surf, now)
+            # Downward chevron + PRESS label above the target lane so
+            # the patient never has to guess which tile to push. The
+            # chevron bobs vertically a few pixels per cycle to draw
+            # the eye without being distracting. Drawn AFTER the lanes
+            # so it always sits on top (no clipping by neighbouring
+            # tiles).
+            self._draw_target_indicator(surf, now)
 
         # Floating hit/miss popups. Held back while the pattern rest
         # card is up: the card dims the stage, and a "Miss" from the
         # last trial floating at full strength over that dim was the
         # brightest thing on a screen whose whole job is "stop and
         # rest".
-        if not pattern_resting:
+        # Reaction has no tier popup to rise (flash_lane refuses one),
+        # but encouragement banners still land in _popups, and a
+        # banner floating up the screen mid-trial is exactly the kind
+        # of uncued movement the static stage exists to remove.
+        if not pattern_resting and not static:
             for p in self._popups:
                 p.draw(surf, self.layout)
 
@@ -2854,7 +3108,12 @@ class GameplayScreen(Screen):
 
         # One skip control for every enforced wait, drawn last so it
         # sits over the countdown card and the rest material alike.
-        draw_skip_chip(surf, self.layout, self.theme, self.engine)
+        # Held back while a reaction trial is open: reaction arms its
+        # waits between trials (the settle gate), so the chip has
+        # nothing to offer there and its countdown text would be the
+        # one thing on the frame still ticking.
+        if not frozen:
+            draw_skip_chip(surf, self.layout, self.theme, self.engine)
 
         # Either exit guard (engine-drawn, above this screen) is the
         # frame's one message; stacking PAUSED under the session
@@ -3062,13 +3321,21 @@ class GameplayScreen(Screen):
     # ---- reaction ----------------------------------------------------------
     def _draw_reaction_layer(self, surf: pygame.Surface,
                              now: float) -> None:
-        """The wait must feel tense and the stimulus electric. During
-        the foreperiod (and a catch wait, which must be identical) the
-        whole lane band drops behind a translucent veil, so the arm
-        moment reads as the lights coming back on. A slow breathing
-        dot row says "hold" without words; the session best sits
-        quietly at the foot of the screen so "faster" always has a
-        target."""
+        """Reaction's own furniture, and deliberately almost none of it.
+
+        This layer used to drop the whole lane band behind a
+        translucent veil for the foreperiod and breathe a row of dots
+        under it, so the stimulus read as the lights coming back on.
+        It looked good and it is unusable for EEG: the veil is a
+        full-width luminance step at the start of every wait and
+        another at every stimulus, and the dots are a 0.55 Hz
+        oscillation over the whole screen through the epoch. Neither
+        is time-locked to anything the record can subtract. What the
+        stage keeps is what does not move: the level and window pill,
+        and the session best at the foot of the screen so "faster"
+        always has a target, held with the rest of the HUD while a
+        trial is open.
+        """
         m = self.engine.mode
         if m is None or not self.lanes:
             return
@@ -3102,45 +3369,11 @@ class GameplayScreen(Screen):
             draw_text(surf, label, (pill.x + pad_x, pill.y + pad_y),
                       self.theme, self.layout, pt=FONT_SMALL,
                       centre=False, colour=self.theme.muted)
-        phase = getattr(m, "_phase", "")
-        if phase in ("foreperiod", "catch"):
-            top = min(ls.rect.top for ls in self.lanes) - 48
-            bottom = max(ls.rect.bottom for ls in self.lanes) + 34
-            size = (self.layout.width, bottom - top)
-            if self._hold_dim is None or self._hold_dim.get_size() != size:
-                self._hold_dim = pygame.Surface(size, pygame.SRCALPHA)
-                # Alpha 175: at the old 140 the pastel tiles read
-                # almost full-brightness through the wash, so the
-                # "lights come back on" moment had nothing to come
-                # back FROM (before/after screenshots in the upgrade
-                # folder). Still translucent enough that the lane
-                # positions stay visible for hand placement.
-                self._hold_dim.fill((*self.theme.background, 175))
-            surf.blit(self._hold_dim, (0, top))
-            # Three dots breathing at 0.55 Hz: calm, deliberate, and
-            # visibly not yet the stimulus. Sized up (r=7, wider
-            # spacing, higher peak alpha) so the hold signal reads
-            # from a metre away over the stronger veil.
-            if not (self.message and now < self.message_until):
-                pulse = (math.sin(now * (2 * math.pi / 1.8)) + 1) * 0.5
-                alpha = int(90 + 130 * pulse)
-                r = 7
-                dot = pygame.Surface((r * 2, r * 2), pygame.SRCALPHA)
-                pygame.draw.circle(dot, (*self.theme.muted, alpha),
-                                   (r, r), r)
-                cx = self.layout.width // 2
-                for dx in (-34, 0, 34):
-                    surf.blit(dot, (cx + dx - r, 201 - r))
-        best = None
-        if hasattr(m, "session_best_ms"):
-            try:
-                best = m.session_best_ms()
-            except Exception:
-                best = None
-        # isinstance rather than truthiness: a test double's mode
-        # returns a MagicMock here, which must not reach the format.
         # bg_alpha 32 (was 24): the target the patient is chasing was
-        # nearly invisible against the light background.
+        # nearly invisible against the light background. Held while a
+        # trial is open, because a new best lands ON the response and
+        # would repaint this the moment the press was made.
+        best = self._held("best", self._reaction_best())
         if isinstance(best, (int, float)):
             _chip(surf, self.layout,
                   (self.layout.width // 2, self.layout.height - 42),
@@ -3412,6 +3645,22 @@ class GameplayScreen(Screen):
             pygame.draw.rect(fill, (*accent, 230), fill.get_rect(),
                              border_radius=3)
             surf.blit(fill, (bar_x, bar_y))
+        # The riff's finger numbers, ONLY when a loaded sequence file
+        # says explicit AND show_sequence. The mode gates both; this
+        # asks it rather than deciding for itself, so the secrecy rule
+        # lives in one place. The word sequence still never appears.
+        digits = ""
+        getter = getattr(m, "sequence_digits", None)
+        if callable(getter):
+            try:
+                digits = getter() or ""
+            except Exception:
+                digits = ""
+        if digits:
+            draw_text(surf, f"Fingers: {digits}",
+                      (chip_rect.x, bar_y + 12),
+                      self.theme, self.layout, pt=FONT_SMALL + 2,
+                      centre=False, colour=accent)
 
     def _draw_star_row(self, surf: pygame.Surface, centre_x: int,
                        y: int, earned: int) -> None:
@@ -3696,24 +3945,43 @@ class RhythmScreen(Screen):
         # spot at y=200 rose straight up into the streak pill at the
         # exact moment a streak threshold refreshed it.
         cx = self.layout.width // 2
-        self._popups.append(FloatingText(
+        # One banner at a time, same reason as the cadence screen: two
+        # thresholds inside the 1.8 s lifetime drew on top of each other
+        # here and read as a smear.
+        self._popups = [p for p in self._popups
+                        if not getattr(p, "is_banner", False)]
+        banner = FloatingText(
             text, (cx, 250), self.theme.success,
             font_pt=FONT_TITLE - 4,
             lifetime_s=1.8,
             rise_px=30,
-        ))
+        )
+        banner.is_banner = True
+        self._popups.append(banner)
 
-    def flash_lane(self, lane: int, colour, duration_s: float, now: float) -> None:
+    def flash_lane(self, lane: int, colour, duration_s: float, now: float,
+                   popup_text: str | None = None,
+                   popup_glyph: str | None = None) -> None:
         for ls in self.lanes:
             if ls.lane == lane:
                 ls.flash(colour, duration_s, now)
-                if self.message:
-                    # Above the strike ring, not on it: at the lane
-                    # top the judgement text sat right across the ring
-                    # the patient is aiming the next note at.
-                    strike_y = self.layout.height - 290
+                # Above the strike ring, not on it: at the lane top
+                # the feedback sat right across the ring the patient
+                # is aiming the next note at.
+                strike_y = self.layout.height - 290
+                if popup_glyph:
+                    # Lab style: one ring per outcome, no words, in
+                    # the page ink so size, position, colour and
+                    # lifetime are identical for every outcome.
                     self._popups.append(FloatingText(
-                        self.message, (ls.rect.centerx, strike_y - 64),
+                        "", (ls.rect.centerx, strike_y - 64),
+                        self.theme.foreground, font_pt=36,
+                        glyph=popup_glyph,
+                    ))
+                elif popup_text or self.message:
+                    self._popups.append(FloatingText(
+                        popup_text or self.message,
+                        (ls.rect.centerx, strike_y - 64),
                         colour, font_pt=36,
                     ))
                 # Particle burst centred on the strike-line ring for
@@ -4724,6 +4992,9 @@ class ResultsScreen(Screen):
         # notified", which draws the finished state so a bare draw()
         # in a test never renders a half-swept ring.
         self._shown_t = 0.0
+        # This session's per-mode first-go-against-latest rows, rebuilt
+        # on every on_show. None means "not built yet".
+        self._progress_rows: list[dict] | None = None
 
     def on_show(self) -> None:
         """Engine hook: a block just landed here, restart the entry
@@ -4732,6 +5003,184 @@ class ResultsScreen(Screen):
         self._shown_t = time.perf_counter()
         self.show_details = False
         self.detail_btn.label = "More detail"
+        # The session-so-far row is rebuilt once per block, not per
+        # frame: it walks every game of the session and reads a
+        # summary per mode.
+        self._progress_rows = None
+
+    # ---- session so far ---------------------------------------------------
+    # The single long session's whole point is that a participant sees
+    # their own numbers move inside one sitting (docs/research/
+    # healthy_baseline_study.txt Section 2.1). This row is where they
+    # see it: the mode just played against that person's FIRST go at it
+    # today, in the mode's own words, and a short chip for every other
+    # mode with two goes behind it. Only this session's log is read, so
+    # nothing here can compare against a different day.
+    PROGRESS_LABEL = "SO FAR"
+    PROGRESS_MAX_CHIPS = 6
+
+    def _progress(self) -> list[dict]:
+        rows = getattr(self, "_progress_rows", None)
+        if rows is None:
+            try:
+                from ..game.battery import progress_rows
+                rows = progress_rows(self.engine.session_games_log())
+            except Exception:
+                # A bare engine in a test double must not take the
+                # results screen down with it.
+                rows = []
+            self._progress_rows = rows
+        return rows
+
+    def _progress_row_for(self, mode: str, hand: str) -> dict | None:
+        for row in self._progress():
+            if row.get("mode") == mode and row.get("hand") == hand:
+                return row
+        return None
+
+    def _progress_colour(self, better) -> tuple[int, int, int]:
+        """Green for better, amber for worse, grey for a change too
+        small to print. Grey is not a failure state: it is the honest
+        answer when the number did not move."""
+        if better is None:
+            return self.theme.muted
+        return self.theme.success if better else self.theme.warning
+
+    @staticmethod
+    def _progress_label(mode: str, hand: str) -> str:
+        side = {"left": " L", "right": " R"}.get(str(hand), "")
+        return f"{mode_title(mode)}{side}"
+
+    def _battery_done(self) -> bool:
+        """True on the results screen of the LAST PLAY ALL block.
+
+        The card then has no next step to offer, and the last thing a
+        study participant should be looking at is a rotation
+        suggestion, so it becomes the TODAY table instead. A free game
+        played afterwards is an ordinary game and gets NEXT UP back,
+        which is why the last logged game has to be a battery block
+        and not merely the battery being over.
+        """
+        try:
+            progress = self.engine.battery_progress()
+            if not (isinstance(progress, dict) and progress.get("finished")):
+                return False
+            log = self.engine.session_games_log()
+        except Exception:
+            return False
+        return bool(log) and int(log[-1].get("battery_pos") or 0) > 0
+
+    # Rows the TODAY panel can fit above the button.
+    TODAY_MAX_ROWS = 9
+    TODAY_ROW_H = 24
+
+    def _draw_today_panel(self, surf: pygame.Surface,
+                          rect: pygame.Rect) -> None:
+        """PLAY ALL DONE: every mode played today, first go against
+        latest, in the mode's own words.
+
+        Only this participant's own numbers, and no comparison with
+        anybody else, because the point of the panel is that a person
+        can see their own session move. A mode played once says so
+        rather than being dropped, so nobody wonders where it went.
+        """
+        draw_text(surf, "TODAY", (rect.x + 30, rect.y + 26),
+                  self.theme, self.layout, pt=FONT_SMALL, centre=False,
+                  colour=self.theme.accent)
+        rows = self._progress()
+        if not rows:
+            draw_text(surf, "No finished games to compare yet.",
+                      (rect.x + 30, rect.y + 70), self.theme, self.layout,
+                      pt=FONT_BODY, centre=False, colour=self.theme.muted)
+            return
+        y = rect.y + 58
+        name_x = rect.x + 30
+        value_x = rect.x + 170
+        change_x = rect.x + 320
+        for row in rows[:self.TODAY_MAX_ROWS]:
+            label = self._progress_label(str(row["mode"]), str(row["hand"]))
+            # Measured against the gap to the value column, not a round
+            # number: "Muscle Memory R" is wider than 140 px and ran
+            # straight into the "100% to 100%" beside it.
+            draw_text(surf, _fit_text(label, self.layout.font(FONT_SMALL + 2),
+                                      value_x - name_x - 12),
+                      (name_x, y), self.theme, self.layout,
+                      pt=FONT_SMALL + 2, centre=False,
+                      colour=self.theme.foreground)
+            if int(row.get("n") or 0) >= 2:
+                pair = f"{row['first_text']} to {row['latest_text']}"
+                change = str(row.get("short") or "")
+                colour = self._progress_colour(row.get("better"))
+            else:
+                pair = str(row.get("latest_text") or "")
+                change = "played once"
+                colour = self.theme.muted
+            draw_text(surf, pair, (value_x, y), self.theme, self.layout,
+                      pt=FONT_SMALL + 2, centre=False,
+                      colour=self.theme.muted)
+            draw_text(surf, _fit_text(change,
+                                      self.layout.font(FONT_SMALL + 2),
+                                      rect.right - 30 - change_x),
+                      (change_x, y), self.theme, self.layout,
+                      pt=FONT_SMALL + 2, centre=False, colour=colour)
+            y += self.TODAY_ROW_H
+        extra = len(rows) - self.TODAY_MAX_ROWS
+        if extra > 0:
+            draw_text(surf, f"+{extra} more", (name_x, y), self.theme,
+                      self.layout, pt=FONT_SMALL, centre=False,
+                      colour=self.theme.muted)
+            y += self.TODAY_ROW_H
+        draw_text(surf,
+                  "Compared with your own first go today.",
+                  (name_x, y + 4), self.theme, self.layout, pt=FONT_SMALL,
+                  centre=False, colour=self.theme.muted)
+
+    def _draw_progress_row(self, surf: pygame.Surface, left: int, cy: int,
+                           right_limit: int) -> None:
+        rows = [r for r in self._progress() if int(r.get("n") or 0) >= 2]
+        if not rows:
+            return
+        here = (str(self.engine.current_block),
+                str(getattr(self.engine, "hand_mode", "")))
+        x = left
+        # The mode just played leads, with the whole sentence: it is
+        # the number the participant is looking at right now.
+        lead = next((r for r in rows if (r["mode"], r["hand"]) == here),
+                    None)
+        if lead is not None and lead.get("text"):
+            x += _strip_pill(surf, self.layout, x, cy, str(lead["text"]),
+                             self._progress_colour(lead.get("better")),
+                             font_pt=FONT_SMALL + 2) + 14
+        others = [r for r in rows if r is not lead and r.get("short")]
+        if not others:
+            return
+        label_font = self.layout.font(FONT_SMALL)
+        draw_text(surf, self.PROGRESS_LABEL,
+                  (x, cy - label_font.get_height() // 2),
+                  self.theme, self.layout, pt=FONT_SMALL, centre=False,
+                  colour=self.theme.muted)
+        x += label_font.size(self.PROGRESS_LABEL)[0] + 12
+        shown = 0
+        # Room kept back for the overflow chip. Without it a mode that
+        # did not fit vanished with nothing to say it had been cut,
+        # and a participant would think the game had been forgotten.
+        tail_w = self.layout.font(FONT_SMALL).size("+9 more")[0] + 28
+        for row in others[:self.PROGRESS_MAX_CHIPS]:
+            text = (f"{self._progress_label(str(row['mode']), str(row['hand']))}"
+                    f"  {row['short']}")
+            width = self.layout.font(FONT_SMALL).size(text)[0] + 20
+            last = shown == len(others) - 1
+            limit = right_limit if last else right_limit - tail_w
+            if x + width > limit:
+                break
+            _strip_pill(surf, self.layout, x, cy, text,
+                        self._progress_colour(row.get("better")))
+            x += width + 8
+            shown += 1
+        extra = len(others) - shown
+        if extra > 0:
+            _strip_pill(surf, self.layout, x, cy, f"+{extra} more",
+                        self.theme.muted)
 
     def _toggle_details(self) -> None:
         self.show_details = not self.show_details
@@ -4761,7 +5210,9 @@ class ResultsScreen(Screen):
         self.folder_btn.handle_event(e)
         self.detail_btn.handle_event(e)
         self.title_btn.handle_event(e)
-        if not self.show_details:
+        # The button is not drawn once PLAY ALL is done (the card is
+        # the TODAY table then), so it must not take clicks either.
+        if not self.show_details and not self._battery_done():
             self.next_btn.handle_event(e)
         # Enter confirms the primary (Retry) action, same convention as
         # the title screen's START shortcut (audit finding #113: this
@@ -4791,10 +5242,13 @@ class ResultsScreen(Screen):
         if rate >= 0.70:
             return "B", "Solid effort"
         if rate >= 0.50:
-            return "C", "Keep practising"
+            return "C", "Good practice. Keep at it"
+        # The bottom two letters are where a patient is most likely to
+        # stop coming back, so the blurb credits the effort and names
+        # the next step instead of grading the person.
         if rate >= 0.30:
-            return "D", "Tough one - try again"
-        return "E", "Reset and have another go"
+            return "D", "Big effort. Rest, then again"
+        return "E", "Every press was practice. Rest up"
 
     def _grade_colour(self, letter: str) -> tuple[int, int, int]:
         if letter == "S":
@@ -4989,23 +5443,26 @@ class ResultsScreen(Screen):
 
     @staticmethod
     def _syllables_advice(sy: dict) -> str | None:
-        """One supervisor-facing line off the block's accuracy:
-        outside the productive 60 to 95 percent zone the next
-        session's settings deserve a look (the band gate steers
-        toward the 80-85 percent region the learning literature
-        marks as optimal, and a block landing far outside it means
-        the researcher-set knobs are fighting the gate). Advice
-        only: the level stays a researcher decision under the
-        brief's unlock rule."""
-        acc = sy.get("accuracy")
-        if acc is None:
+        """One supervisor-facing line off the block's first-press
+        accuracy, which is what the mode's own staircase steers: it
+        aims near 80 percent (the GraphoGame target and the
+        convergence point of a 3-down-1-up rule) against a 25 percent
+        chance floor. A block that lands well below chance-plus-a-bit
+        means the child was guessing and the band or the foil rung
+        wants a look; one that lands near perfect means the material
+        stopped asking anything. Advice only, and never a claim about
+        reading."""
+        first = sy.get("first_press_accuracy")
+        if first is None:
+            first = sy.get("accuracy")
+        if first is None:
             return None
-        if acc < 0.60:
-            return ("Supervisor: consider an easier band or a "
-                    "slower beat next session.")
-        if acc > 0.95:
-            return ("Supervisor: consider the next band or level "
-                    "next session.")
+        if first < 0.45:
+            return ("Supervisor: close to guessing. An easier band "
+                    "and a lower level next session.")
+        if first > 0.95:
+            return ("Supervisor: try the next band next session; the "
+                    "words stopped asking anything.")
         return None
 
     def _draw_sticker_strip(self, surf: pygame.Surface) -> None:
@@ -5420,7 +5877,16 @@ class ResultsScreen(Screen):
         same starter. Nothing about the block (its EEG markers
         included) can differ from a game started the long way round.
         """
-        if self._pending_step() is not None:
+        if self._battery_done():
+            return
+        step = self._pending_step()
+        if step is not None:
+            # A scheduled rest holds the button (and N) until its
+            # floor. Nothing else on the screen is blocked: the RA can
+            # still open the data folder, read the detail view or end
+            # the session.
+            if self._rest_lock(step)[0]:
+                return
             self.engine.continue_protocol()
             return
         key, hand = self._next_up_plan()
@@ -5428,11 +5894,60 @@ class ResultsScreen(Screen):
             return
         self.engine.begin_game(key, hand)
 
+    def _card_elapsed(self) -> float:
+        """Seconds the between-blocks card has been up.
+
+        Taken from the engine's own stamp (set in show_results) rather
+        than from this screen's animation clock, so the countdown the
+        participant reads and the rest length the battery log records
+        are the same number. Falls back to the animation clock, and to
+        zero before the first on_show, which is what a bare test draw
+        gets.
+        """
+        shown = float(getattr(self.engine, "_step_card_t", 0.0) or 0.0)
+        if shown <= 0:
+            shown = self._shown_t
+        return time.perf_counter() - shown if shown > 0 else 0.0
+
+    def _rest_lock(self, step: dict | None) -> tuple[bool, float]:
+        """(button held, seconds of the scheduled rest still to run)
+        for a pending step.
+
+        A stretch never holds the button: it is a suggestion, and a
+        participant who is ready outranks a tidy 60 s. A scheduled REST
+        does hold it, for rest_min_s only. The two rests in the single
+        long session sit where the design needs them (after the first
+        pass, and at the second pass's set boundary); letting the RA
+        click straight through would quietly remove the one thing
+        separating the two halves of the session. Past the floor the
+        button comes back and says so, so nobody is trapped.
+        """
+        if not isinstance(step, dict):
+            return False, 0.0
+        try:
+            rest_s = float(step.get("rest_s") or 0.0)
+            floor_s = float(step.get("rest_min_s") or 0.0)
+        except (TypeError, ValueError):
+            return False, 0.0
+        if rest_s <= 0:
+            return False, 0.0
+        elapsed = self._card_elapsed()
+        return elapsed < floor_s, max(0.0, rest_s - elapsed)
+
+    @staticmethod
+    def _mmss(seconds: float) -> str:
+        total = int(max(0.0, seconds) + 0.5)
+        return f"{total // 60}:{total % 60:02d}"
+
     def _battery_card_lines(self, step: dict) -> tuple[str, str, str]:
-        """(heading, reason pill, stretch line) for a pending battery
-        step. The stretch line counts down from the moment this screen
-        was shown, so the RA can see when the 60 s are up; the button
-        is never locked, a participant who is ready may go on."""
+        """(heading, reason pill, wait line) for a pending battery
+        step.
+
+        The wait line is the stretch countdown on a stretch step and
+        the rest countdown on a rest step, both measured from the
+        moment this screen was shown. The stretch never locks the
+        button; the rest holds it until its floor (see _rest_lock).
+        """
         try:
             progress = self.engine.battery_progress() or {}
         except Exception:
@@ -5445,18 +5960,22 @@ class ResultsScreen(Screen):
                 "dominant": "main hand",
                 "non_dominant": "other hand"}.get(requested, "")
         reason = f"Play all step {pos}" + (f", {role}" if role else "")
-        stretch = ""
+        wait = ""
         try:
             stretch_s = float(step.get("stretch_s") or 0.0)
+            rest_s = float(step.get("rest_s") or 0.0)
         except (TypeError, ValueError):
-            stretch_s = 0.0
-        if stretch_s > 0:
-            elapsed = (time.perf_counter() - self._shown_t
-                       if self._shown_t > 0 else 0.0)
+            stretch_s = rest_s = 0.0
+        elapsed = self._card_elapsed()
+        if rest_s > 0:
+            left = max(0.0, rest_s - elapsed)
+            wait = (f"Rest: {self._mmss(left)} left" if left > 0
+                    else "Rest done")
+        elif stretch_s > 0:
             left = max(0.0, stretch_s - elapsed)
-            stretch = (f"Stretch break first: {left:.0f} s left"
-                       if left > 0 else "Stretch break done")
-        return heading, reason, stretch
+            wait = (f"Stretch break first: {left:.0f} s left"
+                    if left > 0 else "Stretch break done")
+        return heading, reason, wait
 
     def _draw_next_up(self, surf: pygame.Surface,
                       rect: pygame.Rect) -> None:
@@ -5478,11 +5997,15 @@ class ResultsScreen(Screen):
         outline = tuple(max(0, c - 26) for c in self.theme.background)
         pygame.draw.rect(surf, outline, rect, 1, border_radius=18)
 
+        if self._battery_done():
+            self._draw_today_panel(surf, rect)
+            return
         key, hand = self._next_up_plan()
         step = self._pending_step()
         heading, step_reason, stretch = "NEXT UP", "", ""
         if step is not None:
             heading, step_reason, stretch = self._battery_card_lines(step)
+        held, rest_left = self._rest_lock(step)
         draw_text(surf, heading, (rect.x + 30, rect.y + 26),
                   self.theme, self.layout, pt=FONT_SMALL,
                   centre=False,
@@ -5541,8 +6064,19 @@ class ResultsScreen(Screen):
                   (rect.x + 30, rect.y + 216),
                   self.theme, self.layout, pt=FONT_BODY,
                   centre=False, colour=self.theme.foreground)
-        self.next_btn.label = f"Start {mode_title(key)}   (N)"
-        self.next_btn.colour = accent
+        # During a scheduled rest the button says how long is left and
+        # does nothing; past the floor it says the rest can be cut
+        # short, so the RA never has to guess whether pressing early
+        # is allowed.
+        if held:
+            self.next_btn.label = f"Rest: {self._mmss(rest_left)}"
+            self.next_btn.colour = self.theme.muted
+        elif rest_left > 0:
+            self.next_btn.label = f"Start now: {mode_title(key)}   (N)"
+            self.next_btn.colour = accent
+        else:
+            self.next_btn.label = f"Start {mode_title(key)}   (N)"
+            self.next_btn.colour = accent
         self.next_btn.draw(surf)
 
     def _draw_slim(self, surf: pygame.Surface, cards: list,
@@ -5570,14 +6104,33 @@ class ResultsScreen(Screen):
         # sessions tree). One chip, not a table: the slim screen's one
         # job is the headline, and the chip is its trend arrow. A
         # first-time game has no chip at all rather than an empty one.
-        chip = getattr(self.engine, "vs_last", None)
-        if isinstance(chip, dict) and chip.get("text"):
-            chip_colour = (self.theme.success if chip.get("better")
-                           else self.theme.warning)
-            _strip_pill(surf, self.layout, self.SLIM_CX - 270,
-                        self.SLIM_CARD_TOP + self.SLIM_CARD_H + 24,
-                        str(chip["text"]), chip_colour,
-                        font_pt=FONT_SMALL + 2)
+        #
+        # In a session that plays a mode twice (the study battery does)
+        # the honest comparison is this session's own first go, not
+        # some block from another day, so the SO FAR row takes the
+        # line when it has something to say and the vs-last chip keeps
+        # it otherwise.
+        chip_left = self.SLIM_CX - 270
+        chip_y = self.SLIM_CARD_TOP + self.SLIM_CARD_H + 24
+        chip_right = self.SLIM_STRIP_RECT[0] + self.SLIM_STRIP_RECT[2]
+        here = self._progress_row_for(
+            str(self.engine.current_block),
+            str(getattr(self.engine, "hand_mode", "")))
+        if here is not None and int(here.get("n") or 0) >= 2:
+            self._draw_progress_row(surf, chip_left, chip_y, chip_right)
+        else:
+            chip = getattr(self.engine, "vs_last", None)
+            if isinstance(chip, dict) and chip.get("text"):
+                chip_colour = (self.theme.success if chip.get("better")
+                               else self.theme.warning)
+                used = _strip_pill(surf, self.layout, chip_left, chip_y,
+                                   str(chip["text"]), chip_colour,
+                                   font_pt=FONT_SMALL + 2)
+                self._draw_progress_row(surf, chip_left + used + 14,
+                                        chip_y, chip_right)
+            else:
+                self._draw_progress_row(surf, chip_left, chip_y,
+                                        chip_right)
         self._draw_next_up(surf, pygame.Rect(*self.NEXT_CARD_RECT))
         if str(self.engine.current_block) == "syllables":
             self._draw_sticker_strip(surf)
@@ -5648,7 +6201,7 @@ class ResultsScreen(Screen):
     SLIM_CARDS = {
         "force_pilot": (2, 3, 0),     # in corridor | mean error | score
         "buzz_hunt": (1, 2, 0),       # localisation | span | score
-        "echo": (1, 2, 0),            # longest echo | sequences | score
+        "echo": (1, 2, 0),            # longest echo | items right | score
         "pattern": (2, 4, 1),         # accuracy | stars | takes
         "reaction": (2, 4, 0),        # median RT | accuracy or p10
         "chords": (1, 2, 0),          # clean hit rate | median ER
@@ -5756,10 +6309,10 @@ class ResultsScreen(Screen):
                 (f"IN CORRIDOR{level_note}",
                  (f"{tic * 100:.0f}%" if tic is not None else "n/a"),
                  self.theme.foreground),
-                (f"MEAN ERROR{level_note}",
+                (f"OFF THE LINE{level_note}",
                  (f"{mae:.1f}%" if mae is not None else "n/a"),
                  self.theme.foreground),
-                ("STALLS", f"{overall.get('stalls', 0)}",
+                ("EXITS", f"{overall.get('stalls', 0)}",
                  self.theme.error),
                 ("BEST SECTION", str(best_sec), self.theme.success),
             ]
@@ -5806,8 +6359,11 @@ class ResultsScreen(Screen):
                 "GAP", (bh.get("gap") or {}).get("threshold") or {})
         elif ec is not None:
             # Echo's own vocabulary: the longest echo (span) is the
-            # headline, then the Kessels pair (correct sequences and
-            # the span x correct product). Nothing here reads speed:
+            # headline. Under the Simon rule the support cards are
+            # the items reproduced (partial credit included) and what
+            # became of the spare life; under the legacy ladder they
+            # stay the Kessels pair (correct sequences and the span x
+            # correct product). Nothing here reads speed:
             # reproduction is untimed by design, so no RT card can
             # exist for this mode. Counts stay static rather than
             # riding the entry ease: "3 of 7" counting up through
@@ -5820,13 +6376,40 @@ class ResultsScreen(Screen):
                  self.theme.accent),
                 ("LONGEST ECHO", (f"{span}" if span else "n/a"),
                  self.theme.success),
-                ("SEQUENCES", f"{n_ok} of {n_tr}",
-                 self.theme.foreground),
-                ("SPAN x CORRECT", f"{ec.get('product_score') or 0}",
-                 self.theme.foreground),
-                ("TIMEOUTS", f"{ec.get('n_omissions') or 0}",
-                 self.theme.error),
             ]
+            if str(ec.get("rule") or "ladder") == "simon":
+                games = ec.get("games_played") or []
+                spent = [g for g in games
+                         if isinstance(g, dict)
+                         and g.get("life_used_at") is not None]
+                if spent:
+                    life = ", ".join(f"{g.get('life_used_at')}"
+                                     for g in spent)
+                    life_txt = f"used at {life}"
+                else:
+                    life_txt = "kept"
+                # Card order is load-bearing: SLIM_CARDS picks the
+                # first three by index, so ITEMS RIGHT stays at 2 and
+                # the game count goes on the end where only the More
+                # detail view reads it.
+                cards += [
+                    ("ITEMS RIGHT", f"{ec.get('total_items') or 0}",
+                     self.theme.foreground),
+                    ("LIFE", life_txt, self.theme.foreground),
+                ]
+                if len(games) > 1:
+                    cards.append(("GAMES", f"best of {len(games)}",
+                                  self.theme.foreground))
+            else:
+                cards += [
+                    ("SEQUENCES", f"{n_ok} of {n_tr}",
+                     self.theme.foreground),
+                    ("SPAN x CORRECT", f"{ec.get('product_score') or 0}",
+                     self.theme.foreground),
+                ]
+            cards.append(
+                ("NO REPLY", f"{ec.get('n_omissions') or 0}",
+                 self.theme.error))
         elif pat is not None:
             # Pattern's own docstring (WHAT THE PATIENT SEES) is
             # explicit that "RT numbers are never shown": Boyd and
@@ -5864,7 +6447,7 @@ class ResultsScreen(Screen):
                  self.theme.accent),
                 ("TAKES", f"{n_takes}", self.theme.success),
                 ("ACCURACY", acc_str, self.theme.foreground),
-                ("MISSES", f"{int(round(self.engine.misses * entry))}",
+                ("NOT CAUGHT", f"{int(round(self.engine.misses * entry))}",
                  self.theme.error),
                 ("STARS EARNED", f"{total_stars} / {n_takes * 3}",
                  self.theme.success),
@@ -5915,7 +6498,7 @@ class ResultsScreen(Screen):
                 ("HITS", f"{int(round(self.engine.hits * entry))}",
                  self.theme.success),
                 ("MEDIAN RT", median_str, self.theme.foreground),
-                ("MISSES", f"{int(round(self.engine.misses * entry))}",
+                ("NOT CAUGHT", f"{int(round(self.engine.misses * entry))}",
                  self.theme.error),
                 fifth,
                 sixth,
@@ -5974,19 +6557,23 @@ class ResultsScreen(Screen):
             # way rhythm's cards do, so an early or late mean reads
             # the same on the card. Free-paced levels (1, 2, 5, 6)
             # keep AVG RT / BEST RT, which are real first-tap RTs.
-            level = sy.get("level")
-            paced_level = level in (3, 4)
             acc = sy.get("accuracy")
             acc_str = f"{acc * 100:.0f}%" if acc is not None else "n/a"
             band = sy.get("band_final") or "n/a"
-            if paced_level:
-                amean = sy.get("asyn_mean_ms")
-                asd = sy.get("asyn_sd_ms")
-                offset_str = (f"{abs(amean):.0f} ms"
-                              if amean is not None else "n/a")
-                sd_str = f"{asd:.0f} ms" if asd is not None else "n/a"
-                fifth = ("AVG OFFSET", offset_str, self.theme.foreground)
-                sixth = ("OFFSET SD", sd_str, self.theme.success)
+            # The choice task's own measures. FIRST TRY is the number
+            # the mode is steered by (the staircase holds it near 80
+            # percent against a 25 percent chance floor); LEVEL is the
+            # foil rung it finished on. A block with neither (an old
+            # session, or one that logged nothing) falls back to the
+            # generic RT pair rather than printing n/a twice.
+            first = sy.get("first_press_accuracy")
+            rung = sy.get("rung_final")
+            if first is not None or rung is not None:
+                first_str = (f"{first * 100:.0f}%"
+                             if first is not None else "n/a")
+                rung_str = str(rung) if rung is not None else "n/a"
+                fifth = ("FIRST TRY", first_str, self.theme.foreground)
+                sixth = ("LEVEL", rung_str, self.theme.success)
             else:
                 fifth = ("AVG RT", avg_str, self.theme.foreground)
                 sixth = ("BEST RT", best_str, self.theme.success)
@@ -5995,7 +6582,7 @@ class ResultsScreen(Screen):
                  self.theme.accent),
                 ("WORDS CORRECT", acc_str, self.theme.success),
                 ("BAND", str(band), self.theme.foreground),
-                ("MISSES", f"{int(round(self.engine.misses * entry))}",
+                ("NOT CAUGHT", f"{int(round(self.engine.misses * entry))}",
                  self.theme.error),
                 fifth,
                 sixth,
@@ -6019,7 +6606,7 @@ class ResultsScreen(Screen):
                 ("HITS", f"{int(round(self.engine.hits * entry))}",
                  self.theme.success),
                 ("SYNC GAP", gap_str, self.theme.foreground),
-                ("MISSES", f"{int(round(self.engine.misses * entry))}",
+                ("NOT CAUGHT", f"{int(round(self.engine.misses * entry))}",
                  self.theme.error),
                 ("RIGHT HAND RT", r_str, self.theme.foreground),
                 ("LEFT HAND RT", l_str, self.theme.foreground),
@@ -6041,7 +6628,7 @@ class ResultsScreen(Screen):
                 ("HITS", f"{int(round(self.engine.hits * entry))}",
                  self.theme.success),
                 ("TOP PACE", top_str, self.theme.success),
-                ("MISSES", f"{int(round(self.engine.misses * entry))}",
+                ("NOT CAUGHT", f"{int(round(self.engine.misses * entry))}",
                  self.theme.error),
                 ("FINAL PACE", fin_str, self.theme.foreground),
                 ("HIT RATE", f"{rate * 100 * entry:.0f}%",
@@ -6055,7 +6642,7 @@ class ResultsScreen(Screen):
                  self.theme.success),
                 ("HIT RATE", f"{rate * 100 * entry:.0f}%",
                  self.theme.foreground),
-                ("MISSES", f"{int(round(self.engine.misses * entry))}",
+                ("NOT CAUGHT", f"{int(round(self.engine.misses * entry))}",
                  self.theme.error),
                 (avg_label, avg_str, self.theme.foreground),
                 (best_label, best_str, self.theme.success),
@@ -6161,7 +6748,7 @@ class ResultsScreen(Screen):
             self._draw_per_lane_chart(
                 surf,
                 pygame.Rect(left_x, chart_y, chart_w, chart_h),
-                "MEAN TRACKING ERROR PER FINGER",
+                "MEAN DISTANCE FROM THE LINE PER FINGER",
                 maes, unit="% of max", high_is_bad=True,
                 levels=fp_levels,
             )
@@ -6343,7 +6930,7 @@ class ResultsScreen(Screen):
                 surf,
                 pygame.Rect(left_x + chart_w + chart_gap, chart_y,
                              chart_w, chart_h),
-                "MISSES + WRONG PRESSES PER FINGER",
+                "NOT CAUGHT + OTHER-FINGER PRESSES PER FINGER",
                 miscounts4, unit="count", high_is_bad=True,
             )
         else:
@@ -6375,7 +6962,7 @@ class ResultsScreen(Screen):
                 surf,
                 pygame.Rect(left_x + chart_w + chart_gap, chart_y,
                              chart_w, chart_h),
-                "MISSES + WRONG PRESSES PER FINGER",
+                "NOT CAUGHT + OTHER-FINGER PRESSES PER FINGER",
                 miscounts, unit="count", high_is_bad=True,
             )
 
@@ -6390,15 +6977,15 @@ class ResultsScreen(Screen):
         mf_count = getattr(self.engine, "_miss_force_count", 0)
         mf_window = int(getattr(self.engine, "_force_window_ms", 1000))
         if not has_force:
-            mf_text = ("Miss-trial force: needs the force sensors "
-                       "(not available in keyboard mode)")
+            mf_text = ("Force on uncaught cues: needs the force "
+                       "sensors (not available in keyboard mode)")
         elif mf_count > 0:
             mf_text = (
-                f"Miss-trial force: {mf_total:.0f} sensor units over "
-                f"{mf_count} missed trials (avg {mf_total / mf_count:.0f} "
-                f"per miss, all fingers, first {mf_window} ms)")
+                f"Force on uncaught cues: {mf_total:.0f} sensor units "
+                f"over {mf_count} cues (avg {mf_total / mf_count:.0f} "
+                f"each, all fingers, first {mf_window} ms)")
         else:
-            mf_text = "Miss-trial force: no missed trials this round"
+            mf_text = "Force on uncaught cues: every cue was caught"
         draw_text(surf, mf_text, (cx, 650), self.theme, self.layout,
                   pt=FONT_SMALL, centre=True, colour=self.theme.muted)
 
@@ -6463,6 +7050,21 @@ class DiagnosticsScreen(Screen):
         # Dropdowns + buttons for the hardware panel; (re)built in
         # `rebuild_panel` whenever the port list changes.
         self._panel_buttons: list[Button] = []
+        # The firmware modal, and the three things it needs. All None
+        # until a firmware button is pressed: locating avrdude touches
+        # the filesystem and the port list, which is not work the screen
+        # should do just because somebody opened Settings.
+        self._dialog = None
+        self._firmware_tool = None
+        self._firmware_game = None
+        self._firmware_addr = None
+        # The Muscle Memory sequence file card and the one button that
+        # opens it. Kept out of _panel_buttons because that list is
+        # hit-tested against the ports panel; this button lives in the
+        # session data panel with its own list.
+        from .pattern_file_panel import PatternFilePanel
+        self._riff_panel = PatternFilePanel(engine, self.theme, self.layout)
+        self._riff_buttons: list[Button] = []
         from .widgets import Dropdown
         self._port_dropdowns: dict[str, Dropdown] = {}
         # Test Mode toggle. Rect is sized + positioned every frame in
@@ -6558,6 +7160,14 @@ class DiagnosticsScreen(Screen):
     PORTS_COL_GAP = 20
     DATA_X = 770
     DATA_BTN_W = 210
+    # The data panel used to run to the right edge. It now stops at a
+    # fixed width so the firmware panel can have the rest. 246 is the
+    # floor: "Open data folder" is DATA_BTN_W wide inside BAND_PAD each
+    # side, and a button that pokes out of its band is a real bug (a
+    # click lands where nothing was drawn), which test_screen_layout
+    # pins.
+    DATA_W = 250
+    FIRMWARE_BTN_H = 40
 
     def _cues_rect(self) -> pygame.Rect:
         return pygame.Rect(self.BAND_X, self.ROW1_TOP,
@@ -6582,7 +7192,63 @@ class DiagnosticsScreen(Screen):
 
     def _data_rect(self) -> pygame.Rect:
         return pygame.Rect(self.DATA_X, self._panel_top(),
-                           self.layout.width - self.BAND_X - self.DATA_X,
+                           self.DATA_W, self.PANEL_HEIGHT)
+
+    # The sequence-file button sits on the last free line of the data
+    # panel, under the sessions path. Shorter than the buttons above it
+    # (28 against 40) because that is the room the panel has left, and
+    # it opens a card rather than doing anything on its own.
+    RIFF_BTN_H = 28
+
+    def _riff_btn_rect(self) -> pygame.Rect:
+        d = self._data_rect()
+        return pygame.Rect(d.x + self.BAND_PAD, self._ports_row_y(1) + 38,
+                           self.DATA_BTN_W, self.RIFF_BTN_H)
+
+    def _refresh_riff_button(self) -> None:
+        """Build the button if it is missing and keep its label in step
+        with what is loaded. Rebuilt on draw rather than on a port
+        rescan because the file can change from the card, from a drop
+        on the window, or from the drop folder."""
+        try:
+            line = self.engine.pattern_plan_headline()
+        except Exception:
+            line = ""
+        name = line.split(" (", 1)[0] if line else ""
+        label = f"Riff file: {name}" if name else "Riff file: built-in"
+        rect = self._riff_btn_rect()
+        font = self.layout.font(FONT_BODY - 4)
+        label = _fit_text(label, font, rect.w - 16) or "Riff file"
+        if not self._riff_buttons:
+            self._riff_buttons = [Button(
+                rect, label, self._open_riff_panel,
+                self.theme, self.layout, font_pt=FONT_BODY - 4)]
+        else:
+            self._riff_buttons[0].rect = rect
+            self._riff_buttons[0].label = label
+
+    def _open_riff_panel(self) -> None:
+        self._riff_panel.show()
+
+    def set_status(self, text: str) -> None:
+        """Put a line on the screen's message bar. The engine calls this
+        when a file is dropped on the window, so the drop lands
+        somewhere visible instead of only in the log."""
+        if text:
+            self._port_status = str(text)
+            if self._riff_panel.open:
+                self._riff_panel.status = str(text)
+
+    def _firmware_x(self) -> int:
+        return self.DATA_X + self.DATA_W + self.ROW1_GAP
+
+    def _firmware_rect(self) -> pygame.Rect:
+        """The Arduino firmware panel, right of the data folder. Takes
+        whatever the row has left, which is 214 px at the 1280 wide
+        render size ui.resolution fixes."""
+        x = self._firmware_x()
+        return pygame.Rect(x, self._panel_top(),
+                           self.layout.width - self.BAND_X - x,
                            self.PANEL_HEIGHT)
 
     def _ports_row_y(self, i: int) -> int:
@@ -7097,6 +7763,159 @@ class DiagnosticsScreen(Screen):
             "Open data folder", self.engine.open_sessions_folder,
             self.theme, self.layout, font_pt=FONT_BODY - 2,
         ))
+        # Firmware panel. Writing the Arduino used to mean the Arduino
+        # IDE, a PlatformIO project and four manual uploads per sensor
+        # swap; these two buttons are that job with the developer tools
+        # taken out of it.
+        fw = self._firmware_rect()
+        fw_x = fw.x + self.BAND_PAD
+        fw_w = fw.w - self.BAND_PAD * 2
+        self._panel_buttons.append(Button(
+            pygame.Rect(fw_x, self._ports_row_y(0), fw_w, row_h),
+            "Flash firmware", self._open_flash_dialog,
+            self.theme, self.layout, font_pt=FONT_BODY - 2,
+        ))
+        self._panel_buttons.append(Button(
+            pygame.Rect(fw_x, self._ports_row_y(1), fw_w, row_h),
+            "Sensor address", self._open_address_dialog,
+            self.theme, self.layout, font_pt=FONT_BODY - 2,
+        ))
+
+    # ---- firmware flashing ------------------------------------------------
+
+    def _firmware_bits(self):
+        """(avrdude tool, game hex, address-tool hex) or a refusal.
+
+        Returns (tool, game, addr, None) when everything is present and
+        (None, None, None, "why not") when it is not, so both click
+        handlers refuse the same way and the reason lands on the status
+        line rather than inside a dialog nobody asked for.
+        """
+        from ..hardware import flasher
+        tool = flasher.find_avrdude(self.engine.cfg)
+        if tool is None:
+            return None, None, None, flasher.NO_AVRDUDE_MESSAGE
+        game = flasher.find_hex("game", self.engine.cfg)
+        addr = flasher.find_hex("addr_tool", self.engine.cfg)
+        if game is None:
+            return None, None, None, flasher.NO_HEX_MESSAGE
+        return tool, game, addr, None
+
+    def _open_firmware_dialog(self, mode: str) -> None:
+        from ..hardware import flasher
+        from .firmware_dialog import FirmwareDialog
+        why = self.engine.firmware_job_allowed()
+        if why:
+            self._port_status = why
+            return
+        tool, game, addr, refusal = self._firmware_bits()
+        if refusal:
+            self._port_status = refusal
+            return
+        if mode == "address" and addr is None:
+            self._port_status = flasher.NO_HEX_MESSAGE
+            return
+        ports = flasher.candidate_ports(self.engine.cfg, self.engine.source)
+        if not ports:
+            self._port_status = flasher.NO_PORT_MESSAGE
+            return
+        self._firmware_tool = tool
+        self._firmware_game = game
+        self._firmware_addr = addr
+        self._dialog = FirmwareDialog(
+            mode, self.theme, self.layout, ports=ports,
+            firmware_label=game.label(),
+            on_flash=self._start_firmware_job,
+            on_address=self._start_address_job,
+            on_close=self._close_firmware_dialog,
+        )
+
+    def _open_flash_dialog(self) -> None:
+        self._open_firmware_dialog("flash")
+
+    def _open_address_dialog(self) -> None:
+        self._open_firmware_dialog("address")
+
+    def _close_firmware_dialog(self) -> None:
+        self._dialog = None
+
+    def _start_firmware_job(self, port: str):
+        """Hand the port to avrdude, then start the thread.
+
+        begin_firmware_job runs here on the main thread on purpose: the
+        job thread must never touch the engine, and the source has to be
+        closed BEFORE avrdude opens the same port.
+        """
+        from ..hardware.flasher import FirmwareJob
+        why = self.engine.firmware_job_allowed()
+        if why:
+            self._port_status = why
+            return None
+        self.engine.begin_firmware_job()
+        job = FirmwareJob(self._firmware_tool, port, self._firmware_game,
+                          self.engine.cfg)
+        job.start()
+        return job
+
+    def _start_address_job(self, port: str, change: bool,
+                           old: int | None, new: int | None):
+        from ..hardware.flasher import AddressJob
+        why = self.engine.firmware_job_allowed()
+        if why:
+            self._port_status = why
+            return None
+        if self._firmware_addr is None:
+            self._port_status = "No address tool firmware in this build."
+            return None
+        self.engine.begin_firmware_job()
+        job = AddressJob(
+            self._firmware_tool, port, self._firmware_addr,
+            self._firmware_game, self.engine.cfg,
+            change=change, old=old if old is not None else 0x04,
+            new=new if new is not None else 0x05)
+        job.start()
+        return job
+
+    def _poll_firmware_job(self) -> None:
+        """One frame's worth of watching the job. Called from update.
+
+        Everything that touches the engine or the config file happens
+        here, on the main thread, once the thread has set `done`.
+        """
+        dlg = self._dialog
+        if dlg is None or dlg.job is None or not dlg.job.done:
+            return
+        job = dlg.job
+        # Remember the bootloader that answered, so the next flash tries
+        # the right speed first instead of failing at the wrong one for
+        # a second and a half.
+        if job.baud:
+            try:
+                self.engine.cfg.save_user_overrides(
+                    {"firmware.preferred_baud": int(job.baud)})
+            except Exception as e:
+                log.warning("Could not remember the flash baud: %s", e)
+        reconnected = self.engine.end_firmware_job()
+        text = (job.summary or job.message).strip()
+        if reconnected:
+            text = f"{text} {reconnected}".strip()
+        dlg.finish(text, bool(job.ok))
+        self._port_status = text
+
+    @property
+    def firmware_dialog_open(self) -> bool:
+        return self._dialog is not None
+
+    def on_escape(self) -> bool:
+        """Esc while a firmware dialog is up belongs to the dialog.
+
+        Returns True when it was swallowed, so the engine leaves the
+        Settings screen alone.
+        """
+        dlg = self._dialog
+        if dlg is None:
+            return False
+        return dlg.on_escape()
 
     def _sync_with_port_watcher(self) -> None:
         """Redraw the Arduino panel when the watcher says the port list
@@ -7145,6 +7964,19 @@ class DiagnosticsScreen(Screen):
         self.rebuild_panel()
 
     def handle_event(self, e: pygame.event.Event) -> None:
+        # The firmware modal eats everything while it is up. Nothing
+        # under a dim layer may react: a stray click on Back mid flash
+        # would leave the source stopped and the port with avrdude.
+        if self._dialog is not None:
+            self._dialog.handle_event(e)
+            if self._dialog is not None and self._dialog.wants_close:
+                self._dialog = None
+            return
+        # The sequence-file card is modal too: while it is up a click
+        # must not reach a port dropdown or a finger tile drawn under
+        # the dim layer.
+        if self._riff_panel.handle_event(e):
+            return
         # Dropdowns first so an open dropdown's option click is
         # consumed before the underlying STIM / Save button can fire.
         consumed = False
@@ -7175,6 +8007,12 @@ class DiagnosticsScreen(Screen):
             self._save_volumes()
         self.back_btn.handle_event(e)
         for b in self._panel_buttons:
+            b.handle_event(e)
+        # Built lazily on the first draw, so a headless click before any
+        # frame has rendered gets it built here too.
+        if not self._riff_buttons:
+            self._refresh_riff_button()
+        for b in self._riff_buttons:
             b.handle_event(e)
         # Click a finger tile to buzz JUST that finger (fire its STIM
         # motor on its own). Press-to-test-sensor and click-to-test-buzzer
@@ -7226,6 +8064,13 @@ class DiagnosticsScreen(Screen):
         return False
 
     def update(self, dt: float) -> None:
+        # A firmware job holds the port. Polling the watcher, driving
+        # the STIM queue or reading the detectors would all be talking
+        # to a source that is deliberately stopped, so the whole frame
+        # is just the job while a dialog is up.
+        if self._dialog is not None:
+            self._poll_firmware_job()
+            return
         # Keep the port panel current on its own.
         self._sync_with_port_watcher()
         # Drain any queued STIM test pulses that have come due.
@@ -7492,7 +8337,10 @@ class DiagnosticsScreen(Screen):
         cap_x = data_rect.x + self.BAND_PAD
         cap_w = data_rect.right - self.BAND_PAD - cap_x
         cap_font = self.layout.font(FONT_SMALL)
-        cap_y = self._ports_row_y(1)
+        # Pulled up eight pixels from the port row it used to line up
+        # with: the riff button now takes the bottom line of this
+        # panel, and the path was sitting on top of it.
+        cap_y = self._ports_row_y(1) - 8
         draw_text(surf, "Every session is saved here:", (cap_x, cap_y),
                   self.theme, self.layout, pt=FONT_SMALL,
                   centre=False, colour=self.theme.muted)
@@ -7507,10 +8355,34 @@ class DiagnosticsScreen(Screen):
         draw_text(surf, shown, (cap_x, cap_y + 20),
                   self.theme, self.layout, pt=FONT_SMALL,
                   centre=False, colour=self.theme.foreground)
-        draw_text(surf, "one folder per day, newest last",
-                  (cap_x, cap_y + 44),
+        # The one button for the Muscle Memory sequence file. It sits
+        # here rather than in a panel of its own because a loaded file
+        # says what the recordings are OF, and the bottom row has no
+        # width left for a seventh group. It replaced the "one folder
+        # per day" caption, which said nothing the path above it does
+        # not already show.
+        # Its label carries the answer to the only question a therapist
+        # asks about it in passing (is a custom riff loaded, and which
+        # one), so the panel needs no extra caption row for it.
+        self._refresh_riff_button()
+        for b in self._riff_buttons:
+            b.draw(surf)
+        # Group 6, writing the Arduino. The caption says which firmware
+        # is in this build, so a therapist can tell whether the board
+        # already has it without flashing to find out.
+        fw_rect = self._firmware_rect()
+        self._draw_band(surf, fw_rect, "ARDUINO FIRMWARE")
+        fw_caption, fw_colour = self._firmware_caption()
+        # bottom - 24 clears the second button by four pixels. At -30 the
+        # caption's first row of pixels lands inside the button above it,
+        # which reads as a label belonging to the button rather than to
+        # the panel.
+        draw_text(surf, _fit_text(fw_caption,
+                                  self.layout.font(FONT_SMALL),
+                                  fw_rect.w - self.BAND_PAD * 2),
+                  (fw_rect.x + self.BAND_PAD, fw_rect.bottom - 24),
                   self.theme, self.layout, pt=FONT_SMALL,
-                  centre=False, colour=self.theme.muted)
+                  centre=False, colour=fw_colour)
         # Buttons for both bottom panels (test STIM, refresh, save, open
         # folder), then the dropdowns on top of whatever they overlap.
         for b in self._panel_buttons:
@@ -7545,3 +8417,35 @@ class DiagnosticsScreen(Screen):
                   (self.layout.width // 2, self.layout.height - 30),
                   self.theme, self.layout, pt=FONT_SMALL + 2,
                   centre=True, colour=self.theme.muted)
+        # The firmware modal last of all: it dims the whole screen, so
+        # anything drawn after it would float above the dim layer and
+        # look clickable when it is not.
+        if self._dialog is not None:
+            self._dialog.draw(surf)
+        # Same rule for the sequence-file card.
+        self._riff_panel.draw(surf)
+
+    def _firmware_caption(self) -> tuple[str, tuple[int, int, int]]:
+        """What is under the two firmware buttons, and in what colour.
+
+        Read once and cached: this runs on the draw path and finding
+        avrdude walks the filesystem. A missing piece is a warning
+        colour, because the button above it will refuse when pressed.
+        """
+        cached = getattr(self, "_firmware_caption_cache", None)
+        if cached is not None:
+            return cached
+        try:
+            from ..hardware import flasher
+            image = flasher.find_hex("game", self.engine.cfg)
+            if image is None:
+                out = ("no firmware bundled", self.theme.warning)
+            elif flasher.find_avrdude(self.engine.cfg) is None:
+                out = ("no avrdude found", self.theme.warning)
+            else:
+                out = (image.short_label(), self.theme.muted)
+        except Exception as e:
+            log.warning("Could not describe the bundled firmware: %s", e)
+            out = ("firmware state unknown", self.theme.warning)
+        self._firmware_caption_cache = out
+        return out

@@ -40,11 +40,28 @@ docs/lab_package/*.exe
 docs/lab_package/eeg_lab.yaml
 docs/lab_package/source/
 
+# Firmware images and the bundled avrdude. Build products of
+# builds/build_firmware.py and builds/fetch_avrdude.py, rebuilt by CI on
+# every push. The hexes would fork from their source the moment anyone
+# committed one, and avrdude is a 6 MB third-party binary.
+assets/firmware/*
+!assets/firmware/README.txt
+tools/avrdude/*/
+bin/dl/
+
 # Per-session output. Don't publish.
 sessions/
 
 # Written by the Settings screen, per user.
 config/user_settings.yaml
+
+# The Patterns sequence file a researcher loaded on this machine, its
+# pointer, and the drop folder with the import archive. Per machine,
+# not part of the app. config/pattern_sequence_template.yaml is the
+# committed blank one and stays tracked.
+config/pattern_sequence.yaml
+config/pattern_sequence.json
+config/pattern_sequences/
 
 # Notebook output. Regenerated every run, so it does not belong in git.
 analysis/figures/

@@ -188,7 +188,14 @@ class Config:
         if migrated:
             log.info("Translated legacy cue settings onto %s",
                      ", ".join("cue." + k for k in migrated))
-        return cls(data=merged, source=src)
+        cfg = cls(data=merged, source=src)
+        # Feedback style is checked at load, not at first trial: a lab
+        # session recorded with the feedback glyph inside the
+        # response-locked window is unusable, and finding out at
+        # startup costs nothing.
+        from .ui.feedback_bank import check_style_config
+        check_style_config(cfg)
+        return cfg
 
     def save_user_overrides(self, overrides: dict) -> Path:
         """Persist user-set config to USER_OVERRIDES (atomic write).
@@ -269,6 +276,13 @@ class Config:
             # Per-participant preferences (data/prefs.py): written by
             # the app, so it lives next to the exe, not in the bundle.
             ("config", "participant_prefs.json"),
+            # The researcher's Patterns sequence file (data/
+            # pattern_file.py): imported, archived and cleared by the
+            # app, so all three live next to the exe rather than in
+            # the read-only bundle.
+            ("config", "pattern_sequence.yaml"),
+            ("config", "pattern_sequence.json"),
+            ("config", "pattern_sequences"),
             ("logs",),
         )
         parts = p.parts

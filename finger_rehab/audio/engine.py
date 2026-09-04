@@ -506,6 +506,53 @@ class AudioEngine:
         except Exception:
             return False
 
+    # ---- spoken words ------------------------------------------------
+    # Syllables plays pre-rendered speech: the word at ATTEND, each
+    # syllable as it is modelled, and the syllable again as corrective
+    # feedback on a missed set. It rides a RESERVED channel (the last
+    # of the 16 the mixer is built with) so a word can never be cut
+    # off by a cue tone or a hit chime, and so stopping speech cannot
+    # stop anything else. Sounds are cached by path: a block replays
+    # the same few files hundreds of times and decoding each one once
+    # keeps the frame loop clear.
+
+    SPEECH_CHANNEL = 15
+
+    def play_speech(self, path: str | Path, volume: float = 1.0) -> bool:
+        """Speak one rendered file. False (never an exception) when
+        the mixer is down or the file is missing or unreadable: a
+        child mid-session must never meet a stack trace because an
+        asset was not rendered."""
+        if not self._initialised or pygame is None:
+            return False
+        p = Path(path)
+        if not hasattr(self, "_speech_cache"):
+            self._speech_cache: dict[str, object] = {}
+        snd = self._speech_cache.get(str(p))
+        if snd is None:
+            if not p.exists():
+                return False
+            try:
+                snd = pygame.mixer.Sound(str(p))
+            except Exception as e:
+                log.warning("Could not load speech %s: %s", p, e)
+                return False
+            self._speech_cache[str(p)] = snd
+        try:
+            snd.set_volume(self._clamp01(self.master_volume * volume))
+            pygame.mixer.Channel(self.SPEECH_CHANNEL).play(snd)
+            return True
+        except Exception:
+            return False
+
+    def stop_speech(self) -> None:
+        if not self._initialised or pygame is None:
+            return
+        try:
+            pygame.mixer.Channel(self.SPEECH_CHANNEL).stop()
+        except Exception:
+            pass
+
     def _play_click(self) -> None:
         if self._click is not None:
             self._click.set_volume(self._cue_vol(0.6))

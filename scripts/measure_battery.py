@@ -1,11 +1,13 @@
 """Measure the study battery's clock cost headless.
 
-The healthy baseline design budgets 44 minutes per visit (docs/
-research/healthy_baseline_study.txt, Section 2.3) from arithmetic
-over the config. This script plays the whole battery through the
-real engine, real modes and real loggers with a simulated
-participant, on a simulated clock, and reports what the blocks
-actually cost in seconds. No display, no audio, no hardware.
+The healthy baseline design is one long sitting: nine blocks early,
+two played-once modes in the middle, the same nine blocks late, with
+two scheduled rests. It targets 85 minutes and stops at 90 (docs/
+research/healthy_baseline_study.txt, Section 2.3). This script plays
+the whole plan through the real engine, real modes and real loggers
+with a simulated participant, on a simulated clock, and reports what
+the blocks actually cost in seconds. No display, no audio, no
+hardware.
 
 The participant is a model hand on a fake sensor stream: every mode
 is driven the way the boards drive it, through 200 Hz samples into
@@ -51,6 +53,19 @@ SAMPLE_HZ = 200.0
 LOGIN_S = 3 * 60.0
 QUICK_CAL_S = 2 * 60.0
 TRANSITION_S = 10.0
+
+
+def wait_before(step: dict) -> float:
+    """Seconds of scheduled wait before a step, on top of the NEXT UP
+    transition. A stretch is taken in full; a rest is taken in full
+    too, which is the planning number (the 60 s floor is the minimum
+    the card allows, not what a participant is expected to take)."""
+    if not isinstance(step, dict):
+        return 0.0
+    rest_s = float(step.get("rest_s") or 0.0)
+    if rest_s > 0:
+        return rest_s
+    return float(step.get("stretch_s") or 0.0)
 
 
 class SimClock:
@@ -228,6 +243,50 @@ class Participant:
         for lane in act.targets:
             self.schedule(t + self.rng.gauss(0.0, 0.015), int(lane), 0.45)
 
+    def _adaptive(self, m, now, eng) -> None:
+        """Same shape as classic: one lane lights, press it. The pace
+        adapter reads the model's hit rate, so the block's length is
+        set by how fast the model answers, exactly as it would be by a
+        real hand."""
+        act = getattr(m, "active", None)
+        if act is None:
+            return
+        key = ("adaptive", act.trial_id)
+        if key in self.answered:
+            return
+        self.answered.add(key)
+        self.schedule(act.stim_t_perf + self._rt(), act.lane)
+
+    # The model taps the warm-up metronome at this interval. The
+    # warm-up ends on its own beats whether or not anyone taps, so
+    # this only exists so the block writes a warm-up statistic.
+    WARMUP_TAP_S = 0.6
+
+    def _syllables(self, m, now, eng) -> None:
+        phase = getattr(m, "phase", "")
+        if phase == "warmup":
+            last = getattr(self, "_syl_last_tap", 0.0)
+            if now - last >= self.WARMUP_TAP_S:
+                self._syl_last_tap = now
+                self.hand.press(int(m.lanes[0]), now, 0.10)
+            return
+        if phase != "choose":
+            return
+        opts = getattr(m, "option_set", None)
+        if opts is None:
+            return
+        key = ("syllables", m.trial_counter)
+        if key in self.answered:
+            return
+        self.answered.add(key)
+        # Nothing counts until the spawn lockout is past, so the model
+        # waits it out rather than pressing into a dead window.
+        spawn = getattr(m, "_spawn_t", None)
+        t0 = float(spawn if spawn is not None else now)
+        lock = float(getattr(m, "spawn_lockout_s", 0.25) or 0.25)
+        self.schedule(max(now, t0 + lock) + self._rt(),
+                      int(opts.target_lane))
+
     def _echo(self, m, now, eng) -> None:
         act = getattr(m, "active", None)
         if act is None or getattr(m, "phase", "") != "respond":
@@ -398,6 +457,7 @@ def main() -> int:
               f"{cell['hand_first'].replace('_', '-')}", flush=True)
         rows = []
         transitions_s = 0.0
+        rests_s = 0.0
         while True:
             if not eng.block_is_running():
                 break
@@ -409,29 +469,52 @@ def main() -> int:
             summary = eng.session.block_summary or {}
             rows.append((step.get("position", 0), mode, hand_mode, secs,
                          summary.get("status", "?"),
-                         summary.get("trials", "")))
-            print(f"  {step.get('position', 0):2d} {mode:12s} {hand_mode:6s}"
+                         summary.get("trials", ""),
+                         str(step.get("phase") or "")))
+            print(f"  {step.get('position', 0):2d} {str(step.get('phase') or ''):5s}"
+                  f" {mode:12s} {hand_mode:6s}"
                   f" {secs / 60.0:6.2f} min  {summary.get('status', '?')}"
                   f"  trials={summary.get('trials', '')}", flush=True)
             nxt = eng.pending_protocol_step()
             if nxt is None:
                 break
-            gap = TRANSITION_S + float(nxt.get("stretch_s") or 0.0)
-            transitions_s += gap
-            clock.t += gap
+            wait_s = wait_before(nxt)
+            if float(nxt.get("rest_s") or 0.0) > 0:
+                rests_s += wait_s
+                print(f"     rest  {wait_s / 60.0:6.2f} min "
+                      f"(floor {float(nxt.get('rest_min_s') or 0.0):.0f} s)",
+                      flush=True)
+            else:
+                transitions_s += wait_s
+            transitions_s += TRANSITION_S
+            clock.t += TRANSITION_S + wait_s
             eng.continue_protocol()
         blocks_s = sum(r[3] for r in rows)
-        total_s = LOGIN_S + QUICK_CAL_S + blocks_s + transitions_s
-        budget = float((eng._battery or {}).get("budget_min", 44.0))
+        total_s = (LOGIN_S + QUICK_CAL_S + blocks_s + transitions_s
+                   + rests_s)
+        battery = eng._battery or {}
+        budget = float(battery.get("budget_min", 85.0))
+        hard_stop = float(battery.get("hard_stop_min", 0.0))
+        by_phase: dict[str, float] = {}
+        for r in rows:
+            by_phase[r[6]] = by_phase.get(r[6], 0.0) + r[3]
         print()
         print(f"  blocks       {blocks_s / 60.0:6.2f} min over {len(rows)} blocks")
+        for phase in ("pre", "mid", "post"):
+            if phase in by_phase:
+                print(f"    {phase:9s}{by_phase[phase] / 60.0:6.2f} min")
+        print(f"  rests        {rests_s / 60.0:6.2f} min (scheduled, taken "
+              "in full)")
         print(f"  transitions  {transitions_s / 60.0:6.2f} min "
               f"({TRANSITION_S:.0f} s NEXT UP each, plus the stretch)")
         print(f"  login + cal  {(LOGIN_S + QUICK_CAL_S) / 60.0:6.2f} min "
               "(fixed allowances from the design)")
         print(f"  TOTAL        {total_s / 60.0:6.2f} min against a "
-              f"{budget:.0f} min budget "
+              f"{budget:.0f} min target "
               f"({'inside' if total_s <= budget * 60 else 'OVER'})")
+        if hard_stop > 0:
+            print(f"  hard stop    {hard_stop:.0f} min "
+                  f"({'inside' if total_s <= hard_stop * 60 else 'OVER'})")
         print(f"  wall time    {(_time.time() - wall0) / 60.0:.1f} min")
         if args.keep:
             print(f"  sessions kept at {tmp}")

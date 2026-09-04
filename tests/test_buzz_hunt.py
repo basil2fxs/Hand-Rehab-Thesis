@@ -135,6 +135,79 @@ def _press_event(lane, t):
                       hand="right")
 
 
+class _DetectorStub:
+    """Just enough of an FSR detector for _fingers_down: the pressed
+    flags, one per finger on that hand's board, plus the peak-force
+    accessor log_trial reaches for once a detector dict exists."""
+
+    def __init__(self, n: int = 4):
+        self.pressed = [False] * n
+
+    def current_peak(self, sensor_idx: int):
+        return None
+
+    def current_impulse(self, sensor_idx: int):
+        return None
+
+
+def _attach_detectors(e, hands=("right",), n=4):
+    e.detectors = {h: _DetectorStub(n) for h in hands}
+    return e.detectors
+
+
+def _run_frames(m, t, seconds, dt=1.0 / 60.0, hook=None):
+    """Tick the mode through `seconds` of virtual frames. `hook` is
+    called with (mode, now) before each tick so a test can play the
+    part of a patient, a pause, or a long frame."""
+    end = t + seconds
+    while t < end:
+        step = dt
+        if hook is not None:
+            got = hook(m, t)
+            if got:
+                step = got
+        t += step
+        m._tick(t)
+        if m.phase == "done":
+            break
+    return t
+
+
+def _tap_along(react_s=0.3):
+    """A patient who replays what they feel as they feel it: one
+    press react_s after every playback starts, then normal answers
+    once the window is open. This is the natural way to play the span
+    and gap stages and it used to lock the block up for good."""
+    seen = {"t0": None}
+
+    def hook(m, now):
+        if m.phase != "trial":
+            return None
+        if m.sub == "play" and m._play_t0 is not None:
+            if now >= m._play_t0 + react_s and seen["t0"] != m._play_t0:
+                seen["t0"] = m._play_t0
+                m.queue_press(_press_event(m.lane, now))
+        elif m.sub == "respond":
+            m.queue_press(_press_event(m.lane, now))
+        return None
+
+    return hook
+
+
+def _press_train(period_s=1.0, lane=1):
+    state = {"next": None}
+
+    def hook(m, now):
+        if state["next"] is None:
+            state["next"] = now
+        if now >= state["next"]:
+            state["next"] = now + period_s
+            m.queue_press(_press_event(lane, now))
+        return None
+
+    return hook
+
+
 def _mode(e, hands=None, **over):
     from finger_rehab.game.modes.buzz_hunt import (BuzzHuntMode,
                                             participant_hebb_seed)
@@ -1248,7 +1321,9 @@ class GapTests(unittest.TestCase):
         silently replay the identical (seed, kind) pair: it gives the
         trial an extra, uncounted exposure to the same stimulus
         before it scores as a normal single-exposure trial (audit
-        finding #92, the gap-stage half)."""
+        finding #92, the gap-stage half). The fresh kind comes from
+        the balanced bag, not a coin flip, so repeated redraws cannot
+        unbalance the one/two distribution the staircase reads."""
         m = self._gap_mode()
         t = _to_trial(m)
         orig_seed = m.trial_seed
@@ -1259,14 +1334,31 @@ class GapTests(unittest.TestCase):
             m._tick(t)
         self.assertEqual(m._pulse_idx, 1, "the first pulse must have "
                          "fired before the early press lands")
+        bag_next = m._gap_kind_bag.next()
+        m._gap_kind_bag.next = lambda _v=bag_next: _v
         m.queue_press(_press_event(m.lane, t))
         m._tick(t + dt)
         self.assertEqual(m.sub, "wait")
         self.assertNotEqual(m.trial_seed, orig_seed)
-        import random as _random
-        expected_kind = (_random.Random(m.trial_seed).random() < 0.5)
-        self.assertEqual(m.gap_two, expected_kind)
-        self.assertEqual(int(m.params["two"]), 1 if expected_kind else 0)
+        self.assertEqual(m.gap_two, bool(bag_next))
+        self.assertEqual(int(m.params["two"]), 1 if bag_next else 0)
+
+    def test_a_gap_redraw_comes_from_the_balanced_bag(self):
+        """Forty redraws must stay balanced. A fresh coin flip here
+        meant that a patient who kept pressing during playback, or a
+        therapist who kept pausing, quietly biased the one/two mix and
+        the staircase read the bias as perception."""
+        m = self._gap_mode()
+        _to_trial(m)
+        kinds = []
+        for _ in range(40):
+            m._redraw_interrupted_material()
+            kinds.append(bool(m.gap_two))
+        n_two = sum(1 for k in kinds if k)
+        self.assertEqual(len(kinds), 40)
+        # A balanced bag can never drift more than its own bag size
+        # from even; a coin flip drifts without limit.
+        self.assertLessEqual(abs(n_two - 20), 2)
 
     def test_gap_reversals_reach_the_raw_log(self):
         m = self._gap_mode(n=8)
@@ -1446,20 +1538,26 @@ class BlockFlowTests(unittest.TestCase):
         m = _mode(_engine(), catch_rate=0.0)
         m = _only_stage(m, "gap", 2)
         t = _to_trial(m)
-        # Reach the play sub-phase, then stall a whole second: both
-        # pulses of a two-buzz plan dispatch in the same frame.
+        # Reach the play sub-phase, force a two-pulse plan so a gap
+        # exists to collapse, let the FIRST pulse go out, then stall a
+        # whole second across the silent gap. (The dispatcher sends at
+        # most one pulse per frame now, so the stall has to land
+        # between the two rather than before both.)
         guard = t + 30.0
         while m.sub != "play" and t < guard:
             t += 1.0 / 60.0
             m._tick(t)
-        # Force a two-pulse plan so a gap exists to collapse.
         if len(m._pulse_plan) < 2:
             m.gap_two = True
             m.params["two"] = 1
             from finger_rehab.game.modes.buzz_hunt import (
                 pulses_from_params)
             m._pulse_plan = pulses_from_params(m.waveform, m.params)
+        t += 1.0 / 60.0
+        m._tick(t)
+        self.assertEqual(m._pulse_idx, 1, "the first short must be out")
         m._tick(t + 1.0)
+        self.assertEqual(m._pulse_idx, 2, "the second short follows")
         self.assertIs(m._stim_delivered, False)
         events = [ev for ev in m.engine.raw_logger.events
                   if ev["event"] == "stim_late_pulse"]
@@ -1642,10 +1740,385 @@ class BlockFlowTests(unittest.TestCase):
         self.assertEqual(list(cfg.get("buzz_hunt.window_promote")), [6, 8])
         self.assertEqual(list(cfg.get("buzz_hunt.window_demote")), [2, 4])
         self.assertFalse(bool(cfg.get("buzz_hunt.duration_staircase")))
-        self.assertEqual(float(cfg.get("buzz_hunt.gap_floor_ms")), 120.0)
+        self.assertEqual(float(cfg.get("buzz_hunt.gap_floor_ms")), 150.0)
         self.assertEqual(float(cfg.get("buzz_hunt.gap_short_ms")), 150.0)
         self.assertGreater(float(cfg.get("buzz_hunt.gap_start_ms")),
                            float(cfg.get("buzz_hunt.gap_floor_ms")))
+
+
+# ---- nothing may stall the block ----------------------------------------
+
+
+class BlockAlwaysAdvancesTests(unittest.TestCase):
+    """The reliability floor: no player behaviour, and no hardware
+    behaviour, may leave the block sitting with no trial running and
+    no buzz coming.
+
+    Every case here reproduced a permanent freeze before the per-trial
+    wall existed. They shared one root cause: nothing inside
+    phase 'trial' had a deadline, so a trial that could not close took
+    the whole block down with it and the block never ended, never
+    buzzed again and never wrote a summary. Measured on the shipped
+    settings, a stuck finger sat fifty minutes past a fifteen minute
+    cap at nine trials of sixty-two.
+    """
+
+    def _loc(self, n=20, **over):
+        kw = dict(catch_rate=0.0)
+        kw.update(over)
+        m = _mode(_engine(), **kw)
+        m.engine.finish_block = lambda: None
+        return _only_stage(m, "loc", n)
+
+    def test_a_finger_left_on_a_pad_does_not_freeze_the_block(self):
+        m = self._loc()
+        dets = _attach_detectors(m.engine)
+        t = _to_trial(m)
+        dets["right"].pressed[2] = True
+        t = _run_frames(m, t, 60.0)
+        self.assertTrue(dets["right"].pressed[2], "the finger stayed down")
+        self.assertGreater(m.trials_done, 0,
+                           "the wall must start the trial anyway")
+        forced = [ev for ev in m.engine.raw_logger.events
+                  if ev["event"] == "buzz_hunt_gate_forced"]
+        self.assertTrue(forced)
+        self.assertIn("reason=fingers_down", forced[0]["detail"])
+        self.assertGreater(m.forced_starts, 0)
+
+    def test_a_finger_on_the_other_hand_does_not_freeze_the_block(self):
+        # _fingers_down scans every detector, not the trial's hand, so
+        # in bilateral play a resting left hand blocked a right-hand
+        # trial. The wall covers that too.
+        hands = {"right": [0, 1, 2, 3], "left": [4, 5, 6, 7]}
+        m = _mode(_engine("both"), hands=hands, catch_rate=0.0)
+        m.engine.finish_block = lambda: None
+        m = _only_stage(m, "loc", 20)
+        dets = _attach_detectors(m.engine, hands=("right", "left"))
+        t = _to_trial(m)
+        dets["left"].pressed[0] = True
+        _run_frames(m, t, 60.0)
+        self.assertGreater(m.trials_done, 0)
+
+    def test_a_stuck_finger_still_reaches_the_session_cap(self):
+        # The cap used to be checked only on cards, so a gate that
+        # never opened held the cap off as well as the block.
+        m = self._loc(n=200, session_cap_min=1.0)
+        dets = _attach_detectors(m.engine)
+        t = _to_trial(m)
+        dets["right"].pressed[0] = True
+        _run_frames(m, t, 400.0)
+        self.assertEqual(m.phase, "done")
+        self.assertEqual(m.end_reason, "time_cap")
+
+    def test_a_press_train_cannot_hold_the_wait_gate_forever(self):
+        # Any press faster than REST_GATE_S plus the drawn foreperiod
+        # (up to 2.7 s shipped) restarted the gate for good: measured
+        # 1764 early-press events, two trials of sixty-two, and half
+        # an hour of silence.
+        m = self._loc()
+        _attach_detectors(m.engine)
+        t = _to_trial(m)
+        seen = {"play": False}
+
+        def hook(mode, now):
+            if mode.sub == "play":
+                seen["play"] = True
+            return None
+
+        train = _press_train(period_s=1.0)
+
+        def both(mode, now):
+            train(mode, now)
+            return hook(mode, now)
+
+        _run_frames(m, t, 90.0, hook=both)
+        self.assertTrue(seen["play"], "the stimulus must reach the hand")
+        self.assertGreater(m.trials_done, 0)
+
+    def test_a_tap_during_gap_playback_cannot_replay_forever(self):
+        # The gap stimulus runs 420 to 620 ms at the shipped
+        # staircase, so anyone with an ordinary simple reaction time
+        # taps inside it. Every tap was an abort and a replay, and the
+        # next replay drew the same tap: 582 aborted playbacks over
+        # thirty minutes and one trial of twenty-one.
+        m = _mode(_engine(), catch_rate=0.0)
+        m.engine.finish_block = lambda: None
+        m = _only_stage(m, "gap", 20)
+        _attach_detectors(m.engine)
+        t = _to_trial(m)
+        _run_frames(m, t, 300.0, hook=_tap_along(0.3))
+        self.assertGreaterEqual(m.trials_done, 5)
+
+    def test_a_tap_during_span_playback_cannot_replay_forever(self):
+        m = _mode(_engine(), catch_rate=0.0)
+        m.engine.finish_block = lambda: None
+        m = _only_stage(m, "span", 20)
+        _attach_detectors(m.engine)
+        t = _to_trial(m)
+        _run_frames(m, t, 300.0, hook=_tap_along(0.3))
+        self.assertGreaterEqual(m.trials_done, 5)
+
+    def test_the_abort_still_protects_a_single_exposure(self):
+        # Before the wall is spent the old behaviour is unchanged: one
+        # early press redraws the material and re-waits, so a partial
+        # exposure is never scored as a full one.
+        m = _mode(_engine(), catch_rate=0.0)
+        m = _only_stage(m, "gap", 2)
+        t = _to_trial(m)
+        while m._pulse_idx == 0 and t < 1100.0:
+            t += 1.0 / 60.0
+            m._tick(t)
+        seed_before = m.trial_seed
+        m.queue_press(_press_event(m.lane, t))
+        m._tick(t + 1.0 / 60.0)
+        self.assertEqual(m.sub, "wait")
+        self.assertEqual(m.trials_done, 0)
+        self.assertNotEqual(m.trial_seed, seed_before)
+        self.assertEqual(m._wall_forced, "")
+
+    def test_a_press_past_the_wall_becomes_the_answer(self):
+        m = _mode(_engine(), catch_rate=0.0)
+        m = _only_stage(m, "gap", 2)
+        t = _to_trial(m)
+        while m._pulse_idx == 0 and t < 1100.0:
+            t += 1.0 / 60.0
+            m._tick(t)
+        # Spend the wall, then press mid-playback.
+        m._trial_wall = t - 0.001
+        m.queue_press(_press_event(m.lane, t))
+        m._tick(t + 1.0 / 60.0)
+        self.assertEqual(m.phase, "feedback")
+        self.assertEqual(m.trials_done, 1)
+        early = [ev for ev in m.engine.raw_logger.events
+                 if ev["event"] == "buzz_hunt_early"
+                 and "trial_wall_spent=True" in ev["detail"]]
+        self.assertTrue(early)
+        row = m.engine.trial_logger.rows[-1]
+        self.assertIn("wall_forced=play:trial_wall_spent",
+                      row["stimulus"])
+
+    def test_the_watchdog_closes_a_trial_that_cannot_end(self):
+        # Belt and braces: if a sub-phase deadline ever grows a hole,
+        # the trial closes and says so rather than the block sitting.
+        m = self._loc(n=4)
+        _attach_detectors(m.engine)
+        t = _to_trial(m)
+        t = _to_respond(m, t)
+        m._respond_t0 = t + 1e6            # a window that never closes
+        t += m._trial_watchdog_s() + 1.0
+        m._tick(t)
+        self.assertEqual(m.phase, "feedback")
+        forced = [ev for ev in m.engine.raw_logger.events
+                  if ev["event"] == "buzz_hunt_trial_forced"]
+        self.assertTrue(forced)
+        self.assertIn("reason=watchdog", forced[0]["detail"])
+
+    def test_a_pause_before_the_stimulus_does_not_restart_the_trial(self):
+        # Restarting a trial that had delivered nothing cost a whole
+        # announce card plus a fresh foreperiod for nothing: a patient
+        # pausing every six seconds played eight trials of sixty-two.
+        m = self._loc(n=4)
+        t = _to_trial(m)
+        self.assertEqual(m.sub, "wait")
+        self.assertEqual(m._pulse_idx, 0)
+        counter_before = m.trial_counter
+        m.on_resume(5.0)
+        self.assertEqual(m.phase, "trial")
+        self.assertEqual(m.sub, "wait")
+        self.assertEqual(m.trial_counter, counter_before)
+        restarts = [ev for ev in m.engine.raw_logger.events
+                    if ev["event"] == "trial_restart"]
+        self.assertEqual(restarts, [])
+
+    def test_a_pause_after_the_stimulus_still_restarts_the_trial(self):
+        m = self._loc(n=4)
+        t = _to_trial(m)
+        _to_respond(m, t)
+        m.on_resume(5.0)
+        self.assertEqual(m.phase, "announce")
+        restarts = [ev for ev in m.engine.raw_logger.events
+                    if ev["event"] == "trial_restart"]
+        self.assertEqual(len(restarts), 1)
+
+    def test_a_restart_ties_off_the_stimulus_segment(self):
+        # An unbalanced segment leaves the notebook pairing this
+        # trial's stim start with the NEXT trial's stim end.
+        m = self._loc(n=4)
+        t = _to_trial(m)
+        _to_respond(m, t)
+        m._stim_seg_open = True
+        m.engine.log_segment_end = lambda *a, **k: ends.append(a)
+        ends = []
+        m.on_resume(5.0)
+        self.assertTrue(ends, "the open stim marker must be closed")
+        self.assertFalse(m._stim_seg_open)
+
+    def test_a_board_that_stops_accepting_stim_ends_the_block(self):
+        # 45 silent trials and an end_reason of "completed" was the
+        # worst version of this: the block claimed a result it never
+        # measured. Three delivery failures in a row end it honestly.
+        e = _engine()
+        state = {"ok": True}
+        e.source.send_command = lambda c: (e._sent.append(c)
+                                           or state["ok"])
+        m = _mode(e, catch_rate=0.0)
+        m.engine.finish_block = lambda: None
+        m = _only_stage(m, "loc", 30)
+        _attach_detectors(e)
+        t = _to_trial(m)
+        for i in range(12):
+            if m.phase == "done":
+                break
+            if i == 2:
+                state["ok"] = False
+            t = _to_respond(m, t)
+            t = _answer_loc(m, t)
+            if m.phase == "feedback":
+                t += m.rest_s + 0.01
+                m._tick(t)
+                if m.phase in ("stage", "announce"):
+                    t += m.stage_intro_s + m.announce_s + 0.02
+                    m._tick(t)
+                    if m.phase == "announce":
+                        t += m.announce_s + 0.01
+                        m._tick(t)
+        self.assertEqual(m.phase, "done")
+        self.assertEqual(m.end_reason, "stim_lost")
+        lost = [ev for ev in m.engine.raw_logger.events
+                if ev["event"] == "stim_lost"]
+        self.assertTrue(lost)
+        first = [ev for ev in m.engine.raw_logger.events
+                 if ev["event"] == "buzz_hunt_stim_fail"]
+        self.assertTrue(first, "raw.csv must carry the moment it went")
+        self.assertGreater(m.trials_done, 0, "what played is kept")
+        self.assertTrue(m.block_stats()["reliability"]["stim_lost"])
+
+    def test_a_good_trial_clears_the_dead_board_run(self):
+        # A single dropped pulse is not a dead board.
+        e = _engine()
+        state = {"ok": False}
+        e.source.send_command = lambda c: (e._sent.append(c)
+                                           or state["ok"])
+        m = _mode(e, catch_rate=0.0)
+        m.engine.finish_block = lambda: None
+        m = _only_stage(m, "loc", 10)
+        _attach_detectors(e)
+        t = _to_trial(m)
+        t = _to_respond(m, t)
+        t = _answer_loc(m, t)
+        self.assertEqual(m._stim_fail_run, 1)
+        state["ok"] = True
+        t = _next_trial(m, t)
+        t = _to_respond(m, t)
+        _answer_loc(m, t)
+        self.assertEqual(m._stim_fail_run, 0)
+        self.assertFalse(m._stim_lost)
+
+    def test_a_long_frame_never_burst_fires_a_span_train(self):
+        # One 2 s frame used to dispatch every overdue pulse at once.
+        # Each pulse_motor landed inside the previous lane's firmware
+        # hold, so _send_stim wrote a STOP first and three span items
+        # of exactly 0 ms went out. One pulse per frame, and the rest
+        # of the plan shifts out by the lateness instead of
+        # compressing.
+        m = _mode(_engine(), catch_rate=0.0, span_start=5)
+        m = _only_stage(m, "span", 1)
+        t = _to_trial(m)
+        while m._pulse_idx < 1 and t < 1100.0:
+            t += 1.0 / 60.0
+            m._tick(t)
+        before = len(_stim_requests(m))
+        respond_before = m._respond_t0
+        m._tick(t + 2.0)
+        after = len(_stim_requests(m))
+        self.assertEqual(after - before, 1,
+                         "at most one pulse may go out per frame")
+        self.assertGreater(m._plan_shift_s, 0.0, "the plan re-anchored")
+        self.assertGreater(m._respond_t0, respond_before,
+                           "the window moves with the stimulus")
+
+    def test_a_late_pulse_still_voids_the_trial(self):
+        # The re-anchor must not hide the disturbance: the event and
+        # the voided row both survive it.
+        m = _mode(_engine(), catch_rate=0.0, span_start=4)
+        m = _only_stage(m, "span", 1)
+        t = _to_trial(m)
+        while m._pulse_idx < 1 and t < 1100.0:
+            t += 1.0 / 60.0
+            m._tick(t)
+        m._tick(t + 2.0)
+        self.assertIs(m._stim_delivered, False)
+        late = [ev for ev in m.engine.raw_logger.events
+                if ev["event"] == "stim_late_pulse"]
+        self.assertTrue(late)
+        t = _to_respond(m, t + 2.0)
+        t += m._respond_window_s() + 0.05
+        m._tick(t)
+        self.assertEqual(m.phase, "feedback")
+        row = m.engine.trial_logger.rows[-1]
+        self.assertIn("stim_failed=True", row["stimulus"])
+        self.assertEqual(m._span_records, [])
+
+    def test_no_player_behaviour_can_stall_the_block(self):
+        """The point of all of it: whatever the patient, the
+        therapist or the hardware does, the block reaches phase
+        'done' with an end_reason recorded."""
+        def never_responds(m, now):
+            return None
+
+        def presses_constantly(m, now):
+            return _press_train(period_s=0.5)(m, now)
+
+        def pauses_often(state={}):
+            def hook(m, now):
+                nxt = state.setdefault("next", now + 5.0)
+                if now >= nxt:
+                    state["next"] = now + 5.0
+                    m.on_resume(0.5)
+                return None
+            return hook
+
+        def long_frames(state={}):
+            def hook(m, now):
+                nxt = state.setdefault("next", now + 7.0)
+                if now >= nxt:
+                    state["next"] = now + 7.0
+                    return 2.0
+                return None
+            return hook
+
+        cases = {
+            "never responds": (never_responds, None, False),
+            "presses every 0.5 s": (presses_constantly, None, False),
+            "taps 300 ms into every playback": (_tap_along(0.3), None,
+                                                False),
+            "leaves a finger on a pad": (never_responds, None, True),
+            "pauses every 5 s": (pauses_often(), None, False),
+            "two second frames": (long_frames(), None, False),
+            "a board that dies": (never_responds, 6, False),
+        }
+        for label, (hook, die_after, stick) in cases.items():
+            with self.subTest(behaviour=label):
+                e = _engine()
+                calls = {"n": 0}
+
+                def send(c, _e=e, _n=die_after, _c=calls):
+                    _c["n"] += 1
+                    _e._sent.append(c)
+                    return not (_n is not None and _c["n"] > _n)
+
+                e.source.send_command = send
+                m = _mode(e, catch_rate=0.1, session_cap_min=2.0,
+                          gap_trials_per_hand=3, span_trials=3,
+                          loc_trials_per_hand=6)
+                m.engine.finish_block = lambda: None
+                dets = _attach_detectors(e)
+                t = _to_trial(m)
+                if stick:
+                    dets["right"].pressed[1] = True
+                _run_frames(m, t, 1800.0, hook=hook)
+                self.assertEqual(m.phase, "done", label)
+                self.assertIsNotNone(m.end_reason, label)
 
 
 # ---- the window ladder --------------------------------------------------
@@ -1945,6 +2418,84 @@ class ScreenTests(unittest.TestCase):
         joined = " | ".join(seen)
         self.assertIn("FOUND IT", joined)
         self.assertIn("The buzz was on", joined)
+
+    def test_a_blocked_gate_says_so_on_screen(self):
+        # A quiet gate that keeps resetting used to show nothing at
+        # all: no banner, no skip chip (the foreperiod is deliberately
+        # unarmed) and a frozen score, so a therapist could not tell a
+        # running block from a dead one.
+        import finger_rehab.ui.buzz_hunt_screen as bs
+        sc, m, surf = self._screen_and_mode()
+        dets = _attach_detectors(m.engine)
+        t = _to_trial(m)
+        dets["right"].pressed[1] = True
+        for _ in range(5):
+            t += 1.0 / 60.0
+            m._tick(t)
+        self.assertEqual(m.sub, "wait")
+        seen = []
+        original = bs.draw_text
+
+        def recorder(s, text, pos, *a, **k):
+            seen.append(str(text))
+            return original(s, text, pos, *a, **k)
+
+        bs.draw_text = recorder
+        try:
+            sc.draw(surf)
+        finally:
+            bs.draw_text = original
+        joined = " | ".join(seen)
+        self.assertIn("Rest your fingers on the pads", joined)
+        for word in ("INDEX", "MIDDLE", "RING", "LITTLE", "LEFT",
+                     "RIGHT"):
+            self.assertNotIn(word, joined.upper().replace(
+                "BUZZ HUNT", ""))
+
+    def test_the_forced_start_count_reaches_the_screen(self):
+        import finger_rehab.ui.buzz_hunt_screen as bs
+        sc, m, surf = self._screen_and_mode()
+        _attach_detectors(m.engine)
+        _to_trial(m)
+        m.forced_starts = 3
+        seen = []
+        original = bs.draw_text
+
+        def recorder(s, text, pos, *a, **k):
+            seen.append(str(text))
+            return original(s, text, pos, *a, **k)
+
+        bs.draw_text = recorder
+        try:
+            sc.draw(surf)
+        finally:
+            bs.draw_text = original
+        self.assertIn("Forced starts: 3", " | ".join(seen))
+
+    def test_a_clean_trial_frame_says_nothing_extra(self):
+        # Nothing on the gate line may hint that a buzz is coming: the
+        # foreperiod is part of the stimulus and a "get ready" here
+        # would hand over the onset the jitter exists to hide.
+        import finger_rehab.ui.buzz_hunt_screen as bs
+        sc, m, surf = self._screen_and_mode()
+        _attach_detectors(m.engine)
+        t = _to_trial(m)
+        _to_respond(m, t)
+        seen = []
+        original = bs.draw_text
+
+        def recorder(s, text, pos, *a, **k):
+            seen.append(str(text))
+            return original(s, text, pos, *a, **k)
+
+        bs.draw_text = recorder
+        try:
+            sc.draw(surf)
+        finally:
+            bs.draw_text = original
+        joined = " | ".join(seen)
+        self.assertNotIn("Rest your fingers", joined)
+        self.assertNotIn("Forced starts", joined)
 
     def test_breathing_stays_far_below_the_flash_limit(self):
         from finger_rehab.ui.buzz_hunt_screen import BuzzHuntScreen

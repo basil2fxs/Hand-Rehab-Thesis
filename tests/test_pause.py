@@ -205,8 +205,9 @@ class EncouragementStreakTests(unittest.TestCase):
         calls = eng._screens["gameplay"].add_encouragement.call_args_list
         # 2 thresholds crossed in 5 hits: 3 and 5.
         self.assertEqual(len(calls), 2)
-        self.assertEqual(calls[0].args[0], "Nice!")
-        self.assertEqual(calls[1].args[0], "Keep going!")
+        # Process praise with the count in it, not a trait.
+        self.assertEqual(calls[0].args[0], "3 in a row")
+        self.assertEqual(calls[1].args[0], "5 in a row, nice")
 
     def test_miss_resets_streak(self) -> None:
         eng = self._make_engine_with_stub_screens()
@@ -220,8 +221,8 @@ class EncouragementStreakTests(unittest.TestCase):
 
     def test_threshold_fires_only_once_per_block(self) -> None:
         eng = self._make_engine_with_stub_screens()
-        # Hit 3, miss to reset streak, hit 3 again. The "Nice!" popup
-        # should only fire on the first crossing.
+        # Hit 3, miss to reset streak, hit 3 again. The "3 in a row"
+        # banner should only fire on the first crossing.
         for _ in range(3):
             eng._update_streak(was_hit=True, screen_key="gameplay")
         eng._update_streak(was_hit=False, screen_key="gameplay")

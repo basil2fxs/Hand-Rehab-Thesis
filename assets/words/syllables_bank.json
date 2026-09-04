@@ -1,0 +1,9435 @@
+{
+ "licence": "Hand-written for this project. No third-party word list, dictionary or corpus was copied. See assets/words/LICENCE.txt.",
+ "generated_by": "scripts/build_syllables_bank.py",
+ "generated_on": "2026-09-04",
+ "source": "assets/words/syllables_source.txt",
+ "convention": "Australian English. Splits follow spoken syllables cut at the nearest spelling boundary; stress is the 0-based index of the primary-stress syllable.",
+ "counts": {
+  "2": 368,
+  "3": 223,
+  "4": 101
+ },
+ "words": [
+  {
+   "word": "ability",
+   "band": "C",
+   "syllables": [
+    "a",
+    "bil",
+    "i",
+    "ty"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "accident",
+   "band": "B",
+   "syllables": [
+    "ac",
+    "ci",
+    "dent"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "accidental",
+   "band": "C",
+   "syllables": [
+    "ac",
+    "ci",
+    "den",
+    "tal"
+   ],
+   "stress": 2,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "acrobat",
+   "band": "C",
+   "syllables": [
+    "ac",
+    "ro",
+    "bat"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "activity",
+   "band": "C",
+   "syllables": [
+    "ac",
+    "tiv",
+    "i",
+    "ty"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "adventure",
+   "band": "B",
+   "syllables": [
+    "ad",
+    "ven",
+    "ture"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "after",
+   "band": "A",
+   "syllables": [
+    "af",
+    "ter"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "afternoon",
+   "band": "A",
+   "syllables": [
+    "af",
+    "ter",
+    "noon"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "airport",
+   "band": "A",
+   "syllables": [
+    "air",
+    "port"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "alligator",
+   "band": "C",
+   "syllables": [
+    "al",
+    "li",
+    "ga",
+    "tor"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "alphabet",
+   "band": "B",
+   "syllables": [
+    "al",
+    "pha",
+    "bet"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "ambulance",
+   "band": "B",
+   "syllables": [
+    "am",
+    "bu",
+    "lance"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "anchor",
+   "band": "A",
+   "syllables": [
+    "an",
+    "chor"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "angry",
+   "band": "A",
+   "syllables": [
+    "an",
+    "gry"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "animal",
+   "band": "B",
+   "syllables": [
+    "an",
+    "i",
+    "mal"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "ankle",
+   "band": "A",
+   "syllables": [
+    "an",
+    "kle"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "another",
+   "band": "A",
+   "syllables": [
+    "a",
+    "no",
+    "ther"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "answer",
+   "band": "A",
+   "syllables": [
+    "an",
+    "swer"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "anyone",
+   "band": "B",
+   "syllables": [
+    "an",
+    "y",
+    "one"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "anything",
+   "band": "B",
+   "syllables": [
+    "an",
+    "y",
+    "thing"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "apartment",
+   "band": "B",
+   "syllables": [
+    "a",
+    "part",
+    "ment"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "apology",
+   "band": "C",
+   "syllables": [
+    "a",
+    "pol",
+    "o",
+    "gy"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "apple",
+   "band": "A",
+   "syllables": [
+    "ap",
+    "ple"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "appreciate",
+   "band": "C",
+   "syllables": [
+    "ap",
+    "pre",
+    "ci",
+    "ate"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "apricot",
+   "band": "C",
+   "syllables": [
+    "ap",
+    "ri",
+    "cot"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "apron",
+   "band": "A",
+   "syllables": [
+    "a",
+    "pron"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "aquarium",
+   "band": "C",
+   "syllables": [
+    "a",
+    "quar",
+    "i",
+    "um"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "armadillo",
+   "band": "C",
+   "syllables": [
+    "ar",
+    "ma",
+    "dil",
+    "lo"
+   ],
+   "stress": 2,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "asparagus",
+   "band": "C",
+   "syllables": [
+    "as",
+    "par",
+    "a",
+    "gus"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "assembly",
+   "band": "B",
+   "syllables": [
+    "as",
+    "sem",
+    "bly"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "astronaut",
+   "band": "B",
+   "syllables": [
+    "as",
+    "tro",
+    "naut"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "astronomy",
+   "band": "C",
+   "syllables": [
+    "as",
+    "tron",
+    "o",
+    "my"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "automatic",
+   "band": "C",
+   "syllables": [
+    "au",
+    "to",
+    "ma",
+    "tic"
+   ],
+   "stress": 2,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "autumn",
+   "band": "A",
+   "syllables": [
+    "au",
+    "tumn"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "avocado",
+   "band": "C",
+   "syllables": [
+    "av",
+    "o",
+    "ca",
+    "do"
+   ],
+   "stress": 2,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "baby",
+   "band": "A",
+   "syllables": [
+    "ba",
+    "by"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "backpack",
+   "band": "A",
+   "syllables": [
+    "back",
+    "pack"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "bacon",
+   "band": "A",
+   "syllables": [
+    "ba",
+    "con"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "badger",
+   "band": "B",
+   "syllables": [
+    "bad",
+    "ger"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "bamboo",
+   "band": "B",
+   "syllables": [
+    "bam",
+    "boo"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "banana",
+   "band": "A",
+   "syllables": [
+    "ba",
+    "na",
+    "na"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "bandicoot",
+   "band": "C",
+   "syllables": [
+    "ban",
+    "di",
+    "coot"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "banjo",
+   "band": "B",
+   "syllables": [
+    "ban",
+    "jo"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "barbecue",
+   "band": "B",
+   "syllables": [
+    "bar",
+    "be",
+    "cue"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "barramundi",
+   "band": "C",
+   "syllables": [
+    "bar",
+    "ra",
+    "mun",
+    "di"
+   ],
+   "stress": 2,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "basket",
+   "band": "A",
+   "syllables": [
+    "bas",
+    "ket"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "basketball",
+   "band": "A",
+   "syllables": [
+    "bas",
+    "ket",
+    "ball"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "bathroom",
+   "band": "A",
+   "syllables": [
+    "bath",
+    "room"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "battery",
+   "band": "B",
+   "syllables": [
+    "bat",
+    "ter",
+    "y"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "beautiful",
+   "band": "A",
+   "syllables": [
+    "beau",
+    "ti",
+    "ful"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "beautifully",
+   "band": "C",
+   "syllables": [
+    "beau",
+    "ti",
+    "ful",
+    "ly"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "bedroom",
+   "band": "A",
+   "syllables": [
+    "bed",
+    "room"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "beetle",
+   "band": "A",
+   "syllables": [
+    "bee",
+    "tle"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "before",
+   "band": "A",
+   "syllables": [
+    "be",
+    "fore"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "begin",
+   "band": "A",
+   "syllables": [
+    "be",
+    "gin"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "beginner",
+   "band": "B",
+   "syllables": [
+    "be",
+    "gin",
+    "ner"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "behind",
+   "band": "A",
+   "syllables": [
+    "be",
+    "hind"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "below",
+   "band": "A",
+   "syllables": [
+    "be",
+    "low"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "bicycle",
+   "band": "A",
+   "syllables": [
+    "bi",
+    "cy",
+    "cle"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "billabong",
+   "band": "C",
+   "syllables": [
+    "bil",
+    "la",
+    "bong"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "binoculars",
+   "band": "C",
+   "syllables": [
+    "bi",
+    "noc",
+    "u",
+    "lars"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "biology",
+   "band": "C",
+   "syllables": [
+    "bi",
+    "ol",
+    "o",
+    "gy"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "biscuit",
+   "band": "A",
+   "syllables": [
+    "bis",
+    "cuit"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "blanket",
+   "band": "A",
+   "syllables": [
+    "blan",
+    "ket"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "blizzard",
+   "band": "C",
+   "syllables": [
+    "bliz",
+    "zard"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "blossom",
+   "band": "B",
+   "syllables": [
+    "blos",
+    "som"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "blueberry",
+   "band": "B",
+   "syllables": [
+    "blue",
+    "ber",
+    "ry"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "boomerang",
+   "band": "C",
+   "syllables": [
+    "boo",
+    "me",
+    "rang"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "bottle",
+   "band": "A",
+   "syllables": [
+    "bot",
+    "tle"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "boxes",
+   "band": "A",
+   "syllables": [
+    "box",
+    "es"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "breakfast",
+   "band": "A",
+   "syllables": [
+    "break",
+    "fast"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "broccoli",
+   "band": "B",
+   "syllables": [
+    "broc",
+    "co",
+    "li"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "brother",
+   "band": "A",
+   "syllables": [
+    "bro",
+    "ther"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "brumby",
+   "band": "C",
+   "syllables": [
+    "brum",
+    "by"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "bubble",
+   "band": "A",
+   "syllables": [
+    "bub",
+    "ble"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "bucket",
+   "band": "A",
+   "syllables": [
+    "buck",
+    "et"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "budgerigar",
+   "band": "C",
+   "syllables": [
+    "budg",
+    "er",
+    "i",
+    "gar"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "buffalo",
+   "band": "C",
+   "syllables": [
+    "buf",
+    "fa",
+    "lo"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "bullfrog",
+   "band": "B",
+   "syllables": [
+    "bull",
+    "frog"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "bumblebee",
+   "band": "C",
+   "syllables": [
+    "bum",
+    "ble",
+    "bee"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "butter",
+   "band": "A",
+   "syllables": [
+    "but",
+    "ter"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "buttercup",
+   "band": "C",
+   "syllables": [
+    "but",
+    "ter",
+    "cup"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "butterfly",
+   "band": "A",
+   "syllables": [
+    "but",
+    "ter",
+    "fly"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "button",
+   "band": "A",
+   "syllables": [
+    "but",
+    "ton"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "cabbage",
+   "band": "B",
+   "syllables": [
+    "cab",
+    "bage"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "cactus",
+   "band": "C",
+   "syllables": [
+    "cac",
+    "tus"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "calamari",
+   "band": "C",
+   "syllables": [
+    "cal",
+    "a",
+    "ma",
+    "ri"
+   ],
+   "stress": 2,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "calculate",
+   "band": "B",
+   "syllables": [
+    "cal",
+    "cu",
+    "late"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "calculator",
+   "band": "C",
+   "syllables": [
+    "cal",
+    "cu",
+    "la",
+    "tor"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "calendar",
+   "band": "B",
+   "syllables": [
+    "cal",
+    "en",
+    "dar"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "camel",
+   "band": "A",
+   "syllables": [
+    "cam",
+    "el"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "camera",
+   "band": "B",
+   "syllables": [
+    "cam",
+    "e",
+    "ra"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "camping",
+   "band": "A",
+   "syllables": [
+    "camp",
+    "ing"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "candle",
+   "band": "A",
+   "syllables": [
+    "can",
+    "dle"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "candlestick",
+   "band": "B",
+   "syllables": [
+    "can",
+    "dle",
+    "stick"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "cannonball",
+   "band": "C",
+   "syllables": [
+    "can",
+    "non",
+    "ball"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "capsicum",
+   "band": "C",
+   "syllables": [
+    "cap",
+    "si",
+    "cum"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "captain",
+   "band": "A",
+   "syllables": [
+    "cap",
+    "tain"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "caramel",
+   "band": "B",
+   "syllables": [
+    "car",
+    "a",
+    "mel"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "caravan",
+   "band": "B",
+   "syllables": [
+    "car",
+    "a",
+    "van"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "cardigan",
+   "band": "C",
+   "syllables": [
+    "car",
+    "di",
+    "gan"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "carnival",
+   "band": "C",
+   "syllables": [
+    "car",
+    "ni",
+    "val"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "carpenter",
+   "band": "B",
+   "syllables": [
+    "car",
+    "pen",
+    "ter"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "carpet",
+   "band": "A",
+   "syllables": [
+    "car",
+    "pet"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "carrot",
+   "band": "A",
+   "syllables": [
+    "car",
+    "rot"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "cashew",
+   "band": "C",
+   "syllables": [
+    "cash",
+    "ew"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "cassowary",
+   "band": "C",
+   "syllables": [
+    "cas",
+    "so",
+    "wa",
+    "ry"
+   ],
+   "stress": 2,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "castle",
+   "band": "A",
+   "syllables": [
+    "cas",
+    "tle"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "catapult",
+   "band": "C",
+   "syllables": [
+    "cat",
+    "a",
+    "pult"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "caterpillar",
+   "band": "C",
+   "syllables": [
+    "cat",
+    "er",
+    "pil",
+    "lar"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "cattle",
+   "band": "A",
+   "syllables": [
+    "cat",
+    "tle"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "cauliflower",
+   "band": "C",
+   "syllables": [
+    "cau",
+    "li",
+    "flow",
+    "er"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "celebrate",
+   "band": "B",
+   "syllables": [
+    "cel",
+    "e",
+    "brate"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "celebration",
+   "band": "C",
+   "syllables": [
+    "cel",
+    "e",
+    "bra",
+    "tion"
+   ],
+   "stress": 2,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "celery",
+   "band": "B",
+   "syllables": [
+    "cel",
+    "e",
+    "ry"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "centimetre",
+   "band": "C",
+   "syllables": [
+    "cen",
+    "ti",
+    "me",
+    "tre"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "centipede",
+   "band": "C",
+   "syllables": [
+    "cen",
+    "ti",
+    "pede"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "character",
+   "band": "C",
+   "syllables": [
+    "char",
+    "ac",
+    "ter"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "cheetah",
+   "band": "B",
+   "syllables": [
+    "chee",
+    "tah"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "chicken",
+   "band": "A",
+   "syllables": [
+    "chick",
+    "en"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "chilly",
+   "band": "B",
+   "syllables": [
+    "chil",
+    "ly"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "chimney",
+   "band": "B",
+   "syllables": [
+    "chim",
+    "ney"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "chimpanzee",
+   "band": "B",
+   "syllables": [
+    "chim",
+    "pan",
+    "zee"
+   ],
+   "stress": 2,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "chocolate",
+   "band": "B",
+   "syllables": [
+    "choc",
+    "o",
+    "late"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "cinema",
+   "band": "C",
+   "syllables": [
+    "cin",
+    "e",
+    "ma"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "cinnamon",
+   "band": "C",
+   "syllables": [
+    "cin",
+    "na",
+    "mon"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "circle",
+   "band": "A",
+   "syllables": [
+    "cir",
+    "cle"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "clever",
+   "band": "A",
+   "syllables": [
+    "cle",
+    "ver"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "cloudy",
+   "band": "A",
+   "syllables": [
+    "cloud",
+    "y"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "cockatoo",
+   "band": "B",
+   "syllables": [
+    "cock",
+    "a",
+    "too"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "coffee",
+   "band": "A",
+   "syllables": [
+    "cof",
+    "fee"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "comedy",
+   "band": "C",
+   "syllables": [
+    "com",
+    "e",
+    "dy"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "comfortable",
+   "band": "C",
+   "syllables": [
+    "com",
+    "for",
+    "ta",
+    "ble"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "community",
+   "band": "C",
+   "syllables": [
+    "com",
+    "mu",
+    "ni",
+    "ty"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "company",
+   "band": "B",
+   "syllables": [
+    "com",
+    "pa",
+    "ny"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "computer",
+   "band": "A",
+   "syllables": [
+    "com",
+    "pu",
+    "ter"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "concentration",
+   "band": "C",
+   "syllables": [
+    "con",
+    "cen",
+    "tra",
+    "tion"
+   ],
+   "stress": 2,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "continent",
+   "band": "C",
+   "syllables": [
+    "con",
+    "ti",
+    "nent"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "continuous",
+   "band": "C",
+   "syllables": [
+    "con",
+    "tin",
+    "u",
+    "ous"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "conversation",
+   "band": "C",
+   "syllables": [
+    "con",
+    "ver",
+    "sa",
+    "tion"
+   ],
+   "stress": 2,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "cottage",
+   "band": "B",
+   "syllables": [
+    "cot",
+    "tage"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "cotton",
+   "band": "B",
+   "syllables": [
+    "cot",
+    "ton"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "cousin",
+   "band": "A",
+   "syllables": [
+    "cou",
+    "sin"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "cranberry",
+   "band": "C",
+   "syllables": [
+    "cran",
+    "ber",
+    "ry"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "crayon",
+   "band": "A",
+   "syllables": [
+    "cray",
+    "on"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "cricket",
+   "band": "B",
+   "syllables": [
+    "crick",
+    "et"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "crocodile",
+   "band": "B",
+   "syllables": [
+    "croc",
+    "o",
+    "dile"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "cucumber",
+   "band": "B",
+   "syllables": [
+    "cu",
+    "cum",
+    "ber"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "cupboard",
+   "band": "A",
+   "syllables": [
+    "cup",
+    "board"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "cupcake",
+   "band": "A",
+   "syllables": [
+    "cup",
+    "cake"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "curious",
+   "band": "C",
+   "syllables": [
+    "cu",
+    "ri",
+    "ous"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "curiously",
+   "band": "C",
+   "syllables": [
+    "cu",
+    "ri",
+    "ous",
+    "ly"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "curtain",
+   "band": "A",
+   "syllables": [
+    "cur",
+    "tain"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "cushion",
+   "band": "A",
+   "syllables": [
+    "cush",
+    "ion"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "customer",
+   "band": "C",
+   "syllables": [
+    "cus",
+    "tom",
+    "er"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "daffodil",
+   "band": "C",
+   "syllables": [
+    "daf",
+    "fo",
+    "dil"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "daisy",
+   "band": "B",
+   "syllables": [
+    "dai",
+    "sy"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "dancing",
+   "band": "A",
+   "syllables": [
+    "dan",
+    "cing"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "dandelion",
+   "band": "C",
+   "syllables": [
+    "dan",
+    "de",
+    "li",
+    "on"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "dangerous",
+   "band": "B",
+   "syllables": [
+    "dan",
+    "ger",
+    "ous"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "decorate",
+   "band": "B",
+   "syllables": [
+    "de",
+    "co",
+    "rate"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "decoration",
+   "band": "C",
+   "syllables": [
+    "dec",
+    "o",
+    "ra",
+    "tion"
+   ],
+   "stress": 2,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "decorator",
+   "band": "C",
+   "syllables": [
+    "dec",
+    "o",
+    "ra",
+    "tor"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "delicious",
+   "band": "B",
+   "syllables": [
+    "de",
+    "li",
+    "cious"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "desert",
+   "band": "C",
+   "syllables": [
+    "de",
+    "sert"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "dictionary",
+   "band": "C",
+   "syllables": [
+    "dic",
+    "tion",
+    "ar",
+    "y"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "didgeridoo",
+   "band": "C",
+   "syllables": [
+    "didg",
+    "er",
+    "i",
+    "doo"
+   ],
+   "stress": 3,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "different",
+   "band": "B",
+   "syllables": [
+    "dif",
+    "fer",
+    "ent"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "digger",
+   "band": "B",
+   "syllables": [
+    "dig",
+    "ger"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "dingo",
+   "band": "B",
+   "syllables": [
+    "din",
+    "go"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "dinner",
+   "band": "A",
+   "syllables": [
+    "din",
+    "ner"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "dinosaur",
+   "band": "A",
+   "syllables": [
+    "di",
+    "no",
+    "saur"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "dirty",
+   "band": "A",
+   "syllables": [
+    "dir",
+    "ty"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "disappear",
+   "band": "B",
+   "syllables": [
+    "dis",
+    "ap",
+    "pear"
+   ],
+   "stress": 2,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "disappointed",
+   "band": "C",
+   "syllables": [
+    "dis",
+    "ap",
+    "point",
+    "ed"
+   ],
+   "stress": 2,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "discover",
+   "band": "B",
+   "syllables": [
+    "dis",
+    "co",
+    "ver"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "doctor",
+   "band": "A",
+   "syllables": [
+    "doc",
+    "tor"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "dollar",
+   "band": "A",
+   "syllables": [
+    "dol",
+    "lar"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "dolphin",
+   "band": "B",
+   "syllables": [
+    "dol",
+    "phin"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "domino",
+   "band": "C",
+   "syllables": [
+    "dom",
+    "i",
+    "no"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "donkey",
+   "band": "A",
+   "syllables": [
+    "don",
+    "key"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "dragon",
+   "band": "A",
+   "syllables": [
+    "dra",
+    "gon"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "dragonfly",
+   "band": "B",
+   "syllables": [
+    "drag",
+    "on",
+    "fly"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "dreaming",
+   "band": "A",
+   "syllables": [
+    "dream",
+    "ing"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "driver",
+   "band": "A",
+   "syllables": [
+    "dri",
+    "ver"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "dusty",
+   "band": "A",
+   "syllables": [
+    "dus",
+    "ty"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "eagle",
+   "band": "B",
+   "syllables": [
+    "ea",
+    "gle"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "echidna",
+   "band": "C",
+   "syllables": [
+    "e",
+    "chid",
+    "na"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "education",
+   "band": "C",
+   "syllables": [
+    "ed",
+    "u",
+    "ca",
+    "tion"
+   ],
+   "stress": 2,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "eighty",
+   "band": "A",
+   "syllables": [
+    "eigh",
+    "ty"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "elbow",
+   "band": "A",
+   "syllables": [
+    "el",
+    "bow"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "elderly",
+   "band": "C",
+   "syllables": [
+    "el",
+    "der",
+    "ly"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "electrical",
+   "band": "C",
+   "syllables": [
+    "e",
+    "lec",
+    "tri",
+    "cal"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "electronic",
+   "band": "C",
+   "syllables": [
+    "e",
+    "lec",
+    "tron",
+    "ic"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "elephant",
+   "band": "A",
+   "syllables": [
+    "el",
+    "e",
+    "phant"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "elevator",
+   "band": "C",
+   "syllables": [
+    "el",
+    "e",
+    "va",
+    "tor"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "emerald",
+   "band": "C",
+   "syllables": [
+    "em",
+    "er",
+    "ald"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "emergency",
+   "band": "C",
+   "syllables": [
+    "e",
+    "mer",
+    "gen",
+    "cy"
+   ],
+   "stress": 2,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "empty",
+   "band": "A",
+   "syllables": [
+    "emp",
+    "ty"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "emu",
+   "band": "B",
+   "syllables": [
+    "e",
+    "mu"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "enemy",
+   "band": "B",
+   "syllables": [
+    "en",
+    "e",
+    "my"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "engine",
+   "band": "A",
+   "syllables": [
+    "en",
+    "gine"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "engineer",
+   "band": "B",
+   "syllables": [
+    "en",
+    "gi",
+    "neer"
+   ],
+   "stress": 2,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "enter",
+   "band": "A",
+   "syllables": [
+    "en",
+    "ter"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "entertainment",
+   "band": "C",
+   "syllables": [
+    "en",
+    "ter",
+    "tain",
+    "ment"
+   ],
+   "stress": 2,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "escalator",
+   "band": "C",
+   "syllables": [
+    "es",
+    "ca",
+    "la",
+    "tor"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "even",
+   "band": "A",
+   "syllables": [
+    "e",
+    "ven"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "evergreen",
+   "band": "C",
+   "syllables": [
+    "ev",
+    "er",
+    "green"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "everybody",
+   "band": "C",
+   "syllables": [
+    "ev",
+    "ery",
+    "bo",
+    "dy"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "everyone",
+   "band": "A",
+   "syllables": [
+    "ev",
+    "ery",
+    "one"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "everything",
+   "band": "A",
+   "syllables": [
+    "ev",
+    "ery",
+    "thing"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "excellent",
+   "band": "B",
+   "syllables": [
+    "ex",
+    "cel",
+    "lent"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "exercise",
+   "band": "B",
+   "syllables": [
+    "ex",
+    "er",
+    "cise"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "experiment",
+   "band": "C",
+   "syllables": [
+    "ex",
+    "per",
+    "i",
+    "ment"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "exploration",
+   "band": "C",
+   "syllables": [
+    "ex",
+    "plo",
+    "ra",
+    "tion"
+   ],
+   "stress": 2,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "family",
+   "band": "A",
+   "syllables": [
+    "fam",
+    "i",
+    "ly"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "fantastic",
+   "band": "B",
+   "syllables": [
+    "fan",
+    "tas",
+    "tic"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "farmer",
+   "band": "A",
+   "syllables": [
+    "far",
+    "mer"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "father",
+   "band": "A",
+   "syllables": [
+    "fa",
+    "ther"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "favourite",
+   "band": "B",
+   "syllables": [
+    "fa",
+    "vour",
+    "ite"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "feather",
+   "band": "A",
+   "syllables": [
+    "fea",
+    "ther"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "festival",
+   "band": "C",
+   "syllables": [
+    "fes",
+    "ti",
+    "val"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "fifty",
+   "band": "A",
+   "syllables": [
+    "fif",
+    "ty"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "finger",
+   "band": "A",
+   "syllables": [
+    "fin",
+    "ger"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "finish",
+   "band": "A",
+   "syllables": [
+    "fin",
+    "ish"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "firefighter",
+   "band": "B",
+   "syllables": [
+    "fire",
+    "fight",
+    "er"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "flamingo",
+   "band": "C",
+   "syllables": [
+    "fla",
+    "min",
+    "go"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "flower",
+   "band": "A",
+   "syllables": [
+    "flow",
+    "er"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "follow",
+   "band": "A",
+   "syllables": [
+    "fol",
+    "low"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "footpath",
+   "band": "A",
+   "syllables": [
+    "foot",
+    "path"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "forest",
+   "band": "B",
+   "syllables": [
+    "for",
+    "est"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "forget",
+   "band": "A",
+   "syllables": [
+    "for",
+    "get"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "forgetful",
+   "band": "B",
+   "syllables": [
+    "for",
+    "get",
+    "ful"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "fortunate",
+   "band": "C",
+   "syllables": [
+    "for",
+    "tu",
+    "nate"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "forty",
+   "band": "A",
+   "syllables": [
+    "for",
+    "ty"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "freezing",
+   "band": "A",
+   "syllables": [
+    "freez",
+    "ing"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "friendly",
+   "band": "A",
+   "syllables": [
+    "friend",
+    "ly"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "funny",
+   "band": "A",
+   "syllables": [
+    "fun",
+    "ny"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "furniture",
+   "band": "B",
+   "syllables": [
+    "fur",
+    "ni",
+    "ture"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "gallery",
+   "band": "C",
+   "syllables": [
+    "gal",
+    "ler",
+    "y"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "garage",
+   "band": "A",
+   "syllables": [
+    "ga",
+    "rage"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "garden",
+   "band": "A",
+   "syllables": [
+    "gar",
+    "den"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "gardener",
+   "band": "B",
+   "syllables": [
+    "gar",
+    "den",
+    "er"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "garlic",
+   "band": "B",
+   "syllables": [
+    "gar",
+    "lic"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "gecko",
+   "band": "C",
+   "syllables": [
+    "gec",
+    "ko"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "general",
+   "band": "C",
+   "syllables": [
+    "gen",
+    "er",
+    "al"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "generator",
+   "band": "C",
+   "syllables": [
+    "gen",
+    "er",
+    "a",
+    "tor"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "generously",
+   "band": "C",
+   "syllables": [
+    "gen",
+    "er",
+    "ous",
+    "ly"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "gentle",
+   "band": "A",
+   "syllables": [
+    "gen",
+    "tle"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "gentleman",
+   "band": "B",
+   "syllables": [
+    "gen",
+    "tle",
+    "man"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "geography",
+   "band": "C",
+   "syllables": [
+    "ge",
+    "og",
+    "ra",
+    "phy"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "giant",
+   "band": "A",
+   "syllables": [
+    "gi",
+    "ant"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "ginger",
+   "band": "B",
+   "syllables": [
+    "gin",
+    "ger"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "gingerbread",
+   "band": "B",
+   "syllables": [
+    "ging",
+    "er",
+    "bread"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "glittering",
+   "band": "B",
+   "syllables": [
+    "glit",
+    "ter",
+    "ing"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "goblin",
+   "band": "C",
+   "syllables": [
+    "gob",
+    "lin"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "goldfish",
+   "band": "A",
+   "syllables": [
+    "gold",
+    "fish"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "gorilla",
+   "band": "B",
+   "syllables": [
+    "go",
+    "ril",
+    "la"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "grandfather",
+   "band": "A",
+   "syllables": [
+    "grand",
+    "fa",
+    "ther"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "grandmother",
+   "band": "A",
+   "syllables": [
+    "grand",
+    "mo",
+    "ther"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "grandparent",
+   "band": "C",
+   "syllables": [
+    "grand",
+    "par",
+    "ent"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "granny",
+   "band": "A",
+   "syllables": [
+    "gran",
+    "ny"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "gravity",
+   "band": "C",
+   "syllables": [
+    "gra",
+    "vi",
+    "ty"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "guacamole",
+   "band": "C",
+   "syllables": [
+    "gua",
+    "ca",
+    "mo",
+    "le"
+   ],
+   "stress": 2,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "guitar",
+   "band": "B",
+   "syllables": [
+    "gui",
+    "tar"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "guitarist",
+   "band": "C",
+   "syllables": [
+    "gui",
+    "tar",
+    "ist"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "hamburger",
+   "band": "B",
+   "syllables": [
+    "ham",
+    "bur",
+    "ger"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "hammer",
+   "band": "B",
+   "syllables": [
+    "ham",
+    "mer"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "hammerhead",
+   "band": "C",
+   "syllables": [
+    "ham",
+    "mer",
+    "head"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "hamster",
+   "band": "B",
+   "syllables": [
+    "ham",
+    "ster"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "handle",
+   "band": "A",
+   "syllables": [
+    "han",
+    "dle"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "happen",
+   "band": "A",
+   "syllables": [
+    "hap",
+    "pen"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "happiness",
+   "band": "B",
+   "syllables": [
+    "hap",
+    "pi",
+    "ness"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "happy",
+   "band": "A",
+   "syllables": [
+    "hap",
+    "py"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "harbour",
+   "band": "B",
+   "syllables": [
+    "har",
+    "bour"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "harmony",
+   "band": "C",
+   "syllables": [
+    "har",
+    "mo",
+    "ny"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "heavy",
+   "band": "A",
+   "syllables": [
+    "hea",
+    "vy"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "helicopter",
+   "band": "C",
+   "syllables": [
+    "hel",
+    "i",
+    "cop",
+    "ter"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "helium",
+   "band": "C",
+   "syllables": [
+    "he",
+    "li",
+    "um"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "helmet",
+   "band": "A",
+   "syllables": [
+    "hel",
+    "met"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "helpful",
+   "band": "A",
+   "syllables": [
+    "help",
+    "ful"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "hibernation",
+   "band": "C",
+   "syllables": [
+    "hi",
+    "ber",
+    "na",
+    "tion"
+   ],
+   "stress": 2,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "history",
+   "band": "B",
+   "syllables": [
+    "his",
+    "to",
+    "ry"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "holiday",
+   "band": "B",
+   "syllables": [
+    "hol",
+    "i",
+    "day"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "honesty",
+   "band": "C",
+   "syllables": [
+    "hon",
+    "es",
+    "ty"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "honey",
+   "band": "A",
+   "syllables": [
+    "ho",
+    "ney"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "hopping",
+   "band": "A",
+   "syllables": [
+    "hop",
+    "ping"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "horizon",
+   "band": "C",
+   "syllables": [
+    "ho",
+    "ri",
+    "zon"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "hornet",
+   "band": "C",
+   "syllables": [
+    "hor",
+    "net"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "hospital",
+   "band": "A",
+   "syllables": [
+    "hos",
+    "pi",
+    "tal"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "hotel",
+   "band": "B",
+   "syllables": [
+    "ho",
+    "tel"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "hundred",
+   "band": "A",
+   "syllables": [
+    "hun",
+    "dred"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "hungry",
+   "band": "A",
+   "syllables": [
+    "hun",
+    "gry"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "hurricane",
+   "band": "C",
+   "syllables": [
+    "hur",
+    "ri",
+    "cane"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "husband",
+   "band": "A",
+   "syllables": [
+    "hus",
+    "band"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "illustration",
+   "band": "C",
+   "syllables": [
+    "il",
+    "lus",
+    "tra",
+    "tion"
+   ],
+   "stress": 2,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "imitation",
+   "band": "C",
+   "syllables": [
+    "im",
+    "i",
+    "ta",
+    "tion"
+   ],
+   "stress": 2,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "important",
+   "band": "A",
+   "syllables": [
+    "im",
+    "por",
+    "tant"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "impossible",
+   "band": "C",
+   "syllables": [
+    "im",
+    "pos",
+    "si",
+    "ble"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "incredible",
+   "band": "C",
+   "syllables": [
+    "in",
+    "cred",
+    "i",
+    "ble"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "independent",
+   "band": "C",
+   "syllables": [
+    "in",
+    "de",
+    "pen",
+    "dent"
+   ],
+   "stress": 2,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "information",
+   "band": "C",
+   "syllables": [
+    "in",
+    "for",
+    "ma",
+    "tion"
+   ],
+   "stress": 2,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "instrument",
+   "band": "B",
+   "syllables": [
+    "in",
+    "stru",
+    "ment"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "interesting",
+   "band": "C",
+   "syllables": [
+    "in",
+    "ter",
+    "est",
+    "ing"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "internet",
+   "band": "B",
+   "syllables": [
+    "in",
+    "ter",
+    "net"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "interview",
+   "band": "B",
+   "syllables": [
+    "in",
+    "ter",
+    "view"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "introduction",
+   "band": "C",
+   "syllables": [
+    "in",
+    "tro",
+    "duc",
+    "tion"
+   ],
+   "stress": 2,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "invisible",
+   "band": "C",
+   "syllables": [
+    "in",
+    "vis",
+    "i",
+    "ble"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "invitation",
+   "band": "C",
+   "syllables": [
+    "in",
+    "vi",
+    "ta",
+    "tion"
+   ],
+   "stress": 2,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "island",
+   "band": "B",
+   "syllables": [
+    "is",
+    "land"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "ivy",
+   "band": "B",
+   "syllables": [
+    "i",
+    "vy"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "jacket",
+   "band": "A",
+   "syllables": [
+    "ja",
+    "cket"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "jelly",
+   "band": "A",
+   "syllables": [
+    "jel",
+    "ly"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "jellyfish",
+   "band": "B",
+   "syllables": [
+    "jel",
+    "ly",
+    "fish"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "jigsaw",
+   "band": "A",
+   "syllables": [
+    "jig",
+    "saw"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "joey",
+   "band": "C",
+   "syllables": [
+    "joe",
+    "y"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "juicy",
+   "band": "A",
+   "syllables": [
+    "juic",
+    "y"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "jumper",
+   "band": "A",
+   "syllables": [
+    "jum",
+    "per"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "jungle",
+   "band": "B",
+   "syllables": [
+    "jun",
+    "gle"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "kangaroo",
+   "band": "A",
+   "syllables": [
+    "kan",
+    "ga",
+    "roo"
+   ],
+   "stress": 2,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "kelpie",
+   "band": "C",
+   "syllables": [
+    "kel",
+    "pie"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "kerosene",
+   "band": "C",
+   "syllables": [
+    "ker",
+    "o",
+    "sene"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "kettle",
+   "band": "A",
+   "syllables": [
+    "ket",
+    "tle"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "keyboard",
+   "band": "A",
+   "syllables": [
+    "key",
+    "board"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "kilometre",
+   "band": "C",
+   "syllables": [
+    "ki",
+    "lo",
+    "me",
+    "tre"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "kindergarten",
+   "band": "C",
+   "syllables": [
+    "kin",
+    "der",
+    "gar",
+    "ten"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "kitchen",
+   "band": "A",
+   "syllables": [
+    "kit",
+    "chen"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "kitten",
+   "band": "A",
+   "syllables": [
+    "kit",
+    "ten"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "koala",
+   "band": "A",
+   "syllables": [
+    "ko",
+    "a",
+    "la"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "kookaburra",
+   "band": "C",
+   "syllables": [
+    "kook",
+    "a",
+    "bur",
+    "ra"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "ladder",
+   "band": "A",
+   "syllables": [
+    "lad",
+    "der"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "lady",
+   "band": "A",
+   "syllables": [
+    "la",
+    "dy"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "ladybird",
+   "band": "B",
+   "syllables": [
+    "la",
+    "dy",
+    "bird"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "lantern",
+   "band": "B",
+   "syllables": [
+    "lan",
+    "tern"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "laptop",
+   "band": "A",
+   "syllables": [
+    "lap",
+    "top"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "lavender",
+   "band": "C",
+   "syllables": [
+    "lav",
+    "en",
+    "der"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "lemon",
+   "band": "A",
+   "syllables": [
+    "lem",
+    "on"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "lemonade",
+   "band": "B",
+   "syllables": [
+    "lem",
+    "on",
+    "ade"
+   ],
+   "stress": 2,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "letter",
+   "band": "A",
+   "syllables": [
+    "let",
+    "ter"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "lettuce",
+   "band": "B",
+   "syllables": [
+    "let",
+    "tuce"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "library",
+   "band": "A",
+   "syllables": [
+    "li",
+    "bra",
+    "ry"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "lightning",
+   "band": "A",
+   "syllables": [
+    "light",
+    "ning"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "lion",
+   "band": "A",
+   "syllables": [
+    "li",
+    "on"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "liquorice",
+   "band": "C",
+   "syllables": [
+    "li",
+    "quo",
+    "rice"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "listen",
+   "band": "A",
+   "syllables": [
+    "lis",
+    "ten"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "little",
+   "band": "A",
+   "syllables": [
+    "lit",
+    "tle"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "lizard",
+   "band": "B",
+   "syllables": [
+    "liz",
+    "ard"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "lollipop",
+   "band": "C",
+   "syllables": [
+    "lol",
+    "li",
+    "pop"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "lolly",
+   "band": "A",
+   "syllables": [
+    "lol",
+    "ly"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "lonely",
+   "band": "A",
+   "syllables": [
+    "lone",
+    "ly"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "lovely",
+   "band": "A",
+   "syllables": [
+    "love",
+    "ly"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "lumberjack",
+   "band": "C",
+   "syllables": [
+    "lum",
+    "ber",
+    "jack"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "lunchbox",
+   "band": "A",
+   "syllables": [
+    "lunch",
+    "box"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "macaroni",
+   "band": "C",
+   "syllables": [
+    "mac",
+    "a",
+    "ro",
+    "ni"
+   ],
+   "stress": 2,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "macaroon",
+   "band": "C",
+   "syllables": [
+    "mac",
+    "a",
+    "roon"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "magazine",
+   "band": "B",
+   "syllables": [
+    "mag",
+    "a",
+    "zine"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "magnify",
+   "band": "C",
+   "syllables": [
+    "mag",
+    "ni",
+    "fy"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "magpie",
+   "band": "B",
+   "syllables": [
+    "mag",
+    "pie"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "mandarin",
+   "band": "B",
+   "syllables": [
+    "man",
+    "da",
+    "rin"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "mango",
+   "band": "A",
+   "syllables": [
+    "man",
+    "go"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "marathon",
+   "band": "C",
+   "syllables": [
+    "mar",
+    "a",
+    "thon"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "marble",
+   "band": "A",
+   "syllables": [
+    "mar",
+    "ble"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "marigold",
+   "band": "C",
+   "syllables": [
+    "mar",
+    "i",
+    "gold"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "market",
+   "band": "A",
+   "syllables": [
+    "mar",
+    "ket"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "marmalade",
+   "band": "B",
+   "syllables": [
+    "mar",
+    "ma",
+    "lade"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "mattress",
+   "band": "B",
+   "syllables": [
+    "mat",
+    "tress"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "mechanical",
+   "band": "C",
+   "syllables": [
+    "me",
+    "chan",
+    "i",
+    "cal"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "medicine",
+   "band": "B",
+   "syllables": [
+    "med",
+    "i",
+    "cine"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "melody",
+   "band": "C",
+   "syllables": [
+    "mel",
+    "o",
+    "dy"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "melon",
+   "band": "A",
+   "syllables": [
+    "mel",
+    "on"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "memory",
+   "band": "B",
+   "syllables": [
+    "mem",
+    "o",
+    "ry"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "mermaid",
+   "band": "B",
+   "syllables": [
+    "mer",
+    "maid"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "messy",
+   "band": "A",
+   "syllables": [
+    "mes",
+    "sy"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "microphone",
+   "band": "B",
+   "syllables": [
+    "mi",
+    "cro",
+    "phone"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "microscope",
+   "band": "B",
+   "syllables": [
+    "mi",
+    "cro",
+    "scope"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "microwave",
+   "band": "B",
+   "syllables": [
+    "mi",
+    "cro",
+    "wave"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "midday",
+   "band": "A",
+   "syllables": [
+    "mid",
+    "day"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "midnight",
+   "band": "A",
+   "syllables": [
+    "mid",
+    "night"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "million",
+   "band": "A",
+   "syllables": [
+    "mil",
+    "lion"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "minimum",
+   "band": "C",
+   "syllables": [
+    "min",
+    "i",
+    "mum"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "minute",
+   "band": "A",
+   "syllables": [
+    "min",
+    "ute"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "mirror",
+   "band": "A",
+   "syllables": [
+    "mir",
+    "ror"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "mittens",
+   "band": "A",
+   "syllables": [
+    "mit",
+    "tens"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "monitor",
+   "band": "C",
+   "syllables": [
+    "mon",
+    "i",
+    "tor"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "monkey",
+   "band": "A",
+   "syllables": [
+    "mon",
+    "key"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "monster",
+   "band": "A",
+   "syllables": [
+    "mon",
+    "ster"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "moonlight",
+   "band": "A",
+   "syllables": [
+    "moon",
+    "light"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "morning",
+   "band": "A",
+   "syllables": [
+    "mor",
+    "ning"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "mosquito",
+   "band": "B",
+   "syllables": [
+    "mos",
+    "qui",
+    "to"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "mother",
+   "band": "A",
+   "syllables": [
+    "mo",
+    "ther"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "motor",
+   "band": "A",
+   "syllables": [
+    "mo",
+    "tor"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "motorcycle",
+   "band": "C",
+   "syllables": [
+    "mo",
+    "tor",
+    "cy",
+    "cle"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "mountain",
+   "band": "A",
+   "syllables": [
+    "moun",
+    "tain"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "muffin",
+   "band": "A",
+   "syllables": [
+    "muf",
+    "fin"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "muscle",
+   "band": "B",
+   "syllables": [
+    "mus",
+    "cle"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "mushroom",
+   "band": "A",
+   "syllables": [
+    "mush",
+    "room"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "music",
+   "band": "A",
+   "syllables": [
+    "mu",
+    "sic"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "musical",
+   "band": "B",
+   "syllables": [
+    "mu",
+    "si",
+    "cal"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "mustard",
+   "band": "B",
+   "syllables": [
+    "mus",
+    "tard"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "mysterious",
+   "band": "C",
+   "syllables": [
+    "mys",
+    "te",
+    "ri",
+    "ous"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "mystery",
+   "band": "C",
+   "syllables": [
+    "mys",
+    "ter",
+    "y"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "napkin",
+   "band": "A",
+   "syllables": [
+    "nap",
+    "kin"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "natural",
+   "band": "C",
+   "syllables": [
+    "na",
+    "tur",
+    "al"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "necessary",
+   "band": "C",
+   "syllables": [
+    "nec",
+    "es",
+    "sar",
+    "y"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "nectarine",
+   "band": "C",
+   "syllables": [
+    "nec",
+    "tar",
+    "ine"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "needle",
+   "band": "B",
+   "syllables": [
+    "nee",
+    "dle"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "nephew",
+   "band": "B",
+   "syllables": [
+    "neph",
+    "ew"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "newspaper",
+   "band": "B",
+   "syllables": [
+    "news",
+    "pa",
+    "per"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "ninety",
+   "band": "A",
+   "syllables": [
+    "nine",
+    "ty"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "noisy",
+   "band": "A",
+   "syllables": [
+    "nois",
+    "y"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "noodles",
+   "band": "A",
+   "syllables": [
+    "noo",
+    "dles"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "numbat",
+   "band": "C",
+   "syllables": [
+    "num",
+    "bat"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "number",
+   "band": "A",
+   "syllables": [
+    "num",
+    "ber"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "nursery",
+   "band": "C",
+   "syllables": [
+    "nur",
+    "ser",
+    "y"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "ocean",
+   "band": "A",
+   "syllables": [
+    "o",
+    "cean"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "octopus",
+   "band": "B",
+   "syllables": [
+    "oc",
+    "to",
+    "pus"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "office",
+   "band": "A",
+   "syllables": [
+    "of",
+    "fice"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "onion",
+   "band": "A",
+   "syllables": [
+    "on",
+    "ion"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "open",
+   "band": "A",
+   "syllables": [
+    "o",
+    "pen"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "opera",
+   "band": "C",
+   "syllables": [
+    "op",
+    "er",
+    "a"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "operation",
+   "band": "C",
+   "syllables": [
+    "op",
+    "er",
+    "a",
+    "tion"
+   ],
+   "stress": 2,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "operator",
+   "band": "C",
+   "syllables": [
+    "op",
+    "er",
+    "a",
+    "tor"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "orange",
+   "band": "A",
+   "syllables": [
+    "or",
+    "ange"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "orangutan",
+   "band": "C",
+   "syllables": [
+    "o",
+    "rang",
+    "u",
+    "tan"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "orchard",
+   "band": "B",
+   "syllables": [
+    "or",
+    "chard"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "orchestra",
+   "band": "C",
+   "syllables": [
+    "or",
+    "ches",
+    "tra"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "ordinary",
+   "band": "C",
+   "syllables": [
+    "or",
+    "di",
+    "nar",
+    "y"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "organise",
+   "band": "C",
+   "syllables": [
+    "or",
+    "gan",
+    "ise"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "ostrich",
+   "band": "C",
+   "syllables": [
+    "os",
+    "trich"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "otter",
+   "band": "B",
+   "syllables": [
+    "ot",
+    "ter"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "oven",
+   "band": "A",
+   "syllables": [
+    "o",
+    "ven"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "oxygen",
+   "band": "C",
+   "syllables": [
+    "ox",
+    "y",
+    "gen"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "paddleboat",
+   "band": "B",
+   "syllables": [
+    "pad",
+    "dle",
+    "boat"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "paddock",
+   "band": "B",
+   "syllables": [
+    "pad",
+    "dock"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "pancake",
+   "band": "A",
+   "syllables": [
+    "pan",
+    "cake"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "panda",
+   "band": "A",
+   "syllables": [
+    "pan",
+    "da"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "pantomime",
+   "band": "C",
+   "syllables": [
+    "pan",
+    "to",
+    "mime"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "paper",
+   "band": "A",
+   "syllables": [
+    "pa",
+    "per"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "parachute",
+   "band": "B",
+   "syllables": [
+    "par",
+    "a",
+    "chute"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "paradise",
+   "band": "C",
+   "syllables": [
+    "par",
+    "a",
+    "dise"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "parrot",
+   "band": "A",
+   "syllables": [
+    "par",
+    "rot"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "particle",
+   "band": "C",
+   "syllables": [
+    "par",
+    "ti",
+    "cle"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "passenger",
+   "band": "B",
+   "syllables": [
+    "pas",
+    "sen",
+    "ger"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "pasta",
+   "band": "A",
+   "syllables": [
+    "pas",
+    "ta"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "peanut",
+   "band": "A",
+   "syllables": [
+    "pea",
+    "nut"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "pebble",
+   "band": "B",
+   "syllables": [
+    "peb",
+    "ble"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "pelican",
+   "band": "B",
+   "syllables": [
+    "pel",
+    "i",
+    "can"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "pencil",
+   "band": "A",
+   "syllables": [
+    "pen",
+    "cil"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "penguin",
+   "band": "B",
+   "syllables": [
+    "pen",
+    "guin"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "pepper",
+   "band": "A",
+   "syllables": [
+    "pep",
+    "per"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "peppermint",
+   "band": "B",
+   "syllables": [
+    "pep",
+    "per",
+    "mint"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "pepperoni",
+   "band": "C",
+   "syllables": [
+    "pep",
+    "per",
+    "o",
+    "ni"
+   ],
+   "stress": 2,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "periscope",
+   "band": "C",
+   "syllables": [
+    "per",
+    "i",
+    "scope"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "petrol",
+   "band": "B",
+   "syllables": [
+    "pet",
+    "rol"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "photo",
+   "band": "A",
+   "syllables": [
+    "pho",
+    "to"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "photograph",
+   "band": "B",
+   "syllables": [
+    "pho",
+    "to",
+    "graph"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "photographer",
+   "band": "C",
+   "syllables": [
+    "pho",
+    "tog",
+    "ra",
+    "pher"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "photographic",
+   "band": "C",
+   "syllables": [
+    "pho",
+    "to",
+    "graph",
+    "ic"
+   ],
+   "stress": 2,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "photography",
+   "band": "C",
+   "syllables": [
+    "pho",
+    "tog",
+    "ra",
+    "phy"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "piano",
+   "band": "B",
+   "syllables": [
+    "pi",
+    "a",
+    "no"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "picnic",
+   "band": "A",
+   "syllables": [
+    "pic",
+    "nic"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "picture",
+   "band": "A",
+   "syllables": [
+    "pic",
+    "ture"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "piglet",
+   "band": "A",
+   "syllables": [
+    "pig",
+    "let"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "pillar",
+   "band": "B",
+   "syllables": [
+    "pil",
+    "lar"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "pillow",
+   "band": "A",
+   "syllables": [
+    "pil",
+    "low"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "pineapple",
+   "band": "A",
+   "syllables": [
+    "pine",
+    "ap",
+    "ple"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "pioneer",
+   "band": "C",
+   "syllables": [
+    "pi",
+    "o",
+    "neer"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "pirate",
+   "band": "B",
+   "syllables": [
+    "pi",
+    "rate"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "plastic",
+   "band": "B",
+   "syllables": [
+    "plas",
+    "tic"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "platypus",
+   "band": "B",
+   "syllables": [
+    "plat",
+    "y",
+    "pus"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "playground",
+   "band": "A",
+   "syllables": [
+    "play",
+    "ground"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "pocket",
+   "band": "A",
+   "syllables": [
+    "pock",
+    "et"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "pollination",
+   "band": "C",
+   "syllables": [
+    "pol",
+    "li",
+    "na",
+    "tion"
+   ],
+   "stress": 2,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "pony",
+   "band": "B",
+   "syllables": [
+    "po",
+    "ny"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "porcupine",
+   "band": "C",
+   "syllables": [
+    "por",
+    "cu",
+    "pine"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "possible",
+   "band": "C",
+   "syllables": [
+    "pos",
+    "si",
+    "ble"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "possum",
+   "band": "B",
+   "syllables": [
+    "pos",
+    "sum"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "potato",
+   "band": "B",
+   "syllables": [
+    "po",
+    "ta",
+    "to"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "pottery",
+   "band": "C",
+   "syllables": [
+    "pot",
+    "ter",
+    "y"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "preparation",
+   "band": "C",
+   "syllables": [
+    "prep",
+    "a",
+    "ra",
+    "tion"
+   ],
+   "stress": 2,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "pretty",
+   "band": "A",
+   "syllables": [
+    "pret",
+    "ty"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "problem",
+   "band": "A",
+   "syllables": [
+    "prob",
+    "lem"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "professional",
+   "band": "C",
+   "syllables": [
+    "pro",
+    "fes",
+    "sion",
+    "al"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "property",
+   "band": "C",
+   "syllables": [
+    "prop",
+    "er",
+    "ty"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "puddle",
+   "band": "A",
+   "syllables": [
+    "pud",
+    "dle"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "puffin",
+   "band": "C",
+   "syllables": [
+    "puf",
+    "fin"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "pumpkin",
+   "band": "A",
+   "syllables": [
+    "pump",
+    "kin"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "puppet",
+   "band": "A",
+   "syllables": [
+    "pup",
+    "pet"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "puppy",
+   "band": "A",
+   "syllables": [
+    "pup",
+    "py"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "purple",
+   "band": "A",
+   "syllables": [
+    "pur",
+    "ple"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "puzzle",
+   "band": "A",
+   "syllables": [
+    "puz",
+    "zle"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "pyjamas",
+   "band": "B",
+   "syllables": [
+    "py",
+    "ja",
+    "mas"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "pyramid",
+   "band": "C",
+   "syllables": [
+    "py",
+    "ra",
+    "mid"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "python",
+   "band": "C",
+   "syllables": [
+    "py",
+    "thon"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "quality",
+   "band": "C",
+   "syllables": [
+    "qual",
+    "i",
+    "ty"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "quantity",
+   "band": "C",
+   "syllables": [
+    "quan",
+    "ti",
+    "ty"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "question",
+   "band": "A",
+   "syllables": [
+    "ques",
+    "tion"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "quiet",
+   "band": "A",
+   "syllables": [
+    "qui",
+    "et"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "quokka",
+   "band": "C",
+   "syllables": [
+    "quok",
+    "ka"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "rabbit",
+   "band": "A",
+   "syllables": [
+    "rab",
+    "bit"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "radiator",
+   "band": "C",
+   "syllables": [
+    "ra",
+    "di",
+    "a",
+    "tor"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "rainbow",
+   "band": "A",
+   "syllables": [
+    "rain",
+    "bow"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "rainforest",
+   "band": "B",
+   "syllables": [
+    "rain",
+    "for",
+    "est"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "raisin",
+   "band": "B",
+   "syllables": [
+    "rai",
+    "sin"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "rascal",
+   "band": "C",
+   "syllables": [
+    "ras",
+    "cal"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "raspberry",
+   "band": "B",
+   "syllables": [
+    "rasp",
+    "ber",
+    "ry"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "rattle",
+   "band": "A",
+   "syllables": [
+    "rat",
+    "tle"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "reading",
+   "band": "A",
+   "syllables": [
+    "read",
+    "ing"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "rectangle",
+   "band": "B",
+   "syllables": [
+    "rec",
+    "tan",
+    "gle"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "recycle",
+   "band": "B",
+   "syllables": [
+    "re",
+    "cy",
+    "cle"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "refrigerate",
+   "band": "C",
+   "syllables": [
+    "re",
+    "frig",
+    "er",
+    "ate"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "reindeer",
+   "band": "C",
+   "syllables": [
+    "rein",
+    "deer"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "remedy",
+   "band": "C",
+   "syllables": [
+    "rem",
+    "e",
+    "dy"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "remember",
+   "band": "B",
+   "syllables": [
+    "re",
+    "mem",
+    "ber"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "restaurant",
+   "band": "B",
+   "syllables": [
+    "res",
+    "tau",
+    "rant"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "rhinoceros",
+   "band": "C",
+   "syllables": [
+    "rhi",
+    "noc",
+    "er",
+    "os"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "ribbon",
+   "band": "A",
+   "syllables": [
+    "rib",
+    "bon"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "river",
+   "band": "A",
+   "syllables": [
+    "riv",
+    "er"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "robin",
+   "band": "B",
+   "syllables": [
+    "ro",
+    "bin"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "robot",
+   "band": "A",
+   "syllables": [
+    "ro",
+    "bot"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "rocket",
+   "band": "A",
+   "syllables": [
+    "rock",
+    "et"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "rooster",
+   "band": "A",
+   "syllables": [
+    "roos",
+    "ter"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "rubber",
+   "band": "A",
+   "syllables": [
+    "rub",
+    "ber"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "ruler",
+   "band": "A",
+   "syllables": [
+    "ru",
+    "ler"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "running",
+   "band": "A",
+   "syllables": [
+    "run",
+    "ning"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "saddle",
+   "band": "B",
+   "syllables": [
+    "sad",
+    "dle"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "safari",
+   "band": "C",
+   "syllables": [
+    "sa",
+    "fa",
+    "ri"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "salad",
+   "band": "A",
+   "syllables": [
+    "sa",
+    "lad"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "salamander",
+   "band": "C",
+   "syllables": [
+    "sal",
+    "a",
+    "man",
+    "der"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "salami",
+   "band": "C",
+   "syllables": [
+    "sa",
+    "la",
+    "mi"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "salmon",
+   "band": "B",
+   "syllables": [
+    "sal",
+    "mon"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "sandals",
+   "band": "A",
+   "syllables": [
+    "san",
+    "dals"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "sandcastle",
+   "band": "B",
+   "syllables": [
+    "sand",
+    "cas",
+    "tle"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "sandwich",
+   "band": "A",
+   "syllables": [
+    "sand",
+    "wich"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "satellite",
+   "band": "C",
+   "syllables": [
+    "sat",
+    "el",
+    "lite"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "sausage",
+   "band": "A",
+   "syllables": [
+    "sau",
+    "sage"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "scarlet",
+   "band": "C",
+   "syllables": [
+    "scar",
+    "let"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "scissors",
+   "band": "A",
+   "syllables": [
+    "scis",
+    "sors"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "scooter",
+   "band": "A",
+   "syllables": [
+    "scoot",
+    "er"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "seagull",
+   "band": "B",
+   "syllables": [
+    "sea",
+    "gull"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "season",
+   "band": "A",
+   "syllables": [
+    "sea",
+    "son"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "second",
+   "band": "A",
+   "syllables": [
+    "sec",
+    "ond"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "secretary",
+   "band": "C",
+   "syllables": [
+    "sec",
+    "re",
+    "tar",
+    "y"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "seedling",
+   "band": "B",
+   "syllables": [
+    "seed",
+    "ling"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "seven",
+   "band": "A",
+   "syllables": [
+    "sev",
+    "en"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "seventeen",
+   "band": "B",
+   "syllables": [
+    "sev",
+    "en",
+    "teen"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "seventy",
+   "band": "B",
+   "syllables": [
+    "sev",
+    "en",
+    "ty"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "shadow",
+   "band": "B",
+   "syllables": [
+    "shad",
+    "ow"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "shampoo",
+   "band": "B",
+   "syllables": [
+    "sham",
+    "poo"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "shelter",
+   "band": "B",
+   "syllables": [
+    "shel",
+    "ter"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "shopping",
+   "band": "A",
+   "syllables": [
+    "shop",
+    "ping"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "shoulder",
+   "band": "A",
+   "syllables": [
+    "shoul",
+    "der"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "shovel",
+   "band": "A",
+   "syllables": [
+    "shov",
+    "el"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "signal",
+   "band": "B",
+   "syllables": [
+    "sig",
+    "nal"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "silly",
+   "band": "A",
+   "syllables": [
+    "sil",
+    "ly"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "silver",
+   "band": "A",
+   "syllables": [
+    "sil",
+    "ver"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "sister",
+   "band": "A",
+   "syllables": [
+    "sis",
+    "ter"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "sitting",
+   "band": "A",
+   "syllables": [
+    "sit",
+    "ting"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "situation",
+   "band": "C",
+   "syllables": [
+    "sit",
+    "u",
+    "a",
+    "tion"
+   ],
+   "stress": 2,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "sixty",
+   "band": "A",
+   "syllables": [
+    "six",
+    "ty"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "skateboard",
+   "band": "A",
+   "syllables": [
+    "skate",
+    "board"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "skeleton",
+   "band": "C",
+   "syllables": [
+    "skel",
+    "e",
+    "ton"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "sleeping",
+   "band": "A",
+   "syllables": [
+    "sleep",
+    "ing"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "sleepy",
+   "band": "A",
+   "syllables": [
+    "sleep",
+    "y"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "slippers",
+   "band": "A",
+   "syllables": [
+    "slip",
+    "pers"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "sneakers",
+   "band": "A",
+   "syllables": [
+    "sneak",
+    "ers"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "snowman",
+   "band": "A",
+   "syllables": [
+    "snow",
+    "man"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "soccer",
+   "band": "A",
+   "syllables": [
+    "soc",
+    "cer"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "sofa",
+   "band": "A",
+   "syllables": [
+    "so",
+    "fa"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "somebody",
+   "band": "B",
+   "syllables": [
+    "some",
+    "bo",
+    "dy"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "somersault",
+   "band": "C",
+   "syllables": [
+    "som",
+    "er",
+    "sault"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "something",
+   "band": "A",
+   "syllables": [
+    "some",
+    "thing"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "spaghetti",
+   "band": "B",
+   "syllables": [
+    "spa",
+    "ghet",
+    "ti"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "sparrow",
+   "band": "B",
+   "syllables": [
+    "spar",
+    "row"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "spectacle",
+   "band": "C",
+   "syllables": [
+    "spec",
+    "ta",
+    "cle"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "spelling",
+   "band": "A",
+   "syllables": [
+    "spell",
+    "ing"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "spider",
+   "band": "A",
+   "syllables": [
+    "spi",
+    "der"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "spinach",
+   "band": "B",
+   "syllables": [
+    "spi",
+    "nach"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "spoonful",
+   "band": "A",
+   "syllables": [
+    "spoon",
+    "ful"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "squirrel",
+   "band": "C",
+   "syllables": [
+    "squir",
+    "rel"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "stable",
+   "band": "A",
+   "syllables": [
+    "sta",
+    "ble"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "staircase",
+   "band": "A",
+   "syllables": [
+    "stair",
+    "case"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "starfish",
+   "band": "B",
+   "syllables": [
+    "star",
+    "fish"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "station",
+   "band": "A",
+   "syllables": [
+    "sta",
+    "tion"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "stationery",
+   "band": "C",
+   "syllables": [
+    "sta",
+    "tion",
+    "er",
+    "y"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "stormy",
+   "band": "B",
+   "syllables": [
+    "stor",
+    "my"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "story",
+   "band": "A",
+   "syllables": [
+    "sto",
+    "ry"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "strawberry",
+   "band": "A",
+   "syllables": [
+    "straw",
+    "ber",
+    "ry"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "submarine",
+   "band": "B",
+   "syllables": [
+    "sub",
+    "ma",
+    "rine"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "sudden",
+   "band": "A",
+   "syllables": [
+    "sud",
+    "den"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "sugar",
+   "band": "A",
+   "syllables": [
+    "su",
+    "gar"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "summer",
+   "band": "A",
+   "syllables": [
+    "sum",
+    "mer"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "sunflower",
+   "band": "B",
+   "syllables": [
+    "sun",
+    "flow",
+    "er"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "sunset",
+   "band": "A",
+   "syllables": [
+    "sun",
+    "set"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "sunshine",
+   "band": "A",
+   "syllables": [
+    "sun",
+    "shine"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "superhero",
+   "band": "C",
+   "syllables": [
+    "su",
+    "per",
+    "he",
+    "ro"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "supermarket",
+   "band": "C",
+   "syllables": [
+    "su",
+    "per",
+    "mar",
+    "ket"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "supper",
+   "band": "A",
+   "syllables": [
+    "sup",
+    "per"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "surfboard",
+   "band": "A",
+   "syllables": [
+    "surf",
+    "board"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "swimming",
+   "band": "A",
+   "syllables": [
+    "swim",
+    "ming"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "syllable",
+   "band": "C",
+   "syllables": [
+    "syl",
+    "la",
+    "ble"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "table",
+   "band": "A",
+   "syllables": [
+    "ta",
+    "ble"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "tablet",
+   "band": "A",
+   "syllables": [
+    "tab",
+    "let"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "tadpole",
+   "band": "B",
+   "syllables": [
+    "tad",
+    "pole"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "tambourine",
+   "band": "C",
+   "syllables": [
+    "tam",
+    "bou",
+    "rine"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "tarantula",
+   "band": "C",
+   "syllables": [
+    "ta",
+    "ran",
+    "tu",
+    "la"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "teacher",
+   "band": "A",
+   "syllables": [
+    "tea",
+    "cher"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "teapot",
+   "band": "A",
+   "syllables": [
+    "tea",
+    "pot"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "technology",
+   "band": "C",
+   "syllables": [
+    "tech",
+    "nol",
+    "o",
+    "gy"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "teddy",
+   "band": "A",
+   "syllables": [
+    "ted",
+    "dy"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "telephone",
+   "band": "B",
+   "syllables": [
+    "tel",
+    "e",
+    "phone"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "telescope",
+   "band": "B",
+   "syllables": [
+    "tel",
+    "e",
+    "scope"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "television",
+   "band": "C",
+   "syllables": [
+    "tel",
+    "e",
+    "vi",
+    "sion"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "temperature",
+   "band": "C",
+   "syllables": [
+    "tem",
+    "per",
+    "a",
+    "ture"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "temporary",
+   "band": "C",
+   "syllables": [
+    "tem",
+    "po",
+    "rar",
+    "y"
+   ],
+   "stress": 2,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "tennis",
+   "band": "A",
+   "syllables": [
+    "ten",
+    "nis"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "terrible",
+   "band": "C",
+   "syllables": [
+    "ter",
+    "ri",
+    "ble"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "thirsty",
+   "band": "A",
+   "syllables": [
+    "thirs",
+    "ty"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "thirty",
+   "band": "A",
+   "syllables": [
+    "thir",
+    "ty"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "thunder",
+   "band": "A",
+   "syllables": [
+    "thun",
+    "der"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "thunderstorm",
+   "band": "B",
+   "syllables": [
+    "thun",
+    "der",
+    "storm"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "ticket",
+   "band": "A",
+   "syllables": [
+    "tick",
+    "et"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "tidy",
+   "band": "A",
+   "syllables": [
+    "ti",
+    "dy"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "tiger",
+   "band": "A",
+   "syllables": [
+    "ti",
+    "ger"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "tiny",
+   "band": "A",
+   "syllables": [
+    "ti",
+    "ny"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "tissue",
+   "band": "B",
+   "syllables": [
+    "tis",
+    "sue"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "toaster",
+   "band": "B",
+   "syllables": [
+    "toast",
+    "er"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "today",
+   "band": "A",
+   "syllables": [
+    "to",
+    "day"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "tomato",
+   "band": "B",
+   "syllables": [
+    "to",
+    "ma",
+    "to"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "tonight",
+   "band": "A",
+   "syllables": [
+    "to",
+    "night"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "toothbrush",
+   "band": "A",
+   "syllables": [
+    "tooth",
+    "brush"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "toothpaste",
+   "band": "A",
+   "syllables": [
+    "tooth",
+    "paste"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "tornado",
+   "band": "C",
+   "syllables": [
+    "tor",
+    "na",
+    "do"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "tortoise",
+   "band": "C",
+   "syllables": [
+    "tor",
+    "toise"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "towel",
+   "band": "A",
+   "syllables": [
+    "tow",
+    "el"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "tower",
+   "band": "A",
+   "syllables": [
+    "tow",
+    "er"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "tractor",
+   "band": "B",
+   "syllables": [
+    "trac",
+    "tor"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "traffic",
+   "band": "A",
+   "syllables": [
+    "traf",
+    "fic"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "trailer",
+   "band": "B",
+   "syllables": [
+    "trail",
+    "er"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "trainer",
+   "band": "A",
+   "syllables": [
+    "train",
+    "er"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "trampoline",
+   "band": "B",
+   "syllables": [
+    "tram",
+    "po",
+    "line"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "treasure",
+   "band": "B",
+   "syllables": [
+    "trea",
+    "sure"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "triangle",
+   "band": "B",
+   "syllables": [
+    "tri",
+    "an",
+    "gle"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "trousers",
+   "band": "A",
+   "syllables": [
+    "trou",
+    "sers"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "trumpet",
+   "band": "B",
+   "syllables": [
+    "trum",
+    "pet"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "tunnel",
+   "band": "B",
+   "syllables": [
+    "tun",
+    "nel"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "turkey",
+   "band": "B",
+   "syllables": [
+    "tur",
+    "key"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "turtle",
+   "band": "A",
+   "syllables": [
+    "tur",
+    "tle"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "twenty",
+   "band": "A",
+   "syllables": [
+    "twen",
+    "ty"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "ugly",
+   "band": "A",
+   "syllables": [
+    "ug",
+    "ly"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "umbrella",
+   "band": "A",
+   "syllables": [
+    "um",
+    "brel",
+    "la"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "uncle",
+   "band": "A",
+   "syllables": [
+    "un",
+    "cle"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "understanding",
+   "band": "C",
+   "syllables": [
+    "un",
+    "der",
+    "stand",
+    "ing"
+   ],
+   "stress": 2,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "underwater",
+   "band": "C",
+   "syllables": [
+    "un",
+    "der",
+    "wa",
+    "ter"
+   ],
+   "stress": 2,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "unicorn",
+   "band": "B",
+   "syllables": [
+    "u",
+    "ni",
+    "corn"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "uniform",
+   "band": "B",
+   "syllables": [
+    "u",
+    "ni",
+    "form"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "useful",
+   "band": "A",
+   "syllables": [
+    "use",
+    "ful"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "vegemite",
+   "band": "C",
+   "syllables": [
+    "veg",
+    "e",
+    "mite"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "vegetable",
+   "band": "C",
+   "syllables": [
+    "veg",
+    "e",
+    "ta",
+    "ble"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "velvet",
+   "band": "B",
+   "syllables": [
+    "vel",
+    "vet"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "victorious",
+   "band": "C",
+   "syllables": [
+    "vic",
+    "to",
+    "ri",
+    "ous"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "village",
+   "band": "B",
+   "syllables": [
+    "vil",
+    "lage"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "violin",
+   "band": "B",
+   "syllables": [
+    "vi",
+    "o",
+    "lin"
+   ],
+   "stress": 2,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "volcano",
+   "band": "B",
+   "syllables": [
+    "vol",
+    "ca",
+    "no"
+   ],
+   "stress": 1,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "wagon",
+   "band": "B",
+   "syllables": [
+    "wa",
+    "gon"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "wallaby",
+   "band": "B",
+   "syllables": [
+    "wal",
+    "la",
+    "by"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "walnut",
+   "band": "A",
+   "syllables": [
+    "wal",
+    "nut"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "walrus",
+   "band": "C",
+   "syllables": [
+    "wal",
+    "rus"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "water",
+   "band": "A",
+   "syllables": [
+    "wa",
+    "ter"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "waterfall",
+   "band": "B",
+   "syllables": [
+    "wa",
+    "ter",
+    "fall"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "watermelon",
+   "band": "C",
+   "syllables": [
+    "wa",
+    "ter",
+    "mel",
+    "on"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "waterproof",
+   "band": "B",
+   "syllables": [
+    "wa",
+    "ter",
+    "proof"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "welcome",
+   "band": "A",
+   "syllables": [
+    "wel",
+    "come"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "wheelbarrow",
+   "band": "C",
+   "syllables": [
+    "wheel",
+    "bar",
+    "row"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "whisper",
+   "band": "A",
+   "syllables": [
+    "whis",
+    "per"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "whistle",
+   "band": "A",
+   "syllables": [
+    "whis",
+    "tle"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "wilderness",
+   "band": "C",
+   "syllables": [
+    "wil",
+    "der",
+    "ness"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "window",
+   "band": "A",
+   "syllables": [
+    "win",
+    "dow"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "windowsill",
+   "band": "C",
+   "syllables": [
+    "win",
+    "dow",
+    "sill"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "windy",
+   "band": "A",
+   "syllables": [
+    "win",
+    "dy"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "winter",
+   "band": "A",
+   "syllables": [
+    "win",
+    "ter"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "wizard",
+   "band": "C",
+   "syllables": [
+    "wiz",
+    "ard"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "wombat",
+   "band": "B",
+   "syllables": [
+    "wom",
+    "bat"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "wonderful",
+   "band": "A",
+   "syllables": [
+    "won",
+    "der",
+    "ful"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "wonderfully",
+   "band": "C",
+   "syllables": [
+    "won",
+    "der",
+    "ful",
+    "ly"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "yellow",
+   "band": "A",
+   "syllables": [
+    "yel",
+    "low"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "yesterday",
+   "band": "A",
+   "syllables": [
+    "yes",
+    "ter",
+    "day"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "yoghurt",
+   "band": "A",
+   "syllables": [
+    "yo",
+    "ghurt"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "yoyo",
+   "band": "A",
+   "syllables": [
+    "yo",
+    "yo"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "zebra",
+   "band": "A",
+   "syllables": [
+    "ze",
+    "bra"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "zigzag",
+   "band": "B",
+   "syllables": [
+    "zig",
+    "zag"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  },
+  {
+   "word": "zipper",
+   "band": "A",
+   "syllables": [
+    "zip",
+    "per"
+   ],
+   "stress": 0,
+   "sources": [
+    "manual"
+   ],
+   "reviewer": ""
+  }
+ ]
+}

@@ -12,6 +12,13 @@ cd "$(dirname "$0")/.."
 # Install build dependency if missing. Doesn't touch your existing venv.
 python3 -m pip install --quiet --upgrade pyinstaller
 
+# Firmware and avrdude, so Settings can flash the Arduino from the
+# finished app. Neither may abort the build: a machine without
+# PlatformIO keeps whatever hexes are already staged, and a failed
+# download only means the app says avrdude is missing.
+python3 builds/build_firmware.py || echo "Firmware not rebuilt; using what is staged."
+python3 builds/fetch_avrdude.py || echo "avrdude not fetched; the app will say so."
+
 # Clean previous build so stale data files don't sneak in.
 rm -rf bin/build bin/dist
 mkdir -p bin

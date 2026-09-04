@@ -42,6 +42,13 @@ class BatteryStep:
     hand_requested: str         # what the preset said (hand1, dominant...)
     phase: str = "battery"
     stretch_before_s: float = 0.0
+    # A scheduled rest before this step. rest_before_s is how long the
+    # card counts down; rest_min_s is the floor the Start button holds
+    # for. Both zero on a step with no rest. Kept apart from the
+    # stretch because the two behave differently on the card: a
+    # stretch is a suggestion, a rest is enforced to its floor.
+    rest_before_s: float = 0.0
+    rest_min_s: float = 0.0
     track: str | None = None    # rhythm only: file name in the music dir
     difficulty: str | None = None
     position: int = 0           # 1-based, set by build_plan
@@ -70,6 +77,11 @@ class BatteryPlan:
     overrides: dict = field(default_factory=dict)
     budget_min: float = 0.0
     stretch_s: float = 0.0
+    rest_s: float = 0.0
+    rest_min_s: float = 0.0
+    # Where the run sheet stops the session. 0 means "no hard stop",
+    # which is what a preset without the key gets.
+    hard_stop_min: float = 0.0
 
 
 class BatteryError(ValueError):
@@ -151,6 +163,8 @@ def build_plan(cfg, participant: str, dominant_hand: str,
         raise BatteryError(f"Preset '{preset}' has no order '{order_key}'")
     cell = dict(cell, mode_order=order_key, hand_first=hand_first)
     stretch_s = float(raw.get("stretch_s", 0.0) or 0.0)
+    rest_s = float(raw.get("rest_s", 0.0) or 0.0)
+    rest_min_s = min(float(raw.get("rest_min_s", 0.0) or 0.0), rest_s)
     steps: list[BatteryStep] = []
     for entry in order:
         if not isinstance(entry, dict):
@@ -163,13 +177,19 @@ def build_plan(cfg, participant: str, dominant_hand: str,
         if mode == "mirror":
             # Bilateral by definition, whatever the preset says.
             hand = "both"
+        # A rest and a stretch before the same step would show two
+        # countdowns on one card; the rest is the enforced one, so it
+        # wins and the stretch is dropped.
+        rest_before = bool(entry.get("rest_before")) and rest_s > 0
         steps.append(BatteryStep(
             mode=mode,
             hand=hand,
             hand_requested=requested,
             phase=str(entry.get("phase") or "battery").strip().lower(),
             stretch_before_s=(stretch_s if entry.get("stretch_before")
-                              else 0.0),
+                              and not rest_before else 0.0),
+            rest_before_s=(rest_s if rest_before else 0.0),
+            rest_min_s=(rest_min_s if rest_before else 0.0),
             track=(str(entry["track"]) if entry.get("track") else None),
             difficulty=(str(entry["difficulty"])
                         if entry.get("difficulty") else None),
@@ -189,6 +209,9 @@ def build_plan(cfg, participant: str, dominant_hand: str,
         overrides=copy.deepcopy(overrides),
         budget_min=float(raw.get("budget_min", 0.0) or 0.0),
         stretch_s=stretch_s,
+        rest_s=rest_s,
+        rest_min_s=rest_min_s,
+        hard_stop_min=float(raw.get("hard_stop_min", 0.0) or 0.0),
     )
 
 
@@ -274,6 +297,145 @@ def find_track(cfg, name: str | None) -> Path | None:
     except OSError:
         pass
     return None
+
+
+# ---------------------------------------------------------------------
+# Session so far: first go against latest go, per mode and hand
+# ---------------------------------------------------------------------
+# The single long session exists so a participant can watch their own
+# numbers move inside one sitting. That needs one comparison, made the
+# same way everywhere: the mode's own headline number from the FIRST
+# completed block of the session against the LATEST one, on the same
+# hand, with the direction and the wording the vs-last-time chip
+# already uses (data/history). Nothing here reads the disk: the
+# session log the engine keeps is this session and only this session,
+# so "your first go today" cannot quietly become a block from a week
+# ago.
+#
+# The wording tails in data/history end in "than last time" / "on last
+# time" because that chip compares across sessions. Inside one sitting
+# the honest tail is "than your first go", and the strip wants the
+# words with no tail at all, so both are made from the one string
+# rather than from a second table that could drift out of step.
+_HISTORY_TAILS = (" than last time", " on last time")
+
+# What the screen says when a mode moved by less than its display
+# precision. Not "no change": the number moved, it just did not move
+# enough to print, and calling that an improvement would be a lie.
+SAME_SHORT = "about the same"
+SAME_TEXT = "about the same as your first go"
+
+
+# How each mode's comparable number is printed on the progress panel.
+# data/history knows the direction and the wording; it does not print
+# the value itself, so the unit lives here. Kept as a table rather
+# than guessed from the number, because a fraction (0.89 steady) and a
+# count (span 7) are both small and would print identically. A test
+# pins this table's keys against history's rule table so a mode cannot
+# gain a chip and lose its unit.
+PROGRESS_UNITS = {
+    "classic": "percent",
+    "adaptive": "bpm",
+    "mirror": "ms",
+    "reaction": "ms",
+    "pattern": "percent",
+    "chords": "percent",
+    "syllables": "percent",
+    "force_pilot": "percent",
+    "buzz_hunt": "percent",
+    "echo": "count",
+    "rhythm": "ms",
+}
+
+
+def value_text(mode: str, value) -> str:
+    """One of this mode's numbers, in the units the screen shows."""
+    if value is None:
+        return ""
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return ""
+    unit = PROGRESS_UNITS.get(str(mode), "count")
+    if unit == "percent":
+        return f"{v * 100:.0f}%"
+    if unit == "ms":
+        return f"{v:.0f} ms"
+    if unit == "bpm":
+        return f"{v:.0f} BPM"
+    return f"{v:.0f}"
+
+
+def _retail(text: str, tail: str) -> str:
+    for old in _HISTORY_TAILS:
+        if text.endswith(old):
+            return text[: -len(old)] + tail
+    return text
+
+
+def progress_rows(log_rows) -> list[dict]:
+    """Per mode and hand, this session's first completed block against
+    its latest one, in the order the modes were first played.
+
+    Takes the engine's session log (session_games_log), so it is pure
+    and testable without a screen or a sessions tree. Rows the chip
+    cannot speak about (a mode with no comparable number, an abandoned
+    block, a first-and-only go) still appear with n and the values, so
+    a caller can show "played once" rather than dropping the mode.
+    """
+    from ..data import history
+    runs: dict[tuple[str, str], list[dict]] = {}
+    order: list[tuple[str, str]] = []
+    for row in log_rows or []:
+        if not isinstance(row, dict) or row.get("status") != "completed":
+            continue
+        mode = str(row.get("mode") or "")
+        hand = str(row.get("hand") or "")
+        summary = row.get("summary")
+        if not mode or not isinstance(summary, dict):
+            continue
+        if history.comparable_value(mode, summary) is None:
+            continue
+        key = (mode, hand)
+        if key not in runs:
+            runs[key] = []
+            order.append(key)
+        runs[key].append(summary)
+    out: list[dict] = []
+    for mode, hand in order:
+        blocks = runs[(mode, hand)]
+        row = {
+            "mode": mode,
+            "hand": hand,
+            "n": len(blocks),
+            "first": history.comparable_value(mode, blocks[0]),
+            "latest": history.comparable_value(mode, blocks[-1]),
+            "first_text": value_text(
+                mode, history.comparable_value(mode, blocks[0])),
+            "latest_text": value_text(
+                mode, history.comparable_value(mode, blocks[-1])),
+            "chip": None,
+            "text": "",
+            "short": "",
+            "better": None,
+            "delta": 0.0,
+        }
+        if len(blocks) >= 2:
+            chip = history.chip_for(mode, blocks[-1], blocks[0])
+            if chip is None:
+                # chip_for returns nothing when the change rounds away
+                # at display precision. That is a real answer here.
+                row["text"] = SAME_TEXT
+                row["short"] = SAME_SHORT
+            else:
+                row["chip"] = chip
+                row["better"] = bool(chip.get("better"))
+                row["delta"] = float(chip.get("delta") or 0.0)
+                row["text"] = _retail(str(chip.get("text") or ""),
+                                      " than your first go")
+                row["short"] = _retail(str(chip.get("text") or ""), "")
+        out.append(row)
+    return out
 
 
 def unplayable_reason(step: BatteryStep, source, one_board: bool) -> str:

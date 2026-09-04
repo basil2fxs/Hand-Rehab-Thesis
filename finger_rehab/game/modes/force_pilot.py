@@ -43,49 +43,107 @@ PARAMETER DEFENCES, in config order:
   percent MVC in Lodha 2013 and the Camacho-Villa 2025 steadiness
   meta-analysis), and staying under half of max keeps 20 to 30 s runs
   repeatable without strength fatigue dominating the trace.
-- runs of 20 to 30 s per finger: Lodha held 20 s, Davidson tracked
-  32 s trials; long enough for sub-1 Hz spectral estimates, short
-  enough to repeat per finger.
-- ramps at 5 or 10 percent of max per second: Naik 2011's lower two
-  rates. The drawn rate is logged per run.
-- sines 0.2 to 0.6 Hz and a sum-of-sines assessment inside 0.1 to
-  0.6 Hz: the Lodha analysis bands plus Davidson's 0.2 Hz tracking
-  sine. The assessment section is pseudorandom (non-harmonic
-  frequencies, random phases) so it cannot be memorised, and its seed
-  and drawn parameters are logged for exact offline reconstruction.
-- corridor half-widths 8 / 6 / 4 percent and waveform bandwidth per
-  level: the two difficulty axes the brief names. Level is tracked
-  per (hand, finger), not one shared value, so the strongest finger
-  promoting cannot drag a weaker finger (or the other hand) into a
-  harder corridor it never earned, matching the adaptive-weighting
-  intent the mode was built with. Moves are announced plainly on
-  screen and logged (force_pilot_level raw event, with the moving
-  hand and finger in its detail).
-- promotion at 80 percent time-in-corridor over two runs, demotion
-  under 40 percent, both judged on that finger's own recent runs
-  only: the app's challenge-point convention (adaptive mode holds a
-  65 to 80 percent band); no published staircase exists for corridor
-  tracking, so this is a design choice and says so.
+- runs of 13 to 16 s: shorter than the 20 to 30 s the pre-ladder plan
+  used, because a run is now one shape rather than six, and twelve of
+  them have to fit inside a battery block. Lodha held 20 s and
+  Davidson tracked 32 s trials, so a single run is thinner for a
+  spectral estimate than theirs; the notebook pools a level's runs
+  across plays rather than reading one run's spectrum on its own.
+- ramps at 4, 5 and 12 percent of max per second (Tide, Hills, Dunes):
+  Naik 2011's lower rates for the climbs, with Dunes deliberately
+  three times faster on the way down, since release is the half
+  Davidson 2026 found impaired in Parkinson's.
+- component frequencies 0.12 to 0.5 Hz: the Lodha analysis bands plus
+  Davidson's 0.2 Hz tracking sine, and inside the tracking bandwidth
+  argued in THE LADDER below. The multisine levels are non-harmonic
+  so they cannot be predicted from one cycle, and every frequency,
+  amplitude and phase is logged for exact offline reconstruction.
+- corridor half-widths 8 / 6 / 5 / 4 percent across the ladder: the
+  corridor is one of the four difficulty axes (Section THE LADDER
+  below). A narrower corridor mechanically lowers time in corridor
+  for the same tracking quality, so time in corridor is comparable
+  WITHIN a level and never across levels; mean absolute error, RMSE
+  and the force-target correlation are the across-level measures.
+- no staircase. The ladder is fixed, so nothing promotes or demotes
+  and no difficulty state carries between blocks. What replaced it is
+  in THE LADDER below.
 - visual gain 1.0 by default: gain magnifies the DISPLAYED error only
   (craft shows target + gain x error). Archer 2017 shows gain shifts
   patient error substantially, so it is a per-block config lever, is
   logged in every run's waveform_params, and must be held constant
   within any comparison.
 
+THE LADDER. Twelve named waves in a fixed order, the same order for
+every participant on every play, from a slow breath to an open-sea
+storm. Basil's brief: familiar shapes from the world at the start,
+harder as they go, and the same levels in the same order every time
+so repeated play measures learning of THESE waves.
+
+- Difficulty rises on four axes, and the table below names which axis
+  each step turns: predictability (one sine, then ramps and steps,
+  then a harmonic pair, then non-harmonic sums), top frequency (0.15
+  up to 0.5 Hz), corridor width (8, 6, 5, 4 percent) and amplitude
+  range (up to 31 percent of max).
+- The top frequency is 0.5 Hz because that is where tracking of an
+  UNPREDICTABLE target falls apart: visually guided force corrections
+  are issued about once a second (Slifkin AB, Vaillancourt DE, Newell
+  KM 2000, Journal of Neurophysiology 84(4):1708-1718) and the
+  operator's effective delay on an unpredictable signal is 250 to
+  350 ms (McRuer DT and Jex HR 1967, IEEE Transactions on Human
+  Factors in Electronics HFE-8(3):231-249, cited through Drop FM et
+  al 2016, IFAC-PapersOnLine 49(19):177-182). A predictable sine can
+  be followed far higher because the mover generates the rhythm and
+  synchronises to it (Cathers I, O'Dwyer N, Neilson P 1996,
+  Experimental Brain Research 111(3):437-446), which is why the
+  early, periodic levels are the easy ones and the multisines are the
+  hard ones.
+- The multisine levels are the standard way to build a target that
+  cannot be memorised: non-harmonic components with fixed phases and
+  amplitudes falling as 1/f, the coloured-noise force targets of
+  Sosnoff JJ and Newell KM 2008, Journals of Gerontology Series B
+  63(6):P344-P352.
+- Level 12 (Uncharted) has the SAME statistics as level 11 (Storm)
+  with its eight phases redrawn each block. That pair is the control
+  that separates "learned these waves" from "got used to the pad":
+  waveform-specific learning shows as improvement on the repeated
+  target beyond the improvement on a novel target of matched
+  difficulty (Yang L, Wan F, Nan W, Zhu F, Hu Y 2017, Scientific
+  Reports 7:12333, which detected exactly that in a continuous
+  tracking task; the variability-of-practice line behind it is Wulf G
+  and Schmidt RA 1997, Journal of Experimental Psychology: Learning,
+  Memory, and Cognition 23(4):987-1006). It is the one place the
+  "identical every time" brief is deliberately broken, and the
+  analysis says so.
+- One run = one level = one finger, from a fixed finger table (index
+  plays 4 levels including both storms, middle 3, ring 3, little 2).
+  A per-finger result is therefore a (level, finger) result and is
+  reported that way; the Storm / Uncharted pair is the same finger or
+  the comparison would be a finger comparison.
+- Step edges (Stairs) carry a grace window: the target jumps in zero
+  time and the finger cannot, so the first step_grace_s after each
+  edge is not scored at all. Scoring the jump would score reaction
+  time, which Reaction mode already measures.
+
 FLOW. Session max press probes run first (the shared foundation flow:
 MaxPressProbe per finger, median of maximal presses, stored via
 engine.record_max_press) for every playing hand whose stored max is
 missing or older than six hours. Every force target afterwards is
-percent of THAT number, never raw counts. Then runs: one finger flies
-per run, the corridor scrolls right to left through hold, ramp up,
-hold, ramp down (release), sine, then the sum-of-sines assessment.
-Leaving the corridor stalls the craft and buzzes the working finger;
-rings on the centreline reward time-in-corridor. The weakest fingers
-(highest mean tracking error so far) get extra runs through the
-existing FloorWeightedScheduler, floored so every finger stays
-analysable. One hand selected: its four fingers. Both hands: all
-eight fingers, runs alternating between hands on a balanced bag, and
-the active hand and finger are named on screen throughout.
+percent of THAT number, never raw counts. Then the ladder: level 1 to
+level 12, one run each, and in a both-hands block each level is flown
+by the first hand then the second so the hand comparison is within a
+level and the resting hand recovers while the other flies. Leaving
+the corridor stalls the craft and buzzes the working finger; rings on
+the centreline reward time-in-corridor.
+
+Gaps are deliberately short (Basil's brief: not much time between
+runs). One card of announce_s carries the last run's numbers and the
+next wave's name, and the only other wait is one rest of mid_rest_s
+after level 6. Massed practice with short rests is what the motor
+learning literature uses for a task of this length (Lee TD and
+Genovese ED 1988, Research Quarterly for Exercise and Sport
+59(4):277-287, on massed versus distributed practice), and the
+notebook's fatigue check (levels 7 to 9 against 4 to 6) is the
+evidence that the dose held.
 
 CUES AND CHANNELS. This mode never calls on_stim: there is no hidden
 target to cue, because a visuomotor tracking task must show the
@@ -97,16 +155,21 @@ the CSV (cue_flags), and each buzz is delivered through
 engine.pulse_motor, which logs a raw pulse_motor event per buzz.
 
 LOGGING. One trial row per run. waveform is "corridor";
-waveform_seed plus the force_pilot config rebuild the run's section
-plan bit-exactly through draw_run_params; waveform_params also
-carries every DRAWN number (ramp rate, sine frequency and cycles,
-sum-of-sines frequencies, amplitudes and phases, corridor half-width,
-gain, the finger's max_press_counts) so the notebook can rebuild the
-target from the row alone via sections_from_params without importing
-this module, to the 6-significant-digit precision of the packed cell.
-segment_times brackets every section (hold_in, ramp_up, hold_top,
-release, sine, pre_assess, assess_sos) in raw-stream t_perf seconds,
-and segment_start / segment_end events mark the same bounds inside
+waveform_params carries the run's whole section list explicitly (one
+group of keys per section: name, kind, duration, levels and every
+oscillator component's frequency, amplitude and phase) plus the
+header keys ladder, lvl, wave, pass, fixed, hw_pct, gain, span_pct,
+base_pct, grace_s and max_press_counts. The notebook rebuilds the
+target from that cell alone through sections_from_params, without
+importing this module and without needing the seed. waveform_seed
+still carries the block seed; only level 12's phases consume it, and
+they are logged like every other number, so the row stays sufficient
+on its own. Params from before the ladder (a seven-section
+hold / ramp / hold / release / sine / approach / assessment plan with
+no n_sec key) rebuild through the legacy branch, so old sessions
+re-score unchanged. segment_times brackets every section in
+raw-stream t_perf seconds under the wave's own section names, and
+segment_start / segment_end events mark the same bounds inside
 raw.csv. The in-game score (time-in-corridor, mean absolute error at
 frame rate) is feedback; the analysis notebook re-scores offline from
 the 200 Hz raw samples between the logged bounds.
@@ -125,6 +188,20 @@ other populations this mode is measurement plus practice, not a
 proven therapy. There is no keyboard fallback by design: a keyboard
 cannot produce a continuous force signal, and the mode says so on
 screen instead of pretending.
+
+The ladder adds four limits of its own, and they belong next to any
+result that uses it. "Familiar wave" is a naming device: no study has
+measured whether a shape named after breathing or tides is easier
+because it is familiar. What the literature supports is that
+predictable, periodic, few-component targets are tracked better, and
+the ladder is ordered on those properties, not on the names. A fixed
+order confounds level with time on task: level 12 is always last and
+always after 23 runs, so part of any level effect is fatigue and
+attention; the mid rest and the notebook's fatigue check bound that,
+they do not remove it. Time in corridor is not comparable across
+levels, by construction. And per-finger conclusions across levels are
+confounded with the finger table (index plays four rungs, little
+two), so every per-finger number is reported per (level, finger).
 """
 from __future__ import annotations
 
@@ -138,7 +215,6 @@ from typing import TYPE_CHECKING
 from ...data.logger import ContinuousTrialLog
 from ..force_stream import ForceView, MaxPressProbe, needs_max_press_probe
 from ..rest_skip import WaitSkip
-from ..scheduling import BalancedScheduler, FloorWeightedScheduler
 from ..scoring import ScoreConfig, TrialResult
 from .classic import PendingTrial
 
@@ -152,20 +228,17 @@ log = logging.getLogger(__name__)
 # On-screen finger names, matching the hand picker's "index to little".
 FINGER_WORDS = ("INDEX", "MIDDLE", "RING", "LITTLE")
 
-# Waveform band floors. Ceilings come from the level's bandwidth knob;
-# the floors stay put so the sine keeps inside the brief's 0.2 to
-# 0.6 Hz and the assessment can reach down into the 0.1 to 0.3 Hz band
-# the Lodha biomarker lives in.
+# LEGACY constants: the band floors and the run-length ceiling of the
+# pre-ladder random plan. Kept because draw_run_params below is kept,
+# and that is kept so sessions recorded before September 2026 still
+# rebuild. The ladder uses neither.
 SINE_FREQ_FLOOR_HZ = 0.2
 SOS_FREQ_FLOOR_HZ = 0.1
-
-# Hard ceiling on a run's planned length: the brief's 20 to 30 s
-# window. The sine's whole-cycle rounding is trimmed against this so
-# a slow ramp draw cannot push the plan past it.
 RUN_CAP_S = 30.0
 
-# Plain-words labels for the scored sections, used by the results
-# summary ("best section") and the run feedback card.
+# Plain-words labels for the LEGACY seven-section plan (sessions
+# recorded before the wave ladder). Ladder sections carry their own
+# names; section_label() below handles both.
 SECTION_LABELS = {
     "hold_in": "low hold",
     "ramp_up": "press ramp",
@@ -176,18 +249,317 @@ SECTION_LABELS = {
     "assess_sos": "assessment",
 }
 
+# Plain words for the ladder's own section names. A name with a trailing
+# repeat number ("beat2", "up1") falls back to its stem plus the number.
+LADDER_SECTION_LABELS = {
+    "settle": "settle",
+    "low": "low water",
+    "flood": "flood tide",
+    "slack": "slack water",
+    "ebb": "ebb tide",
+    "low2": "low water",
+    "breath": "breath",
+    "swell": "swell",
+    "s0": "bottom step",
+    "s": "step",
+    "up": "climb",
+    "down": "descent",
+    "waves": "waves",
+    "rest0": "rest",
+    "rest": "rest",
+    "beat": "beat",
+    "windward": "slow climb",
+    "slipface": "fast drop",
+    "end": "settle",
+    "chop": "chop",
+    "approach": "approach",
+    "ocean": "open ocean",
+    "storm": "storm",
+    "uncharted": "uncharted water",
+}
+
+
+def section_label(name: str) -> str:
+    """Plain words for a section name, for the results summary and the
+    on-screen band. Ladder sections repeat with a trailing index
+    (beat1, beat2...); those read as one label so 'best section' does
+    not split a wave into its repeats."""
+    text = str(name or "")
+    if text in SECTION_LABELS:
+        return SECTION_LABELS[text]
+    if text in LADDER_SECTION_LABELS:
+        return LADDER_SECTION_LABELS[text]
+    stem = text.rstrip("0123456789")
+    if stem in LADDER_SECTION_LABELS:
+        return LADDER_SECTION_LABELS[stem]
+    return text.replace("_", " ")
+
+
+# ---- the wave ladder -------------------------------------------------------
+# Fixed, in this order, for every participant on every play. The table
+# lives in code and not in the yaml on purpose: a config edit must not
+# be able to change the thesis levels quietly. Levels are written as
+# offsets from the configured base_pct so the resting altitude stays
+# one knob; at the shipped base of 8 percent the envelope runs 8 to
+# about 31 percent of the finger's max press, inside the 0 to 40
+# altitude span.
+
+LADDER_ID = "waves_v1"
+
+# The 1/f multisine that levels 11 and 12 fly: eight non-harmonic
+# components from 0.08 to 0.50 Hz with amplitudes proportional to 1/f,
+# summing to 12.01 percent. Hard-coded rather than regenerated from an
+# RNG so the numbers in the thesis cannot move under a library change.
+STORM_COMPONENTS = (
+    (0.08, 3.78, 4.910),
+    (0.13, 2.33, 1.698),
+    (0.19, 1.59, 6.253),
+    (0.25, 1.21, 4.978),
+    (0.31, 0.98, 3.030),
+    (0.37, 0.82, 1.541),
+    (0.44, 0.69, 2.096),
+    (0.50, 0.61, 3.172),
+)
+# Level 10: three non-harmonic components, fixed phases, same total
+# amplitude as the storm so only the component count differs.
+OCEAN_COMPONENTS = (
+    (0.12, 6.0, 0.7),
+    (0.29, 3.5, 3.9),
+    (0.47, 2.5, 2.2),
+)
+# Level 12 redraws the storm's eight phases from the block seed. The
+# constant keeps that draw off any other seed stream in the block.
+UNCHARTED_SEED_XOR = 0x5A5A5A5A
+
+
+@dataclass(frozen=True)
+class WaveLevel:
+    """One rung of the ladder. `finger` is 0 index to 3 little;
+    `hw_pct` is the corridor half-width; `steps` marks a level whose
+    target jumps between holds and therefore earns the step-edge
+    grace window."""
+
+    lvl: int
+    slug: str
+    name: str
+    finger: int
+    hw_pct: float
+    coach: str
+    steps: bool = False
+
+
+LADDER: tuple[WaveLevel, ...] = (
+    WaveLevel(1, "slow_breath", "Slow breath", 0, 8.0,
+              "breathe with it"),
+    WaveLevel(2, "tide", "Tide", 1, 8.0, "rise, hold, ease off"),
+    WaveLevel(3, "swell", "Swell", 2, 8.0, "ride the swell"),
+    WaveLevel(4, "stairs", "Stairs", 3, 6.0,
+              "step up, settle, step down", steps=True),
+    WaveLevel(5, "hills", "Hills", 0, 6.0, "up and over, twice"),
+    WaveLevel(6, "beach_waves", "Beach waves", 1, 6.0,
+              "keep the rhythm"),
+    WaveLevel(7, "heartbeat", "Heartbeat", 2, 5.0, "squeeze on the beat"),
+    WaveLevel(8, "dunes", "Dunes", 3, 5.0, "climb slowly, drop fast"),
+    WaveLevel(9, "chop", "Chop", 1, 5.0, "two waves at once"),
+    WaveLevel(10, "open_ocean", "Open ocean", 2, 4.0,
+              "no pattern, just follow"),
+    WaveLevel(11, "storm", "Storm", 0, 4.0, "hold your line"),
+    WaveLevel(12, "uncharted", "Uncharted", 0, 4.0, "new water, same sea"),
+)
+
+LADDER_BY_LVL = {w.lvl: w for w in LADDER}
+
+
+def _hold(name: str, dur: float, a: float) -> dict:
+    return {"nm": name, "k": "h", "d": float(dur), "a": round(float(a), 4)}
+
+
+def _ramp(name: str, dur: float, a: float, b: float) -> dict:
+    return {"nm": name, "k": "r", "d": float(dur), "a": round(float(a), 4),
+            "b": round(float(b), 4)}
+
+
+def _osc(name: str, dur: float, mid: float, comps) -> dict:
+    return {"nm": name, "k": "o", "d": float(dur), "a": round(float(mid), 4),
+            "comps": tuple((float(f), float(m), round(float(p), 4))
+                           for f, m, p in comps)}
+
+
+def _trough_sine(name: str, dur: float, f: float, amp: float,
+                 mid: float) -> dict:
+    """One sine starting at its trough (phase -pi/2), so the wave opens
+    at the level the section before it ended on and nothing jumps."""
+    return _osc(name, dur, mid, ((f, amp, -math.pi / 2.0),))
+
+
+def _pulse(name: str, width_s: float, lo: float, hi: float) -> dict:
+    """One raised-cosine pulse from lo up to hi and back down over
+    width_s: a single sine cycle starting and ending at its trough."""
+    amp = (hi - lo) / 2.0
+    return _osc(name, width_s, lo + amp,
+                ((1.0 / width_s, amp, -math.pi / 2.0),))
+
+
+def _multisine(name: str, dur: float, base: float, comps,
+               approach_s: float = 1.0) -> list[dict]:
+    """A sum-of-sines section plus the ramp that walks the target from
+    the resting level to wherever the phases put the sum at t = 0, so
+    the run still opens without a jump."""
+    mid = round(base + sum(m for _f, m, _p in comps), 4)
+    v0 = mid + sum(m * math.sin(p) for _f, m, p in comps)
+    return [_ramp("approach", approach_s, base, v0),
+            _osc(name, dur, mid, comps)]
+
+
+def level_sections(level: WaveLevel, base_pct: float,
+                   phases: tuple = ()) -> list[dict]:
+    """The section specs for one ladder level, in plain dicts.
+
+    Every level is built from the three section kinds the logging
+    contract already carries (hold, ramp, osc), so the trial row
+    rebuilds the target bit-exactly and the notebook re-scores it
+    offline with no new maths. `phases` is used by level 12 only.
+    """
+    b = float(base_pct)
+    slug = level.slug
+    if slug == "slow_breath":
+        # 0.15 Hz is a 6.7 s cycle: inside the slow-breathing range
+        # reviewed by Russo MA, Santarelli DM, O'Rourke D (2017),
+        # Breathe 13(4):298-309, which is why the coach line works.
+        return [_hold("settle", 1.5, b),
+                _trough_sine("breath", 13.3333, 0.15, 6.0, b + 6.0)]
+    if slug == "tide":
+        # 5 percent of max per second, the slower of the two ramp
+        # rates Naik 2011 scored, up and back down again.
+        return [_hold("low", 1.5, b),
+                _ramp("flood", 4.0, b, b + 20.0),
+                _hold("slack", 3.0, b + 20.0),
+                _ramp("ebb", 4.0, b + 20.0, b),
+                _hold("low2", 1.0, b)]
+    if slug == "swell":
+        return [_hold("settle", 1.0, b),
+                _trough_sine("swell", 15.0, 0.2, 9.0, b + 9.0)]
+    if slug == "stairs":
+        # Six step edges, each holding 2.2 s. The first grace_s after
+        # every edge is unscored (see grace_windows).
+        treads = (6.0, 12.0, 18.0, 12.0, 6.0, 0.0)
+        return [_hold("s0", 1.5, b)] + [
+            _hold(f"s{i}", 2.2, b + off)
+            for i, off in enumerate(treads, 1)]
+    if slug == "hills":
+        out = [_hold("settle", 1.0, b)]
+        for i in (1, 2):
+            out.append(_ramp(f"up{i}", 3.2, b, b + 16.0))
+            out.append(_ramp(f"down{i}", 3.2, b + 16.0, b))
+        return out
+    if slug == "beach_waves":
+        return [_hold("settle", 1.0, b),
+                _trough_sine("waves", 12.0, 0.3333, 7.0, b + 7.0)]
+    if slug == "heartbeat":
+        # Four 2 s pulses with 1 s of rest between them: force pulses
+        # rather than continuous tracking, the regime Vaillancourt DE
+        # et al 2007 (NeuroImage 36(3):793-803) studied.
+        out = [_hold("rest0", 1.5, b + 2.0)]
+        for i in (1, 2, 3, 4):
+            out.append(_pulse(f"beat{i}", 2.0, b + 2.0, b + 17.0))
+            out.append(_hold(f"rest{i}", 1.0, b + 2.0))
+        return out
+    if slug == "dunes":
+        # Slow rise (4 percent/s), fast release (12 percent/s): release
+        # is the half Davidson 2026 found impaired in Parkinson's, and
+        # here it is asked for three times faster than the climb.
+        out = [_hold("settle", 1.0, b)]
+        for i in (1, 2):
+            out.append(_ramp(f"windward{i}", 4.5, b, b + 18.0))
+            out.append(_ramp(f"slipface{i}", 1.5, b + 18.0, b))
+        out.append(_hold("end", 1.0, b))
+        return out
+    if slug == "chop":
+        # Harmonic pair (3:1), so the whole shape repeats every 6.67 s
+        # and can still be learnt inside one run.
+        return [_hold("settle", 1.0, b),
+                _osc("chop", 13.3333, b + 9.0,
+                     ((0.15, 6.0, -math.pi / 2.0),
+                      (0.45, 3.0, -math.pi / 2.0)))]
+    if slug == "open_ocean":
+        return _multisine("ocean", 14.0, b, OCEAN_COMPONENTS)
+    if slug == "storm":
+        return _multisine("storm", 14.0, b, STORM_COMPONENTS)
+    if slug == "uncharted":
+        ph = tuple(phases) or tuple(p for _f, _m, p in STORM_COMPONENTS)
+        comps = tuple((f, m, ph[i % len(ph)])
+                      for i, (f, m, _p) in enumerate(STORM_COMPONENTS))
+        return _multisine("uncharted", 14.0, b, comps)
+    raise ValueError(f"unknown ladder level {slug!r}")
+
+
+def uncharted_phases(block_seed: int, pass_idx: int = 1) -> tuple:
+    """Level 12's eight phases: drawn from the block seed, logged with
+    the run, and never the same two blocks running. Rounded to four
+    decimals so the number in the CSV is exactly the number flown."""
+    rng = random.Random((int(block_seed) ^ UNCHARTED_SEED_XOR)
+                        + max(0, int(pass_idx) - 1))
+    return tuple(round(rng.uniform(0.0, 2.0 * math.pi), 4)
+                 for _ in STORM_COMPONENTS)
+
+
+def params_from_level(level: WaveLevel, pass_idx: int, base_pct: float,
+                      span_pct: float, gain: float,
+                      max_press_counts: float, grace_s: float = 0.0,
+                      phases: tuple = ()) -> dict:
+    """The loggable params dict for one ladder run.
+
+    The section list is written out key by key rather than left
+    implicit in a generator, so the row rebuilds without this module
+    and a level's maths can never drift away from what was flown: the
+    mode itself flies sections_from_params(this dict).
+    """
+    secs = level_sections(level, base_pct, phases)
+    p = {
+        "ladder": LADDER_ID,
+        "lvl": int(level.lvl),
+        "wave": level.slug,
+        "pass": int(pass_idx),
+        "fixed": 0 if level.slug == "uncharted" else 1,
+        "hw_pct": float(level.hw_pct),
+        "gain": float(gain),
+        "span_pct": float(span_pct),
+        "base_pct": float(base_pct),
+        "max_press_counts": float(max_press_counts),
+        "grace_s": float(grace_s) if level.steps else 0.0,
+        "n_sec": len(secs),
+    }
+    for i, s in enumerate(secs, 1):
+        p[f"s{i}_nm"] = s["nm"]
+        p[f"s{i}_k"] = s["k"]
+        p[f"s{i}_d"] = float(s["d"])
+        p[f"s{i}_a"] = float(s["a"])
+        if s["k"] == "r":
+            p[f"s{i}_b"] = float(s["b"])
+        elif s["k"] == "o":
+            comps = s["comps"]
+            p[f"s{i}_n"] = len(comps)
+            for j, (f, m, ph) in enumerate(comps, 1):
+                p[f"s{i}_f{j}"] = float(f)
+                p[f"s{i}_m{j}"] = float(m)
+                p[f"s{i}_p{j}"] = float(ph)
+    return p
+
 
 # ---- pure trajectory generation --------------------------------------------
 # The rule from the logging contract: the exact target the patient saw
-# must be rebuildable offline. Two pure layers deliver that.
-#   draw_run_params(seed, ...)  draws every random number ONCE and
-#                               returns the flat dict that is logged as
-#                               waveform_params (seed in waveform_seed).
-#   sections_from_params(p)     deterministic plan from that dict; the
-#                               notebook carries a copy and never needs
-#                               the seed or this module's rng.
-#   target_pct(sections, t)     evaluates the target at any time.
-# The mode uses the same three functions to play the run it logs.
+# must be rebuildable offline. Three pure layers deliver that.
+#   params_from_level(level, ...)  the flat dict logged as
+#                                  waveform_params for one ladder rung.
+#   sections_from_params(p)        deterministic plan from that dict;
+#                                  the notebook carries a copy and
+#                                  never needs the seed or this
+#                                  module's rng.
+#   target_pct(sections, t)        evaluates the target at any time.
+# The mode plays sections_from_params(self.params), so what flew and
+# what was logged cannot drift apart. draw_run_params below belongs to
+# the pre-ladder plan and is kept only so sessions recorded before
+# September 2026 still rebuild.
 
 
 @dataclass(frozen=True)
@@ -219,7 +591,10 @@ def draw_run_params(seed: int, level: int, freq_ceiling_hz: float,
                     hold_in_s: float, hold_top_s: float,
                     pre_assess_s: float,
                     max_press_counts: float) -> dict:
-    """Draw a run's random numbers and return the loggable params dict.
+    """LEGACY: the pre-ladder run draw, kept so sessions recorded
+    before September 2026 (and the tests that pin their rebuild) still
+    produce the params dict those rows carry. The mode no longer calls
+    it; params_from_level builds a ladder run.
 
     Pure: the same seed and knobs always return the same dict, which
     is what makes waveform_seed sufficient for bit-exact rebuilds.
@@ -285,7 +660,14 @@ def sections_from_params(p: dict) -> list[RunSection]:
     number comes from the params dict, so the notebook can rebuild the
     plan from the logged cell alone (parse_waveform_params gives floats
     at 6 significant digits, which bounds the rebuild error well under
-    a hundredth of a percent of max)."""
+    a hundredth of a percent of max).
+
+    Two shapes. A ladder run carries n_sec and writes its sections out
+    explicitly; a run recorded before the ladder (September 2026)
+    carries the seven-section draw and is rebuilt by the legacy branch
+    below, unchanged, so old sessions still re-score."""
+    if "n_sec" in p:
+        return _ladder_sections_from_params(p)
     base = float(p["base_pct"])
     plateau = float(p["plateau_pct"])
     rate = float(p["ramp_rate_pct_s"])
@@ -330,6 +712,64 @@ def sections_from_params(p: dict) -> list[RunSection]:
     return out
 
 
+def _ladder_sections_from_params(p: dict) -> list[RunSection]:
+    """Rebuild a ladder run's sections from the explicit key groups
+    params_from_level wrote. Pure and self-contained: the notebook
+    carries the same twenty lines."""
+    out: list[RunSection] = []
+    t = 0.0
+    for i in range(1, int(round(float(p["n_sec"]))) + 1):
+        name = str(p[f"s{i}_nm"])
+        kind = str(p[f"s{i}_k"])
+        dur = float(p[f"s{i}_d"])
+        a = float(p[f"s{i}_a"])
+        if kind == "r":
+            out.append(RunSection(name=name, kind="ramp", start_s=t,
+                                  dur_s=dur, a_pct=a,
+                                  b_pct=float(p[f"s{i}_b"])))
+        elif kind == "o":
+            n = int(round(float(p[f"s{i}_n"])))
+            out.append(RunSection(
+                name=name, kind="osc", start_s=t, dur_s=dur, a_pct=a,
+                freqs_hz=tuple(float(p[f"s{i}_f{j}"])
+                               for j in range(1, n + 1)),
+                amps_pct=tuple(float(p[f"s{i}_m{j}"])
+                               for j in range(1, n + 1)),
+                phases_rad=tuple(float(p[f"s{i}_p{j}"])
+                                 for j in range(1, n + 1))))
+        else:
+            out.append(RunSection(name=name, kind="hold", start_s=t,
+                                  dur_s=dur, a_pct=a))
+        t += dur
+    return out
+
+
+def grace_windows(sections: list[RunSection],
+                  grace_s: float) -> list[tuple[float, float]]:
+    """Unscored windows after a step edge, as (start, end) run times.
+
+    A step edge is a hold that follows a hold at a different level:
+    the target moves in zero time and no finger can. Scoring that
+    window would score reaction time, which Reaction mode measures
+    properly, so it is dropped from time in corridor, from the error
+    integral, from stall detection and from ring placement, in the
+    game and again in the offline re-score. Derived from the sections
+    alone, so the notebook finds the same windows from the same row.
+    """
+    if grace_s <= 0.0 or len(sections) < 2:
+        return []
+    out = []
+    for prev, sec in zip(sections, sections[1:]):
+        if (prev.kind == "hold" and sec.kind == "hold"
+                and abs(sec.a_pct - prev.a_pct) > 1e-9):
+            out.append((sec.start_s, sec.start_s + float(grace_s)))
+    return out
+
+
+def in_grace(windows: list[tuple[float, float]], t: float) -> bool:
+    return any(a <= t < b for a, b in windows)
+
+
 def run_duration_s(sections: list[RunSection]) -> float:
     return sections[-1].end_s if sections else 0.0
 
@@ -365,13 +805,16 @@ def target_pct(sections: list[RunSection], t: float) -> float:
 
 @dataclass
 class RunRecord:
-    """What one completed run contributes to block_stats and to the
-    weakest-finger weighting."""
+    """What one completed run contributes to block_stats. `level` is
+    the ladder position and `wave` its slug; the pair is what the
+    per-level tables and the notebook's learning curves group on."""
 
     hand: str
     finger: int
     lane: int
     level: int
+    wave: str
+    pass_idx: int
     scored_s: float
     tic_frac: float
     mae_pct: float
@@ -385,6 +828,9 @@ class RunRecord:
 
 class ForcePilotMode(WaitSkip):
     name = "Force Pilot"
+    # Which ladder this block flew. Stamped on block_stats so a later
+    # ladder version can never be pooled with this one by accident.
+    ladder_id = LADDER_ID
 
     # A force reading older than this is a source dropout: scoring
     # pauses rather than judging a flat line the patient is not
@@ -400,138 +846,132 @@ class ForcePilotMode(WaitSkip):
 
     def __init__(self, engine: "GameEngine",
                  lanes_by_hand: dict[str, list[int]],
-                 level: int,
-                 corridor_hw_by_level: list[float],
-                 freq_ceiling_by_level: list[float],
-                 runs_per_finger: int,
-                 min_finger_share: float,
                  span_pct: float,
                  base_pct: float,
-                 plateau_pct: float,
-                 ramp_rates_pct_s: list[float],
-                 sine_amp_pct: float,
-                 sine_s: float,
-                 sos_amps_pct: list[float],
-                 sos_s: float,
-                 hold_in_s: float,
-                 hold_top_s: float,
-                 pre_assess_s: float,
                  visual_gain: float,
                  ring_interval_s: float,
                  ring_points: int,
                  exit_buzz_ms: float,
                  exit_buzz_cooldown_s: float,
-                 promote_frac: float,
-                 demote_frac: float,
                  probe_presses: int,
                  probe_floor_counts: float,
                  probe_max_age_s: float,
                  announce_s: float,
-                 rest_s: float,
+                 mid_rest_s: float,
+                 step_grace_s: float,
+                 passes: int,
                  score_cfg: ScoreConfig,
                  seed: int = 0,
                  demo_trials: int | None = None,
-                 level_by_hf: dict[tuple[str, int], int] | None = None
+                 demo_levels: list[int] | None = None,
+                 levels: list[int] | None = None,
+                 hand_order: list[str] | None = None
                  ) -> None:
         self.engine = engine
         self.hands = {h: list(v)[:4] for h, v in lanes_by_hand.items() if v}
         if not self.hands:
             self.hands = {"right": [0, 1, 2, 3]}
         self.hand_names = list(self.hands)
-        self.bilateral = len(self.hand_names) > 1
-        self.corridor_hw_by_level = [float(x) for x in corridor_hw_by_level]
-        self.freq_ceiling_by_level = [float(x) for x in freq_ceiling_by_level]
-        self.max_level = min(len(self.corridor_hw_by_level),
-                             len(self.freq_ceiling_by_level))
-        # Difficulty is per (hand, finger), not one shared value: a
-        # strong finger promoting must never drag a finger that has
-        # never played into a harder corridor, and a weak finger
-        # demoting must never soften the corridor for a finger that
-        # is coping fine. level_by_hf carries any state from a prior
-        # block (same pattern as the other adaptive modes keying
-        # their difficulty state per unit of play, e.g. buzz_hunt's
-        # per-hand staircases); a combo missing from it starts at the
-        # configured `level`. self.level/.corridor_hw below are a
-        # live mirror of whichever (hand, finger) is currently
-        # playing, updated by _prepare_run and _move_level, kept only
-        # because the screen and draw_run_params read them as scalars.
-        default_level = max(1, min(int(level), self.max_level))
-        carried = dict(level_by_hf or {})
-        self._level_by_hf: dict[tuple[str, int], int] = {}
-        self._level_start_by_hf: dict[tuple[str, int], int] = {}
-        self._level_trace_by_hf: dict[tuple[str, int], list[int]] = {}
-        self._recent_tic_by_hf: dict[tuple[str, int], list[float]] = {}
-        for hand in self.hand_names:
-            for f in range(4):
-                key = (hand, f)
-                lvl = carried.get(key)
-                if not isinstance(lvl, int) or lvl < 1:
-                    lvl = default_level
-                lvl = max(1, min(lvl, self.max_level))
-                self._level_by_hf[key] = lvl
-                self._level_start_by_hf[key] = lvl
-                self._level_trace_by_hf[key] = [lvl]
-        self.level = default_level
-        self.level_start = default_level
         self.span_pct = float(span_pct)
         self.base_pct = float(base_pct)
-        self.plateau_pct = float(plateau_pct)
-        self.ramp_rates_pct_s = [float(r) for r in ramp_rates_pct_s]
-        self.sine_amp_pct = float(sine_amp_pct)
-        self.sine_s = float(sine_s)
-        self.sos_amps_pct = [float(a) for a in sos_amps_pct]
-        self.sos_s = float(sos_s)
-        self.hold_in_s = float(hold_in_s)
-        self.hold_top_s = float(hold_top_s)
-        self.pre_assess_s = float(pre_assess_s)
         self.visual_gain = float(visual_gain)
         self.ring_interval_s = max(0.5, float(ring_interval_s))
         self.ring_points = int(ring_points)
         self.exit_buzz_ms = float(exit_buzz_ms)
         self.exit_buzz_cooldown_s = float(exit_buzz_cooldown_s)
-        self.promote_frac = float(promote_frac)
-        self.demote_frac = float(demote_frac)
         self.probe_presses = max(2, int(probe_presses))
         self.probe_floor_counts = float(probe_floor_counts)
         self.probe_max_age_s = float(probe_max_age_s)
         self.announce_s = max(0.5, float(announce_s))
-        self.rest_s = max(1.0, float(rest_s))
+        self.mid_rest_s = max(0.0, float(mid_rest_s))
+        self.step_grace_s = max(0.0, float(step_grace_s))
+        self.passes = max(1, int(passes))
         self.score_cfg = score_cfg
-        self.rng = random.Random(int(seed))
+        # The block seed, logged on every run. Only level 12 spends it.
+        self.seed = int(seed)
         self.demo = demo_trials is not None
 
-        n_fingers = 4 * len(self.hand_names)
-        self.total_runs = max(1, int(runs_per_finger)) * n_fingers
+        # The ladder for this block. Fixed order, fixed fingers; the
+        # only thing a caller may change is WHICH rungs play, and only
+        # Test Mode and the tests do that.
+        wanted = list(levels) if levels else None
+        if wanted is None and self.demo:
+            wanted = list(demo_levels or [1, 4, 7, 12])
+        self.levels: list[WaveLevel] = [
+            LADDER_BY_LVL[int(n)] for n in (wanted or [w.lvl for w in LADDER])
+            if int(n) in LADDER_BY_LVL]
+        if not self.levels:
+            self.levels = list(LADDER)
+        # Hand order inside a level: the study's first hand flies, then
+        # the other. Same order every play for one participant, so the
+        # hand comparison is within a level and the resting hand
+        # recovers while the other works.
+        self.hand_order = [h for h in (hand_order or self._study_hand_order())
+                           if h in self.hands]
+        if not self.hand_order:
+            self.hand_order = list(self.hand_names)
         if self.demo:
-            # Test Mode: a couple of short runs so a supervisor demo
-            # reaches Results inside a minute or two. The run SHAPE
-            # stays intact (every section still appears) so the demo
-            # shows the real thing, just compressed.
-            self.total_runs = min(self.total_runs, max(1, int(demo_trials)))
-            self.hold_in_s = min(self.hold_in_s, 1.2)
-            self.hold_top_s = min(self.hold_top_s, 1.2)
-            self.sine_s = min(self.sine_s, 3.0)
-            self.sos_s = min(self.sos_s, 3.0)
-            self.pre_assess_s = min(self.pre_assess_s, 1.0)
-            self.rest_s = min(self.rest_s, 2.0)
-            self.announce_s = min(self.announce_s, 1.5)
+            # Test Mode: four rungs on one hand so a supervisor demo
+            # reaches Results inside a couple of minutes. The waves
+            # themselves are untouched, so the demo shows the real
+            # thing rather than a compressed imitation of it.
+            self.hand_order = self.hand_order[:1]
+            self.announce_s = min(self.announce_s, 1.0)
+            self.mid_rest_s = 0.0
             self.probe_presses = 2
-            # The fastest configured ramp keeps the demo run short.
-            self.ramp_rates_pct_s = [max(self.ramp_rates_pct_s)]
+
+        # The whole block as a list of runs, decided here and never
+        # touched again: (ladder level, hand, pass). Nothing adapts,
+        # so the plan a participant flies is the plan every other
+        # participant flies.
+        self._plan: list[tuple[WaveLevel, str, int]] = []
+        for p_idx in range(1, self.passes + 1):
+            for lvl in self.levels:
+                for hand in self.hand_order:
+                    self._plan.append((lvl, hand, p_idx))
+        if self.demo and demo_trials is not None:
+            self._plan = self._plan[:max(1, int(demo_trials))]
+        self.total_runs = len(self._plan)
+        # One rest, halfway through each pass, plus one between passes.
+        # Everything else is a 1.8 s card: Basil asked for little time
+        # between runs, and the fingers rotate through the ladder
+        # anyway, so no one finger works twice in a row for long.
+        per_pass = len(self.levels) * len(self.hand_order)
+        self._rest_after: set[int] = set()
+        if self.mid_rest_s > 0:
+            for p_idx in range(self.passes):
+                start = p_idx * per_pass
+                half = start + (len(self.levels) // 2) * len(self.hand_order)
+                if 0 < half < len(self._plan):
+                    self._rest_after.add(half - 1)
+                if p_idx + 1 < self.passes:
+                    self._rest_after.add(start + per_pass - 1)
+        # Level 12's phases, drawn once per pass from the block seed
+        # and logged with the run. Everything else in the ladder is
+        # identical every block.
+        self._uncharted_phases = {
+            p_idx: uncharted_phases(self.seed, p_idx)
+            for p_idx in range(1, self.passes + 1)}
+        # What this block flew, worked out once: block_stats stamps it
+        # on the session so a later ladder version can never be pooled
+        # with this one, and the results screen reads it per frame.
+        self.ladder_info = {
+            "id": LADDER_ID,
+            "passes": self.passes,
+            "hand_order": list(self.hand_order),
+            "levels": [
+                {"lvl": w.lvl, "wave": w.slug, "name": w.name,
+                 "finger": w.finger, "hw_pct": w.hw_pct,
+                 "dur_s": round(run_duration_s(sections_from_params(
+                     params_from_level(
+                         w, 1, self.base_pct, self.span_pct,
+                         self.visual_gain, 0.0,
+                         grace_s=self.step_grace_s,
+                         phases=self._uncharted_phases[1]))), 4)}
+                for w in self.levels],
+        }
 
         self.view = ForceView(engine)
-        # Weakest-finger weighting: hands alternate on a balanced bag
-        # (both hands get equal run counts), and within a hand the
-        # floor-weighted scheduler gives struggling fingers extra runs
-        # without starving any finger below its guaranteed share.
-        self._hand_bag = BalancedScheduler(
-            list(range(len(self.hand_names))), self.rng,
-            avoid_repeats=False)
-        self._finger_sched = {
-            h: FloorWeightedScheduler(4, min_share=float(min_finger_share),
-                                      rng=self.rng)
-            for h in self.hand_names}
-        self._mae_by_hf: dict[tuple[str, int], list[float]] = {}
 
         # Probe queue: every finger of every playing hand whose stored
         # session max is missing or stale. Order is hands as selected,
@@ -558,7 +998,9 @@ class ForcePilotMode(WaitSkip):
         # Phase machine. Phases:
         #   no_input -> (nothing; the source cannot feed this mode)
         #   probe_gap -> probe (per finger) ... -> announce -> run ->
-        #   feedback -> announce ... -> done
+        #   announce -> run ... -> rest (once) -> ... -> done
+        # "announce" is one card carrying both halves of the old pair:
+        # how the run just flown went, and which wave comes next.
         self.phase = "init"
         self.end_reason: str | None = None
         self._t0: float | None = None
@@ -575,19 +1017,26 @@ class ForcePilotMode(WaitSkip):
         # Run state (populated by _prepare_run).
         self.trial_counter = 0
         self.runs_done = 0
-        self.hand: str = self.hand_names[0]
-        self.finger: int = 0
-        self.lane: int = self.hands[self.hand][0]
-        self.run_seed: int = 0
+        self.hand: str = self.hand_order[0]
+        self.finger: int = self.levels[0].finger
+        self.lane: int = self.hands[self.hand][self.finger]
+        self.run_seed: int = self.seed
         self.params: dict = {}
         self.sections: list[RunSection] = []
         self.duration_s: float = 0.0
-        self.corridor_hw = self.corridor_hw_by_level[self.level - 1]
+        # The rung playing right now, mirrored as scalars because the
+        # screen and the trial row read them that way.
+        self.wave: WaveLevel = self.levels[0]
+        self.level: int = self.wave.lvl
+        self.pass_idx: int = 1
+        self.corridor_hw = self.wave.hw_pct
+        self.grace: list[tuple[float, float]] = []
+        self._plan_idx = -1
+        self._next_idx = 0
         self.run_t0: float | None = None
         self.active: PendingTrial | None = None
         self.ring_times: list[float] = []
         self.ring_state: list[bool | None] = []
-        self.level_msg: str = ""
         self._last_result: dict | None = None
         self._records: list[RunRecord] = []
 
@@ -608,12 +1057,42 @@ class ForcePilotMode(WaitSkip):
         self._no_signal_streak = 0
         self._abs_err_int = 0.0
         self._in_c_s = 0.0
+        self._grace_s = 0.0
         self._sec_acc: dict[str, list[float]] = {}
+        # Ramp error split by direction, not by section name: every
+        # ramp level (Tide, Hills, Dunes) feeds the same two buckets,
+        # so press and release stay comparable across the ladder.
+        self._press_acc = [0.0, 0.0]
+        self._release_acc = [0.0, 0.0]
         self._stalls = 0
         self._rings_collected = 0
         self._ring_idx = 0
         self._was_in = True
         self._last_buzz_t: float | None = None
+
+    # ---- who flies first ---------------------------------------------------
+    def _study_hand_order(self) -> list[str]:
+        """Hand order inside a level: the study's first hand, then the
+        other. The battery's counterbalancing cell decides which hand
+        that is (data/intake.cell_for against the login's main hand),
+        so a participant's order is the same every play and matches
+        the order the rest of the battery used. No main hand on the
+        login means the hands play as selected."""
+        if len(self.hand_names) < 2:
+            return list(self.hand_names)
+        sess = getattr(self.engine, "session", None)
+        dom = str(getattr(sess, "dominant_hand", "") or "").strip().lower()
+        if dom not in ("left", "right"):
+            return list(self.hand_names)
+        try:
+            from ...data.intake import cell_for
+            first_word = str(cell_for(
+                str(getattr(sess, "participant", "") or ""))["hand_first"])
+        except Exception:
+            first_word = "dominant"
+        other = "left" if dom == "right" else "right"
+        first = dom if first_word == "dominant" else other
+        return [first, "left" if first == "right" else "right"]
 
     # ---- plumbing shared with the other modes ------------------------------
     def queue_press(self, ev) -> None:
@@ -668,9 +1147,9 @@ class ForcePilotMode(WaitSkip):
                 self._start_run(now)
         elif self.phase == "run":
             self._run_frame(now, dt)
-        elif self.phase == "feedback":
+        elif self.phase == "rest":
             if self._phase_until is not None and now >= self._phase_until:
-                self._next_run(now)
+                self._after_mid_rest(now)
 
     def _start(self, now: float) -> None:
         source = getattr(self.engine, "source", None)
@@ -776,36 +1255,28 @@ class ForcePilotMode(WaitSkip):
             self._enter_announce(now)
 
     # ---- run selection and setup -------------------------------------------
-    def _mean_mae(self, hand: str, finger: int) -> float | None:
-        vals = self._mae_by_hf.get((hand, finger))
-        if not vals:
-            return None
-        return sum(vals) / len(vals)
-
     def _prepare_run(self) -> None:
-        """Pick the next hand and finger, then draw the run plan."""
-        if self.bilateral:
-            self.hand = self.hand_names[self._hand_bag.next()]
-        else:
-            self.hand = self.hand_names[0]
-        weights = [self._mean_mae(self.hand, f) for f in range(4)]
-        if any(w is not None and w > 0 for w in weights):
-            use = [w if w is not None else 0.0 for w in weights]
-            # A finger with no data yet weighs in at the current worst,
-            # so it cannot be starved just for being unmeasured.
-            worst = max(w for w in use)
-            use = [w if w > 0 else worst for w in use]
-        else:
-            use = None
-        self.finger = self._finger_sched[self.hand].next(use)
+        """Take the next rung off the fixed plan and build its run.
+
+        No choosing happens here any more: the level, its finger, its
+        corridor and the hand were all decided when the block opened,
+        so two participants on the same hand selection fly the same
+        24 runs in the same order."""
+        idx = min(self._next_idx, len(self._plan) - 1)
+        self._plan_idx = idx
+        self._next_idx = idx + 1
+        wave, hand, pass_idx = self._plan[idx]
+        self.wave = wave
+        self.level = wave.lvl
+        self.pass_idx = pass_idx
+        self.hand = hand if hand in self.hands else self.hand_names[0]
+        self.finger = wave.finger
         self.lane = self.hands[self.hand][self.finger]
-        # Difficulty is this finger's own state, not whatever the
-        # previous run's finger had drifted to. self.level is only a
-        # scalar mirror of _level_by_hf[(hand, finger)] for the run
-        # that is about to play; _move_level writes both back.
-        self.level = self._level_by_hf[(self.hand, self.finger)]
         self.trial_counter += 1
-        self.run_seed = self.rng.randrange(2 ** 32)
+        # The seed is the block's, logged once; only level 12 spends
+        # it, and the phases it drew ride the row like every other
+        # number so the seed is never needed to rebuild a target.
+        self.run_seed = self.seed
         self._build_run_plan()
 
     def _finger_max_counts(self) -> float:
@@ -819,36 +1290,44 @@ class ForcePilotMode(WaitSkip):
         return 0.0
 
     def _build_run_plan(self) -> None:
-        self.corridor_hw = self.corridor_hw_by_level[self.level - 1]
-        self.params = draw_run_params(
-            seed=self.run_seed, level=self.level,
-            freq_ceiling_hz=self.freq_ceiling_by_level[self.level - 1],
-            corridor_hw_pct=self.corridor_hw, gain=self.visual_gain,
-            span_pct=self.span_pct, base_pct=self.base_pct,
-            plateau_pct=self.plateau_pct,
-            ramp_rates_pct_s=self.ramp_rates_pct_s,
-            sine_amp_pct=self.sine_amp_pct, sine_s=self.sine_s,
-            sos_amps_pct=self.sos_amps_pct, sos_s=self.sos_s,
-            hold_in_s=self.hold_in_s, hold_top_s=self.hold_top_s,
-            pre_assess_s=self.pre_assess_s,
-            max_press_counts=self._finger_max_counts())
+        self.corridor_hw = self.wave.hw_pct
+        self.params = params_from_level(
+            self.wave, self.pass_idx, base_pct=self.base_pct,
+            span_pct=self.span_pct, gain=self.visual_gain,
+            max_press_counts=self._finger_max_counts(),
+            grace_s=self.step_grace_s,
+            phases=self._uncharted_phases.get(self.pass_idx, ()))
+        # The mode flies exactly what it logged: the sections come
+        # back out of the params dict, not from the table directly.
         self.sections = sections_from_params(self.params)
         self.duration_s = run_duration_s(self.sections)
+        self.grace = grace_windows(self.sections,
+                                   float(self.params.get("grace_s", 0.0)))
         self.ring_times = []
         t = self.RING_LEAD_S
         while t < self.duration_s - 0.5:
-            self.ring_times.append(t)
+            # No ring inside a step-edge grace window: the window is
+            # not scored, so a checkpoint sitting in it would reward
+            # or punish nothing.
+            if not in_grace(self.grace, t):
+                self.ring_times.append(t)
             t += self.ring_interval_s
         self.ring_state = [None] * len(self.ring_times)
 
     def _enter_announce(self, now: float, reuse_run: bool = False) -> None:
+        """The one card between runs: how the last run went and which
+        wave is next. Announce and feedback used to be two cards
+        totalling 12.5 s; the brief asked for little time between
+        runs, so they are one card of announce_s (1.8 s shipped) and
+        the only other wait in the block is the mid-ladder rest. The
+        card is still long enough for the rest tare below, which the
+        notebook reads from 1.0 s to 0.05 s before a run starts."""
         if not reuse_run:
             pass  # the run was prepared by the caller
         self.phase = "announce"
         self._phase_until = now + self.announce_s
-        # The announce card names who flies next. Skippable: the tare
-        # below runs on entry, not over the card's lifetime, so
-        # shortening the card takes nothing away from the next run.
+        # Skippable: the tare runs on entry, not over the card's
+        # lifetime, so shortening the card takes nothing from the run.
         self.arm_wait("announce", self._phase_until, self._start_run,
                       started_at=now)
         # Rest tare: the working hand is off the pads or resting during
@@ -856,12 +1335,31 @@ class ForcePilotMode(WaitSkip):
         self.view.rebaseline([self.lane])
         self._reset_run_scoring()
 
+    def _enter_mid_rest(self, now: float) -> None:
+        """The one real rest in the block, halfway up the ladder (and
+        between passes when a block runs the ladder twice). Long
+        enough to draw the skip chip, which the 1.8 s cards are not:
+        somebody who wants to keep going can, and the skip is counted
+        in block_stats like every other."""
+        self.phase = "rest"
+        self._phase_until = now + self.mid_rest_s
+        self.arm_wait("rest", self._phase_until, self._after_mid_rest,
+                      started_at=now)
+        self.view.rebaseline([self.lane])
+
+    def _after_mid_rest(self, now: float) -> None:
+        self.clear_wait()
+        self._enter_announce(now)
+
     def _reset_run_scoring(self) -> None:
         self._sec_idx = 0
         self._scored_s = 0.0
         self._abs_err_int = 0.0
         self._in_c_s = 0.0
+        self._grace_s = 0.0
         self._sec_acc = {s.name: [0.0, 0.0, 0.0] for s in self.sections}
+        self._press_acc = [0.0, 0.0]
+        self._release_acc = [0.0, 0.0]
         self._stalls = 0
         self._rings_collected = 0
         self._ring_idx = 0
@@ -881,7 +1379,6 @@ class ForcePilotMode(WaitSkip):
         self.phase = "run"
         self._phase_until = None
         self.run_t0 = now
-        self.level_msg = ""
         self.active = PendingTrial(
             trial_id=self.trial_counter, lane=self.lane,
             stim_t_perf=now, keys_pressed=[], incorrect_presses=[])
@@ -899,7 +1396,8 @@ class ForcePilotMode(WaitSkip):
                 "force_pilot_run", lane=self.lane, t_perf=now,
                 detail=(f"trial_id={self.trial_counter};"
                         f"seed={self.run_seed};lvl={self.level};"
-                        f"finger={self.finger + 1}"),
+                        f"wave={self.wave.slug};pass={self.pass_idx};"
+                        f"hand={self.hand};finger={self.finger + 1}"),
                 hand=self.engine.hand_mode)
         self.engine.log_segment_start(self.sections[0].name,
                                       self.trial_counter, self.lane, now)
@@ -969,12 +1467,34 @@ class ForcePilotMode(WaitSkip):
         self.target_now = target
         err = pct - target
         in_c = abs(err) <= self.corridor_hw
+        idx = min(self._sec_idx, len(self.sections) - 1)
+        if in_grace(self.grace, t_run):
+            # Step-edge grace: the target has just jumped and the
+            # finger physically cannot be there yet. Nothing about
+            # this window is scored -- no corridor time, no error, no
+            # stall, no buzz -- and the same window is dropped again
+            # in the offline re-score. _was_in stays True so the first
+            # frame AFTER the window that is still outside counts as
+            # a fresh stall rather than being swallowed.
+            self._grace_s += dt
+            self._was_in = True
+            self.force_pct_now = pct
+            shown = target + self.visual_gain * err
+            self.craft_display_pct = max(0.0, min(self.span_pct, shown))
+            self.in_corridor_now = in_c
+            self.stalled = False
+            return
         self._scored_s += dt
         self._abs_err_int += abs(err) * dt
         if in_c:
             self._in_c_s += dt
-        idx = min(self._sec_idx, len(self.sections) - 1)
-        acc = self._sec_acc.get(self.sections[idx].name)
+        sec = self.sections[idx]
+        if sec.kind == "ramp":
+            bucket = (self._press_acc if sec.b_pct >= sec.a_pct
+                      else self._release_acc)
+            bucket[0] += abs(err) * dt
+            bucket[1] += dt
+        acc = self._sec_acc.get(sec.name)
         if acc is not None:
             acc[0] += abs(err) * dt
             acc[1] += dt
@@ -1033,6 +1553,10 @@ class ForcePilotMode(WaitSkip):
             return None
         return acc[0] / acc[1]
 
+    @staticmethod
+    def _bucket_mae(acc: list[float]) -> float | None:
+        return (acc[0] / acc[1]) if acc and acc[1] > 0 else None
+
     def _close_run(self, now: float) -> None:
         trial = self.active
         self.active = None
@@ -1050,8 +1574,8 @@ class ForcePilotMode(WaitSkip):
         self._no_signal_streak = 0
         tic = (self._in_c_s / scored) if scored > 0 else 0.0
         mae = (self._abs_err_int / scored) if scored > 0 else 0.0
-        press_mae = self._sec_mae("ramp_up")
-        release_mae = self._sec_mae("release")
+        press_mae = self._bucket_mae(self._press_acc)
+        release_mae = self._bucket_mae(self._release_acc)
         section_mae = {n: self._sec_mae(n) for n in self._sec_acc}
         rings_total = len(self.ring_times)
 
@@ -1068,25 +1592,25 @@ class ForcePilotMode(WaitSkip):
 
         rec = RunRecord(
             hand=self.hand, finger=self.finger, lane=self.lane,
-            level=self.level, scored_s=scored, tic_frac=tic, mae_pct=mae,
+            level=self.level, wave=self.wave.slug, pass_idx=self.pass_idx,
+            scored_s=scored, tic_frac=tic, mae_pct=mae,
             press_mae_pct=press_mae, release_mae_pct=release_mae,
             stalls=self._stalls, rings_collected=self._rings_collected,
             rings_total=rings_total, section_mae=section_mae)
         self._records.append(rec)
-        if scored > 0:
-            self._mae_by_hf.setdefault((self.hand, self.finger),
-                                       []).append(mae)
 
         def _fmt(v):
             return "" if v is None else f"{v:.2f}"
 
         stimulus = (
-            f"corridor;lvl={self.level};hand={self.hand};"
+            f"corridor;lvl={self.level};wave={self.wave.slug};"
+            f"pass={self.pass_idx};hand={self.hand};"
             f"finger={FINGER_WORDS[self.finger].lower()};"
             f"tic={tic:.3f};mae={mae:.2f};"
             f"press_mae={_fmt(press_mae)};release_mae={_fmt(release_mae)};"
             f"rings={self._rings_collected}/{rings_total};"
-            f"stalls={self._stalls};scored_s={scored:.2f}")
+            f"stalls={self._stalls};scored_s={scored:.2f};"
+            f"grace_s={self._grace_s:.2f}")
         segments = [(s.name, (self.run_t0 or 0.0) + s.start_s,
                      (self.run_t0 or 0.0) + s.end_s)
                     for s in self.sections]
@@ -1115,16 +1639,18 @@ class ForcePilotMode(WaitSkip):
             "rings": self._rings_collected, "rings_total": rings_total,
             "stalls": self._stalls,
             "hand": self.hand, "finger": self.finger,
+            "level": self.level, "wave": self.wave.name,
         }
         self.runs_done += 1
-        self._move_level(tic)
         if self.runs_done >= self.total_runs:
             self._end("completed")
             return
-        self.phase = "feedback"
-        self._phase_until = now + self.rest_s
-        self._arm_run_rest(now)
+        rest_due = self._plan_idx in self._rest_after
         self._prepare_run()
+        if rest_due:
+            self._enter_mid_rest(now)
+        else:
+            self._enter_announce(now)
 
     # How many consecutive signal-starved closes of the same run slot
     # replay it before the slot is abandoned. Keeps a permanently dead
@@ -1135,15 +1661,18 @@ class ForcePilotMode(WaitSkip):
     def _close_run_no_signal(self, trial, now: float, scored: float,
                              plan_s: float) -> None:
         """Close a signal-starved run as hardware loss: its own
-        error_type, no RunRecord (so no per-finger MAE dilution), no
-        staircase move, and the run replays like a pause restart.
-        After MAX_NO_SIGNAL_RETRIES consecutive starved closes the
-        slot is given up so a dead device cannot loop forever."""
+        error_type, no RunRecord (so no per-level MAE dilution), and
+        the run replays like a pause restart. After
+        MAX_NO_SIGNAL_RETRIES consecutive starved closes the rung is
+        given up, the ladder moves on, and the gap shows in the
+        notebook as a missing level rather than as bad tracking."""
         stimulus = (
-            f"corridor;lvl={self.level};hand={self.hand};"
+            f"corridor;lvl={self.level};wave={self.wave.slug};"
+            f"pass={self.pass_idx};hand={self.hand};"
             f"finger={FINGER_WORDS[self.finger].lower()};"
             f"tic=;mae=;press_mae=;release_mae=;rings=0/0;"
             f"stalls={self._stalls};scored_s={scored:.2f};"
+            f"grace_s={self._grace_s:.2f};"
             f"plan_s={plan_s:.2f};no_signal=True")
         segments = [(s.name, (self.run_t0 or 0.0) + s.start_s,
                      (self.run_t0 or 0.0) + s.end_s)
@@ -1163,112 +1692,53 @@ class ForcePilotMode(WaitSkip):
             "press_mae": None, "release_mae": None,
             "rings": 0, "rings_total": 0, "stalls": self._stalls,
             "hand": self.hand, "finger": self.finger,
+            "level": self.level, "wave": self.wave.name,
         }
         if self._no_signal_streak <= self.MAX_NO_SIGNAL_RETRIES:
-            # Replay the same run (same seed, same plan), like the
+            # Replay the same rung (same level, same phases), like the
             # pause path: the slot produced no evidence yet.
-            self.phase = "feedback"
-            self._phase_until = now + self.rest_s
-            self._arm_run_rest(now)
+            self._enter_announce(now, reuse_run=True)
             return
-        # Give the slot up: move on without touching the staircase.
+        # Give the rung up and move the ladder on.
         self._no_signal_streak = 0
         self.runs_done += 1
         if self.runs_done >= self.total_runs:
             self._end("completed")
             return
-        self.phase = "feedback"
-        self._phase_until = now + self.rest_s
-        self._arm_run_rest(now)
+        rest_due = self._plan_idx in self._rest_after
         self._prepare_run()
-
-    def _move_level(self, tic: float) -> None:
-        """Difficulty on the brief's two axes at once: the level index
-        picks both the corridor half-width and the waveform bandwidth.
-        State is per (hand, finger): the run just closed belongs to
-        self.hand/self.finger (this fires from _close_run before
-        _prepare_run advances to the next combo), so only THAT
-        finger's promotion history and level move. A strong finger's
-        streak must never promote a finger that has not played, and a
-        weak finger's miss must never soften the corridor for a
-        finger that is coping fine. Announced plainly (level_msg shows
-        on the rest and announce screens) and logged, so no run's
-        difficulty is ever implicit."""
-        key = (self.hand, self.finger)
-        recent = self._recent_tic_by_hf.setdefault(key, [])
-        recent.append(tic)
-        moved = 0
-        if (len(recent) >= 2
-                and min(recent[-2:]) >= self.promote_frac
-                and self.level < self.max_level):
-            moved = 1
-        elif tic < self.demote_frac and self.level > 1:
-            moved = -1
-        if not moved:
-            return
-        self.level += moved
-        self._level_by_hf[key] = self.level
-        recent.clear()
-        self._level_trace_by_hf.setdefault(key, []).append(self.level)
-        hw = self.corridor_hw_by_level[self.level - 1]
-        word = "narrows" if moved > 0 else "widens"
-        finger_word = FINGER_WORDS[self.finger].lower()
-        self.level_msg = (f"Corridor {word}: level {self.level} of "
-                          f"{self.max_level} ({hw:.0f}% wide each side) "
-                          f"-- {self.hand} {finger_word}")
-        raw = getattr(self.engine, "raw_logger", None)
-        if raw:
-            raw.queue_event(
-                "force_pilot_level",
-                detail=(f"level={self.level} hw_pct={hw} "
-                        f"runs_done={self.runs_done} hand={self.hand} "
-                        f"finger={self.finger + 1}"),
-                hand=self.engine.hand_mode)
-
-    def _arm_run_rest(self, now: float) -> None:
-        """The between-run rest shows the run's numbers and lets the
-        finger recover. Ten seconds of holding a corridor is tiring,
-        so the floor is there for the hand, not for the measurement:
-        the next run re-tares on its own announce card whatever the
-        rest length was."""
-        self.arm_wait("rest", self._phase_until, self._next_run,
-                      started_at=now)
-
-    def _next_run(self, now: float) -> None:
-        self.clear_wait()
-        self._enter_announce(now)
+        if rest_due:
+            self._enter_mid_rest(now)
+        else:
+            self._enter_announce(now)
 
     # ---- end of block ------------------------------------------------------
     def _end(self, reason: str) -> None:
         self.phase = "done"
         self.end_reason = reason
-        # Next block this login session starts where this one ended,
-        # like reaction's window level, but one level per (hand,
-        # finger): the dict shape is the point, since the whole
-        # finding this fixes was one shared level flattening that
-        # per-finger state. A restart or session end resets to config
-        # (the engine clears the carry in _clear_session_carry), and a
-        # Test Mode demo never writes it: a supervisor's demo must not
-        # seed a real patient's difficulty.
-        if not self.demo:
-            self.engine._force_pilot_levels = dict(self._level_by_hf)
+        # Nothing carries between blocks any more. The ladder is fixed,
+        # so a second block is the same twelve waves in the same order,
+        # which is the whole point: play index, not difficulty state,
+        # is what changes between plays. The engine still clears
+        # _force_pilot_levels on a session end; leaving it empty here
+        # keeps a stale carry from an older build out of a new block.
+        self.engine._force_pilot_levels = {}
         self.engine.finish_block()
 
     # ---- block summary -----------------------------------------------------
-    @staticmethod
-    def _hf_key(hand: str, finger: int) -> str:
-        return f"{hand}:{finger}"
-
     def block_stats(self) -> dict:
         """What finish_block folds into metadata.json, and what the
-        results screen reads: per-finger tracking quality, the pooled
-        per-section errors and the best section in plain words.
+        results screen reads: per-finger and per-level tracking
+        quality, the pooled per-section errors and the best section in
+        plain words.
 
-        Levels and the per-lane / per-section stats are broken out by
-        corridor level as well as by lane: a run played at the
-        easiest level and one at the hardest earn differently-scaled
-        outcomes for the same real tracking quality, so pooling them
-        without the level split would misrepresent both."""
+        Everything is broken out by ladder level as well as by lane. A
+        run at level 1 and a run at level 12 are not the same
+        measurement: the corridor is twice as wide at the bottom of
+        the ladder, so time in corridor falls as the ladder climbs
+        whether or not tracking got worse. `ladder` records which
+        rungs this block ran and in which hand order, so a later
+        ladder version can never be pooled with this one by accident."""
         def _mean(vals):
             vals = [v for v in vals if v is not None]
             return round(sum(vals) / len(vals), 3) if vals else None
@@ -1295,32 +1765,61 @@ class ForcePilotMode(WaitSkip):
                 "release_mae_pct": _mean([r.release_mae_pct for r in rs]),
                 "by_level": by_level,
             }
+        names: list[str] = []
+        for r in self._records:
+            for name in r.section_mae:
+                if name not in names:
+                    names.append(name)
         section_mae: dict[str, float | None] = {}
-        for name in SECTION_LABELS:
+        for name in names:
             vals = [r.section_mae.get(name) for r in self._records]
             section_mae[name] = _mean(vals)
         section_mae_by_level: dict[str, dict] = {}
         for lvl in sorted({r.level for r in self._records}):
             lrs = [r for r in self._records if r.level == lvl]
+            lnames = [n for n in names
+                      if any(n in r.section_mae for r in lrs)]
             section_mae_by_level[str(lvl)] = {
                 name: _mean([r.section_mae.get(name) for r in lrs])
-                for name in SECTION_LABELS
+                for name in lnames
             }
         best = None
         scored_secs = {n: v for n, v in section_mae.items()
                        if v is not None}
         if scored_secs:
-            best = SECTION_LABELS[min(scored_secs, key=scored_secs.get)]
-        levels = {
-            self._hf_key(hand, finger): {
-                "start": self._level_start_by_hf[(hand, finger)],
-                "final": self._level_by_hf[(hand, finger)],
-                "trace": list(self._level_trace_by_hf[(hand, finger)]),
+            best = section_label(min(scored_secs, key=scored_secs.get))
+
+        def _level_row(rs):
+            return {
+                "runs": len(rs),
+                "mae_pct": _mean([r.mae_pct for r in rs]),
+                "time_in_corridor": _mean([r.tic_frac for r in rs]),
+                "rings": sum(r.rings_collected for r in rs),
+                "stalls": sum(r.stalls for r in rs),
             }
-            for hand in self.hand_names for finger in range(4)
-        }
+
+        # Per ladder position, pooled over hands and then split by
+        # hand. This is the table the ladder exists for: time in
+        # corridor is only comparable WITHIN a level (the corridor
+        # narrows as the ladder climbs), so nothing here pools levels.
+        per_level = {
+            str(lvl): _level_row([r for r in self._records
+                                  if r.level == lvl])
+            for lvl in sorted({r.level for r in self._records})}
+        per_level_by_hand: dict[str, dict] = {}
+        for hand in self.hand_names:
+            rows = {
+                str(lvl): _level_row([r for r in self._records
+                                      if r.level == lvl and r.hand == hand])
+                for lvl in sorted({r.level for r in self._records
+                                   if r.hand == hand})}
+            if rows:
+                per_level_by_hand[hand] = rows
         return {
-            "levels": levels,
+            "ladder": dict(self.ladder_info),
+            "per_level": per_level,
+            "per_level_by_hand": per_level_by_hand,
+            "step_grace_s": self.step_grace_s,
             "visual_gain": self.visual_gain,
             "hands": self.hand_names,
             "runs": len(self._records),

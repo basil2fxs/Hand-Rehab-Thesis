@@ -1,0 +1,75 @@
+# Finger Rehab: Muscle Memory sequence file (pattern_file 1)
+#
+# HOW TO USE
+#   1. Copy this file, edit the blocks below, keep the .yaml ending.
+#   2. Load it: drag it onto the game window on any menu screen, OR
+#      save it as config/pattern_sequences/current.yaml, OR use
+#      Load pattern file on the Settings screen.
+#   3. It now runs for every Muscle Memory block, every session,
+#      until you load another file or press Clear on Settings.
+#
+# TIMING: gaps_ms is the pause AFTER each press before the next key
+#   lights (0 to 5000). Give one number for every item, or one number
+#   for the whole block. The list is played the same way on every
+#   repeat and in every session; that repetition is what makes the
+#   timing learnable, so change it only when you mean to start a new
+#   task. Probes should keep the trained block's gaps so that only
+#   the order changes.
+#
+# KINDS: warmup (random, not analysed, at most one, first), random
+#   (balanced baseline), seq (the trained riff), probe (an unfamiliar
+#   riff of the SAME length; scored against the seq blocks either
+#   side of it). Every seq and probe sequence must be the same length
+#   and no lane may follow itself.
+#
+# WHAT THE PARTICIPANT SEES: takes and stars, never the word riff or
+#   sequence, unless explicit is true.
+#
+# LANES (one hand): 1 index, 2 middle, 3 ring, 4 little of the hand
+#   picked at setup. Keyboard: right hand J K L ;  left hand F D S A.
+# For both hands set hands: both and use 1..4 for the right hand and
+#   5..8 for the left hand, index to little.
+
+pattern_file: 1
+name: My riff                 # shown on Settings and the game hub, 40 chars max
+hands: one                    # one or both
+explicit: false               # true = you will tell them the riff; the data is stamped explicit
+show_sequence: false          # true (needs explicit true) shows the riff digits during play
+timeout_ms: 2000              # how long a lit key waits for its press, 300 to 10000
+defaults:
+  gaps_ms: 500                # default pause after a press
+  rest_after_s: 10            # default rest floor after a block (self-paced past it)
+
+blocks:
+  - name: warm
+    kind: warmup
+    trials: 12
+
+  - name: base
+    kind: random
+    trials: 32
+
+  - name: riff_1
+    kind: seq
+    sequence: [2, 4, 1, 3, 4, 2, 3, 1]
+    gaps_ms:  [500, 500, 500, 500, 500, 500, 500, 500]
+    repeats: 5
+
+  - name: riff_2
+    kind: seq
+    sequence: [2, 4, 1, 3, 4, 2, 3, 1]
+    gaps_ms:  [500, 500, 500, 500, 500, 500, 500, 500]
+    repeats: 5
+
+  - name: fresh
+    kind: probe
+    sequence: [3, 1, 4, 2, 1, 3, 2, 4]
+    gaps_ms:  [500, 500, 500, 500, 500, 500, 500, 500]
+    repeats: 5
+
+  - name: riff_3
+    kind: seq
+    sequence: [2, 4, 1, 3, 4, 2, 3, 1]
+    gaps_ms:  [500, 500, 500, 500, 500, 500, 500, 500]
+    repeats: 5
+    rest_after_s: 30

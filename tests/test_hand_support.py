@@ -364,7 +364,7 @@ class ScreenMirrorTests(unittest.TestCase):
         cfg.data.setdefault("report", {})["enabled"] = False
         cfg.data.setdefault("audio", {})["enabled"] = False
         cfg.data.setdefault("game", {})["test_mode_enabled"] = True
-        cfg.data.setdefault("syllables", {})["speak_words"] = False
+        cfg.data.setdefault("syllables", {})["speech"] = {"backend": "off"}
         eng = GameEngine(cfg, KeyboardOnlySource())
         eng._screens = eng._build_screens()
         eng.show_results = lambda: None
@@ -399,7 +399,7 @@ class ScreenMirrorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             eng = make_engine("both", td)
             eng.cfg.data["game"]["test_mode_enabled"] = True
-            eng.cfg.data["syllables"]["speak_words"] = False
+            eng.cfg.data["syllables"]["speech"] = {"backend": "off"}
             eng.begin_syllables_block()
             sc = eng._screens["syllables"]
             self.assertEqual(sc.controls_lines(eng.mode), [])
@@ -419,7 +419,7 @@ class ScreenMirrorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             eng = make_engine("both", td)
             eng.cfg.data["game"]["test_mode_enabled"] = True
-            eng.cfg.data["syllables"]["speak_words"] = False
+            eng.cfg.data["syllables"]["speech"] = {"backend": "off"}
             eng.begin_syllables_block()
             mode = eng.mode
             self.assertIsNone(mode.model_hand)
@@ -710,24 +710,29 @@ class ModeHandMatrixTests(unittest.TestCase):
                     tempfile.TemporaryDirectory() as td, \
                     patched_clock() as clock:
                 eng = self._matrix_engine(hand_mode, td, 6)
-                eng.cfg.data["syllables"]["speak_words"] = False
-                eng.cfg.data["syllables"]["level"] = 2
+                eng.cfg.data["syllables"]["speech"] = {"backend": "off"}
                 eng.begin_syllables_block()
                 mode = eng.mode
+                answered: set = set()
 
-                def respond(clock, mode=mode, hand_mode=hand_mode):
-                    # Tap back the word during respond. Each position
-                    # owns exactly one lane, the sliding window's own
-                    # (lanes_for_position returns that single lane on
-                    # any hand count), so the walk follows the window
-                    # left to right wherever it sits.
-                    if mode.phase != "respond" or mode.active is None:
+                def respond(clock, mode=mode, hand_mode=hand_mode,
+                            answered=answered):
+                    # Answer the option set on screen: press the
+                    # finger under the right chunk, once, after the
+                    # spawn lockout. Every tile of a word sits on that
+                    # word's hand, so the hand rotation is what puts
+                    # both hands into a bilateral block.
+                    if mode.phase != "choose" or mode.option_set is None:
                         return
-                    if len(mode.taps) >= mode.n_expected:
+                    if mode._set_close_t is not None:
                         return
-                    pos = len(mode.taps)
-                    options = mode.lanes_for_position(pos)
-                    lane = options[pos % len(options)]
+                    key = (mode.trial_counter, mode.pos)
+                    if key in answered:
+                        return
+                    if clock.t < mode._spawn_t + mode.spawn_lockout_s + 0.1:
+                        return
+                    answered.add(key)
+                    lane = mode.option_set.target_lane
                     mode.queue_press(
                         _press(lane, clock.t,
                                hand=mode._hand_of_lane(lane)))
@@ -947,7 +952,7 @@ class PrepCountdownTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td, \
                 patched_clock() as clock:
             eng = make_engine("right", td)
-            eng.cfg.data["syllables"]["speak_words"] = False
+            eng.cfg.data["syllables"]["speech"] = {"backend": "off"}
             eng.begin_syllables_block()
             sc = eng._screens["syllables"]
             self.assertAlmostEqual(sc._countdown_until - clock.t, 3.0,

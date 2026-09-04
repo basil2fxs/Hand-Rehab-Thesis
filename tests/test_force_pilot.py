@@ -159,34 +159,20 @@ def _mode(e, hands=None, **over):
     kw = dict(
         engine=e,
         lanes_by_hand=hands or {"right": [0, 1, 2, 3]},
-        level=1,
-        corridor_hw_by_level=[8.0, 6.0, 4.0],
-        freq_ceiling_by_level=[0.3, 0.45, 0.6],
-        runs_per_finger=2,
-        min_finger_share=0.15,
         span_pct=40.0,
         base_pct=8.0,
-        plateau_pct=28.0,
-        ramp_rates_pct_s=[10.0],
-        sine_amp_pct=9.0,
-        sine_s=6.0,
-        sos_amps_pct=[6.0, 3.5, 2.5],
-        sos_s=8.0,
-        hold_in_s=3.0,
-        hold_top_s=3.0,
-        pre_assess_s=1.0,
         visual_gain=1.0,
         ring_interval_s=1.5,
         ring_points=2,
         exit_buzz_ms=80.0,
         exit_buzz_cooldown_s=1.0,
-        promote_frac=0.8,
-        demote_frac=0.4,
         probe_presses=3,
         probe_floor_counts=30.0,
         probe_max_age_s=6 * 3600.0,
         announce_s=0.5,
-        rest_s=1.0,
+        mid_rest_s=15.0,
+        step_grace_s=0.6,
+        passes=1,
         score_cfg=ScoreConfig(),
         seed=7,
         demo_trials=None,
@@ -230,75 +216,156 @@ def _play_run(m, t_start, force_fn, dt=1.0 / 60.0):
     return t
 
 
-# ---- trajectory generation ---------------------------------------------
+# ---- the wave ladder ---------------------------------------------------
 
 
-class TrajectoryTests(unittest.TestCase):
-    def test_same_seed_same_plan(self):
-        self.assertEqual(_params(), _params())
+# The spec table the thesis levels rest on: level, slug, finger, corridor
+# half-width, run seconds, top component Hz, and the percent-of-max range
+# the target covers. Changing a number here is changing the study, so it
+# is written out once and pinned rather than derived from the code.
+LADDER_TABLE = [
+    (1, "slow_breath", 0, 8.0, 14.8333, 0.15, 8.0, 20.0),
+    (2, "tide", 1, 8.0, 13.5, 0.0, 8.0, 28.0),
+    (3, "swell", 2, 8.0, 16.0, 0.20, 8.0, 26.0),
+    (4, "stairs", 3, 6.0, 14.7, 0.0, 8.0, 26.0),
+    (5, "hills", 0, 6.0, 13.8, 0.0, 8.0, 24.0),
+    (6, "beach_waves", 1, 6.0, 13.0, 0.3333, 8.0, 22.0),
+    (7, "heartbeat", 2, 5.0, 13.5, 0.50, 10.0, 25.0),
+    (8, "dunes", 3, 5.0, 14.0, 0.0, 8.0, 26.0),
+    (9, "chop", 1, 5.0, 14.3333, 0.45, 8.0, 26.0),
+    (10, "open_ocean", 2, 4.0, 15.0, 0.47, 8.0, 30.7),
+    (11, "storm", 0, 4.0, 15.0, 0.50, 8.0, 27.8),
+    (12, "uncharted", 0, 4.0, 15.0, 0.50, 8.0, 32.1),
+]
 
-    def test_different_seed_different_plan(self):
-        a, b = _params(seed=1), _params(seed=2)
-        self.assertNotEqual(a["sine_freq_hz"], b["sine_freq_hz"])
+
+def _level_sections(lvl, seed=7, pass_idx=1):
+    from finger_rehab.game.modes.force_pilot import (
+        LADDER_BY_LVL, params_from_level, sections_from_params,
+        uncharted_phases)
+    w = LADDER_BY_LVL[lvl]
+    phases = (uncharted_phases(seed, pass_idx)
+              if w.slug == "uncharted" else ())
+    p = params_from_level(w, pass_idx, base_pct=8.0, span_pct=40.0,
+                          gain=1.0, max_press_counts=400.0,
+                          grace_s=0.6, phases=phases)
+    return p, sections_from_params(p)
+
+
+class LadderTests(unittest.TestCase):
+    """The twelve waves themselves: the table, the maths, and the
+    promise that every participant flies the same ladder."""
+
+    def test_ladder_matches_the_spec_table(self):
+        from finger_rehab.game.modes.force_pilot import (
+            LADDER, run_duration_s, target_pct)
+        self.assertEqual(len(LADDER), 12)
+        for row, w in zip(LADDER_TABLE, LADDER):
+            lvl, slug, finger, hw, dur, fmax, lo, hi = row
+            self.assertEqual((w.lvl, w.slug, w.finger, w.hw_pct),
+                             (lvl, slug, finger, hw), slug)
+            _p, secs = _level_sections(lvl)
+            self.assertAlmostEqual(run_duration_s(secs), dur, places=3,
+                                   msg=slug)
+            top = max([max(s.freqs_hz) for s in secs if s.kind == "osc"]
+                      or [0.0])
+            self.assertAlmostEqual(top, fmax, places=4, msg=slug)
+            vals = [target_pct(secs, i * dur / 1500.0)
+                    for i in range(1501)]
+            self.assertAlmostEqual(min(vals), lo, delta=0.05, msg=slug)
+            self.assertLessEqual(max(vals), hi + 0.05, slug)
+            # The whole ladder lives inside the 0 to span altitude map.
+            self.assertGreaterEqual(min(vals), 0.0, slug)
+            self.assertLessEqual(max(vals), 40.0, slug)
+
+    def test_the_top_frequency_is_half_a_hertz(self):
+        # Above about 0.5 Hz an unpredictable target stops measuring
+        # tracking and starts measuring lag (McRuer and Jex 1967 via
+        # Drop 2016; Slifkin 2000 on 1 Hz correction bursts).
+        for lvl in range(1, 13):
+            _p, secs = _level_sections(lvl)
+            for s in secs:
+                for f in s.freqs_hz:
+                    self.assertLessEqual(f, 0.5 + 1e-9, lvl)
 
     def test_sections_are_continuous(self):
-        # A step between sections would be an uncontrolled stimulus:
-        # the corridor is designed with no jumps, and the approach
-        # ramp exists exactly to walk into the assessment's start.
-        from finger_rehab.game.modes.force_pilot import (
-            sections_from_params, target_pct)
-        secs = sections_from_params(_params())
-        for k in range(1, len(secs)):
-            before = target_pct(secs, secs[k].start_s - 1e-7)
-            after = target_pct(secs, secs[k].start_s + 1e-7)
-            self.assertAlmostEqual(before, after, places=3,
-                                   msg=secs[k].name)
+        # A step between sections would be an uncontrolled stimulus.
+        # Stairs is the exception the mode names: its steps ARE the
+        # level, which is why they carry a grace window.
+        from finger_rehab.game.modes.force_pilot import target_pct
+        for lvl in range(1, 13):
+            _p, secs = _level_sections(lvl)
+            for k in range(1, len(secs)):
+                before = target_pct(secs, secs[k].start_s - 1e-7)
+                after = target_pct(secs, secs[k].start_s + 1e-7)
+                if lvl == 4:
+                    continue
+                self.assertAlmostEqual(before, after, places=3,
+                                       msg=f"{lvl} {secs[k].name}")
 
-    def test_duration_inside_the_brief_window(self):
-        # 20 to 30 s runs, both configured ramp rates.
-        from finger_rehab.game.modes.force_pilot import (
-            run_duration_s, sections_from_params)
-        for seed in range(12):
-            secs = sections_from_params(_params(seed=seed))
-            dur = run_duration_s(secs)
-            self.assertGreaterEqual(dur, 20.0)
-            self.assertLessEqual(dur, 30.0)
+    def test_fingers_and_corridors_climb_the_way_the_design_says(self):
+        from finger_rehab.game.modes.force_pilot import LADDER
+        counts = {f: sum(1 for w in LADDER if w.finger == f)
+                  for f in range(4)}
+        # Index carries both storms (the novel-versus-repeated pair
+        # must be one finger or it is a finger comparison).
+        self.assertEqual(counts, {0: 4, 1: 3, 2: 3, 3: 2})
+        self.assertEqual([w.finger for w in LADDER if w.lvl in (11, 12)],
+                         [0, 0])
+        widths = [w.hw_pct for w in LADDER]
+        self.assertEqual(widths, sorted(widths, reverse=True))
+        self.assertEqual(sorted(set(widths), reverse=True),
+                         [8.0, 6.0, 5.0, 4.0])
 
-    def test_target_stays_inside_the_span(self):
+    def test_stairs_is_the_only_level_with_grace_windows(self):
+        from finger_rehab.game.modes.force_pilot import grace_windows
+        for lvl in range(1, 13):
+            p, secs = _level_sections(lvl)
+            wins = grace_windows(secs, float(p["grace_s"]))
+            if lvl == 4:
+                self.assertEqual(len(wins), 6)
+                self.assertEqual([round(a, 2) for a, _b in wins],
+                                 [1.5, 3.7, 5.9, 8.1, 10.3, 12.5])
+                self.assertTrue(all(abs(b - a - 0.6) < 1e-9
+                                    for a, b in wins))
+            else:
+                self.assertEqual(wins, [], lvl)
+
+    def test_every_level_rebuilds_from_the_packed_cell(self):
+        # The offline contract: the notebook parses waveform_params
+        # and rebuilds the target with no seed and no import. Every
+        # number in the ladder is written to six significant digits or
+        # fewer, so the round trip is exact rather than merely close.
+        from finger_rehab.data.logger import (pack_waveform_params,
+                                              parse_waveform_params)
         from finger_rehab.game.modes.force_pilot import (
             run_duration_s, sections_from_params, target_pct)
-        for seed in range(8):
-            secs = sections_from_params(_params(seed=seed))
+        for lvl in range(1, 13):
+            p, secs = _level_sections(lvl)
+            cell = pack_waveform_params(p)
+            self.assertLess(len(cell), 1024, lvl)
+            back = sections_from_params(parse_waveform_params(cell))
+            self.assertEqual([s.name for s in back],
+                             [s.name for s in secs], lvl)
             dur = run_duration_s(secs)
-            for i in range(500):
-                v = target_pct(secs, dur * i / 499.0)
-                self.assertGreaterEqual(v, 0.0)
-                self.assertLessEqual(v, 40.0)
+            worst = max(abs(target_pct(secs, dur * i / 999.0)
+                            - target_pct(back, dur * i / 999.0))
+                        for i in range(1000))
+            self.assertLess(worst, 1e-4, f"level {lvl} drifted {worst}")
 
-    def test_frequencies_respect_the_level_band(self):
-        from finger_rehab.game.modes.force_pilot import (
-            SINE_FREQ_FLOOR_HZ, SOS_FREQ_FLOOR_HZ)
-        for seed in range(20):
-            p = _params(seed=seed, freq_ceiling_hz=0.45)
-            self.assertGreaterEqual(p["sine_freq_hz"], SINE_FREQ_FLOOR_HZ)
-            self.assertLessEqual(p["sine_freq_hz"], 0.45)
-            freqs = [p["sos_f1_hz"], p["sos_f2_hz"], p["sos_f3_hz"]]
-            self.assertEqual(freqs, sorted(freqs))
-            for f in freqs:
-                self.assertGreaterEqual(f, SOS_FREQ_FLOOR_HZ)
-                self.assertLessEqual(f, 0.45)
-
-    def test_rebuild_from_the_packed_cell(self):
-        # The offline contract: the notebook parses waveform_params
-        # and rebuilds the target without this module's rng. The
-        # packed cell trims floats to 6 significant digits, so the
-        # rebuild is exact to well under a hundredth of a percent.
+    def test_legacy_params_still_rebuild(self):
+        # Sessions recorded before the ladder carry the seven-section
+        # draw. They must still re-score, in the game and in the
+        # notebook's copy of this builder.
         from finger_rehab.data.logger import (pack_waveform_params,
-                                       parse_waveform_params)
+                                              parse_waveform_params)
         from finger_rehab.game.modes.force_pilot import (
             run_duration_s, sections_from_params, target_pct)
         p = _params()
         secs = sections_from_params(p)
+        self.assertEqual([s.name for s in secs],
+                         ["hold_in", "ramp_up", "hold_top", "release",
+                          "sine", "pre_assess", "assess_sos"])
         back = sections_from_params(
             parse_waveform_params(pack_waveform_params(p)))
         dur = run_duration_s(secs)
@@ -306,6 +373,101 @@ class TrajectoryTests(unittest.TestCase):
                         - target_pct(back, dur * i / 399.0))
                     for i in range(400))
         self.assertLess(worst, 1e-3)
+
+    def test_params_carry_the_header_the_notebook_reads(self):
+        p, _secs = _level_sections(4)
+        self.assertEqual(p["ladder"], "waves_v1")
+        self.assertEqual(p["lvl"], 4)
+        self.assertEqual(p["wave"], "stairs")
+        self.assertEqual(p["pass"], 1)
+        self.assertEqual(p["fixed"], 1)
+        self.assertEqual(p["hw_pct"], 6.0)
+        self.assertEqual(p["grace_s"], 0.6)
+        self.assertEqual(p["n_sec"], 7)
+        p12, _s12 = _level_sections(12)
+        self.assertEqual(p12["fixed"], 0)     # the one novel level
+        self.assertEqual(p12["grace_s"], 0.0)
+
+    def test_uncharted_matches_the_storm_except_for_its_phases(self):
+        from finger_rehab.game.modes.force_pilot import run_duration_s
+        _p11, storm = _level_sections(11)
+        _p12, unch = _level_sections(12)
+        self.assertAlmostEqual(run_duration_s(storm),
+                               run_duration_s(unch), places=6)
+        s_osc = [s for s in storm if s.kind == "osc"][0]
+        u_osc = [s for s in unch if s.kind == "osc"][0]
+        self.assertEqual(s_osc.freqs_hz, u_osc.freqs_hz)
+        self.assertEqual(s_osc.amps_pct, u_osc.amps_pct)
+        self.assertNotEqual(s_osc.phases_rad, u_osc.phases_rad)
+
+    def test_uncharted_redraws_per_block_and_the_rest_never_moves(self):
+        from finger_rehab.game.modes.force_pilot import uncharted_phases
+        a = uncharted_phases(11111)
+        b = uncharted_phases(22222)
+        self.assertNotEqual(a, b)
+        self.assertEqual(a, uncharted_phases(11111))     # same seed
+        for lvl in (1, 5, 11):
+            _pa, sa = _level_sections(lvl, seed=11111)
+            _pb, sb = _level_sections(lvl, seed=22222)
+            self.assertEqual(
+                [(s.name, s.dur_s, s.a_pct, s.b_pct, s.freqs_hz,
+                  s.amps_pct, s.phases_rad) for s in sa],
+                [(s.name, s.dur_s, s.a_pct, s.b_pct, s.freqs_hz,
+                  s.amps_pct, s.phases_rad) for s in sb], lvl)
+
+
+class LadderOrderTests(unittest.TestCase):
+    """Basil's brief: the same levels in the same order every play."""
+
+    def _plan(self, m):
+        return [(w.lvl, w.slug, hand, p) for w, hand, p in m._plan]
+
+    def test_the_plan_is_identical_across_blocks_and_participants(self):
+        hands = {"right": [0, 1, 2, 3], "left": [4, 5, 6, 7]}
+        e1 = _engine("both")
+        e1.session.participant = "P01"
+        e2 = _engine("both")
+        e2.session.participant = "SOMEBODY-ELSE"
+        m1 = _mode(e1, hands=hands, seed=1)
+        m2 = _mode(e2, hands=hands, seed=987654321)
+        self.assertEqual(self._plan(m1), self._plan(m2))
+        self.assertEqual(len(m1._plan), 24)
+
+    def test_one_hand_climbs_one_to_twelve(self):
+        m = _mode(_engine())
+        self.assertEqual([w.lvl for w, _h, _p in m._plan],
+                         list(range(1, 13)))
+        self.assertEqual({h for _w, h, _p in m._plan}, {"right"})
+
+    def test_both_hands_fly_each_level_back_to_back(self):
+        m = _mode(_engine("both"),
+                  hands={"right": [0, 1, 2, 3], "left": [4, 5, 6, 7]})
+        pairs = [(w.lvl, h) for w, h, _p in m._plan]
+        first = m.hand_order[0]
+        other = m.hand_order[1]
+        self.assertEqual(pairs[:4], [(1, first), (1, other),
+                                     (2, first), (2, other)])
+        # Every level is flown once by each hand, and the finger is
+        # the level's finger on both sides.
+        for lvl in range(1, 13):
+            got = [h for lv, h in pairs if lv == lvl]
+            self.assertEqual(got, [first, other], lvl)
+
+    def test_passes_repeat_the_whole_ladder(self):
+        m = _mode(_engine(), passes=2)
+        self.assertEqual(m.total_runs, 24)
+        self.assertEqual([p for _w, _h, p in m._plan],
+                         [1] * 12 + [2] * 12)
+        self.assertEqual([w.lvl for w, _h, _p in m._plan],
+                         list(range(1, 13)) * 2)
+
+    def test_a_selected_hand_flies_its_own_lanes(self):
+        m = _mode(_engine("left"), hands={"left": [4, 5, 6, 7]})
+        lanes = []
+        for _ in range(len(m._plan)):
+            m._prepare_run()
+            lanes.append(m.lane)
+        self.assertEqual(lanes, [4 + w.finger for w in m.levels])
 
 
 # ---- the probe gate ----------------------------------------------------
@@ -377,6 +539,7 @@ class ProbeGateTests(unittest.TestCase):
 class RunScoringTests(unittest.TestCase):
     def _ready_mode(self, e=None, **over):
         e = e or _engine()
+        e.finish_block = lambda: None
         e.calibration_profiles["right"] = _fresh_profile()
         return _mode(e, **over)
 
@@ -415,11 +578,14 @@ class RunScoringTests(unittest.TestCase):
                           if str(c).startswith("STIM")])
 
     def test_release_error_is_scored_apart_from_press(self):
-        # The Davidson 2026 marker: error during the ramp-down must be
-        # separable from error during the ramp-up.
-        m = self._ready_mode()
+        # The Davidson 2026 marker: error during a ramp DOWN must be
+        # separable from error during a ramp up. The split is by
+        # direction, not by section name, so it works on every ramp
+        # level of the ladder (Tide, Hills, Dunes).
+        m = self._ready_mode(levels=[2])         # Tide: flood then ebb
         t = _to_run_phase(m)
-        release = next(s for s in m.sections if s.name == "release")
+        release = next(s for s in m.sections
+                       if s.kind == "ramp" and s.b_pct < s.a_pct)
 
         def force(t_run, target):
             if release.start_s <= t_run < release.end_s:
@@ -480,9 +646,9 @@ class RunScoringTests(unittest.TestCase):
         _play_run(m, t, lambda t_run, target: target)
         events = [ev for ev in m.engine.raw_logger.events
                   if ev["event"] in ("segment_start", "segment_end")]
-        names = [s.name for s in m.sections]
-        # The plan for the NEXT run replaced m.sections at close; the
-        # logged names still describe the run that played.
+        # The plan for the NEXT run replaced m.sections at close, so
+        # the count comes from the level that actually played.
+        names = [s.name for s in _level_sections(1)[1]]
         starts = [ev for ev in events if ev["event"] == "segment_start"]
         ends = [ev for ev in events if ev["event"] == "segment_end"]
         self.assertEqual(len(starts), len(names))
@@ -509,90 +675,204 @@ class RunScoringTests(unittest.TestCase):
 # ---- difficulty --------------------------------------------------------
 
 
-class LevelTests(unittest.TestCase):
-    def _m(self):
-        e = _engine()
-        e.calibration_profiles["right"] = _fresh_profile()
-        return _mode(e)
+class BlockFlowTests(unittest.TestCase):
+    """The shape of a block: one short card between runs, one rest,
+    and the whole ladder inside the clinic's time promise."""
 
-    def test_two_strong_runs_promote_and_announce(self):
-        m = self._m()
-        m._move_level(0.9)
-        self.assertEqual(m.level, 1)
-        m._move_level(0.85)
-        self.assertEqual(m.level, 2)
-        self.assertIn("narrows", m.level_msg)
-        self.assertIn("level 2", m.level_msg)
-        evs = [ev for ev in m.engine.raw_logger.events
-               if ev["event"] == "force_pilot_level"]
-        self.assertEqual(len(evs), 1)
+    def _drive(self, m, t=1000.0, force=None):
+        """Play the block to the end, collecting every enforced wait."""
+        force = force or (lambda t_run, target: target)
+        from finger_rehab.game.modes.force_pilot import target_pct
+        waits = []
+        m._tick(t)
+        guard = 0
+        while m.phase != "done" and guard < 5000:
+            guard += 1
+            if m.phase in ("announce", "rest"):
+                view = m.wait_view(t)
+                waits.append((view["kind"], round(view["total"], 3),
+                              view["show"]))
+                t = (m._phase_until or t) + 0.001
+                m._tick(t)
+                continue
+            if m.phase == "run":
+                while m.phase == "run":
+                    t += 1.0 / 60.0
+                    t_run = t - (m.run_t0 or t)
+                    m.view.pct = force(t_run,
+                                       target_pct(m.sections, t_run))
+                    m._tick(t)
+                continue
+            break
+        return t, waits
 
-    def test_one_weak_run_demotes(self):
-        m = self._m()
-        m.level = 2
-        m._move_level(0.2)
-        self.assertEqual(m.level, 1)
-        self.assertIn("widens", m.level_msg)
-
-    def test_level_is_capped_both_ways(self):
-        m = self._m()
-        m.level = 3
-        for _ in range(4):
-            m._move_level(0.95)
-        self.assertEqual(m.level, 3)
-        m.level = 1
-        m._move_level(0.0)
-        self.assertEqual(m.level, 1)
-
-    def test_next_run_uses_the_new_corridor(self):
-        m = self._m()
-        t = _to_run_phase(m)
-        hand, finger = m.hand, m.finger
-        m._recent_tic_by_hf[(hand, finger)] = [0.9]
-        _play_run(m, t, lambda t_run, target: target)   # promotes
-        # The finger that just ran is the one that moved, regardless
-        # of which finger the scheduler hands out next.
-        self.assertEqual(m._level_by_hf[(hand, finger)], 2)
-        # Force the same finger back so its own promoted corridor is
-        # visible on its very next run (a different finger's next run
-        # must still be whatever ITS OWN level says, which the
-        # per-finger-level tests below cover).
-        m._finger_sched[hand].next = lambda weights=None: finger
-        m._prepare_run()
-        self.assertEqual(m.hand, hand)
-        self.assertEqual(m.finger, finger)
-        self.assertEqual(m.level, 2)
-        self.assertEqual(m.corridor_hw, 6.0)
-        self.assertEqual(m.params["lvl"], 2)
-
-    def test_one_fingers_promotion_does_not_move_another(self):
-        # The headline finding this fixes: level was one shared value
-        # per hand (and across hands in bilateral play), so the
-        # strongest finger's runs forced the same corridor onto the
-        # weakest finger's runs. Two strong runs on finger 0 must not
-        # touch finger 1's level, which a finger that has never played
-        # should still hold at the configured start.
-        m = self._m()
-        m._move_level(0.9)     # finger (right, 0), first strong run
-        m._move_level(0.85)    # second strong run: promotes to 2
-        self.assertEqual(m._level_by_hf[("right", 0)], 2)
-        self.assertEqual(m._level_by_hf[("right", 1)], 1)
-        self.assertEqual(m._level_by_hf[("right", 2)], 1)
-        self.assertEqual(m._level_by_hf[("right", 3)], 1)
-
-    def test_bilateral_hands_keep_independent_levels(self):
+    def _mode_both(self, **over):
         e = _engine(hand_mode="both")
+        e.finish_block = lambda: None
         e.calibration_profiles["right"] = _fresh_profile()
         e.calibration_profiles["left"] = _fresh_profile("left")
-        m = _mode(e, hands={"right": [0, 1, 2, 3], "left": [4, 5, 6, 7]})
-        m.hand, m.finger = "right", 0
-        m._move_level(0.9)
-        m._move_level(0.85)    # promotes the right index finger to 2
-        self.assertEqual(m._level_by_hf[("right", 0)], 2)
-        self.assertEqual(m._level_by_hf[("left", 0)], 1)
+        return _mode(e, hands={"right": [0, 1, 2, 3],
+                               "left": [4, 5, 6, 7]},
+                     announce_s=1.8, **over)
+
+    def test_only_one_wait_in_the_block_is_longer_than_a_card(self):
+        # Basil's brief: not much time between runs. Every gap is the
+        # 1.8 s card except one rest at the halfway point, and only
+        # that rest is long enough to draw the skip chip.
+        m = self._mode_both()
+        _t, waits = self._drive(m)
+        self.assertEqual(m.runs_done, 24)
+        cards = [w for w in waits if w[0] == "announce"]
+        rests = [w for w in waits if w[0] == "rest"]
+        self.assertEqual(len(cards), 24)
+        self.assertEqual(len(rests), 1)
+        self.assertTrue(all(w[1] == 1.8 and w[2] is False for w in cards))
+        self.assertEqual(rests[0][1], 15.0)
+        self.assertTrue(rests[0][2])          # the chip is drawn
+
+    def test_the_rest_lands_halfway_up_the_ladder(self):
+        m = self._mode_both()
+        seen = []
+        t = 1000.0
+        m._tick(t)
+        guard = 0
+        from finger_rehab.game.modes.force_pilot import target_pct
+        while m.phase != "done" and guard < 5000:
+            guard += 1
+            if m.phase == "rest":
+                seen.append(m.runs_done)
+            if m.phase in ("announce", "rest"):
+                t = (m._phase_until or t) + 0.001
+                m._tick(t)
+                continue
+            if m.phase == "run":
+                while m.phase == "run":
+                    t += 1.0 / 60.0
+                    t_run = t - (m.run_t0 or t)
+                    m.view.pct = target_pct(m.sections, t_run)
+                    m._tick(t)
+                continue
+            break
+        # After level 6 on both hands: 6 levels x 2 hands = 12 runs.
+        self.assertEqual(sorted(set(seen)), [12])
+
+    def test_a_both_hands_block_fits_the_clinic_promise(self):
+        m = self._mode_both()
+        t, _waits = self._drive(m)
+        minutes = (t - 1000.0) / 60.0
+        self.assertLess(minutes, 7.0)
+        self.assertGreater(minutes, 6.0)
+
+    def test_one_hand_is_twelve_runs_and_half_the_time(self):
+        e = _engine()
+        e.finish_block = lambda: None
+        e.calibration_profiles["right"] = _fresh_profile()
+        m = _mode(e, announce_s=1.8)
+        t, waits = self._drive(m)
+        self.assertEqual(m.runs_done, 12)
+        self.assertEqual(len([w for w in waits if w[0] == "rest"]), 1)
+        self.assertLess((t - 1000.0) / 60.0, 4.0)
+
+    def test_every_level_is_flown_once_in_ladder_order(self):
+        e = _engine()
+        e.finish_block = lambda: None
+        e.calibration_profiles["right"] = _fresh_profile()
+        m = _mode(e, announce_s=1.8)
+        self._drive(m)
+        self.assertEqual([r.level for r in m._records],
+                         list(range(1, 13)))
+        self.assertEqual([r.wave for r in m._records][:3],
+                         ["slow_breath", "tide", "swell"])
+        self.assertEqual([r.finger for r in m._records],
+                         [0, 1, 2, 3, 0, 1, 2, 3, 1, 2, 0, 0])
+
+    def test_the_card_shows_the_last_run_and_the_next_wave(self):
+        e = _engine()
+        e.calibration_profiles["right"] = _fresh_profile()
+        m = _mode(e)
+        t = _to_run_phase(m)
+        _play_run(m, t, lambda t_run, target: target)
+        # One card, carrying both halves: the run just flown and the
+        # rung coming next.
+        self.assertEqual(m.phase, "announce")
+        self.assertEqual(m._last_result["wave"], "Slow breath")
+        self.assertAlmostEqual(m._last_result["tic"], 1.0, places=3)
+        self.assertEqual(m.level, 2)
+        self.assertEqual(m.wave.slug, "tide")
+
+    def test_the_demo_plays_four_rungs_on_one_hand(self):
+        e = _engine(hand_mode="both")
+        e.finish_block = lambda: None
+        e.calibration_profiles["right"] = _fresh_profile()
+        e.calibration_profiles["left"] = _fresh_profile("left")
+        m = _mode(e, hands={"right": [0, 1, 2, 3], "left": [4, 5, 6, 7]},
+                  demo_trials=6, demo_levels=[1, 4, 7, 12])
+        self.assertTrue(m.demo)
+        self.assertEqual([w.lvl for w in m.levels], [1, 4, 7, 12])
+        self.assertEqual(len(m.hand_order), 1)
+        self.assertEqual(m.total_runs, 4)
+        self.assertEqual(m.mid_rest_s, 0.0)
+        t, waits = self._drive(m)
+        self.assertEqual([w[0] for w in waits], ["announce"] * 4)
+        self.assertTrue(m.block_stats()["demo"])
 
 
-# ---- hands and scheduling ----------------------------------------------
+class GraceWindowTests(unittest.TestCase):
+    """Stairs only: the target jumps in zero time and no finger can
+    follow it, so that window is not scored at all."""
+
+    def _stairs(self):
+        e = _engine()
+        e.finish_block = lambda: None
+        e.calibration_profiles["right"] = _fresh_profile()
+        return _mode(e, levels=[4])
+
+    def test_an_exit_inside_the_grace_window_costs_nothing(self):
+        m = self._stairs()
+        t = _to_run_phase(m)
+        self.assertEqual(m.level, 4)
+        self.assertEqual(len(m.grace), 6)
+
+        def force(t_run, target):
+            inside = any(a <= t_run < b for a, b in m.grace)
+            return target + (20.0 if inside else 0.0)
+
+        _play_run(m, t, force)
+        rec = m._records[0]
+        self.assertEqual(rec.stalls, 0)
+        self.assertGreaterEqual(rec.tic_frac, 0.999)
+        self.assertLess(rec.mae_pct, 1e-6)
+        # The graced seconds are dropped from the scored time, not
+        # scored as if they were tracked well.
+        self.assertAlmostEqual(rec.scored_s, m.duration_s - 6 * 0.6,
+                               delta=0.1)
+
+    def test_still_being_out_after_the_grace_window_stalls(self):
+        m = self._stairs()
+        t = _to_run_phase(m)
+        _play_run(m, t, lambda t_run, target: target + 20.0)
+        rec = m._records[0]
+        # One stall on the opening exit plus one at each step edge
+        # where the grace ends and the trace is still outside.
+        self.assertEqual(rec.stalls, 7)
+
+    def test_no_ring_sits_inside_a_grace_window(self):
+        m = self._stairs()
+        _to_run_phase(m)
+        for t_ring in m.ring_times:
+            self.assertFalse(any(a <= t_ring < b for a, b in m.grace),
+                             t_ring)
+
+    def test_the_grace_length_is_logged_with_the_run(self):
+        m = self._stairs()
+        t = _to_run_phase(m)
+        _play_run(m, t, lambda t_run, target: target)
+        row = m.engine.trial_logger.rows[0]
+        self.assertIn("grace_s=3.6", row["stimulus"])
+        self.assertIn("grace_s=0.6", row["waveform_params"])
+
+
+# ---- hands ------------------------------------------------------------
 
 
 class HandMatrixTests(unittest.TestCase):
@@ -603,7 +883,7 @@ class HandMatrixTests(unittest.TestCase):
         m._tick(0.0)
         self.assertEqual(m.phase, "announce")
         self.assertEqual(m.hand, "left")
-        self.assertEqual(m.total_runs, 8)
+        self.assertEqual(m.total_runs, 12)
 
     def test_both_hands_means_all_eight_fingers(self):
         e = _engine(hand_mode="both")
@@ -611,46 +891,46 @@ class HandMatrixTests(unittest.TestCase):
         e.calibration_profiles["left"] = _fresh_profile("left")
         m = _mode(e, hands={"right": [0, 1, 2, 3],
                             "left": [4, 5, 6, 7]})
-        self.assertEqual(m.total_runs, 16)
+        self.assertEqual(m.total_runs, 24)
         lanes = set()
         hand_counts = {"right": 0, "left": 0}
-        for _ in range(16):
+        for _ in range(24):
             m._prepare_run()
             lanes.add(m.lane)
             hand_counts[m.hand] += 1
         self.assertEqual(lanes, set(range(8)))
-        # Balanced hand bag: equal run counts across the block.
-        self.assertEqual(hand_counts["right"], 8)
-        self.assertEqual(hand_counts["left"], 8)
+        # Each hand flies every level once, so the counts match by
+        # construction rather than by a balanced draw.
+        self.assertEqual(hand_counts["right"], 12)
+        self.assertEqual(hand_counts["left"], 12)
 
-    def test_weakest_finger_draws_extra_runs_with_a_floor(self):
+    def test_the_hand_order_follows_the_study_cell(self):
+        # hand1 from the battery's counterbalancing cell flies first,
+        # so a participant's hand order is the same every play and
+        # matches the order the rest of the battery used.
+        from finger_rehab.data.intake import cell_for
+        for who in ("P01", "P02", "P03", "P04"):
+            e = _engine(hand_mode="both")
+            e.session.participant = who
+            e.session.dominant_hand = "right"
+            m = _mode(e, hands={"right": [0, 1, 2, 3],
+                                "left": [4, 5, 6, 7]})
+            first = ("right" if cell_for(who)["hand_first"] == "dominant"
+                     else "left")
+            self.assertEqual(m.hand_order, [first,
+                                            "left" if first == "right"
+                                            else "right"], who)
+
+    def test_a_finger_flies_the_levels_its_table_row_says(self):
         e = _engine()
         e.calibration_profiles["right"] = _fresh_profile()
         m = _mode(e)
-        m._mae_by_hf = {("right", 0): [10.0], ("right", 1): [1.0],
-                        ("right", 2): [1.0], ("right", 3): [1.0]}
-        counts = [0, 0, 0, 0]
-        for _ in range(200):
+        by_finger = {}
+        for _ in range(m.total_runs):
             m._prepare_run()
-            counts[m.finger] += 1
-        self.assertEqual(max(counts), counts[0])
-        # The floor keeps every finger analysable.
-        for c in counts:
-            self.assertGreaterEqual(c / 200.0, 0.10)
-
-    def test_unmeasured_finger_is_not_starved(self):
-        # A finger with no runs yet weighs in at the current worst, so
-        # early weighting cannot lock it out.
-        e = _engine()
-        e.calibration_profiles["right"] = _fresh_profile()
-        m = _mode(e)
-        m._mae_by_hf = {("right", 1): [4.0]}
-        counts = [0, 0, 0, 0]
-        for _ in range(80):
-            m._prepare_run()
-            counts[m.finger] += 1
-        for c in counts:
-            self.assertGreater(c, 0)
+            by_finger.setdefault(m.finger, []).append(m.level)
+        self.assertEqual(by_finger, {0: [1, 5, 11, 12], 1: [2, 6, 9],
+                                     2: [3, 7, 10], 3: [4, 8]})
 
 
 # ---- pause and block stats ---------------------------------------------
@@ -680,10 +960,11 @@ class PauseAndStatsTests(unittest.TestCase):
         self.assertEqual(len(restarts), 1)
 
     def test_block_stats_carry_the_results_summary(self):
-        m = self._ready()
+        e = _engine()
+        e.calibration_profiles["right"] = _fresh_profile()
         finished = []
-        m.engine.finish_block = lambda: finished.append(True)
-        m.total_runs = 1
+        e.finish_block = lambda: finished.append(True)
+        m = _mode(e, levels=[1])
         t = _to_run_phase(m)
         lane = m.lane
         _play_run(m, t, lambda t_run, target: target)
@@ -694,63 +975,39 @@ class PauseAndStatsTests(unittest.TestCase):
         self.assertGreaterEqual(
             stats["overall"]["time_in_corridor"], 0.999)
         self.assertIn(str(lane), stats["per_lane"])
-        self.assertIn(stats["best_section"],
-                      ("low hold", "press ramp", "high hold",
-                       "release ramp", "waves", "approach",
-                       "assessment"))
-        # The session-carrying level hook for the next block: now a
-        # dict keyed by (hand, finger), not one shared value.
-        self.assertEqual(m.engine._force_pilot_levels[(m.hand, m.finger)],
-                         m.level)
+        self.assertIn(stats["best_section"], ("settle", "breath"))
+        # Nothing carries between blocks any more: the ladder is fixed.
+        self.assertEqual(m.engine._force_pilot_levels, {})
 
-    def test_demo_block_writes_no_level_carry(self):
-        # A supervisor's Test Mode demo must not seed the next real
-        # patient's difficulty.
+    def test_block_stats_carry_the_ladder_and_the_per_level_table(self):
         e = _engine()
+        e.finish_block = lambda: None
         e.calibration_profiles["right"] = _fresh_profile()
-        m = _mode(e, demo_trials=1)
-        m.engine.finish_block = lambda: None
-        m._end("completed")
-        self.assertFalse(hasattr(m.engine, "_force_pilot_levels"))
-
-    def test_block_stats_splits_per_lane_and_section_by_level(self):
-        # A run at the easiest level and a run at the hardest level
-        # earn differently-scaled outcomes for the same real tracking
-        # quality, so per_lane and section_mae must not silently pool
-        # across a level change mid-block.
-        m = self._ready()
-        m.engine.finish_block = lambda: None
-        m.total_runs = 2
+        # Two rungs, no mid rest: the halfway rest would otherwise
+        # land after the first of two levels.
+        m = _mode(e, levels=[1, 2], mid_rest_s=0.0)
         t = _to_run_phase(m)
-        lane, hand, finger = m.lane, m.hand, m.finger
-        # Force the same finger back every time so the second run
-        # plays at whatever level its own promotion left it at.
-        m._finger_sched[hand].next = lambda weights=None: finger
-        # Force a promotion after the first run so the second run at
-        # this same finger plays at a different level.
-        m._recent_tic_by_hf[(hand, finger)] = [0.9]
         _play_run(m, t, lambda t_run, target: target)
-        self.assertEqual(m._level_by_hf[(hand, finger)], 2)
-        self.assertEqual(m.phase, "feedback")
         t = m._phase_until + 0.01
-        m._tick(t)                                 # feedback -> announce
-        self.assertEqual(m.phase, "announce")
-        t = m._phase_until + 0.01
-        m._tick(t)                                 # announce -> run
+        m._tick(t)                                 # card -> run
         self.assertEqual(m.phase, "run")
-        self.assertEqual(m.level, 2)
         _play_run(m, t, lambda t_run, target: target)
         stats = m.block_stats()
-        by_level = stats["per_lane"][str(lane)]["by_level"]
-        self.assertEqual(set(by_level), {"1", "2"})
-        self.assertEqual(by_level["1"]["runs"], 1)
-        self.assertEqual(by_level["2"]["runs"], 1)
-        sec_by_level = stats["section_mae_pct_by_level"]
-        self.assertEqual(set(sec_by_level), {"1", "2"})
-        self.assertEqual(stats["levels"][f"{hand}:{finger}"]["start"], 1)
-        self.assertEqual(stats["levels"][f"{hand}:{finger}"]["final"], 2)
-        self.assertEqual(stats["levels"][f"{hand}:{finger}"]["trace"],
-                         [1, 2])
+        self.assertEqual(stats["ladder"]["id"], "waves_v1")
+        self.assertEqual(stats["ladder"]["passes"], 1)
+        self.assertEqual([lv["wave"] for lv in stats["ladder"]["levels"]],
+                         ["slow_breath", "tide"])
+        self.assertEqual(stats["ladder"]["hand_order"], ["right"])
+        self.assertEqual(set(stats["per_level"]), {"1", "2"})
+        self.assertEqual(stats["per_level"]["1"]["runs"], 1)
+        self.assertEqual(set(stats["per_level_by_hand"]["right"]),
+                         {"1", "2"})
+        self.assertEqual(stats["step_grace_s"], 0.6)
+        # Nothing pools two levels into one row.
+        by_level = stats["per_lane"][str(m._records[0].lane)]["by_level"]
+        self.assertEqual(set(by_level), {"1"})
+        self.assertEqual(set(stats["section_mae_pct_by_level"]),
+                         {"1", "2"})
 
 
 # ---- the screen --------------------------------------------------------
@@ -832,13 +1089,15 @@ class ScreenTests(unittest.TestCase):
             f"{['INDEX', 'MIDDLE', 'RING', 'LITTLE'][m.finger]}")
 
     def test_current_section_is_announced_in_words(self):
-        """Half a second into the run the plan is inside hold_in, so
-        the screen must say LOW HOLD and its coaching line."""
+        """Half a second into Slow breath the plan is inside its
+        opening hold, so the screen must name that section and say
+        what it asks for. The words come from the section's SHAPE, so
+        every wave in the ladder gets them without a name table."""
         import time as _time
         import finger_rehab.ui.force_pilot_screen as fps
         sc, m, surf, _t = self._screen_and_mode()
         # The screen reads run time off the wall clock; anchor the
-        # run's start half a second ago so the draw lands in hold_in.
+        # run's start half a second ago so the draw lands in the hold.
         m.run_t0 = _time.perf_counter() - 0.5
         seen = []
         original = fps.draw_text
@@ -853,8 +1112,41 @@ class ScreenTests(unittest.TestCase):
         finally:
             fps.draw_text = original
         joined = " | ".join(seen)
-        self.assertIn("LOW HOLD", joined)
+        self.assertIn("SETTLE", joined)
         self.assertIn("hold it steady", joined)
+        self.assertIn("Slow breath", joined)
+
+    def test_the_card_names_the_wave_and_previews_its_shape(self):
+        """The one card between runs: the level number and name, the
+        coaching line, and the band about to scroll past."""
+        import finger_rehab.ui.force_pilot_screen as fps
+        sc, m, surf, _t = self._screen_and_mode()
+        m.phase = "announce"
+        m._last_result = {"label": "Great", "tic": 0.87, "mae": 1.2,
+                          "rings": 4, "rings_total": 8,
+                          "hand": "right", "finger": 0,
+                          "level": 1, "wave": "Slow breath"}
+        m._prepare_run()
+        seen = []
+        original = fps.draw_text
+
+        def recorder(s, text, pos, *a, **k):
+            seen.append(str(text))
+            return original(s, text, pos, *a, **k)
+
+        fps.draw_text = recorder
+        try:
+            sc.draw(surf)
+        finally:
+            fps.draw_text = original
+        joined = " | ".join(seen)
+        self.assertIn("NEXT", joined)
+        self.assertIn(m.wave.coach, joined)
+        self.assertIn("87% in corridor", joined)
+        self.assertIn("4 of 8 rings", joined)
+        # Nothing on the card may say the order repeats.
+        for word in ("fixed", "same order", "random", "repeat"):
+            self.assertNotIn(word, joined.lower())
 
     def test_time_in_corridor_is_the_hero_readout(self):
         """The in-band share is the one large number on the run
@@ -881,16 +1173,20 @@ class ScreenTests(unittest.TestCase):
                       " | ".join(t for t, _pt in seen))
 
     def test_release_sections_bake_in_a_distinct_band(self):
-        """The release stretch of the corridor renders in its own
-        colours, so easing off reads differently from pressing on."""
+        """A ramp asking for LESS force renders in its own colours, so
+        easing off reads differently from pressing on. Tide has one of
+        each, and the rule is the ramp's direction, not its name."""
         from finger_rehab.game.modes.force_pilot import target_pct
         sc, m, surf, _t = self._screen_and_mode()
+        m._next_idx = 1                     # level 2, Tide
+        m._prepare_run()
         corridor = sc._build_corridor(m)
         cols = sc._corridor_colours()
         lead_s = sc.MARKER_X / sc.PX_PER_S
         by_name = {sec.name: sec for sec in m.sections}
-        for name, want in (("release", cols["band_release"]),
-                           ("hold_in", cols["band"])):
+        for name, want in (("ebb", cols["band_release"]),
+                           ("flood", cols["band"]),
+                           ("low", cols["band"])):
             sec = by_name[name]
             t_mid = sec.start_s + sec.dur_s / 2.0
             x = int((t_mid + lead_s) * sc.PX_PER_S)
@@ -898,6 +1194,26 @@ class ScreenTests(unittest.TestCase):
                 - sc.PLOT_TOP
             got = corridor.get_at((x, y))[:3]
             self.assertEqual(got, tuple(want), name)
+
+    def test_a_step_edge_grace_window_draws_paler(self):
+        """Stairs: the unscored window after each step edge is drawn
+        in its own tint, so the patient can see the jump is not being
+        held against them."""
+        from finger_rehab.game.modes.force_pilot import target_pct
+        sc, m, surf, _t = self._screen_and_mode()
+        m._next_idx = 3                     # level 4, Stairs
+        m._prepare_run()
+        corridor = sc._build_corridor(m)
+        cols = sc._corridor_colours()
+        lead_s = sc.MARKER_X / sc.PX_PER_S
+        a, b = m.grace[0]
+        for t_probe, want in ((a + 0.3, cols["band_grace"]),
+                              (b + 0.5, cols["band"])):
+            x = int((t_probe + lead_s) * sc.PX_PER_S)
+            y = sc._y(target_pct(m.sections, t_probe), m.span_pct) \
+                - sc.PLOT_TOP
+            self.assertEqual(corridor.get_at((x, y))[:3], tuple(want),
+                             t_probe)
 
 
 # ---- audit fixes: error_type and dropout ring gating ---------------------
@@ -924,11 +1240,7 @@ class ErrorTypeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             folder = Path(td)
             e.trial_logger = TrialLogger(folder / "trials.csv")
-            m = _mode(e)
-            m.total_runs = 2   # never let this run trigger _end()
-            finger, hand = 0, "right"
-            m._finger_sched[hand].next = lambda weights=None: finger
-
+            m = _mode(e)       # the whole ladder: no _end() here
             t0 = 1000.0
             m._tick(t0)
             t = t0 + m.announce_s + 0.01
@@ -963,7 +1275,6 @@ class ErrorTypeTests(unittest.TestCase):
             folder = Path(td)
             e.trial_logger = TrialLogger(folder / "trials.csv")
             m = _mode(e)
-            m.total_runs = 2
             t = _to_run_phase(m)
             _play_run(m, t, lambda t_run, target: target)  # perfect
             with open(folder / "trials.csv") as f:
@@ -1031,10 +1342,11 @@ class NoSignalRunTests(unittest.TestCase):
     show the patient ROUGH RIDE with 'Mean error 0.0% of max', and
     demote the staircase for a device fault."""
 
-    def _starved_run(self, level=2):
+    def _starved_run(self):
         e = _engine()
+        e.finish_block = lambda: None
         e.calibration_profiles["right"] = _fresh_profile()
-        m = _mode(e, level=level)
+        m = _mode(e)
         t = _to_run_phase(m)
         m.view.gone = True
         t = _play_run(m, t, lambda t_run, target: target)
@@ -1049,25 +1361,25 @@ class NoSignalRunTests(unittest.TestCase):
         self.assertEqual(m._records, [])
         self.assertEqual(m.block_stats()["overall"]["mae_pct"], None)
         self.assertEqual(m.block_stats()["no_signal_runs"], 1)
-        # No staircase move, and the slot replays.
+        # The rung is not counted, and it replays after one card.
         self.assertEqual(m.runs_done, 0)
         self.assertEqual(m._last_result["label"], "NoSignal")
-        t += m.rest_s + 0.05
-        m._tick(t)
         self.assertEqual(m.phase, "announce")
+        self.assertEqual(m.level, 1)
 
     def test_dead_device_gives_the_slot_up_eventually(self):
         e, m, t = self._starved_run()
         for _ in range(m.MAX_NO_SIGNAL_RETRIES):
-            t += m.rest_s + 0.05
-            m._tick(t)
             t += m.announce_s + 0.05
             m._tick(t)
             self.assertEqual(m.phase, "run")
+            self.assertEqual(m.level, 1)     # the same rung replays
             t = _play_run(m, t, lambda t_run, target: target)
-        # After the retries the slot is abandoned and play moves on.
+        # After the retries the rung is given up and the ladder moves
+        # on, with the gap visible as a missing level offline.
         self.assertEqual(m.runs_done, 1)
         self.assertEqual(m._records, [])
+        self.assertEqual(m.level, 2)
 
     def test_partial_coverage_above_half_still_scores(self):
         e = _engine()
@@ -1096,9 +1408,6 @@ class DropoutRingGatingTests(unittest.TestCase):
         e = _engine()
         e.calibration_profiles["right"] = _fresh_profile()
         m = _mode(e)
-        m.total_runs = 5
-        finger, hand = 0, "right"
-        m._finger_sched[hand].next = lambda weights=None: finger
         t0 = 1000.0
         m._tick(t0)
         t = t0 + m.announce_s + 0.01
@@ -1148,9 +1457,6 @@ class DropoutRingGatingTests(unittest.TestCase):
         e = _engine()
         e.calibration_profiles["right"] = _fresh_profile()
         m = _mode(e)
-        m.total_runs = 5
-        finger, hand = 0, "right"
-        m._finger_sched[hand].next = lambda weights=None: finger
         t = _to_run_phase(m)
         m.view.pct = m.base_pct
         dt = 1.0 / 60.0
@@ -1254,7 +1560,30 @@ class ResultsScreenLevelAnnotationTests(unittest.TestCase):
         _chart_calls, cards = self._draw(self._fp_summary())
         values = dict(cards)
         self.assertIn("IN CORRIDOR (mixed levels)", values)
-        self.assertIn("MEAN ERROR (mixed levels)", values)
+        self.assertIn("OFF THE LINE (mixed levels)", values)
+
+    def test_a_ladder_block_carries_no_level_annotation(self):
+        # The wave ladder has no staircase, so block_stats publishes
+        # `ladder` and no `levels` map. Every finger flies several
+        # rungs, so a single level number per bar would be a lie: the
+        # charts draw plain finger labels and the pooled cards carry
+        # no mixed-level warning.
+        fp = self._fp_summary()
+        fp.pop("levels")
+        fp["ladder"] = {"id": "waves_v1", "passes": 1,
+                        "hand_order": ["right"],
+                        "levels": [{"lvl": 1, "wave": "slow_breath"},
+                                   {"lvl": 2, "wave": "tide"}]}
+        fp["per_level"] = {"1": {"runs": 1, "mae_pct": 4.0},
+                           "2": {"runs": 1, "mae_pct": 3.0}}
+        chart_calls, cards = self._draw(fp)
+        values = dict(cards)
+        self.assertIn("IN CORRIDOR", values)
+        self.assertNotIn("IN CORRIDOR (mixed levels)", values)
+        fp_calls = [c for c in chart_calls if "FINGER" in c["title"]]
+        self.assertTrue(fp_calls)
+        for c in fp_calls:
+            self.assertEqual(c["kw"].get("levels"), [0, 0, 0, 0])
 
     def test_same_level_fingers_get_no_mixed_note(self):
         fp = self._fp_summary()

@@ -1,17 +1,22 @@
 """The cohort chapter of the notebook, driven end to end on a synthetic
 cohort the REAL engine wrote.
 
-Five participant codes play two visits each on the keyboard source:
-a reaction block per hand (dominant first, then the other hand) and
-one bilateral echo block, with a named person and a code-less visit
-mixed into the same tree to prove the selection leaves them out. The
-folders are then handed to the real notebook functions
-(build_catalogue, sec_cohort_selection and the sections after it),
-the same path tests/test_force_pilot_notebook_levels.py walks.
+Five participant codes play ONE sitting each on the keyboard source,
+through the REAL battery machinery with a shortened preset: a reaction
+block per hand and a bilateral echo block early (phase pre), the same
+three again late (phase post), with a rest scheduled before the first
+post block. A named person, a code with no visit and one free-play
+block with no battery phase are mixed into the same tree to prove the
+selection and the pre-against-post tables leave them where they
+belong. The folders are then handed to the real notebook functions
+(build_catalogue, sec_cohort_selection and the sections after it), the
+same path tests/test_force_pilot_notebook_levels.py walks.
 
-What this pins: the long table's shape and hand roles, the ICC path
-(interval, SEM, MDC), the paired hand comparison and its wording, the
-validity verdicts, the CSV and report on disk, the small-n refusal,
+What this pins: the long table's shape, phases, positions and hand
+roles, the within-session reliability path (split-half, ICC interval,
+SEM, MDC), the pre-to-post change and its responder count, the
+learning-curve fits, the validity verdicts including the L rows, the
+CSVs, progress_mdc.yaml and the report on disk, the small-n refusal,
 that no name ever reaches an output, and that the per-session report
 still leaves the cohort sections out.
 """
@@ -43,8 +48,26 @@ from tests.test_echo_mode import patched_clock
 CODES = ("P01", "P02", "P03", "P04", "P05")
 DOMINANT = {"P01": "right", "P02": "right", "P03": "left", "P04": "right",
             "P05": "right"}
-VISIT_ONE_DAY = "2026-08-20"
 TRIALS_PER_REACTION_BLOCK = 12
+# The sitting, shortened. The shipped preset is twenty blocks; three
+# modes twice is enough to exercise every pre-against-post path and
+# still runs in seconds. rest_before on the first POST block is what
+# gives metadata battery.rest_before_s, which the post-rest contrast
+# reads.
+SHORT_ORDER = [
+    {"mode": "reaction", "hand": "hand1", "phase": "pre"},
+    {"mode": "reaction", "hand": "hand2", "phase": "pre"},
+    {"mode": "echo", "hand": "both", "phase": "pre"},
+    {"mode": "reaction", "hand": "hand1", "phase": "post",
+     "rest_before": True},
+    {"mode": "reaction", "hand": "hand2", "phase": "post"},
+    {"mode": "echo", "hand": "both", "phase": "post"},
+]
+BLOCKS_PER_SITTING = len(SHORT_ORDER)
+# The gain injected between the two goes: the POST reaction blocks run
+# 20 ms faster, which the learning table has to recover with the right
+# sign and the right word.
+POST_GAIN_MS = 20.0
 
 
 def _press(lane: int, t: float, hand: str = "right"):
@@ -67,17 +90,26 @@ def _engine(root: Path):
     # No catch trials: every trial the driver fires is answered.
     cfg.data.setdefault("reaction", {}).update({"seed": 1234,
                                                 "catch_rate": 0.0})
+    # The REAL battery machinery on a shortened order. Both cells run
+    # the same six steps, so every code's sitting is the same shape and
+    # the phase stamping is the shipped one, not a hand-written stub.
+    preset = cfg.data["protocol"]["presets"]["study_battery"]
+    preset["orders"] = {"A": [dict(s) for s in SHORT_ORDER],
+                        "B": [dict(s) for s in SHORT_ORDER]}
+    # No config overrides: this rig drives the modes by hand, so the
+    # study's short forms and frozen ladders would only get in the way
+    # of the numbers the assertions below pin.
+    preset["overrides"] = {}
     eng = GameEngine(cfg, KeyboardOnlySource())
     eng._screens = eng._build_screens()
     return eng
 
 
-def _play_reaction(eng, hand: str, base_ms: float, rng: random.Random,
-                   n_trials: int = TRIALS_PER_REACTION_BLOCK) -> Path:
-    """One reaction block: every trial answered on the cued finger
-    about base_ms after the stimulus, driven the way
+def _drive_reaction(eng, hand: str, base_ms: float, rng: random.Random,
+                    n_trials: int = TRIALS_PER_REACTION_BLOCK) -> None:
+    """Play an OPEN reaction block: every trial answered on the cued
+    finger about base_ms after the stimulus, driven the way
     tests/test_reaction_mode.py drives the mode."""
-    assert eng.begin_game("reaction", hand), f"reaction refused on {hand}"
     mode = eng.mode
     t = 100.0
     for _ in range(n_trials):
@@ -88,19 +120,24 @@ def _play_reaction(eng, hand: str, base_ms: float, rng: random.Random,
         mode._handle_press(_press(target, t + 2.0 + rt, hand),
                            now=t + 2.0 + rt)
         t += 4.0
+
+
+def _play_reaction(eng, hand: str, base_ms: float, rng: random.Random,
+                   n_trials: int = TRIALS_PER_REACTION_BLOCK) -> Path:
+    """One free-pick reaction block, opened and closed here."""
+    assert eng.begin_game("reaction", hand), f"reaction refused on {hand}"
     folder = Path(eng.session_paths.root)
+    _drive_reaction(eng, hand, base_ms, rng, n_trials)
     eng.finish_block()
     return folder
 
 
-def _play_echo(eng, fail_from: int) -> Path:
-    """One bilateral echo block on a stepped clock: perfect replay up
-    to length fail_from - 1, then a wrong first press at every longer
-    length, so the ladder ends and the span is fail_from - 1."""
+def _drive_echo(eng, fail_from: int) -> None:
+    """Play an OPEN echo block on a stepped clock: perfect replay up to
+    length fail_from - 1, then a wrong first press at every longer
+    length, so the game ends and the span is fail_from - 1."""
     with patched_clock() as clock:
-        assert eng.begin_game("echo", "both"), "echo refused on both"
         mode = eng.mode
-        folder = Path(eng.session_paths.root)
         answered = {"n": 0}
 
         def respond(clk) -> None:
@@ -127,43 +164,83 @@ def _play_echo(eng, fail_from: int) -> Path:
             respond(clock)
         else:
             raise AssertionError("the echo block never ended")
+
+
+def _play_echo(eng, fail_from: int) -> Path:
+    """One free-pick echo block, opened and closed by the engine's own
+    end-of-block path."""
+    assert eng.begin_game("echo", "both"), "echo refused on both"
+    folder = Path(eng.session_paths.root)
+    _drive_echo(eng, fail_from)
     return folder
 
 
+def _play_battery(eng, dom: str, base: float, rng: random.Random,
+                  fail_from: int) -> None:
+    """Run the shortened battery, playing every block for real.
+
+    The engine opens each step; this drives the mode the way the
+    per-mode tests do, closes the block and takes the next step off the
+    NEXT UP card, exactly as an RA would.
+    """
+    assert eng.start_battery(), "the battery refused to start"
+    for _ in range(BLOCKS_PER_SITTING * 2):
+        if not eng.block_is_running():
+            break
+        mode_name = str(eng.current_block)
+        phase = str(eng._current_phase)
+        if mode_name == "reaction":
+            hand = str(eng.hand_mode)
+            slow = 30.0 if hand != dom else 0.0
+            gain = POST_GAIN_MS if phase == "post" else 0.0
+            _drive_reaction(eng, hand, base + slow - gain, rng)
+        elif mode_name == "echo":
+            _drive_echo(eng, fail_from)
+        if eng.block_is_running():
+            # Echo ends its own block when the game is over; reaction
+            # is driven trial by trial and has to be closed here.
+            eng.finish_block()
+        if eng.pending_protocol_step() is None:
+            break
+        assert eng.continue_protocol(), "the battery would not continue"
+
+
 def write_synthetic_cohort(root: Path) -> None:
-    """Five codes, two visits, on one engine. Visit 1 lands in today's
-    day folder and is renamed to VISIT_ONE_DAY afterwards, so visit 2
-    gets today's folder and the two visits sit on different days the
-    way real ones do. The metadata visit field is what the chapter
-    reads; the folder day is the retest interval it reports."""
+    """Five codes, one sitting each, through the real battery.
+
+    Every code plays the six steps of SHORT_ORDER in one session, so
+    each block carries battery.phase and battery.position and every
+    trial row carries the phase column. A named person, a code with no
+    visit and one free-play block with no battery phase go into the
+    same tree: the first two must be dropped by the selection, the
+    third must reach the export and stay out of every pre-against-post
+    table.
+    """
     import pygame
     pygame.init()
     eng = None
     try:
         eng = _engine(root)
         rng = random.Random(7)
-        today = time.strftime("%Y-%m-%d")
-        for visit in ("1", "2"):
-            for i, code in enumerate(CODES):
-                dom = DOMINANT[code]
-                other = "left" if dom == "right" else "right"
-                eng.begin_session(
-                    code, str(22 + i),
-                    sex="female" if i % 2 else "male",
-                    dominant_hand=dom,
-                    edinburgh_lq="80" if dom == "right" else "-70",
-                    visit=visit, hand_length_mm="185",
-                    hand_breadth_mm="82")
-                # Dominant hand faster by 30 ms for everyone, visit 2
-                # 8 ms faster than visit 1: small, consistent effects
-                # the chapter should find and word correctly.
-                base = 250.0 + 15.0 * i - (8.0 if visit == "2" else 0.0)
-                _play_reaction(eng, dom, base, rng)
-                _play_reaction(eng, other, base + 30.0, rng)
-                _play_echo(eng, fail_from=4 + i)
-                eng.end_session()
-            if visit == "1":
-                (root / today).rename(root / VISIT_ONE_DAY)
+        for i, code in enumerate(CODES):
+            dom = DOMINANT[code]
+            eng.begin_session(
+                code, str(22 + i),
+                sex="female" if i % 2 else "male",
+                dominant_hand=dom,
+                edinburgh_lq="80" if dom == "right" else "-70",
+                visit="1", hand_length_mm="185",
+                hand_breadth_mm="82")
+            # A fake rig has no calibration behind it; the guard would
+            # put a question up. The clinician has answered it here.
+            eng._uncal_ack = {"left", "right"}
+            _play_battery(eng, dom, 250.0 + 15.0 * i, rng,
+                          fail_from=4 + i)
+            if code == CODES[0]:
+                # One free pick after the battery: no battery stamp, so
+                # phase is empty and the pre-post tables must ignore it.
+                _play_reaction(eng, dom, 400.0, rng)
+            eng.end_session()
         # A named person with no visit, and a code with no visit:
         # neither is a study participant.
         eng.begin_session("Mara", "40", dominant_hand="right", visit="")
@@ -231,14 +308,20 @@ class CohortNotebookTests(unittest.TestCase):
                                ra.sec_cohort_describe(cls.cohort))
             cls.hands = ra.keep(cls.ctx, "cohort_hands",
                                 ra.sec_cohort_hands(cls.cohort))
-            cls.retest = ra.keep(cls.ctx, "cohort_retest",
-                                 ra.sec_cohort_retest(cls.cohort))
-            cls.practice = ra.keep(cls.ctx, "cohort_practice",
-                                   ra.sec_cohort_practice(cls.cohort))
+            cls.within = ra.keep(cls.ctx, "cohort_within_session",
+                                 ra.sec_cohort_within_session(cls.cohort))
+            cls.retest = cls.within["table"]
+            cls.learning = ra.keep(
+                cls.ctx, "cohort_learning",
+                ra.sec_cohort_learning(cls.cohort, cls.within))
+            cls.curves = ra.keep(cls.ctx, "cohort_curves",
+                                 ra.sec_cohort_curves(cls.cohort))
             cls.validity = ra.keep(cls.ctx, "cohort_validity",
                                    ra.sec_cohort_validity(cls.cohort))
-            cls.written = ra.keep(cls.ctx, "cohort_export",
-                                  ra.sec_cohort_export(cls.cohort))
+            cls.written = ra.keep(
+                cls.ctx, "cohort_export",
+                ra.sec_cohort_export(cls.cohort, cls.within,
+                                     cls.learning))
             cls.report = ra.write_cohort_report(cls.ctx, cls.cohort)
         cls.out = buf.getvalue()
         import matplotlib.pyplot as plt
@@ -252,23 +335,56 @@ class CohortNotebookTests(unittest.TestCase):
     def test_selection_keeps_codes_with_visits_only(self) -> None:
         sel = self.cohort["sel"]
         self.assertEqual(set(sel["participant"]), set(CODES))
-        self.assertEqual(len(sel), len(CODES) * 2 * 3)
+        # Six battery blocks each, plus P01's one free pick.
+        self.assertEqual(len(sel), len(CODES) * BLOCKS_PER_SITTING + 1)
         dropped = self.cohort["dropped"]
         self.assertEqual(dropped["name_not_code"], 1)
         self.assertEqual(dropped["no_visit"], 1)
         people = self.cohort["people"]
-        self.assertEqual(list(people["visits"]), [2] * len(CODES))
-        self.assertTrue((people["interval_days"] > 0).all())
+        self.assertEqual(list(people["visits"]), [1] * len(CODES))
         self.assertEqual(
             people.set_index("participant").loc["P03", "dominant_hand"],
             "left")
+
+    def test_the_phase_and_the_position_come_off_the_battery(self) -> None:
+        sel = self.cohort["sel"]
+        battery = sel[sel["phase"] != ""]
+        self.assertEqual(set(battery["phase"]), {"pre", "post"})
+        self.assertEqual(len(battery), len(CODES) * BLOCKS_PER_SITTING)
+        # The free pick carries no phase and is not dropped.
+        free = sel[sel["phase"] == ""]
+        self.assertEqual(len(free), 1)
+        self.assertEqual(free["participant"].iloc[0], CODES[0])
+        for who, g in battery.groupby("participant"):
+            positions = sorted(int(v) for v in g["battery_position"])
+            self.assertEqual(positions,
+                             list(range(1, BLOCKS_PER_SITTING + 1)), who)
+
+    def test_the_free_play_block_stays_out_of_the_paired_tables(self):
+        long = self.cohort["long"]
+        blank = long[long["phase"] == ""]
+        self.assertFalse(blank.empty)
+        self.assertEqual(set(blank["participant"]), {CODES[0]})
+        self.assertIn("no battery phase", self.out)
+        # It is in the export...
+        import pandas as pd
+        back = pd.read_csv(Path(self.cohort["out_dir"])
+                           / "cohort_metrics.csv")
+        self.assertTrue((back["phase"].fillna("") == "").any())
+        # ...and out of every pre-against-post row.
+        for tbl in (self.retest, self.learning["table"]):
+            self.assertNotIn("", set(tbl.get("phase", [])))
 
     def test_long_table_shape_and_hand_roles(self) -> None:
         long = self.cohort["long"]
         self.assertEqual(list(long.columns), self.ra.COHORT_LONG_COLS)
         self.assertEqual(set(long["participant"]), set(CODES))
         self.assertEqual(set(long["mode"]), {"reaction", "echo"})
-        self.assertEqual(set(long["visit"]), {"1", "2"})
+        self.assertEqual(set(long["visit"]), {"1"})
+        self.assertEqual(set(long["phase"]), {"pre", "post", ""})
+        battery = long[long["phase"] != ""]
+        self.assertTrue((battery["position"] >= 1).all())
+        self.assertTrue((battery["position"] <= BLOCKS_PER_SITTING).all())
         self.assertTrue((long["n_trials"] > 0).all())
         self.assertTrue(long["value"].map(lambda v: v == v).all())
         rx = long[long["mode"] == "reaction"]
@@ -279,15 +395,14 @@ class CohortNotebookTests(unittest.TestCase):
         self.assertIn("false_start_rate", set(rx["metric"]))
         echo = long[long["mode"] == "echo"]
         self.assertEqual(set(echo["hand_role"]), {"both"})
-        spans = echo[(echo["metric"] == "span") & (echo["visit"] == "1")]
+        spans = echo[(echo["metric"] == "span") & (echo["phase"] == "pre")]
         self.assertEqual(
             spans.set_index("participant")["value"].to_dict(),
             {code: float(3 + i) for i, code in enumerate(CODES)})
         # Every block ran under the same config, so one hash per mode.
         self.assertEqual(long.groupby("mode")["config_hash"].nunique()
                          .max(), 1)
-        self.assertEqual(set(long["day"]),
-                         {VISIT_ONE_DAY, time.strftime("%Y-%m-%d")})
+        self.assertEqual(set(long["day"]), {time.strftime("%Y-%m-%d")})
 
     def test_the_cohort_pick_word_selects_codes(self) -> None:
         sel = self.ra.resolve("cohort", self.cat)
@@ -295,10 +410,10 @@ class CohortNotebookTests(unittest.TestCase):
 
     # ---- descriptives ------------------------------------------------
     def test_normative_table_prints_at_the_minimum(self) -> None:
-        self.assertIn("normative table, visit 1", self.out)
+        self.assertIn("normative table, the PRE go", self.out)
         d = self.desc[(self.desc["mode"] == "reaction")
                       & (self.desc["metric"] == "median_rt_ms")
-                      & (self.desc["visit"] == "1")]
+                      & (self.desc["phase"] == "pre")]
         self.assertEqual(set(d["hand_role"]), {"dominant", "nondominant"})
         self.assertEqual(list(d["n"]), [len(CODES)] * 2)
         row = d[d["hand_role"] == "dominant"].iloc[0]
@@ -309,7 +424,7 @@ class CohortNotebookTests(unittest.TestCase):
     def test_hand_comparison_finds_the_built_in_advantage(self) -> None:
         h = self.hands[(self.hands["mode"] == "reaction")
                        & (self.hands["metric"] == "median_rt_ms")
-                       & (self.hands["visit"] == "1")].iloc[0]
+                       & (self.hands["phase"] == "pre")].iloc[0]
         self.assertEqual(h["n"], len(CODES))
         self.assertLess(h["diff"], 0)          # dominant faster
         self.assertLess(h["ci_hi"], 0)
@@ -322,14 +437,14 @@ class CohortNotebookTests(unittest.TestCase):
         # Accuracy is 1.0 on every block, so its row says so instead
         # of printing a NaN p and a NaN dz.
         acc = self.hands[(self.hands["metric"] == "accuracy")
-                         & (self.hands["visit"] == "1")].iloc[0]
+                         & (self.hands["phase"] == "pre")].iloc[0]
         self.assertEqual(acc["test"], "no variation")
         self.assertIn("accuracy: dominant equals non-dominant; n 5, "
                       "no variation between the pairs", self.out)
         self.assertNotIn("p nan", self.out)
         self.assertNotIn("dz +nan", self.out)
 
-    # ---- test-retest -------------------------------------------------
+    # ---- within-session reliability ----------------------------------
     def test_icc_path_computes_with_interval_sem_and_mdc(self) -> None:
         r = self.retest
         row = r[(r["mode"] == "reaction") & (r["metric"] == "median_rt_ms")
@@ -347,18 +462,86 @@ class CohortNotebookTests(unittest.TestCase):
         self.assertEqual(list(echo["hand_role"]), ["both"])
         self.assertEqual(int(echo["n"].iloc[0]), len(CODES))
         self.assertIn("ICC(2,1)", self.out)
+        self.assertIn("WITHIN SESSION, SAME SITTING", self.out)
         figs = Path(self.cohort["out_dir"]) / "figures"
         self.assertTrue((figs / "cohort_icc_forest.png").exists())
-        self.assertTrue((figs / "cohort_bland_altman.png").exists())
+        self.assertTrue((figs / "cohort_bland_altman_within.png").exists())
 
-    def test_practice_effect_reads_visit_two_against_visit_one(self) -> None:
-        p = self.practice[(self.practice["mode"] == "reaction")
-                          & (self.practice["metric"] == "median_rt_ms")
-                          & (self.practice["hand_role"] == "dominant")]
+    def test_split_half_runs_where_the_trials_exist_and_says_so_where_not(
+            self) -> None:
+        r = self.retest
+        rx = r[(r["mode"] == "reaction")
+               & (r["metric"] == "median_rt_ms")
+               & (r["hand_role"] == "dominant")].iloc[0]
+        self.assertEqual(rx["split_note"], "")
+        self.assertTrue(-1.0 <= rx["r_split"] <= 1.0)
+        self.assertLessEqual(rx["r_split_lo"], rx["r_split"])
+        self.assertLessEqual(rx["r_split"], rx["r_split_hi"])
+        span = r[(r["mode"] == "echo")
+                 & (r["metric"] == "span")].iloc[0]
+        self.assertTrue(span["r_split"] != span["r_split"])   # NaN
+        self.assertIn("nothing to split", span["split_note"])
+        self.assertIn("nothing to split", self.out)
+
+    def test_the_mdc_map_is_keyed_by_mode_and_metric(self) -> None:
+        mdc = self.within["mdc"]
+        self.assertIn(("reaction", "median_rt_ms"), mdc)
+        self.assertGreater(mdc[("reaction", "median_rt_ms")], 0)
+
+    # ---- change from the first go to the last ------------------------
+    def test_learning_table_recovers_the_injected_gain(self) -> None:
+        tbl = self.learning["table"]
+        p = tbl[(tbl["mode"] == "reaction")
+                & (tbl["metric"] == "median_rt_ms")
+                & (tbl["hand_role"] == "dominant")]
         self.assertEqual(len(p), 1)
         self.assertEqual(int(p["n"].iloc[0]), len(CODES))
-        self.assertLess(p["diff"].iloc[0], 0)   # visit 2 faster
-        self.assertIn("visit 1", p["direction"].iloc[0])
+        self.assertLess(p["diff"].iloc[0], 0)          # post faster
+        self.assertAlmostEqual(float(p["diff"].iloc[0]), -POST_GAIN_MS,
+                               delta=15.0)
+        self.assertEqual(p["in_words"].iloc[0], "faster")
+        self.assertIn("pre", p["direction"].iloc[0])
+        self.assertIn("faster: pre higher than post", self.out)
+        self.assertIn("CHANGE FROM THE FIRST GO TO THE LAST", self.out)
+        self.assertIn("Kantak and Winstein 2012", self.out)
+
+    def test_responders_are_counted_against_this_tables_own_mdc(self):
+        resp = self.learning["responders"]
+        row = resp[(resp["mode"] == "reaction")
+                   & (resp["metric"] == "median_rt_ms")
+                   & (resp["hand_role"] == "dominant")].iloc[0]
+        self.assertEqual(int(row["n"]), len(CODES))
+        self.assertEqual(float(row["mdc95"]),
+                         self.within["mdc"][("reaction", "median_rt_ms")])
+        self.assertGreaterEqual(int(row["responders"]), 0)
+        self.assertLessEqual(int(row["responders"]), len(CODES))
+        self.assertLessEqual(row["ci_lo"], row["share"])
+        self.assertLessEqual(row["share"], row["ci_hi"])
+        self.assertTrue(0.0 <= row["ci_lo"] <= 1.0)
+        self.assertTrue(0.0 <= row["ci_hi"] <= 1.0)
+        # A metric with no MDC gets no count and says why.
+        blank = resp[resp["responders"].isna()]
+        self.assertTrue(len(blank))
+        self.assertTrue((blank["note"].str.len() > 0).all())
+
+    def test_the_post_rest_contrast_names_the_short_rests(self) -> None:
+        self.assertIn("post-rest contrast", self.out)
+        self.assertIn("under 120 s", self.out)
+
+    # ---- learning curves ---------------------------------------------
+    def test_curves_fit_per_person_and_carry_the_direction(self) -> None:
+        slopes = self.curves["slopes"]
+        self.assertFalse(slopes.empty)
+        self.assertEqual(set(slopes["mode"]), {"reaction", "echo"})
+        rx = slopes[slopes["mode"] == "reaction"]
+        self.assertEqual(set(rx["participant"]), set(CODES))
+        self.assertEqual(set(rx["better"]), {"lower"})
+        self.assertTrue((rx["n_pre"] > 0).all())
+        self.assertTrue((rx["n_post"] > 0).all())
+        echo = slopes[slopes["mode"] == "echo"]
+        self.assertEqual(set(echo["better"]), {"higher"})
+        self.assertIn("LEARNING CURVES", self.out)
+        self.assertIn("Heathcote", self.out)
 
     # ---- validity ----------------------------------------------------
     def test_validity_verdicts_are_plain_and_decided(self) -> None:
@@ -375,10 +558,16 @@ class CohortNotebookTests(unittest.TestCase):
         # Modes with no blocks are not testable, and say so.
         self.assertEqual(v.loc["P1", "verdict"], "not testable")
         self.assertEqual(v.loc["P1", "detail"], "no data")
-        # The retired Lighthouse checks L1 to L3 are gone, not "not
-        # testable": a row for a mode the app no longer has would be a
-        # verdict on nothing.
-        self.assertNotIn("L1", v.index)
+        # The learning table (Section 4.6 table 2) rides in the same
+        # frame. L1 is the anchor: reaction is expected NOT to move
+        # across the sitting, tested as equivalence.
+        for cid in ("L1", "L2", "L3", "L4", "L5", "L6", "L7", "L8"):
+            self.assertIn(cid, v.index, cid)
+        self.assertIn("equivalence", " ".join(
+            str(x) for x in v.loc[["R3", "L1"], "criterion"]).lower()
+            + str(v.loc["L1", "criterion"]))
+        self.assertIn("+/- 20", str(v.loc["L1", "criterion"]))
+        self.assertEqual(v.loc["L8", "verdict"], "not testable")
         self.assertIn("R2  pass", self.out)
         self.assertIn("reference 0.0", self.out)
         self.assertIn("not testable", self.out)
@@ -393,15 +582,29 @@ class CohortNotebookTests(unittest.TestCase):
         back = pd.read_csv(csv_path)
         self.assertEqual(list(back.columns), self.ra.COHORT_LONG_COLS)
         self.assertEqual(len(back), len(self.cohort["long"]))
-        for name in ("describe", "hands", "retest", "practice",
-                     "validity"):
+        for name in ("describe", "hands", "within_session", "learning",
+                     "responders", "slopes", "validity"):
             self.assertTrue((out_dir / f"cohort_{name}.csv").exists(), name)
         self.assertEqual(self.report, out_dir / "report.html")
         page = self.report.read_text(encoding="utf-8")
-        self.assertIn("TEST-RETEST, SEM AND MDC", page)
+        self.assertIn("WITHIN-SESSION RELIABILITY, SEM AND MDC", page)
         self.assertIn("KNOWN-EFFECT VALIDITY CHECKS", page)
         self.assertIn("data:image/png;base64", page)
         self.assertIn(f"{len(CODES)} participant(s)", page)
+
+    def test_progress_mdc_yaml_is_written_and_parses(self) -> None:
+        import yaml
+        path = Path(self.cohort["out_dir"]) / "progress_mdc.yaml"
+        self.assertIn(path, self.written)
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        value = data["progress"]["mdc"]["reaction"]["median_rt_ms"]
+        self.assertIsInstance(float(value), float)
+        self.assertGreater(float(value), 0.0)
+        # One key per mode, not one per metric row.
+        self.assertEqual(len(data["progress"]["mdc"]),
+                         len(set(data["progress"]["mdc"])))
+        self.assertIn("never writes that file itself",
+                      path.read_text(encoding="utf-8"))
 
     def test_an_empty_cohort_writes_no_folder(self) -> None:
         # No participants means no report and, above all, no stray
@@ -416,12 +619,15 @@ class CohortNotebookTests(unittest.TestCase):
         self.assertIn("no cohort report is written", buf.getvalue())
 
     def test_undefined_icc_carries_its_reason(self) -> None:
-        # Echo spans repeat exactly at visit 2 for four of five people,
-        # and hebb_minus_novel_acc is zero everywhere: both are
-        # reported as undefined with the reason, never as a bare NaN.
+        # The simulated player never times out, so n_omissions is zero
+        # for everyone in both phases: reported as undefined with the
+        # reason, never as a bare NaN. (n_omissions rather than the old
+        # hebb_minus_novel_acc: the shipped echo rule is Simon, which
+        # has no hidden repeats to score, so that metric only exists
+        # for a legacy ladder block.)
         r = self.retest
         row = r[(r["mode"] == "echo")
-                & (r["metric"] == "hebb_minus_novel_acc")].iloc[0]
+                & (r["metric"] == "n_omissions")].iloc[0]
         self.assertTrue(row["icc21"] != row["icc21"])
         self.assertIn("ICC undefined", row["note"])
         self.assertIn("no variance", row["note"])
@@ -444,7 +650,8 @@ class CohortNotebookTests(unittest.TestCase):
         cohort = dict(self.cohort, min_n=28, tables={})
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
-            tbl = ra.sec_cohort_retest(cohort)
+            within = ra.sec_cohort_within_session(cohort)
+            tbl = within["table"]
             ra.sec_cohort_hands(cohort)
             val = ra.sec_cohort_validity(cohort)
         out = buf.getvalue()
@@ -452,7 +659,7 @@ class CohortNotebookTests(unittest.TestCase):
         plt.close("all")
         self.assertIn("the design analyses 28", out)
         self.assertIn("no statistic is printed", out)
-        self.assertNotIn("ICC(2,1): two-way random", out)
+        self.assertNotIn("ICC(2,1) is two-way random", out)
         self.assertFalse(tbl.empty)
         self.assertEqual(set(val["verdict"]), {"not testable"})
         self.assertIn("n under the design minimum",
@@ -471,7 +678,7 @@ class CohortNotebookTests(unittest.TestCase):
         self.assertIsNotNone(here)
         page = Path(here).read_text(encoding="utf-8")
         self.assertIn("Overview", page)
-        self.assertNotIn("TEST-RETEST, SEM AND MDC", page)
+        self.assertNotIn("WITHIN-SESSION RELIABILITY", page)
         self.assertNotIn("cohort_", page)
         self.assertNotIn("not captured", buf.getvalue())
         # The per-session report went beside its own session, not
@@ -498,7 +705,8 @@ class CohortNotebookTests(unittest.TestCase):
             here = ra.write_report(ctx)
         import matplotlib.pyplot as plt
         plt.close("all")
-        self.assertEqual(len(ctx["folders"]), 6)      # every P01 game
+        # Six battery blocks plus the one free pick.
+        self.assertEqual(len(ctx["folders"]), BLOCKS_PER_SITTING + 1)
         summary = (self.root / "individual_patient_results" / "P01"
                    / "summary.html")
         self.assertTrue(summary.exists(), buf.getvalue())
@@ -551,14 +759,14 @@ class CohortNotebookTests(unittest.TestCase):
         # number, never as an "undefined" on a blank.
         long = self.cohort["long"]
         spans = long[(long["mode"] == "echo") & (long["metric"] == "span")]
-        v1 = spans[spans["visit"] == "1"].set_index("participant")["value"]
+        v1 = spans[spans["phase"] == "pre"].set_index("participant")["value"]
         copy = long.copy()
         mask = (copy["mode"] == "echo") & (copy["metric"] == "span")
         copy.loc[mask, "value"] = copy.loc[mask, "participant"].map(v1)
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
-            r = self.ra.sec_cohort_retest(dict(self.cohort, long=copy,
-                                               tables={}))
+            r = self.ra.sec_cohort_within_session(
+                dict(self.cohort, long=copy, tables={}))["table"]
         import matplotlib.pyplot as plt
         plt.close("all")
         # The section redrew the cohort figures outside keep(); they
@@ -569,6 +777,83 @@ class CohortNotebookTests(unittest.TestCase):
         self.assertEqual(row["band"], "excellent")
         self.assertIn("ICC exact", row["note"])
         self.assertNotIn("undefined", row["note"])
+
+
+class CohortStatisticsHelperTests(unittest.TestCase):
+    """The four helpers the single-session design added, on inputs
+    whose answers are known without any session data."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.ra = _load_notebook()
+
+    def test_split_half_interval_contains_a_known_correlation(self):
+        import numpy as np
+        rng = np.random.default_rng(11)
+        # Twelve people, each with 40 trials drawn around their own
+        # mean: the split-half of a stable per-person mean is high.
+        by_person = {f"P{i:02d}": (200.0 + 20.0 * i
+                                   + rng.normal(0, 15.0, 40)).tolist()
+                     for i in range(12)}
+        r, lo, hi = self.ra.split_half(by_person, n_splits=200)
+        self.assertTrue(lo <= r <= hi)
+        self.assertGreater(r, 0.8)
+        self.assertLessEqual(hi, 1.0000001)
+        # Under three people there is nothing to correlate.
+        self.assertTrue(all(v != v for v in
+                            self.ra.split_half({"a": [1, 2, 3, 4]})))
+
+    def test_tost_says_equivalent_at_five_ms_and_not_at_forty(self):
+        import numpy as np
+        rng = np.random.default_rng(3)
+        base = 300.0 + rng.normal(0, 10.0, 30)
+        close = base + 5.0 + rng.normal(0, 2.0, 30)
+        far = base + 40.0 + rng.normal(0, 2.0, 30)
+        _p, ok = self.ra.tost_paired(base, close, 20.0)
+        self.assertTrue(ok)
+        _p, ok = self.ra.tost_paired(base, far, 20.0)
+        self.assertFalse(ok)
+
+    def test_wilson_stays_inside_zero_to_one_at_the_edges(self) -> None:
+        for k, n in ((0, 10), (10, 10), (1, 3)):
+            share, lo, hi = self.ra.wilson_ci(k, n)
+            self.assertAlmostEqual(share, k / n)
+            self.assertGreaterEqual(lo, 0.0)
+            self.assertLessEqual(hi, 1.0)
+            self.assertLessEqual(lo, share)
+            self.assertLessEqual(share, hi)
+        self.assertTrue(all(v != v for v in self.ra.wilson_ci(0, 0)))
+
+    def test_log_linear_slope_is_negative_on_a_falling_series(self):
+        import numpy as np
+        y = [300.0 - 30.0 * np.log(i + 1) for i in range(1, 21)]
+        slope, se, n = self.ra.log_linear_slope(y)
+        self.assertEqual(n, 20)
+        self.assertLess(slope, 0)
+        self.assertGreaterEqual(se, 0)
+        self.assertTrue(all(v != v for v in
+                            self.ra.log_linear_slope([1.0, 2.0])[:2]))
+
+    def test_exp_fit_recovers_a_known_rate(self) -> None:
+        import numpy as np
+        a, b, c = 200.0, 120.0, 0.25
+        y = [a + b * np.exp(-c * x) for x in range(20)]
+        fa, fb, fc, ok = self.ra.exp_fit(y)
+        self.assertTrue(ok)
+        self.assertAlmostEqual(fc, c, delta=0.2 * c)
+        self.assertAlmostEqual(fa, a, delta=0.05 * a)
+        # Too few points: no fit is attempted and it says so.
+        self.assertFalse(self.ra.exp_fit(y[:4])[3])
+
+    def test_the_notebook_phases_match_the_shipped_preset(self) -> None:
+        from finger_rehab.config import Config
+        cfg = Config.load()
+        preset = cfg.get("protocol.presets.study_battery") or {}
+        phases = {str(step.get("phase") or "").strip().lower()
+                  for order in (preset.get("orders") or {}).values()
+                  for step in order}
+        self.assertEqual(set(self.ra.COHORT_PHASES), phases)
+        self.assertEqual(set(self.ra.COHORT_PAIR_PHASES), {"pre", "post"})
 
 
 if __name__ == "__main__":

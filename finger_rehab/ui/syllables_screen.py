@@ -1,88 +1,69 @@
-"""Syllable Beats screen. Words and syllable blocks are not a lane
-strip, so the mode gets its own screen instead of GameplayScreen.
+"""Syllables screen: a word being built at the top, four written
+chunks falling over four fingers below it. Words and falling tiles are
+not a lane strip, so the mode gets its own screen instead of
+GameplayScreen.
 
-The screen is built so that a seven year old, or the parent across
-the table, always knows two things without reading anything twice:
-whose turn it is, and why what just happened happened. Every phase
-announces itself with one big stage title and one short instruction:
+The screen is built so that a seven year old, or the parent across the
+table, always knows two things without reading anything twice: whose
+turn it is, and why what just happened happened. Every phase announces
+itself with one big stage title and one short instruction:
 
   WARM UP      tap along with the tick, any finger
-  LISTEN...    the word appears huge and is spoken once
-  WATCH        the blocks light in turn; hands off is said outright,
-               and in bilateral play a tag under the sounding block
-               names the hand carrying the buzz, so the buzz hopping
-               between hands is explained on screen as it happens
-  GET READY... paced levels count DOWN 4 3 2 1 to GO, so the ticks
-               the child waits through cannot be mistaken for the
-               ticks the child taps on
-  YOUR TURN!   the blocks drain to hollow outlines waiting to be
-               filled, a big GO! marks the start, and in bilateral
-               play a line names the hand(s) the window sits on:
-               "Left hand this time." on a one-hand window, "Both
-               hands, left to right." when the window crosses the
-               midline, where the block row also opens a wider gap
-               so the word visibly runs off one hand onto the other
-  feedback     WONDERFUL! with a green swell on success; a kind SO
-               CLOSE! (or HAVE ANOTHER LOOK on no taps) naming the
-               one thing to change, then the replay demonstrates it
+  LISTEN...    the word appears huge and is spoken, and the strip at
+               the top shows one empty slot per syllable
+  WATCH        each slot lights in turn with its chunk while the
+               syllable is spoken and the whole hand feels one roll;
+               then the slots empty again, because the next phase is
+               remembering, not copying
+  WHICH ONE?   four chunks fall slowly down the four lanes over the
+               child's fingers. One is the syllable that comes next.
+               Press the finger under it
+  WONDERFUL!   every slot filled, the word swells and is spoken whole
 
-Between words the screen never goes dead: the gap says the next word
-is coming. The model and the response also LOOK different, not just
-read different: model blocks are solid and light up, response blocks
-are hollow outlines that fill as taps land, so a beat to copy and a
-beat already copied cannot be confused.
+THE TILES CARRY NO CLUE. All four are drawn identically: same size,
+same neutral card colour, same weight of text, all lower case. The
+only thing that says which finger answers a tile is WHERE the tile is,
+which is the spatial code the mode's docstring defends (Fitts and
+Seeger 1953). So this screen must never colour the target tile, ring
+it, put it in a fixed lane, or start its fade earlier than the others.
+The finger colours live under the lanes in the seat row, where they
+name the FINGER and not the answer.
 
-THE BLOCKS SIT OVER THE FINGERS. The desk row (every playing finger,
-left to right) owns a fixed slot row across the screen, and a word's
-blocks occupy the slots of its sliding window, so WHERE the blocks
-sit says WHICH fingers this word wants and the window visibly moves
-from word to word. Slots the window leaves empty show a small dot in
-the resting finger's idle colour: present and quiet, never a target.
+Letters are widely tracked (Zorzi et al. 2012, PNAS: extra-large
+letter spacing improved dyslexic children's reading on the fly) in the
+app's ordinary sans font (Wery and Diliberto 2017; Kuster et al. 2018:
+special dyslexia fonts do not help).
 
-There is no labelled finger row under the blocks. Keyboard key hints
-live in a small Controls note in the bottom corner, only when the
-input IS the keyboard; with the real sensors the child's fingers sit
-on the pads and a legend would only pull eyes away from the blocks.
-The block-to-finger mapping is taught where it matters: by the block
-sitting over its finger's slot, by the buzz on the finger while its
-block lights, and by the fixed finger colours the blocks wear
-everywhere else in the app.
-
-Letters and reading: the block text shows the word's own chunks at
-levels 1 to 5 because showing the word as text IS this build's visual
-stimulus (no recorded audio or picture library exists). At level 6 the
-blocks show dots while the child taps, and the graphemes only fade in
-as feedback after a correct response, per the letters-attached
-evidence discussed in the mode docstring: letters are feedback there,
-never a prerequisite.
+FEEDBACK IS LOUD WHEN IT IS GOOD AND QUIET WHEN IT IS NOT. A correct
+press lifts its tile up into the word strip and fills that slot in the
+finger's colour. A wrong press turns that one tile grey and lets it
+drift away; nothing flashes, nothing sounds, no cross appears, and the
+other tiles keep falling, so the child can still get it. A set that
+falls off the bottom unanswered shows the right tile glowing once as
+it goes, which is the corrective display, and it lands seconds after
+any wrong press rather than on top of it.
 
 THE REWARD LAYER the screen draws (the mode owns every decision; see
-THE REWARD LAYER in syllables.py for the schedule and the evidence):
-a correct-for-position tap sparkles as its block fills (a brief
-scale-up with a lighter fill), and on paced levels an on-beat tap
-adds one expanding ring, so the beat criterion is visible per tap
-rather than only per word; a wrong-position tap fills its block
-grey, information without punishment. Consecutive Greats light up to
-three stars in the bottom-left corner at fixed milestones; the
-corner is deliberately peripheral so the stars reward without
-stealing the focal point, and they simply are not drawn again after
-a round ends (no loss animation). The break screen is the journey:
-one stop per round on a walking strip, and finishing a round stamps
-its stop with the round's sticker, the ritual that makes the
-mandated rest something rather than nothing. A band promotion shows
-a one-shot "Bigger words!" card on the next between-word screen; a
-demotion shows nothing at all. Everything here draws in the
-feedback, break and gap phases only: attend, model, count-in and
-respond keep their pinned look and silence.
+THE REWARD LAYER in syllables.py): up to three stars in the
+bottom-left corner at fixed word streaks, peripheral on purpose so
+they reward without stealing the focal point; the break screen is the
+journey, one stop per round on a walking strip with the round's
+sticker stamped on it; a band promotion shows a one-shot "Bigger
+words!" card on the next between-word screen and a demotion shows
+nothing at all.
 
-Flash safety: nothing on this screen flashes faster than the 2 Hz
-beat, well under the 3 flashes per second limit (WCAG 2.3.1);
-feedback pulses are a single slow swell and every reward animation
-is a one-shot grow-and-settle, never a repeating flash.
+The break screen also carries one line for the adult: the review of
+this whole family of games found supportive adult interaction to be
+the only moderator that mattered (McTigue, Solheim, Zimmer and Uppstad
+2020), so the rest is where the screen asks for it.
 
-Screen conventions match the rest of the app: 1280x800 logical
-layout, theme-aware, Esc and P are handled by the engine's global
-event path, and the paused overlay mirrors GameplayScreen's.
+Flash safety: nothing on this screen repeats faster than 2 Hz; the
+lift, the grey drift and the miss glow are one-shot animations (WCAG
+2.3.1).
+
+Screen conventions match the rest of the app: 1280x800 logical layout,
+theme-aware, Esc and P are handled by the engine's global event path,
+and the paused overlay mirrors GameplayScreen's.
 """
 from __future__ import annotations
 
@@ -107,24 +88,18 @@ log = logging.getLogger(__name__)
 
 
 # Streak-star gold, fixed across themes: the stars are a reward mark,
-# not a theme element, and the same gold reads on the light and dark
-# backgrounds alike.
+# not a theme element, and the same gold reads on light and dark alike.
 STAR_GOLD = (245, 191, 66)
 
-# The word bands' identity colours for the promotion card: green for
-# the everyday words, blue for the less common, purple for the rare
-# and long ones. Fixed rather than theme-derived so "band B blue" is
-# the same fact in every theme, like the finger colours.
+# The word bands' identity colours for the promotion card.
 BAND_COLOURS = {
     "A": (34, 197, 94),
     "B": (59, 130, 246),
     "C": (168, 85, 247),
 }
 
-# The one fiction shell (never rotated): the session is a bush walk
-# and every round is a stop on it. Eight names cover any words_total
-# and round_size the config can produce; the shipped four-round block
-# uses the first four.
+# The one fiction shell (never rotated): the session is a bush walk and
+# every round is a stop on it.
 JOURNEY_STOPS = ("The Creek", "Big Rock", "The Lookout",
                  "The Waterfall", "The Cave", "Old Bridge",
                  "The Meadow", "The Summit")
@@ -141,65 +116,45 @@ def _star_points(cx: float, cy: float, r_outer: float,
     return pts
 
 
+def _mix(a: tuple[int, int, int], b: tuple[int, int, int],
+         t: float) -> tuple[int, int, int]:
+    return tuple(int(x + (y - x) * t) for x, y in zip(a, b))
+
+
 class SyllablesScreen(Screen):
 
-    # Slot row geometry. Every playing finger owns a fixed slot; the
-    # word's blocks occupy the slots of its window, so block position
-    # says which finger plays. Heights leave room for the stage title
-    # above and the GO! / count-down slot below.
-    BLOCK_H = 150
-    STRESS_EXTRA = 36          # stressed block drawn taller from L4 up
-    BLOCK_GAP = 18
-    # Extra gap between the two hands' slot groups in bilateral play,
-    # so the row visibly reads as two hands meeting in the middle
-    # rather than one long ribbon.
-    HAND_GAP = 46
-    SIDE_PAD = 40              # slot row inset from the screen edges
-    # A single hand's four slots would each be over 280 px wide on the
-    # 1280 layout; capping them keeps the blocks child-block sized
-    # while the slot POSITIONS still span the row.
-    SLOT_MAX_W = 240
-    EXTRA_W = 84               # the grey "you tapped one too many" block
-    SEAT_R = 9                 # resting-finger dot radius
-    ROW_CY = 400               # vertical centre of the block row
-    TITLE_Y = 168              # stage title ("YOUR TURN!")
-    SUB_Y = 222                # one-line instruction under the title
-    HINT_Y = 258               # bilateral either-hand line
-    UNDER_Y = ROW_CY + 150     # GO! and the count-down number
-    # How long the GO! stays up at the start of the response phase
-    # when no tap has landed yet. Long enough to read, short enough
-    # that it is gone before the first paced beat needs the space.
-    GO_S = 0.7
+    # ---- geometry, in the 1280x800 logical layout ----
+    STRIP_Y = 112              # centre of the word-building strip
+    STRIP_H = 80
+    SLOT_GAP = 14
+    SLOT_MIN_W = 120
+    SLOT_MAX_W = 220
+    TITLE_Y = 186              # stage title
+    SUB_Y = 226                # one-line instruction under it
+    TOP_Y = 306                # where a tile enters
+    EXIT_Y = 606               # where a tile leaves
+    TILE_W = 196
+    TILE_H = 90
+    LANE_PAD = 90              # tile field inset from the screen edges
+    SEAT_Y = 672               # the finger seats under the lanes
+    SEAT_R = 11
+    # Letter tracking on the tiles and the strip, as a fraction of the
+    # point size (Zorzi et al. 2012).
+    TRACKING = 0.12
+    # How long the newest star's one-shot pop runs.
+    STAR_FLASH_S = 0.9
+    STAMP_FLASH_S = 1.0
 
     def __init__(self, engine: "GameEngine") -> None:
         super().__init__(engine)
         # Animation trackers, all read-side: the mode stays the single
         # source of truth and the screen just notices changes.
-        # Which block last lit during model/replay, and when, so the
-        # sounding block can bounce once per beat.
         self._last_model_idx = -1
         self._model_lit_t = 0.0
-        # Tap count last frame, so a landed tap can pop its block.
-        # Each pop keeps the tap's quality marks from the moment it
-        # landed (position-correct, on-beat), read once from
-        # mode.tap_marks(): the sparkle and the on-beat ring are
-        # drawn from data the mode already computed, never measured
-        # here. Entries are (block_idx, t, pos_ok, on_beat).
-        self._last_tap_count = 0
-        self._tap_pops: list[tuple[int, float, bool, bool | None]] = []
-        # Cached success glow (sized to the block row) so the feedback
-        # swell does not allocate a fresh surface per frame.
-        self._glow_cache: pygame.Surface | None = None
-        self._glow_key: tuple[int, int] | None = None
-        # Pre-start countdown, same contract as GameplayScreen: while
-        # perf_counter() is below this the GET READY card shows and the
-        # mode's update is held back, so the warm-up beat cannot start
-        # until the child has had the one 3 s prep every mode gets.
+        # Pre-start countdown, same contract as GameplayScreen.
         self._countdown_until = 0.0
         self._dim_cache: pygame.Surface | None = None
-        # Block typefaces by point size, so the fit-to-slot shrink in
-        # _draw_blocks does not pay SysFont's lookup cost per frame.
-        self._block_fonts: dict[int, pygame.font.Font] = {}
+        self._tile_fonts: dict[int, pygame.font.Font] = {}
 
     def start_countdown(self, seconds: float) -> None:
         """Begin the pre-start GET READY countdown. Called by the
@@ -211,23 +166,22 @@ class SyllablesScreen(Screen):
 
     def _accent(self) -> tuple[int, int, int]:
         """Syllables pink from the mode picker, so the kids' screen
-        keeps the same identity colour it was chosen by."""
+        keeps the identity colour it was chosen by."""
         return ModeSelectScreen.MODE_ACCENTS.get(
             "syllables", self.theme.accent)
 
+    def _card(self) -> tuple[int, int, int]:
+        """The tile fill: one neutral card colour for all four tiles in
+        every theme. Never a finger colour and never per option, so no
+        tile can be told from another before it is pressed."""
+        return _mix(self.theme.background, self.theme.foreground, 0.10)
+
     def on_block_start(self) -> None:
-        # Fresh block: drop every animation tracker so nothing pops on
-        # frame one of a new visit.
         self._last_model_idx = -1
-        self._last_tap_count = 0
-        self._tap_pops.clear()
 
     # ---- events ------------------------------------------------------------
     def handle_event(self, e: pygame.event.Event) -> None:
         if self.engine.paused:
-            # The engine only gates input for the screens it knows run
-            # blocks; belt and braces here so a press during the pause
-            # overlay cannot queue into the mode.
             return
         if self.engine.mode and hasattr(self.engine.mode, "handle_event"):
             self.engine.mode.handle_event(e)
@@ -235,25 +189,11 @@ class SyllablesScreen(Screen):
     def update(self, dt: float) -> None:
         if self.engine.paused:
             return
-        # Hold the mode back while the GET READY countdown runs, same
-        # as GameplayScreen, so the warm-up's first beat lands the
-        # instant the card clears rather than under it.
         if (self.engine.mode and hasattr(self.engine.mode, "update")
                 and self._countdown_remaining() <= 0):
             self.engine.mode.update(dt)
 
     # ---- stage copy --------------------------------------------------------
-    # One title, one instruction, one colour per phase. The title is
-    # the single focal announcement; a child who reads nothing else
-    # still gets whose turn it is from the colour and the size.
-    ERROR_SUBS = {
-        "extra_tap": "One tap too many. See the grey block.",
-        "missing_tap": "One beat is still empty.",
-        "wrong_order": "Start from the first finger.",
-        "off_beat": "Try to land right on the tick.",
-        "wrong_stress": "Press the tall block harder.",
-    }
-
     def _stage(self, mode) -> tuple[str, str, str]:
         """(title, instruction, colour name) for the current phase.
         Colour names resolve through _stage_colour so the copy can be
@@ -263,36 +203,16 @@ class SyllablesScreen(Screen):
             return ("WARM UP", "Tap along with the tick. Any finger.",
                     "accent")
         if phase == "attend":
-            return ("LISTEN...", "How many beats does it have?", "accent")
+            return ("LISTEN...", "Here is the word.", "accent")
         if phase == "model":
-            return ("WATCH", "Hands off. See and feel how it taps.",
+            return ("WATCH", "Hands off. See and hear each part.",
                     "accent")
-        if phase == "replay":
-            return ("WATCH AGAIN", "See how it goes. Next word after this.",
-                    "warning")
-        if phase == "countin":
-            return ("GET READY...", "Start tapping on GO. One tap each tick.",
-                    "accent")
-        if phase == "respond":
-            if mode.paced:
-                sub = "Tap with the ticks."
-            elif mode.order_required:
-                sub = "Tap the beats. First finger first."
-            else:
-                sub = "Tap once for every beat."
-            return ("YOUR TURN!", sub, "success")
-        if phase == "feedback":
-            res = mode._last_result or {}
-            if res.get("correct"):
-                return ("WONDERFUL!", "", "success")
-            err = res.get("error", "")
-            if err == "timeout":
-                # Nothing landed, so "so close" would be untrue. Kind
-                # and plain instead, and the replay follows.
-                return ("HAVE ANOTHER LOOK",
-                        "No rush. Watch how it goes.", "warning")
-            return ("SO CLOSE!",
-                    self.ERROR_SUBS.get(err, "Watch once more."), "warning")
+        if phase == "choose":
+            return ("WHICH ONE?",
+                    "Press the finger under the part that comes next.",
+                    "success")
+        if phase == "complete":
+            return ("WONDERFUL!", "", "success")
         if phase == "break":
             hands = "hands" if getattr(mode, "bilateral", False) else "hand"
             return ("REST TIME",
@@ -301,23 +221,15 @@ class SyllablesScreen(Screen):
         return ("", "", "muted")
 
     def _hands_line(self, mode) -> str:
-        """One short sentence naming the hand(s) this word's window
-        sits on, said where the child acts on it. The window owns its
-        lanes, so the line reports placement, never a choice: a
-        crossing window says both hands, a one-hand window in
-        bilateral play names its hand (the window moves word to word,
-        so the hand is news each time), and a single-hand session
-        needs no line at all."""
-        if mode.phase not in ("countin", "respond"):
+        """One short sentence naming the hand this word plays on, said
+        at ATTEND before any tile exists so it can never be read as a
+        hint about which tile is right. A single-hand session needs no
+        line at all."""
+        if mode.phase not in ("attend", "model"):
             return ""
         if not getattr(mode, "bilateral", False):
             return ""
-        if getattr(mode, "row_mode", False):
-            return "Both hands, left to right."
-        lanes = mode.window_lanes()
-        if not lanes:
-            return ""
-        return f"{mode._hand_of_lane(lanes[0]).capitalize()} hand this time."
+        return f"{str(mode.word_hand).capitalize()} hand this time."
 
     def _stage_colour(self, name: str) -> tuple[int, int, int]:
         if name == "accent":
@@ -330,17 +242,12 @@ class SyllablesScreen(Screen):
             return
         cx = self.layout.width // 2
         draw_text(surf, title, (cx, self.TITLE_Y), self.theme, self.layout,
-                  pt=FONT_H1 + 12, centre=True,
+                  pt=FONT_H1 + 6, centre=True,
                   colour=self._stage_colour(colour))
         if sub:
             draw_text(surf, sub, (cx, self.SUB_Y), self.theme, self.layout,
                       pt=FONT_BODY + 2, centre=True,
                       colour=self.theme.muted)
-        hint = self._hands_line(mode)
-        if hint:
-            draw_text(surf, hint, (cx, self.HINT_Y), self.theme,
-                      self.layout, pt=FONT_BODY, centre=True,
-                      colour=self._accent())
 
     # ---- draw --------------------------------------------------------------
     def draw(self, surf: pygame.Surface) -> None:
@@ -367,29 +274,20 @@ class SyllablesScreen(Screen):
             pass
         else:
             self._draw_word_trial(surf, mode, now)
-        if phase in ("attend", "model", "replay", "countin",
-                     "respond", "feedback", "gap"):
-            # The round's streak stars live in the corner through the
-            # whole word cycle ("stay lit until the round ends"); the
-            # break and warm-up screens have no round in play.
+        if phase in ("attend", "model", "choose", "complete", "gap"):
             self._draw_streak_stars(surf, mode, now)
         self._draw_controls_note(surf, mode)
         remaining = self._countdown_remaining()
         if remaining > 0:
             self._draw_countdown_card(surf, remaining)
-        # One skip control for every enforced wait, drawn last so it
-        # sits over the countdown card and the rest material alike.
         draw_skip_chip(surf, self.layout, self.theme, self.engine)
-        # Skipped under either exit guard (the engine draws the
-        # session dialog or the end-game chip above this screen),
-        # matching GameplayScreen.
         if self.engine.paused and not self.engine.exit_overlay_active:
             self._draw_paused_overlay(surf)
 
     def _draw_countdown_card(self, surf: pygame.Surface,
                              remaining: float) -> None:
         """GET READY card matching GameplayScreen's, in this mode's
-        pink, so the pre-start moment looks the same on every screen."""
+        pink, so the pre-start moment looks the same everywhere."""
         if (self._dim_cache is None
                 or self._dim_cache.get_size() != surf.get_size()):
             self._dim_cache = pygame.Surface(surf.get_size(),
@@ -417,9 +315,6 @@ class SyllablesScreen(Screen):
 
     # ---- top strip ---------------------------------------------------------
     def _top_label(self, mode) -> str:
-        """What the top-left counter says. During the warm-up and the
-        rest no word is in play, and saying "Word 1 of 50" then would
-        be a counter moving for no visible reason."""
         if mode.phase == "warmup":
             return "Warm up"
         if mode.phase == "break":
@@ -428,7 +323,6 @@ class SyllablesScreen(Screen):
         return f"Word {min(done + 1, total)} of {total}"
 
     def _draw_top(self, surf: pygame.Surface, mode) -> None:
-        # Slim progress bar, same visual language as GameplayScreen.
         done, total = mode.words_done, mode.words_total
         pad, bar_y, bar_h = 30, 14, 6
         bar_w = self.layout.width - pad * 2
@@ -446,12 +340,10 @@ class SyllablesScreen(Screen):
         draw_text(surf, self._top_label(mode),
                   (pad, 34), self.theme, self.layout, pt=FONT_SMALL,
                   colour=self.theme.muted)
-        draw_text(surf, f"Level {mode.level}   Band {mode.band}",
+        draw_text(surf, f"Band {mode.band}   Level {mode.rung} of "
+                        f"{mode.rung_max}",
                   (self.layout.width // 2, 40), self.theme, self.layout,
                   pt=FONT_SMALL, centre=True, colour=self.theme.muted)
-        # Mode pill top-right, same spot and styling as every other
-        # in-play screen, with the score sitting just left of it. The
-        # old free-floating pink number drifted with digit count.
         accent = self._accent()
         pf = self.layout.font(FONT_SMALL + 2)
         pill_label = pf.render("SYLLABLES", True, (255, 255, 255))
@@ -462,12 +354,6 @@ class SyllablesScreen(Screen):
                          border_radius=pill_rect.height // 2)
         surf.blit(pill_label,
                   pill_label.get_rect(center=pill_rect.center))
-        # Score under the pill, with the word that names it. Sitting
-        # beside the pill it was a bare number 16 px off a filled pill
-        # in the same accent, so the two read as one crowded object
-        # and nothing on screen said what the number counted. The lane
-        # modes have always carried a SCORE label; these four now
-        # match, and the band under the pill is empty on all of them.
         sf = self.layout.font(FONT_H2, bold=True)
         score_surf = sf.render(f"{self.engine.score}", True, accent)
         lf = self.layout.font(FONT_SMALL)
@@ -481,80 +367,65 @@ class SyllablesScreen(Screen):
     # ---- warm-up -----------------------------------------------------------
     def _draw_warmup(self, surf: pygame.Surface, mode, now: float) -> None:
         cx = self.layout.width // 2
-        # A circle that swells on each beat: the visual is a helper,
-        # the metronome tick is the timing reference. Pink, like the
-        # rest of the mode's identity colour. Phased off the beat GRID
-        # (mode._warmup_beats[0], one IOI after the arbitrary perf_
-        # counter moment the warm-up started), not off the wall-clock
-        # epoch: `now % ioi_s` puts the swell up to half a period away
-        # from the audible tick, so a child cueing off the circle
-        # instead of the metronome would tap with a constant offset
-        # against the very asynchronies this probe measures. Mirrors
-        # the respond-phase pulse, which is correctly anchored to
-        # _respond_t0.
+        cy = (self.TOP_Y + self.EXIT_Y) // 2
+        # A circle that swells on each beat, phased off the beat GRID
+        # rather than the wall clock, so a child cueing off the circle
+        # instead of the metronome does not tap with a constant offset
+        # against the very asynchronies this probe measures.
         beats = getattr(mode, "_warmup_beats", None)
         anchor = beats[0] if beats else now
         phase = ((now - anchor) % mode.ioi_s) / mode.ioi_s
         r = 60 + int(26 * math.exp(-4.0 * phase))
-        pygame.draw.circle(surf, self._accent(),
-                           (cx, self.ROW_CY), r)
-        pygame.draw.circle(surf, self.theme.background,
-                           (cx, self.ROW_CY), max(6, r - 16))
+        pygame.draw.circle(surf, self._accent(), (cx, cy), r)
+        pygame.draw.circle(surf, self.theme.background, (cx, cy),
+                           max(6, r - 16))
         done = getattr(mode, "_warmup_done", 0)
         draw_text(surf, f"{min(done, mode.warmup_total)} of "
                         f"{mode.warmup_total} taps",
-                  (cx, self.ROW_CY + 120), self.theme, self.layout,
+                  (cx, cy + 120), self.theme, self.layout,
                   pt=FONT_BODY, centre=True, colour=self.theme.muted)
 
     # ---- break -------------------------------------------------------------
-    # How long the fresh sticker's stamp-down runs on the break screen.
-    STAMP_FLASH_S = 1.0
-
     def stop_name(self, k: int) -> str:
         """Stop `k` (0-based round index) on the session's walk. One
         fiction shell, never rotated: the same walk every session."""
         return JOURNEY_STOPS[k % len(JOURNEY_STOPS)]
 
     def _draw_break(self, surf: pygame.Surface, mode, now: float) -> None:
-        """The rest is the journey's ritual: the walking strip shows
-        one stop per round, finished stops wear their sticker stamp,
-        and the stop just reached stamps itself as the break opens.
-        The old four bobbing blocks moved for nothing; the strip says
-        where the session is and what finishing the round earned,
-        still with nothing to respond to."""
         cx = self.layout.width // 2
         left = 0
         if mode._phase_until is not None:
             left = max(0, int(math.ceil(mode._phase_until - now)))
         draw_text(surf, f"Next round in {left}",
-                  (cx, self.HINT_Y + 28), self.theme, self.layout,
+                  (cx, self.SUB_Y + 40), self.theme, self.layout,
                   pt=FONT_H2, centre=True, colour=self.theme.muted)
         band = getattr(mode, "band_celebrate", None)
         if band:
-            # A promotion earned on the round's last word would land
-            # its card on a gap that never draws (the break swallows
-            # it), so the break carries the news as one line in the
-            # band's colour under the countdown.
             draw_text(surf, "Bigger words next round!",
-                      (cx, self.HINT_Y + 64), self.theme, self.layout,
+                      (cx, self.SUB_Y + 76), self.theme, self.layout,
                       pt=FONT_BODY + 2, centre=True,
                       colour=BAND_COLOURS.get(band, self._accent()))
         self._draw_journey(surf, mode, now)
         n = int(getattr(mode, "stickers", 0) or 0)
         if n:
             draw_text(surf,
-                      f"Sticker earned! {self.stop_name(n - 1)} "
-                      f"stamped.",
-                      (cx, self.ROW_CY + 112), self.theme, self.layout,
-                      pt=FONT_BODY + 2, centre=True,
-                      colour=self._accent())
+                      f"Sticker earned! {self.stop_name(n - 1)} stamped.",
+                      (cx, self.EXIT_Y - 20), self.theme, self.layout,
+                      pt=FONT_BODY + 2, centre=True, colour=self._accent())
+        # The adult line. McTigue et al. (2020) found supportive adult
+        # interaction to be the only moderator that reliably mattered
+        # in this family of games, so the rest screen asks for it.
+        draw_text(surf, "Sit with your child and say the syllables "
+                        "together.",
+                  (cx, self.EXIT_Y + 10), self.theme, self.layout,
+                  pt=FONT_BODY, centre=True, colour=self.theme.muted)
 
     def _draw_journey(self, surf: pygame.Surface, mode,
                       now: float) -> None:
         """The walking strip: one circle per round, joined by a path.
-        Finished stops are stamped (accent fill, white star), the
-        next stop waits as an outline with its number, and the newest
-        stamp lands with a single settle."""
+        Finished stops are stamped (accent fill, white star), the next
+        stop waits as an outline with its number, and the newest stamp
+        lands with a single settle."""
         n_rounds = int(getattr(mode, "n_rounds", 4) or 4)
         stickers = int(getattr(mode, "stickers", 0) or 0)
         flash_t = getattr(mode, "sticker_flash_t", None)
@@ -562,7 +433,7 @@ class SyllablesScreen(Screen):
         spacing = (min(170, (self.layout.width - 240) // (n_rounds - 1))
                    if n_rounds > 1 else 0)
         x0 = self.layout.width // 2 - spacing * (n_rounds - 1) // 2
-        cy = self.ROW_CY
+        cy = (self.TOP_Y + self.EXIT_Y) // 2
         if n_rounds > 1:
             pygame.draw.line(surf, self.theme.muted,
                              (x0, cy), (x0 + spacing * (n_rounds - 1),
@@ -573,20 +444,15 @@ class SyllablesScreen(Screen):
                 rr = float(r)
                 if (k == stickers - 1 and flash_t is not None
                         and now - flash_t < self.STAMP_FLASH_S):
-                    # The stamp comes DOWN onto the page: it starts
-                    # oversized and settles, one shot.
                     p = (now - flash_t) / self.STAMP_FLASH_S
                     rr *= 1.0 + 0.8 * (1.0 - p) ** 2
-                pygame.draw.circle(surf, self._accent(), (x, cy),
-                                   int(rr))
+                pygame.draw.circle(surf, self._accent(), (x, cy), int(rr))
                 pts = _star_points(x, cy, rr * 0.55, rr * 0.25)
                 pygame.draw.polygon(surf, (255, 255, 255), pts)
             else:
                 current = k == stickers
-                colour = (self._accent() if current
-                          else self.theme.muted)
-                pygame.draw.circle(surf, self.theme.background,
-                                   (x, cy), r)
+                colour = self._accent() if current else self.theme.muted
+                pygame.draw.circle(surf, self.theme.background, (x, cy), r)
                 pygame.draw.circle(surf, colour, (x, cy), r,
                                    4 if current else 2)
                 draw_text(surf, str(k + 1), (x, cy), self.theme,
@@ -598,386 +464,183 @@ class SyllablesScreen(Screen):
 
     # ---- between words -----------------------------------------------------
     def _draw_gap(self, surf: pygame.Surface, mode, now: float) -> None:
-        """The inter-trial gap used to be a dead screen: top strip,
-        finger row, nothing else, for most of a second. A child (or a
-        parent) staring at a blank screen cannot tell if the game
-        stalled. Now the gap says what is coming, and a band
-        promotion borrows the whole gap for its one-shot card."""
+        """The inter-word gap says what is coming, so a child (or a
+        parent) never watches a dead screen wondering if the game
+        stalled. A band promotion borrows the whole gap for its card."""
         cx = self.layout.width // 2
+        cy = (self.TOP_Y + self.EXIT_Y) // 2
         band = getattr(mode, "band_celebrate", None)
         if band:
             self._draw_band_card(surf, mode, band, now)
             return
         nxt = min(mode.words_done + 1, mode.words_total)
         draw_text(surf, f"Here comes word {nxt}...",
-                  (cx, self.ROW_CY - 30), self.theme, self.layout,
+                  (cx, cy - 30), self.theme, self.layout,
                   pt=FONT_H1, centre=True, colour=self.theme.muted)
-        # A slow breathing dot, so the screen visibly lives while the
-        # word loads. One cycle per second, far under the flash limit.
         r = 12 + int(5 * math.sin(now * math.pi))
-        pygame.draw.circle(surf, self._accent(), (cx, self.ROW_CY + 60), r)
+        pygame.draw.circle(surf, self._accent(), (cx, cy + 60), r)
 
     def _draw_band_card(self, surf: pygame.Surface, mode, band: str,
                         now: float) -> None:
         """The promotion card: the band gate already moved (and was
-        logged); this makes the earned step visible to the child, in
-        the new band's colour, for exactly one between-word gap. One
-        settle-in, then still. Demotion never reaches this method."""
+        logged); this makes the earned step visible for exactly one
+        between-word gap. Demotion never reaches this method."""
         colour = BAND_COLOURS.get(band, self._accent())
         cx = self.layout.width // 2
+        cy = (self.TOP_Y + self.EXIT_Y) // 2
         t0 = mode._phase_t0 if mode._phase_t0 is not None else now
         p = min(1.0, max(0.0, (now - t0) / 0.25))
         w = int(560 * (0.85 + 0.15 * p))
         h = int(200 * (0.85 + 0.15 * p))
         card = pygame.Rect(0, 0, w, h)
-        card.center = (cx, self.ROW_CY - 10)
+        card.center = (cx, cy - 10)
         fill = pygame.Surface(card.size, pygame.SRCALPHA)
         pygame.draw.rect(fill, (*self.theme.background, 245),
                          fill.get_rect(), border_radius=24)
         pygame.draw.rect(fill, (*colour, 220), fill.get_rect(), 4,
                          border_radius=24)
         surf.blit(fill, card.topleft)
-        draw_text(surf, "BIGGER WORDS!",
-                  (cx, card.y + int(h * 0.42)), self.theme,
-                  self.layout, pt=FONT_H1 + 8, centre=True,
+        draw_text(surf, "BIGGER WORDS!", (cx, card.y + int(h * 0.42)),
+                  self.theme, self.layout, pt=FONT_H1 + 8, centre=True,
                   colour=colour)
-        draw_text(surf, f"You reached band {band}. Wonderful tapping!",
-                  (cx, card.y + int(h * 0.72)), self.theme,
-                  self.layout, pt=FONT_BODY + 2, centre=True,
-                  colour=self.theme.muted)
+        draw_text(surf, f"You reached band {band}. Wonderful reading!",
+                  (cx, card.y + int(h * 0.72)), self.theme, self.layout,
+                  pt=FONT_BODY + 2, centre=True, colour=self.theme.muted)
 
-    # ---- the word and its blocks -------------------------------------------
-    def _draw_word_trial(self, surf: pygame.Surface, mode,
+    # ---- tracked text ------------------------------------------------------
+    def _tile_font(self, pt: int) -> pygame.font.Font:
+        font = self._tile_fonts.get(pt)
+        if font is None:
+            font = make_font(pt, bold=True)
+            self._tile_fonts[pt] = font
+        return font
+
+    def _tracked_width(self, font: pygame.font.Font, text: str,
+                       track: int) -> int:
+        if not text:
+            return 0
+        return (sum(font.size(ch)[0] for ch in text)
+                + track * (len(text) - 1))
+
+    def _draw_tracked(self, surf: pygame.Surface, text: str,
+                      font: pygame.font.Font, colour, centre,
+                      alpha: int = 255) -> None:
+        """One chunk with wide letter spacing, drawn letter by letter.
+        Tracking is the one typographic choice with direct evidence
+        behind it for this population (Zorzi et al. 2012), and pygame
+        has no tracking control, so the letters are placed by hand."""
+        track = max(2, int(font.get_height() * self.TRACKING))
+        total = self._tracked_width(font, text, track)
+        x = centre[0] - total // 2
+        for ch in text:
+            glyph = font.render(ch, True, colour)
+            if alpha < 255:
+                glyph.set_alpha(alpha)
+            surf.blit(glyph, glyph.get_rect(
+                midleft=(x, centre[1])))
+            x += glyph.get_width() + track
+
+    def _fitted_tile_font(self, text: str, max_w: int,
+                          pt: int) -> pygame.font.Font:
+        """The largest size from `pt` down whose tracked render of
+        `text` fits `max_w`. A five-letter chunk shrinks instead of
+        spilling out of its tile."""
+        while True:
+            font = self._tile_font(pt)
+            track = max(2, int(font.get_height() * self.TRACKING))
+            if pt <= 18 or self._tracked_width(font, text, track) <= max_w:
+                return font
+            pt -= 4
+
+    # ---- the word strip ----------------------------------------------------
+    def slot_rects(self, mode) -> list[pygame.Rect]:
+        """One rect per syllable of the word, left to right across the
+        top. The strip is the word being built: it says how many parts
+        there are, which one is being asked for, and what has already
+        been won."""
+        n = max(1, mode.n_syll)
+        longest = max((len(s) for s in (mode.word.syllables if mode.word
+                                        else ("aa",))), default=2)
+        w = max(self.SLOT_MIN_W,
+                min(self.SLOT_MAX_W, 56 + longest * 34))
+        total = w * n + self.SLOT_GAP * (n - 1)
+        x = (self.layout.width - total) // 2
+        rects = []
+        for _ in range(n):
+            r = pygame.Rect(x, 0, w, self.STRIP_H)
+            r.centery = self.STRIP_Y
+            rects.append(r)
+            x += w + self.SLOT_GAP
+        return rects
+
+    def _draw_word_strip(self, surf: pygame.Surface, mode,
                          now: float) -> None:
         word = mode.word
         if word is None:
             return
-        cx = self.layout.width // 2
         phase = mode.phase
-        self._draw_header(surf, mode)
-        if phase == "attend":
-            # The whole word, huge, while it is (possibly) spoken.
-            font = make_font(int(FONT_TITLE * 1.6), bold=True)
-            t = font.render(word.word, True, self.theme.foreground)
-            surf.blit(t, t.get_rect(center=(cx, self.ROW_CY)))
-            return
-        self._draw_blocks(surf, mode, now)
-        if phase == "countin":
-            self._draw_countin(surf, mode, now)
-        elif phase == "respond":
-            self._draw_go(surf, mode, now)
-
-    def _slot_rects(self, mode) -> list[pygame.Rect]:
-        """One rect per desk-row slot, fixed for the whole block: the
-        playing fingers in physical left-to-right order, spanning the
-        screen, with the wider HAND_GAP between the two hands' groups
-        in bilateral play. Word blocks land IN these slots, so where
-        a block sits says which finger plays it, and the window is
-        seen to move from word to word."""
-        desk = mode.desk_row()
-        n_slots = max(1, len(desk))
-        # Where the hand changes along the desk row, the gap widens.
-        gap_idx = None
-        if getattr(mode, "bilateral", False):
-            hands = [mode._hand_of_lane(lane) for lane in desk]
-            for i in range(n_slots - 1):
-                if hands[i] != hands[i + 1]:
-                    gap_idx = i
-                    break
-        total_gap = self.BLOCK_GAP * (n_slots - 1)
-        if gap_idx is not None:
-            total_gap += self.HAND_GAP - self.BLOCK_GAP
-        usable = self.layout.width - 2 * self.SIDE_PAD - total_gap
-        slot_w = min(usable // n_slots, self.SLOT_MAX_W)
-        row_w = slot_w * n_slots + total_gap
-        x = (self.layout.width - row_w) // 2
-        rects = []
-        for i in range(n_slots):
-            r = pygame.Rect(x, 0, slot_w, self.BLOCK_H)
-            r.centery = self.ROW_CY
-            rects.append(r)
-            x += slot_w + (self.HAND_GAP if gap_idx == i
-                           else self.BLOCK_GAP)
-        return rects
-
-    def _block_rects(self, mode) -> list[pygame.Rect]:
-        """One rect per expected unit: the word's window slots. The
-        stressed block is taller from level 4 up; level 5 draws the
-        onset small and the rime large, the standard onset-rime
-        visual. Where the window crosses the midline the slot row's
-        wider hand gap falls between the crossing blocks, so the
-        child sees the word run off one hand onto the other exactly
-        where their fingers do."""
-        word = mode.word
-        units = mode.units_for(word)
-        slots = self._slot_rects(mode)
-        off = mode.window_offset()
-        rects = []
-        for i in range(len(units)):
-            r = pygame.Rect(slots[min(off + i, len(slots) - 1)])
-            if mode.level == 5:
-                r.height = int(r.height * (0.72 if i == 0 else 1.0))
-                if i == 0:
-                    # The onset block is the smaller of the pair.
-                    r = r.inflate(-int(r.width * 0.26), 0)
-            elif mode.level >= 4 and i == word.stress:
-                r.height += self.STRESS_EXTRA
-            r.centery = self.ROW_CY
-            rects.append(r)
-        return rects
-
-    def _fitted_font(self, text: str, max_w: int,
-                     pt: int) -> pygame.font.Font:
-        """The block typeface at the largest size, stepping down from
-        `pt`, whose render of `text` fits `max_w`. Slot-width blocks
-        cannot grow with their text the way the old text-sized blocks
-        did, so a long chunk shrinks instead of overflowing."""
-        while True:
-            font = self._block_fonts.get(pt)
-            if font is None:
-                font = make_font(pt, bold=True)
-                self._block_fonts[pt] = font
-            if pt <= 18 or font.size(text)[0] <= max_w:
-                return font
-            pt -= 4
-
-    def _draw_seats(self, surf: pygame.Surface, mode,
-                    n_units: int) -> None:
-        """A small dot in each desk slot the window leaves empty, in
-        the resting finger's idle colour: the child sees WHERE this
-        word sits on their fingers and which fingers rest, without a
-        labelled finger row pulling their eyes off the blocks."""
-        desk = mode.desk_row()
-        off = mode.window_offset()
-        for i, slot in enumerate(self._slot_rects(mode)):
-            if off <= i < off + n_units or i >= len(desk):
-                continue
-            finger = mode._finger_of_lane(desk[i])
-            pygame.draw.circle(surf, self.theme.lane_idle[finger],
-                               slot.center, self.SEAT_R)
-
-    def _draw_blocks(self, surf: pygame.Surface, mode, now: float) -> None:
-        word = mode.word
-        units = mode.units_for(word)
-        self._draw_seats(surf, mode, len(units))
-        rects = self._block_rects(mode)
-        phase = mode.phase
-        res = mode._last_result or {}
-        n_taps = len(mode.taps)
-        feedback_ok = phase == "feedback" and res.get("correct")
-        # The response phase draws WAITING blocks as hollow outlines
-        # that fill solid as taps land, so "a beat to copy" (solid,
-        # lighting up in the model) and "a beat waiting for you" can
-        # never be confused. The count-in shows the same hollow row:
-        # it belongs to the child's turn, the blocks are already
-        # theirs to fill.
-        waiting_style = phase in ("respond", "countin")
-        # One slow swell over the whole feedback window; a single
-        # pulse, not a flash.
-        swell = 0.0
-        if phase == "feedback" and mode._phase_t0 is not None:
-            swell = math.sin(min(1.0, (now - mode._phase_t0)
-                                 / mode.FEEDBACK_S) * math.pi)
-        # Bounce tracker: note the moment the sounding block changes so
-        # it can hop once per beat, like a bouncing-ball singalong.
+        rects = self.slot_rects(mode)
         model_idx = getattr(mode, "_model_idx", -1)
-        if phase in ("model", "replay"):
+        if phase == "model":
             if model_idx != self._last_model_idx:
                 self._last_model_idx = model_idx
                 self._model_lit_t = now
         else:
             self._last_model_idx = -1
-        # Tap pops: a landed tap fills its block with a quick grow-and-
-        # settle so the fill feels earned, not just recoloured. The
-        # tap's quality rides along: a correct-for-position tap gets
-        # the sparkle (lighter fill through the pop), an on-beat tap
-        # additionally gets one expanding ring, so the per-tap and
-        # per-beat criteria are visible AS the tap lands. Marks are
-        # frozen at landing time because the tap's own quality never
-        # changes afterwards.
-        marks = (mode.tap_marks()
-                 if hasattr(mode, "tap_marks") else [])
-        if phase == "respond":
-            if n_taps > self._last_tap_count:
-                for idx in range(self._last_tap_count, n_taps):
-                    if rects:
-                        m = marks[idx] if idx < len(marks) else {}
-                        self._tap_pops.append(
-                            (min(idx, len(rects) - 1), now,
-                             bool(m.get("pos_ok", True)),
-                             m.get("on_beat")))
-            self._last_tap_count = n_taps
-        elif phase not in ("feedback",):
-            self._last_tap_count = 0
-        if self._tap_pops:
-            # 0.45 s covers the pop (0.28 s) plus the ring's fade.
-            self._tap_pops = [p for p in self._tap_pops
-                              if now - p[1] < 0.45]
-        # Success glow: one soft light behind the whole row, riding the
-        # same slow swell as the blocks. Cached; alpha set per frame.
-        if feedback_ok and rects:
-            row_left = rects[0].left
-            row_right = rects[-1].right
-            glow_w = row_right - row_left + 160
-            glow_h = self.BLOCK_H + 170
-            key = (glow_w, glow_h)
-            if self._glow_cache is None or self._glow_key != key:
-                g = pygame.Surface((glow_w, glow_h), pygame.SRCALPHA)
-                centre_rect = g.get_rect()
-                for inset, alpha in ((0, 22), (30, 30), (60, 38)):
-                    pygame.draw.ellipse(
-                        g, (*self.theme.success, alpha),
-                        centre_rect.inflate(-inset * 2, -inset * 2))
-                self._glow_cache = g
-                self._glow_key = key
-            # set_alpha applies at blit time, so the cached surface can
-            # ride the swell with no per-frame copy.
-            self._glow_cache.set_alpha(int(255 * swell))
-            surf.blit(self._glow_cache,
-                      ((row_left + row_right) // 2 - glow_w // 2,
-                       self.ROW_CY - glow_h // 2))
-        lit_rect: pygame.Rect | None = None
-        for i, (u, rect) in enumerate(zip(units, rects)):
-            # The block wears the colour of the finger that plays it
-            # (the mode resolves position to finger through the
-            # window's own lanes), so the colours track the window as
-            # it slides, and a crossing window's colours run toward
-            # the midline then away from it across the gap.
-            finger = (mode.finger_for_position(i)
-                      if hasattr(mode, "finger_for_position")
-                      else i % 4)
-            lit = (phase in ("model", "replay")
-                   and getattr(mode, "_model_idx", -1) == i)
-            # The sounding block hops: up and back down over 0.4 s,
-            # one arc per beat, no repeat until the next block lights.
-            if lit and self._model_lit_t > 0:
-                b_frac = min(1.0, (now - self._model_lit_t) / 0.4)
-                rect = rect.move(0, -int(16 * math.sin(b_frac * math.pi)))
+        swell = 0.0
+        if phase == "complete" and mode._phase_t0 is not None:
+            swell = math.sin(min(1.0, (now - mode._phase_t0)
+                                 / mode.complete_s) * math.pi)
+        for i, rect in enumerate(rects):
+            chunk = None
+            # A filled slot wears the colour of the FINGER that won
+            # it, which is a fact the child can act on. The lit slot
+            # during the model has no finger behind it yet, so it
+            # wears the mode's own accent instead of borrowing a
+            # finger colour that would mean nothing.
+            fill = self._accent()
+            lit = phase == "model" and model_idx == i
             if lit:
-                lit_rect = rect
-            # A fresh tap pops its block outward for a beat. The pop
-            # entry carries the tap's quality marks for the sparkle
-            # and the on-beat ring below.
-            pop = None
-            for entry in self._tap_pops:
-                if entry[0] == i:
-                    pop = entry
-                    p_frac = min(1.0, (now - entry[1]) / 0.28)
-                    grow = int(14 * math.sin(p_frac * math.pi))
+                chunk = word.syllables[i]
+                b = min(1.0, (now - self._model_lit_t) / 0.4)
+                rect = rect.move(0, -int(10 * math.sin(b * math.pi)))
+            elif phase in ("choose", "complete", "attend"):
+                filled = getattr(mode, "filled", [])
+                lanes = getattr(mode, "filled_lanes", [])
+                if i < len(filled):
+                    chunk = filled[i]
+                if chunk is not None and i < len(lanes) and lanes[i] is not None:
+                    fill = self.theme.lane_active[
+                        mode._finger_of_lane(lanes[i])]
+            if chunk is not None:
+                if phase == "complete":
+                    grow = int(6 * swell)
                     rect = rect.inflate(grow, grow)
-                    break
-            filled = (phase == "respond" and i < n_taps) or (
-                phase == "feedback" and i < res.get("n_taps", 0))
-            hollow = phase == "feedback" and i >= res.get("n_taps", 0)
-            # A wrong-position tap keeps its block grey: the same
-            # no-blame vocabulary as the extra-tap blocks, so a fill
-            # in the finger's colour is only ever earned by the right
-            # finger at the right turn (reward layer, R1).
-            tap_wrong = (filled and i < len(marks)
-                         and not marks[i].get("pos_ok", True))
-            if feedback_ok:
-                grow = int(6 * swell)
-                r = rect.inflate(grow, grow)
-                pygame.draw.rect(surf, self.theme.success, r,
-                                 border_radius=22)
-                fill = self.theme.success
-            elif hollow:
-                # A beat nobody tapped: outline only, unmissable.
-                pygame.draw.rect(surf, self.theme.muted, rect, 4,
-                                 border_radius=22)
-                fill = self.theme.background
-            elif waiting_style and not filled:
-                # Waiting to be tapped: an empty outline in the
-                # finger's colour. The next paced beat pulses its
-                # outline so the child sees which block is due when.
+                pygame.draw.rect(surf, fill, rect, border_radius=18)
+                font = self._fitted_tile_font(chunk, rect.width - 26,
+                                              int(FONT_TITLE * 0.8))
+                self._draw_tracked(
+                    surf, chunk, font,
+                    _text_colour_for(fill, (255, 255, 255),
+                                     self.theme.foreground),
+                    rect.center)
+            else:
+                waiting = (phase == "choose" and i == mode.pos)
                 width = 4
                 r = rect
-                if (phase == "respond" and mode.paced
-                        and i == n_taps and mode._beat_times):
-                    ph = ((now - mode._respond_t0) % mode.ioi_s
-                          ) / mode.ioi_s if mode._respond_t0 else 0.0
-                    r = rect.inflate(int(10 * math.exp(-3.0 * ph)),
-                                     int(10 * math.exp(-3.0 * ph)))
-                    width = 6
-                pygame.draw.rect(surf, self.theme.lane_active[finger],
-                                 r, width, border_radius=22)
-                fill = self.theme.background
-            else:
-                if tap_wrong:
-                    fill = self.theme.muted
-                else:
-                    fill = (self.theme.lane_active[finger]
-                            if (lit or filled)
-                            else self.theme.lane_idle[finger])
-                # The sparkle: through the pop's few frames a correct
-                # fill runs lighter, so the fill reads as a small win
-                # landing rather than a recolour.
-                if (pop is not None and pop[2] and not tap_wrong
-                        and now - pop[1] < 0.28):
-                    fade = 1.0 - (now - pop[1]) / 0.28
-                    fill = tuple(
-                        int(c + (255 - c) * 0.55 * fade) for c in fill)
-                pygame.draw.rect(surf, fill, rect, border_radius=22)
-                if lit:
-                    ring = rect.inflate(14, 14)
-                    pygame.draw.rect(surf, self.theme.foreground, ring,
-                                     3, border_radius=26)
-                # The on-beat ring: one expanding, thinning outline on
-                # a paced tap that landed inside the on-beat window.
-                # One shot per tap, well under any flash limit, and
-                # only ever on top of an earned fill.
-                if pop is not None and pop[3] and not tap_wrong:
-                    r_frac = min(1.0, (now - pop[1]) / 0.45)
-                    ring = rect.inflate(int(10 + 30 * r_frac),
-                                        int(10 + 30 * r_frac))
-                    width = max(1, int(5 * (1.0 - r_frac)))
-                    pygame.draw.rect(surf, self.theme.success, ring,
-                                     width, border_radius=26)
-            # Block text: the chunk itself, except level 6 shows a dot
-            # until the graphemes earn their fade-in on success.
-            if mode.level == 6 and not feedback_ok:
-                dot = (self.theme.lane_active[finger]
-                       if fill == self.theme.background
-                       else _text_colour_for(fill, (255, 255, 255),
-                                             self.theme.foreground))
-                pygame.draw.circle(surf, dot, rect.center, 10)
-            else:
-                font = self._fitted_font(u, rect.width - 16,
-                                         int(FONT_TITLE * 1.1))
-                colour = _text_colour_for(
-                    fill, (255, 255, 255), self.theme.foreground)
-                t = font.render(u, True, colour)
-                if mode.level == 6:
-                    # Fade the graphemes in over the feedback swell.
-                    t.set_alpha(int(255 * min(1.0, swell * 1.6)))
-                surf.blit(t, t.get_rect(center=rect.center))
-            # A dot under each filled block at feedback time so a
-            # correct count reads at a glance.
-            if phase == "feedback" and filled and not hollow:
-                pygame.draw.circle(surf, self.theme.success,
-                                   (rect.centerx, rect.bottom + 20), 7)
-        # In bilateral play, name the hand carrying the buzz under the
-        # sounding block, as it sounds: the buzz hops between hands on
-        # purpose (both hands get modelled equally) and the hop should
-        # be explained on screen the moment it happens.
-        if (lit_rect is not None and getattr(mode, "bilateral", False)
-                and getattr(mode, "model_hand", None)):
-            self._draw_hand_tag(surf, lit_rect, mode.model_hand)
-        # Extra taps: one grey block per surplus tap, appended to the
-        # row, so "too many" is visible without words.
-        extra = 0
-        if phase == "respond":
-            extra = max(0, n_taps - len(units))
-        elif phase == "feedback":
-            extra = max(0, res.get("n_taps", 0) - len(units))
-        if extra and rects:
-            x = rects[-1].right + self.BLOCK_GAP
-            for _ in range(extra):
-                r = pygame.Rect(x, 0, self.EXTRA_W, self.BLOCK_H - 30)
-                r.centery = self.ROW_CY
-                pygame.draw.rect(surf, self.theme.muted, r,
+                if waiting:
+                    # The slot being asked for breathes gently. It says
+                    # WHICH PART of the word is wanted; it says nothing
+                    # about which lane holds it.
+                    p = (now * 0.8) % 1.0
+                    grow = int(8 * math.sin(p * math.pi))
+                    r = rect.inflate(grow, grow)
+                    width = 5
+                pygame.draw.rect(surf, self.theme.muted if not waiting
+                                 else self._accent(), r, width,
                                  border_radius=18)
-                x += self.EXTRA_W + self.BLOCK_GAP
+        if getattr(mode, "bilateral", False):
+            self._draw_hand_tag(surf, rects[-1], str(mode.word_hand))
 
     def _draw_hand_tag(self, surf: pygame.Surface, rect: pygame.Rect,
                        hand: str) -> None:
@@ -986,23 +649,203 @@ class SyllablesScreen(Screen):
         text = pf.render(label, True, (255, 255, 255))
         pill = pygame.Rect(0, 0, text.get_width() + 22,
                            text.get_height() + 8)
-        pill.center = (rect.centerx, rect.bottom + 34)
+        pill.midleft = (rect.right + 18, rect.centery)
         pygame.draw.rect(surf, self._accent(), pill,
                          border_radius=pill.height // 2)
         surf.blit(text, text.get_rect(center=pill.center))
 
-    # ---- streak stars ------------------------------------------------------
-    # How long the newest star's one-shot pop runs at feedback time.
-    STAR_FLASH_S = 0.9
+    # ---- the lanes and the falling tiles -----------------------------------
+    def lane_centres(self, mode) -> list[int]:
+        """The x centre of each of the four lanes, in the playing
+        hand's desk order (leftmost lane = leftmost finger)."""
+        lanes = mode.active_lanes()
+        n = max(1, len(lanes))
+        usable = self.layout.width - 2 * self.LANE_PAD
+        step = usable // n
+        return [self.LANE_PAD + step // 2 + i * step for i in range(n)]
 
+    def _draw_lane_guides(self, surf: pygame.Surface, mode) -> None:
+        for x in self.lane_centres(mode):
+            pygame.draw.line(surf, _mix(self.theme.background,
+                                        self.theme.muted, 0.28),
+                             (x, self.TOP_Y - self.TILE_H // 2 - 16),
+                             (x, self.EXIT_Y + 6), 2)
+        pygame.draw.line(surf, _mix(self.theme.background,
+                                    self.theme.muted, 0.45),
+                         (self.LANE_PAD // 2, self.EXIT_Y + 6),
+                         (self.layout.width - self.LANE_PAD // 2,
+                          self.EXIT_Y + 6), 2)
+
+    def _draw_seats(self, surf: pygame.Surface, mode) -> None:
+        """One coloured dot per playing finger under its lane, and a
+        quiet dot for each finger of the resting hand: the child sees
+        which four fingers this word wants without a labelled row
+        pulling their eyes off the tiles."""
+        centres = self.lane_centres(mode)
+        for x, lane in zip(centres, mode.active_lanes()):
+            finger = mode._finger_of_lane(lane)
+            pygame.draw.circle(surf, self.theme.lane_active[finger],
+                               (x, self.SEAT_Y), self.SEAT_R)
+        if not getattr(mode, "bilateral", False):
+            return
+        resting = [h for h in mode.hand_names if h != mode.word_hand]
+        if not resting:
+            return
+        lanes = mode.hands.get(resting[0], [])
+        x0 = self.layout.width // 2 - (len(lanes) - 1) * 18 // 2
+        for i, lane in enumerate(lanes):
+            finger = mode._finger_of_lane(lane)
+            pygame.draw.circle(surf, self.theme.lane_idle[finger],
+                               (x0 + i * 18, self.SEAT_Y + 46), 6)
+        draw_text(surf, f"{resting[0]} hand resting",
+                  (self.layout.width // 2, self.SEAT_Y + 74),
+                  self.theme, self.layout, pt=FONT_SMALL, centre=True,
+                  colour=self.theme.muted)
+
+    def tile_layout(self, mode, now: float) -> list[dict]:
+        """Where each tile of the current set is and what state it is
+        in, as plain data so a test can read the frame without a
+        display. One dict per option:
+        {option, rect, state, alpha}, state in falling | dead | lifted
+        | glow | fading."""
+        oset = getattr(mode, "option_set", None)
+        spawn = getattr(mode, "_spawn_t", None)
+        if oset is None or spawn is None:
+            return []
+        lanes = mode.active_lanes()
+        centres = self.lane_centres(mode)
+        by_lane = {lane: x for lane, x in zip(lanes, centres)}
+        fall = max(0.1, float(mode.fall_s))
+        p = max(0.0, min(1.0, (now - spawn) / fall))
+        base_y = self.TOP_Y + p * (self.EXIT_Y - self.TOP_Y)
+        lockout = max(0.01, float(mode.spawn_lockout_s))
+        fade_in = max(0.0, min(1.0, (now - spawn) / lockout))
+        dead = set(getattr(mode, "_dead_lanes", set()) or set())
+        correct_t = getattr(mode, "_correct_t", None)
+        glow_t = getattr(mode, "_glow_t", None)
+        slots = self.slot_rects(mode)
+        out: list[dict] = []
+        for opt in oset.options:
+            x = by_lane.get(opt.lane)
+            if x is None:
+                continue
+            rect = pygame.Rect(0, 0, self.TILE_W, self.TILE_H)
+            rect.center = (x, int(base_y))
+            state = "falling"
+            alpha = int(255 * fade_in)
+            if correct_t is not None and opt.lane == oset.target_lane:
+                # The winning tile lifts into its slot in the strip.
+                lift = max(0.0, min(1.0, (now - correct_t)
+                                    / max(0.05, mode.CORRECT_HOLD_S)))
+                slot = slots[min(mode.pos, len(slots) - 1)]
+                rect.center = (
+                    int(x + (slot.centerx - x) * lift),
+                    int(rect.centery
+                        + (slot.centery - rect.centery) * lift))
+                state = "lifted"
+            elif correct_t is not None:
+                state = "fading"
+                alpha = int(255 * max(0.0, 1.0 - (now - correct_t) / 0.3))
+            elif opt.lane in dead:
+                state = "dead"
+                # Grey and drifting out to the nearer side, so the tile
+                # visibly leaves rather than blinking out.
+                gone = max(0.0, min(1.0, (now - spawn) / fall))
+                side = -1 if x < self.layout.width // 2 else 1
+                rect.centerx = int(x + side * 160 * gone)
+                alpha = int(255 * max(0.15, 1.0 - gone))
+            elif glow_t is not None and opt.lane == oset.target_lane:
+                state = "glow"
+                rect.centery = self.EXIT_Y
+            elif glow_t is not None:
+                # The set was missed: the foils leave quietly so the
+                # only thing left on screen is the answer.
+                state = "fading"
+                alpha = int(255 * max(0.0, 1.0 - (now - glow_t)
+                                      / max(0.05, mode.MISS_GLOW_S)))
+            out.append({"option": opt, "rect": rect, "state": state,
+                        "alpha": max(0, min(255, alpha))})
+        return out
+
+    def _draw_tiles(self, surf: pygame.Surface, mode, now: float) -> None:
+        card = self._card()
+        border = _mix(self.theme.background, self.theme.muted, 0.55)
+        glow_t = getattr(mode, "_glow_t", None)
+        for item in self.tile_layout(mode, now):
+            rect, state, alpha = item["rect"], item["state"], item["alpha"]
+            text = item["option"].text
+            if state == "dead":
+                fill = _mix(self.theme.background, self.theme.muted, 0.45)
+                ink = self.theme.muted
+            else:
+                fill = card
+                ink = self.theme.foreground
+            tile = pygame.Surface(rect.size, pygame.SRCALPHA)
+            pygame.draw.rect(tile, (*fill, 255), tile.get_rect(),
+                             border_radius=20)
+            pygame.draw.rect(tile, (*border, 255), tile.get_rect(), 3,
+                             border_radius=20)
+            if alpha < 255:
+                tile.set_alpha(alpha)
+            surf.blit(tile, rect.topleft)
+            font = self._fitted_tile_font(text, rect.width - 30,
+                                          int(FONT_TITLE * 0.75))
+            self._draw_tracked(surf, text, font, ink, rect.center,
+                               alpha=alpha)
+            if state == "glow" and glow_t is not None:
+                # The corrective display: one slow swell around the
+                # tile that was right, as it leaves. No sound, no red,
+                # nothing to read.
+                p = max(0.0, min(1.0, (now - glow_t) / mode.MISS_GLOW_S))
+                ring = rect.inflate(int(10 + 26 * p), int(10 + 26 * p))
+                width = max(2, int(6 * (1.0 - p)))
+                pygame.draw.rect(surf, self._accent(), ring, width,
+                                 border_radius=26)
+
+    # ---- the word in play --------------------------------------------------
+    def _draw_word_trial(self, surf: pygame.Surface, mode,
+                         now: float) -> None:
+        word = mode.word
+        if word is None:
+            return
+        cx = self.layout.width // 2
+        phase = mode.phase
+        self._draw_word_strip(surf, mode, now)
+        self._draw_header(surf, mode)
+        hint = self._hands_line(mode)
+        if hint:
+            draw_text(surf, hint, (cx, self.SUB_Y + 36), self.theme,
+                      self.layout, pt=FONT_BODY, centre=True,
+                      colour=self._accent())
+        self._draw_seats(surf, mode)
+        if phase in ("attend", "model"):
+            # The whole word, large, while it is spoken and modelled.
+            font = make_font(int(FONT_TITLE * 1.4), bold=True)
+            self._draw_tracked(surf, word.word, font,
+                               self.theme.foreground,
+                               (cx, (self.TOP_Y + self.EXIT_Y) // 2))
+            return
+        if phase == "complete":
+            # The whole word, said and seen together: the payoff for
+            # the parts, and the pairing the mode is training.
+            font = make_font(int(FONT_TITLE * 1.4), bold=True)
+            self._draw_tracked(surf, word.word, font,
+                               self.theme.foreground,
+                               (cx, (self.TOP_Y + self.EXIT_Y) // 2))
+            draw_text(surf, "You built the whole word!",
+                      (cx, (self.TOP_Y + self.EXIT_Y) // 2 + 96),
+                      self.theme, self.layout, pt=FONT_H2, centre=True,
+                      colour=self.theme.success)
+            return
+        self._draw_lane_guides(surf, mode)
+        self._draw_tiles(surf, mode, now)
+
+    # ---- streak stars ------------------------------------------------------
     def _draw_streak_stars(self, surf: pygame.Surface, mode,
                            now: float) -> None:
         """The round's earned streak stars, bottom-left: one, two,
-        three at the fixed milestones. Peripheral on purpose, so the
-        stars reward without competing with the word for the focal
-        point; nothing draws when no star is earned, so the corner
-        stays empty furniture-free. The newest star grows and settles
-        once, at the feedback moment its milestone landed on."""
+        three at the fixed milestones. Peripheral on purpose, and
+        nothing draws when no star is earned."""
         stars = int(getattr(mode, "round_stars", 0) or 0)
         if stars <= 0:
             return
@@ -1021,56 +864,16 @@ class SyllablesScreen(Screen):
         if flashing:
             milestones = getattr(mode, "STREAK_MILESTONES", (3, 5, 8))
             n = milestones[min(stars, len(milestones)) - 1]
-            draw_text(surf, f"{n} in a row!",
+            draw_text(surf, f"{n} words in a row!",
                       (x0 - 16, cy + 28), self.theme, self.layout,
                       pt=FONT_SMALL + 2, colour=STAR_GOLD)
-
-    # ---- count-down and GO -------------------------------------------------
-    def countin_remaining(self, mode, now: float) -> int:
-        """Ticks left before the child's first beat, counting DOWN.
-        The old display counted up 1 2 3 4 with no endpoint on
-        screen, so a waiting tick was indistinguishable from a
-        tapping tick until too late."""
-        if mode._phase_t0 is None or mode.count_in_beats <= 0:
-            return 0
-        elapsed = int((now - mode._phase_t0) / mode.ioi_s)
-        return max(1, min(mode.count_in_beats,
-                          mode.count_in_beats - elapsed))
-
-    def _draw_countin(self, surf: pygame.Surface, mode,
-                      now: float) -> None:
-        left = self.countin_remaining(mode, now)
-        if left <= 0:
-            return
-        draw_text(surf, str(left),
-                  (self.layout.width // 2, self.UNDER_Y),
-                  self.theme, self.layout, pt=FONT_TITLE + 10,
-                  centre=True, colour=self._accent())
-
-    def _draw_go(self, surf: pygame.Surface, mode, now: float) -> None:
-        """A big green GO! the instant the response phase opens, gone
-        as soon as the first tap lands. The count-down promises GO,
-        so GO must actually appear, or the child is left waiting for
-        a starting gun that never fires."""
-        if mode.taps or mode._respond_t0 is None:
-            return
-        if now - mode._respond_t0 > self.GO_S:
-            return
-        draw_text(surf, "GO!",
-                  (self.layout.width // 2, self.UNDER_Y),
-                  self.theme, self.layout, pt=FONT_TITLE + 10,
-                  centre=True, colour=self.theme.success)
 
     # ---- corner controls note ----------------------------------------------
     def controls_lines(self, mode) -> list[str]:
         """Keyboard hints for the corner note, one line per playing
         hand, in keyboard reading order. Empty when the input is the
-        real sensors: fingers sit on the pads, a legend would only
-        pull the child's eyes off the blocks.
-
-        Delegates to the shared widgets.keyboard_controls_lines so
-        every gameplay screen renders the same convention (audit
-        finding #110)."""
+        real sensors: fingers sit on the pads, a legend would only pull
+        the child's eyes off the tiles."""
         return keyboard_controls_lines(self.engine, mode)
 
     def _draw_controls_note(self, surf: pygame.Surface, mode) -> None:

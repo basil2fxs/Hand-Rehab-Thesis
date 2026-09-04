@@ -170,11 +170,11 @@ class ChipDirectionTests(unittest.TestCase):
         self.assertEqual(chip["text"], "12 ms faster than last time")
         self.assertTrue(chip["better"])
 
-    def test_reaction_slower_is_worse(self) -> None:
+    def test_a_reaction_time_that_went_up_reads_as_down(self) -> None:
         chip = self._chip("reaction",
                           {"reaction": {"median_rt_ms": 420.0}},
                           {"reaction": {"median_rt_ms": 400.0}})
-        self.assertEqual(chip["text"], "20 ms slower than last time")
+        self.assertEqual(chip["text"], "20 ms behind on last time")
         self.assertFalse(chip["better"])
 
     def test_rhythm_compares_absolute_offset_down_is_better(self) -> None:
@@ -190,7 +190,7 @@ class ChipDirectionTests(unittest.TestCase):
             {"beat_offset_stats": {"beat_offset_abs_mean_ms": 70.0}},
             {"beat_offset_stats": {"beat_offset_abs_mean_ms": 60.0}})
         self.assertEqual(worse["text"],
-                         "10 ms looser timing than last time")
+                         "10 ms wider of the beat on last time")
         self.assertFalse(worse["better"])
 
     def test_mirror_smaller_sync_gap_is_better(self) -> None:
@@ -211,7 +211,7 @@ class ChipDirectionTests(unittest.TestCase):
         worse = self._chip("classic", {"hit_rate": 0.70},
                            {"hit_rate": 0.80})
         self.assertEqual(worse["text"],
-                         "10% less accurate than last time")
+                         "10% down on last time")
         self.assertFalse(worse["better"])
 
     def test_adaptive_compares_top_pace_up_is_better(self) -> None:
@@ -247,25 +247,31 @@ class ChipDirectionTests(unittest.TestCase):
 
     def test_echo_longer_span_is_better(self) -> None:
         chip = self._chip("echo",
-                          {"echo": {"span": 5}},
-                          {"echo": {"span": 4}})
+                          {"echo": {"span": 5, "rule": "simon"}},
+                          {"echo": {"span": 4, "rule": "simon"}})
         self.assertEqual(chip["text"],
                          "longest echo up 1 on last time")
         self.assertTrue(chip["better"])
 
-    def test_echo_cumulative_blocks_never_compare(self) -> None:
-        # A cumulative (classic Simon) block rehearses every prefix,
-        # so its span is inflated by the game rule; a chip comparing
-        # it against a ladder block would report the rule change as
-        # patient change, in either direction.
+    def test_echo_ladder_blocks_never_compare(self) -> None:
+        # A Simon game grows one sequence and re-presents every
+        # prefix, so its span sits above a Kessels ladder span from
+        # the same person; a chip across the two would report the
+        # game rule change as patient change, in either direction. A
+        # block from before the rule existed carries no rule key and
+        # is a ladder block, so it stays out too.
         self.assertIsNone(self._chip(
             "echo",
-            {"echo": {"span": 7, "cumulative": True}},
+            {"echo": {"span": 7, "rule": "simon"}},
+            {"echo": {"span": 5, "rule": "ladder"}}))
+        self.assertIsNone(self._chip(
+            "echo",
+            {"echo": {"span": 7, "rule": "simon"}},
             {"echo": {"span": 5}}))
         self.assertIsNone(self._chip(
             "echo",
-            {"echo": {"span": 5}},
-            {"echo": {"span": 7, "cumulative": True}}))
+            {"echo": {"span": 5, "rule": "ladder"}},
+            {"echo": {"span": 4, "rule": "ladder"}}))
 
     def test_chords_clean_rate_up_is_better(self) -> None:
         chip = self._chip(
@@ -363,14 +369,14 @@ class EngineVsLastTests(unittest.TestCase):
                              "12 ms faster than last time")
             self.assertTrue(eng.vs_last["better"])
 
-    def test_worse_direction_reads_worse(self) -> None:
+    def test_the_down_direction_reads_as_down(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             eng = _engine(td)
             eng.session.participant = "Pat"
             self._play_reaction(eng, 400.0)
             self._play_reaction(eng, 431.0)
             self.assertEqual(eng.vs_last["text"],
-                             "31 ms slower than last time")
+                             "31 ms behind on last time")
             self.assertFalse(eng.vs_last["better"])
 
     def test_other_hand_history_does_not_count(self) -> None:

@@ -41,6 +41,7 @@ from typing import TYPE_CHECKING
 import pygame
 
 from ..game.modes.force_pilot import FINGER_WORDS
+from . import feedback_bank
 from .screens import ModeSelectScreen, Screen, draw_skip_chip
 from .widgets import (
     FONT_BODY, FONT_H1, FONT_H2, FONT_SMALL, FONT_TITLE,
@@ -192,9 +193,11 @@ class BuzzHuntScreen(Screen):
             self._draw_top(surf, mode)
             self._draw_focus_point(surf, now)
             self._draw_trial_prompt(surf, mode)
+            self._draw_status_line(surf, mode)
         elif phase == "feedback":
             self._draw_top(surf, mode)
             self._draw_feedback(surf, mode, now)
+            self._draw_status_line(surf, mode)
         else:
             self._draw_top(surf, mode)
         remaining = self._countdown_remaining()
@@ -319,6 +322,35 @@ class BuzzHuntScreen(Screen):
                   self.theme, self.layout, pt=FONT_BODY, centre=True,
                   colour=self.theme.muted)
 
+    def _draw_status_line(self, surf: pygame.Surface, mode) -> None:
+        """What the block is waiting for, and how often it has had to
+        stop waiting.
+
+        A quiet gate that keeps resetting (a finger resting on a pad,
+        a fidgeting hand) used to show nothing at all: no banner, no
+        skip chip, and a score frozen at whatever it was. The
+        therapist had no way to tell a running block from a dead one.
+        The gate's own instruction goes above the stage sentence, and
+        the count of trials the wall had to force sits in the corner.
+
+        Neither line ever hints that a buzz is coming. The foreperiod
+        is part of the stimulus, so a countdown or a "get ready" here
+        would hand over the onset the jitter exists to hide: the gate
+        line only shows while the gate is CLOSED, and the counter only
+        changes after a trial has already been forced."""
+        msg = getattr(mode, "stage_msg", "")
+        if msg:
+            draw_text(surf, str(msg),
+                      (self.layout.width // 2, self.layout.height - 104),
+                      self.theme, self.layout, pt=FONT_BODY, centre=True,
+                      colour=self.theme.warning)
+        forced = int(getattr(mode, "forced_starts", 0) or 0)
+        if forced:
+            draw_text(surf, f"Forced starts: {forced}",
+                      (30, self.layout.height - 40), self.theme,
+                      self.layout, pt=FONT_SMALL,
+                      colour=self.theme.muted)
+
     def _draw_announce(self, surf: pygame.Surface, mode,
                        now: float) -> None:
         cx = self.layout.width // 2
@@ -359,6 +391,37 @@ class BuzzHuntScreen(Screen):
                            (self.DOT_CX, self.DOT_CY), self.DOT_R)
 
     # ---- feedback ----------------------------------------------------------
+    def _title_for(self, res: dict, situation: str) -> str:
+        """A title from the phrase bank, drawn ONCE per feedback phase.
+
+        This screen redraws every frame, so a fresh random draw here
+        would make the words flicker sixty times a second. The picked
+        line is cached against the phase's own end time, which changes
+        exactly when the feedback card changes.
+        """
+        mode = self.engine.mode
+        stage = str(res.get("stage", ""))
+        key = (situation, stage, getattr(mode, "_phase_until", None),
+               res.get("lane"), res.get("taps"))
+        if getattr(self, "_title_key", None) == key:
+            return self._title_cache
+        if situation == "wrong" and stage == "gap":
+            asked = "TWO BUZZES" if res.get("two") else "ONE BUZZ"
+            text = self._phrase("wrong_count", ASKED=asked)
+        elif situation == "wrong":
+            text = self._phrase(
+                "wrong",
+                TARGET=FINGER_WORDS[int(res.get("lane", 0)) % 4])
+        else:
+            text = self._phrase(situation)
+        self._title_key = key
+        self._title_cache = text
+        return text
+
+    def _phrase(self, situation: str, **slots) -> str:
+        return feedback_bank.phrase_via(
+            self.engine, situation, "line", "buzz_hunt", **slots)
+
     def _draw_feedback(self, surf: pygame.Surface, mode,
                        now: float) -> None:
         cx = self.layout.width // 2
@@ -378,9 +441,15 @@ class BuzzHuntScreen(Screen):
                 "gap": "RIGHT CALL!",
             }.get(stage, "CORRECT!"), self.theme.success
         elif not res.get("responded", True) and stage != "span":
-            title, colour = "THE BUZZ GOT AWAY", self.theme.muted
+            title = self._title_for(res, "no_response")
+            colour = self.theme.muted
         else:
-            title, colour = "NOT THAT ONE", self.theme.muted
+            # Never a "that was the wrong one" label. The title says
+            # where the buzz actually was, which is the same
+            # information said forwards, and the chips below still
+            # show the two lanes side by side.
+            title = self._title_for(res, "wrong")
+            colour = self.theme.muted
         draw_text(surf, title, (cx, 170), self.theme, self.layout,
                   pt=FONT_H1 + 6, centre=True, colour=colour)
         y = 250
@@ -395,7 +464,7 @@ class BuzzHuntScreen(Screen):
                       self.theme, self.layout, pt=FONT_BODY,
                       centre=True, colour=self.theme.muted)
             if press is None:
-                draw_text(surf, "nothing", (cx + 160, y + 40),
+                draw_text(surf, "no press", (cx + 160, y + 40),
                           self.theme, self.layout, pt=FONT_H2,
                           centre=True, colour=self.theme.muted)
             else:
@@ -423,7 +492,7 @@ class BuzzHuntScreen(Screen):
             if pressed:
                 self._draw_lane_row(surf, pressed, cx, y)
             else:
-                draw_text(surf, "nothing", (cx, y), self.theme,
+                draw_text(surf, "no presses", (cx, y), self.theme,
                           self.layout, pt=FONT_H2, centre=True,
                           colour=self.theme.muted)
             y += 60

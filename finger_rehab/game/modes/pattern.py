@@ -51,6 +51,29 @@ unilateral and bimanual material are derived from the same name seed
 through different generators, so starting one never changes the
 other.
 
+SEQUENCE FILES. Everything above describes the material the mode
+GENERATES. A researcher can instead hand the mode a YAML file
+(finger_rehab/data/pattern_file.py) that names the blocks, the lane
+order of each one, the pause after every individual press, the
+repeats and the rest. When one is loaded it replaces the generated
+riff and the fixed ten-take layout for every block until it is
+replaced or cleared, and the layout below is what runs only when no
+file is active. Everything the analysis depends on is unchanged: the
+stimulus cell still packs kind, take label, material id and cycle
+position; pattern_trial is still TRUE only for kind seq; the EEG
+bytes are still 40 for sequence and 41 for everything else; probes
+are still scored against their flanking trained takes. What the file
+adds to metadata is the schedule itself plus a schedule_id (the
+sha256 of the exact bytes), so the notebook reads the layout from the
+data instead of assuming this one, and two different files never
+pool. Per-press gaps only mean anything because they repeat
+identically: Shin and Ivry (2002, JEP:LMC 28:445-457) and O'Reilly et
+al (2008, J Neurophysiol 99:2731-2735) found temporal structure is
+learnt only alongside the order it travels with, so the file plays
+the same rhythm on every repeat and in every session, and a probe
+should carry the trained block's gaps or it changes two things at
+once.
+
 SEED AND STABILITY. The trained sequence must be the same one every
 time a participant sits down, or cross-session learning curves are
 meaningless. The seed is derived from the participant name (SHA-256 of
@@ -548,6 +571,12 @@ class Segment:
     fingers: list[int]        # finger index (0..3) per trial, in order
     soc_id: str               # "trained", "p0".."p3", "" for non-SOC
     long_rest_after: bool = False
+    # Set only when a sequence file drives the block: one gap per
+    # trial of this whole take (repeats already expanded), and the
+    # take's own rest floor. None means "use the mode's single RSI and
+    # the shared rest floor", which is the built-in behaviour.
+    gaps_s: list[float] | None = None
+    rest_after_s: float | None = None
     # Filled during play, read by block_stats and the star display.
     n_done: int = field(default=0)
     n_correct: int = field(default=0)
@@ -578,7 +607,10 @@ class PatternMode(WaitSkip):
                  fatigue_timeout_run: int, session_cap_min: float,
                  short_session: bool, score_cfg: ScoreConfig,
                  demo_trials: int | None = None,
-                 fatigue_rest_s: float | None = None) -> None:
+                 fatigue_rest_s: float | None = None,
+                 plan=None,
+                 sequence_file_error: str | None = None,
+                 battery_overrides_ignored: bool = False) -> None:
         self.engine = engine
         # The lanes in play, indexed by sequence position: one hand's
         # four fingers, or with both boards connected all eight (right
@@ -611,20 +643,52 @@ class PatternMode(WaitSkip):
         self.short_session = bool(short_session)
         self.demo_trials = demo_trials
 
-        # Participant-stable material from the name-derived seed;
-        # per-block freshness (random orders, probe rotation) from the
-        # block seed, which is drawn fresh unless pattern.seed pins it.
-        self.trained, self.probes = build_sequences(
-            self.p_seed, probe_pool_size, n_lanes=self.n_fingers)
-        self.cycle_len = len(self.trained)
+        # A researcher's sequence file (data/pattern_file.py) replaces
+        # the generated material and the fixed ten-take layout with
+        # the blocks and per-press timings it describes. It is the
+        # same file for everybody on the machine, so it describes the
+        # task rather than the person, and its sha256 rides every
+        # block so two different files can never be pooled.
+        self.plan = plan
+        # Set when an active file failed to parse at block start and
+        # the block fell back to the built-in riff. Carried into
+        # block_stats so the fallback is never invisible in the data.
+        self.sequence_file_error = sequence_file_error
+        self.battery_overrides_ignored = bool(battery_overrides_ignored)
         self.block_rng = random.Random(self.block_seed)
-        self.probe_offset = self.block_rng.randrange(len(self.probes))
-        # Bimanual cycles are twice as long, so a take runs about half
-        # as many of them to keep take length inside the standard 50 to
-        # 100 trial envelope (5 x 12 unilateral, 3 x 24 bimanual).
-        if self.n_fingers >= CYCLE8_LANES:
-            soc_cycles_per_block = max(
-                1, (int(soc_cycles_per_block) + 1) // 2)
+        if plan is not None:
+            # The file owns the timing and the material. rsi stays as
+            # the file's default gap so block_stats.rsi_ms keeps
+            # meaning "the gap this game ran on" for a file that gives
+            # one number, which is the common case.
+            self.timeout = float(plan.timeout_s)
+            self.rsi = float(plan.default_gap_s)
+            self.cycle_len = plan.cycle_len
+            self.trained = list(plan.seq_blocks()[0].sequence)
+            self.probes = []
+            seen: set[tuple[int, ...]] = set()
+            for pb in plan.probe_blocks():
+                key = tuple(pb.sequence)
+                if key not in seen:
+                    seen.add(key)
+                    self.probes.append(list(pb.sequence))
+            self.probe_offset = 0
+        else:
+            # Participant-stable material from the name-derived seed;
+            # per-block freshness (random orders, probe rotation) from
+            # the block seed, drawn fresh unless pattern.seed pins it.
+            self.trained, self.probes = build_sequences(
+                self.p_seed, probe_pool_size, n_lanes=self.n_fingers)
+            self.cycle_len = len(self.trained)
+            self.probe_offset = self.block_rng.randrange(len(self.probes))
+            # Bimanual cycles are twice as long, so a take runs about
+            # half as many of them to keep take length inside the
+            # standard 50 to 100 trial envelope (5 x 12 unilateral,
+            # 3 x 24 bimanual). A file says repeats and means repeats,
+            # so this never applies to one.
+            if self.n_fingers >= CYCLE8_LANES:
+                soc_cycles_per_block = max(
+                    1, (int(soc_cycles_per_block) + 1) // 2)
 
         if demo_trials is not None:
             # Test Mode: a two-take miniature (trained then probe) so a
@@ -636,16 +700,21 @@ class PatternMode(WaitSkip):
             self.rest_min = min(self.rest_min, 2.0)
             self.long_rest = min(self.long_rest, 2.0)
             self.fatigue_rest = min(self.fatigue_rest, 2.0)
-            probe = self.probes[self.probe_offset]
             cyc = self.cycle_len
-            self.segments = [
-                Segment("seq", "1",
-                        [self.trained[i % cyc] for i in range(n_seq)],
-                        "trained"),
-                Segment("probe", "2",
-                        [probe[i % cyc] for i in range(n_probe)],
-                        f"p{self.probe_offset}"),
-            ]
+            if plan is not None:
+                self.segments = self._demo_from_plan(plan, n_seq, n_probe)
+            else:
+                probe = self.probes[self.probe_offset]
+                self.segments = [
+                    Segment("seq", "1",
+                            [self.trained[i % cyc] for i in range(n_seq)],
+                            "trained"),
+                    Segment("probe", "2",
+                            [probe[i % cyc] for i in range(n_probe)],
+                            f"p{self.probe_offset}"),
+                ]
+        elif plan is not None:
+            self.segments = self._layout_from_plan(plan)
         else:
             self.segments = self._build_layout(
                 soc_cycles_per_block, warmup_trials, random_block_trials)
@@ -719,6 +788,72 @@ class PatternMode(WaitSkip):
         self._rsi_presses: dict[int, int] = {}
 
     # ---- layout ------------------------------------------------------------
+    def _plan_random_fingers(self, n: int) -> list[int]:
+        """Warm-up and random material for a file block. The file says
+        how many trials, not which ones: a fixed random list would be
+        the same order for every participant and every session, which
+        is the one thing a baseline block must not be."""
+        return BalancedScheduler(
+            list(range(self.n_fingers)), self.block_rng).sequence(n)
+
+    def _layout_from_plan(self, plan) -> list[Segment]:
+        """One Segment per file block, in file order. Labels follow the
+        built-in convention (W for the warm-up, then 1..N) so the take
+        grouping in the notebook needs no change, and soc ids are
+        file:<block name> so a file block can never be mistaken for
+        generated material in the data."""
+        segs: list[Segment] = []
+        labels = plan.labels()
+        for label, blk in zip(labels, plan.blocks):
+            if blk.kind in ("seq", "probe"):
+                fingers = [blk.sequence[i % len(blk.sequence)]
+                           for i in range(blk.trials)]
+                soc_id = f"file:{blk.name}"
+            else:
+                fingers = self._plan_random_fingers(blk.trials)
+                soc_id = ""
+            seg = Segment(blk.kind, label, fingers, soc_id)
+            seg.gaps_s = blk.expanded_gaps_s()
+            seg.rest_after_s = float(blk.rest_after_s)
+            # Kept in step with the rest length so the wait chip and
+            # the EEG rest markers still say "long rest" when the file
+            # asks for one.
+            seg.long_rest_after = seg.rest_after_s >= self.long_rest
+            segs.append(seg)
+        return segs
+
+    def _demo_from_plan(self, plan, n_seq: int, n_probe: int
+                        ) -> list[Segment]:
+        """Test Mode miniature from a file: the first trained block,
+        then the first probe block if the file has one, else its first
+        random block, so a demo still writes both pattern_trial values
+        to the CSV."""
+        first_seq = plan.seq_blocks()[0]
+        probes = plan.probe_blocks()
+        second = probes[0] if probes else None
+        if second is None:
+            second = next((b for b in plan.blocks
+                           if b.kind in ("random", "warmup")), None)
+        segs = [self._demo_segment(first_seq, "1", n_seq)]
+        if second is not None:
+            segs.append(self._demo_segment(second, "2", n_probe))
+        return segs
+
+    def _demo_segment(self, blk, label: str, n: int) -> Segment:
+        n = max(1, int(n))
+        if blk.kind in ("seq", "probe"):
+            fingers = [blk.sequence[i % len(blk.sequence)] for i in range(n)]
+            soc_id = f"file:{blk.name}"
+        else:
+            fingers = self._plan_random_fingers(n)
+            soc_id = ""
+        seg = Segment(blk.kind, label, fingers, soc_id)
+        gaps = blk.gaps_s or []
+        seg.gaps_s = ([gaps[i % len(gaps)] for i in range(n)]
+                      if gaps else None)
+        seg.rest_after_s = min(float(blk.rest_after_s), 2.0)
+        return seg
+
     def _build_layout(self, cycles: int, warmup_n: int,
                       random_n: int) -> list[Segment]:
         segs: list[Segment] = []
@@ -888,6 +1023,38 @@ class PatternMode(WaitSkip):
             return "Warm-up"
         return f"Take {seg.label} of {self.n_takes}"
 
+    def block_material(self) -> str:
+        """generated | file | builtin_fallback. Same string block_stats
+        writes, so the raw.csv config line and metadata.json can never
+        disagree about which material ran."""
+        if self.plan is not None:
+            return "file"
+        return "builtin_fallback" if self.sequence_file_error else "generated"
+
+    def schedule_id(self) -> str:
+        return self.plan.schedule_id if self.plan is not None else "builtin"
+
+    def sequence_digits(self, seg_idx: int | None = None) -> str:
+        """The take's lane numbers for the screen, or "" when they must
+        stay hidden. Only a file that says BOTH explicit and
+        show_sequence opens this: telling a patient the sequence exists
+        is exactly what Boyd and Winstein found impairs implicit
+        learning after stroke, so the default keeps it shut and the
+        researcher has to say twice that they meant it. The word
+        sequence still never appears; these are digits under the take
+        chip."""
+        plan = self.plan
+        if plan is None or not (plan.explicit and plan.show_sequence):
+            return ""
+        i = self._seg_idx if seg_idx is None else seg_idx
+        if not 0 <= i < len(self.segments):
+            return ""
+        seg = self.segments[i]
+        if seg.kind not in ("seq", "probe") or not seg.fingers:
+            return ""
+        cyc = seg.fingers[:self.cycle_len] or seg.fingers
+        return " ".join(str(f + 1) for f in cyc)
+
     def _fire(self, now: float) -> None:
         seg = self.segments[self._seg_idx]
         finger = seg.fingers[self._trial_in_seg]
@@ -983,8 +1150,17 @@ class PatternMode(WaitSkip):
             stim += f";soc={seg.soc_id};pos={pos}"
         self.engine.log_trial(trial, outcome, now,
                               stimulus=stim, pattern_trial=pattern_trial)
+        # The gap belongs to the item just answered, so it is read
+        # BEFORE the position advances. A file's gap list is per item
+        # of one cycle, already tiled across the take's repeats, which
+        # is what makes the same rhythm play on every repeat and in
+        # every session (the condition under which the timing becomes
+        # learnable at all).
+        gap = self.rsi
+        if seg.gaps_s and self._trial_in_seg < len(seg.gaps_s):
+            gap = seg.gaps_s[self._trial_in_seg]
         self._trial_in_seg += 1
-        self._next_stim_due = now + self.rsi
+        self._next_stim_due = now + gap
         # Hard session cap: end at a trial close, never mid-trial.
         if (self._t0 is not None
                 and (now - self._t0) > self.session_cap_s):
@@ -1032,7 +1208,10 @@ class PatternMode(WaitSkip):
         title = ("Warm-up done" if seg.kind == "warmup"
                  else f"Take {seg.label} done")
         msg = f"{title}  {stars}".rstrip()
-        dur = self.long_rest if seg.long_rest_after else self.rest_min
+        if seg.rest_after_s is not None:
+            dur = seg.rest_after_s
+        else:
+            dur = self.long_rest if seg.long_rest_after else self.rest_min
         self._enter_rest(now, dur, "between", msg)
 
     @staticmethod
@@ -1218,11 +1397,27 @@ class PatternMode(WaitSkip):
                 continue
             st = self._segment_rt_stats(i)
             stats_by_idx[i] = st
+            # The timing this take actually ran on. With no file every
+            # gap is the single RSI and these three numbers agree with
+            # rsi_ms; with a file they are the only place the shape of
+            # the rhythm survives into metadata per take.
+            gaps_ms = [g * 1000.0 for g in (seg.gaps_s or [])]
+            if not gaps_ms:
+                gaps_ms = [self.rsi * 1000.0]
             per_take.append({
                 "block": seg.label,
                 "kind": seg.kind,
                 "soc": seg.soc_id or None,
                 "n_rsi_presses": self._rsi_presses.get(i, 0),
+                "n_items": (self.cycle_len if seg.kind in ("seq", "probe")
+                            else len(seg.fingers)),
+                "gap_ms_mean": round(sum(gaps_ms) / len(gaps_ms), 1),
+                "gap_ms_min": round(min(gaps_ms), 1),
+                "gap_ms_max": round(max(gaps_ms), 1),
+                "rest_after_s": (seg.rest_after_s if seg.rest_after_s
+                                 is not None else
+                                 (self.long_rest if seg.long_rest_after
+                                  else self.rest_min)),
                 **st,
             })
         learning = []
@@ -1263,6 +1458,23 @@ class PatternMode(WaitSkip):
         return {
             "participant_seed": self.p_seed,
             "block_seed": self.block_seed,
+            # Where the material came from. "file" means a researcher's
+            # sequence file drove the block; "builtin_fallback" means
+            # one was loaded but could not be read at block start and
+            # the built-in riff ran instead, which must never be
+            # invisible in the data. schedule_id splits games in the
+            # notebook exactly the way rsi_ms does: a different file is
+            # a different task and the two never pool.
+            "material": ("file" if self.plan is not None
+                         else "builtin_fallback" if self.sequence_file_error
+                         else "generated"),
+            "schedule_id": (self.plan.schedule_id if self.plan is not None
+                            else "builtin"),
+            "explicit": bool(self.plan.explicit) if self.plan else False,
+            "sequence_file": (self.plan.summary() if self.plan is not None
+                              else None),
+            "sequence_file_error": self.sequence_file_error,
+            "battery_overrides_ignored": self.battery_overrides_ignored,
             "n_lanes": self.n_fingers,
             "cycle_len": self.cycle_len,
             "trained_soc": seq_str(self.trained),

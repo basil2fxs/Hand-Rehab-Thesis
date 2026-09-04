@@ -1,0 +1,51 @@
+# Right-hand explicit riff. Drop this file on the game window, or
+# save it as config/pattern_sequences/current.yaml.
+pattern_file: 1
+name: Explicit riff A, one hand
+hands: one              # lanes 1..4 = index, middle, ring, little of the hand picked at setup
+explicit: true          # the participant is TOLD the riff before the block
+show_sequence: true     # digits of the current riff shown under the take chip
+timeout_ms: 2000
+defaults:
+  gaps_ms: 500          # used wherever a block gives no gaps_ms
+  rest_after_s: 10      # floor of the self-paced rest after a block
+
+blocks:
+  - name: warm
+    kind: warmup
+    trials: 12          # balanced random over the four lanes, not analysed
+
+  - name: base
+    kind: random
+    trials: 32          # general-speed baseline, balanced over the lanes
+
+  - name: riffA_1
+    kind: seq
+    sequence: [2, 4, 1, 3, 4, 2, 3, 1]
+    gaps_ms:  [400, 400, 800, 400, 400, 800, 400, 1200]   # one gap per item, same every repeat
+    repeats: 6          # 48 presses
+
+  - name: riffA_2
+    kind: seq
+    sequence: [2, 4, 1, 3, 4, 2, 3, 1]
+    gaps_ms:  [400, 400, 800, 400, 400, 800, 400, 1200]
+    repeats: 6
+
+  - name: fresh
+    kind: probe         # unfamiliar order, SAME gaps, so only the order changes
+    sequence: [3, 1, 4, 2, 1, 3, 2, 4]
+    gaps_ms:  [400, 400, 800, 400, 400, 800, 400, 1200]
+    repeats: 6
+
+  - name: riffA_3
+    kind: seq
+    sequence: [2, 4, 1, 3, 4, 2, 3, 1]
+    gaps_ms:  [400, 400, 800, 400, 400, 800, 400, 1200]
+    repeats: 6
+    rest_after_s: 30    # the one long rest
+
+  - name: riffA_4
+    kind: seq
+    sequence: [2, 4, 1, 3, 4, 2, 3, 1]
+    gaps_ms:  [400, 400, 800, 400, 400, 800, 400, 1200]
+    repeats: 6

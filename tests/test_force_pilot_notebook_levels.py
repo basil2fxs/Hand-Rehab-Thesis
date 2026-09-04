@@ -116,9 +116,11 @@ def _play_run_with_raw(m, raw: _RealRawLogger, finger: int, hand: str,
 
 
 def _write_session(root: Path) -> Path:
-    """One real Force Pilot game folder: two runs of the same finger,
-    forced to promote between them so they land at two different
-    corridor levels. Returns the folder path."""
+    """One real Force Pilot game folder: two runs of the same finger
+    at two different rungs of the wave ladder. Levels 1 (Slow breath)
+    and 5 (Hills) are both the index finger in the ladder's finger
+    table, which is the case the audit finding named: one finger, two
+    corridors, which must not pool. Returns the folder path."""
     day_dir = root / "2026-08-10"
     folder = day_dir / "Pat_100000_force_pilot"
     folder.mkdir(parents=True, exist_ok=True)
@@ -131,38 +133,31 @@ def _write_session(root: Path) -> Path:
     raw = _RealRawLogger(folder / "raw.csv")
     e.raw_logger = raw
 
-    m = _mode(e)
-    m.total_runs = 1000            # never let the block finish here
+    e.finish_block = lambda: None
+    # Two rungs, both the index finger, and no mid rest (with only two
+    # levels the halfway rest would land after the first run).
+    m = _mode(e, levels=[1, 5], mid_rest_s=0.0)
     finger, hand = 0, "right"
 
     def perfect(t_run, target):
         return target
 
-    # Pin the scheduler to the same finger throughout, and pre-load
-    # one strong "recent" run so the SECOND real run's own strong tic
-    # completes a promotion at the close of run 1 (two-strong-runs
-    # rule), landing run 2 at level 2.
-    m._finger_sched[hand].next = lambda weights=None: finger
-    m._recent_tic_by_hf[(hand, finger)] = [0.9]
-
     t0 = 1000.0
     m._tick(t0)
     assert m.phase == "announce", m.phase
+    assert m.level == 1, m.level
     t = t0 + m.announce_s + 0.01
     m._tick(t)
     assert m.phase == "run", m.phase
     _queue_baseline(raw, finger, hand, m.run_t0)
     t = _play_run_with_raw(m, raw, finger, hand, t, perfect)
-    assert m.phase == "feedback", m.phase
+    assert m.phase == "announce", m.phase
 
     t = m._phase_until + 0.01
-    m._tick(t)                                  # feedback -> announce
-    assert m.phase == "announce", m.phase
-    assert m._level_by_hf[(hand, finger)] == 2, m._level_by_hf
-    t = m._phase_until + 0.01
-    m._tick(t)                                  # announce -> run
+    m._tick(t)                                  # card -> run
     assert m.phase == "run", m.phase
-    assert m.level == 2
+    assert m.level == 5
+    assert m.finger == finger
     _queue_baseline(raw, finger, hand, m.run_t0)
     _play_run_with_raw(m, raw, finger, hand, t, perfect)
 
@@ -181,6 +176,136 @@ def _write_session(root: Path) -> Path:
     return folder
 
 
+def _write_ladder_block(root: Path, when: str, noise: float,
+                        levels=(11, 12)) -> Path:
+    """One Force Pilot block that climbs the given rungs of the wave
+    ladder, tracked with a fixed offset so the block's error is known
+    in advance. `when` is the folder's time stamp, which is what the
+    notebook orders plays by."""
+    folder = root / "2026-08-10" / f"Pat_{when}_force_pilot"
+    folder.mkdir(parents=True, exist_ok=True)
+
+    from finger_rehab.data.logger import TrialLogger
+
+    e = _engine()
+    e.finish_block = lambda: None
+    e.calibration_profiles["right"] = _fresh_profile()
+    e.trial_logger = TrialLogger(folder / "trials.csv")
+    raw = _RealRawLogger(folder / "raw.csv")
+    e.raw_logger = raw
+    # The card is the shipped 1.8 s here, not the fixture's 0.5: the
+    # resting samples this test queues before each run span 1.5 s, and
+    # a shorter gap would drop them on top of the previous run's tail.
+    m = _mode(e, levels=list(levels), mid_rest_s=0.0, announce_s=1.8)
+    finger, hand = 0, "right"          # both storms are the index
+
+    t = 1000.0
+    m._tick(t)
+    for _ in levels:
+        t = m._phase_until + 0.01
+        m._tick(t)
+        assert m.phase == "run", m.phase
+        _queue_baseline(raw, finger, hand, m.run_t0)
+        t = _play_run_with_raw(m, raw, finger, hand, t,
+                               lambda t_run, target: target + noise)
+    raw.close()
+    meta = {
+        "participant": "Pat", "age": "50", "hand": "right",
+        "started_at": f"2026-08-10T{when[:2]}:{when[2:4]}:{when[4:]}",
+        "finished_at": "2026-08-10T10:03:00",
+        "source_name": "MultiSerialSource",
+        "software_version": "1.0.0",
+        "block_summary": {"block": "force_pilot", "status": "completed",
+                          "trials": len(levels), "demo": False,
+                          "force_unit": "sensor units"},
+    }
+    (folder / "metadata.json").write_text(json.dumps(meta))
+    return folder
+
+
+class ForcePilotLadderChapterTests(unittest.TestCase):
+    """Two plays of the ladder, through the real mode and the real
+    notebook: the play index, the per level table, and the sequence
+    learning score the thesis result rests on."""
+
+    def test_two_plays_carry_a_play_index_and_a_sequence_score(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            # Play 1 tracks 3% off the target, play 2 only 1% off on
+            # the FIXED storm and still 3% off on the novel one, which
+            # is what waveform-specific learning looks like.
+            _write_ladder_block(root, "100000", 3.0)
+            _write_ladder_block(root, "110000", 1.0)
+            ra_ns = _load_ra()
+            cat = ra_ns.build_catalogue(root=root)
+            self.assertEqual(len(cat), 2, cat)
+            folders = [Path(p) for p in cat["folder"]]
+            trials = ra_ns.load_games(folders, cat)
+            metas = ra_ns.load_metas(folders)
+            runs, dropped = ra_ns.force_tracking_runs(folders, trials,
+                                                      metas)
+            self.assertEqual(dropped, 0)
+            self.assertEqual(len(runs), 4)
+            self.assertEqual(sorted(runs["level"]), [11, 11, 12, 12])
+            self.assertEqual(sorted(runs["wave"].unique()),
+                             ["storm", "uncharted"])
+            # The play index is the ladder climb this run belongs to,
+            # ordered by when the block ran.
+            self.assertEqual(sorted(runs["play_idx"].unique()), [1, 2])
+            early = runs[runs["play_idx"] == 1]
+            late = runs[runs["play_idx"] == 2]
+            self.assertAlmostEqual(early["mae"].mean(), 3.0, delta=0.2)
+            self.assertAlmostEqual(late["mae"].mean(), 1.0, delta=0.2)
+            # Level 12 is the only level redrawn per block, and it
+            # says so on the row.
+            self.assertEqual(set(runs[runs["level"] == 11]["fixed"]),
+                             {True})
+            self.assertEqual(set(runs[runs["level"] == 12]["fixed"]),
+                             {False})
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                out = ra_ns.sec_force_ladder(folders, trials, metas)
+            text = buf.getvalue()
+            self.assertIsNotNone(out)
+            self.assertEqual(out["n_plays"], 2)
+            self.assertIn("WAVE LADDER", text)
+            self.assertIn("storm", text)
+            self.assertIn("sequence-specific learning", text)
+            # The score is play-1-minus-last on the fixed level minus
+            # the same on the novel one, computed here by hand from
+            # the run rows.
+            def _delta(level):
+                g = runs[runs["level"] == level].set_index("play_idx")
+                return float(g.loc[1, "mae"] - g.loc[2, "mae"])
+            want = _delta(11) - _delta(12)
+            self.assertAlmostEqual(out["seq_learning_mae"], want,
+                                   places=6)
+
+    def test_one_ladder_version_at_a_time(self):
+        # A level number means a different wave in a different ladder,
+        # so the chapter must refuse to pool two of them.
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            _write_ladder_block(root, "100000", 2.0)
+            folder = _write_ladder_block(root, "110000", 2.0)
+            path = folder / "trials.csv"
+            text = path.read_text().replace("ladder=waves_v1",
+                                            "ladder=waves_v2")
+            path.write_text(text)
+            ra_ns = _load_ra()
+            cat = ra_ns.build_catalogue(root=root)
+            folders = [Path(p) for p in cat["folder"]]
+            trials = ra_ns.load_games(folders, cat)
+            metas = ra_ns.load_metas(folders)
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                out = ra_ns.sec_force_ladder(folders, trials, metas)
+            self.assertIsNone(out)
+            self.assertIn("REFUSING TO POOL", buf.getvalue())
+
+
 class ForcePilotNotebookLevelSplitTests(unittest.TestCase):
     def test_per_finger_table_and_slope_split_by_level(self):
         import tempfile
@@ -195,7 +320,7 @@ class ForcePilotNotebookLevelSplitTests(unittest.TestCase):
             runs, dropped = ra_ns.force_tracking_runs(folders, trials)
             self.assertEqual(dropped, 0)
             self.assertEqual(len(runs), 2)
-            self.assertEqual(sorted(runs["level"]), [1, 2])
+            self.assertEqual(sorted(runs["level"]), [1, 5])
             # Both runs are the same real finger and hand: this is the
             # exact case the audit finding named -- one finger playing
             # at two levels must not get pooled into one row.

@@ -349,6 +349,7 @@ import pygame
 
 from ...hardware.eeg_trigger import CODES as EEG_CODES
 from ...hardware.fsr_detector import PressEvent
+from ...ui import feedback_bank
 from ..rest_skip import WaitSkip
 from ..scheduling import BalancedScheduler
 from ..scoring import ScoreConfig, TrialResult, classify
@@ -1590,7 +1591,10 @@ class ChordsMode(WaitSkip):
         self._set_message(self._feedback_text(trial, cls, over_force,
                                               light_press, max_leak_lane),
                           0.9,
-                          kind="success" if cls == "hit" else "warn")
+                          # "warn" amber is the hardware colour. A
+                          # chord that did not form is information,
+                          # so it gets the neutral chip.
+                          kind="success" if cls == "hit" else "info")
         # Quiet-fingers reward moment: a clean chord leaves the
         # untargeted fingers wearing a brief tick on the gameplay
         # screen: its own hand's for a within chord, both hands' for a
@@ -1729,16 +1733,27 @@ class ChordsMode(WaitSkip):
             return f"{self._hand_of_lane(lane).title()} {name.lower()}"
         return name
 
+    def _phrase(self, situation: str, **slots) -> str:
+        """One line from the chords sub-bank, through the engine's
+        seeded deck when there is a real engine behind it."""
+        return feedback_bank.phrase_via(
+            self.engine, situation, "line", "chords", **slots)
+
     def _feedback_text(self, trial: PendingChordTrial, cls: str,
                        over_force: bool, light: bool,
                        max_leak_lane: int | None = None) -> str:
-        """Failure wording says the ACTION, never the mechanism: which
-        finger lifted, which landed late, which never landed. The old
-        "Hold it a beat longer" always arrived after the trial had
-        closed, so there was nothing to hold; the live ring now covers
-        the during-the-press half of that job."""
+        """Feedback says the ACTION, never the mechanism: which finger
+        lifted, which came in behind the others, which is still to
+        land. The old "Hold it a beat longer" always arrived after the
+        trial had closed, so there was nothing to hold; the live ring
+        now covers the during-the-press half of that job.
+
+        Wording comes from feedback_bank.MODE_LINES["chords"] so it is
+        checked against the banned list with everything else and so
+        the same branch does not read identically ten trials running.
+        """
         if over_force:
-            return "Too hard, press lighter"
+            return self._phrase("over_force")
         if cls == "hit":
             return ("Chord! *" if light and trial.kind == "chord"
                     else "Chord!")
@@ -1746,33 +1761,40 @@ class ChordsMode(WaitSkip):
             # Name the finger that closed the span.
             if trial.onsets:
                 last = max(trial.onsets, key=lambda l: trial.onsets[l])
-                return (f"{self._finger_name(trial, last)} was late, "
-                        "press together")
+                return self._phrase(
+                    "late_chord",
+                    target=self._finger_name(trial, last))
             return "Press together"
         if cls == "no_hold":
             lifted = list(trial.hold_released)
             if len(lifted) == 1:
-                return (f"{self._finger_name(trial, lifted[0])} "
-                        "lifted too soon")
-            return "Released too soon"
+                return self._phrase(
+                    "no_hold",
+                    target=self._finger_name(trial, lifted[0]))
+            return "Hold all of them a moment longer."
         if cls == "leak_fail":
             quiet = [f for f in range(4) if f not in trial.fingers]
             if trial.incorrect_presses:
                 lane = trial.incorrect_presses[0][0]
-                return f"{self._finger_name(trial, lane)} leaked"
+                return self._phrase(
+                    "leak_fail", target=self._finger_name(trial, lane))
             if max_leak_lane is not None:
-                return f"{self._finger_name(trial, max_leak_lane)} leaked, keep it still"
-            return "Quiet fingers leaked" if quiet else "Leaked"
-        # partial: a target was missing when the trial timed out.
+                return self._phrase(
+                    "leak_fail",
+                    target=self._finger_name(trial, max_leak_lane))
+            return ("Quiet fingers, rest them." if quiet
+                    else "Rest the quiet fingers on the pads.")
+        # partial: a target was still to land when the trial closed.
         missing = [l for l in trial.targets if l not in trial.onsets]
         if missing and all(l in trial.keys_pressed for l in missing):
-            # Every missing finger DID land at some point but lifted
-            # again before the chord formed: the failure is
-            # togetherness, not reach.
+            # Every finger still to land DID arrive at some point but
+            # lifted again before the chord formed: the thing to fix
+            # is togetherness, not reach.
             return "Press together and keep them down"
         if len(missing) == 1:
-            return f"{self._finger_name(trial, missing[0])} never landed"
-        return "Fingers missing"
+            return self._phrase(
+                "partial", target=self._finger_name(trial, missing[0]))
+        return "All four down together."
 
     # ---- progression -------------------------------------------------------
     def _staircase(self, hit: bool) -> None:

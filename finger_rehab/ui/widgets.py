@@ -891,6 +891,19 @@ class LaneStrip:
         # them flip these to False after construction.
         self.show_hand_label = True
         self.show_value_readout = True
+        # The three halos (scored glow, target pulse, press glow) all
+        # render OUTSIDE this rect, and the target pulse is a sine on
+        # top of that. Reaction turns them off so the lit tile is the
+        # whole of what changed on the screen and it changes once: an
+        # EEG epoch cannot separate a stimulus from a pulsing halo
+        # around it. Everything else keeps them.
+        self.show_halos = True
+        # The response-window bar drains down the tile and sweeps
+        # green to amber to red as it goes. Off in reaction for the
+        # same reason: the tile lighting has to be a step, and the
+        # window it is asking for is already named in words at the top
+        # of that screen.
+        self.show_timing_bar = True
 
     def set_pressed(self, is_pressed: bool, now: float,
                      min_hold_s: float = 0.10) -> None:
@@ -962,7 +975,7 @@ class LaneStrip:
 
         # Halo behind the strip during the glow window. Larger rect, semi-
         # transparent so the lane appears to pulse outward briefly.
-        if now < self.glow_until:
+        if now < self.glow_until and self.show_halos:
             halo = self.rect.inflate(28, 28)
             ts = pygame.Surface(halo.size, pygame.SRCALPHA)
             alpha = int(150 * (self.glow_until - now) / 0.4)  # fade out
@@ -980,7 +993,7 @@ class LaneStrip:
         # period 0.9 s keeps it gentle but visible. Skipped when the
         # tile is also being pressed (the press halo already does
         # the job of attention).
-        if self.active and not self.is_pressed:
+        if self.active and not self.is_pressed and self.show_halos:
             import math as _m
             phase = (_m.sin(now * (2 * _m.pi / 0.9)) + 1) * 0.5
             target_halo = self.rect.inflate(36, 36)
@@ -1001,7 +1014,7 @@ class LaneStrip:
         # "your press registered" feedback even before the timing
         # judges it. Drawn BEFORE the body fill so the body sits on
         # top of the glow rather than the other way round.
-        if self.is_pressed:
+        if self.is_pressed and self.show_halos:
             press_halo = self.rect.inflate(24, 24)
             ph_surf = pygame.Surface(press_halo.size, pygame.SRCALPHA)
             # Two passes for a soft falloff: a wider faint pass + a
@@ -1108,7 +1121,7 @@ class LaneStrip:
         # lane showing how much of the press window is left. Coloured by
         # zone (green = Great timing, yellow = Good, orange = Late) so the
         # patient knows roughly which band their press will land in.
-        if self._timing_stim_t is not None:
+        if self._timing_stim_t is not None and self.show_timing_bar:
             elapsed = now - self._timing_stim_t
             remaining = max(0.0, self._timing_timeout - elapsed)
             frac = remaining / self._timing_timeout
@@ -1155,13 +1168,19 @@ class FloatingText:
                  colour: tuple[int, int, int],
                  font_pt: int = 36,
                  lifetime_s: float = 0.9,
-                 rise_px: int = 60) -> None:
+                 rise_px: int = 60,
+                 glyph: str | None = None) -> None:
         self.text = text
         self.start_pos = pos
         self.colour = colour
         self.font_pt = font_pt
         self.lifetime_s = lifetime_s
         self.rise_px = rise_px
+        # "full" / "half" / "open" draws a ring instead of words. The
+        # EEG lab shows one physically identical token per outcome so
+        # the feedback event carries no emotional word into the
+        # 200 to 300 ms window the FRN is measured in.
+        self.glyph = glyph
         self.born = time.perf_counter()
 
     @property
@@ -1173,12 +1192,55 @@ class FloatingText:
         frac = max(0.0, min(1.0, age / self.lifetime_s))
         y_offset = int(self.rise_px * frac)
         alpha = int(255 * (1.0 - frac))
+        if self.glyph:
+            self._draw_glyph(surf, y_offset, alpha)
+            return
         font = layout.font(self.font_pt)
         text = font.render(self.text, True, self.colour)
         text.set_alpha(alpha)
         rect = text.get_rect(center=(self.start_pos[0],
                                       self.start_pos[1] - y_offset))
+        # Keep the whole popup on the page. Feedback wording is longer
+        # than the bare outcome label it replaced ("Switch to Middle"
+        # against "Miss"), and in bilateral play the outer lane centres
+        # sit 100 px from the edge, so an unclamped popup lost its
+        # first word. Sliding it in beats clipping it: the lane flash
+        # underneath still says which finger this is about.
+        margin = 8
+        if rect.width < layout.width - margin * 2:
+            rect.left = max(margin, rect.left)
+            rect.right = min(layout.width - margin, rect.right)
         surf.blit(text, rect)
+
+    # Same diameter, stroke, position and lifetime for every outcome:
+    # only the fill differs, so nothing about the token's low-level
+    # visual properties is confounded with the outcome.
+    GLYPH_D = 28
+    GLYPH_STROKE = 3
+
+    def _draw_glyph(self, surf: pygame.Surface, y_offset: int,
+                    alpha: int) -> None:
+        d = self.GLYPH_D
+        pad = self.GLYPH_STROKE + 1
+        size = d + pad * 2
+        tile = pygame.Surface((size, size), pygame.SRCALPHA)
+        centre = (size // 2, size // 2)
+        r = d // 2
+        if self.glyph == "full":
+            pygame.draw.circle(tile, self.colour, centre, r)
+        else:
+            pygame.draw.circle(tile, self.colour, centre, r,
+                               self.GLYPH_STROKE)
+            if self.glyph == "half":
+                # Left half filled. A wedge, not a second ring, so the
+                # outline stays the same size in all three states.
+                pygame.draw.circle(tile, self.colour, centre, r, 0,
+                                   draw_top_left=True,
+                                   draw_bottom_left=True)
+        tile.set_alpha(alpha)
+        rect = tile.get_rect(center=(self.start_pos[0],
+                                      self.start_pos[1] - y_offset))
+        surf.blit(tile, rect)
 
 
 class HitBurst:

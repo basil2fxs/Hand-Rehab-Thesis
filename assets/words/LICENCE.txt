@@ -1,0 +1,76 @@
+Syllables word bank: licence and provenance
+===========================================
+
+Files
+-----
+syllables_source.txt   the word list in source form, one line per word
+syllables_bank.json    the built bank the game loads
+                       (scripts/build_syllables_bank.py makes it)
+
+Licence
+-------
+Both files were written for this project (Basil Toufexis, Curtin
+University thesis project, 2026) and carry the same licence as the
+rest of this repository. They may be used, changed and redistributed
+with it.
+
+Provenance
+----------
+Every word, syllable split, stress mark and band was written by hand
+against ordinary Australian English usage. No third-party word list,
+dictionary, corpus file or database was copied, in whole or in part.
+In particular:
+
+- The Oxford Wordlist (Oxford University Press Australia, the 500
+  most frequent words in the writing of Australian children in their
+  first three years of school) is copyright OUP. It was not consulted
+  as data and none of it is reproduced here. The idea it stands for,
+  that a children's bank should be built on words children actually
+  use, is not copyrightable and is what the hand list aims at.
+- The Macquarie Dictionary's syllable-division convention is used as
+  a RULE (cut at the spelling boundary nearest the spoken one:
+  rab-bit, ti-ger), which is a convention anyone may follow. No
+  Macquarie entry, split or pronunciation was copied.
+- No frequency database (SUBTLEX-UK, CPB-Lex), pronouncing dictionary
+  (cmudict) or hyphenation file (Moby Hyphenator II) was downloaded,
+  parsed or shipped.
+
+Band assignment (A everyday, B less often met, C rare, plus every
+four-syllable word) is a judgement made by hand to the rule in the
+brief, not a copied frequency figure.
+
+The bigger bank, if it is ever wanted
+-------------------------------------
+The research note for this mode sets out a route to a larger,
+frequency-graded bank from open resources. Anyone taking it must
+download each source themselves, keep it out of this repository, and
+carry its terms:
+
+  CMU Pronouncing Dictionary (cmudict), BSD licence: phonemes with
+    stress digits, so syllable count and primary stress come free.
+  Moby Hyphenator II (Grady Ward, Moby Project, public domain,
+    Project Gutenberg ebook 3204): written hyphenation points for
+    187,175 words.
+  Kuperman, Stadthagen-Gonzalez and Brysbaert (2012) age-of-
+    acquisition ratings: which words children know by 6 to 8.
+  SUBTLEX-UK (van Heuven, Mandera, Keuleers and Brysbaert 2014) or
+    CPB-Lex (Green, Keogh, Sun and O'Brien 2023): child-facing
+    frequencies. Confirm redistribution terms before shipping any
+    derived file.
+  Wiktionary via wiktextract: CC BY-SA and GFDL. Using it makes the
+    derived bank share-alike, so the note recommends sending
+    Wiktionary disagreements to a review list instead of into the
+    bank.
+
+Splits from any of those sources still need a human pass: English
+syllable division in print is a convention rather than a fact (Kearns
+2020, Reading Research Quarterly, found the two taught rules fit 70.6
+and 30.5 percent of applicable words), and the spoken syllable and the
+printed chunk must agree exactly or the game teaches the wrong pair.
+
+Review
+------
+The reviewer field on every entry is empty. Before the bank is used
+with children, a teacher or speech pathologist should check a random
+sample for split, stress and suitability, and their initials go in
+that field. The thesis methods section should state who reviewed what.

@@ -164,6 +164,45 @@ class TestCanonicalSignalCopies:
             f"never one side alone.")
 
 
+_LIVE = {}
+
+
+def _live_notebook():
+    """Every notebook cell's definitions exec'd into one module
+    namespace, so a chapter function can be called for real. Built
+    once per test session: the setup cell is large."""
+    import sys
+    import tempfile
+    from types import ModuleType
+    if "ns" in _LIVE:
+        return _LIVE["ns"]
+    import matplotlib
+    matplotlib.use("Agg")
+    from tests.test_rehab_analysis import (FUTURE_FLAGS, MODULE_NAME,
+                                           _code_cells, _definitions)
+    name = MODULE_NAME + "_contract"
+    module = ModuleType(name)
+    module.__file__ = str(ROOT / "analysis" / "session_analysis.ipynb")
+    sys.modules[name] = module
+    ns = module.__dict__
+    try:
+        for index, lines in _code_cells():
+            code = compile(_definitions(index, lines),
+                           f"session_analysis.ipynb cell {index}",
+                           "exec", flags=FUTURE_FLAGS, dont_inherit=True)
+            exec(code, ns)
+    finally:
+        sys.modules.pop(name, None)
+    ns["FIGDIR"] = Path(tempfile.mkdtemp())
+
+    class _Live:
+        def __init__(self, d):
+            self.__dict__ = d
+
+    _LIVE["ns"] = _Live(ns)
+    return _LIVE["ns"]
+
+
 def _notebook_functions(source, names):
     """Compile just the named top-level defs out of the notebook
     source. The copies can then be exercised directly, without
@@ -417,6 +456,21 @@ class TestContinuousModeContract:
         ('"buzz_hunt_reversal"', "finger_rehab/game/modes/buzz_hunt.py",
          '"buzz_hunt_reversal"'),
         ("level_ms=", "finger_rehab/game/modes/buzz_hunt.py", '"level_ms"'),
+        # The reliability build's raw events. The notebook counts them
+        # per block as frame health, so a rename on either side has to
+        # fail here rather than turn a column silently to zero.
+        ('"buzz_hunt_gate_forced"', "finger_rehab/game/modes/buzz_hunt.py",
+         '"buzz_hunt_gate_forced"'),
+        ('"buzz_hunt_trial_forced"', "finger_rehab/game/modes/buzz_hunt.py",
+         '"buzz_hunt_trial_forced"'),
+        ('"buzz_hunt_stim_fail"', "finger_rehab/game/modes/buzz_hunt.py",
+         '"buzz_hunt_stim_fail"'),
+        ('"stim_lost"', "finger_rehab/game/modes/buzz_hunt.py",
+         '"stim_lost"'),
+        ('"pulse_broken"', "finger_rehab/game/engine.py",
+         '"pulse_broken"'),
+        ("wall_forced=", "finger_rehab/game/modes/buzz_hunt.py",
+         '"wall_forced"'),
     ]
 
     @pytest.mark.parametrize("game_literal,game_file,nb_literal",
@@ -520,14 +574,255 @@ def test_the_export_cell_is_last():
 # it produces are pinned in tests/test_cohort_notebook.py on a cohort
 # the real engine wrote.
 
+class TestBuzzHuntFloorsAndCensoring:
+    """The gap floor is a host limit, not a perceptual one, and the
+    notebook has to know the same number the mode does."""
+
+    def test_the_gap_floor_matches_the_mode(self, source) -> None:
+        from finger_rehab.game.modes.buzz_hunt import GAP_FLOOR_MS
+        (floor,) = _notebook_names(source, ["BH_GAP_FLOOR_MS"])
+        assert floor == GAP_FLOOR_MS == 150.0
+
+    def test_the_config_ships_the_same_floor(self) -> None:
+        from finger_rehab.config import Config
+        from finger_rehab.game.modes.buzz_hunt import GAP_FLOOR_MS
+        assert float(Config.load().get("buzz_hunt.gap_floor_ms")) \
+            == GAP_FLOOR_MS
+
+    def test_a_censored_threshold_never_prints_a_number(self) -> None:
+        ra = _live_notebook()
+        text = ra.bh_gap_threshold_text(
+            {"final_ms": 150.0, "estimate_ms": 150.0, "floor_ms": 150.0,
+             "censored": True})
+        assert "censored" in text
+        assert "at or below 150 ms" in text
+        # An uncensored one is a plain number.
+        clear = ra.bh_gap_threshold_text(
+            {"final_ms": 320.0, "estimate_ms": 316.7, "floor_ms": 150.0,
+             "censored": False})
+        assert clear == "317 ms"
+        assert ra.bh_gap_threshold_text(None) is None
+
+    def test_stim_lost_survives_the_block_loader(self) -> None:
+        """A block that ended because the board went away must still
+        render, and must be named as not comparable."""
+        import contextlib
+        import io
+        import pandas as pd
+        ra = _live_notebook()
+        metas = {"g1": {"block_summary": {
+            "block": "buzz_hunt",
+            "buzz_hunt": {
+                "end_reason": "stim_lost",
+                "reliability": {"forced_starts": 3, "stim_failures": 4,
+                                "stim_lost": True},
+                "gap": {"threshold": {"right": {
+                    "final_ms": 150.0, "estimate_ms": 150.0,
+                    "floor_ms": 150.0, "censored": True}}},
+                "loc": {"accuracy": 0.9}}}}}
+        stored = ra.stored_mode_stats(metas, "buzz_hunt")
+        assert stored["g1"]["end_reason"] == "stim_lost"
+        assert stored["g1"]["reliability"]["stim_lost"] is True
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            out = ra.sec_tactile([], pd.DataFrame(), metas)
+        # No trials, so the chapter says so rather than half-drawing.
+        assert out is None
+        assert "No Buzz Hunt trials" in buf.getvalue()
+
+
+SEQUENCE_FILE = {
+    "schema": 1, "name": "Riff A", "file_name": "riffA.yaml",
+    "schedule_id": "abc123def456", "hands": "one", "n_lanes": 4,
+    "explicit": False, "show_sequence": False, "cycle_len": 4,
+    "total_trials": 24, "estimated_minutes": 1.2, "warnings": [],
+    "blocks": [
+        {"name": "riff_1", "kind": "seq", "label": "1", "trials": 12,
+         "repeats": 3, "sequence": [2, 4, 1, 3],
+         "gaps_ms": [400, 400, 800, 1200], "rest_after_s": 10.0},
+        {"name": "fresh", "kind": "probe", "label": "2", "trials": 12,
+         "repeats": 3, "sequence": [1, 4, 2, 3],
+         "gaps_ms": [400, 400, 800, 1200], "rest_after_s": 10.0}],
+}
+
+
+def _pattern_trials(game, n=14):
+    """Two takes of one pattern game: a trained take then a probe."""
+    import pandas as pd
+    rows = []
+    trial = 0
+    for take, kind, soc, base in (("1", "seq", "file:riff_1", 420.0),
+                                  ("2", "probe", "file:fresh", 520.0),
+                                  ("3", "seq", "file:riff_1", 430.0)):
+        for i in range(n):
+            trial += 1
+            rows.append({
+                "mode": "pattern", "game": game, "session": game,
+                "hand_mode": "right", "side": "right", "trial": trial,
+                "stimulus": f"{kind};b={take};soc={soc};pos={i % 4}",
+                "time_difference_ms": base + (i % 5) * 4.0,
+                "early_late": "", "error_type": "",
+                "pattern_trial": kind == "seq",
+            })
+    return pd.DataFrame(rows)
+
+
+def _pattern_meta(**summary):
+    base = {"rsi_ms": 500, "timeout_ms": 2000, "start_trim": 0,
+            "material": "generated", "schedule_id": "builtin",
+            "explicit": False, "sequence_file": None,
+            "sequence_file_error": None, "demo": False}
+    base.update(summary)
+    return {"block_summary": {"block": "pattern", "pattern": base}}
+
+
+class TestPatternSequenceFileChapter:
+    """A loaded sequence file replaces the material AND the per-press
+    gaps, so two games under different files are two different tasks.
+    The chapter has to split on the schedule, print what each group
+    actually ran, and keep explicit practice out of the implicit
+    learning score."""
+
+    def test_a_file_game_gets_its_own_consistency_group(self) -> None:
+        import pandas as pd
+        ra = _live_notebook()
+        trials = pd.concat([_pattern_trials("g_builtin"),
+                            _pattern_trials("g_file")],
+                           ignore_index=True)
+        metas = {
+            "g_builtin": _pattern_meta(),
+            "g_file": _pattern_meta(material="file",
+                                    schedule_id="abc123def456",
+                                    sequence_file=SEQUENCE_FILE),
+        }
+        groups, sigs = ra.pattern_consistency_groups(trials, metas)
+        assert len(groups) == 2, groups
+        assert sigs["g_file"]["schedule_id"] == "abc123def456"
+        assert sigs["g_builtin"]["schedule_id"] == "builtin"
+        # Same rsi, same timeout, same cue flags: only the file split
+        # them.
+        for key in ("rsi_ms", "timeout_ms", "cue_flags"):
+            assert sigs["g_file"][key] == sigs["g_builtin"][key]
+
+    def test_the_split_and_the_schedule_readout_print(self) -> None:
+        import contextlib
+        import io
+        import pandas as pd
+        ra = _live_notebook()
+        trials = pd.concat([_pattern_trials("g_builtin"),
+                            _pattern_trials("g_file")],
+                           ignore_index=True)
+        metas = {
+            "g_builtin": _pattern_meta(),
+            "g_file": _pattern_meta(material="file",
+                                    schedule_id="abc123def456",
+                                    sequence_file=SEQUENCE_FILE),
+        }
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            ra.sec_pattern_srtt(trials, metas)
+        import matplotlib.pyplot as plt
+        plt.close("all")
+        out = buf.getvalue()
+        assert "SPLIT:" in out
+        assert "schedule=abc123def456" in out
+        assert "Schedule read from metadata" in out
+        assert "riff_1" in out
+        assert "400-1200 (4 per cycle)" in out
+
+    def test_a_fallback_says_why_it_fell_back(self) -> None:
+        import contextlib
+        import io
+        ra = _live_notebook()
+        stored = {"g_bad": _pattern_meta(
+            material="builtin_fallback",
+            sequence_file_error="lane 9 is not on a four-lane board",
+        )["block_summary"]["pattern"]}
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            ra._pattern_schedule_readout(stored)
+        out = buf.getvalue()
+        assert "FELL BACK: g_bad" in out
+        assert "lane 9 is not on a four-lane board" in out
+
+    def test_explicit_practice_never_enters_the_learning_score(self):
+        ra = _live_notebook()
+        for explicit in (False, True):
+            block = {"game": "g1", "folder": Path("."),
+                     "meta": _pattern_meta(), "rows": _pattern_trials("g1"),
+                     "hand": "right", "calset": None, "extra": {},
+                     "bs": _pattern_meta(
+                         material="file", schedule_id="abc123def456",
+                         explicit=explicit,
+                         sequence_file=dict(SEQUENCE_FILE,
+                                            explicit=explicit),
+                     )["block_summary"]}
+            out = ra._cohort_pattern(block)
+            metrics = {m for _h, m, _v, _n in out}
+            assert block["extra"]["pattern_schedule_id"] == "abc123def456"
+            assert block["extra"]["pattern_explicit"] is explicit
+            if explicit:
+                assert "learning_score_ms" not in metrics
+            else:
+                assert "learning_score_ms" in metrics, metrics
+
+    def test_the_mode_still_writes_every_key_the_chapter_reads(self):
+        """The chapter reads these off block_summary.pattern. If
+        pattern.py stops writing one, the split or the read-out goes
+        quiet instead of failing, so the source is pinned here."""
+        src = (ROOT / "finger_rehab/game/modes/pattern.py").read_text()
+        for key in ('"material"', '"schedule_id"', '"explicit"',
+                    '"sequence_file"', '"sequence_file_error"',
+                    '"battery_overrides_ignored"'):
+            assert key in src, f"pattern.py no longer writes {key}"
+        for key in ('"n_items"', '"gap_ms_mean"', '"gap_ms_min"',
+                    '"gap_ms_max"', '"rest_after_s"'):
+            assert key in src, f"pattern.py no longer writes {key} " \
+                               f"on a per_take row"
+        source = _notebook_source()
+        for key in ("schedule_id", "sequence_file", "explicit",
+                    "material", "sequence_file_error"):
+            assert f'"{key}"' in source or f"'{key}'" in source, (
+                f"the notebook stopped reading {key}")
+
+    def test_the_long_table_names_the_excluded_explicit_blocks(self):
+        import contextlib
+        import io
+        import pandas as pd
+        ra = _live_notebook()
+        sel = pd.DataFrame([{
+            "folder": "/nowhere/2026-09-04/P01_100000_pattern",
+            "participant": "P01", "visit": "1", "day": "2026-09-04",
+            "mode": "pattern", "dominant_hand": "right",
+            "phase": "pre", "battery_position": 1,
+        }])
+        game = ra.game_key(sel["folder"].iloc[0])
+        trials = _pattern_trials(game)
+        metas = {game: _pattern_meta(material="file",
+                                     schedule_id="abc123def456",
+                                     explicit=True,
+                                     sequence_file=SEQUENCE_FILE)}
+        metas[game]["battery"] = {"phase": "pre", "position": 1}
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            long, frames = ra.cohort_long_table(sel, trials, metas)
+        out = buf.getvalue()
+        assert "EXCLUDED from the Muscle Memory learning score" in out
+        assert "1 block(s) run as EXPLICIT practice" in out
+        assert "learning_score_ms" not in set(long["metric"])
+        assert frames["pattern_schedule_id"][0][2] == "abc123def456"
+
+
 class TestCohortChapterContract:
     SECTIONS = ["sec_cohort_selection", "sec_cohort_describe",
-                "sec_cohort_hands", "sec_cohort_retest",
-                "sec_cohort_practice", "sec_cohort_validity",
-                "sec_cohort_export"]
+                "sec_cohort_hands", "sec_cohort_within_session",
+                "sec_cohort_learning", "sec_cohort_curves",
+                "sec_cohort_validity", "sec_cohort_export"]
     HELPERS = ["write_cohort_report", "icc_ci", "cohort_long_table",
                "cohort_catalogue", "cohort_paired", "cohort_values",
-               "is_study_code", "cohort_hand_role"]
+               "is_study_code", "cohort_hand_role", "split_half",
+               "tost_paired", "wilson_ci", "log_linear_slope",
+               "exp_fit", "fine_series", "rolling_median"]
     BATTERY_MODES = {"reaction", "mirror", "rhythm", "echo", "force_pilot",
                      "chords", "buzz_hunt", "pattern"}
 
@@ -541,9 +836,36 @@ class TestCohortChapterContract:
 
     def test_long_table_columns_match_the_design(self, source):
         (cols,) = _notebook_names(source, ["COHORT_LONG_COLS"])
-        assert cols == ["participant", "visit", "day", "hand", "hand_role",
-                        "mode", "metric", "value", "n_trials",
-                        "block_folder", "config_hash"]
+        # phase is the pairing key of the single-session design and
+        # position is where in the sitting the block ran; visit stays
+        # so a tree from the old two-visit design still loads.
+        assert cols == ["participant", "phase", "position", "visit", "day",
+                        "hand", "hand_role", "mode", "metric", "value",
+                        "n_trials", "block_folder", "config_hash"]
+        assert "phase" in cols and "position" in cols
+
+    def test_the_phases_are_the_ones_the_shipped_preset_writes(
+            self, source):
+        """A preset change must not silently break the pairing: the
+        notebook's phase words are read back off config/default.yaml."""
+        from finger_rehab.config import Config
+        phases, pair = _notebook_names(
+            source, ["COHORT_PHASES", "COHORT_PAIR_PHASES"])
+        preset = Config.load().get("protocol.presets.study_battery") or {}
+        shipped = {str(step.get("phase") or "").strip().lower()
+                   for order in (preset.get("orders") or {}).values()
+                   for step in order}
+        assert set(phases) == shipped
+        assert set(pair) == {"pre", "post"}
+
+    def test_the_fine_series_covers_every_shipped_mode(self, source):
+        """Every mode on the hub has a watched series, or the curve
+        chapter silently skips it."""
+        from finger_rehab.ui.screens import ModeSelectScreen
+        (better,) = _notebook_names(source, ["FINE_SERIES_BETTER"])
+        modes = {str(m[0]) for m in ModeSelectScreen.MODES} - {"classic"}
+        assert modes <= set(better), modes - set(better)
+        assert set(better.values()) <= {"lower", "higher"}
 
     def test_registry_covers_the_eight_battery_modes(self, source):
         floor, registry, modes = _notebook_names(

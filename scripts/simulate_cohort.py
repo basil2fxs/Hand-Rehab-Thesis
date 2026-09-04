@@ -1,34 +1,45 @@
 """Simulate the healthy baseline cohort through the real engine.
 
 Participant codes (24 by default, --n for more) play the study
-battery twice, seven days apart, the way the research assistant
-runs it: log in with the
-intake fields, start the battery, take every NEXT UP step, end the
-session. The engine, the modes, the loggers and the battery runner
-are the shipped ones (scripts/measure_battery.py supplies the model
-hand on a fake 200 Hz sensor stream and the simulated clock); only
-the person is synthetic.
+battery ONCE, in one long sitting, the way the research assistant
+runs it: log in with the intake fields, start the battery, take every
+NEXT UP step, end the session. The engine, the modes, the loggers and
+the battery runner are the shipped ones (scripts/measure_battery.py
+supplies the model hand on a fake 200 Hz sensor stream and the
+simulated clock); only the person is synthetic.
 
-Each code carries latent skill so the cohort chapter of the notebook
-has something to find:
+The design is one visit with every mode played early (phase pre) and
+again late (phase post), so the thing to inject is not a
+between-visit practice effect but a WITHIN-session one. Each code
+carries latent skill plus a per-person rate of change from its first
+go to its last:
 
-  reaction   a per-person base RT (stable across visits), the
-             dominant hand 25 ms faster, visit 2 10 ms faster than
-             visit 1, 45 ms trial-to-trial noise
-  mirror     the dominant hand's press leads the other by 15 ms
-  rhythm     a per-person negative asynchrony and jitter
-  echo       a per-person span ceiling (the ladder fails past it)
-  buzz hunt  a per-person localisation accuracy; errors land on
-             the neighbouring finger
-  pattern    trained-sequence presses speed up with exposure and
-             the exposure carries into visit 2 (retention)
-  force      the hold noise is drawn PER VISIT with no per-person
-             part, so force error is the metric that should come
-             out unreliable
+  reaction   a per-person base RT, the dominant hand 25 ms faster,
+             45 ms trial-to-trial noise, and only 0 to 5 ms of
+             pre-to-post gain: this is the stability anchor, and the
+             analysis expects it NOT to move
+  mirror     the dominant hand's press leads the other by 15 ms, and
+             the lead and its jitter shrink by post
+  rhythm     a per-person negative asynchrony; its SD tightens by
+             post, the mean stays negative
+  echo       a per-person span ceiling, the same in both passes (the
+             span is expected to be flat)
+  buzz hunt  a per-person localisation accuracy, errors landing on
+             the neighbouring finger, and 40 ms off the localisation
+             RT by post
+  chords     a per-person press spread across the chord, 15 percent
+             tighter by post
+  pattern    trained-sequence presses speed up with exposure, and the
+             exposure carries from the pre block into the post block
+  force      the hold noise is drawn PER BLOCK with no per-person
+             part, so force error is the metric that should come out
+             unreliable within a session; on top of that the post
+             blocks are 30 percent quieter, so the pre-post change is
+             real while the reliability is not
 
 The truth behind every code is written to <out>/truth.json and the
-measured minutes per visit to <out>/durations.csv, so an analysis
-run over <out>/sessions can be checked against what was injected.
+measured minutes to <out>/durations.csv, so an analysis run over
+<out>/sessions can be checked against what was injected.
 
     python3 scripts/simulate_cohort.py --out /tmp/cohort
     python3 scripts/simulate_cohort.py --out /tmp/cohort --n 4
@@ -42,11 +53,9 @@ from __future__ import annotations
 
 import argparse
 import csv
-import datetime as _dt
 import json
 import os
 import random
-import shutil
 import sys
 import time as _time
 from pathlib import Path
@@ -61,9 +70,22 @@ import measure_battery as mb  # noqa: E402
 
 
 DOMINANT_ADVANTAGE_S = 0.025
-PRACTICE_S = 0.010
 MIRROR_LEAD_S = 0.015
-RETEST_DAYS = 7
+# How much quieter a post force block is than a pre one. The absolute
+# noise is redrawn per block, so this is a shift in the middle of a
+# noisy distribution: the pre-post change is recoverable, the
+# block-to-block reliability is not.
+FORCE_POST_FACTOR = 0.70
+# How much tighter the presses inside a chord land by the post pass.
+CHORD_POST_FACTOR = 0.85
+# Everything the post pass is supposed to move, as the mean of the
+# per-person draw. The analysis has to recover these signs.
+POST_GAINS_S = {
+    "reaction": 0.0025,     # the anchor: small on purpose
+    "mirror": 0.012,
+    "rhythm_sd": 0.003,
+    "buzz": 0.040,
+}
 
 
 def make_truth(n: int, seed: int) -> dict[str, dict]:
@@ -90,22 +112,42 @@ def make_truth(n: int, seed: int) -> dict[str, dict]:
             "asyn_sd_s": rng.uniform(0.015, 0.035),
             "loc_acc": rng.uniform(0.86, 1.0),
             "learn_per_cycle_s": rng.uniform(0.004, 0.008),
-            # Force noise per visit, no person part: see the module doc.
-            "force_noise_sd": [rng.uniform(0.4, 2.2), rng.uniform(0.4, 2.2)],
+            "chord_spread_s": rng.uniform(0.010, 0.022),
+            # Per-person rates of change from the pre pass to the post
+            # pass. Clamped at zero: nobody gets worse on purpose, the
+            # measurement noise supplies the people who look worse.
+            "post_rt_gain_s": max(0.0, rng.gauss(
+                POST_GAINS_S["reaction"], 0.0015)),
+            "post_mirror_gain_s": max(0.0, rng.gauss(
+                POST_GAINS_S["mirror"], 0.004)),
+            "post_asyn_sd_gain_s": max(0.0, rng.gauss(
+                POST_GAINS_S["rhythm_sd"], 0.001)),
+            "post_buzz_gain_s": max(0.0, rng.gauss(
+                POST_GAINS_S["buzz"], 0.012)),
         }
     return truth
 
 
 class CohortParticipant(mb.Participant):
-    """The model participant with a person behind it."""
+    """The model participant with a person behind it, and a phase.
+
+    `phase` is the battery's own phase word for the block in play
+    (pre, mid, post), taken from the engine before every block, so the
+    injected within-session change lands on exactly the blocks the
+    analysis pairs.
+    """
 
     def __init__(self, hand: mb.HandModel, rng: random.Random,
-                 truth: dict, visit: int, seq_presses: int) -> None:
+                 truth: dict, seq_presses: int) -> None:
         super().__init__(hand, rng)
         self.truth = truth
-        self.visit = visit
+        self.phase = "pre"
         self.seq_presses = seq_presses      # pattern exposure so far
         self.hand_mode = "right"
+
+    @property
+    def late(self) -> bool:
+        return self.phase == "post"
 
     # ---- hands and reaction times -------------------------------------
     def lane_hand(self, lane: int) -> str:
@@ -117,8 +159,8 @@ class CohortParticipant(mb.Participant):
         base = float(self.truth["rt_s"])
         if self.lane_hand(lane) != self.truth["dominant"]:
             base += DOMINANT_ADVANTAGE_S
-        if self.visit >= 2:
-            base -= PRACTICE_S
+        if self.late:
+            base -= float(self.truth["post_rt_gain_s"])
         return max(0.15, self.rng.gauss(base, float(self.truth["rt_sd_s"])))
 
     def act(self, eng, now: float) -> None:
@@ -144,16 +186,40 @@ class CohortParticipant(mb.Participant):
         if key in self.answered:
             return
         self.answered.add(key)
-        # One shared reaction, then the dominant hand lands first.
+        # One shared reaction, then the dominant hand lands first. By
+        # the post pass the lead and its jitter have both shrunk,
+        # which is what the mean gap reads.
         t = act.stim_t_perf + self.rt_for(act.finger) + 0.05
         right, left = act.finger, act.finger + 4
-        lead = MIRROR_LEAD_S / 2.0
+        gap = MIRROR_LEAD_S
+        jitter = 0.010
+        if self.late:
+            gap = max(0.002, gap - float(self.truth["post_mirror_gain_s"]))
+            jitter *= 0.6
+        lead = gap / 2.0
         if self.truth["dominant"] == "right":
             self.schedule(t - lead, right)
-            self.schedule(t + lead + self.rng.gauss(0.0, 0.01), left)
+            self.schedule(t + lead + self.rng.gauss(0.0, jitter), left)
         else:
-            self.schedule(t + lead + self.rng.gauss(0.0, 0.01), right)
+            self.schedule(t + lead + self.rng.gauss(0.0, jitter), right)
             self.schedule(t - lead, left)
+
+    def _chords(self, m, now, eng) -> None:
+        if self._self_paced_rest(m, now, "_rest_until", int(m.lanes[0])):
+            return
+        act = getattr(m, "active", None)
+        if act is None or getattr(m, "phase", "") != "stim":
+            return
+        key = ("chords", act.trial_id)
+        if key in self.answered:
+            return
+        self.answered.add(key)
+        spread = float(self.truth["chord_spread_s"])
+        if self.late:
+            spread *= CHORD_POST_FACTOR
+        t = act.stim_t_perf + self._rt() + 0.15
+        for lane in act.targets:
+            self.schedule(t + self.rng.gauss(0.0, spread), int(lane), 0.45)
 
     def _pattern(self, m, now, eng) -> None:
         if self._self_paced_rest(m, now, "_rest_min_until",
@@ -170,7 +236,8 @@ class CohortParticipant(mb.Participant):
         seg = m.segments[m._seg_idx]
         if seg.kind == "seq":
             # Trained material: faster with every cycle seen, capped,
-            # and the exposure count carries across visits.
+            # and the exposure count carries from the pre block into
+            # the post block of the same sitting.
             cycles = self.seq_presses / 12.0
             rt -= min(0.06, cycles * float(self.truth["learn_per_cycle_s"]))
             self.seq_presses += 1
@@ -187,7 +254,9 @@ class CohortParticipant(mb.Participant):
         t = now + 0.4
         seq = list(m.sequence)
         if len(seq) > int(self.truth["span_cap"]):
-            # Past the span: one wrong press ends the trial.
+            # Past the span: one wrong press ends the trial. The cap
+            # does not move between passes, so echo span is the metric
+            # expected to sit still.
             wrong = next(l for l in m.lanes if l != seq[0])
             self.schedule(t, int(wrong))
             return
@@ -198,14 +267,16 @@ class CohortParticipant(mb.Participant):
     def _rhythm(self, m, now, eng) -> None:
         if not getattr(m, "_countdown_done", False):
             return
+        sd = float(self.truth["asyn_sd_s"])
+        if self.late:
+            sd = max(0.005, sd - float(self.truth["post_asyn_sd_gain_s"]))
         for s in m.upcoming(0.6):
             key = ("rhythm", s.index)
             if key in self.answered or s.hit_at is not None:
                 continue
             self.answered.add(key)
             until = float(s.note.t) - float(m.song_time)
-            asyn = self.rng.gauss(float(self.truth["asyn_s"]),
-                                  float(self.truth["asyn_sd_s"]))
+            asyn = self.rng.gauss(float(self.truth["asyn_s"]), sd)
             self.schedule(now + until + asyn, int(s.note.lane), 0.10)
 
     def _buzz_hunt(self, m, now, eng) -> None:
@@ -236,10 +307,13 @@ class CohortParticipant(mb.Participant):
             i = fingers.index(lane) if lane in fingers else 0
             j = i + 1 if i + 1 < len(fingers) else i - 1
             lane = int(fingers[j])
-        self.schedule(max(now, t0) + self.rt_for(lane) + 0.15, lane)
+        rt = self.rt_for(lane)
+        if self.late:
+            rt = max(0.15, rt - float(self.truth["post_buzz_gain_s"]))
+        self.schedule(max(now, t0) + rt + 0.15, lane)
 
 
-def build_engine(code: str, truth: dict, visit: int, data_dir: Path,
+def build_engine(code: str, truth: dict, data_dir: Path,
                  rig: mb.FakeRig):
     import pygame
     pygame.init()
@@ -260,7 +334,7 @@ def build_engine(code: str, truth: dict, visit: int, data_dir: Path,
         sex=str(truth["sex"]),
         dominant_hand=str(truth["dominant"]),
         edinburgh_lq=str(truth["edinburgh_lq"]),
-        visit=str(visit),
+        visit="1",
         hand_length_mm=str(truth["hand_length_mm"]),
         hand_breadth_mm=str(truth["hand_breadth_mm"]))
     from finger_rehab.hardware.calibration_profile import CalibrationProfile
@@ -276,50 +350,61 @@ def build_engine(code: str, truth: dict, visit: int, data_dir: Path,
     return eng
 
 
-def play_visit(code: str, truth: dict, visit: int, data_dir: Path,
-               clock: mb.SimClock, fps: float, cap_s: float,
-               seq_presses: int, seed: int) -> tuple[list, float, int]:
-    """One visit: login, battery, every NEXT UP, end session.
-    Returns (rows per block, total simulated minutes, pattern exposure)."""
+def play_session(code: str, truth: dict, data_dir: Path,
+                 clock: mb.SimClock, fps: float, cap_s: float,
+                 seed: int) -> tuple[list, float]:
+    """One sitting: login, battery, every NEXT UP and every rest, end
+    session. Returns (rows per block, total simulated minutes)."""
     rig = mb.FakeRig()
     hand = mb.HandModel(rng=random.Random(seed))
-    hand.noise_sd = float(truth["force_noise_sd"][visit - 1])
-    who = CohortParticipant(hand, random.Random(seed + 1), truth, visit,
-                            seq_presses)
-    eng = build_engine(code, truth, visit, data_dir, rig)
+    noise_rng = random.Random(seed + 7)
+    who = CohortParticipant(hand, random.Random(seed + 1), truth, 0)
+    eng = build_engine(code, truth, data_dir, rig)
     rows = []
-    transitions_s = 0.0
+    waits_s = 0.0
+    rests_s = 0.0
     try:
         ok, reason = eng.battery_available()
         if not ok:
-            raise SystemExit(f"{code} visit {visit}: battery unavailable: "
-                             f"{reason}")
+            raise SystemExit(f"{code}: battery unavailable: {reason}")
         if not eng.start_battery():
-            raise SystemExit(f"{code} visit {visit}: battery did not start")
+            raise SystemExit(f"{code}: battery did not start")
         while eng.block_is_running():
             mode = str(eng.current_block)
             hand_mode = str(eng.hand_mode)
             step = dict(eng._protocol_current or {})
+            who.phase = str(step.get("phase") or "")
+            # Force noise is redrawn for every block with no person
+            # part, so the within-session reliability of force error
+            # is poor by construction; the post blocks are quieter, so
+            # the pre-post change is still there to be found.
+            noise = noise_rng.uniform(0.8, 1.9)
+            hand.noise_sd = (noise * FORCE_POST_FACTOR if who.late
+                             else noise)
             secs = mb.run_block(eng, rig, hand, who, clock, fps, cap_s)
             summary = eng.session.block_summary or {}
             rows.append({
-                "code": code, "visit": visit,
+                "code": code,
                 "position": step.get("position", 0), "mode": mode,
-                "hand": hand_mode, "minutes": secs / 60.0,
+                "hand": hand_mode, "phase": who.phase,
+                "minutes": secs / 60.0,
                 "status": summary.get("status", "?"),
                 "trials": summary.get("trials", ""),
             })
             nxt = eng.pending_protocol_step()
             if nxt is None:
                 break
-            gap = mb.TRANSITION_S + float(nxt.get("stretch_s") or 0.0)
-            transitions_s += gap
-            clock.t += gap
+            wait_s = mb.wait_before(nxt)
+            if float(nxt.get("rest_s") or 0.0) > 0:
+                rests_s += wait_s
+            else:
+                waits_s += wait_s
+            waits_s += mb.TRANSITION_S
+            clock.t += mb.TRANSITION_S + wait_s
             eng.continue_protocol()
         progress = eng.battery_progress() or {}
         if not progress.get("finished"):
-            print(f"  {code} visit {visit}: battery did not finish",
-                  file=sys.stderr)
+            print(f"  {code}: battery did not finish", file=sys.stderr)
         eng.end_session()
     finally:
         try:
@@ -327,36 +412,9 @@ def play_visit(code: str, truth: dict, visit: int, data_dir: Path,
         except Exception:
             pass
     blocks_s = sum(r["minutes"] for r in rows) * 60.0
-    total_min = (mb.LOGIN_S + mb.QUICK_CAL_S + blocks_s + transitions_s) / 60.0
-    return rows, total_min, who.seq_presses
-
-
-def move_day(root: Path, old_day: str, new_day: str,
-             codes: set[str]) -> None:
-    """Move the given codes' game folders from one day folder to
-    another and fix the index rows that point at them, so visit 1
-    sits a week before visit 2 the way it would on disk. Other
-    codes' folders stay where they are (a later run can add codes
-    to a tree that already holds two visits of the first ones)."""
-    src, dst = root / old_day, root / new_day
-    if not src.is_dir():
-        return
-    dst.mkdir(exist_ok=True)
-    for p in list(src.iterdir()):
-        if p.is_dir() and p.name.split("_")[0] in codes:
-            shutil.move(str(p), str(dst / p.name))
-    if not any(src.iterdir()):
-        src.rmdir()
-    index = root / "sessions_index.csv"
-    if index.is_file():
-        out = []
-        for line in index.read_text(encoding="utf-8").splitlines(True):
-            cells = line.split(",")
-            if len(cells) > 2 and cells[2] in codes:
-                line = (line.replace(f"{old_day}/", f"{new_day}/")
-                        .replace(f"{old_day},", f"{new_day},", 1))
-            out.append(line)
-        index.write_text("".join(out), encoding="utf-8")
+    total_min = ((mb.LOGIN_S + mb.QUICK_CAL_S + blocks_s + waits_s
+                  + rests_s) / 60.0)
+    return rows, total_min
 
 
 def main() -> int:
@@ -381,51 +439,39 @@ def main() -> int:
     todo = {c: t for c, t in truth.items()
             if int(c[1:]) >= args.first}
     (out / "truth.json").write_text(json.dumps({
+        "design": "one long session, phases pre / mid / post",
         "dominant_advantage_s": DOMINANT_ADVANTAGE_S,
-        "practice_s": PRACTICE_S, "mirror_lead_s": MIRROR_LEAD_S,
-        "retest_days": RETEST_DAYS, "participants": truth},
+        "mirror_lead_s": MIRROR_LEAD_S,
+        "post_gains_s": POST_GAINS_S,
+        "force_post_factor": FORCE_POST_FACTOR,
+        "chord_post_factor": CHORD_POST_FACTOR,
+        "participants": truth},
         indent=2), encoding="utf-8")
 
     real_perf = _time.perf_counter
     clock = mb.SimClock(real_perf())
     _time.perf_counter = lambda: clock.t
     wall0 = _time.time()
-    today = _time.strftime("%Y-%m-%d")
-    day1 = (_dt.date.today() - _dt.timedelta(days=RETEST_DAYS)).isoformat()
-    exposure: dict[str, int] = {c: 0 for c in truth}
     block_rows: list[dict] = []
-    visit_rows: list[dict] = []
+    session_rows: list[dict] = []
     try:
-        for visit in (1, 2):
-            for i, (code, t) in enumerate(truth.items()):
-                if code not in todo:
-                    continue
-                if visit == 2:
-                    from finger_rehab.data.intake import suggest_visit
-                    suggested = suggest_visit(root, code)
-                    if suggested != 2:
-                        print(f"  {code}: login would suggest visit "
-                              f"{suggested}, not 2", file=sys.stderr)
-                rows, total_min, exposure[code] = play_visit(
-                    code, t, visit, root, clock, args.fps,
-                    args.cap_min * 60.0, exposure[code],
-                    args.seed * 100 + i * 2 + visit)
-                block_rows.extend(rows)
-                completed = sum(1 for r in rows if r["status"] == "completed")
-                visit_rows.append({"code": code, "visit": visit,
-                                   "dominant": t["dominant"],
-                                   "blocks": len(rows),
-                                   "completed": completed,
-                                   "minutes": round(total_min, 2)})
-                print(f"{code} visit {visit} {t['dominant']:5s} "
-                      f"{total_min:6.2f} min  {completed}/{len(rows)} "
-                      f"completed",
-                      flush=True)
-            if visit == 1:
-                move_day(root, today, day1, set(todo))
+        for i, (code, t) in enumerate(truth.items()):
+            if code not in todo:
+                continue
+            rows, total_min = play_session(
+                code, t, root, clock, args.fps, args.cap_min * 60.0,
+                args.seed * 100 + i)
+            block_rows.extend(rows)
+            completed = sum(1 for r in rows if r["status"] == "completed")
+            session_rows.append({"code": code, "dominant": t["dominant"],
+                                 "blocks": len(rows),
+                                 "completed": completed,
+                                 "minutes": round(total_min, 2)})
+            print(f"{code} {t['dominant']:5s} {total_min:6.2f} min  "
+                  f"{completed}/{len(rows)} completed", flush=True)
     finally:
         _time.perf_counter = real_perf
-    for name, rows in (("durations.csv", visit_rows),
+    for name, rows in (("durations.csv", session_rows),
                        ("blocks.csv", block_rows)):
         path = out / name
         append = args.first > 1 and path.is_file()
@@ -434,12 +480,13 @@ def main() -> int:
             if not append:
                 w.writeheader()
             w.writerows(rows)
-    mins = sorted(r["minutes"] for r in visit_rows)
+    mins = sorted(r["minutes"] for r in session_rows)
     mid = mins[len(mins) // 2]
+    budget = 85.0
     print()
-    print(f"  {len(mins)} visits: min {mins[0]:.1f}, median {mid:.1f}, "
-          f"max {mins[-1]:.1f} min against a 50 min budget; "
-          f"{sum(1 for m in mins if m > 50)} over")
+    print(f"  {len(mins)} sessions: min {mins[0]:.1f}, median {mid:.1f}, "
+          f"max {mins[-1]:.1f} min against a {budget:.0f} min target; "
+          f"{sum(1 for m in mins if m > budget)} over")
     print(f"  wall time {(_time.time() - wall0) / 60.0:.1f} min; "
           f"sessions at {root}")
     return 0

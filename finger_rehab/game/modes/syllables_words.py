@@ -1,78 +1,66 @@
-"""Word list for Syllable Beats. Australian English, imageable,
-age-appropriate nouns a 6 to 11 year old knows.
+"""Word material for Syllables. Australian English, imageable,
+age-appropriate words a 6 to 11 year old knows.
 
-HOW THE GRADING FOLLOWS THE BRIEF. The brief asks for a starter list
-selected on child-frequency (SUBTLEX-UK children's band, Zipf scale)
-and cross-checked for age suitability, split into three bands:
-A = Zipf 5+ early-acquired everyday words, B = Zipf 4 to 5, C = under
-4 or any 4-syllable word. No frequency database ships with this app,
-so the bands here are hand-assigned to the same rule of thumb: A is
-words in any young child's daily vocabulary (dog, apple, banana), B is
-words a child knows but meets less often (lizard, umbrella, cockatoo),
-and C is the rarer words plus, per the brief's rule, every 4-syllable
-word regardless of how common it is. Distribution keeps the brief's
-shape scaled down: heaviest on 2-syllable words, then 3, then 4, with
-the one-syllable words kept only for the sub-syllable levels (below).
-Where the list leans local on purpose (wombat, kookaburra, galah,
-billabong) it is because these are the imageable animals and things an
-Australian child actually meets in books and backyards.
+TWO SOURCES, ONE POOL. The bank is assets/words/syllables_bank.json
+(built from assets/words/syllables_source.txt by
+scripts/build_syllables_bank.py, about 690 words of 2 to 4
+syllables). The hand list WORDS below is the seed and the review set:
+it is the material the mode was designed and tested against, it holds
+the local words a child here actually meets (wombat, kookaburra,
+galah, billabong, echidna, budgerigar), and where a word appears in
+both, the hand entry wins. Loading is cached, and a missing or broken
+bank file leaves the hand list alone rather than taking the game down
+with it.
 
-ONE-SYLLABLE WORDS NEVER REACH THE SYLLABLE LEVELS (2026-09). Levels
-1 to 4 draw only words of MIN_SYLLABLES (two) or more syllables. A
-one-syllable word asks for one tap, and one tap has no boundary to
-find: the child is detecting a word, not segmenting it, so the trial
-measures tap detection and the first tester found the items dull. The
-one-syllable words stay in WORDS because the sub-syllable levels are
-built on them: level 5 (onset-rime) cuts inside a syllable by
-definition, and level 6 (phonemes) on one hand needs the 2 to 4
-grapheme words, which are all one syllable. With the short words gone
-the band ladder reads as a syllable ladder too: band A is mostly
-2-syllable words with a handful of easy 3s, band B is an even mix of
-2 and 3, band C is the 4-syllable words (plus the 5s bilaterally),
-so promotion from A to C walks 2, 3, 4+ syllables the way the brief's
-8-of-10 rule intends. Level 1 keeps its 3-syllable counting cap, so
-its pool is the 2 and 3 syllable words of the band.
+HOW THE BANDS WORK. A is everyday words, mostly two syllables; B is
+words a child knows but meets less often, two and three syllables; C
+is the rarer words and, per the brief's rule, every four-syllable word
+whatever its frequency. Promotion (8 of the last 10 right) therefore
+walks the child 2, 3, 4 syllables without the mode ever asking for a
+word length directly. No band draws a one-syllable word: one syllable
+has no boundary to hear, so MIN_SYLLABLES is two.
 
 SYLLABLE SPLITS AND STRESS follow spoken Australian pronunciation in
 the Macquarie Dictionary's convention, one convention for the whole
-list as the brief requires. Splits are text chunks that concatenate
-back to the spelling, so the screen can render the word as blocks with
-no separate display string; where spelling and phonology disagree the
-split follows the spelling boundary nearest the spoken one (rab-bit,
-not ra-bbit). stress is the 0-based index of the primary-stress
-syllable.
+list. Splits are text chunks that concatenate back to the spelling, so
+the screen renders the word as chunks with no separate display string;
+where spelling and phonology disagree the split follows the spelling
+boundary nearest the spoken one (rab-bit, not ra-bbit). stress is the
+0-based index of the primary-stress syllable.
 
-ONSET-RIME (level 5) uses the one-syllable CVC-family words: each has
-an `onset_rime` pair splitting the leading consonant(s) from the rest,
-which is the standard onset-rime cut.
+WHY THE SPLIT IS NEVER THE QUESTION. English syllable division in
+print is a convention, not a fact: Kearns (2020, Reading Research
+Quarterly) analysed 14,844 words from Grade 1 to 8 texts and found the
+two taught division rules fit 70.6 percent (VC|CV, rab-bit) and 30.5
+percent (V|CV, ti-ger) of the words they apply to. So the bank stores
+ONE split per word, chosen by the spoken boundary, and the game never
+asks a child to place a boundary: it asks them to pick the chunk that
+was spoken. That is also why the spoken syllable and the printed chunk
+have to be the same thing (the speech assets are rendered per chunk).
 
-PHONEME BLOCKS (level 6) use the transparent subset: `graphemes` is
-the word's spelling cut into one chunk per phoneme (sh, oo, ck and
-double letters count as one grapheme, standard phonics practice), so
-one tap maps to one block maps to one sound, and the graphemes can
-fade into the blocks as letter feedback after a correct response
-(letters attached, Ehri et al. 2001). Words whose spelling cannot be
-cut one-to-one (cake, ball) carry None and stay out of level 6.
+WHAT THE OLD SUB-SYLLABLE MATERIAL IS DOING HERE. onset_rime and
+graphemes are kept on the Word record and the one-syllable entries are
+kept in WORDS, because they cost nothing and the retired level ladder
+may come back as a separate mode. Neither is drawn by the syllables
+choice task: `words_for` returns whole words of two or more syllables
+only.
 
-LONG MATERIAL FOR THE READ-ACROSS ROW (bilateral pools only). With
-both hands on the device the mode lays 5 to 8 unit words across both
-hands' fingers, so this list carries the material: transparent words
-of 5 to 6 graphemes (stamp, muffin, basket), a 7 to 8 grapheme
-stretch pool that only enters at band C (blanket, sandpit,
-breakfast), and a token pair of 5-syllable words at band C for
-levels 2 to 4 (hippopotamus, refrigerator). The phoneme level is the
-legitimate long territory: fluency measures use 3 to 4 phonemes
-(DIBELS PSF) and power tests reach about 6 (CTOPP-2), while English
-child vocabulary tops out near 5 syllables and verbal span in 5 to 8
-year olds sits around 4 to 5 items (Gathercole, Pickering, Ambridge
-and Wearing 2004), so there are deliberately NO 6-8 syllable words:
-strings past span would measure memory, not segmentation. A single
-hand never draws any of this; four fingers cap one hand's pool at 4
-units and the 2 to 4 material stays the entry pool everywhere.
+HAND COUNT NO LONGER CHANGES THE MATERIAL. Under the old tapping task
+a word of n syllables needed n adjacent fingers, so long words existed
+only in bilateral play. In the choice task each syllable is one set of
+four tiles over four fingers, so a four-syllable word plays exactly as
+well on one hand as on two. `bilateral` is kept on the signature
+because the caller has it and because the hand rotation reads better
+when the two live side by side, but it no longer widens the pool.
 """
 from __future__ import annotations
 
+import json
+import logging
 from dataclasses import dataclass
+from pathlib import Path
+
+log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -255,88 +243,143 @@ WORDS: tuple[Word, ...] = (
 )
 
 
-# Level 5 material: the onset-rime cut only exists for the CVC-family
-# one-syllable words, so the filter is "has a cut".
+
+
+# Level 5 material from the retired tapping ladder: the onset-rime cut
+# only exists for the CVC-family one-syllable words. Unused by the
+# choice task, kept because the cut is real material and costs
+# nothing.
 ONSET_RIME_WORDS: tuple[Word, ...] = tuple(
     w for w in WORDS if w.onset_rime is not None)
 
-# Level 6 material, single hand: transparent spellings with 2 to 4
-# phonemes. Four fingers cap ONE hand's count at 4; this stays the
-# entry pool and the whole pool for any single-hand session.
+# Level 6 material from the retired ladder: transparent spellings cut
+# one chunk per phoneme. Also unused by the choice task.
 TRANSPARENT_WORDS: tuple[Word, ...] = tuple(
     w for w in WORDS if w.graphemes is not None
     and 2 <= len(w.graphemes) <= 4)
-
-# Level 6 material, both hands: 5 to 6 graphemes span the read-across
-# row without touching the little fingers (the row is centred on the
-# midline), and the 7 to 8 grapheme stretch recruits them last.
-TRANSPARENT_WORDS_WIDE: tuple[Word, ...] = tuple(
-    w for w in WORDS if w.graphemes is not None
-    and 5 <= len(w.graphemes) <= 6)
-TRANSPARENT_WORDS_STRETCH: tuple[Word, ...] = tuple(
-    w for w in WORDS if w.graphemes is not None
-    and 7 <= len(w.graphemes) <= 8)
 
 
 # The bag needs at least this many words or a 10-word round repeats
 # material almost immediately, which teaches the list rather than the
 # skill. Bands that come up short borrow from the band below.
-_MIN_POOL = 8
+_MIN_POOL = 12
 
-# The shortest word the syllable levels (1 to 4) ever draw. One tap
-# has nothing to segment (module docstring), so the one-syllable
-# entries serve only the onset-rime and phoneme levels.
+# The shortest and longest word the mode ever draws. One syllable has
+# no boundary to hear; past four is memory span, not segmentation
+# (English child vocabulary tops out near five syllables and verbal
+# span at 5 to 8 years sits around four to five items, Gathercole,
+# Pickering, Ambridge and Wearing 2004), and a five-syllable word is
+# five option sets in a row before the child sees a finished word.
 MIN_SYLLABLES = 2
+MAX_SYLLABLES = 4
+
+BANK_PATH = ("assets", "words", "syllables_bank.json")
+
+_BANK_CACHE: tuple[Word, ...] | None = None
+_ALL_CACHE: tuple[Word, ...] | None = None
 
 
-def words_for(level: int, band: str,
-              bilateral: bool = False) -> tuple[Word, ...]:
-    """The draw pool for a level at a band.
+def _bank_file() -> Path:
+    """Where the built bank lives, in a source checkout and inside the
+    frozen app alike (config._bundle_root resolves _MEIPASS)."""
+    try:
+        from ...config import _bundle_root
+        root = _bundle_root()
+    except Exception:
+        root = Path(__file__).resolve().parents[3]
+    return root.joinpath(*BANK_PATH)
 
-    Levels 1 to 4 draw whole words of MIN_SYLLABLES or more syllables
-    from the current band: level 1 stops at 3 syllables (the counting
-    entry point), level 2 up adds the 4-syllable words, which only
-    exist in band C. A band whose pool is thin for the level (band C
-    at level 1 holds only the rare 3-syllable words) tops up from the
-    easier bands so a round of 10 words never cycles a handful of
-    items. Level 5 is the onset-rime subset and level 6 the
-    transparent subset, both built on the one-syllable words the
-    syllable levels leave out; level 5 ignores the band because that
-    subset is already the easy end of the list, and thinning it
-    further would leave too few words to fill a session without
-    immediate repeats.
 
-    `bilateral` unlocks the read-across row material, which a single
-    hand's four fingers cannot play: level 6 widens to 5-6 graphemes
-    (plus the 7-8 stretch at band C only), and levels 2 to 4 admit the
-    token 5-syllable pool, which is band C so it only ever surfaces in
-    a band C block. Eight fingers is a pool extension, never a level
-    or a requirement: every rung stays fully playable on one hand.
-    """
-    if level >= 6:
-        if not bilateral:
-            return TRANSPARENT_WORDS
-        pool = TRANSPARENT_WORDS + TRANSPARENT_WORDS_WIDE
-        if band == "C":
-            pool = pool + TRANSPARENT_WORDS_STRETCH
-        return pool
-    if level == 5:
-        return ONSET_RIME_WORDS
-    if level <= 1:
-        max_syll = 3
-    else:
-        max_syll = 5 if bilateral else 4
+def load_bank(path: Path | None = None) -> tuple[Word, ...]:
+    """The built word bank, cached. Returns an empty tuple (and logs
+    once) when the file is missing or unreadable: the hand list below
+    is a complete, playable pool on its own, so a packaging slip
+    degrades the material instead of stopping a child mid-session.
+
+    Entries are validated the way the build script validates them,
+    because a hand-edited JSON is exactly the file nobody rebuilds:
+    the chunks must join to the word, the stress index must be inside
+    the word, and the syllable count must be in range."""
+    global _BANK_CACHE
+    if path is None and _BANK_CACHE is not None:
+        return _BANK_CACHE
+    target = path or _bank_file()
+    out: list[Word] = []
+    try:
+        data = json.loads(target.read_text())
+        for e in data.get("words", []):
+            syls = tuple(str(s) for s in e.get("syllables", ()))
+            word = str(e.get("word", ""))
+            band = str(e.get("band", "A"))
+            stress = int(e.get("stress", 0))
+            if (not syls or "".join(syls) != word
+                    or band not in ("A", "B", "C")
+                    or not (0 <= stress < len(syls))
+                    or not (MIN_SYLLABLES <= len(syls) <= MAX_SYLLABLES)):
+                continue
+            out.append(Word(word=word, band=band, syllables=syls,
+                            stress=stress))
+    except FileNotFoundError:
+        log.warning("Syllables word bank not found at %s; "
+                    "playing the built-in list only", target)
+    except Exception as e:
+        log.warning("Syllables word bank at %s could not be read (%s); "
+                    "playing the built-in list only", target, e)
+    result = tuple(out)
+    if path is None:
+        _BANK_CACHE = result
+    return result
+
+
+def all_words() -> tuple[Word, ...]:
+    """Bank plus hand list, hand entries winning on conflict, filtered
+    to the syllable range the mode plays. Sorted by word so a block's
+    material order depends on the seed and nothing else."""
+    global _ALL_CACHE
+    if _ALL_CACHE is not None:
+        return _ALL_CACHE
+    merged: dict[str, Word] = {}
+    for w in load_bank():
+        merged[w.word] = w
+    for w in WORDS:
+        if MIN_SYLLABLES <= w.n_syll <= MAX_SYLLABLES:
+            merged[w.word] = w
+    _ALL_CACHE = tuple(sorted(
+        (w for w in merged.values()
+         if MIN_SYLLABLES <= w.n_syll <= MAX_SYLLABLES),
+        key=lambda w: w.word))
+    return _ALL_CACHE
+
+
+def syllable_lists() -> tuple[tuple[str, ...], ...]:
+    """Every word's chunks, for the foil generator's inventory: the
+    set of syllables the game is allowed to show, and the letter pairs
+    that count as pronounceable."""
+    return tuple(w.syllables for w in all_words())
+
+
+def words_for(band: str, bilateral: bool = False) -> tuple[Word, ...]:
+    """The draw pool for a band.
+
+    A and B stay at two and three syllables, C adds the four-syllable
+    words; a band whose own pool is thin tops up from the band below,
+    so a round of ten words never cycles a handful of items. The
+    `bilateral` flag is accepted and ignored: word length no longer
+    depends on how many hands are connected (module docstring)."""
     ladder = ["A", "B", "C"]
-    start = ladder.index(band) if band in ladder else 0
+    if band not in ladder:
+        band = "A"
+    max_syll = MAX_SYLLABLES if band == "C" else 3
+    words = all_words()
     pool: list[Word] = []
-    # Walk from the asked band down toward A until the pool is usable.
+    start = ladder.index(band)
     for b in reversed(ladder[:start + 1]):
-        pool.extend(w for w in WORDS
+        pool.extend(w for w in words
                     if w.band == b
                     and MIN_SYLLABLES <= w.n_syll <= max_syll)
         if len(pool) >= _MIN_POOL:
             break
     if not pool:
-        pool = [w for w in WORDS
+        pool = [w for w in words
                 if MIN_SYLLABLES <= w.n_syll <= max_syll]
     return tuple(pool)

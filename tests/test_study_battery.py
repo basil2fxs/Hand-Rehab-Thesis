@@ -16,6 +16,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -24,10 +25,19 @@ os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
 
-ORDER_A = ["reaction", "reaction", "mirror", "rhythm", "echo",
-           "force_pilot", "chords", "buzz_hunt", "pattern"]
-ORDER_B = ["force_pilot", "chords", "buzz_hunt",
-           "reaction", "reaction", "mirror", "rhythm", "echo", "pattern"]
+# The single long session: nine blocks early (phase pre), the two
+# played-once modes in the middle (phase mid), the same nine blocks
+# late (phase post). docs/research/healthy_baseline_study.txt
+# Sections 2.1 to 2.3.
+PRE_A = ["reaction", "reaction", "mirror", "rhythm", "echo",
+         "force_pilot", "chords", "buzz_hunt", "pattern"]
+PRE_B = ["force_pilot", "chords", "buzz_hunt",
+         "reaction", "reaction", "mirror", "rhythm", "echo", "pattern"]
+MID = ["adaptive", "syllables"]
+ORDER_A = PRE_A + MID + PRE_A
+ORDER_B = PRE_B + MID + PRE_B
+PHASES = (["pre"] * 9) + ["mid", "mid"] + (["post"] * 9)
+N_STEPS = 20
 
 
 class _Rig:
@@ -73,8 +83,9 @@ class PlanTests(unittest.TestCase):
         for code, (order, first) in cases.items():
             plan = build_plan(cfg, code, "right")
             self.assertEqual([s.mode for s in plan.steps], order, code)
-            self.assertEqual(plan.id, "healthy_baseline_v1")
-            self.assertEqual(len(plan.steps), 9)
+            self.assertEqual(plan.id, "healthy_single_session_v1")
+            self.assertEqual(len(plan.steps), N_STEPS)
+            self.assertEqual([s.phase for s in plan.steps], PHASES, code)
             hand1 = next(s for s in plan.steps
                          if s.hand_requested == "hand1")
             hand2 = next(s for s in plan.steps
@@ -87,7 +98,14 @@ class PlanTests(unittest.TestCase):
                 if s.hand_requested == "both":
                     self.assertEqual(s.hand, "both")
             self.assertEqual([s.position for s in plan.steps],
-                             list(range(1, 10)))
+                             list(range(1, N_STEPS + 1)))
+            # Every mode is played, and the pre pass and the post pass
+            # are the same nine blocks in the same order.
+            self.assertEqual(len({s.mode for s in plan.steps}), 10)
+            self.assertEqual([s.mode for s in plan.steps[:9]],
+                             [s.mode for s in plan.steps[11:]])
+            self.assertEqual([s.hand for s in plan.steps[:9]],
+                             [s.hand for s in plan.steps[11:]])
 
     def test_hands_follow_the_dominant_hand(self) -> None:
         from finger_rehab.game.battery import build_plan
@@ -109,7 +127,37 @@ class PlanTests(unittest.TestCase):
         self.assertEqual([s.mode for s in b.steps if s.stretch_before_s],
                          ["reaction"])
         self.assertEqual(a.stretch_s, 60.0)
-        self.assertEqual(a.budget_min, 44.0)
+        self.assertEqual(a.budget_min, 85.0)
+        self.assertEqual(a.hard_stop_min, 90.0)
+        # The stretch is at the pre pass's set boundary, before the
+        # sixth block in A and the fourth in B.
+        self.assertEqual([s.position for s in a.steps
+                          if s.stretch_before_s], [6])
+        self.assertEqual([s.position for s in b.steps
+                          if s.stretch_before_s], [4])
+
+    def test_two_rests_split_the_sitting(self) -> None:
+        """One rest after the pre pass, one at the post pass's set
+        boundary, in both orders. The rest holds the button for its
+        floor and counts down to its full length."""
+        from finger_rehab.game.battery import build_plan
+        cfg = self._cfg()
+        for code, positions, modes in (("P01", [10, 17],
+                                        ["adaptive", "force_pilot"]),
+                                       ("P02", [10, 15],
+                                        ["adaptive", "reaction"])):
+            plan = build_plan(cfg, code, "right")
+            rests = [s for s in plan.steps if s.rest_before_s]
+            self.assertEqual([s.position for s in rests], positions, code)
+            self.assertEqual([s.mode for s in rests], modes, code)
+            for s in rests:
+                self.assertEqual(s.rest_before_s, 180.0)
+                self.assertEqual(s.rest_min_s, 60.0)
+                # A rest and a stretch on one card would be two
+                # countdowns; the rest wins.
+                self.assertEqual(s.stretch_before_s, 0.0)
+            self.assertEqual(plan.rest_s, 180.0)
+            self.assertEqual(plan.rest_min_s, 60.0)
 
     def test_rhythm_carries_its_pinned_track(self) -> None:
         from finger_rehab.game.battery import build_plan, find_track
@@ -150,9 +198,7 @@ class OverrideTests(unittest.TestCase):
         allowed = {
             "reaction.sub_mode", "reaction.block_trials",
             "reaction.response_windows_s",
-            "force_pilot.runs_per_finger", "force_pilot.rest_s",
-            "force_pilot.level", "force_pilot.promote_frac",
-            "force_pilot.demote_frac",
+            "force_pilot.passes",
             "chords.subblocks", "chords.trials_per_subblock",
             "chords.sync_windows_ms",
             "buzz_hunt.loc_trials_per_hand",
@@ -162,6 +208,10 @@ class OverrideTests(unittest.TestCase):
             "pattern.short_session", "pattern.soc_cycles_per_block",
             "pattern.random_block_trials",
             "rhythm.difficulty",
+            "echo.games", "echo.max_len",
+            "syllables.rung", "syllables.words_per_block",
+            "syllables.round_size", "syllables.break_s",
+            "game.total_trials",
         }
         self.assertEqual(keys, allowed)
         for key in keys:
@@ -253,7 +303,7 @@ class _BatteryHarness(unittest.TestCase):
         Returns (mode, hand, folder) per completed block."""
         played: list[tuple[str, str, Path]] = []
         self.assertTrue(eng.start_battery())
-        for _ in range(20):
+        for _ in range(N_STEPS * 2):
             if not eng.block_is_running():
                 break
             played.append((str(eng.current_block), str(eng.hand_mode),
@@ -273,9 +323,10 @@ class BatteryOrderTests(_BatteryHarness):
         self._login(eng, "P01", "right")
         played = self._run_battery(eng)
         self.assertEqual([m for m, _h, _f in played], ORDER_A)
+        hands_a = ["right", "left", "both", "both", "both",
+                   "both", "both", "both", "right"]
         self.assertEqual([h for _m, h, _f in played],
-                         ["right", "left", "both", "both", "both",
-                          "both", "both", "both", "right"])
+                         hands_a + ["right", "both"] + hands_a)
 
     def test_even_code_runs_order_b_non_dominant_first(self) -> None:
         self._stub_rhythm()
@@ -283,9 +334,10 @@ class BatteryOrderTests(_BatteryHarness):
         self._login(eng, "P04", "right")
         played = self._run_battery(eng)
         self.assertEqual([m for m, _h, _f in played], ORDER_B)
+        hands_b = ["both", "both", "both", "left", "right",
+                   "both", "both", "both", "right"]
         self.assertEqual([h for _m, h, _f in played],
-                         ["both", "both", "both",
-                          "left", "right", "both", "both", "both", "right"])
+                         hands_b + ["right", "both"] + hands_b)
 
     def test_left_dominant_flips_the_hands(self) -> None:
         self._stub_rhythm()
@@ -301,14 +353,15 @@ class BatteryOrderTests(_BatteryHarness):
         eng = self._engine(_Rig())
         self._login(eng, "P03", "right")
         played = self._run_battery(eng)
-        self.assertEqual(len(played), 9)
+        self.assertEqual(len(played), N_STEPS)
         for pos, (mode, hand, folder) in enumerate(played, start=1):
             meta = json.loads((folder / "metadata.json").read_text(
                 encoding="utf-8"))
             bat = meta["battery"]
-            self.assertEqual(bat["id"], "healthy_baseline_v1", mode)
+            self.assertEqual(bat["id"], "healthy_single_session_v1", mode)
             self.assertEqual(bat["position"], pos, mode)
-            self.assertEqual(bat["of"], 9)
+            self.assertEqual(bat["of"], N_STEPS)
+            self.assertEqual(bat["phase"], PHASES[pos - 1], mode)
             self.assertEqual(bat["step"], f"{mode}_{hand}")
             self.assertEqual(bat["cell"]["mode_order"], "A")
             self.assertEqual(bat["cell"]["hand_first"], "non_dominant")
@@ -322,16 +375,21 @@ class BatteryOrderTests(_BatteryHarness):
             # short forms it ran under.
             snap = meta["config_snapshot"]
             self.assertEqual(snap["reaction"]["response_windows_s"], [2.0])
-            self.assertEqual(snap["force_pilot"]["runs_per_finger"], 1)
+            self.assertEqual(snap["force_pilot"]["passes"], 1)
+            self.assertEqual(snap["syllables"]["words_per_block"], 12)
         # And the trial CSV phase column names the battery.
         self.assertEqual(eng._current_phase, "")
         progress = eng.battery_progress()
         self.assertTrue(progress["finished"])
-        self.assertEqual(progress["done"], 9)
+        self.assertEqual(progress["done"], N_STEPS)
+        self.assertEqual(progress["budget_min"], 85.0)
+        self.assertEqual(progress["hard_stop_min"], 90.0)
         self.assertEqual([r["status"] for r in progress["log"]],
-                         ["completed"] * 9)
+                         ["completed"] * N_STEPS)
         self.assertEqual([r["battery_pos"] for r in eng.session_games_log()],
-                         list(range(1, 10)))
+                         list(range(1, N_STEPS + 1)))
+        self.assertEqual([r["phase"] for r in eng.session_games_log()],
+                         PHASES)
 
     @staticmethod
     def _config_text(eng) -> str:
@@ -356,6 +414,8 @@ class BatteryOrderTests(_BatteryHarness):
                          [2.0, 1.5, 1.2])
         self.assertEqual(eng.cfg.get("chords.subblocks"), 5)
         self.assertEqual(eng.cfg.get("buzz_hunt.gap_trials_per_hand"), 20)
+        self.assertEqual(eng.cfg.get("syllables.words_per_block"), 40)
+        self.assertEqual(eng.cfg.get("syllables.rung"), 1)
         # A free game after the battery is a standard block again and
         # carries no stamp.
         eng.begin_game("reaction", "right")
@@ -367,7 +427,7 @@ class BatteryOrderTests(_BatteryHarness):
         self.assertEqual(before, self._config_text(eng))
 
     def _run_battery_from_running(self, eng) -> None:
-        for _ in range(20):
+        for _ in range(N_STEPS * 2):
             if not eng.block_is_running():
                 break
             eng.finish_block()
@@ -381,7 +441,7 @@ class ShortFormTests(_BatteryHarness):
     and ladders move."""
 
     def _step_to(self, eng, mode: str):
-        for _ in range(20):
+        for _ in range(N_STEPS * 2):
             if str(eng.current_block) == mode and eng.block_is_running():
                 return eng.mode
             if eng.block_is_running():
@@ -399,20 +459,21 @@ class ShortFormTests(_BatteryHarness):
         m = self._step_to(eng, "reaction")
         self.assertEqual(m.max_level, 1)
         self.assertEqual(m.response_window, 2.0)
-        self.assertEqual(m.total_trials, 25)
+        self.assertEqual(m.total_trials, 20)
         # Scoring is untouched.
         self.assertEqual(eng.score_cfg.perfect_ms, 100)
 
-    def test_force_pilot_ladder_is_frozen(self) -> None:
+    def test_force_pilot_flies_the_whole_wave_ladder(self) -> None:
+        # Nothing to freeze any more: the ladder is fixed by design,
+        # so the battery runs it once, both hands, 24 runs.
         self._stub_rhythm()
         eng = self._engine(_Rig())
         self._login(eng, "P01", "right")
         eng.start_battery()
         fp = self._step_to(eng, "force_pilot")
-        self.assertEqual(fp.total_runs, 8)      # one run per finger, both
-        self.assertGreater(fp.promote_frac, 1.0)
-        self.assertEqual(fp.demote_frac, 0.0)
-        self.assertEqual(fp.rest_s, 5.0)
+        self.assertEqual(fp.passes, 1)
+        self.assertEqual([w.lvl for w in fp.levels], list(range(1, 13)))
+        self.assertEqual(fp.total_runs, 24)     # 12 levels x two hands
 
     def test_chords_buzz_hunt_and_pattern_counts(self) -> None:
         self._stub_rhythm()
@@ -426,8 +487,8 @@ class ShortFormTests(_BatteryHarness):
         self.assertEqual(ch.windows_ms, [150.0])
         bh = self._step_to(eng, "buzz_hunt")
         plan = list(bh._stage_plan)
-        self.assertEqual(plan.count("loc"), 32)    # 16 per hand, both
-        self.assertEqual(plan.count("span"), 8)
+        self.assertEqual(plan.count("loc"), 24)    # 12 per hand, both
+        self.assertEqual(plan.count("span"), 4)
         self.assertEqual(plan.count("dis"), 0)
         self.assertEqual(plan.count("gap"), 0)
         pat = self._step_to(eng, "pattern")
@@ -534,7 +595,7 @@ class BatteryFlowTests(_BatteryHarness):
         self.assertEqual((key, hand), ("reaction", "left"))
         heading, pill, stretch = results._battery_card_lines(
             eng.pending_protocol_step())
-        self.assertEqual(heading, "PLAY ALL  step 2 of 9")
+        self.assertEqual(heading, "PLAY ALL  step 2 of 20")
         self.assertEqual(pill, "Play all step 2, hand 2")
         self.assertEqual(stretch, "")
         results.draw(pygame.Surface((1280, 800)))
@@ -546,7 +607,7 @@ class BatteryFlowTests(_BatteryHarness):
                          ("reaction", "left"))
         eng.finish_block()
         _ok, label, _reason = hub._battery_state()
-        self.assertEqual(label, "PLAY ALL 2/9  (A)")
+        self.assertEqual(label, "PLAY ALL 2/20  (A)")
         hub.draw(pygame.Surface((1280, 800)))
 
     def test_the_stretch_step_says_so_on_the_card(self) -> None:
@@ -562,7 +623,7 @@ class BatteryFlowTests(_BatteryHarness):
         results = eng._screens["results"]
         heading, _pill, stretch = results._battery_card_lines(
             eng.pending_protocol_step())
-        self.assertIn("step 6 of 9", heading)
+        self.assertIn("step 6 of 20", heading)
         self.assertIn("Stretch", stretch)
 
     def test_without_a_main_hand_the_hub_says_why(self) -> None:
@@ -599,6 +660,269 @@ class BatteryFlowTests(_BatteryHarness):
 
 
 # ---------------------------------------------------------------------
+# 2b. the two scheduled rests, and the session-so-far row
+# ---------------------------------------------------------------------
+class RestStepTests(_BatteryHarness):
+    """A rest is not a stretch. The stretch at the pre pass's set
+    boundary is a suggestion and never locks anything; the two rests
+    are what separates the halves of the sitting, so the card holds
+    the button for the floor and the length actually taken is logged
+    (design doc Section 2.5)."""
+
+    def _advance_to(self, eng, position: int) -> dict:
+        for _ in range(N_STEPS * 2):
+            if eng.block_is_running():
+                eng.finish_block()
+            step = eng.pending_protocol_step()
+            if step is None:
+                break
+            if int(step["position"]) == position:
+                return step
+            eng.continue_protocol()
+        self.fail(f"battery never waited at step {position}")
+
+    def _at_rest(self, eng):
+        self._stub_rhythm()
+        self._login(eng, "P01", "right")
+        eng.start_battery()
+        step = self._advance_to(eng, 10)
+        self.assertEqual(step["mode"], "adaptive")
+        self.assertEqual(step["rest_s"], 180.0)
+        self.assertEqual(step["rest_min_s"], 60.0)
+        return step, eng._screens["results"]
+
+    def test_the_rest_card_counts_down_and_holds_the_button(self) -> None:
+        eng = self._engine(_Rig())
+        step, results = self._at_rest(eng)
+        heading = ""
+        for elapsed, line, held in ((0.0, "Rest: 3:00 left", True),
+                                    (30.0, "Rest: 2:30 left", True),
+                                    (90.0, "Rest: 1:30 left", False),
+                                    (200.0, "Rest done", False)):
+            eng._step_card_t = time.perf_counter() - elapsed
+            heading, _pill, wait = results._battery_card_lines(step)
+            self.assertEqual(wait, line)
+            self.assertEqual(results._rest_lock(step)[0], held)
+        self.assertIn("step 10 of 20", heading)
+
+    def test_n_is_refused_until_the_floor_then_starts_early(self) -> None:
+        import pygame
+        eng = self._engine(_Rig())
+        step, results = self._at_rest(eng)
+        press = pygame.event.Event(
+            pygame.KEYDOWN, {"key": pygame.K_n, "mod": 0, "unicode": "n",
+                             "scancode": 0})
+        eng._step_card_t = time.perf_counter() - 5.0
+        results.draw(pygame.Surface((1280, 800)))
+        self.assertEqual(results.next_btn.label, "Rest: 2:55")
+        results.handle_event(press)
+        self.assertFalse(eng.block_is_running())
+        self.assertEqual(eng.pending_protocol_step()["position"], 10)
+        # Past the floor the button comes back and says the rest can
+        # be cut short.
+        eng._step_card_t = time.perf_counter() - 70.0
+        results.draw(pygame.Surface((1280, 800)))
+        self.assertTrue(results.next_btn.label.startswith("Start now"))
+        results.handle_event(press)
+        self.assertTrue(eng.block_is_running())
+        self.assertEqual(eng.current_block, "adaptive")
+
+    def test_the_rest_actually_taken_is_logged(self) -> None:
+        eng = self._engine(_Rig())
+        step, _results = self._at_rest(eng)
+        eng._step_card_t = time.perf_counter() - 95.0
+        eng.continue_protocol()
+        folder = Path(eng.session_paths.root)
+        eng.finish_block()
+        entry = next(r for r in eng.battery_progress()["log"]
+                     if r["position"] == 10)
+        self.assertEqual(entry["rest_s"], 180.0)
+        self.assertGreaterEqual(entry["rest_taken_s"], 95.0)
+        self.assertLess(entry["rest_taken_s"], 120.0)
+        meta = json.loads((folder / "metadata.json").read_text(
+            encoding="utf-8"))
+        self.assertGreaterEqual(meta["battery"]["rest_before_s"], 95.0)
+        # A step with no rest carries no rest key at all, rather than
+        # a zero that reads like a rest of no length.
+        first = next(r for r in eng.battery_progress()["log"]
+                     if r["position"] == 1)
+        self.assertEqual(first["rest_taken_s"], 0.0)
+
+
+class ProgressRowTests(unittest.TestCase):
+    """game/battery.progress_rows: this session's first go against its
+    latest, per mode and hand. Pure over the engine's session log, so
+    no screen and no sessions tree."""
+
+    @staticmethod
+    def _reaction(ms: float) -> dict:
+        return {"block": "reaction", "status": "completed",
+                "reaction": {"median_rt_ms": ms}}
+
+    @staticmethod
+    def _force(frac: float) -> dict:
+        return {"block": "force_pilot", "status": "completed",
+                "force_pilot": {"overall": {"time_in_corridor": frac}}}
+
+    def _rows(self, log):
+        from finger_rehab.game.battery import progress_rows
+        return {(r["mode"], r["hand"]): r for r in progress_rows(log)}
+
+    def test_first_against_latest_in_the_modes_own_words(self) -> None:
+        rows = self._rows([
+            {"mode": "reaction", "hand": "right", "status": "completed",
+             "phase": "pre", "summary": self._reaction(312.0)},
+            {"mode": "force_pilot", "hand": "both", "status": "completed",
+             "phase": "pre", "summary": self._force(0.82)},
+            # An abandoned block is not a result to be measured against.
+            {"mode": "reaction", "hand": "right", "status": "abandoned",
+             "phase": "post", "summary": self._reaction(999.0)},
+            {"mode": "reaction", "hand": "left", "status": "completed",
+             "phase": "pre", "summary": self._reaction(331.0)},
+            {"mode": "reaction", "hand": "right", "status": "completed",
+             "phase": "post", "summary": self._reaction(290.0)},
+            {"mode": "force_pilot", "hand": "both", "status": "completed",
+             "phase": "post", "summary": self._force(0.89)},
+        ])
+        rx = rows[("reaction", "right")]
+        self.assertEqual((rx["n"], rx["first"], rx["latest"]),
+                         (2, 312.0, 290.0))
+        self.assertTrue(rx["better"])
+        self.assertEqual(rx["text"], "22 ms faster than your first go")
+        self.assertEqual(rx["short"], "22 ms faster")
+        fp = rows[("force_pilot", "both")]
+        self.assertEqual(fp["text"], "7% steadier than your first go")
+        self.assertEqual(fp["short"], "7% steadier")
+        # The two hands never mix, and a mode played once says so by
+        # having nothing to say.
+        left = rows[("reaction", "left")]
+        self.assertEqual((left["n"], left["text"], left["better"]),
+                         (1, "", None))
+
+    def test_a_change_too_small_to_print_is_about_the_same(self) -> None:
+        rows = self._rows([
+            {"mode": "reaction", "hand": "right", "status": "completed",
+             "summary": self._reaction(300.0)},
+            {"mode": "reaction", "hand": "right", "status": "completed",
+             "summary": self._reaction(300.2)},
+        ])
+        rx = rows[("reaction", "right")]
+        self.assertEqual(rx["text"], "about the same as your first go")
+        self.assertEqual(rx["short"], "about the same")
+        self.assertIsNone(rx["better"])
+
+    def test_every_mode_with_a_chip_has_a_unit_to_print(self) -> None:
+        """The wording lives in data/history, the unit in battery. If a
+        mode gains a chip and no unit, the panel would print a bare
+        number, so the two tables are pinned together."""
+        from finger_rehab.data import history
+        from finger_rehab.game.battery import PROGRESS_UNITS, value_text
+        self.assertEqual(set(PROGRESS_UNITS), set(history._RULES))
+        self.assertEqual(value_text("reaction", 290.4), "290 ms")
+        self.assertEqual(value_text("force_pilot", 0.894), "89%")
+        self.assertEqual(value_text("echo", 7), "7")
+        self.assertEqual(value_text("adaptive", 160.0), "160 BPM")
+        self.assertEqual(value_text("reaction", None), "")
+
+    def test_a_second_go_that_came_in_under_is_said_plainly(self) -> None:
+        rows = self._rows([
+            {"mode": "reaction", "hand": "right", "status": "completed",
+             "summary": self._reaction(290.0)},
+            {"mode": "reaction", "hand": "right", "status": "completed",
+             "summary": self._reaction(312.0)},
+        ])
+        rx = rows[("reaction", "right")]
+        self.assertFalse(rx["better"])
+        # The direction, not a verdict on the round.
+        self.assertEqual(rx["short"], "22 ms behind")
+
+
+class ProgressStripTests(_BatteryHarness):
+    """The row the participant reads on the results screen."""
+
+    def _screen(self, log):
+        eng = self._engine(_Rig())
+        eng._session_log = log
+        results = eng._screens["results"]
+        results.on_show()
+        return eng, results
+
+    def test_the_row_leads_with_the_mode_just_played(self) -> None:
+        import pygame
+        log = [
+            {"mode": "reaction", "hand": "right", "status": "completed",
+             "summary": ProgressRowTests._reaction(312.0)},
+            {"mode": "force_pilot", "hand": "both", "status": "completed",
+             "summary": ProgressRowTests._force(0.82)},
+            {"mode": "force_pilot", "hand": "both", "status": "completed",
+             "summary": ProgressRowTests._force(0.89)},
+            {"mode": "reaction", "hand": "right", "status": "completed",
+             "summary": ProgressRowTests._reaction(290.0)},
+        ]
+        eng, results = self._screen(log)
+        eng.current_block = "reaction"
+        eng.hand_mode = "right"
+        here = results._progress_row_for("reaction", "right")
+        self.assertEqual(here["text"], "22 ms faster than your first go")
+        self.assertEqual(results._progress_colour(here["better"]),
+                         results.theme.success)
+        other = results._progress_row_for("force_pilot", "both")
+        self.assertEqual(other["short"], "7% steadier")
+        self.assertEqual(results._progress_label("reaction", "right"),
+                         "Reaction R")
+        self.assertEqual(results._progress_label("force_pilot", "both"),
+                         "Force Pilot")
+        # And it draws, at the shipped size and at the smallest one.
+        results.draw(pygame.Surface((1280, 800)))
+        results.draw(pygame.Surface((1024, 700)))
+
+    def test_no_second_go_means_no_row(self) -> None:
+        import pygame
+        eng, results = self._screen([
+            {"mode": "reaction", "hand": "right", "status": "completed",
+             "summary": ProgressRowTests._reaction(312.0)}])
+        eng.current_block = "reaction"
+        eng.hand_mode = "right"
+        row = results._progress_row_for("reaction", "right")
+        self.assertEqual(row["n"], 1)
+        self.assertEqual(row["text"], "")
+        results.draw(pygame.Surface((1280, 800)))
+
+    def test_play_all_done_turns_the_card_into_todays_table(self) -> None:
+        import pygame
+        log = [
+            {"mode": "reaction", "hand": "right", "status": "completed",
+             "battery_pos": 1,
+             "summary": ProgressRowTests._reaction(312.0)},
+            {"mode": "reaction", "hand": "right", "status": "completed",
+             "battery_pos": 12,
+             "summary": ProgressRowTests._reaction(290.0)},
+        ]
+        eng, results = self._screen(log)
+        eng.current_block = "reaction"
+        eng.hand_mode = "right"
+        # No battery: the card is the ordinary NEXT UP suggestion.
+        self.assertFalse(results._battery_done())
+        eng._battery = {"id": "x", "cell": {}, "of": 2, "done": True,
+                        "log": [], "budget_min": 85.0,
+                        "hard_stop_min": 90.0, "started_perf": 0.0}
+        self.assertTrue(results._battery_done())
+        results.draw(pygame.Surface((1280, 800)))
+        # A free game after PLAY ALL is an ordinary game again.
+        eng._session_log = log + [
+            {"mode": "echo", "hand": "both", "status": "completed",
+             "battery_pos": 0, "summary": None}]
+        self.assertFalse(results._battery_done())
+
+    def test_an_empty_session_still_draws(self) -> None:
+        import pygame
+        eng, results = self._screen([])
+        eng.current_block = "reaction"
+        self.assertEqual(results._progress(), [])
+        results.draw(pygame.Surface((1280, 800)))
+
+
+# ---------------------------------------------------------------------
 # 3. a keyboard rig
 # ---------------------------------------------------------------------
 class KeyboardRigTests(_BatteryHarness):
@@ -607,21 +931,26 @@ class KeyboardRigTests(_BatteryHarness):
         eng = self._engine()          # KeyboardOnlySource
         self._login(eng, "P01", "right")
         played = self._run_battery(eng)
-        # Chords plays on the keys; the two sensor modes do not.
+        # Chords plays on the keys; the two sensor modes do not, in
+        # either pass.
+        keyboard_pass = ["reaction", "reaction", "mirror", "rhythm",
+                         "echo", "chords", "pattern"]
         self.assertEqual([m for m, _h, _f in played],
-                         ["reaction", "reaction", "mirror", "rhythm",
-                          "echo", "chords", "pattern"])
+                         keyboard_pass + MID + keyboard_pass)
         log = eng.battery_progress()["log"]
         skipped = [(r["mode"], r["reason"]) for r in log
                    if r["status"] == "skipped"]
         self.assertEqual(skipped, [
+            ("force_pilot", "needs sensor hardware"),
+            ("buzz_hunt", "needs sensor hardware"),
             ("force_pilot", "needs sensor hardware"),
             ("buzz_hunt", "needs sensor hardware")])
         self.assertTrue(eng.battery_progress()["finished"])
         # Position numbering is the design's, skips included.
         meta = json.loads((played[-1][2] / "metadata.json").read_text(
             encoding="utf-8"))
-        self.assertEqual(meta["battery"]["position"], 9)
+        self.assertEqual(meta["battery"]["position"], N_STEPS)
+        self.assertEqual(meta["battery"]["phase"], "post")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,111 @@
+Flashing the Arduino from Settings
+=================================
+
+Two buttons in the ARDUINO FIRMWARE panel, bottom right of the Settings
+screen. Neither needs the Arduino IDE, PlatformIO or any other tool on
+the machine: everything they use ships inside the app.
+
+
+Flash firmware
+--------------
+Writes the game firmware to the board. Press it, confirm, wait about ten
+seconds. The buzzers run their self test when the board restarts, which
+is the app's confirmation that the new firmware is running.
+
+Use it when a board is new, when the firmware has been updated, or after
+an address change that could not put the firmware back (the result line
+says so in those words when that happens).
+
+The caption under the buttons says which firmware this build carries,
+for example "hex b7097de". CI builds the hexes from the same commit as
+the app, so that short commit identifies exactly what would be written.
+The popup shows the build date beside it.
+
+
+Change sensor address
+---------------------
+Moves one SingleTact interface board from one I2C address to another.
+The device wants 0x05 index, 0x06 middle, 0x07 ring, 0x08 little, and a
+sensor arrives from the factory on 0x04.
+
+Behind the popup the app flashes a small tool sketch, talks to it over
+serial, then puts the game firmware back. Nothing is left on the board
+afterwards except the game.
+
+CONNECT ONE SENSOR ONLY.
+
+Every SingleTact interface answers I2C address 0x04 as well as the
+address held in its own flash. The manual (revision 2.10, section 2.3)
+puts it this way: "The interface board will always respond to two I2C
+addresses: 0x04 and the address specified in flash (register address
+0)." A write to 0x04 therefore reaches every sensor on the bus at the
+same time. Changing "0x04" with the whole device wired up would put all
+four sensors on one address and there would be no way to tell them
+apart afterwards.
+
+The app refuses that case rather than warning about it: if the scan
+before the write finds any address besides 0x04, the change is blocked
+and the message names what it found. A change between two real
+addresses (0x06 to 0x09, say) only reaches the one sensor and is safe
+with everything still connected.
+
+Scan on the same popup lists what is on the bus without changing
+anything. 0x04 appears whenever any sensor at all is attached, so seeing
+it does not mean an unaddressed sensor is present.
+
+
+What can go wrong
+-----------------
+Not while a block is running
+    Finish or abandon the game first. Swapping the source mid-block
+    would leave a half recorded trial pointing at hardware that no
+    longer exists.
+
+No Arduino found
+    Plug it in. If Windows never shows a port at all, the CH340 driver
+    is missing: install CH341SER from wch-ic.com. macOS 10.14 and later
+    need no driver.
+
+The board did not answer at 115200 or 57600
+    A Nano carries one of two bootloaders and the app tries both. If
+    neither answers, check the USB cable (some are charge only), unplug
+    and replug, then try again.
+
+Could not open the port, another program has it
+    Close the Arduino IDE, any serial monitor, or a second copy of this
+    app.
+
+The port is not there any more
+    The board was unplugged, or the cable came loose, between choosing
+    the board and writing to it. Plug it back in and try again.
+
+Written but read-back differs
+    Press Flash firmware again. If it repeats, the board is suspect.
+
+The GAME firmware is NOT on the board
+    The address step ran but the restore failed. The board is not
+    playable until you press Flash firmware. Nothing else was damaged.
+
+This Mac needs Rosetta
+    Nobody publishes an Apple silicon build of the uploader, so it runs
+    under Rosetta 2. Run softwareupdate --install-rosetta in Terminal
+    once, then try again.
+
+Whatever the message says, the full uploader output goes into the app
+log, which is where to look when a message is not enough.
+
+
+For the build machine
+---------------------
+    python3 builds/build_firmware.py     compile both hexes (PlatformIO)
+    python3 builds/fetch_avrdude.py      download the uploader
+
+build_app.sh and build_app.bat run both before PyInstaller, and CI does
+the same on every push. Neither is allowed to fail the build: a build
+without them still runs, and the Settings panel says which piece is
+missing.
+
+The bundled uploader is avrdude 8.0-arduino.1, GPL-2.0-or-later. Its
+licence text and a pointer to the corresponding source travel with it in
+tools/avrdude/<platform>/. The app spawns it as a separate program and
+links none of its code.

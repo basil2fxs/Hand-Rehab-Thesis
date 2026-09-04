@@ -98,6 +98,25 @@ def _build_mode(**overrides):
     return engine, EchoMode(**kwargs)
 
 
+def _ladder_mode(**overrides):
+    """The legacy Kessels ladder (echo.rule: ladder). Everything in
+    LadderTests, HebbTests and ReproductionTests below is that rule's
+    contract and must keep passing untouched now the shipped rule is
+    Simon."""
+    kwargs = dict(rule="ladder")
+    kwargs.update(overrides)
+    return _build_mode(**kwargs)
+
+
+def _simon_mode(**overrides):
+    """The shipped rule: one sequence per game growing from a single
+    item, one spare life, per-participant material."""
+    kwargs = dict(rule="simon", start_len=1, max_len=8,
+                  participant="Basil", games=1, lives=1)
+    kwargs.update(overrides)
+    return _build_mode(**kwargs)
+
+
 def _drive(mode, clock, responder=None, step_s: float = 0.1,
            max_steps: int = 30000) -> None:
     """Step the clock and the mode together until the block ends (or
@@ -215,7 +234,7 @@ class LadderTests(unittest.TestCase):
 
     def test_two_different_sequences_per_length_advance_on_one(
             self) -> None:
-        eng, mode = _build_mode()
+        eng, mode = _ladder_mode()
         with patched_clock() as clock:
             # Fail the FIRST trial at every length: one correct out of
             # two must still advance, all the way to termination when
@@ -242,7 +261,7 @@ class LadderTests(unittest.TestCase):
 
     def test_both_failing_at_the_start_length_ends_the_block(
             self) -> None:
-        eng, mode = _build_mode()
+        eng, mode = _ladder_mode()
         with patched_clock() as clock:
             _drive(mode, clock,
                    _perfect(mode, clock, fail_all_from=2))
@@ -252,7 +271,7 @@ class LadderTests(unittest.TestCase):
         self.assertEqual(stats["run_end_reasons"], ["both_failed"])
 
     def test_ceiling_ends_a_perfect_run(self) -> None:
-        eng, mode = _build_mode(max_len=4)
+        eng, mode = _ladder_mode(max_len=4)
         with patched_clock() as clock:
             _drive(mode, clock, _perfect(mode, clock))
         self.assertEqual([r["len"] for r in mode._records],
@@ -270,7 +289,7 @@ class LadderTests(unittest.TestCase):
         # trials at a length run at one rate whether the first one
         # failed or not, the start rate is what block_stats reports,
         # and the whole schedule sits next to it.
-        eng, mode = _build_mode(max_len=5, item_on_ms=400.0, ioi_ms=800.0,
+        eng, mode = _ladder_mode(max_len=5, item_on_ms=400.0, ioi_ms=800.0,
                                 ioi_step_ms=50.0, ioi_floor_ms=600.0)
         with patched_clock() as clock:
             _drive(mode, clock, _perfect(mode, clock, fail_at={2, 3, 4}))
@@ -290,20 +309,20 @@ class LadderTests(unittest.TestCase):
     def test_the_schedule_floors_at_the_motor_and_step_zero_is_fixed_rate(
             self) -> None:
         from finger_rehab.game.modes.echo import EchoMode
-        _e, mode = _build_mode(max_len=9, item_on_ms=400.0, ioi_ms=800.0,
+        _e, mode = _ladder_mode(max_len=9, item_on_ms=400.0, ioi_ms=800.0,
                                ioi_step_ms=50.0, ioi_floor_ms=600.0)
         self.assertEqual([round(mode.ioi_for(n), 3) for n in range(2, 10)],
                          [0.8, 0.75, 0.7, 0.65, 0.6, 0.6, 0.6, 0.6])
         # A floor under item_on plus the motor's spin-down is raised
         # to it: the next finger must have stopped before the next
         # item starts.
-        _e, tight = _build_mode(item_on_ms=400.0, ioi_ms=800.0,
+        _e, tight = _ladder_mode(item_on_ms=400.0, ioi_ms=800.0,
                                 ioi_step_ms=100.0, ioi_floor_ms=100.0)
         self.assertAlmostEqual(tight.ioi_floor_s,
                                0.4 + EchoMode.MOTOR_CLEAR_S)
         self.assertAlmostEqual(tight.ioi_for(9), 0.55)
         # Step zero is the fixed-rate Corsi protocol again.
-        _e, flat = _build_mode(item_on_ms=500.0, ioi_ms=1000.0)
+        _e, flat = _ladder_mode(item_on_ms=500.0, ioi_ms=1000.0)
         self.assertEqual({flat.ioi_for(n) for n in range(2, 10)}, {1.0})
         # The shipped config is the tightened schedule.
         from finger_rehab.config import Config
@@ -316,7 +335,7 @@ class LadderTests(unittest.TestCase):
     def test_hebb_trials_are_the_hidden_prefix_and_count_for_the_ladder(
             self) -> None:
         from finger_rehab.game.modes.echo import echo_stream
-        eng, mode = _build_mode(max_len=4)
+        eng, mode = _ladder_mode(max_len=4)
         with patched_clock() as clock:
             _drive(mode, clock, _perfect(mode, clock))
         stats = mode.block_stats()
@@ -333,7 +352,7 @@ class LadderTests(unittest.TestCase):
         self.assertEqual(stats["n_trials"], 6)
 
     def test_extra_runs_restart_the_ladder(self) -> None:
-        eng, mode = _build_mode(runs=2, max_len=3)
+        eng, mode = _ladder_mode(runs=2, max_len=3)
         with patched_clock() as clock:
             _drive(mode, clock, _perfect(mode, clock))
         self.assertEqual([(r["run"], r["len"]) for r in mode._records],
@@ -350,7 +369,7 @@ class ReproductionTests(unittest.TestCase):
 
     def test_wrong_press_ends_the_attempt_with_partial_credit(
             self) -> None:
-        eng, mode = _build_mode()
+        eng, mode = _ladder_mode()
         with patched_clock() as clock:
             done = {"sent": False}
 
@@ -383,7 +402,7 @@ class ReproductionTests(unittest.TestCase):
         self.assertEqual(outcome.points, mode.ITEM_POINTS * 1)
 
     def test_silence_times_out_as_an_omission(self) -> None:
-        eng, mode = _build_mode(idle_timeout_s=2.0,
+        eng, mode = _ladder_mode(idle_timeout_s=2.0,
                                 fatigue_timeout_run=99)
         with patched_clock() as clock:
             for _ in range(120):
@@ -395,7 +414,7 @@ class ReproductionTests(unittest.TestCase):
         self.assertEqual(mode._records[0]["pressed"], [])
 
     def test_playback_presses_are_logged_never_punished(self) -> None:
-        eng, mode = _build_mode()
+        eng, mode = _ladder_mode()
         with patched_clock() as clock:
             poked = {"n": 0}
 
@@ -416,7 +435,7 @@ class ReproductionTests(unittest.TestCase):
         eng.apply_wrong_press_penalty.assert_not_called()
 
     def test_two_straight_timeouts_force_a_rest_then_end(self) -> None:
-        eng, mode = _build_mode(idle_timeout_s=1.0)
+        eng, mode = _ladder_mode(idle_timeout_s=1.0)
         with patched_clock() as clock:
             _drive(mode, clock, responder=None, step_s=0.1,
                    max_steps=2000)
@@ -430,7 +449,7 @@ class ReproductionTests(unittest.TestCase):
         # if the frame that would have noticed has not run yet. A
         # press stamped while the last item is still lit stays a
         # playback press.
-        eng, mode = _build_mode(item_on_ms=400.0, ioi_ms=800.0)
+        eng, mode = _ladder_mode(item_on_ms=400.0, ioi_ms=800.0)
         with patched_clock() as clock:
             for _ in range(400):
                 clock.t += 0.05
@@ -461,7 +480,7 @@ class ReproductionTests(unittest.TestCase):
         # The MagicMock engine records every pulse_motor call: after
         # the show phase there must be none, whatever a correct press
         # used to earn.
-        eng, mode = _build_mode()
+        eng, mode = _ladder_mode()
         eng.source.provides_samples = True
         eng.cue_settings.return_value.buzz_before = True
         with patched_clock() as clock:
@@ -485,27 +504,332 @@ class ReproductionTests(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------
-# cumulative (classic Simon) mode
+# the Simon rule: the shipped game
 # ---------------------------------------------------------------------
-class CumulativeTests(unittest.TestCase):
+def _simon_play(mode, clock, miss_at=None):
+    """Replay each trial exactly, except at the lengths in `miss_at`:
+    a dict of length -> how many attempts at that length to fail,
+    counted per game. A miss presses a later item of the sequence
+    first, so it is a transposition at serial position 1, the
+    dominant spatial-span error and a deterministic one whatever the
+    draw."""
+    miss_at = dict(miss_at or {})
+    answered = {"n": 0}
+    missed: dict[tuple[int, int], int] = {}
 
-    def test_grows_by_appending_and_dies_on_first_miss(self) -> None:
-        eng, mode = _build_mode(cumulative=True)
+    def respond(clk) -> None:
+        if mode.phase != "respond" or mode.active is None:
+            return
+        if mode.trial_counter == answered["n"]:
+            return
+        answered["n"] = mode.trial_counter
+        length = len(mode.sequence)
+        key = (mode.run_idx, length)
+        if missed.get(key, 0) < miss_at.get(length, 0):
+            missed[key] = missed.get(key, 0) + 1
+            wrong = next((l for l in mode.sequence[1:]
+                          if l != mode.sequence[0]),
+                         next(l for l in mode.lanes
+                              if l != mode.sequence[0]))
+            mode.queue_press(_press(wrong, clk.t))
+            return
+        for lane in mode.sequence:
+            mode.queue_press(_press(lane, clk.t))
+    return respond
+
+
+class SimonMaterialTests(unittest.TestCase):
+    """The per-game seed and the per-game stream. Same person, same
+    game count, same sequence: that is what makes a game replayable in
+    analysis and what stops two games of one session repeating."""
+
+    def test_seed_moves_with_the_game_and_the_name(self) -> None:
+        from finger_rehab.game.modes.echo import participant_simon_seed
+        self.assertNotEqual(participant_simon_seed("Basil", 0),
+                            participant_simon_seed("Basil", 1))
+        self.assertNotEqual(participant_simon_seed("alice", 3),
+                            participant_simon_seed("bob", 3))
+        self.assertEqual(participant_simon_seed("Basil", 2),
+                         participant_simon_seed("  basil ", 2))
+
+    def test_seed_is_not_the_ladder_or_buzz_hunt_seed(self) -> None:
+        from finger_rehab.game.modes.buzz_hunt import participant_hebb_seed
+        from finger_rehab.game.modes.echo import (participant_echo_seed,
+                                                  participant_simon_seed)
+        for idx in range(4):
+            self.assertNotEqual(participant_simon_seed("Basil", idx),
+                                participant_echo_seed("Basil"))
+            self.assertNotEqual(participant_simon_seed("Basil", idx),
+                                participant_hebb_seed("Basil"))
+
+    def test_stream_is_prefix_stable_and_never_doubles(self) -> None:
+        from finger_rehab.game.modes.echo import simon_stream
+        lanes = [0, 1, 2, 3]
+        long = simon_stream(99, lanes, 12)
+        for length in range(1, 12):
+            self.assertEqual(simon_stream(99, lanes, length),
+                             long[:length])
+        self.assertTrue(all(a != b for a, b in zip(long, long[1:])), long)
+
+    def test_eight_lanes_are_all_drawn_from(self) -> None:
+        from finger_rehab.game.modes.echo import simon_stream
+        seq = simon_stream(7, list(range(8)), 60)
+        self.assertEqual(set(seq), set(range(8)))
+
+
+class SimonRuleTests(unittest.TestCase):
+
+    def test_one_sequence_grows_by_one_from_length_one(self) -> None:
+        from finger_rehab.game.modes.echo import simon_stream
+        eng, mode = _simon_mode(max_len=6)
+        seq = simon_stream(mode.game_seed, mode.lanes, 6)
         with patched_clock() as clock:
-            _drive(mode, clock,
-                   _perfect(mode, clock, fail_all_from=5))
-        played = [r["played"] for r in mode._records]
-        self.assertEqual([len(p) for p in played], [2, 3, 4, 5])
-        for shorter, longer in zip(played, played[1:]):
-            self.assertEqual(longer[:len(shorter)], shorter,
-                             "cumulative material must extend the "
-                             "same sequence, that IS the toy's rule")
+            _drive(mode, clock, _simon_play(mode, clock))
+        self.assertEqual([r["len"] for r in mode._records],
+                         [1, 2, 3, 4, 5, 6])
+        for r in mode._records:
+            self.assertEqual(r["played"], seq[:r["len"]],
+                             "every trial replays the SAME sequence, "
+                             "one item longer: that IS the Simon rule")
         stats = mode.block_stats()
-        self.assertTrue(stats["cumulative"])
-        self.assertEqual(stats["run_end_reasons"], ["cumulative_miss"])
-        # No hidden trials: there are no fresh draws to hide a repeat
-        # among when everything repeats by design.
+        self.assertEqual(stats["rule"], "simon")
+        self.assertEqual(stats["run_end_reasons"], ["ceiling"])
+        self.assertEqual(stats["span"], 6)
+        self.assertEqual(stats["total_items"], 21)
+        self.assertIsNone(stats["product_score"])
         self.assertEqual(stats["hebb_trials"], [])
+
+    def test_the_life_replays_the_same_length_once(self) -> None:
+        eng, mode = _simon_mode(max_len=8)
+        with patched_clock() as clock:
+            _drive(mode, clock, _simon_play(mode, clock,
+                                            miss_at={4: 1, 6: 9}))
+        rows = [(r["len"], r["outcome"], r["life"], r["pos"])
+                for r in mode._records]
+        self.assertEqual(rows, [
+            (1, "correct", False, 0), (2, "correct", False, 0),
+            (3, "correct", False, 0), (4, "wrong", False, 1),
+            (4, "correct", True, 0), (5, "correct", False, 0),
+            (6, "wrong", False, 1)])
+        # The replay is the same four items, not a redraw.
+        self.assertEqual(mode._records[3]["played"],
+                         mode._records[4]["played"])
+        stats = mode.block_stats()
+        self.assertEqual(stats["span"], 5)
+        # Partial credit over the whole game: the correct trials pay
+        # their length, the two failed attempts slipped on their own
+        # first press and pay nothing.
+        self.assertEqual(stats["total_items"],
+                         1 + 2 + 3 + 0 + 4 + 5 + 0)
+        game = stats["games_played"][0]
+        self.assertEqual(game["end_reason"], "second_miss")
+        self.assertEqual(game["life_used_at"], 4)
+        self.assertTrue(game["recovered"])
+        self.assertEqual([m["kind"] for m in game["misses"]],
+                         ["wrong", "wrong"])
+        self.assertEqual(stats["end_reason"], "completed")
+
+    def test_the_row_carries_the_rule_seed_life_and_miss(self) -> None:
+        eng, mode = _simon_mode(max_len=4)
+        with patched_clock() as clock:
+            _drive(mode, clock, _simon_play(mode, clock, miss_at={2: 1}))
+        stims = [c.kwargs["stimulus"] for c in eng.log_trial.call_args_list]
+        self.assertTrue(all(s.startswith("echo;") for s in stims))
+        self.assertTrue(all("rule=simon" in s for s in stims))
+        self.assertTrue(all(f"seed={mode.game_seed}" in s for s in stims))
+        # The failed length-2 attempt, then its replay.
+        self.assertIn("life=0;lives_left=1", stims[1])
+        self.assertIn("pos=1", stims[1])
+        self.assertIn("miss=transposition", stims[1])
+        self.assertIn("life=1;lives_left=0", stims[2])
+        self.assertIn("miss=none", stims[2])
+        # The pulse train is still rebuildable from the params.
+        _args, kwargs = eng.log_trial.call_args
+        params = kwargs["continuous"].params
+        self.assertEqual(params["rule"], "simon")
+        self.assertEqual(params["game_seed"], mode.game_seed)
+
+    def test_a_wrong_lane_the_sequence_never_held_is_an_intrusion(
+            self) -> None:
+        eng, mode = _simon_mode(max_len=4)
+        with patched_clock() as clock:
+            done = {"sent": False}
+            for _ in range(400):
+                if mode._records:
+                    break
+                clock.t += 0.1
+                mode.update(0.1)
+                if mode.phase == "respond" and not done["sent"]:
+                    done["sent"] = True
+                    wrong = next(l for l in mode.lanes
+                                 if l not in mode.sequence)
+                    mode.queue_press(_press(wrong, clock.t))
+        self.assertEqual(mode._records[0]["miss"], "intrusion")
+
+    def test_silence_spends_the_life_then_ends_the_game_as_fatigue(
+            self) -> None:
+        eng, mode = _simon_mode(idle_timeout_s=1.0, fatigue_rest_s=1.0)
+        with patched_clock() as clock:
+            _drive(mode, clock, responder=None, step_s=0.1,
+                   max_steps=4000)
+        stats = mode.block_stats()
+        self.assertEqual([r["outcome"] for r in mode._records],
+                         ["omission", "omission"])
+        self.assertEqual([r["life"] for r in mode._records],
+                         [False, True])
+        self.assertEqual(stats["end_reason"], "fatigue")
+        self.assertEqual(stats["games_played"][0]["end_reason"],
+                         "fatigue")
+        self.assertEqual(stats["n_omissions"], 2)
+        # The forced rest between them is the recovery rest, and it
+        # went out on the EEG rest band like every other forced rest.
+        sent = [c.args[0] for c in eng._eeg_send.call_args_list]
+        from finger_rehab.hardware.eeg_trigger import CODES
+        self.assertIn(CODES["rest_start"], sent)
+        self.assertIn(CODES["rest_end"], sent)
+
+    def test_no_life_is_the_strict_arcade_rule(self) -> None:
+        eng, mode = _simon_mode(lives=0, max_len=8)
+        with patched_clock() as clock:
+            _drive(mode, clock, _simon_play(mode, clock, miss_at={3: 9}))
+        self.assertEqual([r["len"] for r in mode._records], [1, 2, 3])
+        self.assertEqual(mode.block_stats()["games_played"][0]
+                         ["end_reason"], "second_miss")
+
+    def test_two_games_draw_different_material_and_report_both(
+            self) -> None:
+        eng, mode = _simon_mode(games=2, max_len=4)
+        with patched_clock() as clock:
+            _drive(mode, clock, _simon_play(mode, clock, miss_at={4: 9}))
+        by_game: dict[int, list] = {}
+        for r in mode._records:
+            by_game.setdefault(r["run"], []).append(r)
+        self.assertEqual(sorted(by_game), [1, 2])
+        first = by_game[1][-1]["played"]
+        second = by_game[2][-1]["played"]
+        self.assertNotEqual(first, second,
+                            "each game draws its own sequence")
+        stats = mode.block_stats()
+        games = stats["games_played"]
+        self.assertEqual(len(games), 2)
+        self.assertNotEqual(games[0]["game_seed"], games[1]["game_seed"])
+        self.assertEqual(games[0]["game_index"], 0)
+        self.assertEqual(games[1]["game_index"], 1)
+        # Every game gets its own life back.
+        self.assertEqual([g["life_used_at"] for g in games], [4, 4])
+        self.assertEqual(stats["span"], max(g["span"] for g in games))
+        self.assertEqual(stats["span_mean"],
+                         round(sum(g["span"] for g in games) / 2, 2))
+
+    def test_the_game_count_carries_the_seed_forward(self) -> None:
+        from finger_rehab.game.modes.echo import participant_simon_seed
+        eng, mode = _simon_mode(game_index_base=5, max_len=2)
+        self.assertEqual(mode.game_seed,
+                         participant_simon_seed("Basil", 5))
+        self.assertEqual(mode.game_index, 5)
+
+    def test_lengths_one_and_two_share_the_opening_rate(self) -> None:
+        _e, mode = _simon_mode(max_len=6, item_on_ms=400.0, ioi_ms=800.0,
+                               ioi_step_ms=50.0, ioi_floor_ms=600.0)
+        self.assertEqual([round(mode.ioi_for(n), 3)
+                          for n in range(1, 7)],
+                         [0.8, 0.8, 0.75, 0.7, 0.65, 0.6])
+        self.assertEqual(mode.block_stats()["ioi_schedule_ms"]["1"],
+                         800.0)
+        self.assertEqual(mode.block_stats()["ioi_anchor_len"], 2)
+
+    def test_a_retired_cumulative_config_runs_as_simon(self) -> None:
+        with self.assertLogs("finger_rehab.game.modes.echo",
+                             level="WARNING") as caught:
+            _e, mode = _build_mode(cumulative=True, participant="Basil")
+        self.assertEqual(mode.rule, "simon")
+        self.assertTrue(any("retired" in m for m in caught.output))
+
+
+class PriorGameCountTests(unittest.TestCase):
+    """The seed carries on across sessions, so the count of a
+    participant's earlier Simon games has to be read off the sessions
+    tree the same way the vs-last chip reads it."""
+
+    def _write(self, root: Path, name: str, participant: str,
+               echo: dict | None, block: str = "echo") -> Path:
+        folder = root / name
+        folder.mkdir(parents=True)
+        meta = {"participant": participant,
+                "block_summary": {"block": block, "status": "completed"}}
+        if echo is not None:
+            meta["block_summary"]["echo"] = echo
+        (folder / "metadata.json").write_text(json.dumps(meta),
+                                              encoding="utf-8")
+        return folder
+
+    def test_counts_games_excludes_this_folder_and_survives_junk(
+            self) -> None:
+        from finger_rehab.game.modes.echo import count_prior_echo_games
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._write(root, "a", "Basil",
+                        {"rule": "simon",
+                         "games_played": [{"span": 4}, {"span": 5}]})
+            self._write(root, "b", "Basil", {"rule": "simon",
+                                             "games_played": [{"span": 3}]})
+            # Not counted: another participant, a ladder block, a
+            # different mode, and the folder this block is writing.
+            self._write(root, "c", "Someone",
+                        {"rule": "simon", "games_played": [{"span": 9}]})
+            self._write(root, "d", "Basil", {"rule": "ladder", "span": 6})
+            self._write(root, "e", "Basil", None, block="reaction")
+            here = self._write(root, "f", "Basil",
+                               {"rule": "simon",
+                                "games_played": [{"span": 2}]})
+            (root / "broken").mkdir()
+            (root / "broken" / "metadata.json").write_text(
+                "{ not json", encoding="utf-8")
+            self.assertEqual(
+                count_prior_echo_games(root, "Basil", exclude_root=here), 3)
+            self.assertEqual(count_prior_echo_games(root, "Basil"), 4)
+        self.assertEqual(
+            count_prior_echo_games(Path(td) / "gone", "Basil"), 0)
+
+    def test_a_simon_block_with_no_games_played_counts_as_one(
+            self) -> None:
+        from finger_rehab.game.modes.echo import count_prior_echo_games
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._write(root, "a", "Basil", {"rule": "simon"})
+            self.assertEqual(count_prior_echo_games(root, "Basil"), 1)
+
+    def test_an_abandoned_game_still_used_up_its_sequence(self) -> None:
+        # A block quit part way through game 2 records only game 1,
+        # but game 2's sequence was shown. Counting it is what stops
+        # the next block replaying material the player has seen.
+        from finger_rehab.game.modes.echo import count_prior_echo_games
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._write(root, "a", "Basil",
+                        {"rule": "simon", "n_trials": 9,
+                         "games_played": [{"span": 4, "n_trials": 6}]})
+            self.assertEqual(count_prior_echo_games(root, "Basil"), 2)
+            self._write(root, "b", "Basil",
+                        {"rule": "simon", "n_trials": 6,
+                         "games_played": [{"span": 4, "n_trials": 6}]})
+            self.assertEqual(count_prior_echo_games(root, "Basil"), 3)
+
+
+class SimonChipTests(unittest.TestCase):
+    """The vs-last-time chip compares Simon spans with Simon spans and
+    nothing else: a growing sequence re-presents every prefix, so its
+    span sits above the same person's ladder span."""
+
+    def test_only_simon_blocks_compare(self) -> None:
+        from finger_rehab.data.history import comparable_value
+        self.assertEqual(
+            comparable_value("echo", {"echo": {"rule": "simon",
+                                               "span": 6}}), 6.0)
+        self.assertIsNone(
+            comparable_value("echo", {"echo": {"rule": "ladder",
+                                               "span": 6}}))
+        self.assertIsNone(comparable_value("echo", {"echo": {"span": 6}}))
 
 
 # ---------------------------------------------------------------------
@@ -568,38 +892,87 @@ class EndToEndTests(unittest.TestCase):
             meta = json.loads(
                 (root / "metadata.json").read_text(encoding="utf-8"))
             echo = meta["block_summary"]["echo"]
-            # The demo miniature is the fixed 2, 3, 3 ladder with
-            # real rows, the pattern / buzz_hunt demo convention.
+            # The Simon demo miniature: one game to a ceiling of three
+            # items, with real rows, the pattern / buzz_hunt demo
+            # convention.
             self.assertTrue(echo["demo"])
+            self.assertEqual(echo["rule"], "simon")
+            self.assertEqual(echo["max_len"], 3)
             self.assertEqual(echo["n_trials"], 3)
             self.assertEqual(echo["span"], 3)
-            self.assertEqual(echo["total_correct"], 3)
-            self.assertEqual(echo["product_score"], 9)
+            self.assertEqual(echo["total_items"], 6)
+            self.assertIsNone(echo["product_score"])
             self.assertEqual(echo["n_lanes"], 4)
+            self.assertEqual(len(echo["games_played"]), 1)
+            game = echo["games_played"][0]
+            # Test Mode never advances the participant's game count.
+            self.assertEqual(game["game_index"], -1)
+            self.assertEqual(game["end_reason"], "ceiling")
+            self.assertIsNone(game["life_used_at"])
             # The Berch parameters, pinned next to the data, the
             # length schedule included.
             for key in ("item_on_ms", "ioi_ms", "ioi_step_ms",
                         "ioi_floor_ms", "ioi_schedule_ms",
                         "motor_clear_ms", "idle_timeout_s",
-                        "hebb_every", "start_len", "max_len"):
+                        "ioi_anchor_len", "start_len", "max_len",
+                        "lives", "games"):
                 self.assertIn(key, echo)
+            self.assertEqual(echo["ioi_schedule_ms"]["1"], 800.0)
             self.assertEqual(echo["ioi_schedule_ms"]["2"], 800.0)
             self.assertEqual(echo["ioi_schedule_ms"]["3"], 750.0)
             with (root / "trials.csv").open(encoding="utf-8") as fh:
                 rows = list(csv.DictReader(fh))
             self.assertEqual(len(rows), 3)
+            played = []
             for row in rows:
                 self.assertTrue(row["stimulus"].startswith("echo;"))
                 self.assertIn("played=", row["stimulus"])
                 self.assertIn("pressed=", row["stimulus"])
                 self.assertIn("pt=", row["stimulus"])
+                self.assertIn("rule=simon", row["stimulus"])
+                self.assertIn(f"seed={game['game_seed']}",
+                              row["stimulus"])
+                self.assertIn("life=0", row["stimulus"])
+                self.assertIn("pos=0", row["stimulus"])
+                self.assertIn("miss=none", row["stimulus"])
                 # Reproduction is untimed: no RT may ever appear.
                 self.assertEqual(row["time_difference_ms"], "")
                 self.assertEqual(row["waveform"], "echo_seq")
+                played.append(next(
+                    p[len("played="):] for p in row["stimulus"].split(";")
+                    if p.startswith("played=")))
+            # One sequence, one item longer each trial.
+            self.assertEqual([len(p.split("-")) for p in played],
+                             [1, 2, 3])
+            self.assertTrue(played[2].startswith(played[1]))
+            self.assertTrue(played[1].startswith(played[0]))
+
+    def test_a_ladder_demo_still_runs_the_legacy_rule(self) -> None:
+        with tempfile.TemporaryDirectory() as td, \
+                patched_clock() as clock:
+            eng = _make_engine(td)
+            eng.cfg.data.setdefault("echo", {})["rule"] = "ladder"
+            eng.cfg.data["echo"]["start_len"] = 2
+            eng.cfg.data["echo"]["max_len"] = 9
+            eng.begin_echo_block()
+            self._run_demo_block(eng, clock)
+            root = Path(eng.last_session_root)
+            meta = json.loads(
+                (root / "metadata.json").read_text(encoding="utf-8"))
+            echo = meta["block_summary"]["echo"]
+            self.assertEqual(echo["rule"], "ladder")
+            self.assertEqual(echo["n_trials"], 3)
+            self.assertEqual(echo["span"], 3)
+            self.assertEqual(echo["total_correct"], 3)
+            self.assertEqual(echo["product_score"], 9)
+            with (root / "trials.csv").open(encoding="utf-8") as fh:
+                rows = list(csv.DictReader(fh))
             # The third trial is the hidden one under hebb_every 3,
             # and it renders in the CSV like any other.
             self.assertIn("hebb=1", rows[2]["stimulus"])
             self.assertIn("hebb=0", rows[0]["stimulus"])
+            self.assertIn("rule=ladder", rows[0]["stimulus"])
+            self.assertNotIn("life=", rows[0]["stimulus"])
 
     def test_bilateral_demo_draws_over_eight_lanes(self) -> None:
         with tempfile.TemporaryDirectory() as td, \
@@ -625,7 +998,7 @@ class EndToEndTests(unittest.TestCase):
                         lanes.update(int(x) for x in
                                      part[len("played="):].split("-"))
             self.assertTrue(lanes <= set(range(8)), lanes)
-            # With this seed the 8 demo items span both hands; the
+            # With this seed the demo sequence crosses hands; the
             # notebook's 4-vs-8 split keys off n_lanes either way.
             self.assertTrue(any(l >= 4 for l in lanes), lanes)
             self.assertTrue(any(l < 4 for l in lanes), lanes)
@@ -803,7 +1176,18 @@ class WireTests(unittest.TestCase):
                        300)
             eng.begin_echo_block()
             mode = eng.mode
+            # Trial 1 of a Simon game is a single item, so its tap
+            # both registers and completes the trial.
             pump.until(lambda: mode.phase == "respond")
+            lane = mode.sequence[0]
+            pump.tap(lane, 0.015)
+            pump.until(lambda: len(mode._records) >= 1, 120)
+            self.assertEqual(mode._records[0]["pressed"], [lane])
+            self.assertEqual(mode._records[0]["outcome"], "correct")
+            # Trial 2 is two items, so the same short tap leaves the
+            # trial in flight rather than closing it.
+            pump.until(lambda: mode.phase == "respond"
+                       and len(mode.sequence) == 2, 600)
             lane = mode.sequence[0]
             pump.tap(lane, 0.015)
             for _ in range(6):

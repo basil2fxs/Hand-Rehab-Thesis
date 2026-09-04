@@ -40,10 +40,11 @@ ANTICIPATIONS AND CATCH TRIALS. Responses under 100 ms are not
 physiologically plausible visual reaction times and are scored as false
 starts, never as hits (Luce 1986, Response Times; Basner and Dinges
 2011, Sleep; Whelan 2008, The Psychological Record). A press during the
-foreperiod is likewise a false start; the trial aborts gently ("Too
-soon", no penalty sound, no score loss) and a fresh attempt follows, so
-false starts never consume scorable slots. On a fraction of trials
-(catch_rate) no stimulus ever comes; surviving the wait earns a small
+foreperiod is likewise a false start; the trial aborts gently (a line
+from the "ahead of the cue" phrase bank, no penalty sound, no score
+loss) and a fresh attempt follows, so false starts never consume
+scorable slots. On a fraction of trials (catch_rate) no stimulus ever
+comes; surviving the wait earns a small
 reward. Catch trials are the standard second anticipation control from
 the PVT tradition (Dinges and Powell 1985), kept at 10 percent because
 higher rates inflate RT and frustrate patients.
@@ -134,6 +135,7 @@ import pygame
 
 from ...hardware.eeg_trigger import CODES as EEG_CODES
 from ...hardware.fsr_detector import PressEvent
+from ...ui import feedback_bank
 from ..rest_skip import WaitSkip
 from ..scheduling import BalancedScheduler, PairedBalancedScheduler
 from ..scoring import ScoreConfig, TrialResult, classify
@@ -549,8 +551,11 @@ class ReactionMode(WaitSkip):
             hand=self._hand_for_lane(ev.lane),
         )
         self._stim_due = None
-        self._set_message("Too soon", self.false_start_feedback_s,
-                          kind="warn")
+        # A press before the cue is information, not a fault: the line
+        # says which way it was and what the go signal is. "warn"
+        # amber is kept for hardware problems only.
+        self._set_message(self._phrase("early"),
+                          self.false_start_feedback_s, kind="info")
         self._enter_rest(now, self.false_start_feedback_s)
 
     def _catch_false_start(self, ev: PressEvent, now: float) -> None:
@@ -563,8 +568,11 @@ class ReactionMode(WaitSkip):
             hand=self._hand_for_lane(ev.lane),
         )
         self._catch_until = None
-        self._set_message("Too soon", self.false_start_feedback_s,
-                          kind="warn")
+        # A press before the cue is information, not a fault: the line
+        # says which way it was and what the go signal is. "warn"
+        # amber is kept for hardware problems only.
+        self._set_message(self._phrase("early"),
+                          self.false_start_feedback_s, kind="info")
         self._enter_rest(now, self.false_start_feedback_s)
 
     def _catch_survived(self, now: float) -> None:
@@ -623,8 +631,8 @@ class ReactionMode(WaitSkip):
                 hand=self._hand_for_lane(trial.lane),
             )
             self._clear_lanes()
-            self._set_message("Too soon", self.false_start_feedback_s,
-                              kind="warn")
+            self._set_message(self._phrase("early"),
+                              self.false_start_feedback_s, kind="info")
             self._enter_rest(now, self.false_start_feedback_s)
             return
         if ev.lane == trial.lane:
@@ -648,7 +656,10 @@ class ReactionMode(WaitSkip):
                 trial, outcome, now,
                 stimulus=f"{self.sub_mode};fp={self._fp_scheduled:.3f}",
                 hand=self._hand_for_lane(trial.lane))
-            self._set_message("Wrong finger", self.feedback_s, kind="warn")
+            self._set_message(
+                self._phrase("wrong_finger",
+                             **self._finger_slots(trial.lane, ev.lane)),
+                self.feedback_s, kind="info")
             self._enter_rest(now, self.feedback_s)
             return
         # Simple mode: a different finger is logged and the attempt is
@@ -665,7 +676,10 @@ class ReactionMode(WaitSkip):
             hand=self._hand_for_lane(trial.lane),
         )
         self._clear_lanes()
-        self._set_message("Wrong finger", self.feedback_s, kind="warn")
+        self._set_message(
+            self._phrase("wrong_finger",
+                         **self._finger_slots(trial.lane, ev.lane)),
+            self.feedback_s, kind="info")
         self._enter_rest(now, self.feedback_s)
 
     def _close_scorable(self, ev: PressEvent | None, now: float,
@@ -731,10 +745,21 @@ class ReactionMode(WaitSkip):
         if is_best:
             store[key] = rt_ms
         # The kind picks the chip colour on screen: gold for a new
-        # best, amber for a lapse, green for an ordinary valid press.
+        # best, neutral for a lapse, green for an ordinary valid press.
+        if getattr(self.engine, "feedback_style", "") == "neutral":
+            # Lab style: the plain readout on every valid press, same
+            # colour every trial. A "NEW BEST" in gold is an extra
+            # visual event with its own emotional weight, which is
+            # exactly what an ERP block cannot have.
+            self._set_message(f"{rt_ms:.0f} ms", self.feedback_s,
+                              kind="info")
+            return
         if rt_ms >= self.lapse_ms:
-            msg = f"{rt_ms:.0f} ms  too slow"
-            kind = "warn"
+            # A lapse keeps its number (the information) and loses
+            # the verdict; the bank line says what to do next.
+            msg = self._phrase("lapse", mode="reaction",
+                               ms=f"{rt_ms:.0f}") or f"{rt_ms:.0f} ms"
+            kind = "info"
         elif is_best and prev is not None:
             msg = f"{rt_ms:.0f} ms  NEW BEST"
             kind = "best"
@@ -772,6 +797,19 @@ class ReactionMode(WaitSkip):
         if not isinstance(screens, dict):
             return None
         return screens.get("gameplay")
+
+    def _phrase(self, situation: str, mode: str | None = None,
+                **slots) -> str:
+        """Wording for one event, from the shared phrase bank, through
+        the engine's seeded deck when there is a real engine."""
+        return feedback_bank.phrase_via(
+            self.engine, situation, "line", mode, **slots)
+
+    def _finger_slots(self, target_lane: int | None,
+                      pressed_lane: int | None = None) -> dict:
+        target = feedback_bank.finger_words(target_lane)
+        pressed = feedback_bank.finger_words(pressed_lane) or target
+        return {"target": target, "pressed": pressed}
 
     def _set_message(self, text: str, duration_s: float,
                      kind: str = "info") -> None:

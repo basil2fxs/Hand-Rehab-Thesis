@@ -770,7 +770,8 @@ class CodeKeysTheHistoryTests(_LoginHarness):
         self.assertEqual(self.eng.session.participant, "P05")
         self._play_one_game(hit=False)
         self.assertIsNotNone(self.eng.vs_last)
-        self.assertIn("less accurate than last time", self.eng.vs_last["text"])
+        # Down on last time, said as a direction and not a verdict.
+        self.assertIn("down on last time", self.eng.vs_last["text"])
 
 
 def _load_ra():

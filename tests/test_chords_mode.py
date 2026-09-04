@@ -1022,10 +1022,19 @@ class HoldTraceReplayTests(unittest.TestCase):
             n += 1
         return stim_t, progress, phases
 
-    def _warn_text(self, screen) -> str:
-        warns = [txt for (_, txt, kind) in screen.messages
-                 if kind == "warn"]
-        return warns[-1] if warns else ""
+    def _feedback_text(self, screen) -> str:
+        """The last non-hit feedback line the screen was given.
+
+        Kind is "info", not "warn": amber is reserved for hardware
+        problems now, so a chord that did not form is not dressed up
+        as an alarm. The line still names the finger.
+        """
+        lines = [txt for (_, txt, kind) in screen.messages
+                 if kind != "success"]
+        return lines[-1] if lines else ""
+
+    # Old name kept so the rest of the file reads the same.
+    _warn_text = _feedback_text
 
     def test_a_held_press_satisfies_the_hold_with_live_progress(self):
         engine, mode, det, screen = self._build()
@@ -1063,8 +1072,15 @@ class HoldTraceReplayTests(unittest.TestCase):
         self.assertEqual(rec["class"], "no_hold")
         from finger_rehab.game.modes.chords import FINGER_NAMES
         expected = FINGER_NAMES[self._target]
-        self.assertEqual(self._warn_text(screen),
-                         f"{expected} lifted too soon")
+        # The finger that let go is named, and the line says what to
+        # do about it. The exact wording is drawn from the phrase
+        # bank, so pin the finger and the action, not one sentence.
+        text = self._warn_text(screen)
+        self.assertIn(expected, text)
+        self.assertTrue(
+            any(w in text.lower()
+                for w in ("keep it down", "keep them down", "longer")),
+            text)
         for (_, txt, _) in screen.messages:
             self.assertNotIn("beat", txt.lower())
         # The together bonus is forfeited on a broken hold: 6
@@ -1143,8 +1159,8 @@ class RtIsFirstOnsetTests(unittest.TestCase):
 
 class LeakFeedbackNamesFingerTests(unittest.TestCase):
     """Audit finding #26: a measured leak fail (no wrong press) must
-    name the offending finger, the argmax of leak_norms, not a generic
-    'Quiet fingers leaked'."""
+    name the finger it measured, the argmax of leak_norms, not a
+    generic line about the quiet fingers."""
 
     def test_measured_leak_fail_names_the_worst_finger(self) -> None:
         engine, mode = _build_mode()
@@ -1168,8 +1184,15 @@ class LeakFeedbackNamesFingerTests(unittest.TestCase):
         _complete_chord(mode, 5.4, gap_s=0.01)
         rec = mode._records[-1]
         self.assertEqual(rec["class"], "leak_fail")
-        self.assertIn("leaked, keep it still", captured["text"])
-        self.assertNotEqual(captured["text"], "Quiet fingers leaked")
+        # The named finger plus what to do with it. Wording comes
+        # from the phrase bank, so pin the finger, not the sentence.
+        from finger_rehab.game.modes.chords import FINGER_NAMES
+        worst = FINGER_NAMES[mode._finger_of_lane(quiet[0])]
+        self.assertIn(worst, captured["text"])
+        self.assertTrue(
+            any(w in captured["text"].lower()
+                for w in ("still", "rest it", "on its pad")),
+            captured["text"])
 
 
 class BilateralHandColumnTests(unittest.TestCase):

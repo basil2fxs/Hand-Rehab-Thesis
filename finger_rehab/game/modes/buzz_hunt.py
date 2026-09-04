@@ -83,10 +83,13 @@ they always did and block_stats carries the threshold dict, and with
 the flag off the threshold dict is empty rather than a start level
 dressed as a measurement. The gap stage keeps its staircase because a
 gap IS a duration and a silent gap has no amplitude to lose, but its
-floor is the motor's spin-down (GAP_FLOOR_MS, 120 ms: under that the
-motor is still ringing, so the two shorts merge) and its shorts are
-felt pulses (gap_short_ms 150), so the stage now measures gap
-detection on top of a real silence rather than on top of a twitch.
+floor is the motor's spin-down plus a display frame (GAP_FLOOR_MS,
+150 ms: under that the motor is still ringing, so the two shorts
+merge) and its shorts are felt pulses (gap_short_ms 150), so the
+stage now measures gap detection on top of a real silence rather
+than on top of a twitch. The floor is a HOST floor, not a
+perceptual one: a gap threshold that lands on it is censored, not
+measured, and must be reported as "at or below the floor".
 
 WHAT THIS MODE CANNOT CLAIM, said plainly:
 - The ERM motors' lag, rise and stop times on THIS rig are datasheet
@@ -268,8 +271,26 @@ log = logging.getLogger(__name__)
 FELT_PULSE_FLOOR_MS = 50.0
 # A silent gap shorter than the motor's spin-down is not silent: the
 # 310-103 class stop time is about 115 ms after current off, so the
-# gap staircase never asks for a gap under 120 ms.
-GAP_FLOOR_MS = 120.0
+# gap staircase never asks for a gap under this.
+#
+# The DELIVERED gap is shorter than the requested one, which is why
+# this is 150 and not 115 or 120. The first short ends on the
+# firmware's own 150 ms timer while the second short starts at the
+# first frame at or after its planned onset, so the motor-off window
+# is the request minus up to one display frame (measured on a replay
+# of the wire: 320 -> 316.7, 240 -> 233.3, 160 -> 150.0, 120 ->
+# 116.7). At a 120 ms floor that left 116.7 ms of motor-off against a
+# 115 ms spin-down, about 2 ms of real silence, so the bottom of the
+# staircase was a level nobody could answer and a good performer
+# walked straight down to it. 150 leaves the spin-down a full frame
+# of headroom, and it is also one firmware hold, the same number as
+# gap_short_ms.
+GAP_FLOOR_MS = 150.0
+# The firmware holds every STIM for this long and turns the motor off
+# on its own timer. A STIM for another finger on the same board inside
+# that window forces _send_stim to write a STOP first, and the buzz
+# already running is cut to a blip.
+FIRMWARE_HOLD_S = 0.150
 # The LEGACY duration staircase's floor (buzz_hunt.duration_staircase
 # true): the 20 ms command floor plus one-frame stretch means requests
 # under about 40 ms all deliver much the same twitch (measured
@@ -560,6 +581,34 @@ class BuzzHuntMode(WaitSkip):
     # Fingers must be quiet this long before a trial's wait starts, so
     # a lingering press cannot read as a lightning response.
     REST_GATE_S = 0.5
+    # THE PER-TRIAL WALL. The longest legitimate trial spends
+    # REST_GATE_S (0.5) at the quiet gate, up to wait_hi_s (2.2) of
+    # foreperiod and at most about twelve seconds of span playback, so
+    # 25 s is double the worst honest case. Past it the trial stops
+    # waiting for conditions that may never arrive: the quiet gate
+    # plays anyway and an early press becomes the answer instead of
+    # another replay. Without it three separate player behaviours
+    # (a finger resting on a pad, a press train faster than the gate,
+    # and tapping along with a span or gap stimulus) held a trial in
+    # sub "wait" forever, and because no deadline existed inside
+    # phase "trial" the whole block went down with it: no buzz, no
+    # summary, no end. A trial that ran under a forced gate is still
+    # a trial and is flagged as one; a block that never runs is
+    # nothing.
+    TRIAL_WALL_S = 25.0
+    # Belt and braces on top of the wall: the hard ceiling for a whole
+    # trial is the wall plus that trial's own response window plus
+    # this pad. Nothing should ever reach it (every sub-phase has its
+    # own deadline), so reaching it means a sub-phase deadline has a
+    # hole in it, and the watchdog closes the trial and says so in
+    # raw.csv rather than letting the block sit.
+    TRIAL_WATCHDOG_PAD_S = 5.0
+    # Consecutive trials whose stimulus never reached the hardware
+    # before the block gives up and says so. A board that has stopped
+    # accepting bytes does not come back on its own, and a silent
+    # block that reports "completed" is worse than no block: three in
+    # a row ends it with end_reason stim_lost.
+    STIM_LOST_RUN = 3
     # Second tap in a gap trial must land within this of the first to
     # read as a deliberate double tap; the window close is the real
     # judge, this only shapes the on-screen tap dots.
@@ -789,8 +838,29 @@ class BuzzHuntMode(WaitSkip):
         self.trial_t0: float | None = None
         self._wait_s = 1.0
         self._quiet_since: float | None = None
+        # The per-trial wall (TRIAL_WALL_S past _start_trial) and what
+        # it had to force, which the row and the notebook both read.
+        self._trial_wall: float | None = None
+        self._wall_forced: str = ""
+        # Trials the wall had to start or close for the block. Drawn
+        # in the corner of the screen so a therapist can see the rig
+        # is fighting the gate rather than frozen.
+        self.forced_starts = 0
+        # Consecutive trials whose stimulus never reached the board.
+        self._stim_fail_run = 0
+        self._stim_lost = False
+        # Per board, the lane last driven and the moment its buzz is
+        # over, on the mode's own clock. _begin_play reads it so a
+        # restarted playback cannot fire into a live hold.
+        self._last_pulse: dict[str, tuple[int, float]] = {}
         self._pulse_plan: list[tuple[int, float, float]] = []
         self._pulse_idx = 0
+        # How far a frame overrun has pushed the remaining plan out
+        # from where _prepare_trial drew it (see _reanchor_plan). The
+        # stimulus markers and the response window read the shifted
+        # span, not the planned one, so they still bracket the real
+        # stimulus.
+        self._plan_shift_s = 0.0
         self._stim_seg_open = False
         self._stim_delivered: bool | None = None
         self._play_t0: float | None = None
@@ -834,10 +904,21 @@ class BuzzHuntMode(WaitSkip):
 
     def on_resume(self, pause_dur: float) -> None:
         for attr in ("_t0", "_phase_until", "_quiet_since", "_play_t0",
-                     "_respond_t0", "_target_on", "trial_t0"):
+                     "_respond_t0", "_target_on", "trial_t0",
+                     "_trial_wall"):
             v = getattr(self, attr)
             if v is not None:
                 setattr(self, attr, v + pause_dur)
+        if self.phase == "trial" and self.sub == "wait" \
+                and self._pulse_idx == 0:
+            # Nothing has been delivered, so there is nothing to
+            # protect: the timestamps above already absorbed the
+            # pause and the trial carries on where it was. Restarting
+            # it cost a whole announce card plus a fresh foreperiod
+            # for nothing, and a patient who paused every six seconds
+            # played eight trials of sixty-two.
+            self._presses.clear()
+            return
         if self.phase == "trial":
             # A pause interrupts the pulse train or the response
             # window, so the trial is unscoreable: restart it. Nothing
@@ -857,9 +938,10 @@ class BuzzHuntMode(WaitSkip):
                     "trial_restart", lane=self.lane,
                     detail=f"trial_id={self.trial_counter}",
                     hand=self.engine.hand_mode)
-            self.engine.stop_all_motors()
+            now = time.perf_counter()
+            self._release_motors(now)
             self._redraw_interrupted_material()
-            self._enter_announce(time.perf_counter())
+            self._enter_announce(now)
 
     # ---- main tick ---------------------------------------------------------
     def update(self, dt: float) -> None:
@@ -878,8 +960,17 @@ class BuzzHuntMode(WaitSkip):
         # nobody at the pads, the same lesson chords learnt: a cap
         # that only ticks at trial closes never fires when no trial
         # ever closes.
-        if (self.phase in ("stage", "announce", "feedback")
-                and (now - self._t0) > self.session_cap_s):
+        # A trial still at its quiet gate counts as between trials for
+        # this purpose: nothing has been delivered yet, so ending
+        # there cuts no stimulus short, which is the same reason the
+        # cap is allowed to fire on a card. Without it a gate that
+        # never opened held the cap off as well as the block, and a
+        # fifteen minute block sat for an hour with the buzzer silent.
+        past_cap = (now - self._t0) > self.session_cap_s
+        if past_cap and self.phase in ("stage", "announce", "feedback"):
+            self._end("time_cap")
+            return
+        if past_cap and self.phase == "trial" and self.sub == "wait":
             self._end("time_cap")
             return
         if self.phase in ("stage", "announce"):
@@ -1062,7 +1153,14 @@ class BuzzHuntMode(WaitSkip):
         self.sub = "wait"
         self._quiet_since = None
         self._pulse_idx = 0
-        self._stim_seg_open = False
+        self._plan_shift_s = 0.0
+        # A restart from on_resume arrives here with the stimulus
+        # marker still open. Tie it off properly instead of dropping
+        # the flag: an unbalanced segment leaves the notebook pairing
+        # this trial's stim start with the NEXT trial's stim end, and
+        # the trial_restart event only rescues that if the pairing
+        # code looks for it.
+        self._close_stim_marker(now)
         self._play_t0 = None
         self._respond_t0 = None
         self._target_on = None
@@ -1081,6 +1179,12 @@ class BuzzHuntMode(WaitSkip):
         self.clear_wait()
         self.trial_t0 = now
         self._quiet_since = None
+        # Re-stamped on EVERY entry to a trial, a restart from
+        # on_resume included, so the wall always measures this
+        # attempt at this trial rather than the block.
+        self._trial_wall = now + self.TRIAL_WALL_S
+        self._wall_forced = ""
+        self.stage_msg = ""
         self.active = PendingTrial(
             trial_id=self.trial_counter, lane=max(self.lane, 0),
             stim_t_perf=now, keys_pressed=[], incorrect_presses=[])
@@ -1130,7 +1234,35 @@ class BuzzHuntMode(WaitSkip):
                 continue
         return False
 
+    def _trial_watchdog_s(self) -> float:
+        """The hard ceiling on one whole trial: the wall, plus this
+        trial's own response window, plus a pad. Every sub-phase has
+        its own deadline inside that, so this only ever fires if one
+        of them has a hole in it."""
+        return (self.TRIAL_WALL_S + self._respond_window_s()
+                + self.TRIAL_WATCHDOG_PAD_S)
+
     def _trial_frame(self, now: float) -> None:
+        # Watchdog first, so a sub-phase that somehow cannot end
+        # cannot take the block with it. It closes the trial through
+        # the normal path (a row is written, the block advances) and
+        # names itself in raw.csv so the notebook can drop the row.
+        if (self.trial_t0 is not None
+                and now - self.trial_t0 > self._trial_watchdog_s()):
+            self._force_close_trial(now, "watchdog")
+            return
+        # The engine's motor drain can discover mid-frame that a
+        # stretched pulse broke in two (a frame longer than the
+        # firmware hold let the motor spin down before the re-arm
+        # landed). It reports that the only way it can, by setting
+        # _last_stim_delivered False; pick it up here so the trial is
+        # voided through the same path as a dropped STIM. A buzz with
+        # a hole in it is a different stimulus, and in the gap stage
+        # it is the wrong answer.
+        if (self._stim_delivered is True
+                and getattr(self.engine, "_last_stim_delivered",
+                            None) is False):
+            self._stim_delivered = False
         if self.sub == "wait":
             self._wait_frame(now)
         elif self.sub == "play":
@@ -1138,7 +1270,82 @@ class BuzzHuntMode(WaitSkip):
         elif self.sub == "respond":
             self._respond_frame(now)
 
+    def _force_close_trial(self, now: float, reason: str) -> None:
+        """Close whatever trial is in flight and move on.
+
+        Used by the watchdog, and by the play-phase half of the wall
+        when an early press has to become the answer rather than the
+        nth reason to replay. Whatever presses are queued become the
+        response, the motors stop, the markers close, and the trial
+        goes through its ordinary close so the row, the score and the
+        block counter all stay consistent."""
+        self._wall_forced = reason
+        self.forced_starts += 1
+        self._release_motors(now)
+        while self._presses:
+            ev = self._presses.popleft()
+            self._resp_presses.append((ev.lane, ev.t_perf))
+        raw = getattr(self.engine, "raw_logger", None)
+        if raw:
+            raw.queue_event(
+                "buzz_hunt_trial_forced", lane=max(self.lane, 0),
+                t_perf=now,
+                detail=(f"trial_id={self.trial_counter};"
+                        f"sub={self.sub};reason={reason}"),
+                hand=self.engine.hand_mode)
+        was_wait = self.sub == "wait"
+        self._close_stim_marker(now)
+        if self.sub != "respond":
+            self.sub = "respond"
+            if self._respond_t0 is None:
+                self._respond_t0 = now
+            self.engine.log_segment_start("respond", self.trial_counter,
+                                          max(self.lane, 0), now)
+        if was_wait and self._pulse_plan:
+            # Nothing was ever delivered, so this is not a perception
+            # sample: void it the way a dropped STIM is voided rather
+            # than scoring silence as a miss. A catch trial has no
+            # plan and nothing to void, and its stim_delivered stays
+            # None so it cannot read as a hardware failure.
+            self._stim_delivered = False
+            self.engine._last_stim_delivered = False
+        if self.waveform == "buzz":
+            self._close_buzz(now, responded=bool(self._resp_presses))
+        elif self.waveform == "buzz_seq":
+            self._close_span(now)
+        else:
+            self._close_gap(now)
+
     def _wait_frame(self, now: float) -> None:
+        # THE WALL, wait half. Past it the gate stops asking for
+        # conditions that may never arrive (a finger resting on a pad,
+        # a press train faster than REST_GATE_S plus the foreperiod)
+        # and plays anyway. The forced start is stamped on the row and
+        # queued as a raw event so the notebook can drop these trials
+        # from every timing measure; the foreperiod they ran under is
+        # not the drawn one.
+        if (self._trial_wall is not None and now > self._trial_wall
+                and not self._wall_forced):
+            why = "fingers_down" if self._fingers_down() else "presses"
+            self._wall_forced = f"wait:{why}"
+            self.forced_starts += 1
+            self._presses.clear()
+            raw = getattr(self.engine, "raw_logger", None)
+            if raw:
+                raw.queue_event(
+                    "buzz_hunt_gate_forced", lane=max(self.lane, 0),
+                    t_perf=now,
+                    detail=(f"trial_id={self.trial_counter};"
+                            f"reason={why}"),
+                    hand=self.engine.hand_mode)
+            # No on-screen warning that the buzz is coming: the
+            # foreperiod is part of the stimulus and a line saying
+            # "here it comes" would hand over the onset the jitter
+            # exists to hide. The screen carries the running count of
+            # forced starts instead, which only ever changes after the
+            # fact, and raw.csv carries the moment.
+            self._begin_play(now)
+            return
         # Quiet gate, then the drawn wait. A press during either
         # restarts the wait gently: it cannot be a response to a
         # stimulus that has not fired, and letting it stand would
@@ -1154,9 +1361,15 @@ class BuzzHuntMode(WaitSkip):
                     "buzz_hunt_early", lane=max(self.lane, 0),
                     detail=f"trial_id={self.trial_counter};sub=wait",
                     hand=self.engine.hand_mode)
+            # A therapist watching a gate that keeps resetting used to
+            # get nothing at all: no banner, no skip chip (the
+            # foreperiod is deliberately unarmed) and a frozen score.
+            # Say what the block is waiting for.
+            self.stage_msg = "Hands still, please"
             return
         if self._fingers_down():
             self._quiet_since = None
+            self.stage_msg = "Rest your fingers on the pads"
             return
         if self._quiet_since is None:
             self._quiet_since = now
@@ -1166,8 +1379,29 @@ class BuzzHuntMode(WaitSkip):
 
     def _begin_play(self, now: float) -> None:
         self.sub = "play"
-        self._play_t0 = now
+        # The gate's instruction line comes down the moment the gate
+        # opens: leaving it up through the stimulus would put a
+        # changing word on screen while the patient is meant to be
+        # feeling for a buzz.
+        self.stage_msg = ""
+        # A restart (an early press, a pause, the wall spending
+        # itself) can arrive while the board is still inside the
+        # 150 ms firmware hold of the pulse the abandoned playback
+        # left running. Firing the new plan's first pulse there makes
+        # _send_stim write a STOP across that live hold and the finger
+        # gets a clipped buzz instead of a whole one. One board, one
+        # motor at a time: start the plan when the hold has run out.
+        # A same-lane restart needs no wait, because a re-arm on the
+        # lane already buzzing sends no STOP.
+        start = now
+        if self._pulse_plan:
+            first_lane = self._pulse_plan[0][0]
+            held = self._last_pulse.get(self._lane_owner(first_lane)[0])
+            if held is not None and held[0] != first_lane:
+                start = max(start, held[1])
+        self._play_t0 = start
         self._pulse_idx = 0
+        self._plan_shift_s = 0.0
         span = stimulus_span_s(self.waveform, self.params)
         # Response opens at target onset for localisation (a fast
         # press mid-buzz is a legitimate response) and at stimulus end
@@ -1177,11 +1411,11 @@ class BuzzHuntMode(WaitSkip):
         if self.waveform == "buzz":
             lead = (float(self.params.get("distractor_lead_ms", 0.0))
                     / 1000.0 if "distractor_lane" in self.params else 0.0)
-            self._target_on = now + lead
+            self._target_on = start + lead
             self._respond_t0 = self._target_on
         else:
-            self._target_on = now
-            self._respond_t0 = now + span
+            self._target_on = start
+            self._respond_t0 = start + span
         if self.active is not None:
             self.active.stim_t_perf = self._target_on
         self.engine.log_segment_start("stim", self.trial_counter,
@@ -1193,6 +1427,37 @@ class BuzzHuntMode(WaitSkip):
             self.sub = "respond"
             self.engine.log_segment_start("respond", self.trial_counter,
                                           max(self.lane, 0), now)
+
+    def _release_motors(self, now: float) -> None:
+        """Stop the motors WITHOUT cutting a pulse that is still
+        inside its firmware hold.
+
+        A trial is abandoned in three ways (an early press, the wall
+        spending itself, a pause) and each of them used to send STOP
+        on the spot. If the stimulus had gone out microseconds
+        earlier, that STOP arrived before the motor had done anything:
+        the wire carried STIM then STOP with nothing between, and the
+        recorded pulse was 0 ms. A 310-103 class ERM has about 40 ms
+        of lag and 87 ms of rise, so anything cut inside its own hold
+        is not a fainter buzz, it is no buzz, and it is exactly the
+        "buzzer doesn't go off long enough to feel" complaint.
+
+        Nothing needs the motors off THIS frame: an abandoned trial
+        re-waits REST_GATE_S plus a fresh foreperiod, and a pause is
+        not measuring anything. So drop everything queued (so no
+        re-arm can restart a finger behind the stop) and let the stop
+        land when the current hold expires, at most one hold away. The
+        firmware would have turned the motor off on its own timer at
+        that moment anyway."""
+        e = self.engine
+        busy = getattr(e, "_motor_busy", None) or {}
+        until = max((u for _lane, u in busy.values()), default=None)
+        e._motor_queue = []
+        e._pulse_stops = {}
+        if until is None or now >= until:
+            e.stop_all_motors()
+            return
+        e._motor_stop_at = until
 
     def _close_stim_marker(self, now: float) -> None:
         """End the raw-stream stim marker exactly once. Needed as a
@@ -1225,15 +1490,58 @@ class BuzzHuntMode(WaitSkip):
             self.hand, _f = self._lane_owner(self.lane)
             self.params["seq"] = pack_lanes(self.sequence)
         elif self.waveform == "buzz_gap":
-            draw = random.Random(self.trial_seed)
-            self.gap_two = draw.random() < 0.5
+            # Through the balanced bag, not a fresh coin flip. The bag
+            # exists so a run of "two" answers cannot teach a response
+            # bias the staircase then misreads; a coin flip here meant
+            # that repeated pausing, or a patient who kept pressing
+            # during playback, quietly unbalanced the one/two
+            # distribution the staircase reads.
+            self.gap_two = bool(self._gap_kind_bag.next())
             self.params["two"] = 1 if self.gap_two else 0
         self._pulse_plan = pulses_from_params(self.waveform, self.params)
+        self._plan_shift_s = 0.0
+
+    def _reanchor_plan(self, idx: int, shift_s: float) -> None:
+        """Push this pulse and every one after it out by shift_s.
+
+        Same lesson syllables._update_model learnt (its comment says
+        it in as many words): when the loop has stalled past a beat,
+        re-anchor rather than burst-fire the catch-up items a frame
+        apart, because one board drives four motors through one
+        darlington and cannot deliver two at once. Compressing the
+        train is what turns a span playback into a ladder of 0 ms
+        blips. The whole remaining plan moves together so the spacing
+        the stage measures survives; the trial is still voided by the
+        caller, because the delivered timing no longer matches the
+        row."""
+        self._pulse_plan = [
+            (lane, (on + shift_s if i >= idx else on), dur)
+            for i, (lane, on, dur) in enumerate(self._pulse_plan)]
+        self._plan_shift_s += shift_s
+        if self.waveform != "buzz" and self._play_t0 is not None:
+            # For span and gap the response window opens at stimulus
+            # END, so it has to move with the stimulus or the window
+            # opens while the last pulse is still playing.
+            self._respond_t0 = self._play_t0 + self._stim_span_s()
+
+    def _stim_span_s(self) -> float:
+        """This trial's stimulus length as it is actually being
+        played: the planned span plus whatever a re-anchor added."""
+        return (stimulus_span_s(self.waveform, self.params)
+                + self._plan_shift_s)
 
     def _play_frame(self, now: float) -> None:
         t = now - (self._play_t0 or now)
-        while (self._pulse_idx < len(self._pulse_plan)
-               and t >= self._pulse_plan[self._pulse_idx][1]):
+        # ONE PULSE PER FRAME. This used to be a while loop, so a
+        # single long frame dispatched every overdue pulse at once and
+        # each pulse_motor landed inside the previous lane's 150 ms
+        # firmware hold, making _send_stim write a STOP first: a
+        # STIM/STOP/STIM/STOP ladder microseconds apart and three span
+        # items of exactly 0 ms on the wire (measured on a 2 s frame
+        # freeze). echo.py fires one item per frame and returns for
+        # the same reason.
+        if (self._pulse_idx < len(self._pulse_plan)
+                and t >= self._pulse_plan[self._pulse_idx][1]):
             lane, _on, dur = self._pulse_plan[self._pulse_idx]
             # Timing guard for the pulses AFTER the first: a frame
             # stall longer than the planned inter-pulse gap dispatches
@@ -1276,7 +1584,15 @@ class BuzzHuntMode(WaitSkip):
                             detail=(f"late_s={late_s:.3f};"
                                     f"spacing_s={spacing:.3f}"),
                             hand=self.engine.hand_mode)
+                    # Re-anchor rather than compress: the trial is
+                    # already void, but the patient still has a
+                    # stimulus in their hand and it must not arrive
+                    # as a burst of blips.
+                    self._reanchor_plan(self._pulse_idx, late_s)
+                    lane, _on, dur = self._pulse_plan[self._pulse_idx]
             ok = self.engine.pulse_motor(lane, dur)
+            self._last_pulse[self._lane_owner(lane)[0]] = (
+                lane, now + max(dur / 1000.0, FIRMWARE_HOLD_S))
             if self._pulse_idx == 0:
                 # EEG buzz-as-stimulus marker (38). Anchored to the
                 # moment the STIM byte left for the Arduino, because
@@ -1319,7 +1635,7 @@ class BuzzHuntMode(WaitSkip):
             ev = self._presses.popleft()
             self._presses.clear()
             self._resp_presses.append((ev.lane, ev.t_perf))
-            self.engine.stop_all_motors()
+            self._release_motors(now)
             self._close_stim_marker(now)
             raw = getattr(self.engine, "raw_logger", None)
             if raw:
@@ -1348,7 +1664,7 @@ class BuzzHuntMode(WaitSkip):
                 and "distractor_lane" in self.params):
             ev = self._presses.popleft()
             self._presses.clear()
-            self.engine.stop_all_motors()
+            self._release_motors(now)
             self._close_stim_marker(now)
             raw = getattr(self.engine, "raw_logger", None)
             if raw:
@@ -1371,10 +1687,37 @@ class BuzzHuntMode(WaitSkip):
             self._finish_trial(now)
             return
         if self._presses and now < (self._respond_t0 or now):
+            # THE WALL, play half. The abort below exists so a partial
+            # exposure is not scored as a full one, and it is right
+            # for the first press or two. What it had no answer for is
+            # a patient whose reaction time is simply shorter than the
+            # stimulus: the gap stage's stimulus runs 420 to 620 ms
+            # and the span stage's up to 1750 ms, replaying as you
+            # feel it is the obvious strategy for a tactile sequence,
+            # and every retry drew the same press again because a
+            # reaction time is a property of the person, not the
+            # trial. Measured: a 300 ms responder locked up 12 blocks
+            # of 12 at the median of 32 trials, which is the end of
+            # the localisation stage. Past the wall the press stops
+            # being a reason to replay and becomes the trial's answer;
+            # the row carries trial_wall_spent so the notebook can
+            # drop it from the timing measures.
+            if self._trial_wall is not None and now > self._trial_wall:
+                self._early_presses[self.stage] = (
+                    self._early_presses.get(self.stage, 0) + 1)
+                raw = getattr(self.engine, "raw_logger", None)
+                if raw:
+                    raw.queue_event(
+                        "buzz_hunt_early", lane=max(self.lane, 0),
+                        detail=(f"trial_id={self.trial_counter};"
+                                f"sub=play;trial_wall_spent=True"),
+                        hand=self.engine.hand_mode)
+                self._force_close_trial(now, "play:trial_wall_spent")
+                return
             self._presses.clear()
             self._early_presses[self.stage] = (
                 self._early_presses.get(self.stage, 0) + 1)
-            self.engine.stop_all_motors()
+            self._release_motors(now)
             self._close_stim_marker(now)
             raw = getattr(self.engine, "raw_logger", None)
             if raw:
@@ -1386,8 +1729,7 @@ class BuzzHuntMode(WaitSkip):
             self.sub = "wait"
             self._quiet_since = None
             return
-        stim_end = ((self._play_t0 or now)
-                    + stimulus_span_s(self.waveform, self.params))
+        stim_end = (self._play_t0 or now) + self._stim_span_s()
         open_at = self._respond_t0 or now
         if now >= open_at:
             self.sub = "respond"
@@ -1415,8 +1757,7 @@ class BuzzHuntMode(WaitSkip):
         # For localisation the buzz may still be sounding while the
         # window is open; close its raw marker the frame it ends.
         if self._stim_seg_open:
-            stim_end = ((self._play_t0 or now)
-                        + stimulus_span_s(self.waveform, self.params))
+            stim_end = (self._play_t0 or now) + self._stim_span_s()
             if now >= stim_end:
                 self._close_stim_marker(stim_end)
         while self._presses:
@@ -1437,10 +1778,57 @@ class BuzzHuntMode(WaitSkip):
             else:
                 self._close_gap(now)
 
+    # ---- the board across trials -------------------------------------------
+    def _note_stim_result(self, stim_failed: bool) -> None:
+        """Track the hardware across trials, not just within one.
+
+        Every close path already voids its own trial when the
+        stimulus did not reach the board, but nothing read that back
+        during the block: a board that stopped accepting bytes at
+        trial 5 played 45 silent trials, logged 45 warnings into a
+        file nobody watches during a session, and the block still
+        reported end_reason "completed". A dropout does not come back
+        on its own, so STIM_LOST_RUN failures in a row end the block
+        honestly with everything already played kept, exactly as
+        time_cap does.
+
+        A trial the wall forced out of the quiet gate never asked the
+        hardware for anything (_pulse_idx 0). It is still void, but it
+        is evidence about the patient, not about the board, so it
+        neither counts toward the run nor clears it.
+        """
+        if self._pulse_idx == 0:
+            return
+        if not stim_failed:
+            self._stim_fail_run = 0
+            return
+        self.engine._block_stim_failures += 1
+        log.warning("Buzz Hunt stimulus not delivered for trial "
+                    "%s. Check the Arduino connection.",
+                    self.trial_counter)
+        self._stim_fail_run += 1
+        raw = getattr(self.engine, "raw_logger", None)
+        if self._stim_fail_run == 1 and raw:
+            # The moment the board went away, in raw.csv, rather than
+            # only as a delivered=NO detail on each trial row.
+            raw.queue_event(
+                "buzz_hunt_stim_fail", lane=max(self.lane, 0),
+                detail=f"trial_id={self.trial_counter};run=1",
+                hand=self.engine.hand_mode)
+        if self._stim_fail_run >= self.STIM_LOST_RUN and not self._stim_lost:
+            self._stim_lost = True
+            self.stage_msg = "Check the Arduino connection"
+            if raw:
+                raw.queue_event(
+                    "stim_lost", lane=max(self.lane, 0),
+                    detail=(f"trial_id={self.trial_counter};"
+                            f"run={self._stim_fail_run}"),
+                    hand=self.engine.hand_mode)
+
     # ---- closing: localisation and distractor ------------------------------
     def _segments(self, now: float) -> list[tuple[str, float, float]]:
         play_t0 = self._play_t0 or now
-        stim_end = play_t0 + stimulus_span_s(self.waveform, self.params)
+        stim_end = play_t0 + self._stim_span_s()
         segs = [("stim", play_t0, min(stim_end, now))]
         if self._respond_t0 is not None:
             segs.append(("respond", self._respond_t0, now))
@@ -1469,11 +1857,7 @@ class BuzzHuntMode(WaitSkip):
         # rather than reading it as a real Miss (or, worse, a lucky
         # correct guess) and pushing the staircase on hardware noise.
         stim_failed = self._stim_delivered is False
-        if stim_failed:
-            self.engine._block_stim_failures += 1
-            log.warning("Buzz Hunt stimulus not delivered for trial "
-                         "%s. Check the Arduino connection.",
-                         self.trial_counter)
+        self._note_stim_result(stim_failed)
         # Belt-and-braces: a press timestamped before the target
         # actually fired can only reach here through the lured-decoy
         # path above (where it is scored as a miss, not a hit), but
@@ -1556,7 +1940,8 @@ class BuzzHuntMode(WaitSkip):
                 f"dur_ms={float(self.params['dur_ms']):.0f};"
                 f"window_ms={float(self.params['window_ms']):.0f};"
                 f"{level_txt}"
-                f"lured={lured};stim_failed={stim_failed}")
+                f"lured={lured};stim_failed={stim_failed};"
+                f"wall_forced={self._wall_forced}")
             info = ContinuousTrialLog(waveform="buzz", params=self.params,
                                       seed=self.trial_seed,
                                       segments=self._segments(now))
@@ -1571,7 +1956,24 @@ class BuzzHuntMode(WaitSkip):
                                   error_type=("stim_failed"
                                               if stim_failed
                                               and outcome.label == "Miss"
-                                              else None))
+                                              else None),
+                                  # In this mode the buzz IS the
+                                  # stimulus, so a confirmation buzz
+                                  # on the same finger cannot be told
+                                  # apart from it: log_trial's
+                                  # after-press cue re-arms the lane
+                                  # and throws away the stimulus
+                                  # pulse's own scoped stop, which
+                                  # merged the two into one buzz
+                                  # running from onset to 150 ms past
+                                  # the press. Measured with
+                                  # cue.buzz_after on: a 50 ms
+                                  # reaction delivered 183 ms and a
+                                  # 120 ms reaction 267 ms, against a
+                                  # row that still said 150. The
+                                  # chime under cue.sound_after is the
+                                  # confirmation channel here.
+                                  after_press_cue=False)
         if not stim_failed:
             # A trial whose buzz never fired is not a perception
             # sample: it must not water down (or, on a lucky guess,
@@ -1647,11 +2049,7 @@ class BuzzHuntMode(WaitSkip):
                                     max(self.lane, 0), now)
         pressed = [lane for lane, _t in self._resp_presses]
         stim_failed = self._stim_delivered is False
-        if stim_failed:
-            self.engine._block_stim_failures += 1
-            log.warning("Buzz Hunt stimulus not delivered for trial "
-                         "%s. Check the Arduino connection.",
-                         self.trial_counter)
+        self._note_stim_result(stim_failed)
         correct = (not stim_failed) and pressed == self.sequence
         n_right = sum(1 for a, b in zip(pressed, self.sequence) if a == b)
         if correct:
@@ -1671,7 +2069,8 @@ class BuzzHuntMode(WaitSkip):
                 f"hebb={1 if self.is_hebb else 0};"
                 f"played={pack_lanes(self.sequence)};"
                 f"pressed={pack_lanes(pressed)};"
-                f"stim_failed={stim_failed}")
+                f"stim_failed={stim_failed};"
+                f"wall_forced={self._wall_forced}")
             info = ContinuousTrialLog(waveform="buzz_seq",
                                       params=self.params,
                                       seed=self.trial_seed,
@@ -1682,7 +2081,24 @@ class BuzzHuntMode(WaitSkip):
                                   error_type=("stim_failed"
                                               if stim_failed
                                               and outcome.label == "Miss"
-                                              else None))
+                                              else None),
+                                  # In this mode the buzz IS the
+                                  # stimulus, so a confirmation buzz
+                                  # on the same finger cannot be told
+                                  # apart from it: log_trial's
+                                  # after-press cue re-arms the lane
+                                  # and throws away the stimulus
+                                  # pulse's own scoped stop, which
+                                  # merged the two into one buzz
+                                  # running from onset to 150 ms past
+                                  # the press. Measured with
+                                  # cue.buzz_after on: a 50 ms
+                                  # reaction delivered 183 ms and a
+                                  # 120 ms reaction 267 ms, against a
+                                  # row that still said 150. The
+                                  # chime under cue.sound_after is the
+                                  # confirmation channel here.
+                                  after_press_cue=False)
         if not stim_failed:
             # A sequence that never played is not a memory sample: it
             # must not enter the span curve or the Hebb slope.
@@ -1715,11 +2131,7 @@ class BuzzHuntMode(WaitSkip):
         answered_two = taps >= 2
         responded = taps > 0
         stim_failed = self._stim_delivered is False
-        if stim_failed:
-            self.engine._block_stim_failures += 1
-            log.warning("Buzz Hunt stimulus not delivered for trial "
-                         "%s. Check the Arduino connection.",
-                         self.trial_counter)
+        self._note_stim_result(stim_failed)
         correct = ((not stim_failed) and responded
                   and answered_two == self.gap_two)
         stair = self._gap_stair[self.hand]
@@ -1754,7 +2166,8 @@ class BuzzHuntMode(WaitSkip):
                 f"two={1 if self.gap_two else 0};"
                 f"gap_ms={float(self.params['gap_ms']):.0f};"
                 f"taps={taps};stair_ms={stair.level:.0f};"
-                f"reversal={reversal};stim_failed={stim_failed}")
+                f"reversal={reversal};stim_failed={stim_failed};"
+                f"wall_forced={self._wall_forced}")
             info = ContinuousTrialLog(waveform="buzz_gap",
                                       params=self.params,
                                       seed=self.trial_seed,
@@ -1765,7 +2178,24 @@ class BuzzHuntMode(WaitSkip):
                                   error_type=("stim_failed"
                                               if stim_failed
                                               and outcome.label == "Miss"
-                                              else None))
+                                              else None),
+                                  # In this mode the buzz IS the
+                                  # stimulus, so a confirmation buzz
+                                  # on the same finger cannot be told
+                                  # apart from it: log_trial's
+                                  # after-press cue re-arms the lane
+                                  # and throws away the stimulus
+                                  # pulse's own scoped stop, which
+                                  # merged the two into one buzz
+                                  # running from onset to 150 ms past
+                                  # the press. Measured with
+                                  # cue.buzz_after on: a 50 ms
+                                  # reaction delivered 183 ms and a
+                                  # 120 ms reaction 267 ms, against a
+                                  # row that still said 150. The
+                                  # chime under cue.sound_after is the
+                                  # confirmation channel here.
+                                  after_press_cue=False)
         if not stim_failed:
             # A stimulus that never played is not a gap-detection
             # sample: it must not enter the gap accuracy or the
@@ -1796,6 +2226,12 @@ class BuzzHuntMode(WaitSkip):
 
     def _next_or_end(self, now: float) -> None:
         self.clear_wait()
+        # Checked BEFORE the completion check: a block whose board
+        # died halfway through has not completed anything, and
+        # reporting that it did is the worst version of the fault.
+        if self._stim_lost:
+            self._end("stim_lost")
+            return
         if self.trials_done >= self.total_trials:
             self._end("completed")
             return
@@ -1932,12 +2368,22 @@ class BuzzHuntMode(WaitSkip):
             }
         gap_thresholds: dict[str, dict] = {}
         for hand, stair in self._gap_stair.items():
+            est = stair.estimate(self.threshold_reversals)
+            landed = est if est is not None else stair.level
             gap_thresholds[hand] = {
                 "final_ms": round(stair.level, 1),
-                "estimate_ms": (round(est, 1) if (est := stair.estimate(
-                    self.threshold_reversals)) is not None else None),
+                "estimate_ms": (round(est, 1) if est is not None
+                                else None),
                 "n_reversals": len(stair.reversals),
                 "reversals_ms": [round(r, 1) for r in stair.reversals],
+                # The floor is the motor's spin-down plus a display
+                # frame, a HOST limit and not a perceptual one, so a
+                # threshold sitting on it is a censored observation:
+                # the patient's real threshold is at or below the
+                # floor and this rig cannot say where. Report it that
+                # way, never as a number.
+                "floor_ms": round(self.gap_floor_ms, 1),
+                "censored": bool(landed <= self.gap_floor_ms + 1e-6),
             }
         hebb = [r for r in self._span_records if r["hebb"]]
         novel = [r for r in self._span_records if not r["hebb"]]
@@ -2011,5 +2457,13 @@ class BuzzHuntMode(WaitSkip):
             },
             "demo": self.demo,
             "end_reason": self.end_reason,
+            # How hard the block had to work to keep moving, so a
+            # reader can tell a clean block from one the wall carried.
+            "reliability": {
+                "forced_starts": self.forced_starts,
+                "stim_failures": int(getattr(
+                    self.engine, "_block_stim_failures", 0) or 0),
+                "stim_lost": self._stim_lost,
+            },
             **self.wait_skip_stats(),
         }

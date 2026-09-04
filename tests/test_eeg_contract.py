@@ -300,7 +300,12 @@ class WriterConfigTests(unittest.TestCase):
         self.assertEqual(st["box_mode"], "pulse")
         self.assertEqual(st["pulse_ms"], 8.0)
         self.assertEqual(st["gap_ms"], 12.0)
-        self.assertEqual(st["codes_version"], "1.2")
+        # 1.3 added the 50-band choice-set codes for syllables. No
+        # existing code changed meaning, which the band and uniqueness
+        # tests above check; this pins that the version travels into
+        # metadata so a recording can always be decoded with the map
+        # it was made under.
+        self.assertEqual(st["codes_version"], "1.3")
 
 
 class _EngineHarness(unittest.TestCase):
@@ -874,7 +879,7 @@ class RhythmLeadMarkerTests(_EngineHarness):
                 eng.finish_block()
                 meta = json.loads((root / "metadata.json").read_text())
                 eeg = meta["eeg"]
-                self.assertEqual(eeg["codes_version"], "1.2")
+                self.assertEqual(eeg["codes_version"], "1.3")
                 self.assertEqual(eeg["latency"]["buzzer_ms"], 45.0)
                 self.assertEqual(eeg["latency"]["visual_ms"], 20.0)
                 self.assertEqual(eeg["latency"]["tone_ms"], 12.0)

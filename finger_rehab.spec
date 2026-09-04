@@ -12,6 +12,7 @@
 # double-clickable thing on a Mac, with no unpack delay.
 
 import sys
+from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_submodules
 
@@ -27,6 +28,31 @@ datas = [
     ("config", "config"),
     ("assets", "assets"),
 ]
+
+# avrdude, so Settings can flash the Arduino on a PC with no developer
+# tools installed. The firmware hexes ride along inside assets/ already;
+# only the uploader needs its own entries.
+#
+# The executable goes through `binaries`, not `datas`, because
+# PyInstaller ad-hoc signs collected binaries on macOS and an unsigned
+# helper inside a signed bundle will not launch. avrdude.conf and the
+# two licence files are plain data.
+#
+# Nothing here is an error when missing: builds/fetch_avrdude.py
+# downloads it, and a build without it still works. The Settings panel
+# then says "no avrdude found" instead of offering a button that cannot
+# do anything.
+binaries = []
+_plat = "win32" if sys.platform == "win32" else ("darwin" if IS_MAC
+                                                 else "linux")
+_tool_dir = Path("tools") / "avrdude" / _plat
+_exe_name = "avrdude.exe" if _plat == "win32" else "avrdude"
+if (_tool_dir / _exe_name).exists():
+    _dest = f"tools/avrdude/{_plat}"
+    binaries.append((str(_tool_dir / _exe_name), _dest))
+    for _extra in ("avrdude.conf", "LICENSE.txt", "SOURCE.txt"):
+        if (_tool_dir / _extra).exists():
+            datas.append((str(_tool_dir / _extra), _dest))
 
 # librosa pulls a lot in. Let PyInstaller's hook discover the lot.
 hidden = []
@@ -44,7 +70,7 @@ icon_file = ("assets/icons/app_icon.icns" if IS_MAC
 a = Analysis(
     ["main.py"],
     pathex=["."],
-    binaries=[],
+    binaries=binaries,
     datas=datas,
     hiddenimports=hidden,
     hookspath=[],

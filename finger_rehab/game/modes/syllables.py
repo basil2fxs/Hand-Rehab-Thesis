@@ -1,291 +1,195 @@
-"""Syllable Beats mode: phonological awareness training for children
-with reading difficulty, played by tapping the beats inside words on
-the four force sensors. A different population from the rest of this
-suite, with a different evidence base; the claim limits at the bottom
-of this docstring are part of the design.
+"""Syllables: a syllable-matching game for children with reading
+difficulty. The word is heard and seen, then its syllables come down
+the screen one set at a time, four written options over four fingers,
+and the child presses the finger under the chunk that was spoken. A
+different population from the rest of this suite, with a different
+evidence base; the claim limits at the bottom of this docstring are
+part of the design.
 
-WHY THIS DESIGN. Phonological awareness training causally improves
-reading: Bradley and Bryant (1983, Nature) showed it longitudinally,
-and the National Reading Panel meta-analysis (Ehri, Nunes, Willows,
-Schuster, Yaghoub-Zadeh and Shanahan, 2001, Reading Research
-Quarterly; 52 studies) put PA instruction at d = 0.86 on PA and 0.53
-on reading, the strongest claim anywhere in this mode. Segmentation
-develops from large units to small: Liberman, Shankweiler, Fischer and
-Carter (1974, J Exp Child Psychol) showed it with a TAPPING task
-(46 percent of 4 year olds could tap syllables, none phonemes), and
-Anthony and Francis (2005) and Ziegler and Goswami (2005, grain size
-theory) confirm the progression, which is why the level ladder runs
-syllables before onset-rime before phonemes and why a tapping device
-is a natural fit: the canonical measure IS tapping. The temporal
-sampling framework (Goswami 2011, Trends Cogn Sci) ties dyslexia to
-impaired entrainment at slow speech rhythms; Thomson and Goswami
-(2008, J Physiol Paris) found dyslexic children tap less accurately
-to metronomes at 1.5 to 2.5 Hz with 2 Hz the key marker. Rhythm
-training transferred to PA and reading in one RCT (Flaugnacco et al.
-2015, PLOS ONE); the closest product trial (Descamps et al. 2025,
-Scientific Reports, Mila-Learn) was null on its primary decoding
-outcome, with reading gains only in secondary per-protocol analyses,
-and the wider music-transfer literature is mixed (Dumont et al.
-2017), so transfer is plausible, not proven.
+WHAT THE CHILD DOES. ATTEND: the whole word appears at the top as n
+empty slots with the word written large under them, and the word is
+spoken. MODEL: each slot lights in turn at the beat, its chunk shows,
+the syllable is spoken, and one tactile roll runs across all four
+fingers of the playing hand. Then the slots empty again. CHOOSE, once
+per syllable in order: four tiles fall slowly down four lanes that sit
+over the four fingers, one tile is the syllable and three are foils.
+The child presses the finger under the right tile. A correct press
+lifts the tile into the word strip; a wrong press greys that tile and
+nothing else. COMPLETE: the strip is full, the whole word is spoken
+again.
 
-PARAMETER DEFENCES, in the order they appear in config:
-- 500 ms beat interval (2 Hz): the Thomson and Goswami deficit marker,
-  and inside the 400 to 500 ms spontaneous motor tempo of 4 to 8 year
-  olds (Drake, Jones and Baruch 2000; McAuley et al. 2006; Repp and Su
-  2013), so children synchronise best near it. 667 ms (1.5 Hz) is the
-  slow option for younger children, 400 ms (2.5 Hz) the stretch, the
-  other two rates Thomson and Goswami tested.
-- plus or minus 150 ms on-beat window: a literature-informed design
-  choice sized to child asynchrony SDs (Repp and Su 2013); raw signed
-  asynchronies are logged regardless so the analysis can re-window.
-- stress ratio 2.0 (stressed tap at least twice the trial's median
-  peak, unstressed under 1.5x): a design choice, relative not absolute
-  because child force output varies widely; no literature number
-  exists for a tapped stress ratio. It is the production analogue of
-  the DeeDee stress-perception deficit (Goswami et al. 2010, 2013).
-- 10 words per round, breaks between rounds, 20 minute hard cap,
-  8 of 10 promotion / under 5 of 10 demotion: mastery-criterion
-  conventions from PA programs; the session dose keeps the program
-  inside the NRP's effective 5 to 18 hour window, where 20 to 75 hour
-  programs did WORSE (Ehri et al. 2001).
-- graphemes fade in at level 6 after a correct response because PA
-  plus letters beats PA alone (d = 0.67, Ehri et al. 2001); letters
-  are feedback, never a prerequisite, so a non-reading child can
-  always play.
-- feedback is visual and kind (blocks fill, extra taps show grey,
-  missing stay hollow, one replay, no punishment sound) and there is
-  deliberately NO speeded-naming drill: naming speed does not respond
-  to direct training (de Jong and Vrielink 2004; Norton and Wolf
-  2012).
+WHY A CHOICE TASK AND NOT COUNTING. Phonological awareness
+instruction works (Ehri, Nunes, Willows, Schuster, Yaghoub-Zadeh and
+Shanahan 2001, 52 studies, d = 0.86 on PA and 0.53 on reading, and PA
+WITH LETTERS beat PA alone), but for children with a reading
+disability the only treatment family with a confirmed effect in the
+randomised-trial meta-analysis is phonics, print to sound (Galuschka,
+Ise, Krick and Schulte-Koerne 2014, g = 0.32). Two syllable-level
+PRINT studies point straight at this task: Bhattacharya and Ehri
+(2004) improved struggling adolescent readers' decoding of new words
+by having them analyse the graphosyllabic units of multisyllabic
+words, where whole-word practice did nothing; Mueller, Richter,
+Karageorgos, Krawietz and Ennemoser (2017) improved German poor
+readers' word-reading fluency with syllable-based training. Both used
+WRITTEN syllables, which is what the falling tiles are. Segmentation
+develops from large units to small (Liberman, Shankweiler, Fischer and
+Carter 1974: 46 percent of four year olds could tap syllables and none
+could tap phonemes; Ziegler and Goswami's 2005 grain size theory
+explains why English readers need the big units as well as the small
+ones), so the syllable is the right grain to start at.
 
-LEVEL LADDER (syllables.level, researcher-set):
-  1 counting: free pace, any fingers, 2 to 3 syllable words; success
-    is tap count = syllable count. No level from 1 to 4 ever draws a
-    one-syllable word: one tap has nothing to segment (the reasoning
-    and the band ladder it leaves are in syllables_words.py).
-  2 finger-mapped: one finger per syllable, walking physically LEFT
-    TO RIGHT like the blocks (the read-across row rule below); adds
-    4-syllable words, and 5-syllable band C words in bilateral play.
-  3 beat-paced: as 2, at the configured beat (4-tick count-in, one
-    tap per beat); per-tap signed asynchrony is scored. This is the
-    temporal-sampling core.
-  4 stress marking: as 3, plus press noticeably harder on the
-    stressed syllable (the force sensors as an accent channel).
-  5 onset-rime: CVC-family words, two taps, onset then rime on the
-    first two fingers; the display splits into a small and a large
-    block.
-  6 phoneme counting: transparent-spelling words, one tap per phoneme,
-    graphemes fade into the blocks after a correct response. 2 to 4
-    phonemes on one hand; bilateral play widens the pool to 5-6, and
-    band C adds the 7-8 grapheme stretch words.
-Band promotion (A to B to C) runs inside a block on the brief's 8 of
-last 10 / under 5 of 10 rule and every firing is logged to raw.csv.
-LEVEL movement is across sessions and needs the session history this
-app deliberately does not keep, so the level is a config knob the
-researcher moves using the brief's unlock rule (80 percent at top
-band in two consecutive sessions).
+THE GAME SHAPE COMES FROM GRAPHOGAME. Richardson and Lyytinen (2014)
+describe the method this mode copies: multiple-choice trials pairing
+an audio segment with the right written form, adaptation aimed at
+about 80 percent correct, immediate positive feedback. Mehringer et
+al. (2020) add the distractor rule (a target among one to nine
+distractors, some deliberately confusable). Two results bound what may
+be claimed from it: Ahmed, Wilson, Mead, Noble, Richardson, Wolpert
+and Goswami (2020) found only a small nonword-decoding effect in
+English, and McTigue, Solheim, Zimmer and Uppstad (2020) found a
+negligible overall effect across the GraphoGame literature with
+SUPPORTIVE ADULT INTERACTION as the only significant moderator. Hence
+the adult line on the rest screen, and hence the claim limits below.
 
-ASSET REALITY. The brief's recorded words and picture library do not
-exist and cannot be added, so the word is shown as large text split
-into per-syllable blocks that light in rhythm, the per-finger buzzer
-pulses in sequence through the shared cue path (one motor per board
-at a time, which is exactly what a syllable beat needs), and each
-syllable onset plays the finger's cue tone through the existing audio
-engine. On macOS, if the `say` command exists, the word is spoken
-once at ATTEND time in a background process (never blocking the frame
-loop, failing silent); everywhere else the mode is fully usable
-without speech. The word list ships in syllables_words.py with the
-grading rationale in its docstring. The buzzer and tone ride the
-shared cue.* switches, so under the shipped defaults the model is
-audio-tactile-visual, and any tap timing it trains is timing to that
-mix, not to sound alone; cue_flags on every trial row records which
-channels a block actually ran, which is what lets sessions played
-with the vibration off (a child may ask for that) be separated from
-full-cue sessions in the analysis instead of pooled.
+WHAT IS DELIBERATELY DIFFERENT FROM GRAPHOGAME. GraphoGame makes the
+child re-pick the right answer before moving on. Here a wrong press
+greys its tile and the other tiles keep falling; if the set leaves the
+screen unanswered the right tile glows on its way out, the syllable is
+spoken, and the WORD comes back later (after two other words, then
+after four) rather than being drilled on the spot. The reasons are
+spacing and feedback timing: spaced retrieval beats massed for word
+learning in children with language disorder (Leonard and Deevy 2020),
+an unsuccessful retrieval attempt followed by the answer still helps
+later learning (Kornell, Hays and Bjork 2009), delayed feedback beat
+immediate feedback in Grade 6 children (Metcalfe, Kornell and Finn
+2009), and adults with dyslexia learn worse from immediate feedback
+but normally from delayed feedback (Gabay 2021, following Foerde and
+Shohamy 2011 on the striatal-to-hippocampal shift). So positive
+feedback is immediate and loud (the tile lifts, the chime plays) and
+negative feedback is quiet, informational and late.
 
-TRIAL LOOP: ATTEND (word appears, spoken once if possible) -> MODEL
-(blocks light left to right at the beat interval, buzzer and tone per
-syllable) -> COUNT-IN (paced levels only, metronome ticks) -> RESPOND
-(taps collected from the press detector, whose timestamps come from
-the 200 Hz sample stream, not the frame clock) -> FEEDBACK (blocks
-fill or hollow; full success pulses and chimes through the shared
-after-press cue path) -> one model REPLAY on error -> next word.
-Warm-up before the first word is a few paced taps to the metronome
-with no word (syllables.warmup_taps, never more than WARMUP_TAPS_MAX):
-a tap threshold check and a per-session sensorimotor synchronisation
-probe, logged to raw.csv. It was ten taps; the first tester found ten
-tedious before the game had started, and five still gives the probe
-five asynchronies and the sensors a check.
+NO HINTS, EVER. Fitts and Seeger (1953) showed response selection is
+fastest when the stimulus and the response share a spatial code: a
+tile falling in the lane over the finger that answers it IS that code,
+and it is the only mapping the child gets. Nothing else may carry the
+answer before the press. The model's tactile pulse is therefore a
+four-finger ROLL, not a single buzz (a buzz on one finger during the
+model would announce which lane to press later); the option-set spawn
+goes through the engine's cue path with `silent_stim` set, so it arms
+the force window, the timeout and the EEG marker but fires no tone, no
+screen highlight and no buzzer; the four tiles are drawn identically;
+and the target lane is drawn by a deficit rule with a random
+tie-break, never in a predictable place.
 
-THE REWARD LAYER (2026-09). One game, deepened, never split into
-rotating sub-games: focused one-or-two-skill PA programs beat
-multi-skill ones in the NRP meta-analysis (Ehri et al. 2001), task
-mixing is expensive at 6 to 10 (Cepeda, Kramer and Gonzalez de
-Sather 2001), procedural learning is impaired in dyslexia so
-repetitions of one loop respect the deficit (Lum, Ullman and
-Conti-Ramsden 2013), and 40 words per block is the whole per-session
-sample the analysis lives on. Every reward is deterministic and
-informational, the one cell of the reward literature that does not
-undermine children's intrinsic motivation (Deci, Koestner and Ryan
-1999); random jackpots are excluded on three separate grounds
-(motivational undermining, uncontrolled reward-prediction-error in
-the EEG record, ethics optics of slot-machine mechanics in a child
-study). The schedule:
-- per-tap: a correct-for-position tap fills its block with a brief
-  sparkle, and on paced levels an on-beat tap adds a small ring
-  flash (tap_marks exposes what scoring already computes; the
-  screen draws it, nothing new is measured and no sound plays
-  during RESPOND);
-- per-word: Great keeps its chime and pulse, points stay 6/3/0;
-- streaks: consecutive Greats light one, two, three stars at fixed
-  milestones of 3, 5 and 8, at feedback time; a non-Great resets
-  the counter silently and earned stars stay lit until the round
-  ends (no penalties anywhere);
-- per-round: finishing a round earns exactly one sticker, stamped
-  onto the journey strip on the break screen. Completion-contingent
-  on showing up, never on score, and session-local by design (the
-  app keeps no cross-session history);
-- band promotion: already logged, now also celebrated with a
-  one-shot "Bigger words!" card on the next between-word screen;
-  demotion stays silent (kindness rule);
-- fiction: one light journey shell per session (rounds are stops on
-  a walk, the sticker stamps the stop), per the fiction moderator
-  of Sailer and Homner (2020); never rotated mid-session.
-Rewards are engagement scaffolding, not an active ingredient: the
-direct experiment in this game family (Ronimus et al. 2014,
-GraphoGame rewards RCT) found token rewards raised session length
-only temporarily, with better in-session concentration the one
-durable report, so this layer exists to sharpen the 8.5 minutes,
-and no analysis may present streaks or stickers as training. The
-ease-in draw (below) and the streak both ride the stimulus string
-so the notebook can separate engagement from learning.
+DIFFICULTY MOVES ON TWO CLOCKS.
+- The FOIL RUNG (1 to 8) controls how similar the wrong options are,
+  how long the tiles take to fall, and whether the syllable is spoken
+  again at spawn. It moves by a 3-down-1-up staircase on first-press
+  correctness, which converges on the 79.4 percent point of the
+  psychometric function (Levitt 1971), the same region GraphoGame
+  targets. A rung can move every three sets, so it tracks the child
+  inside a round.
+- The WORD BAND (A everyday two-syllable words, B two and three, C
+  the four-syllable ones) keeps the brief's 8-of-the-last-10 /
+  under-5-of-10 rule on WORD outcomes, evaluated at round boundaries,
+  so word length changes slowly and the child sees a card when it
+  does.
+The number of options is always four: it sits inside GraphoGame's one
+to nine range, it matches four fingers, and chance is a flat 25
+percent the analysis can draw as a line.
 
-EASE-IN DRAW. After two consecutive Miss words the next draw is
-biased to the child's best unit count so far this block (ties to
-the lower count), one word only, never twice in a row, from the
-current band pool. It breaks failure spirals inside a round without
-touching the band rule: the word still enters _recent like any
-other, but its row carries ease=1 so the accuracy-by-count chart
-can hold the biased draw out instead of flattering itself.
+TIMING IS SIZED TO A CHILD READING. Choice reaction time grows with
+the number of alternatives (Hick's law, reviewed in Proctor and
+Schneider 2018) and children are slower than adults by a factor near
+1.5 to 1.8 at age 8 (Kail 1991), so an 8 year old needs roughly a
+second before any READING is done, and a struggling reader needs time
+to read four chunks and compare them. Time pressure is also what
+separates dyslexic from typical letter-sound binding (Aravena,
+Snellings, Tijms and van der Molen 2013). So a set is on screen for
+4.0 s at the entry rung and never under 2.5 s: the window is a floor
+for thinking, not a rhythm target.
 
-WHAT ONE TRIAL LOGS (fixed CSV schema, so the word-level detail rides
-the stimulus column the way pattern mode rides it):
-- stimulus: semicolon-separated key=value string, documented here
-  because the notebook parses it:
-    word;lvl=<level>;band=<A|B|C>;nsyll=<target taps>;stress=<idx>;
-    map=off<k>;paced=<0|1>;ioi=<ms>;replay=<0|1>;ease=1;
-    streak=<n>;err=<error type or ok>;taps=<lane>:<t_ms>:<peak>,...;
-    asyn=<a1>,<a2>,...
-  ease=1 appears only on ease-in draws (see EASE-IN DRAW above), so
-  the notebook can hold those biased words out of the accuracy-by-
-  count chart. streak=<n> is on every row: the consecutive-Great
-  count AFTER this word (0 on any non-Great), the engagement trace
-  the reward layer logs.
-  map=off<k> is the sliding window's start slot in the desk row,
-  0-based (see THE SLIDING WINDOW below); with the playing hands
-  known it rebuilds exactly which lane carried which unit. Rows
-  logged before the window carried map=row on spanning words and no
-  map= key otherwise. taps are 1-indexed lanes with time in ms from
-  RESPOND start and the tap's peak force (counts above baseline;
-  empty in keyboard mode). asyn appears on paced trials only:
-  per-tap signed asynchrony in ms, negative = early, the rhythm-mode
-  sign convention.
-- time_difference_ms: first-tap reaction time on free-paced levels;
-  MEAN signed asynchrony on paced levels (the rhythm convention).
-- lane / correct_keys: the trial is keyed on the window's first
-  lane, with every window lane in correct_keys. Per-lane charts
-  mean little here because fingers are unit positions, not targets;
-  the analysis works from the stimulus field.
-- error types (err=): timeout, missing_tap, extra_tap, wrong_order,
-  off_beat, wrong_stress, ok.
-- outcome labels: Great = every level criterion met, Good = right
-  count but a level criterion missed, Miss = wrong count or timeout.
-  No penalties are applied anywhere; this mode is for children.
+HANDS. With both hands connected the hands ALTERNATE PER WORD: all
+four tiles sit over the playing hand, the resting hand shows seat
+dots, and the switch is announced at ATTEND before any tile exists.
+Never within a word and never mirrored: dyslexic children are worse
+than controls at asynchronous bimanual tapping but not at unimanual
+tapping (Wolff, Michel, Ovrut and Drake 1990), eight tiles would
+double the alternatives and crowd the screen, and a mirrored set lets
+a child play a whole block on the hand they favour. One hand
+connected plays every word on that hand, with nothing gated behind
+two.
 
-THE SLIDING WINDOW. One child-sized rule everywhere: the blocks sit
-in a row on screen, your fingers sit in a row on the desk, the first
-block is the leftmost finger the word asks for, and you walk right.
-The representation a dyslexic child must build maps temporal order
-onto LEFT-TO-RIGHT SPACE, because that is what print is: Elkonin
-boxes lay one box per sound left to right (Ross and Joseph 2019),
-and ordinal position in verbal working memory is spontaneously coded
-left to right in left-to-right reading cultures (SPoARC, van Dijck
-and Fias 2011; direction follows reading habits, Shaki, Fischer and
-Petrusic 2009). So the response scaffold is the physical desk row,
-not anatomical finger identity: the playing fingers form one desk
-row read left to right (a single right hand runs index to little, a
-single left hand little to index, both hands are the left hand's
-four then the right hand's four), and a word of n units occupies n
-ADJACENT slots of that row, tapped first slot to last. WHERE the
-window sits slides from word to word: a 2-unit word on one hand can
-sit on fingers 1-2, 2-3 or 3-4, and with both hands anywhere in the
-8-lane row, so across a block every finger of every selected hand
-takes its turn. Under the older fixed mapping position 1 always
-landed on the same leftmost fingers, so the ring and little of a
-single hand only ever played in 4-unit words, and in bilateral play
-one hand could idle through whole rounds of short words. The offset
-is placed over the least-cued lanes (a deficit draw with a random
-tie-break), so per-finger participation stays near-equal within a
-block and the child cannot predict the next placement. The child is never asked to remember a placement rule:
-the blocks are drawn over the window's own lanes, the model buzzes
-those lanes in order, and the resting fingers' slots stay visibly
-empty, so the word itself shows which fingers it wants.
-Word-relative positions keep their meaning (stress=, per-position
-order checking, every level criterion) no matter where the window
-sits.
+DISPLAY. Tiles use wide letter tracking, because extra-large letter
+spacing improved dyslexic children's reading on the fly (Zorzi et al.
+2012, PNAS), and the app's ordinary sans font, because special
+dyslexia fonts do not help (Wery and Diliberto 2017; Kuster, van
+Weerdenburg, Gompel and Bosman 2018). Everything is lower case:
+reversals only exist in lower case, and print is lower case.
 
-BOTH HANDS. A child with both hands on the device uses both: the
-window ranges over all eight fingers as one read-across row, so both
-hands are visited within a round instead of one idling while the
-child favours the other. A window may cross the midline (a 2-unit
-word on left index then right index), and words of 5 to 8 units
-always do; the tap order still runs strictly left to right, so a
-crossing is one ordered hand-over, never alternation. Each position
-owns exactly ONE lane and correct_keys says so. This replaces the
-earlier either-hand rule on short words (either hand's finger could
-satisfy a position): that rule let a child play a whole block on one
-preferred hand, which is exactly the idling the window exists to
-remove, and the window carries no hand rule to know, because the
-blocks and the buzz show which fingers play. Deliberately NOT in
-this design: forced hand alternation within a word (bimanual timing
-is impaired in dyslexia, Wolff, Michel, Ovrut and Drake 1990, and
-asymmetric bimanual patterns mature late in all children, so
-alternation errors would measure the motor system, not
-segmentation), simultaneous two-hand taps (a coordination task with
-no PA construct behind it, and chords-mode territory in this
-project), and any gating of the ladder behind bilateral play: eight
-fingers is a pool extension, never a requirement or a level. The
-model phase still buzzes exactly one finger per syllable (one motor
-per board, and sequential onsets at the beat interval are exactly
-what that hardware delivers); the buzzing hand is set by the
-window's own lanes, so no hand bag is consulted. The modelled lanes
-ride the stimulus string (model=) in bilateral play, and every
-trial carries its window offset (map=off<k>), so the analysis can
-rebuild exactly which lane carried which unit and split cross-hand
-windows from one-hand ones. On screen the blocks carry the colours
-of the fingers that play them, the model names the hand carrying
-each buzz (model_hand, set per onset), and at respond time the
-screen names the hand the window sits on, or "both hands, left to
-right" when it crosses.
+WHAT THE NUMBER MEASURES UNDER THE SHIPPED CUE DEFAULTS. Those
+defaults play the buzzer and the cue tone with the screen, and this
+mode splits them across the phases on purpose. The model is
+audio-tactile-visual: the syllable is spoken, the four-finger roll
+runs, the slot lights. The choice-set spawn is none of those (the
+`silent_stim` path fires no tone, no highlight and no buzz), so the
+rt on a set row is a spoken-to-printed matching time under a silent
+onset, not a cued reaction time, and it is not comparable with the
+rt of any other mode in this suite. The after-press cue on a correct
+press rides cue.buzz_after / cue.sound_after like everywhere else.
+The cue_flags column on every row is how the analysis separates
+blocks run under different channel mixes instead of pooling them.
+
+THE REWARD LAYER is unchanged from the tapping version and stays
+deterministic and informational, the one cell of the reward
+literature that does not undermine children's intrinsic motivation
+(Deci, Koestner and Ryan 1999): points 6/3/0 per set, up to three
+corner stars at fixed streaks of 3, 5 and 8 WORDS answered with every
+first press right, one sticker per completed round stamped on the
+session's walking strip, a one-shot "Bigger words!" card on band
+promotion, silence on demotion, no penalties anywhere. Ronimus,
+Kujala, Tolvanen and Lyytinen (2014) found rewards raise play time
+only early, so this layer exists to sharpen ten minutes, and no
+analysis may present streaks or stickers as training.
+
+WHAT ONE ROW LOGS. One trials.csv row per option SET, not per word:
+
+    word;pos=<k>;nsyll=<n>;syl=<chunk>;band=<A|B|C>;rung=<1-8>;
+    hand=<L|R>;fall=<ms>;respeak=<0|1>;ret=<0|1|2>;
+    opts=<lane>:<text>:<kind>,... (four, 1-indexed lanes);
+    tlane=<1-indexed target lane>;
+    presses=<lane>:<t_ms from spawn>:<peak>:<kind>,...;
+    first=<ok|wrong|none>;err=<ok|wrong_first|miss>;rt=<ms>;
+    streak=<n>;ease=1 (biased draws only);sup=<0|1>
+
+rt is spawn to correct press. time_difference_ms on the row is that
+rt; error_type carries err on Miss rows; correct_keys is the target
+lane alone; the row's hand column is the word's hand. Word-level
+outcomes are derived by the notebook from the set rows (all sets of
+one word attempt share word and ret).
 
 WHAT THIS MODE CANNOT CLAIM. It trains and measures in-task
-behaviour: syllable segmentation, beat synchronisation, stress
-marking. It is not a dyslexia treatment and cannot claim to improve
-reading (that needs standardised pre and post measures and a
-control); it is not a diagnostic instrument and must never label a
-child dyslexic. The tactile channel is engagement and cueing, not a
-claimed active ingredient: the multisensory element of structured
-literacy has no demonstrated additive effect (Stevens et al. 2021,
-meta-analytic null). The same limit applies to the sliding window
-and two-hand play: neither has a demonstrated additive effect on
-phonological awareness, so the window is scaffolding, engagement and
-per-finger measurement coverage, never a claimed active ingredient,
-and cross-hand windows carry an added spatial-mapping demand that
-keeps them split from one-hand windows in the analysis. The hardware was built and ethically scoped for
-adult stroke rehabilitation; use with children needs new ethics
-approval, a finger-spacing check and hygiene procedures, and none of
-these parameters have been validated on children with this device, so
-the first study is feasibility and acceptability, not efficacy.
+behaviour: first-press accuracy at matching a spoken syllable to one
+of four written chunks, which foil types capture wrong presses, and
+how long that decision takes. Those are not reading, decoding or
+spelling outcomes; a change in them means nothing outside the game
+without a standardised pre and post measure and a control group
+(Galuschka 2014, McTigue 2020). It is not a dyslexia treatment and
+must never label a child dyslexic. Chance is 25 percent per set, so
+accuracy near 25 percent is guessing and the analysis must show that
+line. The foil taxonomy counts confusions; it does not diagnose
+letter position dyslexia or anything else (Kohnen, Nickels, Castles,
+Friedmann and McArthur 2012 needed purpose-built tests for that). The
+tactile channel is engagement and cueing, not a claimed active
+ingredient (Stevens et al. 2021, meta-analytic null on the
+multisensory element). GraphoGame's effects depend on adult support
+(McTigue 2020), so a session played alone is a different condition and
+the `supervised` flag records which one it was. The hardware was built
+and ethically scoped for adult stroke rehabilitation; use with
+children needs new ethics approval, a finger-spacing check and hygiene
+procedures, and none of these parameters have been validated on
+children with this device, so the first study is feasibility and
+acceptability, not efficacy.
 """
 from __future__ import annotations
 
@@ -293,10 +197,12 @@ import logging
 import random
 import shutil
 import subprocess
+import os
 import sys
 import time
 from collections import deque
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pygame
@@ -306,7 +212,8 @@ from ..rest_skip import WaitSkip
 from ..scoring import ScoreConfig, TrialResult
 from ._keys import keymap_for_hand, resolve_key
 from .classic import PendingTrial
-from .syllables_words import Word, words_for
+from .syllables_foils import Inventory, build_option_set
+from .syllables_words import Word, syllable_lists, words_for
 
 if TYPE_CHECKING:
     from ..engine import GameEngine
@@ -316,59 +223,92 @@ log = logging.getLogger(__name__)
 
 
 BANDS = ("A", "B", "C")
+# Press kinds, in the order the input rule tests them. Only "correct"
+# ever scores; "wrong" is the only other kind that changes anything
+# (it sets first=wrong for the set and greys its tile).
+KIND_CORRECT = "correct"
+KIND_WRONG = "wrong"
+KIND_WRONG_REPEAT = "wrong_repeat"
+KIND_ANTICIP = "anticip"
+KIND_OFF_HAND = "off_hand"
 
 
 @dataclass
-class Tap:
-    """One accepted tap in the response phase. Time comes from the
-    press detector, which stamps events from the 200 Hz sample stream
-    (5 ms resolution), never from the 60 Hz frame clock."""
+class Press:
+    """One press inside an option set, whatever it did."""
     lane: int
     t_perf: float
-    peak: float | None = None      # counts above baseline; None = no FSR data
+    kind: str
+    peak: float | None = None
 
 
 @dataclass
-class TrialRecord:
-    """What one closed word-trial contributes to block_stats."""
+class SetRecord:
+    """What one closed option set contributes to block_stats."""
+    word: str
+    pos: int
+    n_syll: int
+    band: str
+    rung: int
+    hand: str
+    ret: int
+    first: str                 # ok | wrong | none
+    err: str                   # ok | wrong_first | miss
+    rt_ms: float | None
+    wrong_kind: str | None     # foil kind of the first wrong press
+    n_anticip: int = 0
+    n_off_hand: int = 0
+
+
+@dataclass
+class WordRecord:
+    """What one closed word attempt contributes: the unit the band
+    gate and the streak work on."""
     word: str
     n_syll: int
     band: str
-    correct: bool
-    error: str
-    asynchronies: list[float] = field(default_factory=list)
-    stress_ratio: float | None = None
-    stress_correct: bool | None = None
+    ret: int
+    correct: bool              # every set's first press was right
+    completed: bool            # the strip filled
+    error: str                 # ok | wrong_first | miss
+    hand: str = "right"
+    sets: list[SetRecord] = field(default_factory=list)
 
 
 class SyllablesMode(WaitSkip):
     name = "Syllables"
 
-    # Once the expected number of taps has landed, wait this long for a
-    # possible extra tap before scoring, so feedback still starts
-    # within the brief's 200 ms of the last tap while an extra tap is
-    # not silently cut off.
-    SETTLE_S = 0.2
-    # How long the success or error feedback stays on screen before the
-    # replay or the next word. Long enough for a child to see every
-    # block's fill state, short enough that 10 words stay lively.
-    FEEDBACK_S = 1.4
-    # Fixed streak milestones: consecutive Greats light the first,
-    # second and third star. Fixed and transparent rather than a
-    # variable-ratio schedule, so the reward carries no
-    # reward-prediction-error surprise into the EEG record and no
-    # slot-machine mechanics into a child study (docstring: THE
-    # REWARD LAYER).
+    # How long the set stays on screen after the correct press, so the
+    # tile is seen lifting into the word strip before the next set.
+    CORRECT_HOLD_S = 0.3
+    # The corrective display on a missed set: the right tile glows on
+    # its way out and the syllable is spoken. Delayed by construction
+    # (it lands one to three seconds after any wrong press), which is
+    # the feedback timing the docstring defends.
+    MISS_GLOW_S = 0.6
+    # A greyed tile drifts off over this long. Screen-side only.
+    GREY_DRIFT_S = 0.5
+    # Fixed streak milestones, in WORDS answered with every first
+    # press right. Fixed and transparent rather than a variable-ratio
+    # schedule, so the reward carries no reward-prediction-error
+    # surprise into the EEG record.
     STREAK_MILESTONES = (3, 5, 8)
-    # Hard cap on the warm-up taps whatever the config asks for: the
-    # probe needs a handful of taps, not a drill, and a child sitting
-    # through ten before the first word is a child losing interest
-    # before the game starts (docstring: TRIAL LOOP).
+    # Hard cap on warm-up taps whatever the config asks for.
     WARMUP_TAPS_MAX = 5
+    # Metronome count-in beats before the warm-up taps are counted.
+    # The warm-up is the only place a beat grid still exists.
+    COUNT_IN_BEATS = 4
+    # Returns are extra words on top of the block's budget, so they
+    # are capped or a child who misses a lot never reaches the end.
+    MAX_RETURNS = 6
+    # The floor on the fall window, whatever the config says. Below
+    # this the task measures reading speed under time pressure, which
+    # is the thing Aravena et al. (2013) showed dyslexic readers fail
+    # for reasons that have nothing to do with this game.
+    MIN_FALL_S = 2.5
 
     def __init__(self, engine: "GameEngine",
                  lanes: list[int],
-                 level: int,
                  band: str,
                  ioi_ms: float,
                  words_total: int,
@@ -376,32 +316,32 @@ class SyllablesMode(WaitSkip):
                  break_s: float,
                  warmup_taps: int,
                  attend_s: float,
-                 free_window_s: float,
-                 count_in_beats: int,
-                 grace_ms: float,
-                 on_beat_window_ms: float,
-                 stress_ratio: float,
-                 unstressed_max_ratio: float,
                  tap_debounce_ms: float,
                  inter_trial_gap_ms: float,
                  session_cap_min: float,
-                 replay_on_error: bool,
-                 speak_words: bool,
-                 say_voice: str | None,
                  score_cfg: ScoreConfig,
+                 rung: int = 1,
+                 rung_min: int = 1,
+                 rung_max: int = 8,
+                 fall_s: list[float] | None = None,
+                 set_gap_s: float = 0.4,
+                 spawn_lockout_s: float = 0.25,
+                 respeak_rungs: list[int] | None = None,
+                 return_after: list[int] | None = None,
+                 complete_s: float = 1.4,
+                 homophone_foils: bool = False,
+                 alternate_hands: bool = True,
+                 supervised: bool = True,
+                 speech: dict | None = None,
                  seed: int = 0,
                  demo_trials: int | None = None,
                  lanes_by_hand: dict[str, list[int]] | None = None,
                  ) -> None:
         self.engine = engine
         # The lanes of each playing hand, in the hand's own order
-        # (lanes[0] index through lanes[3] little). Unit positions map
-        # onto lanes per WORD through the sliding window (see
-        # docstring): desk_row orders every playing finger physically
-        # left to right, window_lanes cuts the word's n adjacent slots
-        # out of it at the per-word offset, and _position_of resolves
-        # any lane back to its position for the current word.
-        # self.lanes stays the first hand's four for fallback paths.
+        # (lanes[0] index through lanes[3] little). A word plays on ONE
+        # hand: its four lanes are the four option lanes, in desk
+        # order, so the leftmost tile sits over the leftmost finger.
         if lanes_by_hand and len([h for h, v in lanes_by_hand.items()
                                   if v]) > 1:
             self.hands = {h: list(v)[:4]
@@ -410,8 +350,6 @@ class SyllablesMode(WaitSkip):
             four = list(lanes)[:4]
             while len(four) < 4:
                 four.append(len(four))
-            # Key the single hand by what the session actually plays,
-            # so the finger row can mirror a left-hand session.
             hand_name = str(getattr(engine, "hand_mode", "right"))
             if hand_name not in ("left", "right"):
                 hand_name = "right"
@@ -419,7 +357,6 @@ class SyllablesMode(WaitSkip):
         self.hand_names = list(self.hands)
         self.bilateral = len(self.hand_names) > 1
         self.lanes = self.hands[self.hand_names[0]]
-        self.level = max(1, min(6, int(level)))
         self.band = band if band in BANDS else "A"
         self.ioi_s = max(0.2, float(ioi_ms) / 1000.0)
         self.round_size = max(1, int(round_size))
@@ -427,19 +364,33 @@ class SyllablesMode(WaitSkip):
         self.warmup_total = max(0, min(self.WARMUP_TAPS_MAX,
                                        int(warmup_taps)))
         self.attend_s = max(0.2, float(attend_s))
-        self.free_window_s = float(free_window_s)
-        self.count_in_beats = max(0, int(count_in_beats))
-        self.grace_s = max(0.0, float(grace_ms) / 1000.0)
-        self.on_beat_window_s = float(on_beat_window_ms) / 1000.0
-        self.stress_ratio = float(stress_ratio)
-        self.unstressed_max_ratio = float(unstressed_max_ratio)
         self.tap_debounce_s = max(0.0, float(tap_debounce_ms) / 1000.0)
         self.inter_trial_gap_s = max(0.0, float(inter_trial_gap_ms) / 1000.0)
         self.session_cap_s = float(session_cap_min) * 60.0
-        self.replay_on_error = bool(replay_on_error)
-        self.speak_words = bool(speak_words)
-        self.say_voice = say_voice
         self.score_cfg = score_cfg
+        self.rung_min = max(1, int(rung_min))
+        self.rung_max = max(self.rung_min, min(8, int(rung_max)))
+        self.rung = max(self.rung_min, min(self.rung_max, int(rung)))
+        self.rung_start = self.rung
+        self._fall_table = [max(self.MIN_FALL_S, float(v))
+                            for v in (fall_s or [4.0, 4.0, 3.5, 3.5,
+                                                 3.0, 3.0, 2.5, 2.5])]
+        self.set_gap_s = max(0.0, float(set_gap_s))
+        # The lockout has a floor as well as a config value: the tiles
+        # are still fading in below it, so a press there answered a
+        # set the child could not have read.
+        self.spawn_lockout_s = max(0.2, float(spawn_lockout_s))
+        self.respeak_rungs = set(int(r) for r in (respeak_rungs or [1, 2, 3]))
+        self.return_after = [max(0, int(v))
+                             for v in (return_after or [2, 4])] or [2, 4]
+        self.complete_s = max(0.2, float(complete_s))
+        self.homophone_foils = bool(homophone_foils)
+        self.alternate_hands = bool(alternate_hands)
+        self.supervised = bool(supervised)
+        speech = dict(speech or {})
+        self.speech_backend = str(speech.get("backend", "auto") or "auto")
+        self.speech_dir = str(speech.get("dir", "assets/speech"))
+        self.speech_volume = float(speech.get("volume", 1.0))
         self.demo = demo_trials is not None
         if self.demo:
             # Test Mode: a handful of words, no warm-up, token breaks,
@@ -451,162 +402,101 @@ class SyllablesMode(WaitSkip):
             self.words_total = max(1, int(words_total))
 
         self.rng = random.Random(int(seed))
+        self.inventory = Inventory(syllable_lists())
         self._bag: list[Word] = []
-        # The sliding window's state: the current word's start slot in
-        # the desk row, plus a per-lane cue tally the offset draw
-        # balances against. A shuffle bag over OFFSETS is not enough:
-        # an edge lane sits in only one window position while a middle
-        # lane sits in up to n, so equal offsets still starve the
-        # little fingers (measured 4-to-1 in bilateral play). Placing
-        # each word over the least-cued lanes instead keeps every
-        # finger's count within a word-length of the rest.
-        self._offset = 0
-        self._lane_cues: dict[int, int] = {}
-        # The lanes the model phase actually buzzed for the current
-        # word, in onset order, packed into the stimulus string when
-        # both hands play so the analysis can split models by hand.
-        self._model_lanes: list[int] = []
-        # Which hand the model is buzzing RIGHT NOW, for the screen:
-        # a window that crosses the midline hands the buzz over from
-        # left to right mid-word, and a child (or the parent watching)
-        # should see that named, not have to guess why the other hand
-        # buzzed. None outside the model and replay phases.
-        self.model_hand: str | None = None
 
-        # Session flow state. Phases:
-        #   warmup -> (attend -> model -> countin -> respond -> feedback
-        #   -> replay?) per word -> break between rounds -> done.
-        self.phase = "warmup" if self.warmup_total else "gap"
+        # ---- the word in play ----
         self.word: Word | None = None
+        self.word_hand: str = self.hand_names[0]
+        self.filled: list[str | None] = []      # the word strip
+        # Which lane won each slot, so the strip can fill in the
+        # colour of the finger that answered it. A slot coloured by
+        # POSITION would be a false cue: position and finger have
+        # nothing to do with each other here.
+        self.filled_lanes: list[int | None] = []
+        self.pos = 0                            # syllable being chosen
+        self.ret = 0                            # 0 first attempt, 1-2 returns
+        self.option_set = None
+        self.silent_stim = False                # engine reads this at spawn
+
+        # ---- session flow ----
+        # warmup -> gap -> attend -> model -> choose -> complete -> gap
+        # ... with break between rounds and done at the end.
+        self.phase = "warmup" if self.warmup_total else "gap"
         self.trial_counter = 0
-        self.words_done = 0
+        self.words_done = 0                     # distinct first attempts
         self.active: PendingTrial | None = None
-        self.taps: list[Tap] = []
         self._presses: deque[PressEvent] = deque()
-        self._t0: float | None = None          # session clock (hard cap)
+        self._t0: float | None = None
         self._phase_t0: float | None = None
         self._phase_until: float | None = None
-        self._model_idx = -1                    # syllable lit during MODEL
+        self._model_idx = -1
         self._model_next_t: float | None = None
-        self._respond_t0: float | None = None
-        self._beat_times: list[float] = []      # paced tap targets
-        self._replayed = False                  # one replay per word, max
-        self._pending_replay = False
-        self._last_result: dict | None = None   # screen reads for feedback
-        self._last_tap_t: dict[int, float] = {}  # per-lane debounce
+        self.model_hand: str | None = None
         self._say_proc: subprocess.Popen | None = None
+        self._missing_speech: set[str] = set()
         self.end_reason: str | None = None
 
-        # Warm-up probe state: the child taps along with the metronome,
-        # any finger, one tap per beat. Logged to raw.csv per tap.
-        self._warmup_beats: list[float] = []
-        self._warmup_asyn: list[float] = []
-        self._warmup_done = 0
+        # ---- the option set in play ----
+        self._spawn_t: float | None = None
+        self._exit_t: float | None = None
+        self._next_spawn_t: float | None = None
+        self._set_close_t: float | None = None
+        self._set_presses: list[Press] = []
+        self._dead_lanes: set[int] = set()
+        self._first_kind: str | None = None     # ok | wrong (first real press)
+        self._correct_t: float | None = None
+        self._glow_t: float | None = None       # missed-set corrective glow
+        self._last_tap_t: dict[int, float] = {}
+        self._respeak = False
+        self.lift_t: float | None = None        # screen: tile lifting
 
-        # Aggregates for block_stats.
-        self._records: list[TrialRecord] = []
+        # ---- difficulty ----
+        self._run = 0                           # consecutive first-press ok
+        self._rung_trace: list[int] = [self.rung]
+        self._lane_targets: dict[int, int] = {}
+        self._recent_target_lanes: list[int] = []
+
+        # ---- material rotation ----
+        self._hand_cursor = 0
+        self._parked: list[dict] = []
+        self._returns_started = 0
+        self._retired: list[str] = []
+        # Every word the child has met this block, so the ease-in
+        # rescue draw reaches for something new rather than handing
+        # back a word they have just failed.
+        self._seen_words: set[str] = set()
+
+        # ---- aggregates ----
+        self._sets: list[SetRecord] = []
+        self._records: list[WordRecord] = []
         self._band_trace: list[str] = [self.band]
         self._recent: deque[bool] = deque(maxlen=10)
         self._since_band_change = 0
 
-        # Reward-layer state (see THE REWARD LAYER in the docstring).
-        # All of it is deterministic bookkeeping the screen reads;
-        # nothing here touches the attend/model/countin/respond
-        # phases, whose cue timing and EEG markers are pinned by
-        # tests. Public names are what the screen draws from.
-        self._streak = 0            # consecutive Great words
+        # ---- warm-up probe ----
+        self._warmup_beats: list[float] = []
+        self._warmup_asyn: list[float] = []
+        self._warmup_done = 0
+
+        # ---- reward layer ----
+        self._streak = 0
         self._max_streak = 0
-        self.round_stars = 0        # milestones lit this round, 0-3
-        self.star_flash_t: float | None = None   # newest star's moment
-        self._stickers = 0          # completed rounds so far
+        self.round_stars = 0
+        self.star_flash_t: float | None = None
+        self._stickers = 0
         self.sticker_flash_t: float | None = None
-        self.band_celebrate: str | None = None   # promoted band to show
-        self._miss_run = 0          # consecutive Misses (ease trigger)
-        self._ease_word = False     # current word came from the bias
+        self.band_celebrate: str | None = None
+        self._miss_run = 0
+        self._ease_word = False
         self._n_ease_in = 0
 
-    # ---- material ----------------------------------------------------------
-    def _draw_word(self) -> Word:
-        """Shuffle-bag draw over the current level and band pool, so a
-        round cannot repeat one word while another never comes up. The
-        bag rebuilds when it empties or after a band change."""
-        if not self._bag:
-            self._bag = list(words_for(self.level, self.band,
-                                       bilateral=self.bilateral))
-            self.rng.shuffle(self._bag)
-        return self._bag.pop()
-
-    def _best_unit_count(self) -> int | None:
-        """The unit count the child has done best on so far this
-        block, ties to the LOWER count (the kinder direction). None
-        before any word has closed."""
-        by_count: dict[int, list[bool]] = {}
-        for r in self._records:
-            by_count.setdefault(r.n_syll, []).append(r.correct)
-        best, best_acc = None, -1.0
-        for n in sorted(by_count):
-            acc = sum(by_count[n]) / len(by_count[n])
-            if acc > best_acc:
-                best, best_acc = n, acc
-        return best
-
-    def _draw_ease_word(self) -> Word | None:
-        """One word from the current band pool at the child's best
-        unit count, bypassing the shuffle bag (the bag's fairness is
-        about material coverage; this draw is about breaking a
-        failure spiral, and it must not eat the bag's remaining
-        words). None when no best count exists yet or the pool holds
-        no word at it, in which case the normal draw runs."""
-        best = self._best_unit_count()
-        if best is None:
-            return None
-        pool = [w for w in words_for(self.level, self.band,
-                                     bilateral=self.bilateral)
-                if len(self.units_for(w)) == best]
-        if not pool:
-            return None
-        prev = self.word.word if self.word is not None else None
-        fresh = [w for w in pool if w.word != prev]
-        return self.rng.choice(fresh or pool)
-
-    def units_for(self, word: Word) -> list[str]:
-        """The text chunks the child taps out, one per block: syllables
-        at levels 1 to 4, onset and rime at 5, graphemes at 6."""
-        if self.level >= 6 and word.graphemes:
-            return list(word.graphemes)
-        if self.level == 5 and word.onset_rime:
-            return list(word.onset_rime)
-        return list(word.syllables)
-
-    @property
-    def n_expected(self) -> int:
-        return len(self.units_for(self.word)) if self.word else 0
-
-    @property
-    def paced(self) -> bool:
-        # Levels 3 and 4 are the beat-paced rungs of the ladder.
-        return self.level in (3, 4)
-
-    @property
-    def order_required(self) -> bool:
-        # Level 1 is counting with any fingers; everything above maps
-        # syllable position onto finger order.
-        return self.level >= 2
-
-    # ---- the sliding window ------------------------------------------------
-    # Position-to-lane mapping is WORD-relative: a word of n units
-    # occupies n adjacent slots of the desk row (every playing finger
-    # in physical left-to-right order), starting at a per-word offset
-    # placed by the deficit draw. The walk always travels left to right
-    # (the way the blocks light and the way print runs) AND every
-    # finger takes its turn across a block.
-
+    # ---- geometry the screen and the keyboard note share ------------------
     def desk_row(self) -> list[int]:
         """Every playing lane in physical desk order, left to right.
         Lane lists run index outward, which is left to right on the
         right hand and right to left on the left, so the left hand
-        contributes its lanes reversed, and in bilateral play it
-        comes first because it IS the left of the desk."""
+        contributes its lanes reversed and comes first."""
         row: list[int] = []
         if "left" in self.hands:
             row.extend(reversed(self.hands["left"]))
@@ -615,114 +505,13 @@ class SyllablesMode(WaitSkip):
                 row.extend(self.hands[hand])
         return row
 
-    def _draw_offset(self, n: int) -> None:
-        """Place a fresh n-unit word over the least-cued lanes.
-
-        Every candidate offset is scored by the cue tally of the lanes
-        its window would cover; the draw picks uniformly among the
-        lowest-scoring offsets. That balances FINGERS rather than
-        offsets, which matters because the two are not the same thing:
-        an edge lane appears in one window position, a middle lane in
-        up to n, so a bag that deals offsets equally still cues the
-        index fingers four times as often as the littles in bilateral
-        play. The random tie-break keeps placement unpredictable, and
-        mixed word lengths share one tally so short and long words
-        cooperate on the same goal."""
-        desk = self.desk_row()
-        n = max(1, n)
-        n_off = max(1, len(desk) - n + 1)
-        if n_off <= 1:
-            self._offset = 0
-        else:
-            for lane in desk:
-                self._lane_cues.setdefault(lane, 0)
-            scores = [sum(self._lane_cues[l] for l in desk[k:k + n])
-                      for k in range(n_off)]
-            best = min(scores)
-            self._offset = self.rng.choice(
-                [k for k, s in enumerate(scores) if s == best])
-        for lane in desk[self._offset:self._offset + n]:
-            self._lane_cues[lane] = self._lane_cues.get(lane, 0) + 1
-
-    def window_offset(self) -> int:
-        """The current window's start slot, clamped so the window
-        always fits the desk row even when the word changes under a
-        drawn offset (the test harness swaps words mid-trial): the
-        packed map=off value and the actual lanes must never
-        disagree, so both read this clamp."""
-        desk = self.desk_row()
-        if not desk:
-            return 0
-        n = min(max(1, self.n_expected), len(desk))
-        return max(0, min(self._offset, len(desk) - n))
-
-    def window_lanes(self) -> list[int]:
-        """The lanes carrying positions 0..n-1 of the current word,
-        in walking order: n adjacent desk-row slots from the offset.
-        One lane per position, on any hand count."""
-        desk = self.desk_row()
-        if not desk or self.n_expected <= 0:
-            return []
-        off = self.window_offset()
-        return desk[off:off + min(self.n_expected, len(desk))]
-
-    @property
-    def row_mode(self) -> bool:
-        """True when the current window crosses the midline, so the
-        word runs off one hand onto the other (any 5-8 unit word,
-        and short words whose offset straddles the gap). The screen
-        widens the block gap there and names the two-hand rule."""
-        return len({self._hand_of_lane(lane)
-                    for lane in self.window_lanes()}) > 1
-
-    def row_split(self) -> int | None:
-        """How many of a crossing window's positions the LEFT hand
-        carries (the index of the first right-hand position, where
-        the screen widens the gap), or None when the window sits on
-        one hand."""
-        if not self.row_mode:
-            return None
-        return sum(1 for lane in self.window_lanes()
-                   if self._hand_of_lane(lane) == "left")
-
-    def lanes_for_position(self, pos: int) -> list[int]:
-        """Every lane that legally carries position `pos` of the
-        current word: exactly one, the window's own."""
-        lanes = self.window_lanes()
-        return [lanes[pos]] if 0 <= pos < len(lanes) else []
-
-    def expected_lanes(self) -> list[int]:
-        """One lane per expected position: the window itself."""
-        return self.window_lanes()
-
-    def acceptable_lanes(self) -> list[int]:
-        """Every lane that can legally carry some expected position.
-        This is what the trial's correct_keys records.
-
-        Level 1 is counting with ANY finger (order_required is False),
-        so restricting this to the window overstates the constraint:
-        a tap outside the window scores err=ok there (acceptable_
-        lanes is never consulted for order, only for the CSV column),
-        so every playing lane is listed. From level 2 up each
-        position owns one window lane, so the list holds exactly the
-        window's lanes.
-
-        A caution for consumers: engine.log_trial SORTS the list
-        before writing, so the CSV's correct_keys is an unordered SET
-        of acceptable lanes, not the walking order (left-hand and
-        cross-midline windows walk descending lane numbers). The
-        position order lives in the stimulus map=off<k> fields plus
-        the desk row, which is what the notebook rebuilds it from."""
-        if not self.order_required:
-            return sorted(l for hands in self.hands.values() for l in hands)
-        return self.window_lanes()
-
-    def _position_of(self, lane: int) -> int | None:
-        """Which unit position a lane carries in the CURRENT word, or
-        None when the lane carries no position (a playing finger
-        resting this word, or a lane outside the game)."""
-        lanes = self.window_lanes()
-        return lanes.index(lane) if lane in lanes else None
+    def active_lanes(self) -> list[int]:
+        """The four lanes this word plays on, in desk order: the
+        playing hand's own fingers, left to right."""
+        lanes = self.hands.get(self.word_hand) or self.lanes
+        if self.word_hand == "left":
+            return list(reversed(lanes))
+        return list(lanes)
 
     def _hand_of_lane(self, lane: int) -> str:
         for hand, lanes in self.hands.items():
@@ -735,89 +524,125 @@ class SyllablesMode(WaitSkip):
 
     def _finger_of_lane(self, lane: int) -> int:
         """The finger a lane sits under within its hand (0 index to 3
-        little), independent of which unit position it carries this
-        word. Calibration gaps and block colours are per FINGER; unit
-        positions are window slots, not finger numbers, so the two
-        must never be conflated. Same helper chords.py uses."""
+        little). Calibration gaps and colours are per FINGER."""
         lanes = self.hands.get(self._hand_of_lane(lane), self.lanes)
         try:
             return max(0, min(3, lanes.index(lane)))
         except ValueError:
             return max(0, min(3, lane - lanes[0]))
 
-    def finger_for_position(self, pos: int) -> int:
-        """Which finger (0 index to 3 little) colours block `pos`, so
-        a block wears the colour of the finger that plays it: the
-        window's own lane for that position, resolved to its
-        finger."""
-        lanes = self.window_lanes()
-        if not lanes:
-            return min(max(pos, 0), 3)
-        return self._finger_of_lane(
-            lanes[min(max(pos, 0), len(lanes) - 1)])
+    @property
+    def n_syll(self) -> int:
+        return len(self.word.syllables) if self.word else 0
 
-    # ---- per-finger normalisation -------------------------------------------
-    def _reference_counts(self, lane: int) -> float:
-        """This finger's calibrated light-press gap in counts, the same
-        normaliser chords.py uses so a stress ratio compares forces on a
-        common scale instead of raw ADC counts (which differ by pad
-        sensitivity, not by how hard the child pressed). Falls back to
-        the shipped fsr.on_delta thresholds when no in-app calibration
-        has run, and to 1.0 (no normalisation) when even that cannot be
-        read (test doubles with no cfg). Keyed by the lane's FINGER,
-        never its unit position: a window can put position 0 on a
-        left-ring lane, but its calibration gap is still the ring's."""
-        finger = self._finger_of_lane(lane)
-        profs = getattr(self.engine, "calibration_profiles", None)
-        if isinstance(profs, dict):
-            prof = profs.get(self._hand_of_lane(lane))
-            try:
-                g = float(prof.gap()[finger])
-                if g > 0:
-                    return g
-            except (AttributeError, TypeError, IndexError, ValueError):
-                pass
-        try:
-            on_delta = list(self.engine.cfg.get("fsr.on_delta") or [])
-            v = float(on_delta[finger]) / 0.40
-            if v > 0:
-                return v
-        except (AttributeError, TypeError, IndexError, ValueError):
-            pass
-        return 1.0
+    @property
+    def fall_s(self) -> float:
+        """How long this rung's tiles are on screen."""
+        idx = max(0, min(len(self._fall_table) - 1, self.rung - 1))
+        return self._fall_table[idx]
+
+    @property
+    def current_timeout_s(self) -> float:
+        """The set's response window, which is the RT censoring limit
+        the engine writes into the trial row."""
+        return self.fall_s
+
+    def eeg_stim_code(self) -> int | None:
+        """The choice band: 50 for a set on a first attempt, 51 for a
+        set on a returned word. None everywhere else, so the model
+        roll keeps the ordinary 30-band cue-condition code."""
+        if self.phase != "choose":
+            return None
+        from ...hardware import eeg_trigger
+        return eeg_trigger.CODES[
+            "stim_choice_set_return" if self.ret else "stim_choice_set"]
+
+    # ---- material ---------------------------------------------------------
+    def _draw_word(self) -> Word:
+        """Shuffle-bag draw over the current band pool, so a round
+        cannot repeat one word while another never comes up. The bag
+        rebuilds when it empties or after a band change."""
+        if not self._bag:
+            self._bag = [w for w in words_for(self.band,
+                                              bilateral=self.bilateral)
+                         if w.word not in self._retired]
+            if not self._bag:
+                # A band small enough to retire whole: better to
+                # repeat than to stall the block.
+                self._bag = list(words_for(self.band,
+                                           bilateral=self.bilateral))
+            self.rng.shuffle(self._bag)
+        return self._bag.pop()
+
+    def _best_syllable_count(self) -> int | None:
+        """The syllable count the child has done best on so far this
+        block, ties to the LOWER count (the kinder direction)."""
+        by_count: dict[int, list[bool]] = {}
+        for r in self._records:
+            by_count.setdefault(r.n_syll, []).append(r.correct)
+        best, best_acc = None, -1.0
+        for n in sorted(by_count):
+            acc = sum(by_count[n]) / len(by_count[n])
+            if acc > best_acc:
+                best, best_acc = n, acc
+        return best
+
+    def _draw_ease_word(self) -> Word | None:
+        """One word at the child's best syllable count, bypassing the
+        shuffle bag: the bag's fairness is about material coverage,
+        this draw is about breaking a failure spiral."""
+        best = self._best_syllable_count()
+        if best is None:
+            return None
+        pool = [w for w in words_for(self.band, bilateral=self.bilateral)
+                if w.n_syll == best and w.word not in self._retired]
+        if not pool:
+            return None
+        # A word already played this block is a poor rescue: the child
+        # has just failed it, and a retired one is meant to be gone for
+        # the block. Fall back through seen, then to the whole pool,
+        # so the draw never returns None when material exists.
+        prev = self.word.word if self.word is not None else None
+        unseen = [w for w in pool
+                  if w.word != prev and w.word not in self._seen_words]
+        fresh = [w for w in pool if w.word != prev]
+        return self.rng.choice(unseen or fresh or pool)
+
+    def _next_hand(self) -> str:
+        """Which hand the next word plays on. One hand connected: that
+        hand. Both connected with alternate_hands: left, right, left,
+        right across words, starting on the session's main hand."""
+        if not self.bilateral or not self.alternate_hands:
+            main = str(getattr(self.engine, "hand_mode", "right"))
+            if main in self.hands:
+                return main
+            return self.hand_names[0]
+        order = [h for h in ("left", "right") if h in self.hands]
+        main = str(getattr(self.engine, "hand_mode", "right"))
+        if main in order:
+            # Start on the main hand, then alternate.
+            order = ([main] + [h for h in order if h != main])
+        hand = order[self._hand_cursor % len(order)]
+        self._hand_cursor += 1
+        return hand
 
     # ---- plumbing shared with the other modes ------------------------------
     def queue_press(self, ev: PressEvent) -> None:
         self._presses.append(ev)
 
-    @property
-    def current_timeout_s(self) -> float:
-        """The response window for the current word. The engine logs it
-        as the trial's RT censoring limit (timeout_ms column)."""
-        if self.paced:
-            n = max(1, self.n_expected)
-            return (self.count_in_beats + n) * self.ioi_s + self.grace_s
-        return self.free_window_s
-
     def on_resume(self, pause_dur: float) -> None:
-        # Session-level clocks slide forward like every other mode.
         for attr in ("_t0", "_phase_t0", "_phase_until", "_model_next_t",
-                     "_respond_t0"):
+                     "_spawn_t", "_exit_t", "_next_spawn_t",
+                     "_set_close_t", "_correct_t", "_glow_t", "lift_t"):
             v = getattr(self, attr)
             if v is not None:
                 setattr(self, attr, v + pause_dur)
-        self._beat_times = [t + pause_dur for t in self._beat_times]
         self._warmup_beats = [t + pause_dur for t in self._warmup_beats]
-        # A pause mid-word breaks the rhythm the trial is measuring
-        # (taps already landed are on the old clock, beats on the new),
-        # so the fair move is to restart the word from ATTEND rather
-        # than salvage half a trial. Nothing was logged for it yet.
-        if self.phase in ("attend", "model", "countin", "respond"):
-            # The restarted word takes a NEW trial id, so the aborted
-            # id's stim rows (and EEG stim markers, when enabled) sit
-            # in raw.csv with no trials.csv row. The event explains
-            # the orphan in the stream instead of leaving a silent
-            # hole in the id sequence for stim-to-trial matchers.
+        # A pause mid-word breaks the presentation the trial rests on
+        # (the word was spoken and modelled before the pause, the tiles
+        # fall after it), so the fair move is to restart the word from
+        # ATTEND rather than salvage half of it.
+        if self.phase in ("attend", "model", "choose", "complete"):
             raw = getattr(self.engine, "raw_logger", None)
             if raw:
                 raw.queue_event(
@@ -827,14 +652,14 @@ class SyllablesMode(WaitSkip):
                             f"phase={self.phase}"),
                     hand=self.engine.hand_mode)
             self.active = None
+            self.option_set = None
             self._begin_word(time.perf_counter(), reuse_word=True)
 
     def handle_event(self, e: pygame.event.Event) -> None:
         if e.type == pygame.KEYDOWN:
             # Keyboard fallback stays wired even with an Arduino
-            # connected, same reasoning as classic.py: a busted
-            # auto-detect must never leave the therapist with no
-            # working input.
+            # connected: a busted auto-detect must never leave the
+            # therapist with no working input.
             km = self.engine.cfg.get(
                 keymap_for_hand(self.engine.hand_mode), {},
             )
@@ -847,14 +672,6 @@ class SyllablesMode(WaitSkip):
                         value=0, baseline=0.0,
                         hand=self.engine.hand_mode,
                     ))
-                    # Keyboard presses bypass engine._on_press (the FSR
-                    # detector path), which is the only place raw.csv
-                    # normally gets a "press" event (audit finding #112,
-                    # generalising the mirror-mode fix for #75 to every
-                    # mode): without this a keyboard-injected press in a
-                    # mixed session (Arduino attached, keyboard kept
-                    # live as backup) was indistinguishable from a real
-                    # FSR press. detail="keyboard" marks the source.
                     raw_logger = getattr(self.engine, "raw_logger", None)
                     if raw_logger:
                         raw_logger.queue_event(
@@ -885,29 +702,19 @@ class SyllablesMode(WaitSkip):
         elif self.phase == "attend":
             if now >= self._phase_until:
                 self._enter_phase("model", now)
-        elif self.phase in ("model", "replay"):
+        elif self.phase == "model":
             self._update_model(now)
-        elif self.phase == "countin":
-            if now >= self._phase_until:
-                # Anchor the response beats on the scheduled count-in
-                # end, which sits on the model's grid, not on the frame
-                # that noticed it: the child is scored against the beat
-                # they heard, not the beat plus a frame of loop delay.
-                self._enter_phase("respond", self._phase_until)
-        elif self.phase == "respond":
-            self._update_respond(now)
-        elif self.phase == "feedback":
-            if now >= self._phase_until:
-                self._after_feedback(now)
+        elif self.phase == "choose":
+            self._update_choose(now)
+        elif self.phase == "complete":
+            if self._phase_until is not None and now >= self._phase_until:
+                self._after_word(now)
 
     # ---- warm-up probe -----------------------------------------------------
     def _update_warmup(self, now: float) -> None:
         if not self._warmup_beats:
-            # Count-in plus one beat per warm-up tap. The metronome is
-            # the audio timing reference (the screen is 60 Hz); it was
-            # started in _enter_phase.
             first = now + self.ioi_s
-            total = self.count_in_beats + self.warmup_total
+            total = self.COUNT_IN_BEATS + self.warmup_total
             self._warmup_beats = [first + i * self.ioi_s
                                   for i in range(total)]
         if now >= self._warmup_beats[-1] + self.ioi_s:
@@ -915,10 +722,7 @@ class SyllablesMode(WaitSkip):
             self._enter_phase("gap", now)
 
     def _warmup_tap(self, ev: PressEvent) -> None:
-        # Match the tap to the nearest scorable beat (count-in beats
-        # are not scored) and log the signed asynchrony to raw.csv so
-        # the analysis gets its per-session synchronisation probe.
-        scorable = self._warmup_beats[self.count_in_beats:]
+        scorable = self._warmup_beats[self.COUNT_IN_BEATS:]
         if not scorable:
             return
         nearest = min(scorable, key=lambda b: abs(ev.t_perf - b))
@@ -932,10 +736,27 @@ class SyllablesMode(WaitSkip):
                             hand=self.engine.hand_mode)
 
     # ---- word flow ---------------------------------------------------------
+    def _due_return(self) -> dict | None:
+        """The parked word whose wait is up, if any. Returns are
+        played before fresh draws so the spacing is exact."""
+        for entry in self._parked:
+            if entry["remaining"] <= 0:
+                return entry
+        return None
+
     def _begin_word(self, now: float, reuse_word: bool = False) -> None:
-        # Session cap and completion are checked at word boundaries so
-        # the block never ends mid-trial.
-        if self.words_done >= self.words_total:
+        # Returns over the cap are let go BEFORE the completion check,
+        # or a block whose every word missed would keep drawing fresh
+        # words for ever: the due entry blocked the "block finished"
+        # branch and then fell through to a fresh draw.
+        entry = self._due_return()
+        while entry is not None and self._returns_started >= self.MAX_RETURNS:
+            self._parked.remove(entry)
+            self._retire(entry, "return_cap")
+            entry = self._due_return()
+        # Completion and the session cap are checked at word
+        # boundaries so the block never ends mid-word.
+        if self.words_done >= self.words_total and entry is None:
             self._end("completed")
             return
         if (self._t0 is not None
@@ -943,87 +764,70 @@ class SyllablesMode(WaitSkip):
             self._end("time_cap")
             return
         if not reuse_word or self.word is None:
-            # Ease-in: two Misses in a row bias ONE draw toward the
-            # child's best unit count so far, never two ease draws
-            # back to back (docstring: EASE-IN DRAW). A word restarted
-            # after a pause keeps its draw, so the flag survives too.
-            ease = (self._draw_ease_word()
-                    if self._miss_run >= 2 and not self._ease_word
-                    else None)
-            if ease is not None:
-                self.word = ease
-                self._ease_word = True
-                self._n_ease_in += 1
-            else:
-                self.word = self._draw_word()
+            if entry is not None:
+                self._parked.remove(entry)
+                self.word = entry["word"]
+                self.word_hand = entry["hand"]
+                self.ret = entry["return_count"] + 1
                 self._ease_word = False
-            # A fresh word gets a fresh window; a word restarted after
-            # a pause keeps its placement, so it does not jump fingers
-            # on the child mid-word.
-            self._draw_offset(self.n_expected)
-        # Whatever between-word screen carried the band celebration,
-        # the moment a new word starts the card's moment is over.
+                self._returns_started += 1
+            else:
+                # Ease-in: two Misses in a row bias ONE draw toward
+                # the child's best syllable count, never two in a row.
+                ease = (self._draw_ease_word()
+                        if self._miss_run >= 2 and not self._ease_word
+                        else None)
+                if ease is not None:
+                    self.word = ease
+                    self._ease_word = True
+                    self._n_ease_in += 1
+                else:
+                    self.word = self._draw_word()
+                    self._ease_word = False
+                self.ret = 0
+                self.word_hand = self._next_hand()
+                for parked in self._parked:
+                    parked["remaining"] -= 1
+        if self.word is not None:
+            self._seen_words.add(self.word.word)
         self.band_celebrate = None
-        self.trial_counter += 1
-        self.taps = []
+        self.filled = [None] * self.n_syll
+        self.filled_lanes = [None] * self.n_syll
+        self.pos = 0
+        self.option_set = None
+        self.active = None
+        self._set_presses = []
+        self._dead_lanes = set()
         self._last_tap_t = {}
-        self._model_lanes = []
-        self._replayed = False
-        self._pending_replay = False
-        self._last_result = None
-        window = self.window_lanes()
-        self.active = PendingTrial(
-            trial_id=self.trial_counter,
-            lane=window[0] if window else self.lanes[0],
-            stim_t_perf=now,
-            keys_pressed=[],
-            incorrect_presses=[],
-        )
         self._enter_phase("attend", now)
-        self._speak(self.word.word)
+        self._speak_word()
 
     def _enter_phase(self, phase: str, now: float) -> None:
         self.phase = phase
         self._phase_t0 = now
         self._phase_until = None
-        # Any wait armed by the phase we are leaving is over.
         self.clear_wait()
-        if phase not in ("model", "replay"):
+        if phase != "model":
             self.model_hand = None
         if phase == "warmup":
             self._warmup_beats = []
             self._start_metronome()
         elif phase == "attend":
             self._phase_until = now + self.attend_s
-        elif phase in ("model", "replay"):
+        elif phase == "model":
             self._model_idx = -1
             self._model_next_t = now + self.ioi_s
-        elif phase == "countin":
-            self._phase_until = now + self.count_in_beats * self.ioi_s
-            self._start_metronome()
-        elif phase == "respond":
-            self._respond_t0 = now
-            self.taps = []
-            self._last_tap_t = {}
-            if self.paced:
-                # One beat per unit, continuing the count-in pulse.
-                self._beat_times = [now + (i + 1) * self.ioi_s
-                                    for i in range(self.n_expected)]
-            else:
-                self._beat_times = []
-                self._stop_metronome()
-            self._phase_until = now + self.current_timeout_s - (
-                self.count_in_beats * self.ioi_s if self.paced else 0.0)
-        elif phase == "feedback":
-            self._phase_until = now + self.FEEDBACK_S
-            self._stop_metronome()
+        elif phase == "choose":
+            self._next_spawn_t = now
+            self._set_close_t = None
+        elif phase == "complete":
+            self._phase_until = now + self.complete_s
+            # "feedback" is the wait vocabulary the skip chip already
+            # knows: the complete card IS this mode's feedback moment.
             self.arm_wait("feedback", self._phase_until,
-                          self._skip_feedback, started_at=now)
+                          self._skip_complete, started_at=now)
         elif phase == "break":
             self._phase_until = now + self.break_s
-            # The between-round break is rest for a child, nothing
-            # more: no measurement leans on its length, so a skip
-            # carries no per-trial flag, only the tally.
             self.arm_wait("break", self._phase_until,
                           self._skip_to_next_word, started_at=now)
         elif phase == "gap":
@@ -1032,266 +836,218 @@ class SyllablesMode(WaitSkip):
                           self._skip_to_next_word, started_at=now)
 
     def _skip_to_next_word(self, now: float) -> None:
-        """Cut a break or an inter-word gap short: straight into the
-        next word, exactly where the timer would have taken it."""
         self._begin_word(now)
 
-    def _skip_feedback(self, now: float) -> None:
-        """Cut the feedback card short. The word has already been
-        scored and logged; this only shortens how long the result
-        stays on screen."""
-        self._after_feedback(now)
+    def _skip_complete(self, now: float) -> None:
+        self._after_word(now)
 
     def _update_model(self, now: float) -> None:
-        """Light the blocks one per beat, left to right. Each onset goes
-        through the engine's shared cue path (engine.on_stim), which
-        fires the finger's buzzer and cue tone under the cue.* switches
-        and records the cue condition; one motor per board runs at a
-        time, so sequential onsets at the beat interval are exactly
-        what the hardware can deliver.
+        """Light each slot in turn at the beat, speak its syllable, and
+        fire ONE tactile roll across all four fingers of the playing
+        hand.
 
-        Beat deadlines are ABSOLUTE: each syllable is due one IOI after
-        the previous DEADLINE, not one IOI after the frame that noticed
-        it. Re-anchoring to the frame clock added the frame delay to
-        every interval (measured +5 ms per beat at 120 fps, drifting
-        10-25 ms across a word, worse at 60 Hz), a systematic stretch
-        of the 2 Hz grid the beat-synchronisation analysis assumes. The
-        cue still fires at the frame that crosses the deadline, so each
-        onset jitters within a frame of its grid slot, but the error no
-        longer accumulates."""
+        The roll is the whole point: the old tapping mode buzzed the
+        single finger that would answer that syllable, which in a
+        choice task would announce the target lane before the tiles
+        exist. Four lanes in one on_stim_multi call reach the board as
+        an arpeggio (the engine spaces one motor per board), so the
+        child feels the syllable without feeling WHERE it is.
+
+        Beat deadlines are ABSOLUTE: each syllable is due one interval
+        after the previous DEADLINE, not one after the frame that
+        noticed it, so the frame delay cannot accumulate across a
+        word."""
         due = self._model_next_t
         if due is None or now < due:
             return
         self._model_idx += 1
-        if self._model_idx >= self.n_expected:
+        if self._model_idx >= self.n_syll:
             self._model_idx = -1
             self._model_next_t = None
-            if self.phase == "replay":
-                # The replay is demonstration only; the word is already
-                # scored and logged, so move on.
-                self._enter_phase("gap", now)
-                self.words_done += 1
-                self._round_rewards(now)
-                self._maybe_break(now)
-            elif self.paced:
-                # Hand the grid deadline over, not the frame time, so
-                # the count-in ticks continue the model's beat rather
-                # than restarting it a frame late.
-                self._enter_phase("countin", due)
-            else:
-                self._enter_phase("respond", due)
+            self._enter_phase("choose", due)
             return
         self._model_next_t = due + self.ioi_s
         if self._model_next_t <= now:
-            # The loop stalled past a whole beat (alt-tab, IO). Re-anchor
-            # rather than burst-fire catch-up syllables a frame apart,
-            # which the one-motor-per-board hardware could not deliver.
+            # The loop stalled past a whole beat (alt-tab, IO).
+            # Re-anchor rather than burst-fire catch-up syllables.
             self._model_next_t = now + self.ioi_s
-        # Which lane: the window's own for this position. The buzzing
-        # hand follows the window, so a crossing window hands the
-        # buzz over exactly where the child's taps will.
-        lanes = self.window_lanes()
-        if lanes:
-            lane = lanes[min(self._model_idx, len(lanes) - 1)]
-        else:
-            lane = self.lanes[0]
-        self.model_hand = self._hand_of_lane(lane)
-        if self.phase == "model":
-            self._model_lanes.append(lane)
-        # The replay runs after the trial was scored (self.active is
-        # gone), but it is still the multisensory model, so the cue
-        # path fires either way, tagged with the word's trial id.
-        tid = (self.active.trial_id if self.active is not None
-               else self.trial_counter)
-        self.engine.on_stim(lane, tid, now)
+        self.model_hand = self.word_hand
+        self._speak_syllable(self._model_idx)
+        # Every lane of the playing hand, so the roll carries the
+        # syllable without carrying a lane. The trial id is the word's
+        # next set id, which is what the marker stream needs to tie the
+        # 30-band model bytes to the word they belong to.
+        self.engine.on_stim_multi(self.active_lanes(),
+                                  self.trial_counter, now)
 
-    def _update_respond(self, now: float) -> None:
-        # Track each in-flight tap's running peak while the finger is
-        # still down, so the stress criterion sees the whole press.
-        self._poll_tap_peaks()
-        window_over = (self._phase_until is not None
-                       and now >= self._phase_until)
-        enough = len(self.taps) >= self.n_expected
-        settled = (enough and self.taps
-                   and now >= self.taps[-1].t_perf + self.SETTLE_S)
-        if window_over or settled:
-            self._score_word(now)
+    # ---- the choice phase --------------------------------------------------
+    def _update_choose(self, now: float) -> None:
+        if self.option_set is None:
+            if self._next_spawn_t is not None and now >= self._next_spawn_t:
+                self._spawn_set(now)
+            return
+        if self._set_close_t is not None:
+            if now >= self._set_close_t:
+                self._close_set(now)
+            return
+        if self._exit_t is not None and now >= self._exit_t:
+            self._miss_set(now)
+
+    def _spawn_set(self, now: float) -> None:
+        """Four tiles for syllable `self.pos`: build them, open the
+        trial, and mark the onset.
+
+        The marker call goes through the engine's ordinary cue path so
+        the force window, the timeout and the EEG byte all arm the way
+        they do everywhere else, with `silent_stim` set for the length
+        of the call so nothing is heard, felt or highlighted. A cue on
+        the target lane here would hand the child the answer."""
+        lanes = self.active_lanes()
+        self.option_set = build_option_set(
+            self.word, self.pos, self.rung, self.rng, self.inventory,
+            lanes, self._lane_targets, self._recent_target_lanes,
+            homophone_foils=self.homophone_foils)
+        tlane = self.option_set.target_lane
+        self._lane_targets[tlane] = self._lane_targets.get(tlane, 0) + 1
+        self._recent_target_lanes.append(tlane)
+        self.trial_counter += 1
+        self.active = PendingTrial(
+            trial_id=self.trial_counter,
+            lane=tlane,
+            stim_t_perf=now,
+            keys_pressed=[],
+            incorrect_presses=[],
+        )
+        self._spawn_t = now
+        self._exit_t = now + self.fall_s
+        self._next_spawn_t = None
+        self._set_close_t = None
+        self._set_presses = []
+        self._dead_lanes = set()
+        self._first_kind = None
+        self._correct_t = None
+        self._glow_t = None
+        self.lift_t = None
+        self._last_tap_t = {}
+        self._respeak = self.rung in self.respeak_rungs
+        raw = getattr(self.engine, "raw_logger", None)
+        if raw:
+            raw.queue_event(
+                "set_spawn", lane=tlane, t_perf=now,
+                detail=(f"trial_id={self.trial_counter};"
+                        f"word={self.word.word};pos={self.pos};"
+                        f"rung={self.rung};ret={self.ret}"),
+                hand=self.word_hand)
+        self.silent_stim = True
+        try:
+            self.engine.on_stim_multi(lanes, self.trial_counter, now,
+                                      buzz=False)
+        finally:
+            self.silent_stim = False
+        if self._respeak:
+            self._speak_syllable(self.pos)
 
     def _handle_press(self, ev: PressEvent, now: float) -> None:
         if self.phase == "warmup":
             self._warmup_tap(ev)
             return
-        if self.phase == "break":
-            # Breaks are fixed-length rest for a child, not self-paced
-            # like the adult modes; presses during one are ignored.
-            return
-        if self.phase != "respond" or self.active is None:
+        if self.phase != "choose" or self.option_set is None:
             # No penalty anywhere in this mode: a child fidgeting
-            # between words must not lose points for it.
+            # between words must not lose anything for it.
             return
-        if not self._lane_in_game(ev.lane):
+        if self._set_close_t is not None:
+            # The set is already scored and fading out.
             return
         last = self._last_tap_t.get(ev.lane)
         if last is not None and (ev.t_perf - last) < self.tap_debounce_s:
             return
         self._last_tap_t[ev.lane] = ev.t_perf
+        kind = self._classify(ev)
         peak = self._peak_for(ev)
-        self.taps.append(Tap(lane=ev.lane, t_perf=ev.t_perf, peak=peak))
-        self.active.keys_pressed.append(ev.lane)
-        # Wrong-POSITION taps land in incorrect_presses so the CSV's
-        # had_incorrect_press / first_incorrect_lane columns carry
-        # them, without any of the adult modes' penalties. Each
-        # position owns one window lane, and a playing finger with no
-        # position this word (pos None: a finger the window rests) is
-        # a wrong tap, not an ignored one: the child pressed and the
-        # record must say so.
-        pos = self._position_of(ev.lane)
-        k = len(self.taps) - 1
-        if (self.order_required and
-                (pos is None or k >= self.n_expected or pos != k)):
-            self.active.incorrect_presses.append((ev.lane, ev.t_perf))
+        self._set_presses.append(Press(lane=ev.lane, t_perf=ev.t_perf,
+                                       kind=kind, peak=peak))
+        if self.active is not None:
+            self.active.keys_pressed.append(ev.lane)
+        if kind == KIND_CORRECT:
+            if self._first_kind is None:
+                self._first_kind = "ok"
+            self.filled[self.pos] = self.option_set.target
+            self.filled_lanes[self.pos] = ev.lane
+            self._correct_t = ev.t_perf
+            self.lift_t = ev.t_perf
+            self._score_set(now, ev.t_perf)
+            self._set_close_t = ev.t_perf + self.CORRECT_HOLD_S
+        elif kind == KIND_WRONG:
+            if self._first_kind is None:
+                self._first_kind = "wrong"
+            self._dead_lanes.add(ev.lane)
+            if self.active is not None:
+                self.active.incorrect_presses.append((ev.lane, ev.t_perf))
 
-    def _peak_for(self, ev: PressEvent) -> float | None:
-        helper = getattr(self.engine, "_peak_force_for_lane", None)
-        if not callable(helper):
-            return None
-        try:
-            return helper(ev.lane)
-        except Exception:
-            return None
+    def _classify(self, ev: PressEvent) -> str:
+        """The input rule, in the order the docstring states it. Only
+        a press on the target lane, after the lockout, while the set
+        is on screen, ever scores."""
+        opt = self.option_set.option_for_lane(ev.lane)
+        if opt is None or not self._lane_in_game(ev.lane):
+            return KIND_OFF_HAND
+        if (self._spawn_t is not None
+                and ev.t_perf < self._spawn_t + self.spawn_lockout_s):
+            return KIND_ANTICIP
+        if ev.lane in self._dead_lanes:
+            return KIND_WRONG_REPEAT
+        if ev.lane == self.option_set.target_lane:
+            return KIND_CORRECT
+        return KIND_WRONG
 
-    def _poll_tap_peaks(self) -> None:
-        # engine._peak_force_for_lane reports the CURRENT press's
-        # running peak on that lane, so once a second tap has landed on
-        # the same lane (a repeated-position word, or a child drumming
-        # one finger at level 1), polling every tap on the lane retro-
-        # writes the new press's peak onto the earlier tap too. Only
-        # the most recent tap on each lane is still "the press in
-        # progress"; every earlier same-lane tap has already released
-        # and keeps the peak it was scored with when it landed.
-        helper = getattr(self.engine, "_peak_force_for_lane", None)
-        if not callable(helper):
+    def _miss_set(self, now: float) -> None:
+        """The set left the screen unanswered: the target tile glows on
+        its way out and the syllable is spoken once. The word stops
+        here and comes back later."""
+        self._glow_t = now
+        self._score_set(now, None)
+        self._speak_syllable(self.pos)
+        self._set_close_t = now + self.MISS_GLOW_S
+
+    def _close_set(self, now: float) -> None:
+        missed = self._first_kind != "ok" and self._correct_t is None
+        self.option_set = None
+        self._spawn_t = None
+        self._exit_t = None
+        self._set_close_t = None
+        if missed:
+            self._park_word(now)
+            self._finish_word(now, completed=False)
             return
-        latest_idx: dict[int, int] = {}
-        for i, tap in enumerate(self.taps):
-            latest_idx[tap.lane] = i
-        for lane, idx in latest_idx.items():
-            try:
-                live = helper(lane)
-            except Exception:
-                continue
-            tap = self.taps[idx]
-            if live is not None and (tap.peak is None or live > tap.peak):
-                tap.peak = live
-
-    def tap_marks(self) -> list[dict]:
-        """Read-side per-tap quality for the screen's reward layer,
-        derived from what scoring already computes and nothing else:
-        pos_ok mirrors the incorrect_presses predicate in
-        _handle_press (any finger counts while order is not
-        required), on_beat mirrors the paced window test in
-        _score_word. One dict per landed tap, in tap order, so the
-        screen can sparkle a correct fill and ring an on-beat tap
-        without measuring anything of its own."""
-        marks: list[dict] = []
-        n = self.n_expected
-        for k, tap in enumerate(self.taps):
-            pos = self._position_of(tap.lane)
-            pos_ok = (k < n and (not self.order_required or pos == k))
-            on_beat = None
-            if self.paced and k < len(self._beat_times):
-                a_ms = (tap.t_perf - self._beat_times[k]) * 1000.0
-                on_beat = abs(a_ms) <= self.on_beat_window_s * 1000.0
-            marks.append({"pos_ok": pos_ok, "on_beat": on_beat})
-        return marks
-
-    @property
-    def stickers(self) -> int:
-        """Completed rounds so far: the sticker count the break and
-        results screens draw."""
-        return self._stickers
-
-    @property
-    def n_rounds(self) -> int:
-        """How many stops the session's journey has: one per full
-        round, plus the partial round a non-multiple word count
-        leaves (its completion still earns no sticker, but the strip
-        must show the stop the child is walking toward)."""
-        return max(1, -(-self.words_total // self.round_size))
+        self.pos += 1
+        if self.pos >= self.n_syll:
+            self._enter_phase("complete", now)
+            self._speak_word()
+            return
+        self._next_spawn_t = now + self.set_gap_s
 
     # ---- scoring -----------------------------------------------------------
-    def _score_word(self, now: float) -> None:
+    def _score_set(self, now: float, correct_t: float | None) -> None:
+        """Close one option set: label it, log its row, move the
+        staircase. Called once per set, either at the correct press or
+        at the exit line."""
         trial = self.active
-        word = self.word
-        if trial is None or word is None:
+        if trial is None or self.word is None or self.option_set is None:
             return
         self.active = None
-        n = self.n_expected
-        taps = self.taps
-        count_correct = len(taps) == n
-        # Order is checked on the taps that exist; count errors are
-        # named first in the taxonomy below, so wrong_order is only
-        # ever reported for a right-count trial. The check runs on
-        # unit POSITIONS: each position owns one window lane, and a
-        # tap with no position this word (a resting finger) resolves
-        # to None and fails the comparison.
-        order_correct = (not self.order_required
-                         or [self._position_of(t.lane)
-                             for t in taps[:n]]
-                         == list(range(min(n, len(taps)))))
-
-        asyn: list[float] = []
-        all_on_beat = True
-        if self.paced:
-            # Tap k is paired with beat k: one tap per beat is the
-            # instruction, so nearest-beat matching would hide a
-            # skipped syllable.
-            for k, tap in enumerate(taps[:len(self._beat_times)]):
-                a = (tap.t_perf - self._beat_times[k]) * 1000.0
-                asyn.append(a)
-                if abs(a) > self.on_beat_window_s * 1000.0:
-                    all_on_beat = False
-            if len(taps) < n:
-                all_on_beat = False
-
-        stress_correct: bool | None = None
-        stress_ratio_val: float | None = None
-        if self.level == 4 and count_correct:
-            stress_correct, stress_ratio_val = self._score_stress(
-                taps, word)
-
-        # Error taxonomy, worst first, mirroring the brief's list.
-        if not taps:
-            error = "timeout"
-        elif len(taps) > n:
-            error = "extra_tap"
-        elif len(taps) < n:
-            error = "missing_tap"
-        elif not order_correct:
-            error = "wrong_order"
-        elif self.paced and not all_on_beat:
-            error = "off_beat"
-        elif stress_correct is False:
-            error = "wrong_stress"
+        first = self._first_kind or "none"
+        if correct_t is not None:
+            err = "ok" if first == "ok" else "wrong_first"
         else:
-            error = "ok"
-        correct = error == "ok"
-
-        # Outcome: Great when everything the level asks for landed,
-        # Good when the count was right but a criterion missed, Miss
-        # otherwise. rt carries first-tap RT free-paced and mean
-        # signed asynchrony paced (the rhythm sign convention).
-        if self.paced and asyn:
-            rt_ms = sum(asyn) / len(asyn)
-        elif taps and self._respond_t0 is not None:
-            rt_ms = (taps[0].t_perf - self._respond_t0) * 1000.0
-        else:
-            rt_ms = None
-        if correct:
+            err = "miss"
+        rt_ms = ((correct_t - self._spawn_t) * 1000.0
+                 if correct_t is not None and self._spawn_t is not None
+                 else None)
+        if err == "ok":
             outcome = TrialResult(label="Great",
                                   points=self.score_cfg.great_points,
                                   rt_ms=rt_ms)
-        elif count_correct:
+        elif err == "wrong_first":
             outcome = TrialResult(label="Good",
                                   points=self.score_cfg.good_points,
                                   rt_ms=rt_ms)
@@ -1299,26 +1055,142 @@ class SyllablesMode(WaitSkip):
             outcome = TrialResult(label="Miss",
                                   points=self.score_cfg.miss_points,
                                   rt_ms=rt_ms)
+        wrong_kind = None
+        for p in self._set_presses:
+            if p.kind == KIND_WRONG:
+                wrong_kind = self.option_set.kind_for_lane(p.lane)
+                break
+        rec = SetRecord(
+            word=self.word.word, pos=self.pos, n_syll=self.n_syll,
+            band=self.band, rung=self.rung, hand=self.word_hand,
+            ret=self.ret, first=first, err=err, rt_ms=rt_ms,
+            wrong_kind=wrong_kind,
+            n_anticip=sum(1 for p in self._set_presses
+                          if p.kind == KIND_ANTICIP),
+            n_off_hand=sum(1 for p in self._set_presses
+                           if p.kind == KIND_OFF_HAND),
+        )
+        self._sets.append(rec)
+        # The EEG response marker must lock to the child's own press,
+        # so it is the first press that was neither an anticipation nor
+        # an off-hand press; outcome.rt_ms is spawn-to-correct-press,
+        # which is not the same thing on a wrong-then-right set.
+        resp_t = None
+        for p in self._set_presses:
+            if p.kind in (KIND_ANTICIP, KIND_OFF_HAND):
+                continue
+            resp_t = p.t_perf
+            break
+        self.engine.log_trial(
+            trial, outcome, now,
+            stimulus=self._pack_stimulus(rec),
+            # One lane is right, and the row says which.
+            correct_lanes=[self.option_set.target_lane],
+            # A Miss here is a set nobody answered, never a wrong
+            # finger: the mode's own code beats the engine's
+            # had_incorrect_press-derived guess.
+            error_type=(err if outcome.label == "Miss" else ""),
+            response_t_perf=resp_t,
+            hand=self.word_hand,
+        )
+        if self._source_alive():
+            self._move_rung(err in ("ok",), err, now)
 
-        self._last_result = {
-            "correct": correct,
-            "error": error,
-            "n_taps": len(taps),
-            "stress_correct": stress_correct,
+    def _move_rung(self, first_ok: bool, err: str, now: float) -> None:
+        """The 3-down-1-up staircase (Levitt 1971): three consecutive
+        first-press-correct sets make the foils harder, one set whose
+        first press was wrong or missed makes them easier. The run
+        counter resets on every move, so a rung cannot move twice off
+        one run."""
+        old = self.rung
+        if first_ok:
+            self._run += 1
+            if self._run >= 3 and self.rung < self.rung_max:
+                self.rung += 1
+                self._run = 0
+            elif self._run >= 3:
+                self._run = 0
+        else:
+            self._run = 0
+            if self.rung > self.rung_min:
+                self.rung -= 1
+        if self.rung == old:
+            return
+        self._rung_trace.append(self.rung)
+        raw = getattr(self.engine, "raw_logger", None)
+        if raw:
+            raw.queue_event(
+                "rung_change",
+                detail=(f"old={old};new={self.rung};"
+                        f"reason={'run3' if first_ok else err};"
+                        f"set_idx={len(self._sets)}"),
+                hand=self.word_hand)
+
+    def _park_word(self, now: float) -> None:
+        """A missed word waits, then comes back in full with fresh
+        foils. Two returns, then it retires for the block: expanding
+        spaced retrieval (Leonard and Deevy 2020), not drilling."""
+        if self.word is None:
+            return
+        nxt = self.ret
+        if nxt >= len(self.return_after):
+            self._retire({"word": self.word, "return_count": self.ret},
+                         "third_miss")
+            return
+        entry = {
+            "word": self.word,
+            "hand": self.word_hand,
+            "return_count": self.ret,
+            "remaining": self.return_after[nxt],
         }
-        self._records.append(TrialRecord(
-            word=word.word, n_syll=n, band=self.band,
-            correct=correct, error=error, asynchronies=list(asyn),
-            stress_ratio=stress_ratio_val,
-            stress_correct=stress_correct,
-        ))
-        # Streak and ease-in bookkeeping, BEFORE the trial is packed:
-        # the row's streak= is the count AFTER this word (docstring),
-        # so the update has to land first. A non-Great resets the
-        # counter silently; earned stars stay lit (round_stars is only
-        # cleared when the round ends), which is the no-penalty rule
-        # applied to the reward layer.
-        if outcome.label == "Great":
+        self._parked.append(entry)
+        raw = getattr(self.engine, "raw_logger", None)
+        if raw:
+            raw.queue_event(
+                "word_parked",
+                detail=(f"word={self.word.word};"
+                        f"return_count={self.ret};"
+                        f"due_after={entry['remaining']}"),
+                hand=self.word_hand)
+
+    def _retire(self, entry: dict, reason: str) -> None:
+        word = entry.get("word")
+        name = getattr(word, "word", str(word))
+        self._retired.append(name)
+        raw = getattr(self.engine, "raw_logger", None)
+        if raw:
+            raw.queue_event(
+                "word_retired",
+                detail=f"word={name};reason={reason}",
+                hand=self.word_hand)
+
+    def _finish_word(self, now: float, completed: bool) -> None:
+        """Close the word attempt: the record the band gate, the streak
+        and the ease-in draw all work from."""
+        if self.word is None:
+            return
+        # Only the sets of THIS attempt, which is the tail of the list:
+        # the same word can appear again as a return with its own sets,
+        # and the two attempts are separate rows in every chart.
+        tail: list[SetRecord] = []
+        for s in reversed(self._sets):
+            if s.word != self.word.word or s.ret != self.ret:
+                break
+            tail.append(s)
+        sets = list(reversed(tail))
+        all_first_ok = bool(sets) and all(s.first == "ok" for s in sets)
+        if completed and all_first_ok:
+            label, error = "Great", "ok"
+        elif completed:
+            label, error = "Good", "wrong_first"
+        else:
+            label, error = "Miss", "miss"
+        rec = WordRecord(word=self.word.word, n_syll=self.n_syll,
+                         band=self.band, ret=self.ret,
+                         correct=(label == "Great"), completed=completed,
+                         error=error, hand=self.word_hand, sets=sets)
+        self._records.append(rec)
+        if label == "Great":
             self._streak += 1
             self._max_streak = max(self._max_streak, self._streak)
             if self._streak in self.STREAK_MILESTONES:
@@ -1331,62 +1203,45 @@ class SyllablesMode(WaitSkip):
                         "syllables_streak",
                         detail=(f"n={self._streak} "
                                 f"word_idx={self.words_done}"),
-                        hand=self.engine.hand_mode)
+                        hand=self.word_hand)
         else:
             self._streak = 0
-        self._miss_run = (self._miss_run + 1
-                          if outcome.label == "Miss" else 0)
-        # The replay decision the row's replay= flag must report: it is
-        # made AFTER this trial closes (in _after_feedback, once the
-        # word's outcome and self._replayed are both final), so pack it
-        # from the same predicates now rather than reading
-        # self._replayed, which is still False at pack time on every
-        # trial and made replay= permanently 0.
-        will_replay = (not correct and self.replay_on_error
-                       and not self._replayed)
-        self.engine.log_trial(
-            trial, outcome, now,
-            stimulus=self._pack_stimulus(word, error, asyn, will_replay),
-            # The window's lanes (every playing lane at level 1,
-            # where any finger counts). log_trial sorts before
-            # writing, so the CSV column is an unordered set; the
-            # walking order is recoverable from map=off in the
-            # stimulus (see acceptable_lanes).
-            correct_lanes=self.acceptable_lanes(),
-            # A Miss here always means a wrong tap COUNT (timeout,
-            # extra_tap or missing_tap: the only three ways count_
-            # correct comes out False above), never a wrong finger, so
-            # the engine's had_incorrect_press-derived error_type
-            # (wrong_finger / timeout) would misclassify a prompt
-            # extra-tap Miss as a silent timeout. Pass the mode's own
-            # code straight through for Miss rows.
-            error_type=(error if outcome.label == "Miss" else ""),
-            # The EEG response marker must lock to the child's actual
-            # first press. outcome.rt_ms here is NOT stim-to-press
-            # (first-tap RT from RESPOND start free-paced, mean signed
-            # asynchrony paced), so the engine's stim + rt fallback
-            # would put the marker mid-ATTEND, seconds before the
-            # press. Passing the first tap's own timestamp also stops
-            # a prompt extra-tap Miss from emitting resp_timeout.
-            response_t_perf=(taps[0].t_perf if taps else None),
-        )
+        self._miss_run = self._miss_run + 1 if label == "Miss" else 0
+        raw = getattr(self.engine, "raw_logger", None)
+        if raw:
+            raw.queue_event(
+                "word_complete",
+                detail=(f"word={self.word.word};ret={self.ret};"
+                        f"outcome={label};sets={len(sets)}"),
+                hand=self.word_hand)
         # The band gate only learns from words the child could
-        # actually answer. With the serial link down every word scores
-        # err=timeout, so an unguarded gate demoted the band on
-        # hardware downtime and difficulty responded to the device,
-        # not the child (the engine's connection banner says what is
-        # happening on screen; this keeps the difficulty honest too).
-        if self._source_alive():
-            self._recent.append(correct)
+        # actually answer: with the serial link down every set times
+        # out, and an unguarded gate would demote on hardware
+        # downtime, making difficulty respond to the device.
+        if self._source_alive() and self.ret == 0:
+            self._recent.append(label != "Miss")
             self._since_band_change += 1
             self._maybe_move_band()
-        self._pending_replay = will_replay
-        self._enter_phase("feedback", now)
+        if not completed:
+            self._enter_phase("gap", now)
+            self._after_word_bookkeeping(now)
+
+    def _after_word(self, now: float) -> None:
+        """Leaving the COMPLETE card: close the word, then the gap."""
+        self._finish_word(now, completed=True)
+        self._enter_phase("gap", now)
+        self._after_word_bookkeeping(now)
+
+    def _after_word_bookkeeping(self, now: float) -> None:
+        if self.ret == 0:
+            self.words_done += 1
+            self._round_rewards(now)
+            self._maybe_break(now)
 
     def _source_alive(self) -> bool:
         """False only when a sample-providing source is disconnected
-        (fully, or this session's playing hands via a one-board
-        drop). Keyboard sessions are always alive."""
+        (fully, or this session's playing hands via a one-board drop).
+        Keyboard sessions are always alive."""
         src = getattr(self.engine, "source", None)
         if src is None or not getattr(src, "provides_samples", False):
             return True
@@ -1401,122 +1256,69 @@ class SyllablesMode(WaitSkip):
             hands = {"left", "right"} if hand == "both" else {hand}
         return not (down & hands)
 
-    def _score_stress(self, taps: list[Tap],
-                      word: Word) -> tuple[bool | None, float | None]:
-        """Level 4 accent criterion, relative to the child's own trial:
-        the stressed tap at least stress_ratio times the reference
-        level of the OTHER taps, every other tap under
-        unstressed_max_ratio times it. Keyboard mode has no force data,
-        so the criterion is unscored (None) rather than failed: the
-        child cannot mark stress on a channel that does not exist.
+    def _peak_for(self, ev: PressEvent) -> float | None:
+        helper = getattr(self.engine, "_peak_force_for_lane", None)
+        if not callable(helper):
+            return None
+        try:
+            return helper(ev.lane)
+        except Exception:
+            return None
 
-        Two things this must not do:
-        1. Compare the stressed tap against a "median" that includes
-           itself. For a 2-syllable word that median is always the
-           louder of the two taps (sorted(peaks)[1] == max(peaks) when
-           n==2), so the stressed tap can never clear it no matter how
-           hard the child accents it. The reference is instead the
-           median of every OTHER tap, which for n==2 is simply the
-           other tap -- comparable, not self-referential.
-        2. Compare raw ADC counts across fingers. Different pads read
-           different counts for the same real force (the same problem
-           chords.py's cross-talk ratio already guards against via
-           _reference_counts), so every peak is normalised by its own
-           finger's calibrated light-press gap before the ratio is
-           taken.
-        """
-        if any(t.peak is None for t in taps) or len(taps) < 2:
-            return None, None
-        s_idx = word.stress
-        if s_idx >= len(taps):
-            return None, None
-        norm = [t.peak / self._reference_counts(t.lane) for t in taps]
-        others = [v for i, v in enumerate(norm) if i != s_idx]
-        if not others:
-            return None, None
-        others_sorted = sorted(others)
-        m = len(others_sorted)
-        if m % 2:
-            ref = others_sorted[m // 2]
-        else:
-            ref = (others_sorted[m // 2 - 1] + others_sorted[m // 2]) / 2.0
-        if ref <= 0:
-            return None, None
-        ratio = norm[s_idx] / ref
-        ok = ratio >= self.stress_ratio and all(
-            (v / ref) < self.unstressed_max_ratio
-            for i, v in enumerate(norm) if i != s_idx)
-        return ok, ratio
-
-    def _pack_stimulus(self, word: Word, error: str,
-                       asyn: list[float], replay: bool) -> str:
-        taps_s = ",".join(
-            f"{t.lane + 1}:"
-            f"{(t.t_perf - (self._respond_t0 or t.t_perf)) * 1000.0:.1f}:"
-            + (f"{t.peak:.1f}" if t.peak is not None else "")
-            for t in self.taps)
+    # ---- the stimulus string ----------------------------------------------
+    def _pack_stimulus(self, rec: SetRecord) -> str:
+        """The row's stimulus cell, documented in the module docstring
+        because the notebook parses it. Everything the analysis needs
+        about one option set is here: what was on screen, on which
+        lanes, of which foil kinds, and every press that landed."""
+        opts = ",".join(
+            f"{o.lane + 1}:{o.text}:{o.kind}"
+            for o in self.option_set.options) if self.option_set else ""
+        presses = ",".join(
+            f"{p.lane + 1}:"
+            f"{(p.t_perf - (self._spawn_t or p.t_perf)) * 1000.0:.1f}:"
+            + (f"{p.peak:.1f}" if p.peak is not None else "")
+            + f":{p.kind}"
+            for p in self._set_presses)
         parts = [
-            word.word,
-            f"lvl={self.level}",
-            f"band={self.band}",
-            f"nsyll={self.n_expected}",
-            f"stress={word.stress}",
-        ]
-        # The sliding window: the desk-row slot carrying the word's
-        # first unit, 0-based. With the playing hands known this
-        # rebuilds exactly which lane carried which unit (the
-        # notebook does), replacing the older map=row flag that only
-        # marked spanning words.
-        parts.append(f"map=off{self.window_offset()}")
-        parts += [
-            f"paced={1 if self.paced else 0}",
-            f"ioi={self.ioi_s * 1000.0:.0f}",
-            f"replay={1 if replay else 0}",
+            rec.word,
+            f"pos={rec.pos}",
+            f"nsyll={rec.n_syll}",
+            f"syl={self.option_set.target if self.option_set else ''}",
+            f"band={rec.band}",
+            f"rung={rec.rung}",
+            f"hand={'L' if rec.hand == 'left' else 'R'}",
+            f"fall={self.fall_s * 1000.0:.0f}",
+            f"respeak={1 if self._respeak else 0}",
+            f"ret={rec.ret}",
+            f"opts={opts}",
+            f"tlane={self.option_set.target_lane + 1 if self.option_set else 0}",
+            f"presses={presses}",
+            f"first={rec.first}",
+            f"err={rec.err}",
+            f"rt={rec.rt_ms:.1f}" if rec.rt_ms is not None else "rt=",
         ]
         if self._ease_word:
-            # Only on biased draws: the notebook holds these out of
-            # the accuracy-by-count chart, because a draw steered to
-            # the child's best count would flatter it.
+            # Only on biased draws, so the notebook can hold them out
+            # of the accuracy charts.
             parts.append("ease=1")
-        # The consecutive-Great count AFTER this word, on every row:
-        # the notebook's engagement trace, kept apart from the
-        # accuracy measures because streak length correlates with
-        # band and word length by construction.
         parts.append(f"streak={self._streak}")
-        parts += [
-            f"err={error}",
-            f"taps={taps_s}",
-        ]
-        if asyn:
-            parts.append("asyn=" + ",".join(f"{a:.1f}" for a in asyn))
-        if self.bilateral and self._model_lanes:
-            # Which lanes the model phase buzzed, 1-indexed like taps,
-            # so the analysis can split model hands from tap hands.
-            parts.append("model=" + ",".join(str(l + 1)
-                                             for l in self._model_lanes))
+        parts.append(f"sup={1 if self.supervised else 0}")
         return ";".join(parts)
 
-    def _after_feedback(self, now: float) -> None:
-        if self._pending_replay:
-            self._pending_replay = False
-            self._replayed = True
-            self._enter_phase("replay", now)
-            return
-        self.words_done += 1
-        self._round_rewards(now)
-        self._enter_phase("gap", now)
-        self._maybe_break(now)
+    # ---- rewards and rounds ------------------------------------------------
+    @property
+    def stickers(self) -> int:
+        return self._stickers
+
+    @property
+    def n_rounds(self) -> int:
+        return max(1, -(-self.words_total // self.round_size))
 
     def _round_rewards(self, now: float) -> None:
         """One sticker the moment a round's last word closes, before
-        any break screen, so the break shows the sticker being
-        stamped. Earned by finishing the round, never by scoring in
-        it (completion-contingent is the reward cell closest to
-        harmless in Deci 1999, and the 30 s rest gets a ritual out of
-        it). A block the time cap ends mid-round earns nothing here
-        because no round completed. The round's stars go dark with
-        the round; the reset is silent and lands under the break or
-        results screen, so no child watches a star disappear."""
+        any break screen. Earned by finishing the round, never by
+        scoring in it."""
         if self.words_done <= 0 or self.words_done % self.round_size:
             return
         self._stickers += 1
@@ -1531,31 +1333,16 @@ class SyllablesMode(WaitSkip):
                 hand=self.engine.hand_mode)
 
     def _maybe_break(self, now: float) -> None:
-        # A rest lands after every full round, except when the block is
-        # already over (the completion check in _begin_word owns that).
         if (self.words_done < self.words_total and self.break_s > 0
                 and self.words_done % self.round_size == 0):
             self._enter_phase("break", now)
 
     # ---- band progression --------------------------------------------------
     def _maybe_move_band(self) -> None:
-        """The brief's within-level rule: promote at 8 of the last 10
-        fully correct, demote under 5 of 10. Evaluated only once 10
-        words have run since the last change, so one change cannot
-        cascade off the window that triggered it. Every firing is
-        logged so the difficulty trace is reconstructible."""
-        # The band never moves above level 4. At level 5 words_for
-        # ignores it entirely (the onset-rime pool has no band split,
-        # deliberately - see syllables_words.py), so a move would
-        # change only a label on the row and in band_trace. At level 6
-        # the band matters once, at draw time, in bilateral play (band
-        # C admits the 7-8 grapheme stretch words), but that is a
-        # researcher START decision like the level itself: a mid-block
-        # promotion off a 10-word streak must not push a child into
-        # the stretch material unsupervised, so in-block movement
-        # stays off and band_trace stays flat.
-        if self.level >= 5:
-            return
+        """The brief's rule, on WORD outcomes: promote at 8 of the last
+        10 answered, demote under 5 of 10. Evaluated only once 10 words
+        have run since the last change, so one change cannot cascade
+        off the window that triggered it."""
         if len(self._recent) < 10 or self._since_band_change < 10:
             return
         wins = sum(1 for c in self._recent if c)
@@ -1572,28 +1359,17 @@ class SyllablesMode(WaitSkip):
         self._band_trace.append(self.band)
         self._since_band_change = 0
         self._recent.clear()
-        self._bag = []          # refill from the new band's pool
-        # Promotion was earned and is now SEEN: the next between-word
-        # screen shows a one-shot "Bigger words!" card in the new
-        # band's colour, converting the adaptive gate into visible
-        # competence feedback at zero measurement cost. Demotion stays
-        # silent: difficulty easing is a kindness, never an
-        # announcement.
+        self._bag = []
         if promoted:
             self.band_celebrate = self.band
         detail = (f"band={self.band} wins={wins}/10 "
                   f"word_idx={self.words_done}")
         if promoted:
-            # shown=1 marks the firings whose celebration card is
-            # armed for display, so the notebook can tell celebrated
-            # promotions from silent demotions without inferring
-            # direction from the trace.
             detail += " shown=1"
         raw = getattr(self.engine, "raw_logger", None)
         if raw:
-            raw.queue_event(
-                "syllables_band", detail=detail,
-                hand=self.engine.hand_mode)
+            raw.queue_event("syllables_band", detail=detail,
+                            hand=self.engine.hand_mode)
 
     # ---- audio and speech helpers ------------------------------------------
     def _start_metronome(self) -> None:
@@ -1614,27 +1390,110 @@ class SyllablesMode(WaitSkip):
         except Exception:
             pass
 
-    def _speak(self, word: str) -> None:
-        """Speak the word once at ATTEND time via the macOS `say`
-        command, in the background so the frame loop never waits on
-        it, failing silent everywhere it cannot work."""
-        if not self.speak_words or sys.platform != "darwin":
+    def _speech_root(self) -> Path:
+        try:
+            from ...config import _bundle_root
+            root = _bundle_root()
+        except Exception:
+            root = Path(__file__).resolve().parents[3]
+        return root / self.speech_dir
+
+    def speech_path(self, stem: str) -> Path | None:
+        """The rendered file for a word or a word_k syllable, or None
+        when nothing is on disk. ogg first, then wav: the renderer
+        writes ogg, a hand-made file is likely to be wav."""
+        root = self._speech_root()
+        for ext in (".ogg", ".wav"):
+            p = root / f"{stem}{ext}"
+            if p.exists():
+                return p
+        return None
+
+    def _speak_word(self) -> None:
+        if self.word is not None:
+            self._speak(self.word.word, self.word.word)
+
+    def _speak_syllable(self, k: int) -> None:
+        if self.word is None or not (0 <= k < self.n_syll):
             return
-        if shutil.which("say") is None:
+        self._speak(f"{self.word.word}_{k}", self.word.syllables[k])
+
+    def _speak(self, stem: str, text: str) -> None:
+        """Play a rendered speech file, or fall back to the macOS `say`
+        command on a developer machine.
+
+        The lab machine runs the Windows build, where `say` does not
+        exist, and Apple's licence does not allow its voices inside a
+        distributed build, so files are the shipping path and `say` is
+        a convenience for whoever is working on the mode. backend
+        `auto` (the default) plays a file when one is there and speaks
+        on a Mac when one is not; `file` never spawns anything; `say`
+        never reads a file; `off` is silent. A missing file is logged
+        once per stem and never raises: a child mid-session must not
+        meet a stack trace because an asset was not rendered."""
+        backend = self.speech_backend
+        if backend == "off":
             return
-        cmd = ["say"]
-        if self.say_voice:
-            cmd += ["-v", str(self.say_voice)]
-        cmd.append(word)
+        path = None if backend == "say" else self.speech_path(stem)
+        if path is not None:
+            audio = getattr(self.engine, "audio", None)
+            player = getattr(audio, "play_speech", None)
+            if callable(player):
+                try:
+                    player(str(path), volume=self.speech_volume)
+                except Exception:
+                    pass
+            raw = getattr(self.engine, "raw_logger", None)
+            if raw:
+                raw.queue_event("speech", t_perf=time.perf_counter(),
+                                detail=f"file={path.name}",
+                                hand=self.word_hand)
+            return
+        if backend == "file":
+            if stem not in self._missing_speech:
+                self._missing_speech.add(stem)
+                log.info("No speech file for %r under %s; running silent",
+                         stem, self.speech_dir)
+            return
+        if sys.platform != "darwin" or shutil.which("say") is None:
+            if stem not in self._missing_speech:
+                self._missing_speech.add(stem)
+                log.info("No speech file for %r and no `say` here; "
+                         "running silent", stem)
+            return
+        # The system voice is a developer convenience, never a shipped
+        # path: each call holds the shared audio device for about a
+        # second. Under a dummy audio driver (every test and every
+        # headless run) a block's worth of words piles up on that
+        # device and wedges coreaudiod, so stay silent there.
+        if os.environ.get("SDL_AUDIODRIVER", "").lower() == "dummy":
+            if stem not in self._missing_speech:
+                self._missing_speech.add(stem)
+                log.info("No speech file for %r and audio is dummy; "
+                         "running silent", stem)
+            return
+        # One voice at a time. Without this the previous word is
+        # orphaned rather than stopped, so a fast block leaves a queue
+        # of processes nobody reaps.
+        prev = self._say_proc
+        if prev is not None and prev.poll() is None:
+            try:
+                prev.terminate()
+            except Exception:
+                pass
         try:
             self._say_proc = subprocess.Popen(
-                cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                ["say", str(text)],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except Exception:
             self._say_proc = None
+            return
+        raw = getattr(self.engine, "raw_logger", None)
+        if raw:
+            raw.queue_event("speech", t_perf=time.perf_counter(),
+                            detail=f"say={text}", hand=self.word_hand)
 
     def _reap_say(self) -> None:
-        # poll() collects the finished process so it never lingers as a
-        # zombie; cheap no-op while it is still speaking.
         if self._say_proc is not None and self._say_proc.poll() is not None:
             self._say_proc = None
 
@@ -1648,61 +1507,90 @@ class SyllablesMode(WaitSkip):
     # ---- block summary -----------------------------------------------------
     def block_stats(self) -> dict:
         """What finish_block folds into session.json: the settings the
-        block ran under, accuracy split by syllable count (the
-        Liberman-style curve), the pooled asynchronies from paced
-        trials and the warm-up probe, the stress ratios, and the band
-        trace, so a session is readable without parsing the stimulus
-        strings back out of trials.csv."""
-        by_count: dict[int, list[bool]] = {}
-        for r in self._records:
-            by_count.setdefault(r.n_syll, []).append(r.correct)
-        acc_by_count = {
-            str(k): round(sum(v) / len(v), 3)
-            for k, v in sorted(by_count.items()) if v}
-        asyn = [a for r in self._records for a in r.asynchronies]
-        ratios = [r.stress_ratio for r in self._records
-                  if r.stress_ratio is not None]
-        errors: dict[str, int] = {}
-        for r in self._records:
-            if not r.correct:
-                errors[r.error] = errors.get(r.error, 0) + 1
+        block ran under, first-press accuracy split every way the
+        analysis asks for it, the foil-kind confusion counts, the
+        staircase trace and the engagement numbers, so a session is
+        readable without parsing the stimulus strings back out."""
+        sets = self._sets
+        n_sets = len(sets)
+        first_ok = sum(1 for s in sets if s.first == "ok")
 
-        def _mean(xs: list[float]) -> float | None:
+        def _acc(rows: list[SetRecord]) -> float | None:
+            return (round(sum(1 for s in rows if s.first == "ok")
+                          / len(rows), 3) if rows else None)
+
+        def _group(key) -> dict:
+            out: dict[str, list[SetRecord]] = {}
+            for s in sets:
+                out.setdefault(str(key(s)), []).append(s)
+            return {k: {"n": len(v), "acc": _acc(v)}
+                    for k, v in sorted(out.items())}
+
+        confusion: dict[str, int] = {}
+        for s in sets:
+            if s.first == "wrong" and s.wrong_kind:
+                confusion[s.wrong_kind] = confusion.get(s.wrong_kind, 0) + 1
+        rts = [s.rt_ms for s in sets
+               if s.first == "ok" and s.rt_ms is not None]
+
+        def _mean(xs) -> float | None:
             return round(sum(xs) / len(xs), 1) if xs else None
 
-        def _sd(xs: list[float]) -> float | None:
+        def _sd(xs) -> float | None:
             if len(xs) < 2:
                 return None
             m = sum(xs) / len(xs)
             return round((sum((x - m) ** 2 for x in xs)
                           / (len(xs) - 1)) ** 0.5, 1)
 
-        n = len(self._records)
+        words = self._records
+        first_attempts = [w for w in words if w.ret == 0]
+        returns = [w for w in words if w.ret > 0]
+        per_hand = {}
+        for hand in self.hand_names:
+            rows = [s for s in sets if s.hand == hand]
+            per_hand[hand] = {"n": len(rows), "acc": _acc(rows)}
         return {
-            "level": self.level,
             "hands": self.hand_names,
             "band_final": self.band,
             "band_trace": list(self._band_trace),
+            "rung_start": self.rung_start,
+            "rung_final": self.rung,
+            "rung_trace": list(self._rung_trace),
             "ioi_ms": round(self.ioi_s * 1000.0),
-            "on_beat_window_ms": round(self.on_beat_window_s * 1000.0),
-            "stress_ratio_criterion": self.stress_ratio,
-            "n_words": n,
-            "accuracy": round(sum(1 for r in self._records if r.correct)
-                              / n, 3) if n else None,
-            "accuracy_by_syllables": acc_by_count,
-            "error_counts": errors,
-            "asyn_mean_ms": _mean(asyn),
-            "asyn_sd_ms": _sd(asyn),
+            "n_sets": n_sets,
+            "first_press_accuracy": (round(first_ok / n_sets, 3)
+                                     if n_sets else None),
+            "chance_level": round(1.0 / 4, 3),
+            "accuracy_by_rung": _group(lambda s: s.rung),
+            "accuracy_by_pos": _group(lambda s: s.pos),
+            "accuracy_by_nsyll": _group(lambda s: s.n_syll),
+            "confusion_by_kind": confusion,
+            "mean_rt_correct_ms": _mean(rts),
+            "sd_rt_correct_ms": _sd(rts),
+            "n_anticipations": sum(s.n_anticip for s in sets),
+            "n_off_hand": sum(s.n_off_hand for s in sets),
+            "words_attempted": len(first_attempts),
+            "words_completed": sum(1 for w in first_attempts if w.completed),
+            "words_returned": self._returns_started,
+            "returns_completed": sum(1 for w in returns if w.completed),
+            "words_retired": len(self._retired),
+            # Words parked when the block ended: they were missed and
+            # their return never came round, which is a fact about the
+            # block's length, not about the child.
+            "words_parked_at_end": len(self._parked),
+            "per_hand": per_hand,
+            # The word-level accuracy the results screen and the
+            # history chip read: a word counts when the child finished
+            # it, whatever it took.
+            "n_words": len(first_attempts),
+            "accuracy": (round(sum(1 for w in first_attempts if w.completed)
+                               / len(first_attempts), 3)
+                         if first_attempts else None),
+            "supervised": self.supervised,
             "warmup_taps": self._warmup_done,
             "warmup_asyn_mean_ms": _mean(self._warmup_asyn),
             "warmup_asyn_sd_ms": _sd(self._warmup_asyn),
-            "stress_ratio_median": (round(sorted(ratios)[len(ratios) // 2], 2)
-                                    if ratios else None),
-            # The reward layer's engagement numbers, kept apart from
-            # the accuracy measures above so the notebook can show
-            # engagement and learning separately (streak length
-            # correlates with band and word length by construction,
-            # so it is never a skill measure).
             "max_streak": self._max_streak,
             "stickers": self._stickers,
             "n_ease_in": self._n_ease_in,

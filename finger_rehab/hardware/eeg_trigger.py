@@ -64,7 +64,10 @@ except ImportError:
 # 1.2: prep_buzz_lead 22 added for rhythm's leading buzz, and a beat
 # whose buzz went out earlier carries the stimulus code WITHOUT the
 # buzzer bit (33 becomes 31). No existing code changed meaning.
-CODES_VERSION = "1.2"
+# 1.3: the choice-set band 50-59 added for syllables' option sets
+# (50 first attempt, 51 returned word). Nothing else changed: the
+# syllables model roll still carries an ordinary 30-band code.
+CODES_VERSION = "1.3"
 
 # 0 is the idle line, written after every pulse and in every shutdown
 # path. It never labels an event, so it lives outside CODES.
@@ -102,6 +105,14 @@ CODES: dict[str, int] = {
     # Pattern-mode stimulus band (40-49), sequence status in the byte.
     "stim_pattern_sequence": 40,
     "stim_pattern_random": 41,
+    # Choice-set band (50-59): four written options fall over four
+    # fingers and NOTHING names the target finger, so these are not
+    # cued stimuli and must never be pooled with the 30-band. The byte
+    # says whether the word is on its first attempt or has come back
+    # after a miss, because a returned word is a second retrieval of
+    # material the child has already met.
+    "stim_choice_set": 50,
+    "stim_choice_set_return": 51,
     # Response band (100-131), correctness in the byte, lane added to
     # the bases because hand identity is what the LRP is made of.
     #
@@ -170,7 +181,10 @@ RETIRED_MODE_IDS: dict[str, int] = {
 # each. The contract test walks this table.
 BANDS: dict[str, tuple[int, int]] = {
     "prep_": (20, 29),
+    # Both of these sit before the general "stim_" row on purpose: the
+    # table is walked in order and the first matching prefix wins.
     "stim_pattern_": (40, 49),
+    "stim_choice_": (50, 59),
     "stim_": (30, 39),
     "resp_": (100, 131),
     "feedback_": (140, 149),

@@ -14,6 +14,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -28,6 +29,49 @@ def _press(lane: int, t: float = 0.0):
     from finger_rehab.hardware.fsr_detector import PressEvent
     return PressEvent(lane=lane, t_perf=t, value=0, baseline=0.0,
                        hand="right")
+
+
+def _frame(gp, size=(1280, 800)):
+    """One rendered frame of the gameplay screen, as a surface."""
+    import pygame
+    surf = pygame.Surface(size)
+    gp.draw(surf)
+    return surf
+
+
+def _bytes(surf):
+    import pygame
+    # tobytes on pygame-ce 2.3+, tostring on the older API.
+    fn = getattr(pygame.image, "tobytes", None) or pygame.image.tostring
+    return fn(surf, "RGB")
+
+
+def _first_diff(a, b):
+    """(x, y) of the first pixel that differs between two frames, or
+    None when they are identical. The fast path is a single bytes
+    compare; the per-pixel walk only runs to name a failure."""
+    ba, bb = _bytes(a), _bytes(b)
+    if ba == bb:
+        return None
+    w = a.get_width()
+    for i in range(0, min(len(ba), len(bb)), 3):
+        if ba[i:i + 3] != bb[i:i + 3]:
+            px = i // 3
+            return (px % w, px // w)
+    return (-1, -1)
+
+
+def _diff_outside(a, b, rect):
+    """(x, y) of the first pixel outside `rect` that differs, or None.
+
+    Done by patching `rect` from b into a copy of a and comparing the
+    whole frame: what is left is exactly the outside-the-rect
+    difference, at one bytes compare rather than a million get_at
+    calls.
+    """
+    patched = a.copy()
+    patched.blit(b, rect.topleft, rect)
+    return _first_diff(patched, b)
 
 
 def _build_mode(**overrides):
@@ -668,9 +712,9 @@ class ReactionScreenLayerTests(unittest.TestCase):
     the RT feedback chip is the mode's headline feedback (larger,
     higher, stronger than the shared default), the streak chip parks
     under the mode pill instead of inside the feedback chip, the tier
-    popup never rises through the RT number, and the foreperiod veil
-    is strong enough that the stimulus visibly turns the lights back
-    on. Real engine, real GameplayScreen, keyboard source."""
+    popup never rises through the RT number, and arming the wait
+    leaves the stage exactly as it was. Real engine, real
+    GameplayScreen, keyboard source."""
 
     def _engine_and_screen(self):
         import pygame
@@ -791,17 +835,266 @@ class ReactionScreenLayerTests(unittest.TestCase):
         finally:
             pygame.quit()
 
-    def test_foreperiod_veil_is_strong_enough_to_read(self) -> None:
+    def test_the_wait_no_longer_dims_the_whole_stage(self) -> None:
+        """The foreperiod used to drop the lane band behind a veil and
+        breathe a row of dots under it. Both are full-width brightness
+        changes with nothing in the record to subtract them against,
+        which is the complaint this rework came from. Arming a wait
+        must now leave the screen exactly as it was."""
         import pygame
         try:
             eng, gp, _screens = self._engine_and_screen()
+            # No skip chip on either frame. The chip itself is allowed
+            # to come and go (it does it at the instant the marker
+            # fires), and here it is an artefact anyway: this class
+            # runs with a MagicMock gameplay screen, whose
+            # _countdown_remaining floats to 1.0 and reads as a prep
+            # wait. What must not change is everything else.
+            eng.current_wait_view = lambda: None
+            eng.mode._phase = "arm"
+            idle = _frame(gp)
             eng.mode._phase = "foreperiod"
-            gp.draw(pygame.Surface((1280, 800)))
-            self.assertIsNotNone(gp._hold_dim)
-            alpha = gp._hold_dim.get_at((5, 5)).a
-            # 140 washed the pastel tiles to near full brightness, so
-            # the stimulus had nothing to switch back on.
-            self.assertGreaterEqual(alpha, 160)
+            waiting = _frame(gp)
+            self.assertIsNone(
+                _first_diff(idle, waiting),
+                "arming the wait still repaints the stage")
+            self.assertFalse(hasattr(gp, "_hold_dim"),
+                             "the veil surface is back")
+        finally:
+            pygame.quit()
+
+
+class ReactionStaticStageTests(unittest.TestCase):
+    """The frame-difference contract.
+
+    Reaction is the block that gets recorded with EEG, and on an EEG
+    record every change in what the eye is shown lands in the same
+    average as the cue. Anything on screen that moves without a marker
+    behind it therefore has to go: the foreperiod veil, the breathing
+    dots, the ignition ring, the bobbing chevron, the pulsing halo
+    round the target tile, the score scaling up on a point, the chip
+    popping in and timing out mid-wait. What is left is one rule,
+    stated as a pixel test rather than a list of things somebody
+    remembered to switch off: while a trial is open, the ONLY pixels
+    that may change are inside the tile that was cued.
+
+    Frames are rendered a third of a second apart on purpose. Every
+    animation that used to run here had a period between 0.35 s and
+    1.8 s, so two renders in the same millisecond would have agreed
+    whether or not the animation was still there.
+    """
+
+    GAP_S = 0.3
+
+    def _engine_and_screen(self, config=None):
+        import pygame
+        pygame.init()
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
+        import finger_rehab.ui.screens as screens
+        cfg = Config.load(config)
+        cfg.data["ui"]["resolution"] = [1280, 800]
+        cfg.data["audio"]["enabled"] = False
+        cfg.data.setdefault("reaction", {}).update(
+            {"seed": 1, "catch_rate": 0.0})
+        # The marker writer wants the trigger box on a COM port and the
+        # lab preset refuses to start without it. The stage is what is
+        # under test, and the fixed foreperiod that puts the visible S1
+        # on screen is read straight off reaction.fp_eeg_fixed_s, not
+        # off this switch.
+        cfg.data.setdefault("eeg", {})["enabled"] = False
+        eng = GameEngine(cfg, KeyboardOnlySource())
+        eng._screens = {"gameplay": MagicMock(), "results": MagicMock()}
+        eng.begin_reaction_block()
+        gp = screens.GameplayScreen(eng)
+        gp._countdown_until = 0.0
+        # The real screen, not a double: on_stim_multi has to light an
+        # actual tile for a frame difference to mean anything.
+        eng._screens["gameplay"] = gp
+        gp._countdown_until = 0.0
+        return eng, gp
+
+    def _cued_rect(self, gp, lane):
+        for ls in gp.lanes:
+            if ls.lane == lane:
+                return ls.rect
+        raise AssertionError(f"lane {lane} has no tile")
+
+    def _fire(self, eng, lane=1):
+        eng.mode._phase = "stim"
+        eng.on_stim_multi([lane], 1, time.perf_counter())
+
+    def test_only_the_cued_tile_changes_while_a_trial_is_open(self) -> None:
+        import pygame
+        try:
+            eng, gp = self._engine_and_screen()
+            eng.mode._phase = "foreperiod"
+            wait_a = _frame(gp)
+            time.sleep(self.GAP_S)
+            wait_b = _frame(gp)
+            self.assertIsNone(
+                _first_diff(wait_a, wait_b),
+                "the wait is still animating something")
+
+            self._fire(eng, lane=1)
+            rect = self._cued_rect(gp, 1)
+            lit = _frame(gp)
+            self.assertIsNone(
+                _diff_outside(wait_b, lit, rect),
+                "the stimulus changed pixels outside the cued tile")
+            self.assertIsNotNone(
+                _first_diff(wait_b, lit),
+                "the stimulus did not change the cued tile at all")
+
+            time.sleep(self.GAP_S)
+            held = _frame(gp)
+            # Not just outside the tile: once the cue is up nothing
+            # moves at all until the trial ends. The window bar used
+            # to drain down the tile and sweep green to red while it
+            # did, which is a colour ramp on the stimulus itself.
+            self.assertIsNone(
+                _first_diff(lit, held),
+                "the stage moved while the response window was open")
+        finally:
+            pygame.quit()
+
+    def test_the_hud_is_frozen_from_the_wait_to_a_beat_after(self) -> None:
+        """Score, streak, progress and the session best all change ON
+        the response, which is the middle of the epoch that response is
+        being read in. They are held from the wait arming until a beat
+        after the trial closes, so they move in the gap between trials
+        instead."""
+        import pygame
+        try:
+            eng, gp = self._engine_and_screen()
+            eng.mode._phase = "foreperiod"
+            before = _frame(gp)
+            eng.score = 40
+            eng.hit_streak = 6
+            gp.set_message("212 ms  NEW BEST", 2.0, kind="best")
+            during = _frame(gp)
+            self.assertIsNone(
+                _first_diff(before, during),
+                "the HUD repainted in the middle of a trial")
+            # Trial over: the frame is still held for the tail, then
+            # everything lands at once.
+            gp.REACT_EPOCH_TAIL_S = 0.0
+            eng.mode._phase = "rest"
+            _frame(gp)                       # arms the tail
+            after = _frame(gp)               # tail expired
+            self.assertIsNotNone(
+                _first_diff(before, after),
+                "the score never caught up after the trial")
+        finally:
+            pygame.quit()
+
+    def test_the_feedback_still_gets_its_full_moment(self) -> None:
+        """The RT number is set ON the response and the stage stays
+        frozen for a beat after that, so the chip's window has to be
+        shifted by the same beat. Without it the number would appear
+        for whatever fraction of a second was left of it, which is the
+        PVT's whole motivating loop reduced to a flash."""
+        import pygame
+        import finger_rehab.ui.screens as screens
+        try:
+            eng, gp = self._engine_and_screen()
+            eng.mode._phase = "foreperiod"
+            _frame(gp)                       # snapshot taken, no chip
+            # Half a second of window, read a full second later: the
+            # raw window is long gone, the shifted one is not.
+            gp.set_message("212 ms", 0.5, kind="success")
+            eng.mode._phase = "rest"
+            _frame(gp)                       # arms the tail
+            time.sleep(gp.REACT_EPOCH_TAIL_S + 0.05)
+            chips = []
+            original = screens._chip
+
+            def recorder(surf, layout, centre, text, fg, **k):
+                chips.append(str(text))
+                return original(surf, layout, centre, text, fg, **k)
+
+            screens._chip = recorder
+            try:
+                _frame(gp)                   # tail expired, stage live
+            finally:
+                screens._chip = original
+            self.assertIn("212 ms", chips,
+                          "the freeze ate the trial's feedback")
+        finally:
+            pygame.quit()
+
+    def test_the_tile_keeps_its_glow_and_bar_in_every_other_mode(
+            self) -> None:
+        """The halos render outside the rect and the window bar ramps
+        inside it, so reaction switches both off. No other mode pays
+        for that: nothing downstream of them reads microvolts."""
+        import pygame
+        try:
+            eng, gp = self._engine_and_screen()
+            eng.mode._phase = "foreperiod"
+            _frame(gp)
+            self.assertTrue(all(not ls.show_halos for ls in gp.lanes),
+                            "a halo still spills outside the reaction tile")
+            self.assertTrue(
+                all(not ls.show_timing_bar for ls in gp.lanes),
+                "the window bar still ramps on the reaction stimulus")
+            eng.current_block = "adaptive"
+            _frame(gp)
+            self.assertTrue(all(ls.show_halos for ls in gp.lanes),
+                            "the other modes lost their tile glow")
+            self.assertTrue(all(ls.show_timing_bar for ls in gp.lanes),
+                            "the other modes lost their window bar")
+        finally:
+            pygame.quit()
+
+    def test_no_chevron_and_no_ignition_ring_in_reaction(self) -> None:
+        """Both draw outside the tile and both are animated. The tile
+        going from its idle colour to its active one is the cue."""
+        import pygame
+        try:
+            eng, gp = self._engine_and_screen()
+            calls = []
+            gp._draw_target_indicator = (
+                lambda *a, **k: calls.append("chevron"))
+            gp._draw_ignitions = lambda *a, **k: calls.append("ignition")
+            self._fire(eng, lane=2)
+            _frame(gp)
+            self.assertEqual(calls, [])
+            eng.current_block = "adaptive"
+            _frame(gp)
+            self.assertEqual(sorted(calls), ["chevron", "ignition"])
+        finally:
+            pygame.quit()
+
+    def test_the_eeg_lab_config_keeps_the_stage_still(self) -> None:
+        """The lab preset turns ON a visible S1 (the fixed foreperiod
+        variant draws a "Ready" cue), which is the one thing that could
+        put a timed chip back in the middle of a wait. Under that
+        config the cue must arrive with the wait and stay for it, not
+        expire 800 ms into a 2.5 s foreperiod."""
+        import pygame
+        repo = Path(__file__).resolve().parents[1]
+        try:
+            eng, gp = self._engine_and_screen(
+                config=repo / "config" / "eeg_lab.yaml")
+            self.assertEqual(eng.mode.fp_fixed_s, 2.5,
+                             "this is not the lab reaction config")
+            gp.set_message("Ready", 0.25)
+            eng.mode._phase = "foreperiod"
+            early = _frame(gp)
+            time.sleep(0.35)                 # past the cue's own timeout
+            late = _frame(gp)
+            self.assertIsNone(
+                _first_diff(early, late),
+                "the ready cue vanished in the middle of the wait")
+            self._fire(eng, lane=0)
+            rect = self._cued_rect(gp, 0)
+            lit = _frame(gp)
+            self.assertIsNone(
+                _diff_outside(late, lit, rect),
+                "the stimulus moved something outside the cued tile "
+                "under the lab config")
         finally:
             pygame.quit()
 

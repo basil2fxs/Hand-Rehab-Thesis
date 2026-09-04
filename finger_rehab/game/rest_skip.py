@@ -55,11 +55,11 @@ log = logging.getLogger(__name__)
 # Below it sit the per-trial gaps nobody wants a button on: Buzz
 # Hunt's announce (1.5) and feedback (2.0), Reaction's feedback plus
 # inter-trial gap (up to 2.0), Syllables' feedback (1.4) and inter-word
-# gap (0.8), the force modes' probe gap (1.2). At or above it sit the
-# waits somebody genuinely sits through: the announce cards on the two
-# force modes (2.5), the GET READY prep (3.0), Buzz Hunt's stage card
-# (5.0), Force Pilot's between-run rest (10), Patterns' rests
-# (10/30/45), Chords' rests
+# gap (0.8), the force modes' probe gap (1.2), Force Pilot's one card
+# between runs (1.8). At or above it sit the waits somebody genuinely
+# sits through: Buzz Hunt's announce card (2.5), the GET READY prep
+# (3.0), Buzz Hunt's stage card (5.0), Force Pilot's mid-ladder rest
+# (15), Patterns' rests (10/30/45), Chords' rests
 # (30/120) and Syllables' break (30). A gate that overruns, like the
 # Chords quiet-settle, grows past the threshold on its own and takes
 # the control when it does. Overridable through game.skip_chip_min_s.

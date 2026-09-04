@@ -14,6 +14,15 @@ if errorlevel 1 (
     exit /b 1
 )
 
+rem Firmware and avrdude, so Settings can flash the Arduino from the
+rem finished exe. Neither may abort the build: a machine without
+rem PlatformIO keeps whatever hexes are already staged, and a failed
+rem download only means the app says avrdude is missing.
+py builds\build_firmware.py
+if errorlevel 1 echo Firmware not rebuilt; using what is staged.
+py builds\fetch_avrdude.py
+if errorlevel 1 echo avrdude not fetched; the app will say so.
+
 rmdir /s /q bin\build 2>nul
 rmdir /s /q bin\dist 2>nul
 if not exist bin mkdir bin
