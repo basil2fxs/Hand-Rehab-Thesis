@@ -885,14 +885,25 @@ class TestCohortChapterContract:
             assert gone not in source, f"{gone} outlived the one pass"
 
     def test_the_dropped_checks_are_named_with_their_reason(self, source):
-        """R3 and P2 are in Section 1 of the design and cannot be run
-        here. They print as DROPPED with the reason, so a reader who
-        meets them there finds out what happened to them."""
+        """R3, P2 and E2 are in Section 1 of the design and cannot be
+        run here. They print as DROPPED with the reason, so a reader
+        who meets them there finds out what happened to them.
+
+        Two reasons, not one. R3 and P2 need the same block played
+        twice and the design plays it once. E2 needs echo under its
+        ladder rule and the battery plays the Simon rule, so it came
+        out for a reason that has nothing to do with the one pass and
+        carries its own criterion line.
+        """
         (dropped,) = _notebook_names(source, ["COHORT_DROPPED_CHECKS"])
-        assert set(dropped) == {"R3", "P2"}
-        for cid, (mode, _check, reason) in dropped.items():
-            assert mode in ("reaction", "pattern"), cid
-            assert "twice" in reason, cid
+        assert set(dropped) == {"R3", "P2", "E2"}
+        for cid, (mode, _check, reason, criterion) in dropped.items():
+            assert mode in ("reaction", "pattern", "echo"), cid
+            assert criterion.startswith("DROPPED:"), cid
+            if cid == "E2":
+                assert "ladder" in reason and "simon" in reason, cid
+            else:
+                assert "twice" in reason, cid
 
     def test_every_mode_says_how_its_within_block_trend_reads(
             self, source):

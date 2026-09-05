@@ -114,6 +114,15 @@ def make_truth(n: int, seed: int) -> dict[str, dict]:
             "asyn_s": rng.gauss(-0.030, 0.012),
             "asyn_sd_s": rng.uniform(0.015, 0.035),
             "loc_acc": rng.uniform(0.86, 1.0),
+            # How often this reader gets a syllable tile right first
+            # press at the easiest rung. Drawn around the level the
+            # foil staircase is aiming for (Levitt 1971 three-down
+            # one-up converges near 79.4 percent), so the staircase,
+            # the foil confusion counts and the spaced-return
+            # comparison all have something to work on. A model that
+            # never errs leaves those three checks with no data, which
+            # reads as a software fault and is not one.
+            "read_acc": rng.uniform(0.78, 0.94),
             "learn_per_cycle_s": rng.uniform(0.004, 0.008),
             "chord_spread_s": rng.uniform(0.010, 0.022),
             # The per-person within-block warm-up. Clamped at zero:
@@ -297,6 +306,24 @@ class CohortParticipant(mb.Participant):
             asyn = self.rng.gauss(float(self.truth["asyn_s"]), sd)
             self.schedule(now + until + asyn, int(s.note.lane), 0.10)
 
+    def syllable_error_rate(self) -> float:
+        """Chance of pressing a foil, rising with the rung.
+
+        The rung is the mode's own difficulty ladder (1 to 8), so a
+        reader who is right read_acc of the time on rung 1 makes more
+        mistakes as the words get longer. Held under a half so the
+        block still climbs rather than collapsing to chance.
+        """
+        rung = float(getattr(self, "_syl_rung", 1) or 1)
+        base = 1.0 - float(self.truth.get("read_acc", 0.85))
+        return min(0.45, base * (1.0 + 0.12 * (rung - 1.0)))
+
+    def _syllables(self, m, now, eng) -> None:
+        # The rung moves inside the block, so it is read off the mode
+        # each tick rather than fixed at block start.
+        self._syl_rung = int(getattr(m, "rung", 1) or 1)
+        super()._syllables(m, now, eng)
+
     def _buzz_hunt(self, m, now, eng) -> None:
         if (getattr(m, "phase", "") != "trial"
                 or getattr(m, "sub", "") != "respond"):
@@ -339,6 +366,12 @@ def build_engine(code: str, truth: dict, data_dir: Path,
     cfg = Config.load()
     cfg.data["ui"]["resolution"] = [1280, 800]
     cfg.data["session"]["data_dir"] = str(data_dir)
+    # Keep the calibration store out of the checkout. Force Pilot
+    # probes the max press mid-block and saves the profile back, so
+    # without this a headless run rewrites the tracked
+    # config/calibration/current_<hand>.json.
+    cfg.data["session"]["calibration_dir"] = str(
+        Path(data_dir).parent / "calibration")
     cfg.data["audio"]["enabled"] = False
     cfg.data["report"] = {"enabled": False}
     cfg.data["eeg"] = {"enabled": False}

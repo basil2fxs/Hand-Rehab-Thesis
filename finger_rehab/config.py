@@ -259,6 +259,30 @@ class Config:
                 return default
         return node
 
+    def calibration_path(self, name: str | Path) -> Path:
+        """Where one calibration file lives: current_<hand>.json, or
+        history/<stamp>.json.
+
+        Normally config/calibration next to the app, which is what a
+        clinic wants: the profile a hand was measured on survives a
+        restart. A headless run wants the opposite. measure_battery.py
+        and simulate_cohort.py play real blocks, and Force Pilot's
+        max-press probe writes the profile back through
+        GameEngine.record_max_press, so a timing run started from a
+        checkout leaves the tracked config/calibration file modified
+        and somebody eventually commits a probe by accident. Setting
+        session.calibration_dir moves the whole store, reads and
+        writes together, so a headless run touches nothing tracked.
+        """
+        rel = Path(name)
+        if rel.is_absolute():
+            return rel
+        store = (self.get("session.calibration_dir") or "")
+        store = str(store).strip()
+        if store:
+            return (Path(store).expanduser() / rel).resolve()
+        return self.resolve_path(Path("config") / "calibration" / rel)
+
     def resolve_path(self, value: str | Path) -> Path:
         # Read-only assets live under the bundle root, writable files live
         # next to the executable. Whitelist the writable ones explicitly so

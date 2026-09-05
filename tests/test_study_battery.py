@@ -990,5 +990,43 @@ class KeyboardRigTests(_BatteryHarness):
         self.assertEqual(meta["battery"]["phase"], PHASE)
 
 
+class HandoverProseTests(unittest.TestCase):
+    """battery.py's docstring and the preset's comment are the two
+    pieces of prose a handover reader opens first. A bad edit once
+    left both half-replaced: a cross-reference doubled onto itself and
+    a sentence that started mid-word. Neither changes behaviour, which
+    is exactly why nothing caught it.
+    """
+
+    def _texts(self):
+        from finger_rehab.game import battery
+        yaml_text = (Path(__file__).resolve().parents[1]
+                     / "config" / "default.yaml").read_text(
+                         encoding="utf-8")
+        start = yaml_text.index("  # The study_battery preset")
+        end = yaml_text.index("  presets:", start)
+        comment = yaml_text[start:end].replace("#", " ")
+        return {"battery.py docstring": battery.__doc__,
+                "default.yaml preset comment": comment}
+
+    def test_the_cross_reference_is_one_sentence(self) -> None:
+        for where, text in self._texts().items():
+            flat = " ".join(text.split())
+            with self.subTest(where=where):
+                self.assertIn("Section 1 of that document", flat)
+                self.assertIn("Sections 2 to 5 are written for", flat)
+                # The half-replaced form, and the doubled clause it
+                # ran into.
+                self.assertNotIn("Sections 2, 4", flat)
+                self.assertEqual(flat.count("Sections 2 to 5"), 1)
+
+    def test_the_docstring_sentence_is_whole(self) -> None:
+        from finger_rehab.game import battery
+        flat = " ".join((battery.__doc__ or "").split())
+        self.assertIn("Nothing in this module knows about passes or "
+                      "phases", flat)
+        self.assertNotIn("this one-pass design. module knows", flat)
+
+
 if __name__ == "__main__":
     unittest.main()

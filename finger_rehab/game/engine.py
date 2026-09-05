@@ -3040,7 +3040,7 @@ class GameEngine:
         from ..hardware.calibration_profile import CalibrationProfile
         for name in (f"current_{hand}.json", "current.json"):
             try:
-                path = self.cfg.resolve_path(f"config/calibration/{name}")
+                path = self.cfg.calibration_path(name)
             except Exception:
                 continue
             prof = CalibrationProfile.load(path)
@@ -3156,7 +3156,7 @@ class GameEngine:
         for hand in ("right", "left"):
             for name in (f"current_{hand}.json", "current.json"):
                 try:
-                    path = self.cfg.resolve_path(f"config/calibration/{name}")
+                    path = self.cfg.calibration_path(name)
                 except Exception:
                     continue
                 prof = CalibrationProfile.load(path)
@@ -3327,8 +3327,8 @@ class GameEngine:
         if getattr(self, "calibration_profile", None) is None:
             self.calibration_profile = prof
         try:
-            path = self.cfg.resolve_path(
-                f"config/calibration/current_{hand}.json")
+            path = self.cfg.calibration_path(
+                f"current_{hand}.json")
             prof.save(path)
         except Exception as e:
             # A failed save costs a re-probe after a restart, not the

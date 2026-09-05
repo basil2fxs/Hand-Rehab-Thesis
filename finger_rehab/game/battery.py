@@ -14,12 +14,12 @@ and the engine's part stays small: start, continue, finish.
 The design the shipped preset implements is ONE PASS in one sitting:
 eleven blocks, ten modes, every mode played once. Data Collection
 Plan.md of 4 September 2026, and the amendment at the top of
-docs/research/healthy_baseline_study.txt. Section 1 of that document,
-what each mode measures, still carries the design; its Sections 2, 4
-Sections 2 to 5 describe this one-pass design.
-module knows about passes or phases beyond copying the preset's phase
-word onto the step, so a design change is a config edit, not a code
-change.
+docs/research/healthy_baseline_study.txt. Section 1 of that
+document, what each mode measures and the literature behind it,
+still carries the design, and its Sections 2 to 5 are written for
+this one pass. Nothing in this module knows about passes or phases
+beyond copying the preset's phase word onto the step, so a design
+change is a config edit, not a code change.
 """
 from __future__ import annotations
 

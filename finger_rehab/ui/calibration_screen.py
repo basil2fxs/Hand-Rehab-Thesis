@@ -435,8 +435,8 @@ class CalibrationScreen:
     # ---- saving ---------------------------------------------------------
 
     def _profile_path(self):
-        return self.engine.cfg.resolve_path(
-            f"config/calibration/current_{self.hand}.json")
+        return self.engine.cfg.calibration_path(
+            f"current_{self.hand}.json")
 
     def _load_saved_profile(self) -> CalibrationProfile | None:
         """The profile already on disk for this hand, or None."""
@@ -503,8 +503,8 @@ class CalibrationScreen:
                 # Keep a dated copy so a calibration is never silently lost
                 # when the next one is taken.
                 stamp = self.profile.created_at.replace(":", "").replace("-", "")
-                self.profile.save(cfg.resolve_path(
-                    f"config/calibration/history/{stamp}.json"))
+                self.profile.save(cfg.calibration_path(
+                    f"history/{stamp}.json"))
                 self._saved_path = path
             except OSError as e:
                 log.warning("calibration save failed: %s", e)

@@ -802,6 +802,12 @@ class RecordMaxPressTests(unittest.TestCase):
         e.calibration_profiles["right"] = _profile()
         with TemporaryDirectory() as td:
             e.cfg.resolve_path = lambda p: Path(td) / p
+            # The engine saves through Config.calibration_path so the
+            # whole store can move for a headless run; a MagicMock cfg
+            # has to be told what that returns or the probe writes to
+            # a mock and the read back below finds nothing.
+            e.cfg.calibration_path = lambda n: (
+                Path(td) / "config" / "calibration" / n)
             e.record_max_press("right", [210.0, 190.0, 160.0, 130.0])
             prof = e.calibration_profiles["right"]
             self.assertEqual(prof.max_press, [210.0, 190.0, 160.0, 130.0])
@@ -824,6 +830,8 @@ class RecordMaxPressTests(unittest.TestCase):
         e = _engine()
         with TemporaryDirectory() as td:
             e.cfg.resolve_path = lambda p: Path(td) / p
+            e.cfg.calibration_path = lambda n: (
+                Path(td) / "config" / "calibration" / n)
             e.record_max_press("left", [100.0] * 4)
         self.assertIn("left", e.calibration_profiles)
         self.assertTrue(e.calibration_profiles["left"].has_max_press())
@@ -831,6 +839,8 @@ class RecordMaxPressTests(unittest.TestCase):
     def test_failed_save_does_not_lose_the_session_value(self):
         e = _engine()
         e.cfg.resolve_path = MagicMock(side_effect=OSError("read only"))
+        e.cfg.calibration_path = MagicMock(
+            side_effect=OSError("read only"))
         e.record_max_press("right", [200.0] * 4)
         self.assertTrue(
             e.calibration_profiles["right"].has_max_press())

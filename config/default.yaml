@@ -2,6 +2,15 @@
 
 session:
   data_dir: sessions
+  # Where the calibration store lives. null means the usual
+  # config/calibration next to the app, so a hand's profile survives a
+  # restart. Point it somewhere else for a headless run: Force Pilot's
+  # max-press probe saves the profile back mid-block, so a timing or
+  # simulation run started from a checkout would otherwise leave the
+  # tracked config/calibration/current_<hand>.json modified.
+  # scripts/measure_battery.py and scripts/simulate_cohort.py set it to
+  # their own temp tree for exactly that reason.
+  calibration_dir: null
   participant: null
   # Age captured on the title screen alongside the participant name.
   # Kept as a string so the JSON round-trips raw user input (e.g.
@@ -1739,8 +1748,8 @@ protocol:
   # (Data Collection Plan.md, "Where the 45 minutes goes") and in the
   # amendment at the top of docs/research/healthy_baseline_study.txt.
   # Section 1 of that document, what each mode measures and the
-  # literature behind it, still carries the design; Sections 2, 4 and
-  # Sections 2 to 5 describe this one-pass design.
+  # literature behind it, still carries the design, and its Sections
+  # 2 to 5 are written for this one pass.
   # Every override below changes a COUNT or freezes a difficulty
   # ladder; none changes a threshold, a window or a scoring rule, so
   # every metric a battery block writes is the metric the standard
@@ -1780,6 +1789,14 @@ protocol:
       # minutes of blocks, 2.67 of transitions (ten NEXT UP cards at
       # 10 s plus the 60 s stretch), the 3 minute rest and the 5
       # minutes of login, seating and quick calibration.
+      #
+      # The sitting is not a fixed length. Several blocks draw fresh
+      # material every time (their seed keys are empty on purpose, so
+      # a participant never meets the same sequence twice), and
+      # reaction's exponential foreperiod moves the most. Re-measured
+      # 5 September with --repeats, eight sittings on each of the four
+      # cells: medians 43.66 to 43.95, whole range 43.11 to 44.50,
+      # none over 45. Quote the median and the range, not one run.
       #
       # The plan file's table says 43.5 because it counted eleven
       # 10 s transitions and no stretch; the run has ten transitions

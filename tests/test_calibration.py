@@ -297,6 +297,14 @@ class TestScreenFlow:
             def resolve_path(self, v):
                 return Path(v)
 
+            def calibration_path(self, name):
+                # Config.calibration_path: the store moves as a whole
+                # when session.calibration_dir is set, so a double
+                # that only has resolve_path leaves the screen with a
+                # MagicMock for a path.
+                return self.resolve_path(
+                    Path("config") / "calibration" / name)
+
             def save_user_overrides(self, o):
                 return Path("x")
 
@@ -500,6 +508,14 @@ class TestReviewFixes:
 
             def resolve_path(self, v):
                 return root / v
+
+            def calibration_path(self, name):
+                # Config.calibration_path: the store moves as a whole
+                # when session.calibration_dir is set, so a double
+                # that only has resolve_path leaves the screen with a
+                # MagicMock for a path.
+                return self.resolve_path(
+                    Path("config") / "calibration" / name)
 
             def save_user_overrides(self, o):
                 return root / "user_settings.yaml"

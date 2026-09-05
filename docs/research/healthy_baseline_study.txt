@@ -31,6 +31,22 @@ as the results:
     dropped. R1, R2, P1, P3 and every other mode's checks survive,
     because they were always within-session.
 
+One more check was dropped later, for a different reason, and it is
+named here so the three dropped rows sit together:
+
+  - E2 (echo, hidden-sequence trials more accurate than novel ones)
+    is dropped because the battery plays echo under the Simon rule.
+    The Hebb repeat only exists under the ladder rule, so this is a
+    consequence of the mode change of 3 September 2026 and not of
+    the one-pass change. Section 1.11 carries the detail.
+
+Two further contrasts are named in Section 1 as not available rather
+than as dropped checks, because the design never claimed them: the
+choice-minus-simple reaction contrast (only the choice sub-mode is
+played) and the RAS-against-fixed-cadence contrast (the battery
+carries no fixed-cadence control block). The notebook prints both
+with that reason beside them rather than as missing data.
+
 What survives: the normative table, the paired dominant versus
 non-dominant comparison, the known-effect checks, the feasibility
 numbers, internal consistency inside a block, and a within-block
@@ -95,8 +111,12 @@ DECISIONS IN ONE SCREEN
 
 - Within-subject, both hands, ONE sitting per person, every mode
   played once. Booking 60 minutes: 15 minutes of consent and intake
-  off the clock, then a PLAY ALL run measured at 44.4 minutes,
-  against a budget of 45 and a hard stop at 50.
+  off the clock, then a PLAY ALL run measured at a median 44.4
+  minutes over five codes and 43.8 over 32 repeat sittings, range
+  43.1 to 44.7, against a budget of 45 and a hard stop at 50. The
+  spread is real: several blocks draw fresh material every time, so
+  the sitting has a length distribution rather than a length
+  (Section 2.3).
 - Eleven blocks: reaction on each hand, mirror, rhythm, echo, force
   pilot, chords, buzz hunt, pattern, adaptive, syllables. Reaction
   is the only mode played twice, once per hand, because the two
@@ -319,7 +339,14 @@ Claim limits: audio_offset_ms (40) is a configured constant, not a
 measured latency on the study laptop; measure it once with a
 microphone against the trigger event if the thesis wants absolute
 asynchrony, otherwise report within-device numbers. The scoring
-windows are game feel, not research criteria (rhythm.py).
+windows are game feel, not research criteria (rhythm.py). The
+rhythm block is the rhythmic auditory cueing arm and the battery
+carries no fixed-cadence control block to set against it, so this
+mode is a timing measurement here and no RAS-against-control claim
+is available (Thaut, McIntosh and Rice 1997, Journal of the
+Neurological Sciences 151(2):207-212, is the effect that would need
+that control). A study that wants it adds the control block and the
+sitting grows.
 
 1.7 Mirror (both hands)
 -----------------------
@@ -347,10 +374,22 @@ release, sine, assess_sos), Lodha sub-1 Hz spectral ratio. Block
 level: force_pilot.overall.mae_pct, time_in_corridor,
 release_mae_pct, press_mae_pct, section_mae_pct.
 Known effects to reproduce:
-  F1 Error grows with target bandwidth and unpredictability: MAE
-     assess_sos > sine > holds, ordered within participant
-     (Kurillo 2005 varied target shape for exactly this reason;
-     Lodha 2013 puts the healthy variability structure below 1 Hz).
+  F1 Error grows with target bandwidth and unpredictability. Read
+     in the battery as the wave ladder's own ordering: the twelve
+     waves in force_pilot.py are laid out slowest to fastest, Slow
+     breath through Storm, so a level number is a bandwidth, and the
+     check is a per-participant Spearman rho of level MAE against
+     level number, tested above zero across the cohort. The original
+     wording was MAE assess_sos > sine > holds ordered within
+     participant; the battery overrides force_pilot to passes: 1,
+     one climb of the ladder, and the assessment and sine segments
+     belong to a standalone run that this design does not play, so
+     that form has no data on a study day and would have stayed
+     undecided however many students turned up. The notebook still
+     computes the old form when a selection happens to hold those
+     segments. Same literature either way (Kurillo 2005 varied
+     target shape for exactly this reason; Lodha 2013 puts the
+     healthy variability structure below 1 Hz).
   F2 Visuomotor lag positive, of order 100 to 300 ms (a sanity
      check on the corridor timing, not a literature norm).
   F3 Release error approximately equal to press error in young
@@ -454,9 +493,17 @@ Known effects to reproduce:
      bimodal presentation and a press response are named
      deviations, so E1 is a plausibility band, not a norm
      comparison; a cohort median of 5 to 8 is consistent.
-  E2 Hebb repetition learning: hidden-sequence trials more accurate
-     than novel trials at matched length (Hebb 1961; Couture and
-     Tremblay 2007, in echo.py).
+  E2 DROPPED. It read Hebb repetition learning, hidden-sequence
+     trials more accurate than novel trials at matched length (Hebb
+     1961; Couture and Tremblay 2007, in echo.py). The hidden repeat
+     is a property of the ladder rule: echo.py sets is_hebb only
+     when rule == "ladder", and the battery plays the shipped
+     default rule: simon, one sequence per game grown by one item a
+     trial. No number of participants decides E2 under that rule, so
+     it is dropped rather than left waiting for data. Buying it back
+     costs a second echo block under the ladder rule, which the 45
+     minute sitting has no room for. E1 and E3 are unaffected and
+     Echo still has checks.
   E3 Serial-order errors dominate: transpositions and omissions
      outnumber intrusions.
 Reliability class: moderate (span is a coarse integer; the product
@@ -671,12 +718,26 @@ covering both orders and both hand orders, 4 September 2026: 43.95,
 budget_min is 45 and its hard_stop_min is 50. Re-run the script and
 record the median again after any change to the preset.
 
-Read the headroom honestly: about 30 seconds against the budget. The
-model hand is a healthy adult on a good day, so a slower participant
-turns the strip amber, and amber means "into the booking's buffer"
-rather than "something has gone wrong". The hard stop at 50 is where
-the 15 minutes of consent, handedness form, hand measurements and
-rig reset stop fitting inside the hour each student is booked for.
+One sitting is one draw, not the length of the sitting. Several
+blocks draw fresh material every time by design: their seed keys in
+config are empty so a participant never meets the same sequence
+twice. Reaction is the biggest mover of the eleven, because its
+foreperiod is drawn from an exponential on every trial. Measured
+again on 5 September 2026 with the script's --repeats flag, eight
+sittings on each of the four counterbalancing cells, 32 in all:
+medians 43.66, 43.67, 43.89 and 43.95 minutes, whole range 43.11 to
+44.50, none over the 45 minute budget and none near the 50 minute
+hard stop. Reaction moved up to 1.3 minutes between sittings of the
+same code; rhythm, force pilot and echo did not move at all.
+
+Read the headroom honestly: roughly a minute against the budget, and
+the sitting is not a fixed length, so quote the median and the range
+rather than one run. The model hand is a healthy adult on a good day,
+so a slower participant turns the strip amber, and amber means "into
+the booking's buffer" rather than "something has gone wrong". The
+hard stop at 50 is where the 15 minutes of consent, handedness form,
+hand measurements and rig reset stop fitting inside the hour each
+student is booked for.
 
 What the model leaves out, and what a real session adds. The model
 never asks a question, never needs a calibration finger redone,
@@ -1263,9 +1324,9 @@ twice in the same person, and this design measures it once.
 Two tables, both decided before the data comes in.
 
 Table 1, known effects, one row per check, from Section 1: R1 R2,
-P1 P3, C1 C2 C3 C4, Rh1 Rh2, M1 M2, F1 F2 F3 F4, B1 B2 B3 B4, E1 E2
+P1 P3, C1 C2 C3 C4, Rh1 Rh2, M1 M2, F1 F2 F3 F4, B1 B2 B3 B4, E1
 E3. Each row: statistic, CI, test, effect size, pass or fail against
-the stated criterion. Two rows carry the word DROPPED and their
+the stated criterion. Three rows carry the word DROPPED and their
 reason, so that a reader who finds them in Section 1 finds out here
 what happened to them:
 
@@ -1274,6 +1335,14 @@ what happened to them:
   P2  pattern, larger learning score on the second go and a faster
       trained-take RT. DROPPED: needs the pattern block played
       twice. P1 and P3 are unaffected and Pattern still has checks.
+  E2  echo, hidden-sequence trials more accurate than novel ones at
+      matched length. DROPPED: the hidden repeat only exists under
+      echo's ladder rule and the battery plays the Simon rule, so
+      the comparison has no second term. E1 and E3 are unaffected.
+
+F1 is in the table under its ladder wording, not its assess-sine-
+holds wording: Section 1.8 says why the battery cannot produce the
+second one.
 
 Table 2, within-block improvement, pre-specified with a direction
 (Section 4.5b says how each is computed and what it cannot show):
@@ -1412,7 +1481,9 @@ healthy cohort cannot give.
     a fake sensor stream, counts the rests and the transitions
     separately, and reports the minutes against budget_min and
     hard_stop_min. Five codes over both orders and both hand orders
-    gave a median of 44.4 minutes (Section 2.3). Re-run it after any
+    gave a median of 44.4 minutes, and 32 repeat sittings a median
+    of 43.8 with a range of 43.1 to 44.5 (Section 2.3). Re-run it
+    after any
     change to the preset.
   k DONE. scripts/simulate_cohort.py injects a per-person
     within-BLOCK drift rather than a between-block change, writes it

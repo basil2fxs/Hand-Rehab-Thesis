@@ -26,6 +26,15 @@ the reaction and rest floors of every mode are what set the time.
     python3 scripts/measure_battery.py                 P01, right-handed
     python3 scripts/measure_battery.py --code P04 --dominant left
     python3 scripts/measure_battery.py --fps 60        coarser frames
+    python3 scripts/measure_battery.py --repeats 10    the spread
+
+ONE RUN IS A SAMPLE OF ONE. Several modes draw fresh material every
+block by design (their seed keys in config are empty so a participant
+never meets the same sequence twice), so no two sittings play the same
+trials and no two take the same number of minutes. Repeated runs of
+the same code on this rig have come out between about 43 and about 45
+minutes, which straddles the budget. Use --repeats and quote the
+median and the range, not one number.
 
 The sessions it writes go to a temp folder that is deleted at the
 end (pass --keep to look at them). Nothing touches the real
@@ -278,6 +287,23 @@ class Participant:
     # this only exists so the block writes a warm-up statistic.
     WARMUP_TAP_S = 0.6
 
+    # How often the reader picks a foil instead of the target. Zero
+    # here on purpose: this file measures how long the battery takes,
+    # and a wrong press parks the word for a later return
+    # (syllables.return_after), which lengthens the block. A cohort
+    # simulation that wants realistic data sets it (see
+    # scripts/simulate_cohort.py); a perfect reader leaves the foil
+    # staircase, the confusion counts and the return comparison with
+    # nothing to work on, which is not the software failing but is
+    # also not a test of it.
+    SYLLABLE_ERROR_RATE = 0.0
+
+    def syllable_error_rate(self) -> float:
+        """The chance this press goes to a foil. A hook rather than a
+        constant so a subclass can make it depend on the rung, which
+        is what a real reader looks like: harder words, more errors."""
+        return float(self.SYLLABLE_ERROR_RATE)
+
     def _syllables(self, m, now, eng) -> None:
         phase = getattr(m, "phase", "")
         if phase == "warmup":
@@ -300,8 +326,17 @@ class Participant:
         spawn = getattr(m, "_spawn_t", None)
         t0 = float(spawn if spawn is not None else now)
         lock = float(getattr(m, "spawn_lockout_s", 0.25) or 0.25)
-        self.schedule(max(now, t0 + lock) + self._rt(),
-                      int(opts.target_lane))
+        lane = int(opts.target_lane)
+        rate = self.syllable_error_rate()
+        if rate > 0.0 and self.rng.random() < rate:
+            # Press a foil. Drawn from the tiles that are actually on
+            # screen so the wrong_kind the mode records is a real foil
+            # kind, which is what the confusion check reads.
+            foils = [int(o.lane) for o in getattr(opts, "options", ())
+                     if int(o.lane) != lane]
+            if foils:
+                lane = self.rng.choice(foils)
+        self.schedule(max(now, t0 + lock) + self._rt(), lane)
 
     def _echo(self, m, now, eng) -> None:
         act = getattr(m, "active", None)
@@ -376,6 +411,12 @@ def build_engine(code: str, dominant: str, data_dir: Path, rig: FakeRig):
     cfg = Config.load()
     cfg.data["ui"]["resolution"] = [1280, 800]
     cfg.data["session"]["data_dir"] = str(data_dir)
+    # Keep the calibration store out of the checkout. Force Pilot
+    # probes the max press mid-block and saves the profile back, so
+    # without this a headless run rewrites the tracked
+    # config/calibration/current_<hand>.json.
+    cfg.data["session"]["calibration_dir"] = str(
+        Path(data_dir).parent / "calibration")
     cfg.data["audio"]["enabled"] = False
     cfg.data["report"] = {"enabled": False}
     cfg.data["eeg"] = {"enabled": False}
@@ -434,23 +475,22 @@ def run_block(eng, rig: FakeRig, hand: HandModel, who: Participant,
     return clock.t - t_start
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--code", default="P01")
-    ap.add_argument("--dominant", default="right",
-                    choices=("left", "right"))
-    ap.add_argument("--fps", type=float, default=120.0)
-    ap.add_argument("--cap-min", type=float, default=20.0,
-                    help="abandon any single block past this many minutes")
-    ap.add_argument("--keep", action="store_true",
-                    help="keep the temp sessions folder")
-    ap.add_argument("--seed", type=int, default=1)
-    args = ap.parse_args()
+def one_sitting(args, seed: int, quiet: bool = False) -> dict | None:
+    """One whole battery, timed. Returns the minutes it took, or None
+    if the battery would not start.
 
+    Separated from main() so the same sitting can be run more than
+    once. It has to be: several blocks draw a fresh seed per block by
+    design (the config's per-mode seed keys are empty so a participant
+    never meets the same material twice), so no two sittings play the
+    same trials and no two take the same time. A single run is one
+    draw, and quoting it as the length of the sitting is quoting a
+    sample of one.
+    """
     tmp = Path(tempfile.mkdtemp(prefix="battery_timing_"))
     rig = FakeRig()
-    hand = HandModel(rng=random.Random(args.seed))
-    who = Participant(hand, random.Random(args.seed + 1))
+    hand = HandModel(rng=random.Random(seed))
+    who = Participant(hand, random.Random(seed + 1))
     real_perf = _time.perf_counter
     clock = SimClock(real_perf())
     _time.perf_counter = lambda: clock.t
@@ -460,14 +500,15 @@ def main() -> int:
         ok, reason = eng.battery_available()
         if not ok:
             print(f"battery unavailable: {reason}")
-            return 2
+            return None
         if not eng.start_battery():
             print("battery did not start")
-            return 2
+            return None
         cell = eng._battery["cell"]
-        print(f"Battery {eng._battery['id']} for {args.code}, dominant "
-              f"{args.dominant}: order {cell['mode_order']}, hand 1 = "
-              f"{cell['hand_first'].replace('_', '-')}", flush=True)
+        if not quiet:
+            print(f"Battery {eng._battery['id']} for {args.code}, dominant "
+                  f"{args.dominant}: order {cell['mode_order']}, hand 1 = "
+                  f"{cell['hand_first'].replace('_', '-')}", flush=True)
         rows = []
         transitions_s = 0.0
         rests_s = 0.0
@@ -484,18 +525,21 @@ def main() -> int:
                          summary.get("status", "?"),
                          summary.get("trials", ""),
                          str(step.get("phase") or "")))
-            print(f"  {step.get('position', 0):2d} {mode:12s} {hand_mode:6s}"
-                  f" {secs / 60.0:6.2f} min  {summary.get('status', '?')}"
-                  f"  trials={summary.get('trials', '')}", flush=True)
+            if not quiet:
+                print(f"  {step.get('position', 0):2d} {mode:12s} "
+                      f"{hand_mode:6s} {secs / 60.0:6.2f} min  "
+                      f"{summary.get('status', '?')}  "
+                      f"trials={summary.get('trials', '')}", flush=True)
             nxt = eng.pending_protocol_step()
             if nxt is None:
                 break
             wait_s = wait_before(nxt)
             if float(nxt.get("rest_s") or 0.0) > 0:
                 rests_s += wait_s
-                print(f"     rest  {wait_s / 60.0:6.2f} min "
-                      f"(floor {float(nxt.get('rest_min_s') or 0.0):.0f} s)",
-                      flush=True)
+                if not quiet:
+                    print(f"     rest  {wait_s / 60.0:6.2f} min (floor "
+                          f"{float(nxt.get('rest_min_s') or 0.0):.0f} s)",
+                          flush=True)
             else:
                 transitions_s += wait_s
             transitions_s += TRANSITION_S
@@ -513,6 +557,14 @@ def main() -> int:
         by_mode: dict[str, float] = {}
         for r in rows:
             by_mode[r[1]] = by_mode.get(r[1], 0.0) + r[3]
+        if quiet:
+            return {"total_min": total_s / 60.0,
+                    "blocks_min": blocks_s / 60.0,
+                    "no_rest_min": (total_s - rests_s) / 60.0,
+                    "budget_min": budget, "hard_stop_min": hard_stop,
+                    "by_mode_min": {m: s / 60.0
+                                    for m, s in by_mode.items()},
+                    "blocks": len(rows)}
         print()
         print("  per mode, the plan file's block table:")
         for mode, secs in sorted(by_mode.items(), key=lambda kv: -kv[1]):
@@ -539,7 +591,12 @@ def main() -> int:
         print(f"  wall time    {(_time.time() - wall0) / 60.0:.1f} min")
         if args.keep:
             print(f"  sessions kept at {tmp}")
-        return 0
+        return {"total_min": total_s / 60.0,
+                "blocks_min": blocks_s / 60.0,
+                "no_rest_min": (total_s - rests_s) / 60.0,
+                "budget_min": budget, "hard_stop_min": hard_stop,
+                "by_mode_min": {m: s / 60.0 for m, s in by_mode.items()},
+                "blocks": len(rows)}
     finally:
         _time.perf_counter = real_perf
         try:
@@ -550,6 +607,70 @@ def main() -> int:
             pass
         if not args.keep:
             shutil.rmtree(tmp, ignore_errors=True)
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap.add_argument("--code", default="P01")
+    ap.add_argument("--dominant", default="right",
+                    choices=("left", "right"))
+    ap.add_argument("--fps", type=float, default=120.0)
+    ap.add_argument("--cap-min", type=float, default=20.0,
+                    help="abandon any single block past this many minutes")
+    ap.add_argument("--keep", action="store_true",
+                    help="keep the temp sessions folder")
+    ap.add_argument("--seed", type=int, default=1)
+    ap.add_argument("--repeats", type=int, default=1,
+                    help="sittings to time, each on its own seed. The "
+                         "battery draws fresh material per block, so one "
+                         "run is a sample of one; use several before "
+                         "quoting a number against the budget")
+    args = ap.parse_args()
+
+    first = one_sitting(args, args.seed)
+    if first is None:
+        return 2
+    if args.repeats <= 1:
+        return 0
+
+    runs = [first]
+    print(f"\n  repeating the sitting {args.repeats - 1} more time(s) "
+          f"on fresh seeds:", flush=True)
+    for i in range(1, args.repeats):
+        got = one_sitting(args, args.seed + 100 * i, quiet=True)
+        if got is None:
+            return 2
+        runs.append(got)
+        print(f"    run {i + 1:2d}  {got['total_min']:6.2f} min",
+              flush=True)
+
+    totals = sorted(r["total_min"] for r in runs)
+    budget = float(first["budget_min"])
+    hard = float(first["hard_stop_min"])
+    mid = (totals[len(totals) // 2] if len(totals) % 2
+           else (totals[len(totals) // 2 - 1]
+                 + totals[len(totals) // 2]) / 2.0)
+    over = sum(1 for t in totals if t > budget)
+    over_hard = sum(1 for t in totals if hard > 0 and t > hard)
+    print(f"\n  {len(totals)} sitting(s): median {mid:.2f} min, range "
+          f"{totals[0]:.2f} to {totals[-1]:.2f}, spread "
+          f"{totals[-1] - totals[0]:.2f} min")
+    print(f"  over the {budget:.0f} min budget: {over} of {len(totals)}")
+    if hard > 0:
+        print(f"  over the {hard:.0f} min hard stop: {over_hard} of "
+              f"{len(totals)}")
+    # Which block moves most between runs, because that is the one to
+    # pin down if the sitting has to be made predictable.
+    modes = sorted({m for r in runs for m in r["by_mode_min"]})
+    spans = []
+    for m in modes:
+        vals = [r["by_mode_min"].get(m, 0.0) for r in runs]
+        spans.append((max(vals) - min(vals), m, min(vals), max(vals)))
+    spans.sort(reverse=True)
+    print("  minutes each mode moved across the runs:")
+    for span, m, lo, hi in spans:
+        print(f"    {m:12s} {span:5.2f} min  ({lo:.2f} to {hi:.2f})")
+    return 0
 
 
 if __name__ == "__main__":

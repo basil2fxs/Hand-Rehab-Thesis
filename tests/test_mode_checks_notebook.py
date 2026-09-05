@@ -375,7 +375,11 @@ class ModeChecksTests(unittest.TestCase):
         self.assertIn("finger", table.columns)
 
     def test_the_verdict_words_are_the_four_we_allow(self) -> None:
-        allowed = {"pass", "fail", "reported", "not testable"}
+        # "dropped" joined the four in September: a check the shipped
+        # battery cannot produce (E2 needs echo's ladder rule) says so
+        # instead of printing "no data" at a reader who then goes
+        # looking for a file that was never going to exist.
+        allowed = {"pass", "fail", "reported", "not testable", "dropped"}
         for mode in MODES:
             checks = self.out[mode]["result"].get("checks")
             if checks is None or checks.empty:

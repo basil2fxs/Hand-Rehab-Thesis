@@ -735,15 +735,15 @@ class QuickCalibrationScreen(Screen):
         cfg = self.engine.cfg
         for hand, prof in self._profiles.items():
             try:
-                path = cfg.resolve_path(
-                    f"config/calibration/current_{hand}.json")
+                path = cfg.calibration_path(
+                    f"current_{hand}.json")
                 prof.save(path)
                 # Dated copy, same convention as the clinical save, so
                 # a quick calibration never silently destroys the one
                 # before it.
                 stamp = prof.created_at.replace(":", "").replace("-", "")
-                prof.save(cfg.resolve_path(
-                    f"config/calibration/history/{stamp}.json"))
+                prof.save(cfg.calibration_path(
+                    f"history/{stamp}.json"))
             except OSError as e:
                 log.warning("quick calibration save failed for %s: %s",
                             hand, e)

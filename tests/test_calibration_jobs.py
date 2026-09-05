@@ -55,6 +55,13 @@ class FakeCfg:
     def resolve_path(self, value):
         return self.root / value
 
+    def calibration_path(self, name):
+        """Config.calibration_path. The whole calibration store moves
+        when session.calibration_dir is set, so reads and writes stay
+        together; a double with only resolve_path hands the screen a
+        path object it never built."""
+        return self.resolve_path(Path("config") / "calibration" / name)
+
     def save_user_overrides(self, overrides):
         self.saved.update(overrides)
         self.save_calls += 1
