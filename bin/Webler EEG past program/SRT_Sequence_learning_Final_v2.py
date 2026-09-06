@@ -5,14 +5,14 @@ SRT Sequence Learning Experiment
 
 Design (3 phases + Recall):
   1. Practice SRT    (random sequence, constant 500 ms ISI)
-  2. Learning SRT    (fixed 10-item sequence, group-specific ISI — 8 blocks)
+  2. Learning SRT    (fixed 10-item sequence, group-specific ISI - 8 blocks)
   3. Post-test SRT   (random sequence, constant 500 ms ISI)
   4. Explicit Recall (participant clicks squares to indicate perceived sequence)
 
 Between-subjects IV: timing group (selected in GUI)
-  constant  — ISI after every keypress = 500 ms
-  cyclical  — ISI cycles tied to sequence position (avg 500 ms)
-  random    — ISI randomly shuffled each cycle from {250x3, 500x4, 750x3}
+  constant  - ISI after every keypress = 500 ms
+  cyclical  - ISI cycles tied to sequence position (avg 500 ms)
+  random    - ISI randomly shuffled each cycle from {250x3, 500x4, 750x3}
               (avg 500 ms); no consistent positional pattern.
 
 Visual: four grey squares (centred on screen, closer together vertically
