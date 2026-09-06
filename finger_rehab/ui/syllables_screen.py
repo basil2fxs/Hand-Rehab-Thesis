@@ -277,11 +277,6 @@ class SyllablesScreen(Screen):
         if phase in ("attend", "model", "choose", "complete", "gap"):
             self._draw_streak_stars(surf, mode, now)
         self._draw_controls_note(surf, mode)
-        if getattr(mode, "speech_failures", 0):
-            draw_text(surf, "Speech unavailable: check audio before recording results",
-                      (self.layout.width // 2, self.layout.height - 26),
-                      self.theme, self.layout, pt=FONT_SMALL, centre=True,
-                      colour=self.theme.foreground)
         remaining = self._countdown_remaining()
         if remaining > 0:
             self._draw_countdown_card(surf, remaining)

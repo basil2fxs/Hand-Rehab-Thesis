@@ -65,7 +65,7 @@ from . import feedback_bank
 from .screens import ModeSelectScreen, Screen, draw_skip_chip
 from .widgets import (
     FONT_BODY, FONT_H1, FONT_H2, FONT_SMALL, FONT_TITLE,
-    draw_text, make_font, contrast_text,
+    draw_text, make_font,
 )
 
 if TYPE_CHECKING:
@@ -146,10 +146,6 @@ class ForcePilotScreen(Screen):
         return max(0.0, self._countdown_until - time.perf_counter())
 
     def _accent(self) -> tuple[int, int, int]:
-        if self.theme.name == "high_contrast":
-            return self.theme.accent
-        if self.theme.name == "dark":
-            return (163, 217, 89)
         return ModeSelectScreen.MODE_ACCENTS.get(
             "force_pilot", self.theme.accent)
 
@@ -280,7 +276,7 @@ class ForcePilotScreen(Screen):
                   pt=FONT_SMALL, centre=True, colour=self.theme.muted)
         accent = self._accent()
         pf = self.layout.font(FONT_SMALL + 2)
-        pill_label = pf.render("FORCE PILOT", True, contrast_text(accent))
+        pill_label = pf.render("FORCE PILOT", True, (255, 255, 255))
         pill_rect = pygame.Rect(0, 0, pill_label.get_width() + 24,
                                 pill_label.get_height() + 8)
         pill_rect.topright = (self.layout.width - 28, 30)

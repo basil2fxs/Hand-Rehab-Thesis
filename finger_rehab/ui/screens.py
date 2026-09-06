@@ -23,7 +23,7 @@ from .widgets import (
     TextInput, ToggleMenu,
     FONT_TITLE, FONT_H1, FONT_H2, FONT_BODY, FONT_SMALL,
     BUTTON_H, BUTTON_W, PADDING, draw_text, keyboard_controls_lines,
-    make_font, surface_colour,
+    make_font,
 )
 
 from ..game.battery import HARDWARE_MODES
@@ -1365,9 +1365,10 @@ class ModeSelectScreen(Screen):
     # in both columns.
     MODES = [
         ("reaction", "Reaction",
-         "Press the finger that lights up."),
+         "Press the key that lights up, fast. Measures eye-to-hand speed."),
         ("adaptive", "Adaptive",
-         "Follow the lights as the pace changes."),
+         "Hit cued keys as the pace adapts to you. Keeps practice at "
+         "the right challenge."),
         # The pattern card must not mention that a sequence repeats, or
         # even use the word "pattern": the patient can read this
         # screen, and explicit knowledge of the sequence impairs the
@@ -1376,25 +1377,33 @@ class ModeSelectScreen(Screen):
         # rather than "Patterns" for the same reason (audit finding
         # #10) -- the internal mode key stays "pattern".
         ("pattern", "Muscle Memory",
-         "Play along with a short piano riff."),
+         "Record takes of a piano riff, session by session. Builds "
+         "muscle memory."),
         ("chords", "Chords",
-         "Press two to four fingers together."),
+         "Press 2-4 keys as one chord. Trains fingers to move "
+         "together, and to stay still."),
         ("rhythm", "Rhythm",
-         "Follow the notes and press on the beat."),
+         "Press in time with a song. Practises movement timing to "
+         "a beat."),
         ("syllables", "Syllables",
-         "Listen, then choose each part of the word."),
+         "Catch the right part of the word as it falls. Builds the "
+         "sound skills reading rests on."),
         ("mirror", "Mirror",
-         "Match the same finger on both hands."),
+         "Same finger, both hands, pressed as one. Practises moving "
+         "the hands together."),
         ("force_pilot", "Force Pilot",
-         "Follow the wave with a gentle, steady press."),
+         "Keep your press inside a moving corridor. Trains smooth "
+         "force control."),
         ("buzz_hunt", "Buzz Hunt",
-         "Feel the buzz, then press that finger."),
+         "Feel which finger buzzed and press it. Measures and trains "
+         "the sense of touch."),
         # Echo is measurement-first like Reaction and Buzz Hunt, so
         # the card says "measures" and promises nothing therapeutic.
         # Unlike the pattern card there is no secret to keep: explicit
         # memorising IS the task here.
         ("echo", "Echo",
-         "Watch, remember, then repeat the lights."),
+         "Watch the keys light up, then play them back in order. "
+         "Measures memory span."),
     ]
     # Every stage of these two needs a real analogue signal (a
     # continuous force trace or the vibration motors themselves) --
@@ -1409,25 +1418,25 @@ class ModeSelectScreen(Screen):
     # card uses these, plus the icon takes the same colour as a subtle
     # repeated cue.
     MODE_ACCENTS = {
-        "adaptive": (4, 120, 87),   # emerald green - "growth"
-        "classic":  (79, 70, 229),   # indigo - "steady, structured"
-        "rhythm":   (124, 58, 237),   # purple - "music"
+        "adaptive": (16, 185, 129),   # emerald green - "growth"
+        "classic":  (99, 102, 241),   # indigo - "steady, structured"
+        "rhythm":   (168, 85, 247),   # purple - "music"
         # Mirror gets a teal / cyan so the four cards form a clear
         # colour ladder (green -> indigo -> purple -> teal) without
         # overlapping any of the lane-tile finger pastels.
-        "mirror":   (15, 118, 110),   # teal - "synchronised hands"
-        "reaction": (185, 28, 28),    # red - "speed"
-        "pattern":  (180, 83, 9),   # amber - "a path forming"
-        "chords":   (3, 105, 161),   # sky blue - "keys together"
-        "syllables": (190, 24, 93),  # pink - "language, playful"
-        "force_pilot": (67, 117, 26),  # lime - "altitude, lift"
+        "mirror":   (20, 184, 166),   # teal - "synchronised hands"
+        "reaction": (239, 68, 68),    # red - "speed"
+        "pattern":  (245, 158, 11),   # amber - "a path forming"
+        "chords":   (14, 165, 233),   # sky blue - "keys together"
+        "syllables": (236, 72, 153),  # pink - "language, playful"
+        "force_pilot": (132, 204, 22),  # lime - "altitude, lift"
         # Orange for the buzz: warm and tactile, and the only strong
         # orange on the grid so the card reads distinct.
-        "buzz_hunt": (194, 65, 12),
+        "buzz_hunt": (249, 115, 22),
         # Indigo for Echo: classic's retired colour returns to the
         # grid, and nothing else on it sits between the sky blue and
         # the purple, so the card reads distinct.
-        "echo": (79, 70, 229),
+        "echo": (99, 102, 241),
     }
 
     # Game select is the session hub, so the header gives its subtitle
@@ -1469,7 +1478,9 @@ class ModeSelectScreen(Screen):
             # pale that the cards looked the same washed white that
             # prompted this fix.
             accent = self.MODE_ACCENTS.get(key, self.theme.accent)
-            pastel = surface_colour(self.theme)
+            pastel = tuple(
+                int(c + (255 - c) * 0.55) for c in accent
+            )
             # Button label is empty - the title + icon + description
             # are rendered manually so we get a cleaner icon-left,
             # text-right layout than Button's auto-centred label.
@@ -1903,10 +1914,6 @@ class ModeSelectScreen(Screen):
         for b, (key, title, desc) in zip(self.buttons, self.MODES):
             b.draw(surf)
             accent = self.MODE_ACCENTS.get(key, self.theme.accent)
-            if self.theme.name == "dark":
-                accent = tuple(int(c + (255-c)*.40) for c in accent)
-            elif self.theme.name == "high_contrast":
-                accent = self.theme.accent
             # Vertical accent strip on the left edge of the card. Reads
             # as a colour code for the mode without overpowering the
             # button's default fill. Slightly inset so the rounded
@@ -1922,7 +1929,7 @@ class ModeSelectScreen(Screen):
             # against the card. Hover doesn't need to flip the colour
             # because the pastel fill stays light in both states.
             fg = self.theme.foreground
-            muted_fg = self.theme.muted
+            muted_fg = self.theme.foreground
             # Mode icon, in the mode's accent colour so the colour cue
             # repeats. Sized to the ten-card row height.
             icon_size = 40
@@ -2029,7 +2036,7 @@ class ModeSelectScreen(Screen):
         self.battery_btn.label = label
         if ok:
             self.battery_btn.colour = None
-            self.battery_btn.primary = True
+            self.battery_btn.primary = self._battery_pending()
         else:
             self.battery_btn.primary = False
             self.battery_btn.colour = tuple(
@@ -8270,7 +8277,9 @@ class DiagnosticsScreen(Screen):
         # Header.
         source_name = getattr(self.engine.source, "name", "?")
         state_text, state_colour = self._connection_state()
-        sub = "Press a pad to check it. Click a finger to test its buzzer."
+        sub = ("Press a finger to test its sensor, or click it to buzz "
+                "that finger. Ports auto-assign by plug order; "
+                "override below only if needed.")
         if state_text == "KEYBOARD":
             sub = ("Keyboard mode. Press FDSA / JKL; to test each "
                     "lane, or plug an Arduino in: it connects itself.")

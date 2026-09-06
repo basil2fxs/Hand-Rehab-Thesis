@@ -431,9 +431,9 @@ class FingerColourMappingTests(unittest.TestCase):
                           (255, 255, 255))
         self.assertEqual(strip._label_colour((71, 85, 105)),
                           (255, 255, 255))
-        # Light fills use black text, independent of the page theme.
+        # Light fills keep the theme's dark text.
         self.assertEqual(strip._label_colour((254, 240, 138)),
-                          (0, 0, 0))
+                          CLINICAL.foreground)
 
 
 if __name__ == "__main__":

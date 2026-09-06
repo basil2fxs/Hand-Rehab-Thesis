@@ -670,13 +670,13 @@ class TestModeSelectCardLayout:
     def test_measurement_modes_say_measure_not_treat(
             self, mode_select_screen):
         # Reaction and Buzz Hunt are measurement-first (their
-        # docstrings refuse therapy claims). Cards describe the action;
-        # no card may promise treatment or recovery.
+        # docstrings refuse therapy claims), so their cards must say
+        # "measures" and no card may promise treatment or recovery.
         sc, _ = mode_select_screen
         descs = {k: d.lower() for k, _t, d in sc.MODES}
-        assert "press" in descs["reaction"]
-        assert "buzz" in descs["buzz_hunt"]
-        assert "repeat" in descs["echo"]
+        assert "measures" in descs["reaction"]
+        assert "measures" in descs["buzz_hunt"]
+        assert "measures" in descs["echo"]
         for key, d in descs.items():
             for banned in ("cure", "recover", "restores", "treats",
                            "therapy"):

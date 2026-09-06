@@ -39,33 +39,8 @@ PREFILLED_TAG = "from before"
 # resort. Keeping it in one constant means every screen, heading and button
 # shares the exact same typeface instead of each call site hard-coding its
 # own chain (which is how the fonts drifted apart before).
-# Prefer separate regular and bold font files. Some macOS collections
-# resolve both weights to their first face, making body text heavy.
-FONT_FAMILY = "Segoe UI,Arial,DejaVu Sans"
-
-
-def surface_colour(theme: Theme) -> tuple[int, int, int]:
-    """Raised surfaces remain distinct in each supported theme."""
-    if theme.name == "high_contrast":
-        return theme.background
-    if sum(theme.background) < 384:
-        return (27, 39, 57)
-    return (255, 255, 255)
-
-
-def outline_colour(theme: Theme) -> tuple[int, int, int]:
-    if theme.name == "high_contrast":
-        return theme.foreground
-    return (71, 85, 105) if sum(theme.background) < 384 else (203, 213, 225)
-
-
-def contrast_text(fill) -> tuple[int, int, int]:
-    """Choose black or white by relative luminance, including dark themes."""
-    channels = [c / 255 for c in fill[:3]]
-    linear = [c / 12.92 if c <= .04045 else ((c + .055) / 1.055) ** 2.4
-              for c in channels]
-    lum = sum(c * w for c, w in zip(linear, (.2126, .7152, .0722)))
-    return (0, 0, 0) if lum > .179 else (255, 255, 255)
+FONT_FAMILY = ("Avenir Next,Helvetica Neue,Segoe UI,Helvetica,"
+               "Arial,DejaVu Sans")
 
 
 def make_font(pt: int, bold: bool = False) -> pygame.font.Font:
@@ -162,26 +137,78 @@ class Button:
     BORDER_RADIUS = 14
 
     def draw(self, surf: pygame.Surface) -> None:
-        emphasised = self.primary or self.colour is not None
-        fill = (self.colour if self.colour is not None else
-                self.theme.accent if self.primary else surface_colour(self.theme))
-        if self.pressed:
-            fill = _darker(fill, .10)
-        border = self.theme.accent if self.hover else outline_colour(self.theme)
-        pygame.draw.rect(surf, fill, self.rect, border_radius=self.BORDER_RADIUS)
-        pygame.draw.rect(surf, border, self.rect, 2 if self.hover else 1,
-                         border_radius=self.BORDER_RADIUS)
+        # Pick the base fill colour by precedence:
+        #   explicit colour > primary -> theme accent > muted (default)
+        if self.colour is not None:
+            base = self.colour
+            if self.hover:
+                base = tuple(min(255, c + 16) for c in base)
+        elif self.primary:
+            base = self.theme.accent
+            if self.hover:
+                base = tuple(min(255, c + 14) for c in base)
+        else:
+            base = self.theme.muted
+            if self.hover:
+                base = self.theme.accent
+        fill = _darker(base, 0.12) if self.pressed else base
+
+        # Single soft drop shadow that fades out downward. Pressed state
+        # collapses it to almost nothing so the button reads as pushed in.
+        passes = ((2, 22),) if self.pressed else self._SHADOW_PASSES
+        shadow_surf = pygame.Surface(
+            (self.rect.w + 24, self.rect.h + 24), pygame.SRCALPHA,
+        )
+        for dy, alpha in passes:
+            pygame.draw.rect(
+                shadow_surf, (15, 23, 42, alpha),
+                pygame.Rect(12, 12 + dy, self.rect.w, self.rect.h),
+                border_radius=self.BORDER_RADIUS,
+            )
+        surf.blit(shadow_surf, (self.rect.x - 12, self.rect.y - 12))
+
+        # Flat body fill. Pressed buttons shift down by 1 px so the click
+        # registers visually as well as audibly. No gloss gradient, no
+        # bevel: the soft shadow alone carries the depth, which is the
+        # look modern clinical and mobile apps use.
+        body_rect = self.rect.move(0, 1 if self.pressed else 0)
+        pygame.draw.rect(surf, fill, body_rect,
+                          border_radius=self.BORDER_RADIUS)
+
+        # One-pixel top highlight: a hairline of low-alpha white along the
+        # very top edge only. Gives the surface a faint lift without the
+        # old half-height "shine" that made it look like a glass pill.
+        if not self.pressed:
+            hi = pygame.Surface((body_rect.w - 10, 2), pygame.SRCALPHA)
+            pygame.draw.rect(hi, (255, 255, 255, 40), hi.get_rect(),
+                             border_radius=1)
+            surf.blit(hi, (body_rect.x + 5, body_rect.y + 2))
+
+        # Hover ring: a 2 px outline in white at low alpha so the
+        # affordance reads on any background colour. Skipped while
+        # pressed because the shifted body would clip the ring.
+        if self.hover and not self.pressed:
+            ring = pygame.Surface(
+                (body_rect.w + 4, body_rect.h + 4), pygame.SRCALPHA,
+            )
+            pygame.draw.rect(
+                ring, (255, 255, 255, 120),
+                ring.get_rect(),
+                width=2,
+                border_radius=self.BORDER_RADIUS + 2,
+            )
+            surf.blit(ring,
+                       (body_rect.x - 2, body_rect.y - 2))
+
+        # Label. Contrast against the fill: dark text on light fills,
+        # white on dark.
         if self.label:
-            colour = contrast_text(fill) if emphasised else self.theme.foreground
-            font = self.layout.font(self.font_pt, bold=self.primary)
-            # Long labels must stay inside their actual click target.
-            label = self.label
-            while label and font.size(label)[0] > self.rect.w - 24:
-                label = label[:-1]
-            if label != self.label and len(label) > 3:
-                label = label[:-3] + "..."
-            text = font.render(label, True, colour)
-            surf.blit(text, text.get_rect(center=self.rect.center))
+            font = self.layout.font(self.font_pt)
+            avg = sum(fill) / 3
+            text_colour = (self.theme.background
+                            if avg > 150 else (255, 255, 255))
+            text = font.render(self.label, True, text_colour)
+            surf.blit(text, text.get_rect(center=body_rect.center))
 
 
 class Card:
@@ -207,14 +234,47 @@ class Card:
         self.layout = layout
 
     def draw(self, surf: pygame.Surface) -> None:
-        pygame.draw.rect(surf, surface_colour(self.theme), self.rect,
-                         border_radius=self.BORDER_RADIUS)
-        pygame.draw.rect(surf, outline_colour(self.theme), self.rect, 1,
-                         border_radius=self.BORDER_RADIUS)
+        # Multi-pass soft drop shadow built off-screen so the outermost
+        # pass fades smoothly into the page background.
+        shadow_surf = pygame.Surface(
+            (self.rect.w + 24, self.rect.h + 24), pygame.SRCALPHA,
+        )
+        for dy, alpha in self._SHADOW_PASSES:
+            pygame.draw.rect(
+                shadow_surf, (0, 0, 0, alpha),
+                pygame.Rect(12, 12 + dy, self.rect.w, self.rect.h),
+                border_radius=self.BORDER_RADIUS,
+            )
+        surf.blit(shadow_surf, (self.rect.x - 12, self.rect.y - 12))
+        # Card body: a touch darker than the page background so it
+        # reads as a raised panel.
+        body_colour = tuple(
+            max(0, min(255, c - 8)) for c in self.theme.background
+        )
+        pygame.draw.rect(surf, body_colour, self.rect,
+                          border_radius=self.BORDER_RADIUS)
+        # Subtle top-band highlight, same trick as Button: an SRCALPHA
+        # inset rect with low-alpha white. Reads as a hint of light
+        # from above without going gel-buttony.
+        shine_h = max(10, self.rect.h // 6)
+        shine_surf = pygame.Surface(
+            (self.rect.w - 12, shine_h), pygame.SRCALPHA,
+        )
+        pygame.draw.rect(
+            shine_surf, (255, 255, 255, 28),
+            shine_surf.get_rect(),
+            border_radius=max(2, self.BORDER_RADIUS - 6),
+        )
+        surf.blit(shine_surf, (self.rect.x + 6, self.rect.y + 6))
+        # Thin 1 px outline so the edge stays crisp.
+        outline_colour = tuple(max(0, c - 30) for c in self.theme.background)
+        pygame.draw.rect(surf, outline_colour, self.rect, 1,
+                          border_radius=self.BORDER_RADIUS)
+        # Optional title in the top-left corner.
         if self.title and self.layout:
-            text = self.layout.font(FONT_H2, bold=True).render(
-                self.title, True, self.theme.foreground)
-            surf.blit(text, (self.rect.x + PADDING, self.rect.y + 18))
+            font = self.layout.font(FONT_H2)
+            t = font.render(self.title, True, self.theme.accent)
+            surf.blit(t, (self.rect.x + PADDING, self.rect.y + 18))
 
 
 def draw_text(surf: pygame.Surface, text: str, pos: tuple[int, int],
@@ -898,7 +958,11 @@ class LaneStrip:
         luminance weighting and flips to white once the fill is dark
         enough that the theme's near-black text would disappear (the
         ring finger's black tile, or any flash colour)."""
-        return contrast_text(fill)
+        r, g, b = fill[0], fill[1], fill[2]
+        luminance = 0.299 * r + 0.587 * g + 0.114 * b
+        if luminance < 140:
+            return (255, 255, 255)
+        return self.theme.foreground
 
     def draw(self, surf: pygame.Surface, now: float) -> None:
         # Background fill
@@ -1346,7 +1410,9 @@ class TextInput:
                    else self.theme.muted)
         # Field background is a touch darker than the page so it reads
         # like a sunken slot.
-        body_colour = surface_colour(self.theme)
+        body_colour = tuple(
+            max(0, min(255, c - 14)) for c in self.theme.background
+        )
         pygame.draw.rect(surf, body_colour, self.rect,
                           border_radius=self.BORDER_RADIUS)
         pygame.draw.rect(surf, border, self.rect,
@@ -1584,22 +1650,15 @@ class Slider:
     def draw(self, surf: pygame.Surface) -> None:
         # Label above the track.
         if self.label:
-            val_text = self.value_format.format(self.value)
-            label_size, value_size = FONT_SMALL + 4, FONT_BODY
-            # Reserve space between text and value even in narrow panels.
-            while True:
-                lbl_font = self.layout.font(label_size)
-                val_font = self.layout.font(value_size)
-                width = lbl_font.size(self.label)[0] + val_font.size(val_text)[0] + 12
-                if width <= self.rect.w or min(label_size, value_size) <= 12:
-                    break
-                label_size -= 1
-                value_size -= 1
+            lbl_font = self.layout.font(FONT_SMALL + 4)
             lbl = lbl_font.render(self.label, True, self.theme.muted)
+            surf.blit(lbl, (self.rect.x, self.rect.y - self.LABEL_GAP))
+            # Current value right-aligned.
+            val_font = self.layout.font(FONT_BODY)
+            val_text = self.value_format.format(self.value)
             val = val_font.render(val_text, True, self.theme.accent)
-            y = self.rect.y - self.LABEL_GAP + 12
-            surf.blit(lbl, lbl.get_rect(midleft=(self.rect.x, y)))
-            surf.blit(val, val.get_rect(midright=(self.rect.right, y)))
+            surf.blit(val, val.get_rect(
+                topright=(self.rect.right, self.rect.y - self.LABEL_GAP - 2)))
         # Track background (full width, faint).
         track_y = self.rect.centery - self.TRACK_H // 2
         track_rect = pygame.Rect(self.rect.x, track_y,

@@ -1418,13 +1418,6 @@ class SyllablesMode(WaitSkip):
             return
         self._speak(f"{self.word.word}_{k}", self.word.syllables[k])
 
-    def _speech_failed(self, stem: str, reason: str) -> None:
-        self.speech_failures = getattr(self, "speech_failures", 0) + 1
-        raw = getattr(self.engine, "raw_logger", None)
-        if raw:
-            raw.queue_event("speech_failed", t_perf=time.perf_counter(),
-                            detail=f"file={stem};reason={reason}", hand=self.word_hand)
-
     def _speak(self, stem: str, text: str) -> None:
         """Play a rendered speech file, or fall back to the macOS `say`
         command on a developer machine.
@@ -1440,21 +1433,16 @@ class SyllablesMode(WaitSkip):
         meet a stack trace because an asset was not rendered."""
         backend = self.speech_backend
         if backend == "off":
-            self._speech_failed(stem, "disabled")
             return
         path = None if backend == "say" else self.speech_path(stem)
         if path is not None:
             audio = getattr(self.engine, "audio", None)
             player = getattr(audio, "play_speech", None)
-            delivered = False
             if callable(player):
                 try:
-                    delivered = bool(player(str(path), volume=self.speech_volume))
+                    player(str(path), volume=self.speech_volume)
                 except Exception:
                     pass
-            if not delivered:
-                self._speech_failed(stem, "playback_unavailable")
-                return
             raw = getattr(self.engine, "raw_logger", None)
             if raw:
                 raw.queue_event("speech", t_perf=time.perf_counter(),
@@ -1462,14 +1450,12 @@ class SyllablesMode(WaitSkip):
                                 hand=self.word_hand)
             return
         if backend == "file":
-            self._speech_failed(stem, "missing_file")
             if stem not in self._missing_speech:
                 self._missing_speech.add(stem)
                 log.info("No speech file for %r under %s; running silent",
                          stem, self.speech_dir)
             return
         if sys.platform != "darwin" or shutil.which("say") is None:
-            self._speech_failed(stem, "missing_voice")
             if stem not in self._missing_speech:
                 self._missing_speech.add(stem)
                 log.info("No speech file for %r and no `say` here; "
@@ -1481,7 +1467,6 @@ class SyllablesMode(WaitSkip):
         # headless run) a block's worth of words piles up on that
         # device and wedges coreaudiod, so stay silent there.
         if os.environ.get("SDL_AUDIODRIVER", "").lower() == "dummy":
-            self._speech_failed(stem, "headless_audio")
             if stem not in self._missing_speech:
                 self._missing_speech.add(stem)
                 log.info("No speech file for %r and audio is dummy; "
@@ -1603,7 +1588,6 @@ class SyllablesMode(WaitSkip):
                                / len(first_attempts), 3)
                          if first_attempts else None),
             "supervised": self.supervised,
-            "speech_failures": getattr(self, "speech_failures", 0),
             "warmup_taps": self._warmup_done,
             "warmup_asyn_mean_ms": _mean(self._warmup_asyn),
             "warmup_asyn_sd_ms": _sd(self._warmup_asyn),

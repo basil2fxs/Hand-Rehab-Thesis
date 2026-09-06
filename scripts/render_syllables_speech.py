@@ -100,48 +100,26 @@ def _render_say(text: str, out: Path, voice: str | None) -> bool:
 
 def _render_cloud(provider: str, text: str, ssml: str | None,
                   out: Path, voice: str) -> bool:
-    """Render through the provider SDK, using its normal credential lookup.
-
-    Google: cloud.google.com/text-to-speech/docs/create-audio-text-client-libraries
-    Polly: boto3.amazonaws.com/v1/documentation/api/latest/reference/services/polly/client/synthesize_speech.html
-    No credentials are stored in the manifest or in this repository.
-    """
-    if provider == "google":
-        try:
-            from google.cloud import texttospeech as tts
-        except ImportError:
-            raise SystemExit("Install google-cloud-texttospeech and configure application default credentials.")
-        response = tts.TextToSpeechClient().synthesize_speech(
-            input=tts.SynthesisInput(**({"ssml": ssml} if ssml else {"text": text})),
-            voice=tts.VoiceSelectionParams(language_code="en-AU", name=voice),
-            audio_config=tts.AudioConfig(audio_encoding=tts.AudioEncoding.LINEAR16,
-                                         sample_rate_hertz=22050))
-        payload = response.audio_content
-        if not payload:
-            raise RuntimeError("Speech provider returned no audio")
-        out.write_bytes(payload)  # LINEAR16 includes its WAV header.
-        return True
-    if provider == "polly":
-        try:
-            import boto3
-        except ImportError:
-            raise SystemExit("Install boto3 and configure AWS credentials for Polly.")
-        import wave
-        from contextlib import closing
-        response = boto3.client("polly").synthesize_speech(
-            Text=ssml or text, TextType="ssml" if ssml else "text",
-            VoiceId=voice, LanguageCode="en-AU",
-            Engine="standard" if voice in ("Nicole", "Russell") else "neural",
-            OutputFormat="pcm", SampleRate="16000")
-        with closing(response["AudioStream"]) as stream:
-            payload = stream.read()
-        if not payload:
-            raise RuntimeError("Speech provider returned no audio")
-        with wave.open(str(out), "wb") as wav:
-            wav.setnchannels(1); wav.setsampwidth(2); wav.setframerate(16000)
-            wav.writeframes(payload)
-        return True
-    raise ValueError(f"Unknown speech provider: {provider}")
+    """Google or Polly. Deliberately not implemented here: the call
+    needs credentials, a billing account and an accepted terms of
+    service, none of which belong in a repository. The shape of the
+    call is documented so whoever runs it can fill in ten lines with
+    the provider's own SDK sample in front of them."""
+    raise SystemExit(
+        f"--provider {provider} needs the provider SDK and credentials.\n"
+        "Fill in _render_cloud with the provider's sample call:\n"
+        "  google: texttospeech.TextToSpeechClient().synthesize_speech(\n"
+        "      input=SynthesisInput(ssml=ssml or text),\n"
+        "      voice=VoiceSelectionParams(language_code='en-AU',\n"
+        "                                 name=voice),\n"
+        "      audio_config=AudioConfig(audio_encoding=OGG_OPUS,\n"
+        "                               sample_rate_hertz=22050))\n"
+        "  polly: boto3.client('polly').synthesize_speech(\n"
+        "      Text=ssml or text, TextType='ssml' if ssml else 'text',\n"
+        "      VoiceId=voice, Engine='neural', OutputFormat='ogg_vorbis')\n"
+        "then write response.audio_content to the path this script\n"
+        "hands you. Record the voice and the date in the manifest, and\n"
+        "check the provider's terms on redistributing the audio first.")
 
 
 def main() -> int:
@@ -195,26 +173,25 @@ def main() -> int:
         files = []
         for stem, text, ssml in jobs:
             target = out / f"{stem}.wav"
-            exists = next((out / f"{stem}{ext}" for ext in (".ogg", ".wav", ".aiff")
-                           if (out / f"{stem}{ext}").exists()), None)
+            exists = any((out / f"{stem}{ext}").exists()
+                         for ext in (".ogg", ".wav", ".aiff"))
             if exists and not args.force:
-                files.append(exists.name)
+                files.append(target.name)
                 continue
             if args.provider == "say":
                 ok = _render_say(text, target, args.voice)
             else:
                 ok = _render_cloud(args.provider, text, ssml, target,
                                    args.voice)
-            if not ok or not target.exists():
-                raise SystemExit(f"Audio was not written: {target.name}")
-            n_done += 1
+            if ok:
+                n_done += 1
             files.append(target.name)
         manifest["entries"][w.word] = {
             "file": files[0],
             "syllables": files[1:],
             "chunks": list(w.syllables),
         }
-        manifest_path.write_text(json.dumps(manifest, indent=1) + "\n")
+    manifest_path.write_text(json.dumps(manifest, indent=1) + "\n")
     print(f"rendered {n_done} files into {out}")
     print(f"manifest: {manifest_path}")
     if args.provider == "say":

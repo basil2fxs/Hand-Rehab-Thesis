@@ -48,12 +48,6 @@ def _remove(path: Path) -> None:
 def make_source(repo: Path, pkg: Path) -> Path:
     """Delete and rebuild pkg/source from the repo."""
     dest = pkg / "source"
-    # The PsychoPy runner saves data inside source/. Rebuilding must
-    # never remove a recording made from the package being handed over.
-    recordings = dest / "sessions"
-    if recordings.exists() and any(recordings.iterdir()):
-        raise SystemExit("Source package contains sessions. Copy the recordings "
-                         "to the study data folder before rebuilding it.")
     _remove(dest)
     for item in SOURCE_ITEMS:
         src, dst = repo / item, dest / item
