@@ -8270,9 +8270,7 @@ class DiagnosticsScreen(Screen):
         # Header.
         source_name = getattr(self.engine.source, "name", "?")
         state_text, state_colour = self._connection_state()
-        sub = ("Press a finger to test its sensor, or click it to buzz "
-                "that finger. Ports auto-assign by plug order; "
-                "override below only if needed.")
+        sub = "Press a pad to check it. Click a finger to test its buzzer."
         if state_text == "KEYBOARD":
             sub = ("Keyboard mode. Press FDSA / JKL; to test each "
                     "lane, or plug an Arduino in: it connects itself.")

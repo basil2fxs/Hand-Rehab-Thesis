@@ -1584,15 +1584,22 @@ class Slider:
     def draw(self, surf: pygame.Surface) -> None:
         # Label above the track.
         if self.label:
-            lbl_font = self.layout.font(FONT_SMALL + 4)
-            lbl = lbl_font.render(self.label, True, self.theme.muted)
-            surf.blit(lbl, (self.rect.x, self.rect.y - self.LABEL_GAP))
-            # Current value right-aligned.
-            val_font = self.layout.font(FONT_BODY)
             val_text = self.value_format.format(self.value)
+            label_size, value_size = FONT_SMALL + 4, FONT_BODY
+            # Reserve space between text and value even in narrow panels.
+            while True:
+                lbl_font = self.layout.font(label_size)
+                val_font = self.layout.font(value_size)
+                width = lbl_font.size(self.label)[0] + val_font.size(val_text)[0] + 12
+                if width <= self.rect.w or min(label_size, value_size) <= 12:
+                    break
+                label_size -= 1
+                value_size -= 1
+            lbl = lbl_font.render(self.label, True, self.theme.muted)
             val = val_font.render(val_text, True, self.theme.accent)
-            surf.blit(val, val.get_rect(
-                topright=(self.rect.right, self.rect.y - self.LABEL_GAP - 2)))
+            y = self.rect.y - self.LABEL_GAP + 12
+            surf.blit(lbl, lbl.get_rect(midleft=(self.rect.x, y)))
+            surf.blit(val, val.get_rect(midright=(self.rect.right, y)))
         # Track background (full width, faint).
         track_y = self.rect.centery - self.TRACK_H // 2
         track_rect = pygame.Rect(self.rect.x, track_y,

@@ -44,5 +44,6 @@ any favourable result. A literature reference line is context, not a pass mark f
 
 Verification on 6 September: 103 test files, 3018 tests passed;
 64 packaging and startup tests also passed after restricting release configuration;
+116 presentation and audio-control tests passed after the final Settings spacing fix;
 the notebook executed all 149 cells without errors on eight simulated
 sittings. These are software checks, not collected participant results.
