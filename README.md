@@ -1,9 +1,7 @@
 # Finger Rehab
 
-A hand device and a laptop game for measuring and training finger movement. Four force pads and four
-vibration motors sit under the fingers of each hand, wired to an Arduino Nano that streams force to the
-laptop over USB. Ten games run on that signal, and every press is logged with its timing and its force,
-so a hand can be compared week to week.
+Ten finger games using four SingleTact force pads and four vibration motors per hand.
+Arduino Nano boards stream the force over USB. The notebook turns each game recording into thesis figures.
 
 ![The hub, with all ten games](docs/images/hub.png)
 ![Reaction, one trial lit](docs/images/reaction.png)
@@ -23,7 +21,8 @@ flowchart LR
 
 **The sensors.** Each finger rests on a SingleTact CS8-10N pad, 10 N full scale, read over I2C at 0x05
 index, 0x06 middle, 0x07 ring, 0x08 pinky and sent at 200 Hz as `FSR: a,b,c,d`. A failed read is sent as
-0, so a dead pad and a loose plug look the same. One count is 0.019531 N.
+0, so a dead pad and a loose plug look the same. The nominal scale is 0.019531 N per count above the
+resting baseline. Check it with known loads before quoting force accuracy.
 
 **The buzzers.** Four vibration motors, one per finger, on pins D11 D10 D9 D6. The laptop sends `STIM:n`
 for lane 1 to 4 and the board pulses that motor. At boot every board buzzes all four in turn as a self
@@ -36,7 +35,6 @@ then cues a finger, waits, scores it and repeats.
 
 **What gets logged.** Every block writes one row per trial, every raw force sample, the calibration and
 settings it ran under, and a small HTML report. Nothing is overwritten.
-
 **Where sessions land.** Beside the app, or in the repo when run from source, under
 `sessions/<date>/<person>_<time>_<mode>/`. If that folder cannot be written the app falls back to
 `~/Finger Rehab Data`, and Settings has an Open data folder button for whichever is in use.
@@ -46,7 +44,6 @@ settings it ran under, and a small HTML report. Nothing is overwritten.
 ```
 pip install -r requirements.txt
 python main.py
-python -m pytest tests
 ```
 
 Nothing plugged in? It falls back to the keyboard: `J K L ;` right hand, `F D S A` left, index to little.
@@ -65,16 +62,16 @@ Windows: run `builds\Windows\Finger Rehab.exe`, or build it with `builds\build_a
 | **Muscle Memory** | Play a piano riff, take after take. Measures learning of a repeated sequence. |
 | **Chords** | Press two to four fingers at once. Measures moving fingers together and holding the rest still. |
 | **Rhythm** | Press on the beat of a song. Measures timing error against the beat. |
-| **Syllables** | Catch the right part of a spoken word. Measures reading by sound. |
+| **Syllables** | Catch the right part of a spoken word. Records which written syllable was chosen. |
 | **Mirror** | Press the same finger on both hands at once. Measures how well the hands stay together. |
 | **Force Pilot** | Hold a press inside a moving corridor. Measures steady control of force. |
 | **Buzz Hunt** | Feel which finger buzzed, then press it. Measures the sense of touch. |
-| **Echo** | Watch a sequence light up, then repeat it back. Measures memory span. |
+| **Echo** | Watch a sequence light up, then repeat it back. Records the longest completed sequence in this game. |
 
 ## Troubleshooting
 
-Settings is the cog at the bottom right of the login screen: live finger readout, port dropdowns, Test
-STIM per hand, Flash firmware, Sensor address, Open data folder. Calibrate sits beside it.
+Settings (the login cog) has live readings, ports, Test STIM, Flash firmware, Sensor address and Open data folder.
+Calibrate sits beside it.
 
 **A sensor reads nothing, or sits at zero.** Its tile in Settings never moves while the others do. A
 failed I2C read is sent as 0, so a loose lead, a dead pad and a pad on the wrong address all look the
@@ -100,11 +97,10 @@ that finger's travel, or a pad reading zero when empty. It saves to
 and is using `~/Finger Rehab Data`.
 
 **A buzzer does not buzz.** Settings, Test LEFT STIM or Test RIGHT STIM fires that hand's four motors in
-order. If none fire on a board that streams data fine, it is the wiring or the motor driver, not the
-software. If the test works but the buzz before a cue is missing, that cue is switched off in Sensory
+order. If none fire while force data streams, check the command connection, firmware, wiring and motor driver. If the test works but the buzz before a cue is missing, that cue is switched off in Sensory
 Cues.
 
-**Presses register on the wrong finger.** Two pads are answering the same I2C address. Every SingleTact
+**Presses register on the wrong finger.** Check pad order and I2C addresses; two pads may share an address. Every SingleTact
 answers 0x04 as well as its own address, so a write to 0x04 hits every sensor at once. Fix it in Settings,
 Sensor address, with only that sensor connected: 0x05 index, 0x06 middle, 0x07 ring, 0x08 pinky. Never
 move a sensor off 0x04 with the others wired in. Two whole hands swapped is the port assignment above.
@@ -140,6 +136,15 @@ same clock. `metadata.json` holds the block summary, the calibration and the sof
 Open `analysis/session_analysis.ipynb`, run the Setup cell, pick a save, then Run All. Figures and CSV
 exports land in the session folder they describe, a per-person summary in
 `sessions/individual_patient_results/<person>/`, cohort output in `sessions/cohort_results/`.
+
+**Collection:** Play all is eleven blocks, about 45 minutes. Keep pilots in a separate folder.
+Set `SESSIONS_DIR` to the collection folder, select `all`, then Run All. Start with **Thesis figure
+overview** for individual results, sample counts, coverage and PDF/SVG exports. Historical bench data
+is off by default; your own force analyses still run in Python. Read the dropped counts before pooling.
+
+**Not ready yet:** Syllables needs recorded and checked speech; see [speech setup](assets/speech/README.txt).
+Measure force calibration and physical EEG/display/buzzer delays on the rig before timing claims.
+The [request audit](docs/collection_readiness.md) lists implemented work and the remaining collection checks.
 
 ## If you are taking this over
 

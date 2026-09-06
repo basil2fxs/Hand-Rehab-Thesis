@@ -22,10 +22,12 @@ block_cipher = None
 IS_MAC = sys.platform == "darwin"
 
 
-# Data files that need to ship inside the bundle. config/ carries
-# default.yaml; assets/ carries music + the icon set.
+# Ship only shared configuration. Local settings, saved schedules and
+# calibration belong to the computer and must not enter a release.
 datas = [
-    ("config", "config"),
+    ("config/default.yaml", "config"),
+    ("config/eeg_lab.yaml", "config"),
+    ("config/pattern_sequence_template.yaml", "config"),
     ("assets", "assets"),
 ]
 
