@@ -24,8 +24,17 @@ IS_MAC = sys.platform == "darwin"
 
 # Data files that need to ship inside the bundle. config/ carries
 # default.yaml; assets/ carries music + the icon set.
+# config/default.yaml and the pattern template only. eeg_lab.yaml is
+# deliberately NOT bundled: the main install is the game, with no EEG
+# anything in it. The lab package puts eeg_lab.yaml BESIDE the exe and
+# main.py picks it up from there, which is how Welber's copy turns the
+# markers on without a separate build.
+#
+# user_settings.yaml is not bundled either: it is written at runtime,
+# and shipping one would overwrite a machine's own settings on update.
 datas = [
-    ("config", "config"),
+    ("config/default.yaml", "config"),
+    ("config/pattern_sequence_template.yaml", "config"),
     ("assets", "assets"),
 ]
 

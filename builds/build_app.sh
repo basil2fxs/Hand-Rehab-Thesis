@@ -29,6 +29,14 @@ python3 -m PyInstaller \
     --distpath bin/dist \
     finger_rehab.spec
 
+# The setup and diagnostics tool, built from the same tree so it can
+# never be older than the game it installs.
+python3 -m PyInstaller \
+    --noconfirm \
+    --workpath bin/build \
+    --distpath bin/dist \
+    setup_tool.spec
+
 echo
 echo "Build complete. Artefacts:"
 ls -1 bin/dist/
@@ -38,6 +46,8 @@ if [[ "$(uname)" == "Darwin" ]]; then
     mkdir -p "builds/Mac"
     rm -rf "builds/Mac/Finger Rehab.app"
     cp -R "bin/dist/Finger Rehab.app" "builds/Mac/Finger Rehab.app"
+    rm -rf "builds/Mac/Finger Rehab Setup.app"
+    cp -R "bin/dist/Finger Rehab Setup.app" "builds/Mac/Finger Rehab Setup.app"
     echo
     echo "Ready to run: builds/Mac/Finger Rehab.app"
     echo "Double-click it from Finder, or run from terminal:"

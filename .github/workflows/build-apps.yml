@@ -100,14 +100,24 @@ jobs:
       - name: Build
         run: python -m PyInstaller --noconfirm --workpath bin/build --distpath bin/dist finger_rehab.spec
 
+      # The setup and diagnostics tool. Same commit as the game, so the
+      # repair kit can never be older than the thing it repairs.
+      - name: Build the setup tool
+        run: python -m PyInstaller --noconfirm --workpath bin/build --distpath bin/dist setup_tool.spec
+
       - name: Zip bundle (macOS)
         if: runner.os == 'macOS'
-        run: cd bin/dist && ditto -c -k --keepParent "Finger Rehab.app" "${{ matrix.artefact }}.zip"
+        run: |
+          cd bin/dist
+          mkdir -p "Finger Rehab"
+          cp -R "Finger Rehab.app" "Finger Rehab/"
+          cp -R "Finger Rehab Setup.app" "Finger Rehab/"
+          ditto -c -k --keepParent "Finger Rehab" "${{ matrix.artefact }}.zip"
 
       - name: Zip bundle (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: Compress-Archive -Path "bin/dist/Finger Rehab.exe" -DestinationPath "bin/dist/${{ matrix.artefact }}.zip"
+        run: Compress-Archive -Path "bin/dist/Finger Rehab.exe", "bin/dist/Finger Rehab Setup.exe" -DestinationPath "bin/dist/${{ matrix.artefact }}.zip"
 
       # The lab package: the exe, eeg_lab.yaml, run_in_psychopy.py and
       # a fresh source/ copy of the game, nothing else. The same script

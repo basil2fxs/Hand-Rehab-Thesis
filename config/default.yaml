@@ -105,6 +105,18 @@ serial:
     - "0x1A86"   # CH340
     - "0x0403"   # FTDI
 
+autostart:
+  # Start the game by itself when a board is plugged in. The setup tool
+  # turns this on at install time and the Settings screen can toggle it
+  # later; nothing here runs unless the watcher has been registered with
+  # the operating system.
+  #
+  # How often the watcher looks for a board, in seconds. Listing the
+  # serial ports costs well under 2 ms, so once a second is responsive
+  # without being noticeable. Below 0.1 is clamped, since a spin loop
+  # on a clinic laptop would be worse than a slow start.
+  poll_s: 1.0
+
 firmware:
   # One-click flashing from the Settings screen. The hexes are built by
   # builds/build_firmware.py (CI does it on every push) and the avrdude

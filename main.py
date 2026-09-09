@@ -27,6 +27,12 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--participant", default=None)
     p.add_argument("--log-level", default=None,
                    choices=["DEBUG", "INFO", "WARNING", "ERROR"])
+    # The auto-start watcher is this same executable in a different
+    # mode, so there is one binary to build, ship and trust rather
+    # than two that can fall out of step.
+    p.add_argument("--watch", action="store_true",
+                   help="Sit in the background and start the game when "
+                        "a board is plugged in")
     return p.parse_args()
 
 
@@ -96,6 +102,19 @@ def main() -> int:
     if args.participant:
         cfg.data.setdefault("session", {})["participant"] = args.participant
 
+    if args.watch:
+        from finger_rehab.hardware import autostart
+        game_cmd = [sys.executable]
+        if not getattr(sys, "frozen", False):
+            game_cmd.append(str(Path(__file__).resolve()))
+        log.info("watching for a board every %.1f s",
+                 cfg.get("autostart.poll_s", autostart.DEFAULT_POLL_S))
+        autostart.watch(game_cmd,
+                        poll_s=cfg.get("autostart.poll_s",
+                                       autostart.DEFAULT_POLL_S),
+                        vendor_ids=cfg.get("serial.vendor_ids"))
+        return 0
+
     if args.list_ports:
         from finger_rehab.hardware.serial_source import list_available_ports
         for p in list_available_ports():
@@ -122,7 +141,16 @@ def main() -> int:
         except Exception:
             pass
         return 6
-    return engine.run()
+    # Held for as long as the game runs. The watcher checks this before
+    # launching, which is what stops a replug from opening a second
+    # copy over the top of a session in progress.
+    from finger_rehab.hardware.autostart import RunLock
+    lock = RunLock()
+    lock.acquire()
+    try:
+        return engine.run()
+    finally:
+        lock.release()
 
 
 def _build_source(cfg, args):

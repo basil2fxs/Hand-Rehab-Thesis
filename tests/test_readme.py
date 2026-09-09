@@ -40,6 +40,7 @@ BANNED_CHARS = (
 SECTIONS = [
     "How it works",
     "Run it",
+    "Setup and repairs",
     "The ten games",
     "Troubleshooting",
     "Data and analysis",
@@ -57,6 +58,7 @@ SYMPTOMS = [
     "Calibration is asked for every time.",
     "A buzzer does not buzz.",
     "Presses register on the wrong finger.",
+    "The game does not open when I plug the board in.",
     "The board needs re-flashing.",
     "The game runs but no data lands.",
     "The EEG box does not appear.",
@@ -109,8 +111,13 @@ class ReadmeExistsTests(unittest.TestCase):
 
     def test_it_stays_short(self):
         lines = _readme().splitlines()
-        self.assertLess(len(lines), 170,
-                        f"README is {len(lines)} lines; keep it near 160")
+        # Raised from 170 when the setup and repair section landed: the
+        # installer, the auto-start and their troubleshooting entry are
+        # a real part of the handover now. The bound exists to stop this
+        # becoming a wall of text, not to freeze the feature set, so it
+        # moves when a feature does and not for padding.
+        self.assertLess(len(lines), 185,
+                        f"README is {len(lines)} lines; keep it near 180")
 
     def test_every_section_is_there_in_order(self):
         found = re.findall(r"^## (.+)$", _readme(), re.M)

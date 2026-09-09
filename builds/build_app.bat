@@ -36,6 +36,12 @@ if errorlevel 1 (
     exit /b 1
 )
 
+REM The setup and diagnostics tool, same tree as the game.
+py -m PyInstaller --noconfirm ^
+    --workpath bin\build ^
+    --distpath bin\dist ^
+    setup_tool.spec
+
 if not exist builds\Windows mkdir builds\Windows
 copy /y "bin\dist\Finger Rehab.exe" "builds\Windows\Finger Rehab.exe" >nul
 

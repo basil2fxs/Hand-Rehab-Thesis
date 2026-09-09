@@ -377,3 +377,52 @@ class BuildWiringTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MainInstallHasNoEEGTests(unittest.TestCase):
+    """The game people install is the game, not the lab rig.
+
+    Basil's rule: one main game, and a separate lab handover folder
+    that holds the EEG side. The marker code stays in the binary
+    (ripping it out of ten modes would fork the project and let
+    Welber's copy drift), but no EEG FILE ships in the main install
+    and nothing in it mentions EEG.
+    """
+
+    def test_the_game_spec_does_not_bundle_the_lab_config(self):
+        spec = (REPO / "finger_rehab.spec").read_text()
+        self.assertNotIn("eeg_lab.yaml", spec.split("datas = [")[1]
+                         .split("]")[0])
+        # And it must still bundle the one config it does need.
+        self.assertIn("config/default.yaml", spec)
+
+    def test_the_setup_tool_spec_does_not_either(self):
+        spec = (REPO / "setup_tool.spec").read_text()
+        self.assertNotIn("eeg_lab.yaml", spec.split("datas = [")[1]
+                         .split("]")[0])
+
+    def test_the_lab_config_still_exists_for_the_lab_package(self):
+        # Excluded from the bundle, NOT deleted: the lab package puts
+        # it beside the exe and main.py reads it from there.
+        self.assertTrue((REPO / "config" / "eeg_lab.yaml").exists())
+        self.assertIn("eeg_lab.yaml", (REPO / "main.py").read_text())
+
+
+class SetupToolIsBuiltEverywhereTests(unittest.TestCase):
+    """The repair kit must never be older than the thing it repairs."""
+
+    def test_both_build_scripts_build_it(self):
+        for name in ("build_app.sh", "build_app.bat"):
+            text = (REPO / "builds" / name).read_text()
+            self.assertIn("setup_tool.spec", text, name)
+
+    def test_ci_builds_it_and_ships_it(self):
+        ci = (REPO / ".github" / "workflows" / "build-apps.yml").read_text()
+        self.assertIn("setup_tool.spec", ci)
+        self.assertIn("Finger Rehab Setup.exe", ci)
+        self.assertIn("Finger Rehab Setup.app", ci)
+
+    def test_the_watcher_is_the_same_binary_as_the_game(self):
+        # One binary in two modes, so there is no second executable to
+        # build, sign and keep in step.
+        self.assertIn("--watch", (REPO / "main.py").read_text())

@@ -53,8 +53,22 @@ Nothing plugged in? It falls back to the keyboard: `J K L ;` right hand, `F D S 
 Force Pilot and Buzz Hunt need the device; the other eight play on the keyboard.
 
 Windows: run `builds\Windows\Finger Rehab.exe`, or build it with `builds\build_app.bat`. macOS:
-`builds/build_app.sh`. The EEG lab gets one folder, `docs/lab_package`: the exe, `eeg_lab.yaml`,
-`run_in_psychopy.py` and a `source/` copy. Notes in [docs/eeg_lab_setup.txt](docs/eeg_lab_setup.txt).
+`builds/build_app.sh`. Both build a second app beside the game, **Finger Rehab Setup**.
+
+## Setup and repairs
+
+`Finger Rehab Setup` installs the game on a new machine and repairs it afterwards: **Install or
+repair**, **Auto-start ON / OFF**, **Show boards**, **Flash firmware**, **Sensor address**,
+**Uninstall**. No administrator needed. Each also runs headless: `"Finger Rehab Setup" --do install`.
+
+**Auto-start.** Plugging a board in opens the game within a second. A watcher starts at login (a
+scheduled task on Windows, a LaunchAgent on macOS) and checks the ports once a second. It reacts only to
+a board *arriving* and checks a lock file first, so it never opens a second copy and closing the game
+leaves it closed.
+
+The EEG lab gets its own folder, `docs/lab_package`: the exe, `eeg_lab.yaml`, `run_in_psychopy.py`, a
+`source/` copy. No EEG anything ships in the main install; that `eeg_lab.yaml` sits beside the lab exe
+and switches the markers on. See [docs/eeg_lab_setup.txt](docs/eeg_lab_setup.txt).
 
 ## The ten games
 
@@ -108,6 +122,10 @@ Cues.
 answers 0x04 as well as its own address, so a write to 0x04 hits every sensor at once. Fix it in Settings,
 Sensor address, with only that sensor connected: 0x05 index, 0x06 middle, 0x07 ring, 0x08 pinky. Never
 move a sensor off 0x04 with the others wired in. Two whole hands swapped is the port assignment above.
+
+**The game does not open when I plug the board in.** Open `Finger Rehab Setup`, press Show boards. Not
+listed means a lead or a driver, not the auto-start. Listed means press Auto-start ON. It only fires
+when a board *arrives*, so if it was already in at login, unplug and replug.
 
 **The board needs re-flashing.** Settings, Flash firmware writes `assets/firmware/finger_rehab_nano.hex`
 with a bundled avrdude, so no developer tools are needed. A Nano runs one of two bootloaders, 115200 or
