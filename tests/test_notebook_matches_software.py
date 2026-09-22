@@ -827,15 +827,33 @@ class TestCohortChapterContract:
                "cohort_within_block_curves", "cohort_series_table",
                "_binned_curve", "_slope_ci", "_dropped_row",
                "_within_block_row", "_bh_fixed_level_series",
-               "_fp_level_residual"]
+               "_fp_within_level_repeat", "uniform_grid",
+               "fine_series_smoothed", "band_side",
+               "block_drop_intervals", "add_sensor_lost",
+               "buzz_lead_ms", "eeg_cue_codes_for",
+               "loud_trial_split", "wrong_press_latency",
+               "rig_and_protocol"]
     # Every mode is played once in the one pass. The split below is not
     # how often a mode is played any more, it is whether the design
     # makes a directional claim on it: adaptive and syllables are
     # described and never claimed on, because the staircase moves the
     # task under the hand.
     CLAIMED_MODES = {"reaction", "mirror", "rhythm", "echo", "force_pilot",
-                     "chords", "buzz_hunt", "pattern"}
+                     "chords", "pattern"}
     ONCE_MODES = {"adaptive", "syllables"}
+    # Buzz Hunt makes claims on its localisation metrics and none on
+    # the censoring flags and ordinal rungs beside them, so it is not
+    # all-or-nothing. A paired Wilcoxon and a Cohen dz on a binary
+    # at_floor indicator estimate nothing, and a variable censored for
+    # most healthy hands has a paired difference between two selected
+    # samples. Those rows carry descriptive=True and the hands table
+    # routes them into a counts-and-Wilson block instead.
+    DESCRIPTIVE_ROWS = {
+        ("buzz_hunt", "at_floor"),
+        ("buzz_hunt", "gap_at_floor"),
+        ("buzz_hunt", "gap_threshold_ms"),
+        ("buzz_hunt", "window_top_level"),
+    }
 
     def test_setup_defines_every_cohort_name(self, source):
         tree = ast.parse(source)
@@ -889,19 +907,27 @@ class TestCohortChapterContract:
         run here. They print as DROPPED with the reason, so a reader
         who meets them there finds out what happened to them.
 
-        Two reasons, not one. R3 and P2 need the same block played
+        Three reasons, not one. R3 and P2 need the same block played
         twice and the design plays it once. E2 needs echo under its
         ladder rule and the battery plays the Simon rule, so it came
         out for a reason that has nothing to do with the one pass and
-        carries its own criterion line.
+        carries its own criterion line. W6 came out for a third: the
+        ladder is climbed once per hand in a fixed order, so run order
+        and difficulty are the same variable and the level-residual
+        slope it asked for is zero by construction, whatever the data
+        say and however many participants turn up.
         """
         (dropped,) = _notebook_names(source, ["COHORT_DROPPED_CHECKS"])
-        assert set(dropped) == {"R3", "P2", "E2"}
+        assert set(dropped) == {"R3", "P2", "E2", "W6"}
         for cid, (mode, _check, reason, criterion) in dropped.items():
-            assert mode in ("reaction", "pattern", "echo"), cid
+            assert mode in ("reaction", "pattern", "echo",
+                            "force_pilot"), cid
             assert criterion.startswith("DROPPED:"), cid
             if cid == "E2":
                 assert "ladder" in reason and "simon" in reason, cid
+            elif cid == "W6":
+                assert "fixed order" in reason, cid
+                assert "construction" in reason, cid
             else:
                 assert "twice" in reason, cid
 
@@ -932,7 +958,7 @@ class TestCohortChapterContract:
     def test_registry_covers_every_mode_the_sitting_plays(self, source):
         floor, registry, modes = _notebook_names(
             source, ["COHORT_BH_FLOOR_MS", "COHORT_METRICS", "COHORT_MODES"])
-        every = self.CLAIMED_MODES | self.ONCE_MODES
+        every = self.CLAIMED_MODES | self.ONCE_MODES | {"buzz_hunt"}
         assert {mode for mode, _m in registry} == every
         assert set(modes) == every
         # Every mode has exactly one headline metric for the figures.
@@ -959,6 +985,13 @@ class TestCohortChapterContract:
         for (mode, metric), spec in registry.items():
             if mode in self.CLAIMED_MODES:
                 assert not spec.get("descriptive"), f"{mode}.{metric}"
+        for key in self.DESCRIPTIVE_ROWS:
+            spec = registry.get(key)
+            assert spec is not None, key
+            assert spec.get("descriptive"), (
+                f"{key} is a censoring flag or an ordinal rung and must "
+                f"not take a paired test")
+            assert spec.get("caveat"), f"{key} has no reason"
         # "played once" is true of every mode now, so it cannot be a
         # reason for anything.
         for (mode, metric), spec in registry.items():

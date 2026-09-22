@@ -249,9 +249,13 @@ class BoardDropTests(unittest.TestCase):
         tbl = self.ra.stream_gaps([self.dropped])
         self.assertEqual(len(tbl), 1)
         row = tbl.iloc[0]
-        self.assertEqual(int(row["disconnects"]), 1)
-        self.assertEqual(int(row["reconnects"]), 1)
+        # One PHYSICAL drop, whatever the raw log wrote. A whole-rig
+        # disconnect also writes a per-hand row at the same instant,
+        # so counting raw rows reported three drops and three times
+        # the downtime for one cable.
+        self.assertEqual(int(row["drops"]), 1)
         self.assertEqual(int(row["still_down_at_end"]), 0)
+        self.assertTrue(str(row["hands"]))
         # The board was away for DROP_FOR_S; both the paired events and
         # the hole in the sample stream have to agree about that.
         self.assertAlmostEqual(float(row["seconds_down"]), DROP_FOR_S,
@@ -259,6 +263,55 @@ class BoardDropTests(unittest.TestCase):
         self.assertGreaterEqual(int(row["sample_gaps"]), 1)
         self.assertAlmostEqual(float(row["worst_gap_s"]), DROP_FOR_S,
                                delta=0.5)
+
+    def test_one_physical_drop_is_not_counted_once_per_hand(self) -> None:
+        """A whole-rig drop writes a source_disconnected row for the
+        source and one per hand at the same t_perf. Counting rows gave
+        3 drops and 24.0 s where the engine's own connection summary
+        said 1 and 8.0."""
+        import csv as _csv
+        folder = Path(self.dropped)
+        rows = list(_csv.DictReader(
+            (folder / "raw.csv").open(newline="", encoding="utf-8")))
+        drop = next(r for r in rows
+                    if r.get("event") == "source_disconnected")
+        back = next(r for r in rows
+                    if r.get("event") == "source_reconnected")
+        echoes = []
+        for src, hand in ((drop, "right"), (drop, "left"),
+                          (back, "right"), (back, "left")):
+            echo = dict(src)
+            echo["hand"] = hand
+            echo["detail"] = f"hand={hand}"
+            echoes.append(echo)
+        out = folder / "raw.csv"
+        with out.open("a", newline="", encoding="utf-8") as fh:
+            w = _csv.DictWriter(fh, fieldnames=list(rows[0].keys()))
+            for e in echoes:
+                w.writerow(e)
+        try:
+            tbl = self.ra.stream_gaps([self.dropped])
+            row = tbl.iloc[0]
+            self.assertEqual(int(row["drops"]), 1)
+            self.assertAlmostEqual(float(row["seconds_down"]), DROP_FOR_S,
+                                   delta=0.5)
+        finally:
+            with out.open("w", newline="", encoding="utf-8") as fh:
+                w = _csv.DictWriter(fh, fieldnames=list(rows[0].keys()))
+                w.writeheader()
+                for r in rows:
+                    w.writerow(r)
+
+    def test_the_summary_is_preferred_over_the_raw_scan(self) -> None:
+        """block_summary.connection already merges the intervals, and
+        the engine is the only thing that knows which hand was
+        playing. block_drop_intervals reads it first."""
+        spans = self.ra.block_drop_intervals(self.dropped)
+        self.assertEqual(len(spans), 1)
+        self.assertIsNotNone(spans[0]["to_s"])
+        self.assertAlmostEqual(spans[0]["to_s"] - spans[0]["from_s"],
+                               DROP_FOR_S, delta=0.5)
+        self.assertEqual(self.ra.block_drop_intervals(self.clean), [])
 
     def test_a_clean_block_produces_no_row_at_all(self) -> None:
         tbl = self.ra.stream_gaps([self.clean])
@@ -290,7 +343,7 @@ class BoardDropTests(unittest.TestCase):
 
     def test_sec_quality_calls_it(self) -> None:
         """The report is wired into the chapter, not just available."""
-        self.assertIn("stream_gaps(folders)", _notebook_code())
+        self.assertIn("stream_gaps(folders, metas)", _notebook_code())
 
 
 # ==================================================================

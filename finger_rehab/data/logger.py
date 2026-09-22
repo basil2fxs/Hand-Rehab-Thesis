@@ -94,7 +94,10 @@ TRIAL_COLUMNS = [
     # miss_force_window_ms): sum of each finger's peak above baseline,
     # and the per-finger breakdown as "lane:peak;..." (1-indexed lanes,
     # only fingers that rose above baseline). Same unit context as
-    # peak_force_n. Empty when no FSR samples arrived in the window
+    # peak_force_n, and since the 2026-09 unit fix that is true of the
+    # number as well as the sentence: both go through the engine's
+    # _to_force_unit, so a calibrated block reports both in newtons.
+    # Empty when no FSR samples arrived in the window
     # (keyboard mode); "0.000" means samples flowed but no finger rose
     # above baseline. Feeds miss-force and individuation analyses.
     "force_window_sum",

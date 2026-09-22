@@ -26,6 +26,9 @@ if [ -z "$PY" ]; then
 fi
 
 echo "Starting the EEG build. Close the game window to stop."
+echo "No trigger box here, so markers go to the dummy backend and are"
+echo "still written to raw.csv. With a box plugged into this Mac, pass"
+echo "its port:  ./Local_Runner.command --eeg-port /dev/cu.usbmodemXXXX"
 echo
 
 "$PY" main.py --config config/eeg_lab.yaml --no-eeg-box "$@"

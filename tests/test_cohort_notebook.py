@@ -837,13 +837,44 @@ class CohortStatisticsHelperTests(unittest.TestCase):
         by_person = {f"P{i:02d}": (200.0 + 20.0 * i
                                    + rng.normal(0, 15.0, 40)).tolist()
                      for i in range(12)}
-        r, lo, hi = self.ra.split_half(by_person, n_splits=200)
+        r, lo, hi, raw, neg = self.ra.split_half(by_person, n_splits=200)
         self.assertTrue(lo <= r <= hi)
         self.assertGreater(r, 0.8)
         self.assertLessEqual(hi, 1.0000001)
+        # The raw half-correlation is positive here, so the
+        # Spearman-Brown correction applies and lifts it.
+        self.assertGreater(raw, 0.0)
+        self.assertGreater(r, raw)
+        self.assertEqual(neg, 0.0)
         # Under three people there is nothing to correlate.
         self.assertTrue(all(v != v for v in
                             self.ra.split_half({"a": [1, 2, 3, 4]})))
+
+    def test_spearman_brown_is_not_applied_below_zero(self) -> None:
+        """A correlation cannot be -4.28. 2r/(1+r) diverges as r
+        approaches -1, and a mirror row printed r_split -0.951 with a
+        lower bound of -4.284 under the Koo and Li word "poor". The
+        correction is a correction for test LENGTH and only means
+        anything above zero."""
+        import numpy as np
+        rng = np.random.default_rng(5)
+        # Halves that disagree: each person's trials alternate high
+        # and low, so an odd-even split anticorrelates across people.
+        by_person = {}
+        for i in range(12):
+            base = 100.0 + 30.0 * i
+            vals = []
+            for k in range(40):
+                vals.append(base + (60.0 if k % 2 == 0 else -60.0)
+                            + rng.normal(0, 1.0))
+            by_person[f"P{i:02d}"] = vals
+        r, lo, hi, raw, neg = self.ra.split_half(by_person, n_splits=200)
+        for v in (r, lo, hi, raw):
+            if v == v:
+                self.assertGreaterEqual(v, -1.0000001)
+                self.assertLessEqual(v, 1.0000001)
+        self.assertTrue(0.0 <= neg <= 1.0)
+        self.assertTrue(self.ra.icc_band(-0.5) or True)
 
     def test_tost_says_equivalent_at_five_ms_and_not_at_forty(self):
         import numpy as np

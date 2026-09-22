@@ -211,6 +211,15 @@ class GameEngine:
         # app session.
         self._across_blocks_mean_rt: list[float] = []
         self._across_blocks_mean_peak: list[float] = []
+        # Same history split by mode. rt_ms is not one clock across the
+        # battery: reaction's is a cue-to-press latency, pattern's,
+        # chords', syllables' and buzz_hunt's is spawn-to-press on a
+        # visible target. Pooling them makes the mode order look like
+        # fatigue (a patient whose latency never moved still reported
+        # +125 ms per block on pattern). The pooled list stays for the
+        # Results screen; the per-mode one is what the summary's
+        # same-mode slope is built from.
+        self._across_blocks_mean_rt_by_mode: dict[str, list[float]] = {}
         # Per-sensor baseline drift samples. Key = (hand, sensor_idx),
         # value = list of (t_minutes_since_block_start, baseline_value)
         # tuples. The mainloop samples this every 30 s; finish_block
@@ -614,7 +623,13 @@ class GameEngine:
         fingers in play this hand_mode. Lane numbering matches the game:
         right hand 0..n-1, left hand 0..n-1 unilateral or n..2n-1 in
         bilateral. Negative deltas clamp to 0 (a finger sitting below its
-        baseline isn't pressing)."""
+        baseline isn't pressing).
+
+        Peaks go through _to_force_unit, the same conversion
+        peak_force_n and impulse_n use, so force_window_sum,
+        force_window_peaks and block_summary.miss_force carry the unit
+        block_summary.force_unit names instead of staying in counts
+        beside newton siblings."""
         # Mark that real FSR data reached this window, so the trial CSV
         # can tell "no data" (keyboard mode / dropout -> empty cell)
         # apart from "data flowed but no finger rose" (-> 0.000).
@@ -630,6 +645,7 @@ class GameEngine:
                 delta = float(svals[i]) - base
                 if delta < 0.0:
                     delta = 0.0
+                delta = self._to_force_unit(delta)
                 lane = lane_base + i
                 if delta > peak.get(lane, 0.0):
                     peak[lane] = delta
@@ -2468,6 +2484,7 @@ class GameEngine:
         # slope computed entirely from patient A's blocks).
         self._across_blocks_mean_rt = []
         self._across_blocks_mean_peak = []
+        self._across_blocks_mean_rt_by_mode = {}
 
     # Intake fields the login commits alongside name and age. Each is
     # a Session attribute and a session.* config key with the same
@@ -5111,6 +5128,31 @@ class GameEngine:
             if not isinstance(self.session.calibration, dict):
                 self.session.calibration = {}
             self.session.calibration["max_press_by_hand"] = by_hand
+        # Same reasoning, carried the rest of the way. The flat keys
+        # above (empty, resting, press, gap, on_delta, off_delta) are
+        # also one hand's, and the quick calibration screen always runs
+        # left then right, so the stamp was always the right hand and
+        # the left hand's profile never reached metadata.json at all.
+        # Every bilateral block then lost one hand to the analysis:
+        # force normalisation, the cross-talk matrix and the inter-hand
+        # comparison all fall back to uncalibrated for the missing
+        # side. Both profiles go under "by_hand"; the flat keys stay
+        # where they are so saves written before this change and the
+        # readers that expect them keep working.
+        profiles_by_hand = {}
+        for hand, p in (getattr(self, "calibration_profiles", None)
+                        or {}).items():
+            if p is None:
+                continue
+            try:
+                profiles_by_hand[hand] = p.summary()
+            except Exception as e:
+                log.warning("could not summarise %s calibration: %s",
+                            hand, e)
+        if profiles_by_hand:
+            if not isinstance(self.session.calibration, dict):
+                self.session.calibration = {}
+            self.session.calibration["by_hand"] = profiles_by_hand
 
     def _build_block_summary(self, status: str) -> dict:
         """Aggregates that go into metadata.json so an analyst can grok
@@ -5426,9 +5468,14 @@ class GameEngine:
         # history; the current block's mean is appended FIRST so the
         # slope returned includes this block.
         rt_count = getattr(self, "_block_rt_count", 0)
+        mode_key = str(self.current_block or "(none)")
         if rt_count > 0:
             self._across_blocks_mean_rt.append(
                 self._block_rt_sum / rt_count)
+            if not hasattr(self, "_across_blocks_mean_rt_by_mode"):
+                self._across_blocks_mean_rt_by_mode = {}
+            self._across_blocks_mean_rt_by_mode.setdefault(
+                mode_key, []).append(self._block_rt_sum / rt_count)
         all_peaks = [p for lane_peaks in self._per_lane_peak_force.values()
                       for p in lane_peaks]
         if all_peaks:
@@ -5436,6 +5483,16 @@ class GameEngine:
                 sum(all_peaks) / len(all_peaks))
         summary["fatigue_slope_rt_ms_per_block"] = metrics.fatigue_slope(
             self._across_blocks_mean_rt)
+        # The pooled slope above mixes modes whose rt_ms is a different
+        # measurement, so it reads the battery order as fatigue. The
+        # same-mode slope only compares this mode with itself, which is
+        # the comparison the word fatigue means; it is None until the
+        # patient has played this mode twice. modes_seen says how much
+        # of the pooled number is mode mix.
+        by_mode = getattr(self, "_across_blocks_mean_rt_by_mode", None) or {}
+        summary["fatigue_slope_rt_ms_per_block_same_mode"] = (
+            metrics.fatigue_slope(by_mode.get(mode_key, [])))
+        summary["fatigue_slope_rt_modes_seen"] = len(by_mode)
         summary["fatigue_slope_force_per_block"] = metrics.fatigue_slope(
             self._across_blocks_mean_peak)
         # Beat-offset stats for rhythm mode only. Computed straight
@@ -6897,16 +6954,7 @@ class GameEngine:
         if peak is None:
             return None
         _peak_raw, peak_minus_baseline = peak
-        cal = self.cfg.get("fsr.force_calibration_n_per_count", None)
-        if cal is None:
-            # Raw ADC counts. session.json records this fact under
-            # block_summary.force_unit so the analyst knows the column
-            # isn't in newtons.
-            return float(peak_minus_baseline)
-        try:
-            return float(peak_minus_baseline) * float(cal)
-        except (TypeError, ValueError):
-            return float(peak_minus_baseline)
+        return self._to_force_unit(peak_minus_baseline)
 
     def _impulse_for_lane(self, lane: int) -> float | None:
         """Live force-time integral on a lane's target sensor. Same
@@ -6925,20 +6973,65 @@ class GameEngine:
         if imp is None:
             return None
         _raw, minus_baseline = imp
-        cal = self.cfg.get("fsr.force_calibration_n_per_count", None)
-        if cal is None:
-            return float(minus_baseline)
-        try:
-            return float(minus_baseline) * float(cal)
-        except (TypeError, ValueError):
-            return float(minus_baseline)
+        return self._to_force_unit(minus_baseline)
 
     def _force_unit(self) -> str:
         """Return 'N' if a calibration constant is present, else
         'counts'. Stored in block_summary so the trial CSV's
-        peak_force_n column is interpretable downstream."""
-        cal = self.cfg.get("fsr.force_calibration_n_per_count", None)
-        return "N" if cal is not None else "counts"
+        peak_force_n column is interpretable downstream.
+
+        Goes through _force_cal_n_per_count so the label and the
+        numbers cannot disagree: a zero or unparseable constant is not
+        a calibration, and a block carrying one reports counts."""
+        return "N" if self._force_cal_n_per_count() is not None else "counts"
+
+    def _to_force_unit(self, value: float) -> float:
+        """Counts above baseline -> whatever `_force_unit` says the
+        block is in.
+
+        One conversion for every force number a block publishes. It
+        used to live inline in _peak_force_for_lane and
+        _impulse_for_lane only, so the miss-force window columns
+        (force_window_sum, force_window_peaks, block_summary.miss_force)
+        stayed in raw counts while peak_force_n and impulse_n went to
+        newtons, under a single force_unit label of "N". On a 10 N part
+        with 0.01953 N per count that made mean_per_miss read 99.79 "N",
+        51 times the real figure. Every caller now goes through here.
+
+        getattr-guarded on cfg: _track_force_peaks is reachable from
+        test fixtures that build an engine via __new__, and from the
+        Settings screen pumping samples through an engine that has not
+        run a block yet."""
+        cal = self._force_cal_n_per_count()
+        if cal is None:
+            # Raw ADC counts. session.json records this fact under
+            # block_summary.force_unit so the analyst knows the column
+            # isn't in newtons.
+            return float(value)
+        return float(value) * cal
+
+    def _force_cal_n_per_count(self) -> float | None:
+        """The newtons-per-count constant, or None when there isn't a
+        usable one.
+
+        Zero, negative and unparseable values count as absent. A
+        constant of zero would silently multiply every force number to
+        nothing while _force_unit still labelled the column "N", which
+        is worse than reporting counts and saying so."""
+        cfg = getattr(self, "cfg", None)
+        if cfg is None:
+            return None
+        try:
+            cal = cfg.get("fsr.force_calibration_n_per_count", None)
+        except Exception:
+            return None
+        if cal is None:
+            return None
+        try:
+            cal = float(cal)
+        except (TypeError, ValueError):
+            return None
+        return cal if cal > 0.0 else None
 
     # Cadence for the per-block drift sampler. Set to 30 s as a
     # compromise: long enough that the baseline-tracking EMA has
@@ -7647,9 +7740,17 @@ class GameEngine:
             # pressed a pad nobody was reading. Same treatment adaptive
             # and chords already give their own detected drops.
             error_type = "device_drop"
+        hardware_void = error_type in ("device_drop", "no_signal")
+        if hardware_void:
+            # Count every hardware-voided close, not only the subset
+            # the engine detected for itself just above. adaptive and
+            # chords pass device_drop in, and force_pilot passes
+            # no_signal, and those rows were being voided out of hits
+            # and misses while connection.voided_trials stayed at the
+            # engine-detected count. On an eight-second drop that read
+            # 1 against five voided rows in trials.csv.
             self._block_drop_voided = getattr(
                 self, "_block_drop_voided", 0) + 1
-        hardware_void = error_type in ("device_drop", "no_signal")
         if not hardware_void:
             self._update_streak(outcome.label != "Miss", "gameplay")
             if outcome.label == "Miss":

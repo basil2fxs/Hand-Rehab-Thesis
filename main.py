@@ -59,6 +59,13 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--no-eeg-box", action="store_true",
                    help="Run the EEG build without requiring the "
                         "trigger box (markers still logged)")
+    # eeg_lab.yaml pins COM10, which is the lab desktop's port name and
+    # cannot exist on a Mac. Without this there is no way to point a
+    # box plugged in here at anything, so a local run could only ever
+    # use the dummy backend.
+    p.add_argument("--eeg-port", default=None,
+                   help="Serial port of the EEG trigger box, e.g. "
+                        "/dev/cu.usbmodem1101 or COM7")
     return p.parse_args()
 
 
@@ -132,6 +139,8 @@ def main() -> int:
                  "EEG lab mode")
 
     # CLI overrides
+    if args.eeg_port:
+        cfg.data.setdefault("eeg", {})["port"] = args.eeg_port
     if args.no_eeg_box:
         cfg.data.setdefault("eeg", {})["require_port"] = False
     if args.hand:

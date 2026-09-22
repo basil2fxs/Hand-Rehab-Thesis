@@ -113,7 +113,9 @@ DECISIONS IN ONE SCREEN
   played once. Booking 60 minutes: 15 minutes of consent and intake
   off the clock, then a PLAY ALL run measured at a median 44.4
   minutes over five codes and 43.8 over 32 repeat sittings, range
-  43.1 to 44.7, against a budget of 45 and a hard stop at 50. The
+  43.11 to 44.50, against a budget of 45 and a hard stop at 50.
+  (44.73 is the maximum of the separate five-code run in Section 2.3,
+  not of the 32-sitting range; the two were crossed here.) The
   spread is real: several blocks draw fresh material every time, so
   the sitting has a length distribution rather than a length
   (Section 2.3).
@@ -134,9 +136,15 @@ DECISIONS IN ONE SCREEN
 - Pattern runs on the dominant hand only, last of the nine main
   blocks, in its short form. Echo runs one bilateral 8-lane block.
   Every other mode runs both hands.
-- Every difficulty ladder that would otherwise move mid-block is
-  frozen by config, so every participant plays the same task and the
-  trial index inside a block means time rather than difficulty.
+- Every ladder that can be frozen without changing the task is
+  frozen by config: the reaction response window and the chords sync
+  window. Four modes keep a ladder that IS the task, so for them the
+  trial index inside a block means difficulty and not time. Echo
+  grows a Simon sequence until it is missed, force pilot climbs
+  twelve waves, buzz hunt's response window can promote inside the
+  block, and adaptive moves the BPM by design. Section 4.5b says
+  which and what that costs; it is the reason those four get no
+  within-block improvement reading.
 - Participants are P01 upward. The code goes in the login NAME field
   (the login suggests the next free code off the sessions tree, so
   it is never mistyped) and keys the sessions tree, the index, the
@@ -295,18 +303,22 @@ literature values are order-of-magnitude context only. The short
 form gives about 20 within-hand chords per hand, so
 per-chord cells are cohort-pooled, never per person.
 
-1.4 Syllables (EXCLUDED)
-------------------------
+1.4 Syllables (played once, descriptive only)
+---------------------------------------------
 Paediatric phonological-awareness mode with word bands graded for
 children. Adults sit at ceiling on counting and mapping levels, and
 the construct (segmentation skill) has no adult deficit to measure.
-Not in the battery. If a ceiling check is wanted for the thesis
-appendix, run level 3 (beat-paced) on five pilot adults once:
+It was cut from the battery for that reason and then put back when
+the design changed to playing every mode once: syllables IS played,
+once, and it appears in no reliability, known-effect or within-block
+table. It is in order A and order B of the shipped preset. If a
+ceiling check is wanted for the thesis appendix, run level 3
+(beat-paced) on five pilot adults once:
 expected accuracy above 95 percent and asynchrony SD under 60 ms at
 the 500 ms beat; anything else is a bug report, not a finding.
 
-1.5 Adaptive (EXCLUDED from the battery)
-----------------------------------------
+1.5 Adaptive (played once, descriptive only)
+--------------------------------------------
 The controller ramps a healthy hand to bpm_max (180) and the config's
 own headless measurement says the trailing hit rate only re-enters
 the 65 to 80 band around trial 53, past the 40-trial block. A
@@ -365,8 +377,9 @@ so the gap is measured across a changing pace; report bpm_min and
 bpm_max alongside. Efficacy of bilateral training is contested and
 not claimed (mirror.py).
 
-1.8 Force Pilot (both hands, short form, level frozen at 1)
------------------------------------------------------------
+1.8 Force Pilot (both hands, short form, one climb of the
+     twelve-wave ladder)
+---------------------------------------------------------
 Primary (notebook sec_force_tracking, offline from raw.csv): RMSE
 and MAE in percent of max, time in corridor, cross-correlation lag,
 press versus release MAE, section MAE (hold_in, ramp_up, hold_top,
@@ -397,12 +410,22 @@ Known effects to reproduce:
      ageing marker (Davidson 2026; Naik 2011, in force_pilot.py), so
      a young cohort should show a small difference; report the
      paired difference with its CI as an equivalence statement.
-  F4 Time in corridor above the 0.8 promotion criterion on most
-     runs: confirms level 1 is the right entry point and that the
-     ladder would move for a healthy hand.
-Error versus level (the effect the brief names) cannot come from a
-one-run-per-finger battery with the ladder frozen. It comes from a
-separate level pilot: six participants, one extra sitting,
+  F4 Time in corridor at or above 0.8 on most runs, reported PER
+     LEVEL across the climb. 0.8 is force_pilot.py's GREAT_TIC, the
+     game's own Great feedback tier, not a promotion criterion:
+     force_pilot.py has no staircase, the ladder is fixed, and
+     nothing promotes or demotes. The corridor also narrows from 8
+     to 4 percent of max up the twelve waves, so a single pooled
+     median mixes corridor widths; the per-level breakdown is the
+     one to read. This row says the corridor is flyable at each
+     level for a healthy hand, which is what the ladder needs to be
+     usable.
+Error versus level IS produced by this battery, through F1 above:
+the twelve waves are climbed in a fixed order and a level number is
+a bandwidth. What the battery cannot give is a level effect
+separated from time on task, because level 12 is always last and
+always after 23 runs, and it cannot give a repeated climb. For
+either, run a separate level pilot: six participants, one extra sitting,
 runs_per_finger 3 with the ladder free, so each finger reaches level
 2 or 3 and MAE by level can be plotted. Cheap, and it belongs in the
 instrumentation section.
@@ -1200,6 +1223,37 @@ interval is lumpy and its ends are not trustworthy to the decimal.
 Directional hypotheses from Section 1 (R2, M2) are one-sided;
 everything else two-sided with no claim beyond the interval.
 
+Wilcoxon is primary at every n, not only at this one. Letting the
+Shapiro p choose between the Wilcoxon p and the paired t p is a gate
+in everything but name, and a data-dependent choice between two p
+values is a soft version of reporting the smaller one, which the
+paragraph above forbids. At ten participants the choice never bit,
+because n under 20 already picked Wilcoxon; a second collection day
+takes n past 20 and it would start choosing.
+
+Multiplicity. One cohort run produces about fifty-five p values
+across the hands, within-block and validity tables, and until
+2026-09 none of them was adjusted. Two families are controlled, and
+nothing else carries a p that may be quoted as a finding:
+
+  - The dominant-versus-non-dominant table. R2 and M2 are the two
+    planned directional hypotheses and are the ones the sample size
+    was written against. Every other row in that table is printed as
+    a difference, an interval and an effect size under an
+    EXPLORATORY heading, with the p marked unadjusted.
+  - The known-effect and within-block table (Section 4.6). Holm's
+    step-down correction (Holm, S. 1979, Scandinavian Journal of
+    Statistics 6(2), 65-70) is applied across the pre-specified rows
+    that carry a test. Holm controls the family-wise error rate
+    without assuming independence, which these rows do not have: the
+    same ten people give every one of them. A row that passes on the
+    unadjusted p and not after Holm is reported as "direction only".
+
+A check that could not be run is not a failed check. Where every
+pair was identical, or a rank correlation had no variation to
+correlate, the verdict word is "no variation", counted apart from
+"fail". Six of one run's thirteen "fails" were rows of that kind.
+
 4.5 What can honestly be said about repeatability and progress
 --------------------------------------------------------------
 With one block per mode, no measurement in this study is repeated.
@@ -1344,6 +1398,22 @@ F1 is in the table under its ladder wording, not its assess-sine-
 holds wording: Section 1.8 says why the battery cannot produce the
 second one.
 
+Four further rows are computed and printed under their own
+EXPLORATORY heading, below Table 1 and outside its family-wise
+control. They are not pre-specified and must not be quoted as
+confirmations:
+
+  C5  chords, dominant against non-dominant median ER. No
+      difference is the expected answer in young adults, so the row
+      reports the paired contrast with its interval and carries no
+      pass or fail.
+  Rh3 rhythm, dominance on absolute asynchrony. No direction is
+      predicted, so it is reported paired, not tested.
+  B5  buzz hunt, whether the response-window ladder climbs at all.
+      A description of the task, not a claim about the hand.
+  E2p echo, whether misses fall late in the sequence rather than on
+      the first item. Added while reading echo's error structure.
+
 Table 2, within-block improvement, pre-specified with a direction
 (Section 4.5b says how each is computed and what it cannot show):
 
@@ -1358,15 +1428,49 @@ Table 2, within-block improvement, pre-specified with a direction
   W4 chords      sub-block 2 tighter than sub-block 1 (median ER
                  down, clean hit rate up), both within-hand.
   W5 buzz hunt   localisation RT falls, at a fixed window level.
-  W6 force pilot MAE falls against the level trend, as a residual,
-                 flagged as a short series.
+  W6 force pilot DROPPED. It asked for MAE against run order once
+                 the corridor level was regressed out. The battery
+                 plays force pilot with passes: 1, so the ladder is
+                 climbed once per hand in the same fixed order and
+                 level correlates with run index at r = 0.9974.
+                 Ordinary least squares residuals are orthogonal to
+                 the regressor, so the residual slope is zero BY
+                 CONSTRUCTION and no number of participants changes
+                 it: measured per block, 3.5e-05, -8.7e-06 and
+                 -4.3e-06, printed as a failed check. A both-hands
+                 block does fly every level twice, but the second run
+                 is the OTHER hand in a fixed order, so that contrast
+                 is left minus right and not a within-block trend
+                 either. F1 and the force tracking chapter are
+                 unaffected. A passes >= 2 block would give the row
+                 back, and the notebook computes it when one exists.
 
 Rhythm, echo, adaptive and syllables get no within-block check. In
 echo and adaptive a later trial is a harder trial by design, in
 rhythm the track's own structure moves under the window, and
 syllables has two rounds to its name and is descriptive only
-(Section 4.5b). No other inferential test is run; everything else is
-descriptive with intervals.
+(Section 4.5b). Rhythm and syllables are therefore read as
+DESCRIPTIVE in the notebook's within-block chapter: their trend is
+printed with its numbers and they are out of the improvement set,
+the effect-size forest and the anchor comparison. No other
+inferential test is run; everything else is descriptive with
+intervals.
+
+The anchor comparison only subtracts like from like. W1 is in
+milliseconds per log trial, and a mode whose series is an error
+ratio, an accuracy fraction or a millisecond standard deviation is
+compared with it as a share of that mode's own first-third median
+instead, which is dimensionless. Subtracting a millisecond from a
+ratio and printing the result as a number to read is not a
+comparison.
+
+The first-third and last-third values, and the per-person slopes,
+are taken from the RAW scorable series. Smoothing is for the drawn
+curve only: a five-point rolling median makes adjacent points
+dependent, which an ordinary least squares standard error assumes
+they are not, and on fifteen reaction blocks it moved the per-block
+contrast by 8.84 ms on average and one block from a 48 ms gain to
+exactly zero.
 
 These are construct checks: the game reproduces what the literature
 predicts, which is evidence the measurement is of the right thing.

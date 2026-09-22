@@ -650,8 +650,11 @@ class TestBooleanColumnsSurviveLoading:
         ctx = ra.prepare("all", root=tmp_path)
         ra.sec_quality(ctx["trials"], ctx["folders"], ctx["metas"])
 
-        line = [l for l in capsys.readouterr().out.splitlines()
-                if "cue commands not delivered" in l][0]
+        # The line says BUZZ, not cue: stim_delivered is the buzz
+        # channel only, and the screen can still have named the finger.
+        out = capsys.readouterr().out
+        line = [l for l in out.splitlines()
+                if "buzz commands not delivered" in l][0]
         assert "32 of 64" in line, line
         assert "-" not in line.split(":")[1]
 
