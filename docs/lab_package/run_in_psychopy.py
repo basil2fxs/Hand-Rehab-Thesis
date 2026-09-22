@@ -108,8 +108,11 @@ if __name__ == "__main__":
               "plain script, not a PsychoPy experiment.")
     rc = main()
     if rc != 0:
-        print(f"Exit code {rc}. A game that refused to start says why "
-              "above; 'needs its trigger box' means the COM number in "
+        # The exe has no console, so its reason is in its log file;
+        # a source run prints it into this pane.
+        print(f"Exit code {rc}. A game that refused to start says why: "
+              "the exe in sessions/rehab.log beside it, a source run "
+              "above. 'needs its trigger box' means the COM number in "
               "eeg_lab.yaml is wrong or the box is unplugged.")
     # Keep a double-clicked console open on failure. Under PsychoPy or
     # any other pipe stdin never answers, so do not wait there.

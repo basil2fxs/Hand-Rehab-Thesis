@@ -1,4 +1,4 @@
-Flashing from Settings. Two buttons in the Arduino firmware column of the Settings screen; the hexes and avrdude ship inside the app, so nothing is installed.
+Flashing from Settings. The first two buttons in the Arduino firmware column of the Settings screen (the third is the Auto-start switch); the hexes and avrdude ship inside the app, so nothing is installed.
 Flash firmware: press, confirm, wait about ten seconds. The board restarts and buzzes all four motors, which is the confirmation. The caption under the buttons names the hex the app carries (a short commit).
 Sensor address: connect ONE sensor, enter the old and new address, confirm. The app flashes a small tool sketch, moves the sensor, then puts the game firmware back. Scan lists what answers on the bus.
 Every SingleTact also answers 0x04, so a change from 0x04 with other sensors wired in would move all of them; the app refuses that case. The device wants 0x05 index, 0x06 middle, 0x07 ring, 0x08 little.

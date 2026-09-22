@@ -273,7 +273,8 @@ def _fit_text(text: str, font: pygame.font.Font, max_w: int) -> str:
 
 
 def _draw_header(surf: pygame.Surface, title: str, subtitle: str,
-                 theme: Theme, layout: Layout) -> None:
+                 theme: Theme, layout: Layout,
+                 subtitle_pt: int = FONT_BODY) -> None:
     """Reused at the top of every menu screen so they all match.
 
     Title is rendered bold via the same Helvetica Neue Bold cut the
@@ -296,7 +297,7 @@ def _draw_header(surf: pygame.Surface, title: str, subtitle: str,
     pygame.draw.rect(surf, theme.accent, bar_rect, border_radius=2)
     if subtitle:
         draw_text(surf, subtitle, (cx, title_rect.bottom + 32),
-                  theme, layout, pt=FONT_BODY, centre=True,
+                  theme, layout, pt=subtitle_pt, centre=True,
                   colour=theme.muted)
 
 
@@ -7936,15 +7937,24 @@ class DiagnosticsScreen(Screen):
         say what happened on the status line and relabel the button."""
         from ..hardware import autostart
         runner = self._autostart_runner or autostart._run
+        import sys
         try:
             if self._autostart_on:
                 ok, msg = autostart.unregister(runner)
             else:
-                ok, msg = autostart.register(
-                    autostart.watcher_command(),
-                    poll_s=self.engine.cfg.get("autostart.poll_s",
-                                               autostart.DEFAULT_POLL_S),
-                    runner=runner)
+                # Same rule as the launch-time sync: a copy running
+                # from the disk image or a translocated folder must
+                # not register that path, which dies with the image.
+                why = (autostart.unsafe_location(sys.executable)
+                       if getattr(sys, "frozen", False) else None)
+                if why:
+                    ok, msg = False, why
+                else:
+                    ok, msg = autostart.register(
+                        autostart.watcher_command(),
+                        poll_s=self.engine.cfg.get(
+                            "autostart.poll_s", autostart.DEFAULT_POLL_S),
+                        runner=runner)
         except Exception as e:
             ok, msg = False, str(e)
         self._autostart_on = self._read_autostart()
@@ -8343,9 +8353,9 @@ class DiagnosticsScreen(Screen):
         # Header.
         source_name = getattr(self.engine.source, "name", "?")
         state_text, state_colour = self._connection_state()
-        sub = ("Press a finger to test its sensor, or click it to buzz "
-                "that finger. Ports auto-assign by plug order; "
-                "override below only if needed.")
+        # The finger-test instruction lives on the FINGER TEST band
+        # itself, so this line only covers the ports.
+        sub = "Ports auto-assign by plug order; override below only if needed."
         if state_text == "KEYBOARD":
             sub = ("Keyboard mode. Press FDSA / JKL; to test each "
                     "lane, or plug an Arduino in: it connects itself.")
@@ -8355,7 +8365,19 @@ class DiagnosticsScreen(Screen):
         elif state_text == "NO DATA":
             sub = ("Port is open but no FSR data is arriving. "
                     "Check the Arduino is sending FSR: lines.")
-        _draw_header(surf, "Settings", sub, self.theme, self.layout)
+        # The TEST MODE and MENU MUSIC pills sit on this line's row at
+        # the right, so the line must end before their column. Step
+        # the point size down until it does; the widest pill label
+        # sets the column, so the guard holds whichever pill is up.
+        pill_font = self.layout.font(FONT_SMALL + 2)
+        column = pill_font.size("MENU MUSIC  OFF")[0] + 28 + 30 + 16
+        limit = self.layout.width - 2 * column
+        sub_pt = FONT_BODY
+        while (sub_pt > FONT_SMALL + 1
+               and self.layout.font(sub_pt).size(sub)[0] > limit):
+            sub_pt -= 1
+        _draw_header(surf, "Settings", sub, self.theme, self.layout,
+                     subtitle_pt=sub_pt)
         # Source name pill top-right. Strip "Source(...)" wrappers so
         # long names like KeyboardOnlySource don't clip off the edge.
         clean_name = source_name

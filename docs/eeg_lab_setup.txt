@@ -31,8 +31,10 @@ At the lab PC
 5. Open run_in_psychopy.py in PsychoPy Coder and press Run, or
    double-click Finger Rehab.exe. The low byte drops to 0 the moment
    the game opens the port. A refusal to start names the port that
-   failed; under PsychoPy it is in the Runner's output pane. Nothing
-   opens at all: a copy is already open behind another window.
+   failed: the exe has no console and writes it to sessions/rehab.log
+   beside itself; a run from source/ puts it in the Runner's output
+   pane. Nothing opens at all: a copy is already open behind another
+   window.
 6. Keep vsync on for the game window, or visual markers lead the
    screen by an unknown amount.
 7. Reaction blocks run on a still screen: from code 21 to a second
@@ -93,7 +95,9 @@ Codes (finger_rehab/hardware/eeg_trigger.py, CODES, version 1.4)
 240  session start   241  session end   242  pause   243  resume
 244  rest start      245  rest end
 
-Lanes: right hand 0 to 3 index to little, left hand 4 to 7. Chords
+Lanes: 0 to 3 index to little on a one-hand block, whichever hand
+(the hand column on the row and in events.tsv says which); with both
+hands selected, right 0 to 3 and left 4 to 7. Chords
 write one 33 and one response byte per chord, not per finger. Mirror
 writes one 33 per pair and one 100+lane per hand, both sent when the
 pair closes, so a byte can trail its press by the pair window; the

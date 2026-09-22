@@ -51,6 +51,14 @@ def parse_args() -> argparse.Namespace:
                         "operating system and exit")
     p.add_argument("--unregister-autostart", action="store_true",
                    help="Remove the auto-start registration and exit")
+    # The lab preset refuses to start without the trigger box, which is
+    # right at the lab and wrong on a desk with no box on it. This
+    # relaxes that one rule: a real box is still used when it opens,
+    # and markers fall back to the dummy backend when it does not, so
+    # the run is identical to the lab's apart from the wire.
+    p.add_argument("--no-eeg-box", action="store_true",
+                   help="Run the EEG build without requiring the "
+                        "trigger box (markers still logged)")
     return p.parse_args()
 
 
@@ -124,6 +132,8 @@ def main() -> int:
                  "EEG lab mode")
 
     # CLI overrides
+    if args.no_eeg_box:
+        cfg.data.setdefault("eeg", {})["require_port"] = False
     if args.hand:
         cfg.data.setdefault("bilateral", {})["hand"] = args.hand
     if args.mode:

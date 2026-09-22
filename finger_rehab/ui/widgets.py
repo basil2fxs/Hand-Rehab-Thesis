@@ -1650,12 +1650,25 @@ class Slider:
     def draw(self, surf: pygame.Surface) -> None:
         # Label above the track.
         if self.label:
-            lbl_font = self.layout.font(FONT_SMALL + 4)
+            val_text = self.value_format.format(self.value)
+            lbl_pt, val_pt = FONT_SMALL + 4, FONT_BODY
+            # Five sliders share the Settings levels panel, so a long
+            # label (FEEDBACK, BUZZER) and a wide value (100%, 250 ms)
+            # can meet in the middle. Step both fonts down together
+            # until the pair fits with a gap, rather than let the
+            # value print over the label.
+            while lbl_pt > FONT_SMALL:
+                lbl_w = self.layout.font(lbl_pt).size(self.label)[0]
+                val_w = self.layout.font(val_pt).size(val_text)[0]
+                if lbl_w + val_w + 8 <= self.rect.w:
+                    break
+                lbl_pt -= 1
+                val_pt -= 1
+            lbl_font = self.layout.font(lbl_pt)
             lbl = lbl_font.render(self.label, True, self.theme.muted)
             surf.blit(lbl, (self.rect.x, self.rect.y - self.LABEL_GAP))
             # Current value right-aligned.
-            val_font = self.layout.font(FONT_BODY)
-            val_text = self.value_format.format(self.value)
+            val_font = self.layout.font(val_pt)
             val = val_font.render(val_text, True, self.theme.accent)
             surf.blit(val, val.get_rect(
                 topright=(self.rect.right, self.rect.y - self.LABEL_GAP - 2)))

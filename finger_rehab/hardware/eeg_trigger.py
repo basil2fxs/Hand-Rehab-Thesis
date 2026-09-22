@@ -279,10 +279,11 @@ CODE_NOTES: dict[str, tuple[str, str, str, str]] = {
     "stim_buzz_hunt": (
         "pulse_motor command", "stim_buzz_hunt",
         "buzz_hunt: a pulse the participant must locate",
-        "One byte per pulse: a span trial writes one per item and a "
-        "gap trial two, so count pulse_motor raw events, not rows. "
-        "Scored trials carry no response byte; only false alarms "
-        "reach the 120 band. Catch trials write no 38 at all."),
+        "One byte per trial, at the FIRST pulse of its train: a span "
+        "or gap row has more pulse_motor raw events than 38s, and the "
+        "later pulses of the train are only in raw.csv. Scored trials "
+        "carry no response byte; only false alarms reach the 120 "
+        "band. Catch trials write no 38 at all."),
     "stim_pattern_sequence": (
         "flip", "stim_visual", "pattern: item from the trained sequence", ""),
     "stim_pattern_random": (
