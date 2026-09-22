@@ -26,7 +26,7 @@ bin/dist/
 .pio/
 
 # Ready-to-run apps and the installers. Hundreds of MB each, far past
-# GitHub's file limits. The instruction files inside stay tracked.
+# GitHub's file limits. builds/README.txt is the one tracked file.
 builds/Mac/*.app/
 builds/Mac/*.dmg
 builds/Windows/*.exe
@@ -46,7 +46,7 @@ docs/lab_package/source/
 # every push. The hexes would fork from their source the moment anyone
 # committed one, and avrdude is a 6 MB third-party binary.
 assets/firmware/*
-!assets/firmware/README.txt
+!assets/firmware/README.md
 tools/avrdude/*/
 bin/dl/
 

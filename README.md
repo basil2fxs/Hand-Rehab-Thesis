@@ -2,8 +2,7 @@
 
 A hand device and a laptop game for measuring and training finger movement. Four force pads and four
 vibration motors sit under the fingers of each hand, wired to an Arduino Nano that streams force to the
-laptop over USB. Ten games run on that signal, and every press is logged with its timing and its force,
-so a hand can be compared week to week.
+laptop over USB. Ten games run on that signal, and every press is logged with its timing and its force.
 
 ![The hub, with all ten games](docs/images/hub.png)
 ![Reaction, one trial lit](docs/images/reaction.png)
@@ -21,57 +20,30 @@ flowchart LR
   F --> N["analysis/session_analysis.ipynb"]
 ```
 
-**The sensors.** Each finger rests on a SingleTact CS8-10N pad, 10 N full scale, read over I2C at 0x05
-index, 0x06 middle, 0x07 ring, 0x08 pinky and sent at 200 Hz as `FSR: a,b,c,d`. A failed read is sent as
-0, so a dead pad and a loose plug look the same. One count is 0.019531 N.
+A press is found in the force stream, not by a switch: each pad keeps a slow baseline, and a press crosses the
+gap between that person's resting level and their light press, measured once per hand at login. A failed read
+is sent as 0, so a dead pad and a loose plug look the same. At boot the board buzzes all four motors, about 1.6 s.
 
-**The buzzers.** Four vibration motors, one per finger, on pins D11 D10 D9 D6. The laptop sends `STIM:n`
-for lane 1 to 4 and the board pulses that motor. At boot every board buzzes all four in turn as a self
-test, about 1.6 s of buzzing. That is normal.
+## Install
 
-**The game loop.** A press is found in the force stream, not by a switch. Each sensor keeps a slow
-baseline that absorbs drift without following a press, and a press crosses the gap between that person's
-resting level and their light press. Logging in measures that gap once per hand, about a minute. A mode
-then cues a finger, waits, scores it and repeats.
+Two installers come out of the build-apps run on GitHub (Actions tab, latest run):
 
-**What gets logged.** Every block writes one row per trial, every raw force sample, the calibration and
-settings it ran under, and a small HTML report. Nothing is overwritten.
+- **Windows:** run `FingerRehab-Setup-Windows.exe`. It installs under `%LOCALAPPDATA%\Programs\Finger Rehab`,
+  no administrator needed, and turns auto-start on. SmartScreen says "Windows protected your PC" the first
+  time: More info, then Run anyway. Uninstalling keeps the sessions folder.
+- **macOS:** open `FingerRehab-macOS.dmg` and drag Finger Rehab into Applications. The first open is refused
+  because the app is not notarised: System Settings, Privacy & Security, Open Anyway. Once is enough.
 
-**Where sessions land.** Beside the app, or in the repo when run from source, under
-`sessions/<date>/<person>_<time>_<mode>/`. If that folder cannot be written the app falls back to
-`~/Finger Rehab Data`, and Settings has an Open data folder button for whichever is in use.
+Local builds: `builds\build_app.bat` (Windows), `builds/build_app.sh` (macOS). From source: `pip install -r
+requirements.txt`, then `python main.py`; tests are `python -m pytest tests`. Nothing plugged in? The keyboard
+stands in: `J K L ;` right hand, `F D S A` left, index to little. Force Pilot and Buzz Hunt need the device.
 
-## Run it
+## When a board is plugged in
 
-```
-pip install -r requirements.txt
-python main.py
-python -m pytest tests
-```
-
-Nothing plugged in? It falls back to the keyboard: `J K L ;` right hand, `F D S A` left, index to little.
-Force Pilot and Buzz Hunt need the device; the other eight play on the keyboard.
-
-Installers come from the build-apps run on GitHub: `FingerRehab-Setup-Windows.exe` and
-`FingerRehab-macOS.dmg`. Local builds: `builds\build_app.bat` (Windows), `builds/build_app.sh` (macOS).
-
-## Setup and repairs
-
-Windows: run the installer. It puts the game in `%LOCALAPPDATA%\Programs\Finger Rehab` and turns
-auto-start on; no administrator needed. Windows says "Windows protected your PC" the first time: More
-info, then Run anyway. Uninstalling keeps the sessions folder. macOS: open the dmg and drag Finger Rehab
-into Applications. The first open is refused because the app is not notarised: System Settings, Privacy
-& Security, Open Anyway, then your password. Once is enough. Auto-start turns itself on at the first
-launch from Applications. Repairs live in Settings: **Auto-start**, **Flash firmware**, **Sensor address**.
-
-**Auto-start.** Plugging a board in opens the game within a second. A watcher starts at login (a
-scheduled task on Windows, a LaunchAgent on macOS) and checks the ports once a second. It reacts only to
-a board *arriving* and checks a lock file first, so it never opens a second copy and closing the game
-leaves it closed.
-
-The EEG lab gets its own folder, `docs/lab_package`: the exe, `eeg_lab.yaml`, `run_in_psychopy.py`, a
-`source/` copy. No EEG anything ships in the main install; that `eeg_lab.yaml` sits beside the lab exe
-and switches the markers on. See [docs/eeg_lab_setup.txt](docs/eeg_lab_setup.txt).
+The game opens within a second. A watcher starts at login (a scheduled task on Windows, a LaunchAgent on macOS)
+and checks the ports once a second. It acts only on a board arriving: a board already in at login needs an unplug
+and replug, and closing the game leaves it closed. A second copy is refused with "Finger Rehab is already
+running". On macOS auto-start turns itself on at the first launch from Applications, not from the disk image.
 
 ## The ten games
 
@@ -88,97 +60,89 @@ and switches the markers on. See [docs/eeg_lab_setup.txt](docs/eeg_lab_setup.txt
 | **Buzz Hunt** | Feel which finger buzzed, then press it. Measures the sense of touch. |
 | **Echo** | Watch a sequence light up, then repeat it back. Measures memory span. |
 
+## Settings
+
+The cog at the bottom right of the login screen: live finger readout, port dropdowns, Test STIM per hand,
+Open data folder, and one column of three repairs (details in [docs/flashing.txt](docs/flashing.txt)).
+
+- **Auto-start:** the switch reads on or off. Off stays off; the next launch does not turn it back on.
+- **Flash firmware:** writes the game firmware to the board with the bundled avrdude, about ten seconds.
+- **Sensor address:** moves one SingleTact to a new I2C address, with only that sensor connected.
+
 ## Troubleshooting
 
-Settings is the cog at the bottom right of the login screen: live finger readout, port dropdowns, Test
-STIM per hand, Flash firmware, Sensor address, Open data folder. Calibrate sits beside it.
+**A sensor reads nothing, or sits at zero.** Its tile in Settings never moves while the others do. A failed
+I2C read is sent as 0, so a loose lead, a dead pad and a pad on the wrong address all look the same. Reseat
+both ends of the lead, then Settings, Sensor address, Scan lists which addresses answer. Calibration refuses a
+pad that reads zero on an empty device.
 
-**A sensor reads nothing, or sits at zero.** Its tile in Settings never moves while the others do. A
-failed I2C read is sent as 0, so a loose lead, a dead pad and a pad on the wrong address all look the
-same. Reseat both ends of the lead, then use Settings, Sensor address, Scan to list which addresses
-answer. Calibration refuses a pad that reads zero on an empty device.
+**A sensor drifts, or reads high at rest.** The finger triggers on its own, or calibration says the trigger
+sits across most of that finger's travel. Thresholds come from the gap between resting and pressing, so a pad
+squashed by the strap eats the gap, and under 20 counts of travel is refused. The baseline absorbs slow drift
+over about ten seconds, not a preload. Reposition the pad flat and calibrate again.
 
-**A sensor drifts, or reads high at rest.** The finger triggers on its own, or calibration says the
-trigger sits across most of that finger's travel. Thresholds come from the gap between resting and
-pressing, so a pad squashed by the strap eats the gap, and under 20 counts of travel is refused. The
-baseline absorbs slow drift over about ten seconds, not a preload. Reposition the pad flat and calibrate
-again.
+**The board is not found, or the port keeps changing.** Ports are picked by USB vendor id, then any port with
+a vendor id, ignoring the Mac virtual ports. First board found is the right hand, second the left, and the
+login screen prints what each hand got. To pin one: Settings, Refresh, pick the port per hand, Save, which
+writes `config/user_settings.yaml`. A saved port that no longer exists is ignored and that hand falls back to
+plug order, which the login screen says.
 
-**The board is not found, or the port keeps changing.** Ports are picked by USB vendor id, then any port
-with a vendor id, ignoring the Mac virtual ports. First board found is the right hand, second the left,
-and the login screen prints what each hand got. To pin one: Settings, Refresh, pick the port per hand,
-Save, which writes `config/user_settings.yaml`. A saved port that no longer exists is ignored and that
-hand falls back to plug order, which the login screen says out loud.
-
-**Calibration is asked for every time.** Once per hand per session is the design. Repeats inside one
-session mean the profile was refused: under 20 counts between resting and pressing, a trigger too high in
-that finger's travel, or a pad reading zero when empty. It saves to
-`config/calibration/current_<hand>.json`; if that file never appears, the app cannot write beside itself
-and is using `~/Finger Rehab Data`.
+**Calibration is asked for every time.** Once per hand per session is the design. Repeats inside one session
+mean the profile was refused: under 20 counts between resting and pressing, a trigger too high in that
+finger's travel, or a pad reading zero when empty. It saves to `config/calibration/current_<hand>.json`; if
+that file never appears, the app cannot write beside itself and is using `~/Finger Rehab Data`.
 
 **A buzzer does not buzz.** Settings, Test LEFT STIM or Test RIGHT STIM fires that hand's four motors in
-order. If none fire on a board that streams data fine, it is the wiring or the motor driver, not the
-software. If the test works but the buzz before a cue is missing, that cue is switched off in Sensory
-Cues.
+order. If none fire on a board that streams data fine, it is the wiring or the motor driver, not the software.
+If the test works but the buzz before a cue is missing, that cue is switched off in Sensory Cues.
 
 **Presses register on the wrong finger.** Two pads are answering the same I2C address. Every SingleTact
 answers 0x04 as well as its own address, so a write to 0x04 hits every sensor at once. Fix it in Settings,
-Sensor address, with only that sensor connected: 0x05 index, 0x06 middle, 0x07 ring, 0x08 pinky. Never
-move a sensor off 0x04 with the others wired in. Two whole hands swapped is the port assignment above.
+Sensor address, with only that sensor connected: 0x05 index, 0x06 middle, 0x07 ring, 0x08 pinky. Never move a
+sensor off 0x04 with the others wired in. Two whole hands swapped is the port assignment above.
 
-**The game does not open when I plug the board in.** Open Settings and press Refresh. Not listed means
-a lead or a driver, not the auto-start. Listed means the Auto-start button should read on; press it if it
-reads off. It only fires when a board *arrives*, so if it was already in at login, unplug and replug.
+**The game does not open when I plug the board in.** Open Settings and press Refresh. Not listed means a lead
+or a driver, not the auto-start. Listed means the Auto-start switch should read on; press it if it reads off.
+It only fires when a board arrives, so if it was already in at login, unplug and replug.
 
-**The board needs re-flashing.** Settings, Flash firmware writes `assets/firmware/finger_rehab_nano.hex`
-with a bundled avrdude, so no developer tools are needed. A Nano runs one of two bootloaders, 115200 or
-57600; the app tries one, then the other, and remembers which worked. See
-[docs/flashing.txt](docs/flashing.txt).
+**The board needs re-flashing.** Settings, Flash firmware writes `assets/firmware/finger_rehab_nano.hex` with
+the bundled avrdude, so no developer tools are needed. A Nano runs one of two bootloaders, 115200 or 57600;
+the app tries one, then the other, and remembers which worked.
 
-**The game runs but no data lands.** Settings, Open data folder opens the folder actually in use, which
-is `~/Finger Rehab Data` when the app cannot write beside itself. Also check Test Mode is off in Settings
+**The game runs but no data lands.** Settings, Open data folder opens the folder actually in use, which is
+`~/Finger Rehab Data` when the app cannot write beside itself. Also check Test Mode is off in Settings
 (`game.test_mode_enabled`), because it caps every block at six trials.
 
-**The EEG box does not appear.** Markers are off in the shipped game. The lab preset `config/eeg_lab.yaml`
-turns them on and is what "EEG Lab.command" and the lab package launch; set `eeg.port` to the box's port.
-With `eeg.require_port` true the session refuses to start without an openable box, and with it false it
-falls back to a logging-only dummy that reaches no amplifier. Never set `eeg.baud` to 1200: it resets the
-MMBT-S off the bus, and the writer refuses that value.
+**The EEG box does not appear.** Markers are off in the shipped game. The lab preset `config/eeg_lab.yaml` turns
+them on: the lab folder's exe loads it from beside itself; from source pass `--config config/eeg_lab.yaml`. Set
+`eeg.port` to the box's port. With `eeg.require_port` true the session refuses to start without an openable box;
+false falls back to a logging-only dummy. `eeg.baud` 1200 resets the MMBT-S off the bus, so the writer refuses it.
 
-**Sessions look empty in the notebook.** It walks for `trials.csv` from the first `sessions` folder beside
-it or up to four levels above, so a notebook copied elsewhere finds nothing until `SESSIONS_DIR` is set in
-the setup cell. A folder holding only a header row is a block quit before the first trial closed.
+**Sessions look empty in the notebook.** It walks for `trials.csv` from the first `sessions` folder beside it
+or up to four levels above, so a notebook copied elsewhere finds nothing until `SESSIONS_DIR` is set in the
+setup cell. A folder holding only a header row is a block quit before the first trial closed.
 
-## Data and analysis
+## Data
 
-`trials.csv` is one row per trial: timestamp, seconds into the block, participant, hand, block, trial,
-lane, the outcome (reaction time or timing offset, points, feedback, error type), which keys were pressed
-and any wrong finger, and the press's peak force and force-time integral. `raw.csv` is every sample at 200
-Hz: timestamps, sample index, `fsr1` to `fsr8`, plus event rows for presses, cues and EEG markers on the
-same clock. `metadata.json` holds the block summary, the calibration and the software version;
-`report.html` is the readable version.
-
-Open `analysis/session_analysis.ipynb`, run the Setup cell, pick a save, then Run All. Figures and CSV
-exports land in the session folder they describe, a per-person summary in
+Sessions land beside the app under `sessions/<date>/<person>_<time>_<mode>/`, or in `~/Finger Rehab Data`
+when that folder cannot be written; Open data folder in Settings opens whichever is in use. `trials.csv` is
+one row per trial: timing, hand, lane, outcome, the keys pressed, peak force and force-time integral.
+`raw.csv` is every sample at 200 Hz plus event rows for presses, cues and EEG markers on the same clock.
+`metadata.json` holds the block summary, the calibration and the software version; `report.html` is the
+readable version. Nothing is overwritten. Open `analysis/session_analysis.ipynb`, run the Setup cell, pick a
+save, then Run All. Figures land in the session folder they describe, per-person summaries in
 `sessions/individual_patient_results/<person>/`, cohort output in `sessions/cohort_results/`.
 
-## If you are taking this over
+## The lab folder
 
-- Settings live in `config/default.yaml`, one block per mode, with the reason for each number in the
-  comments. `config/user_settings.yaml` is written by the Settings screen and overrides them.
-- To change a mode's difficulty, edit its block: Reaction uses `reaction.block_trials: 25` and
-  `reaction.response_windows_s: [2.0, 1.5, 1.2]`.
-- To add a word to Syllables, add a line to `assets/words/syllables_source.txt` (band, then the word split
-  by hyphens, stressed syllable in capitals) and run `python scripts/build_syllables_bank.py`, which
-  checks every line and writes nothing if one fails.
-- Firmware source is `arduino/firmware_on_device`, read only here. The hex the app flashes is
-  `assets/firmware/finger_rehab_nano.hex`.
-- Tests are `python -m pytest tests`. Run the whole suite before any commit.
+`docs/lab_package` (the `FingerRehab-EEGLab.zip` from the same build) holds the exe, `eeg_lab.yaml`,
+`run_in_psychopy.py`, `README.txt` and a `source/` copy. The exe loads the yaml beside it and writes every
+marker to the trigger box; the home install carries no EEG anything. Open `run_in_psychopy.py` in PsychoPy
+Coder and press Run. Checklist and code table: [docs/eeg_lab_setup.txt](docs/eeg_lab_setup.txt).
 
 ## Licence
 
-Thesis work by Basil Toufexis, Curtin University, 2026. No licence file yet, so ask before reusing the
-code. It builds on Satoru Nakayama's 2025 thesis software, whose serial protocol and press detection are
-kept so the old patient data still loads. Third-party terms live with the files:
-[music](assets/music/ATTRIBUTION.md), [icons](assets/icons/LICENSE), [words](assets/words/LICENCE.txt) and
-[avrdude](tools/avrdude).
+Thesis work by Basil Toufexis, Curtin University, 2026. No licence file yet, so ask before reusing the code.
+It builds on Satoru Nakayama's 2025 thesis software, whose serial protocol and press detection are kept so
+the old patient data still loads. Third-party terms live with the files: [music](assets/music/ATTRIBUTION.md),
+[icons](assets/icons/LICENSE), [words](assets/words/LICENCE.txt) and [avrdude](tools/avrdude).

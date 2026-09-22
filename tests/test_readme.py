@@ -1,16 +1,16 @@
 """The root README is the handover. Nobody hands this rig over in person.
 
-The README is written so the next student can pick the project up with
-nothing else, which means the parts that answer a question in the middle
-of a clinic are the parts worth pinning: the game table (a mode added to
-the hub and not to the table is a mode nobody outside the code knows
-exists), the troubleshooting entries (the only place the failure modes
-of the hardware are written down), and the names those entries tell
-somebody to click or edit. A button renamed in the UI or a config key
-renamed in default.yaml leaves the README quietly telling the next
-person to look for something that is gone, and nothing else would catch
-it. The rest is cheap rot cover: the screenshots it opens with, links to
-files that were moved, its length, and the plain ASCII house rule.
+Two things ship: an installer for home use and a folder for the EEG
+lab. The README is written around those two, so the parts worth
+pinning are the ones somebody reads with a broken rig or a fresh
+laptop in front of them: the installer names (they must match what CI
+uploads), the game table (a mode added to the hub and not to the table
+is a mode nobody outside the code knows exists), the troubleshooting
+entries (the only place the hardware's failure modes are written down)
+and the buttons and config keys those entries tell somebody to press
+or edit. The rest is cheap rot cover: the screenshots, links to files
+that were moved, the length, and the plain ASCII house rule, which the
+short READMEs beside the assets and the builds share.
 """
 from __future__ import annotations
 
@@ -22,6 +22,13 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 README = REPO / "README.md"
 ASSET_READMES = sorted((REPO / "assets").glob("*/README.md"))
+# The short instruction files this README points at or sits beside.
+SIDE_DOCS = [
+    REPO / "builds" / "README.txt",
+    REPO / "docs" / "flashing.txt",
+    REPO / "docs" / "eeg_lab_setup.txt",
+    REPO / "docs" / "lab_package" / "README.txt",
+]
 # The house rule bans these outright. The em dash and the section sign
 # are the two that keep coming back from pasted text.
 # Written as escapes so this file is itself plain ASCII.
@@ -33,18 +40,24 @@ BANNED_CHARS = (
     "\u2026"  # ellipsis
     "\u00a0"  # non-breaking space
 )
+# Words the house style bans in any file. Matched as whole words,
+# case-insensitively.
+BANNED_WORDS = ("delve", "leverage", "robust", "seamless", "showcase",
+                "crucial", "pivotal", "intricate", "testament", "foster",
+                "comprehensive", "profound")
 
-# The order a reader meets them: what it is, how to start it, what the
-# games are, what to do when the hardware misbehaves, then the data and
-# the handover notes.
+# The order a reader meets them: what it is, how to install it, what
+# happens at the USB socket, the games, the repairs, the failures, the
+# data, the lab, the licence.
 SECTIONS = [
     "How it works",
-    "Run it",
-    "Setup and repairs",
+    "Install",
+    "When a board is plugged in",
     "The ten games",
+    "Settings",
     "Troubleshooting",
-    "Data and analysis",
-    "If you are taking this over",
+    "Data",
+    "The lab folder",
     "Licence",
 ]
 
@@ -75,6 +88,15 @@ SETTINGS_CONTROLS = [
     "Scan",
 ]
 
+# The three repairs the Settings section lists, one bold lead each,
+# and the label the UI draws for each. The auto-start switch carries
+# its state in the label.
+REPAIRS = {
+    "Auto-start": "Auto-start: on",
+    "Flash firmware": "Flash firmware",
+    "Sensor address": "Sensor address",
+}
+
 # Config keys the README quotes by name. A key renamed in default.yaml
 # without the README following turns advice into a wild goose chase.
 CONFIG_KEYS = [
@@ -82,8 +104,14 @@ CONFIG_KEYS = [
     "eeg.require_port",
     "eeg.baud",
     "game.test_mode_enabled",
-    "reaction.block_trials",
-    "reaction.response_windows_s",
+]
+
+# What CI uploads, by file name. The Install and lab sections name
+# them, so a rename in the workflow has to reach the README.
+ARTEFACTS = [
+    "FingerRehab-Setup-Windows.exe",
+    "FingerRehab-macOS.dmg",
+    "FingerRehab-EEGLab.zip",
 ]
 
 
@@ -111,13 +139,10 @@ class ReadmeExistsTests(unittest.TestCase):
 
     def test_it_stays_short(self):
         lines = _readme().splitlines()
-        # Raised from 170 when the setup and repair section landed: the
-        # installer, the auto-start and their troubleshooting entry are
-        # a real part of the handover now. The bound exists to stop this
-        # becoming a wall of text, not to freeze the feature set, so it
-        # moves when a feature does and not for padding.
-        self.assertLess(len(lines), 185,
-                        f"README is {len(lines)} lines; keep it near 180")
+        # Two deliverables, one page. The bound moves when a feature
+        # does and not for padding.
+        self.assertLess(len(lines), 150,
+                        f"README is {len(lines)} lines; keep it under 150")
 
     def test_every_section_is_there_in_order(self):
         found = re.findall(r"^## (.+)$", _readme(), re.M)
@@ -131,6 +156,45 @@ class ReadmeExistsTests(unittest.TestCase):
         for part in ("Arduino", "STIM:n", "trials.csv"):
             with self.subTest(part=part):
                 self.assertIn(part, body)
+
+
+class TwoDeliverablesTests(unittest.TestCase):
+    """The installers and the lab folder, by the names CI gives them."""
+
+    def test_the_readme_names_what_ci_uploads(self):
+        ci = (REPO / ".github" / "workflows" / "build-apps.yml").read_text(
+            encoding="utf-8")
+        text = _readme()
+        for name in ARTEFACTS:
+            with self.subTest(artefact=name):
+                self.assertIn(name, ci, f"CI no longer makes {name}")
+                self.assertIn(name, text, f"the README does not name {name}")
+
+    def test_the_first_open_notes_are_there(self):
+        # Neither installer is signed, so both first opens need one
+        # click through. The exact wording is what a person searches
+        # the README for while the dialog is on screen.
+        body = _section("Install")
+        self.assertIn("Windows protected your PC", body)
+        self.assertIn("Open Anyway", body)
+
+    def test_the_lab_section_is_four_lines(self):
+        lines = [ln for ln in _section("The lab folder").splitlines()
+                 if ln.strip()]
+        self.assertEqual(len(lines), 4, lines)
+        self.assertIn("run_in_psychopy.py", "\n".join(lines))
+
+    def test_the_settings_section_lists_the_three_repairs(self):
+        ui = "\n".join(p.read_text(encoding="utf-8")
+                       for p in sorted((REPO / "finger_rehab" / "ui")
+                                       .glob("*.py")))
+        body = _section("Settings")
+        leads = re.findall(r"^- \*\*(.+?):\*\*", body, re.M)
+        self.assertEqual(leads, list(REPAIRS))
+        for label in REPAIRS.values():
+            with self.subTest(label=label):
+                self.assertIn(f'"{label}"', ui,
+                              f"no button labelled {label} in the UI")
 
 
 class EveryLiveModeIsListedTests(unittest.TestCase):
@@ -206,6 +270,14 @@ class TroubleshootingTests(unittest.TestCase):
                 self.assertIsNot(cfg.get(key, sentinel), sentinel,
                                  f"{key} is gone from default.yaml")
 
+    def test_no_launcher_that_the_lab_folder_does_not_ship(self):
+        # The lab folder ships run_in_psychopy.py and the exe. An entry
+        # that sends the lab to a .bat or .command file sends them to
+        # nothing.
+        body = _section("Troubleshooting")
+        self.assertNotIn("EEG Lab.bat", body)
+        self.assertNotIn("EEG Lab.command", body)
+
 
 class LinksAndImagesResolveTests(unittest.TestCase):
 
@@ -239,12 +311,24 @@ class LinksAndImagesResolveTests(unittest.TestCase):
 
 class HouseStyleTests(unittest.TestCase):
 
+    def _files(self) -> list[Path]:
+        return [README, *ASSET_READMES, *SIDE_DOCS]
+
     def test_plain_ascii(self):
-        for path in (README, *ASSET_READMES):
+        for path in self._files():
             text = path.read_text(encoding="utf-8")
             for ch in BANNED_CHARS:
-                with self.subTest(file=path.parent.name, char=hex(ord(ch))):
+                with self.subTest(file=path.name, char=hex(ord(ch))):
                     self.assertNotIn(ch, text)
+
+    def test_no_banned_words(self):
+        for path in self._files():
+            text = path.read_text(encoding="utf-8")
+            for word in BANNED_WORDS:
+                with self.subTest(file=path.name, word=word):
+                    self.assertIsNone(
+                        re.search(rf"\b{word}\b", text, re.I),
+                        f"{path.name} uses the banned word {word}")
 
     def test_asset_readmes_are_three_lines(self):
         """They sit under the file list on GitHub. Three lines is what
@@ -257,6 +341,19 @@ class HouseStyleTests(unittest.TestCase):
                 self.assertEqual(len(lines), 3,
                                  f"{path.parent.name}/README.md is "
                                  f"{len(lines)} lines")
+
+    def test_flashing_notes_fit_on_one_screen(self):
+        lines = [ln for ln in (REPO / "docs" / "flashing.txt")
+                 .read_text(encoding="utf-8").splitlines() if ln.strip()]
+        self.assertLessEqual(len(lines), 10, len(lines))
+
+    def test_builds_has_one_instruction_file(self):
+        # builds/README.txt covers both installers. The per-platform
+        # HOW TO files it replaced described the bare exe and app,
+        # which are not what anyone installs now.
+        self.assertTrue((REPO / "builds" / "README.txt").is_file())
+        stray = [p for p in (REPO / "builds").rglob("HOW TO*")]
+        self.assertEqual(stray, [])
 
 
 if __name__ == "__main__":

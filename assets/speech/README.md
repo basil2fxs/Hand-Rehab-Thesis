@@ -1,0 +1,3 @@
+Spoken words and syllables for the Syllables mode: `<word>.ogg` is the whole word, `<word>_<k>.ogg` the k-th syllable, `manifest.json` the provider, voice and render date (.wav is read too, ogg first).
+Ships empty. A missing file falls back to the macOS `say` command on a developer Mac and to silence anywhere else, logged once per word; the game is otherwise unchanged.
+Fill it with `python3 scripts/render_syllables_speech.py --provider google --voice en-AU-Neural2-C`; the script's docstring covers the provider terms and the listening check, and `--provider say` output is for local testing only, never for git or the build.

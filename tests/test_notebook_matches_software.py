@@ -1261,3 +1261,85 @@ def test_every_name_the_notebook_cites_is_in_the_reference_list():
                       if name not in listed and name not in not_names})
     assert missing == [], (
         f"cited in the notebook but absent from REFERENCES: {missing}")
+
+
+# ---------------------------------------------------------- EEG markers
+# The EEG chapter carries a copy of the code map because the notebook
+# travels without the package. The copy, the band table, the export
+# columns, the meaning table and the per-mode literature row are
+# pinned to the module here, so a code added to CODES cannot go
+# unnamed in the analysis and a renamed export column cannot drift.
+
+class TestEegMarkerChapter:
+    NAMES = ["EEG_CODES_VERSION", "EEG_CODES", "EEG_MODE_IDS", "EEG_BANDS",
+             "_EEG_CUED", "_EEG_PRESSERS", "EEG_MEANING", "EEG_RULES",
+             "EEG_EVENT_COLUMNS", "EEG_CODES_COLUMNS"]
+    LIVE_MODES = ("reaction", "classic", "adaptive", "pattern", "chords",
+                  "mirror", "syllables", "echo", "buzz_hunt", "force_pilot",
+                  "rhythm")
+
+    def _names(self, source):
+        return dict(zip(self.NAMES, _notebook_names(source, self.NAMES)))
+
+    def test_code_map_copy_matches_the_module(self, source):
+        from finger_rehab.hardware import eeg_trigger as et
+        n = self._names(source)
+        assert n["EEG_CODES_VERSION"] == et.CODES_VERSION
+        assert n["EEG_CODES"] == et.CODES
+        assert n["EEG_MODE_IDS"] == et.MODE_IDS
+        assert tuple(n["EEG_BANDS"]) == tuple(et.BAND_LABELS)
+        assert n["EEG_EVENT_COLUMNS"] == et.EVENT_COLUMNS
+        assert n["EEG_CODES_COLUMNS"] == et.CODES_COLUMNS
+
+    def test_every_code_has_a_meaning_and_its_senders(self, source):
+        from finger_rehab.hardware import eeg_trigger as et
+        meaning = self._names(source)["EEG_MEANING"]
+        assert set(meaning) == set(et.CODES)
+        for name, (locks, offset, text, senders) in meaning.items():
+            module_locks, module_offset, _m, _n = et.CODE_NOTES[name]
+            assert locks == module_locks, name
+            assert offset == module_offset, name
+            assert text, name
+            assert senders, name
+
+    def test_every_live_mode_has_a_reconciliation_rule(self, source):
+        rules = self._names(source)["EEG_RULES"]
+        for mode in self.LIVE_MODES:
+            assert rules.get(mode), mode
+
+    def test_section_runs_through_keep_between_raw_and_continuous(self):
+        code = [src for src, kind in _cells() if kind == "code"]
+
+        def only(call):
+            hits = [i for i, c in enumerate(code)
+                    if f"{call}(" in c and f"def {call}(" not in c]
+            assert len(hits) == 1, (call, hits)
+            return hits[0]
+
+        eeg, raw, cont = only("sec_eeg"), only("sec_raw"), only("sec_continuous")
+        assert raw < eeg < cont
+        assert code[eeg].startswith("check_selection(ctx, pick)")
+        assert 'keep(ctx, "eeg", sec_eeg(folders, trials, metas))' in code[eeg]
+
+    def test_every_mode_carries_the_marker_row(self, source):
+        (lit,) = _notebook_names(source, ["MODE_LIT"])
+        for mode, specs in lit.items():
+            by_id = {spec["id"]: spec for spec in specs}
+            assert "EEG" in by_id, mode
+            assert "eeg_trigger.py" in by_id["EEG"]["source"], mode
+            assert by_id["EEG"]["reference"], mode
+        # The row is decided by the audit prepare() ran, so the mode
+        # chapters that run before the EEG chapter still print it.
+        assert "eeg_lit_verdict(mode)" in _section_source(source,
+                                                          "print_lit_checks")
+        assert ("_EEG_AUDIT.update(eeg_audit(folders, metas, trials))"
+                in _section_source(source, "prepare"))
+
+    def test_title_claim_limit_and_reference(self, source):
+        assert '"eeg": "EEG markers"' in source
+        body = _section_source(source, "sec_eeg")
+        assert "Nothing comes back from the amplifier" in body
+        assert "No EEG markers" in body
+        (refs,) = _notebook_names(source, ["REFERENCES"])
+        assert any("EEG-BIDS" in entry for _group, entries in refs
+                   for entry in entries)
