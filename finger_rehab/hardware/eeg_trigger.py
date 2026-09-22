@@ -67,7 +67,11 @@ except ImportError:
 # 1.3: the choice-set band 50-59 added for syllables' option sets
 # (50 first attempt, 51 returned word). Nothing else changed: the
 # syllables model roll still carries an ordinary 30-band code.
-CODES_VERSION = "1.3"
+# 1.4: prep_run_start 23 and prep_segment_edge 24 added for Force
+# Pilot, whose runs had no per-run byte at all. Every raw.csv eeg row
+# also carries name=<code name> from this version. No existing code
+# changed meaning.
+CODES_VERSION = "1.4"
 
 # 0 is the idle line, written after every pulse and in every shutdown
 # path. It never labels an event, so it lives outside CODES.
@@ -91,6 +95,13 @@ CODES: dict[str, int] = {
     # somatosensory ERP locks here, the auditory and visual ERPs lock
     # to the 30-band, and the two are never pooled.
     "prep_buzz_lead": 22,
+    # Force Pilot: a run has no stimulus onset, so its first scored
+    # frame is marked here and every section boundary after it (the
+    # plateau-to-ramp edges the notebook cuts on, and the run's end)
+    # gets 24. Written from the mode with the model-clock time the
+    # trial row's segment_times also carries, so the two agree.
+    "prep_run_start": 23,
+    "prep_segment_edge": 24,
     "prep_catch_onset": 25,      # reaction: virtual go on a catch trial
     # Stimulus band (30-39), cue condition in the byte.
     "stim_visual": 30,           # screen highlight only
@@ -198,6 +209,174 @@ BANDS: dict[str, tuple[int, int]] = {
     "resume": (240, 249),
     "rest_": (240, 249),
 }
+
+# Band label per code range, for the exported code table and the
+# events file. Same ranges as BANDS, keyed the way an analyst reads
+# them rather than by CODES prefix.
+BAND_LABELS: tuple[tuple[int, int, str], ...] = (
+    (20, 29, "prep"),
+    (30, 39, "stim"),
+    (40, 49, "stim_pattern"),
+    (50, 59, "stim_choice"),
+    (100, 131, "resp"),
+    (140, 149, "feedback"),
+    (200, 238, "block"),
+    (240, 249, "flow"),
+)
+
+# What each code locks to and what it means, for the code table shipped
+# with every session (markers_codes.csv). Keyed by CODES name; the
+# additive codes (responses, block edges) are described once on their
+# base. locks_to says which physical moment t_event is; offset_key
+# names the marker_offsets_ms entry that shifts a byte-locked epoch
+# onto the stimulus. The notes carry the per-mode rules an epoching
+# script must know and cannot read off the byte.
+CODE_NOTES: dict[str, tuple[str, str, str, str]] = {
+    "prep_countdown": (
+        "state", "", "GET READY card shown at block start",
+        "Sent back to back with the block-start byte; the two can "
+        "leave in either order when the line is busy, so sort by "
+        "t_event, not wire order."),
+    "prep_foreperiod": (
+        "state", "", "reaction: ready cue shown, wait armed (CNV S1)",
+        "Fixed 2.5 s ahead of the go in the lab preset."),
+    "prep_buzz_lead": (
+        "STIM command", "prep_buzz_lead",
+        "rhythm: tactile pulse sent ahead of the beat",
+        "The beat's own byte then drops the buzzer bit (31, not 33)."),
+    "prep_run_start": (
+        "first scored frame", "",
+        "force_pilot: tracking run starts",
+        "One per run, one trials.csv row per run. No stimulus or "
+        "response byte exists for a run: a corridor is continuous."),
+    "prep_segment_edge": (
+        "model clock", "",
+        "force_pilot: section boundary inside a run, including its end",
+        "Same times as the row's segment_times column."),
+    "prep_catch_onset": (
+        "state", "", "reaction: virtual go on a catch trial",
+        "No stimulus followed; a press after it is a 120-band byte."),
+    "stim_visual": (
+        "flip", "stim_visual", "cue shown, screen highlight only",
+        "30-37 code the cue mix in the byte: +1 tone, +2 buzzer, "
+        "+4 target not shown. Lane is on the raw.csv row."),
+    "stim_visual_tone": ("flip", "stim_visual", "cue: screen and tone", ""),
+    "stim_visual_buzz": (
+        "flip", "stim_buzz", "cue: screen and buzzer",
+        "The STIM command left before the flip; felt vibration is "
+        "buzzer_ms after the command."),
+    "stim_visual_buzz_tone": (
+        "flip", "stim_buzz", "cue: screen, buzzer and tone (default mix)",
+        "Chords: one byte per chord on its lowest lane, never per "
+        "finger. Syllables: also the model roll, one per syllable, "
+        "no trials.csv row. Echo: one per playback item. Mirror: one "
+        "per pair. The byte says which cues were configured, not "
+        "that the motor ran: join stim_delivered from trials.csv."),
+    "stim_uncued": ("flip", "stim_visual", "cue: nothing names the finger", ""),
+    "stim_tone": ("flip", "stim_tone", "cue: tone only", ""),
+    "stim_buzz": ("flip", "stim_buzz", "cue: buzzer only", ""),
+    "stim_buzz_tone": ("flip", "stim_buzz", "cue: buzzer and tone", ""),
+    "stim_buzz_hunt": (
+        "pulse_motor command", "stim_buzz_hunt",
+        "buzz_hunt: a pulse the participant must locate",
+        "One byte per pulse: a span trial writes one per item and a "
+        "gap trial two, so count pulse_motor raw events, not rows. "
+        "Scored trials carry no response byte; only false alarms "
+        "reach the 120 band. Catch trials write no 38 at all."),
+    "stim_pattern_sequence": (
+        "flip", "stim_visual", "pattern: item from the trained sequence", ""),
+    "stim_pattern_random": (
+        "flip", "stim_visual", "pattern: random or probe item", ""),
+    "stim_choice_set": (
+        "flip", "stim_visual",
+        "syllables: four options spawn, word on its first attempt",
+        "Nothing names the target finger; never pool with the 30 "
+        "band. The spawn is the cue onset; tiles fall for fall_s."),
+    "stim_choice_set_return": (
+        "flip", "stim_visual",
+        "syllables: options spawn for a word that came back after a miss",
+        ""),
+    "resp_correct_base": (
+        "press sample", "response", "correct press, + lane pressed (0-7)",
+        "Mirror sends one per hand (right 0-3, left 4-7). Chords sends "
+        "one on the primary lane when the chord completes; per-finger "
+        "onsets are only in the mode's own log. Echo sends one per "
+        "reproduced item."),
+    "resp_wrong_base": (
+        "press sample", "response",
+        "wrong finger, + lane actually pressed", ""),
+    "resp_anticipation_base": (
+        "press sample", "response",
+        "press before the go or under the anticipation cut, + lane", ""),
+    "resp_timeout": (
+        "state", "", "response window closed with no press",
+        "Bookkeeping only; never average response-locked on it. In "
+        "rhythm it lands when the miss window closes, inside the "
+        "next note's 22-31 span, and belongs to the earlier note. "
+        "Mirror misses send no 130: both hand bytes still go out."),
+    "resp_idle": ("press sample", "response", "press with no trial active", ""),
+    "feedback_positive": (
+        "flip", "", "outcome glyph or chime for a hit",
+        "Only under eeg.feedback_markers. Lab style draws the glyph "
+        "feedback_delay_ms after the press and marks that flip. A "
+        "feedback byte inside one frame of the block-end byte was "
+        "drained at block close and the results screen followed it; "
+        "leave it out of FRN averages."),
+    "feedback_negative": (
+        "flip", "", "outcome glyph for a miss; force_pilot: corridor-exit buzz",
+        "Same rule as 140."),
+    "feedback_neutral": ("flip", "", "reserved", ""),
+    "block_start_base": (
+        "state", "", "block starts, + mode id",
+        "reaction 0, classic 1, adaptive 2, rhythm 3, mirror 4, "
+        "pattern 5, chords 6, syllables 7, force_pilot 8, buzz_hunt "
+        "10, echo 12; 9 retired, 11 reserved."),
+    "block_abandoned": ("state", "", "block abandoned mid-way (Esc)", ""),
+    "block_end_base": ("state", "", "block completed, + mode id", ""),
+    "session_start": (
+        "state", "", "participant logged in",
+        "Outside any block: on the wire and in the app log, never in "
+        "raw.csv or events.tsv."),
+    "session_end": ("state", "", "session ended or app closed", "Same as 240."),
+    "pause": ("state", "", "block paused", ""),
+    "resume": ("state", "", "block resumed", ""),
+    "rest_start": ("state", "", "rest card shown", ""),
+    "rest_end": ("state", "", "rest card dismissed", ""),
+}
+
+
+def band_of(code: int) -> str:
+    """Band label for a code, or "unknown" outside every band."""
+    for lo, hi, label in BAND_LABELS:
+        if lo <= int(code) <= hi:
+            return label
+    return "unknown"
+
+
+def name_of(code: int) -> str:
+    """Human name for a byte, with the additive parts resolved:
+    resp_correct_lane3, block_start_reaction. Bases with an unknown
+    remainder still name their band (block_start_id17) rather than
+    returning nothing, so a row can never lose its byte."""
+    code = int(code)
+    for name, value in CODES.items():
+        # A base shares its byte with lane 0 or mode id 0; the resolved
+        # form below is the one the row should carry.
+        if value == code and not name.endswith("_base"):
+            return name
+    modes = {v: k for k, v in MODE_IDS.items()}
+    for base, prefix in (("resp_correct_base", "resp_correct_lane"),
+                         ("resp_wrong_base", "resp_wrong_lane"),
+                         ("resp_anticipation_base", "resp_anticipation_lane")):
+        lane = code - CODES[base]
+        if 0 <= lane <= 7:
+            return f"{prefix}{lane}"
+    for base, prefix in (("block_start_base", "block_start_"),
+                         ("block_end_base", "block_end_")):
+        mode_id = code - CODES[base]
+        if 0 <= mode_id <= 18:
+            return prefix + modes.get(mode_id, f"id{mode_id}")
+    return "unknown"
 
 
 def stim_code(sound_before: bool, buzz_before: bool,
@@ -342,7 +521,18 @@ def format_detail(rec: MarkerEmission) -> str:
     return (f"code={rec.code};t_event={rec.t_event:.6f};"
             f"t_wire={t_wire};delayed={1 if rec.delayed else 0};"
             f"failed={1 if rec.failed else 0};"
-            f"dropped={1 if rec.dropped else 0}")
+            f"dropped={1 if rec.dropped else 0};"
+            f"name={name_of(rec.code)}")
+
+
+def parse_detail(detail: str) -> dict[str, str]:
+    """Inverse of format_detail: the key=value pairs as strings."""
+    out: dict[str, str] = {}
+    for part in (detail or "").split(";"):
+        key, _, val = part.partition("=")
+        if key:
+            out[key] = val
+    return out
 
 
 class TriggerBackend:
@@ -603,6 +793,10 @@ class MarkerWriter:
             "box": self.box,
             "box_mode": self.box_mode,
             "codes_version": CODES_VERSION,
+            # The map itself travels with every block, so a session
+            # folder decodes on its own even if this module moves on.
+            "codes": dict(CODES),
+            "mode_ids": dict(MODE_IDS),
             "failure_count": self.failure_count,
             "delayed_count": self.delayed_count,
             "dropped_count": self.dropped_count,
@@ -755,3 +949,211 @@ def writer_from_config(get, on_emit=None) -> MarkerWriter:
     return MarkerWriter(backend=backend, enabled=True,
                         pulse_ms=pulse_ms, gap_ms=gap_ms,
                         on_emit=on_emit, box=box, box_mode=box_mode)
+
+
+# ---- events export -----------------------------------------------------------
+# The lab side of the record. raw.csv holds every emission as an eeg
+# row on the force-sample clock, which is what the notebook audits;
+# the files below are the same rows in the shape an EEG pipeline
+# imports: a BIDS events.tsv with its json sidecar, and the code table
+# the recording was made under. Written at block end for EEG blocks
+# and rebuildable from any session folder with export_events().
+
+EVENTS_TSV = "events.tsv"
+EVENTS_JSON = "events.json"
+CODES_CSV = "markers_codes.csv"
+# onset and duration first, as BIDS requires; value is the byte, so
+# mne_bids reads it as the event id; the rest are ours and the
+# sidecar describes them.
+EVENT_COLUMNS = ["onset", "duration", "trial_type", "value", "sample",
+                 "lane", "hand", "t_event", "t_wire", "delayed", "failed",
+                 "dropped"]
+CODES_COLUMNS = ["code", "name", "band", "locks_to", "offset_key",
+                 "meaning", "notes", "codes_version"]
+NA = "n/a"
+
+
+def codes_table() -> list[dict]:
+    """Every byte the map can produce, one row each, sorted by code.
+    Built from CODES, MODE_IDS and CODE_NOTES so it cannot drift from
+    the map it documents."""
+    rows: list[dict] = []
+    modes = sorted(MODE_IDS.values())
+    for name, code in CODES.items():
+        locks, offset, meaning, notes = CODE_NOTES.get(name, ("", "", "", ""))
+        if name.startswith("resp_") and name.endswith("_base"):
+            expand = [code + lane for lane in range(8)]
+        elif name.startswith("block_") and name.endswith("_base"):
+            expand = [code + mid for mid in modes]
+        else:
+            expand = [code]
+        for c in expand:
+            rows.append({"code": c, "name": name_of(c), "band": band_of(c),
+                         "locks_to": locks, "offset_key": offset,
+                         "meaning": meaning, "notes": notes,
+                         "codes_version": CODES_VERSION})
+    rows.sort(key=lambda r: r["code"])
+    return rows
+
+
+def write_codes_table(path) -> None:
+    import csv
+    from pathlib import Path
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=CODES_COLUMNS)
+        w.writeheader()
+        for row in codes_table():
+            w.writerow(row)
+
+
+def read_marker_rows(raw_csv) -> tuple[list[dict], float | None]:
+    """The eeg rows of a raw.csv, detail parsed, plus the onset
+    reference: the t_perf of the block's first force sample, or of
+    the block_start event when the block ran on the keyboard, or of
+    the first eeg row when neither exists. None when there are no
+    eeg rows at all."""
+    import csv
+    from pathlib import Path
+    rows: list[dict] = []
+    t0: float | None = None
+    t0_kind = 3
+    with Path(raw_csv).open(newline="", encoding="utf-8") as f:
+        for r in csv.DictReader(f):
+            event = r.get("event", "")
+            try:
+                t_perf = float(r.get("t_perf", ""))
+            except ValueError:
+                continue
+            if event == "" and t0_kind > 0:
+                t0, t0_kind = t_perf, 0
+            elif event == "block_start" and t0_kind > 1:
+                t0, t0_kind = t_perf, 1
+            elif event == "eeg":
+                d = parse_detail(r.get("detail", ""))
+                try:
+                    code = int(d.get("code", ""))
+                except ValueError:
+                    continue
+                if t0_kind > 2:
+                    t0, t0_kind = t_perf, 2
+                rows.append({
+                    "code": code,
+                    "name": d.get("name") or name_of(code),
+                    "lane": r.get("lane", ""),
+                    "hand": r.get("hand", ""),
+                    "t_event": d.get("t_event", "") or f"{t_perf:.6f}",
+                    "t_wire": d.get("t_wire", ""),
+                    "delayed": d.get("delayed", "0"),
+                    "failed": d.get("failed", "0"),
+                    "dropped": d.get("dropped", "0"),
+                })
+    return rows, t0
+
+
+def _sidecar(eeg_meta: dict, t0_note: str, rate) -> dict:
+    return {
+        "onset": {
+            "Description": "Seconds from the block's first raw.csv force "
+                           "sample (t_perf), the game's own clock. The "
+                           "amplifier's zero is unknown to the game: "
+                           "align by matching inter-marker intervals to "
+                           "the Status channel, then shift. " + t0_note,
+            "Units": "s"},
+        "duration": {"Description": "Marker pulse width, eeg.pulse_ms.",
+                     "Units": "s"},
+        "trial_type": {"Description": "Code name from markers_codes.csv, "
+                                      "lane or mode resolved."},
+        "value": {"Description": "The byte on the trigger line, the low "
+                                 "byte of the BioSemi Status channel."},
+        "sample": {"Description": "round(onset * amplifier rate); n/a "
+                                  "when eeg.amplifier_rate_hz is unset.",
+                   "AmplifierRateHz": rate},
+        "lane": {"Description": "Finger 0-7 the marker belongs to, right "
+                                "hand 0-3, left 4-7; empty for state "
+                                "markers."},
+        "hand": {"Description": "Hand mode of the block."},
+        "t_event": {"Description": "perf_counter time of the physical "
+                                   "event on the force-sample clock.",
+                    "Units": "s"},
+        "t_wire": {"Description": "perf_counter just after the byte was "
+                                  "written; empty when it never was.",
+                   "Units": "s"},
+        "delayed": {"Description": "1 when the byte waited for the line "
+                                   "(pulse plus gap) behind another "
+                                   "marker; t_event is still the event."},
+        "failed": {"Description": "1 when the write failed: the row is "
+                                  "the intended marker, nothing reached "
+                                  "the amplifier."},
+        "dropped": {"Description": "1 when the queue shed the marker; "
+                                   "never on the wire."},
+        "CodesVersion": eeg_meta.get("codes_version", CODES_VERSION),
+        "PulseMs": eeg_meta.get("pulse_ms"),
+        "GapMs": eeg_meta.get("gap_ms"),
+        "Box": eeg_meta.get("box"),
+        "BoxMode": eeg_meta.get("box_mode"),
+        "Backend": eeg_meta.get("backend"),
+        "Degraded": eeg_meta.get("degraded"),
+        "MarkerOffsetsMs": eeg_meta.get("marker_offsets_ms"),
+        "SessionMarkers": "240 and 241 fire outside any block and are "
+                          "not in this file.",
+    }
+
+
+def export_events(root, sample_rate_hz=None) -> dict:
+    """Write events.tsv, events.json and markers_codes.csv into a
+    session folder from its raw.csv and metadata.json. Returns the
+    three paths. Rows are sorted by t_event, the intended time, because
+    two markers inside pulse plus gap of each other leave the wire in
+    priority order, not event order. Failed and dropped rows stay in,
+    flagged, so a trial that lost its byte is visible rather than
+    silently absent."""
+    import csv
+    import json
+    from pathlib import Path
+    root = Path(root)
+    raw = root / "raw.csv"
+    if not raw.is_file():
+        raise FileNotFoundError(raw)
+    eeg_meta: dict = {}
+    meta_path = root / "metadata.json"
+    if meta_path.is_file():
+        try:
+            eeg_meta = json.loads(meta_path.read_text(encoding="utf-8")).get(
+                "eeg", {}) or {}
+        except (OSError, ValueError):
+            eeg_meta = {}
+    rows, t0 = read_marker_rows(raw)
+    pulse_ms = float(eeg_meta.get("pulse_ms") or 10.0)
+    rate = float(sample_rate_hz) if sample_rate_hz else None
+    if t0 is None:
+        t0 = 0.0
+        t0_note = "This block has no eeg rows; onset is raw t_event."
+    else:
+        t0_note = f"Reference t_perf {t0:.6f}."
+    rows.sort(key=lambda r: float(r["t_event"]))
+    tsv = root / EVENTS_TSV
+    with tsv.open("w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f, delimiter="\t", lineterminator="\n")
+        w.writerow(EVENT_COLUMNS)
+        for r in rows:
+            onset = float(r["t_event"]) - t0
+            w.writerow([
+                f"{onset:.6f}",
+                f"{pulse_ms / 1000.0:.3f}",
+                r["name"],
+                r["code"],
+                int(round(onset * rate)) if rate else NA,
+                r["lane"] if r["lane"] != "" else NA,
+                r["hand"] or NA,
+                r["t_event"],
+                r["t_wire"] or NA,
+                r["delayed"], r["failed"], r["dropped"],
+            ])
+    sidecar = root / EVENTS_JSON
+    sidecar.write_text(json.dumps(_sidecar(eeg_meta, t0_note, rate),
+                                  indent=2), encoding="utf-8")
+    codes = root / CODES_CSV
+    write_codes_table(codes)
+    return {"events": tsv, "sidecar": sidecar, "codes": codes}

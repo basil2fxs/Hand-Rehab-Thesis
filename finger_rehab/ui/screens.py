@@ -626,27 +626,27 @@ def draw_session_strip(surf: pygame.Surface, rect: pygame.Rect,
 
 
 class TitleScreen(Screen):
-    # Session protocol shown in the Info overlay. Every participant runs
-    # the same core modes, in the same order, the same number of times, so
-    # the final analysis compares like with like. Reaction took Classic's
-    # place as the baseline: Classic's fixed pattern was learnable in
-    # seconds, so half of what it measured was anticipation.
+    # Session protocol shown in the Info overlay. A study visit is the
+    # PLAY ALL battery: eleven blocks, every mode once, in the order the
+    # participant's code sets (protocol.presets.study_battery in
+    # config/default.yaml). tests/test_info_overlay.py checks these
+    # lines against that preset and the mirror count against the
+    # config, so the card cannot describe a protocol the app no longer
+    # runs, which is what the previous four-mode wording did.
     INFO_TITLE = "Session protocol"
     INFO_STEPS = [
         "1. Enter the participant code (or name), age and main hand,",
-        "      then press LOG IN. A study visit presses PLAY ALL on the hub.",
-        "2. Run the four core modes in this order, once each per session:",
-        "      Reaction  (baseline eye-to-hand speed, random waits)",
-        "      Adaptive  (40 trials, pace adjusts to the participant)",
-        "      Rhythm  (one full song, press on the beat)",
-        "      Mirror  (40 trials, both hands together)",
-        "3. Training modes as prescribed for the participant:",
-        "      Muscle Memory, Chords, Syllables, Force Pilot,",
-        "      Buzz Hunt, Echo",
+        "      then press LOG IN.",
+        "2. A study visit presses PLAY ALL on the hub. It runs eleven",
+        "      blocks, every mode once, in the order set by the code:",
+        "      Reaction (once per hand), Mirror, Rhythm, Echo, Force Pilot,",
+        "      Chords, Buzz Hunt, Muscle Memory, Adaptive, Syllables.",
+        "3. Outside a study visit, pick modes from the hub as prescribed.",
+        "      Mirror is 32 trials, both hands together; Adaptive is 40.",
         "4. Finish every block. Quitting early leaves gaps in the data.",
     ]
-    INFO_FOOTER = ("The four core blocks give the comparable data; the "
-                   "training modes add their own measures on top.")
+    INFO_FOOTER = ("About 45 minutes on the rig for the full PLAY ALL "
+                   "run, rest and stretch included.")
 
     # Vertical rhythm, in logical pixels against the 1280x800 render
     # surface. Held as constants because the card, the inputs and the
@@ -1184,6 +1184,16 @@ class TitleScreen(Screen):
         draw_text(surf, "Multi-modal finger rehabilitation",
                   (cx, self.TAGLINE_Y), self.theme, self.layout,
                   pt=FONT_BODY + 4, centre=True, colour=self.theme.muted)
+        # The one line main.py's auto-start sync may have for this
+        # launch: the installed copy just registered itself, or it is
+        # running from a disk image and could not. Sits between the
+        # tagline and the card, the only free line on this screen.
+        autostart_note = getattr(self.engine, "autostart_note", "")
+        if autostart_note:
+            draw_text(surf, str(autostart_note),
+                      (cx, self.TAGLINE_Y + 22), self.theme, self.layout,
+                      pt=FONT_SMALL + 1, centre=True,
+                      colour=self.theme.accent)
 
         # Card holding the whole "start a session" job: who is playing,
         # how old they are, and the button that begins. Grouping them
@@ -7162,6 +7172,12 @@ class DiagnosticsScreen(Screen):
         self._firmware_tool = None
         self._firmware_game = None
         self._firmware_addr = None
+        # The auto-start switch. Read once when Settings opens (one
+        # schtasks call on Windows, a file check on macOS) and again
+        # after each press. The runner is injectable so the switch can
+        # be pressed in a test without touching the operating system.
+        self._autostart_runner = None
+        self._autostart_on = self._read_autostart()
         # The Muscle Memory sequence file card and the one button that
         # opens it. Kept out of _panel_buttons because that list is
         # hit-tested against the ports panel; this button lives in the
@@ -7271,7 +7287,12 @@ class DiagnosticsScreen(Screen):
     # click lands where nothing was drawn), which test_screen_layout
     # pins.
     DATA_W = 250
-    FIRMWARE_BTN_H = 40
+    # Three buttons stacked in the firmware panel: flash, sensor
+    # address, auto-start. 36 high with a 6 gap fits three under the
+    # heading inside PANEL_HEIGHT; the 40 the port rows use would not.
+    FIRMWARE_BTN_H = 36
+    FIRMWARE_ROW_GAP = 6
+    FIRMWARE_ROW_TOP = 38
 
     def _cues_rect(self) -> pygame.Rect:
         return pygame.Rect(self.BAND_X, self.ROW1_TOP,
@@ -7354,6 +7375,11 @@ class DiagnosticsScreen(Screen):
         return pygame.Rect(x, self._panel_top(),
                            self.layout.width - self.BAND_X - x,
                            self.PANEL_HEIGHT)
+
+    def _firmware_row_y(self, i: int) -> int:
+        """Top of firmware button i (0 flash, 1 address, 2 auto-start)."""
+        return (self._panel_top() + self.FIRMWARE_ROW_TOP
+                + i * (self.FIRMWARE_BTN_H + self.FIRMWARE_ROW_GAP))
 
     def _ports_row_y(self, i: int) -> int:
         """Top of port row i. Used by rebuild_panel for the dropdown and
@@ -7874,16 +7900,56 @@ class DiagnosticsScreen(Screen):
         fw = self._firmware_rect()
         fw_x = fw.x + self.BAND_PAD
         fw_w = fw.w - self.BAND_PAD * 2
+        fw_h = self.FIRMWARE_BTN_H
         self._panel_buttons.append(Button(
-            pygame.Rect(fw_x, self._ports_row_y(0), fw_w, row_h),
+            pygame.Rect(fw_x, self._firmware_row_y(0), fw_w, fw_h),
             "Flash firmware", self._open_flash_dialog,
             self.theme, self.layout, font_pt=FONT_BODY - 2,
         ))
         self._panel_buttons.append(Button(
-            pygame.Rect(fw_x, self._ports_row_y(1), fw_w, row_h),
+            pygame.Rect(fw_x, self._firmware_row_y(1), fw_w, fw_h),
             "Sensor address", self._open_address_dialog,
             self.theme, self.layout, font_pt=FONT_BODY - 2,
         ))
+        # The third job the old Setup app did. The label carries the
+        # current state and a press flips it.
+        self._panel_buttons.append(Button(
+            pygame.Rect(fw_x, self._firmware_row_y(2), fw_w, fw_h),
+            "Auto-start: on" if self._autostart_on else "Auto-start: off",
+            self._toggle_autostart,
+            self.theme, self.layout, font_pt=FONT_BODY - 2,
+        ))
+
+    # ---- auto-start -------------------------------------------------------
+
+    def _read_autostart(self) -> bool:
+        from ..hardware import autostart
+        try:
+            runner = self._autostart_runner or autostart._run
+            return bool(autostart.is_registered(runner))
+        except Exception as e:
+            log.warning("Could not read the auto-start state: %s", e)
+            return False
+
+    def _toggle_autostart(self) -> None:
+        """Register or remove the watcher for the game's own path, then
+        say what happened on the status line and relabel the button."""
+        from ..hardware import autostart
+        runner = self._autostart_runner or autostart._run
+        try:
+            if self._autostart_on:
+                ok, msg = autostart.unregister(runner)
+            else:
+                ok, msg = autostart.register(
+                    autostart.watcher_command(),
+                    poll_s=self.engine.cfg.get("autostart.poll_s",
+                                               autostart.DEFAULT_POLL_S),
+                    runner=runner)
+        except Exception as e:
+            ok, msg = False, str(e)
+        self._autostart_on = self._read_autostart()
+        self._port_status = msg if ok else f"Auto-start: {msg}"
+        self.rebuild_panel()
 
     # ---- firmware flashing ------------------------------------------------
 
@@ -8471,22 +8537,12 @@ class DiagnosticsScreen(Screen):
         self._refresh_riff_button()
         for b in self._riff_buttons:
             b.draw(surf)
-        # Group 6, writing the Arduino. The caption says which firmware
-        # is in this build, so a therapist can tell whether the board
-        # already has it without flashing to find out.
+        # Group 6, writing the Arduino and the auto-start. The heading
+        # hint names the bundled firmware where the heading leaves room
+        # for it; the third button row took the line the caption had.
         fw_rect = self._firmware_rect()
-        self._draw_band(surf, fw_rect, "ARDUINO FIRMWARE")
-        fw_caption, fw_colour = self._firmware_caption()
-        # bottom - 24 clears the second button by four pixels. At -30 the
-        # caption's first row of pixels lands inside the button above it,
-        # which reads as a label belonging to the button rather than to
-        # the panel.
-        draw_text(surf, _fit_text(fw_caption,
-                                  self.layout.font(FONT_SMALL),
-                                  fw_rect.w - self.BAND_PAD * 2),
-                  (fw_rect.x + self.BAND_PAD, fw_rect.bottom - 24),
-                  self.theme, self.layout, pt=FONT_SMALL,
-                  centre=False, colour=fw_colour)
+        fw_caption, _fw_colour = self._firmware_caption()
+        self._draw_band(surf, fw_rect, "ARDUINO FIRMWARE", fw_caption)
         # Buttons for both bottom panels (test STIM, refresh, save, open
         # folder), then the dropdowns on top of whatever they overlap.
         for b in self._panel_buttons:

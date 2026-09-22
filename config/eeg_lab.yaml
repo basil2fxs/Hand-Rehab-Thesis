@@ -1,6 +1,6 @@
 # Lab preset for EEG sessions. Loaded OVER config/default.yaml by
 #   python main.py --config config/eeg_lab.yaml
-# (the "EEG Lab.command" / "EEG Lab.bat" launchers do exactly that).
+# which is what docs/lab_package/run_in_psychopy.py runs from source.
 # The frozen exe also loads a copy of this file on its own whenever
 # one sits in the same folder, which is how the lab package's exe
 # starts in lab mode from a bare double-click.
@@ -39,6 +39,11 @@ eeg:
   # which switch position the session was recorded with.
   box: mmbt-s
   box_mode: pulse
+  # The amplifier's sampling rate, if known, fills the sample column
+  # of events.tsv (round(onset * rate)). Left unset the column reads
+  # n/a and the onset column in seconds is all a pipeline needs.
+  # Confirm the ActiView rate on the lab desktop before setting it.
+  amplifier_rate_hz: null
 
 reaction:
   # Fixed-foreperiod CNV variant with the visible ready cue. See the

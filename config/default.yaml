@@ -106,10 +106,10 @@ serial:
     - "0x0403"   # FTDI
 
 autostart:
-  # Start the game by itself when a board is plugged in. The setup tool
-  # turns this on at install time and the Settings screen can toggle it
-  # later; nothing here runs unless the watcher has been registered with
-  # the operating system.
+  # Start the game by itself when a board is plugged in. The installer
+  # turns this on and the Settings screen can toggle it later; nothing
+  # here runs unless the watcher has been registered with the operating
+  # system.
   #
   # How often the watcher looks for a board, in seconds. Listing the
   # serial ports costs well under 2 ms, so once a second is responsive
@@ -154,8 +154,8 @@ eeg:
   #
   # Shipping default is OFF: a normal rehab session has no amplifier
   # and pays nothing for this block existing. The lab preset
-  # (config/eeg_lab.yaml, launched by "EEG Lab.command" or
-  # "EEG Lab.bat") flips it on over these defaults.
+  # (config/eeg_lab.yaml, which the lab folder's exe and
+  # run_in_psychopy.py load) flips it on over these defaults.
   enabled: false
   # The trigger box's serial port, e.g. COM10 on the lab's Windows
   # desktop. This is a SECOND port, separate from the Arduino sensor

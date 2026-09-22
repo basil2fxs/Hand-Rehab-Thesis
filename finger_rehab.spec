@@ -5,6 +5,9 @@
 #   Windows: bin/dist/Finger Rehab.exe          (single-file exe)
 #   Linux:   bin/dist/Finger Rehab              (single-file binary)
 #
+# build_app.sh then wraps the .app in FingerRehab-macOS.dmg, and CI
+# wraps the exe in FingerRehab-Setup-Windows.exe (installers/windows.iss).
+#
 # Windows and Linux use one-file mode so the deliverable is literally
 # one double-clickable file. Trade-off: one-file unpacks itself to a
 # temp folder on launch, so the first paint takes several seconds on
@@ -143,6 +146,9 @@ if IS_MAC:
         icon="assets/icons/app_icon.icns",
         bundle_identifier="au.edu.curtin.fingerrehab",
         info_plist={
+            # Must equal SOFTWARE_VERSION in finger_rehab/data/session.py;
+            # test_screen_layout pins the two together, and the Windows
+            # installer reads the same number through builds/version.py.
             "CFBundleShortVersionString": "3.2",
             "CFBundleVersion": "3.2",
             "NSHighResolutionCapable": True,

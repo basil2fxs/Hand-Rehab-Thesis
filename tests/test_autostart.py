@@ -202,5 +202,346 @@ class LaunchTests(unittest.TestCase):
             [str(Path("/definitely/not/here/fr"))]))
 
 
+class WatcherCommandTests(unittest.TestCase):
+    """One rule for what gets registered, shared by the flags, the
+    launch-time sync and the Settings switch."""
+
+    def test_a_frozen_copy_registers_itself(self):
+        self.assertEqual(autostart.watcher_command(frozen=True),
+                         [sys.executable, "--watch"])
+
+    def test_a_source_checkout_registers_main_py(self):
+        cmd = autostart.watcher_command(frozen=False)
+        self.assertEqual(cmd[0], sys.executable)
+        self.assertEqual(cmd[-1], "--watch")
+        self.assertTrue(Path(cmd[1]).is_file(), cmd[1])
+        self.assertEqual(Path(cmd[1]).name, "main.py")
+
+
+class UnsafeLocationTests(unittest.TestCase):
+    """A LaunchAgent pointing into a disk image or a translocated copy
+    is dead the moment the image is ejected or the app reopened."""
+
+    def setUp(self):
+        if sys.platform != "darwin":
+            self.skipTest("macos only")
+
+    def test_a_mounted_disk_image_is_refused(self):
+        why = autostart.unsafe_location(
+            "/Volumes/Finger Rehab/Finger Rehab.app/Contents/MacOS/Finger Rehab")
+        self.assertIn("Applications", why)
+
+    def test_a_translocated_copy_is_refused(self):
+        why = autostart.unsafe_location(
+            "/private/var/folders/x/T/AppTranslocation/1234/d/Finger Rehab.app"
+            "/Contents/MacOS/Finger Rehab")
+        self.assertIn("Applications", why)
+
+    def test_applications_is_fine(self):
+        self.assertIsNone(autostart.unsafe_location(
+            "/Applications/Finger Rehab.app/Contents/MacOS/Finger Rehab"))
+
+
+class FakeSchtasks:
+    """A stand-in for the Windows task scheduler that remembers the one
+    task, so /Query /XML answers with what /Create was given."""
+
+    def __init__(self) -> None:
+        self.calls: list[list[str]] = []
+        self.tr: str | None = None
+
+    def __call__(self, cmd):
+        self.calls.append(list(cmd))
+        verb = cmd[1] if len(cmd) > 1 else ""
+        if cmd[0] == "launchctl":
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+        if verb == "/Create":
+            self.tr = cmd[cmd.index("/TR") + 1]
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+        if verb == "/Delete":
+            self.tr = None
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+        if verb == "/Query":
+            if self.tr is None:
+                return subprocess.CompletedProcess(cmd, 1, stdout="",
+                                                   stderr="not found")
+            tr = self.tr
+            if tr.startswith('"'):
+                end = tr.index('"', 1)
+                exe, args = tr[:end + 1], tr[end + 1:].strip()
+            else:
+                exe, _, args = tr.partition(" ")
+            xml = (f"<Task><Actions><Exec><Command>{exe}</Command>"
+                   f"<Arguments>{args}</Arguments></Exec></Actions></Task>")
+            return subprocess.CompletedProcess(cmd, 0, stdout=xml, stderr="")
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+
+class SyncTests(unittest.TestCase):
+    """The rule that runs on every normal launch of an installed copy.
+
+    On macOS the plist is redirected into a temp folder, so the test
+    reads and writes a real plist without touching the login items. On
+    Windows the fake scheduler above stands in for schtasks.
+    """
+
+    def setUp(self):
+        if sys.platform not in ("win32", "darwin"):
+            self.skipTest("desktop only")
+        self.tmp = TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        root = Path(self.tmp.name)
+        self.marker = root / "first_launch"
+        self.runner = FakeSchtasks()
+        self._orig_plist = autostart.agent_plist_path
+        autostart.agent_plist_path = lambda: root / "agent.plist"
+        self.addCleanup(setattr, autostart, "agent_plist_path",
+                        self._orig_plist)
+        if sys.platform == "win32":
+            self.here = ["C:\\Users\\me\\AppData\\Local\\Programs\\Finger Rehab"
+                         "\\Finger Rehab.exe", "--watch"]
+            self.there = ["D:\\Finger Rehab\\Finger Rehab.exe", "--watch"]
+        else:
+            self.here = ["/Applications/Finger Rehab.app/Contents/MacOS"
+                         "/Finger Rehab", "--watch"]
+            self.there = ["/Users/me/Desktop/Finger Rehab.app/Contents"
+                          "/MacOS/Finger Rehab", "--watch"]
+
+    def _sync(self, cmd, frozen=True):
+        return autostart.sync(cmd, frozen=frozen, runner=self.runner,
+                              marker=self.marker)
+
+    def _registered(self):
+        return autostart.registered_command(self.runner)
+
+    def test_a_source_checkout_never_registers_itself(self):
+        what, note = self._sync(self.here, frozen=False)
+        self.assertEqual(what, "source")
+        self.assertEqual(note, "")
+        self.assertIsNone(self._registered())
+        self.assertFalse(self.marker.exists())
+
+    def test_first_launch_registers_once_and_says_so(self):
+        what, note = self._sync(self.here)
+        self.assertEqual(what, "first")
+        self.assertIn("plug a board in", note)
+        self.assertIn("Settings", note)
+        self.assertTrue(self.marker.exists())
+        self.assertEqual(self._registered(), self.here)
+
+    def test_the_next_launch_leaves_it_alone(self):
+        self._sync(self.here)
+        n = len(self.runner.calls)
+        what, note = self._sync(self.here)
+        self.assertEqual((what, note), ("kept", ""))
+        # Reading the state is fine; writing it again is not.
+        writes = [c for c in self.runner.calls[n:]
+                  if c[1] in ("/Create", "bootstrap")]
+        self.assertEqual(writes, [])
+
+    def test_turned_off_in_settings_stays_off(self):
+        self._sync(self.here)
+        ok, _ = autostart.unregister(runner=self.runner)
+        self.assertTrue(ok)
+        what, note = self._sync(self.here)
+        self.assertEqual((what, note), ("off", ""))
+        self.assertIsNone(self._registered())
+
+    def test_the_installer_registered_it_and_settings_turned_it_off(self):
+        # The Windows installer runs --register-autostart before the
+        # game ever opens, so the first launch finds it registered.
+        ok, _ = autostart.register(list(self.here), runner=self.runner)
+        self.assertTrue(ok)
+        what, _ = self._sync(self.here)
+        self.assertEqual(what, "kept")
+        self.assertTrue(self.marker.exists())
+        autostart.unregister(runner=self.runner)
+        what, note = self._sync(self.here)
+        self.assertEqual((what, note), ("off", ""))
+        self.assertIsNone(self._registered())
+
+    def test_a_refused_registration_is_retried_next_launch(self):
+        refusing = FakeRunner(returncode=1)
+        what, msg = autostart.sync(self.here, frozen=True, runner=refusing,
+                                   marker=self.marker)
+        self.assertEqual(what, "failed")
+        self.assertTrue(msg)
+        self.assertFalse(self.marker.exists())
+
+    def test_a_moved_app_re_registers_its_new_path(self):
+        self._sync(self.there)
+        self.assertEqual(self._registered(), self.there)
+        what, note = self._sync(self.here)
+        self.assertEqual((what, note), ("moved", ""))
+        self.assertEqual(self._registered(), self.here)
+
+    def test_running_from_the_disk_image_refuses_and_says_drag(self):
+        if sys.platform != "darwin":
+            self.skipTest("macos only")
+        what, note = self._sync(
+            ["/Volumes/Finger Rehab/Finger Rehab.app/Contents/MacOS"
+             "/Finger Rehab", "--watch"])
+        self.assertEqual(what, "unsafe")
+        self.assertIn("Applications", note)
+        self.assertIsNone(self._registered())
+        # Nothing was decided, so the real first launch still happens.
+        self.assertFalse(self.marker.exists())
+
+
+class MainFlagTests(unittest.TestCase):
+    """The two flags the installer and the uninstaller run, hidden."""
+
+    def _run_main(self, argv, register=None, unregister=None):
+        import io
+        from contextlib import redirect_stderr, redirect_stdout
+        from unittest.mock import patch
+        import main as main_mod
+        out, err = io.StringIO(), io.StringIO()
+        with patch.object(sys, "argv", ["main.py", *argv]), \
+             patch.object(autostart, "register",
+                          register or autostart.register), \
+             patch.object(autostart, "unregister",
+                          unregister or autostart.unregister), \
+             redirect_stdout(out), redirect_stderr(err):
+            code = main_mod.main()
+        return code, out.getvalue(), err.getvalue()
+
+    def test_register_prints_one_line_and_exits_zero(self):
+        seen = {}
+        def fake_register(cmd, poll_s=1.0, runner=None):
+            seen["cmd"] = list(cmd)
+            return True, "The game will start when a board is plugged in."
+        code, out, err = self._run_main(["--register-autostart"],
+                                        register=fake_register)
+        self.assertEqual(code, 0)
+        self.assertEqual(out.strip().splitlines(),
+                         ["The game will start when a board is plugged in."])
+        self.assertEqual(err, "")
+        self.assertEqual(seen["cmd"], autostart.watcher_command())
+
+    def test_a_refusal_goes_to_stderr_with_exit_one(self):
+        code, out, err = self._run_main(
+            ["--register-autostart"],
+            register=lambda cmd, poll_s=1.0, runner=None:
+                (False, "Windows refused to create the scheduled task."))
+        self.assertEqual(code, 1)
+        self.assertEqual(out, "")
+        self.assertIn("refused", err)
+
+    def test_unregister_exits_zero(self):
+        called = []
+        code, out, _ = self._run_main(
+            ["--unregister-autostart"],
+            unregister=lambda runner=None: (called.append(1) or
+                                            (True, "Auto-start turned off.")))
+        self.assertEqual(code, 0)
+        self.assertEqual(called, [1])
+        self.assertIn("turned off", out)
+
+
+class SettingsSwitchTests(unittest.TestCase):
+    """The Auto-start button on the real Settings screen, with the
+    operating system replaced by the fake scheduler and a temp plist."""
+
+    def setUp(self):
+        if sys.platform not in ("win32", "darwin"):
+            self.skipTest("desktop only")
+        import pygame
+        pygame.init()
+        pygame.font.init()
+        self.addCleanup(pygame.quit)
+        self.tmp = TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        orig = autostart.agent_plist_path
+        autostart.agent_plist_path = lambda: Path(self.tmp.name) / "a.plist"
+        self.addCleanup(setattr, autostart, "agent_plist_path", orig)
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
+        from finger_rehab.ui.screens import DiagnosticsScreen
+        cfg = Config.load()
+        cfg.data.setdefault("ui", {})["resolution"] = [1280, 800]
+        self.engine = GameEngine(cfg, KeyboardOnlySource())
+        self.screen = DiagnosticsScreen(self.engine)
+        self.runner = FakeSchtasks()
+        self.screen._autostart_runner = self.runner
+        self.screen._autostart_on = self.screen._read_autostart()
+        self.screen.rebuild_panel()
+
+    def _button(self):
+        hits = [b for b in self.screen._panel_buttons
+                if b.label.startswith("Auto-start")]
+        self.assertEqual(len(hits), 1, [b.label for b in hits])
+        return hits[0]
+
+    def test_it_sits_with_the_firmware_buttons_and_is_drawn(self):
+        import pygame
+        b = self._button()
+        self.assertTrue(self.screen._firmware_rect().contains(b.rect))
+        for other in self.screen._panel_buttons:
+            if other is not b:
+                self.assertFalse(b.rect.colliderect(other.rect), other.label)
+        self.screen.draw(pygame.Surface((1280, 800)))
+
+    def test_it_reads_off_then_turns_on_for_the_games_own_path(self):
+        b = self._button()
+        self.assertEqual(b.label, "Auto-start: off")
+        b.on_click()
+        self.assertEqual(autostart.registered_command(self.runner),
+                         autostart.watcher_command())
+        self.assertEqual(self._button().label, "Auto-start: on")
+        self.assertIn("plug", self.screen._port_status)
+
+    def test_a_second_press_turns_it_off(self):
+        self._button().on_click()
+        self._button().on_click()
+        self.assertIsNone(autostart.registered_command(self.runner))
+        self.assertEqual(self._button().label, "Auto-start: off")
+        self.assertIn("off", self.screen._port_status)
+
+
+class TitleNoteTests(unittest.TestCase):
+    """The one line the launch-time sync may leave on the title screen."""
+
+    def setUp(self):
+        import pygame
+        pygame.init()
+        pygame.font.init()
+        self.addCleanup(pygame.quit)
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
+        from finger_rehab.ui.screens import TitleScreen
+        cfg = Config.load()
+        cfg.data.setdefault("ui", {})["resolution"] = [1280, 800]
+        self.engine = GameEngine(cfg, KeyboardOnlySource())
+        self.screen = TitleScreen(self.engine)
+
+    def _painted(self):
+        import pygame
+        import finger_rehab.ui.screens as screens_mod
+        seen: list[str] = []
+        original = screens_mod.draw_text
+        def recorder(surf, text, pos, *args, **kwargs):
+            seen.append(str(text))
+            return original(surf, text, pos, *args, **kwargs)
+        screens_mod.draw_text = recorder
+        try:
+            self.screen.draw(pygame.Surface((1280, 800)))
+        finally:
+            screens_mod.draw_text = original
+        return seen
+
+    def test_the_note_is_painted_when_set(self):
+        self.engine.autostart_note = ("Auto-start is on: plug a board in "
+                                      "and the game opens. Settings turns "
+                                      "it off.")
+        self.assertIn(self.engine.autostart_note, self._painted())
+
+    def test_nothing_extra_is_painted_otherwise(self):
+        self.engine.autostart_note = ""
+        self.assertFalse([t for t in self._painted() if "Auto-start" in t])
+
+
 if __name__ == "__main__":
     unittest.main()

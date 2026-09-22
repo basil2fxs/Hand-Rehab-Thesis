@@ -1,14 +1,15 @@
 """Tests for the EEG lab package.
 
 docs/lab_package is the one folder handed to the EEG lab. Its top
-level holds exactly four entries: Finger Rehab.exe, eeg_lab.yaml,
-run_in_psychopy.py and a fresh source/ copy of the game. Three things
-are pinned here. The launcher picks the right route (source/, the
-exe, or nothing) and refuses to start without the packages the game
-needs. scripts/build_lab_package.py produces that minimal folder from
-any repo and clears the text files earlier layouts shipped. The two
-build scripts and the CI workflow all go through that one script, so
-the local folder and the CI zip cannot fork.
+level holds exactly five entries: Finger Rehab.exe, eeg_lab.yaml,
+run_in_psychopy.py, README.txt and a fresh source/ copy of the game.
+Three things are pinned here. The launcher picks the right route (the
+exe on Windows, source/ elsewhere, or nothing) and refuses to start
+from source without the packages the game needs.
+scripts/build_lab_package.py produces that minimal folder from any
+repo and clears the text files earlier layouts shipped. The two build
+scripts and the CI workflow all go through that one script, so the
+local folder and the CI zip cannot fork.
 """
 from __future__ import annotations
 
@@ -31,13 +32,12 @@ sys.path.insert(0, str(REPO))
 LAUNCHER = REPO / "docs" / "lab_package" / "run_in_psychopy.py"
 BUILDER = REPO / "scripts" / "build_lab_package.py"
 TARGET = {"Finger Rehab.exe", "eeg_lab.yaml", "run_in_psychopy.py",
-          "source"}
+          "README.txt", "source"}
 # What the game imports at run time; see PACKAGES in the launcher.
 NEEDED = {"pygame-ce", "pyserial", "pyyaml", "numpy", "scipy", "librosa",
           "soundfile", "matplotlib"}
 # Shipped by earlier package layouts; must never come back.
-STALE = ("README.txt", "eeg_lab_setup.txt", "EEG Lab.bat",
-         "run_from_source.py")
+STALE = ("eeg_lab_setup.txt", "EEG Lab.bat", "run_from_source.py")
 
 
 def _load(path: Path):
@@ -76,12 +76,14 @@ class LauncherTests(unittest.TestCase):
         (self.here / "source" / "main.py").write_text("")
         (self.here / "source" / "config" / "eeg_lab.yaml").write_text("")
 
-    def _run(self):
-        """main() with subprocess.call captured: (rc, call, stdout)."""
+    def _run(self, platform: str = "linux"):
+        """main() with subprocess.call captured: (rc, call, stdout).
+        The platform is passed explicitly so the route under test does
+        not depend on the machine running the suite."""
         out = io.StringIO()
         with patch.object(self.mod.subprocess, "call",
                           return_value=0) as call, redirect_stdout(out):
-            rc = self.mod.main(self.here)
+            rc = self.mod.main(self.here, platform=platform)
         return rc, call, out.getvalue()
 
     def test_compiles(self) -> None:
@@ -120,14 +122,32 @@ class LauncherTests(unittest.TestCase):
         missing.assert_not_called()
         call.assert_called_once_with([str(exe)], cwd=str(self.here))
 
-    def test_source_wins_over_the_exe(self) -> None:
+    def test_source_wins_over_the_exe_off_windows(self) -> None:
+        # A Mac or Linux PsychoPy cannot run the exe, so source/ is
+        # the route there even with the exe beside it.
         self._source_layout()
         (self.here / "Finger Rehab.exe").write_bytes(b"")
         with patch.object(self.mod, "missing_packages", return_value=[]):
-            _, call, _ = self._run()
+            _, call, _ = self._run(platform="darwin")
         self.assertEqual(call.call_args.args[0][0], sys.executable)
 
-    def test_missing_pygame_ce_prints_one_pip_line_and_stops(self) -> None:
+    def test_exe_wins_on_windows_and_needs_no_packages(self) -> None:
+        # The lab desktop: the exe carries its own Python, so the first
+        # Run must not stop at a pip line for PsychoPy's classic pygame.
+        self._source_layout()
+        exe = self.here / "Finger Rehab.exe"
+        exe.write_bytes(b"")
+        with patch.object(self.mod, "missing_packages") as missing:
+            rc, call, out = self._run(platform="win32")
+        self.assertEqual(rc, 0)
+        missing.assert_not_called()
+        call.assert_called_once_with([str(exe)], cwd=str(self.here))
+        # And it says where the data goes, next to the exe.
+        self.assertIn(str(self.here / "sessions"), out)
+
+    def test_missing_pygame_ce_prints_uninstall_then_install(self) -> None:
+        # PsychoPy's classic pygame owns the same package name, so the
+        # fix is two pip lines in this order, ready to paste.
         self._source_layout()
         with patch.object(self.mod, "_pygame_is_ce", return_value=False), \
                 patch.object(self.mod.importlib.util, "find_spec",
@@ -136,9 +156,11 @@ class LauncherTests(unittest.TestCase):
         self.assertNotEqual(rc, 0)
         call.assert_not_called()
         lines = out.strip().splitlines()
-        self.assertEqual(len(lines), 1, out)
+        self.assertEqual(len(lines), 3, out)
+        self.assertIn(f'"{sys.executable}" -m pip uninstall -y pygame',
+                      lines[1])
         self.assertIn(f'"{sys.executable}" -m pip install pygame-ce',
-                      lines[0])
+                      lines[2])
 
     def test_pip_line_names_every_missing_package(self) -> None:
         self._source_layout()
@@ -152,9 +174,12 @@ class LauncherTests(unittest.TestCase):
             rc, call, out = self._run()
         self.assertNotEqual(rc, 0)
         call.assert_not_called()
-        self.assertEqual(len(out.strip().splitlines()), 1, out)
+        # The header and one install line; no uninstall when pygame-ce
+        # is already the pygame in place.
+        self.assertEqual(len(out.strip().splitlines()), 2, out)
         self.assertIn("-m pip install librosa soundfile", out)
         self.assertNotIn("pygame-ce", out)
+        self.assertNotIn("uninstall", out)
 
     def test_every_run_time_package_is_checked(self) -> None:
         self.assertEqual(set(self.mod.PACKAGES.values()), NEEDED)
@@ -222,6 +247,7 @@ class BuilderTests(unittest.TestCase):
             "tests/test_x.py": "", "sessions/P01/trials.csv": "",
             "docs/eeg_lab_setup.txt": "notes",
             "docs/lab_package/run_in_psychopy.py": "# launcher\n",
+            "docs/lab_package/README.txt": "lab readme\n",
         }
         for rel, text in files.items():
             p = root / rel
@@ -269,6 +295,13 @@ class BuilderTests(unittest.TestCase):
         self.assertEqual(set(names), TARGET)
         self.assertEqual((pkg / "run_in_psychopy.py").read_text(),
                          "# launcher\n")
+        self.assertEqual((pkg / "README.txt").read_text(), "lab readme\n")
+
+    def test_readme_is_short_and_plain(self) -> None:
+        # Fifteen lines at most, ASCII only: the lab reads it once.
+        text = (REPO / "docs" / "lab_package" / "README.txt").read_text()
+        self.assertLessEqual(len(text.strip().splitlines()), 15)
+        self.assertTrue(text.isascii())
 
     def test_without_an_exe_the_rest_still_builds(self) -> None:
         # A Mac build cannot make the exe: the folder keeps the one
@@ -396,11 +429,6 @@ class MainInstallHasNoEEGTests(unittest.TestCase):
         # And it must still bundle the one config it does need.
         self.assertIn("config/default.yaml", spec)
 
-    def test_the_setup_tool_spec_does_not_either(self):
-        spec = (REPO / "setup_tool.spec").read_text()
-        self.assertNotIn("eeg_lab.yaml", spec.split("datas = [")[1]
-                         .split("]")[0])
-
     def test_the_lab_config_still_exists_for_the_lab_package(self):
         # Excluded from the bundle, NOT deleted: the lab package puts
         # it beside the exe and main.py reads it from there.
@@ -408,19 +436,72 @@ class MainInstallHasNoEEGTests(unittest.TestCase):
         self.assertIn("eeg_lab.yaml", (REPO / "main.py").read_text())
 
 
-class SetupToolIsBuiltEverywhereTests(unittest.TestCase):
-    """The repair kit must never be older than the thing it repairs."""
+class OneAppTests(unittest.TestCase):
+    """The Setup app is gone: the installer and the game's Settings
+    screen do its jobs. Nothing may build, ship or mention it."""
 
-    def test_both_build_scripts_build_it(self):
-        for name in ("build_app.sh", "build_app.bat"):
-            text = (REPO / "builds" / name).read_text()
-            self.assertIn("setup_tool.spec", text, name)
+    BUILD_FILES = ("builds/build_app.sh", "builds/build_app.bat",
+                   ".github/workflows/build-apps.yml", "finger_rehab.spec",
+                   ".gitignore", "README.md", "builds/README.txt",
+                   "config/default.yaml", "main.py",
+                   "finger_rehab/hardware/autostart.py")
 
-    def test_ci_builds_it_and_ships_it(self):
+    def test_the_setup_tool_is_gone(self):
+        self.assertFalse((REPO / "setup_tool.py").exists())
+        self.assertFalse((REPO / "setup_tool.spec").exists())
+        for name in self.BUILD_FILES:
+            text = (REPO / name).read_text(encoding="utf-8")
+            self.assertNotIn("setup_tool", text, name)
+            self.assertNotIn("Finger Rehab Setup", text, name)
+
+    def test_ci_ships_the_three_artefacts(self):
         ci = (REPO / ".github" / "workflows" / "build-apps.yml").read_text()
-        self.assertIn("setup_tool.spec", ci)
-        self.assertIn("Finger Rehab Setup.exe", ci)
-        self.assertIn("Finger Rehab Setup.app", ci)
+        for name in ("FingerRehab-Setup-Windows.exe", "FingerRehab-macOS.dmg",
+                     "FingerRehab-EEGLab.zip"):
+            self.assertIn(name, ci, name)
+        self.assertIn("installers\\windows.iss", ci)
+        self.assertIn("hdiutil create", ci)
+        self.assertIn("build_lab_package.py", ci)
+
+    def test_the_mac_build_script_makes_the_disk_image(self):
+        sh = (REPO / "builds" / "build_app.sh").read_text()
+        self.assertIn("hdiutil create", sh)
+        self.assertIn("FingerRehab-macOS.dmg", sh)
+        self.assertIn("ln -s /Applications", sh)
+
+    def test_the_installer_wraps_the_game_and_runs_the_flags(self):
+        iss = (REPO / "installers" / "windows.iss").read_text()
+        self.assertIn('Source: "..\\bin\\dist\\Finger Rehab.exe"', iss)
+        self.assertIn("--register-autostart", iss)
+        self.assertIn("--unregister-autostart", iss)
+        self.assertIn("PrivilegesRequired=lowest", iss)
+        self.assertIn("OutputBaseFilename=FingerRehab-Setup-Windows", iss)
+        # A real GUID, not the spec's placeholder, so an update finds
+        # the earlier install.
+        self.assertRegex(iss, r"AppId=\{\{[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}"
+                              r"-[0-9A-F]{4}-[0-9A-F]{12}\}")
+        # Nothing wipes the folder, so sessions survive an uninstall.
+        self.assertNotRegex(iss, r"(?m)^\[UninstallDelete\]")
+        # The register flag runs hidden: it must never open a window.
+        line = next(l for l in iss.splitlines()
+                    if "--register-autostart" in l)
+        self.assertIn("runhidden", line)
+
+    def test_the_flags_exist_in_main(self):
+        text = (REPO / "main.py").read_text()
+        self.assertIn("--register-autostart", text)
+        self.assertIn("--unregister-autostart", text)
+
+    def test_one_version_everywhere(self):
+        # The spec's literal is pinned to SOFTWARE_VERSION by
+        # test_screen_layout; this pins the installer's copy of it.
+        ci = (REPO / ".github" / "workflows" / "build-apps.yml").read_text()
+        self.assertIn("builds/version.py", ci)
+        self.assertIn("/DAppVersion=", ci)
+        from finger_rehab.data.session import SOFTWARE_VERSION
+        out = subprocess.run([sys.executable, str(REPO / "builds" / "version.py")],
+                             capture_output=True, text=True, check=True)
+        self.assertEqual(out.stdout.strip(), SOFTWARE_VERSION)
 
     def test_the_watcher_is_the_same_binary_as_the_game(self):
         # One binary in two modes, so there is no second executable to

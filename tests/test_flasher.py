@@ -520,6 +520,19 @@ class TestAddressJob:
         assert job.found_before == [0x04, 0x05, 0x06, 0x07, 0x08]
         # Two flashes: the tool, then the game firmware back.
         assert len(runs(fake_tool)) == 2
+        # The dialog reads ok and summary, not found_before. A scan
+        # that parsed the bus and then reported a failure is what the
+        # Scan button showed until this was pinned.
+        assert job.ok
+        assert "On the bus now: 0x04, 0x05, 0x06, 0x07, 0x08." in job.summary
+        assert "Game firmware restored" in job.summary
+
+    def test_a_scan_of_an_empty_bus_still_succeeds(
+            self, fake_tool, cfg, tmp_path):
+        job = _run_address_job(fake_tool, cfg, tmp_path, {"SCAN": "FOUND: none"})
+        assert job.found_before == []
+        assert job.ok
+        assert "Nothing answers on the bus now." in job.summary
 
     def test_changing_from_0x04_is_refused_when_others_answer(
             self, fake_tool, cfg, tmp_path):

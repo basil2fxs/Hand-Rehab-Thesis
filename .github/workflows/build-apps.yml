@@ -1,14 +1,15 @@
-# Build the standalone Finger Rehab apps for macOS and Windows.
+# Build the Finger Rehab installers for Windows and macOS, and the EEG
+# lab folder.
 #
 # PyInstaller cannot cross-compile, so each OS builds its own app on a
 # matching GitHub runner. Run it from the Actions tab (workflow_dispatch)
-# or push a tag like v1.0.0. Download the artefacts from the run page:
-#   FingerRehab-macOS.zip    -> Finger Rehab.app (double-click)
-#   FingerRehab-Windows.zip  -> Finger Rehab/Finger Rehab.exe (double-click)
+# or push to main or a tag like v1.0.0. Download from the run page:
+#   FingerRehab-Setup-Windows   FingerRehab-Setup-Windows.exe, run it
+#   FingerRehab-macOS           FingerRehab-macOS.dmg, drag to Applications
+#   FingerRehab-EEGLab          FingerRehab-EEGLab.zip, the lab folder
 #
-# Both are fully self-contained: Python, pygame, numpy, librosa and
-# matplotlib all ship inside. Nothing to install on the target machine.
-# Windows builds as ONE file (Finger Rehab.exe); macOS as the .app.
+# All are self-contained: Python, pygame, numpy, librosa and matplotlib
+# ship inside. Nothing to install on the target machine.
 
 name: build-apps
 
@@ -61,11 +62,7 @@ jobs:
     needs: firmware
     strategy:
       matrix:
-        include:
-          - os: macos-latest
-            artefact: FingerRehab-macOS
-          - os: windows-latest
-            artefact: FingerRehab-Windows
+        os: [macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -80,6 +77,13 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt pyinstaller
+
+      # One version string for the exe, the app bundle and the
+      # installer: SOFTWARE_VERSION in finger_rehab/data/session.py,
+      # the same number every session's metadata records.
+      - name: Read the version
+        shell: bash
+        run: echo "APP_VERSION=$(python builds/version.py)" >> "$GITHUB_ENV"
 
       # The hexes the firmware job just compiled, from this same commit,
       # so a released app can never carry firmware from a different one.
@@ -100,24 +104,71 @@ jobs:
       - name: Build
         run: python -m PyInstaller --noconfirm --workpath bin/build --distpath bin/dist finger_rehab.spec
 
-      # The setup and diagnostics tool. Same commit as the game, so the
-      # repair kit can never be older than the thing it repairs.
-      - name: Build the setup tool
-        run: python -m PyInstaller --noconfirm --workpath bin/build --distpath bin/dist setup_tool.spec
-
-      - name: Zip bundle (macOS)
+      # macOS: a disk image with the app and an Applications link, the
+      # drag target. UDZO is compressed and read-only.
+      - name: Make the disk image (macOS)
         if: runner.os == 'macOS'
         run: |
-          cd bin/dist
-          mkdir -p "Finger Rehab"
-          cp -R "Finger Rehab.app" "Finger Rehab/"
-          cp -R "Finger Rehab Setup.app" "Finger Rehab/"
-          ditto -c -k --keepParent "Finger Rehab" "${{ matrix.artefact }}.zip"
+          STAGE=bin/dist/dmg
+          rm -rf "$STAGE"; mkdir -p "$STAGE"
+          cp -R "bin/dist/Finger Rehab.app" "$STAGE/"
+          ln -s /Applications "$STAGE/Applications"
+          hdiutil create -volname "Finger Rehab" -srcfolder "$STAGE" \
+              -ov -format UDZO bin/dist/FingerRehab-macOS.dmg
 
-      - name: Zip bundle (Windows)
+      - name: Upload the disk image (macOS)
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: FingerRehab-macOS
+          path: bin/dist/FingerRehab-macOS.dmg
+          retention-days: 30
+
+      # Windows: Inno Setup ships on the runner image but is not on
+      # PATH; call it by its full path and fall back to Chocolatey.
+      - name: Find or install Inno Setup (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: Compress-Archive -Path "bin/dist/Finger Rehab.exe", "bin/dist/Finger Rehab Setup.exe" -DestinationPath "bin/dist/${{ matrix.artefact }}.zip"
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup --no-progress -y
+          }
+          if (-not (Test-Path $iscc)) { throw "ISCC.exe not found" }
+          "ISCC=$iscc" >> $env:GITHUB_ENV
+
+      - name: Build the Windows installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          & $env:ISCC "/DAppVersion=$env:APP_VERSION" installers\windows.iss
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      # Prove the installer installs, registers the auto-start task and
+      # uninstalls cleanly. The runner account is an administrator, so
+      # this checks the script, not what a standard user can do.
+      - name: Install, check, uninstall (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Start-Process "bin\dist\FingerRehab-Setup-Windows.exe" `
+            -ArgumentList "/VERYSILENT","/SP-","/SUPPRESSMSGBOXES" -Wait
+          $exe = "$env:LOCALAPPDATA\Programs\Finger Rehab\Finger Rehab.exe"
+          if (-not (Test-Path $exe)) { throw "not installed" }
+          schtasks /Query /TN FingerRehabAutostart
+          if ($LASTEXITCODE) { throw "auto-start task missing" }
+          Start-Process "$env:LOCALAPPDATA\Programs\Finger Rehab\unins000.exe" `
+            -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES" -Wait
+          schtasks /Query /TN FingerRehabAutostart 2>$null
+          if (-not $LASTEXITCODE) { throw "task survived uninstall" }
+
+      - name: Upload the Windows installer
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: FingerRehab-Setup-Windows
+          path: bin/dist/FingerRehab-Setup-Windows.exe
+          retention-days: 30
 
       # The lab package: the exe, eeg_lab.yaml, run_in_psychopy.py and
       # a fresh source/ copy of the game, nothing else. The same script
@@ -130,18 +181,12 @@ jobs:
         run: |
           python scripts/build_lab_package.py --exe "bin/dist/Finger Rehab.exe" --out "bin/dist/Finger Rehab EEG Lab"
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          Compress-Archive -Path "bin/dist/Finger Rehab EEG Lab" -DestinationPath "bin/dist/FingerRehab-EEGLab-Windows.zip"
+          Compress-Archive -Path "bin/dist/Finger Rehab EEG Lab" -DestinationPath "bin/dist/FingerRehab-EEGLab.zip"
 
       - name: Upload EEG lab package (Windows)
         if: runner.os == 'Windows'
         uses: actions/upload-artifact@v4
         with:
-          name: FingerRehab-EEGLab-Windows
-          path: bin/dist/FingerRehab-EEGLab-Windows.zip
-          retention-days: 30
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artefact }}
-          path: bin/dist/${{ matrix.artefact }}.zip
+          name: FingerRehab-EEGLab
+          path: bin/dist/FingerRehab-EEGLab.zip
           retention-days: 30

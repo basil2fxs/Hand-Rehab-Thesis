@@ -1,8 +1,8 @@
 @echo off
-REM Build the standalone Windows exe (one file, everything inside).
-REM PyInstaller output goes to bin\dist\, then the exe is copied into
-REM builds\Windows\ so the ready-to-run deliverables always live in one
-REM obvious place at the project root.
+REM Build the Windows exe (one file, everything inside) and, when Inno
+REM Setup is installed, the installer that wraps it. PyInstaller output
+REM goes to bin\dist\, then both are copied into builds\Windows\ so the
+REM deliverables always live in one place.
 setlocal
 
 rem The script lives in builds\; the build runs from the project root.
@@ -36,14 +36,25 @@ if errorlevel 1 (
     exit /b 1
 )
 
-REM The setup and diagnostics tool, same tree as the game.
-py -m PyInstaller --noconfirm ^
-    --workpath bin\build ^
-    --distpath bin\dist ^
-    setup_tool.spec
-
 if not exist builds\Windows mkdir builds\Windows
 copy /y "bin\dist\Finger Rehab.exe" "builds\Windows\Finger Rehab.exe" >nul
+
+rem The installer. Inno Setup 6 is a free download (jrsoftware.org);
+rem without it the bare exe above still works, it just has to be run
+rem from wherever it was copied.
+for /f "delims=" %%v in ('py builds\version.py') do set APP_VERSION=%%v
+set ISCC=%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe
+if exist "%ISCC%" (
+    "%ISCC%" "/DAppVersion=%APP_VERSION%" installers\windows.iss
+    if errorlevel 1 (
+        echo Installer build failed
+        exit /b 1
+    )
+    copy /y "bin\dist\FingerRehab-Setup-Windows.exe" "builds\Windows\FingerRehab-Setup-Windows.exe" >nul
+    echo Installer: builds\Windows\FingerRehab-Setup-Windows.exe
+) else (
+    echo Inno Setup not found, so no installer. Install it from jrsoftware.org to build one.
+)
 
 rem Refresh the EEG lab package, the one folder that gets copied to
 rem the lab desktop. The script copies in this build's exe, refreshes
@@ -58,5 +69,4 @@ if errorlevel 1 (
 echo.
 echo Build complete.
 echo Ready to run: builds\Windows\Finger Rehab.exe
-echo Copy that one file to any Windows PC and double-click it.
 echo Lab install: copy the whole docs\lab_package folder to the lab PC.

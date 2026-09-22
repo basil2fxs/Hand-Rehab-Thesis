@@ -6,6 +6,16 @@ import logging
 import sys
 from pathlib import Path
 
+# Every mode the hub can start. Kept here as plain strings so parsing
+# the command line never imports pygame; tests/test_run_lock_order.py
+# checks it against GameEngine._BLOCK_STARTERS so the two cannot drift.
+MODE_KEYS = ("reaction", "adaptive", "rhythm", "mirror", "pattern",
+             "chords", "syllables", "force_pilot", "buzz_hunt", "echo",
+             "classic")
+
+# Exit code for a launch refused because another copy holds the lock.
+ALREADY_RUNNING = 7
+
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Finger rehab game")
@@ -22,8 +32,8 @@ def parse_args() -> argparse.Namespace:
                    choices=["left", "right", "both"],
                    help="Override the hand mode set in config")
     p.add_argument("--mode", default=None,
-                   choices=["classic", "adaptive", "rhythm"],
-                   help="Override the game mode set in config")
+                   choices=MODE_KEYS,
+                   help="Preselect a mode on the hub (game.mode in config)")
     p.add_argument("--participant", default=None)
     p.add_argument("--log-level", default=None,
                    choices=["DEBUG", "INFO", "WARNING", "ERROR"])
@@ -33,6 +43,14 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--watch", action="store_true",
                    help="Sit in the background and start the game when "
                         "a board is plugged in")
+    # The installer runs the first of these hidden after copying the
+    # exe in, and the uninstaller runs the second before deleting it.
+    # Neither may open a window: print one line and exit.
+    p.add_argument("--register-autostart", action="store_true",
+                   help="Register this executable's watcher with the "
+                        "operating system and exit")
+    p.add_argument("--unregister-autostart", action="store_true",
+                   help="Remove the auto-start registration and exit")
     return p.parse_args()
 
 
@@ -79,6 +97,17 @@ def main() -> int:
         # Most likely a YAML parse error from a hand-edited override.
         print(f"Could not load config: {e}", file=sys.stderr)
         return 5
+    if args.register_autostart or args.unregister_autostart:
+        from finger_rehab.hardware import autostart
+        if args.register_autostart:
+            ok, msg = autostart.register(
+                autostart.watcher_command(__file__),
+                poll_s=cfg.get("autostart.poll_s",
+                               autostart.DEFAULT_POLL_S))
+        else:
+            ok, msg = autostart.unregister()
+        print(msg, file=sys.stdout if ok else sys.stderr)
+        return 0 if ok else 1
     # Resolve the log path through the config so a relative
     # "sessions/finger_rehab.log" lands next to the app (USER_ROOT) instead of
     # whatever the working directory happens to be. Finder launches the
@@ -104,15 +133,27 @@ def main() -> int:
 
     if args.watch:
         from finger_rehab.hardware import autostart
+        # One watcher at a time. A login task plus a watcher started
+        # by hand would otherwise both see the same arrival and race
+        # to launch; the game lock stops one of them, but not before
+        # both have tried.
+        watcher_lock = autostart.RunLock(
+            autostart.user_root() / "watcher.lock")
+        if not watcher_lock.acquire():
+            log.info("another watcher is already running; leaving it to it")
+            return 0
         game_cmd = [sys.executable]
         if not getattr(sys, "frozen", False):
             game_cmd.append(str(Path(__file__).resolve()))
         log.info("watching for a board every %.1f s",
                  cfg.get("autostart.poll_s", autostart.DEFAULT_POLL_S))
-        autostart.watch(game_cmd,
-                        poll_s=cfg.get("autostart.poll_s",
-                                       autostart.DEFAULT_POLL_S),
-                        vendor_ids=cfg.get("serial.vendor_ids"))
+        try:
+            autostart.watch(game_cmd,
+                            poll_s=cfg.get("autostart.poll_s",
+                                           autostart.DEFAULT_POLL_S),
+                            vendor_ids=cfg.get("serial.vendor_ids"))
+        finally:
+            watcher_lock.release()
         return 0
 
     if args.list_ports:
@@ -123,8 +164,22 @@ def main() -> int:
             print(f"{p.device:24s}  vid={vid}  pid={pid}  {p.description}")
         return 0
 
+    # Held for as long as the game runs. Taken BEFORE the serial port
+    # is opened: on Windows the port is exclusive, so a second copy
+    # that opened it first would silently fall back to keyboard mode
+    # and a whole session could be recorded on the wrong window. The
+    # watcher checks the same lock before launching.
+    from finger_rehab.hardware.autostart import RunLock
+    lock = RunLock()
+    if not lock.acquire():
+        msg = "Finger Rehab is already running. Use the window that is open."
+        log.error(msg)
+        print(msg, file=sys.stderr)
+        return ALREADY_RUNNING
+
     source = _build_source(cfg, args)
     if source is None:
+        lock.release()
         log.error("Could not build any source. Try --source keyboard.")
         return 2
 
@@ -140,17 +195,33 @@ def main() -> int:
             source.stop()
         except Exception:
             pass
+        lock.release()
         return 6
-    # Held for as long as the game runs. The watcher checks this before
-    # launching, which is what stops a replug from opening a second
-    # copy over the top of a session in progress.
-    from finger_rehab.hardware.autostart import RunLock
-    lock = RunLock()
-    lock.acquire()
+    # Keep the auto-start pointed at this copy of the app. An installed
+    # copy registers itself once on its first launch and re-registers
+    # whenever it has been moved; the one line it may have to say lands
+    # on the title screen. Never fatal: a refused schtasks call must not
+    # stop the game from opening.
+    engine.autostart_note = _sync_autostart(cfg, log)
     try:
         return engine.run()
     finally:
         lock.release()
+
+
+def _sync_autostart(cfg, log) -> str:
+    """One launch's worth of the auto-start rule; see autostart.sync."""
+    from finger_rehab.hardware import autostart
+    try:
+        what, note = autostart.sync(
+            autostart.watcher_command(__file__),
+            poll_s=cfg.get("autostart.poll_s", autostart.DEFAULT_POLL_S))
+    except Exception as e:
+        log.warning("auto-start sync failed: %s", e)
+        return ""
+    if what not in ("kept", "source"):
+        log.info("auto-start: %s %s", what, note)
+    return note if what in ("first", "unsafe") else ""
 
 
 def _build_source(cfg, args):

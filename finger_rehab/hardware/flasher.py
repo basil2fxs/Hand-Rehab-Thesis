@@ -938,6 +938,14 @@ class AddressJob(_Job):
             self.found_before = self._parse_found(reply)
             if self.change:
                 self._do_change(ser)
+            else:
+                # A scan on its own is a success the moment the bus
+                # answers. Without these two lines the dialog showed
+                # the last progress line in red and the therapist read
+                # a working scan as a failure.
+                self.ok = True
+                self.summary = self._bus_line(self.found_before)
+                self._say(self.summary)
         except Exception as e:
             log.exception("Address job failed")
             self.ok = False

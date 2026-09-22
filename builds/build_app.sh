@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Build the standalone app for the current platform (macOS or Linux).
-# PyInstaller output goes to bin/dist/ (intermediates in bin/build/),
-# then the finished app is copied into builds/Mac/ so the ready-to-run
-# deliverables always live in one obvious place at the project root.
+# Build the app for the current platform (macOS or Linux).
+# PyInstaller output goes to bin/dist/ (intermediates in bin/build/).
+# On macOS the app is then wrapped in a disk image and both are copied
+# into builds/Mac/, so the deliverables always live in one place.
 
 set -euo pipefail
 
@@ -29,29 +29,29 @@ python3 -m PyInstaller \
     --distpath bin/dist \
     finger_rehab.spec
 
-# The setup and diagnostics tool, built from the same tree so it can
-# never be older than the game it installs.
-python3 -m PyInstaller \
-    --noconfirm \
-    --workpath bin/build \
-    --distpath bin/dist \
-    setup_tool.spec
-
 echo
 echo "Build complete. Artefacts:"
 ls -1 bin/dist/
 
 if [[ "$(uname)" == "Darwin" ]]; then
-    # Refresh the ready-to-run copy in builds/Mac/.
+    # The disk image: the app plus an Applications link to drag it
+    # onto. UDZO is compressed and read-only. -ov replaces last time's.
+    STAGE="bin/dist/dmg"
+    rm -rf "$STAGE"
+    mkdir -p "$STAGE"
+    cp -R "bin/dist/Finger Rehab.app" "$STAGE/"
+    ln -s /Applications "$STAGE/Applications"
+    hdiutil create -volname "Finger Rehab" -srcfolder "$STAGE" \
+        -ov -format UDZO "bin/dist/FingerRehab-macOS.dmg"
+    rm -rf "$STAGE"
+    # Refresh the ready-to-run copies in builds/Mac/.
     mkdir -p "builds/Mac"
     rm -rf "builds/Mac/Finger Rehab.app"
     cp -R "bin/dist/Finger Rehab.app" "builds/Mac/Finger Rehab.app"
-    rm -rf "builds/Mac/Finger Rehab Setup.app"
-    cp -R "bin/dist/Finger Rehab Setup.app" "builds/Mac/Finger Rehab Setup.app"
+    cp -f "bin/dist/FingerRehab-macOS.dmg" "builds/Mac/FingerRehab-macOS.dmg"
     echo
+    echo "Installer: builds/Mac/FingerRehab-macOS.dmg"
     echo "Ready to run: builds/Mac/Finger Rehab.app"
-    echo "Double-click it from Finder, or run from terminal:"
-    echo "  open 'builds/Mac/Finger Rehab.app'"
 else
     mkdir -p "builds/Linux"
     cp -f "bin/dist/Finger Rehab" "builds/Linux/Finger Rehab"

@@ -1,9 +1,12 @@
 # EEG lab setup
 
-The lab task IS the shipping game. `EEG Lab.bat` (Windows) and
-`EEG Lab.command` (Mac) run the same `main.py` with
-`config/eeg_lab.yaml` on top. Nothing is forked, so a game update is
-a lab update.
+The lab task IS the shipping game. The lab folder (docs/lab_package,
+assembled by scripts/build_lab_package.py) holds Finger Rehab.exe,
+eeg_lab.yaml, run_in_psychopy.py, README.txt and a source/ copy of
+the game. The exe loads the eeg_lab.yaml beside it on its own;
+run_in_psychopy.py starts the exe on Windows, or `main.py --config
+eeg_lab.yaml` from source/ elsewhere. Nothing is forked, so a game
+update is a lab update.
 
 ## What lab mode changes
 
@@ -76,9 +79,11 @@ receiver (the box the optical fibre plugs into) -> ActiView.
    change pulse_ms to 10 and box_mode to simple in eeg_lab.yaml.
 5. Start the EEG recording in ActiView. The trigger low byte should
    read 255.
-6. Double-click Finger Rehab.exe, or EEG Lab.bat which does the same
-   but keeps the window open on failure. A refusal to start names the
-   port that failed; that is require_port working.
+6. Open run_in_psychopy.py in PsychoPy Coder and press Run, or
+   double-click Finger Rehab.exe; both load the eeg_lab.yaml beside
+   the exe. A refusal to start names the port that failed; that is
+   require_port working. Under PsychoPy the message is in the
+   Runner's output pane.
 7. Check vsync is ON for the game window. With it off the flip
    returns before the screen updates and visual markers lead by an
    unknown amount.
@@ -90,10 +95,14 @@ receiver (the box the optical fibre plugs into) -> ActiView.
    together in the gap between trials. If you see any of that moving
    during a trial, the block is not the one this file describes;
    tests/test_reaction_mode.py holds the frame-by-frame contract.
-9. Data lands in sessions/ as normal, plus eeg rows in raw.csv and an
+9. Data lands in sessions/ beside the exe (source/sessions/ when run
+   from source): trials.csv, raw.csv with an eeg row per marker, an
    eeg section in metadata.json (backend, port, pulse and gap widths,
-   box and box mode, the latency constants and the marker-to-stimulus
-   offsets, failure counts, degraded flag).
+   box and box mode, the code map, the latency constants and the
+   marker-to-stimulus offsets, failure counts, degraded flag),
+   events.tsv with its events.json sidecar, and markers_codes.csv.
+10. Flashing firmware and changing a sensor address are done from the
+   exe's Settings screen. The source/ copy carries no avrdude.
 
 ## What to expect when running
 
@@ -103,11 +112,13 @@ receiver (the box the optical fibre plugs into) -> ActiView.
 2. At login one jump to 240. Each block: 200+mode at start, 20 at the
    GET READY card, 220+mode at the end.
 3. Each stimulus: a jump to 30-38 (40 or 41 in pattern blocks, 50 or
-   51 for a syllables option set), each
-   press 100-131, and in rhythm blocks a 22 about 200 ms before each
-   beat's 31. Each jump lasts 8 ms (about 16 samples at 2048 Hz) and
-   returns to 0. Decimal display shows the code in the low group;
-   Analog display shows the matching bits going high.
+   51 for a syllables option set), each press 100-131, in rhythm
+   blocks a 22 about 200 ms before each beat's 31, and in Force
+   Pilot a 23 as each run starts and a 24 at each section edge of
+   the corridor, its end included. Each jump lasts 8 ms (about 16
+   samples at 2048 Hz) and returns to 0. Decimal display shows the
+   code in the low group; Analog display shows the matching bits
+   going high.
 4. The box's green LED flashes for odd codes only (31, 33, 101, 241
    and so on). A dark LED on 30, 32, 200 or 240 is not a fault.
 5. Pauses are 242 and 243; the session ends with one 241.
@@ -168,6 +179,24 @@ how unexpected the outcome was.
 - Two events in one frame queue by priority (stimulus first). The
   late one goes out 1-2 frames later and its row carries both times
   plus delayed=1. Nothing is dropped without a dropped=1 row.
+- Every eeg row's detail cell reads
+  code=..;t_event=..;t_wire=..;delayed=..;failed=..;dropped=..;name=..
+  with name the resolved code name (resp_correct_lane2,
+  block_start_reaction). The same rows, sorted by t_event, are
+  written at block end as events.tsv (BIDS columns: onset, duration,
+  trial_type, value, sample, then lane, hand, t_event, t_wire,
+  delayed, failed, dropped) with events.json describing them, and
+  markers_codes.csv lists every byte the map can produce with what it
+  locks to. onset is seconds from the block's first force sample on
+  the game's clock, not the amplifier's: align by matching
+  inter-marker intervals to the Status channel, then shift. Set
+  eeg.amplifier_rate_hz in eeg_lab.yaml to fill the sample column.
+  finger_rehab.hardware.eeg_trigger.export_events(folder) rebuilds
+  the three files for any session folder.
+- In the lab feedback style the last trial's glyph used to be lost
+  when the block closed inside the 800 ms delay; it is now drawn on
+  the closing frame and marked. A 140/141 within one frame of the
+  block-end byte is that case; leave it out of FRN averages.
 
 ## Marker to stimulus: the latency constants
 
@@ -238,7 +267,7 @@ marks what the old file could not.
 | Correctness | never marked; recovered offline from the CSV | in the byte, known at detection time |
 | Block boundaries | never marked | 200+mode start, 220+mode end, 219 abandoned (reaction=0, classic=1, adaptive=2, rhythm=3, mirror=4, pattern=5, chords=6, syllables=7, force_pilot=8, buzz_hunt=10, echo=12; 9 retired with Lighthouse in September 2026 and never reissued, 11 reserved for syllables_words) |
 | Session and flow | never marked | 240 session start, 241 session end, 242 pause, 243 resume, 244/245 rest bounds |
-| Preparation | never marked | 20 GET READY onset, 21 foreperiod armed (CNV S1), 22 rhythm leading buzz, 25 catch-trial virtual onset |
+| Preparation | never marked | 20 GET READY onset, 21 foreperiod armed (CNV S1), 22 rhythm leading buzz, 23 Force Pilot run start, 24 Force Pilot section edge (run end included), 25 catch-trial virtual onset |
 | Reset | 0 after each pulse | same |
 | Lane identity of the stimulus | in the CSV only | same choice, on purpose: 8 lanes x 8 cue conditions does not fit one band. The lane rides the raw.csv eeg row logged with every marker, alignable by timestamp instead of blind row order |
 
@@ -271,6 +300,23 @@ For the epoching script:
 - Shift stimulus-locked epochs by eeg.marker_offsets_ms from
   metadata.json (table above) to lock to the stimulus rather than
   the byte.
+- Per-mode rules the byte cannot tell you, all in markers_codes.csv:
+  chords write one 33 and one response byte per chord, not per
+  finger; mirror writes one 33 per pair and one 100+lane per hand
+  (right 0-3, left 4-7) with no 130 on a miss; syllables' model roll
+  is a 30-band byte with no trial row and the 50/51 spawn is the cue
+  onset; buzz_hunt writes one 38 per pulse (a span trial several, a
+  gap trial two, a catch trial none) and no response byte on scored
+  trials; rhythm's 130 lands when the miss window closes, inside the
+  next note's span; force_pilot runs carry 23 and 24 and no stimulus
+  or response bytes; 240 and 241 are outside every block and never
+  in raw.csv or events.tsv.
+- Import routes. MNE: mne.io.read_raw_bdf(stim_channel="auto") then
+  mne.find_events(raw, mask=255, mask_type="and") gives the low byte
+  as the event id; mne_bids.read_raw_bids reads a sibling events.tsv
+  once its onset column has been shifted onto the BDF clock. EEGLAB:
+  File > Import event info > from ASCII file, fields latency type
+  duration, time unit 1, one header line.
 
 ## Before the first real recording
 

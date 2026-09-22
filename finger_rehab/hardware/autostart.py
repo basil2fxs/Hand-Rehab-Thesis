@@ -234,7 +234,47 @@ def agent_plist_path() -> Path:
 
 
 def _run(cmd: list[str]) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, capture_output=True, text=True)
+    kwargs: dict = {}
+    if sys.platform == "win32":
+        # The game is built without a console, so every schtasks call
+        # would otherwise flash a black window over the Settings screen.
+        kwargs["creationflags"] = _CREATE_NO_WINDOW
+    return subprocess.run(cmd, capture_output=True, text=True, **kwargs)
+
+
+def watcher_command(main_path: str | Path | None = None,
+                    frozen: bool | None = None) -> list[str]:
+    """The command the operating system should run at login.
+
+    The watcher is this same executable with --watch, so a frozen copy
+    registers itself and a source checkout registers the interpreter
+    plus main.py. One rule, used by the launch-time sync, the two
+    command line flags and the Settings switch, so they can never
+    register three different things.
+    """
+    if frozen is None:
+        frozen = bool(getattr(sys, "frozen", False))
+    if frozen:
+        return [sys.executable, "--watch"]
+    main_py = Path(main_path) if main_path else \
+        Path(__file__).resolve().parents[2] / "main.py"
+    return [sys.executable, str(main_py), "--watch"]
+
+
+def unsafe_location(exe: str | Path) -> str | None:
+    """Why this executable must not be registered, or None.
+
+    launchd runs exactly the path it was given, so an agent that points
+    into a mounted disk image or into App Translocation's random
+    folder breaks the moment the image is ejected or the app is next
+    opened. Both happen on the first launch after a download, which is
+    exactly when the first-launch registration would run.
+    """
+    text = str(exe)
+    if sys.platform == "darwin":
+        if text.startswith("/Volumes/") or "/AppTranslocation/" in text:
+            return "Drag Finger Rehab into Applications to turn on auto-start."
+    return None
 
 
 def register(watcher_cmd: list[str], poll_s: float = DEFAULT_POLL_S,
@@ -309,7 +349,7 @@ def is_registered(runner=_run) -> bool:
 
 
 def status(runner=_run) -> dict:
-    """One dict the Settings screen and the setup tool both read."""
+    """One dict the Settings screen reads."""
     return {
         "supported": sys.platform in ("win32", "darwin"),
         "registered": is_registered(runner),
@@ -318,3 +358,127 @@ def status(runner=_run) -> dict:
         "where": (TASK_NAME if sys.platform == "win32"
                   else str(agent_plist_path())),
     }
+
+
+# ---------------------------------------------------------------------------
+# Keeping the registration pointed at the app that is actually installed
+# ---------------------------------------------------------------------------
+
+def first_launch_marker() -> Path:
+    """Touched once the installed game has registered itself.
+
+    A file rather than a config key: user_settings.yaml is the file that
+    decides how the device behaves in a session, and the tests guard it
+    for that reason. Whether the first launch has happened is not a
+    setting, so it does not belong in there.
+    """
+    return user_root() / "autostart.first_launch"
+
+
+def _normalise(cmd: list[str]) -> list[str]:
+    """Strip quotes and case so a moved path compares as moved and an
+    unchanged one as unchanged, whichever way schtasks quoted it."""
+    out = []
+    for c in cmd:
+        c = c.strip().strip('"')
+        if c:
+            out.append(c.lower() if sys.platform == "win32" else c)
+    return out
+
+
+def registered_command(runner=_run) -> list[str] | None:
+    """What the operating system will run at login, or None.
+
+    Windows keeps it in the task's XML as a Command element plus an
+    Arguments element; macOS keeps it as ProgramArguments in the plist.
+    An empty list means registered but unreadable, which the sync treats
+    as "re-register to be sure".
+    """
+    if sys.platform == "win32":
+        proc = runner(["schtasks", "/Query", "/TN", TASK_NAME, "/XML"])
+        if proc.returncode != 0:
+            return None
+        import re
+        text = proc.stdout or ""
+        cmd = re.search(r"<Command>(.*?)</Command>", text, re.S)
+        args = re.search(r"<Arguments>(.*?)</Arguments>", text, re.S)
+        if not cmd:
+            return []
+        import html
+        # schtasks keeps the quotes register() put round a path with a
+        # space in it; the caller wants the path.
+        parts = [html.unescape(cmd.group(1)).strip().strip('"')]
+        if args:
+            parts += html.unescape(args.group(1)).split()
+        return parts
+    if sys.platform == "darwin":
+        path = agent_plist_path()
+        if not path.exists():
+            return None
+        try:
+            data = plistlib.loads(path.read_bytes())
+            return [str(x) for x in data.get("ProgramArguments", [])]
+        except Exception:
+            return []
+    return None
+
+
+def sync(watcher_cmd: list[str], *, frozen: bool | None = None,
+         poll_s: float = DEFAULT_POLL_S, runner=_run,
+         marker: Path | None = None) -> tuple[str, str]:
+    """Run once per normal launch. Returns (what happened, one line).
+
+    The rules, in order:
+      unsafe     the app is running from a disk image or a translocated
+                 copy, so nothing is touched and the line says to drag
+                 it into Applications
+      source     a source checkout never registers itself
+      moved      registered, but at a different path: re-register here
+      kept       registered here already
+      first      the installed copy's first launch: register once and
+                 leave a marker so turning it off in Settings sticks
+      off        the marker exists and nothing is registered, which is
+                 the Settings switch having been turned off
+
+    The message for "first" is the one line the title screen shows.
+    """
+    if frozen is None:
+        frozen = bool(getattr(sys, "frozen", False))
+    if sys.platform not in ("win32", "darwin"):
+        return "unsupported", ""
+    if not frozen:
+        return "source", ""
+    why = unsafe_location(watcher_cmd[0])
+    if why:
+        return "unsafe", why
+    marker = Path(marker) if marker else first_launch_marker()
+
+    def done_once() -> None:
+        # A registration seen or made means the first launch is behind
+        # us, whoever did the registering (the installer runs the flag
+        # before the game ever opens). Without this, turning auto-start
+        # off in Settings would be undone by the next launch.
+        try:
+            marker.parent.mkdir(parents=True, exist_ok=True)
+            marker.touch()
+        except OSError:
+            log.warning("could not write the first-launch marker at %s",
+                        marker)
+
+    current = registered_command(runner)
+    if current is not None:
+        done_once()
+        if _normalise(current) == _normalise(list(watcher_cmd)):
+            return "kept", ""
+        ok, msg = register(list(watcher_cmd), poll_s, runner)
+        return ("moved", "") if ok else ("failed", msg)
+    if marker.exists():
+        return "off", ""
+    ok, msg = register(list(watcher_cmd), poll_s, runner)
+    if not ok:
+        # No marker, so a refused schtasks call is tried again next
+        # launch rather than silently given up on forever.
+        return "failed", msg
+    done_once()
+    return "first", ("Auto-start is on: plug a board in and the game "
+                     "opens. Settings turns it off.")

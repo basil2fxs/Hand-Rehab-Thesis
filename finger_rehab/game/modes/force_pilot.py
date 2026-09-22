@@ -213,6 +213,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from ...data.logger import ContinuousTrialLog
+from ...hardware.eeg_trigger import CODES as EEG_CODES
 from ..force_stream import ForceView, MaxPressProbe, needs_max_press_probe
 from ..rest_skip import WaitSkip
 from ..scoring import ScoreConfig, TrialResult
@@ -1401,6 +1402,13 @@ class ForcePilotMode(WaitSkip):
                 hand=self.engine.hand_mode)
         self.engine.log_segment_start(self.sections[0].name,
                                       self.trial_counter, self.lane, now)
+        # The run's own byte. A corridor has no stimulus onset and no
+        # press, so without this the 45 s between the block markers
+        # could not be epoched at all; the notebook's movement-onset
+        # estimate from the raw trace locks to this.
+        send = getattr(self.engine, "_eeg_send", None)
+        if callable(send):
+            send(EEG_CODES["prep_run_start"], lane=self.lane, t_event=now)
 
     # ---- the run itself ----------------------------------------------------
     def _advance_segments(self, t_run: float) -> None:
@@ -1413,6 +1421,12 @@ class ForcePilotMode(WaitSkip):
             t_mark = (self.run_t0 or 0.0) + sec.end_s
             self.engine.log_segment_end(sec.name, self.trial_counter,
                                         self.lane, t_mark)
+            # One byte per boundary, the run's end included, at the
+            # same model-clock time the row's segment_times carries.
+            send = getattr(self.engine, "_eeg_send", None)
+            if callable(send):
+                send(EEG_CODES["prep_segment_edge"], lane=self.lane,
+                     t_event=t_mark)
             self._sec_idx += 1
             if self._sec_idx < len(self.sections):
                 nxt = self.sections[self._sec_idx]

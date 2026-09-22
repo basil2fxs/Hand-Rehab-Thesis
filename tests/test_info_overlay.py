@@ -78,6 +78,38 @@ class InfoOverlayTests(unittest.TestCase):
         for mode in ("reaction", "adaptive", "rhythm", "mirror"):
             self.assertIn(mode, blob)
 
+    # The hub's display names for the preset's mode keys.
+    _NAMES = {"reaction": "Reaction", "mirror": "Mirror", "rhythm": "Rhythm",
+              "echo": "Echo", "force_pilot": "Force Pilot",
+              "chords": "Chords", "buzz_hunt": "Buzz Hunt",
+              "pattern": "Muscle Memory", "adaptive": "Adaptive",
+              "syllables": "Syllables"}
+
+    def test_protocol_text_matches_the_battery_preset(self):
+        # The card used to describe a four-mode protocol and a 40-trial
+        # Mirror block; PLAY ALL runs eleven blocks and Mirror is 32.
+        # Read the truth from the config so the card cannot drift again.
+        from finger_rehab.game import battery
+        eng, ts = self._title_screen()
+        preset = battery.load_preset(eng.cfg)
+        self.assertIsNotNone(preset)
+        blob = " ".join(ts.INFO_STEPS)
+        for order in preset["orders"].values():
+            self.assertEqual(len(order), 11)
+            for step in order:
+                self.assertIn(self._NAMES[step["mode"]], blob)
+        self.assertIn("eleven", blob.lower())
+        self.assertNotIn("four core", blob.lower())
+        import re
+        m = re.search(r"Mirror is (\d+) trials", blob)
+        self.assertIsNotNone(m, blob)
+        mirror_trials = 4 * int(eng.cfg.get("game.repeat_count", 8))
+        self.assertEqual(int(m.group(1)), mirror_trials)
+        m = re.search(r"Adaptive is (\d+)", blob)
+        self.assertEqual(int(m.group(1)),
+                         int(preset["overrides"]["game"]["total_trials"]))
+        self.assertIn(str(preset["budget_min"]), ts.INFO_FOOTER)
+
     def test_protocol_renders_without_error(self):
         import pygame
         _, ts = self._title_screen()

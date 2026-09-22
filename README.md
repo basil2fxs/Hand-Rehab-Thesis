@@ -52,14 +52,17 @@ python -m pytest tests
 Nothing plugged in? It falls back to the keyboard: `J K L ;` right hand, `F D S A` left, index to little.
 Force Pilot and Buzz Hunt need the device; the other eight play on the keyboard.
 
-Windows: run `builds\Windows\Finger Rehab.exe`, or build it with `builds\build_app.bat`. macOS:
-`builds/build_app.sh`. Both build a second app beside the game, **Finger Rehab Setup**.
+Installers come from the build-apps run on GitHub: `FingerRehab-Setup-Windows.exe` and
+`FingerRehab-macOS.dmg`. Local builds: `builds\build_app.bat` (Windows), `builds/build_app.sh` (macOS).
 
 ## Setup and repairs
 
-`Finger Rehab Setup` installs the game on a new machine and repairs it afterwards: **Install or
-repair**, **Auto-start ON / OFF**, **Show boards**, **Flash firmware**, **Sensor address**,
-**Uninstall**. No administrator needed. Each also runs headless: `"Finger Rehab Setup" --do install`.
+Windows: run the installer. It puts the game in `%LOCALAPPDATA%\Programs\Finger Rehab` and turns
+auto-start on; no administrator needed. Windows says "Windows protected your PC" the first time: More
+info, then Run anyway. Uninstalling keeps the sessions folder. macOS: open the dmg and drag Finger Rehab
+into Applications. The first open is refused because the app is not notarised: System Settings, Privacy
+& Security, Open Anyway, then your password. Once is enough. Auto-start turns itself on at the first
+launch from Applications. Repairs live in Settings: **Auto-start**, **Flash firmware**, **Sensor address**.
 
 **Auto-start.** Plugging a board in opens the game within a second. A watcher starts at login (a
 scheduled task on Windows, a LaunchAgent on macOS) and checks the ports once a second. It reacts only to
@@ -123,9 +126,9 @@ answers 0x04 as well as its own address, so a write to 0x04 hits every sensor at
 Sensor address, with only that sensor connected: 0x05 index, 0x06 middle, 0x07 ring, 0x08 pinky. Never
 move a sensor off 0x04 with the others wired in. Two whole hands swapped is the port assignment above.
 
-**The game does not open when I plug the board in.** Open `Finger Rehab Setup`, press Show boards. Not
-listed means a lead or a driver, not the auto-start. Listed means press Auto-start ON. It only fires
-when a board *arrives*, so if it was already in at login, unplug and replug.
+**The game does not open when I plug the board in.** Open Settings and press Refresh. Not listed means
+a lead or a driver, not the auto-start. Listed means the Auto-start button should read on; press it if it
+reads off. It only fires when a board *arrives*, so if it was already in at login, unplug and replug.
 
 **The board needs re-flashing.** Settings, Flash firmware writes `assets/firmware/finger_rehab_nano.hex`
 with a bundled avrdude, so no developer tools are needed. A Nano runs one of two bootloaders, 115200 or

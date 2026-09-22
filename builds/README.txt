@@ -1,16 +1,20 @@
-Finger Rehab, ready-to-run apps
-===============================
+Finger Rehab, installers and ready-to-run apps
+==============================================
 
-Mac/       Finger Rehab.app     double-click to play
-Windows/   Finger Rehab.exe     double-click to play
+Mac/      FingerRehab-macOS.dmg           open, drag Finger Rehab to Applications
+          Finger Rehab.app                the same app, bare
+Windows/  FingerRehab-Setup-Windows.exe   run it; installs per user, no admin
+          Finger Rehab.exe                the same game, bare
 
-Self-contained: Python and every library ship inside, nothing to
-install. Session data goes to a sessions/ folder next to the app.
+Self-contained: Python and every library ship inside. The installer
+turns auto-start on, so the game opens when a board is plugged in.
+Session data goes to a sessions/ folder next to the app, or to
+~/Finger Rehab Data when that folder cannot be written.
 
-First launch shows a one-time security prompt because the app is not
-signed. Mac: right-click, Open, Open again. Windows: More info, Run
-anyway.
+Neither is signed, so the first open needs one click through.
+Windows: "Windows protected your PC", More info, Run anyway.
+Mac: System Settings, Privacy & Security, Open Anyway, password.
 
 To rebuild after changing the source, run build_app.sh (Mac) or
-build_app.bat (Windows) from this folder. Each drops its app back
+build_app.bat (Windows) from this folder. Each drops its files back
 here and refreshes docs/lab_package, the folder that goes to the lab.

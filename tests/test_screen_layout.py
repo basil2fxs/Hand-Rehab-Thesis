@@ -323,6 +323,8 @@ class TestSettingsGroups:
             "Open data folder": screen._data_rect(),
             "Flash firmware": screen._firmware_rect(),
             "Sensor address": screen._firmware_rect(),
+            "Auto-start: on": screen._firmware_rect(),
+            "Auto-start: off": screen._firmware_rect(),
         }
         for b in screen._panel_buttons:
             assert homes.get(b.label, panel).contains(b.rect), b.label

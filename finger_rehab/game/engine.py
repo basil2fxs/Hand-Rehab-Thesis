@@ -1218,6 +1218,23 @@ class GameEngine:
         else:
             log.info("eeg marker outside block: %s", detail)
 
+    def _export_eeg_events(self) -> None:
+        """Write events.tsv, events.json and markers_codes.csv beside
+        trials.csv once the loggers have closed, for EEG blocks only
+        (the dummy backend counts, so a box-less block still exports
+        and the notebook can be checked without an amplifier). Built
+        from raw.csv, so the file and the wire record cannot
+        disagree; export_events() rebuilds it for any old folder."""
+        markers = getattr(self, "markers", None)
+        paths = getattr(self, "session_paths", None)
+        if markers is None or not markers.active or paths is None:
+            return
+        try:
+            rate = self.cfg.get("eeg.amplifier_rate_hz", None)
+            eeg_trigger.export_events(Path(paths.root), sample_rate_hz=rate)
+        except Exception as e:
+            log.warning("EEG events export failed: %s", e)
+
     def _flush_eeg_stim(self) -> None:
         """Wire the stimulus markers armed this frame. Called by the
         frame loop immediately after _present()'s flip, before
@@ -2001,6 +2018,7 @@ class GameEngine:
                     )
                 except Exception:
                     pass
+            self._note_drop(self.hand_mode)
             # Clear each detector's pressed state instead of leaving it
             # latched at whatever it was the instant the samples
             # stopped. Without this, a drop that happens with a finger
@@ -2035,6 +2053,7 @@ class GameEngine:
                     )
                 except Exception:
                     pass
+            self._note_reconnect(self.hand_mode)
         self._source_was_connected = connected
         self._check_per_hand_connection()
 
@@ -2076,6 +2095,11 @@ class GameEngine:
                         )
                     except Exception:
                         pass
+                # A whole-rig drop is already on the list under the
+                # block's hand mode; a second entry per board would
+                # count one unplug as three.
+                if self.source.is_connected:
+                    self._note_drop(hand)
                 det = (getattr(self, "detectors", None) or {}).get(hand)
                 pressed = getattr(det, "pressed", None)
                 if pressed:
@@ -2092,6 +2116,7 @@ class GameEngine:
                         )
                     except Exception:
                         pass
+                self._note_reconnect(hand)
                 det = (getattr(self, "detectors", None) or {}).get(hand)
                 if det is not None:
                     pressed = getattr(det, "pressed", None)
@@ -2113,6 +2138,101 @@ class GameEngine:
                             log.warning("could not re-prime %s baselines "
                                         "after reconnect: %s", hand, e)
         self._hand_was_connected = dict(hands_now)
+
+    # -- dropout bookkeeping for the block record ----------------------
+    #
+    # raw.csv has carried source_disconnected / source_reconnected rows
+    # for a long time, but nothing reached metadata.json or the trial
+    # rows: a trial whose response window overlapped a drop was written
+    # as an honest timeout and pooled with the real ones. These keep a
+    # per-block list of (hand, t_down, t_up) so the block summary can
+    # say the drop happened and log_trial can void the trials it ate.
+
+    def _note_drop(self, hand: str) -> None:
+        drops = getattr(self, "_block_drops", None)
+        if drops is None:
+            drops = []
+            self._block_drops = drops
+        # One open interval per hand at a time; a repeat while already
+        # down is the per-hand check echoing the whole-rig one.
+        for d in drops:
+            if d["hand"] == hand and d["t_up"] is None:
+                return
+        drops.append({"hand": hand, "t_down": time.perf_counter(),
+                      "t_up": None})
+
+    def _note_reconnect(self, hand: str) -> None:
+        for d in getattr(self, "_block_drops", None) or []:
+            if d["hand"] == hand and d["t_up"] is None:
+                d["t_up"] = time.perf_counter()
+
+    def _reset_block_drops(self) -> None:
+        """Fresh list per block. A board that is still away when the
+        block starts opens an interval at t0, so the trials it eats
+        are voided the same as a mid-block drop."""
+        self._block_drops = []
+        self._block_drop_voided = 0
+        # getattr on source: test fixtures build engines via __new__.
+        src = getattr(self, "source", None)
+        if not getattr(src, "provides_samples", False):
+            return
+        if getattr(self, "_source_was_connected", True) is False:
+            self._note_drop(self.hand_mode)
+            return
+        for hand in sorted(getattr(self, "_hands_down", None) or ()):
+            self._note_drop(hand)
+
+    @staticmethod
+    def _hands_touch(a: str | None, b: str | None) -> bool:
+        return a == b or "both" in (a, b) or None in (a, b)
+
+    def _drop_overlaps(self, hand: str | None, t_from: float | None,
+                       t_to: float) -> bool:
+        """True when any drop on `hand` overlaps [t_from, t_to]. A
+        drop still open counts to the end of time; a trial with no
+        known stim time is judged on its close alone."""
+        for d in getattr(self, "_block_drops", None) or []:
+            if not self._hands_touch(hand, d["hand"]):
+                continue
+            up = d["t_up"]
+            if d["t_down"] > t_to:
+                continue
+            if up is None or t_from is None or up >= t_from:
+                return True
+        return False
+
+    def _connection_summary(self) -> dict:
+        drops = getattr(self, "_block_drops", None) or []
+        now = time.perf_counter()
+        t0 = getattr(self, "_block_t0", None)
+        spans = sorted((d["t_down"], now if d["t_up"] is None else d["t_up"])
+                       for d in drops)
+        # Union of the intervals, so a whole-rig drop that also shows
+        # up per hand is not counted twice in seconds_down.
+        merged: list[list[float]] = []
+        for a, b in spans:
+            if merged and a <= merged[-1][1]:
+                merged[-1][1] = max(merged[-1][1], b)
+            else:
+                merged.append([a, b])
+        seconds_down = sum(b - a for a, b in merged)
+
+        def rel(t):
+            if t is None or t0 is None:
+                return None
+            return round(t - t0, 3)
+
+        return {
+            "drops": len(drops),
+            "seconds_down": round(seconds_down, 3),
+            "hands": sorted({d["hand"] for d in drops}),
+            "still_down_at_end": any(d["t_up"] is None for d in drops),
+            "voided_trials": getattr(self, "_block_drop_voided", 0),
+            # Block-relative seconds, the same clock as trials.csv's
+            # block_t_s, so an analyst can line a drop up with rows.
+            "intervals": [{"hand": d["hand"], "from_s": rel(d["t_down"]),
+                           "to_s": rel(d["t_up"])} for d in drops],
+        }
 
     def _pump_source(self) -> None:
         self._check_source_connection()
@@ -4834,6 +4954,8 @@ class GameEngine:
         self._trials_fired = 0
         self._block_stim_failures = 0
         self._last_stim_delivered = None
+        self._last_stim_t_perf = None
+        self._reset_block_drops()
         self._block_pause_count = 0
         self._block_paused_s = 0.0
         # Prep skips reset per block like the pause counters, so the
@@ -5048,6 +5170,10 @@ class GameEngine:
         # vibration cue and must not be read as ordinary misses.
         summary["stim_cue_failures"] = getattr(
             self, "_block_stim_failures", 0)
+        # Sensor dropouts. drops > 0 means part of this block was
+        # played with a board away; the trials it ate carry
+        # error_type device_drop and are out of hits and misses.
+        summary["connection"] = self._connection_summary()
         # Pauses. duration_s above is wall-clock including any pause,
         # so subtract paused_total_s for actual time on task.
         summary["pauses"] = getattr(self, "_block_pause_count", 0)
@@ -6406,6 +6532,23 @@ class GameEngine:
         # frame, and cutting it would make the final trial the only one
         # the patient gets no confirmation on.
         self.stop_all_motors(allow_after_cue=True)
+        # The lab style parks the last trial's glyph for
+        # feedback_delay_ms; a block that closes inside that delay
+        # used to draw nothing and drop its 140/141. Draw it on this
+        # closing frame and mark it, so the last trial is fed back
+        # like every other and the marker record stays complete. The
+        # code table flags a feedback byte this close to the block-end
+        # byte as one to leave out of FRN averages.
+        self._drain_feedback(force=True)
+        # Pump the last trial's bytes out before the block-end byte is
+        # sent. The writer sheds the lowest-priority marker when more
+        # than three queue at once, and a response byte, a parked
+        # feedback byte or two and the boundary all land in this one
+        # frame: the boundary, lowest priority of the lot, was the one
+        # shed.
+        markers = getattr(self, "markers", None)
+        if markers is not None and markers.active:
+            markers.drain(0.25)
         if self.raw_logger:
             self.raw_logger.queue_event("block_end", detail=self.current_block,
                                          hand=self.hand_mode)
@@ -6465,6 +6608,9 @@ class GameEngine:
             except Exception as e:
                 log.warning("Could not save metadata on finish: %s", e)
         self._close_loggers()
+        # EEG blocks: events.tsv and the code table, from the closed
+        # raw.csv, before the report reads the folder.
+        self._export_eeg_events()
         # Researcher outputs: report.html + summary.csv + charts in the
         # session folder, plus a line in sessions_index.csv. After the
         # loggers close so the CSVs are complete.
@@ -6522,9 +6668,13 @@ class GameEngine:
                 )
             except Exception:
                 pass
+        # Same rule as finish_block: pump the queue before the boundary
+        # byte so it is never the marker the writer sheds.
+        markers = getattr(self, "markers", None)
+        if markers is not None and markers.active:
+            markers.drain(0.25)
         self._eeg_send(eeg_trigger.block_code(self.current_block,
                                               "abandoned"))
-        markers = getattr(self, "markers", None)
         if markers is not None and markers.active:
             markers.drain(0.25)
         self.session.finished_at = time.strftime("%Y-%m-%dT%H:%M:%S")
@@ -6541,6 +6691,7 @@ class GameEngine:
         except Exception as e:
             log.warning("Could not save abandoned metadata: %s", e)
         self._close_loggers()
+        self._export_eeg_events()
         # Partial blocks still get the researcher outputs; the report's
         # status field says "abandoned" so nobody mistakes it for a
         # complete block.
@@ -6861,18 +7012,21 @@ class GameEngine:
         return {"popup_text": text} if text else {}
 
     def _park_feedback(self, screen_key: str, lane: int, popup: dict,
-                       colour, label: str) -> None:
+                       colour, label: str, marker: bool = True) -> None:
         """Hold a feedback glyph until feedback_delay_ms has passed.
 
         The lab style puts a fixed gap between the press and the
         feedback so the feedback ERP is not smeared into the
         response-locked activity. The 140/141 marker rides with the
         glyph, not with log_trial, so the marker marks the moment the
-        participant actually saw something.
+        participant actually saw something. marker False parks the
+        glyph alone: continuous rows (force_pilot runs) get no
+        feedback byte from the trial close, only from the mode's own
+        corridor-exit buzz.
         """
         due = time.perf_counter() + self.feedback_delay_ms / 1000.0
         code = None
-        if getattr(self, "_eeg_feedback_markers", False):
+        if marker and getattr(self, "_eeg_feedback_markers", False):
             code = eeg_trigger.CODES[
                 "feedback_positive" if label != "Miss"
                 else "feedback_negative"]
@@ -6881,12 +7035,14 @@ class GameEngine:
         self._pending_feedback.append(
             (due, screen_key, lane, dict(popup), colour, code))
 
-    def _drain_feedback(self) -> None:
+    def _drain_feedback(self, force: bool = False) -> None:
         """Spawn every parked glyph whose delay has expired.
 
         Called once per frame from the main loop, so the glyph appears
         on the first flip at or after its due time and the marker goes
-        out on that same flip.
+        out on that same flip. force spawns the lot whatever the
+        clock says: finish_block uses it so a block closing inside the
+        delay still shows and marks its last glyph.
         """
         if not getattr(self, "_pending_feedback", None):
             return
@@ -6894,7 +7050,7 @@ class GameEngine:
         still: list[tuple] = []
         for entry in self._pending_feedback:
             due, screen_key, lane, popup, colour, code = entry
-            if now_perf < due:
+            if now_perf < due and not force:
                 still.append(entry)
                 continue
             sc = self._screens.get(screen_key)
@@ -7060,6 +7216,7 @@ class GameEngine:
         # tracking each finger's peak from this instant.
         self._ensure_metric_state()
         self._trials_fired += 1
+        self._last_stim_t_perf = float(t_perf)
         # Syllables fires on_stim once per model SYLLABLE, not once per
         # trial, so the loud-trial fraction would land on an arbitrary
         # syllable inside a word whose stress the mode teaches (and, at
@@ -7413,7 +7570,8 @@ class GameEngine:
                 # visual event. Park it and let update() spawn it.
                 gp.flash_lane(trial.lane, colour, 0.4, now)
                 self._park_feedback("gameplay", trial.lane, popup,
-                                     colour, outcome.label)
+                                     colour, outcome.label,
+                                     marker=continuous is None)
             else:
                 gp.flash_lane(trial.lane, colour, 0.4, now, **popup)
             # Clear the timing bar + deactivate every strip now that the
@@ -7477,6 +7635,20 @@ class GameEngine:
         # controller into recovery), and it must not count as a miss
         # in the block tallies or per-lane charts. The row itself
         # still logs, carrying its own error_type.
+        if (error_type is None and outcome.label == "Miss"
+                and not trial.incorrect_presses
+                and self._drop_overlaps(
+                    hand or self.hand_mode,
+                    getattr(trial, "stim_t_perf", None)
+                    or getattr(self, "_last_stim_t_perf", None),
+                    now)):
+            # No press, and a board was away somewhere between the
+            # stimulus and the deadline: the patient may well have
+            # pressed a pad nobody was reading. Same treatment adaptive
+            # and chords already give their own detected drops.
+            error_type = "device_drop"
+            self._block_drop_voided = getattr(
+                self, "_block_drop_voided", 0) + 1
         hardware_void = error_type in ("device_drop", "no_signal")
         if not hardware_void:
             self._update_streak(outcome.label != "Miss", "gameplay")

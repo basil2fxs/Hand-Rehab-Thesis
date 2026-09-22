@@ -163,7 +163,8 @@ class SyllablesMarkerTests(unittest.TestCase):
         self.assertEqual((lo, hi), (50, 59))
         for name in ("stim_choice_set", "stim_choice_set_return"):
             self.assertTrue(lo <= CODES[name] <= hi)
-        self.assertEqual(CODES_VERSION, "1.3")
+        # The choice band arrived in 1.3; later maps keep it.
+        self.assertGreaterEqual(float(CODES_VERSION), 1.3)
         # Nothing else moved into the new band.
         for name, code in CODES.items():
             if 50 <= code <= 59:

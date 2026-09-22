@@ -1,9 +1,10 @@
 """Assemble the EEG lab package, the one folder that goes to the lab.
 
-Its top level holds exactly four entries and nothing else:
+Its top level holds exactly five entries and nothing else:
   Finger Rehab.exe     the frozen game (Windows build or CI)
   eeg_lab.yaml         copy of config/eeg_lab.yaml
-  run_in_psychopy.py   committed launcher: runs source/ or the exe
+  run_in_psychopy.py   committed launcher: runs the exe or source/
+  README.txt           committed, fifteen lines, what the lab does
   source/              fresh copy of the game for PsychoPy's own Python
 
 builds/build_app.sh, builds/build_app.bat and the CI workflow all call
@@ -25,15 +26,18 @@ REPO = Path(__file__).resolve().parents[1]
 PACKAGE = REPO / "docs" / "lab_package"
 EXE = "Finger Rehab.exe"
 LAUNCHER = "run_in_psychopy.py"
-TOP_LEVEL = {EXE, "eeg_lab.yaml", LAUNCHER, "source"}
+README = "README.txt"
+# The two committed files that travel with the package unchanged.
+COMMITTED = (LAUNCHER, README)
+TOP_LEVEL = {EXE, "eeg_lab.yaml", LAUNCHER, README, "source"}
 # What main.py needs to run from source/: the package, the two configs,
 # the music and icons. No tests, docs, sessions, calibration or user
 # settings.
 SOURCE_ITEMS = ("main.py", "requirements.txt", "finger_rehab",
                 "config/default.yaml", "config/eeg_lab.yaml", "assets")
 # Shipped by earlier package layouts, plus editor and OS cruft.
-STALE = ("README.txt", "eeg_lab_setup.txt", "EEG Lab.bat",
-         "run_from_source.py", "__pycache__", ".DS_Store")
+STALE = ("eeg_lab_setup.txt", "EEG Lab.bat", "run_from_source.py",
+         "__pycache__", ".DS_Store")
 IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store",
                                 ".pytest_cache")
 
@@ -79,11 +83,13 @@ def assemble(repo: Path = REPO, pkg: Path = PACKAGE,
     for name in STALE:
         _remove(pkg / name)
     shutil.copy2(repo / "config" / "eeg_lab.yaml", pkg / "eeg_lab.yaml")
-    # The launcher lives in docs/lab_package; it only needs copying when
-    # the package is assembled somewhere else (CI's zip folder).
-    launcher, target = repo / "docs" / "lab_package" / LAUNCHER, pkg / LAUNCHER
-    if not (target.exists() and target.samefile(launcher)):
-        shutil.copy2(launcher, target)
+    # The launcher and the README live in docs/lab_package; they only
+    # need copying when the package is assembled somewhere else (CI's
+    # zip folder).
+    for name in COMMITTED:
+        source, target = repo / "docs" / "lab_package" / name, pkg / name
+        if not (target.exists() and target.samefile(source)):
+            shutil.copy2(source, target)
     make_source(repo, pkg)
     if exe is not None:
         shutil.copy2(exe, pkg / EXE)
