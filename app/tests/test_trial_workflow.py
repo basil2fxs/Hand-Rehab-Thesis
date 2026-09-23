@@ -431,5 +431,18 @@ class TheCalibrationScreenNeverStrandsASession(_BatteryHarness):
         self.assertIs(eng.screen_obj, eng._screens["mode_select"])
 
 
+class TheHandScreenIsLaidOutLikeTheHands(_BatteryHarness):
+
+    def test_left_sits_left_and_right_sits_right(self) -> None:
+        for rig, want in ((_OneBoard("right"), ["left", "right"]),
+                          (_TwoBoards(), ["left", "both", "right"])):
+            eng = self._engine(rig)
+            sc = eng._screens["hand_choice"]
+            sc.enter()
+            self.assertEqual(sc.options, want)
+            xs = [b.rect.x for b in sc.buttons]
+            self.assertEqual(xs, sorted(xs))
+
+
 if __name__ == "__main__":
     unittest.main()

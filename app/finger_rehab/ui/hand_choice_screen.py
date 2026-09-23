@@ -24,6 +24,7 @@ class HandChoiceScreen(Screen):
     LABELS = {"right": "Right hand", "left": "Left hand",
               "both": "Both hands"}
     KEYS = {pygame.K_r: "right", pygame.K_l: "left", pygame.K_b: "both"}
+    SCREEN_ORDER = {"left": 0, "both": 1, "right": 2}
     BUTTON_W = 290
     BUTTON_H = 220
     GAP = 32
@@ -44,8 +45,11 @@ class HandChoiceScreen(Screen):
         """Rebuilt each time it opens: the boards attached decide the
         choices, and they can change between visits."""
         options = getattr(self.engine, "session_hand_options", None)
-        self.options = (options() if callable(options)
-                        else ["right", "left", "both"])
+        offered = (options() if callable(options)
+                   else ["right", "left", "both"])
+        # Laid out the way the hands sit: left on the left, right on
+        # the right, both between them.
+        self.options = sorted(offered, key=self.SCREEN_ORDER.get)
         n = len(self.options)
         total = n * self.BUTTON_W + (n - 1) * self.GAP
         x0 = self.layout.width // 2 - total // 2
