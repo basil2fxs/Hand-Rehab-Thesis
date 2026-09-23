@@ -28,8 +28,19 @@ def _bundle_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
+# Set by the lab launcher (EEG_Lab/run_in_psychopy.py) for a run from
+# source/, so that route writes sessions/, the log and calibration
+# beside the launcher, exactly where the exe route puts them. Without
+# it they landed inside source/, which the README never mentions and
+# a refreshed lab folder replaces wholesale.
+DATA_ROOT_ENV = "FINGER_REHAB_DATA_ROOT"
+
+
 def _user_root() -> Path:
     """Where writable files (sessions/, logs) go when frozen."""
+    forced = os.environ.get(DATA_ROOT_ENV, "").strip()
+    if forced:
+        return Path(forced).expanduser().resolve()
     if getattr(sys, "frozen", False):
         exe = Path(sys.executable).resolve()
         # On macOS the executable lives at Foo.app/Contents/MacOS/Foo.
@@ -219,6 +230,10 @@ class Config:
             local_port = (read_local_eeg_port()
                           if is_bundled_config(p) else None)
             if local_port:
+                log.info("EEG port %s from %s (picked in the game on "
+                         "this machine; delete that file to use the "
+                         "port line in %s again)", local_port,
+                         EEG_PORT_FILE, p.name)
                 eeg = merged.get("eeg")
                 if not isinstance(eeg, dict):
                     eeg = {}

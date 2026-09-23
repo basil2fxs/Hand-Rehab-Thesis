@@ -1217,6 +1217,36 @@ class GameEngine:
         return first
 
     # ---- EEG marker plumbing -----------------------------------------------
+    def eeg_wrong_press(self, presses) -> None:
+        """Mark a wrong finger the moment it lands.
+
+        The modes that keep a trial open after a wrong press (classic,
+        adaptive, mirror, pattern, chords, syllables: the cue stays lit
+        until the right finger or the deadline) used to send the wrong
+        byte only when the trial closed, up to the deadline later. The
+        row in raw.csv kept the press time, but the byte in the EEG
+        recording sat hundreds of ms after the error, and the ERN is
+        locked to the error itself. Now the mode calls this right after
+        appending to its incorrect_presses list; the first wrong press
+        of a trial is the one that counts, as before, and log_trial
+        does not send it again.
+        """
+        if not presses or len(presses) != 1:
+            return
+        lane, t_perf = presses[0]
+        code = eeg_trigger.response_code("wrong", lane)
+        if code is None:
+            return
+        sent = getattr(self, "_eeg_wrong_sent", None)
+        if not isinstance(sent, set):
+            sent = self._eeg_wrong_sent = set()
+        sent.add((int(lane), float(t_perf)))
+        self._eeg_send(code, lane=lane, t_event=t_perf)
+
+    def _eeg_wrong_already_sent(self, lane, t_perf) -> bool:
+        sent = getattr(self, "_eeg_wrong_sent", None)
+        return isinstance(sent, set) and (int(lane), float(t_perf)) in sent
+
     def _eeg_send(self, code: int | None, lane: int | None = None,
                   t_event: float | None = None) -> None:
         """One guarded doorway to the MarkerWriter. getattr-guarded so
@@ -3544,7 +3574,9 @@ class GameEngine:
             return
         try:
             from ..hardware.discovery import build_source_from_config
-            fresh = build_source_from_config(self.cfg)
+            # --port on the command line still names the board.
+            fresh = build_source_from_config(
+                self.cfg, forced_port=getattr(self, "cli_forced_port", None))
         except Exception as e:
             log.warning("Could not choose the hand boards again: %s", e)
             return
@@ -3554,6 +3586,12 @@ class GameEngine:
             log.info("No hand board besides the trigger box; "
                      "keyboard mode")
         self.source = fresh
+        # What the session files say the input was, and which port each
+        # hand had, must describe this source, not the one it replaced.
+        self._hand_port_memory = {}
+        self._remember_hand_ports(fresh)
+        if getattr(self, "session", None) is not None:
+            self.session.source_name = getattr(fresh, "name", "?")
 
     def show_diagnostics(self) -> None:
         # Settings always shows 8 sensors, so make sure both
@@ -4940,6 +4978,7 @@ class GameEngine:
     def _begin_block(self, name: str) -> None:
         self.current_block = name
         self._eeg_feedback_markers = self._feedback_markers_on(name)
+        self._eeg_wrong_sent = set()
         # Fresh phrase deck per block, seeded from who is playing and
         # which block this is, so the same participant replaying the
         # same block sees the same wording in the same order. A
@@ -4990,8 +5029,15 @@ class GameEngine:
             self.session.battery = self._battery_stamp()
         except Exception:
             self.session.battery = {}
-        if self.session.battery:
-            self.session.config_snapshot = copy.deepcopy(self.cfg.data)
+        # Every block records the config it actually ran with. It was
+        # only refreshed for battery blocks, so a Settings change after
+        # launch (the cue switches, which change the stimulus codes) or
+        # a port picked in the EEG picker never reached an ordinary
+        # block's metadata.json. The input source is refreshed for the
+        # same reason: a reconnect replaces it.
+        self.session.config_snapshot = copy.deepcopy(self.cfg.data)
+        self.session.source_name = getattr(getattr(self, "source", None),
+                                           "name", "?")
         self.score = 0
         self.hits = 0
         self.misses = 0
@@ -7238,7 +7284,11 @@ class GameEngine:
         on the first flip at or after its due time and the marker goes
         out on that same flip. force spawns the lot whatever the
         clock says: finish_block uses it so a block closing inside the
-        delay still shows and marks its last glyph.
+        delay still shows its last glyph. That glyph gets no byte: it
+        appears early, and the results screen lands on top of it, so
+        it is no FRN trial, and a lab epoching the BDF alone could not
+        tell it from a good one. (It used to be sent and left for the
+        notebook to flag; a real-time run showed the flag missing it.)
         """
         if not getattr(self, "_pending_feedback", None):
             return
@@ -7257,7 +7307,7 @@ class GameEngine:
                     # A screen without the glyph keyword still gets
                     # its flash; the feedback is then colour only.
                     sc.flash_lane(lane, colour, 0.4, now_perf)
-            if code is not None:
+            if code is not None and now_perf >= due:
                 self._eeg_send(code, t_event=now_perf)
         self._pending_feedback = still
 
@@ -8001,9 +8051,14 @@ class GameEngine:
                                        else now)))
                 elif had_incorrect:
                     wrong_lane, wrong_t = trial.incorrect_presses[0]
-                    self._eeg_send(
-                        eeg_trigger.response_code("wrong", wrong_lane),
-                        lane=wrong_lane, t_event=wrong_t)
+                    # Normally already on the wire from the press itself
+                    # (eeg_wrong_press); only a mode that never called
+                    # it gets the byte here, late but with the press
+                    # time in t_event.
+                    if not self._eeg_wrong_already_sent(wrong_lane, wrong_t):
+                        self._eeg_send(
+                            eeg_trigger.response_code("wrong", wrong_lane),
+                            lane=wrong_lane, t_event=wrong_t)
                 elif response_t_perf is None:
                     self._eeg_send(eeg_trigger.CODES["resp_timeout"],
                                    t_event=now)

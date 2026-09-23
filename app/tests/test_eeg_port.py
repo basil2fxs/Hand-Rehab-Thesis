@@ -333,14 +333,25 @@ class PickerScreenTests(unittest.TestCase):
         s.enter(MagicMock())
         s.scan.assert_called_with(exclude=["COM3"])
 
-    def test_at_launch_a_planned_hand_board_is_tagged_not_hidden(self):
-        # The source has not opened anything yet, so the box may be
-        # the port it took for a hand; it stays pickable, marked.
+    def test_at_launch_every_port_is_offered(self):
+        # Nothing is open yet, and the box on a new COM number may be
+        # the very port the start-up scan took for a hand board.
         s, _ = self._screen(self._waiting(), started=False,
                             hands=("COM3",))
         s.enter(None)
         s.scan.assert_called_with(exclude=[])
-        self.assertEqual(s._hand_guess, ["COM3"])
+
+    def test_picking_the_port_in_use_reconnects_it(self):
+        # A replugged cable leaves a handle that still says open.
+        old = _OpenPort("COM7")
+        markers = MarkerWriter(backend=old, enabled=True)
+        s, _ = self._screen(markers)
+        fresh = _OpenPort("COM7")
+        s.opener = MagicMock(return_value=(fresh, ""))
+        s.enter(MagicMock())
+        s.pick("COM7")
+        self.assertTrue(old.closed)
+        self.assertIs(markers.backend, fresh)
 
     def test_from_settings_back_returns_there(self):
         back = MagicMock()

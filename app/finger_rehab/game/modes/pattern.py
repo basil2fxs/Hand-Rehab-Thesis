@@ -1116,6 +1116,7 @@ class PatternMode(WaitSkip):
             # responses). Per-press penalty as in classic: spamming
             # must not be the winning strategy.
             self.active.incorrect_presses.append((ev.lane, ev.t_perf))
+            self.engine.eeg_wrong_press(self.active.incorrect_presses)
             self.engine.apply_wrong_press_penalty()
 
     def _close(self, ev: PressEvent | None, now: float) -> None:

@@ -221,6 +221,9 @@ def main() -> int:
     # whenever it has been moved; the one line it may have to say lands
     # on the title screen. Never fatal: a refused schtasks call must not
     # stop the game from opening.
+    # A re-pick of the hand boards (after the EEG port picker) must
+    # honour --port the same way the first pick did.
+    engine.cli_forced_port = args.port
     engine.autostart_note = _sync_autostart(cfg, log)
     try:
         return engine.run()
@@ -229,7 +232,16 @@ def main() -> int:
 
 
 def _sync_autostart(cfg, log) -> str:
-    """One launch's worth of the auto-start rule; see autostart.sync."""
+    """One launch's worth of the auto-start rule; see autostart.sync.
+
+    Never in the EEG lab build. The lab exe is the same binary as the
+    home one, so without this its first launch on the lab PC would
+    register a logon task that opens the game whenever a USB serial
+    device appears, and the trigger box is one. A shared lab machine
+    must be left as it was found.
+    """
+    if cfg.get("eeg.enabled", False):
+        return ""
     from finger_rehab.hardware import autostart
     try:
         what, note = autostart.sync(

@@ -53,7 +53,6 @@ class EegPortScreen(Screen):
         self._status_kind = "muted"
         self._connected = False
         self._buttons: list[Button] = []
-        self._hand_guess: list[str] = []
 
     # ---- entry ------------------------------------------------------------
     @property
@@ -93,18 +92,14 @@ class EegPortScreen(Screen):
         """List the ports again. The hand boards' ports are left out
         once they are running; at launch they have not been opened, so
         every port is fair game."""
-        planned = [getattr(h, "port", None) for h in
-                   (getattr(self.engine.source, "hands", None) or [])]
-        planned = [p for p in planned if p]
         exclude = []
-        self._hand_guess = []
         if getattr(self.engine, "_hand_source_started", False):
-            exclude = planned
-        else:
-            # Not opened yet, so still pickable (the box itself may be
-            # what was taken for a hand board), but tagged so a hand
-            # board is not clicked by mistake.
-            self._hand_guess = planned
+            exclude = [getattr(h, "port", None) for h in
+                       (getattr(self.engine.source, "hands", None) or [])]
+            exclude = [p for p in exclude if p]
+        # At launch nothing is open yet, so every port is listed: the
+        # box on a new COM number may be exactly what the start-up scan
+        # took for a hand board, so no port is marked as one either.
         try:
             self._choices = list(self.scan(exclude=exclude))
         except Exception as e:
@@ -119,15 +114,12 @@ class EegPortScreen(Screen):
         from ..hardware.eeg_port import same_port
         current = self._current_port()
         markers = self.engine.markers
-        if (same_port(device, current) and markers.active
-                and not markers.degraded):
-            self._say(f"Already sending on {device}.", "success")
-            self._connected = True
-            self._build_buttons()
-            return
         if same_port(device, current):
-            # Reconnecting the same port: release it first, or Windows
-            # refuses a second handle on it.
+            # Picking the port in use always reconnects it. A cable
+            # bumped and replugged between blocks leaves a handle that
+            # still reports open and fails on the next write, so "it
+            # is already open" proves nothing. Release it first, or
+            # Windows refuses a second handle on the same port.
             try:
                 markers.backend.close()
             except Exception as e:
@@ -248,11 +240,7 @@ class EegPortScreen(Screen):
             pygame.draw.rect(surf, theme.background, rect, border_radius=12)
             pygame.draw.rect(surf, edge, rect, 3 if in_use or
                              i == self._hover else 2, border_radius=12)
-            tag = ("   (in use now)" if in_use else
-                   "   (hand board?)" if any(same_port(device, g)
-                                            for g in self._hand_guess)
-                   else "")
-            label = choice.label + tag
+            label = choice.label + ("   (in use now)" if in_use else "")
             label = _fit_text(label, row_font, rect.w - 40)
             draw_text(surf, label, (rect.x + 20,
                                     rect.centery - row_font.get_height() // 2),
@@ -273,8 +261,11 @@ class EegPortScreen(Screen):
         for k, line in enumerate((
                 "Not sure which one? Unplug the box, press Scan again, "
                 "and see which entry goes.",
-                "Hand boards already in use are not listed. The choice is "
-                "saved in eeg_lab.yaml for next time.")):
+                ("The hand boards are in this list too until the game "
+                 "starts. The choice is saved in eeg_lab.yaml."
+                 if self.at_launch else
+                 "Hand boards in use are not listed. The choice is saved "
+                 "in eeg_lab.yaml."))):
             draw_text(surf, line, (layout.width // 2, hint_y + k * 24),
                       theme, layout, pt=FONT_SMALL + 2, centre=True,
                       colour=theme.muted)

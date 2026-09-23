@@ -40,7 +40,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from finger_rehab.config import Config                                # noqa: E402
 from finger_rehab.hardware.fsr_detector import Calibration, FSRDetector  # noqa: E402
 from finger_rehab.hardware.serial_source import (                     # noqa: E402
-    _LINE_RE, discover_ports,
+    _LINE_RE, bench_port,
 )
 
 try:
@@ -107,14 +107,12 @@ def main() -> int:
     print("\n1. SERIAL LINK")
     port = (sys.argv[1] if len(sys.argv) > 1 else None)
     if port is None:
-        found = discover_ports(cfg.get("serial.vendor_ids"), max_ports=8)
-        if not found:
-            record("board detected", False,
-                   "no Arduino-family port found")
+        port, why = bench_port()
+        if not port:
+            record("board detected", False, why)
             print("\n   Plug the device in and try again, or pass the port:")
             print("      python3 tools/test_device.py /dev/cu.usbserial-130")
             return 1
-        port = found[0]
         record("board detected", True, port)
     else:
         record("board detected", True, f"{port} (given on the command line)")

@@ -4,8 +4,8 @@ EEG_Lab is the one folder handed to the EEG lab. Its top
 level holds exactly five entries: Finger Rehab.exe, eeg_lab.yaml,
 run_in_psychopy.py, README.txt and a fresh source/ copy of the game.
 Three things are pinned here. The launcher picks the right route (the
-exe on Windows, source/ elsewhere, or nothing) and refuses to start
-from source without the packages the game needs.
+exe on Windows, source/ elsewhere, or nothing) and, from source, installs
+what PsychoPy lacks beside itself before the game starts.
 scripts/build_lab_package.py produces that minimal folder from any
 repo and clears the text files earlier layouts shipped. The two build
 scripts and the CI workflow all go through that one script, so the
@@ -23,7 +23,7 @@ import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 
 REPO = Path(__file__).resolve().parents[1]
@@ -110,10 +110,19 @@ class LauncherTests(unittest.TestCase):
         # The interpreter PsychoPy ran the script with, the real
         # main.py, and the lab folder's own eeg_lab.yaml (the copy the
         # lab edits) rather than the one inside source/.
-        call.assert_called_once_with(
+        call.assert_called_once()
+        self.assertEqual(
+            call.call_args.args[0],
             [sys.executable, str(self.here / "source" / "main.py"),
-             "--config", str(self.here / "eeg_lab.yaml")],
-            cwd=str(self.here / "source"))
+             "--config", str(self.here / "eeg_lab.yaml")])
+        self.assertEqual(call.call_args.kwargs["cwd"],
+                         str(self.here / "source"))
+        # Data beside this file, same as the exe route, and the lab
+        # folder's own packages first on the game's path.
+        env = call.call_args.kwargs["env"]
+        self.assertEqual(env["FINGER_REHAB_DATA_ROOT"], str(self.here))
+        self.assertTrue(env["PYTHONPATH"].startswith(
+            str(self.here / "python_packages")))
 
     def test_source_route_falls_back_to_the_bundled_config(self) -> None:
         self._source_layout()
@@ -166,7 +175,7 @@ class LauncherTests(unittest.TestCase):
         exe.write_bytes(b"")
         calls = []
 
-        def call(cmd, cwd=None):
+        def call(cmd, cwd=None, env=None):
             calls.append(cmd)
             if cmd == [str(exe)]:
                 raise OSError("An Application Control policy has "
@@ -194,54 +203,134 @@ class LauncherTests(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assertIn("did not start", out.getvalue())
 
-    def test_missing_pygame_ce_prints_uninstall_then_install(self) -> None:
-        # PsychoPy's classic pygame owns the same package name, so the
-        # fix is two pip lines in this order, ready to paste.
+    def test_missing_packages_are_installed_then_the_game_runs(self) -> None:
+        # PsychoPy lacks pygame-ce and librosa. The launcher installs
+        # them itself, beside this file, and then starts the game:
+        # nothing to paste into a terminal, no admin rights.
         self._source_layout()
-        with patch.object(self.mod, "_pygame_is_ce", return_value=False), \
-                patch.object(self.mod.importlib.util, "find_spec",
-                             return_value=object()):
-            rc, call, out = self._run()
-        self.assertNotEqual(rc, 0)
-        call.assert_not_called()
-        lines = out.strip().splitlines()
-        self.assertEqual(len(lines), 3, out)
-        self.assertIn(f'"{sys.executable}" -m pip uninstall -y pygame',
-                      lines[1])
-        self.assertIn(f'"{sys.executable}" -m pip install pygame-ce',
-                      lines[2])
+        with patch.object(self.mod, "missing_packages",
+                          side_effect=[["pygame-ce", "librosa"], []]), \
+                patch.object(self.mod, "install_packages",
+                             return_value=True) as install:
+            rc, call, _ = self._run()
+        self.assertEqual(rc, 0)
+        install.assert_called_once()
+        self.assertEqual(install.call_args.args[0], ["pygame-ce", "librosa"])
+        self.assertEqual(install.call_args.args[1], self.here)
+        self.assertEqual(call.call_args.args[0][1],
+                         str(self.here / "source" / "main.py"))
 
-    def test_pip_line_names_every_missing_package(self) -> None:
+    def test_a_failed_install_never_starts_the_game(self) -> None:
         self._source_layout()
-
-        def find_spec(name):
-            return None if name in ("librosa", "soundfile") else object()
-
-        with patch.object(self.mod, "_pygame_is_ce", return_value=True), \
-                patch.object(self.mod.importlib.util, "find_spec",
-                             find_spec):
-            rc, call, out = self._run()
-        self.assertNotEqual(rc, 0)
+        with patch.object(self.mod, "missing_packages",
+                          return_value=["librosa"]), \
+                patch.object(self.mod, "install_packages",
+                             return_value=False):
+            rc, call, _ = self._run()
+        self.assertEqual(rc, 1)
         call.assert_not_called()
-        # The header and one install line; no uninstall when pygame-ce
-        # is already the pygame in place.
-        self.assertEqual(len(out.strip().splitlines()), 2, out)
-        self.assertIn("-m pip install librosa soundfile", out)
-        self.assertNotIn("pygame-ce", out)
-        self.assertNotIn("uninstall", out)
+
+    def test_still_missing_after_the_install_says_what(self) -> None:
+        self._source_layout()
+        with patch.object(self.mod, "missing_packages",
+                          return_value=["librosa"]), \
+                patch.object(self.mod, "install_packages",
+                             return_value=True):
+            rc, call, out = self._run()
+        self.assertEqual(rc, 1)
+        call.assert_not_called()
+        self.assertIn("Still missing after the install: librosa", out)
+
+    def test_the_probe_sees_what_the_game_will_see(self) -> None:
+        # The check runs in a child Python with the game's own
+        # environment, so the lab folder's packages count.
+        env = self.mod.game_env(self.here)
+        done = MagicMock(stdout='{"missing": ["librosa"], "ce": true}\n',
+                         stderr="")
+        with patch.object(self.mod.subprocess, "run",
+                          return_value=done) as run:
+            self.assertEqual(self.mod.missing_packages(env), ["librosa"])
+        child_env = run.call_args.kwargs["env"]
+        self.assertEqual(child_env["PYTHONPATH"], env["PYTHONPATH"])
+        self.assertIn("librosa", child_env["FR_PROBE_MODULES"])
+
+    def test_classic_pygame_is_not_accepted(self) -> None:
+        # Older PsychoPy ships classic pygame: it imports, but only
+        # pygame-ce sets IS_CE.
+        done = MagicMock(stdout='{"missing": [], "ce": false}', stderr="")
+        with patch.object(self.mod.subprocess, "run", return_value=done):
+            self.assertEqual(self.mod.missing_packages({}), ["pygame-ce"])
+
+    def test_the_plan_skips_what_psychopy_already_has(self) -> None:
+        # pip cannot see PsychoPy's zipped packages, so its own plan
+        # re-downloads numpy and scipy. The launcher keeps only what
+        # this Python cannot import at a fitting version.
+        report = {"install": [
+            {"metadata": {"name": "librosa", "version": "0.11.0",
+                          "requires_dist": ["numpy>=1.22.3",
+                                            "scipy>=1.6.0", "pooch>=1.1",
+                                            "matplotlib>=3.5; extra == 'display'"]}},
+            {"metadata": {"name": "numpy", "version": "2.2.6"}},
+            {"metadata": {"name": "scipy", "version": "1.15.3"}},
+            {"metadata": {"name": "pooch", "version": "1.9.0",
+                          "requires_dist": ["platformdirs>=2.5.0"]}},
+            {"metadata": {"name": "platformdirs", "version": "4.11.12"}},
+        ]}
+        have = {"numpy": "2.2.5", "scipy": "1.13.1"}
+        plan = self.mod.plan_install(report, ["librosa"], have.get)
+        self.assertEqual(sorted(plan), ["librosa==0.11.0", "platformdirs==4.11.12",
+                                        "pooch==1.9.0"])
+
+    def test_a_broken_dependency_under_a_working_one_is_fixed(self) -> None:
+        # Found by running the lab folder in PsychoPy 2026.2.4 on a Mac:
+        # the app carries platformdirs' metadata without its code, so
+        # pooch imported fine but librosa failed underneath it.
+        report = {"install": [
+            {"metadata": {"name": "platformdirs", "version": "4.11.12"}}]}
+        have = {"librosa": "0.11.0", "pooch": "1.9.0"}
+        requires = {"librosa": ["pooch>=1.1"],
+                    "pooch": ["platformdirs>=2.5.0"]}.get
+        plan = self.mod.plan_install(report, ["librosa"], have.get,
+                                     lambda n: requires(n) or [])
+        self.assertIn("platformdirs==4.11.12", plan)
+        self.assertNotIn("pooch", " ".join(plan))
+
+    def test_install_is_one_plan_then_one_no_deps_target_install(self) -> None:
+        env = self.mod.game_env(self.here)
+        calls = []
+
+        def call(cmd, env=None):
+            calls.append(cmd)
+            if "--dry-run" in cmd:
+                report = cmd[cmd.index("--report") + 1]
+                Path(report).write_text(
+                    '{"install": [{"metadata": {"name": "pygame-ce", '
+                    '"version": "2.5.8"}}]}')
+            return 0
+
+        out = io.StringIO()
+        with patch.object(self.mod.subprocess, "call", call), \
+                redirect_stdout(out):
+            ok = self.mod.install_packages(["pygame-ce"], self.here, env)
+        self.assertTrue(ok)
+        self.assertEqual(len(calls), 2)
+        final = calls[1]
+        self.assertIn("--no-deps", final)
+        self.assertEqual(final[final.index("--target") + 1],
+                         str(self.here / "python_packages"))
+        self.assertEqual(final[-1], "pygame-ce==2.5.8")
+        self.assertIn("needs the internet", out.getvalue())
+
+    def test_an_old_psychopy_python_is_refused_plainly(self) -> None:
+        self._source_layout()
+        with patch.object(self.mod, "OLDEST_PYTHON", (99, 0)):
+            rc, call, out = self._run()
+        self.assertEqual(rc, 1)
+        call.assert_not_called()
+        self.assertIn("needs 3.10 or newer", out)
 
     def test_every_run_time_package_is_checked(self) -> None:
         self.assertEqual(set(self.mod.PACKAGES.values()), NEEDED)
-
-    def test_classic_pygame_is_not_accepted(self) -> None:
-        # Classic pygame imports fine and has no IS_CE; only pygame-ce
-        # passes.
-        fake = type(sys)("pygame")
-        with patch.dict(sys.modules, {"pygame": fake}):
-            self.assertFalse(self.mod._pygame_is_ce())
-        fake.IS_CE = 1
-        with patch.dict(sys.modules, {"pygame": fake}):
-            self.assertTrue(self.mod._pygame_is_ce())
 
     def test_nothing_to_run_says_so_in_one_line(self) -> None:
         rc, call, out = self._run()

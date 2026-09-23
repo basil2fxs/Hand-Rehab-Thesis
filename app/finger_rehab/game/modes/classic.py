@@ -162,6 +162,7 @@ class ClassicMode:
             # which with the bumped default (2) overwhelms the
             # +3 great-hit reward.
             self.active.incorrect_presses.append((ev.lane, ev.t_perf))
+            self.engine.eeg_wrong_press(self.active.incorrect_presses)
             self.engine.apply_wrong_press_penalty()
 
     def _finish(self, ev: PressEvent | None, now: float) -> None:

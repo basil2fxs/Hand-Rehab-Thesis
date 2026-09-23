@@ -42,6 +42,10 @@ README = "README.txt"
 # The two committed files that travel with the package unchanged.
 COMMITTED = (LAUNCHER, README)
 TOP_LEVEL = {EXE, "eeg_lab.yaml", LAUNCHER, README, "source"}
+# What running the folder leaves beside those: the recordings, the
+# calibration and saved settings, and the packages a run from source
+# installs. Allowed, never deleted, never shipped by CI.
+USER_DATA = {"sessions", "config", "python_packages"}
 # What main.py needs to run from source/: the package, the two configs,
 # the music and icons. No tests, docs, sessions, calibration or user
 # settings.
@@ -78,7 +82,7 @@ def make_source(repo: Path, pkg: Path) -> Path:
 def check(pkg: Path, need_exe: bool = False) -> list[str]:
     """Return the top-level names; fail on anything outside TOP_LEVEL."""
     names = sorted(p.name for p in pkg.iterdir())
-    extra = set(names) - TOP_LEVEL
+    extra = set(names) - TOP_LEVEL - USER_DATA
     missing = TOP_LEVEL - set(names)
     if not need_exe:
         missing.discard(EXE)

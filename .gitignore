@@ -45,6 +45,9 @@ Installers/macOS/*.dmg
 EEG_Lab/*.exe
 EEG_Lab/eeg_lab.yaml
 EEG_Lab/source/
+# Left by running the lab folder on this machine.
+EEG_Lab/config/
+EEG_Lab/python_packages/
 
 # Firmware images and the bundled avrdude. Build products of
 # app/builds/build_firmware.py and app/builds/fetch_avrdude.py, rebuilt

@@ -345,6 +345,7 @@ class MirrorMode:
             # rule as classic / adaptive: every wrong press costs
             # something so spamming doesn't pay.
             self.active.incorrect_presses.append((ev.lane, ev.t_perf))
+            self.engine.eeg_wrong_press(self.active.incorrect_presses)
             self.engine.apply_wrong_press_penalty()
             return
         # Both sides in? Finish the trial now. The RT used for

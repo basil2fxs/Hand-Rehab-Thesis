@@ -165,22 +165,41 @@ def resolve_ports_and_hands(cfg, fallback_ports, known_ports=None,
     return a.ports, a.hands
 
 
-def hand_board_ports(cfg, max_ports: int = 2) -> list[str]:
+def excluded_ports(cfg) -> list[str]:
+    """Ports that are never a hand board: the EEG port the config
+    names, and any port carrying the USB identity of a trigger box
+    opened this run, whatever COM number it has come back on."""
+    from .eeg_port import reserved_port
+    from .eeg_trigger import BOX_IDS
+    get = cfg.get if cfg is not None else (lambda key, default=None: default)
+    out = []
+    reserved = reserved_port(get)
+    if reserved:
+        out.append(reserved)
+    if BOX_IDS:
+        from .serial_source import list_available_ports
+        out += [p.device for p in list_available_ports()
+                if p.hardware_id in BOX_IDS]
+    return out
+
+
+def hand_board_ports(cfg, max_ports: int = 2,
+                     manual: bool = False) -> list[str]:
     """discover_ports with the EEG trigger box kept out of it.
 
-    With EEG markers on, the box's port is never a hand board, and the
-    "any USB serial device" fallback is off: in the lab the likeliest
-    unknown serial device is the trigger box itself, and taking it
-    either locks the marker writer out (Windows) or turns hand-board
-    commands into trigger codes (macOS).
+    With EEG markers on, the box is never a hand board, and the "any
+    USB serial device" fallback is off for automatic choices: in the
+    lab the likeliest unknown serial device is the trigger box itself,
+    and taking it either locks the marker writer out (Windows) or turns
+    hand-board commands into trigger codes (macOS). `manual` is the
+    Settings list a person picks from, which keeps unbranded boards.
     """
-    from .eeg_port import reserved_port
     from .serial_source import discover_ports
     get = cfg.get if cfg is not None else (lambda key, default=None: default)
-    reserved = reserved_port(get)
     return discover_ports(get("serial.vendor_ids"), max_ports=max_ports,
-                          exclude=(reserved,) if reserved else (),
-                          allow_unknown=not get("eeg.enabled", False))
+                          exclude=excluded_ports(cfg),
+                          allow_unknown=manual or not get("eeg.enabled",
+                                                          False))
 
 
 def build_source_from_config(cfg, forced_port: str | None = None,
@@ -210,14 +229,15 @@ def build_source_from_config(cfg, forced_port: str | None = None,
     if not _HAVE_SERIAL:
         return None
 
-    from .eeg_port import reserved_port, same_port
-    reserved = reserved_port(cfg.get)
-    # The trigger box's port is invisible to everything below, so a
-    # saved per-hand override naming it reads as stale and is dropped.
+    from .eeg_port import same_port
+    boxes = excluded_ports(cfg)
+    # The trigger box is invisible to everything below, so a saved
+    # per-hand override naming it reads as stale and is dropped.
     known = [p.device for p in list_available_ports()
-             if not same_port(p.device, reserved)]
+             if not any(same_port(p.device, b) for b in boxes)]
     forced = forced_port or cfg.get("serial.port", "auto")
-    if forced and forced != "auto" and same_port(forced, reserved):
+    if (forced and forced != "auto"
+            and any(same_port(forced, b) for b in boxes)):
         log.warning("serial port %s is the EEG trigger box's port; "
                     "using auto-discovery for the hand boards", forced)
         forced = "auto"

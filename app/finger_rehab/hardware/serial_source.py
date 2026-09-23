@@ -43,6 +43,16 @@ class PortInfo:
     description: str
     vid: int | None
     pid: int | None
+    # The USB serial number, where the chip reports one. It follows the
+    # device from socket to socket, which the COM number does not, so
+    # it is how the EEG trigger box is recognised after a replug.
+    serial_number: str | None = None
+
+    @property
+    def hardware_id(self) -> str | None:
+        if self.vid is None or not self.serial_number:
+            return None
+        return f"{self.vid:04x}:{(self.pid or 0):04x}:{self.serial_number}"
 
 
 def list_available_ports() -> list[PortInfo]:
@@ -55,8 +65,28 @@ def list_available_ports() -> list[PortInfo]:
             description=p.description or "",
             vid=p.vid,
             pid=p.pid,
+            serial_number=getattr(p, "serial_number", None),
         ))
     return out
+
+
+def bench_port() -> tuple[str | None, str]:
+    """The one board a bench script may open without being told.
+
+    Refuses when more than one USB serial device is plugged in: on the
+    lab desktop one of them is the EEG trigger box, and STIM or STOP
+    written to it would land in the recording as trigger codes.
+    Returns (port, "") or (None, what to do).
+    """
+    usb = [p for p in list_available_ports()
+           if p.vid is not None and not _is_junk_port(p.device)]
+    if len(usb) == 1:
+        return usb[0].device, ""
+    if not usb:
+        return None, "No board found. Pass --port."
+    names = ", ".join(p.device for p in usb)
+    return None, (f"More than one USB serial device ({names}); one may be "
+                  "the EEG trigger box. Pass --port with the board's port.")
 
 
 def discover_port(expected_vids: list[str] | None) -> str | None:

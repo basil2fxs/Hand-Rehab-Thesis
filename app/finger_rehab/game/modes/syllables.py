@@ -983,6 +983,7 @@ class SyllablesMode(WaitSkip):
             self._dead_lanes.add(ev.lane)
             if self.active is not None:
                 self.active.incorrect_presses.append((ev.lane, ev.t_perf))
+                self.engine.eeg_wrong_press(self.active.incorrect_presses)
 
     def _classify(self, ev: PressEvent) -> str:
         """The input rule, in the order the docstring states it. Only

@@ -201,12 +201,11 @@ def main() -> int:
 
     port_name = args.port
     if not port_name:
-        from finger_rehab.hardware.serial_source import discover_ports
-        found = discover_ports(None)
-        if not found:
-            print("No Arduino found. Pass --port /dev/cu.something")
+        from finger_rehab.hardware.serial_source import bench_port
+        port_name, why = bench_port()
+        if not port_name:
+            print(why)
             return 2
-        port_name = found[0]
 
     out = Path(args.out) if args.out else default_out_path(root)
     if "sessions" in out.resolve().parts:

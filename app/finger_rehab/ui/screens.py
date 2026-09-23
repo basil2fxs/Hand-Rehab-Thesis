@@ -7707,7 +7707,8 @@ class DiagnosticsScreen(Screen):
             # Arduinos still shows them all in the dropdown. The EEG
             # trigger box's port is never offered as a hand.
             self._detected_ports = hand_board_ports(self.engine.cfg,
-                                                    max_ports=8)
+                                                    max_ports=8,
+                                                    manual=True)
         except Exception as e:
             self._detected_ports = []
             self._port_status = f"Port scan failed: {e}"

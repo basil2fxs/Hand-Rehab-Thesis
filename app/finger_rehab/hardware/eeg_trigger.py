@@ -308,6 +308,9 @@ CODE_NOTES: dict[str, tuple[str, str, str, str]] = {
     "resp_wrong_base": (
         "press sample", "response",
         "wrong finger, + lane actually pressed",
+        "Sent the moment the wrong finger lands, in every mode, "
+        "including those whose trial stays open for the right finger "
+        "(only the first wrong press of a trial is marked). "
         "Rhythm sends it for the wrong finger pressed while another "
         "finger's note was due, so rhythm supplies ERN error trials. "
         "Chords sends it for a discrete wrong-finger press; force that "
@@ -331,9 +334,10 @@ CODE_NOTES: dict[str, tuple[str, str, str, str]] = {
         "flip", "", "full-ring glyph or chime for a hit",
         "Only under eeg.feedback_markers. Lab style draws the glyph "
         "feedback_delay_ms after the press and marks that flip. A "
-        "feedback byte inside one frame of the block-end byte was "
-        "drained at block close and the results screen followed it; "
-        "leave it out of FRN averages."),
+        "glyph the block end cuts short gets no byte, so every "
+        "feedback byte in a recording is a full-delay one. (Older "
+        "recordings: a feedback byte inside one frame of the block-end "
+        "byte was drained at block close; leave it out.)"),
     "feedback_negative": (
         "flip", "", "outcome glyph for a miss; force_pilot: corridor-exit buzz",
         "Same rule as 140."),
@@ -582,6 +586,25 @@ class TriggerBackend:
         pass
 
 
+# USB identities (vid:pid:serial) of every trigger box opened this run.
+# A box that drops out and comes back on another COM number is still
+# this device, and hand-board discovery must keep off it under its new
+# name as well as its old one (discovery.excluded_ports).
+BOX_IDS: set[str] = set()
+
+
+def _remember_box(port: str) -> None:
+    try:
+        from .serial_source import list_available_ports
+        for p in list_available_ports():
+            if p.device.strip().lower() == str(port).strip().lower():
+                if p.hardware_id:
+                    BOX_IDS.add(p.hardware_id)
+                return
+    except Exception as e:
+        log.debug("could not read the trigger box's USB identity: %s", e)
+
+
 class SerialBackend(TriggerBackend):
     """The real trigger box on a serial port."""
 
@@ -621,6 +644,7 @@ class SerialBackend(TriggerBackend):
             )
             log.info("EEG trigger on %s @ %d", self.port, self.baud)
             self.last_error = ""
+            _remember_box(self.port)
             return True
         except Exception as e:
             log.warning("Could not open EEG trigger port %s: %s",

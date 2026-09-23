@@ -220,3 +220,37 @@ jobs:
           name: FingerRehab-EEGLab
           path: app/bin/dist/FingerRehab-EEGLab.zip
           retention-days: 30
+
+      # Start the lab exe the way the lab does, from a copy of the
+      # folder with nothing plugged in. There is no COM10 here, so it
+      # must open on the trigger box picker and stay up, say in its log
+      # that the eeg_lab.yaml beside it put it in lab mode, and leave
+      # no auto-start task behind on the machine. Nothing else in CI
+      # ever starts the lab build.
+      - name: Smoke-run the lab exe (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: |
+          $lab = Join-Path $env:RUNNER_TEMP "labrun"
+          Copy-Item -Recurse "bin/dist/Finger Rehab EEG Lab" $lab
+          $p = Start-Process -FilePath (Join-Path $lab "Finger Rehab.exe") -WorkingDirectory $lab -PassThru
+          Start-Sleep -Seconds 30
+          $log = Join-Path $lab "sessions/rehab.log"
+          $alive = -not $p.HasExited
+          if ($alive) { Stop-Process -Id $p.Id -Force }
+          if (-not (Test-Path $log)) {
+            Write-Host "No log at $log"
+            Get-ChildItem -Recurse $lab -Depth 2 | Select-Object FullName
+            exit 1
+          }
+          Get-Content $log
+          if (-not $alive) { Write-Host "The lab exe exited early, code $($p.ExitCode)"; exit 1 }
+          if (-not (Select-String -Path $log -Pattern "running in EEG lab mode" -Quiet)) { Write-Host "Not in lab mode"; exit 1 }
+          if (-not (Select-String -Path $log -Pattern "waiting on the port picker" -Quiet)) { Write-Host "Did not reach the port picker"; exit 1 }
+          schtasks /Query /TN FingerRehabAutostart 2>$null | Out-Null
+          if ($LASTEXITCODE -eq 0) { Write-Host "The lab exe registered auto-start"; exit 1 }
+          Write-Host "Lab exe: lab mode, port picker, no auto-start."
+          exit 0

@@ -414,7 +414,10 @@ class FeedbackGapTests(_EngineHarness):
     """The lab style parks the glyph for feedback_delay_ms. Two gaps
     the research pass found are closed here."""
 
-    def test_last_trial_feedback_byte_survives_the_block_end(self) -> None:
+    def test_a_glyph_cut_short_by_the_block_end_sends_no_byte(self) -> None:
+        # The last glyph still shows, but early and under the results
+        # screen: no FRN trial, and a BDF-only pipeline could not tell
+        # it from a good one, so it must not reach the wire.
         import pygame
         pygame.init()
         try:
@@ -432,8 +435,9 @@ class FeedbackGapTests(_EngineHarness):
                 # The block closes well inside the 800 ms delay.
                 eng.finish_block()
                 codes = [int(d["code"]) for d in _eeg_rows(root)]
-                self.assertIn(140, codes)
-                self.assertLess(codes.index(140), codes.index(221))
+                self.assertIn(221, codes)
+                self.assertFalse([c for c in codes if 140 <= c <= 149],
+                                 codes)
         finally:
             pygame.quit()
 
@@ -1161,15 +1165,36 @@ class LabSessionTests(unittest.TestCase):
         starts = [d for d in fp["eeg_rows"] if d["code"] == "23"]
         self.assertTrue(all(d["lane"] != "" for d in starts))
 
-    def test_last_trial_feedback_byte_is_not_lost(self) -> None:
-        # Under the overlay's 800 ms delay the last trial's glyph used
-        # to be parked past the block end; every trial now has one.
+    def test_every_feedback_byte_is_a_full_delay_one(self) -> None:
+        # Under the overlay's 800 ms delay a glyph the block end cuts
+        # short still shows but sends no byte: it lands early, under the
+        # results screen, and a lab reading the BDF alone could not tell
+        # it from a good one. Every byte that is sent sits the full
+        # delay after the response it follows, one per trial at most.
+        delay = 0.8
         for name in ("reaction", "classic", "adaptive", "pattern"):
             scn = _lab()[name]
             with self.subTest(mode=name):
-                fb = [c for c in scn["nonzero"] if c in (140, 141)]
-                self.assertEqual(len(fb), len(scn["trials"]))
-
+                rows = scn["eeg_rows"]
+                fb = [d for d in rows if 140 <= int(d["code"]) <= 142]
+                self.assertTrue(fb)
+                self.assertLessEqual(len(fb), len(scn["trials"]))
+                if name != "reaction":
+                    # In the fast modes the next trial's press can land
+                    # before this trial's glyph, so a byte cannot be
+                    # paired with the press before it. That overlap is
+                    # why the lab sends FRN bytes in reaction, chords
+                    # and force_pilot only.
+                    continue
+                last_response = None
+                for d in rows:
+                    code = int(d["code"])
+                    if 100 <= code <= 131:
+                        last_response = float(d["t_event"])
+                    elif 140 <= code <= 142 and last_response is not None:
+                        self.assertGreaterEqual(
+                            float(d["t_event"]) - last_response,
+                            delay - 0.02, (name, d))
 
 if __name__ == "__main__":
     unittest.main()

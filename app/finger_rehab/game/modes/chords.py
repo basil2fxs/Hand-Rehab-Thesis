@@ -1363,6 +1363,7 @@ class ChordsMode(WaitSkip):
             # loudest possible leak. Suite convention: every wrong
             # press costs points and the trial downgrades to Miss.
             self.active.incorrect_presses.append((ev.lane, ev.t_perf))
+            self.engine.eeg_wrong_press(self.active.incorrect_presses)
             self.engine.apply_wrong_press_penalty()
 
     # ---- hold --------------------------------------------------------------

@@ -51,12 +51,11 @@ def main() -> int:
 
     port = args.port
     if not port:
-        from finger_rehab.hardware.serial_source import discover_ports
-        found = discover_ports(None)
-        if not found:
-            print("No Arduino found. Pass --port /dev/cu.something")
+        from finger_rehab.hardware.serial_source import bench_port
+        port, why = bench_port()
+        if not port:
+            print(why)
             return 2
-        port = found[0]
 
     print(f"Opening {port}")
     try:

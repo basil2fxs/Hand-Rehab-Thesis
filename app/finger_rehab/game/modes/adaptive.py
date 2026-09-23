@@ -211,6 +211,7 @@ class AdaptiveMode:
             # the dominant strategy: mash everything, eat one small
             # penalty, take the hit).
             self.active.incorrect_presses.append((ev.lane, ev.t_perf))
+            self.engine.eeg_wrong_press(self.active.incorrect_presses)
             self.engine.apply_wrong_press_penalty()
 
     # Quality weights tell the adapter how good a press was, not just hit/miss.

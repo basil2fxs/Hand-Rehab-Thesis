@@ -235,13 +235,12 @@ def open_source(port: str | None):
     """The board through the same discovery the game uses."""
     from finger_rehab.config import Config
     from finger_rehab.hardware.serial_source import (SerialSource,
-                                                    discover_ports)
+                                                    bench_port)
     cfg = Config.load()
     if not port:
-        found = discover_ports(cfg.get("serial.vendor_ids"), max_ports=1)
-        if not found:
-            raise SystemExit("no board found; pass --port")
-        port = found[0]
+        port, why = bench_port()
+        if not port:
+            raise SystemExit(why)
     src = SerialSource(port, baud=int(cfg.get("serial.baud", BAUD)),
                        num_sensors=int(cfg.get("fsr.num_sensors_per_hand", 4)))
     src.start()
