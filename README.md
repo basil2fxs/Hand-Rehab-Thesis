@@ -10,7 +10,7 @@ laptop over USB. Ten games run on that signal, and every press is logged with it
 ## Where things are
 
 ```
-Local_Runner.command   start the EEG build on this Mac (double-click)
+Local_Runner.command   start the game on this Mac, newest code (double-click)
 analysis/              the notebook: this is where results get analysed
 sessions/              recorded sessions, one folder per game
 Installers/            what people install: Windows exe, macOS dmg

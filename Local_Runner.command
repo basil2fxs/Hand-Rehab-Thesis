@@ -1,19 +1,16 @@
 #!/bin/bash
-# Local_Runner: starts the EEG build on this Mac. Double-click it.
+# Local_Runner: starts the game on this Mac. Double-click it.
 #
-# Same software the lab gets, same markers, same lab settings. The one
-# difference is that it does not insist on the trigger box, so with no
-# box on the desk the markers go to the dummy backend and are still
-# written to raw.csv. Plug a box in and it uses it.
+# The normal game, straight from the code in app/, so it is always the
+# newest version there is: no build to wait for, no EEG. This Mac never
+# has an EEG, so the lab settings (eeg_lab.yaml) are never loaded here;
+# they live in the EEG_Lab folder, which goes to the lab.
 #
-# Everything else stays as it is: two deliverables, the installer for
-# people at home and the lab folder for the lab. This file is the local
-# way in, so nothing here has to be typed.
+# Recordings go to the sessions/ folder beside this file, which is the
+# one the analysis notebook reads. Your calibration and settings stay
+# in app/config as before.
 
 set -e
-# The code lives in app/; this file sits above it so the top level
-# stays to the point: the notebook, the sessions, the two things
-# people are handed, and this.
 cd "$(dirname "$0")/app"
 
 # Prefer the Python that built the app, fall back to whatever is on the
@@ -28,18 +25,18 @@ if [ -z "$PY" ]; then
     exit 1
 fi
 
-echo "Starting the EEG build. Close the game window to stop."
-echo "No trigger box here, so markers go to the dummy backend and are"
-echo "still written to raw.csv. With a box plugged into this Mac, pass"
-echo "its port:  ./Local_Runner.command --eeg-port /dev/cu.usbmodemXXXX"
+echo "Starting Finger Rehab. Close the game window to stop."
+echo "Recordings go to $(cd .. && pwd)/sessions"
 echo
 
-"$PY" main.py --config config/eeg_lab.yaml --no-eeg-box "$@"
+set +e
+"$PY" main.py --data-dir ../sessions "$@"
 STATUS=$?
+set -e
 
 echo
 if [ $STATUS -ne 0 ]; then
-    echo "The game exited with code $STATUS. The log is in sessions/."
+    echo "The game exited with code $STATUS. The log is sessions/rehab.log."
     read -r -p "Press return to close." _
 fi
 exit $STATUS

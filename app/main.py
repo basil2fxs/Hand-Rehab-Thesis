@@ -63,6 +63,10 @@ def parse_args() -> argparse.Namespace:
     # cannot exist on a Mac. Without this there is no way to point a
     # box plugged in here at anything, so a local run could only ever
     # use the dummy backend.
+    # Local_Runner keeps the recordings in the top-level sessions/
+    # folder the notebook reads, not in app/sessions beside the code.
+    p.add_argument("--data-dir", default=None,
+                   help="Folder the recordings and the log go to")
     p.add_argument("--eeg-port", default=None,
                    help="Serial port of the EEG trigger box, e.g. "
                         "/dev/cu.usbmodem1101 or COM7")
@@ -123,6 +127,11 @@ def main() -> int:
             ok, msg = autostart.unregister()
         print(msg, file=sys.stdout if ok else sys.stderr)
         return 0 if ok else 1
+    if args.data_dir:
+        data_dir = Path(args.data_dir).expanduser().resolve()
+        cfg.data.setdefault("session", {})["data_dir"] = str(data_dir)
+        cfg.data.setdefault("logging", {})["file"] = str(
+            data_dir / "rehab.log")
     # Resolve the log path through the config so a relative
     # "sessions/finger_rehab.log" lands next to the app (USER_ROOT) instead of
     # whatever the working directory happens to be. Finder launches the

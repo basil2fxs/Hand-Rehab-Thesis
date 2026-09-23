@@ -1023,9 +1023,18 @@ class ParityTests(unittest.TestCase):
         # (a bare double-click, the exe loads the sibling yaml) or the
         # PsychoPy launcher, which test_lab_package.py pins. On the Mac
         # the one source launcher is Local_Runner.command, which sits at
-        # the top level beside app/ because it is Basil's way in.
+        # the top level beside app/ because it is Basil's way in. It
+        # runs the normal game: this Mac never has an EEG, so the lab
+        # settings must never load here, and the recordings go to the
+        # top-level sessions/ the notebook reads.
         text = (REPO.parent / "Local_Runner.command").read_text()
-        self.assertIn("main.py --config config/eeg_lab.yaml", text)
+        command = [ln for ln in text.splitlines()
+                   if "main.py" in ln and not ln.lstrip().startswith("#")]
+        self.assertEqual(len(command), 1, command)
+        self.assertIn("main.py --data-dir ../sessions", command[0])
+        self.assertNotIn("eeg_lab", command[0])
+        self.assertNotIn("--no-eeg-box", command[0])
+        self.assertNotIn("--eeg-port", command[0])
         # No other python entry point may be invoked. The basename
         # must be exactly main.py: an endswith check would let a
         # forked lab_main.py through, and the assertIn above is
