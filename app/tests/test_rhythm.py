@@ -55,6 +55,40 @@ class LibrosaIntegrationTests(unittest.TestCase):
         bm = extract_beatmap("/nonexistent/song.mp3", difficulty="medium")
         self.assertGreater(len(bm.notes), 0)
 
+    def test_a_python_without_aifc_still_reads_the_song(self) -> None:
+        """PsychoPy's Python has no aifc, and librosa.load asks
+        audioread for its backends first, which imports it: under
+        PsychoPy every track fell back to a procedural map (found on
+        the lab build, 24 September 2026). The song is read through
+        soundfile, byte for byte what librosa.load returns."""
+        if (importlib.util.find_spec("librosa") is None
+                or importlib.util.find_spec("soundfile") is None):
+            self.skipTest("librosa / soundfile not installed")
+        from unittest import mock
+
+        import audioread
+        import librosa
+        import numpy as np
+        from finger_rehab.audio import beatmap as bmod
+        song = Path(__file__).resolve().parents[1] / "assets" / "music" \
+            / "Easy_Lemon.mp3"
+        if not song.is_file():
+            self.skipTest("study track not in assets")
+        want, sr = librosa.load(str(song), mono=True)
+
+        def no_aifc():
+            raise ModuleNotFoundError("No module named 'aifc'")
+
+        with mock.patch.object(audioread, "available_backends", no_aifc):
+            with self.assertRaises(ModuleNotFoundError):
+                librosa.load(str(song), mono=True)
+            got, got_sr = bmod.decode_mono(song)
+            bm = bmod.extract_beatmap(song, difficulty="medium")
+        self.assertEqual(got_sr, sr)
+        self.assertTrue(np.array_equal(got, want))
+        self.assertEqual(bm.song, str(song))
+        self.assertGreater(len(bm.notes), 64)      # not the procedural 64
+
     def test_extract_beatmap_recovers_tempo_from_click_track(self) -> None:
         # Generate a deterministic 120-BPM click track, then verify that
         # extract_beatmap returns a Beatmap whose tempo is in the ballpark.

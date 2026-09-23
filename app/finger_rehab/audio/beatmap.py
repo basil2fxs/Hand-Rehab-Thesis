@@ -305,6 +305,32 @@ def _select_strong_beats(beat_times: list[float],
     return [t for t, _ in chosen]
 
 
+# librosa.load's own defaults, which every beat map was made with.
+DECODE_SR = 22050
+
+
+def decode_mono(path: str | Path, sr: int = DECODE_SR):
+    """The track as librosa.load(path, mono=True) returns it: float32,
+    channels averaged, resampled to `sr` with librosa's default
+    resampler. Read through soundfile first, because librosa.load asks
+    audioread for its backends before it tries anything, audioread
+    imports aifc, and PsychoPy's Python (3.10, a trimmed standard
+    library) has no aifc: under PsychoPy every track failed and rhythm
+    silently played a procedural map instead of the song's beats.
+    librosa.load stays as the fallback for a file soundfile cannot
+    read."""
+    import librosa
+    try:
+        import soundfile as sf
+        data, native = sf.read(str(path), dtype="float32", always_2d=True)
+    except Exception:
+        return librosa.load(str(path), mono=True, sr=sr)
+    y = librosa.to_mono(data.T)
+    if native != sr:
+        y = librosa.resample(y, orig_sr=native, target_sr=sr)
+    return y, sr
+
+
 def extract_beatmap(audio_path: str | Path,
                     difficulty: str = "medium",
                     lane_pattern: list[int] | None = None,
@@ -328,7 +354,7 @@ def extract_beatmap(audio_path: str | Path,
     try:
         import librosa
         with DECODE_LOCK:
-            y, sr = librosa.load(str(p), mono=True)
+            y, sr = decode_mono(p)
         # Onset envelope (energy of percussive hits over time).
         # Computed once and shared between beat-track + strength
         # ranking so beat_track follows the same percussive cues we
