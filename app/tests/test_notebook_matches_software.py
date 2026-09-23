@@ -822,7 +822,7 @@ class TestCohortChapterContract:
                 "sec_cohort_hands", "sec_cohort_within_block",
                 "sec_cohort_consistency", "sec_cohort_reliability",
                 "sec_cohort_feasibility", "sec_cohort_validity",
-                "sec_cohort_export"]
+                "sec_cohort_sensitivity", "sec_cohort_export"]
     HELPERS = ["write_cohort_report", "icc_ci", "cohort_long_table",
                "cohort_catalogue", "cohort_paired", "cohort_values",
                "cohort_battery_rows", "median_order_ci",

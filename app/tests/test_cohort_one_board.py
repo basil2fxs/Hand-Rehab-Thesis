@@ -8,12 +8,15 @@ after the rest. Five codes are right-handed and one is left-handed,
 so the left-hander's blocks are all on the non-dominant hand. The
 folders go through the real notebook functions.
 
-What this pins: pass 2 stays out of every first-pass table; the
-left-hander stays out of the pooled numbers and appears in the
-handedness table; the two-hand checks print as DROPPED with the
-one-board reason; R3 reads pass 2 against pass 1; E1 uses the
-four-lane band; and the reliability chapter pairs the passes and
-writes its table and figures.
+What this pins: pass 2 stays out of every first-pass table; everyone,
+the left-hander included, is in the pooled numbers (COHORT_POOL, 24
+September 2026); the handedness table sets the left-hander against
+the right-handers and the LQ correlation runs off the intake LQ; the
+sensitivity rerun drops the left-hander without touching the main
+tables; the two-hand checks print as DROPPED with the one-board
+reason; R3 reads pass 2 against pass 1; E1 uses the four-lane band;
+and the reliability chapter pairs the passes and writes its table and
+figures.
 """
 from __future__ import annotations
 
@@ -128,6 +131,8 @@ class OneBoardTwoPassCohortTests(unittest.TestCase):
             cls.within = ra.sec_cohort_within_block(cls.cohort)
             cls.reliability = ra.sec_cohort_reliability(cls.cohort)
             cls.validity = ra.sec_cohort_validity(cls.cohort, cls.within)
+            cls.sensitivity = ra.sec_cohort_sensitivity(cls.cohort,
+                                                        cls.within)
             cls.written = ra.sec_cohort_export(cls.cohort)
         cls.out = buf.getvalue()
         import matplotlib.pyplot as plt
@@ -150,9 +155,9 @@ class OneBoardTwoPassCohortTests(unittest.TestCase):
         self.assertEqual(set(long["phase"]), {"pass1", "pass2"})
         first = self.ra.cohort_battery_rows(long)
         self.assertEqual(set(first["phase"]), {"pass1"})
-        # One value per right-hander, not a two-block mean.
+        # One value per participant, not a two-block mean.
         rt = self.ra.cohort_values(long, "reaction", "median_rt_ms")
-        self.assertEqual(len(rt), 5)
+        self.assertEqual(len(rt), 6)
         p1 = long[(long["phase"] == "pass1") & (long["mode"] == "reaction")
                   & (long["metric"] == "median_rt_ms")].set_index(
                       "participant")["value"]
@@ -160,16 +165,44 @@ class OneBoardTwoPassCohortTests(unittest.TestCase):
             self.assertAlmostEqual(v, p1.loc[who])
         self.assertNotIn("more than one battery block", self.out)
 
-    def test_the_left_hander_is_described_not_pooled(self) -> None:
+    def test_everyone_is_pooled_and_the_left_hander_set_apart(self):
         long = self.cohort["long"]
-        self.assertNotIn("P06", self.ra.cohort_primary_people(long))
-        self.assertIn("P06", self.out)
-        self.assertNotIn("P06", set(
+        self.assertIn("P06", self.ra.cohort_primary_people(long))
+        self.assertEqual(self.ra.cohort_left_handed(long), {"P06"})
+        self.assertIn("P06", set(
             self.ra.cohort_values(long, "echo", "span").index))
+        # The norm is one group on one board, over everyone.
+        d = self.desc[(self.desc["mode"] == "reaction")
+                      & (self.desc["metric"] == "median_rt_ms")]
+        self.assertEqual(list(d["hand_role"]),
+                         [self.ra.COHORT_POOLED_ROLE])
+        self.assertEqual(int(d["n"].iloc[0]), 6)
         tbl = self.hands.set_index(["mode", "metric"])
         row = tbl.loc[("reaction", "median_rt_ms")]
-        self.assertEqual(row["n_dominant"], 5)
-        self.assertEqual(row["n_nondominant"], 1)
+        self.assertEqual(row["n_right_handed"], 5)
+        self.assertEqual(row["n_left_handed"], 1)
+        # One left-hander: medians only, no shift or p.
+        self.assertTrue(row["shift"] != row["shift"])
+        self.assertIn("medians only", row["note"])
+        lq = self.cohort["tables"]["handedness_lq"].set_index(
+            ["mode", "metric"])
+        self.assertEqual(int(lq.loc[("reaction", "median_rt_ms"), "n"]), 6)
+
+    def test_the_sensitivity_rerun_drops_the_left_hander(self) -> None:
+        s = self.sensitivity.set_index(["table", "id"])
+        r3 = s.loc[("validity", "R3")]
+        self.assertEqual(r3["n_all"], 6)
+        self.assertEqual(r3["n_right_handed"], 5)
+        t1 = s.loc[("reliability", "T1")]
+        self.assertEqual(t1["n_all"], 6)
+        self.assertEqual(t1["n_right_handed"], 5)
+        self.assertIn("changed", self.sensitivity.columns)
+        # The rerun ran on a copy: the main tables still hold everyone.
+        self.assertEqual(int(self.cohort["tables"]["validity"].set_index(
+            "id").loc["R3", "n"]), 6)
+        self.assertEqual(self.ra.COHORT_POOL, "all")
+        self.assertTrue((Path(self.cohort["out_dir"])
+                         / "cohort_sensitivity.csv").is_file())
 
     def test_the_two_hand_checks_are_dropped_with_the_reason(self) -> None:
         v = self.validity.set_index("id")
@@ -177,13 +210,13 @@ class OneBoardTwoPassCohortTests(unittest.TestCase):
             self.assertEqual(v.loc[cid, "verdict"], "dropped", cid)
             self.assertIn("one-board", str(v.loc[cid, "criterion"]), cid)
         self.assertEqual(v.loc["P2", "verdict"], "dropped")
-        # One Rh1 row at most: the dominant hand.
+        # One Rh1 row at most: the right hand, pooled.
         self.assertLessEqual(int((self.validity["id"] == "Rh1").sum()), 1)
 
     def test_r3_reads_pass_two_against_pass_one(self) -> None:
         r3 = self.validity.set_index("id").loc["R3"]
         self.assertNotEqual(r3["verdict"], "dropped")
-        self.assertEqual(r3["n"], 5)
+        self.assertEqual(r3["n"], 6)
         self.assertLess(r3["value"], 0)       # the injected practice
         self.assertGreater(r3["value"], -20)
         self.assertEqual(r3["reference"], 20.0)
@@ -197,7 +230,7 @@ class OneBoardTwoPassCohortTests(unittest.TestCase):
     def test_the_reliability_chapter_pairs_the_passes(self) -> None:
         rel = self.reliability.set_index("id")
         t1 = rel.loc["T1"]
-        self.assertEqual(t1["n"], 5)
+        self.assertEqual(t1["n"], 6)
         self.assertTrue(0.0 < t1["icc21"] <= 1.0)
         self.assertTrue(t1["lo21"] <= t1["icc21"] <= t1["hi21"])
         self.assertLess(t1["bias"], 0)
