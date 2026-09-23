@@ -1,12 +1,13 @@
 """Measure the study battery's clock cost headless.
 
-The healthy baseline design is ONE PASS in one sitting: eleven
-blocks, ten modes, every mode played once (reaction twice, once per
-hand), one scheduled stretch and one scheduled mid-session rest. It
-targets 45 minutes on the rig and stops at 50 (Data Collection Plan,
-4 September 2026, "Where the 45 minutes goes"). This script plays the
-whole plan through the real engine, real modes and real loggers with
-a simulated participant, on a simulated clock, and reports what the
+The healthy baseline design runs on ONE board, the right-hand
+device, in one sitting of two passes: pass 1 plays the nine one-hand
+modes once, a rest, then pass 2 plays Reaction, Force Pilot and
+Chords again for the within-session test-retest. It targets 45
+minutes on the rig and stops at 50 (Data Collection Plan, 24
+September 2026). This script plays the whole plan through the real
+engine, real modes and real loggers with a simulated participant, on
+a simulated clock and a simulated one-board rig, and reports what the
 blocks actually cost in seconds. No display, no audio, no hardware.
 
 The plan file's block table came out of this script, so a run that
@@ -125,17 +126,29 @@ class HandModel:
 
 
 class FakeRig:
-    """A two-board rig fed by the HandModel."""
+    """The study rig: ONE board, the right-hand device, fed by the
+    HandModel. It can be renamed the way a real lone board is, so
+    Play all puts it on the plan's hand."""
     provides_samples = True
     is_connected = True
-    name = "SimulatedTwoBoardRig"
-    hand_modes_available = {"right", "left", "both"}
-    hands: list = []
+    name = "SimulatedOneBoardRig"
 
     def __init__(self) -> None:
         from collections import deque
+        from types import SimpleNamespace
         self._q: deque = deque()
         self.commands: list[str] = []
+        self.hands = [SimpleNamespace(hand="right", port="/dev/sim0")]
+
+    @property
+    def hand_modes_available(self) -> set[str]:
+        return {self.hands[0].hand}
+
+    def relabel_single(self, hand: str) -> bool:
+        if hand not in ("left", "right"):
+            return False
+        self.hands[0].hand = hand
+        return True
 
     def start(self) -> None: ...
     def stop(self) -> None: ...
@@ -509,8 +522,8 @@ def one_sitting(args, seed: int, quiet: bool = False) -> dict | None:
         cell = eng._battery["cell"]
         if not quiet:
             print(f"Battery {eng._battery['id']} for {args.code}, dominant "
-                  f"{args.dominant}: order {cell['mode_order']}, hand 1 = "
-                  f"{cell['hand_first'].replace('_', '-')}", flush=True)
+                  f"{args.dominant}: order {cell['mode_order']}",
+                  flush=True)
         rows = []
         transitions_s = 0.0
         rests_s = 0.0
@@ -553,12 +566,14 @@ def one_sitting(args, seed: int, quiet: bool = False) -> dict | None:
         battery = eng._battery or {}
         budget = float(battery.get("budget_min", 45.0))
         hard_stop = float(battery.get("hard_stop_min", 0.0))
-        # Per mode, because with one pass a mode is the unit the plan
-        # file's block table is written in. The phase column would say
-        # "battery" eleven times over and separate nothing.
+        # Per mode and per pass: the plan file's block table lists a
+        # mode played in both passes once for each.
         by_mode: dict[str, float] = {}
+        by_block: dict[str, float] = {}
         for r in rows:
             by_mode[r[1]] = by_mode.get(r[1], 0.0) + r[3]
+            key = f"{r[1]} {r[6]}".strip()
+            by_block[key] = by_block.get(key, 0.0) + r[3]
         if quiet:
             return {"total_min": total_s / 60.0,
                     "blocks_min": blocks_s / 60.0,
@@ -566,11 +581,13 @@ def one_sitting(args, seed: int, quiet: bool = False) -> dict | None:
                     "budget_min": budget, "hard_stop_min": hard_stop,
                     "by_mode_min": {m: s / 60.0
                                     for m, s in by_mode.items()},
+                    "by_block_min": {m: s / 60.0
+                                     for m, s in by_block.items()},
                     "blocks": len(rows)}
         print()
-        print("  per mode, the plan file's block table:")
-        for mode, secs in sorted(by_mode.items(), key=lambda kv: -kv[1]):
-            print(f"    {mode:12s} {secs / 60.0:6.2f} min")
+        print("  per block, the plan file's block table:")
+        for key, secs in sorted(by_block.items(), key=lambda kv: -kv[1]):
+            print(f"    {key:18s} {secs / 60.0:6.2f} min")
         print()
         print(f"  blocks       {blocks_s / 60.0:6.2f} min over {len(rows)} blocks")
         print(f"  rests        {rests_s / 60.0:6.2f} min (scheduled, taken "

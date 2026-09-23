@@ -1,5 +1,7 @@
-"""The study-day workflow on a real rig: two boards, one participant,
-Play all from login to the last block.
+"""The study-day workflow on a real rig, one participant, Play all
+from login to the last block. The study rig is one board (the
+right-hand device); the two-board cases stay covered because the app
+still supports that rig.
 
 Found by reading the path end to end after a run on the real board
 (23 September 2026). Each class is one way a sitting could produce
@@ -8,7 +10,9 @@ wrong data or lose a step without anyone noticing:
   1. A one-hand block on a two-board rig buzzed the right board for the
      left hand, and took the resting hand's presses as its own.
   2. Play all on one board skipped every two-hand step and ran the
-     other hand's steps on the board that was there.
+     other hand's steps on the board that was there. A one-hand plan
+     now runs on the one board, renamed to the plan's hand; a plan
+     that needs a second board says which.
   3. A step whose board had dropped started anyway; a board gone for
      good skipped every later two-hand step.
   4. A step that never opened its block (a question dismissed, a
@@ -45,13 +49,7 @@ class _OneBoard(_Rig):
 
     def __init__(self, hand: str = "right") -> None:
         super().__init__()
-        self.hands = [SimpleNamespace(hand=hand, port="/dev/fake0")]
-        self.hand_modes_available = {hand}
-
-    def relabel_single(self, hand: str) -> bool:
         self.hands[0].hand = hand
-        self.hand_modes_available = {hand}
-        return True
 
 
 class _TwoBoards(_Rig):
@@ -121,10 +119,24 @@ class OneHandBlocksOnTwoBoards(_BatteryHarness):
 # ---------------------------------------------------------------------
 # 2. one board
 # ---------------------------------------------------------------------
-class PlayAllNeedsBothBoards(_BatteryHarness):
+class PlayAllAndTheBoards(_BatteryHarness):
 
-    def test_one_board_says_which_board_is_missing(self) -> None:
+    def test_the_one_board_plan_runs_on_one_board(self) -> None:
+        for rig in (_OneBoard("right"), _OneBoard("left"), _TwoBoards()):
+            eng = self._engine(rig)
+            self._login(eng, "P02", "right")
+            self.assertEqual(eng.battery_available(), (True, ""),
+                             rig.hands)
+
+    def test_a_two_hand_plan_on_one_board_says_which_is_missing(
+            self) -> None:
         eng = self._engine(_OneBoard("right"))
+        pre = eng.cfg.data["protocol"]["presets"]["study_battery"]
+        pre["orders"] = {k: [{"mode": "reaction", "hand": "right",
+                              "phase": "pass1"},
+                             {"mode": "mirror", "hand": "both",
+                              "phase": "pass1"}]
+                         for k in ("A", "B")}
         self._login(eng, "P02", "right")
         ok, why = eng.battery_available()
         self.assertFalse(ok)
@@ -135,11 +147,6 @@ class PlayAllNeedsBothBoards(_BatteryHarness):
         self.assertEqual(hub._battery_state(),
                          (False, "Play all", why))
 
-    def test_two_boards_are_fine(self) -> None:
-        eng = self._engine(_TwoBoards())
-        self._login(eng, "P02", "right")
-        self.assertEqual(eng.battery_available(), (True, ""))
-
 
 # ---------------------------------------------------------------------
 # 3. a board down between blocks
@@ -148,19 +155,19 @@ class AStepWaitsForItsBoard(_BatteryHarness):
 
     def test_the_step_waits_and_is_not_used_up(self) -> None:
         self._stub_rhythm()
-        eng = self._engine(_TwoBoards())
+        eng = self._engine(_OneBoard("right"))
         self._login(eng, "P01", "right")
         self.assertTrue(eng.start_battery())
         self.assertEqual(eng.current_block, "reaction")
         eng.finish_block()
         pending = eng.pending_protocol_step()
-        self.assertEqual((pending["hand"], pending["position"]),
-                         ("left", 2))
-        eng._hands_down = {"left"}
+        self.assertEqual((pending["mode"], pending["position"]),
+                         ("rhythm", 2))
+        eng._hands_down = {"right"}
         self.assertFalse(eng.continue_protocol())
         self.assertFalse(eng.block_is_running())
         self.assertEqual(eng.pending_protocol_step()["position"], 2)
-        self.assertIn("Left board not connected", eng.battery_wait_line())
+        self.assertIn("Right board not connected", eng.battery_wait_line())
         self.assertEqual([r["status"] for r in
                           eng.battery_progress()["log"]], ["completed"])
         # The card says so rather than offering a start.
@@ -173,26 +180,23 @@ class AStepWaitsForItsBoard(_BatteryHarness):
         self.assertEqual(eng.battery_wait_line(), "")
         self.assertTrue(eng.continue_protocol())
         self.assertEqual((eng.current_block, eng.hand_mode),
-                         ("reaction", "left"))
+                         ("rhythm", "right"))
         self.assertEqual(eng.session.battery["position"], 2)
 
     def test_a_board_gone_from_the_rig_waits_too(self) -> None:
-        # A rebuild that comes back with one board used to read as a
-        # one-board rig and skip every two-hand step that followed.
+        # A rebuild that comes back with no board used to read as a
+        # rig that could not run the step, and skipped it.
         self._stub_rhythm()
-        rig = _TwoBoards()
+        rig = _OneBoard("right")
         eng = self._engine(rig)
         self._login(eng, "P01", "right")
         eng.start_battery()
         eng.finish_block()
-        eng.continue_protocol()
-        eng.finish_block()          # both reactions done; mirror next
-        rig.hand_modes_available = {"right"}
-        rig.hands = rig.hands[:1]
+        rig.hands = []
         self.assertFalse(eng.continue_protocol())
         pending = eng.pending_protocol_step()
         self.assertEqual((pending["mode"], pending["position"]),
-                         ("mirror", 3))
+                         ("rhythm", 2))
         self.assertNotIn("skipped", [r["status"] for r in
                                      eng.battery_progress()["log"]])
 
@@ -262,10 +266,10 @@ class AnAbandonedCalibrationIsOfferedAgain(_BatteryHarness):
         eng.maybe_start_quick_calibration = offer
         eng._uncal_ack = set()
         self.assertTrue(eng.start_battery())
-        self.assertEqual(offers, [["left", "right"]])
+        self.assertEqual(offers, [["right"]])
         # Abandoned: the callback never runs. Continuing offers the
-        # step's own hand again instead of playing on whatever profile
-        # was lying about.
+        # hand again instead of playing on whatever profile was
+        # lying about.
         eng.show_mode_select()
         eng.start_battery()
         self.assertEqual(offers[-1], ["right"])
@@ -277,17 +281,11 @@ class AnAbandonedCalibrationIsOfferedAgain(_BatteryHarness):
         eng._pending_cal_cb()
         self.assertEqual((eng.current_block, eng.hand_mode),
                          ("reaction", "right"))
-        # The left hand is offered before its first block, once.
-        eng.finish_block()
-        eng.continue_protocol()
-        self.assertEqual(offers[-1], ["left"])
-        eng._pending_cal_cb()
-        self.assertEqual((eng.current_block, eng.hand_mode),
-                         ("reaction", "left"))
+        # Once finished, later steps do not ask again.
         n = len(offers)
         eng.finish_block()
         eng.continue_protocol()
-        self.assertEqual(eng.current_block, "mirror")
+        self.assertEqual(eng.current_block, "rhythm")
         self.assertEqual(len(offers), n)
 
 
@@ -301,13 +299,13 @@ class FreePicksSkipsAndRests(_BatteryHarness):
         eng = self._engine(_TwoBoards())
         self._login(eng, "P01", "right")
         eng.start_battery()
-        self.assertEqual(eng._current_phase, "battery")
+        self.assertEqual(eng._current_phase, "pass1")
         eng.finish_block()
         eng.begin_game("echo", "right")
         self.assertEqual(eng._current_phase, "")
         eng.finish_block()
         eng.continue_protocol()
-        self.assertEqual(eng._current_phase, "battery")
+        self.assertEqual(eng._current_phase, "pass1")
 
     def test_s_asks_before_skipping(self) -> None:
         self._stub_rhythm()
@@ -372,9 +370,9 @@ class ARelaunchPicksUpWhereTheSittingWas(_BatteryHarness):
     def test_steps_done_earlier_today_are_not_played_again(self) -> None:
         self._stub_rhythm()
         first = self._done_block("P01_090000_reaction", 1, "reaction_right")
-        self._done_block("P01_090100_reaction", 2, "reaction_left",
+        self._done_block("P01_090100_rhythm", 2, "rhythm_right",
                          status="abandoned")
-        self._done_block("P09_090200_reaction", 2, "reaction_left",
+        self._done_block("P09_090200_rhythm", 2, "rhythm_right",
                          code="P09")
         eng = self._engine(_TwoBoards())
         self._login(eng, "P01", "right")
@@ -382,7 +380,7 @@ class ARelaunchPicksUpWhereTheSittingWas(_BatteryHarness):
         # Position 1 is done; the abandoned and the other code's
         # blocks are not this sitting's.
         self.assertEqual((eng.current_block, eng.hand_mode),
-                         ("reaction", "left"))
+                         ("rhythm", "right"))
         self.assertEqual(eng.session.battery["position"], 2)
         progress = eng.battery_progress()
         self.assertEqual(progress["done"], 1)

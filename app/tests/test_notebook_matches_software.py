@@ -820,8 +820,9 @@ class TestPatternSequenceFileChapter:
 class TestCohortChapterContract:
     SECTIONS = ["sec_cohort_selection", "sec_cohort_describe",
                 "sec_cohort_hands", "sec_cohort_within_block",
-                "sec_cohort_consistency", "sec_cohort_feasibility",
-                "sec_cohort_validity", "sec_cohort_export"]
+                "sec_cohort_consistency", "sec_cohort_reliability",
+                "sec_cohort_feasibility", "sec_cohort_validity",
+                "sec_cohort_export"]
     HELPERS = ["write_cohort_report", "icc_ci", "cohort_long_table",
                "cohort_catalogue", "cohort_paired", "cohort_values",
                "cohort_battery_rows", "median_order_ci",
@@ -879,21 +880,20 @@ class TestCohortChapterContract:
 
     def test_the_phases_are_the_ones_the_shipped_preset_writes(
             self, source):
-        """The one pass writes a single phase word on every step, and
-        the notebook has to carry the same one: a battery block is told
-        from a free pick by having a phase at all."""
+        """The two-pass preset writes pass1 and pass2, and the notebook
+        has to carry the same words: a battery block is told from a
+        free pick by having a phase at all, and the retest pass from
+        the primary one by its word."""
         from finger_rehab.config import Config
-        one, phases = _notebook_names(
-            source, ["COHORT_PHASE", "COHORT_PHASES"])
+        one, retest, phases = _notebook_names(
+            source, ["COHORT_PHASE", "COHORT_RETEST_PHASE",
+                     "COHORT_PHASES"])
         preset = Config.load().get("protocol.presets.study_battery") or {}
         shipped = {str(step.get("phase") or "").strip().lower()
                    for order in (preset.get("orders") or {}).values()
                    for step in order}
         assert set(phases) == shipped
-        assert len(shipped) == 1, (
-            "the shipped preset writes more than one phase word, so the "
-            "battery repeats a block and this is no longer one pass")
-        assert one in shipped
+        assert one in shipped and retest in shipped and one != retest
 
     def test_no_paired_phase_machinery_survives(self, source):
         """The one pass repeats nothing, so a pre-against-post pairing

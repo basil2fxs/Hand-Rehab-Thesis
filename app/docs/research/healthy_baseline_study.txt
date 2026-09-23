@@ -1,89 +1,86 @@
 HEALTHY BASELINE STUDY
 Design for the psychology-student cohort, Thesis Project A
 
-Status: 2026-09-04. ONE SITTING per participant, every mode played
-ONCE. Eleven blocks, about 45 minutes on the rig (44.4 measured) and
-about 60 minutes booked per person, run as one collection day at the
-end of semester. No return visit, no repeated block. The battery
+Status: 2026-09-24. ONE SITTING per participant on ONE BOARD, the
+right-hand device, in TWO PASSES. Pass 1 plays the nine one-hand
+modes once; after a 3 minute rest, pass 2 plays Reaction, Force Pilot
+and Chords again with the same counts. Twelve blocks, about 44
+minutes on the rig and about 60 minutes booked per person, run as one
+collection day at the end of semester. No return visit. The battery
 preset that runs it is protocol.presets.study_battery, id
-healthy_one_pass_v1.
+healthy_one_hand_v2.
 
 The authority on the design is Basil's own plan file, "Data
-Collection Plan.md" of 4 September 2026, under
+Collection Plan.md", under
 Uni/Semester 2/Thesis/Current Thesis Part B/00_Key Facts/. This
 document is the working detail behind that plan and follows it.
-Earlier versions of this file described two visits a week apart, and
-then a single pre/mid/post sitting with every mode played twice.
-Both are gone. Nothing below describes them except where a dropped
-check is named as dropped.
 
-What the one pass costs, and the thesis says it in the same breath
-as the results:
+HOW THE DESIGN GOT HERE (every change made before any participant):
 
-  - No test-retest of any kind. ICC(2,1), ICC(3,1), SEM, MDC95 and
-    the Bland-Altman plot all need the same person measured twice
-    on the same task. None of them is computed, reported or
-    promised.
-  - No pre-versus-post comparison, no responder count against a
-    noise floor, no practice effect measured across blocks.
-  - Validity checks R3 (reaction, no practice effect across visits)
-    and P2 (pattern, a larger learning score on the second go) are
-    dropped. R1, R2, P1, P3 and every other mode's checks survive,
-    because they were always within-session.
+  - Two visits a week apart, then a pre/mid/post sitting: both gone.
+  - 4 September 2026: ONE PASS, both hands, eleven blocks
+    (healthy_one_pass_v1). It dropped R3 and P2, which needed a
+    block played twice, and had no test-retest of any kind.
+  - 3 September 2026: echo moved to the Simon rule, which dropped E2
+    (the Hebb repeat only exists under the ladder rule).
+  - 23 September 2026: A5, A6, S6 and S7 added so every mode has a
+    pre-specified row; the study's rhythm buzz put on the beat;
+    Syllables made a choice task with a late prompt; E3 set against
+    chance.
+  - 24 September 2026: ONE BOARD. Only one hand device will be used
+    this semester, and the printed chassis is the right hand (the
+    mirrored left half is CAD only). So every block is the right
+    hand, for every participant; Mirror, which needs a board on each
+    hand, is not played; and the minutes the second board's blocks
+    used to take now buy a second pass of the three core modes,
+    which gives the design the within-session test-retest it did not
+    have. The Syllables prompt became progressive (Section 1.4).
 
-One more check was dropped later, for a different reason, and it is
-named here so the three dropped rows sit together:
+What one board costs, and the thesis says it in the same breath as
+the results:
 
-  - E2 (echo, hidden-sequence trials more accurate than novel ones)
-    is dropped because the battery plays echo under the Simon rule.
-    The Hebb repeat only exists under the ladder rule, so this is a
-    consequence of the mode change of 3 September 2026 and not of
-    the one-pass change. Section 1.11 carries the detail.
+  - No within-person dominant against non-dominant contrast. R2, C5,
+    Rh3 and M2 are dropped, with the paired chapter that carried
+    them (Section 4.4 now sets right- and left-handers side by side,
+    descriptive only).
+  - No Mirror: M1, M2 and W2 are dropped. No cross-hand chords: C4 is
+    dropped.
+  - Echo on four lanes: a sequence past four items holds every lane,
+    so a wrong finger is a sequence lane by construction and E3 is
+    dropped for the one-board rig; E1 reads the four-lane Simon band
+    (Section 1.11).
+  - Left-handers play their NON-dominant hand. They may take part,
+    are flagged at intake, stay out of every pooled number and are
+    described on their own. The primary sample is the right-handers.
 
-Amended 23 September 2026, before any participant was run:
+What the second pass buys:
 
-  - Adaptive and syllables now carry pre-specified checks (A5, A6,
-    S6, S7; Sections 1.4, 1.5 and 4.6), so every one of the ten
-    modes has a row in Table 1. The ids continue the notebook's
-    per-session literature lists, where A1 to A4 and S1 to S5 mean
-    other things. Both are ceiling checks for a
-    healthy adult, decided on the interval, not on a test.
-  - Syllables is a choice task with a late prompt buzz (Section
-    1.4), not the beat-paced tapping task an earlier version of this
-    file described.
-  - The battery's rhythm block puts the buzz on the beat
-    (rhythm.tactile_mode: on_beat in the preset), so Rh1 and Rh2
-    measure synchronisation to one pacing signal for everybody.
-    Free play leads the beat by 350 ms and adapts to the player
-    (Section 1.6).
-  - Play all calibrates every hand the plan plays before the first
-    block, because the login now calibrates only the hand picked for
-    the session.
-  - Re-timed after these changes with scripts/measure_battery.py,
-    eight sittings on each of the four cells: medians 43.69 to 44.04
-    minutes, range 43.12 to 45.02, none over the 50 minute stop.
-    Reaction at 25 trials per hand was tried and put 15 of 32
-    sittings over the 45 minute budget, so it stays at 20.
+  - Within-session test-retest for Reaction, Force Pilot and Chords:
+    ICC(2,1) with its exact interval, SEM, MDC95, Bland-Altman and
+    the pass 2 minus pass 1 shift, read against the reliability class
+    Section 1 predicted (T1 to T5, Section 4.5). About twenty minutes
+    apart in one seat with one calibration, so the ICC is an upper
+    bound on day-to-day reliability and the MDC95 a lower bound on a
+    real change between days. Between-day test-retest is still the
+    next student's first job.
+  - R3 comes back: no practice effect on median RT from pass 1 to
+    pass 2, as an equivalence test with a 20 ms margin.
 
-Two further contrasts are named in Section 1 as not available rather
-than as dropped checks, because the design never claimed them: the
+Two contrasts are named in Section 1 as not available rather than as
+dropped checks, because the design never claimed them: the
 choice-minus-simple reaction contrast (only the choice sub-mode is
 played) and the RAS-against-fixed-cadence contrast (the battery
-carries no fixed-cadence control block). The notebook prints both
-with that reason beside them rather than as missing data.
+carries no fixed-cadence control block).
 
-What survives: the normative table, the paired dominant versus
-non-dominant comparison, the known-effect checks, the feasibility
-numbers, internal consistency inside a block, and a within-block
-improvement measure (Section 4.5) which is the only progress a
-participant can be shown on the day.
+Sample size: Section 2.1. Bonett (2002) is back in view for the
+reliability rows, and at n = 8 to 12 it says plainly that an ICC
+interval will span two or three bands, which is why T1 to T5 are
+reported against their prediction rather than tested.
 
-Sample size no longer rests on Bonett (2002), because no ICC is
-computed. What justifies the n now is in Section 2.1.
-
-Section 1, what each mode measures and the literature behind it, is
-unaffected by the change and still carries the study. Sections 2 to
-5 are written for the one pass.
+Section 1, what each mode measures and the literature behind it,
+still carries the study; where a mode's headline assumed both hands,
+the one-board note in that mode's section says what changes. Sections
+2 to 5 are written for the two-pass one-board sitting.
 
 No participant has been run: every number about people below is a
 prediction or a literature figure, and every duration is either
@@ -95,15 +92,15 @@ was retired from the battery on 2026-09-03 (Section 1.9).
 Why this study exists. No patients are available this semester. The
 thesis still needs a results chapter with real hands on the device,
 so the rig is turned into a measurement instrument and characterised
-on healthy adults: what does each game measure in a normal hand,
-how wide is that measurement across people, do the two hands read
-the same, and does each game reproduce the effect the literature
-says a healthy hand shows. That is a normative and construct study,
-not a treatment study, and it is a legitimate thesis result on its
-own. A device whose numbers sit in a sensible range and reproduce
-known effects is the precondition for any later patient work, and a
-device whose numbers do not tells the next student what to fix
-first.
+on healthy adults: what does each game measure in a normal hand, how
+wide is that measurement across people, how repeatable is it inside
+a sitting, and does each game reproduce the effect the literature
+says a healthy hand shows. That is a normative, reliability and
+construct study, not a treatment study, and it is a legitimate thesis
+result on its own. A device whose numbers sit in a sensible range,
+repeat, and reproduce known effects is the precondition for any
+later patient work, and a device whose numbers do not tells the next
+student what to fix first.
 
 What this study cannot show, and the thesis must say so in the same
 breath. A healthy cohort says nothing about sensitivity to
@@ -111,17 +108,15 @@ impairment (whether a stroke or carpal tunnel hand scores
 differently), nothing about responsiveness (whether the numbers move
 with recovery), nothing about the 65 to 80 percent challenge band or
 any other therapy claim, and nothing about clinical validity against
-an accepted assessment. One sitting adds three limits on top of
-that. First, there is no repeatability number between blocks, so
-nothing here says how much a metric moves when the same hand plays
-the same game again, which is exactly the number a patient study
-needs; naming that as the next student's first job, and why, is part
-of the contribution rather than an apology. Second, the normative
-table describes the students who sat on the collection day, not a
-population, and is read against literature values as an
-order-of-magnitude plausibility check only. Third, the within-block
-improvement in Section 4.5 is a change in PERFORMANCE inside a few
-minutes of practice, not learning: conditions that raise
+an accepted assessment. The sitting adds three limits on top of that.
+First, the only repeatability is within-session and for three modes,
+so it bounds day-to-day reliability from above and says nothing for
+the other six modes. Second, the normative table describes the
+right-handed students who sat on the collection day, on their
+dominant hand, not a population, and is read against literature
+values as an order-of-magnitude plausibility check only. Third, the
+within-block improvement in Section 4.5 is a change in PERFORMANCE
+inside a few minutes of practice, not learning: conditions that raise
 end-of-practice scores can leave a delayed retention test untouched
 or worse, and the delayed test is the better indicator of learning
 (Kantak and Winstein 2012, Behavioural Brain Research). The
@@ -134,64 +129,49 @@ valid clinical instrument.
 DECISIONS IN ONE SCREEN
 =======================
 
-- Within-subject, both hands, ONE sitting per person, every mode
-  played once. Booking 60 minutes: 15 minutes of consent and intake
-  off the clock, then a PLAY ALL run measured at a median 44.4
-  minutes over five codes and 43.8 over 32 repeat sittings, range
-  43.11 to 44.50, against a budget of 45 and a hard stop at 50.
-  (44.73 is the maximum of the separate five-code run in Section 2.3,
-  not of the 32-sitting range; the two were crossed here.) The
-  spread is real: several blocks draw fresh material every time, so
-  the sitting has a length distribution rather than a length
-  (Section 2.3).
-- Eleven blocks: reaction on each hand, mirror, rhythm, echo, force
-  pilot, chords, buzz hunt, pattern, adaptive, syllables. Reaction
-  is the only mode played twice, once per hand, because the two
-  hands are two different tasks and the paired comparison needs
-  both.
-- One 3 minute rest about halfway through the play, and one 60
-  second stretch note about a third of the way in. The rest counts
-  down on the NEXT UP card and holds the Start button for the first
-  60 seconds; the rest actually taken is logged. The stretch never
-  holds the button.
-- Two mode orders (A, B) crossed with two hand orders, assigned by
-  participant code. At 8 to 12 participants that is two or three per
-  cell: the cells balance order across the cohort, they are not a
-  factor anything is tested on.
-- Pattern runs on the dominant hand only, last of the nine main
-  blocks, in its short form. Echo runs one bilateral 8-lane block.
-  Every other mode runs both hands.
+- One sitting, ONE board, the right-hand device, for everybody.
+  Booking 60 minutes: 15 minutes of consent and intake off the clock,
+  then a PLAY ALL run measured (M) at medians of 43.7 to 44.2 minutes
+  over 48 sittings on six codes, range 43.1 to 44.9, none over the
+  budget of 45 or the hard stop at 50 (Section 2.3).
+- Twelve blocks. Pass 1: reaction, rhythm, echo, force pilot,
+  chords, buzz hunt, pattern, adaptive, syllables, each once. Pass 2,
+  after the rest: reaction, force pilot, chords, in the order pass 1
+  played them. Mirror is not played.
+- One 3 minute rest, between the passes: it is the test-retest
+  interval. It counts down on the NEXT UP card and holds the Start
+  button for the first 60 seconds; the rest actually taken is logged.
+  One 60 second stretch note in pass 1, never holding the button.
+- Two mode orders (A timing work first, B force and vibration work
+  first), assigned by participant code. With one hand there is no
+  hand order to cross.
+- Right-handers are the primary sample. Left-handers may take part;
+  they play the same right-hand device, which is their non-dominant
+  hand, and are described on their own.
 - Every ladder that can be frozen without changing the task is
   frozen by config: the reaction response window and the chords sync
   window. Four modes keep a ladder that IS the task, so for them the
-  trial index inside a block means difficulty and not time. Echo
-  grows a Simon sequence until it is missed, force pilot climbs
-  twelve waves, buzz hunt's response window can promote inside the
-  block, and adaptive moves the BPM by design. Section 4.5b says
-  which and what that costs; it is the reason those four get no
-  within-block improvement reading.
+  trial index inside a block means difficulty and not time (Section
+  4.5b).
 - Participants are P01 upward. The code goes in the login NAME field
-  (the login suggests the next free code off the sessions tree, so
-  it is never mistyped) and keys the sessions tree, the index, the
-  notebook and the hidden sequences. Names live only in the consent
-  log.
+  and keys the sessions tree, the index, the notebook and the hidden
+  sequences. Names live only in the consent log.
 - What the participant sees: after each block, that block's own
-  first trials against its own last trials, in the mode's own words
-  ("your last five presses were 22 ms faster than your first five"),
+  first trials against its own last trials, in the mode's own words,
   and at PLAY ALL DONE a TODAY table with one row per mode. Nothing
-  on it mentions anybody else, and nothing on it calls a change
-  real: with no repeated block there is no noise floor to test a
-  change against (Section 4.5).
-- Primary outputs: the normative table (n, median, IQR, range and
-  every participant's own point), the paired dominant versus
-  non-dominant comparison with Cohen dz and a Wilcoxon signed-rank
-  as the primary test at this n, internal consistency inside a block
-  by permutation split-half, the within-block improvement measure,
-  and one pre-specified known-effect check per mode. One tidy CSV.
+  on it calls a change real: the only noise floor is within-session
+  (Section 4.5a).
+- Primary outputs: the normative table from pass 1 (n, median, IQR,
+  range and every participant's own point), the known-effect checks
+  (Table 1) and within-block checks (Table 2) on pass 1, the
+  within-session reliability table T1 to T5 (pass 1 against pass 2),
+  internal consistency inside a block, the feasibility numbers, and
+  the left-handers described beside the right-handers. One tidy CSV.
 - Reaction is the stability anchor. It is the one mode expected NOT
   to improve inside its own block, so a trend there reads as warm-up
   or drift and it calibrates how much of every other mode's
-  within-block trend is the same thing.
+  within-block trend is the same thing; it is also the reliability
+  anchor, with a PVT literature to hold its ICC against.
 
 
 1. WHAT A HEALTHY COHORT CAN PROVE, PER MODE
@@ -224,19 +204,24 @@ Known effects to reproduce:
      1981; Naatanen 1971, both cited in reaction.py).
   R2 Dominant hand faster than non-dominant. The dominant advantage
      is well replicated for tapping speed and consistency (Peters
-     1980; Hubel et al. 2013) and is small for reaction time, so R2
-     is a directional check, not a powered primary outcome.
-  R3 DROPPED. It read no practice effect on median RT across
-     visits, and one sitting with one reaction block per hand
-     cannot show it. The literature behind it stands and belongs in
-     the next study: the PVT family the block is modelled on shows
-     no change in median RT or lapses over 16 repeated
-     administrations (Basner et al. 2017, Sleep). What this design
-     does instead is W1 in Section 4.6, the trend across the one
-     block, which is the study's own estimate of warm-up and drift.
+     1980; Hubel et al. 2013) and is small for reaction time.
+     DROPPED on the one-board rig (24 September 2026): every block
+     is the right hand, so nobody plays both, and right- against
+     left-handers on one hand would compare people, not hands.
+  R3 No practice effect on median RT from pass 1 to pass 2: the 95
+     percent CI of pass 2 minus pass 1 inside +/- 20 ms, by two
+     one-sided tests (equivalence, the form F3 uses). 20 ms is a
+     little over one 60 Hz frame (16.7 ms), the rig's own timing
+     grain, and about 5 percent of a four-choice RT. The basis: the
+     PVT family the block is modelled on shows no change in median
+     RT or lapses over 16 repeated administrations (Basner et al.
+     2017, Sleep). Restored 24 September 2026, when the second pass
+     made it computable; it had been dropped under the one-pass
+     design.
 Reliability class: good to excellent for median RT (the PVT
-tradition; the block is 25 scorable trials, near the validated 3 min
-PVT-B of Basner, Mollicone and Dinges 2011).
+tradition; the block is 20 scorable trials, near the validated 3 min
+PVT-B of Basner, Mollicone and Dinges 2011). Tested as T1 (Section
+4.5): the prediction the within-session ICC is read against.
 Claim limits: absolute RTs are device-specific (60 Hz display, force
 threshold clock, unmeasured panel latency; Woods 2015 and Plant and
 Turner 2009 in reaction.py) and measured to an audio-tactile-visual
@@ -291,8 +276,12 @@ splits the cohort into two groups that cannot be pooled. A file with
 explicit: true tells the participant the riff, which is a different
 design from this one and is excluded from the implicit measure.
 
-1.3 Chords (both hands, short form)
------------------------------------
+1.3 Chords (one hand, short form, both passes)
+---------------------------------------------
+One-board note (24 September 2026): the block plays the right hand's
+four fingers, 40 chords (two sub-blocks of 20), in both passes. No
+cross-hand chords exist on one board, so C4 and C5 are dropped and
+the cross-hand metrics below are not produced.
 Primary: median_er (enslaving ratio, quiet-finger leak over target
 press), median_span_ms (chord togetherness), clean hit rate
 (chord_outcome_classes.hit / all), per-hand versions in per_hand;
@@ -320,23 +309,29 @@ Known effects to reproduce:
      behavioural performance in dominant and non-dominant hands
      during grasping tasks"), so report the paired result with its
      CI and treat a null as expected.
+  (C4 and C5 are DROPPED on the one-board rig: see the note above.)
 Reliability class: moderate for ER (a ratio of two noisy peaks
-normalised by that day's calibration), good for span_ms.
+normalised by that day's calibration), good for span_ms. Tested as
+T4 and T5 (Section 4.5).
 Claim limits: ER and the matrices are device- and posture-specific
 and chord-conditioned (an upper bound on the single-finger cell);
 literature values are order-of-magnitude context only. The short
-form gives about 20 within-hand chords per hand, so
-per-chord cells are cohort-pooled, never per person.
+form gives 40 within-hand chords a block, so per-chord cells are
+cohort-pooled, never per person.
 
 1.4 Syllables (played once, two ceiling checks)
 -----------------------------------------------
 A paediatric reading game: a word is heard and seen, then its
 syllables fall one set at a time as four written options over four
 fingers, and the child presses the finger under the right chunk. If a
-set is still unanswered at three quarters of its fall, the right
-finger buzzes once (a time-delay prompt, Eyler and Ledford 2024), and
-the prompt fades per word after two answers found alone. The battery
-plays 12 words at the mid foil rung (rung 3).
+set is still unanswered late in its fall, the right finger, and only
+that finger, buzzes once. The delay is progressive per word (0.6,
+0.75, then 0.9 of the fall, then no prompt, one step later for each
+answer found alone and one step back after an error; Walker 2008 for
+progressive over constant delay) and never earlier than the reader's
+own median answer time plus 300 ms (syllables.py PROMPT; the
+research note syllables-dyslexia-rework.md, PROMPT TIMING). The
+battery plays 12 words at the mid foil rung (rung 3).
 Adults have no reading deficit to measure, so the block is not a
 skill result. What it can check is the game itself, on fluent readers:
   S6 Fluent adults answer before the prompt: cohort median of the
@@ -373,8 +368,11 @@ Both are decided on the interval, like S6 and S7. bpm_max_reached,
 bpm_final and the share of the block at the cap stay descriptive, and
 adaptive stays out of the reliability and within-block tables.
 
-1.6 Rhythm (both hands, one fixed track)
-----------------------------------------
+1.6 Rhythm (one hand, one fixed track)
+--------------------------------------
+One-board note (24 September 2026): the block plays the right hand.
+Rh1 is read on the dominant hand (the right-handers); Rh3 is DROPPED,
+since nobody plays both hands.
 Primary: signed mean asynchrony per hand (time_difference_ms on hit
 rows, notebook sec_rhythm), asynchrony SD, mean absolute offset
 (block_summary.beat_offset_stats.beat_offset_abs_mean_ms), hit rate;
@@ -410,8 +408,11 @@ Neurological Sciences 151(2):207-212, is the effect that would need
 that control). A study that wants it adds the control block and the
 sitting grows.
 
-1.7 Mirror (both hands)
------------------------
+1.7 Mirror (both hands; NOT PLAYED on the one-board rig)
+-------------------------------------------------------
+One-board note (24 September 2026): Mirror needs a board on each
+hand, so the battery does not play it and M1, M2 and W2 are DROPPED.
+The section stays because a two-board rig still runs the mode.
 Primary: mirror.mean_gap_ms (absolute right-left onset difference on
 clean pairs), n_clean_pairs, hit rate, right_hand_mean_rt_ms and
 left_hand_mean_rt_ms (a within-trial asymmetry).
@@ -427,9 +428,12 @@ so the gap is measured across a changing pace; report bpm_min and
 bpm_max alongside. Efficacy of bilateral training is contested and
 not claimed (mirror.py).
 
-1.8 Force Pilot (both hands, short form, one climb of the
-     twelve-wave ladder)
----------------------------------------------------------
+1.8 Force Pilot (one hand, short form, one climb of the
+     twelve-wave ladder, both passes)
+-------------------------------------------------------
+One-board note (24 September 2026): the block plays the right hand,
+twelve runs, in both passes; its hand-level MAE and time in corridor
+are T2 and T3 in Section 4.5.
 Primary (notebook sec_force_tracking, offline from raw.csv): RMSE
 and MAE in percent of max, time in corridor, cross-correlation lag,
 press versus release MAE, section MAE (hold_in, ramp_up, hold_top,
@@ -498,8 +502,11 @@ and its checks L1 to L3 are gone from the software; the block came
 off the battery and its minutes off the budget (Section 2.3). The
 design record stays in docs/research/new_modes/force-control.md.
 
-1.10 Buzz Hunt (both hands, short form: localisation and span only)
--------------------------------------------------------------------
+1.10 Buzz Hunt (one hand, short form: localisation and span only)
+-----------------------------------------------------------------
+One-board note (24 September 2026): the block plays the right hand,
+16 localisation trials and 4 span trials. Chance for a four-finger
+localisation is 25 percent; B1 to B5 are unchanged.
 Primary: loc.accuracy per hand and per lane at the fixed 150 ms
 pulse, the confusion matrix (adjacent-finger error share), catch
 false-alarm rate and d-prime, median localisation RT, the top
@@ -554,8 +561,17 @@ docs/research/new_modes/carpal-nerve.md); the distractor stage is
 dropped for time. For carpal tunnel this suite is measurement, not
 therapy (Jerosch-Herold 2016).
 
-1.11 Echo (one bilateral 8-lane block)
---------------------------------------
+1.11 Echo (one 4-lane block on the right hand)
+----------------------------------------------
+One-board note (24 September 2026): the block plays the right hand's
+four lanes, the layout of the retail SIMON toy. E1 reads the four-lane
+Simon band: college students reach spans of about seven on four
+buttons (Gendle and Ransom 2006, in echo.py), so a cohort median of 5
+to 9 is consistent. E3 is DROPPED on the one-board rig: a sequence
+past four items holds every lane, so a wrong finger lands on a
+sequence lane by construction and an intrusion cannot happen; no
+number of participants decides it. The eight-lane text below stands
+for a two-board rig.
 Primary: span, total_correct, product_score (Kessels total: span x
 correct sequences), n_omissions, error taxonomy from the notebook
 (transposition, intrusion, omission), Hebb versus novel accuracy by
@@ -599,8 +615,9 @@ the closest this rig gets to Corsi's nine.
 1.12 Cross-mode summary
 -----------------------
 Strong for a healthy cohort (known effect, expected good
-reliability): reaction, rhythm, force pilot, chords
-(C1 to C4), echo. Group-level only: pattern (P1 reliable at the
+reliability): reaction, rhythm, force pilot, chords (C1 to C3),
+echo. Reaction, force pilot and chords are also the three the second
+pass replays, so they carry the reliability result. Group-level only: pattern (P1 reliable at the
 group level, individual score unreliable by published
 meta-analysis).
 Ceiling or floor limited: buzz hunt (accuracy ceiling; the window
@@ -613,18 +630,26 @@ syllables.
 
 2.1 Design and sample
 ---------------------
-Within-subject, both hands, ONE session, every mode played once.
-Hand is the only repeated factor: dominant against non-dominant,
-taken from the main hand picked at login, with the Edinburgh short
-form on the paper intake sheet as the check.
+ONE session, ONE board, the right-hand device, TWO passes. Every
+block is the right hand. The only repeated factor is the pass: pass 1
+plays the nine one-hand modes once, pass 2 replays Reaction, Force
+Pilot and Chords after the rest. The main hand picked at login, with
+the Edinburgh short form on the paper intake sheet as the check, says
+whether the device hand is the participant's dominant hand.
 
-Why one session. Two visits cost two bookings and lose people
-between them. The pre/mid/post sitting that replaced them ran 80
-minutes measured, 31 of them playing the same nine blocks a second
-time. Neither fits the room, the semester or the participant pool.
-One pass of all ten modes in 45 minutes fits all three, and it is
-the version that can actually be run and analysed before the
-write-up.
+Why one board. Only one hand device will be used this semester, and
+the printed chassis is the right hand; the mirrored left half exists
+only in CAD. A second board would bring back the within-person hand
+contrast and Mirror. Without it, the minutes the second hand's blocks
+used to take buy the second pass, and the design gains the
+within-session test-retest the one-pass version could not compute.
+
+Who takes part. Right-handers are the primary sample: on them the
+device hand is the dominant hand, which is the hand every pooled
+number describes. Left-handers are not turned away. They play the
+same right-hand device, their non-dominant hand, are flagged by the
+Edinburgh score at intake, stay out of every pooled number and are
+described on their own (Section 4.4). Expect about one in ten.
 
 Sample size is set by the day, not by a power calculation. One rig,
 one participant at a time, 60 minutes booked each:
@@ -639,35 +664,30 @@ improve every number in the analysis.
 
 What that n supports, written down before the data arrives.
 
-  Paired comparisons (dominant against non-dominant). Two-sided
-  alpha 0.05, power 0.80: n = 8 detects a paired effect of Cohen
-  dz = 1.16, n = 10 detects dz = 1.00, n = 12 detects dz = 0.89, and
-  n = 20 detects dz = 0.66. Healthy dominance asymmetries are small
-  to medium (tapping speed and consistency favour the dominant hand,
-  Peters 1980, Hubel 2013; force coordination often shows no
-  difference at all, Scientific Reports 2025), so this study is NOT
-  powered to find them. It is powered to report a direction, an
-  effect size and a wide interval, and every paired result is
-  written that way. A Wilcoxon signed-rank test can still reach
-  significance at these n when the direction is close to unanimous:
-  its smallest possible two-sided p is 0.008 at n = 8 and 0.002 at
-  n = 10.
-
   Normative ranges. With n = 10 the smallest and largest values
   observed sit at about the 9th and 91st percentiles of the
   underlying distribution, because the expected quantile of the i-th
   of n ordered values is i / (n + 1). The 5th and 95th percentiles
-  the two-visit design promised therefore cannot be estimated.
-  Report n, median, IQR, the full range and every participant's own
-  point, and give the distribution-free interval for the median: at
-  n = 10 it runs from the 2nd to the 9th ordered value (97.9 percent
-  coverage), which is close to the whole spread. Saying that plainly
-  is worth more than a percentile the data cannot support.
+  therefore cannot be estimated. Report n, median, IQR, the full
+  range and every participant's own point, and give the
+  distribution-free interval for the median: at n = 10 it runs from
+  the 2nd to the 9th ordered value (97.9 percent coverage), close to
+  the whole spread. Saying that plainly is worth more than a
+  percentile the data cannot support.
 
-  Reliability. Nothing. See Section 4.5.
+  Reliability. The ICC interval is wide at this n: Bonett (2002)
+  sizes a sample for a target interval width and at 8 to 12 people
+  that width spans two or three of Koo and Li's bands. In the
+  simulated cohort (n = 9 right-handers) ICC(2,1) of 0.91 on
+  reaction median RT came with a 95 percent interval of 0.67 to 0.98
+  (M, the notebook's exact F interval). So T1 to T5 (Section 4.5)
+  are reported against the class Section 1 predicted, not tested,
+  and the interval is always printed with the point.
 
-Bonett (2002) is not used. It sized the sample for the width of an
-ICC confidence interval, and no ICC is computed.
+  The pass 2 minus pass 1 shift (R3). A paired equivalence test
+  against a 20 ms margin: at n = 10 it concludes equivalence only
+  when the shift's interval is tight, which is why the margin and
+  the interval are both in the row.
 
 Same rig, same laptop, same config file: record the git commit hash
 and the config path on the intake sheet. Both are already in
@@ -675,66 +695,46 @@ metadata.json via config_snapshot and software_version.
 
 2.2 Counterbalancing, the rest and fatigue
 ------------------------------------------
-Two mode orders and two hand orders, four cells, assigned by code:
+Two mode orders, assigned by code (code mod 4 = 1 or 3: order A;
+2 or 0: order B). With one hand there is no hand order left to cross.
+The cell is written into every block's metadata (battery.cell). At 8
+to 12 participants four to six sit in each order; order is not a
+factor anything is tested on and is reported as a description.
 
-  code mod 4 = 1 : order A, dominant hand first   (P01, P05, ...)
-  code mod 4 = 2 : order B, dominant hand first   (P02, P06, ...)
-  code mod 4 = 3 : order A, non-dominant first    (P03, P07, ...)
-  code mod 4 = 0 : order B, non-dominant first    (P04, P08, ...)
+  Order A, pass 1: reaction, rhythm, echo, force pilot, chords, buzz
+  hunt, pattern, adaptive, syllables.
+  Order B, pass 1: force pilot, chords, buzz hunt, adaptive,
+  syllables, reaction, rhythm, echo, pattern.
+  Pass 2, both orders: reaction, force pilot and chords, in the order
+  pass 1 played them (A: reaction, force pilot, chords; B: force
+  pilot, chords, reaction), so each mode's gap between its two blocks
+  is as even as the order allows.
 
-Two or three per cell at 8 to 12 participants. The cell is written
-into every block's metadata (battery.cell). The cells exist so that
-no mode always sits early in the sitting and no hand always goes
-first across the cohort. At this n they are not a factor anything is
-tested on, and cell is reported as a description of who played what
-in which order.
-
-  Order A: timing set, force set, pattern, then adaptive and
-  syllables.
-  Order B: force set, adaptive and syllables, timing set, then
-  pattern.
-
-  Timing set (fixed internal order): reaction hand 1, reaction hand
-  2, mirror, rhythm, echo.
-  Force set (fixed internal order): force pilot, chords, buzz hunt.
-
-  So the force and vibration work leads in B and follows in A, and
-  the two short descriptive blocks sit at the end in A and in the
-  middle in B. What is counterbalanced is a mode's position in the
-  sitting, which is the only thing fatigue can act on when nothing
-  is played twice.
-
-Pattern is the last of the nine main blocks in both orders, and in
-order B it is the last block of the sitting. It sits there because
-it is the longest single block, the only single-hand block, and the
-one whose individual score is least reliable (Section 1.2). If a
-session runs over, pattern is the block to drop and log as missed.
+Pattern is the last block of pass 1 in order B and the seventh in
+order A. It is the longest single block and the one whose individual
+score is least reliable (Section 1.2). If a session runs over, pattern
+is the block to drop and log as missed.
 
 The waits, as the preset ships them. The 60 second stretch note sits
-about a third of the way into the play (order A before force pilot,
-at 9.9 minutes; order B before chords, at 7.4 minutes, straight off
-force pilot's seven minutes of sustained holding). The 3 minute rest
-sits about halfway (order A before chords, at 17.2 of 33.5 minutes
-of play; order B before the first reaction block, at 17.1 of 33.3).
-The rest holds the Start button for its first minute and its length
-is logged (battery log rest_taken_s, and battery.rest_before_s in
-the next block's metadata), because a block that starts straight
-after a break starts fast. Bonstrup et al (2019, Current Biology)
-read those post-rest jumps as rapid consolidation; Gupta and Rickard
-(2022, npj Science of Learning, N = 159) reproduced the same jumps
-from a model with no offline learning in it at all; Das et al (2025,
-PNAS) showed they disappear within seconds under equal testing
-conditions and appear for random sequences that cannot be learned.
-The camps disagree about the mechanism and agree on the practical
-point: the block after the rest starts on a fresh hand. That block
-is chords in order A and reaction in order B, and reaction is the
-anchor the whole within-block measure is read against (Section
-4.5b), so W1 is reported by cell as well as pooled. With two or
-three people per cell that is a caveat printed beside the number,
-not a contrast anything is tested on. Rest length itself is not a
-worry: 15 s, 30 s and self-paced inter-block rests gave identical
-implicit sequence learning at n = 268 (Szucs-Bencze et al 2023,
-eNeuro).
+in pass 1 (order A before force pilot; order B before chords,
+straight off force pilot's sustained holding). The 3 minute rest is
+the gap between the passes: it is the test-retest interval, and it
+also gives pass 2 a rested hand to start on. The rest holds the Start
+button for its first minute and its length is logged (battery log
+rest_taken_s, and battery.rest_before_s in the next block's
+metadata), because a block that starts straight after a break starts
+fast. Bonstrup et al (2019, Current Biology) read those post-rest
+jumps as rapid consolidation; Gupta and Rickard (2022, npj Science of
+Learning, N = 159) reproduced the same jumps from a model with no
+offline learning in it at all; Das et al (2025, PNAS) showed they
+disappear within seconds under equal testing conditions and appear
+for random sequences that cannot be learned. The camps disagree about
+the mechanism and agree on the practical point: the first block of
+pass 2 starts on a fresh hand, so R3 and the reliability of whichever
+mode opens pass 2 carry that caveat, printed beside the number. Rest
+length itself is not a worry: 15 s, 30 s and self-paced inter-block
+rests gave identical implicit sequence learning at n = 268
+(Szucs-Bencze et al 2023, eNeuro).
 
 Fatigue over 45 minutes. Sustained-attention performance declines
 within the first half hour and a proper rest restores more than a
@@ -744,151 +744,118 @@ studies (Albulescu et al 2022, PLOS ONE). Long cognitive test
 sessions raise felt fatigue without lowering scores (Ackerman and
 Kanfer 2009, JEP Applied, 3.5 to 5.5 h, N = 239), so 45 minutes of
 short varied games with one rest is well inside what students
-tolerate, and the fatigue argument for the old 90 minute sitting no
-longer applies. Muscle fatigue is still the one to avoid: training
-at or beyond fatigue impaired skill acquisition on later days even
-after the fatigue had gone (Branscheidt et al 2019, eLife). Hence no
-block over about 7.5 minutes, force targets at a fraction of the
+tolerate. Muscle fatigue is still the one to avoid: training at or
+beyond fatigue impaired skill acquisition on later days even after
+the fatigue had gone (Branscheidt et al 2019, eLife). Hence no block
+over about 6.5 minutes, force targets at a fraction of the
 participant's own maximum, the force mode's own rests left in, and
 the two 0 to 10 tiredness questions on the paper sheet (Section
-5.2). The rest splits the play close to evenly, so the longest run
-without a scheduled break is about 17 minutes of play in either
-order, under 19 with its transitions.
+5.2). Pass 1 is about 24 minutes of play before the rest; the stretch
+note breaks it.
 
 2.3 The session, block by block
 -------------------------------
 Measured, not estimated (M). scripts/measure_battery.py played the
 plan through the real engine, real modes and real loggers on a
-simulated clock, with a model participant on a fake 200 Hz sensor
-stream (reaction about 350 ms, force held within a percent of
-target, sequences replayed correctly, rests taken in full). Run
-4 September 2026; the table is the one in the plan file.
+simulated clock, with a model participant on a simulated one-board
+200 Hz sensor stream (reaction about 350 ms, force held within a
+percent of target, sequences replayed correctly, rests taken in
+full). Run 24 September 2026, code P01, order A.
 
-  Block                              Hands      Minutes
-  ----------------------------------------------------------
-  Login, seating, quick calibration  both          5.00
-  Reaction                           hand 1        2.40
-  Reaction                           hand 2        1.96
-  Mirror                             both          0.60
-  Rhythm (Easy_Lemon, medium)        both          2.05
-  Echo, 8 lanes                      both          3.06
-  Force Pilot                        both          7.36
-  Chords                             both          4.27
-  Buzz Hunt                          both          3.29
-  Pattern                            dominant      6.40
-  Adaptive                           dominant      0.48
-  Syllables                          both          1.83
-  Transitions, 10 s NEXT UP x 10                   1.67
-  The 60 s stretch note                            1.00
-  One rest, about halfway                          3.00
-  ----------------------------------------------------------
-  TOTAL ON THE RIG                               44.37
+  Block                              Pass   Minutes
+  --------------------------------------------------
+  Login, seating, quick calibration          5.00
+  Reaction                           1       2.16
+  Rhythm (Easy_Lemon, medium)        1       2.05
+  Echo, 4 lanes                      1       3.06
+  Force Pilot                        1       3.54
+  Chords (40)                        1       2.59
+  Buzz Hunt (16 + 4)                 1       2.39
+  Pattern                            1       6.29
+  Adaptive                           1       0.48
+  Syllables                          1       1.78
+  The rest, between the passes               3.00
+  Reaction                           2       2.12
+  Force Pilot                        2       3.54
+  Chords (40)                        2       2.71
+  Transitions, 10 s NEXT UP x 11             1.83
+  The 60 s stretch note                      1.00
+  --------------------------------------------------
+  TOTAL ON THE RIG                          43.56
 
-Play alone, without the login, the transitions and the waits, is
-33.7 minutes. Drop the rest and the sitting is 41.4.
-
-The plan file's table reads 43.5 because it counted eleven 10 s
-transitions and no stretch. Eleven blocks have ten cards between
-them, one of which carries the stretch, so the run is 40 seconds
-longer than the plan file's arithmetic. Nothing about the day
-changes.
-
-Measured on the shipped preset (protocol.presets.study_battery, id
-healthy_one_pass_v1), scripts/measure_battery.py over five codes
-covering both orders and both hand orders, 4 September 2026: 43.95,
-44.14, 44.44, 44.70 and 44.73 minutes, median 44.4. The preset's
-budget_min is 45 and its hard_stop_min is 50. Re-run the script and
-record the median again after any change to the preset.
+Play alone is 32.7 minutes. Drop the rest and the sitting is 40.6.
 
 One sitting is one draw, not the length of the sitting. Several
-blocks draw fresh material every time by design: their seed keys in
-config are empty so a participant never meets the same sequence
-twice. Reaction is the biggest mover of the eleven, because its
-foreperiod is drawn from an exponential on every trial. Measured
-again on 5 September 2026 with the script's --repeats flag, eight
-sittings on each of the four counterbalancing cells, 32 in all:
-medians 43.66, 43.67, 43.89 and 43.95 minutes, whole range 43.11 to
-44.50, none over the 45 minute budget and none near the 50 minute
-hard stop. Reaction moved up to 1.3 minutes between sittings of the
-same code; rhythm, force pilot and echo did not move at all.
+blocks draw fresh material every time by design (their seed keys are
+empty, so a participant never meets the same sequence twice), and
+reaction's exponential foreperiod moves the most. Measured with the
+script's --repeats flag, eight sittings on each of six codes (P01 to
+P04 over both orders, P05 and P06 left-handed), 48 in all: medians
+43.67 to 44.17 minutes, whole range 43.13 to 44.90, none over the 45
+minute budget and none near the 50 minute hard stop. Quote the median
+and the range, not one run.
 
-Read the headroom honestly: roughly a minute against the budget, and
-the sitting is not a fixed length, so quote the median and the range
-rather than one run. The model hand is a healthy adult on a good day,
-so a slower participant turns the strip amber, and amber means "into
-the booking's buffer" rather than "something has gone wrong". The
-hard stop at 50 is where the 15 minutes of consent, handedness form,
-hand measurements and rig reset stop fitting inside the hour each
-student is booked for.
+Read the headroom honestly: about a minute against the budget. The
+model hand is a healthy adult on a good day, so a slower participant
+turns the strip amber, and amber means "into the booking's buffer"
+rather than "something has gone wrong". The hard stop at 50 is where
+the 15 minutes of consent, handedness form, hand measurements and rig
+reset stop fitting inside the hour each student is booked for.
 
-What the model leaves out, and what a real session adds. The model
-never asks a question, never needs a calibration finger redone,
-never retries a block. The block times themselves are mostly not
-model-dependent: rhythm is a fixed-length track, force pilot is a
-fixed set of holds and rests, buzz hunt has fixed windows, so a
-slower person does not make them longer. What a real session adds is
-the human part between blocks: ten transitions at a realistic 20 s
-each rather than the design's 10 s allowance (+1.7 min), plus
-questions, a redone calibration finger and the odd retried block
-(+3 min). That puts a typical real session near 49 minutes, inside
-the hard stop and inside the booking, with nothing to spare.
+What the model leaves out, and what a real session adds: questions, a
+redone calibration finger, the odd retried block, and transitions
+nearer 20 s than 10. That puts a typical real session near 48
+minutes, inside the hard stop and inside the booking.
 
 Trim ladder, if the pilot's median clock exceeds 46 minutes. Apply
 in this order and record it in the preset comment:
-  1 buzz hunt loc_trials_per_hand 12 to 10 (about 0.9 min);
-  2 chords trials_per_subblock 20 to 15 (about 2.1 min);
-  3 echo games 2 to 1 (about 3 min, but it costs the within-block
-    span read, so it is the last one).
-Three rungs are already spent getting to the table above: reaction
-block_trials 25 to 20, buzz hunt span_trials 6 to 4 and syllables
-words_per_block 16 to 12, all against the two-visit design's counts.
-Giving one back is tempting, because reaction at 25 trials would buy
-back some of the within-block series length that Section 4.5 depends
-on, but at about 0.9 minutes a hand it costs more than the 30
-seconds of headroom the budget has. It waits for a pilot that comes
-in under 44 minutes.
+  1 buzz hunt loc_trials_per_hand 16 to 12 (about 0.4 min);
+  2 echo games 2 to 1 (about 1.5 min; it costs the within-block span
+    read);
+  3 pass 2 drops chords (about 2.8 min; T4 and T5 go with it, so it
+    is the last one).
+Chords is already at 40 a block in both passes, down from 60, so the
+two blocks stay comparable; any change to its counts must be made to
+both passes together.
 
 Reference full-form durations, for the thesis to state what was
 shortened: reaction 25 trials about 3 min (config comment, M);
-pattern 10 takes 12 to 25 min in patients (config, M) and about 11
-min for a healthy adult (A); chords 100 chords about 8.5 min (A);
-syllables 40 words 8.5 min (M); buzz hunt one hand 8.5 min and both
-hands 16.8 min, capped at 15 (M); force pilot two passes of the
-ladder both hands about 14 min (A); echo ladder to span 6 about 12
-trials, a few minutes (config, M); adaptive 40 trials 30 to 43 s in
-the recorded test blocks on disk (M).
+pattern 10 takes about 11 min for a healthy adult (A); chords 100
+chords about 8.5 min (A); syllables 40 words 8.5 min (M); buzz hunt
+one hand 8.5 min (M); force pilot two passes of the ladder about 7
+min a hand (A); adaptive 40 trials 30 to 43 s in the recorded test
+blocks on disk (M).
 
-Simulated cohort (scripts/simulate_cohort.py): codes play one
-sitting each through the real engine, the way the RA runs it (login
-with the intake, PLAY ALL, every NEXT UP step and every rest, end
-session). Each code carries latent skill plus a per-person
-WITHIN-block drift, because that is the only change one pass can
-show: a reaction warm-up that fades over the first trials, the
-dominant hand leading in mirror, chord spread tightening across the
-block, trained-sequence presses speeding up with exposure in
-pattern, and force hold noise drawn per block with no person behind
-it, so force error is the metric with no recoverable person in it.
-The drift is small and it decays, which is what a warm-up looks
-like. The truth is written to truth.json and the minutes to
-durations.csv beside the tree, so an analysis can be checked against
-what was injected. It checks the pipeline, not the people: a model
-participant cannot stand in for the effects the study exists to
-measure, and a slope recovered from an injected warm-up is not
-evidence that a real participant improved.
+Simulated cohort (scripts/simulate_cohort.py): codes play one sitting
+each through the real engine and the real one-board Play all, the way
+the RA runs it. Each code is a person with fixed traits (base RT,
+span, asynchrony, force lag and steadiness, enslaving, reading
+accuracy), about one in eight left-handed, and every block draws
+fresh trial noise around them, so pass 1 against pass 2 has an
+honest amount of person in it for the reliability chapter to
+recover. A small within-block warm-up that fades is injected too. The
+truth is written to truth.json and the minutes to durations.csv
+beside the tree, so an analysis can be checked against what was
+injected. It checks the pipeline, not the people: a model participant
+cannot stand in for the effects the study exists to measure, and its
+ICCs describe the simulator, never the device.
 
 2.4 Short forms and frozen ladders: exact config keys
 -----------------------------------------------------
 The battery is a protocol preset in config/default.yaml
 (protocol.presets.study_battery). The hub's PLAY ALL button (or A)
-builds the plan for the logged-in code (cell from the code, hands
-from the main hand picked at login) and runs it through the engine's
+builds the plan for the logged-in code (the order from the code;
+every block on the right hand, the one board renamed to it if Left
+was picked at login) and runs it through the engine's
 protocol runner, laying the keys below over the live config for the
 length of the run and putting them back when the last block ends or
 the session ends. Between blocks the results screen shows as usual
 and NEXT UP carries the next step, so every block keeps its GET
 READY countdown and its own rests; the session strip reads PLAY ALL
-k/11 with the running minutes beside it. Each block's metadata.json
-carries battery.id, battery.cell and battery.position, and
+k/12 with the running minutes beside it, and the NEXT UP card names
+the pass. Each block's metadata.json carries battery.id,
+battery.cell, battery.position and battery.phase (pass1 or pass2),
+and
 config_snapshot shows the short-form keys the block ran under. A
 block that follows the scheduled rest also carries
 battery.rest_before_s, the rest the participant actually took.
@@ -914,11 +881,11 @@ window or detection key can never creep in through the preset):
   force_pilot:
     passes: 1                     # one climb of the fixed ladder
   chords:
-    subblocks: 3                  # within, within, cross
+    subblocks: 2                  # 40 chords, both passes
     trials_per_subblock: 20
     sync_windows_ms: [150]        # one rung: W fixed at 150 ms
   buzz_hunt:
-    loc_trials_per_hand: 12       # 16 in the two-visit design
+    loc_trials_per_hand: 16       # one hand: 16 localisation trials
     distractor_trials_per_hand: 0
     span_trials: 4                # 8 in the two-visit design
     gap_trials_per_hand: 0
@@ -943,7 +910,11 @@ window or detection key can never creep in through the preset):
     The preset pins Easy_Lemon.mp3 (126 s) and the battery opens the
     block on it without the song screen; if the file is missing the
     song screen opens and the RA picks it by hand.
-  mirror: defaults.
+  mirror: not played on the one-board rig.
+
+A mode played in both passes plays the same counts both times, or
+its two scores would not be comparable: the preset applies one set of
+keys for the whole sitting, so this holds by construction.
 
 Every one of those is a COUNT, a rest or a frozen ladder rung, except
 rhythm.tactile_mode, which is a cue condition: it moves when the buzz
@@ -960,8 +931,8 @@ Everything else runs on the shipped config/default.yaml as it is,
 with config/user_settings.yaml left at its defaults on the study
 laptop: the cue mix (buzz and sound before the target, nothing
 after, target shown), test mode off, balanced targets, reports on,
-EEG off, quick calibration on, ports auto-assigned in plug order
-(RIGHT board first). The preset does not write these; the run sheet
+EEG off, quick calibration on, the one board auto-assigned and put
+on the right hand by PLAY ALL. The preset does not write these; the run sheet
 checks them and every block's config_snapshot records them. The
 intake fields the software does not hold (affected side, impairment
 score) stay empty for a study code; the cohort is identified by the
@@ -989,21 +960,21 @@ the real engine (tests/test_study_battery.py, ShortFormTests).
 
 Statistical cost of each short form:
 
-  Force Pilot, one pass of the ladder, 24 runs over both hands.
-  Per-finger metrics rest on a single run per level, so per-finger
-  values are cohort-pooled and the hand-level mean is the unit.
+  Force Pilot, one pass of the ladder, 12 runs on the one hand, in
+  each pass. Per-finger metrics rest on a single run per level, so
+  per-finger values are cohort-pooled and the hand-level mean is the
+  unit (and the T2 and T3 metric).
 
-  Chords, 60 chords per participant. About 20 within-hand chords per
-  hand across 11 chord types, so per-chord cells are cohort-pooled.
-  Sub-blocks 1 and 2 are both within-hand, which is what makes the
-  start-to-end comparison in Section 4.5b possible; sub-block 3 is
-  cross-hand and is a different task.
+  Chords, 40 chords a block, in each pass, across 11 chord types, so
+  per-chord cells are cohort-pooled. Both sub-blocks are within-hand,
+  which is what makes the start-to-end comparison in Section 4.5b
+  possible.
 
-  Buzz Hunt, 12 localisation trials per hand and 4 span trials, no
-  gap or distractor stage. The window ladder allows at most one
-  promotion per hand in 12 trials and the top level is censored, so
-  the notebook reports the level distribution rather than a mean.
-  Three localisation trials per finger, so the confusion matrix is
+  Buzz Hunt, 16 localisation trials and 4 span trials, no gap or
+  distractor stage. The window ladder allows at most one or two
+  promotions in 16 trials and the top level is censored, so the
+  notebook reports the level distribution rather than a mean. Four
+  localisation trials per finger, so the confusion matrix is
   cohort-pooled.
 
   Pattern, 36-press takes and a 32-trial random take, once. The
@@ -1014,7 +985,8 @@ Statistical cost of each short form:
   probe of any kind: the learning score is measured inside the one
   block and nowhere else.
 
-  Reaction, 20 trials per hand, window fixed at 2.0 s. The fixed
+  Reaction, 20 trials a block, in each pass, window fixed at 2.0 s.
+  The fixed
   window costs nothing (a healthy adult almost never exceeds 1.2 s).
   The trial count costs twice over now: a split-half inside a
   20-trial block is estimated from two halves of ten, which is why
@@ -1023,10 +995,10 @@ Statistical cost of each short form:
   a within-block trend has only 20 points to sit on. If the pilot
   clock has room, this is the first rung to give back (Section 2.3).
 
-  Syllables and adaptive, one block each, played after the rest.
-  Descriptive only: no known-effect check and no within-block check.
-  They are in the session so that every mode is played and so the
-  end of the sitting changes pace.
+  Syllables and adaptive, one block each, in pass 1. Two ceiling
+  checks each (A5, A6, S6, S7) and no within-block check. They are
+  in the session so that every one-hand mode is played and so the
+  sitting changes pace.
 
 
 3. PARTICIPANT INTAKE, ANONYMITY AND KEYING
@@ -1124,8 +1096,8 @@ control".
 
 Hand measurements: hand length from the distal wrist crease to the
 tip of the middle finger, hand breadth across the metacarpal heads,
-ruler or calliper, both hands, once. They feed the existing
-sec_hand_size check against the chassis sizing range.
+ruler or calliper, the right hand (the device hand), once. They feed
+the existing sec_hand_size check against the chassis sizing range.
 
 3.3 Per-participant config
 --------------------------
@@ -1139,8 +1111,9 @@ entered on the screen always wins over the file.
 
 3.4 session.visit, battery.position and battery.phase
 -----------------------------------------------------
-There is no repeat factor. Each mode is played once, so a
-participant's rows are identified by mode, hand and metric alone.
+The one repeat factor is the pass. Pass 1 plays each mode once;
+pass 2 replays reaction, force pilot and chords. A participant's
+rows are identified by pass, mode and metric.
 
 visit is written to metadata.json by the login without a field: one
 more than the earlier days the code has played on. It is always "1"
@@ -1148,17 +1121,14 @@ here, and a code that reads "2" means somebody played on two days,
 which the analysis flags rather than pools. The key stays because
 old sessions have it and still load (tests/test_intake.py).
 
-battery.position (1 to 11) says how far into the sitting the block
+battery.position (1 to 12) says how far into the sitting the block
 sat, and battery.rest_before_s says how long the participant rested
-immediately before it (absent on a block with no scheduled rest).
-Those two are what the notebook orders and describes on.
-battery.phase is still written by the battery runner into each
-block's metadata and into every trial row's phase column, but with
-one pass there is nothing left for it to separate. Every step of the
-shipped preset carries the same word, battery, which says only that
-the block was run inside the study battery rather than picked freely
-from the hub. Nothing downstream may read pre, mid or post out of it
-any more (Section 4.1).
+immediately before it (on the first block of pass 2). battery.phase
+is pass1 or pass2, written into each block's metadata and into every
+trial row's phase column: pass 1 is the primary data and pass 2 is
+read only against it (Section 4.1). A free pick from the hub carries
+no phase at all. A tree from the one-pass design carries battery,
+which the notebook reads as a first pass.
 
 3.5 Where the data lives
 ------------------------
@@ -1192,15 +1162,16 @@ cohort_metrics.csv with columns
   participant, position, day, hand, hand_role, mode, metric, value,
   n_trials, block_folder, config_hash, phase, visit
 
-Each mode appears once per participant per hand, so participant,
-mode, hand and metric identify a row on their own. position is the
-battery step number (1 to 11), which is how far into the sitting the
-block sat and is the only ordering variable the analysis has. phase
-reads battery on every row a battery block writes and visit reads 1;
-both are carried through for old trees and for any pilot session and
-neither is used as a factor. A code whose rows carry more than one
-visit means somebody played on two days, which the analysis flags
-rather than pools.
+participant, phase, mode and metric identify a row. phase is pass1
+or pass2; every table but reliability reads pass1 only
+(cohort_battery_rows), and the reliability chapter pairs the two
+(cohort_retest_rows). hand is right on every row and hand_role says
+whether that was the participant's dominant hand; a pooled number is
+built from dominant-hand rows only (cohort_primary_people), so a
+left-hander's rows are carried in the export and described on their
+own. position is the battery step number (1 to 12). visit reads 1; a
+code whose rows carry more than one visit means somebody played on
+two days, which the analysis flags rather than pools.
 
 hand is left, right or both; hand_role is dominant, nondominant or
 both (mapped from session.dominant_hand); n_trials is the count the
@@ -1267,7 +1238,19 @@ is drawn as a line where one exists.
 
 4.4 Dominant versus non-dominant
 --------------------------------
-Per metric with a hand_role pair. The Wilcoxon signed-rank test is
+One-board rig (24 September 2026). Nobody plays both hands, so there
+is no pair to test and R2, C5, Rh3 and M2 are DROPPED. The chapter
+instead sets the right-handers (dominant hand, the pooled sample)
+beside the left-handers (non-dominant hand, same right-hand device),
+medians and counts per metric, first pass, with no test: a handful of
+left-handers supports no between-group inference, and a difference
+there would mix handedness with every other way those few people
+differ. It says what the non-dominant hand read on this rig and why
+the left-handers stay out of the pooled numbers.
+
+The rest of this section is the two-board analysis, which the
+notebook still runs on a two-board tree. Per metric with a hand_role
+pair. The Wilcoxon signed-rank test is
 the primary at this n, with the matched-pairs rank-biserial
 correlation as its effect size, because ten differences are not
 enough to check normality with any confidence. Reported beside it:
@@ -1294,16 +1277,13 @@ paragraph above forbids. At ten participants the choice never bit,
 because n under 20 already picked Wilcoxon; a second collection day
 takes n past 20 and it would start choosing.
 
-Multiplicity. One cohort run produces about fifty-five p values
-across the hands, within-block and validity tables, and until
-2026-09 none of them was adjusted. Two families are controlled, and
-nothing else carries a p that may be quoted as a finding:
+Multiplicity. A cohort run produces dozens of p values, and until
+2026-09 none of them was adjusted. The controlled family is the
+known-effect and within-block table; nothing else carries a p that
+may be quoted as a finding (on a two-board tree the
+dominant-versus-non-dominant table adds R2 and M2 as a second planned
+family):
 
-  - The dominant-versus-non-dominant table. R2 and M2 are the two
-    planned directional hypotheses and are the ones the sample size
-    was written against. Every other row in that table is printed as
-    a difference, an interval and an effect size under an
-    EXPLORATORY heading, with the p marked unadjusted.
   - The known-effect and within-block table (Section 4.6). Holm's
     step-down correction (Holm, S. 1979, Scandinavian Journal of
     Statistics 6(2), 65-70) is applied across the pre-specified rows
@@ -1319,9 +1299,10 @@ correlate, the verdict word is "no variation", counted apart from
 
 4.5 What can honestly be said about repeatability and progress
 --------------------------------------------------------------
-With one block per mode, no measurement in this study is repeated.
-That rules out an entire family of numbers, and the plan is written
-so no reader can mistake what is left for what is gone.
+Three modes are measured twice, in one sitting, about twenty minutes
+apart; the other six once. That gives one honest reliability number
+for three modes, (c) below, and rules out the rest, and the plan is
+written so no reader can mistake one for the other.
 
 (a) Internal consistency inside a block. For every metric that can
 be recomputed from a subset of a block's trials, split the block's
@@ -1337,23 +1318,23 @@ other. It says nothing about whether the same hand would score the
 same tomorrow, or in an hour, because nothing at all changes between
 the two halves.
 
-No SEM and no MDC95. The arithmetic would run (SEM = SD x
-sqrt(1 - r) takes any reliability coefficient), and the result would
-be wrong in a direction that matters: a split-half r ignores every
-source of variance that acts between administrations, which is most
-of the measurement error a patient study cares about, so the SEM
-would be too small and the MDC too tight. A too-tight MDC calls
-noise a real change, which is the one failure mode this device must
-not have. So sessions/cohort_results/progress_mdc.yaml is not
-written, and the app's TODAY panel shows a direction and a number
-and never the word "real". The next study, the test-retest one,
+No SEM and no MDC95 from a split-half. The arithmetic would run (SEM
+= SD x sqrt(1 - r) takes any reliability coefficient), and the result
+would be wrong in a direction that matters: a split-half r ignores
+every source of variance that acts between administrations, which is
+most of the measurement error a patient study cares about, so the SEM
+would be too small and the MDC too tight. A too-tight MDC calls noise
+a real change, which is the one failure mode this device must not
+have. The within-session MDC95 of (c) is too tight for the same
+reason, one step less so. So sessions/cohort_results/progress_mdc.yaml
+is not written, and the app's TODAY panel shows a direction and a
+number and never the word "real". A between-day test-retest study
 writes that file.
 
-(b) Within-block improvement: the only progress measure this design
-has. It is what lets a participant see themselves getting better
-during the sitting, which is the thing the design was not willing to
-lose, and it is a weaker claim than a repeated block would have
-been. Both halves of that sentence go in the thesis.
+(b) Within-block improvement, first pass. It is what lets a
+participant see themselves getting better during the sitting, and it
+is a weaker claim than a repeated block. Both halves of that sentence
+go in the thesis.
 
 Definition, per participant, hand, mode and metric with a per-trial
 series (the fine series in Section 4.7 figure 4):
@@ -1381,14 +1362,13 @@ question in every case is whether a later trial is a harder trial.
 
   Clean, because the task is frozen for the whole block:
     reaction (window fixed, foreperiods drawn at random),
-    mirror,
+    mirror (two-board rig only),
     pattern (this IS P1: the probe rebound is a within-block
       learning score and the mode already computes it),
     syllables (accuracy per round, descriptive only).
   Usable with the structure named:
     chords, sub-block 1 against sub-block 2, both within-hand and
-      both 20 trials; sub-block 3 is cross-hand and is not part of
-      the comparison,
+      both 20 trials,
     rhythm, asynchrony SD per 30 s window of a fixed track: window k
       is the same material for every participant, so windows are
       compared across people at the same k, and a within-person
@@ -1414,13 +1394,13 @@ and the thesis in these terms:
   working out what the game wants, so part of any early gain is
   instructions landing rather than motor performance improving.
   It cannot be separated from fatigue pulling the other way inside
-  the same series. It has no noise floor, because nothing was
-  measured twice, so no individual's slope can be called real and
-  only the cohort direction is claimable. And it is a change in
-  performance during practice, not learning that survives (Kantak
-  and Winstein 2012). A repeated block, minutes or days apart, is
-  what would have separated these; this design gave that up to fit
-  the sitting into 45 minutes, and the next study buys it back.
+  the same series. It has no noise floor of its own, so no
+  individual's slope can be called real and only the cohort
+  direction is claimable. And it is a change in performance during
+  practice, not learning that survives (Kantak and Winstein 2012).
+  The second pass separates part of it for three modes (R3 and the
+  pass 2 minus pass 1 shift in (c)); a delayed retention test is
+  still the next study's.
 
 The reaction block is the calibration for all of it. Reaction is the
 mode expected not to improve inside its own block, so whatever trend
@@ -1428,38 +1408,85 @@ it shows is the study's own estimate of warm-up and drift, and every
 other mode's within-block trend is read against it rather than
 against zero.
 
-(c) Dropped, with the reason, so a reader looking for them stops
-looking: block-to-block ICC(2,1) and ICC(3,1); SEM; MDC95; the
-pre-to-post change with its dz and its responder count; the
-Bland-Altman plot; the first-trials-after-rest against
-last-trials-before-rest contrast; and the pre-registered learning
-checks L1 to L8. Every one of them needs the same task measured
-twice in the same person, and this design measures it once.
+(c) Within-session test-retest, pass 1 against pass 2, pre-specified
+24 September 2026 before any participant. Reaction, force pilot and
+chords are replayed after the rest with the same counts and the same
+frozen ladders. Per metric, on the right-handers (the pooled sample;
+a left-hander's non-dominant blocks are not mixed in):
+
+  ICC(2,1), two-way random, absolute agreement, single measure, the
+  form Koo and Li (2016) give for test-retest, with its exact F
+  interval (McGraw and Wong 1996), and ICC(3,1) beside it. Read on
+  Koo and Li's bands: under 0.5 poor, 0.5 to 0.75 moderate, 0.75 to
+  0.9 good, above 0.9 excellent.
+  SEM = SD x sqrt(1 - ICC(2,1)), SD pooled over the two passes, and
+  MDC95 = 1.96 x sqrt(2) x SEM (Weir 2005).
+  Bland-Altman: the mean pass 2 minus pass 1 difference and its 95
+  percent limits of agreement (Bland and Altman 1986), with a plot.
+  The shift: pass 2 minus pass 1 with its paired interval.
+
+The rows, each read against the class Section 1 predicted:
+
+  T1  reaction median_rt_ms        good to excellent (0.75 and up)
+  T2  force_pilot mae_pct          moderate to good (0.5 to 0.9)
+  T3  force_pilot time_in_corridor moderate to good (0.5 to 0.9)
+  T4  chords median_er             moderate (0.5 to 0.75)
+  T5  chords median_span_ms        good (0.75 to 0.9)
+
+Reported, not tested: at n = 8 to 12 an ICC interval spans two or
+three bands, so the table says whether the point estimate sits in
+the predicted band and prints the interval beside it. R3 in Section
+4.6 is the one tested claim that reads pass 2.
+
+What it is, in the thesis's own words: within-session reliability,
+twenty minutes apart, same seat, same calibration. It leaves out
+every source of variance that acts between days (sleep, strap
+position, a new calibration, a different room temperature), so the
+ICC is an upper bound on day-to-day reliability and the MDC95 a lower
+bound on a real change between sessions. It covers three of the nine
+modes. Between-day test-retest for all of them is the next study's
+first job.
+
+(d) Still dropped, with the reason, so a reader looking for them
+stops looking: the pre-to-post change with its responder count; the
+first-trials-after-rest against last-trials-before-rest contrast;
+the pre-registered learning checks L1 to L8; and any reliability
+number for the six modes played once.
 
 4.6 Known-effect and within-block checks (pre-specified)
 --------------------------------------------------------
 Two tables, both decided before the data comes in.
 
-Table 1, known effects, one row per check, from Section 1: R1 R2,
-P1 P3, C1 C2 C3 C4, Rh1 Rh2, M1 M2, F1 F2 F3 F4, B1 B2 B3 B4, E1
-E3, A5 A6, S6 S7. Those four were added on 23 September 2026, before
-any participant, so every mode has a row; they are decided on the
+Table 1, known effects, one row per check, from Section 1, read on
+each right-hander's first-pass block: R1 R2 R3, P1 P3, C1 C2 C3 C4,
+Rh1 Rh2, M1 M2, F1 F2 F3 F4, B1 B2 B3 B4, E1 E3, A5 A6, S6 S7. A5,
+A6, S6 and S7 were added on 23 September 2026, before any
+participant, so every mode has a row; they are decided on the
 interval, carry no p value and so do not enter the family-wise
 correction. E3's criterion was set against chance the same day
-(Section 1.11). Each row: statistic, CI, test, effect size, pass or fail against
-the stated criterion. Three rows carry the word DROPPED and their
-reason, so that a reader who finds them in Section 1 finds out here
-what happened to them:
+(Section 1.11). R3 was restored on 24 September 2026 as the pass 2
+against pass 1 equivalence test (Section 1.1). Each row: statistic,
+CI, test, effect size, pass or fail against the stated criterion.
+Rows carry the word DROPPED and their reason, so that a reader who
+finds them in Section 1 finds out here what happened to them:
 
-  R3  reaction, no practice effect on median RT across visits.
-      DROPPED: needs the reaction block played twice.
   P2  pattern, larger learning score on the second go and a faster
       trained-take RT. DROPPED: needs the pattern block played
       twice. P1 and P3 are unaffected and Pattern still has checks.
   E2  echo, hidden-sequence trials more accurate than novel ones at
       matched length. DROPPED: the hidden repeat only exists under
       echo's ladder rule and the battery plays the Simon rule, so
-      the comparison has no second term. E1 and E3 are unaffected.
+      the comparison has no second term. E1 is unaffected.
+  On the one-board rig (24 September 2026, before any participant):
+  R2  reaction, dominant hand faster. DROPPED: nobody plays both
+      hands.
+  C4  chords, mirror chords hit more often. DROPPED: cross-hand
+      chords need a board on each hand.
+  M1, M2  mirror. DROPPED: Mirror needs a board on each hand and is
+      not played.
+  E3  echo, wrong presses beyond chance. DROPPED: on four lanes a
+      sequence past four items holds every lane, so a wrong finger is
+      a sequence lane by construction.
 
 F1 is in the table under its ladder wording, not its assess-sine-
 holds wording: Section 1.8 says why the battery cannot produce the
@@ -1473,9 +1500,10 @@ confirmations:
   C5  chords, dominant against non-dominant median ER. No
       difference is the expected answer in young adults, so the row
       reports the paired contrast with its interval and carries no
-      pass or fail.
+      pass or fail. DROPPED on the one-board rig.
   Rh3 rhythm, dominance on absolute asynchrony. No direction is
-      predicted, so it is reported paired, not tested.
+      predicted, so it is reported paired, not tested. DROPPED on
+      the one-board rig.
   B5  buzz hunt, whether the response-window ladder climbs at all.
       A description of the task, not a claim about the hand.
   E2p echo, whether misses fall late in the sequence rather than on
@@ -1489,7 +1517,8 @@ Table 2, within-block improvement, pre-specified with a direction
                  interval rather than as a test. A large negative
                  trend here means every other mode's within-block
                  trend is partly warm-up, and the chapter says so.
-  W2 mirror      the right-minus-left onset gap narrows.
+  W2 mirror      the right-minus-left onset gap narrows. DROPPED on
+                 the one-board rig: Mirror is not played.
   W3 pattern     P1 itself: probe minus flanking trained takes above
                  zero at the cohort level.
   W4 chords      sub-block 2 tighter than sub-block 1 (median ER
@@ -1548,10 +1577,12 @@ healthy cohort cannot give.
 ------------------------------------
   1 Normative panel: one dot strip per metric by hand role, every
     participant a point, with the reference line where one exists.
-  2 Paired dominant versus non-dominant: one line per participant
-    between the two hands, for the metrics with a directional
-    prediction (R2, M2) and for the force metrics (expected null),
-    with the Wilcoxon and dz printed.
+  2 Reliability (Section 4.5c): an ICC(2,1) forest for T1 to T5,
+    each point with its interval over the band Section 1 predicted,
+    and a Bland-Altman panel per metric. Captions say
+    within-session, twenty minutes apart, right-handers only. (On a
+    two-board tree the paired dominant versus non-dominant figure
+    takes this slot.)
   3 Internal consistency forest: every metric with its permutation
     split-half interval, bands at 0.5, 0.75 and 0.9 shaded, the axis
     labelled INTERNAL CONSISTENCY, WITHIN ONE BLOCK. The caption
@@ -1563,6 +1594,7 @@ healthy cohort cannot give.
     summary and the app's own strip:
       reaction     RT of scorable trials in order, rolling median 5
       mirror       right-minus-left onset gap per clean pair
+                   (two-board rig only)
       rhythm       asynchrony SD per 30 s window of the track
       echo         longest correct length so far, per ladder trial
       force_pilot  MAE percent per run, per hand, with the level
@@ -1577,11 +1609,10 @@ healthy cohort cannot give.
   6 Per-mode validity figures: reaction RT against foreperiod
     scatter with rho; pattern take curve with the probe rebounds;
     chords per-chord hit rate against D rank and the cohort-mean
-    enslaving matrix; rhythm asynchrony histogram per hand with zero
-    marked; mirror gap distribution; force pilot section MAE bars;
-    buzz hunt cohort confusion matrix and the top-window-level
-    distribution; echo span histogram against 6.2 and the error
-    taxonomy bar.
+    enslaving matrix; rhythm asynchrony histogram with zero marked;
+    force pilot section MAE bars; buzz hunt cohort confusion matrix
+    and the top-window-level distribution; echo span histogram
+    against the four-lane Simon band.
   7 Feasibility: minutes per block, one bar per participant against
     the measured plan of Section 2.3, plus the blocks missed and the
     tiredness ratings.
@@ -1590,56 +1621,42 @@ healthy cohort cannot give.
 4.8 Build work before the first participant
 -------------------------------------------
   a DONE. The preset (protocol.presets.study_battery in
-    config/default.yaml, id healthy_one_pass_v1) carries eleven
-    steps per order with no repeats, budget_min 45 and
-    hard_stop_min 50, the stretch about a third of the way in and
-    the rest about halfway (Section 2.2). Every step carries
-    phase: battery, which says only that the block was run inside
-    the study battery. tests/test_study_battery.py drives the real
-    engine through every step for every cell and reads the stamps
-    and the rest lengths back out of metadata.json.
+    config/default.yaml, id healthy_one_hand_v2) carries twelve
+    steps per order, every one on the right hand: nine in pass 1,
+    three in pass 2 after the rest, budget_min 45 and hard_stop_min
+    50. tests/test_study_battery.py drives the real engine through
+    every step for every order and reads the stamps, the passes and
+    the rest lengths back out of metadata.json; it also checks that a
+    board picked as Left at login is put on the right hand.
   b DONE in tests/test_study_battery.py (ShortFormTests): the
     reaction window list of one and its 20 trials, force pilot's
-    single pass of the 12-level ladder, the chords one-window list,
-    the buzz hunt stage plan and the pattern short layout, all read
-    off the live mode objects a battery block builds.
-  c DONE. The scheduled rest: preset keys rest_s and rest_min_s, a
-    countdown on the NEXT UP card, the Start button held for the
-    floor and then reading "Start early", and the rest actually
-    taken written to the battery log (rest_taken_s) and to the next
-    block's metadata (battery.rest_before_s).
-    tests/test_study_battery.py (RestStepTests) checks the card at
-    0, 30, 90 and 200 seconds, that N is refused before the floor
-    and works after it, and that the logged length matches.
-  d TO DO. The participant's own view. game/battery.progress_rows
-    was written for the pre/post design: it pairs a mode's first go
-    with its latest go across blocks, and with one block per mode it
-    has nothing to pair. It has to read the within-block series
-    instead (first third against last third, the wording still
-    coming through data/history so the screen and the notebook
-    cannot drift apart), and the TODAY table becomes one row per
-    mode of that within-block change. Nothing on the screen may say
-    a change is real, because Section 4.5a means there is no MDC to
-    test it against.
-  e DONE. The notebook's cohort chapter is eight sections:
-    selection, descriptives, dominant against non-dominant,
-    sec_cohort_within_block (first third against last third, slopes
-    with intervals, the mode-by-mode interpretability table),
-    sec_cohort_consistency (the permutation split-half, labelled
-    INTERNAL CONSISTENCY, WITHIN ONE BLOCK), sec_cohort_feasibility,
-    the validity table with R3 and P2 as DROPPED rows and W1 to W6
-    added, and the export, which writes cohort_metrics.csv and
-    cohort_series.csv and no progress_mdc.yaml. The retest, pre-post,
-    responder and learning-curve sections are gone, not silenced.
-    tests/test_cohort_notebook.py drives all eight end to end on a
-    one-pass cohort the real engine wrote, and
-    tests/test_notebook_matches_software.py pins the shape.
-  f Kept, unused. icc_ci in Setup (ICC(2,1) and ICC(3,1) with the
-    McGraw and Wong 1996 exact F intervals, pinned to the Shrout and
-    Fleiss 1979 worked example in
-    tests/test_notebook_matches_software.py) computes nothing in
-    this study. It stays in the notebook for the test-retest study
-    that follows.
+    single pass of the 12-level ladder on one hand, chords at 40 in
+    one window, the buzz hunt stage plan (16 localisation, 4 span)
+    and the pattern short layout, all read off the live mode objects
+    a battery block builds.
+  c DONE. The scheduled rest between the passes: preset keys rest_s
+    and rest_min_s, a countdown on the NEXT UP card, the Start button
+    held for the floor, and the rest actually taken written to the
+    battery log (rest_taken_s) and to the next block's metadata
+    (battery.rest_before_s). tests/test_study_battery.py
+    (RestStepTests) checks the card, the floor and the logged length.
+  d TO DO. The participant's own view reads the within-block series
+    (first third against last third); a mode played in both passes
+    could also show its pass 2 against its pass 1, worded as a
+    direction and never as a real change (Section 4.5a).
+  e DONE. The notebook's cohort chapter: selection, descriptives,
+    dominant against non-dominant (the handedness table on the
+    one-board rig), within-block, internal consistency, reliability
+    (sec_cohort_reliability, T1 to T5, pass 1 against pass 2),
+    feasibility, validity (R3 from the passes, the one-board rows as
+    DROPPED) and the export, which writes cohort_reliability.csv and
+    no progress_mdc.yaml. tests/test_cohort_one_board.py drives it
+    end to end on a one-board two-pass cohort the real engine wrote;
+    tests/test_cohort_notebook.py keeps the two-board one-pass tree
+    working; tests/test_notebook_matches_software.py pins the shape.
+  f DONE. icc_ci (ICC(2,1) and ICC(3,1) with the McGraw and Wong
+    1996 exact F intervals, pinned to the Shrout and Fleiss 1979
+    worked example) has one caller, the reliability chapter.
   g DONE. The login intake (Section 3.2); tests/test_intake.py.
   h TO DO. Bench characterisation of the pads with known masses and
     a 30 s drift trace, before the first participant (force_pilot.py
@@ -1648,22 +1665,21 @@ healthy cohort cannot give.
     (Section 1.6), or an explicit statement that asynchrony is
     within-device.
   j DONE. scripts/measure_battery.py plays the plan headless through
-    the real engine on a simulated clock with a model participant on
-    a fake sensor stream, counts the rests and the transitions
-    separately, and reports the minutes against budget_min and
-    hard_stop_min. Five codes over both orders and both hand orders
-    gave a median of 44.4 minutes, and 32 repeat sittings a median
-    of 43.8 with a range of 43.1 to 44.5 (Section 2.3). Re-run it
-    after any
-    change to the preset.
-  k DONE. scripts/simulate_cohort.py injects a per-person
-    within-BLOCK drift rather than a between-block change, writes it
-    to truth.json and the minutes to durations.csv, and says in its
-    own docstring that a cohort built from it cannot be used to
-    compute ICC, SEM, MDC95 or any pre-versus-post contrast.
-  l TO DO. A two-person pilot for the clock, before recruiting: if
-    the median session exceeds 52 minutes, apply the trim ladder in
-    Section 2.3 and record which rungs were used.
+    the real engine on a simulated clock and a simulated one-board
+    rig, counts the rests and the transitions separately, and reports
+    the minutes per block and per pass against budget_min and
+    hard_stop_min: 48 sittings on six codes, medians 43.7 to 44.2,
+    range 43.1 to 44.9 (Section 2.3). Re-run it after any change to
+    the preset.
+  k DONE. scripts/simulate_cohort.py plays people with fixed traits
+    and fresh per-block noise, about one in eight left-handed,
+    through the real one-board Play all, and writes the truth to
+    truth.json and the minutes to durations.csv. Its reliability
+    numbers describe the simulator, never the device.
+  l TO DO. A two-person pilot on the real board for the clock,
+    before recruiting: if the median session exceeds 46 minutes,
+    apply the trim ladder in Section 2.3 and record which rungs were
+    used.
 
 5. ETHICS AND RUN SHEET
 =======================
@@ -1685,12 +1701,13 @@ musculoskeletal condition affecting the hands; skin condition or
 open wound on the hands; known sensitivity to vibration.
 
 Procedure, in plain words: one visit of about an hour, with a three
-minute break and a stretch break in it; hands rest flat on a 3D
-printed frame with a small force pad under each fingertip; short
-games on a laptop screen; light presses only; small vibration motors
-buzz a fingertip for a quarter of a second as a cue; a ruler
-measurement of each hand; four questions on hand preference; age and
-sex. One visit only, with no follow-up session.
+minute break and a stretch break in it; the right hand rests flat on
+a 3D printed frame with a small force pad under each fingertip; short
+games on a laptop screen, three of them played a second time after
+the break; light presses only; small vibration motors buzz a
+fingertip for a quarter of a second as a cue; a ruler measurement of
+the right hand; four questions on hand preference; age and sex. One
+visit only, with no follow-up session.
 
 Foreseeable discomforts and their controls:
   Vibration: eccentric-rotating-mass motors at fixed drive, 250 ms
@@ -1703,8 +1720,8 @@ Foreseeable discomforts and their controls:
     participant's own comfortable maximum press, holds are 16 s,
     runs under 30 s, with rests built in and every rest skippable
     only by the participant's choice. Mild finger fatigue is the
-    expected worst case, and at 34 minutes of play it is a smaller
-    exposure than the design this replaced.
+    expected worst case, and at about 33 minutes of play on one hand
+    it is a smaller exposure than the designs this replaced.
   Skin contact: pads and frame wiped with 70 percent isopropyl
     between participants; participants wash or sanitise hands on
     arrival; disposable finger cots offered. On a collection day
@@ -1745,25 +1762,26 @@ person.
 BEFORE THE FIRST SESSION OF THE DAY (10 min)
   [ ] Laptop on mains power, app launched as shipped; the login
       screen suggests the next free code (Pxx).
-  [ ] Plug the RIGHT board first, then the LEFT; the login screen
-      names the ports right and left. Boards self-test buzz once
-      each.
+  [ ] Plug in the one board, fitted in the right-hand chassis. It
+      self-tests with a short buzz. Nothing else is plugged in.
   [ ] Pads and frame wiped. Finger cots, ruler, intake sheets and
       EHI forms for the whole day on the desk. Speaker at the study
       volume. Water on the desk for the breaks.
 
 BEFORE EACH SESSION (5 min, inside the 15)
   [ ] Wipe pads and frame. New intake sheet: date, code, cell (A/B,
-      hand first), commit hash, session start time, caffeine in the
+      from the code), commit hash, session start time, caffeine in the
       last two hours (yes/no), hours of sleep last night.
 
 ARRIVAL (15 min, off the clock)
-  [ ] Consent, EHI short form, hand length and breadth both hands,
-      code assigned.
+  [ ] Consent, EHI short form, hand length and breadth of the right
+      hand, code assigned. A left-hander may take part: tick
+      "left-handed, device on the non-dominant hand" on the sheet.
   [ ] Hands washed. Seat height so forearms rest flat, fingers index
       to little on the four pads, thumbs off the frame.
-  [ ] Say once: "This runs about three quarters of an hour, with a
-      stretch early on and a proper break about halfway. Press
+  [ ] Say once: "This runs about three quarters of an hour, all on
+      your right hand, with a stretch early on and a proper break
+      later, after which three of the games come round again. Press
       lightly, like typing. Some games have a hidden rule; do not
       try to work it out, just play." Never mention sequences or
       patterns again.
@@ -1776,20 +1794,18 @@ ARRIVAL (15 min, off the clock)
 CLOCK STARTS (target 45 min, hard stop 50)
   [ ] Check the login: code, age, sex, MAIN HAND (Left or Right,
       required), hand length and breadth. The EHI score stays on the
-      sheet. LOG IN, then pick BOTH HANDS on the hand screen. Quick
-      calibration runs for both hands: hands off, hands resting, then
-      a light press per finger. If a finger fails, redo once, then
-      continue and note it. (Picking one hand is not fatal: PLAY ALL
-      calibrates the other before its first block.)
-  [ ] Both boards plugged in before PLAY ALL: it will not start on
-      one, and the hub says which board is missing.
-  [ ] Press PLAY ALL on the hub (or A). The app plays the cell's
-      order below; after each block press Start on the NEXT UP card
-      (or N). The card names the step, the hand and the wait; the
-      strip reads PLAY ALL k/11 with the minutes beside it, amber
-      past the target and red past the hard stop. If a board drops
-      between blocks the card says "Waiting for the board" and the
-      step stays put: plug it back in and press Start. A block that
+      sheet. LOG IN, then pick RIGHT HAND on the hand screen. Quick
+      calibration runs: hand off, hand resting, then a light press
+      per finger. If a finger fails, redo once, then continue and
+      note it. (Picking Left by mistake is not fatal: PLAY ALL puts
+      the board on the right hand and calibrates it first.)
+  [ ] Press PLAY ALL on the hub (or A). The app plays the order
+      below; after each block press Start on the NEXT UP card (or
+      N). The card names the step and the pass; the strip reads PLAY
+      ALL k/12 with the minutes beside it, amber past the target and
+      red past the hard stop. If the board drops between blocks the
+      card says "Waiting for the board" and the step stays put: plug
+      it back in and press Start. A block that
       cannot be run at all is skipped from the hub with Skip step
       (S), which asks first, and the reason written on the sheet; a
       block ended early is offered again.
@@ -1797,39 +1813,41 @@ CLOCK STARTS (target 45 min, hard stop 50)
       code and main hand, and press PLAY ALL: blocks finished today
       are not played again.
 
-  Order A                          Order B
-   1 Reaction, hand 1               1 Force Pilot, both
-   2 Reaction, hand 2               2 (60 s stretch)
-   3 Mirror, both                     Chords, both
-   4 Rhythm, both, Easy_Lemon,      3 Buzz Hunt, both
-     Medium                         4 Adaptive, dominant hand
-   5 Echo, both                     5 Syllables, both
-   6 (60 s stretch)                 6 (REST, 3 min)
-     Force Pilot, both                Reaction, hand 1
-   7 (REST, 3 min)                  7 Reaction, hand 2
-     Chords, both                   8 Mirror, both
-   8 Buzz Hunt, both                9 Rhythm, both, Easy_Lemon,
-   9 Pattern, dominant hand           Medium
-  10 Adaptive, dominant hand       10 Echo, both
-  11 Syllables, both               11 Pattern, dominant hand
+  Every block is the right hand.
 
-  Hand 1 is the dominant hand for codes ending 1 and 2 in each group
-  of four (P01, P02, P05, P06, ...), the non-dominant hand for P03,
-  P04, P07, P08, ...
+  Order A (P01, P03, P05, ...)     Order B (P02, P04, P06, ...)
+  Pass 1                           Pass 1
+   1 Reaction                       1 Force Pilot
+   2 Rhythm, Easy_Lemon, Medium     2 (60 s stretch)
+   3 Echo                             Chords
+   4 (60 s stretch)                 3 Buzz Hunt
+     Force Pilot                    4 Adaptive
+   5 Chords                         5 Syllables
+   6 Buzz Hunt                      6 Reaction
+   7 Pattern                        7 Rhythm, Easy_Lemon, Medium
+   8 Adaptive                       8 Echo
+   9 Syllables                      9 Pattern
+  (REST, 3 min)                    (REST, 3 min)
+  Pass 2                           Pass 2
+  10 Reaction                      10 Force Pilot
+  11 Force Pilot                   11 Chords
+  12 Chords                        12 Reaction
 
   Per block: read the on-screen card, confirm the participant is
   ready, start. Do not coach during a block. Let the participant
   skip a mode's own internal rests with Space only when they say
   they are ready. Force Pilot and Buzz Hunt refuse to start without
-  the boards; if a board has dropped, reconnect and note the block.
+  the board; if it has dropped, reconnect and note the block. Pass 2
+  is the same three games again: do not say they are repeats, and
+  do not mention the first scores.
   [ ] Tick each block on the sheet as it ends; write the reason for
       any early end or skip.
 
   AT THE REST AND AT THE END
   [ ] Hands off the pads. Offer water. Do not talk about the games,
       the numbers or how it is going.
-  [ ] Ask the two questions at the 3 minute rest, which is about
-      halfway, and again at the end. Write the answers on the sheet
+  [ ] Ask the two questions at the 3 minute rest, between the
+      passes, and again at the end. Write the answers on the sheet
       exactly as worded, 0 = not at all, 10 = completely:
         "Tired in the head?"   0 to 10
         "Tired in the hands?"  0 to 10
@@ -1838,7 +1856,8 @@ CLOCK STARTS (target 45 min, hard stop 50)
   [ ] The Start button is held for the first minute of the rest and
       then reads "Start early". Take the full three minutes unless
       the participant asks to go on; write down when the rest was
-      cut short.
+      cut short. The rest is the gap the reliability numbers are
+      measured across, so a cut rest is always written down.
 
   [ ] At the hard stop: let the current block finish, stop, record
       what was missed. Pattern is the block to lose.
@@ -1848,13 +1867,12 @@ END
       participant read it. Answer questions about their own numbers
       only. Say plainly that it compares the start of each game with
       the end of the same game, that a small change is not
-      necessarily a real one because the study has no way to measure
-      its own noise, and that no comparison with other people is
-      being shown or made.
+      necessarily a real one, and that no comparison with other
+      people is being shown or made.
   [ ] End the session from the hub (confirm the session-end
       warning). Check sessions/<today>/ holds one folder per block
       played, each with trials.csv, raw.csv and metadata.json, and
-      that battery.position runs 1 to 11.
+      that battery.position runs 1 to 12.
   [ ] Debrief: hidden sequences explained, questions answered,
       credit granted, thanks. Say that the session shows what a
       normal hand does on the device and how performance moves

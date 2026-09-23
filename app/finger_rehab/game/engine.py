@@ -6482,6 +6482,11 @@ class GameEngine:
         if (getattr(src, "provides_samples", True)
                 and isinstance(avail, set) and "both" not in avail):
             absent = sorted(need - avail)
+            if absent and self._lone_board_can_become(need):
+                # A one-hand plan on the one board: start_battery puts
+                # the board on the plan's hand, whatever hand was
+                # picked at login.
+                absent = []
             if absent:
                 names = " and ".join(h for h in absent)
                 return False, (f"Play all needs the {names} board too: "
@@ -6567,8 +6572,9 @@ class GameEngine:
         log.info("Battery %s started for %s: cell %s%s, %d steps%s",
                  plan.id, self.session.participant,
                  plan.cell.get("mode_order"),
-                 "" if plan.cell.get("hand_first") == "dominant"
-                 else " non-dominant first", len(steps),
+                 (" non-dominant first"
+                  if plan.cell.get("hand_first") == "non_dominant"
+                  else ""), len(steps),
                  f", {len(earlier)} already done today" if earlier else "")
         if not self._protocol_steps:
             self._finish_battery()
@@ -6586,10 +6592,33 @@ class GameEngine:
                 need.add(h)
         if need == {"left", "right"} and not self.second_board_missing():
             self._session_hand = "both"
+        elif len(need) == 1:
+            only = next(iter(need))
+            if self._lone_board_can_become(need):
+                src = self.source
+                if src.hands[0].hand != only and src.relabel_single(only):
+                    log.info("Play all put the one board on the %s "
+                             "hand", only)
+                    self._hand_port_memory = {}
+                    self._remember_hand_ports(src)
+                    if getattr(self, "session", None) is not None:
+                        self.session.source_name = getattr(src, "name",
+                                                           "?")
+            self._session_hand = only
         if self._battery_calibrate(sorted(need),
                                    self._begin_next_protocol_step):
             return True
         return self._begin_next_protocol_step()
+
+    def _lone_board_can_become(self, need: set[str]) -> bool:
+        """True when a one-hand plan meets exactly one board that can
+        be named for that hand. The study device is the right-hand
+        chassis, so a board picked as Left at login is still the
+        right-hand device and is renamed rather than refused."""
+        src = getattr(self, "source", None)
+        boards = getattr(src, "hands", None) or []
+        return (len(need) == 1 and len(boards) == 1
+                and callable(getattr(src, "relabel_single", None)))
 
     def _battery_done_earlier(self, battery_id: str,
                               steps: list[dict]) -> dict[int, str]:

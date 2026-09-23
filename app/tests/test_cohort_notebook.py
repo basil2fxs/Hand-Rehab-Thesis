@@ -4,8 +4,10 @@ cohort the REAL engine wrote.
 Five participant codes play ONE sitting each on the keyboard source,
 through the REAL battery machinery with a shortened preset: a reaction
 block per hand and a bilateral echo block, every step carrying
-phase "battery" and no block repeated, which is the design of
-4 September 2026. A named person, a code with no visit and one
+phase "battery" and no block repeated. That is the TWO-BOARD one-pass
+design of 4 September 2026, kept as the legacy tree the notebook still
+reads; tests/test_cohort_one_board.py drives the shipped one-board,
+two-pass design. A named person, a code with no visit and one
 free-play block with no battery phase are mixed into the same tree to
 prove the selection leaves them where they belong. The folders are
 then handed to the real notebook functions (build_catalogue,
@@ -63,6 +65,9 @@ TRIALS_PER_REACTION_BLOCK = 12
 # mode and hand; three blocks is enough to exercise every path in the
 # chapter and still runs in seconds. Every step carries the one phase
 # word the one-pass preset writes, and no mode and hand repeats.
+# The one-pass design's phase word. The notebook reads it as a first
+# pass (COHORT_PHASE is now "pass1").
+LEGACY_PHASE = "battery"
 SHORT_ORDER = [
     {"mode": "reaction", "hand": "hand1", "phase": "battery"},
     {"mode": "reaction", "hand": "hand2", "phase": "battery",
@@ -372,7 +377,7 @@ class CohortNotebookTests(unittest.TestCase):
     def test_every_battery_step_carries_the_one_phase_word(self) -> None:
         sel = self.cohort["sel"]
         battery = sel[sel["phase"] != ""]
-        self.assertEqual(set(battery["phase"]), {self.ra.COHORT_PHASE})
+        self.assertEqual(set(battery["phase"]), {LEGACY_PHASE})
         self.assertEqual(len(battery), len(CODES) * BLOCKS_PER_SITTING)
         # The free pick carries no phase and is not dropped.
         free = sel[sel["phase"] == ""]
@@ -399,7 +404,7 @@ class CohortNotebookTests(unittest.TestCase):
         self.assertTrue((back["phase"].fillna("") == "").any())
         # ...and cohort_battery_rows is what keeps it out of the rest.
         battery = self.ra.cohort_battery_rows(long)
-        self.assertEqual(set(battery["phase"]), {self.ra.COHORT_PHASE})
+        self.assertEqual(set(battery["phase"]), {LEGACY_PHASE})
         self.assertLess(len(battery), len(long))
 
     def test_long_table_shape_and_hand_roles(self) -> None:
@@ -408,8 +413,7 @@ class CohortNotebookTests(unittest.TestCase):
         self.assertEqual(set(long["participant"]), set(CODES))
         self.assertEqual(set(long["mode"]), {"reaction", "echo"})
         self.assertEqual(set(long["visit"]), {"1"})
-        self.assertEqual(set(long["phase"]),
-                         {self.ra.COHORT_PHASE, ""})
+        self.assertEqual(set(long["phase"]), {LEGACY_PHASE, ""})
         battery = self.ra.cohort_battery_rows(long)
         self.assertTrue((battery["position"] >= 1).all())
         self.assertTrue((battery["position"] <= BLOCKS_PER_SITTING).all())
@@ -580,15 +584,16 @@ class CohortNotebookTests(unittest.TestCase):
         self.assertIn("INTERNAL CONSISTENCY, WITHIN ONE BLOCK", self.out)
 
     def test_no_reliability_number_is_turned_into_an_mdc(self) -> None:
-        # Nothing is computed twice, so none of these can appear as a
-        # number. The words "SEM" and "MDC95" DO appear, in the
-        # sentences that say why neither is computed.
+        # This legacy tree repeats no block, and the chapters it runs
+        # never turn a split-half into a reliability number. The words
+        # "SEM" and "MDC95" DO appear, in the sentences that say why
+        # neither follows from one block.
         for banned in ("ICC(2,1)", "ICC(3,1)", "Bland-Altman",
                        "limits of agreement", "responders",
                        "post minus pre", "pre-against-post"):
             self.assertNotIn(banned, self.out, banned)
-        self.assertIn("no SEM", self.out)
-        self.assertIn("no MDC95 follow from it", self.out)
+        self.assertIn("No SEM and no", self.out)
+        self.assertIn("MDC95 follow from it", self.out)
         self.assertIn("too tight", self.out)
         for name in ("consistency", "within_block_summary"):
             tbl = self.cohort["tables"][name]
@@ -1008,13 +1013,24 @@ class CohortStatisticsHelperTests(unittest.TestCase):
         phases = {str(step.get("phase") or "").strip().lower()
                   for order in orders for step in order}
         self.assertEqual(set(self.ra.COHORT_PHASES), phases)
-        self.assertEqual(len(phases), 1)
-        # The one pass plays every mode and hand once, which is what
-        # makes every test-retest quantity uncomputable.
+        self.assertEqual(self.ra.COHORT_PHASE, "pass1")
+        self.assertEqual(self.ra.COHORT_RETEST_PHASE, "pass2")
+        # Inside a pass nothing repeats; every pass 2 block is a mode
+        # pass 1 played, which is what the reliability chapter pairs.
         for name, order in (preset.get("orders") or {}).items():
-            seen = [(s.get("mode"), s.get("hand")) for s in order]
-            self.assertEqual(len(seen), len(set(seen)),
-                             f"order {name} repeats a block")
+            for phase in phases:
+                seen = [(s.get("mode"), s.get("hand")) for s in order
+                        if s.get("phase") == phase]
+                self.assertEqual(len(seen), len(set(seen)),
+                                 f"order {name} repeats a block in {phase}")
+            first = {s.get("mode") for s in order
+                     if s.get("phase") == "pass1"}
+            again = {s.get("mode") for s in order
+                     if s.get("phase") == "pass2"}
+            self.assertTrue(again <= first, name)
+            self.assertEqual(
+                again, {m for _i, m, *_r in
+                        self.ra.COHORT_RELIABILITY_METRICS}, name)
 
 
 if __name__ == "__main__":

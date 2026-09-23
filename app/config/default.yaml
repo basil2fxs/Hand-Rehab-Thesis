@@ -1795,188 +1795,119 @@ protocol:
   # as normal and NEXT UP offers the next step, so every block still
   # gets its GET READY countdown and the participant a breather.
   #
-  # The study_battery preset is the healthy baseline battery, in the
-  # ONE PASS form set out in Basil's plan file of 4 September 2026
-  # (Data Collection Plan.md, "Where the 45 minutes goes") and in the
-  # amendment at the top of docs/research/healthy_baseline_study.txt.
+  # The study_battery preset is the healthy baseline battery for the
+  # ONE-BOARD rig: one device, on the right hand, for every
+  # participant (Data Collection Plan.md, 24 September 2026, and the
+  # amendment at the top of docs/research/healthy_baseline_study.txt).
   # Section 1 of that document, what each mode measures and the
-  # literature behind it, still carries the design, and its Sections
-  # 2 to 5 are written for this one pass.
+  # literature behind it, still carries the design.
   # Every override below changes a COUNT or freezes a difficulty
   # ladder; none changes a threshold, a window or a scoring rule, so
   # every metric a battery block writes is the metric the standard
   # block writes, just from fewer trials.
   presets:
     study_battery:
-      id: healthy_one_pass_v1
-      # ONE sitting, ONE pass. Ten modes, eleven blocks, every mode
-      # played exactly once (reaction is the only mode played twice,
-      # once per hand, because the two hands are two different tasks
-      # and the paired dominant versus non-dominant comparison needs
-      # both). There is no return visit and no repeated block, so
-      # there is nothing in this preset to compute a test-retest from:
-      # ICC(2,1), SEM, MDC95 and Bland-Altman are all off the table
-      # and the plan file says so in the same breath as the design.
+      id: healthy_one_hand_v2
+      # ONE sitting, ONE board, TWO passes. The device is the printed
+      # right-hand chassis, so every block plays the right hand, for
+      # every participant: the dominant hand of a right-hander, the
+      # non-dominant hand of a left-hander (the analysis reports those
+      # separately). Mirror needs two boards and is not played.
       #
-      # What the sitting still yields: a normative table per metric,
-      # the paired dominant versus non-dominant comparison, one
-      # pre-specified known-effect check per mode, and the
-      # feasibility numbers. A participant who wants to watch their
-      # own numbers move inside the sitting can only be shown a
-      # WITHIN-block change (first trials against last trials of the
-      # same block), which is a weaker claim than a repeated block
-      # would have been and has to be worded as one.
+      # Pass 1 plays the nine one-hand modes once. After the rest,
+      # pass 2 plays the reliability core again, same task, same
+      # counts: Reaction (the anchor, with a known test-retest
+      # literature), Force Pilot (the device's force measure) and
+      # Chords (its finger-independence measure). Pass 1 against pass
+      # 2 gives WITHIN-SESSION test-retest: ICC, SEM, MDC95,
+      # Bland-Altman and the practice effect. Norms and the
+      # known-effect checks read pass 1 only, the single
+      # administration a clinic would give.
       #
-      # budget_min is the design target from LOG IN to the last block;
-      # hard_stop_min is where the run sheet stops the session (the
-      # block in progress finishes, the rest is logged as missed). The
-      # session strip turns amber past the budget and red past the
-      # hard stop. scripts/measure_battery.py measures the plan
-      # headless against both.
-      #
-      # 45 is the plan file's "about 45 minutes on the rig". Measured
-      # 4 September 2026 by scripts/measure_battery.py over five codes
-      # covering both orders and both hand orders: 43.95, 44.14,
-      # 44.44, 44.70, 44.73 minutes, median 44.4. That is 33.3 to 34.1
-      # minutes of blocks, 2.67 of transitions (ten NEXT UP cards at
-      # 10 s plus the 60 s stretch), the 3 minute rest and the 5
-      # minutes of login, seating and quick calibration.
-      #
-      # The sitting is not a fixed length. Several blocks draw fresh
-      # material every time (their seed keys are empty on purpose, so
-      # a participant never meets the same sequence twice), and
-      # reaction's exponential foreperiod moves the most. Re-measured
-      # 5 September with --repeats, eight sittings on each of the four
-      # cells: medians 43.66 to 43.95, whole range 43.11 to 44.50,
-      # none over 45. Re-measured 23 September after the syllables
-      # warm-up came out and the rhythm buzz moved onto the beat, the
-      # same way: medians 43.69 to 44.04, whole range 43.12 to 45.02,
-      # one of 32 over 45 (by 0.02 min), none over 50. Quote the
-      # median and the range, not one run.
-      #
-      # The plan file's table says 43.5 because it counted eleven
-      # 10 s transitions and no stretch; the run has ten transitions
-      # and the stretch, which is 40 s more. Both sit inside the 30 to
-      # 60 minute target and the difference changes nothing about the
-      # day.
-      #
-      # Read the headroom honestly: about 30 seconds. The model hand
-      # is a healthy adult on a good day, so a real participant who is
-      # slower will turn the strip amber. Amber here means "you are
-      # into the booking's buffer", not "something has gone wrong".
-      # 50 is the run sheet's stop: past it the 15 minutes of consent,
-      # handedness form, hand measurements and rig reset no longer fit
-      # inside the hour each student is booked for.
+      # budget_min is the design target from LOG IN to the last
+      # block; hard_stop_min is where the run sheet stops the session.
+      # scripts/measure_battery.py measures the plan against both on a
+      # one-board rig. Quote its median and range, not one run.
       budget_min: 45
       hard_stop_min: 50
-      # Waits between blocks. A step with stretch_before gets a 60 s
-      # stretch note on the results screen and the button is never
-      # locked. A step with rest_before gets a 3 minute rest that
-      # counts down on the NEXT UP card and holds the button for the
-      # first rest_min_s, so a rest cannot be skipped outright but a
-      # participant who is ready can go early. The rest actually taken
-      # is logged (battery log rest_taken_s, block metadata
-      # battery.rest_before_s), because a shortened rest changes what
-      # the block after it means.
+      # Waits between blocks. The stretch sits before the first Force
+      # Pilot; the rest is the gap between the passes, which is what
+      # the test-retest interval is.
       stretch_s: 60
       rest_s: 180
       rest_min_s: 60
-      # hand values: hand1 / hand2 are the counterbalanced order
-      # (which one is dominant comes from the cell); dominant,
-      # non_dominant, both, left and right are literal.
+      # phase separates the passes: pass1 and pass2 are written into
+      # metadata battery.phase and every trial row's phase column.
       #
-      # phase is written into metadata battery.phase and into every
-      # trial row's phase column. With one pass there is nothing left
-      # for it to separate, so every step carries the same word,
-      # `battery`, which says only what is true: this block was run
-      # inside the study battery rather than picked freely from the
-      # hub. Nothing downstream may read pre, mid or post out of it
-      # any more.
-      #
-      # Order A is the plan file's measured block table, in its order.
-      # Order B plays the same eleven blocks with the force and
-      # vibration work first and the timing work last, so a mode's
-      # position in the sitting is counterbalanced across the cohort
-      # and fatigue cannot sit on the same mode for everyone.
-      #
-      # The stretch sits about a third of the way in by measured
-      # minutes and the rest about halfway, in both orders: A
-      # stretches before Force Pilot at 9.9 min and rests before
-      # Chords at 17.2 of 33.5; B stretches before Chords at 7.4 min,
-      # straight off Force Pilot's seven minutes of sustained holding,
-      # and rests before the first Reaction block at 17.1 of 33.3.
+      # Order A starts with the timing work, order B with the force
+      # and vibration work. Pass 2 keeps its modes in the order pass 1
+      # played them, so each mode's gap between its two blocks is as
+      # even as the order allows.
       orders:
         A:
-          - {mode: reaction, hand: hand1, phase: battery}
-          - {mode: reaction, hand: hand2, phase: battery}
-          - {mode: mirror, hand: both, phase: battery}
-          - {mode: rhythm, hand: both, phase: battery,
+          - {mode: reaction, hand: right, phase: pass1}
+          - {mode: rhythm, hand: right, phase: pass1,
              track: Easy_Lemon.mp3, difficulty: medium}
-          - {mode: echo, hand: both, phase: battery}
-          - {mode: force_pilot, hand: both, phase: battery,
+          - {mode: echo, hand: right, phase: pass1}
+          - {mode: force_pilot, hand: right, phase: pass1,
              stretch_before: true}
-          - {mode: chords, hand: both, phase: battery,
+          - {mode: chords, hand: right, phase: pass1}
+          - {mode: buzz_hunt, hand: right, phase: pass1}
+          - {mode: pattern, hand: right, phase: pass1}
+          - {mode: adaptive, hand: right, phase: pass1}
+          - {mode: syllables, hand: right, phase: pass1}
+          - {mode: reaction, hand: right, phase: pass2,
              rest_before: true}
-          - {mode: buzz_hunt, hand: both, phase: battery}
-          - {mode: pattern, hand: dominant, phase: battery}
-          - {mode: adaptive, hand: dominant, phase: battery}
-          - {mode: syllables, hand: both, phase: battery}
+          - {mode: force_pilot, hand: right, phase: pass2}
+          - {mode: chords, hand: right, phase: pass2}
         B:
-          - {mode: force_pilot, hand: both, phase: battery}
-          - {mode: chords, hand: both, phase: battery,
+          - {mode: force_pilot, hand: right, phase: pass1}
+          - {mode: chords, hand: right, phase: pass1,
              stretch_before: true}
-          - {mode: buzz_hunt, hand: both, phase: battery}
-          - {mode: adaptive, hand: dominant, phase: battery}
-          - {mode: syllables, hand: both, phase: battery}
-          - {mode: reaction, hand: hand1, phase: battery,
-             rest_before: true}
-          - {mode: reaction, hand: hand2, phase: battery}
-          - {mode: mirror, hand: both, phase: battery}
-          - {mode: rhythm, hand: both, phase: battery,
+          - {mode: buzz_hunt, hand: right, phase: pass1}
+          - {mode: adaptive, hand: right, phase: pass1}
+          - {mode: syllables, hand: right, phase: pass1}
+          - {mode: reaction, hand: right, phase: pass1}
+          - {mode: rhythm, hand: right, phase: pass1,
              track: Easy_Lemon.mp3, difficulty: medium}
-          - {mode: echo, hand: both, phase: battery}
-          - {mode: pattern, hand: dominant, phase: battery}
-      # Code number mod 4 -> which order and which hand goes first.
-      # data/intake.cell_for applies the same table; a name with no
-      # number hashes into it so the cell is still fixed per person.
-      # Four cells crossed over two mode orders and two hand orders,
-      # so across a cohort neither the order the modes come in nor the
-      # hand that goes first is confounded with anything else.
+          - {mode: echo, hand: right, phase: pass1}
+          - {mode: pattern, hand: right, phase: pass1}
+          - {mode: force_pilot, hand: right, phase: pass2,
+             rest_before: true}
+          - {mode: chords, hand: right, phase: pass2}
+          - {mode: reaction, hand: right, phase: pass2}
+      # Code number mod 4 -> which order. With one hand there is no
+      # hand order left to cross, so two cells would do; four keep the
+      # code-to-cell rule data/intake.cell_for applies everywhere.
       cells:
-        1: {order: A, hand1: dominant}
-        2: {order: B, hand1: dominant}
-        3: {order: A, hand1: non_dominant}
-        0: {order: B, hand1: non_dominant}
+        1: {order: A}
+        2: {order: B}
+        3: {order: A}
+        0: {order: B}
       # Short forms and frozen ladders, exact keys, applied on top of
       # whatever config is loaded while the battery runs. Every key is
       # a count, a rest or a frozen ladder rung: nothing here moves a
       # threshold, a window or a scoring rule, so a battery block and
       # a free block are the same task, measured the same way, from
-      # fewer trials.
+      # fewer trials. A mode played in both passes plays the same
+      # counts both times, or its two scores would not be comparable.
       overrides:
         reaction:
           sub_mode: choice
-          # 25 in the free-play config. The block is played twice in
-          # the sitting, once per hand, and 20 trials per hand is what
-          # the measured clock fits inside the 45 minute target. It
-          # costs split-half precision inside a block, which the
-          # analysis states. Going back to 25 was tried on 23 September
-          # 2026: scripts/measure_battery.py over 32 sittings on the
-          # four cells put the median at 44.7 to 45.1 minutes and 15 of
-          # the 32 over the budget with a fast model hand, so it stays
-          # at 20.
           block_trials: 20
           response_windows_s: [2.0]   # one rung: the window never moves
         force_pilot:
           passes: 1                   # one climb of the fixed ladder
         chords:
-          subblocks: 3                # within, within, cross
+          # 40 chords a block, both passes (60 in the one-pass design):
+          # two blocks of chords are what the sitting can afford.
+          subblocks: 2
           trials_per_subblock: 20
           sync_windows_ms: [150]      # one rung: W fixed at 150 ms
         buzz_hunt:
-          loc_trials_per_hand: 12     # 16 in the free-play config; 12
-          distractor_trials_per_hand: 0   # per hand is 24 localisation
-          span_trials: 4                  # trials in the one block
+          loc_trials_per_hand: 16     # one hand now: 16 localisation
+          distractor_trials_per_hand: 0   # trials in the block
+          span_trials: 4
           gap_trials_per_hand: 0
           catch_rate: 0.1
         pattern:
@@ -1985,15 +1916,12 @@ protocol:
           random_block_trials: 32
         rhythm:
           difficulty: medium
-          # The one cue key in the list, and not a scoring rule: the
-          # buzz sits ON the beat for the study block. Free play leads
-          # the beat by 350 ms and adapts to each player, which helps
-          # a player who reacts to the buzz but makes the block a
-          # reaction task with a per-person stimulus. Rh1 and Rh2 are
-          # synchronisation effects (taps lead a regular beat, Repp
-          # 2005), measured against a pacing signal that is the same
-          # for everybody, so here the music, the falling note and
-          # the buzz all land on the beat.
+          # The buzz sits ON the beat for the study block. Free play
+          # leads the beat by 350 ms and adapts to each player, which
+          # makes the block a reaction task with a per-person
+          # stimulus. Rh1 and Rh2 are synchronisation effects (taps
+          # lead a regular beat, Repp 2005), measured against a pacing
+          # signal that is the same for everybody.
           tactile_mode: on_beat
         echo:
           games: 2                    # best of two, and their spread

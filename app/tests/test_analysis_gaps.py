@@ -556,18 +556,25 @@ class DroppedCheckTests(unittest.TestCase):
         self.assertIn("Simon rule", row["criterion"])
 
     def test_the_two_repeat_rows_keep_their_own_reason(self) -> None:
-        for cid in ("R3", "P2"):
+        # P2 is always dropped; R3 only on a tree with no second
+        # reaction block (the two-pass battery plays it twice).
+        for cid, says in (("R3", "repeats no reaction block"),
+                          ("P2", "no block is repeated")):
             row = self.ra._dropped_row(cid)
             self.assertEqual(row["verdict"], "dropped")
             self.assertIn("played twice", row["detail"])
-            self.assertIn("no block is repeated", row["criterion"])
+            self.assertIn(says, row["criterion"])
 
     def test_the_design_document_carries_the_same_three(self) -> None:
         doc = (ROOT / "docs" / "research"
                / "healthy_baseline_study.txt").read_text(encoding="utf-8")
         self.assertIn("E2  echo,", doc)
         self.assertIn("E2 DROPPED", doc)
-        self.assertIn("Three rows carry the word DROPPED", doc)
+        self.assertIn("Rows carry the word DROPPED", doc)
+        # The one-board rows are named with their reason too.
+        for cid in ("R2  reaction", "C4  chords", "M1, M2  mirror",
+                    "E3  echo"):
+            self.assertIn(cid, doc)
         # The survivor list must not still claim E2.
         self.assertNotIn("B1 B2 B3 B4, E1 E2", doc)
 
@@ -908,10 +915,12 @@ class SittingSpreadTests(unittest.TestCase):
         with contextlib.redirect_stdout(buf):
             got = mb.one_sitting(args, 1, quiet=True)
         self.assertIsNotNone(got)
-        self.assertEqual(got["blocks"], 11)
+        self.assertEqual(got["blocks"], 12)
         self.assertGreater(got["total_min"], 20.0)
         self.assertLess(got["total_min"], got["budget_min"] + 5.0)
-        self.assertEqual(len(got["by_mode_min"]), 10)
+        # Nine one-hand modes; pass 2 replays three of them.
+        self.assertEqual(len(got["by_mode_min"]), 9)
+        self.assertEqual(len(got["by_block_min"]), 12)
         # Quiet means quiet: the per-block lines belong to the first
         # sitting only, or a --repeats 30 run is 330 lines of noise.
         self.assertEqual(buf.getvalue().strip(), "")
@@ -950,7 +959,5 @@ class SittingSpreadTests(unittest.TestCase):
         doc = (ROOT / "docs" / "research"
                / "healthy_baseline_study.txt").read_text(encoding="utf-8")
         self.assertIn("One sitting is one draw", doc)
-        self.assertIn("43.11 to", doc)
-        # And the old single number is still there as the record of
-        # what was measured on the day it was measured.
-        self.assertIn("median 44.4", doc)
+        self.assertIn("43.13 to 44.90", doc)
+        self.assertIn("48 in all", doc)

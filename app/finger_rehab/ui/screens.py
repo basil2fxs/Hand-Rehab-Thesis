@@ -705,12 +705,13 @@ class TitleScreen(Screen):
     INFO_STEPS = [
         "1. Enter the participant code (or name), age and main hand,",
         "      then press LOG IN.",
-        "2. A study visit presses PLAY ALL on the hub. It runs eleven",
-        "      blocks, every mode once, in the order set by the code:",
-        "      Reaction (once per hand), Mirror, Rhythm, Echo, Force Pilot,",
-        "      Chords, Buzz Hunt, Muscle Memory, Adaptive, Syllables.",
+        "2. A study visit presses PLAY ALL on the hub. It runs twelve",
+        "      blocks on the right hand, in the order set by the code:",
+        "      Reaction, Rhythm, Echo, Force Pilot, Chords, Buzz Hunt,",
+        "      Muscle Memory, Adaptive, Syllables, then after a rest",
+        "      Reaction, Force Pilot and Chords again.",
         "3. Outside a study visit, pick modes from the hub as prescribed.",
-        "      Mirror is 32 trials, both hands together; Adaptive is 40.",
+        "      Mirror is 32 trials and needs two boards; Adaptive is 40.",
         "4. Finish every block. Quitting early leaves gaps in the data.",
     ]
     INFO_FOOTER = ("About 45 minutes on the rig for the full PLAY ALL "
@@ -6269,6 +6270,11 @@ class ResultsScreen(Screen):
         role = {"hand1": "hand 1", "hand2": "hand 2",
                 "dominant": "main hand",
                 "non_dominant": "other hand"}.get(requested, "")
+        # A two-pass battery names the pass, so the RA always knows
+        # which half of the sitting the block belongs to.
+        phase = str(step.get("phase") or "")
+        if not role and phase.startswith("pass") and phase[4:].isdigit():
+            role = f"pass {phase[4:]}"
         reason = f"Play all step {pos}" + (f", {role}" if role else "")
         wait = ""
         try:

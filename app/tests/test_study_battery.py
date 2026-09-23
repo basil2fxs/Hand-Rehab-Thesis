@@ -1,17 +1,20 @@
 """The study battery: the fixed block order from the healthy baseline
 design, run through the real engine's protocol runner.
 
-The design is ONE PASS in one sitting, eleven blocks, every mode
-played once. Nothing here may pin a second pass, a pre/post pair or a
-test-retest quantity back into the battery.
+The design runs on ONE board, the right-hand device, in one sitting
+of two passes: pass 1 plays the nine one-hand modes once, a rest,
+then pass 2 plays Reaction, Force Pilot and Chords again for the
+within-session test-retest (Data Collection Plan, 24 September 2026).
+Every block is the right hand, whatever the main hand; Mirror is not
+played.
 
   1. game/battery.py: the plan for a code (cell, order, hands), the
      override snapshot and its restore.
   2. The engine end to end, real blocks in a temp sessions tree: even
      and odd codes get their orders, every block's metadata carries
-     the battery id and position, the short-form keys reach the mode
-     objects, the config is put back at the end, the strip and NEXT
-     UP read the same state, and an abandon or a skip behaves.
+     the battery id, position and pass, the short-form keys reach the
+     mode objects, the config is put back at the end, the strip and
+     NEXT UP read the same state, and an abandon or a skip behaves.
   3. What a keyboard rig can and cannot run.
 """
 from __future__ import annotations
@@ -29,40 +32,54 @@ os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
 
-# ONE PASS in one sitting: eleven blocks, ten modes, every mode
-# played once and reaction twice because the two hands are two
-# different tasks. Order A is the plan file's measured block table;
-# order B plays the same eleven with the force and vibration work
-# first. Data Collection Plan.md of 4 September 2026, and the
-# amendment at the top of docs/research/healthy_baseline_study.txt.
-ORDER_A = ["reaction", "reaction", "mirror", "rhythm", "echo",
-           "force_pilot", "chords", "buzz_hunt", "pattern",
-           "adaptive", "syllables"]
-ORDER_B = ["force_pilot", "chords", "buzz_hunt", "adaptive",
-           "syllables", "reaction", "reaction", "mirror", "rhythm",
-           "echo", "pattern"]
-N_STEPS = 11
-# With one pass there is nothing left for the phase word to separate,
-# so every step carries the same one. A test that finds pre, mid or
-# post here means the two-visit design has crept back in.
-PHASE = "battery"
-PHASES = [PHASE] * N_STEPS
+# One board, two passes. Pass 1 is the nine one-hand modes; pass 2 is
+# the reliability core in the order pass 1 played it. Order A starts
+# with the timing work, order B with the force and vibration work.
+PASS1_A = ["reaction", "rhythm", "echo", "force_pilot", "chords",
+           "buzz_hunt", "pattern", "adaptive", "syllables"]
+PASS1_B = ["force_pilot", "chords", "buzz_hunt", "adaptive",
+           "syllables", "reaction", "rhythm", "echo", "pattern"]
+ORDER_A = PASS1_A + ["reaction", "force_pilot", "chords"]
+ORDER_B = PASS1_B + ["force_pilot", "chords", "reaction"]
+PASS2_MODES = {"reaction", "force_pilot", "chords"}
+N_STEPS = 12
+N_PASS1 = 9
+# The phase word separates the passes. A test that finds "battery",
+# pre, mid or post here means an older design has crept back in.
+PHASES = ["pass1"] * N_PASS1 + ["pass2"] * (N_STEPS - N_PASS1)
 BUDGET_MIN = 45.0
 HARD_STOP_MIN = 50.0
-BATTERY_ID = "healthy_one_pass_v1"
+BATTERY_ID = "healthy_one_hand_v2"
+# The step after which the rest sits: the first block of pass 2.
+REST_POSITION = N_PASS1 + 1
 
 
 class _Rig:
-    """A two-board rig that never delivers a sample: every mode is
-    playable, nothing ever ticks. Enough for a block to open, write
-    its metadata and close through the real finish path."""
+    """The study rig: ONE board, the right-hand device, that never
+    delivers a sample. Every one-hand mode is playable, nothing ever
+    ticks: enough for a block to open, write its metadata and close
+    through the real finish path. A test that needs two boards sets
+    two entries in `hands`."""
     provides_samples = True
     is_connected = True
-    name = "fake-two-board"
-    hand_modes_available = {"right", "left", "both"}
+    name = "fake-rig"
 
     def __init__(self) -> None:
+        from types import SimpleNamespace
         self.commands: list[str] = []
+        self.hands = [SimpleNamespace(hand="right", port="/dev/fake0")]
+
+    @property
+    def hand_modes_available(self) -> set[str]:
+        if len(self.hands) >= 2:
+            return {"right", "left", "both"}
+        return {h.hand for h in self.hands}
+
+    def relabel_single(self, hand: str) -> bool:
+        if len(self.hands) != 1 or hand not in ("left", "right"):
+            return False
+        self.hands[0].hand = hand
+        return True
 
     def start(self) -> None: ...
     def stop(self) -> None: ...
@@ -86,40 +103,29 @@ class PlanTests(unittest.TestCase):
     def test_the_four_cells_give_the_design_orders(self) -> None:
         from finger_rehab.game.battery import build_plan
         cfg = self._cfg()
-        cases = {
-            # code: (order, first hand for a right-dominant person)
-            "P01": (ORDER_A, "right"), "P02": (ORDER_B, "right"),
-            "P03": (ORDER_A, "left"), "P04": (ORDER_B, "left"),
-            "P05": (ORDER_A, "right"), "P12": (ORDER_B, "left"),
-        }
-        for code, (order, first) in cases.items():
+        cases = {"P01": ORDER_A, "P02": ORDER_B, "P03": ORDER_A,
+                 "P04": ORDER_B, "P05": ORDER_A, "P12": ORDER_B}
+        for code, order in cases.items():
             plan = build_plan(cfg, code, "right")
             self.assertEqual([s.mode for s in plan.steps], order, code)
             self.assertEqual(plan.id, BATTERY_ID)
             self.assertEqual(len(plan.steps), N_STEPS)
             self.assertEqual([s.phase for s in plan.steps], PHASES, code)
-            hand1 = next(s for s in plan.steps
-                         if s.hand_requested == "hand1")
-            hand2 = next(s for s in plan.steps
-                         if s.hand_requested == "hand2")
-            self.assertEqual(hand1.hand, first, code)
-            self.assertNotEqual(hand1.hand, hand2.hand)
-            for s in plan.steps:
-                if s.hand_requested == "both":
-                    self.assertEqual(s.hand, "both")
+            self.assertEqual({s.hand for s in plan.steps}, {"right"}, code)
             self.assertEqual([s.position for s in plan.steps],
                              list(range(1, N_STEPS + 1)))
-            # All ten modes, and no mode played twice except reaction,
-            # whose two goes are the two hands.
             modes = [s.mode for s in plan.steps]
-            self.assertEqual(len(set(modes)), 10, code)
-            twice = [m for m in set(modes) if modes.count(m) > 1]
-            self.assertEqual(twice, ["reaction"], code)
-            self.assertEqual({s.hand for s in plan.steps
-                              if s.mode == "reaction"},
-                             {"left", "right"}, code)
+            pass1, pass2 = modes[:N_PASS1], modes[N_PASS1:]
+            # Nine one-hand modes once, no Mirror: it needs two boards.
+            self.assertEqual(len(set(pass1)), N_PASS1, code)
+            self.assertNotIn("mirror", modes)
+            # Pass 2 is the reliability core, in pass 1's order, so
+            # each mode's gap between its two blocks is as even as
+            # the order allows.
+            self.assertEqual(set(pass2), PASS2_MODES, code)
+            self.assertEqual(pass2, [m for m in pass1 if m in PASS2_MODES])
 
-    def test_both_orders_play_the_same_eleven_blocks(self) -> None:
+    def test_both_orders_play_the_same_blocks(self) -> None:
         """Counterbalancing moves a mode's position in the sitting and
         nothing else: the same eleven blocks on the same hands, so no
         cell gets more or less of anything than another."""
@@ -134,18 +140,16 @@ class PlanTests(unittest.TestCase):
         self.assertNotEqual([s.mode for s in a.steps],
                             [s.mode for s in b.steps])
 
-    def test_hands_follow_the_dominant_hand(self) -> None:
+    def test_a_left_hander_plays_the_right_hand_too(self) -> None:
+        # The device is the right-hand chassis: the main hand changes
+        # what the block means (dominant or not), never which hand.
         from finger_rehab.game.battery import build_plan
         cfg = self._cfg()
-        plan = build_plan(cfg, "P03", "left")   # non-dominant first
-        hand1 = next(s for s in plan.steps if s.hand_requested == "hand1")
-        self.assertEqual(hand1.hand, "right")
-        # A step asking for the dominant hand gets it whichever way
-        # the counterbalanced pair went.
-        pattern = next(s for s in plan.steps if s.mode == "pattern")
-        self.assertEqual(pattern.hand, "left")
-        self.assertEqual(plan.cell["hand_first"], "non_dominant")
-        self.assertEqual(plan.cell["mode_order"], "A")
+        for dom in ("left", "right"):
+            plan = build_plan(cfg, "P03", dom)
+            self.assertEqual({s.hand for s in plan.steps}, {"right"}, dom)
+            self.assertEqual(plan.dominant_hand, dom)
+            self.assertEqual(plan.cell["mode_order"], "A")
 
     def test_the_stretch_sits_at_the_set_boundary(self) -> None:
         from finger_rehab.game.battery import build_plan
@@ -159,22 +163,22 @@ class PlanTests(unittest.TestCase):
         self.assertEqual(a.stretch_s, 60.0)
         self.assertEqual(a.budget_min, BUDGET_MIN)
         self.assertEqual(a.hard_stop_min, HARD_STOP_MIN)
-        # About a third of the way in by measured minutes: before the
-        # sixth block in A, before the second in B (which is straight
-        # off Force Pilot's seven minutes of sustained holding).
+        # In pass 1: before the first Force Pilot in A, and in B
+        # straight after it, before Chords.
         self.assertEqual([s.position for s in a.steps
-                          if s.stretch_before_s], [6])
+                          if s.stretch_before_s], [4])
         self.assertEqual([s.position for s in b.steps
                           if s.stretch_before_s], [2])
 
-    def test_one_rest_sits_halfway_through_the_sitting(self) -> None:
-        """One pass, one rest, about halfway by measured minutes in
-        both orders. The rest holds the button for its floor and
+    def test_one_rest_sits_between_the_passes(self) -> None:
+        """One rest, and it is the gap between the passes: the
+        test-retest interval. It holds the button for its floor and
         counts down to its full length."""
         from finger_rehab.game.battery import build_plan
         cfg = self._cfg()
-        for code, position, mode in (("P01", 7, "chords"),
-                                     ("P02", 6, "reaction")):
+        for code, position, mode in (("P01", REST_POSITION, "reaction"),
+                                     ("P02", REST_POSITION,
+                                      "force_pilot")):
             plan = build_plan(cfg, code, "right")
             rests = [s for s in plan.steps if s.rest_before_s]
             self.assertEqual([s.position for s in rests], [position], code)
@@ -187,6 +191,7 @@ class PlanTests(unittest.TestCase):
                 self.assertEqual(s.stretch_before_s, 0.0)
             self.assertEqual(plan.rest_s, 180.0)
             self.assertEqual(plan.rest_min_s, 60.0)
+            self.assertEqual(rests[0].phase, "pass2")
 
     def test_rhythm_carries_its_pinned_track(self) -> None:
         from finger_rehab.game.battery import build_plan, find_track
@@ -350,36 +355,49 @@ class _BatteryHarness(unittest.TestCase):
 
 
 class BatteryOrderTests(_BatteryHarness):
-    def test_odd_code_runs_order_a_dominant_first(self) -> None:
+    def test_odd_code_runs_order_a(self) -> None:
         self._stub_rhythm()
         eng = self._engine(_Rig())
         self._login(eng, "P01", "right")
         played = self._run_battery(eng)
         self.assertEqual([m for m, _h, _f in played], ORDER_A)
-        self.assertEqual([h for _m, h, _f in played],
-                         ["right", "left", "both", "both", "both", "both",
-                          "both", "both", "right", "right", "both"])
+        self.assertEqual({h for _m, h, _f in played}, {"right"})
 
-    def test_even_code_runs_order_b_non_dominant_first(self) -> None:
+    def test_even_code_runs_order_b(self) -> None:
         self._stub_rhythm()
         eng = self._engine(_Rig())
         self._login(eng, "P04", "right")
         played = self._run_battery(eng)
         self.assertEqual([m for m, _h, _f in played], ORDER_B)
-        self.assertEqual([h for _m, h, _f in played],
-                         ["both", "both", "both", "right", "both", "left",
-                          "right", "both", "both", "both", "right"])
+        self.assertEqual({h for _m, h, _f in played}, {"right"})
 
-    def test_left_dominant_flips_the_hands(self) -> None:
+    def test_a_left_hander_plays_the_right_hand(self) -> None:
         self._stub_rhythm()
         eng = self._engine(_Rig())
-        self._login(eng, "P02", "left")     # B, dominant first
+        self._login(eng, "P02", "left")
         played = self._run_battery(eng)
         self.assertEqual([m for m, _h, _f in played], ORDER_B)
-        # The two reaction blocks, dominant hand first.
-        self.assertEqual([h for _m, h, _f in played][5:7], ["left", "right"])
-        # And pattern, which asks for the dominant hand by name.
-        self.assertEqual(played[-1][1], "left")
+        self.assertEqual({h for _m, h, _f in played}, {"right"})
+        meta = json.loads((played[0][2] / "metadata.json").read_text(
+            encoding="utf-8"))
+        self.assertEqual(meta["dominant_hand"], "left")
+        self.assertEqual(meta["hand"], "right")
+
+    def test_a_board_picked_as_left_is_put_on_the_right(self) -> None:
+        # The RA picked Left hand at login on the one board. The
+        # device is still the right-hand chassis, so Play all renames
+        # the board rather than refusing.
+        self._stub_rhythm()
+        rig = _Rig()
+        rig.hands[0].hand = "left"
+        eng = self._engine(rig)
+        self._login(eng, "P01", "right")
+        self.assertEqual(eng.battery_available(), (True, ""))
+        self.assertTrue(eng.start_battery())
+        self.assertEqual(rig.hands[0].hand, "right")
+        self.assertEqual(eng.session_hand(), "right")
+        self.assertEqual((eng.current_block, eng.hand_mode),
+                         ("reaction", "right"))
 
     def test_every_block_carries_the_battery_stamp(self) -> None:
         self._stub_rhythm()
@@ -397,7 +415,6 @@ class BatteryOrderTests(_BatteryHarness):
             self.assertEqual(bat["phase"], PHASES[pos - 1], mode)
             self.assertEqual(bat["step"], f"{mode}_{hand}")
             self.assertEqual(bat["cell"]["mode_order"], "A")
-            self.assertEqual(bat["cell"]["hand_first"], "non_dominant")
             self.assertEqual(meta["participant"], "P03")
             self.assertEqual(meta["visit"], "1")
             self.assertEqual(meta["dominant_hand"], "right")
@@ -409,8 +426,9 @@ class BatteryOrderTests(_BatteryHarness):
             snap = meta["config_snapshot"]
             self.assertEqual(snap["reaction"]["response_windows_s"], [2.0])
             self.assertEqual(snap["force_pilot"]["passes"], 1)
+            self.assertEqual(snap["chords"]["subblocks"], 2)
             self.assertEqual(snap["syllables"]["words_per_block"], 12)
-        # And the trial CSV phase column names the battery.
+        # The phase column is cleared once the battery ends.
         self.assertEqual(eng._current_phase, "")
         progress = eng.battery_progress()
         self.assertTrue(progress["finished"])
@@ -441,7 +459,7 @@ class BatteryOrderTests(_BatteryHarness):
         self._login(eng, "P01", "right")
         self.assertTrue(eng.start_battery())
         self.assertEqual(eng.cfg.get("reaction.response_windows_s"), [2.0])
-        self.assertEqual(eng.cfg.get("chords.subblocks"), 3)
+        self.assertEqual(eng.cfg.get("chords.subblocks"), 2)
         self._run_battery_from_running(eng)
         self.assertEqual(eng.cfg.get("reaction.response_windows_s"),
                          [2.0, 1.5, 1.2])
@@ -497,8 +515,8 @@ class ShortFormTests(_BatteryHarness):
         self.assertEqual(eng.score_cfg.perfect_ms, 100)
 
     def test_force_pilot_flies_the_whole_wave_ladder(self) -> None:
-        # Nothing to freeze any more: the ladder is fixed by design,
-        # so the battery runs it once, both hands, 24 runs.
+        # Nothing to freeze: the ladder is fixed by design, so the
+        # battery runs it once, on the one hand, 12 runs.
         self._stub_rhythm()
         eng = self._engine(_Rig())
         self._login(eng, "P01", "right")
@@ -506,7 +524,7 @@ class ShortFormTests(_BatteryHarness):
         fp = self._step_to(eng, "force_pilot")
         self.assertEqual(fp.passes, 1)
         self.assertEqual([w.lvl for w in fp.levels], list(range(1, 13)))
-        self.assertEqual(fp.total_runs, 24)     # 12 levels x two hands
+        self.assertEqual(fp.total_runs, 12)
 
     def test_chords_buzz_hunt_and_pattern_counts(self) -> None:
         self._stub_rhythm()
@@ -514,13 +532,14 @@ class ShortFormTests(_BatteryHarness):
         self._login(eng, "P02", "right")
         eng.start_battery()
         ch = self._step_to(eng, "chords")
-        self.assertEqual(ch.subblocks, 3)
+        self.assertEqual(ch.subblocks, 2)          # 40 chords, both passes
         self.assertEqual(ch.trials_per_subblock, 20)
         self.assertEqual(ch.max_level, 0)          # one window: no ladder
         self.assertEqual(ch.windows_ms, [150.0])
+        self.assertFalse(ch.bilateral)
         bh = self._step_to(eng, "buzz_hunt")
         plan = list(bh._stage_plan)
-        self.assertEqual(plan.count("loc"), 24)    # 12 per hand, both
+        self.assertEqual(plan.count("loc"), 16)    # one hand
         self.assertEqual(plan.count("span"), 4)
         self.assertEqual(plan.count("dis"), 0)
         self.assertEqual(plan.count("gap"), 0)
@@ -591,7 +610,7 @@ class BatteryFlowTests(_BatteryHarness):
         eng.finish_block()
         pending = eng.pending_protocol_step()
         self.assertEqual((pending["mode"], pending["position"]),
-                         ("reaction", 2))
+                         ("rhythm", 2))
 
     def test_end_session_cancels_the_battery_and_restores(self) -> None:
         self._stub_rhythm()
@@ -625,11 +644,11 @@ class BatteryFlowTests(_BatteryHarness):
         results = eng._screens["results"]
         self.assertIs(eng.screen_obj, results)
         key, hand = results._next_up_plan()
-        self.assertEqual((key, hand), ("reaction", "left"))
+        self.assertEqual((key, hand), ("rhythm", "right"))
         heading, pill, stretch = results._battery_card_lines(
             eng.pending_protocol_step())
-        self.assertEqual(heading, "PLAY ALL  step 2 of 11")
-        self.assertEqual(pill, "Play all step 2, hand 2")
+        self.assertEqual(heading, "PLAY ALL  step 2 of 12")
+        self.assertEqual(pill, "Play all step 2, pass 1")
         self.assertEqual(stretch, "")
         results.draw(pygame.Surface((1280, 800)))
         # N takes the step.
@@ -637,10 +656,10 @@ class BatteryFlowTests(_BatteryHarness):
             pygame.KEYDOWN, {"key": pygame.K_n, "mod": 0, "unicode": "n",
                              "scancode": 0}))
         self.assertEqual((eng.current_block, eng.hand_mode),
-                         ("reaction", "left"))
+                         ("rhythm", "right"))
         eng.finish_block()
         _ok, label, _reason = hub._battery_state()
-        self.assertEqual(label, "Play all 2/11")
+        self.assertEqual(label, "Play all 2/12")
         hub.draw(pygame.Surface((1280, 800)))
 
     def test_the_stretch_step_says_so_on_the_card(self) -> None:
@@ -656,24 +675,23 @@ class BatteryFlowTests(_BatteryHarness):
         results = eng._screens["results"]
         heading, _pill, stretch = results._battery_card_lines(
             eng.pending_protocol_step())
-        self.assertIn("step 6 of 11", heading)
+        self.assertIn("step 4 of 12", heading)
         self.assertIn("Stretch", stretch)
 
-    def test_play_all_calibrates_every_hand_before_the_first_block(
+    def test_play_all_calibrates_the_device_hand_before_the_first_block(
             self) -> None:
-        """The login calibrates only the hand picked for the session;
-        the study plays both. Play all asks for the rest up front
-        rather than stopping at the first other-hand block."""
+        """Every block plays the right hand, so Play all calibrates the
+        right hand before the first block, whatever the login did."""
         eng = self._engine(_Rig())
         eng.cfg.data["session"]["calibration_dir"] = str(
             self.root / "calibration")
-        eng.begin_session("P07", "25", dominant_hand="right", visit="1")
+        eng.begin_session("P07", "25", dominant_hand="left", visit="1")
         self.assertTrue(eng.start_battery())
-        self.assertEqual(eng.session_hand(), "both")
+        self.assertEqual(eng.session_hand(), "right")
         self.assertIs(eng.screen_obj, eng._screens["quick_cal"])
         self.assertIsNone(eng.mode, "a block started before calibration")
         hands = set(getattr(eng._screens["quick_cal"], "hands", []) or [])
-        self.assertEqual(hands, {"left", "right"})
+        self.assertEqual(hands, {"right"})
 
     def test_play_anyway_is_not_asked_again_by_play_all(self) -> None:
         eng = self._engine(_Rig())
@@ -743,8 +761,9 @@ class RestStepTests(_BatteryHarness):
         self._stub_rhythm()
         self._login(eng, "P01", "right")
         eng.start_battery()
-        step = self._advance_to(eng, 7)
-        self.assertEqual(step["mode"], "chords")
+        step = self._advance_to(eng, REST_POSITION)
+        self.assertEqual(step["mode"], "reaction")
+        self.assertEqual(step["phase"], "pass2")
         self.assertEqual(step["rest_s"], 180.0)
         self.assertEqual(step["rest_min_s"], 60.0)
         return step, eng._screens["results"]
@@ -761,7 +780,7 @@ class RestStepTests(_BatteryHarness):
             heading, _pill, wait = results._battery_card_lines(step)
             self.assertEqual(wait, line)
             self.assertEqual(results._rest_lock(step)[0], held)
-        self.assertIn("step 7 of 11", heading)
+        self.assertIn("step 10 of 12", heading)
 
     def test_n_is_refused_until_the_floor_then_starts_early(self) -> None:
         import pygame
@@ -775,7 +794,8 @@ class RestStepTests(_BatteryHarness):
         self.assertEqual(results.next_btn.label, "Rest: 2:55")
         results.handle_event(press)
         self.assertFalse(eng.block_is_running())
-        self.assertEqual(eng.pending_protocol_step()["position"], 7)
+        self.assertEqual(eng.pending_protocol_step()["position"],
+                         REST_POSITION)
         # Past the floor the button comes back and says the rest can
         # be cut short.
         eng._step_card_t = time.perf_counter() - 70.0
@@ -783,7 +803,7 @@ class RestStepTests(_BatteryHarness):
         self.assertTrue(results.next_btn.label.startswith("Start now"))
         results.handle_event(press)
         self.assertTrue(eng.block_is_running())
-        self.assertEqual(eng.current_block, "chords")
+        self.assertEqual(eng.current_block, "reaction")
 
     def test_the_rest_actually_taken_is_logged(self) -> None:
         eng = self._engine(_Rig())
@@ -793,7 +813,7 @@ class RestStepTests(_BatteryHarness):
         folder = Path(eng.session_paths.root)
         eng.finish_block()
         entry = next(r for r in eng.battery_progress()["log"]
-                     if r["position"] == 7)
+                     if r["position"] == REST_POSITION)
         self.assertEqual(entry["rest_s"], 180.0)
         self.assertGreaterEqual(entry["rest_taken_s"], 95.0)
         self.assertLess(entry["rest_taken_s"], 120.0)
@@ -1003,7 +1023,7 @@ class KeyboardRigTests(_BatteryHarness):
         self._login(eng, "P01", "right")
         played = self._run_battery(eng)
         # Chords plays on the keys; the two sensor modes do not, so
-        # a keyboard rig gets nine of the eleven blocks.
+        # a keyboard rig gets nine of the twelve blocks.
         self.assertEqual([m for m, _h, _f in played],
                          [m for m in ORDER_A
                           if m not in ("force_pilot", "buzz_hunt")])
@@ -1012,13 +1032,14 @@ class KeyboardRigTests(_BatteryHarness):
                    if r["status"] == "skipped"]
         self.assertEqual(skipped, [
             ("force_pilot", "needs sensor hardware"),
-            ("buzz_hunt", "needs sensor hardware")])
+            ("buzz_hunt", "needs sensor hardware"),
+            ("force_pilot", "needs sensor hardware")])
         self.assertTrue(eng.battery_progress()["finished"])
         # Position numbering is the design's, skips included.
         meta = json.loads((played[-1][2] / "metadata.json").read_text(
             encoding="utf-8"))
         self.assertEqual(meta["battery"]["position"], N_STEPS)
-        self.assertEqual(meta["battery"]["phase"], PHASE)
+        self.assertEqual(meta["battery"]["phase"], "pass2")
 
 
 class HandoverProseTests(unittest.TestCase):
@@ -1044,18 +1065,20 @@ class HandoverProseTests(unittest.TestCase):
         for where, text in self._texts().items():
             flat = " ".join(text.split())
             with self.subTest(where=where):
-                self.assertIn("Section 1 of that document", flat)
-                self.assertIn("Sections 2 to 5 are written for", flat)
+                self.assertIn("docs/research/healthy_baseline_study.txt",
+                              flat)
+                self.assertIn("ONE board", flat.replace("ONE-BOARD",
+                                                        "ONE board"))
                 # The half-replaced form, and the doubled clause it
-                # ran into.
+                # once ran into.
                 self.assertNotIn("Sections 2, 4", flat)
-                self.assertEqual(flat.count("Sections 2 to 5"), 1)
+                self.assertEqual(flat.count("24 September 2026"), 1)
 
     def test_the_docstring_sentence_is_whole(self) -> None:
         from finger_rehab.game import battery
         flat = " ".join((battery.__doc__ or "").split())
-        self.assertIn("Nothing in this module knows about passes or "
-                      "phases", flat)
+        self.assertIn("Nothing in this module knows about passes "
+                      "beyond copying the preset's phase word", flat)
         self.assertNotIn("this one-pass design. module knows", flat)
 
 

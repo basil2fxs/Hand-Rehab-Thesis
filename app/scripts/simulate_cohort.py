@@ -8,18 +8,18 @@ the battery runner are the shipped ones (scripts/measure_battery.py
 supplies the model hand on a fake 200 Hz sensor stream and the
 simulated clock); only the person is synthetic.
 
-The design is ONE PASS: eleven blocks, every mode played once, no
-repeated block anywhere in the sitting. There is therefore no
-between-block change to inject and none to recover: a cohort built
-here cannot be used to compute ICC, SEM, MDC95 or any pre-versus-post
-contrast, because the data those need was never collected. What the
-cohort is for is the normative table, the paired dominant versus
-non-dominant comparison, the known-effect checks and the feasibility
-numbers.
+The design runs on ONE board, the right-hand device, in two passes:
+pass 1 plays the nine one-hand modes once, pass 2 replays Reaction,
+Force Pilot and Chords after the rest. Every code is a person with
+fixed traits and every block draws fresh trial noise around them, so
+pass 1 against pass 2 gives the reliability chapter something honest
+to recover: how much of a block's score is the person and how much is
+the block. A left-hander (about one in eight here) plays the right
+hand as their non-dominant hand and is slower for it.
 
-The one change a single pass can still show is WITHIN a block: trials
-late in a block against trials early in the same block. Each code
-carries latent skill plus a per-person within-block drift:
+The change inside a block is the other thing it shows: trials late in
+a block against trials early in the same block. Each code carries
+latent skill plus a per-person within-block drift:
 
   reaction   a per-person base RT, the dominant hand 25 ms faster,
              45 ms trial-to-trial noise, and a small within-block
@@ -43,10 +43,9 @@ carries latent skill plus a per-person within-block drift:
   syllables  a fluent adult reader near ceiling, with a small
              per-person share of sets answered after the prompt buzz
   adaptive   the reaction model, so the pace climbs
-  force      a per-person tracking lag of 120 to 260 ms, the same on
-             both hands; the hold noise is drawn PER BLOCK with no
-             person part, so the hand contrast on force error has
-             nothing injected and stays a negative control
+  force      a per-person tracking lag of 120 to 260 ms and a
+             per-person steadiness, with the hold noise jittered by
+             up to 15 percent from block to block
 
 The within-block drift is deliberately small and it decays, because
 that is what a warm-up looks like: a participant settling into a task
@@ -154,6 +153,9 @@ def make_truth(n: int, seed: int) -> dict[str, dict]:
             # measurement noise supplies the people who look as
             # though they did.
             "warmup_s": max(0.0, rng.gauss(WITHIN_BLOCK_WARMUP_S, 0.008)),
+            # Force steadiness: the hold noise a hand carries from
+            # block to block, a trait with a little jitter on top.
+            "force_sd": rng.uniform(0.8, 1.9),
         }
     return truth
 
@@ -544,12 +546,11 @@ def play_session(code: str, truth: dict, data_dir: Path,
             mode = str(eng.current_block)
             hand_mode = str(eng.hand_mode)
             step = dict(eng._protocol_current or {})
-            # Force noise is redrawn for every block with no person
-            # part, so there is no latent steadiness behind the force
-            # error a block reports. It is the one metric in the
-            # cohort with nothing to recover, which is what makes it
-            # useful as a negative control.
-            hand.noise_sd = noise_rng.uniform(0.8, 1.9)
+            # The person's steadiness, jittered per block: the block
+            # score is part trait and part that block, which is what
+            # the reliability chapter has to separate.
+            hand.noise_sd = float(truth.get("force_sd", 1.35)) * \
+                noise_rng.uniform(0.85, 1.15)
             secs = mb.run_block(eng, rig, hand, who, clock, fps, cap_s)
             summary = eng.session.block_summary or {}
             rows.append({

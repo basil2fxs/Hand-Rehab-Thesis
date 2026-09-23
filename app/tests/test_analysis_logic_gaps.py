@@ -967,18 +967,20 @@ class DeadColumnTests(unittest.TestCase):
         self.assertEqual(self.ra.normalise_hand("L"), "left")
         self.assertIsNone(self.ra.normalise_hand("X"))
 
-    def test_the_icc_helpers_are_kept_and_not_called(self) -> None:
-        """An ICC is a test-retest statistic and this design measures
-        every block once. Both helpers are documented as kept for the
-        next study; nothing may reach for one on single-sitting data."""
+    def test_the_icc_is_computed_only_on_the_paired_passes(self) -> None:
+        """An ICC is a test-retest statistic. The two-pass battery gives
+        it one honest home, pass 1 against pass 2 in the reliability
+        chapter; nothing else may reach for one, least of all on a
+        single block."""
         code = "".join(json.loads(
             (ANALYSIS
              / "session_analysis.ipynb").read_text())["cells"][2]["source"])
-        self.assertIn("KEPT, NOT CALLED", code)
-        for name in ("icc_two_one", "icc_ci"):
-            calls = code.count(name + "(")
-            self.assertEqual(calls, 1,
-                             f"{name} is called somewhere: {calls} uses")
+        self.assertEqual(code.count("icc_two_one("), 1,
+                         "icc_two_one is called somewhere")
+        self.assertEqual(code.count("icc_ci("), 2)
+        at = code.index("icc_ci(np.column_stack")
+        home = code.rfind("\ndef ", 0, at)
+        self.assertTrue(code[home:].startswith("\ndef cohort_retest_stats"))
 
 
 if __name__ == "__main__":

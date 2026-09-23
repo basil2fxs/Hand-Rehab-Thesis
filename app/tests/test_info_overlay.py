@@ -87,18 +87,19 @@ class InfoOverlayTests(unittest.TestCase):
 
     def test_protocol_text_matches_the_battery_preset(self):
         # The card used to describe a four-mode protocol and a 40-trial
-        # Mirror block; PLAY ALL runs eleven blocks and Mirror is 32.
-        # Read the truth from the config so the card cannot drift again.
+        # Mirror block; PLAY ALL runs twelve blocks on the one board and
+        # Mirror, a free pick on two boards, is 32. Read the truth from
+        # the config so the card cannot drift again.
         from finger_rehab.game import battery
         eng, ts = self._title_screen()
         preset = battery.load_preset(eng.cfg)
         self.assertIsNotNone(preset)
         blob = " ".join(ts.INFO_STEPS)
         for order in preset["orders"].values():
-            self.assertEqual(len(order), 11)
+            self.assertEqual(len(order), 12)
             for step in order:
                 self.assertIn(self._NAMES[step["mode"]], blob)
-        self.assertIn("eleven", blob.lower())
+        self.assertIn("twelve", blob.lower())
         self.assertNotIn("four core", blob.lower())
         import re
         m = re.search(r"Mirror is (\d+) trials", blob)
