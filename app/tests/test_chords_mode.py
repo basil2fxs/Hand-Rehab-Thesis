@@ -10,8 +10,8 @@ the full target set in correct_keys, the synchrony window is what
 separates a chord from a sequence of taps, cross-talk is scored from
 the force-window peaks against the quick-cal light-press reference
 and rewarded separately from completion, the buzzer cue for a
-same-board chord is a spaced arpeggio the shared driver can actually
-deliver, and the safety rails (quiet-hand gate, enforced rests,
+same-board chord buzzes every finger together (or, with
+motor.chord_buzz: arpeggio, spaces them out), and the safety rails (quiet-hand gate, enforced rests,
 fatigue triggers, session cap) end a block rather than trap a tired
 hand in it.
 """
@@ -780,8 +780,46 @@ class ArpeggioCueTests(unittest.TestCase):
         e._ensure_metric_state()
         return e
 
-    def test_same_board_chord_becomes_a_spaced_arpeggio(self) -> None:
+    def test_same_board_chord_buzzes_together(self) -> None:
+        import time
         e = self._engine()
+        e.on_stim_multi([1, 2, 3], trial_id=1, t_perf=0.0)
+        stims = [c for c in e._sent if c.startswith("STIM")]
+        # Every finger starts at once and nothing cuts the others.
+        self.assertEqual(stims, ["STIM:2", "STIM:3", "STIM:4"])
+        self.assertNotIn("STOP", e._sent)
+        self.assertEqual(e._busy_lanes(e._motor_busy["right"]),
+                         frozenset({1, 2, 3}))
+        # Each finger is held out to motor.cue_ms by its own re-arms,
+        # and draining them keeps the whole chord on.
+        self.assertEqual(sorted({ln for ln, _ in e._motor_queue}),
+                         [1, 2, 3])
+        e._sent.clear()
+        e._motor_queue = [(ln, time.perf_counter() - 0.001)
+                          for ln, _ in e._motor_queue]
+        e._drain_motor_queue()
+        self.assertNotIn("STOP", e._sent)
+        self.assertEqual(sorted(c for c in e._sent
+                                if c.startswith("STIM")),
+                         ["STIM:2", "STIM:3", "STIM:4"])
+
+    def test_a_single_cue_after_a_chord_still_cuts_it(self) -> None:
+        e = self._engine()
+        e.on_stim_multi([0, 1], trial_id=1, t_perf=0.0)
+        e._motor_queue = []
+        e._sent.clear()
+        e._send_stim(3)
+        self.assertEqual(e._sent[:2], ["STOP", "STIM:4"])
+
+    def _arpeggio_engine(self, hand_mode: str = "right"):
+        e = self._engine(hand_mode)
+        get = e.cfg.get.side_effect
+        e.cfg.get = MagicMock(side_effect=lambda k, d=None: (
+            "arpeggio" if k == "motor.chord_buzz" else get(k, d)))
+        return e
+
+    def test_same_board_chord_becomes_a_spaced_arpeggio(self) -> None:
+        e = self._arpeggio_engine()
         e.on_stim_multi([1, 2, 3], trial_id=1, t_perf=0.0)
         stims = [c for c in e._sent if c.startswith("STIM")]
         # Only the first finger buzzes now; the rest are queued.
@@ -798,7 +836,7 @@ class ArpeggioCueTests(unittest.TestCase):
         self.assertAlmostEqual(gap, 0.190, places=2)
 
     def test_arpeggio_order_is_fixed_low_to_high(self) -> None:
-        e = self._engine()
+        e = self._arpeggio_engine()
         # Handed in scrambled order: the cue still runs index to pinky
         # so the sequence cannot be read as a required press order.
         e.on_stim_multi([3, 0, 2], trial_id=1, t_perf=0.0)

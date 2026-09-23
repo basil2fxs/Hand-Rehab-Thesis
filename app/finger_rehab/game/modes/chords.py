@@ -193,15 +193,19 @@ details before the thesis reference list.
 
 DEVIATIONS FROM THE RESEARCH BRIEF, where the plumbing wins:
 - Cue and go are one moment, like every mode in this suite: the shared
-  stim path lights the fingers, plays the tone and starts the arpeggio
+  stim path lights the fingers, plays the tone and buzzes the chord
   together, and RT runs from that instant. The brief's separate cue
-  phase, jittered go and false_start class do not exist here; the
-  arpeggio therefore overlaps the first part of the response window.
-  Its order is fixed and press order is logged, so cue-order bias in
-  responses stays detectable.
-- The arpeggio pulse is the firmware's fixed 150 ms hold with a 40 ms
-  gap (motor.arpeggio_gap_ms), not the brief's 80/40: the sketch
-  exposes no shorter pulse. A four-finger cue spans about 720 ms.
+  phase, jittered go and false_start class do not exist here.
+- The buzz follows motor.chord_buzz. "together" (the default) starts
+  every finger of the chord at once and holds them for motor.cue_ms,
+  so touch, sight and sound give the same simultaneous shape. The
+  "arpeggio" fallback is one fixed 150 ms hold per finger with a
+  40 ms gap (motor.arpeggio_gap_ms), index to pinky, for a board that
+  goes weak with several motors on; it overlaps the first part of the
+  response window, its order is fixed and press order is logged, so
+  cue-order bias stays detectable. A four-finger arpeggio spans about
+  720 ms. The raw stim_motor rows and the block's config snapshot
+  say which ran.
 - Forces are normalised by each finger's calibrated light-press gap
   (CalibrationProfile.gap), not percent MVC: no per-finger maximum
   exists in this app, and demanding maximal presses to measure one
@@ -330,7 +334,7 @@ What cross-hand chords do NOT cover: anti-phase rhythmic
 coordination. That is Load Split's job; the two modes measure
 different halves of the bimanual literature.
 - With the shipped cue defaults the go moment is audio-tactile-visual:
-  highlight, tone and arpeggio land together, so chord RT and span are
+  highlight, tone and buzz land together, so chord RT and span are
   responses to that mix, not to a visual flash alone. The defaults are
   a whole-suite choice and are not overridden here; cue_flags records
   the mix on every trial row so blocks run under different settings

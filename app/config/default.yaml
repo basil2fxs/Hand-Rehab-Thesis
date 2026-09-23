@@ -506,15 +506,22 @@ motor:
   # stay under the firmware's 150 ms hold or the motor stutters
   # instead of running continuously.
   pulse_interval_ms: 120
-  # Silence between the pulses of a multi-finger cue (chords mode).
-  # The four motors on a board share one driver, so a chord cannot
-  # buzz all its fingers at once; the cue is an arpeggio instead, one
-  # 150 ms firmware pulse per finger, always index to pinky. This gap
-  # sits between pulses so each finger's buzz reads as its own rather
-  # than one long buzz sliding across the hand. At 40 ms a four-finger
-  # cue spans about 720 ms. Raising it makes the fingers easier to
-  # tell apart and the cue slower; do not go below about 20 ms or the
-  # pulses start to blur together.
+  # How a multi-finger cue (chords mode) is buzzed on one board.
+  #   together  every finger of the chord starts at once and is held
+  #             out to cue_ms, so the chord is felt as one shape, the
+  #             way the screen shows it. The firmware runs each motor
+  #             on its own timer, so nothing in the sketch changes.
+  #   arpeggio  one 150 ms pulse per finger, index to pinky, spaced by
+  #             arpeggio_gap_ms. The fallback for a board that goes
+  #             weak with several motors on: the firmware's source
+  #             notes all four together draw more than the shared
+  #             darlington driver supplies well, and the four-finger
+  #             chord is the case to feel for.
+  chord_buzz: together
+  # Silence between the pulses of an arpeggio cue (chord_buzz:
+  # arpeggio only). At 40 ms a four-finger cue spans about 720 ms.
+  # Raising it makes the fingers easier to tell apart and the cue
+  # slower; do not go below about 20 ms or the pulses blur together.
   arpeggio_gap_ms: 40
   # PER-FINGER BUZZ LENGTH, one entry per finger in the order
   # index, middle, ring, pinky. Empty falls back to cue_ms for all four,

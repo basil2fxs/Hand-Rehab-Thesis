@@ -222,7 +222,7 @@ class StimRoutingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             eng = make_engine("both", td)
             # A chord within the LEFT hand: only the left board buzzes
-            # (as an arpeggio; the first pulse is immediate).
+            # (both fingers together, motor.chord_buzz's default).
             eng.on_stim_multi([4, 6], 1, _time.perf_counter())
             right = [c for c in eng._fake_boards["right"].commands
                      if c.startswith("STIM")]

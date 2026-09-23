@@ -6884,42 +6884,57 @@ class GameEngine:
             pass
         return lane + 1
 
-    def _send_stim(self, lane: int) -> bool:
+    @staticmethod
+    def _busy_lanes(busy) -> frozenset:
+        """The lanes a _motor_busy entry holds on: one finger for a
+        single cue, every finger of a chord buzzed together."""
+        lanes = busy[0]
+        if isinstance(lanes, (set, frozenset)):
+            return frozenset(lanes)
+        return frozenset((lanes,))
+
+    def _send_stim(self, lane: int, together: bool = False) -> bool:
         """Fire one STIM pulse for the finger on `lane` (0-indexed).
         Returns whether the hardware accepted it.
 
-        Only one motor per board runs at a time. The firmware turns each
-        motor off on its own timer, so two fingers cued inside the same
-        150 ms hold would both be driven, and the hardware cannot do
-        that: the four motors share one darlington driver that cannot
-        supply them together, which the firmware's own source says in as
-        many words. The result is not two buzzes, it is two weak ones,
-        and at that point the cue the patient is supposed to react to is
-        no longer the cue that was delivered.
+        Normally one motor per board runs at a time. The firmware turns
+        each motor off on its own timer, so two fingers cued inside the
+        same 150 ms hold would both be driven, and the firmware's own
+        source says all four together draw more than the shared
+        darlington driver supplies well. So a pulse aimed at a
+        different finger on the same board stops that board first. The
+        stop is hand-prefixed so the other hand, which has its own
+        board and its own driver, keeps buzzing.
 
-        So a pulse aimed at a different finger on the same board stops
-        that board first. The stop is hand-prefixed so the other hand,
-        which has its own board and its own driver, keeps buzzing.
+        together=True is the exception a chord asks for
+        (motor.chord_buzz: together): the finger joins the ones already
+        running on that board instead of cutting them off, and their
+        re-arms keep the whole chord on for the cue length.
         """
         now = time.perf_counter()
         resolved = self._resolve_lane_to_detector(lane)
         hand = resolved[0] if resolved else (self.hand_mode or "right")
         if not hasattr(self, "_motor_busy"):
-            self._motor_busy: dict[str, tuple[int, float]] = {}
+            self._motor_busy: dict[str, tuple[frozenset, float]] = {}
         busy = self._motor_busy.get(hand)
+        group: frozenset = frozenset((lane,))
         if busy is not None:
-            busy_lane, busy_until = busy
-            if busy_lane != lane and now < busy_until:
+            busy_lanes, busy_until = self._busy_lanes(busy), busy[1]
+            if now < busy_until and (lane in busy_lanes or together):
+                # A re-arm of a running finger, or a chord finger
+                # joining the ones already on: nothing is cut.
+                group = busy_lanes | {lane}
+            elif now < busy_until:
                 try:
                     self.source.send_command(self._hand_command("STOP",
                                                                 hand))
                 except Exception as e:
                     log.warning("motor stop before switching finger: %s", e)
-                # Anything still queued for the finger we just cut off
-                # would restart it behind the new one.
+                # Anything still queued for the fingers we just cut off
+                # would restart them behind the new one.
                 self._motor_queue = [
                     (ln, due) for (ln, due) in getattr(self, "_motor_queue", [])
-                    if ln != busy_lane]
+                    if ln not in busy_lanes]
         ch = self._stim_channel(lane)
         # Bilateral lanes are global (5..8 is the left hand) and the
         # board splitter routes them. A one-hand block numbers its lanes
@@ -6935,7 +6950,7 @@ class GameEngine:
             return False
         if ok:
             self._motor_busy[hand] = (
-                lane, now + self.FIRMWARE_STIM_MS / 1000.0)
+                group, now + self.FIRMWARE_STIM_MS / 1000.0)
         return ok
 
     def _schedule_cue_pulses(self, lane: int) -> None:
@@ -7194,9 +7209,12 @@ class GameEngine:
                     continue
                 hand = self._lane_hand(lane) or (self.hand_mode or "right")
                 busy = getattr(self, "_motor_busy", {}).get(hand)
-                if busy is not None and busy[0] == lane and now >= busy[1]:
+                if (busy is not None and lane in self._busy_lanes(busy)
+                        and now >= busy[1]):
                     broken.add(hand)
                     continue
+                # A re-arm of a finger in the running group (one finger,
+                # or every finger of a chord) never cuts the others.
                 self._send_stim(lane)
             self._motor_queue = [
                 (ln, due) for (ln, due) in still
@@ -8174,22 +8192,22 @@ class GameEngine:
         if (buzz and cues.buzz_before and self.source.provides_samples
                 and not silent):
             # Buzz the TARGET fingers so the patient feels which to
-            # press. One board runs one motor at a time (_send_stim
-            # stops a board before switching fingers), so the targets
-            # are grouped by board first. A board asked for ONE finger
-            # gets the normal held cue: first pulse now, re-armed out
-            # to motor.cue_ms. A board asked for SEVERAL fingers, which
-            # only chords mode does, gets an ARPEGGIO instead: one
-            # firmware pulse per finger in fixed low-to-high lane
-            # order, onsets spaced a full pulse plus
-            # motor.arpeggio_gap_ms apart, so no pulse is cut short by
-            # the next and each finger's buzz reads as its own. The
-            # follow-up pulses ride the motor queue the main loop
-            # already drains. No cue stretch on arpeggio lanes: a
-            # stretched pulse would still be running when the next
-            # finger's pulse came due, and the board cannot do both.
-            # Mirror's two hands are two boards, so they still buzz
-            # together.
+            # press. The targets are grouped by board first. A board
+            # asked for ONE finger gets the normal held cue: first
+            # pulse now, re-armed out to motor.cue_ms. A board asked
+            # for SEVERAL fingers, which only chords mode does, follows
+            # motor.chord_buzz:
+            #   together  every finger of the chord starts at once and
+            #             is held out to motor.cue_ms, so the chord is
+            #             felt as one shape, the way it is shown.
+            #   arpeggio  one firmware pulse per finger in fixed
+            #             low-to-high lane order, onsets spaced a full
+            #             pulse plus motor.arpeggio_gap_ms apart, for a
+            #             rig whose driver cannot run several motors
+            #             well. The follow-up pulses ride the motor
+            #             queue the main loop already drains.
+            # Mirror's two hands are two boards, so they buzz together
+            # either way.
             by_board: dict[str, list[int]] = {}
             for lane in sorted(targets):
                 resolved = self._resolve_lane_to_detector(lane)
@@ -8203,8 +8221,25 @@ class GameEngine:
             except (TypeError, ValueError):
                 gap_ms = 40.0
             spacing_s = (self.FIRMWARE_STIM_MS + max(0.0, gap_ms)) / 1000.0
+            together = str(self.cfg.get("motor.chord_buzz", "together")
+                           or "together").lower() != "arpeggio"
             delivered = True
             for lanes_on_board in by_board.values():
+                if together and len(lanes_on_board) > 1:
+                    for lane in lanes_on_board:
+                        ok = self._send_stim(lane, together=True)
+                        if not ok:
+                            delivered = False
+                        if self.raw_logger:
+                            self.raw_logger.queue_event(
+                                "stim_motor", lane=lane, t_perf=t_perf,
+                                detail=("delivered="
+                                        f"{'yes' if ok else 'NO'};"
+                                        "chord=together"),
+                                hand=self.hand_mode)
+                    for lane in lanes_on_board:
+                        self._schedule_cue_pulses(lane)
+                    continue
                 first = lanes_on_board[0]
                 ok = self._send_stim(first)
                 if not ok:
