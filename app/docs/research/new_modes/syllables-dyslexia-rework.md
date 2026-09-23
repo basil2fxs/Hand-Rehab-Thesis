@@ -64,7 +64,10 @@ selection is fastest when stimulus and response share a spatial code.
 The tile falling in the lane over the finger that answers it IS that
 code, and it is the only mapping the child gets. Consequences in the
 build: the model's tactile pulse became a four-finger ROLL (a single
-buzz would announce the lane before the tiles existed), the option-set
+buzz would announce the lane before the tiles existed; update 23
+September 2026: the roll is gone, the model plays no buzz, and the
+one buzz is a time-delay prompt on the right finger at three quarters
+of the fall, see syllables.py PROMPT), the option-set
 onset goes through the engine's cue path with a `silent_stim` flag so
 it arms the force window, the timeout and the EEG marker but fires no
 tone, no highlight and no buzzer, all four tiles are drawn identically

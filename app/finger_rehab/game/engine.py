@@ -4442,8 +4442,8 @@ class GameEngine:
 
     def begin_syllables_block(self) -> None:
         """Syllables block: a syllable-matching game for children.
-        One engine block is a full session (warm-up tapping probe,
-        rounds of words with breaks, hard time cap). The research case
+        One engine block is a full session (rounds of words with
+        breaks, hard time cap). The research case
         lives in the mode file's docstring; syllables.* in the config
         says what the child experiences. This mode renders on its own
         screen: a word strip and falling tiles are not a lane strip.

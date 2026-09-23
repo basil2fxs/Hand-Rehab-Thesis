@@ -96,6 +96,10 @@ class HandModel:
     force targets are percent of max per lane."""
     press_until: dict[int, float] = field(default_factory=dict)
     force_pct: dict[int, float] = field(default_factory=dict)
+    # Force a resting finger picks up from its pressing neighbours
+    # (enslaving): lane -> (until, counts above resting). Only the
+    # cohort simulation sets it; the timing runs leave it empty.
+    leak: dict[int, tuple[float, float]] = field(default_factory=dict)
     noise_sd: float = 0.6
     rng: random.Random = field(default_factory=lambda: random.Random(7))
 
@@ -111,6 +115,9 @@ class HandModel:
             if pct is not None and pct > 0:
                 v = RESTING + MAX_PRESS * pct / 100.0
                 v += self.rng.gauss(0.0, self.noise_sd * MAX_PRESS / 100.0)
+            lk = self.leak.get(lane)
+            if lk is not None and lk[0] > now:
+                v += lk[1]
             if self.press_until.get(lane, 0.0) > now:
                 v = max(v, RESTING + PRESS_COUNTS)
             vals.append(int(round(max(0.0, v))))
@@ -282,11 +289,6 @@ class Participant:
         self.answered.add(key)
         self.schedule(act.stim_t_perf + self._rt(), act.lane)
 
-    # The model taps the warm-up metronome at this interval. The
-    # warm-up ends on its own beats whether or not anyone taps, so
-    # this only exists so the block writes a warm-up statistic.
-    WARMUP_TAP_S = 0.6
-
     # How often the reader picks a foil instead of the target. Zero
     # here on purpose: this file measures how long the battery takes,
     # and a wrong press parks the word for a later return
@@ -306,12 +308,6 @@ class Participant:
 
     def _syllables(self, m, now, eng) -> None:
         phase = getattr(m, "phase", "")
-        if phase == "warmup":
-            last = getattr(self, "_syl_last_tap", 0.0)
-            if now - last >= self.WARMUP_TAP_S:
-                self._syl_last_tap = now
-                self.hand.press(int(m.lanes[0]), now, 0.10)
-            return
         if phase != "choose":
             return
         opts = getattr(m, "option_set", None)
@@ -336,7 +332,13 @@ class Participant:
                      if int(o.lane) != lane]
             if foils:
                 lane = self.rng.choice(foils)
-        self.schedule(max(now, t0 + lock) + self._rt(), lane)
+        self.schedule(max(now, t0 + lock) + self.syllable_delay(m), lane)
+
+    def syllable_delay(self, m) -> float:
+        """Seconds from the end of the spawn lockout to the press. A
+        hook so the cohort model can answer some sets late enough for
+        the prompt buzz to fire first."""
+        return self._rt()
 
     def _echo(self, m, now, eng) -> None:
         act = getattr(m, "active", None)

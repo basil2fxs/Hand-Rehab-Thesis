@@ -42,9 +42,11 @@ named here so the three dropped rows sit together:
 
 Amended 23 September 2026, before any participant was run:
 
-  - Adaptive and syllables now carry pre-specified checks (A1, A2,
-    S1, S2; Sections 1.4, 1.5 and 4.6), so every one of the ten
-    modes has a row in Table 1. Both are ceiling checks for a
+  - Adaptive and syllables now carry pre-specified checks (A5, A6,
+    S6, S7; Sections 1.4, 1.5 and 4.6), so every one of the ten
+    modes has a row in Table 1. The ids continue the notebook's
+    per-session literature lists, where A1 to A4 and S1 to S5 mean
+    other things. Both are ceiling checks for a
     healthy adult, decided on the interval, not on a test.
   - Syllables is a choice task with a late prompt buzz (Section
     1.4), not the beat-paced tapping task an earlier version of this
@@ -337,11 +339,11 @@ the prompt fades per word after two answers found alone. The battery
 plays 12 words at the mid foil rung (rung 3).
 Adults have no reading deficit to measure, so the block is not a
 skill result. What it can check is the game itself, on fluent readers:
-  S1 Fluent adults answer before the prompt: cohort median of the
+  S6 Fluent adults answer before the prompt: cohort median of the
      unprompted correct rate above 0.9. A lower number says the
      material, the foils or the timing are wrong for anybody, which
      is a bug report before it is a finding.
-  S2 The late prompt is rarely needed: cohort median of the share of
+  S7 The late prompt is rarely needed: cohort median of the share of
      right answers that came after the prompt under 0.1. This says
      the prompt's delay leaves a fluent reader room to answer first,
      which is what makes the unprompted rate the learning measure for
@@ -362,12 +364,12 @@ keeping, and the band-keeping claim stays on the headless simulation
 already in the config commentary. Adaptive is played once, late in
 the sitting on the dominant hand. What a healthy block can check is
 the direction of the closed loop on a real hand:
-  A1 The pace rises for a healthy hand: cohort median of bpm_rise
+  A5 The pace rises for a healthy hand: cohort median of bpm_rise
      (the block's top pace minus its starting pace) above zero.
-  A2 While it rises, the hand stays at or above the band floor:
+  A6 While it rises, the hand stays at or above the band floor:
      cohort median hit rate above 0.65. The controller's steps do not
      push a healthy hand into failure inside 40 trials.
-Both are decided on the interval, like S1 and S2. bpm_max_reached,
+Both are decided on the interval, like S6 and S7. bpm_max_reached,
 bpm_final and the share of the block at the cap stay descriptive, and
 adaptive stays out of the reliability and within-block tables.
 
@@ -529,11 +531,12 @@ Known effects to reproduce:
      (buzz_hunt.py and echo.py both state the ceiling); Hebb trials
      at least as accurate as novel trials.
   B5 The window ladder climbs: a healthy hand plays at level 1 (the
-     2.0 s window) or higher inside its 16 trials, and usually
-     reaches level 2 (a 92 percent responder reaches the top in
-     about 22 trials on the headless simulation, so 16 trials allow
-     two promotions; top_level counts the highest level a trial
-     was played at, final_level where the ladder ended).
+     2.0 s window) or higher inside its 12 trials per hand in the
+     battery (16 in free play). A 92 percent responder reaches the
+     top in about 22 trials on the headless simulation, so 12 trials
+     allow one promotion and often a second; top_level counts the
+     highest level a trial was played at, final_level where the
+     ladder ended.
 Reliability class: poor for accuracy (ceiling restricts range),
 moderate for span; the top window level is an ordinal with four
 values and 12 trials per hand in the short form, so it is reported
@@ -926,14 +929,18 @@ window or detection key can never creep in through the preset):
     break_s: 10
   game:
     total_trials: 40              # pins the adaptive block length
-  rhythm: difficulty medium; the preset pins the track
-    (Easy_Lemon.mp3, 126 s) and the battery opens the block on it
-    without the song screen; if the file is missing the song screen
-    opens and the RA picks it by hand.
+  rhythm:
+    difficulty: medium            # the preset pins the track too
+    tactile_mode: on_beat         # the buzz on the beat (Section 1.6)
+    The preset pins Easy_Lemon.mp3 (126 s) and the battery opens the
+    block on it without the song screen; if the file is missing the
+    song screen opens and the RA picks it by hand.
   mirror: defaults.
 
-Every one of those is a COUNT, a rest or a frozen ladder rung. None
-of them moves a threshold, a window or a scoring rule. In the
+Every one of those is a COUNT, a rest or a frozen ladder rung, except
+rhythm.tactile_mode, which is a cue condition: it moves when the buzz
+arrives, never what a hit is. None of them moves a threshold, a window
+or a scoring rule. In the
 two-visit design the freeze existed so a person's two goes were the
 same task. It matters for two different reasons now: every
 participant plays the identical task, so the normative table is not
@@ -1427,7 +1434,7 @@ Two tables, both decided before the data comes in.
 
 Table 1, known effects, one row per check, from Section 1: R1 R2,
 P1 P3, C1 C2 C3 C4, Rh1 Rh2, M1 M2, F1 F2 F3 F4, B1 B2 B3 B4, E1
-E3, A1 A2, S1 S2. A1 to S2 were added on 23 September 2026, before
+E3, A5 A6, S6 S7. Those four were added on 23 September 2026, before
 any participant, so every mode has a row; they are decided on the
 interval, carry no p value and so do not enter the family-wise
 correction. Each row: statistic, CI, test, effect size, pass or fail against
@@ -1760,9 +1767,11 @@ ARRIVAL (15 min, off the clock)
 CLOCK STARTS (target 45 min, hard stop 50)
   [ ] Check the login: code, age, sex, MAIN HAND (Left or Right,
       required), hand length and breadth. The EHI score stays on the
-      sheet. LOG IN. Quick calibration runs for both hands: hands
-      off, hands resting, then a light press per finger. If a finger
-      fails, redo once, then continue and note it.
+      sheet. LOG IN, then pick BOTH HANDS on the hand screen. Quick
+      calibration runs for both hands: hands off, hands resting, then
+      a light press per finger. If a finger fails, redo once, then
+      continue and note it. (Picking one hand is not fatal: PLAY ALL
+      calibrates the other before its first block.)
   [ ] Press PLAY ALL on the hub (or A). The app plays the cell's
       order below; after each block press Start on the NEXT UP card
       (or N). The card names the step, the hand and the wait; the

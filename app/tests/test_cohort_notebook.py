@@ -686,10 +686,12 @@ class CohortNotebookTests(unittest.TestCase):
     def test_every_mode_has_a_prespecified_row(self) -> None:
         """Adaptive and syllables got their checks on 23 September
         2026, before any participant, so all ten modes sit in the
-        pre-specified family. This short cohort plays neither, so
-        their rows say so rather than going missing."""
+        pre-specified family. Their ids continue the per-session
+        literature lists (A1 to A4, S1 to S5 mean other things there).
+        This short cohort plays neither, so their rows say so rather
+        than going missing."""
         v = self.validity.set_index("id")
-        for cid in ("A1", "A2", "S1", "S2"):
+        for cid in ("A5", "A6", "S6", "S7"):
             self.assertIn(cid, v.index, cid)
             self.assertEqual(v.loc[cid, "family"], "pre-specified", cid)
             self.assertEqual(v.loc[cid, "verdict"], "not testable", cid)

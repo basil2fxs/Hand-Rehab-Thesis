@@ -269,7 +269,10 @@ CODE_NOTES: dict[str, tuple[str, str, str, str]] = {
         "flip", "stim_visual", "cue shown, screen highlight only",
         "30-37 code the cue mix in the byte: +1 tone, +2 buzzer, "
         "+4 target not shown. Lane is on the raw.csv row."),
-    "stim_visual_tone": ("flip", "stim_visual", "cue: screen and tone", ""),
+    "stim_visual_tone": (
+        "flip", "stim_visual", "cue: screen and tone",
+        "Syllables: the model, one per syllable, no trials.csv row; "
+        "it plays no buzz since codes 1.5."),
     "stim_visual_buzz": (
         "flip", "stim_buzz", "cue: screen and buzzer",
         "The STIM command left before the flip; felt vibration is "
@@ -277,8 +280,7 @@ CODE_NOTES: dict[str, tuple[str, str, str, str]] = {
     "stim_visual_buzz_tone": (
         "flip", "stim_buzz", "cue: screen, buzzer and tone (default mix)",
         "Chords: one byte per chord on its lowest lane, never per "
-        "finger. Syllables: also the model roll, one per syllable, "
-        "no trials.csv row. Echo: one per playback item. Mirror: one "
+        "finger. Echo: one per playback item. Mirror: one "
         "per pair. The byte says which cues were configured, not "
         "that the motor ran: join stim_delivered from trials.csv."),
     "stim_uncued": ("flip", "stim_visual", "cue: nothing names the finger", ""),

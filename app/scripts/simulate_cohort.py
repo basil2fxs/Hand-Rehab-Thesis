@@ -26,17 +26,27 @@ carries latent skill plus a per-person within-block drift:
              warm-up that fades over the first trials
   mirror     the dominant hand's press leads the other by 15 ms
   rhythm     a per-person negative asynchrony with a per-person SD
-  echo       a per-person span ceiling
+  echo       a per-person span ceiling; past it the first items come
+             back right and a later one goes wrong, usually a
+             transposition
   buzz hunt  a per-person localisation accuracy, errors landing on
              the neighbouring finger
   chords     a per-person press spread across the chord, tightening
-             a little across the block
+             a little across the block, mirror chords across the
+             hands tighter still, and a per-person enslaving leak
+             into the resting fingers, largest next to a pressing
+             finger and on the ring finger
   pattern    trained-sequence presses speed up with exposure, which
              is the mode's own known effect and is measured inside
-             the one block
-  force      the hold noise is drawn PER BLOCK with no per-person
-             part, so force error is the metric with no recoverable
-             person behind it
+             the one block; an occasional wrong finger, three times
+             as often on a probe take
+  syllables  a fluent adult reader near ceiling, with a small
+             per-person share of sets answered after the prompt buzz
+  adaptive   the reaction model, so the pace climbs
+  force      a per-person tracking lag of 120 to 260 ms, the same on
+             both hands; the hold noise is drawn PER BLOCK with no
+             person part, so the hand contrast on force error has
+             nothing injected and stays a negative control
 
 The within-block drift is deliberately small and it decays, because
 that is what a warm-up looks like: a participant settling into a task
@@ -115,14 +125,28 @@ def make_truth(n: int, seed: int) -> dict[str, dict]:
             "asyn_sd_s": rng.uniform(0.015, 0.035),
             "loc_acc": rng.uniform(0.86, 1.0),
             # How often this reader gets a syllable tile right first
-            # press at the easiest rung. Drawn around the level the
-            # foil staircase is aiming for (Levitt 1971 three-down
-            # one-up converges near 79.4 percent), so the staircase,
-            # the foil confusion counts and the spaced-return
-            # comparison all have something to work on. A model that
-            # never errs leaves those three checks with no data, which
-            # reads as a software fault and is not one.
-            "read_acc": rng.uniform(0.78, 0.94),
+            # press at the easiest rung. The cohort is fluent adult
+            # readers, so near ceiling: S6 predicts a median above 0.9.
+            # The few errors still give the foil staircase, the
+            # confusion counts and the spaced-return comparison
+            # something to work on.
+            "read_acc": rng.uniform(0.94, 1.0),
+            # The share of sets this reader answers slowly, after the
+            # prompt buzz at three quarters of the fall. Small, which
+            # is what S7 predicts, but not zero, so the prompted path
+            # is exercised.
+            "slow_read_share": rng.uniform(0.0, 0.06),
+            # Force tracking lag: a hand follows a moving target about
+            # 100 to 300 ms behind (F2).
+            "track_lag_s": rng.uniform(0.12, 0.26),
+            # Enslaving: the share of a pressing finger's force a
+            # resting neighbour picks up. Healthy hands leak about 5
+            # to 15 percent at light effort (C1); the ring finger
+            # leaks most (C3).
+            "enslave": rng.uniform(0.03, 0.06),
+            # Muscle Memory errors per press on trained material; an
+            # unfamiliar probe take triples it (P3).
+            "pattern_err": rng.uniform(0.01, 0.03),
             "learn_per_cycle_s": rng.uniform(0.004, 0.008),
             "chord_spread_s": rng.uniform(0.010, 0.022),
             # The per-person within-block warm-up. Clamped at zero:
@@ -151,10 +175,14 @@ class CohortParticipant(mb.Participant):
         self.seq_presses = seq_presses      # pattern exposure so far
         self.hand_mode = "right"
         self.trials_this_block = 0
+        from collections import deque
+        self._force_trace: deque = deque()
 
     def begin_block(self) -> None:
         super().begin_block()
         self.trials_this_block = 0
+        self._force_trace.clear()
+        self.hand.leak.clear()
 
     def warmup_gain_s(self) -> float:
         """How much of the per-person warm-up has been taken up by the
@@ -244,8 +272,41 @@ class CohortParticipant(mb.Participant):
             1.0 - (1.0 - CHORD_WITHIN_BLOCK_FACTOR) * self.block_progress())
         t = act.stim_t_perf + self._rt() + 0.15
         self.trials_this_block += 1
-        for lane in act.targets:
-            self.schedule(t + self.rng.gauss(0.0, spread), int(lane), 0.45)
+        targets = [int(l) for l in act.targets]
+        # Mirror chords across the hands land tighter than non-mirror
+        # ones (C4): the same fingers on both hands are one motor plan.
+        if (getattr(act, "scope", "") == "cross"
+                and tuple(getattr(act, "fingers_left", ()))
+                == tuple(getattr(act, "fingers_right", ()))):
+            spread *= 0.5
+        for lane in targets:
+            self.schedule(t + self.rng.gauss(0.0, spread), lane, 0.45)
+        self._chord_leak(m, targets, t, 0.45)
+
+    # Leak by distance to the nearest pressing finger: a neighbour
+    # picks up the most (Zatsiorsky, Li and Latash 2000). The ring
+    # finger is the least independent (Hager-Ross and Schieber 2000).
+    LEAK_BY_DISTANCE = {1: 1.0, 2: 0.5, 3: 0.25}
+    RING_FACTOR = 1.3
+
+    def _chord_leak(self, m, targets, t, hold) -> None:
+        """Put the enslaved force on the resting fingers of every hand
+        the chord uses, for as long as the chord is held."""
+        hands = getattr(m, "hands", {}) or {}
+        for lanes in hands.values():
+            lanes = [int(l) for l in lanes]
+            pressing = [lanes.index(l) for l in targets if l in lanes]
+            if not pressing:
+                continue
+            for i, lane in enumerate(lanes):
+                if lane in targets:
+                    continue
+                dist = min(abs(i - j) for j in pressing)
+                share = (float(self.truth["enslave"])
+                         * self.LEAK_BY_DISTANCE.get(dist, 0.1)
+                         * (self.RING_FACTOR if i == 2 else 1.0)
+                         * max(0.3, self.rng.gauss(1.0, 0.25)))
+                self.hand.leak[lane] = (t + hold, mb.PRESS_COUNTS * share)
 
     def _pattern(self, m, now, eng) -> None:
         if self._self_paced_rest(m, now, "_rest_min_until",
@@ -270,7 +331,20 @@ class CohortParticipant(mb.Participant):
             cycles = self.seq_presses / 12.0
             rt -= min(0.06, cycles * float(self.truth["learn_per_cycle_s"]))
             self.seq_presses += 1
-        self.schedule(act.stim_t_perf + max(0.15, rt), act.lane)
+        # An occasional wrong finger, three times as often on an
+        # unfamiliar probe take (P3). The cue stays lit, so the right
+        # finger follows it and the trial still closes as a Miss.
+        err = float(self.truth["pattern_err"])
+        if seg.kind == "probe":
+            err *= 3.0
+        t = act.stim_t_perf + max(0.15, rt)
+        if self.rng.random() < err:
+            lanes = [int(l) for l in m.lanes]
+            wrong = lanes[(lanes.index(int(act.lane)) + 1) % len(lanes)] \
+                if int(act.lane) in lanes else lanes[0]
+            self.schedule(t, wrong)
+            t += 0.3
+        self.schedule(t, act.lane)
 
     def _echo(self, m, now, eng) -> None:
         act = getattr(m, "active", None)
@@ -282,12 +356,29 @@ class CohortParticipant(mb.Participant):
         self.answered.add(key)
         t = now + 0.4
         seq = list(m.sequence)
-        if len(seq) > int(self.truth["span_cap"]):
-            # Past the span: one wrong press ends the trial. The cap
-            # is a fixed property of the person, so the span the block
+        cap = int(self.truth["span_cap"])
+        if len(seq) > cap:
+            # Past the span: the first cap items come back right and
+            # the next one goes wrong, late in the sequence (E2p).
+            # Usually the next item jumps the queue, a transposition;
+            # sometimes a finger that is not in the sequence, an
+            # intrusion (E3: serial-order errors dominate). The cap is
+            # a fixed property of the person, so the span the block
             # reports is a normative number and nothing else.
-            wrong = next(l for l in m.lanes if l != seq[0])
-            self.schedule(t, int(wrong))
+            for lane in seq[:cap]:
+                self.schedule(t, int(lane))
+                t += 0.55
+            others = [int(l) for l in m.lanes if int(l) not in seq]
+            if cap + 1 < len(seq) and (self.rng.random() < 0.7
+                                       or not others):
+                wrong = int(seq[cap + 1])
+            elif others:
+                wrong = self.rng.choice(others)
+            else:
+                wrong = next(int(l) for l in m.lanes if l != seq[cap])
+            if wrong == int(seq[cap]):
+                wrong = next(int(l) for l in m.lanes if l != seq[cap])
+            self.schedule(t, wrong)
             return
         for lane in seq:
             self.schedule(t, int(lane))
@@ -323,6 +414,33 @@ class CohortParticipant(mb.Participant):
         # each tick rather than fixed at block start.
         self._syl_rung = int(getattr(m, "rung", 1) or 1)
         super()._syllables(m, now, eng)
+
+    def syllable_delay(self, m) -> float:
+        """A slow set waits past the prompt buzz at three quarters of
+        the fall; every other set is answered at reading speed."""
+        if self.rng.random() < float(self.truth["slow_read_share"]):
+            fall = float(getattr(m, "fall_s", 3.0) or 3.0)
+            return fall * 0.8
+        return self._rt()
+
+    def _force_pilot(self, m, now, eng) -> None:
+        """Follow the corridor target track_lag_s behind, the way a
+        hand tracks a moving line (F2). Faster waves then cost more
+        error than slow ones, which is F1."""
+        if self._probe(m, now):
+            self._force_trace.clear()
+            return
+        if getattr(m, "phase", "") != "run":
+            self.hand.force_pct = {}
+            self._force_trace.clear()
+            return
+        target = float(getattr(m, "target_now", 0.0) or 0.0)
+        self._force_trace.append((now, target))
+        cut = now - float(self.truth["track_lag_s"])
+        while (len(self._force_trace) > 1
+               and self._force_trace[1][0] <= cut):
+            self._force_trace.popleft()
+        self.hand.force_pct = {int(m.lane): self._force_trace[0][1]}
 
     def _buzz_hunt(self, m, now, eng) -> None:
         if (getattr(m, "phase", "") != "trial"
