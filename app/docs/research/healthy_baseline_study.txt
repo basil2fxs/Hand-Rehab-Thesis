@@ -41,17 +41,19 @@ the results:
 
   - No within-person dominant against non-dominant contrast. R2, C5,
     Rh3 and M2 are dropped, with the paired chapter that carried
-    them (Section 4.4 now sets right- and left-handers side by side,
-    descriptive only).
+    them (Section 4.4 now compares right- and left-handers between
+    people, exploratory).
   - No Mirror: M1, M2 and W2 are dropped. No cross-hand chords: C4 is
     dropped.
   - Echo on four lanes: a sequence past four items holds every lane,
     so a wrong finger is a sequence lane by construction and E3 is
     dropped for the one-board rig; E1 reads the four-lane Simon band
     (Section 1.11).
-  - Left-handers play their NON-dominant hand. They may take part,
-    are flagged at intake, stay out of every pooled number and are
-    described on their own. The primary sample is the right-handers.
+  - Left-handers play their NON-dominant hand. Anyone can take part.
+    Everyone is in every pooled number (the device, the task and the
+    hand are the same for all); Section 4.4 sets the left-handers
+    against the right-handers, and Section 4.9 reruns every check on
+    the right-handers alone as a sensitivity analysis.
 
 What the second pass buys:
 
@@ -132,7 +134,7 @@ DECISIONS IN ONE SCREEN
 - One sitting, ONE board, the right-hand device, for everybody.
   Booking 60 minutes: 15 minutes of consent and intake off the clock,
   then a PLAY ALL run measured (M) at medians of 43.7 to 44.2 minutes
-  over 48 sittings on six codes, range 43.1 to 44.9, none over the
+  over 48 sittings on six codes, range 43.2 to 44.9, none over the
   budget of 45 or the hard stop at 50 (Section 2.3).
 - Twelve blocks. Pass 1: reaction, rhythm, echo, force pilot,
   chords, buzz hunt, pattern, adaptive, syllables, each once. Pass 2,
@@ -145,9 +147,11 @@ DECISIONS IN ONE SCREEN
 - Two mode orders (A timing work first, B force and vibration work
   first), assigned by participant code. With one hand there is no
   hand order to cross.
-- Right-handers are the primary sample. Left-handers may take part;
-  they play the same right-hand device, which is their non-dominant
-  hand, and are described on their own.
+- Anyone can take part, right- or left-handed. Everyone plays the
+  same right-hand device, the dominant hand of a right-hander and the
+  non-dominant hand of a left-hander, and everyone is in the pooled
+  sample. Handedness is analysed as a between-person factor (Section
+  4.4) and a sensitivity rerun drops the left-handers (Section 4.9).
 - Every ladder that can be frozen without changing the task is
   frozen by config: the reaction response window and the chords sync
   window. Four modes keep a ladder that IS the task, so for them the
@@ -165,8 +169,9 @@ DECISIONS IN ONE SCREEN
   range and every participant's own point), the known-effect checks
   (Table 1) and within-block checks (Table 2) on pass 1, the
   within-session reliability table T1 to T5 (pass 1 against pass 2),
-  internal consistency inside a block, the feasibility numbers, and
-  the left-handers described beside the right-handers. One tidy CSV.
+  internal consistency inside a block, the feasibility numbers, the
+  handedness comparison and the right-handers-only sensitivity rerun.
+  One tidy CSV.
 - Reaction is the stability anchor. It is the one mode expected NOT
   to improve inside its own block, so a trend there reads as warm-up
   or drift and it calibrates how much of every other mode's
@@ -279,9 +284,18 @@ design from this one and is excluded from the implicit measure.
 1.3 Chords (one hand, short form, both passes)
 ---------------------------------------------
 One-board note (24 September 2026): the block plays the right hand's
-four fingers, 40 chords (two sub-blocks of 20), in both passes. No
+four fingers, 40 trials (two sub-blocks of 20), in both passes. No
 cross-hand chords exist on one board, so C4 and C5 are dropped and
 the cross-hand metrics below are not produced.
+Size mix (chords.size_mix, 24 September 2026, before any
+participant): each sub-block of 20 deals 4 single fingers (one per
+finger), 10 pairs, 5 triples and 1 four-finger chord. Eight trials in
+ten use two or three fingers, where every chord has a quiet finger to
+keep still; the quad has no quiet finger and runs every motor at once
+(the firmware's source says four motors overload the shared driver),
+so it is rare and its buzz is the arpeggio. Singles are the baseline
+for C6 and for the one-finger enslaving matrix, and they are kept out
+of every number that says chord (C1 to C3, T4, T5).
 Primary: median_er (enslaving ratio, quiet-finger leak over target
 press), median_span_ms (chord togetherness), clean hit rate
 (chord_outcome_classes.hit / all), per-hand versions in per_hand;
@@ -310,14 +324,28 @@ Known effects to reproduce:
      during grasping tasks"), so report the paired result with its
      CI and treat a null as expected.
   (C4 and C5 are DROPPED on the one-board rig: see the note above.)
+  C6 The chord cost: the first press comes later the more fingers
+     the chord asks for. Per participant, the least-squares slope of
+     median RT on chord size over one, two and three fingers (the
+     quad left out: once per twenty, and a different buzz); the
+     cohort median slope above zero, one-sample Wilcoxon, one-sided.
+     Healthy students pressed one, two and three keys in 510, 632 and
+     762 ms, about 126 ms per extra finger (Verwey 2023; the chord
+     effect first shown by Seibel 1962). Added 24 September 2026
+     with the singles, before any participant, and in the Holm
+     family.
+  Described beside them: the size table (RT, completion, span, ER
+     and clean hits per size) and the one-finger enslaving matrix,
+     the classical single-finger condition (Zatsiorsky, Li and Latash
+     2000) that the chord-conditioned matrices upper-bound.
 Reliability class: moderate for ER (a ratio of two noisy peaks
 normalised by that day's calibration), good for span_ms. Tested as
 T4 and T5 (Section 4.5).
-Claim limits: ER and the matrices are device- and posture-specific
-and chord-conditioned (an upper bound on the single-finger cell);
-literature values are order-of-magnitude context only. The short
-form gives 40 within-hand chords a block, so per-chord cells are
-cohort-pooled, never per person.
+Claim limits: ER and the matrices are device- and posture-specific,
+and the chord matrices are chord-conditioned (an upper bound on the
+single-finger cell); literature values are order-of-magnitude context
+only. The short form gives 32 chords and 8 singles a block, so
+per-chord and per-single cells are cohort-pooled, never per person.
 
 1.4 Syllables (played once, two ceiling checks)
 -----------------------------------------------
@@ -371,8 +399,8 @@ adaptive stays out of the reliability and within-block tables.
 1.6 Rhythm (one hand, one fixed track)
 --------------------------------------
 One-board note (24 September 2026): the block plays the right hand.
-Rh1 is read on the dominant hand (the right-handers); Rh3 is DROPPED,
-since nobody plays both hands.
+Rh1 is read on the right hand over everyone; Rh3 is DROPPED, since
+nobody plays both hands.
 Primary: signed mean asynchrony per hand (time_difference_ms on hit
 rows, notebook sec_rhythm), asynchrony SD, mean absolute offset
 (block_summary.beat_offset_stats.beat_offset_abs_mean_ms), hit rate;
@@ -644,12 +672,25 @@ contrast and Mirror. Without it, the minutes the second hand's blocks
 used to take buy the second pass, and the design gains the
 within-session test-retest the one-pass version could not compute.
 
-Who takes part. Right-handers are the primary sample: on them the
-device hand is the dominant hand, which is the hand every pooled
-number describes. Left-handers are not turned away. They play the
-same right-hand device, their non-dominant hand, are flagged by the
-Edinburgh score at intake, stay out of every pooled number and are
-described on their own (Section 4.4). Expect about one in ten.
+Who takes part. Anyone who volunteers, right- or left-handed: the
+supply is whoever turns up. Everyone plays the same right-hand
+device, so every pooled number describes the right hand on this rig,
+over a sample whose handedness mix is recorded (the main hand at
+login, the Edinburgh short form on paper). Pooling everyone is the
+primary analysis, amended 24 September 2026 before any participant,
+for three reasons: the task, the device and the hand are identical
+for all; in healthy young adults the dominant hand's advantage on
+these measures is small, and smaller still in left-handers, whose
+between-hand differences in tapping are smaller than right-handers'
+(Peters and Durding 1979) and whose simple reaction time differs
+little between the hands (Nisiyama and Ribeiro-do-Valle 2014); and
+turning left-handers into a separate, tiny, undescribed group would
+waste their data. Two analyses make the most of the mix instead of
+hiding it: the handedness comparison of Section 4.4 (left-handers'
+non-dominant hand against right-handers' dominant hand, between
+people, with the LQ as a graded version) and the sensitivity rerun of
+Section 4.9 (every check on the right-handers alone). Expect about
+one participant in ten to be left-handed.
 
 Sample size is set by the day, not by a power calculation. One rig,
 one participant at a time, 60 minutes booked each:
@@ -760,38 +801,39 @@ plan through the real engine, real modes and real loggers on a
 simulated clock, with a model participant on a simulated one-board
 200 Hz sensor stream (reaction about 350 ms, force held within a
 percent of target, sequences replayed correctly, rests taken in
-full). Run 24 September 2026, code P01, order A.
+full). Run 24 September 2026, code P01, order A, with the Chords
+size mix (4 singles, 10 pairs, 5 triples, 1 quad per 20).
 
   Block                              Pass   Minutes
   --------------------------------------------------
   Login, seating, quick calibration          5.00
-  Reaction                           1       2.16
+  Reaction                           1       2.44
   Rhythm (Easy_Lemon, medium)        1       2.05
   Echo, 4 lanes                      1       3.06
   Force Pilot                        1       3.54
-  Chords (40)                        1       2.59
-  Buzz Hunt (16 + 4)                 1       2.39
-  Pattern                            1       6.29
-  Adaptive                           1       0.48
-  Syllables                          1       1.78
+  Chords (40)                        1       2.68
+  Buzz Hunt (16 + 4)                 1       2.36
+  Pattern                            1       6.28
+  Adaptive                           1       0.46
+  Syllables                          1       1.75
   The rest, between the passes               3.00
-  Reaction                           2       2.12
+  Reaction                           2       2.24
   Force Pilot                        2       3.54
-  Chords (40)                        2       2.71
+  Chords (40)                        2       2.69
   Transitions, 10 s NEXT UP x 11             1.83
   The 60 s stretch note                      1.00
   --------------------------------------------------
-  TOTAL ON THE RIG                          43.56
+  TOTAL ON THE RIG                          43.92
 
-Play alone is 32.7 minutes. Drop the rest and the sitting is 40.6.
+Play alone is 33.1 minutes. Drop the rest and the sitting is 40.9.
 
 One sitting is one draw, not the length of the sitting. Several
 blocks draw fresh material every time by design (their seed keys are
 empty, so a participant never meets the same sequence twice), and
 reaction's exponential foreperiod moves the most. Measured with the
 script's --repeats flag, eight sittings on each of six codes (P01 to
-P04 over both orders, P05 and P06 left-handed), 48 in all: medians
-43.67 to 44.17 minutes, whole range 43.13 to 44.90, none over the 45
+P06 over both orders, P04 and P06 left-handed), 48 in all: medians
+43.73 to 44.17 minutes, whole range 43.17 to 44.92, none over the 45
 minute budget and none near the 50 minute hard stop. Quote the median
 and the range, not one run.
 
@@ -881,7 +923,7 @@ window or detection key can never creep in through the preset):
   force_pilot:
     passes: 1                     # one climb of the fixed ladder
   chords:
-    subblocks: 2                  # 40 chords, both passes
+    subblocks: 2                  # 40 trials, both passes
     trials_per_subblock: 20
     sync_windows_ms: [150]        # one rung: W fixed at 150 ms
   buzz_hunt:
@@ -965,8 +1007,9 @@ Statistical cost of each short form:
   per-finger values are cohort-pooled and the hand-level mean is the
   unit (and the T2 and T3 metric).
 
-  Chords, 40 chords a block, in each pass, across 11 chord types, so
-  per-chord cells are cohort-pooled. Both sub-blocks are within-hand,
+  Chords, 40 trials a block in each pass (32 chords across the 11
+  chord types, and 8 single fingers, two per finger), so per-chord
+  and per-single cells are cohort-pooled. Both sub-blocks are within-hand,
   which is what makes the start-to-end comparison in Section 4.5b
   possible.
 
@@ -1137,8 +1180,7 @@ sits in a cloud-synced personal Google Drive folder; participant
 data must not. The study laptop runs the app from a local folder
 whose session.data_dir points at Curtin-approved storage (or a local
 folder that is copied to it at the end of the collection day), and
-the analysis reads from there. State this in the ethics
-application.
+the analysis reads from there. Say so in the method.
 
 
 4. ANALYSIS PLAN
@@ -1166,10 +1208,11 @@ participant, phase, mode and metric identify a row. phase is pass1
 or pass2; every table but reliability reads pass1 only
 (cohort_battery_rows), and the reliability chapter pairs the two
 (cohort_retest_rows). hand is right on every row and hand_role says
-whether that was the participant's dominant hand; a pooled number is
-built from dominant-hand rows only (cohort_primary_people), so a
-left-hander's rows are carried in the export and described on their
-own. position is the battery step number (1 to 12). visit reads 1; a
+whether that was the participant's dominant hand. A pooled number
+is built over everyone (cohort_primary_people with COHORT_POOL
+"all"); the sensitivity rerun sets COHORT_POOL to "dominant" and
+keeps the right-handers. position is the battery step number (1 to
+12). visit reads 1; a
 code whose rows carry more than one visit means somebody played on
 two days, which the analysis flags rather than pools.
 
@@ -1239,14 +1282,28 @@ is drawn as a line where one exists.
 4.4 Dominant versus non-dominant
 --------------------------------
 One-board rig (24 September 2026). Nobody plays both hands, so there
-is no pair to test and R2, C5, Rh3 and M2 are DROPPED. The chapter
-instead sets the right-handers (dominant hand, the pooled sample)
-beside the left-handers (non-dominant hand, same right-hand device),
-medians and counts per metric, first pass, with no test: a handful of
-left-handers supports no between-group inference, and a difference
-there would mix handedness with every other way those few people
-differ. It says what the non-dominant hand read on this rig and why
-the left-handers stay out of the pooled numbers.
+is no pair to test and R2, C5, Rh3 and M2 are DROPPED. Handedness
+becomes a between-person factor: the right-handers play their
+dominant hand and the left-handers their non-dominant hand, on the
+same device. Per metric, first pass: n and median per group; the
+median shift (left minus right) with a percentile bootstrap interval,
+each group resampled on its own; Cliff's delta; and a two-sided
+Mann-Whitney p. All of it is EXPLORATORY: no direction is predicted,
+no multiplicity control covers it, and a group needs three people
+before anything but medians prints. The expected answer is a small
+or no difference (Peters and Durding 1979; Nisiyama and
+Ribeiro-do-Valle 2014), so a large one on a timing measure would be
+the thing to discuss, with the caveat that a handful of left-handers
+also differ from the right-handers in every other way those few
+people differ.
+
+The graded look: where the Edinburgh laterality quotient is recorded
+(the short form on paper, typed into sessions/intake_sheet.csv, one
+row per code, columns participant and edinburgh_lq), Spearman rho of
+LQ against each pooled metric over everyone, from five participants
+up. Also exploratory. LQ runs from -100 (fully left) to +100 (fully
+right); the short form's four items are writing, throwing, toothbrush
+and spoon (Veale 2014).
 
 The rest of this section is the two-board analysis, which the
 notebook still runs on a two-board tree. Per metric with a hand_role
@@ -1411,8 +1468,8 @@ against zero.
 (c) Within-session test-retest, pass 1 against pass 2, pre-specified
 24 September 2026 before any participant. Reaction, force pilot and
 chords are replayed after the rest with the same counts and the same
-frozen ladders. Per metric, on the right-handers (the pooled sample;
-a left-hander's non-dominant blocks are not mixed in):
+frozen ladders. Per metric, over the pooled sample (everyone; the
+right-handers alone in the sensitivity rerun, Section 4.9):
 
   ICC(2,1), two-way random, absolute agreement, single measure, the
   form Koo and Li (2016) give for test-retest, with its exact F
@@ -1458,14 +1515,16 @@ number for the six modes played once.
 Two tables, both decided before the data comes in.
 
 Table 1, known effects, one row per check, from Section 1, read on
-each right-hander's first-pass block: R1 R2 R3, P1 P3, C1 C2 C3 C4,
+each participant's first-pass block: R1 R2 R3, P1 P3, C1 C2 C3 C4 C6,
 Rh1 Rh2, M1 M2, F1 F2 F3 F4, B1 B2 B3 B4, E1 E3, A5 A6, S6 S7. A5,
 A6, S6 and S7 were added on 23 September 2026, before any
 participant, so every mode has a row; they are decided on the
 interval, carry no p value and so do not enter the family-wise
 correction. E3's criterion was set against chance the same day
 (Section 1.11). R3 was restored on 24 September 2026 as the pass 2
-against pass 1 equivalence test (Section 1.1). Each row: statistic,
+against pass 1 equivalence test (Section 1.1), and C6, the chord
+cost, joined the same day with the singles it reads (Section 1.3).
+Each row: statistic,
 CI, test, effect size, pass or fail against the stated criterion.
 Rows carry the word DROPPED and their reason, so that a reader who
 finds them in Section 1 finds out here what happened to them:
@@ -1580,7 +1639,8 @@ healthy cohort cannot give.
   2 Reliability (Section 4.5c): an ICC(2,1) forest for T1 to T5,
     each point with its interval over the band Section 1 predicted,
     and a Bland-Altman panel per metric. Captions say
-    within-session, twenty minutes apart, right-handers only. (On a
+    within-session, twenty minutes apart, everyone on the right hand.
+    (On a
     two-board tree the paired dominant versus non-dominant figure
     takes this slot.)
   3 Internal consistency forest: every metric with its permutation
@@ -1640,17 +1700,23 @@ healthy cohort cannot give.
     battery log (rest_taken_s) and to the next block's metadata
     (battery.rest_before_s). tests/test_study_battery.py
     (RestStepTests) checks the card, the floor and the logged length.
-  d TO DO. The participant's own view reads the within-block series
-    (first third against last third); a mode played in both passes
-    could also show its pass 2 against its pass 1, worded as a
-    direction and never as a real change (Section 4.5a).
-  e DONE. The notebook's cohort chapter: selection, descriptives,
-    dominant against non-dominant (the handedness table on the
-    one-board rig), within-block, internal consistency, reliability
+  d DECIDED, not built. The participant's own view reads the
+    within-block series (first third against last third). Showing
+    pass 2 against pass 1 during the sitting was considered and left
+    out: the pass 2 blocks run back to back, so a comparison shown
+    after the first of them could change effort on the next two and
+    bias the very retest Section 4.5c reads. Show it at the debrief
+    if at all, from the notebook, worded as a direction.
+  e DONE. The notebook's cohort chapter: selection (with the intake
+    sheet's LQ), descriptives, dominant against non-dominant (on the
+    one-board rig the between-person handedness comparison and the LQ
+    correlation), within-block, internal consistency, reliability
     (sec_cohort_reliability, T1 to T5, pass 1 against pass 2),
-    feasibility, validity (R3 from the passes, the one-board rows as
-    DROPPED) and the export, which writes cohort_reliability.csv and
-    no progress_mdc.yaml. tests/test_cohort_one_board.py drives it
+    feasibility, validity (R3 from the passes, C6 with the chord size
+    table and the one-finger matrix, the one-board rows as DROPPED),
+    the handedness sensitivity rerun (sec_cohort_sensitivity) and the
+    export, which writes cohort_reliability.csv, cohort_sensitivity.csv
+    and no progress_mdc.yaml. tests/test_cohort_one_board.py drives it
     end to end on a one-board two-pass cohort the real engine wrote;
     tests/test_cohort_notebook.py keeps the two-board one-pass tree
     working; tests/test_notebook_matches_software.py pins the shape.
@@ -1661,41 +1727,57 @@ healthy cohort cannot give.
   h TO DO. Bench characterisation of the pads with known masses and
     a 30 s drift trace, before the first participant (force_pilot.py
     names it as the precondition).
-  i TO DO. Audio latency measurement of the study laptop for rhythm
-    (Section 1.6), or an explicit statement that asynchrony is
-    within-device.
+  i TO DO on the study laptop, 10 minutes (the procedure is in
+    docs/study_day/before_the_day.md). Audio output latency moves
+    every participant's rhythm asynchrony by the same constant, so
+    Rh2 (the SD) is untouched and Rh1 (the sign of the mean) is read
+    against it. If it is not measured, state that the asynchrony is
+    within-device and that Rh1's sign carries the latency.
   j DONE. scripts/measure_battery.py plays the plan headless through
     the real engine on a simulated clock and a simulated one-board
     rig, counts the rests and the transitions separately, and reports
     the minutes per block and per pass against budget_min and
     hard_stop_min: 48 sittings on six codes, medians 43.7 to 44.2,
-    range 43.1 to 44.9 (Section 2.3). Re-run it after any change to
+    range 43.2 to 44.9 (Section 2.3). Re-run it after any change to
     the preset.
   k DONE. scripts/simulate_cohort.py plays people with fixed traits
-    and fresh per-block noise, about one in eight left-handed,
+    (a per-person chord cost among them) and fresh per-block noise,
+    about one in eight left-handed,
     through the real one-board Play all, and writes the truth to
     truth.json and the minutes to durations.csv. Its reliability
     numbers describe the simulator, never the device.
   l TO DO. A two-person pilot on the real board for the clock,
     before recruiting: if the median session exceeds 46 minutes,
     apply the trim ladder in Section 2.3 and record which rungs were
-    used.
+    used. The run sheet and the checks are in docs/study_day/.
 
-5. ETHICS AND RUN SHEET
-=======================
+4.9 Handedness sensitivity
+--------------------------
+Pre-specified 24 September 2026, before any participant. The primary
+analysis pools everyone (Section 2.1). sec_cohort_sensitivity reruns
+the within-block chapter, Table 1, Table 2 and the reliability rows
+with the left-handers removed (COHORT_POOL "dominant") and sets every
+row beside the pooled one: n, value and verdict both ways, or the
+Koo and Li band for a reliability row, and whether it changed. It
+tests nothing new; each row keeps its own rule. The thesis sentence
+it supports is either "no verdict changes without the left-handers"
+or the named rows that do. With no left-handed participant the
+chapter says so and stops. Output: cohort_sensitivity.csv.
 
-5.1 What the ethics application must cover
-------------------------------------------
-Risk level: low risk under the NHMRC National Statement (2023
-update; "low risk" is research where the only foreseeable risk is
-one of discomfort; NHMRC, National Statement on Ethical Conduct in
-Human Research, Section 2.1). Curtin HREC low-risk pathway.
+5. PARTICIPANTS, SAFETY AND RUN SHEET
+=====================================
 
-Participants: adults 18 and over from the psychology participant
-pool, credit per the pool's standard rate; students of the
-supervisor or the student researcher are excluded to avoid a
-dependent relationship. Inclusion: normal or corrected vision, able
-to sit at a laptop for an hour with a break. Exclusion: current
+5.1 Participants, safety and consent
+------------------------------------
+Risk: the only foreseeable risk is discomfort, which is what the
+NHMRC National Statement calls low risk (NHMRC, National Statement
+on Ethical Conduct in Human Research, 2023 update, Section 2.1). The
+thesis's ethics and professional discussion can describe the study
+that way.
+
+Participants: healthy student volunteers, adults 18 and over, right-
+or left-handed. Inclusion: normal or corrected vision, able to sit at
+a laptop for an hour with a break. Exclusion: current
 hand, wrist or forearm injury or pain; diagnosed neurological or
 musculoskeletal condition affecting the hands; skin condition or
 open wound on the hands; known sensitivity to vibration.
@@ -1732,7 +1814,7 @@ Foreseeable discomforts and their controls:
   Screen and sound: 60 Hz display with no flashing patterns; laptop
     speaker at a moderate fixed volume set once and recorded.
   Boredom or frustration: games are short and scored; participants
-    may skip a block or withdraw at any time without loss of credit.
+    may skip a block or stop at any time, no reason needed.
 
 Data: participant code only in every file the software writes; age,
 sex, handedness and hand size on the intake sheet keyed by code; the
@@ -1744,16 +1826,22 @@ Curtin's research data policy; the software repository is public on
 GitHub and holds no participant data (sessions/ is gitignored).
 Participants may withdraw their data until analysis begins.
 
-Also state: no deception beyond the standard "some games repeat a
-hidden pattern you are not told about" (pattern, buzz hunt, echo),
-disclosed in the debrief; no clinical assessment or feedback is
-given; the device is a research prototype, not a medical device. Say
-in the application that the design is a single session with no
-repeat measurement, so no participant is contacted again after the
-day.
+The information sheet and the debrief say: no deception beyond the
+standard "some games repeat a hidden pattern you are not told about"
+(pattern, buzz hunt, echo), explained in the debrief; no clinical
+assessment or feedback is given; the device is a research prototype,
+not a medical device; one session only, and nobody is contacted
+again after the day. The study-day kit (docs/study_day/) has the
+information sheet, the consent form, the intake sheet and the
+debrief to print.
 
 5.2 Research-assistant run sheet (one session)
 ----------------------------------------------
+The printable version, with the information sheet, consent form,
+intake sheet (Edinburgh short form included), debrief and the
+end-of-day steps, is docs/study_day/. This section is the reasoning
+behind it.
+
 One collection day, one participant at a time, 60 minutes booked
 each. The 15 minutes off the clock covers consent, the handedness
 form, the hand measurements and resetting the rig from the last
@@ -1874,12 +1962,14 @@ END
       played, each with trials.csv, raw.csv and metadata.json, and
       that battery.position runs 1 to 12.
   [ ] Debrief: hidden sequences explained, questions answered,
-      credit granted, thanks. Say that the session shows what a
+      thanks. Say that the session shows what a
       normal hand does on the device and how performance moves
       within a few minutes of practice, and that it does not show
       what is kept overnight.
-  [ ] Copy today's session folders to the approved storage at the
-      end of the day; wipe pads and frame; unplug boards.
+  [ ] Type each code's Edinburgh LQ into sessions/intake_sheet.csv
+      (participant, edinburgh_lq). Copy today's session folders to the
+      approved storage at the end of the day; wipe pads and frame;
+      unplug the board.
 
 
 6. REFERENCES

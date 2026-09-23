@@ -72,6 +72,26 @@ At the lab PC
 13. Flashing firmware and changing a sensor address are done from the
    exe's Settings screen. The source/ copy carries no avrdude.
 
+Testing the lab build on a Mac, no box
+--------------------------------------
+scripts/virtual_trigger_box.py stands in for the MMBT-S: a
+pseudo-terminal the game opens like any serial port, which records
+every byte. It starts the lab folder's source/ under PsychoPy's own
+Python with eeg_lab.yaml, the way run_in_psychopy.py does, with
+--eeg-port pointed at itself; the hand board is found the normal way.
+Play as a participant would, then close the game. The script lists
+the bytes it received against the markers each block logged in
+raw.csv, in order, and writes the byte log to
+EEG_Lab/sessions/eeg/virtual_box_<time>.csv.
+
+    python3 scripts/virtual_trigger_box.py
+    python3 scripts/virtual_trigger_box.py --box-only   just the box
+
+The first time, run run_in_psychopy.py once from PsychoPy Coder so it
+installs the packages the game needs into EEG_Lab/python_packages.
+Delete the test sessions from EEG_Lab/sessions before the folder goes
+to the lab.
+
 What the Status channel shows
 -----------------------------
 - 240 once as the login session's first game starts, 241 once at

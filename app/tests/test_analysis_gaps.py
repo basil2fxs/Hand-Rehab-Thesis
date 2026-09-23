@@ -959,5 +959,5 @@ class SittingSpreadTests(unittest.TestCase):
         doc = (ROOT / "docs" / "research"
                / "healthy_baseline_study.txt").read_text(encoding="utf-8")
         self.assertIn("One sitting is one draw", doc)
-        self.assertIn("43.13 to 44.90", doc)
+        self.assertIn("43.17 to 44.92", doc)
         self.assertIn("48 in all", doc)
