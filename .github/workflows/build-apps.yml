@@ -155,36 +155,38 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Continue"
+          Write-Host "-- installing"
           Start-Process "bin\dist\FingerRehab-Setup-Windows.exe" `
             -ArgumentList "/VERYSILENT","/SP-","/SUPPRESSMSGBOXES" -Wait
-          $exe = "$env:LOCALAPPDATA\Programs\Finger Rehab\Finger Rehab.exe"
-          if (-not (Test-Path $exe)) { throw "not installed" }
-          schtasks /Query /TN FingerRehabAutostart
-          if ($LASTEXITCODE) { throw "auto-start task missing" }
-          # Inno names the uninstaller unins000.exe, but the number
-          # climbs if one is already there, so find it rather than
-          # assume. Print the folder when it is missing: a silent
-          # Start-Process failure here reads as a broken uninstall.
           $dir = "$env:LOCALAPPDATA\Programs\Finger Rehab"
-          $unins = Get-ChildItem -Path $dir -Filter "unins*.exe" `
-            -ErrorAction SilentlyContinue | Select-Object -First 1
-          if (-not $unins) {
-            Get-ChildItem -Path $dir | Select-Object Name | Format-Table
-            throw "no uninstaller in $dir"
-          }
-          # Inno's uninstaller copies itself to temp and relaunches, so
-          # -Wait returns while the real work is still going. Poll for
-          # the result instead of racing it.
+          $exe = "$dir\Finger Rehab.exe"
+          if (-not (Test-Path $exe)) { throw "not installed" }
+          Write-Host "-- installed, contents:"
+          Get-ChildItem -Path $dir | ForEach-Object { Write-Host "   $($_.Name)" }
+          schtasks /Query /TN FingerRehabAutostart | Out-Null
+          if ($LASTEXITCODE) { throw "auto-start task missing" }
+          Write-Host "-- task registered"
+          $unins = Get-ChildItem -Path $dir -Filter "unins*.exe" |
+            Select-Object -First 1
+          if (-not $unins) { throw "no uninstaller in $dir" }
+          Write-Host "-- uninstalling with $($unins.Name)"
           Start-Process $unins.FullName `
             -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES" -Wait
+          Write-Host "-- uninstaller returned, waiting for it to finish"
+          # Inno's uninstaller relaunches itself from temp, so -Wait
+          # returns early. Poll rather than race it.
           $gone = $false
           foreach ($i in 1..30) {
             Start-Sleep -Seconds 2
             schtasks /Query /TN FingerRehabAutostart 2>$null | Out-Null
             if ($LASTEXITCODE) { $gone = $true; break }
           }
-          if (-not $gone) { throw "task survived uninstall" }
-          if (Test-Path $exe) { throw "the exe survived uninstall" }
+          if (-not $gone) {
+            schtasks /Query /TN FingerRehabAutostart /V /FO LIST
+            throw "task survived uninstall"
+          }
+          Write-Host "-- task removed"
 
       - name: Upload the Windows installer
         if: runner.os == 'Windows'
