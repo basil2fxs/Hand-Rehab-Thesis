@@ -17,6 +17,18 @@ except ImportError:
 
 from .source import BaseQueueSource
 
+# What a failed open can throw besides pyserial's own error. On a Mac
+# or Linux pyserial sets the line up with termios after the port
+# opens, and a USB serial driver that refuses the settings (a wedged
+# CH340 does this until it is replugged) raises termios.error, which
+# is neither a SerialException nor an OSError. Uncaught, it killed the
+# reader thread, so the board never came back even after a replug.
+try:
+    import termios
+    _OPEN_ERRORS: tuple = (termios.error,)
+except ImportError:          # Windows
+    _OPEN_ERRORS = ()
+
 
 log = logging.getLogger(__name__)
 
@@ -284,7 +296,7 @@ class SerialSource(BaseQueueSource):
                 s.reset_input_buffer()
                 log.info("Opened %s @ %d", self.port, self.baud)
                 return s
-            except serial.SerialException as e:
+            except (serial.SerialException, *_OPEN_ERRORS) as e:
                 log.warning("Open %s failed (try %d/%d): %s",
                             self.port, attempt, self.open_retries, e)
                 # Skip the wait after the final attempt; we're about to
@@ -314,7 +326,10 @@ class SerialSource(BaseQueueSource):
         while not self._stop.is_set():
             try:
                 self._serial = self._open()
-            except (serial.SerialException, OSError) as e:
+            except Exception as e:
+                # Any failure to open is a state to wait out, never a
+                # reason for the thread to end: this loop is the only
+                # way the board comes back.
                 self._connected = False
                 self._note_drop(str(e))
                 if self._stop.wait(backoff):

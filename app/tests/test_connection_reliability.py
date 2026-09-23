@@ -100,6 +100,39 @@ class TestItComesBack:
         assert calls["n"] >= 3
         assert src._connected
 
+    def test_a_driver_that_refuses_the_settings_is_waited_out(
+            self, source_factory):
+        """A wedged CH340 on a Mac opens and then refuses its line
+        settings with termios.error, which is not a SerialException.
+        That killed the reader thread on 24 September 2026, so the
+        board stayed dead after the replug. It is now one more failed
+        open."""
+        termios = pytest.importorskip("termios")
+        src, calls = source_factory([
+            termios.error(22, "Invalid argument"),
+            RuntimeError("anything else the driver throws"),
+            FakePort(),
+        ])
+        src.start()
+        time.sleep(0.6)
+        assert calls["n"] >= 3
+        assert src._connected
+
+    def test_the_open_retries_catch_the_termios_refusal(self, monkeypatch):
+        termios = pytest.importorskip("termios")
+        tries = {"n": 0}
+
+        def refuse(*_a, **_k):
+            tries["n"] += 1
+            raise termios.error(22, "Invalid argument")
+
+        monkeypatch.setattr(ss.serial, "Serial", refuse)
+        src = ss.SerialSource(port="/dev/fake", baud=115200)
+        src.open_retries, src.retry_delay_s = 3, 0.0
+        with pytest.raises(ss.serial.SerialException):
+            src._open()
+        assert tries["n"] == 3
+
     def test_it_backs_off_rather_than_spinning(self, source_factory):
         src, calls = source_factory(
             [ss.serial.SerialException("nope")])
