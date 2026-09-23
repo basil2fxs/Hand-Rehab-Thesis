@@ -1073,6 +1073,8 @@ class LabPackageTests(unittest.TestCase):
     PKG = LAB_FOLDER
     # sessions/ ships too: build_lab_package makes sessions/eeg with
     # its note so ActiView's recordings have a home from day one.
+    # scripts/build_lab_package.py USER_DATA, less sessions (shipped).
+    USER_DATA = ("config", "python_packages")
     TOP_LEVEL = ("Finger Rehab.exe", "eeg_lab.yaml",
                  "run_in_psychopy.py", "README.txt", "sessions",
                  "source")
@@ -1099,9 +1101,13 @@ class LabPackageTests(unittest.TestCase):
             self.assertTrue((self.PKG / name).exists(),
                             f"lab package missing {name}")
         # And nothing else: a stray README or launcher would fork the
-        # instructions Basil gives the lab in person.
+        # instructions Basil gives the lab in person. What running the
+        # folder leaves beside it (the packages run_in_psychopy.py
+        # installs, saved settings) is user data, the same allowance
+        # build_lab_package.py makes, and never shipped by CI.
         present = sorted(p.name for p in self.PKG.iterdir()
-                         if p.name != ".DS_Store")
+                         if p.name != ".DS_Store"
+                         and p.name not in self.USER_DATA)
         self.assertEqual(present, sorted(self.TOP_LEVEL))
 
     def test_frozen_exe_picks_up_sibling_lab_config(self) -> None:
