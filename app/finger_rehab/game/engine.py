@@ -466,11 +466,16 @@ class GameEngine:
         # Built even with eeg.enabled false so every call site can stay
         # unconditional: a disabled MarkerWriter no-ops at the cost of
         # one attribute test, zero rows. In lab mode (require_port
-        # true) a missing or unopenable trigger box raises here, before
-        # any window opens, so a lab session can never run silently
-        # unmarked; main.py surfaces the message and exits.
-        self._eeg_feedback_markers = bool(
-            cfg.get("eeg.feedback_markers", False))
+        # true) a missing or unopenable trigger box no longer exits:
+        # the writer comes back needing a port, and run() opens the
+        # window on the EEG port picker instead of the login screen.
+        # Nothing past the picker is reachable until a port opens, so
+        # a lab session still can never run unmarked; it just gets a
+        # way to fix a wrong COM number without a text editor.
+        # eeg.feedback_markers is true, false, or a list of the modes
+        # that send FRN bytes. A list is resolved per block in
+        # _begin_block; until a block starts nothing sends feedback.
+        self._eeg_feedback_markers = self._feedback_markers_on(None)
         # Stimulus markers armed by on_stim_multi, wired by the frame
         # loop immediately after the flip that shows the stimulus.
         self._pending_eeg_stim: list[tuple[int, int]] = []
@@ -480,7 +485,12 @@ class GameEngine:
         # then must not send a second one.
         self._eeg_session_open = False
         self.markers = eeg_trigger.writer_from_config(
-            cfg.get, on_emit=self._on_eeg_emission)
+            cfg.get, on_emit=self._on_eeg_emission, defer_missing=True)
+        # False until run() starts the sample source. With the trigger
+        # box missing at launch the source waits: it was chosen before
+        # anyone knew which port was the box's, so it is chosen again
+        # once the picker has settled that (see eeg_port_ready).
+        self._hand_source_started = False
 
     # ---- bilateral plumbing ------------------------------------------------
     def _build_detectors(self) -> None:
@@ -885,12 +895,13 @@ class GameEngine:
                 self.load_saved_calibration()
             except Exception as e:
                 log.warning("could not load saved calibration: %s", e)
-            self.show_title()
-            self.source.start()
-            # Watch for boards arriving from here on. Started after the
-            # first source is up so the watcher's first scan compares
-            # against a rig that is already assigned, not an empty one.
-            self.start_port_watch()
+            if self.eeg_needs_port():
+                # Lab mode and the box did not open. The picker comes
+                # first and the hand boards wait for it.
+                self.show_eeg_port()
+            else:
+                self.show_title()
+                self._start_hand_source()
             self.audio = self._build_audio()
             # No session marker here. 240 rides the login
             # (begin_session) and 241 the session end, so the EEG
@@ -1308,6 +1319,7 @@ class GameEngine:
         )
         from ..ui.buzz_hunt_screen import BuzzHuntScreen
         from ..ui.calibration_screen import CalibrationScreen
+        from ..ui.eeg_port_screen import EegPortScreen
         from ..ui.force_pilot_screen import ForcePilotScreen
         from ..ui.quick_calibration_screen import QuickCalibrationScreen
         from ..ui.syllables_screen import SyllablesScreen
@@ -1325,6 +1337,7 @@ class GameEngine:
             "diagnostics": DiagnosticsScreen(self),
             "calibration": CalibrationScreen(self),
             "quick_cal": QuickCalibrationScreen(self),
+            "eeg_port": EegPortScreen(self),
         }
 
     def _build_audio(self) -> AudioEngine | None:
@@ -1977,6 +1990,12 @@ class GameEngine:
         if self.screen_obj is title:
             self.running = False
             return
+        # The EEG port picker decides for itself: back to Settings when
+        # it was opened from there, quit when it is holding the launch.
+        eeg_port = self._screens.get("eeg_port")
+        if eeg_port is not None and self.screen_obj is eeg_port:
+            eeg_port.on_escape()
+            return
         if self.screen_obj is mode_select:
             # Game select -> login screen ends the whole session, so
             # this is where the session warning lives. end_session
@@ -2316,7 +2335,8 @@ class GameEngine:
         markers = getattr(self, "markers", None)
         if markers is not None and markers.degraded:
             from ..ui.widgets import draw_text
-            draw_text(screen, "EEG markers lost", (12, 10), self.theme,
+            draw_text(screen, "EEG markers lost. Reconnect the box in "
+                      "Settings after this game", (12, 10), self.theme,
                       self.layout, pt=14, colour=(220, 38, 38))
         if not self._show_fps:
             return
@@ -3477,6 +3497,63 @@ class GameEngine:
                 for i, v in enumerate(finger_maxes))
             self.raw_logger.queue_event("max_press", detail=detail,
                                          hand=hand)
+
+    # ---- EEG trigger box port ---------------------------------------------
+    def eeg_needs_port(self) -> bool:
+        markers = getattr(self, "markers", None)
+        return bool(markers is not None and markers.needs_port)
+
+    def show_eeg_port(self, back=None) -> None:
+        """The trigger box port picker. `back` is where its Back
+        button goes (Settings passes its own screen); None means the
+        launch case, where the only ways out are a port that opens or
+        quitting."""
+        screen = self._screens.get("eeg_port")
+        if screen is None:
+            return
+        screen.enter(back)
+        self.screen_obj = screen
+
+    def eeg_port_ready(self) -> None:
+        """The picker opened a port. At launch that is the moment the
+        hand boards can be chosen and started; from Settings it is
+        just a new port and nothing else moves."""
+        if not getattr(self, "_hand_source_started", True):
+            self._rechoose_hand_source()
+            self._start_hand_source()
+
+    def _start_hand_source(self) -> None:
+        self.source.start()
+        self._hand_source_started = True
+        # Watch for boards arriving from here on. Started after the
+        # first source is up so the watcher's first scan compares
+        # against a rig that is already assigned, not an empty one.
+        self.start_port_watch()
+
+    def _rechoose_hand_source(self) -> None:
+        """Pick the hand boards again now the box's port is known.
+
+        main.py chose them before the engine existed, when a trigger
+        box on the wrong COM number looked like any other USB serial
+        device. The source has not been started, so nothing is open
+        yet and swapping it costs nothing. A keyboard source (chosen
+        with --source keyboard, or because no board was found) stays
+        as it is.
+        """
+        if not getattr(self.source, "hands", None):
+            return
+        try:
+            from ..hardware.discovery import build_source_from_config
+            fresh = build_source_from_config(self.cfg)
+        except Exception as e:
+            log.warning("Could not choose the hand boards again: %s", e)
+            return
+        if fresh is None:
+            from ..hardware.keyboard_source import KeyboardOnlySource
+            fresh = KeyboardOnlySource()
+            log.info("No hand board besides the trigger box; "
+                     "keyboard mode")
+        self.source = fresh
 
     def show_diagnostics(self) -> None:
         # Settings always shows 8 sensors, so make sure both
@@ -4844,8 +4921,25 @@ class GameEngine:
         # user can pick something concretely.
         self.show_mode_select()
 
+    def _feedback_markers_on(self, mode: str | None) -> bool:
+        """Whether blocks of `mode` send the 140/141/142 bytes.
+
+        The lab names the modes where the feedback stands on its own.
+        Every byte holds the line for pulse plus gap (20 ms), and a
+        feedback byte 800 ms after a press lands among the next
+        trial's stimulus and press in the fast modes: syllables' 800
+        ms trial gap puts it on the next stimulus exactly. There it
+        would push those bytes late in the recording, which costs the
+        stimulus- and response-locked analyses more than FRN gains.
+        """
+        value = self.cfg.get("eeg.feedback_markers", False)
+        if isinstance(value, (list, tuple, set)):
+            return mode is not None and mode in {str(m) for m in value}
+        return bool(value)
+
     def _begin_block(self, name: str) -> None:
         self.current_block = name
+        self._eeg_feedback_markers = self._feedback_markers_on(name)
         # Fresh phrase deck per block, seeded from who is playing and
         # which block this is, so the same participant replaying the
         # same block sees the same wording in the same order. A
@@ -7120,9 +7214,18 @@ class GameEngine:
         due = time.perf_counter() + self.feedback_delay_ms / 1000.0
         code = None
         if marker and getattr(self, "_eeg_feedback_markers", False):
-            code = eeg_trigger.CODES[
-                "feedback_positive" if label != "Miss"
-                else "feedback_negative"]
+            # The byte says what was drawn. In the lab style that is
+            # one of three rings, and the half ring (Late, Early, near)
+            # is neither a win nor a loss: sending it as 140 put those
+            # trials in the positive FRN average. 142 keeps them apart.
+            glyph = (popup or {}).get("popup_glyph")
+            key = {"full": "feedback_positive",
+                   "half": "feedback_neutral",
+                   "open": "feedback_negative"}.get(glyph)
+            if key is None:
+                key = ("feedback_positive" if label != "Miss"
+                       else "feedback_negative")
+            code = eeg_trigger.CODES[key]
         if not isinstance(getattr(self, "_pending_feedback", None), list):
             self._pending_feedback = []
         self._pending_feedback.append(

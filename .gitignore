@@ -59,6 +59,8 @@ sessions/
 
 # Written by the Settings screen, per user.
 app/config/user_settings.yaml
+# The trigger box port picked in the game on this machine.
+app/config/eeg_port.yaml
 
 # The Patterns sequence file a researcher loaded on this machine and its
 # pointer. Per machine, not part of the app.

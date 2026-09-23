@@ -157,6 +157,43 @@ class LauncherTests(unittest.TestCase):
         # And it says where the data goes, next to the exe.
         self.assertIn(str(self.here / "sessions"), out)
 
+    def test_a_blocked_exe_falls_back_to_source(self) -> None:
+        # The exe is unsigned. Smart App Control on Windows 11 refuses
+        # unsigned programs outright, so the launch raises instead of
+        # running; source/ under PsychoPy's own Python still works.
+        self._source_layout()
+        exe = self.here / "Finger Rehab.exe"
+        exe.write_bytes(b"")
+        calls = []
+
+        def call(cmd, cwd=None):
+            calls.append(cmd)
+            if cmd == [str(exe)]:
+                raise OSError("An Application Control policy has "
+                              "blocked this file")
+            return 0
+
+        out = io.StringIO()
+        with patch.object(self.mod.subprocess, "call", call), \
+                patch.object(self.mod, "missing_packages",
+                             return_value=[]), redirect_stdout(out):
+            rc = self.mod.main(self.here, platform="win32")
+        self.assertEqual(rc, 0)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(calls[1][0], sys.executable)
+        self.assertIn("Running from source instead", out.getvalue())
+
+    def test_a_blocked_exe_with_no_source_fails_plainly(self) -> None:
+        exe = self.here / "Finger Rehab.exe"
+        exe.write_bytes(b"")
+        out = io.StringIO()
+        with patch.object(self.mod.subprocess, "call",
+                          side_effect=OSError("blocked")), \
+                redirect_stdout(out):
+            rc = self.mod.main(self.here, platform="win32")
+        self.assertEqual(rc, 1)
+        self.assertIn("did not start", out.getvalue())
+
     def test_missing_pygame_ce_prints_uninstall_then_install(self) -> None:
         # PsychoPy's classic pygame owns the same package name, so the
         # fix is two pip lines in this order, ready to paste.

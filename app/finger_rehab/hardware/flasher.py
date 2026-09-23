@@ -375,12 +375,13 @@ def candidate_ports(cfg, source=None) -> list[tuple[str, str]]:
     port as a flash target would be a trap.
     """
     try:
-        from .serial_source import discover_ports
-        from .discovery import short_port
+        from .discovery import hand_board_ports, short_port
     except ImportError:
         return []
     try:
-        ports = discover_ports(cfg.get("serial.vendor_ids"), max_ports=8)
+        # Never the EEG trigger box: avrdude resetting and writing to
+        # it would be the worst thing a flash could do in the lab.
+        ports = hand_board_ports(cfg, max_ports=8)
     except Exception as e:
         log.warning("Port scan for the flasher failed: %s", e)
         return []

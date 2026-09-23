@@ -120,7 +120,8 @@ def _is_junk_port(device: str) -> bool:
 
 
 def discover_ports(expected_vids: list[str] | None,
-                    max_ports: int = 2) -> list[str]:
+                    max_ports: int = 2, exclude=(),
+                    allow_unknown: bool = True) -> list[str]:
     """Return Arduino-family ports the host can see, up to max_ports.
 
     Priority:
@@ -136,8 +137,16 @@ def discover_ports(expected_vids: list[str] | None,
     filtered at every step so they never get picked automatically.
     The user can still assign them manually in the Settings screen if
     they really want to.
+
+    `exclude` names ports that belong to something else (the EEG
+    trigger box); `allow_unknown` False drops step 2, for the lab,
+    where an unknown USB serial device is far more likely to be lab
+    equipment than a hand board. discovery.hand_board_ports sets both
+    from the config.
     """
-    ports = list_available_ports()
+    skip = {str(x).strip().lower() for x in exclude if x}
+    ports = [p for p in list_available_ports()
+             if p.device.strip().lower() not in skip]
     if not ports:
         return []
     vid_set: set[int] = set()
@@ -153,6 +162,9 @@ def discover_ports(expected_vids: list[str] | None,
                     and not _is_junk_port(p.device)]
     if vid_matches:
         return vid_matches[:max_ports]
+
+    if not allow_unknown:
+        return []
 
     # Pass 2: any port that has a VID and isn't junk.
     any_real_usb = [p.device for p in ports

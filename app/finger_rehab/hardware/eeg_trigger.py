@@ -146,7 +146,7 @@ CODES: dict[str, int] = {
     # Feedback band (140-149), only under eeg.feedback_markers.
     "feedback_positive": 140,
     "feedback_negative": 141,
-    "feedback_neutral": 142,     # reserved for neutral readouts (FRN control)
+    "feedback_neutral": 142,     # half-ring glyph, lab style (FRN control)
     # Block boundaries (200-231), mode id added.
     "block_start_base": 200,
     "block_abandoned": 219,      # keeps the old eeg.py abandoned concept
@@ -328,7 +328,7 @@ CODE_NOTES: dict[str, tuple[str, str, str, str]] = {
         "Rhythm sends it only when no note in any lane was due. A "
         "wrong finger on the beat is resp_wrong_base instead."),
     "feedback_positive": (
-        "flip", "", "outcome glyph or chime for a hit",
+        "flip", "", "full-ring glyph or chime for a hit",
         "Only under eeg.feedback_markers. Lab style draws the glyph "
         "feedback_delay_ms after the press and marks that flip. A "
         "feedback byte inside one frame of the block-end byte was "
@@ -337,7 +337,10 @@ CODE_NOTES: dict[str, tuple[str, str, str, str]] = {
     "feedback_negative": (
         "flip", "", "outcome glyph for a miss; force_pilot: corridor-exit buzz",
         "Same rule as 140."),
-    "feedback_neutral": ("flip", "", "reserved", ""),
+    "feedback_neutral": (
+        "flip", "", "half-ring glyph (Late, Early, near) in the lab style",
+        "Same rule as 140. Neither a win nor a loss: keep it out of both "
+        "FRN averages or treat it as its own condition."),
     "block_start_base": (
         "state", "", "block starts, + mode id",
         "reaction 0, classic 1, adaptive 2, rhythm 3, mirror 4, "
@@ -588,6 +591,10 @@ class SerialBackend(TriggerBackend):
         self.port = port
         self.baud = baud
         self._serial = None
+        # Why the last open failed, in the OS's own words, so the port
+        # picker can say "access denied" or "not found" instead of a
+        # bare no.
+        self.last_error = ""
 
     @property
     def is_open(self) -> bool:
@@ -597,6 +604,7 @@ class SerialBackend(TriggerBackend):
         if not _HAVE_SERIAL:
             log.warning("pyserial not available; EEG trigger port %s "
                         "cannot open", self.port)
+            self.last_error = "pyserial is not installed"
             return False
         if self.is_open:
             return True
@@ -612,10 +620,12 @@ class SerialBackend(TriggerBackend):
                 write_timeout=0.5,
             )
             log.info("EEG trigger on %s @ %d", self.port, self.baud)
+            self.last_error = ""
             return True
         except Exception as e:
             log.warning("Could not open EEG trigger port %s: %s",
                         self.port, e)
+            self.last_error = str(e)
             self._serial = None
             return False
 
@@ -719,10 +729,48 @@ class MarkerWriter:
         self.first_failure_t: float | None = None
         self.delayed_count = 0
         self.dropped_count = 0
+        # Set when lab mode could not open its port at launch and the
+        # game is waiting on the port picker; says why, for the screen.
+        self.port_problem: str | None = None
 
     @property
     def active(self) -> bool:
         return self.enabled and self.backend is not None
+
+    @property
+    def needs_port(self) -> bool:
+        """Lab mode is on but no box is open: the state the port
+        picker exists for. Nothing can be sent until use_backend."""
+        return self.enabled and self.backend is None
+
+    def use_backend(self, backend: TriggerBackend) -> None:
+        """Send from now on through `backend`, an already open port.
+
+        The port picker calls this once a chosen port has opened. The
+        old port, if any, gets its final 0 and is released, and the
+        failure state starts again: a box that dropped out mid-session
+        and was plugged back in is a working channel, not a degraded
+        one. Queued markers are kept and go out on the new port.
+        """
+        old = self.backend
+        if old is not None and old is not backend:
+            try:
+                old.write_code(RESET)
+            except Exception as e:
+                log.debug("EEG reset on the old port failed: %s", e)
+            try:
+                old.close()
+            except Exception as e:
+                log.debug("EEG old port close failed: %s", e)
+        self.backend = backend
+        self.enabled = True
+        self.port_problem = None
+        self._line = RESET
+        self._high_until = None
+        self._low_since = None
+        self._consecutive_failures = 0
+        self._reopen_tried = False
+        self.degraded = False
 
     # ---- event side --------------------------------------------------------
     def send(self, code: int, lane: int | None = None,
@@ -917,7 +965,8 @@ class TriggerPortError(RuntimeError):
     """Lab mode refusing to start without its trigger box."""
 
 
-def writer_from_config(get, on_emit=None) -> MarkerWriter:
+def writer_from_config(get, on_emit=None,
+                       defer_missing: bool = False) -> MarkerWriter:
     """Build the writer the way the config asks.
 
     `get` is a Config.get-style callable. eeg.enabled false returns an
@@ -960,7 +1009,27 @@ def writer_from_config(get, on_emit=None) -> MarkerWriter:
             backend = candidate
         else:
             reason = f"could not open eeg.port {port}"
+            if candidate.last_error:
+                reason += f" ({candidate.last_error})"
     if backend is None:
+        if require and defer_missing:
+            # The game opens its window on the port picker instead of
+            # exiting. The writer stays enabled with no backend, so it
+            # sends nothing and needs_port stays true until a port
+            # opens; the engine will not leave the picker before then.
+            log.warning("EEG trigger box not open (%s); waiting on the "
+                        "port picker", reason)
+            waiting = MarkerWriter(backend=None, enabled=True,
+                                   pulse_ms=pulse_ms, gap_ms=gap_ms,
+                                   on_emit=on_emit, box=box,
+                                   box_mode=box_mode)
+            # The screen gets the short form; the log above keeps the
+            # OS's own words.
+            from .eeg_port import plain_reason
+            waiting.port_problem = (
+                f"{port}: {plain_reason(candidate.last_error)}" if port
+                else "no port is set in eeg_lab.yaml")
+            return waiting
         if require:
             raise TriggerPortError(
                 f"EEG lab mode needs its trigger box: {reason}. "

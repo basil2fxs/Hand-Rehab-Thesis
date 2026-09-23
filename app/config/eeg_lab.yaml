@@ -13,9 +13,11 @@
 eeg:
   enabled: true
   # The trigger box on the lab's Windows desktop: the NeuroSpec MMBT-S
-  # (Tobii Pro edition, orange case), a virtual COM port. Change here
-  # if it enumerates on a different COM port: Device Manager, Ports
-  # (COM & LPT), unplug it and watch which entry vanishes.
+  # (Tobii Pro edition, orange case), a virtual COM port. If it comes
+  # up on another COM number the game opens on a port list instead of
+  # the login, and the box picked there is saved on this line; Settings
+  # has the same list. By hand: Device Manager, Ports (COM & LPT),
+  # unplug the box and watch which entry vanishes.
   port: COM10
   # MMBT-S manual, Table 1. A virtual COM port ignores baud for speed;
   # 1200 RESETS the box (manual section 3.3), so the writer refuses
@@ -44,6 +46,15 @@ eeg:
   # n/a and the onset column in seconds is all a pipeline needs.
   # Confirm the ActiView rate on the lab desktop before setting it.
   amplifier_rate_hz: null
+  # FRN bytes (140 full ring, 141 open ring, 142 half ring) in the
+  # modes where the feedback stands on its own. Every byte holds the
+  # line 20 ms, and in the fast modes a feedback byte 800 ms after a
+  # press lands among the next trial's stimulus and press bytes and
+  # pushes them late in the recording (syllables' 800 ms trial gap
+  # puts it on the next stimulus exactly). Reaction and chords leave
+  # 1.5 s or more before the next stimulus; force_pilot's 141 is the
+  # corridor-exit buzz, with no press bytes to collide with.
+  feedback_markers: [reaction, chords, force_pilot]
 
 reaction:
   # Fixed-foreperiod CNV variant with the visible ready cue. See the

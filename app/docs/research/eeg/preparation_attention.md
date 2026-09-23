@@ -323,9 +323,13 @@ Design constraints from this lane:
 - Trial budgets: think in the Boudewyn et al. (2018) frame, not magic numbers.
   Floors that the cited literature supports: CNV visible from ~6 to 12 trials but
   plan 30+; ERD ~30+; BP/MRCP several tens; LRP 100+ per hand per condition.
-- Amplifier settings matter for the slow potentials: BP and CNV need a high-pass
-  of 0.05 Hz or lower (or DC), which is a recording decision made in the lab's
-  acquisition software, not in our code, but worth stating in the thesis methods.
+- Filtering matters for the slow potentials: BP and CNV need a high-pass of
+  0.05 Hz or lower (or none). On the lab's BioSemi ActiveTwo this is an analysis
+  choice, not a recording one: the amplifier is DC coupled with no hardware
+  high-pass, so the BDF keeps everything and any high-pass is applied offline
+  (BioSemi FAQ, https://www.biosemi.com/faq/adjust_filter.htm). State the offline
+  filter in the thesis methods, and do not reuse a 0.1 Hz or 0.5 Hz pipeline
+  default for the CNV epochs.
 
 Bottom line for Basil's two questions in this lane. "Can we measure the brain being
 prepared for presses?" Yes, three ways, all standard: CNV in the foreperiod (needs

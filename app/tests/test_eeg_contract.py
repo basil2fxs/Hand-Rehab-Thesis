@@ -634,7 +634,9 @@ class ResponseAnchorTests(_EngineHarness):
         try:
             with tempfile.TemporaryDirectory() as td:
                 eng = self._make_engine(td)
-                eng._eeg_feedback_markers = True
+                # The config, not the attribute: a block start resolves
+                # the switch from eeg.feedback_markers for its mode.
+                eng.cfg.data["eeg"]["feedback_markers"] = True
                 eng.begin_classic_block()
                 from finger_rehab.data.logger import ContinuousTrialLog
                 from finger_rehab.game.scoring import TrialResult
@@ -737,7 +739,9 @@ class ResponseAnchorTests(_EngineHarness):
         try:
             with tempfile.TemporaryDirectory() as td:
                 eng = self._make_engine(td)
-                eng._eeg_feedback_markers = True
+                # The config, not the attribute: a block start resolves
+                # the switch from eeg.feedback_markers for its mode.
+                eng.cfg.data["eeg"]["feedback_markers"] = True
                 # The buzz (and so its marker) only exists under the
                 # after-press cue switch.
                 eng.cfg.data["cue"]["buzz_after"] = True

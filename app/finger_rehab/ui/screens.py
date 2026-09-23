@@ -7141,6 +7141,17 @@ class DiagnosticsScreen(Screen):
             "Back", engine.show_title,
             self.theme, self.layout,
         )
+        # The EEG trigger box's port, in the EEG build only: the other
+        # end of the bottom strip from Back, so it never crowds a
+        # panel. Its label carries the port the markers use right now.
+        self.eeg_btn: Button | None = None
+        if getattr(getattr(engine, "markers", None), "enabled", False):
+            self.eeg_btn = Button(
+                pygame.Rect(engine.layout.width - 40 - self.EEG_BTN_W,
+                            engine.layout.height - 90, self.EEG_BTN_W,
+                            BUTTON_H - 10),
+                "EEG trigger box", self._open_eeg_port,
+                self.theme, self.layout)
         self.lanes: list[LaneStrip] = []
         # Held-key tracker for keyboard mode. Key id -> pygame.K_*.
         self._held_keys: set[int] = set()
@@ -7237,6 +7248,7 @@ class DiagnosticsScreen(Screen):
     # one was; the grouping is what makes it findable.
     BAND_X = 30
     BAND_PAD = 18
+    EEG_BTN_W = 280
 
     # Row 1, side by side: what the patient feels and hears, then how loud
     # and how long it is.
@@ -7388,6 +7400,17 @@ class DiagnosticsScreen(Screen):
         so the label always sits on the row it names."""
         return (self._panel_top() + 50
                 + i * (self.PORTS_ROW_H + self.PORTS_ROW_GAP))
+
+    def _open_eeg_port(self) -> None:
+        self.engine.show_eeg_port(back=self.engine.show_diagnostics)
+
+    def _eeg_btn_label(self) -> str:
+        markers = self.engine.markers
+        port = None if markers.needs_port else getattr(
+            markers.backend, "port", None)
+        if markers.degraded:
+            return f"EEG box: {port} lost"
+        return f"EEG box: {port}" if port else "EEG box: none"
 
     def _status_pos(self) -> tuple[int, int]:
         """Where the message line goes: the bottom strip, starting to the
@@ -7679,11 +7702,12 @@ class DiagnosticsScreen(Screen):
         raw list_available_ports so random macOS virtual ports never
         appear in the dropdown the user can pick from."""
         try:
-            from ..hardware.serial_source import discover_ports
-            vids = self.engine.cfg.get("serial.vendor_ids")
+            from ..hardware.discovery import hand_board_ports
             # max_ports=8 so a future setup with multiple chained
-            # Arduinos still shows them all in the dropdown.
-            self._detected_ports = discover_ports(vids, max_ports=8)
+            # Arduinos still shows them all in the dropdown. The EEG
+            # trigger box's port is never offered as a hand.
+            self._detected_ports = hand_board_ports(self.engine.cfg,
+                                                    max_ports=8)
         except Exception as e:
             self._detected_ports = []
             self._port_status = f"Port scan failed: {e}"
@@ -8186,6 +8210,8 @@ class DiagnosticsScreen(Screen):
                 and self._vol_dirty):
             self._save_volumes()
         self.back_btn.handle_event(e)
+        if self.eeg_btn is not None:
+            self.eeg_btn.handle_event(e)
         for b in self._panel_buttons:
             b.handle_event(e)
         # Built lazily on the first draw, so a headless click before any
@@ -8572,6 +8598,9 @@ class DiagnosticsScreen(Screen):
         for dd in self._port_dropdowns.values():
             dd.draw_closed(surf)
         self.back_btn.draw(surf)
+        if self.eeg_btn is not None:
+            self.eeg_btn.label = self._eeg_btn_label()
+            self.eeg_btn.draw(surf)
         # Message line along the bottom, running right from the Back
         # button. Coloured orange while a port change is unsaved. A
         # hovered cue row takes the line over so the switch can say what
@@ -8580,8 +8609,9 @@ class DiagnosticsScreen(Screen):
         if status_line:
             sx, sy = self._status_pos()
             status_font = self.layout.font(FONT_SMALL + 2)
-            status = _fit_text(status_line, status_font,
-                               self.layout.width - self.BAND_X - sx)
+            right = (self.eeg_btn.rect.x - 20 if self.eeg_btn is not None
+                     else self.layout.width - self.BAND_X)
+            status = _fit_text(status_line, status_font, right - sx)
             status_colour = (self.theme.warning
                               if self._has_unsaved
                               else self.theme.foreground)

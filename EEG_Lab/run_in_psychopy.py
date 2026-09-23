@@ -46,15 +46,19 @@ def missing_packages() -> list[str]:
     return missing
 
 
-def _run_exe(exe: Path, here: Path) -> int:
+def _run_exe(exe: Path, here: Path) -> int | None:
+    """Run the exe; None when Windows would not start it at all."""
     # The frozen exe loads the eeg_lab.yaml beside it on its own and
     # writes sessions/ next to itself.
     print(f"Starting {exe.name}. Data lands in {here / 'sessions'}.")
     try:
         return subprocess.call([str(exe)], cwd=str(here))
-    except OSError:
-        print(f"{exe.name} did not start; it only runs on Windows.")
-        return 1
+    except OSError as e:
+        # Not on Windows, or Windows refused it. The exe is unsigned,
+        # and Smart App Control on Windows 11 blocks unsigned programs
+        # outright, wherever they were copied from.
+        print(f"{exe.name} did not start ({e}).")
+        return None
 
 
 def _run_source(source: Path, here: Path) -> int:
@@ -92,11 +96,19 @@ def main(here: Path | None = None, platform: str = sys.platform) -> int:
 
     # Windows with the exe: the route that needs nothing installed.
     if exe.is_file() and platform == "win32":
-        return _run_exe(exe, here)
+        rc = _run_exe(exe, here)
+        if rc is not None:
+            return rc
+        if not has_source:
+            return 1
+        # Blocked: the same game from source/ under PsychoPy's own
+        # Python, which Windows already trusts.
+        print("Running from source instead.")
     if has_source:
         return _run_source(source, here)
     if exe.is_file():
-        return _run_exe(exe, here)
+        rc = _run_exe(exe, here)
+        return 1 if rc is None else rc
     print("Nothing to run: no source/ folder and no Finger Rehab.exe "
           "beside this file.")
     return 1

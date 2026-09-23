@@ -165,6 +165,24 @@ def resolve_ports_and_hands(cfg, fallback_ports, known_ports=None,
     return a.ports, a.hands
 
 
+def hand_board_ports(cfg, max_ports: int = 2) -> list[str]:
+    """discover_ports with the EEG trigger box kept out of it.
+
+    With EEG markers on, the box's port is never a hand board, and the
+    "any USB serial device" fallback is off: in the lab the likeliest
+    unknown serial device is the trigger box itself, and taking it
+    either locks the marker writer out (Windows) or turns hand-board
+    commands into trigger codes (macOS).
+    """
+    from .eeg_port import reserved_port
+    from .serial_source import discover_ports
+    get = cfg.get if cfg is not None else (lambda key, default=None: default)
+    reserved = reserved_port(get)
+    return discover_ports(get("serial.vendor_ids"), max_ports=max_ports,
+                          exclude=(reserved,) if reserved else (),
+                          allow_unknown=not get("eeg.enabled", False))
+
+
 def build_source_from_config(cfg, forced_port: str | None = None,
                              remembered=None):
     """A started-capable source matching the current config, or None.
@@ -192,8 +210,18 @@ def build_source_from_config(cfg, forced_port: str | None = None,
     if not _HAVE_SERIAL:
         return None
 
-    known = [p.device for p in list_available_ports()]
+    from .eeg_port import reserved_port, same_port
+    reserved = reserved_port(cfg.get)
+    # The trigger box's port is invisible to everything below, so a
+    # saved per-hand override naming it reads as stale and is dropped.
+    known = [p.device for p in list_available_ports()
+             if not same_port(p.device, reserved)]
     forced = forced_port or cfg.get("serial.port", "auto")
+    if forced and forced != "auto" and same_port(forced, reserved):
+        log.warning("serial port %s is the EEG trigger box's port; "
+                    "using auto-discovery for the hand boards", forced)
+        forced = "auto"
+        forced_port = None
     if forced and forced != "auto":
         if forced_port or forced in known:
             detected = [forced]
@@ -203,9 +231,9 @@ def build_source_from_config(cfg, forced_port: str | None = None,
             # discovery find the boards that are actually plugged in.
             log.warning("serial.port %s is not present; "
                         "using auto-discovery instead", forced)
-            detected = discover_ports(cfg.get("serial.vendor_ids"))
+            detected = hand_board_ports(cfg)
     else:
-        detected = discover_ports(cfg.get("serial.vendor_ids"))
+        detected = hand_board_ports(cfg)
     assignment = resolve_assignment(cfg, detected, known_ports=known,
                                     remembered=remembered)
     if not assignment.ports:
@@ -277,9 +305,7 @@ class PortWatcher:
         self._thread: threading.Thread | None = None
 
     def _default_scan(self) -> list[str]:
-        from .serial_source import discover_ports
-        vids = self._cfg.get("serial.vendor_ids") if self._cfg else None
-        return discover_ports(vids)
+        return hand_board_ports(self._cfg)
 
     @property
     def ports(self) -> list[str]:

@@ -1611,13 +1611,23 @@ latency:
   # (Precision Microdrives 310-103 class values: lag 40 ms, rise to
   # full amplitude 87 ms, stop 115 ms after current off). So about 45
   # ms to the first felt motion and about 95 ms to full amplitude;
-  # the first number is the one a reaction is timed from.
+  # the first number is the one a reaction is timed from. PMD's 8 mm
+  # parts span lag 20 to 29 ms and rise 54 to 92 ms at 3 V (308-107,
+  # 308-100 datasheets); lag is to 0.08 G and rise to 50 percent
+  # (PMD AB-029). Nobody publishes when a coin ERM is first FELT, so
+  # only a bench measurement settles this one.
   buzzer_ms: 45
   # Flip return to a mid-screen tile changing on a 60 Hz monitor with
   # vsync, in ms: half a scan (8 ms of the 16.7 ms frame) plus pixel
   # response (4 to 10 ms TN, 8 to 16 ms IPS), no signal-processing
   # lag assumed. A television or a monitor with processing on adds
-  # tens of ms; only a photodiode gives the real number.
+  # tens of ms; only a photodiode gives the real number. For scale:
+  # Bridges et al. 2020 (PeerJ 8:e9414) measured 4 to 7 ms at the
+  # TOP of a plain 60 Hz office LCD on Windows for most packages,
+  # 6 ms for pygame-based Expyriment on Windows and 29 ms on macOS.
+  # Mid-screen adds about half a frame, so 20 is likely high on a
+  # plain lab monitor. In the lab: a photodiode on the tile into a
+  # BioSemi AUX input records it next to the markers.
   visual_ms: 20
   # Cue tone dispatch to sound, in ms: the mixer's 512-sample buffer
   # at 44.1 kHz, the same path rhythm.metronome_offset_ms compensates.

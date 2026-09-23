@@ -67,6 +67,38 @@ DEFAULT_CONFIG = PROJECT_ROOT / "config" / "default.yaml"
 # Config.save_user_overrides when the user changes a setting, then
 # auto-merged on top of default.yaml at next launch.
 USER_OVERRIDES = USER_ROOT / "config" / "user_settings.yaml"
+# The EEG trigger box's port, when it was picked in the game but the
+# lab settings came from the copy of eeg_lab.yaml inside the app
+# (Local_Runner does this). That copy is tracked and ships to the lab,
+# so the game never edits it; the pick is kept here for this machine
+# instead. A lab folder's own eeg_lab.yaml is edited in place, so this
+# file never exists there. See hardware/eeg_port.py.
+EEG_PORT_FILE = USER_ROOT / "config" / "eeg_port.yaml"
+
+
+def is_bundled_config(path: str | Path) -> bool:
+    """True for a yaml inside the app's own config folder, which the
+    game reads but must never write."""
+    try:
+        return (Path(path).resolve().parent
+                == (PROJECT_ROOT / "config").resolve())
+    except OSError:
+        return False
+
+
+def read_local_eeg_port() -> str | None:
+    """The port saved in EEG_PORT_FILE, or None."""
+    if not EEG_PORT_FILE.is_file():
+        return None
+    try:
+        with EEG_PORT_FILE.open("r", encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+    except Exception as e:
+        log.warning("Could not read %s: %s", EEG_PORT_FILE.name, e)
+        return None
+    port = data.get("port") if isinstance(data, dict) else None
+    port = str(port).strip() if port else ""
+    return port or None
 
 
 def _merge(base: dict, over: dict) -> dict:
@@ -181,6 +213,17 @@ class Config:
             if isinstance(user, dict):
                 overrides = user
             src = p
+            # A port picked on this machine beats the lab default in
+            # the app's own copy; --eeg-port, applied later in main,
+            # still beats both.
+            local_port = (read_local_eeg_port()
+                          if is_bundled_config(p) else None)
+            if local_port:
+                eeg = merged.get("eeg")
+                if not isinstance(eeg, dict):
+                    eeg = {}
+                    merged["eeg"] = eeg
+                eeg["port"] = local_port
         # An override file from an older build sets the cue up through
         # keys this one no longer reads. Translate them before anything
         # asks the config what the cues are.
