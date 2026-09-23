@@ -161,10 +161,21 @@ jobs:
           if (-not (Test-Path $exe)) { throw "not installed" }
           schtasks /Query /TN FingerRehabAutostart
           if ($LASTEXITCODE) { throw "auto-start task missing" }
+          # Inno names the uninstaller unins000.exe, but the number
+          # climbs if one is already there, so find it rather than
+          # assume. Print the folder when it is missing: a silent
+          # Start-Process failure here reads as a broken uninstall.
+          $dir = "$env:LOCALAPPDATA\Programs\Finger Rehab"
+          $unins = Get-ChildItem -Path $dir -Filter "unins*.exe" `
+            -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $unins) {
+            Get-ChildItem -Path $dir | Select-Object Name | Format-Table
+            throw "no uninstaller in $dir"
+          }
           # Inno's uninstaller copies itself to temp and relaunches, so
           # -Wait returns while the real work is still going. Poll for
           # the result instead of racing it.
-          Start-Process "$env:LOCALAPPDATA\Programs\Finger Rehab\unins000.exe" `
+          Start-Process $unins.FullName `
             -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES" -Wait
           $gone = $false
           foreach ($i in 1..30) {
