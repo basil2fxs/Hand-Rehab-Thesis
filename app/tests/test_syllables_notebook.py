@@ -178,6 +178,33 @@ class SyllablesChoiceChapterTests(unittest.TestCase):
             kinds = [k for _l, _t, k in got["opts"]]
             self.assertEqual(kinds.count("target"), 1)
 
+    def test_the_prompt_fields_are_read_back(self) -> None:
+        # Every set here was answered 0.4 s in, long before the prompt.
+        self.assertTrue((self.sets["pclass"] == "unprompted_correct").all())
+        self.assertFalse(self.sets["prompted"].any())
+        self.assertTrue(self.sets["unprompted_ok"].all())
+        self.assertTrue((self.sets["exposure"] >= 1).all())
+
+    def test_the_cohort_builder_emits_s1_and_s2(self) -> None:
+        rows = self.trials[self.trials["mode"] == "syllables"].copy()
+        got = {m: v for _h, m, v, _n in
+               self.ra._cohort_syllables({"rows": rows, "hand": "both"})}
+        self.assertEqual(got["unprompted_correct_rate"], 1.0)
+        self.assertEqual(got["prompted_share"], 0.0)
+        # One set answered after the buzz: it is right, but it needed
+        # the help, so it moves S2 and not S1.
+        first = rows.index[0]
+        rows.loc[first, "stimulus"] = (
+            rows.loc[first, "stimulus"]
+            .replace("prompt=0;", "prompt=1;")
+            .replace("pat=;", "pat=3000;")
+            .replace("pclass=unprompted_correct", "pclass=prompted_correct"))
+        got = {m: v for _h, m, v, _n in
+               self.ra._cohort_syllables({"rows": rows, "hand": "both"})}
+        n = len(rows)
+        self.assertAlmostEqual(got["unprompted_correct_rate"], (n - 1) / n)
+        self.assertAlmostEqual(got["prompted_share"], 1 / n)
+
     def test_every_set_was_answered_on_the_target(self) -> None:
         self.assertTrue(self.sets["first_ok"].all())
         self.assertEqual(set(self.sets["err"]), {"ok"})

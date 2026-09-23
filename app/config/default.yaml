@@ -1253,10 +1253,11 @@ force_pilot:
   # The mode never reads the stream: scoring is the same with it on
   # or off (tests/test_force_pilot_music.py pins the rows).
   music_enabled: true
-  # Fraction of master_volume. Kept under the menu level (0.32 of
-  # master by default) so the track sits behind the exit buzz and the
-  # ring chime rather than beside them.
-  music_volume: 0.2
+  # Fraction of master_volume. 1.0: in-game music plays at full
+  # level, the same as the rhythm songs; only the menus are turned
+  # down (audio.menu_music_volume). Lower it here if the track covers
+  # the exit buzz or the ring chime on a given speaker.
+  music_volume: 1.0
 
 buzz_hunt:
   # Buzz Hunt: the vibrotactile perception suite. The buzz IS the
@@ -1682,14 +1683,13 @@ audio:
   # session.prefs_file, not here.
   menu_music_enabled: true
   # Level as a fraction of master_volume, like the other category
-  # levels. null (the default) means half as loud as the game music:
-  # Basil found the menus too loud against the rhythm songs, which
-  # play at master_volume. Half as LOUD is 10 dB down, an amplitude of
-  # 0.32, not 0.5: perceived loudness halves per 10 dB (the sone
-  # scale), and the old 0.5 was only 6 dB down, about two thirds as
-  # loud. Deriving it keeps the ratio when master moves. A number 0 to
-  # 1 pins the level instead; the Settings MUSIC slider writes one.
-  menu_music_volume: null
+  # levels. 0.25: the menus play at a quarter of master while the game
+  # music (rhythm songs, the Force Pilot track) plays at the full
+  # master level, so only the in-game music is at 100 percent. About
+  # 12 dB down, a little quieter than half as loud (loudness halves
+  # per 10 dB, the sone scale). null falls back to the same 0.25. The
+  # Settings MUSIC slider writes a number here.
+  menu_music_volume: 0.25
   # Which files from music_dir the menu playlist draws on. Named
   # explicitly rather than "everything in the folder" so the rhythm
   # library can grow without the menus picking up a slow ambient track
@@ -1837,7 +1837,11 @@ protocol:
       # reaction's exponential foreperiod moves the most. Re-measured
       # 5 September with --repeats, eight sittings on each of the four
       # cells: medians 43.66 to 43.95, whole range 43.11 to 44.50,
-      # none over 45. Quote the median and the range, not one run.
+      # none over 45. Re-measured 23 September after the syllables
+      # warm-up came out and the rhythm buzz moved onto the beat, the
+      # same way: medians 43.69 to 44.04, whole range 43.12 to 45.02,
+      # one of 32 over 45 (by 0.02 min), none over 50. Quote the
+      # median and the range, not one run.
       #
       # The plan file's table says 43.5 because it counted eleven
       # 10 s transitions and no stretch; the run has ten transitions
@@ -1945,9 +1949,11 @@ protocol:
           # the sitting, once per hand, and 20 trials per hand is what
           # the measured clock fits inside the 45 minute target. It
           # costs split-half precision inside a block, which the
-          # analysis states. Going back to 25 costs about 1 minute of
-          # the sitting and is the first place to spend headroom if
-          # the measured total comes in under.
+          # analysis states. Going back to 25 was tried on 23 September
+          # 2026: scripts/measure_battery.py over 32 sittings on the
+          # four cells put the median at 44.7 to 45.1 minutes and 15 of
+          # the 32 over the budget with a fast model hand, so it stays
+          # at 20.
           block_trials: 20
           response_windows_s: [2.0]   # one rung: the window never moves
         force_pilot:
@@ -1968,6 +1974,16 @@ protocol:
           random_block_trials: 32
         rhythm:
           difficulty: medium
+          # The one cue key in the list, and not a scoring rule: the
+          # buzz sits ON the beat for the study block. Free play leads
+          # the beat by 350 ms and adapts to each player, which helps
+          # a player who reacts to the buzz but makes the block a
+          # reaction task with a per-person stimulus. Rh1 and Rh2 are
+          # synchronisation effects (taps lead a regular beat, Repp
+          # 2005), measured against a pacing signal that is the same
+          # for everybody, so here the music, the falling note and
+          # the buzz all land on the beat.
+          tactile_mode: on_beat
         echo:
           games: 2                    # best of two, and their spread
           max_len: 10                 # ceiling, to hold the 3 min line

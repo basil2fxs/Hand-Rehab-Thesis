@@ -381,35 +381,36 @@ class MenuMusicPlayerFadeTests(unittest.TestCase):
 
 class MenuMusicPlayerVolumeTests(unittest.TestCase):
 
-    def test_default_level_is_half_as_loud_as_the_game_music(self) -> None:
-        """No number in the config means the derived level: 10 dB
-        under the rhythm song (which plays at master), an amplitude
-        of 0.32 on top of master. Not 0.5, which is only 6 dB down."""
-        from finger_rehab.audio.menu_music import (HALF_LOUDNESS,
+    def test_default_level_is_a_quarter_of_the_game_music(self) -> None:
+        """No number in the config means 25 percent of master, under
+        the half-loudness line (10 dB down, 0.32), while the game
+        music plays at the full master level."""
+        from finger_rehab.audio.menu_music import (DEFAULT_MENU_LEVEL,
+                                                   HALF_LOUDNESS,
                                                    MenuMusicPlayer,
                                                    menu_music_level)
-        self.assertAlmostEqual(HALF_LOUDNESS, 10 ** (-10 / 20), places=2)
-        self.assertLess(HALF_LOUDNESS, 0.5)
+        self.assertAlmostEqual(DEFAULT_MENU_LEVEL, 0.25)
+        self.assertLess(DEFAULT_MENU_LEVEL, HALF_LOUDNESS)
         with tempfile.TemporaryDirectory() as td:
             p, audio, cfg, clock = _player(td, volume=None)
-            self.assertAlmostEqual(menu_music_level(cfg), HALF_LOUDNESS)
+            self.assertAlmostEqual(menu_music_level(cfg), 0.25)
             p.update("title", False)
             clock.step(MenuMusicPlayer.FADE_IN_S + 0.1)
             p.update("title", False)
-            self.assertAlmostEqual(audio.menu_volume, HALF_LOUDNESS,
-                                   places=3)
+            self.assertAlmostEqual(audio.menu_volume, 0.25, places=3)
             # A number pins it; a broken value falls back.
             cfg.data["audio"]["menu_music_volume"] = 0.7
             self.assertAlmostEqual(menu_music_level(cfg), 0.7)
             cfg.data["audio"]["menu_music_volume"] = "loud"
-            self.assertAlmostEqual(menu_music_level(cfg), HALF_LOUDNESS)
+            self.assertAlmostEqual(menu_music_level(cfg), 0.25)
 
-    def test_shipped_config_derives_the_level(self) -> None:
+    def test_shipped_config_puts_the_menus_at_a_quarter(self) -> None:
         import yaml
         repo = Path(__file__).resolve().parents[1]
         cfg = yaml.safe_load(
             (repo / "config" / "default.yaml").read_text())
-        self.assertIsNone(cfg["audio"]["menu_music_volume"])
+        self.assertEqual(cfg["audio"]["menu_music_volume"], 0.25)
+        self.assertEqual(cfg["force_pilot"]["music_volume"], 1.0)
 
     def test_the_mute_fades_the_track_out_and_keeps_it_off(self) -> None:
         from finger_rehab.audio.menu_music import MenuMusicPlayer

@@ -37,25 +37,28 @@ log = logging.getLogger(__name__)
 # Amplitude factor that makes a track HALF AS LOUD as the game music.
 # Loudness halves per 10 dB (the sone scale: Stevens 1956, J Acoust
 # Soc Am 28:807, and ISO 532), and 10 dB down is an amplitude of
-# 10 ** (-10 / 20) = 0.316. An amplitude of 0.5 is only 6 dB down and
-# reads as roughly two thirds as loud, which is what the menus used to
-# ship at. The rhythm song plays at master_volume, so this factor on
-# top of master IS "half the game music", and it follows master when
-# the Settings slider moves.
+# 10 ** (-10 / 20) = 0.316. Kept as the reference the default sits
+# under.
 HALF_LOUDNESS = 0.316
+# The menu playlist's default level: 25 percent of master. The game
+# music (rhythm songs, the Force Pilot track) plays at 100 percent of
+# master, so the menus sit well under it, about 12 dB down, a little
+# quieter than half as loud. Basil asked for the menus at 20 to 30
+# percent with only the in-game music at full level.
+DEFAULT_MENU_LEVEL = 0.25
 
 
 def menu_music_level(cfg) -> float:
     """The menu playlist level as a fraction of master_volume: the
     number in audio.menu_music_volume when one is set (the Settings
-    MUSIC slider writes one), else half the game music's loudness."""
+    MUSIC slider writes one), else DEFAULT_MENU_LEVEL."""
     raw = cfg.get("audio.menu_music_volume", None)
     if raw is None or raw == "":
-        return HALF_LOUDNESS
+        return DEFAULT_MENU_LEVEL
     try:
         v = float(raw)
     except (TypeError, ValueError):
-        return HALF_LOUDNESS
+        return DEFAULT_MENU_LEVEL
     return max(0.0, min(1.0, v))
 
 

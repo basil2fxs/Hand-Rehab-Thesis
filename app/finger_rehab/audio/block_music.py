@@ -60,9 +60,9 @@ class BlockMusicPlayer:
 
     def volume(self, mode: str) -> float:
         try:
-            v = float(self.cfg.get(f"{mode}.music_volume", 0.2))
+            v = float(self.cfg.get(f"{mode}.music_volume", 1.0))
         except (TypeError, ValueError):
-            v = 0.2
+            v = 1.0
         return max(0.0, min(1.0, v))
 
     def _resolve_tracks(self) -> list[Path]:

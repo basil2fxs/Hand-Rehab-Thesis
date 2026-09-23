@@ -6263,6 +6263,30 @@ class GameEngine:
                  plan.cell.get("mode_order"),
                  "" if plan.cell.get("hand_first") == "dominant"
                  else " non-dominant first", len(steps))
+        # Every hand the plan plays is calibrated before its first
+        # block. The login only calibrates the hand picked there, and
+        # the study plays both, so without this a one-hand pick sent
+        # the sitting into its first other-hand block uncalibrated.
+        need: set[str] = set()
+        for st in steps:
+            h = str(st.get("hand") or "")
+            if h == "both":
+                need.update(("left", "right"))
+            elif h in ("left", "right"):
+                need.add(h)
+        if need == {"left", "right"} and not self.second_board_missing():
+            self._session_hand = "both"
+        try:
+            attached = set(self.calibratable_hands())
+        except Exception:
+            attached = set()
+        # A hand the clinician already chose to play uncalibrated this
+        # session ("Play anyway") is not asked about again.
+        acked = set(getattr(self, "_uncal_ack", None) or ())
+        hands = sorted((need & attached) - acked)
+        if hands and self.maybe_start_quick_calibration(
+                self._begin_next_protocol_step, hands=hands):
+            return True
         self._begin_next_protocol_step()
         return True
 

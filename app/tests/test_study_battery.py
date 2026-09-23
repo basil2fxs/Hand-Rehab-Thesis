@@ -237,6 +237,10 @@ class OverrideTests(unittest.TestCase):
             "pattern.short_session", "pattern.soc_cycles_per_block",
             "pattern.random_block_trials",
             "rhythm.difficulty",
+            # A cue condition, never a scoring rule: the study block
+            # puts the buzz on the beat so Rh1 and Rh2 measure
+            # synchronisation to one pacing signal for everybody.
+            "rhythm.tactile_mode",
             "echo.games", "echo.max_len",
             "syllables.rung", "syllables.words_per_block",
             "syllables.round_size", "syllables.break_s",
@@ -654,6 +658,30 @@ class BatteryFlowTests(_BatteryHarness):
             eng.pending_protocol_step())
         self.assertIn("step 6 of 11", heading)
         self.assertIn("Stretch", stretch)
+
+    def test_play_all_calibrates_every_hand_before_the_first_block(
+            self) -> None:
+        """The login calibrates only the hand picked for the session;
+        the study plays both. Play all asks for the rest up front
+        rather than stopping at the first other-hand block."""
+        eng = self._engine(_Rig())
+        eng.cfg.data["session"]["calibration_dir"] = str(
+            self.root / "calibration")
+        eng.begin_session("P07", "25", dominant_hand="right", visit="1")
+        self.assertTrue(eng.start_battery())
+        self.assertEqual(eng.session_hand(), "both")
+        self.assertIs(eng.screen_obj, eng._screens["quick_cal"])
+        self.assertIsNone(eng.mode, "a block started before calibration")
+        hands = set(getattr(eng._screens["quick_cal"], "hands", []) or [])
+        self.assertEqual(hands, {"left", "right"})
+
+    def test_play_anyway_is_not_asked_again_by_play_all(self) -> None:
+        eng = self._engine(_Rig())
+        self._login(eng, "P08", "right")
+        self._stub_rhythm()
+        self.assertTrue(eng.start_battery())
+        self.assertIsNot(eng.screen_obj, eng._screens["quick_cal"])
+        self.assertIsNotNone(eng.mode)
 
     def test_without_a_main_hand_the_hub_says_why(self) -> None:
         eng = self._engine(_Rig())

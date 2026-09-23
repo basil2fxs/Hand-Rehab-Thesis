@@ -1043,6 +1043,22 @@ class PromptTests(unittest.TestCase):
         mode._update_prompt_fade("no_response", missed=True)
         self.assertTrue(mode._word_prompt_on())
 
+    def test_a_buzz_that_did_not_go_out_prompted_nobody(self) -> None:
+        # Keyboard rig, buzzer channel off or a failed STIM: the engine
+        # answers None or False and the set stays unprompted.
+        for answer in (None, False):
+            with self.subTest(engine_said=answer):
+                engine, mode = _build_mode()
+                engine.on_prompt_buzz.return_value = answer
+                _run_to_choose(mode)
+                t0, fall = mode._spawn_t, mode.fall_s
+                mode._tick(t0 + 0.8 * fall)
+                engine.on_prompt_buzz.assert_called_once()
+                _answer_set(mode, t0 + 0.85 * fall, delay=0.85 * fall)
+                rec = mode._sets[-1]
+                self.assertFalse(rec.prompted)
+                self.assertEqual(rec.pclass, "unprompted_correct")
+
     def test_prompt_off_in_the_config_never_buzzes(self) -> None:
         engine, mode = _build_mode(prompt=False)
         _run_to_choose(mode)

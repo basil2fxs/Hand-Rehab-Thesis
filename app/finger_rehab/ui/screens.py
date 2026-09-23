@@ -7627,7 +7627,7 @@ class DiagnosticsScreen(Screen):
             ("feedback", "FEEDBACK", "audio.feedback_volume", 1.0),
             # Menu playlist level. The on/off switch for it is the
             # MENU MUSIC pill in the top-right metadata column.
-            ("music", "MUSIC", "audio.menu_music_volume", 0.5),
+            ("music", "MUSIC", "audio.menu_music_volume", 0.25),
         )
         n = len(specs) + 1     # + the buzzer cue-length slider
         gap = self.SLIDER_GAP

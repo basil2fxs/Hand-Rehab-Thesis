@@ -82,9 +82,8 @@ class BlockMusicPlayerTests(unittest.TestCase):
             self.assertFalse(p.is_playing)
             self.assertEqual(audio.block_log, [])
 
-    def test_rises_to_its_level_and_sits_under_the_menu_level(self) -> None:
+    def test_rises_to_its_level(self) -> None:
         from finger_rehab.audio.block_music import BlockMusicPlayer
-        from finger_rehab.audio.menu_music import HALF_LOUDNESS
         with tempfile.TemporaryDirectory() as td:
             p, audio, _cfg, clock = _player(td, volume=0.2)
             p.update("force_pilot", menu_state="idle")
@@ -92,7 +91,6 @@ class BlockMusicPlayerTests(unittest.TestCase):
             clock.step(BlockMusicPlayer.FADE_IN_S + 0.1)
             p.update("force_pilot", menu_state="idle")
             self.assertAlmostEqual(audio.block_volume, 0.2, places=3)
-            self.assertLess(0.2, HALF_LOUDNESS)
 
     def test_pause_and_block_end_stop_it(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -135,7 +133,10 @@ class BlockMusicPlayerTests(unittest.TestCase):
         default = yaml.safe_load(
             (repo / "config" / "default.yaml").read_text())
         self.assertTrue(default["force_pilot"]["music_enabled"])
-        self.assertLess(default["force_pilot"]["music_volume"], 0.316)
+        # In-game music plays at full level; only the menus are down.
+        self.assertEqual(default["force_pilot"]["music_volume"], 1.0)
+        self.assertLess(default["audio"]["menu_music_volume"],
+                        default["force_pilot"]["music_volume"])
         for mode in ("rhythm", "reaction", "buzz_hunt",
                      "chords", "echo", "pattern", "mirror", "adaptive",
                      "syllables"):

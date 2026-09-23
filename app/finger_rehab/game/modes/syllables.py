@@ -911,15 +911,19 @@ class SyllablesMode(WaitSkip):
 
     def _fire_prompt(self, now: float) -> None:
         """Buzz the right finger once: the set is still unanswered at
-        prompt_at of its fall. Nothing on screen changes."""
+        prompt_at of its fall. Nothing on screen changes. The set only
+        counts as prompted when the buzz went out: a keyboard rig, the
+        buzzer channel switched off or a failed STIM prompted nobody,
+        and the row must not say it did."""
         self._prompt_due = None
         if self.option_set is None:
             return
         lane = self.option_set.target_lane
-        self._prompted_t = now
         fire = getattr(self.engine, "on_prompt_buzz", None)
-        if callable(fire):
-            fire(lane, self.trial_counter, now)
+        delivered = fire(lane, self.trial_counter, now) if callable(fire) \
+            else None
+        if delivered:
+            self._prompted_t = now
 
     def _word_prompt_on(self) -> bool:
         if not self.prompt_enabled or self.word is None:

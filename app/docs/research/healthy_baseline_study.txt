@@ -40,6 +40,29 @@ named here so the three dropped rows sit together:
     consequence of the mode change of 3 September 2026 and not of
     the one-pass change. Section 1.11 carries the detail.
 
+Amended 23 September 2026, before any participant was run:
+
+  - Adaptive and syllables now carry pre-specified checks (A1, A2,
+    S1, S2; Sections 1.4, 1.5 and 4.6), so every one of the ten
+    modes has a row in Table 1. Both are ceiling checks for a
+    healthy adult, decided on the interval, not on a test.
+  - Syllables is a choice task with a late prompt buzz (Section
+    1.4), not the beat-paced tapping task an earlier version of this
+    file described.
+  - The battery's rhythm block puts the buzz on the beat
+    (rhythm.tactile_mode: on_beat in the preset), so Rh1 and Rh2
+    measure synchronisation to one pacing signal for everybody.
+    Free play leads the beat by 350 ms and adapts to the player
+    (Section 1.6).
+  - Play all calibrates every hand the plan plays before the first
+    block, because the login now calibrates only the hand picked for
+    the session.
+  - Re-timed after these changes with scripts/measure_battery.py,
+    eight sittings on each of the four cells: medians 43.69 to 44.04
+    minutes, range 43.12 to 45.02, none over the 50 minute stop.
+    Reaction at 25 trials per hand was tried and put 15 of 32
+    sittings over the 45 minute budget, so it stays at 20.
+
 Two further contrasts are named in Section 1 as not available rather
 than as dropped checks, because the design never claimed them: the
 choice-minus-simple reaction contrast (only the choice sub-mode is
@@ -303,33 +326,50 @@ literature values are order-of-magnitude context only. The short
 form gives about 20 within-hand chords per hand, so
 per-chord cells are cohort-pooled, never per person.
 
-1.4 Syllables (played once, descriptive only)
----------------------------------------------
-Paediatric phonological-awareness mode with word bands graded for
-children. Adults sit at ceiling on counting and mapping levels, and
-the construct (segmentation skill) has no adult deficit to measure.
-It was cut from the battery for that reason and then put back when
-the design changed to playing every mode once: syllables IS played,
-once, and it appears in no reliability, known-effect or within-block
-table. It is in order A and order B of the shipped preset. If a
-ceiling check is wanted for the thesis appendix, run level 3
-(beat-paced) on five pilot adults once:
-expected accuracy above 95 percent and asynchrony SD under 60 ms at
-the 500 ms beat; anything else is a bug report, not a finding.
+1.4 Syllables (played once, two ceiling checks)
+-----------------------------------------------
+A paediatric reading game: a word is heard and seen, then its
+syllables fall one set at a time as four written options over four
+fingers, and the child presses the finger under the right chunk. If a
+set is still unanswered at three quarters of its fall, the right
+finger buzzes once (a time-delay prompt, Eyler and Ledford 2024), and
+the prompt fades per word after two answers found alone. The battery
+plays 12 words at the mid foil rung (rung 3).
+Adults have no reading deficit to measure, so the block is not a
+skill result. What it can check is the game itself, on fluent readers:
+  S1 Fluent adults answer before the prompt: cohort median of the
+     unprompted correct rate above 0.9. A lower number says the
+     material, the foils or the timing are wrong for anybody, which
+     is a bug report before it is a finding.
+  S2 The late prompt is rarely needed: cohort median of the share of
+     right answers that came after the prompt under 0.1. This says
+     the prompt's delay leaves a fluent reader room to answer first,
+     which is what makes the unprompted rate the learning measure for
+     a child.
+Both are decided on the interval (median and its order-statistic
+interval against the reference), not on a test: at a ceiling every
+value can be identical, which a test reads as "no variation" when it
+is the expected answer. Syllables stays out of the reliability and
+within-block tables.
 
-1.5 Adaptive (played once, descriptive only)
---------------------------------------------
+1.5 Adaptive (played once, two direction checks)
+------------------------------------------------
 The controller ramps a healthy hand to bpm_max (180) and the config's
 own headless measurement says the trailing hit rate only re-enters
 the 65 to 80 band around trial 53, past the 40-trial block. A
-healthy 40-trial block therefore measures the cap, not the
-controller. The band-keeping claim stays on the headless simulation
-already in the config commentary. In the single-session design
-adaptive IS played, once, late in the sitting on the dominant
-hand, because playing every mode was the point of the change;
-bpm_max and the trailing hit rate are reported descriptively and
-adaptive appears in no reliability, known-effect or within-block
-table.
+healthy 40-trial block therefore measures the cap, not the band
+keeping, and the band-keeping claim stays on the headless simulation
+already in the config commentary. Adaptive is played once, late in
+the sitting on the dominant hand. What a healthy block can check is
+the direction of the closed loop on a real hand:
+  A1 The pace rises for a healthy hand: cohort median of bpm_rise
+     (the block's top pace minus its starting pace) above zero.
+  A2 While it rises, the hand stays at or above the band floor:
+     cohort median hit rate above 0.65. The controller's steps do not
+     push a healthy hand into failure inside 40 trials.
+Both are decided on the interval, like S1 and S2. bpm_max_reached,
+bpm_final and the share of the block at the cap stay descriptive, and
+adaptive stays out of the reliability and within-block tables.
 
 1.6 Rhythm (both hands, one fixed track)
 ----------------------------------------
@@ -347,6 +387,14 @@ Known effects to reproduce:
   Rh3 No strong dominance prediction; report paired.
 Reliability class: good for asynchrony SD and absolute offset,
 moderate for the signed mean (bias is small relative to noise).
+Cue timing in the battery: the preset sets rhythm.tactile_mode to
+on_beat, so the music, the falling note and the buzz all land on the
+beat and every participant synchronises to the same pacing signal.
+Free play leads the beat by 350 ms and adapts the lead to each
+player, which helps a player who reacts to the buzz, but that makes
+the block a reaction task with a per-person stimulus and would let
+a reactor's asynchrony settle at zero by design. Rh1 and Rh2 are
+synchronisation effects, so the study block does not use the lead.
 Claim limits: audio_offset_ms (40) is a configured constant, not a
 measured latency on the study laptop; measure it once with a
 microphone against the trigger event if the thesis wants absolute
@@ -1379,7 +1427,10 @@ Two tables, both decided before the data comes in.
 
 Table 1, known effects, one row per check, from Section 1: R1 R2,
 P1 P3, C1 C2 C3 C4, Rh1 Rh2, M1 M2, F1 F2 F3 F4, B1 B2 B3 B4, E1
-E3. Each row: statistic, CI, test, effect size, pass or fail against
+E3, A1 A2, S1 S2. A1 to S2 were added on 23 September 2026, before
+any participant, so every mode has a row; they are decided on the
+interval, carry no p value and so do not enter the family-wise
+correction. Each row: statistic, CI, test, effect size, pass or fail against
 the stated criterion. Three rows carry the word DROPPED and their
 reason, so that a reader who finds them in Section 1 finds out here
 what happened to them:

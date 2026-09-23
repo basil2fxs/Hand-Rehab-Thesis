@@ -683,6 +683,19 @@ class CohortNotebookTests(unittest.TestCase):
             rows = {m for (md, m) in self.ra.COHORT_METRICS if md == mode}
             self.assertTrue(rows, f"{mode} has no registry rows")
 
+    def test_every_mode_has_a_prespecified_row(self) -> None:
+        """Adaptive and syllables got their checks on 23 September
+        2026, before any participant, so all ten modes sit in the
+        pre-specified family. This short cohort plays neither, so
+        their rows say so rather than going missing."""
+        v = self.validity.set_index("id")
+        for cid in ("A1", "A2", "S1", "S2"):
+            self.assertIn(cid, v.index, cid)
+            self.assertEqual(v.loc[cid, "family"], "pre-specified", cid)
+            self.assertEqual(v.loc[cid, "verdict"], "not testable", cid)
+        pre = self.validity[self.validity["family"] == "pre-specified"]
+        self.assertEqual(set(pre["mode"]), set(self.ra.COHORT_MODES))
+
     # ---- outputs -----------------------------------------------------
     def test_csv_and_report_land_in_the_cohort_folder(self) -> None:
         out_dir = Path(self.cohort["out_dir"])
@@ -703,6 +716,14 @@ class CohortNotebookTests(unittest.TestCase):
         self.assertIn("KNOWN-EFFECT VALIDITY CHECKS", page)
         self.assertIn("data:image/png;base64", page)
         self.assertIn(f"{len(CODES)} participant(s)", page)
+
+    def test_the_validity_table_is_drawn_as_a_figure(self) -> None:
+        """One figure of the pre-specified rows for the results
+        chapter and the slides. This cohort plays no pattern block, so
+        the P1 take curve has nothing to draw and is not drawn."""
+        figs = Path(self.cohort["out_dir"]) / "figures"
+        self.assertTrue((figs / "cohort_validity_table.png").exists())
+        self.assertFalse((figs / "cohort_p1_takes.png").exists())
 
     def test_no_mdc_file_is_written(self) -> None:
         out_dir = Path(self.cohort["out_dir"])
