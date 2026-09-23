@@ -147,9 +147,9 @@ save, then Run All. Figures land in the session folder they describe, per-person
 
 ## The lab folder
 
-`EEG_Lab` (the `FingerRehab-EEGLab.zip` from the same build) holds the exe, `eeg_lab.yaml`,
-`run_in_psychopy.py`, `README.txt` and a `source/` copy. The exe loads the yaml beside it and writes every
-marker to the trigger box; the home install carries no EEG anything. Open `run_in_psychopy.py` in PsychoPy
+`EEG_Lab` (the `FingerRehab-EEGLab.zip` from the same build) holds the exe, `eeg_lab.yaml`, `run_in_psychopy.py`,
+`README.txt`, a `source/` copy and `sessions/`, where the games save and `sessions/eeg/` takes ActiView's recording
+under the name the game menu shows. The home install carries no EEG anything. Open `run_in_psychopy.py` in PsychoPy
 Coder and press Run. Checklist and code table: [app/docs/eeg_lab_setup.txt](app/docs/eeg_lab_setup.txt).
 
 ## Licence

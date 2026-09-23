@@ -174,7 +174,7 @@ artifact bookkeeping, learning-stage bins). Abandoned: NICE.
 
 | Code | Event | Status |
 | --- | --- | --- |
-| 240 | session start (engine up, participant confirmed) | REQUIRED |
+| 240 | session start (the login session's first game starts, just before its block start) | REQUIRED |
 | 241 | session end | REQUIRED |
 | 242 | pause (engine `_pause_now`) | REQUIRED |
 | 243 | resume (engine `_resume_now`) | REQUIRED |

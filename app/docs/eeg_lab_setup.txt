@@ -4,53 +4,78 @@ EEG lab setup
 The lab task is the shipping game with config/eeg_lab.yaml loaded on
 top: markers on, trigger box required, fixed 2.5 s reaction foreperiod
 with a visible Ready cue, no music in Force Pilot, neutral feedback
-(one ring glyph 800 ms after the press, no words, no chime). The
-folder that goes to the lab is docs/lab_package, FingerRehab-EEGLab.zip
-on CI: Finger Rehab.exe, eeg_lab.yaml, run_in_psychopy.py, README.txt
-and a source/ copy. The exe loads the yaml beside it on its own, so a
-game update is a lab update.
+(one ring glyph 800 ms after the press, no words, no chime), FRN bytes
+in reaction, chords and Force Pilot. The folder that goes to the lab is
+EEG_Lab at the top of the project (FingerRehab-EEGLab.zip on CI):
+Finger Rehab.exe, eeg_lab.yaml, run_in_psychopy.py, README.txt, a
+source/ copy, and sessions/ with an empty eeg/ folder for ActiView's
+recordings. The exe loads the yaml beside it on its own, so a game
+update is a lab update.
 
 The chain: game -> USB -> NeuroSpec MMBT-S trigger box (orange Tobii
 Pro case, a virtual COM port) -> D-Sub 25 to D-Sub 37 cable -> BioSemi
 ActiveTwo USB receiver -> ActiView. One byte per write sets the box's
 eight lines, which land on trigger inputs 1 to 8, the low byte of the
-Status channel.
+Status channel. Nothing comes back: the game only sends.
 
 At the lab PC
 -------------
-1. Plug the box in before launching. Its COM port is in Device
-   Manager, Ports (COM & LPT): unplug it and watch which entry
-   vanishes. It has been COM10; if not, edit "port: COM10" in
-   eeg_lab.yaml (Notepad is fine).
-2. Never set 1200 baud anywhere: it resets the box off the bus. The
+1. Plug the box in, and the hand boards if they are used, before
+   pressing Run. The switch beside the box's USB socket should read P
+   (Pulse Mode: the box holds each code 8 ms and resets itself). If it
+   reads S, set pulse_ms: 10 and box_mode: simple in eeg_lab.yaml.
+2. Start ActiView. The trigger low byte reads 255.
+3. Open run_in_psychopy.py in PsychoPy Coder and press Run (or
+   double-click Finger Rehab.exe). The low byte drops to 0 the moment
+   the game opens the port. If the box is not on COM10, the game opens
+   on a list of ports instead of the login: click the box (unplug it
+   and press Scan again to see which entry goes) and the choice is
+   saved in eeg_lab.yaml. Settings, EEG box, changes it later or
+   reconnects a box that dropped out.
+4. If Windows refuses the exe (it is unsigned; Smart App Control on
+   Windows 11 blocks unsigned programs), the launcher runs the same
+   game from source/ under PsychoPy's own Python. The first time it
+   installs what PsychoPy lacks into python_packages/ beside it, which
+   needs the internet once. Needs PsychoPy with Python 3.10 or newer.
+5. Log the participant in. The game menu then shows the recording's
+   name, for example "EEG: record ActiView as P07_2026-09-24.bdf in
+   EEG_Lab/sessions/eeg". Start ActiView's recording with that name in
+   that folder, then pick the first game. The line turns to "EEG
+   recording ... is in ..." once the file is there. A second login the
+   same day gets _2, _3 and so on, so nothing is overwritten.
+6. Play the games. Keep Test Mode off in Settings for real data. P
+   pauses; Esc twice ends one game. A red "EEG markers lost" means the
+   box dropped out: finish that game, then Settings, EEG box, and pick
+   it again.
+7. End the session with Esc on the game menu, End session. Then stop
+   ActiView's recording.
+8. Never set 1200 baud anywhere: it resets the box off the bus. The
    game refuses eeg.baud 1200. Leave the port's settings alone.
-3. The switch beside the USB socket should read P (Pulse Mode: the
-   box holds each code 8 ms and resets itself). If it reads S, set
-   pulse_ms: 10 and box_mode: simple in eeg_lab.yaml.
-4. Start the recording in ActiView. The trigger low byte reads 255.
-5. Open run_in_psychopy.py in PsychoPy Coder and press Run, or
-   double-click Finger Rehab.exe. The low byte drops to 0 the moment
-   the game opens the port. A refusal to start names the port that
-   failed: the exe has no console and writes it to sessions/rehab.log
-   beside itself; a run from source/ puts it in the Runner's output
-   pane. Nothing opens at all: a copy is already open behind another
-   window.
-6. Keep vsync on for the game window, or visual markers lead the
+9. Keep vsync on for the game window, or visual markers lead the
    screen by an unknown amount.
-7. Reaction blocks run on a still screen: from code 21 to a second
+10. Reaction blocks run on a still screen: from code 21 to a second
    after the response only the cued tile changes. Score, streak and
    progress update between trials.
-8. Data lands in sessions/ beside the exe (source/sessions/ when run
-   from source): trials.csv, raw.csv with an eeg row per marker,
-   metadata.json (eeg section: port, pulse and gap widths, box, the
-   code map, latency constants, marker offsets, failure counts,
-   degraded flag), events.tsv with events.json, and markers_codes.csv.
-9. Flashing firmware and changing a sensor address are done from the
+11. Everything lands in sessions/ beside run_in_psychopy.py, whichever
+   way the game started: a dated folder per game with trials.csv,
+   raw.csv (an eeg row per marker, with the intended and the actual
+   send time), metadata.json (eeg section: port, pulse and gap widths,
+   box, the code map, latency constants, marker offsets, failure
+   counts, degraded flag, and which recording in sessions/eeg the game
+   belongs to), events.tsv with events.json, and markers_codes.csv;
+   plus rehab.log, the game's own log. Take the whole sessions/ folder
+   home and merge it into the project's sessions/: the notebook reads
+   the games and lists each game's recording as present or missing.
+12. Settings changes made at the lab last until the game closes; every
+   launch starts from eeg_lab.yaml again. The trigger box port is the
+   one exception, since the port list saves it.
+13. Flashing firmware and changing a sensor address are done from the
    exe's Settings screen. The source/ copy carries no avrdude.
 
 What the Status channel shows
 -----------------------------
-- 240 once at login, 241 once at exit (never both), outside any block.
+- 240 once as the login session's first game starts, 241 once at
+  End session or app exit, both outside any block.
 - Each block: 200+mode at the start, 20 at GET READY, 220+mode at the
   end (219 if abandoned).
 - Each stimulus a 30 to 38 (40 or 41 in pattern blocks, 50 or 51 for
@@ -82,12 +107,16 @@ Codes (finger_rehab/hardware/eeg_trigger.py, CODES, version 1.4)
  50  syllables option set, first attempt
  51  syllables option set, word returned after a miss (four written
      options, nothing names the finger: never pool with the 30 band)
-100+lane  correct press               110+lane  wrong finger (lane pressed)
+100+lane  correct press               110+lane  wrong finger (lane pressed),
+                                          sent at that press; the first
+                                          one of a trial is its response
 120+lane  false start                 130  timeout (never epoch on it)
 131  press with no trial active
-140  positive feedback  141  negative  142  neutral. Written on the
-     flip that draws the glyph, and only with eeg.feedback_markers:
-     true in eeg_lab.yaml; the shipped file does not set it.
+140  full ring (hit)  141  open ring (miss)  142  half ring (Late,
+     Early, near). Written on the flip that draws the glyph, 800 ms
+     after the press, in the modes eeg_lab.yaml names (reaction,
+     chords, force_pilot). A glyph the block end cuts short sends no
+     byte.
 200+mode  block start   219  abandoned   220+mode  block end
      mode ids: reaction 0, classic 1, adaptive 2, rhythm 3, mirror 4,
      pattern 5, chords 6, syllables 7, force_pilot 8, buzz_hunt 10,
@@ -99,9 +128,8 @@ Lanes: 0 to 3 index to little on a one-hand block, whichever hand
 (the hand column on the row and in events.tsv says which); with both
 hands selected, right 0 to 3 and left 4 to 7. Chords
 write one 33 and one response byte per chord, not per finger. Mirror
-writes one 33 per pair and one 100+lane per hand, both sent when the
-pair closes, so a byte can trail its press by the pair window; the
-row's t_event keeps the press time. Rhythm's 130 lands when the miss
+writes one 33 per pair and one 100+lane per hand, each sent at that
+hand's own press. Rhythm's 130 lands when the miss
 window closes, inside the next note. Force Pilot runs carry 23 and 24
 and no stimulus or response bytes.
 
@@ -125,9 +153,10 @@ For the analysis
   measured (latency.measured false); scripts/latency_check.py has the
   bench procedure. Put the medians in the config and in the methods.
 - For FRN work drop rows with error_type timeout, device_drop or
-  no_signal, and leave out a 140/141 within one frame of the block-end
-  byte. Do not switch ui.feedback_style mid-study: it moves the
-  feedback epoch.
+  no_signal; 142 (half ring) is neither a win nor a loss. Recordings
+  made before 24 September 2026 could carry a 140/141 within one frame of
+  the block-end byte: leave that one out. Do not switch
+  ui.feedback_style mid-study: it moves the feedback epoch.
 - MNE: mne.io.read_raw_bdf(stim_channel="auto") then
   mne.find_events(raw, mask=255, mask_type="and"). EEGLAB: File,
   Import event info, from ASCII file, fields latency type duration.

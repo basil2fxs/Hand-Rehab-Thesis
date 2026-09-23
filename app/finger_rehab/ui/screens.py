@@ -1896,7 +1896,8 @@ class ModeSelectScreen(Screen):
         # ("every game comes back here"), and says it with the games
         # actually played. The slot is used for a refused pick, which
         # is the one time this screen has something to say back.
-        _draw_header(surf, "Pick a game", self.pick_note,
+        _draw_header(surf, "Pick a game",
+                     self.pick_note or self.eeg_recording_line(),
                      self.theme, self.layout)
         draw_session_strip(
             surf,
@@ -2064,6 +2065,23 @@ class ModeSelectScreen(Screen):
                           self.theme, self.layout, pt=FONT_SMALL,
                           centre=False, colour=self.theme.muted)
         self.mute_btn.draw(surf, self.theme, self.layout)
+
+    def eeg_recording_line(self) -> str:
+        """In the EEG build, what to call ActiView's recording and
+        where to save it, until the file is there. A refused pick's
+        note takes the slot first; this is the rest of the time."""
+        status = getattr(self.engine, "eeg_recording_status", None)
+        if not callable(status):
+            return ""
+        name, found = status()
+        if not name:
+            return ""
+        parts = Path(self.engine.eeg_recording_dir()).parts
+        where = "/".join(parts[-3:])
+        if found:
+            return f"EEG recording {name} is in {where}"
+        return (f"EEG: record ActiView as {name} in {where}, "
+                "then pick a game")
 
     @staticmethod
     def _draw_done_tick(surf: pygame.Surface, cx: int, cy: int,

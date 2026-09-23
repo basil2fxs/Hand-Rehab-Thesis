@@ -87,6 +87,42 @@ class TheByteLeavesAtThePress(_EngineHarness):
                     nxt)
 
 
+class MirrorMarksEachHandAtItsPress(unittest.TestCase):
+
+    def test_each_hand_goes_out_when_it_lands(self):
+        # Mirror is the LRP mode: the analysis is locked to these very
+        # presses, and they used to wait for the pair to close.
+        from tests.test_mirror_mode import _build, _Spy
+        from finger_rehab.hardware.fsr_detector import PressEvent
+        spy = _Spy()
+        mode = _build(spy)
+        mode._fire(now=10.0)
+        finger = mode.active.finger
+        tid = mode.active.trial_id
+        mode._handle_press(PressEvent(lane=finger, t_perf=10.30, value=0,
+                                      baseline=0.0, hand="right"),
+                           now=10.30)
+        spy.eeg_hand_press.assert_called_once_with(tid, finger, 10.30)
+        self.assertIsNotNone(mode.active)   # the pair is still open
+        mode._handle_press(PressEvent(lane=finger + 4, t_perf=10.36,
+                                      value=0, baseline=0.0, hand="left"),
+                           now=10.36)
+        spy.eeg_hand_press.assert_called_with(tid, finger + 4, 10.36)
+        self.assertEqual(spy.eeg_hand_press.call_count, 2)
+
+    def test_log_trial_skips_a_hand_already_sent(self):
+        from finger_rehab.game.engine import GameEngine
+        eng = GameEngine.__new__(GameEngine)
+        sent = []
+        eng._eeg_send = lambda code, lane=None, t_event=None: sent.append(
+            code)
+        eng.eeg_hand_press(7, 2, 5.0)
+        self.assertEqual(sent, [102])
+        self.assertTrue(eng._eeg_hand_already_sent(7, 2))
+        self.assertFalse(eng._eeg_hand_already_sent(7, 6))
+        self.assertFalse(eng._eeg_hand_already_sent(8, 2))
+
+
 class TheLabBuildLeavesTheMachineAlone(unittest.TestCase):
 
     def test_no_auto_start_in_the_lab_build(self):

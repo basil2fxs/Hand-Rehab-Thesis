@@ -110,6 +110,26 @@ def _run_block(words: int = 4, answer: str = "correct") -> dict:
                         and mode._set_close_t is None):
                     key = (mode.word.word, mode.pos, mode.ret,
                            mode.trial_counter)
+                    if answer == "wrong_then_right":
+                        # A wrong option first, then the right one:
+                        # the set stays open after the wrong press.
+                        opts = mode.option_set
+                        wrong_lane = [o.lane for o in opts.options
+                                      if o.lane != opts.target_lane][0]
+                        step = None
+                        if (vt >= mode._spawn_t + 0.4
+                                and key + ("w",) not in answered):
+                            step, lane = "w", wrong_lane
+                        elif (vt >= mode._spawn_t + 0.9
+                                and key + ("w",) in answered
+                                and key + ("c",) not in answered):
+                            step, lane = "c", opts.target_lane
+                        if step:
+                            answered.add(key + (step,))
+                            mode.queue_press(PressEvent(
+                                lane=lane, t_perf=vt, value=0,
+                                baseline=0.0, hand=mode.word_hand))
+                        continue
                     if (vt >= mode._spawn_t + 0.4
                             and key not in answered):
                         answered.add(key)
@@ -141,6 +161,33 @@ def _run_block(words: int = 4, answer: str = "correct") -> dict:
             }
     finally:
         pygame.quit()
+
+
+class WrongThenRightTests(unittest.TestCase):
+    """A wrong option, then the right one. The set scores Good, but
+    the first press was an error: its 110-band byte goes out at that
+    press and is the set's one response byte. A correct byte at close
+    would be a second byte for the same press, stamped with the wrong
+    press's time."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.result = _run_block(3, "wrong_then_right")
+
+    def test_one_response_byte_per_set_and_it_is_the_error(self) -> None:
+        codes = self.result["codes"]
+        idx = [i for i, c in enumerate(codes) if c in (50, 51)]
+        self.assertGreater(len(idx), 1)
+        for i, start in enumerate(idx):
+            end = idx[i + 1] if i + 1 < len(idx) else len(codes)
+            responses = [c for c in codes[start + 1:end]
+                         if 100 <= c <= 131]
+            self.assertEqual(len(responses), 1, f"set {i}: {responses}")
+            self.assertTrue(110 <= responses[0] <= 117, responses)
+
+    def test_the_rows_still_score_the_correction(self) -> None:
+        labels = {r.get("early_late") for r in self.result["trials"]}
+        self.assertIn("Good", labels)
 
 
 class SyllablesMarkerTests(unittest.TestCase):

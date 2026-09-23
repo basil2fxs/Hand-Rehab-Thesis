@@ -223,12 +223,13 @@ class EegChapterTests(unittest.TestCase):
         self.assertLess(wire.loc["reaction", "max_prompt_delay_ms"], 100.0)
         self.assertLess(wire.loc["reaction", "max_prompt_stim_delay_ms"],
                         self.ra.EEG_STIM_DELAY_MS)
-        # Mirror is the exception the chapter has to name: both hands'
-        # bytes leave when the pair closes, so the right-only pair's
-        # byte trailed its press by the pair window.
-        self.assertGreater(wire.loc["mirror", "max_prompt_delay_ms"],
-                           self.ra.EEG_FRAME_MS)
-        self.assertIn("mirror sends both hands' response bytes", self.text)
+        # Mirror used to be the exception: both hands' bytes left as
+        # the pair closed, so a lone press's byte trailed it by the
+        # pair window. Each hand is now marked at its own press, so
+        # mirror leaves as promptly as reaction and the chapter's note
+        # for old recordings stays out of the print.
+        self.assertLess(wire.loc["mirror", "max_prompt_delay_ms"], 100.0)
+        self.assertNotIn("from before 24 September", self.text)
         self.assertNotIn("UNDER THE GAP", self.text)
 
     def test_offsets_and_claim_limit_print(self) -> None:

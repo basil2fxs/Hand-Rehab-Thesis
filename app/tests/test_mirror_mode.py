@@ -35,6 +35,7 @@ class _Spy:
         self.cfg.get = MagicMock(return_value=0)
         self.apply_wrong_press_penalty = MagicMock(return_value=2)
         self.eeg_wrong_press = MagicMock()
+        self.eeg_hand_press = MagicMock()
         self.apply_idle_press_penalty = MagicMock(return_value=1)
         self.on_stim_multi = MagicMock()
         self.log_trial = MagicMock()

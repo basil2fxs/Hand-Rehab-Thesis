@@ -41,7 +41,8 @@ LAUNCHER = "run_in_psychopy.py"
 README = "README.txt"
 # The two committed files that travel with the package unchanged.
 COMMITTED = (LAUNCHER, README)
-TOP_LEVEL = {EXE, "eeg_lab.yaml", LAUNCHER, README, "source"}
+TOP_LEVEL = {EXE, "eeg_lab.yaml", LAUNCHER, README, "source",
+             "sessions"}
 # What running the folder leaves beside those: the recordings, the
 # calibration and saved settings, and the packages a run from source
 # installs. Allowed, never deleted, never shipped by CI.
@@ -79,6 +80,33 @@ def make_source(repo: Path, pkg: Path) -> Path:
     return dest
 
 
+# The folder ActiView's recordings are saved into, shipped ready so it
+# is there before the first recording starts. Beside the game's own
+# session folders, so taking sessions/ home takes a whole lab day.
+EEG_FOLDER = Path("sessions") / "eeg"
+EEG_NOTE = """EEG recordings go in this folder.
+
+After the participant logs in, the game menu shows the name to use,
+for example P07_2026-09-24.bdf. In ActiView, start the recording with
+that name, saved here, before picking the first game. The game notes
+in each game's metadata.json which recording it belongs to.
+
+Taking the data home: copy the whole sessions folder beside
+run_in_psychopy.py. On the Mac, put what is inside it into the
+project's own sessions folder: the dated game folders and this eeg
+folder merge in, and the notebook finds both.
+"""
+
+
+def make_eeg_folder(pkg: Path) -> Path:
+    """sessions/eeg/ with its note. Nothing else in sessions/ is ever
+    touched: on a used lab folder that is the recorded data."""
+    folder = pkg / EEG_FOLDER
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "README.txt").write_text(EEG_NOTE, encoding="utf-8")
+    return folder
+
+
 def check(pkg: Path, need_exe: bool = False) -> list[str]:
     """Return the top-level names; fail on anything outside TOP_LEVEL."""
     names = sorted(p.name for p in pkg.iterdir())
@@ -107,6 +135,7 @@ def assemble(repo: Path = REPO, pkg: Path = PACKAGE,
         if not (target.exists() and target.samefile(source)):
             shutil.copy2(source, target)
     make_source(repo, pkg)
+    make_eeg_folder(pkg)
     if exe is not None:
         shutil.copy2(exe, pkg / EXE)
     return check(pkg, need_exe=exe is not None)

@@ -1243,6 +1243,27 @@ class GameEngine:
         sent.add((int(lane), float(t_perf)))
         self._eeg_send(code, lane=lane, t_event=t_perf)
 
+    def eeg_hand_press(self, trial_id, lane: int, t_perf: float) -> None:
+        """Mirror: one hand's right finger, marked when it lands.
+
+        Mirror used to send both hands' bytes when the pair closed, so
+        the first hand's byte trailed its press by up to the synchrony
+        window, and mirror is the LRP mode: the analysis is locked to
+        exactly those presses. log_trial skips a hand already sent.
+        """
+        code = eeg_trigger.response_code("correct", lane)
+        if code is None:
+            return
+        sent = getattr(self, "_eeg_hand_sent", None)
+        if not isinstance(sent, set):
+            sent = self._eeg_hand_sent = set()
+        sent.add((trial_id, int(lane)))
+        self._eeg_send(code, lane=lane, t_event=t_perf)
+
+    def _eeg_hand_already_sent(self, trial_id, lane) -> bool:
+        sent = getattr(self, "_eeg_hand_sent", None)
+        return isinstance(sent, set) and (trial_id, int(lane)) in sent
+
     def _eeg_wrong_already_sent(self, lane, t_perf) -> bool:
         sent = getattr(self, "_eeg_wrong_sent", None)
         return isinstance(sent, set) and (int(lane), float(t_perf)) in sent
@@ -1307,13 +1328,80 @@ class GameEngine:
         pending.clear()
 
     def eeg_session_start(self) -> None:
-        """Session-start marker (240). Fires when the participant logs
-        in, which is where the session boundary lives: one login, many
-        games, one 240/241 pair bracketing them all. Factored out of
-        begin_session so the contract test can pin the marker sequence
-        without driving the whole login flow."""
+        """Session-start marker (240): one login, many games, one
+        240/241 pair bracketing them all. Sent as the login session's
+        first game starts (_begin_block), not at the login itself: the
+        menu shows the recording's file name only once the participant
+        is logged in, and the researcher starts ActiView after reading
+        it, so a 240 sent at login would land before the recording.
+        Factored out so the contract test can pin the sequence without
+        driving the whole login flow."""
+        self._eeg_session_pending = False
         self._eeg_send(eeg_trigger.CODES["session_start"])
         self._eeg_session_open = True
+
+    # ---- the EEG recording's file -----------------------------------------
+    # ActiView writes the BDF; the game only says what to call it and
+    # where to put it, so one folder carries a lab day home: the game's
+    # own folders and the recordings side by side in sessions/.
+    EEG_RECORDING_SUFFIX = ".bdf"
+
+    def eeg_recording_dir(self) -> Path:
+        """sessions/eeg/ beside the game's own session folders."""
+        root = self.cfg.resolve_path(
+            self.cfg.get("session.data_dir", "sessions"))
+        return Path(root) / "eeg"
+
+    @staticmethod
+    def _file_safe(text: str) -> str:
+        out = "".join(c if (c.isalnum() or c in "-_") else "_"
+                      for c in str(text or "").strip())
+        return out.strip("_") or "NA"
+
+    def _plan_eeg_recording(self) -> None:
+        """At login, in the EEG build: the name ActiView's file should
+        get. Participant and date, then _2, _3 for a second login the
+        same day, so no recording is ever told to overwrite another."""
+        self.eeg_recording = None
+        self._eeg_recording_checked = (0.0, False)
+        markers = getattr(self, "markers", None)
+        if markers is None or not markers.enabled:
+            return
+        folder = self.eeg_recording_dir()
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            log.warning("Could not make the EEG recording folder %s: %s",
+                        folder, e)
+        base = (f"{self._file_safe(self.session.participant)}_"
+                f"{time.strftime('%Y-%m-%d')}")
+        name, n = base, 2
+        while self._recording_exists(folder, name):
+            name, n = f"{base}_{n}", n + 1
+        self.eeg_recording = name
+        log.info("EEG recording for this session: %s%s in %s", name,
+                 self.EEG_RECORDING_SUFFIX, folder)
+
+    def _recording_exists(self, folder: Path, stem: str) -> bool:
+        want = (stem + self.EEG_RECORDING_SUFFIX).lower()
+        try:
+            return any(p.name.lower() == want for p in folder.iterdir())
+        except OSError:
+            return False
+
+    def eeg_recording_status(self) -> tuple[str | None, bool]:
+        """(file name, whether it is in the folder yet). Looked up at
+        most once a second: the menu asks every frame."""
+        name = getattr(self, "eeg_recording", None)
+        if not name:
+            return None, False
+        checked_at, found = getattr(self, "_eeg_recording_checked",
+                                    (0.0, False))
+        now = time.monotonic()
+        if now - checked_at >= 1.0:
+            found = self._recording_exists(self.eeg_recording_dir(), name)
+            self._eeg_recording_checked = (now, found)
+        return name + self.EEG_RECORDING_SUFFIX, found
 
     def eeg_session_end(self) -> None:
         """Session-end marker (241), at most once per 240. The open
@@ -2607,7 +2695,10 @@ class GameEngine:
         # every game. Dies with the session like the rest of this.
         self._uncal_ack = set()
         self._clear_session_carry()
-        self.eeg_session_start()
+        # 240 waits for the first game (see eeg_session_start); the
+        # recording's name is settled now, for the menu to show.
+        self._eeg_session_pending = True
+        self._plan_eeg_recording()
         log.info("Session started: participant=%s age=%s visit=%s "
                  "dominant=%s",
                  name, age or "(not given)",
@@ -2778,6 +2869,15 @@ class GameEngine:
                  int(getattr(self, "_session_games", 0)),
                  self.session_minutes())
         self.eeg_session_end()
+        self._eeg_session_pending = False
+        name, found = self.eeg_recording_status()
+        if name:
+            self._eeg_recording_checked = (0.0, False)
+            name, found = self.eeg_recording_status()
+            (log.info if found else log.warning)(
+                "EEG recording %s %s in %s", name,
+                "is" if found else "is NOT", self.eeg_recording_dir())
+        self.eeg_recording = None
         # A battery that did not finish ends with the session: its
         # overrides come off the config here, so the next login plays
         # standard-length blocks again.
@@ -4976,9 +5076,15 @@ class GameEngine:
         return bool(value)
 
     def _begin_block(self, name: str) -> None:
+        # The login session's first game opens the session on the
+        # recording. Sent before this block's loggers open, so it stays
+        # out of raw.csv as a session-level byte always has.
+        if getattr(self, "_eeg_session_pending", False):
+            self.eeg_session_start()
         self.current_block = name
         self._eeg_feedback_markers = self._feedback_markers_on(name)
         self._eeg_wrong_sent = set()
+        self._eeg_hand_sent = set()
         # Fresh phrase deck per block, seeded from who is playing and
         # which block this is, so the same participant replaying the
         # same block sees the same wording in the same order. A
@@ -5228,6 +5334,15 @@ class GameEngine:
         # record is trustworthy or degraded, and from when.
         markers = getattr(self, "markers", None)
         self.session.eeg = markers.status() if markers is not None else {}
+        # Which ActiView recording this game belongs to, and whether the
+        # file was in sessions/eeg/ yet: the pairing the analysis needs,
+        # written where it cannot get separated from the game.
+        recording, found = (self.eeg_recording_status()
+                            if hasattr(self, "session") else (None, False))
+        if recording:
+            self.session.eeg["recording_file"] = recording
+            self.session.eeg["recording_folder"] = "eeg"
+            self.session.eeg["recording_present"] = bool(found)
         # The stimulus-path delays and the marker-to-stimulus offset
         # per event class, so an epoch locked to a byte can be shifted
         # to the stimulus the patient got. Recorded for every block,
@@ -8025,21 +8140,35 @@ class GameEngine:
                 # downgraded to Miss by the synchrony gate still has
                 # two real presses at known times to lock to.
                 r_rt, l_rt = mirror_hand_rts
+                tid = getattr(trial, "trial_id", None)
                 if r_rt is not None:
-                    self._eeg_send(
-                        eeg_trigger.response_code("correct", trial.lane),
-                        lane=trial.lane,
-                        t_event=trial.stim_t_perf + r_rt / 1000.0)
+                    if not self._eeg_hand_already_sent(tid, trial.lane):
+                        self._eeg_send(
+                            eeg_trigger.response_code("correct",
+                                                      trial.lane),
+                            lane=trial.lane,
+                            t_event=trial.stim_t_perf + r_rt / 1000.0)
                     sent_response = True
                 if l_rt is not None:
                     left_lane = trial.lane + 4
-                    self._eeg_send(
-                        eeg_trigger.response_code("correct", left_lane),
-                        lane=left_lane,
-                        t_event=trial.stim_t_perf + l_rt / 1000.0)
+                    if not self._eeg_hand_already_sent(tid, left_lane):
+                        self._eeg_send(
+                            eeg_trigger.response_code("correct", left_lane),
+                            lane=left_lane,
+                            t_event=trial.stim_t_perf + l_rt / 1000.0)
                     sent_response = True
+            first_was_wrong = bool(
+                had_incorrect and self._eeg_wrong_already_sent(
+                    *trial.incorrect_presses[0]))
             if not sent_response:
-                if outcome.label != "Miss":
+                if outcome.label != "Miss" and first_was_wrong:
+                    # A wrong finger came first and is already on the
+                    # wire as this trial's response byte. Syllables
+                    # scores such a set Good, and a correct byte here
+                    # would be a second response byte for one press,
+                    # stamped with the wrong press's time.
+                    pass
+                elif outcome.label != "Miss":
                     self._eeg_send(
                         eeg_trigger.response_code("correct", trial.lane),
                         lane=trial.lane,

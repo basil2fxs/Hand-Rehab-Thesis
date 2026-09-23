@@ -341,12 +341,20 @@ class SessionCarryStateTests(_SessionHarness):
 
 
 class EegSessionBoundaryTests(_SessionHarness):
-    """240/241 bracket the login, not the app process."""
+    """240/241 bracket the login's games, not the app process. 240 goes
+    out as the login's first game starts: the menu names the recording
+    only after the login, and the researcher starts ActiView after
+    reading it, so a 240 at the login itself could land before the
+    recording."""
 
-    def test_login_sends_240_and_session_end_sends_241_once(self) -> None:
+    def test_first_game_sends_240_and_session_end_sends_241_once(self) -> None:
         self.assertEqual(self._wire_codes(), [])   # boot sends nothing
         self._login()
-        self.assertIn(240, self._wire_codes())
+        self.assertNotIn(240, self._wire_codes())  # nor does the login
+        self._play_one_game()
+        self.assertEqual(self._wire_codes().count(240), 1)
+        self._play_one_game()
+        self.assertEqual(self._wire_codes().count(240), 1)
         self.eng.request_end_session()
         self.eng._confirm_end_session()
         codes = self._wire_codes()
@@ -360,17 +368,28 @@ class EegSessionBoundaryTests(_SessionHarness):
 
     def test_app_quit_mid_session_still_closes_the_pair(self) -> None:
         self._login()
+        self._play_one_game()
         backend = self.eng.markers.backend
         self.eng._eeg_shutdown()
         codes = [c for _, c in backend.written if c != 0]
         self.assertEqual(codes.count(240), 1)
         self.assertEqual(codes.count(241), 1)
 
+    def test_a_login_with_no_game_sends_neither(self) -> None:
+        self._login()
+        backend = self.eng.markers.backend
+        self.eng._eeg_shutdown()
+        codes = [c for _, c in backend.written if c != 0]
+        self.assertNotIn(240, codes)
+        self.assertNotIn(241, codes)
+
     def test_two_logins_make_two_pairs(self) -> None:
         self._login("A", "")
+        self._play_one_game()
         self.eng.request_end_session()
         self.eng._confirm_end_session()
         self._login("B", "")
+        self._play_one_game()
         self.eng.request_end_session()
         self.eng._confirm_end_session()
         codes = self._wire_codes()

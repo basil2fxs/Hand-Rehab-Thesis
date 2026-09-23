@@ -353,9 +353,11 @@ CODE_NOTES: dict[str, tuple[str, str, str, str]] = {
     "block_abandoned": ("state", "", "block abandoned mid-way (Esc)", ""),
     "block_end_base": ("state", "", "block completed, + mode id", ""),
     "session_start": (
-        "state", "", "participant logged in",
-        "Outside any block: on the wire and in the app log, never in "
-        "raw.csv or events.tsv."),
+        "state", "", "first game of a login session starts",
+        "Sent just before that game's block start, not at the login, so "
+        "a recording started after reading its name on the menu still "
+        "has it. Outside any block: on the wire and in the app log, "
+        "never in raw.csv or events.tsv."),
     "session_end": ("state", "", "session ended or app closed", "Same as 240."),
     "pause": ("state", "", "block paused", ""),
     "resume": ("state", "", "block resumed", ""),

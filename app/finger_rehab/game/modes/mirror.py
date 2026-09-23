@@ -337,9 +337,13 @@ class MirrorMode:
         if ev.lane == right_target:
             if self.active.right_press_t is None:
                 self.active.right_press_t = ev.t_perf
+                self.engine.eeg_hand_press(self.active.trial_id, ev.lane,
+                                           ev.t_perf)
         elif ev.lane == left_target:
             if self.active.left_press_t is None:
                 self.active.left_press_t = ev.t_perf
+                self.engine.eeg_hand_press(self.active.trial_id, ev.lane,
+                                           ev.t_perf)
         else:
             # Wrong finger on either hand. Same per-press penalty
             # rule as classic / adaptive: every wrong press costs

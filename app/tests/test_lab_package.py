@@ -1,8 +1,9 @@
 """Tests for the EEG lab package.
 
 EEG_Lab is the one folder handed to the EEG lab. Its top
-level holds exactly five entries: Finger Rehab.exe, eeg_lab.yaml,
-run_in_psychopy.py, README.txt and a fresh source/ copy of the game.
+level holds exactly six entries: Finger Rehab.exe, eeg_lab.yaml,
+run_in_psychopy.py, README.txt, a fresh source/ copy of the game and
+sessions/, which ships with the eeg/ folder ActiView saves into.
 Three things are pinned here. The launcher picks the right route (the
 exe on Windows, source/ elsewhere, or nothing) and, from source, installs
 what PsychoPy lacks beside itself before the game starts.
@@ -44,7 +45,7 @@ sys.path.insert(0, str(REPO))
 LAUNCHER = LAB_FOLDER / "run_in_psychopy.py"
 BUILDER = REPO / "scripts" / "build_lab_package.py"
 TARGET = {"Finger Rehab.exe", "eeg_lab.yaml", "run_in_psychopy.py",
-          "README.txt", "source"}
+          "README.txt", "source", "sessions"}
 # What the game imports at run time; see PACKAGES in the launcher.
 NEEDED = {"pygame-ce", "pyserial", "pyyaml", "numpy", "scipy", "librosa",
           "soundfile", "matplotlib"}
