@@ -149,11 +149,14 @@ class GapAndQueueTests(unittest.TestCase):
         self.assertEqual(backend.written, [30, 0, 101])
 
     def test_priority_orders_queued_markers(self) -> None:
-        # Boundary (204) sent before a stimulus (30) while the line is
-        # busy: the stimulus must still emit first.
+        # A CLOSING boundary (224, block end) sent before a stimulus
+        # (30) while the line is busy: the stimulus must still emit
+        # first, because it belongs inside the block the end closes.
+        # This used a block START before openers moved to the front;
+        # a start now correctly goes first (test_eeg_marker_order).
         w, backend, clock = _writer()
         w.send(101)
-        w.send(204)
+        w.send(224)
         w.send(30)
         clock.advance(0.011)
         w.tick()
@@ -164,7 +167,7 @@ class GapAndQueueTests(unittest.TestCase):
         w.tick()
         clock.advance(0.011)
         w.tick()
-        self.assertEqual(backend.written, [101, 0, 30, 0, 204])
+        self.assertEqual(backend.written, [101, 0, 30, 0, 224])
 
     def test_queue_overflow_drops_lowest_priority(self) -> None:
         from finger_rehab.hardware.eeg_trigger import MarkerWriter
@@ -175,12 +178,14 @@ class GapAndQueueTests(unittest.TestCase):
                          gap_ms=10.0, clock=clock, max_queue=3,
                          on_emit=records.append)
         w.send(30)                     # on the wire
-        for code in (100, 101, 102, 240):
+        for code in (100, 101, 102, 241):
             w.send(code)               # 4 queued: one over the cap
         dropped = [r for r in records if r.dropped]
         self.assertEqual(len(dropped), 1)
-        # The control code is the lowest priority in the queue.
-        self.assertEqual(dropped[0].code, 240)
+        # The session END is the lowest priority in the queue. This
+        # used to drop 240, the session START, which would have lost
+        # the byte a recording is segmented from in any burst.
+        self.assertEqual(dropped[0].code, 241)
         self.assertIsNone(dropped[0].t_wire)
         self.assertEqual(w.dropped_count, 1)
 

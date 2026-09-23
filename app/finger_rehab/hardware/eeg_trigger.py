@@ -30,9 +30,11 @@ Wire protocol, in short:
   1-4 ms pulses; a 250 Hz amplifier needs at least 8 ms to be sure of
   two samples, so 10 ms is the default.
 - A new code only goes out after the line has sat at 0 for gap_ms.
-  Colliding events queue by priority (stimulus > response > feedback >
-  preparation > boundaries/control) and every emission logs its actual
-  wire time, so a delayed marker is late but never wrong.
+  Colliding events queue by priority (session and block starts >
+  stimulus > response > feedback > preparation > closing boundaries and
+  control) and every emission logs its actual wire time, so a delayed
+  marker is late but never wrong. Openers go first so nothing that
+  belongs inside a block can reach the wire before the block does.
 - Write failures degrade, never crash: after 3 consecutive failures
   the port is reopened once; if that fails the session keeps running,
   markers keep being logged with a failed flag, and the session is
@@ -477,11 +479,24 @@ def block_code(mode_name: str, edge: str) -> int | None:
 def priority_for(code: int) -> int:
     """Collision priority; lower emits first when markers queue.
 
-    Stimulus onsets carry the tightest timing requirement, responses
-    next; feedback, preparation and boundaries can afford a frame or
-    two of delay because their analyses are either coarse or windowed
-    away from the delayed edge.
+    Opening a container comes before anything inside it: a session
+    start (240) and a block start (200 to 218) go first. The engine
+    sends a block start and its GET READY in the same frame, and when
+    block starts sat at the bottom of this list the queue put GET READY
+    ahead of them, so every block on the recording opened with a 20
+    that fell just OUTSIDE the block it belonged to. Anyone segmenting
+    a BDF from 2xx to 22x lost it. Giving the openers first place costs
+    stimulus timing nothing: a block start is sent seconds before that
+    block's first stimulus exists, so the two never compete.
+
+    After those, stimulus onsets carry the tightest timing requirement,
+    responses next; feedback, preparation and the closing boundaries
+    can afford a frame or two of delay because their analyses are
+    either coarse or windowed away from the delayed edge.
     """
+    if code == CODES["session_start"] or (
+            CODES["block_start_base"] <= code < CODES["block_abandoned"]):
+        return -1
     if 30 <= code <= 49:
         return 0
     if 100 <= code <= 131:

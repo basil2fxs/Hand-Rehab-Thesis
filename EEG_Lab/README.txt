@@ -1,15 +1,14 @@
 Finger Rehab, EEG lab folder
 
-1. Copy this folder onto the lab PC.
-2. Plug the trigger box in first. Start ActiView; the trigger low byte
-   reads 255.
-3. Open run_in_psychopy.py in PsychoPy Coder and press Run.
-4. The byte drops to 0 when the game opens the port. If it stays 255,
-   put the box's COM number in eeg_lab.yaml, line "port: COM10".
-5. Log in, pick a game. Each block: 200+mode, 20, then a 30-51 byte
-   per stimulus and 100-131 per press (Force Pilot 23/24 instead, Buzz
-   Hunt no press bytes), 220+mode at the end. 240 login, 241 exit.
-6. Data lands in sessions/ next to the exe: trials.csv, raw.csv (eeg
-   rows), metadata.json, events.tsv, markers_codes.csv, rehab.log.
-7. Nothing opens: read sessions/rehab.log. "needs its trigger box"
-   means the COM number is wrong or the cable is out.
+1. Copy this folder onto the lab PC. Plug the trigger box in first.
+2. Open run_in_psychopy.py in PsychoPy Coder and press Run.
+3. ActiView's trigger low byte reads 255, then 0 when the game opens
+   the port. Stuck at 255: put the box's COM number in eeg_lab.yaml.
+4. Same wire as the old SRT task: COM10, 9600 baud, one byte, then 0.
+5. Stimulus onset is 30 to 38, not only 30. 30 is light only, as in the
+   old task; +1 tone, +2 buzz, +4 nothing shown. Here every stimulus is
+   33 (light, tone, buzz). Epoch on the code you want.
+6. Each block: 200+mode, 20, stimuli, 100-131 per press (Force Pilot
+   23/24, Buzz Hunt no presses), 220+mode. 240 login, 241 exit.
+7. Data lands in sessions/: events.tsv names every marker, and
+   markers_codes.csv is the full table. Nothing opens: read rehab.log.
