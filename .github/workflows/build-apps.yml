@@ -161,10 +161,19 @@ jobs:
           if (-not (Test-Path $exe)) { throw "not installed" }
           schtasks /Query /TN FingerRehabAutostart
           if ($LASTEXITCODE) { throw "auto-start task missing" }
+          # Inno's uninstaller copies itself to temp and relaunches, so
+          # -Wait returns while the real work is still going. Poll for
+          # the result instead of racing it.
           Start-Process "$env:LOCALAPPDATA\Programs\Finger Rehab\unins000.exe" `
             -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES" -Wait
-          schtasks /Query /TN FingerRehabAutostart 2>$null
-          if (-not $LASTEXITCODE) { throw "task survived uninstall" }
+          $gone = $false
+          foreach ($i in 1..30) {
+            Start-Sleep -Seconds 2
+            schtasks /Query /TN FingerRehabAutostart 2>$null | Out-Null
+            if ($LASTEXITCODE) { $gone = $true; break }
+          }
+          if (-not $gone) { throw "task survived uninstall" }
+          if (Test-Path $exe) { throw "the exe survived uninstall" }
 
       - name: Upload the Windows installer
         if: runner.os == 'Windows'
