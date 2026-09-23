@@ -4405,9 +4405,10 @@ class GameEngine:
 
     def begin_chords_block(self) -> None:
         """Chords block: two to four fingers pressed together, quiet
-        fingers scored on staying quiet, never a single finger. One
-        engine block is a full session (five sub-blocks of chords
-        with enforced rests). The research case lives in the mode
+        fingers scored on staying quiet, with a few single fingers
+        dealt among them as the baseline (chords.size_mix). One
+        engine block is a full session (five sub-blocks of 20 with
+        enforced rests). The research case lives in the mode
         file's docstring; chords.* in the config says what the
         patient experiences.
 
@@ -4463,6 +4464,7 @@ class GameEngine:
             score_cfg=self.score_cfg,
             seed=seed,
             demo_trials=self._test_mode_trials(),
+            size_mix=self.cfg.get("chords.size_mix", None),
         )
         self._begin_block("chords")
         # The seed shaped every chord draw and jitter in this block, so
@@ -8228,7 +8230,12 @@ class GameEngine:
             # motor.chord_buzz:
             #   together  every finger of the chord starts at once and
             #             is held out to motor.cue_ms, so the chord is
-            #             felt as one shape, the way it is shown.
+            #             felt as one shape, the way it is shown. A
+            #             board asked for more than
+            #             motor.chord_max_together fingers (3) takes
+            #             the arpeggio for that chord: the firmware's
+            #             source says all four motors on one board draw
+            #             more than its darlington driver supplies.
             #   arpeggio  one firmware pulse per finger in fixed
             #             low-to-high lane order, onsets spaced a full
             #             pulse plus motor.arpeggio_gap_ms apart, for a
@@ -8252,9 +8259,15 @@ class GameEngine:
             spacing_s = (self.FIRMWARE_STIM_MS + max(0.0, gap_ms)) / 1000.0
             together = str(self.cfg.get("motor.chord_buzz", "together")
                            or "together").lower() != "arpeggio"
+            try:
+                max_together = int(self.cfg.get("motor.chord_max_together",
+                                                3))
+            except (TypeError, ValueError):
+                max_together = 3
             delivered = True
             for lanes_on_board in by_board.values():
-                if together and len(lanes_on_board) > 1:
+                if (together and 1 < len(lanes_on_board)
+                        <= max(1, max_together)):
                     for lane in lanes_on_board:
                         ok = self._send_stim(lane, together=True)
                         if not ok:
@@ -8276,7 +8289,9 @@ class GameEngine:
                 if self.raw_logger:
                     self.raw_logger.queue_event(
                         "stim_motor", lane=first, t_perf=t_perf,
-                        detail=f"delivered={'yes' if ok else 'NO'}",
+                        detail=(f"delivered={'yes' if ok else 'NO'}"
+                                + (";chord=arpeggio"
+                                   if len(lanes_on_board) > 1 else "")),
                         hand=self.hand_mode)
                 if len(lanes_on_board) == 1:
                     # Hold the motor on for the configured cue length.

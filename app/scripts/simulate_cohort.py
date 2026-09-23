@@ -31,8 +31,10 @@ latent skill plus a per-person within-block drift:
              transposition
   buzz hunt  a per-person localisation accuracy, errors landing on
              the neighbouring finger
-  chords     a per-person press spread across the chord, tightening
-             a little across the block, mirror chords across the
+  chords     a per-person chord cost (the first press comes later
+             the more fingers the chord asks for, about 110 ms per
+             extra finger, C6), a per-person press spread across the
+             chord, tightening a little across the block, mirror chords across the
              hands tighter still, and a per-person enslaving leak
              into the resting fingers, largest next to a pressing
              finger and on the ring finger
@@ -103,6 +105,9 @@ WARMUP_TRIALS = 8.0
 def make_truth(n: int, seed: int) -> dict[str, dict]:
     """The latent skill behind each code, drawn once."""
     rng = random.Random(seed)
+    # The chord cost has its own stream, so adding it left every other
+    # trait of every code where it was.
+    cost_rng = random.Random(seed + 7)
     truth: dict[str, dict] = {}
     for i in range(1, n + 1):
         code = f"P{i:02d}"
@@ -148,6 +153,10 @@ def make_truth(n: int, seed: int) -> dict[str, dict]:
             "pattern_err": rng.uniform(0.01, 0.03),
             "learn_per_cycle_s": rng.uniform(0.004, 0.008),
             "chord_spread_s": rng.uniform(0.010, 0.022),
+            # Seconds the first press slows per extra finger in the
+            # chord: Verwey 2023 measured about 126 ms from one to
+            # three keys in healthy students.
+            "chord_cost_s": max(0.03, cost_rng.gauss(0.110, 0.030)),
             # The per-person within-block warm-up. Clamped at zero:
             # nobody warms up backwards on purpose, and the
             # measurement noise supplies the people who look as
@@ -272,9 +281,13 @@ class CohortParticipant(mb.Participant):
         # chords is scored in.
         spread = float(self.truth["chord_spread_s"]) * (
             1.0 - (1.0 - CHORD_WITHIN_BLOCK_FACTOR) * self.block_progress())
-        t = act.stim_t_perf + self._rt() + 0.15
-        self.trials_this_block += 1
         targets = [int(l) for l in act.targets]
+        extra = max(0, len(targets) - 1)
+        if getattr(act, "scope", "") == "cross":
+            extra = 1
+        t = (act.stim_t_perf + self._rt() + 0.05
+             + float(self.truth.get("chord_cost_s", 0.10)) * extra)
+        self.trials_this_block += 1
         # Mirror chords across the hands land tighter than non-mirror
         # ones (C4): the same fingers on both hands are one motor plan.
         if (getattr(act, "scope", "") == "cross"

@@ -1,9 +1,10 @@
 """Tests for Chords mode, the multi-finger co-activation block. The
-guarantees pinned here are the ones the measurement depends on: every
-trial in play is a chord of two to four fingers (no single fingers,
-Basil's rule), the deal mixes the whole chord space (sizes off a
-shuffle bag, per-finger participation balanced, never the same chord
-twice running), the difficulty formula still ranks the analysis table
+guarantees pinned here are the ones the measurement depends on: the
+deal holds the size mix exactly per bag of twenty (four singles, one
+per finger, ten pairs, five triples, one quad), never opens a block on
+a single, keeps singles out of every chord number, balances per-finger
+participation and never deals the same chord twice running, the
+difficulty formula still ranks the analysis table
 the way the enslaving-adjacency literature predicts, every chord
 lights all its fingers at once and lands in the CSV as "1+3+4" with
 the full target set in correct_keys, the synchrony window is what
@@ -153,13 +154,147 @@ class DifficultyLadderTests(unittest.TestCase):
         self.assertEqual(mode.current_w_ms, 100.0)
 
 
+class SizeMixTests(unittest.TestCase):
+    """Basil, 24 September 2026: keep four fingers at once to a
+    minimum, singles are fine but few. The shipped mix per bag of
+    twenty is four singles, ten pairs, five triples and one quad, and
+    the deal must hold it exactly, keep the rare sizes apart, open on a
+    chord and ask every finger alone equally often."""
+
+    def _mode_draws(self, n: int, seed: int = 7, **kw):
+        _engine, mode = _build_mode(seed=seed, **kw)
+        return [mode._deck["right"].next() for _ in range(n)]
+
+    def test_every_bag_of_twenty_holds_the_mix(self) -> None:
+        for seed in (1, 7, 42, 99):
+            draws = self._mode_draws(200, seed)
+            for b in range(0, 200, 20):
+                sizes = [len(c) for c in draws[b:b + 20]]
+                self.assertEqual(
+                    {k: sizes.count(k) for k in (1, 2, 3, 4)},
+                    {1: 4, 2: 10, 3: 5, 4: 1}, (seed, b))
+
+    def test_rare_sizes_never_run_back_to_back(self) -> None:
+        for seed in (1, 7, 42, 99):
+            sizes = [len(c) for c in self._mode_draws(400, seed)]
+            for a, b in zip(sizes, sizes[1:]):
+                if a == b:
+                    self.assertEqual(a, 2, (seed, sizes))
+
+    def test_a_block_opens_on_a_chord(self) -> None:
+        for seed in range(60):
+            self.assertGreaterEqual(len(self._mode_draws(1, seed)[0]), 2)
+
+    def test_every_finger_is_asked_alone_once_per_bag(self) -> None:
+        for seed in (1, 7, 42):
+            draws = self._mode_draws(200, seed)
+            for b in range(0, 200, 20):
+                singles = sorted(c[0] for c in draws[b:b + 20]
+                                 if len(c) == 1)
+                self.assertEqual(singles, [0, 1, 2, 3], (seed, b))
+
+    def test_no_chord_repeats_and_participation_stays_even(self) -> None:
+        draws = self._mode_draws(200)
+        for a, b in zip(draws, draws[1:]):
+            self.assertNotEqual(a, b)
+        counts = {f: sum(1 for c in draws if f in c) for f in range(4)}
+        self.assertLessEqual(max(counts.values()) - min(counts.values()),
+                             4, counts)
+
+    def test_a_bad_mix_in_config_falls_back_to_the_default(self) -> None:
+        from finger_rehab.game.modes.chords import (DEFAULT_SIZE_MIX,
+                                                    parse_size_mix)
+        self.assertEqual(parse_size_mix({1: 20}), DEFAULT_SIZE_MIX)
+        self.assertEqual(parse_size_mix("nonsense"), DEFAULT_SIZE_MIX)
+        self.assertEqual(parse_size_mix({"2": 3, "3": 1, 9: 5}),
+                         {2: 3, 3: 1})
+
+    def test_the_shipped_config_carries_the_mix(self) -> None:
+        from finger_rehab.config import Config
+        from finger_rehab.game.modes.chords import parse_size_mix
+        cfg = Config.load()
+        self.assertEqual(parse_size_mix(cfg.get("chords.size_mix")),
+                         {1: 4, 2: 10, 3: 5, 4: 1})
+        self.assertEqual(cfg.get("motor.chord_max_together"), 3)
+
+
+class SinglesStayApartTests(unittest.TestCase):
+    """A single is the baseline, not a chord: kind "single", no move
+    of the staircase, never in n_chords, median_er, per_chord or the
+    chord-conditioned matrices, and its own one-finger matrix and the
+    size table in the block summary."""
+
+    REFS = {0: 40.0, 1: 40.0, 2: 40.0, 3: 40.0}
+
+    def _mode(self):
+        engine, mode = _build_mode(trials_per_subblock=20, subblocks=1,
+                                   iti_min_s=0.0, iti_max_s=0.0)
+        mode._reference_counts = lambda lane: self.REFS[lane]
+        return engine, mode
+
+    def _play(self, engine, mode, n: int, t: float = 5.0) -> float:
+        for _ in range(n):
+            if mode.phase == "rest" or mode.phase == "done":
+                break
+            mode._fire(t)
+            engine._force_window_peak = {
+                l: (self.REFS[l] if l in mode.active.targets
+                    else 0.1 * self.REFS[l]) for l in mode.lanes}
+            engine._force_window_saw_samples = True
+            _complete_chord(mode, t + 0.3, gap_s=0.01)
+            t += 1.5
+        return t
+
+    def test_singles_are_kept_apart_in_the_summary(self) -> None:
+        engine, mode = self._mode()
+        self._play(engine, mode, 20)
+        kinds = [r["kind"] for r in mode._records]
+        self.assertEqual(kinds.count("single"), 4)
+        self.assertEqual(kinds[0], "chord")
+        for r in mode._records:
+            self.assertEqual(r["kind"] == "single", r["size"] == 1)
+        st = mode.block_stats()
+        self.assertEqual(st["n_chords"], 16)
+        self.assertEqual(st["n_singles"], 4)
+        self.assertEqual(st["size_mix"], {"1": 4, "2": 10, "3": 5,
+                                          "4": 1})
+        self.assertEqual([row["size"] for row in st["by_size"]],
+                         [1, 2, 3, 4])
+        self.assertEqual([row["n"] for row in st["by_size"]],
+                         [4, 10, 5, 1])
+        self.assertTrue(all(len(p["chord"]) >= 2
+                            for p in st["per_chord"]))
+        per_finger = st["singles"]["per_finger"]["right"]
+        self.assertEqual({k: v["n"] for k, v in per_finger.items()},
+                         {"I": 1, "M": 1, "R": 1, "P": 1})
+        # Every single leaked 10 percent onto each quiet finger, so the
+        # one-finger matrix reads 10 off the diagonal and the ER 0.1.
+        m = st["singles"]["enslaving_matrix"]["right"]
+        for i in range(4):
+            for j in range(4):
+                if i == j:
+                    self.assertIsNone(m[i][j])
+                else:
+                    self.assertAlmostEqual(m[i][j], 10.0, places=1)
+        self.assertAlmostEqual(st["singles"]["median_er"], 0.1, places=3)
+
+    def test_a_single_does_not_move_the_staircase(self) -> None:
+        engine, mode = self._mode()
+        mode._deck["right"]._classes._bag.insert(0, 1)
+        mode._deck["right"]._classes._last = 2
+        before = len(mode._stair)
+        self._play(engine, mode, 1)
+        self.assertEqual(mode._records[-1]["kind"], "single")
+        self.assertEqual(len(mode._stair), before)
+
+
 class MixedDealTests(unittest.TestCase):
-    """Basil's rule made mechanical: "only for 2 or 3 or 4 fingers at
-    once, no single fingers. make sure always different and mixed
-    combinations." The deal must never ask for a single finger, must
-    interleave the sizes off a shuffle bag, must never repeat a chord
-    back to back, and must keep per-finger participation near-equal
-    via the deficit draw."""
+    """The deck with equal classes, the rule the cross-hand deal and
+    the chords-only ladder still use: "make sure always different and
+    mixed combinations." Sizes interleave off a shuffle bag, no chord
+    repeats back to back, and the deficit draw keeps per-finger
+    participation near-equal. The shipped within-hand mix is
+    SizeMixTests above."""
 
     def _draws(self, n: int = 99, seed: int = 7):
         from finger_rehab.game.modes.chords import ALL_CHORDS, \
@@ -634,8 +769,11 @@ class SessionFlowTests(unittest.TestCase):
     patient."""
 
     def _small_mode(self, **overrides):
+        # Chords only: these tests pin rests, fatigue and the cap on
+        # chords, and a single cannot be played late.
         kwargs = dict(trials_per_subblock=2,
-                      subblocks=2, iti_min_s=0.0, iti_max_s=0.0)
+                      subblocks=2, iti_min_s=0.0, iti_max_s=0.0,
+                      size_mix={2: 1, 3: 1, 4: 1})
         kwargs.update(overrides)
         return _build_mode(**kwargs)
 
@@ -693,7 +831,7 @@ class SessionFlowTests(unittest.TestCase):
         engine.finish_block.assert_called_once()
         self.assertEqual(mode.end_reason, "time_cap")
 
-    def test_full_session_is_chords_only_and_finishes(self) -> None:
+    def test_full_session_finishes(self) -> None:
         engine, mode = self._small_mode()
         t = 5.0
         for _ in range(2):
@@ -802,6 +940,30 @@ class ArpeggioCueTests(unittest.TestCase):
         self.assertEqual(sorted(c for c in e._sent
                                 if c.startswith("STIM")),
                          ["STIM:2", "STIM:3", "STIM:4"])
+
+    def test_the_quad_never_runs_four_motors_on_one_board(self) -> None:
+        # The firmware's own source: all four motors together draw
+        # more than the shared darlington driver supplies. A chord
+        # past motor.chord_max_together (3) takes the arpeggio.
+        e = self._engine()
+        e.on_stim_multi([0, 1, 2, 3], trial_id=1, t_perf=0.0)
+        self.assertEqual([c for c in e._sent if c.startswith("STIM")],
+                         ["STIM:1"])
+        queued = sorted(e._motor_queue, key=lambda x: x[1])
+        self.assertEqual([ln for ln, _ in queued], [1, 2, 3])
+        e2 = self._engine()
+        e2.on_stim_multi([0, 1, 2], trial_id=1, t_perf=0.0)
+        self.assertEqual([c for c in e2._sent if c.startswith("STIM")],
+                         ["STIM:1", "STIM:2", "STIM:3"])
+
+    def test_the_motor_cap_is_a_config_value(self) -> None:
+        e = self._engine()
+        get = e.cfg.get.side_effect
+        e.cfg.get = MagicMock(side_effect=lambda k, d=None: (
+            2 if k == "motor.chord_max_together" else get(k, d)))
+        e.on_stim_multi([0, 1, 2], trial_id=1, t_perf=0.0)
+        self.assertEqual([c for c in e._sent if c.startswith("STIM")],
+                         ["STIM:1"])
 
     def test_a_single_cue_after_a_chord_still_cuts_it(self) -> None:
         e = self._engine()
@@ -1839,7 +2001,9 @@ class EngineCrossIntegrationTests(unittest.TestCase):
                 meta = json.loads((root / "metadata.json").read_text())
                 stats = meta["block_summary"]["chords"]
                 self.assertEqual(stats["cross"]["n_chords"], 3)
-                self.assertEqual(stats["n_chords"], 3)
+                # The three within-hand trials come off the size mix,
+                # so a single can be one of them; it counts apart.
+                self.assertEqual(stats["n_chords"] + stats["n_singles"], 3)
         finally:
             pygame.quit()
 

@@ -1,5 +1,6 @@
 """Chords mode: two to four fingers pressed together, with the fingers
-that were NOT asked scored on how quiet they stayed.
+that were NOT asked scored on how quiet they stayed, and a few single
+fingers dealt among them as the baseline.
 
 WHY TRAIN CHORDS. When one finger presses, force leaks onto the others.
 Zatsiorsky, Li and Latash (2000, Exp Brain Res 131) named this
@@ -43,34 +44,41 @@ rank, not a gate: the deal below mixes the whole space every session,
 and the per-chord table orders by D after the fact so the
 difficulty-rank test still runs.
 
-THE DEAL. Every trial asks for 2, 3 or 4 fingers at once; single
-fingers never appear in play (Basil: "only for 2 or 3 or 4 fingers at
-once, no single fingers. make sure always different and mixed
-combinations"). Three rules produce the mix. A shuffle bag over the
-size classes (2, 3, 4) keeps the sizes interleaved and equally dealt,
-and because a fresh bag never starts on the size it just dealt, two
-same-size chords never run back to back. Within the drawn size a
+THE DEAL. Most trials ask for two or three fingers at once, the
+four-finger chord is rare and a few trials ask for one finger alone.
+One bag of twenty, the size of a sub-block, holds four singles (one
+per finger), ten pairs, five triples and one quad (chords.size_mix).
+Basil's brief, 24 September 2026: keep four fingers at once to a
+minimum, singles are fine but few, the point is several fingers. The
+proportions follow from what each size is for. Pairs and triples are
+the chords the enslaving question is about: every one has a quiet
+finger to keep still, and between them they hold ten of the eleven
+chords on the ladder. The quad has no quiet finger, so it measures
+only timing and adds nothing to the leak measures, and its buzz
+drives every motor on the board at once, which the firmware's own
+source says is more current than the shared darlington driver
+supplies well. Four singles give each finger one trial alone per
+sub-block, the least that builds a one-finger baseline per finger
+(SINGLE FINGERS below). Three rules produce the order. The size bag
+(WeightedClassBag) deals the counts exactly per bag, lets pairs, the
+common size, run back to back, and never deals any other size twice
+running, inside a bag or across the join. Within the drawn size a
 deficit draw (the same placement rule syllables uses for its word
 windows) picks uniformly among the chords whose fingers have
 participated least so far, so per-finger participation stays
 near-equal without the order becoming predictable. And the chord just
 dealt is barred from the very next draw, so the same combination
-never runs twice. The quad class has one member (IMRP), so it recurs
-more often than any single pair or triple; that is the price of
-dealing the size dimension evenly, and it is the one chord with no
-quiet fingers, so what it trains is pure timing.
+never runs twice. Singles skip the deficit draw and rotate through
+the four fingers, each alone once per bag. A block always opens on a
+chord, never a single.
 
 THE TRIAL. The hand must be quiet (no finger past its press threshold)
 for baseline_quiet_ms before a chord fires; enslaving is measured from
 rest or it is not enslaving. The stimulus lights ALL target fingers at
-once through the shared cue path, and with the buzzer channel on the
-haptic cue is an ARPEGGIO: one firmware pulse per target finger in
-fixed index-to-pinky order, onsets spaced a full pulse plus a gap
-apart, because the four motors on a board share one driver and can
-only run one at a time. The fixed order says WHICH fingers; the screen
-says WHEN, and because the order never varies it cannot be mistaken
-for a required press order (press order is logged so any order bias is
-checkable). The first target press opens the synchrony window W: the
+once through the shared cue path, and with the buzzer channel on
+every target finger buzzes at the same moment (motor.chord_buzz, see
+DEVIATIONS below for the arpeggio fallback and the quad). The first
+target press opens the synchrony window W: the
 chord counts as together only if every target's onset lands within W
 of the first. A target that lifts again before the chord completes
 loses its onset and must land again, so a chord only ever completes
@@ -140,36 +148,41 @@ ceiling clamped. Levels reset to the widest each block, the safe
 direction to fail.
 
 SESSION SHAPE AND DOSE. One engine block is one session: 5 sub-blocks
-of 20 chords with an enforced 30 s rest between them (self-paced past
-the floor). That is 100 chords or roughly 250-300 individual finger
-presses, matching the 300-repetitions-per-session feasibility
+of 20 trials with an enforced 30 s rest between them (self-paced past
+the floor). Under the size mix that is 100 trials and about 215
+individual finger presses (20 singles, 50 pairs, 25 triples, 5
+quads), a little under the 300-repetitions-per-session feasibility
 benchmark for stroke (Birkenmeier, Prager and Lang 2010,
-Neurorehabil Neural Repair), with a 30 minute hard cap.
+Neurorehabil Neural Repair). The equal mix before 24 September 2026
+reached it; the singles and the rarer quad are the difference.
+A 30 minute hard cap.
 
-NO SINGLE FINGERS, AND WHERE THE REFERENCE WENT. Earlier builds
-opened and closed the session with single-finger probe trials, and
-the enslaving matrices were built from them: each probe supplied the
-instructed finger's own in-trial press as the denominator under the
-quiet fingers' leak. Played cold the probes read as the game itself,
-and Basil's verdict was final: "only for 2 or 3 or 4 fingers at once,
-no single fingers." The probes are gone from play, and the
-single-press reference the matrices need moved to the quick
-calibration every session starts with: the per-finger light-press
-captures already saved per hand (CalibrationProfile.gap) ARE an
-instructed single light press, on the same sensors, minutes before
-the block. What changed in the normalisation: nothing on the leak
-side, because every peak in this mode was already divided by that
-same capture (_reference_counts); on the press side the probe's
-in-trial press_norm is replaced by the active fingers' press_norm
-within the chord itself, which sits near 1.0 by construction because
-chords instruct the same calibrated light press the probes did. The
-measure survives that swap; what is lost is the single-active-finger
-condition, so a matrix cell is now CHORD-CONDITIONED: the leak on
-quiet finger j while i was active in company, an upper bound on the
-single-finger cell under the additive connection-matrix model
-(Zatsiorsky 2000). The start and end matrices come from the first
-and last chord sub-blocks instead of probe sets, which keeps the
-Danion-style start-to-end fatigue read.
+SINGLE FINGERS. Earlier builds opened and closed the session with
+single-finger probe trials, played cold, and they read as the game
+itself; Basil's verdict then was no single fingers at all. They came
+back on 24 September 2026 as a few trials dealt among the chords
+(THE DEAL), for two reasons the one-board study needs. First, the
+chord cost: reaction time rises with the number of keys pressed at
+once, from about 510 ms for one key to 632 for two and 762 for three
+in healthy adults (Verwey 2023, Exp Brain Res 241, the chord effect
+first shown by Seibel 1962), and without a one-finger trial on the
+same rig in the same block there is no baseline to read the rise
+from. Second, the matrix. The per-finger light-press captures from the
+quick calibration (CalibrationProfile.gap) are still the normaliser
+under every force number in this mode (_reference_counts). A matrix
+built from chords is CHORD-CONDITIONED: the leak on quiet finger j
+while i was active in company, an upper bound on the one-finger cell
+under the additive connection-matrix model (Zatsiorsky 2000). A
+single is that one-finger condition itself, so the singles give the
+classical matrix (singles.enslaving_matrix in the block summary)
+beside the chord-conditioned start and end matrices, which still come
+from the first and last chord sub-blocks and keep the Danion-style
+start-to-end fatigue read. Singles are kept apart everywhere a number
+says chord: they have kind "single", they are not on the difficulty
+ladder, they do not move the staircase (a single has no span to
+tighten) and they are not in n_chords, median_er, median_span_ms,
+per_chord or the chord-conditioned matrices. by_size carries all four
+sizes side by side.
 
 FATIGUE GUARD. Fatigue corrupts exactly what this mode trains (Danion
 2000/2001), so after each sub-block: a clean-hit rate 30 or more
@@ -198,14 +211,18 @@ DEVIATIONS FROM THE RESEARCH BRIEF, where the plumbing wins:
   phase, jittered go and false_start class do not exist here.
 - The buzz follows motor.chord_buzz. "together" (the default) starts
   every finger of the chord at once and holds them for motor.cue_ms,
-  so touch, sight and sound give the same simultaneous shape. The
-  "arpeggio" fallback is one fixed 150 ms hold per finger with a
-  40 ms gap (motor.arpeggio_gap_ms), index to pinky, for a board that
-  goes weak with several motors on; it overlaps the first part of the
-  response window, its order is fixed and press order is logged, so
-  cue-order bias stays detectable. A four-finger arpeggio spans about
-  720 ms. The raw stim_motor rows and the block's config snapshot
-  say which ran.
+  so touch, sight and sound give the same simultaneous shape. A board
+  asked for more motors than motor.chord_max_together (3) buzzes that
+  chord as the arpeggio instead, so the quad never runs all four
+  motors on one driver. The "arpeggio" fallback is one fixed 150 ms
+  hold per finger with a 40 ms gap (motor.arpeggio_gap_ms), index to
+  pinky, for a board that goes weak with several motors on; it
+  overlaps the first part of the response window, its order is fixed
+  and press order is logged, so cue-order bias stays detectable. A
+  four-finger arpeggio spans about 720 ms, so the quad's buzz is a
+  different cue from the other sizes' and its row in by_size is read
+  with that in mind. The raw stim_motor rows (chord=together or
+  chord=arpeggio) and the block's config snapshot say which ran.
 - Forces are normalised by each finger's calibrated light-press gap
   (CalibrationProfile.gap), not percent MVC: no per-finger maximum
   exists in this app, and demanding maximal presses to measure one
@@ -467,6 +484,94 @@ ALL_CHORDS: tuple[tuple[int, ...], ...] = tuple(
 ALL_CROSS: tuple[tuple[tuple[int, ...], tuple[int, ...]], ...] = tuple(
     p for tier in CROSS_TIERS for p in tier)
 
+# One finger on its own. Not a chord and not on the ladder: the
+# baseline the chords are measured against (SINGLE FINGERS in the
+# module docstring).
+SINGLE_FINGERS: tuple[tuple[int, ...], ...] = ((0,), (1,), (2,), (3,))
+
+# How many trials of each size one bag holds, sizes 1 to 4. A bag of
+# twenty is one sub-block: four singles (one per finger), ten pairs,
+# five triples and one quad, so eight in ten trials use two or three
+# fingers, the four-finger chord is rare, and each finger is asked
+# alone once per sub-block (THE DEAL).
+DEFAULT_SIZE_MIX: dict[int, int] = {1: 4, 2: 10, 3: 5, 4: 1}
+
+
+def parse_size_mix(raw) -> dict[int, int]:
+    """chords.size_mix from config: a map of size to count, sizes 1
+    to 4. Anything unreadable falls back to DEFAULT_SIZE_MIX, and a
+    mix with no multi-finger size at all is refused the same way, so
+    a stripped config cannot turn the mode into a single-finger drill."""
+    try:
+        mix = {int(k): max(0, int(v)) for k, v in dict(raw).items()
+               if 1 <= int(k) <= 4}
+    except (TypeError, ValueError, AttributeError):
+        return dict(DEFAULT_SIZE_MIX)
+    if not any(n > 0 for k, n in mix.items() if k >= 2):
+        return dict(DEFAULT_SIZE_MIX)
+    return {k: n for k, n in sorted(mix.items()) if n > 0}
+
+
+class WeightedClassBag:
+    """A shuffle bag that holds each class label as many times as its
+    weight: {1: 4, 2: 10, 3: 5, 4: 1} is a bag of twenty. After every
+    full bag the counts are exact, whatever the cut, like
+    BalancedScheduler, which this replaces when the classes are not
+    meant to be equal.
+
+    The most common class may run back to back (ten pairs in twenty
+    cannot be kept apart without a strict alternation a player would
+    learn). Every other class never runs twice in a row, inside a bag
+    or across the join: a reshuffle until that holds, which a random
+    order passes about one time in seven, so the hundred tries fail
+    about once in ten million bags and then the last order is used.
+    `open_on`, when given, is the classes the very first deal may be
+    (a chords block never opens on a single finger)."""
+
+    _MAX_RESHUFFLES = 100
+
+    def __init__(self, weights: dict, rng: random.Random,
+                 open_on=None) -> None:
+        self.weights = {k: int(v) for k, v in weights.items()
+                        if int(v) > 0}
+        if not self.weights:
+            raise ValueError("WeightedClassBag needs a positive weight")
+        self.rng = rng
+        top = max(self.weights.values())
+        self._free = {k for k, v in self.weights.items() if v == top}
+        self._open_on = (None if open_on is None
+                         else {k for k in open_on if k in self.weights})
+        self._bag: list = []
+        self._last = None
+        self.counts: dict = {k: 0 for k in self.weights}
+
+    def _ok(self, bag: list) -> bool:
+        if (self._last is None and self._open_on and bag
+                and bag[0] not in self._open_on):
+            return False
+        prev = self._last
+        for item in bag:
+            if item == prev and item not in self._free:
+                return False
+            prev = item
+        return True
+
+    def _refill(self) -> None:
+        bag = [k for k, v in self.weights.items() for _ in range(v)]
+        for _ in range(self._MAX_RESHUFFLES):
+            self.rng.shuffle(bag)
+            if self._ok(bag):
+                break
+        self._bag = bag
+
+    def next(self):
+        if not self._bag:
+            self._refill()
+        item = self._bag.pop(0)
+        self._last = item
+        self.counts[item] = self.counts.get(item, 0) + 1
+        return item
+
 
 class MixedChordDeck:
     """The deal: mixed, always different, participation-balanced.
@@ -486,18 +591,36 @@ class MixedChordDeck:
 
     `class_of` maps an item to its class label (chord size within a
     hand, mirror/nonmirror across hands); `keys_of` maps an item to
-    the participation keys its fingers tally under.
+    the participation keys its fingers tally under. `class_weights`
+    deals the classes in proportion instead of equally (the size mix,
+    WeightedClassBag); a class with no weight is never dealt. A class
+    in `rotate` skips the deficit draw and deals its members in turn
+    off a shuffle bag, each once per cycle: the singles, so every
+    finger is asked alone equally often whatever the chords did.
     """
 
     def __init__(self, items, rng: random.Random, class_of,
-                 keys_of) -> None:
+                 keys_of, class_weights: dict | None = None,
+                 open_on=None, rotate=()) -> None:
         self.rng = rng
         self._keys_of = keys_of
         self._by_class: dict = {}
         for it in items:
-            self._by_class.setdefault(class_of(it), []).append(it)
-        self._classes = BalancedScheduler(sorted(self._by_class),
-                                          self.rng)
+            cls = class_of(it)
+            if class_weights is not None and not class_weights.get(cls):
+                continue
+            self._by_class.setdefault(cls, []).append(it)
+        if class_weights is not None:
+            self._classes = WeightedClassBag(
+                {c: class_weights[c] for c in self._by_class}, self.rng,
+                open_on=open_on)
+        else:
+            self._classes = BalancedScheduler(sorted(self._by_class),
+                                              self.rng)
+        self._rotations = {
+            cls: BalancedScheduler(list(range(len(self._by_class[cls]))),
+                                   self.rng)
+            for cls in rotate if cls in self._by_class}
         self.tally: dict = {}
         self.last = None
         self.dealt: int = 0
@@ -505,6 +628,14 @@ class MixedChordDeck:
     def next(self):
         cls = self._classes.next()
         pool = self._by_class[cls]
+        rot = self._rotations.get(cls)
+        if rot is not None:
+            pick = pool[rot.next()]
+            for k in self._keys_of(pick):
+                self.tally[k] = self.tally.get(k, 0) + 1
+            self.last = pick
+            self.dealt += 1
+            return pick
         # The bar on the previous item can only empty the pool if the
         # class scheduler's 20-reshuffle guard lost (odds under one in
         # a billion per refill with three classes); the fallback then
@@ -541,7 +672,7 @@ class PendingChordTrial:
     hand="both" and keeps each side's fingers in `fingers_left` /
     `fingers_right` (its `fingers` tuple stays empty)."""
     trial_id: int
-    kind: str                       # always "chord" in play
+    kind: str                       # "chord", or "single" for one finger
     fingers: tuple[int, ...]        # within-hand finger indices 0..3
     targets: tuple[int, ...]        # engine-global lanes, ascending
     stim_t_perf: float
@@ -624,6 +755,7 @@ class ChordsMode(WaitSkip):
                  seed: int = 0,
                  demo_trials: int | None = None,
                  lanes_by_hand: dict[str, list[int]] | None = None,
+                 size_mix: dict | None = None,
                  ) -> None:
         self.engine = engine
         self.hand = hand
@@ -665,11 +797,10 @@ class ChordsMode(WaitSkip):
         self.demo_trials = demo_trials
         self.rng = random.Random(seed)
 
-        # Session layout counters. Demo (Test Mode) shrinks to a
-        # miniature that is ALL chords, rests trimmed; a full session
-        # is subblocks rounds of trials_per_subblock chords and
-        # nothing else. The single-finger probes that used to bracket
-        # the session are gone from play (see NO SINGLE FINGERS in
+        # Session layout counters. Demo (Test Mode) shrinks to one
+        # short round off the same deal, rests trimmed; a full session
+        # is subblocks rounds of trials_per_subblock trials, singles
+        # dealt among the chords (see THE DEAL and SINGLE FINGERS in
         # the docstring).
         n_hands = len(self.hand_names)
         if demo_trials is not None:
@@ -698,9 +829,16 @@ class ChordsMode(WaitSkip):
         self.level = 0
         self.max_level = len(self.windows_ms) - 1
         self.highest_level = 0
-        self._deck = {h: MixedChordDeck(ALL_CHORDS, self.rng,
-                                        class_of=len,
-                                        keys_of=lambda c: c)
+        # The within-hand deal runs over sizes in the proportions of
+        # the size mix (THE DEAL): singles as the baseline, pairs and
+        # triples as the body, the quad rare.
+        self.size_mix = parse_size_mix(
+            DEFAULT_SIZE_MIX if size_mix is None else size_mix)
+        self._deck = {h: MixedChordDeck(ALL_CHORDS + SINGLE_FINGERS,
+                                        self.rng, class_of=len,
+                                        keys_of=lambda c: c,
+                                        class_weights=self.size_mix,
+                                        open_on=(2, 3, 4), rotate=(1,))
                       for h in self.hand_names}
         self._stair: deque[bool] = deque(maxlen=self.STAIRCASE_WINDOW)
         self._since_level_change = 0
@@ -1239,8 +1377,9 @@ class ChordsMode(WaitSkip):
     def _next_targets(self) -> tuple[str, str, str,
                                      tuple[int, ...], tuple[int, ...]]:
         """What the next trial asks for, as (kind, scope, hand,
-        fingers, fingers_right): always a chord, off the current
-        scope's mixed deal (THE DEAL in the docstring). For a
+        fingers, fingers_right), off the current scope's mixed deal
+        (THE DEAL in the docstring): kind "single" for one finger,
+        "chord" otherwise. For a
         within-hand chord `fingers` is the chord within `hand` and
         `fingers_right` is empty; for a cross-hand chord hand is
         "both", `fingers` is the LEFT hand's share and
@@ -1254,7 +1393,9 @@ class ChordsMode(WaitSkip):
             left, right = self._cross_deck.next()
             return "chord", "cross", "both", left, right
         hand = self.hand_names[self._chord_hand_order.next()]
-        return "chord", "within", hand, self._deck[hand].next(), ()
+        fingers = self._deck[hand].next()
+        kind = "single" if len(fingers) == 1 else "chord"
+        return kind, "within", hand, fingers, ()
 
     def _in_training(self) -> bool:
         return self._sub_idx < self.subblocks
@@ -1294,10 +1435,11 @@ class ChordsMode(WaitSkip):
         self.phase = "stim"
         self._quiet_since = None
         self._settle_t0 = None
-        # ALL target fingers light at once; with the buzzer channel on,
-        # the engine turns a same-board multi-lane stim into the
-        # arpeggio (see engine.on_stim_multi). A cross-hand chord is
-        # two boards, and two boards buzz together.
+        # ALL target fingers light at once; with the buzzer channel on
+        # the engine buzzes them together, or as an arpeggio for a
+        # board asked for more motors than motor.chord_max_together
+        # (see engine.on_stim_multi). A cross-hand chord is two
+        # boards, and two boards buzz together.
         self.engine.on_stim_multi(list(targets), self.trial_counter, now)
 
     # ---- presses -----------------------------------------------------------
@@ -1626,8 +1768,8 @@ class ChordsMode(WaitSkip):
             # empty and carry per-hand values instead, so no
             # within-hand aggregate can swallow a cross trial.
             "er": (None if cross or er is None else round(er, 4)),
-            # Raw material for the chord-conditioned enslaving matrix
-            # (see NO SINGLE FINGERS in the docstring): each target's
+            # Raw material for the enslaving matrices (see SINGLE
+            # FINGERS in the docstring): each target's
             # normalised press and each quiet finger's normalised
             # leak, keyed by finger index within the trial's own
             # hand, only on a COMPLETE within-hand response (the
@@ -1657,7 +1799,8 @@ class ChordsMode(WaitSkip):
                           else round(trial.settle_ms, 1)),
             "settle_skipped": bool(trial.settle_skipped),
             "subblock": (self._sub_idx + 1
-                         if trial.kind == "chord" else None),
+                         if trial.kind in ("chord", "single")
+                         else None),
         }
         if cross:
             rec.update({
@@ -1679,7 +1822,7 @@ class ChordsMode(WaitSkip):
                 "lag_ms": (None if lag_ms is None
                            else round(lag_ms, 1)),
             })
-        elif self.bilateral and trial.kind == "chord":
+        elif self.bilateral and trial.kind in ("chord", "single"):
             # Silent mirror force on the resting hand, the free
             # measure bilateral within-hand chords carry.
             rec["mirror_leak"] = (None if mirror_leak is None
@@ -1692,7 +1835,10 @@ class ChordsMode(WaitSkip):
             self._sub_rts.append(rt_ms)
         if cross:
             self._staircase_cross(cls == "hit")
-        else:
+        elif trial.kind == "chord":
+            # A single is the baseline, and it is easy: letting it
+            # climb the window ladder would move the level on trials
+            # that have no span to tighten.
             self._staircase(cls == "hit")
         self._advance(now)
 
@@ -1913,17 +2059,19 @@ class ChordsMode(WaitSkip):
 
     # ---- block summary -----------------------------------------------------
     @staticmethod
-    def _chord_matrix(records: list[dict]) -> list[list[float | None]]:
-        """4x4 chord-conditioned enslaving matrix from within-hand
-        chord records: row i, column j is finger j's normalised leak
-        as a percentage of finger i's normalised press, mean over
-        every chord where i was active and j quiet. The single-press
-        reference under both numbers is the quick-cal light-press
-        capture (see NO SINGLE FINGERS in the docstring); because i
-        is active IN COMPANY, a cell upper-bounds the single-finger
+    def _chord_matrix(records: list[dict],
+                      kind: str = "chord") -> list[list[float | None]]:
+        """4x4 enslaving matrix from within-hand records of one kind:
+        row i, column j is finger j's normalised leak as a percentage
+        of finger i's normalised press, mean over every trial where i
+        was active and j quiet. The single-press reference under both
+        numbers is the quick-cal light-press capture (see SINGLE
+        FINGERS in the docstring). From chords (the default) i is
+        active IN COMPANY, so a cell upper-bounds the single-finger
         cell under the additive connection-matrix model (Zatsiorsky
-        2000). Diagonal and unmeasured cells are None. Context, never
-        validation.
+        2000); from singles (kind "single") it IS that cell, the
+        classical one-finger matrix. Diagonal and unmeasured cells are
+        None. Context, never validation.
 
         A trial where a wrong finger PRESSED stays out: that is a
         response error (cue misread), not enslaving, and its full
@@ -1932,7 +2080,7 @@ class ChordsMode(WaitSkip):
         trials for the same reason."""
         cells: dict[tuple[int, int], list[float]] = {}
         for r in records:
-            if (r["kind"] != "chord"
+            if (r["kind"] != kind
                     or r.get("scope", "within") != "within"
                     or not r.get("leaks") or not r.get("press_norms")):
                 continue
@@ -1959,7 +2107,9 @@ class ChordsMode(WaitSkip):
         every playing hand, and the legacy single-hand keys stay for
         unilateral blocks so older analyses keep reading), the
         fatigue trajectory and the per-trial detail the fixed CSV
-        schema cannot carry."""
+        schema cannot carry. Singles are counted apart (by_size and
+        singles): every key that says chord means two fingers or
+        more, as it always has."""
         # device_drop records are hardware evidence, not performance:
         # they stay out of every performance aggregate below and are
         # surfaced separately (outcome_classes and n_device_drops).
@@ -2019,6 +2169,49 @@ class ChordsMode(WaitSkip):
             return counts
 
         classes = _class_counts(self._records)
+
+        # The size table, singles to quad, within-hand only: RT (first
+        # target onset), completion (last target onset), span, ER and
+        # clean hits per size. The chord cost the analysis reads is
+        # the rise from one finger to three (SINGLE FINGERS in the
+        # docstring).
+        singles = [r for r in scored if r["kind"] == "single"
+                   and r.get("scope", "within") == "within"]
+        by_size = []
+        for size in sorted({int(r["size"]) for r in chords + singles}):
+            rows = [r for r in chords + singles
+                    if int(r["size"]) == size]
+            by_size.append({
+                "size": size,
+                "n": len(rows),
+                "hit_rate": round(sum(1 for r in rows
+                                      if r["class"] == "hit")
+                                  / len(rows), 3),
+                "median_rt_ms": _median([r["rt_ms"] for r in rows
+                                         if r["rt_ms"] is not None]),
+                "median_complete_ms": _median(
+                    [r["complete_ms"] for r in rows
+                     if r.get("complete_ms") is not None]),
+                "median_span_ms": _median([r["span_ms"] for r in rows
+                                           if r["span_ms"] is not None]),
+                "median_er": _median([r["er"] for r in rows
+                                      if r["er"] is not None]),
+            })
+        single_fingers = {
+            h: {FINGER_LETTERS[f]: {
+                "n": len(rows),
+                "hit_rate": (round(sum(1 for r in rows
+                                       if r["class"] == "hit")
+                                   / len(rows), 3) if rows else None),
+                "median_rt_ms": _median([r["rt_ms"] for r in rows
+                                         if r["rt_ms"] is not None]),
+                "median_er": _median([r["er"] for r in rows
+                                      if r["er"] is not None]),
+            } for f in range(4)
+                for rows in [[r for r in singles if r["hand"] == h
+                              and r["chord"] == FINGER_LETTERS[f]]]}
+            for h in self.hand_names
+        }
 
         # Start and end matrices from the FIRST and LAST within-hand
         # sub-blocks, replacing the probe sets that used to bracket
@@ -2111,8 +2304,8 @@ class ChordsMode(WaitSkip):
         # finger's unimanual quick-cal light press. Every press_norm
         # is already normalised by that capture, so the mirror
         # single's per-hand press IS the ratio: no probe trial in the
-        # denominator any more (see NO SINGLE FINGERS in the
-        # docstring). Only mirror singles qualify: one finger per
+        # denominator (see SINGLE FINGERS in the docstring). Only
+        # mirror singles qualify: one finger per
         # hand, so the per-hand press is that finger's press.
         deficit: dict[str, dict[str, float]] = {}
         for h, key in (("left", "press_left"), ("right", "press_right")):
@@ -2141,6 +2334,22 @@ class ChordsMode(WaitSkip):
             # other aggregate at this level (median_er, per_chord);
             # the cross section carries its own counts.
             "n_chords": len(chords),
+            "n_singles": len(singles),
+            "size_mix": {str(k): v for k, v in self.size_mix.items()},
+            "by_size": by_size,
+            "singles": {
+                "per_finger": single_fingers,
+                "median_er": _median([r["er"] for r in singles
+                                      if r["er"] is not None]),
+                # The one-finger enslaving matrix per hand, every
+                # single in the block (a sub-block holds one per
+                # finger, too few for a start and end split).
+                "enslaving_matrix": {
+                    h: self._chord_matrix(
+                        [r for r in singles if r["hand"] == h],
+                        kind="single")
+                    for h in self.hand_names},
+            },
             "outcome_classes": classes,
             # Scope-pure class counts for the results card: the
             # cross-scope chords (their own ladder) would dilute a

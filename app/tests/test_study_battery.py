@@ -532,7 +532,7 @@ class ShortFormTests(_BatteryHarness):
         self._login(eng, "P02", "right")
         eng.start_battery()
         ch = self._step_to(eng, "chords")
-        self.assertEqual(ch.subblocks, 2)          # 40 chords, both passes
+        self.assertEqual(ch.subblocks, 2)          # 40 trials, both passes
         self.assertEqual(ch.trials_per_subblock, 20)
         self.assertEqual(ch.max_level, 0)          # one window: no ladder
         self.assertEqual(ch.windows_ms, [150.0])

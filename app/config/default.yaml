@@ -518,6 +518,11 @@ motor:
   #             darlington driver supplies well, and the four-finger
   #             chord is the case to feel for.
   chord_buzz: together
+  # The most motors one board runs at once for a chord. A chord with
+  # more fingers on one board (the four-finger chord) is buzzed as the
+  # arpeggio below instead, so all four never run together on the
+  # shared driver. Lower it to 2 if a board goes weak on triples.
+  chord_max_together: 3
   # Silence between the pulses of an arpeggio cue (chord_buzz:
   # arpeggio only). At 40 ms a four-finger cue spans about 720 ms.
   # Raising it makes the fingers easier to tell apart and the cue
@@ -973,10 +978,10 @@ pattern:
 
 chords:
   # Chords mode: two, three or four fingers pressed together, and the
-  # fingers that were NOT asked are scored on staying still. Single
-  # fingers never appear: every trial is a chord, the sizes are dealt
-  # evenly and shuffled, no combination repeats twice running, and
-  # every finger gets a fair share of work. The research case for
+  # fingers that were NOT asked are scored on staying still. A few
+  # single fingers are dealt among the chords as the baseline (see
+  # size_mix), no combination repeats twice running, and every finger
+  # gets a fair share of work. The research case for
   # every number lives in rehab/game/modes/chords.py; this file says
   # what the patient experiences. One engine block is a whole
   # session: five rounds of chords with proper rests. With Both hands
@@ -993,6 +998,16 @@ chords:
   # togetherness score is about the gap BETWEEN the fingers, not about
   # answering fast.
   timeout_s: 3.0
+  # How many trials of each size one bag of twenty deals, sizes 1 to 4.
+  # Twenty is one round (trials_per_subblock), so every round gets
+  # exactly this mix: four single fingers (one per finger, the
+  # baseline the chord cost and the one-finger leak matrix are read
+  # from), ten pairs, five triples and one four-finger chord. Most of
+  # the work is two or three fingers, where every chord has a quiet
+  # finger to keep still; the four-finger chord has none and drives
+  # every motor at once, so it stays rare. Other sizes than the
+  # commonest never come up twice in a row.
+  size_mix: {1: 4, 2: 10, 3: 5, 4: 1}
   # How close together the finger presses must land to count as "one
   # chord", in milliseconds, from easiest to hardest. The game starts
   # at the first value and only tightens when the patient is landing
@@ -1020,16 +1035,17 @@ chords:
   iti_max_s: 2.5
   # Session shape: rounds of chords, with a floor on the rest between
   # rounds (the patient presses any finger to continue once the floor
-  # has passed). 5 rounds of 20 is about 100 chords, which lands the
-  # session on the feasible-dose benchmark for stroke without
-  # overstaying it.
+  # has passed). 5 rounds of 20 is 100 trials, about 215 finger
+  # presses under size_mix: a little under the 300 a session the
+  # stroke feasibility benchmark asks for, without overstaying it.
   trials_per_subblock: 20
   subblocks: 5
   rest_between_s: 30
-  # There are no single-finger warm-up presses any more: the whole
-  # session is chords, and the per-finger reference the leak numbers
-  # divide by comes from the quick calibration at login (the light
-  # press each finger demonstrated there).
+  # There are no single-finger warm-up presses at the start or end:
+  # the few singles are dealt among the chords (size_mix), and the
+  # per-finger reference the leak numbers divide by comes from the
+  # quick calibration at login (the light press each finger
+  # demonstrated there).
   # If a round goes clearly worse than the session's first round (hit
   # rate down 30 points, or presses 30 percent slower), the game
   # inserts this longer rest and eases the difficulty one step. A
@@ -1899,8 +1915,9 @@ protocol:
         force_pilot:
           passes: 1                   # one climb of the fixed ladder
         chords:
-          # 40 chords a block, both passes (60 in the one-pass design):
-          # two blocks of chords are what the sitting can afford.
+          # 40 trials a block, both passes (60 in the one-pass design):
+          # two rounds of the size mix (32 chords, 8 single fingers)
+          # are what the sitting can afford.
           subblocks: 2
           trials_per_subblock: 20
           sync_windows_ms: [150]      # one rung: W fixed at 150 ms
