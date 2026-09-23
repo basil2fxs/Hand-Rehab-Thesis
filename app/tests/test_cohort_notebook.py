@@ -622,15 +622,33 @@ class CohortNotebookTests(unittest.TestCase):
                     "C4", "Rh2", "M1", "M2", "F1", "F2", "F3", "F4",
                     "B1", "B2", "B3", "B4", "E1", "E2", "E3"):
             self.assertIn(cid, v.index, cid)
-        self.assertEqual(v.loc["R2", "verdict"], "pass")
+        # R2's interval clears zero, but with five people its p is
+        # 0.031 and E3's exact test sits in the same Holm family, so
+        # the adjusted p is doubled past 0.05 and the row says
+        # direction only rather than pass.
         self.assertLess(v.loc["R2", "value"], 0)
+        self.assertLess(v.loc["R2", "ci_hi"], 0)
+        self.assertLess(v.loc["R2", "p"], 0.05)
+        self.assertAlmostEqual(v.loc["R2", "p_holm"],
+                               min(1.0, 2 * v.loc["R2", "p"]))
+        self.assertEqual(v.loc["R2", "verdict"], "direction only")
         self.assertEqual(v.loc["R1", "verdict"], "pass")
         self.assertIn(v.loc["E1", "verdict"], ("pass", "fail"))
         self.assertEqual(v.loc["E1", "n"], len(CODES))
+        # E3 is set against chance: most wrong presses land on a
+        # sequence lane here, which the old wording (transpositions
+        # against intrusions) called a pass, but chance alone puts
+        # most of them there too.
+        e3 = v.loc["E3"]
+        self.assertGreater(e3["value"], 0.5)
+        self.assertGreater(e3["value"], e3["reference"])
+        self.assertLess(e3["ci_lo"], e3["reference"])
+        self.assertEqual(e3["verdict"], "direction only")
+        self.assertIn("expected by chance", str(e3["detail"]))
         # Modes with no blocks are not testable, and say so.
         self.assertEqual(v.loc["P1", "verdict"], "not testable")
         self.assertEqual(v.loc["P1", "detail"], "no data")
-        self.assertIn("R2  pass", self.out)
+        self.assertIn("R2  direction only", self.out)
         self.assertIn("not testable", self.out)
 
     def test_the_two_dropped_checks_say_why(self) -> None:
@@ -855,6 +873,34 @@ class CohortStatisticsHelperTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.ra = _load_notebook()
+
+    def test_e3_is_set_against_chance(self):
+        # Eight lanes, the miss at position 4 where lane 0 was due: the
+        # other lanes the sequence holds are 1, 2 and 3, so a random
+        # wrong finger is a transposition 3 times in 7.
+        self.assertAlmostEqual(
+            self.ra.echo_miss_chance([0, 1, 2, 0, 3], 4, 8), 3 / 7)
+        # One hand's four lanes, all in the sequence: every wrong
+        # finger is a "transposition", which says nothing about memory.
+        self.assertEqual(self.ra.echo_miss_chance([0, 1, 2, 3, 1], 2, 4),
+                         1.0)
+        self.assertTrue(self.ra.echo_miss_chance([0, 1], 5, 8)
+                        != self.ra.echo_miss_chance([0, 1], 5, 8))
+        # Presses at chance do not clear it; presses well above do.
+        even = self.ra.echo_e3_test([("transposition", 0.5),
+                                     ("intrusion", 0.5)] * 10)
+        self.assertAlmostEqual(even["share"], 0.5)
+        self.assertAlmostEqual(even["chance"], 0.5)
+        self.assertGreater(even["p"], 0.05)
+        self.assertLess(even["lo"], even["chance"])
+        high = self.ra.echo_e3_test([("transposition", 0.4)] * 18
+                                    + [("intrusion", 0.4)] * 2)
+        self.assertLess(high["p"], 0.001)
+        self.assertGreater(high["lo"], high["chance"])
+        # Exact tail: two misses at 0.5 each, both transpositions.
+        both = self.ra.echo_e3_test([("transposition", 0.5)] * 2)
+        self.assertAlmostEqual(both["p"], 0.25)
+        self.assertIsNone(self.ra.echo_e3_test([]))
 
     def test_split_half_interval_contains_a_known_correlation(self):
         import numpy as np

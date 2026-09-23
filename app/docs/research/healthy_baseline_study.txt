@@ -578,8 +578,16 @@ Known effects to reproduce:
      costs a second echo block under the ladder rule, which the 45
      minute sitting has no room for. E1 and E3 are unaffected and
      Echo still has checks.
-  E3 Serial-order errors dominate: transpositions and omissions
-     outnumber intrusions.
+  E3 Serial-order errors dominate: a wrong finger lands on a lane
+     the sequence holds more often than chance. Chance is worked out
+     per miss, as the share of the other lanes that the sequence
+     holds, and the test is exact (Poisson-binomial, one-sided); its
+     p joins the Holm family with the other tested rows.
+     Amended 23 September 2026, before any participant: the first
+     wording set transpositions against intrusions, which the lane
+     count decides on its own (six items on eight lanes hold about
+     half the lanes). Omissions carry no lane and are reported, not
+     tested.
 Reliability class: moderate (span is a coarse integer; the product
 score has the better distribution, echo.py).
 Claim limits: never read against Kessels or Farrell Pagulayan norms
@@ -1437,7 +1445,8 @@ P1 P3, C1 C2 C3 C4, Rh1 Rh2, M1 M2, F1 F2 F3 F4, B1 B2 B3 B4, E1
 E3, A5 A6, S6 S7. Those four were added on 23 September 2026, before
 any participant, so every mode has a row; they are decided on the
 interval, carry no p value and so do not enter the family-wise
-correction. Each row: statistic, CI, test, effect size, pass or fail against
+correction. E3's criterion was set against chance the same day
+(Section 1.11). Each row: statistic, CI, test, effect size, pass or fail against
 the stated criterion. Three rows carry the word DROPPED and their
 reason, so that a reader who finds them in Section 1 finds out here
 what happened to them:
@@ -1772,14 +1781,21 @@ CLOCK STARTS (target 45 min, hard stop 50)
       a light press per finger. If a finger fails, redo once, then
       continue and note it. (Picking one hand is not fatal: PLAY ALL
       calibrates the other before its first block.)
+  [ ] Both boards plugged in before PLAY ALL: it will not start on
+      one, and the hub says which board is missing.
   [ ] Press PLAY ALL on the hub (or A). The app plays the cell's
       order below; after each block press Start on the NEXT UP card
       (or N). The card names the step, the hand and the wait; the
       strip reads PLAY ALL k/11 with the minutes beside it, amber
-      past the target and red past the hard stop. A block that
-      cannot be run (a board dropped) is skipped from the hub with
-      Skip step (S) and the reason written on the sheet; a block
-      ended early is offered again, Retry redoes it.
+      past the target and red past the hard stop. If a board drops
+      between blocks the card says "Waiting for the board" and the
+      step stays put: plug it back in and press Start. A block that
+      cannot be run at all is skipped from the hub with Skip step
+      (S), which asks first, and the reason written on the sheet; a
+      block ended early is offered again.
+  [ ] If the app closes mid-sitting, open it, log in with the same
+      code and main hand, and press PLAY ALL: blocks finished today
+      are not played again.
 
   Order A                          Order B
    1 Reaction, hand 1               1 Force Pilot, both

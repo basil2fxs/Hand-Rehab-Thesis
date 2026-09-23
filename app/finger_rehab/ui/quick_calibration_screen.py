@@ -908,8 +908,16 @@ class QuickCalibrationScreen(Screen):
         self._go_on()
 
     def _go_on(self) -> None:
-        cb = self._continue or self.engine.show_title
+        cb = self._continue
         self._continue = None
+        if cb is None:
+            # Already handed over once. The screen can still be showing
+            # when what it handed over to put a question on top and the
+            # question was dismissed; its buttons then led to the login
+            # screen with the session still open.
+            cb = (self.engine.show_mode_select
+                  if getattr(self.engine, "_session_active", False)
+                  else self.engine.show_title)
         cb()
 
     def _retry(self) -> None:

@@ -360,24 +360,27 @@ class CohortParticipant(mb.Participant):
         if len(seq) > cap:
             # Past the span: the first cap items come back right and
             # the next one goes wrong, late in the sequence (E2p).
-            # Usually the next item jumps the queue, a transposition;
+            # Usually another lane of the sequence, a transposition;
             # sometimes a finger that is not in the sequence, an
-            # intrusion (E3: serial-order errors dominate). The cap is
+            # intrusion (E3: more transpositions than chance). The cap is
             # a fixed property of the person, so the span the block
             # reports is a normative number and nothing else.
             for lane in seq[:cap]:
                 self.schedule(t, int(lane))
                 t += 0.55
+            # A Simon game fails at length cap + 1, so there is never an
+            # item after the failing one to jump to. A transposition is
+            # any other lane of the sequence; the old pick needed
+            # seq[cap + 1] and so only ever made intrusions.
+            right = int(seq[cap])
+            in_seq = sorted({int(l) for l in seq} - {right})
             others = [int(l) for l in m.lanes if int(l) not in seq]
-            if cap + 1 < len(seq) and (self.rng.random() < 0.7
-                                       or not others):
-                wrong = int(seq[cap + 1])
+            if in_seq and (self.rng.random() < 0.7 or not others):
+                wrong = self.rng.choice(in_seq)
             elif others:
                 wrong = self.rng.choice(others)
             else:
-                wrong = next(int(l) for l in m.lanes if l != seq[cap])
-            if wrong == int(seq[cap]):
-                wrong = next(int(l) for l in m.lanes if l != seq[cap])
+                wrong = next(int(l) for l in m.lanes if int(l) != right)
             self.schedule(t, wrong)
             return
         for lane in seq:

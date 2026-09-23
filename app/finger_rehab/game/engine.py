@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import dataclasses
+import json
 import logging
 import random
 import os
@@ -538,7 +539,20 @@ class GameEngine:
         # relying on each caller to remember.
         self.reapply_calibrations()
 
+    def _off_hand(self, hand: str | None) -> bool:
+        """True for a press or release from the hand a one-hand block
+        is not playing. On a two-board rig both detectors stay built
+        and fed (a change of hand between blocks keeps its baseline),
+        so without this a twitch of the resting left ring finger
+        reached a right-hand block as lane 2: a false start, a wrong
+        press or even a hit, on the wrong hand."""
+        return (self.hand_mode in ("left", "right")
+                and hand in ("left", "right")
+                and hand != self.hand_mode)
+
     def _on_press(self, ev: PressEvent) -> None:
+        if self._off_hand(ev.hand):
+            return
         # In bilateral mode we want the mode to see one big 0..7 lane space,
         # not two independent 0..3 spaces. Left-hand presses shift up by
         # num_sensors_per_hand so left index becomes lane 4, left little = 7.
@@ -564,6 +578,8 @@ class GameEngine:
         return n * 2 if self.hand_mode == "both" else n
 
     def _on_release(self, ev: ReleaseEvent) -> None:
+        if self._off_hand(ev.hand):
+            return
         if self.raw_logger:
             self.raw_logger.queue_event("release", lane=ev.lane,
                                          t_perf=ev.t_perf, hand=ev.hand)
@@ -2234,6 +2250,11 @@ class GameEngine:
         if down is None:
             down = set()
             self._hands_down = down
+        # A label the source no longer has cannot come back through
+        # the loop below. Left in, it parked that hand's detector and
+        # kept the SENSORS LOST banner up for the rest of the run.
+        for gone in [h for h in down if h not in hands_now]:
+            down.discard(gone)
         for hand, ok in hands_now.items():
             was = prev.get(hand, True)
             if was and not ok:
@@ -3216,6 +3237,15 @@ class GameEngine:
                   for h in (getattr(self.source, "hands", None) or [])}
         msg = self.reconnect_source()
         hands_now = getattr(self.source, "hands", None) or []
+        # A lone board back on a new port name loses the hand it was
+        # given at login (the remembered port no longer exists, so plug
+        # order names it right). The session's hand is what it is.
+        chosen = getattr(self, "_session_hand", None)
+        if (len(hands_now) == 1 and chosen in ("left", "right")
+                and getattr(hands_now[0], "hand", None) != chosen):
+            relabel = getattr(self.source, "relabel_single", None)
+            if callable(relabel) and relabel(chosen):
+                self._hand_port_memory = {}
         self._remember_hand_ports(self.source)
         gained = [h.hand for h in hands_now if h.hand not in before]
         if gained:
@@ -4018,6 +4048,10 @@ class GameEngine:
         bad = [h for h in self.uncalibrated_hands(hand) if h not in acked]
         if not bad:
             return False
+        # Asked over the hub rather than over a calibration screen that
+        # has already handed over (a skipped quick pass leads straight
+        # here): Esc then leaves the RA somewhere with buttons that work.
+        self._land_between_steps()
         from ..ui.widgets import ConfirmDialog
         names = " and ".join(h.capitalize() for h in bad)
         subject = "hand has" if len(bad) == 1 else "hands have"
@@ -5212,6 +5246,21 @@ class GameEngine:
             self.session.battery = self._battery_stamp()
         except Exception:
             self.session.battery = {}
+        if getattr(self, "_protocol_launch_idx", None) is not None:
+            if self.session.battery:
+                self._protocol_launch_idx = None
+            else:
+                # A different game opened while a step was launched
+                # (a pick from the hand picker after a refusal): that
+                # step never ran, so it is pending again.
+                self._rewind_protocol_launch()
+        if getattr(self, "_battery", None) is not None \
+                and not self.session.battery:
+            # A free pick while a battery is on is not a battery block,
+            # and its trials.csv phase column must not say it is. The
+            # phase used to stay at the last step's value until the
+            # battery ended.
+            self._current_phase = ""
         # Every block records the config it actually ran with. It was
         # only refreshed for battery blocks, so a Settings change after
         # launch (the cue switches, which change the stimulus codes) or
@@ -6055,14 +6104,21 @@ class GameEngine:
             return None
         return {"mode": mode, "phase": phase, "hand": hand, **extra}
 
-    def _begin_next_protocol_step(self) -> None:
+    def _begin_next_protocol_step(self) -> bool:
         """Start the protocol step at `_protocol_index`. Called from
         start_protocol for the first block, from finish_block when the
         previous block ends (auto-advance) and from continue_protocol
         when NEXT UP or the hub takes the next battery step. Falls
         back to results / mode-select when the protocol has run out of
-        steps. A battery step this rig cannot run is skipped here and
-        recorded as such, rather than opened and abandoned."""
+        steps. A battery step this rig can never run is skipped here
+        and recorded as such, rather than opened and abandoned.
+
+        A battery step waits, and is not used up, when a board it
+        needs is not live, and it runs the quick calibration first
+        for a hand it plays that this battery has not yet offered.
+        Returns True when a block is starting (or a calibration that
+        leads into one has the screen), False when nothing started.
+        """
         while True:
             if (not self._protocol_active
                     or self._protocol_index >= len(self._protocol_steps)):
@@ -6071,7 +6127,7 @@ class GameEngine:
                 self._protocol_current = None
                 if self._battery is not None:
                     self._finish_battery()
-                return
+                return False
             step = self._protocol_steps[self._protocol_index]
             reason = self._protocol_step_refusal(step)
             if reason:
@@ -6079,7 +6135,30 @@ class GameEngine:
                 self._log_battery_step(step, "skipped", reason)
                 continue
             break
+        if self._battery is not None:
+            hand = str(step.get("hand") or self.hand_mode)
+            missing = self.hands_not_live(hand)
+            self._battery_wait = missing
+            if missing:
+                # Waiting, not skipping. A board dropped between blocks
+                # used to start the step anyway, and every trial on the
+                # dead hand was voided; a board that was gone for good
+                # skipped every two-hand step that followed. The step
+                # stays pending until the board is back or the RA skips
+                # it on purpose.
+                log.warning("battery step %s waits: %s board not live",
+                            step.get("mode"), " and ".join(missing))
+                self._land_between_steps()
+                return False
+            if self._battery_calibrate(self._step_hands(hand),
+                                       self._begin_next_protocol_step):
+                return True
         self._current_phase = str(step.get("phase") or "")
+        if self._battery is not None:
+            # Held until the block really opens: a question dismissed,
+            # a calibration abandoned or a refusal in between hands the
+            # step back (see _settle_protocol_launch).
+            self._protocol_launch_idx = self._protocol_index
         self._protocol_index += 1
         self._protocol_current = step
         # How long the participant actually rested before this step.
@@ -6102,21 +6181,160 @@ class GameEngine:
             if mode != "mirror" and self.hand_mode != self.session_hand():
                 self.set_hand_mode(self.session_hand())
             self.block_starter(mode)()
-            return
+            return True
         if mode == "rhythm":
             self._begin_protocol_rhythm(step)
-            return
+            return True
         if not self.begin_game(mode, hand):
-            # Refused at the last moment (a board dropped between the
-            # check above and here). Say so and offer the next step.
-            self._log_battery_step(step, "skipped", "refused by rig")
-            self._protocol_current = None
-            self._begin_next_protocol_step()
+            if self._battery is None:
+                # The legacy protocol moves on to its next step, as
+                # it always did.
+                self._protocol_current = None
+                return self._begin_next_protocol_step()
+            # Refused at the last moment. The battery step goes back
+            # to pending rather than being used up.
+            log.warning("battery step %s on %s refused by the rig",
+                        mode, hand)
+            self._rewind_protocol_launch()
+            self._land_between_steps()
+            return False
+        return True
+
+    @staticmethod
+    def _step_hands(hand: str | None) -> list[str]:
+        if hand == "both":
+            return ["left", "right"]
+        return [hand] if hand in ("left", "right") else []
+
+    def hands_not_live(self, hand: str | None) -> list[str]:
+        """The hands `hand` needs whose board is not delivering right
+        now: not attached at all, or attached and dropped. Empty on a
+        keyboard source, which has no boards to lose."""
+        src = getattr(self, "source", None)
+        if not getattr(src, "provides_samples", True):
+            return []
+        want = self._step_hands(hand)
+        if not want:
+            return []
+        if not getattr(src, "is_connected", True):
+            return want
+        avail = getattr(src, "hand_modes_available", None)
+        down = getattr(self, "_hands_down", None) or set()
+        out = []
+        for h in want:
+            if (isinstance(avail, set) and "both" not in avail
+                    and h not in avail):
+                out.append(h)
+            elif h in down:
+                out.append(h)
+        return out
+
+    def battery_wait_line(self) -> str:
+        """What the hub and the NEXT UP card say while the pending
+        step waits for a board, or ''."""
+        step = self.pending_protocol_step()
+        if step is None:
+            return ""
+        missing = self.hands_not_live(str(step.get("hand")
+                                          or self.hand_mode))
+        if not missing:
+            return ""
+        names = " and ".join(h.capitalize() for h in missing)
+        board = "board" if len(missing) == 1 else "boards"
+        return f"{names} {board} not connected: plug in, or skip (S)"
+
+    def _land_between_steps(self) -> None:
+        """Somewhere sensible to stand when a step did not start. A
+        step started from the calibration flow's callback would
+        otherwise leave its finished screen up, with nothing behind
+        its Continue button."""
+        screens = getattr(self, "_screens", None) or {}
+        quick = screens.get("quick_cal")
+        if quick is not None and getattr(self, "screen_obj", None) is quick:
+            self.show_mode_select()
+
+    def _battery_calibrate(self, hands, then) -> bool:
+        """Offer the quick calibration for each of `hands` this
+        battery has not offered yet, then run `then`. True when the
+        flow took the screen.
+
+        A hand counts as offered once the flow hands over (finished
+        or skipped), never on an Esc abandon: an abandoned run leaves
+        the saved file from the last person who sat here applied, so
+        the next step offers it again rather than playing on it. A
+        hand the RA chose to play uncalibrated ("Play anyway") is not
+        asked about again.
+        """
+        offered = getattr(self, "_battery_cal_offered", None)
+        if offered is None:
+            offered = self._battery_cal_offered = set()
+        acked = set(getattr(self, "_uncal_ack", None) or ())
+        try:
+            attached = set(self.calibratable_hands())
+        except Exception:
+            attached = set()
+        todo = sorted((set(hands) & attached) - acked - offered)
+        if not todo:
+            return False
+
+        def after():
+            offered.update(todo)
+            then()
+
+        if self.maybe_start_quick_calibration(after, hands=todo):
+            return True
+        offered.update(todo)
+        return False
+
+    def _rewind_protocol_launch(self) -> None:
+        """Hand a launched battery step back to pending."""
+        idx = getattr(self, "_protocol_launch_idx", None)
+        self._protocol_launch_idx = None
+        if idx is None or self._battery is None:
+            return
+        step = (self._protocol_steps[idx]
+                if 0 <= idx < len(self._protocol_steps) else {})
+        log.info("battery step %s did not start; it is pending again",
+                 step.get("mode"))
+        self._protocol_index = idx
+        self._protocol_current = None
+        self._current_phase = ""
+
+    def _settle_protocol_launch(self) -> None:
+        """A launched step that never opened a block goes back to
+        pending once the app is back between blocks.
+
+        The step is launched before the block exists, and several
+        things can stand between the two: the uncalibrated-hand
+        question dismissed with Esc, its Calibrate now flow abandoned,
+        Muscle Memory refusing a sequence file, a rhythm step whose
+        track is missing and whose song screen is left with Esc. Each
+        of those used to use the step up without a word, and NEXT UP
+        moved on to the one after. Checked lazily here rather than on
+        each of those exits, so a new exit cannot forget it: while a
+        dialog, a calibration or a song screen is up the launch is
+        still in flight, and it only settles once the hub or the
+        results screen is showing with no block open.
+        """
+        if getattr(self, "_protocol_launch_idx", None) is None:
+            return
+        if self.block_is_running():
+            return
+        if getattr(self, "_exit_confirm", None) is not None:
+            return
+        screens = getattr(self, "_screens", None) or {}
+        between = [screens.get(k) for k in ("mode_select", "results")]
+        here = getattr(self, "screen_obj", None)
+        if here is None or here not in between:
+            return
+        self._rewind_protocol_launch()
 
     def _protocol_step_refusal(self, step: dict) -> str:
-        """Why this rig cannot run the step right now, or ''. Only
-        battery steps are screened: the legacy protocol never named a
-        hand and is left to its own behaviour."""
+        """Why this rig can never run the step, or ''. Only battery
+        steps are screened: the legacy protocol never named a hand and
+        is left to its own behaviour. A board that is missing is not
+        a refusal: the step waits for it (hands_not_live), because a
+        board can come back and a skipped step cannot."""
         if self._battery is None:
             return ""
         from .battery import BatteryStep, unplayable_reason
@@ -6125,7 +6343,7 @@ class GameEngine:
                             hand_requested=str(step.get("hand_requested")
                                                or ""))
         return unplayable_reason(probe, getattr(self, "source", None),
-                                 self.second_board_missing())
+                                 False)
 
     def _begin_protocol_rhythm(self, step: dict) -> None:
         """Rhythm inside a protocol: the pinned track, the pinned
@@ -6152,22 +6370,70 @@ class GameEngine:
     def continue_protocol(self) -> bool:
         """Take the next pending step of a protocol that stops at
         results between blocks (the battery). False when nothing is
-        pending, so a caller can fall back to the ordinary flow."""
+        pending or the step is waiting for a board, so a caller can
+        say why (battery_wait_line) or fall back to the ordinary
+        flow."""
         if self.pending_protocol_step() is None:
             return False
-        self._begin_next_protocol_step()
-        return True
+        return self._begin_next_protocol_step()
 
     def pending_protocol_step(self) -> dict | None:
         """The step NEXT UP should offer, or None. Only a protocol
         that waits at results has a pending step to show; the legacy
         chain never lands on results mid-way."""
+        self._settle_protocol_launch()
         if (not self._protocol_active or self._protocol_auto_advance
                 or self._protocol_index >= len(self._protocol_steps)):
             return None
         if self.block_is_running():
             return None
         return dict(self._protocol_steps[self._protocol_index])
+
+    def battery_rest_hold(self) -> tuple[bool, float]:
+        """(held, seconds of the scheduled rest still to run) for the
+        pending step. The results screen holds NEXT UP for the rest's
+        floor; the hub's Play all asks this so it cannot walk round
+        the floor by going to the menu first."""
+        step = self.pending_protocol_step()
+        if not isinstance(step, dict):
+            return False, 0.0
+        try:
+            rest_s = float(step.get("rest_s") or 0.0)
+            floor_s = float(step.get("rest_min_s") or 0.0)
+        except (TypeError, ValueError):
+            return False, 0.0
+        shown = float(getattr(self, "_step_card_t", 0.0) or 0.0)
+        if rest_s <= 0 or shown <= 0:
+            return False, 0.0
+        elapsed = time.perf_counter() - shown
+        return elapsed < floor_s, max(0.0, rest_s - elapsed)
+
+    def ask_skip_protocol_step(self) -> bool:
+        """The researcher's skip, behind one question. S sits next to
+        A on the keyboard and the skip used to go through on the key
+        alone, dropping a step from the sitting for good."""
+        step = self.pending_protocol_step()
+        if step is None or getattr(self, "_exit_confirm", None) is not None:
+            return False
+        from ..ui.screens import mode_title
+        from ..ui.widgets import ConfirmDialog
+        hand = str(step.get("hand") or self.hand_mode)
+        where = {"both": "both hands"}.get(hand, f"{hand} hand")
+
+        def skip():
+            self._exit_confirm = None
+            self.skip_protocol_step()
+
+        self._exit_confirm = ConfirmDialog(
+            question=f"Skip {mode_title(str(step['mode']))}, {where}?",
+            detail=("It will not be played in this sitting.\n"
+                    "The skip is recorded."),
+            safe_label="Keep it",
+            danger_label="Skip it",
+            on_safe=self._dismiss_session_end_confirm,
+            on_danger=skip,
+            theme=self.theme, layout=self.layout)
+        return True
 
     def skip_protocol_step(self) -> bool:
         """Drop the pending step (a board that will not come back, a
@@ -6199,10 +6465,27 @@ class GameEngine:
         if self._battery is not None:
             return True, ""
         try:
-            build_plan(self.cfg, self.session.participant,
-                       self.session.dominant_hand, preset)
+            plan = build_plan(self.cfg, self.session.participant,
+                              self.session.dominant_hand, preset)
         except BatteryError as e:
             return False, str(e)
+        # The study plays both hands. On one board every two-hand step
+        # was skipped without a word and the other hand's steps ran on
+        # the board that was there, recorded as the wrong hand, so the
+        # sitting could only produce mislabelled data. A missing board
+        # is said up front instead.
+        need: set[str] = set()
+        for st in plan.steps:
+            need.update(self._step_hands(st.hand))
+        src = getattr(self, "source", None)
+        avail = getattr(src, "hand_modes_available", None)
+        if (getattr(src, "provides_samples", True)
+                and isinstance(avail, set) and "both" not in avail):
+            absent = sorted(need - avail)
+            if absent:
+                names = " and ".join(h for h in absent)
+                return False, (f"Play all needs the {names} board too: "
+                               "plug it in")
         return True, ""
 
     def start_battery(self, preset: str = "study_battery") -> bool:
@@ -6221,6 +6504,10 @@ class GameEngine:
         from .battery import build_plan, BatteryError, apply_overrides
         if self._battery is not None:
             return self.continue_protocol()
+        ok, why = self.battery_available(preset)
+        if not ok:
+            log.warning("battery not started: %s", why)
+            return False
         try:
             plan = build_plan(self.cfg, self.session.participant,
                               self.session.dominant_hand, preset)
@@ -6253,16 +6540,39 @@ class GameEngine:
             "log": [],
             "done": False,
         }
-        self._protocol_steps = steps
+        # Steps this code already finished today, before the app was
+        # closed or crashed, are not played again. Progress used to
+        # live only in memory, so a relaunch restarted at step 1: the
+        # RA skipped the done steps one by one, or re-ran them and the
+        # notebook averaged two blocks for one position.
+        earlier = self._battery_done_earlier(plan.id, steps)
+        for st in steps:
+            folder = earlier.get(int(st["position"] or 0))
+            if folder:
+                self._battery["log"].append({
+                    "position": int(st["position"] or 0),
+                    "mode": st["mode"], "hand": st["hand"],
+                    "status": "completed", "reason": "earlier today",
+                    "rest_s": 0.0, "rest_taken_s": 0.0,
+                    "folder": folder})
+        self._protocol_steps = [st for st in steps
+                                if int(st["position"] or 0) not in earlier]
         self._protocol_index = 0
         self._protocol_active = True
         self._protocol_auto_advance = False
         self._protocol_current = None
-        log.info("Battery %s started for %s: cell %s%s, %d steps",
+        self._protocol_launch_idx = None
+        self._battery_cal_offered = set()
+        self._battery_wait = []
+        log.info("Battery %s started for %s: cell %s%s, %d steps%s",
                  plan.id, self.session.participant,
                  plan.cell.get("mode_order"),
                  "" if plan.cell.get("hand_first") == "dominant"
-                 else " non-dominant first", len(steps))
+                 else " non-dominant first", len(steps),
+                 f", {len(earlier)} already done today" if earlier else "")
+        if not self._protocol_steps:
+            self._finish_battery()
+            return True
         # Every hand the plan plays is calibrated before its first
         # block. The login only calibrates the hand picked there, and
         # the study plays both, so without this a one-hand pick sent
@@ -6276,19 +6586,51 @@ class GameEngine:
                 need.add(h)
         if need == {"left", "right"} and not self.second_board_missing():
             self._session_hand = "both"
-        try:
-            attached = set(self.calibratable_hands())
-        except Exception:
-            attached = set()
-        # A hand the clinician already chose to play uncalibrated this
-        # session ("Play anyway") is not asked about again.
-        acked = set(getattr(self, "_uncal_ack", None) or ())
-        hands = sorted((need & attached) - acked)
-        if hands and self.maybe_start_quick_calibration(
-                self._begin_next_protocol_step, hands=hands):
+        if self._battery_calibrate(sorted(need),
+                                   self._begin_next_protocol_step):
             return True
-        self._begin_next_protocol_step()
-        return True
+        return self._begin_next_protocol_step()
+
+    def _battery_done_earlier(self, battery_id: str,
+                              steps: list[dict]) -> dict[int, str]:
+        """{position: folder} for the steps of this battery the
+        logged-in code completed today. A block counts only when its
+        metadata names this battery, the same position and the same
+        step (mode and hand), and says it completed."""
+        code = str(getattr(self.session, "participant", "") or "")
+        if not code:
+            return {}
+        try:
+            data_dir = Path(self.cfg.resolve_path(
+                self.cfg.get("session.data_dir", "sessions")))
+        except Exception:
+            return {}
+        day = data_dir / time.strftime("%Y-%m-%d")
+        if not day.is_dir():
+            return {}
+        wanted = {int(st.get("position") or 0):
+                  f"{st['mode']}_{st.get('hand')}" for st in steps}
+        out: dict[int, str] = {}
+        for meta_path in sorted(day.glob("*/metadata.json")):
+            try:
+                meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            if str(meta.get("participant") or "") != code:
+                continue
+            summary = meta.get("block_summary") or {}
+            if summary.get("status") != "completed":
+                continue
+            bat = meta.get("battery") or {}
+            if not isinstance(bat, dict) or bat.get("id") != battery_id:
+                continue
+            try:
+                pos = int(bat.get("position") or 0)
+            except (TypeError, ValueError):
+                continue
+            if pos in wanted and wanted[pos] == bat.get("step"):
+                out.setdefault(pos, str(meta_path.parent))
+        return out
 
     def _battery_stamp(self) -> dict:
         """What metadata.json records for the block that is starting:
@@ -6404,6 +6746,9 @@ class GameEngine:
         self._protocol_auto_advance = True
         self._protocol_current = None
         self._current_phase = ""
+        self._protocol_launch_idx = None
+        self._battery_cal_offered = set()
+        self._battery_wait = []
 
     def _generate_session_report(self) -> None:
         """Build the researcher outputs (report.html, summary.csv,
@@ -6566,9 +6911,8 @@ class GameEngine:
             busy_lane, busy_until = busy
             if busy_lane != lane and now < busy_until:
                 try:
-                    self.source.send_command(
-                        f"{hand.upper()}:STOP"
-                        if self.hand_mode == "both" else "STOP")
+                    self.source.send_command(self._hand_command("STOP",
+                                                                hand))
                 except Exception as e:
                     log.warning("motor stop before switching finger: %s", e)
                 # Anything still queued for the finger we just cut off
@@ -6576,9 +6920,16 @@ class GameEngine:
                 self._motor_queue = [
                     (ln, due) for (ln, due) in getattr(self, "_motor_queue", [])
                     if ln != busy_lane]
+        ch = self._stim_channel(lane)
+        # Bilateral lanes are global (5..8 is the left hand) and the
+        # board splitter routes them. A one-hand block numbers its lanes
+        # 1..4 whichever hand it is, and the splitter sends 1..4 to the
+        # right board, so with two boards attached a left-hand block
+        # buzzed the resting right hand. Name the board instead.
+        cmd = (f"STIM:{ch}" if self.hand_mode == "both"
+               else self._hand_command(f"STIM:{ch}", hand))
         try:
-            ok = bool(self.source.send_command(
-                f"STIM:{self._stim_channel(lane)}"))
+            ok = bool(self.source.send_command(cmd))
         except Exception as e:
             log.warning("STIM send failed on lane %d: %s", lane, e)
             return False
@@ -6683,15 +7034,23 @@ class GameEngine:
         return resolved[0] if resolved else None
 
     def _scoped_stop(self, hand: str) -> None:
-        """STOP one hand's board. Hand-prefixed in bilateral mode so
-        the other hand's motor, which has its own board and driver,
-        keeps running; plain STOP when only one board exists."""
+        """STOP one hand's board. Hand-prefixed whenever two boards
+        are attached, so the other hand's motor, which has its own
+        board and driver, keeps running; plain STOP when only one
+        board exists."""
         try:
-            self.source.send_command(
-                f"{hand.upper()}:STOP"
-                if self.hand_mode == "both" else "STOP")
+            self.source.send_command(self._hand_command("STOP", hand))
         except Exception as e:
             log.warning("scoped motor stop failed for %s: %s", hand, e)
+
+    def _hand_command(self, cmd: str, hand: str) -> str:
+        """cmd for one hand's board: prefixed whenever two boards are
+        attached or the block is bilateral, plain on a single board,
+        whose firmware knows no prefix."""
+        boards = getattr(getattr(self, "source", None), "hands", None) or []
+        if self.hand_mode == "both" or len(boards) >= 2:
+            return f"{hand.upper()}:{cmd}"
+        return cmd
 
     def pulse_motor(self, lane: int, duration_ms: float) -> bool:
         """One buzz of a requested length on one finger's motor.

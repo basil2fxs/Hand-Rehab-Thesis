@@ -1641,12 +1641,35 @@ class ModeSelectScreen(Screen):
             self.battery_note = reason
             return
         self.battery_note = ""
+        hold = getattr(self.engine, "battery_rest_hold", None)
+        if callable(hold) and hold()[0]:
+            # The scheduled rest holds Play all here too; the line
+            # beside the button counts it down.
+            return
         if not self.engine.start_battery():
-            self.battery_note = "Play all could not start"
+            wait = getattr(self.engine, "battery_wait_line", None)
+            self.battery_note = ((wait() if callable(wait) else "")
+                                 or "Play all could not start")
 
     def _skip_step(self) -> None:
         if self._battery_pending():
-            self.engine.skip_protocol_step()
+            ask = getattr(self.engine, "ask_skip_protocol_step", None)
+            if callable(ask):
+                ask()
+            else:
+                self.engine.skip_protocol_step()
+
+    def _battery_live_line(self) -> str:
+        """The line beside Skip step while a step is pending: the rest
+        still to run, or the board the step is waiting for."""
+        hold = getattr(self.engine, "battery_rest_hold", None)
+        if callable(hold):
+            held, left = hold()
+            if held:
+                total = int(left + 0.5)
+                return f"Rest: {total // 60}:{total % 60:02d} to go"
+        wait = getattr(self.engine, "battery_wait_line", None)
+        return wait() if callable(wait) else ""
 
     HAND_LABELS = {"right": "Right hand", "left": "Left hand",
                    "both": "Both hands"}
@@ -2147,20 +2170,21 @@ class ModeSelectScreen(Screen):
         self.battery_btn.draw(surf)
         if self._battery_pending():
             self.skip_btn.draw(surf)
+            bnote = self._battery_live_line()
+            left_x = self.skip_btn.rect.right + 16
         else:
             bnote = self.battery_note or reason
-            if bnote:
-                # Clipped to the room left of the screen edge: a long
-                # reason used to run straight off it.
-                room = (self.layout.width - 16
-                        - (self.battery_btn.rect.right + 16))
-                draw_text(surf,
-                          _fit_text(bnote, self.layout.font(FONT_SMALL),
-                                    room),
-                          (self.battery_btn.rect.right + 16,
-                           self.battery_btn.rect.centery - 8),
-                          self.theme, self.layout, pt=FONT_SMALL,
-                          centre=False, colour=self.theme.muted)
+            left_x = self.battery_btn.rect.right + 16
+        if bnote:
+            # Clipped to the room left of the screen edge: a long
+            # reason used to run straight off it.
+            room = self.layout.width - 16 - left_x
+            draw_text(surf,
+                      _fit_text(bnote, self.layout.font(FONT_SMALL),
+                                room),
+                      (left_x, self.battery_btn.rect.centery - 8),
+                      self.theme, self.layout, pt=FONT_SMALL,
+                      centre=False, colour=self.theme.muted)
         self.mute_btn.draw(surf, self.theme, self.layout)
 
     def eeg_recording_line(self) -> str:
@@ -6346,15 +6370,33 @@ class ResultsScreen(Screen):
         if stretch:
             _strip_pill(surf, self.layout, rect.x + 30 + pill_w + 10,
                         rect.y + 186, stretch, self.theme.accent)
-        draw_text(surf, f"{self._hand_phrase(hand)}, already set up",
-                  (rect.x + 30, rect.y + 216),
-                  self.theme, self.layout, pt=FONT_BODY,
-                  centre=False, colour=self.theme.foreground)
+        wait = ""
+        if step is not None:
+            fn = getattr(self.engine, "battery_wait_line", None)
+            wait = fn() if callable(fn) else ""
+        if wait:
+            # The step waits for a board rather than starting on a
+            # dead hand; the line says which, live, so it clears the
+            # moment the board is back.
+            draw_text(surf,
+                      _fit_text(wait, self.layout.font(FONT_BODY),
+                                rect.w - 60),
+                      (rect.x + 30, rect.y + 216),
+                      self.theme, self.layout, pt=FONT_BODY,
+                      centre=False, colour=self.theme.accent)
+        else:
+            draw_text(surf, f"{self._hand_phrase(hand)}, already set up",
+                      (rect.x + 30, rect.y + 216),
+                      self.theme, self.layout, pt=FONT_BODY,
+                      centre=False, colour=self.theme.foreground)
         # During a scheduled rest the button says how long is left and
         # does nothing; past the floor it says the rest can be cut
         # short, so the RA never has to guess whether pressing early
         # is allowed.
-        if held:
+        if wait:
+            self.next_btn.label = "Waiting for the board"
+            self.next_btn.colour = self.theme.muted
+        elif held:
             self.next_btn.label = f"Rest: {self._mmss(rest_left)}"
             self.next_btn.colour = self.theme.muted
         elif rest_left > 0:
