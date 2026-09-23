@@ -11,7 +11,10 @@
 # way in, so nothing here has to be typed.
 
 set -e
-cd "$(dirname "$0")"
+# The code lives in app/; this file sits above it so the top level
+# stays to the point: the notebook, the sessions, the two things
+# people are handed, and this.
+cd "$(dirname "$0")/app"
 
 # Prefer the Python that built the app, fall back to whatever is on the
 # path, so this keeps working if that framework install ever moves.

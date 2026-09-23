@@ -1,7 +1,7 @@
 """Rayan's sensor bench analyses, ported from R and Python.
 
 Rayan Ahmed characterised the SingleTact pads with a set of R scripts
-and one Python script, left in bin/old_rayyan_stuff/data. They are the
+and one Python script, left in archive/old_rayyan_stuff/data. They are the
 only written record of how these sensors behave, and Welber's earlier
 sessions were processed with the same detector, so the numbers have to
 stay comparable rather than be reinterpreted. This module is that work
@@ -157,7 +157,7 @@ def _numeric(frame: pd.DataFrame, columns) -> pd.DataFrame:
 
 
 def load_bench_raw(path) -> pd.DataFrame:
-    """One of Rayan's bench streams from bin/old_rayyan_stuff/data/raw.
+    """One of Rayan's bench streams from archive/old_rayyan_stuff/data/raw.
 
     Read as he wrote it: event rows keep their sensor values, events are
     lower-cased and trimmed so "Stim" and "stim " both match, and lane

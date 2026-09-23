@@ -19,7 +19,11 @@ from finger_rehab.data.logger import TRIAL_COLUMNS, RAW_COLUMNS
 
 
 ROOT = Path(__file__).resolve().parents[1]
-NOTEBOOK = ROOT / "analysis" / "session_analysis.ipynb"
+# The notebook sits at the top level, beside app/, because that is
+# where the analysis is actually done. ROOT stays the package root.
+ANALYSIS = (ROOT / "analysis" if (ROOT / "analysis").is_dir()
+            else ROOT.parent / "analysis")
+NOTEBOOK = ANALYSIS / "session_analysis.ipynb"
 
 
 def _notebook_source() -> str:
@@ -182,7 +186,7 @@ def _live_notebook():
                                            _code_cells, _definitions)
     name = MODULE_NAME + "_contract"
     module = ModuleType(name)
-    module.__file__ = str(ROOT / "analysis" / "session_analysis.ipynb")
+    module.__file__ = str(ANALYSIS / "session_analysis.ipynb")
     sys.modules[name] = module
     ns = module.__dict__
     try:

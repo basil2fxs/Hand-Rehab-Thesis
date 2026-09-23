@@ -28,8 +28,15 @@ import pytest
 from finger_rehab.data.logger import TRIAL_COLUMNS as BUZZ_HUNT_COLS
 
 
-NOTEBOOK = (Path(__file__).resolve().parents[1]
-            / "analysis" / "session_analysis.ipynb")
+def _analysis_dir() -> Path:
+    """analysis/ sits beside app/, not inside it: it is Basil's
+    workspace, not part of the package."""
+    root = Path(__file__).resolve().parents[1]
+    return root / "analysis" if (root / "analysis").is_dir() \
+        else root.parent / "analysis"
+
+
+NOTEBOOK = _analysis_dir() / "session_analysis.ipynb"
 
 MODULE_NAME = "session_analysis_notebook"
 

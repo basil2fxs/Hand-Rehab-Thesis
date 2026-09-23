@@ -1,7 +1,7 @@
 """Rayan's R and Python analyses, ported into the notebook.
 
 Two kinds of pin. The first is parity with his own output CSVs under
-bin/old_rayyan_stuff/data (or RAYAN_DATA_DIR): peak, noise, SNR and
+archive/old_rayyan_stuff/data (or RAYAN_DATA_DIR): peak, noise, SNR and
 repeatability to the last decimal, the drift regression to his printed
 equations, the Teasdale onsets to his processed CSV at his sample
 rate, and the block-of-100 pipeline to the block means his plots
@@ -35,11 +35,15 @@ import numpy as np
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
+# The notebook sits at the top level, beside app/, because that is
+# where the analysis is actually done. ROOT stays the package root.
+ANALYSIS = (ROOT / "analysis" if (ROOT / "analysis").is_dir()
+            else ROOT.parent / "analysis")
 sys.path.insert(0, str(ROOT))
 
-NOTEBOOK = ROOT / "analysis" / "session_analysis.ipynb"
+NOTEBOOK = ANALYSIS / "session_analysis.ipynb"
 
-RAYAN = ROOT / "bin" / "old_rayyan_stuff" / "data"
+RAYAN = ROOT.parent / "archive" / "old_rayyan_stuff" / "data"
 if not RAYAN.exists() and os.environ.get("RAYAN_DATA_DIR"):
     RAYAN = Path(os.environ["RAYAN_DATA_DIR"])
 RAW_FILES = sorted((RAYAN / "raw").glob("*.csv")) if RAYAN.exists() else []

@@ -4,7 +4,7 @@ Basil's ask: "in settings ... option to straight-up be able to flash the
 arduino with platformio project with one click, silently (should be able
 to happen on any computer once exe installed all dependencies) and also
 with another button popup change the sensor address like the file
-bin/old_rayyan_stuff/SingleTactAddressChange.ino does except silently in
+archive/old_rayyan_stuff/SingleTactAddressChange.ino does except silently in
 background of app with exe covering all dependencies."
 
 What is pinned here:

@@ -20,10 +20,22 @@ from __future__ import annotations
 import argparse
 import shutil
 import sys
+import pathlib
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-PACKAGE = REPO / "docs" / "lab_package"
+def lab_folder(root: pathlib.Path) -> pathlib.Path:
+    """The folder handed to the lab.
+
+    It sits at the top level beside app/, so it is obvious what gets
+    copied to the USB stick. A self-contained tree with it inside is
+    accepted too, which is what the tests build.
+    """
+    beside = root.parent / "EEG_Lab"
+    return beside if beside.is_dir() else root / "EEG_Lab"
+
+
+PACKAGE = lab_folder(REPO)
 EXE = "Finger Rehab.exe"
 LAUNCHER = "run_in_psychopy.py"
 README = "README.txt"
@@ -87,7 +99,7 @@ def assemble(repo: Path = REPO, pkg: Path = PACKAGE,
     # need copying when the package is assembled somewhere else (CI's
     # zip folder).
     for name in COMMITTED:
-        source, target = repo / "docs" / "lab_package" / name, pkg / name
+        source, target = lab_folder(repo) / name, pkg / name
         if not (target.exists() and target.samefile(source)):
             shutil.copy2(source, target)
     make_source(repo, pkg)
@@ -101,7 +113,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--exe", type=Path, default=None,
                     help=f"Windows build to copy in as {EXE}")
     ap.add_argument("--out", type=Path, default=PACKAGE,
-                    help="package folder (default docs/lab_package)")
+                    help="package folder (default EEG_Lab)")
     args = ap.parse_args(argv)
     names = assemble(REPO, args.out, args.exe)
     print(f"Lab package {args.out}:")

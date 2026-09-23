@@ -58,6 +58,10 @@ import numpy as np
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
+# The notebook sits at the top level, beside app/, because that is
+# where the analysis is actually done. ROOT stays the package root.
+ANALYSIS = (ROOT / "analysis" if (ROOT / "analysis").is_dir()
+            else ROOT.parent / "analysis")
 sys.path.insert(0, str(ROOT))
 
 
@@ -68,7 +72,7 @@ def _load_notebook(tag: str):
                                            _code_cells, _definitions)
     name = MODULE_NAME + "_" + tag
     module = ModuleType(name)
-    module.__file__ = str(ROOT / "analysis" / "session_analysis.ipynb")
+    module.__file__ = str(ANALYSIS / "session_analysis.ipynb")
     sys.modules[name] = module
     ns = module.__dict__
     try:
@@ -535,7 +539,7 @@ class Lag1Tests(unittest.TestCase):
 
     def test_the_rhythm_chapter_uses_the_same_helper(self) -> None:
         src = json.loads(
-            (ROOT / "analysis" / "session_analysis.ipynb").read_text())
+            (ANALYSIS / "session_analysis.ipynb").read_text())
         code = "".join(src["cells"][2]["source"])
         self.assertNotIn("np.corrcoef(o_b[1:], o_b[:-1])", code)
         self.assertIn("_lag1(o_b.tolist())", code)
@@ -580,7 +584,7 @@ class SlopeDirectionTests(unittest.TestCase):
 
     def test_the_source_reads_an_interval_rather_than_a_sign(self):
         code = "".join(json.loads(
-            (ROOT / "analysis"
+            (ANALYSIS
              / "session_analysis.ipynb").read_text())["cells"][2]["source"])
         # The direction is still printed, but only after the interval
         # has been consulted and has excluded zero.
@@ -968,7 +972,7 @@ class DeadColumnTests(unittest.TestCase):
         every block once. Both helpers are documented as kept for the
         next study; nothing may reach for one on single-sitting data."""
         code = "".join(json.loads(
-            (ROOT / "analysis"
+            (ANALYSIS
              / "session_analysis.ipynb").read_text())["cells"][2]["source"])
         self.assertIn("KEPT, NOT CALLED", code)
         for name in ("icc_two_one", "icc_ci"):

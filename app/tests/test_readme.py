@@ -20,14 +20,19 @@ from pathlib import Path
 
 
 REPO = Path(__file__).resolve().parents[1]
-README = REPO / "README.md"
+# README.md sits at the top level beside app/: it is the front door of
+# the whole thing, not of the package.
+README = (REPO / "README.md" if (REPO / "README.md").is_file()
+          else REPO.parent / "README.md")
 ASSET_READMES = sorted((REPO / "assets").glob("*/README.md"))
 # The short instruction files this README points at or sits beside.
 SIDE_DOCS = [
     REPO / "builds" / "README.txt",
     REPO / "docs" / "flashing.txt",
     REPO / "docs" / "eeg_lab_setup.txt",
-    REPO / "docs" / "lab_package" / "README.txt",
+    # The lab folder sits at the top level, beside app/, because it is
+    # the thing that gets copied to a USB stick.
+    REPO.parent / "EEG_Lab" / "README.txt",
 ]
 # The house rule bans these outright. The em dash and the section sign
 # are the two that keep coming back from pasted text.
@@ -162,7 +167,7 @@ class TwoDeliverablesTests(unittest.TestCase):
     """The installers and the lab folder, by the names CI gives them."""
 
     def test_the_readme_names_what_ci_uploads(self):
-        ci = (REPO / ".github" / "workflows" / "build-apps.yml").read_text(
+        ci = (REPO.parent / ".github" / "workflows" / "build-apps.yml").read_text(
             encoding="utf-8")
         text = _readme()
         for name in ARTEFACTS:

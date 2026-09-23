@@ -37,6 +37,10 @@ matplotlib.use("Agg")
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
+# The notebook sits at the top level, beside app/, because that is
+# where the analysis is actually done. ROOT stays the package root.
+ANALYSIS = (ROOT / "analysis" if (ROOT / "analysis").is_dir()
+            else ROOT.parent / "analysis")
 sys.path.insert(0, str(ROOT))
 
 from tests.test_force_pilot import _engine, _mode, _fresh_profile
@@ -490,7 +494,7 @@ def _load_ra():
     name = MODULE_NAME + "_standalone"
     cells = _code_cells()
     module = ModuleType(name)
-    module.__file__ = str(ROOT / "analysis" / "session_analysis.ipynb")
+    module.__file__ = str(ANALYSIS / "session_analysis.ipynb")
     sys.modules[name] = module
     ns = module.__dict__
     try:

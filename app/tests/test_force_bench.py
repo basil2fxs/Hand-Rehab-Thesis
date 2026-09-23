@@ -3,7 +3,7 @@
 Two kinds of test here.
 
 Parity. His summary CSVs are in tests/fixtures/rayan, copied out of
-bin/old_rayyan_stuff/data, and every ported analysis is checked against
+archive/old_rayyan_stuff/data, and every ported analysis is checked against
 the file his R or Python wrote: the peak table, the noise floor and the
 SNR, all twelve repeatability rows, the drift regression's printed
 equations, his processed onset CSV, and the block means his plots show.
@@ -13,7 +13,7 @@ thesis rests on these values.
 
 The 7.4 MB force stream is stored gzipped (pandas reads it by
 extension) so the repository does not carry the same file twice at full
-size. It is byte for byte the file in bin/old_rayyan_stuff/data/raw.
+size. It is byte for byte the file in archive/old_rayyan_stuff/data/raw.
 
 Our own format. His logger and ours disagree about three things that
 would each silently corrupt a result: our event rows hold zeros in the
@@ -37,6 +37,10 @@ import pandas as pd
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
+# The notebook sits at the top level, beside app/, because that is
+# where the analysis is actually done. ROOT stays the package root.
+ANALYSIS = (ROOT / "analysis" if (ROOT / "analysis").is_dir()
+            else ROOT.parent / "analysis")
 sys.path.insert(0, str(ROOT))
 
 from finger_rehab.analytics import force_bench as fb
@@ -714,7 +718,7 @@ class TestOnASessionTheEngineWrote:
 
 # ---------------------------------------------- the notebook's bench chapter
 
-NOTEBOOK = ROOT / "analysis" / "session_analysis.ipynb"
+NOTEBOOK = ANALYSIS / "session_analysis.ipynb"
 
 
 def _notebook_code() -> str:

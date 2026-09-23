@@ -21,6 +21,10 @@ on:
     tags:
       - "v*"
 
+defaults:
+  run:
+    working-directory: app
+
 jobs:
   # Compile the two Arduino hexes once, on Linux, and hand them to both
   # app builds. The clinic PC never compiles anything: the app flashes a
@@ -44,7 +48,7 @@ jobs:
           path: |
             ~/.platformio/.cache
             ~/.platformio/packages
-          key: pio-${{ hashFiles('arduino/*/platformio.ini') }}
+          key: pio-${{ hashFiles('app/arduino/*/platformio.ini') }}
 
       - name: Install PlatformIO
         run: python -m pip install --upgrade platformio
@@ -55,7 +59,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: firmware-hex
-          path: assets/firmware
+          path: app/assets/firmware
           retention-days: 30
 
   build:
@@ -92,7 +96,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: firmware-hex
-          path: assets/firmware
+          path: app/assets/firmware
 
       # avrdude, the uploader the app spawns. Verified against Arduino's
       # published checksum; a failure here only means the Settings panel
@@ -121,7 +125,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: FingerRehab-macOS
-          path: bin/dist/FingerRehab-macOS.dmg
+          path: app/bin/dist/FingerRehab-macOS.dmg
           retention-days: 30
 
       # Windows: Inno Setup ships on the runner image but is not on
@@ -167,7 +171,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: FingerRehab-Setup-Windows
-          path: bin/dist/FingerRehab-Setup-Windows.exe
+          path: app/bin/dist/FingerRehab-Setup-Windows.exe
           retention-days: 30
 
       # The lab package: the exe, eeg_lab.yaml, run_in_psychopy.py and
@@ -188,5 +192,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: FingerRehab-EEGLab
-          path: bin/dist/FingerRehab-EEGLab.zip
+          path: app/bin/dist/FingerRehab-EEGLab.zip
           retention-days: 30

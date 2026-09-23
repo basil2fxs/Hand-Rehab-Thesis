@@ -79,7 +79,7 @@ def _press(rise: float, secs: float, base: float = 250.0, seed: int = 3,
 # Measured on the device with a hand present, 29 July 2026, in counts
 # above the empty-device reading. The gentle press is what a relaxed
 # adult produced when asked for the softest thing still worth calling a
-# press. See bin/old_tools/calibrate_rest_vs_press.py (retired: the in-app calibration replaced it).
+# press. See archive/old_tools/calibrate_rest_vs_press.py (retired: the in-app calibration replaced it).
 RESTING = (2.5, 8.9, 11.5, 30.7)
 GENTLE = (51.5, 40.9, 41.5, 145.7)
 

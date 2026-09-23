@@ -25,6 +25,8 @@ os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
 REPO = Path(__file__).resolve().parents[1]
+# The lab folder moved to the top level, beside app/.
+LAB_FOLDER = REPO.parent / "EEG_Lab"
 
 
 def _parse_detail(detail: str) -> dict:
@@ -1013,11 +1015,12 @@ class ParityTests(unittest.TestCase):
         self.assertIsNotNone(cfg.get("game.timeout_s"))
 
     def test_launchers_run_main_py_and_nothing_else(self) -> None:
-        # On Windows the lab runs the frozen exe from the lab package
+        # On Windows the lab runs the frozen exe from the lab folder
         # (a bare double-click, the exe loads the sibling yaml) or the
-        # PsychoPy launcher, which test_lab_package.py pins; the
-        # source-based launcher only exists for the Mac.
-        text = (REPO / "EEG Lab.command").read_text()
+        # PsychoPy launcher, which test_lab_package.py pins. On the Mac
+        # the one source launcher is Local_Runner.command, which sits at
+        # the top level beside app/ because it is Basil's way in.
+        text = (REPO.parent / "Local_Runner.command").read_text()
         self.assertIn("main.py --config config/eeg_lab.yaml", text)
         # No other python entry point may be invoked. The basename
         # must be exactly main.py: an endswith check would let a
@@ -1026,7 +1029,7 @@ class ParityTests(unittest.TestCase):
         for match in re.findall(r"\S+\.py\b", text):
             base = match.replace("\\", "/").rsplit("/", 1)[-1]
             self.assertEqual(base, "main.py",
-                             f"EEG Lab.command invokes {match}")
+                             f"Local_Runner.command invokes {match}")
 
     def test_exactly_one_game_engine_class_exists(self) -> None:
         hits = []
@@ -1046,7 +1049,7 @@ class ParityTests(unittest.TestCase):
 
 
 class LabPackageTests(unittest.TestCase):
-    """docs/lab_package is the one folder that gets copied to the lab
+    """EEG_Lab is the one folder that gets copied to the lab
     desktop: the exe, the lab yaml, the PsychoPy launcher, a fifteen
     line README and a generated source/ tree, nothing else. The exe,
     the yaml copy and source/ are build products (gitignored,
@@ -1054,7 +1057,7 @@ class LabPackageTests(unittest.TestCase):
     must match its source of truth, and a bare double-click of the
     frozen exe must find the sibling config on its own."""
 
-    PKG = REPO / "docs" / "lab_package"
+    PKG = LAB_FOLDER
     TOP_LEVEL = ("Finger Rehab.exe", "eeg_lab.yaml",
                  "run_in_psychopy.py", "README.txt", "source")
 
@@ -1075,7 +1078,7 @@ class LabPackageTests(unittest.TestCase):
         # An exe without eeg_lab.yaml beside it would start the plain
         # game; the build scripts must never leave that state behind.
         if not (self.PKG / "Finger Rehab.exe").exists():
-            self.skipTest("no exe in docs/lab_package on this machine")
+            self.skipTest("no exe in EEG_Lab on this machine")
         for name in self.TOP_LEVEL:
             self.assertTrue((self.PKG / name).exists(),
                             f"lab package missing {name}")

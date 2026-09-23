@@ -1,6 +1,6 @@
 """Tests for the EEG lab package.
 
-docs/lab_package is the one folder handed to the EEG lab. Its top
+EEG_Lab is the one folder handed to the EEG lab. Its top
 level holds exactly five entries: Finger Rehab.exe, eeg_lab.yaml,
 run_in_psychopy.py, README.txt and a fresh source/ copy of the game.
 Three things are pinned here. The launcher picks the right route (the
@@ -27,9 +27,21 @@ from unittest.mock import patch
 
 
 REPO = Path(__file__).resolve().parents[1]
+# The lab folder moved to the top level, beside app/.
+LAB_FOLDER = REPO.parent / "EEG_Lab"
+
+
+def repo_file(rel: str) -> Path:
+    """Build files live under app/; .github, .gitignore and README.md
+    sit at the top level beside it. Try both."""
+    for base in (REPO, REPO.parent):
+        p = base / rel
+        if p.exists():
+            return p
+    return REPO / rel
 sys.path.insert(0, str(REPO))
 
-LAUNCHER = REPO / "docs" / "lab_package" / "run_in_psychopy.py"
+LAUNCHER = LAB_FOLDER / "run_in_psychopy.py"
 BUILDER = REPO / "scripts" / "build_lab_package.py"
 TARGET = {"Finger Rehab.exe", "eeg_lab.yaml", "run_in_psychopy.py",
           "README.txt", "source"}
@@ -44,7 +56,7 @@ def _load(path: Path):
     """Import a script by path (neither folder is a package).
 
     Bytecode writing is off for the duration. Importing the launcher
-    normally drops docs/lab_package/__pycache__ next to it, and that
+    normally drops EEG_Lab/__pycache__ next to it, and that
     folder is the one copied to the EEG lab: its top level must hold
     exactly the four entries and nothing else. The stray cache made
     test_eeg_contract's completeness check fail on the second run of
@@ -225,7 +237,7 @@ class BuilderTests(unittest.TestCase):
         self.root = Path(td.name)
         self.repo = self.root / "repo"
         self._fake_repo(self.repo)
-        self.pkg = self.repo / "docs" / "lab_package"
+        self.pkg = self.repo.parent / "EEG_Lab"
         self.exe = self.root / "Finger Rehab.exe"
         self.exe.write_bytes(b"MZ")
 
@@ -246,11 +258,15 @@ class BuilderTests(unittest.TestCase):
             "assets/.DS_Store": "",
             "tests/test_x.py": "", "sessions/P01/trials.csv": "",
             "docs/eeg_lab_setup.txt": "notes",
-            "docs/lab_package/run_in_psychopy.py": "# launcher\n",
-            "docs/lab_package/README.txt": "lab readme\n",
+            "EEG_Lab/run_in_psychopy.py": "# launcher\n",
+            "EEG_Lab/README.txt": "lab readme\n",
         }
         for rel, text in files.items():
-            p = root / rel
+            # EEG_Lab sits BESIDE the package root in the real tree, the
+            # way app/ and EEG_Lab sit side by side, so the fixture puts
+            # it there too rather than inventing a layout of its own.
+            base = root.parent if rel.startswith("EEG_Lab/") else root
+            p = base / rel
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(text)
 
@@ -299,7 +315,7 @@ class BuilderTests(unittest.TestCase):
 
     def test_readme_is_short_and_plain(self) -> None:
         # Fifteen lines at most, ASCII only: the lab reads it once.
-        text = (REPO / "docs" / "lab_package" / "README.txt").read_text()
+        text = (LAB_FOLDER / "README.txt").read_text()
         self.assertLessEqual(len(text.strip().splitlines()), 15)
         self.assertTrue(text.isascii())
 
@@ -357,10 +373,14 @@ class BuildWiringTests(unittest.TestCase):
     copies the old text files back in."""
 
     def _text(self, rel: str) -> str:
-        p = REPO / rel
-        if not p.is_file():
-            self.skipTest(f"{rel} is not in this checkout")
-        return p.read_text()
+        # Most of these live under app/; .github and the top-level
+        # launcher sit beside it. Try both rather than making every
+        # caller know which.
+        for base in (REPO, REPO.parent):
+            p = base / rel
+            if p.is_file():
+                return p.read_text()
+        self.skipTest(f"{rel} is not in this checkout")
 
     def test_ci_assembles_exactly_the_target_package(self) -> None:
         import yaml
@@ -388,7 +408,7 @@ class BuildWiringTests(unittest.TestCase):
         # script call (the Linux branch's cp of its own binary is fine).
         for line in sh.splitlines():
             if line.lstrip().startswith("cp "):
-                self.assertNotIn("docs/lab_package", line)
+                self.assertNotIn("EEG_Lab", line)
         for name in STALE:
             self.assertNotIn(name, sh)
 
@@ -402,10 +422,10 @@ class BuildWiringTests(unittest.TestCase):
 
     def test_gitignore_covers_every_generated_part(self) -> None:
         rules = self._text(".gitignore").splitlines()
-        for rule in ("docs/lab_package/*.exe", "docs/lab_package/eeg_lab.yaml",
-                     "docs/lab_package/source/"):
+        for rule in ("EEG_Lab/*.exe", "EEG_Lab/eeg_lab.yaml",
+                     "EEG_Lab/source/"):
             self.assertIn(rule, rules)
-        self.assertNotIn("docs/lab_package/eeg_lab_setup.txt", rules)
+        self.assertNotIn("EEG_Lab/eeg_lab_setup.txt", rules)
 
 
 if __name__ == "__main__":
@@ -450,12 +470,12 @@ class OneAppTests(unittest.TestCase):
         self.assertFalse((REPO / "setup_tool.py").exists())
         self.assertFalse((REPO / "setup_tool.spec").exists())
         for name in self.BUILD_FILES:
-            text = (REPO / name).read_text(encoding="utf-8")
+            text = repo_file(name).read_text(encoding="utf-8")
             self.assertNotIn("setup_tool", text, name)
             self.assertNotIn("Finger Rehab Setup", text, name)
 
     def test_ci_ships_the_three_artefacts(self):
-        ci = (REPO / ".github" / "workflows" / "build-apps.yml").read_text()
+        ci = (REPO.parent / ".github" / "workflows" / "build-apps.yml").read_text()
         for name in ("FingerRehab-Setup-Windows.exe", "FingerRehab-macOS.dmg",
                      "FingerRehab-EEGLab.zip"):
             self.assertIn(name, ci, name)
@@ -495,7 +515,7 @@ class OneAppTests(unittest.TestCase):
     def test_one_version_everywhere(self):
         # The spec's literal is pinned to SOFTWARE_VERSION by
         # test_screen_layout; this pins the installer's copy of it.
-        ci = (REPO / ".github" / "workflows" / "build-apps.yml").read_text()
+        ci = (REPO.parent / ".github" / "workflows" / "build-apps.yml").read_text()
         self.assertIn("builds/version.py", ci)
         self.assertIn("/DAppVersion=", ci)
         from finger_rehab.data.session import SOFTWARE_VERSION
