@@ -216,6 +216,17 @@ class OneBoardTwoPassCohortTests(unittest.TestCase):
             (figs / "cohort_reliability_bland_altman.png").is_file())
         self.assertIn("UPPER bound on", self.out)
 
+    def test_the_per_session_phase_view_does_not_pool_the_passes(self):
+        import pandas as pd
+        trials = pd.DataFrame({"participant": ["P01"] * 4,
+                               "phase": ["pass1", "pass1", "pass2",
+                                         "pass2"]})
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            got = self.ra.sec_phase(trials)
+        self.assertIsNone(got)
+        self.assertIn("cohort reliability chapter", buf.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()
