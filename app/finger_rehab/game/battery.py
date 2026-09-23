@@ -123,7 +123,7 @@ def resolve_hand(requested: str, dominant_hand: str,
         return word
     if dom not in ("left", "right"):
         # Worded for the hub's note line, in the login screen's words.
-        raise BatteryError("Play all needs a main hand: pick one at login")
+        raise BatteryError("Needs the main hand from login")
     first = dom if hand_first == "dominant" else other_hand(dom)
     if word == "hand1":
         return first
@@ -448,9 +448,13 @@ def progress_rows(log_rows) -> list[dict]:
                 row["chip"] = chip
                 row["better"] = bool(chip.get("better"))
                 row["delta"] = float(chip.get("delta") or 0.0)
-                row["text"] = _retail(str(chip.get("text") or ""),
-                                      " than your first go")
-                row["short"] = _retail(str(chip.get("text") or ""), "")
+                # Words for an improvement only. A dip keeps its two
+                # numbers on screen and gets no sentence: nothing the
+                # player reads is a step down.
+                if row["better"]:
+                    row["text"] = _retail(str(chip.get("text") or ""),
+                                          " than your first go")
+                    row["short"] = _retail(str(chip.get("text") or ""), "")
         out.append(row)
     return out
 

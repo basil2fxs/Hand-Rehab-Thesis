@@ -73,7 +73,10 @@ except ImportError:
 # Pilot, whose runs had no per-run byte at all. Every raw.csv eeg row
 # also carries name=<code name> from this version. No existing code
 # changed meaning.
-CODES_VERSION = "1.4"
+# 1.5: stim_choice_prompt 52 added for syllables' prompt buzz, and the
+# syllables model no longer buzzes (its 30-band byte drops the buzzer
+# bit, 33 becomes 31). No existing code changed meaning.
+CODES_VERSION = "1.5"
 
 # 0 is the idle line, written after every pulse and in every shutdown
 # path. It never labels an event, so it lives outside CODES.
@@ -126,6 +129,10 @@ CODES: dict[str, int] = {
     # material the child has already met.
     "stim_choice_set": 50,
     "stim_choice_set_return": 51,
+    # The prompt buzz on the right finger, late in a set that is still
+    # unanswered. Sent at the STIM command; an answer after it is a
+    # prompted answer and is analysed apart from the unprompted ones.
+    "stim_choice_prompt": 52,
     # Response band (100-131), correctness in the byte, lane added to
     # the bases because hand identity is what the LRP is made of.
     #
@@ -299,6 +306,12 @@ CODE_NOTES: dict[str, tuple[str, str, str, str]] = {
         "flip", "stim_visual",
         "syllables: options spawn for a word that came back after a miss",
         ""),
+    "stim_choice_prompt": (
+        "STIM command", "prep_buzz_lead",
+        "syllables: prompt buzz on the right finger late in the fall",
+        "Only on a set still unanswered at prompt_at of its fall. A "
+        "press after this byte is a prompted answer (pclass on the "
+        "row)."),
     "resp_correct_base": (
         "press sample", "response", "correct press, + lane pressed (0-7)",
         "Mirror sends one per hand (right 0-3, left 4-7). Chords sends "

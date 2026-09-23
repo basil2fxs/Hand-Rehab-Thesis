@@ -211,6 +211,17 @@ class MultiSerialSource(Source):
         except queue.Empty:
             return None
 
+    def relabel_single(self, hand: str) -> bool:
+        """Name the only board's hand. Plug order calls a lone board
+        the right hand; when the person says it is their left, this
+        makes it so, without reopening the port (a reopen resets the
+        Nano). Refused with two boards, where plug order and the
+        Settings dropdowns decide."""
+        if len(self.hands) != 1 or hand not in ("left", "right"):
+            return False
+        self.hands[0].hand = hand
+        return True
+
     def send_command(self, cmd: str) -> bool:
         """Routes STIM commands to the matching Arduino.
 

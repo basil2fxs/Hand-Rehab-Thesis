@@ -831,9 +831,24 @@ class TestUnreachableTrigger:
         assert any("pinky" in s for s in problems)
 
     def test_the_real_device_still_calibrates(self):
+        # The device the shipped fsr.on_delta defaults came from. At
+        # 0.40 of the gap it gave those defaults, [20, 13, 15, 46];
+        # at today's 0.30, with the gap capped at three times the
+        # light-press floor, it gives lighter triggers, the middle and
+        # ring held up by their noise and preload floors.
         p = self._profile([49, 32, 30, 115], [2.5, 8.9, 11.5, 30.7])
         assert p.usable()[0] is True
-        assert p.on_delta() == [20, 13, 15, 46]
+        assert p.on_delta() == [15, 12, 15, 34]
+
+    def test_a_hard_calibration_press_cannot_make_the_game_hard(self):
+        # Pressing far harder than asked sets a trigger no higher than
+        # a press three times the light-press floor would.
+        light = self._profile([49, 32, 30, 115], [2.5, 8.9, 11.5, 30.7])
+        crushed = self._profile([400, 400, 400, 400],
+                                [2.5, 8.9, 11.5, 30.7])
+        for i, (lo, hi) in enumerate(crushed.target_band()):
+            assert crushed.on_delta()[i] <= round(lo * 3.0 * 0.30) + 1
+        assert max(crushed.on_delta()) < 2 * max(light.on_delta())
 
     def test_no_usable_profile_has_an_unreachable_trigger(self):
         from finger_rehab.hardware.calibration_profile import MAX_TRIGGER_FRACTION

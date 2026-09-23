@@ -1,17 +1,15 @@
 """Buzz Hunt screen. Near-empty ON PURPOSE: the stimulus lives in the
-hand, so the eyes must have nothing to learn from. Tactile-first
-design, stated plainly: during a trial the screen shows a calm focus
-point and nothing else, no lane tiles, no finger names, no meter that
-could leak which finger buzzed or when. Response feedback appears
-only AFTER the press (or after the window closes), on the feedback
-card, which is the SENSe feedback principle without ever becoming a
-visual cue.
+hand, so the eyes must have nothing to learn from. During a trial the
+screen shows a calm focus point and nothing else, no lane tiles, no
+finger names, no meter that could leak which finger buzzed or when.
 
 Layout jobs, in the order a player meets them:
 
-  STAGE CARD      what the coming stage asks, in plain words, with
-                  the hands-flat reminder. Shown once per stage.
+  STAGE CARD      what the coming stage asks, in plain words, with the
+                  skip control under it. Shown once per stage.
   GET READY       the shared countdown card (engine prep path).
+  BETWEEN TRIALS  the dimmed dot. No "get ready" line and no repeated
+                  instruction: the stage card already said it.
   TRIAL           the focus point only: a soft dot that breathes at
                   0.15 Hz, far below the 3 Hz flash limit. The wait,
                   the buzz and the response window all look identical
@@ -19,10 +17,9 @@ Layout jobs, in the order a player meets them:
                   onset, because a visible "now answer" flash would
                   time-lock responses to the screen instead of the
                   buzz.
-  FEEDBACK        only now do words appear: what happened, which
-                  finger buzzed and which was pressed (localisation),
-                  the replayed pattern (span), one-or-two (gap).
-                  Steady text, no flashing.
+  AFTER A TRIAL   the dot goes green for a right answer and stays dim
+                  otherwise. No words, and never anything that reads
+                  as a wrong answer.
   RESULTS         the shared results screen reads block_stats.
 
 All alpha scratch surfaces are created once and reused; steady-state
@@ -40,8 +37,6 @@ from typing import TYPE_CHECKING
 
 import pygame
 
-from ..game.modes.force_pilot import FINGER_WORDS
-from . import feedback_bank
 from .screens import ModeSelectScreen, Screen, draw_skip_chip
 from .widgets import (
     FONT_BODY, FONT_H1, FONT_H2, FONT_SMALL, FONT_TITLE,
@@ -124,34 +119,6 @@ class BuzzHuntScreen(Screen):
                 and self._countdown_remaining() <= 0):
             self.engine.mode.update(dt)
 
-    # ---- helpers -----------------------------------------------------------
-    def _finger_colour(self, lane: int) -> tuple[int, int, int]:
-        pal = self.theme.lane_active
-        return pal[(lane % 4) % len(pal)]
-
-    def _lane_words(self, lane: int) -> str:
-        mode = self.engine.mode
-        hand = "right"
-        if mode is not None:
-            for h, lanes in getattr(mode, "hands", {}).items():
-                if lane in lanes:
-                    hand = h
-                    break
-        return f"{hand.upper()} {FINGER_WORDS[lane % 4]}"
-
-    def _draw_lane_chip(self, surf: pygame.Surface, lane: int,
-                        cx: int, cy: int) -> None:
-        colour = self._finger_colour(lane)
-        pf = self.layout.font(FONT_BODY, bold=True)
-        text = pf.render(self._lane_words(lane), True,
-                         _text_colour_for(colour))
-        pill = pygame.Rect(0, 0, text.get_width() + 34,
-                           text.get_height() + 14)
-        pill.center = (cx, cy)
-        pygame.draw.rect(surf, colour, pill,
-                         border_radius=pill.height // 2)
-        surf.blit(text, text.get_rect(center=pill.center))
-
     # ---- draw --------------------------------------------------------------
     def draw(self, surf: pygame.Surface) -> None:
         surf.fill(self.theme.background)
@@ -171,8 +138,11 @@ class BuzzHuntScreen(Screen):
             self._draw_top(surf, mode)
             self._draw_stage_card(surf, mode)
         elif phase == "announce":
+            # The short pause before a trial: the dimmed dot and
+            # nothing else. It used to say "Get ready..." with the
+            # stage's instruction under it before every single trial.
             self._draw_top(surf, mode)
-            self._draw_announce(surf, mode, now)
+            self._draw_focus_point(surf, now, dim=True)
         elif phase == "trial":
             # The near-empty promise still holds around the dot: the
             # centre of the screen carries the focus point and nothing
@@ -192,7 +162,6 @@ class BuzzHuntScreen(Screen):
             # reveals nothing the patient was not just told.
             self._draw_top(surf, mode)
             self._draw_focus_point(surf, now)
-            self._draw_trial_prompt(surf, mode)
             self._draw_status_line(surf, mode)
         elif phase == "feedback":
             self._draw_top(surf, mode)
@@ -200,12 +169,21 @@ class BuzzHuntScreen(Screen):
             self._draw_status_line(surf, mode)
         else:
             self._draw_top(surf, mode)
+        self._skip_at = None
+        if phase == "stage":
+            self._skip_at = (self.layout.width // 2, 470)
         remaining = self._countdown_remaining()
         if remaining > 0:
             self._draw_countdown_card(surf, remaining)
-        # One skip control for every enforced wait, drawn last so it
-        # sits over the countdown card and the rest material alike.
-        draw_skip_chip(surf, self.layout, self.theme, self.engine)
+        # One skip control for every enforced wait, inside the card
+        # that shows the wait (the countdown card, or under the stage
+        # card's instructions). The short waits between trials draw
+        # none (Space still skips).
+        if self._skip_at is not None:
+            draw_skip_chip(surf, self.layout, self.theme, self.engine,
+                           centre=self._skip_at)
+        else:
+            self.engine._skip_chip_rect = None
         # Skipped under either exit guard (the engine draws the
         # session dialog or the end-game chip above this screen),
         # matching GameplayScreen.
@@ -289,39 +267,8 @@ class BuzzHuntScreen(Screen):
                   pt=FONT_H2, centre=True, colour=self.theme.foreground)
         draw_text(surf, body, (cx, 400), self.theme, self.layout,
                   pt=FONT_BODY, centre=True, colour=self.theme.muted)
-        draw_text(surf, "Hands flat. Eyes on the dot. Feel, then press.",
-                  (cx, 470), self.theme, self.layout, pt=FONT_BODY,
-                  centre=True, colour=self.theme.muted)
 
     # ---- announce ----------------------------------------------------------
-    def _stage_prompt(self, mode) -> str:
-        """The one sentence this stage asks for. Shared by the
-        announce card and the trial's foot line so the patient reads
-        the same wording in both places, and so neither can drift into
-        naming a finger or a hand (a screen test pins that for the
-        trial frames)."""
-        return {
-            "loc": "Press the finger that buzzes. Nothing? Wait.",
-            "distractor": "Ignore the first buzz. Press where the "
-                          "last one was.",
-            "span": f"A pattern of {mode.span_len} buzzes is coming.",
-            "gap": "Tap once for one buzz, twice for two.",
-        }.get(mode.stage, "")
-
-    def _draw_trial_prompt(self, surf: pygame.Surface, mode) -> None:
-        """The stage's sentence, quiet, at the foot of the screen.
-
-        Placed 320 px below the focus point so it sits outside the
-        fixation zone, and drawn in the muted tone at small size so it
-        can be read on purpose without pulling the eye off the dot."""
-        line = self._stage_prompt(mode)
-        if not line:
-            return
-        draw_text(surf, line,
-                  (self.layout.width // 2, self.layout.height - 64),
-                  self.theme, self.layout, pt=FONT_BODY, centre=True,
-                  colour=self.theme.muted)
-
     def _draw_status_line(self, surf: pygame.Surface, mode) -> None:
         """What the block is waiting for, and how often it has had to
         stop waiting.
@@ -343,24 +290,13 @@ class BuzzHuntScreen(Screen):
             draw_text(surf, str(msg),
                       (self.layout.width // 2, self.layout.height - 104),
                       self.theme, self.layout, pt=FONT_BODY, centre=True,
-                      colour=self.theme.warning)
+                      colour=self.theme.muted)
         forced = int(getattr(mode, "forced_starts", 0) or 0)
         if forced:
             draw_text(surf, f"Forced starts: {forced}",
                       (30, self.layout.height - 40), self.theme,
                       self.layout, pt=FONT_SMALL,
                       colour=self.theme.muted)
-
-    def _draw_announce(self, surf: pygame.Surface, mode,
-                       now: float) -> None:
-        cx = self.layout.width // 2
-        draw_text(surf, "Get ready...", (cx, 300), self.theme,
-                  self.layout, pt=FONT_H2, centre=True,
-                  colour=self.theme.foreground)
-        draw_text(surf, self._stage_prompt(mode), (cx, 350), self.theme,
-                  self.layout, pt=FONT_BODY, centre=True,
-                  colour=self.theme.muted)
-        self._draw_focus_point(surf, now, dim=True)
 
     # ---- the focus point ---------------------------------------------------
     def _ensure_halo(self) -> pygame.Surface:
@@ -391,158 +327,19 @@ class BuzzHuntScreen(Screen):
                            (self.DOT_CX, self.DOT_CY), self.DOT_R)
 
     # ---- feedback ----------------------------------------------------------
-    def _title_for(self, res: dict, situation: str) -> str:
-        """A title from the phrase bank, drawn ONCE per feedback phase.
-
-        This screen redraws every frame, so a fresh random draw here
-        would make the words flicker sixty times a second. The picked
-        line is cached against the phase's own end time, which changes
-        exactly when the feedback card changes.
-        """
-        mode = self.engine.mode
-        stage = str(res.get("stage", ""))
-        key = (situation, stage, getattr(mode, "_phase_until", None),
-               res.get("lane"), res.get("taps"))
-        if getattr(self, "_title_key", None) == key:
-            return self._title_cache
-        if situation == "wrong" and stage == "gap":
-            asked = "TWO BUZZES" if res.get("two") else "ONE BUZZ"
-            text = self._phrase("wrong_count", ASKED=asked)
-        elif situation == "wrong":
-            text = self._phrase(
-                "wrong",
-                TARGET=FINGER_WORDS[int(res.get("lane", 0)) % 4])
-        else:
-            text = self._phrase(situation)
-        self._title_key = key
-        self._title_cache = text
-        return text
-
-    def _phrase(self, situation: str, **slots) -> str:
-        return feedback_bank.phrase_via(
-            self.engine, situation, "line", "buzz_hunt", **slots)
-
     def _draw_feedback(self, surf: pygame.Surface, mode,
                        now: float) -> None:
-        cx = self.layout.width // 2
+        """Between trials: the dot, green for a moment when the answer
+        was right, and nothing else. No words, no "the buzz was on",
+        nothing for a wrong answer or a quiet one. It used to be a
+        full card after every trial; the score and the progress bar
+        already say how it is going."""
         res = mode._last_result or {}
-        stage = res.get("stage", mode.stage)
-        correct = bool(res.get("correct"))
-        label = str(res.get("label", ""))
-        if label == "CatchOk":
-            title, colour = "GOOD WAITING", self.theme.success
-        elif label == "FalseAlarm":
-            title, colour = "NOTHING BUZZED THAT TIME", self.theme.muted
-        elif correct:
-            title, colour = {
-                "loc": "FOUND IT!",
-                "distractor": "DECOY IGNORED!",
-                "span": "PATTERN REPLAYED!",
-                "gap": "RIGHT CALL!",
-            }.get(stage, "CORRECT!"), self.theme.success
-        elif not res.get("responded", True) and stage != "span":
-            title = self._title_for(res, "no_response")
-            colour = self.theme.muted
+        if res.get("correct") or res.get("label") == "CatchOk":
+            pygame.draw.circle(surf, self.theme.success,
+                               (self.DOT_CX, self.DOT_CY), self.DOT_R + 4)
         else:
-            # Never a "that was the wrong one" label. The title says
-            # where the buzz actually was, which is the same
-            # information said forwards, and the chips below still
-            # show the two lanes side by side.
-            title = self._title_for(res, "wrong")
-            colour = self.theme.muted
-        draw_text(surf, title, (cx, 170), self.theme, self.layout,
-                  pt=FONT_H1 + 6, centre=True, colour=colour)
-        y = 250
-        if stage in ("loc", "distractor") and not res.get("catch"):
-            draw_text(surf, "The buzz was on", (cx - 160, y),
-                      self.theme, self.layout, pt=FONT_BODY,
-                      centre=True, colour=self.theme.muted)
-            self._draw_lane_chip(surf, int(res.get("lane", 0)),
-                                 cx - 160, y + 40)
-            press = res.get("press_lane")
-            draw_text(surf, "You pressed", (cx + 160, y),
-                      self.theme, self.layout, pt=FONT_BODY,
-                      centre=True, colour=self.theme.muted)
-            if press is None:
-                draw_text(surf, "no press", (cx + 160, y + 40),
-                          self.theme, self.layout, pt=FONT_H2,
-                          centre=True, colour=self.theme.muted)
-            else:
-                self._draw_lane_chip(surf, int(press), cx + 160, y + 40)
-            y += 100
-            rt = res.get("rt_ms")
-            if correct and rt is not None:
-                draw_text(surf, f"{rt:.0f} ms", (cx, y), self.theme,
-                          self.layout, pt=FONT_H2, centre=True,
-                          colour=self.theme.foreground)
-                y += 46
-        elif stage == "span":
-            played = res.get("played") or []
-            pressed = res.get("pressed") or []
-            draw_text(surf, f"Pattern of {len(played)}:", (cx, y),
-                      self.theme, self.layout, pt=FONT_BODY,
-                      centre=True, colour=self.theme.muted)
-            y += 44
-            self._draw_lane_row(surf, played, cx, y)
-            y += 52
-            draw_text(surf, "You replayed:", (cx, y), self.theme,
-                      self.layout, pt=FONT_BODY, centre=True,
-                      colour=self.theme.muted)
-            y += 44
-            if pressed:
-                self._draw_lane_row(surf, pressed, cx, y)
-            else:
-                draw_text(surf, "no presses", (cx, y), self.theme,
-                          self.layout, pt=FONT_H2, centre=True,
-                          colour=self.theme.muted)
-            y += 60
-        elif stage == "gap":
-            asked = "two buzzes" if res.get("two") else "one buzz"
-            taps = int(res.get("taps", 0))
-            said = ("no answer" if taps == 0
-                    else "one buzz" if taps == 1 else "two buzzes")
-            draw_text(surf, f"It was {asked}. You tapped: {said}.",
-                      (cx, y + 20), self.theme, self.layout,
-                      pt=FONT_H2, centre=True,
-                      colour=self.theme.foreground)
-            y += 90
-        elif res.get("catch"):
-            line = ("Waiting was exactly right."
-                    if label == "CatchOk" else
-                    "When nothing buzzes, the right move is to wait.")
-            draw_text(surf, line, (cx, y + 20), self.theme, self.layout,
-                      pt=FONT_H2, centre=True,
-                      colour=self.theme.foreground)
-            y += 90
-        if mode._phase_until is not None:
-            left = max(0.0, mode._phase_until - now)
-            self.draw_next_countdown(
-                surf, f"Next trial in {left:.0f}s", y)
-
-    def _draw_lane_row(self, surf: pygame.Surface, lanes: list[int],
-                       cx: int, cy: int) -> None:
-        """A row of small finger chips for span feedback. Capped so a
-        long sequence stays inside the frame."""
-        shown = list(lanes)[:8]
-        n = len(shown)
-        if n == 0:
-            return
-        gap = 10
-        pf = self.layout.font(FONT_SMALL, bold=True)
-        widths = []
-        for lane in shown:
-            text = pf.render(self._lane_words(lane), True, (0, 0, 0))
-            widths.append(text.get_width() + 22)
-        total = sum(widths) + gap * (n - 1)
-        x = cx - total // 2
-        for lane, w in zip(shown, widths):
-            colour = self._finger_colour(lane)
-            text = pf.render(self._lane_words(lane), True,
-                             _text_colour_for(colour))
-            pill = pygame.Rect(x, cy - 14, w, 28)
-            pygame.draw.rect(surf, colour, pill, border_radius=14)
-            surf.blit(text, text.get_rect(center=pill.center))
-            x += w + gap
+            self._draw_focus_point(surf, now, dim=True)
 
     # ---- countdown card and pause ------------------------------------------
     def _draw_countdown_card(self, surf: pygame.Surface,
@@ -554,9 +351,11 @@ class BuzzHuntScreen(Screen):
             self._dim_cache.fill((0, 0, 0, 60))
         surf.blit(self._dim_cache, (0, 0))
         accent = self._accent()
-        card_rect = pygame.Rect(0, 0, 420, 240)
+        # Tall enough for the skip control under the number.
+        card_rect = pygame.Rect(0, 0, 420, 300)
         card_rect.center = (self.layout.width // 2,
                             self.layout.height // 2)
+        self._skip_at = (card_rect.centerx, card_rect.bottom - 38)
         fill_surf = self._new_surface(card_rect.size, pygame.SRCALPHA)
         pygame.draw.rect(fill_surf, (*self.theme.background, 245),
                          fill_surf.get_rect(), border_radius=22)
@@ -574,9 +373,3 @@ class BuzzHuntScreen(Screen):
 
     # _draw_paused_overlay comes from Screen: one card, one resume
     # line, identical on every screen a block runs on.
-
-
-def _text_colour_for(fill: tuple[int, int, int]) -> tuple[int, int, int]:
-    # Same luminance rule the lane tiles use, so chip text stays
-    # readable on any finger colour.
-    return (15, 23, 42) if sum(fill) / 3 > 140 else (255, 255, 255)

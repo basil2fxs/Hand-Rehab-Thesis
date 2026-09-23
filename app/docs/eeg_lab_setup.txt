@@ -79,7 +79,8 @@ What the Status channel shows
 - Each block: 200+mode at the start, 20 at GET READY, 220+mode at the
   end (219 if abandoned).
 - Each stimulus a 30 to 38 (40 or 41 in pattern blocks, 50 or 51 for
-  a syllables option set), each press 100 to 131. Every code is held
+  a syllables option set, 52 for its late prompt buzz), each press
+  100 to 131. Every code is held
   8 ms (16 samples at 2048 Hz) then 0. The box's LED flashes on odd
   codes only.
 - Pauses are 242 and 243.
@@ -88,12 +89,13 @@ What the Status channel shows
   metadata marks the block degraded. Behaviour stays valid; ERPs from
   that point do not.
 
-Codes (finger_rehab/hardware/eeg_trigger.py, CODES, version 1.4)
+Codes (finger_rehab/hardware/eeg_trigger.py, CODES, version 1.5)
 ----------------------------------------------------------------
  20  GET READY onset
  21  reaction: wait armed (CNV S1)
- 22  rhythm: leading buzz, at the STIM command about 195 ms before the
-     beat's own byte, which is then 31
+ 22  rhythm: leading buzz, at the STIM command about 395 ms before the
+     beat's own byte (350 lead plus 45 motor rise, then adapting to
+     the player), which is then 31
  23  Force Pilot: run start
  24  Force Pilot: section edge, the run's end included
  25  reaction: virtual onset of a catch trial
@@ -107,6 +109,9 @@ Codes (finger_rehab/hardware/eeg_trigger.py, CODES, version 1.4)
  50  syllables option set, first attempt
  51  syllables option set, word returned after a miss (four written
      options, nothing names the finger: never pool with the 30 band)
+ 52  syllables prompt buzz on the right finger, at the STIM command,
+     when a set is still unanswered at three quarters of its fall; a
+     press after it is a prompted answer
 100+lane  correct press               110+lane  wrong finger (lane pressed),
                                           sent at that press; the first
                                           one of a trial is its response

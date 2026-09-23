@@ -228,12 +228,19 @@ class ForcePilotScreen(Screen):
             self._draw_run(surf, mode, now)
         elif phase == "rest":
             self._draw_rest(surf, mode, now)
+        if phase != "rest":
+            self._skip_at = None
         remaining = self._countdown_remaining()
         if remaining > 0:
             self._draw_countdown_card(surf, remaining)
-        # One skip control for every enforced wait, drawn last so it
-        # sits over the countdown card and the rest material alike.
-        draw_skip_chip(surf, self.layout, self.theme, self.engine)
+        # The skip control sits under the countdown it cuts short: in
+        # the GET READY card, or under "Next run in" on the rest. The
+        # short card between runs draws none (Space still skips).
+        if self._skip_at is not None:
+            draw_skip_chip(surf, self.layout, self.theme, self.engine,
+                           centre=self._skip_at)
+        else:
+            self.engine._skip_chip_rect = None
         # Skipped under either exit guard (the engine draws the
         # session dialog or the end-game chip above this screen),
         # matching GameplayScreen.
@@ -450,9 +457,10 @@ class ForcePilotScreen(Screen):
                       centre=True, colour=self.theme.error)
             return
         tic = (res.get("tic") or 0.0) * 100.0
+        # Green for a great run, the mode colour otherwise: never an
+        # amber or red run.
         colour = (self.theme.success if label == "Great"
-                  else self._accent() if label == "Good"
-                  else self.theme.warning)
+                  else self._accent())
         wave = str(res.get("wave") or "")
         head = f"{tic:.0f}% in corridor"
         if wave:
@@ -539,9 +547,13 @@ class ForcePilotScreen(Screen):
                       self.layout, pt=FONT_BODY, centre=True,
                       colour=self.theme.muted)
         self._draw_finger_chip(surf, mode.hand, mode.finger, cx, 452)
+        self._skip_at = None
         if mode._phase_until is not None:
             left = max(0.0, mode._phase_until - now)
             self.draw_next_countdown(surf, f"Next run in {left:.0f}s", 520)
+            line_y = min(520 + self.NEXT_LINE_GAP,
+                         self.layout.height - self.NEXT_LINE_FLOOR)
+            self._skip_at = (cx, line_y + 46)
 
     # ---- the corridor run --------------------------------------------------
     def _corridor_colours(self) -> dict:
@@ -768,8 +780,9 @@ class ForcePilotScreen(Screen):
         if len(pts) > 1:
             pygame.draw.lines(surf, self.theme.foreground, False, pts, 2)
         y = self._y(pct, span)
-        marker = (self.theme.error if mode.stalled
-                  else self._finger_colour(mode.finger))
+        # The marker keeps its finger colour outside the band too: the
+        # tag below says which way to move, nothing needs to go red.
+        marker = self._finger_colour(mode.finger)
         pygame.draw.line(surf, marker, (self.MARKER_X - 14, y),
                          (self.MARKER_X + 14, y), 3)
         pygame.draw.circle(surf, marker, (self.MARKER_X, y), 9)
@@ -789,13 +802,16 @@ class ForcePilotScreen(Screen):
             ty = y - 40 if below else y + 24
             ty = max(self.PLOT_TOP + 8, min(self.PLOT_BOTTOM - 30, ty))
             draw_text(surf, word, (self.MARKER_X + 26, ty), self.theme,
-                      self.layout, pt=FONT_BODY, colour=self.theme.error)
+                      self.layout, pt=FONT_BODY,
+                      colour=self.theme.foreground)
 
     def _draw_run_stats(self, surf: pygame.Surface, mode,
                         t_run: float) -> None:
         """The results band: time in corridor as the one large number,
-        rings and stalls small either side, time left small under the
-        plot's progress line."""
+        rings small beside it, time left small under the plot's
+        progress line. No count of times the line left the band: that
+        is a tally of slips, and the corridor number already says how
+        the run is going."""
         tic = 0.0
         if mode._scored_s > 0:
             tic = mode._in_c_s / mode._scored_s
@@ -810,11 +826,7 @@ class ForcePilotScreen(Screen):
         rings = (f"{mode._rings_collected} of {rings_total}"
                  if rings_total else f"{mode._rings_collected}")
         for dx, value, label in (
-                (-self.SIDE_STAT_DX, rings, "RINGS"),
-                # "EXITS": how many times the line left the band. The
-                # count is the same number; the word is what happened,
-                # not a verdict on it.
-                (self.SIDE_STAT_DX, f"{mode._stalls}", "EXITS")):
+                (-self.SIDE_STAT_DX, rings, "RINGS"),):
             draw_text(surf, value, (cx + dx, self.HERO_Y + 10),
                       self.theme, self.layout, pt=FONT_H2, centre=True,
                       colour=self.theme.foreground)
@@ -837,9 +849,11 @@ class ForcePilotScreen(Screen):
             self._dim_cache.fill((0, 0, 0, 60))
         surf.blit(self._dim_cache, (0, 0))
         accent = self._accent()
-        card_rect = pygame.Rect(0, 0, 420, 240)
+        # Tall enough for the skip control under the number.
+        card_rect = pygame.Rect(0, 0, 420, 300)
         card_rect.center = (self.layout.width // 2,
                             self.layout.height // 2)
+        self._skip_at = (card_rect.centerx, card_rect.bottom - 38)
         fill_surf = self._new_surface(card_rect.size, pygame.SRCALPHA)
         pygame.draw.rect(fill_surf, (*self.theme.background, 245),
                          fill_surf.get_rect(), border_radius=22)

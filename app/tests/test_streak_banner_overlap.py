@@ -1,16 +1,11 @@
-"""Only one streak banner is ever on screen at once.
+"""Streak banners: rare, one at a time, and never over the targets.
 
-The encouragement thresholds sit two trials apart at the bottom of
-GameEngine._ENCOURAGEMENT (3 then 5), and a banner lives for 1.8 s at a
-FIXED point on the strip. At rhythm's cadence two notes take about a
-second, so the "5 in a row, nice" banner used to be added while
-"3 in a row" was still alive, at the same centre, and pygame drew both:
-the strip read as one unreadable smear rather than a count.
-
-The count is the whole point of process praise (Mueller and Dweck 1998,
-J Pers Soc Psychol: praise the doing, not the person), so a banner that
-cannot be read is worse than no banner. The newest count is the true
-one, so an older banner retires when a new one arrives.
+Banners come only with a big streak (10, 20, 30, 50, 75, 100 in a
+row), ten or more apart, so a message is an occasion rather than
+something on every few presses. Only one is ever on screen: the
+newest count is the true one, so an older banner retires when a new
+one arrives. And a banner sits on blank page, below the tiles, where
+it cannot cover the thing the player is aiming at.
 
 Driven through the real GameEngine and the real screens, on both
 screens that carry banners.
@@ -53,36 +48,45 @@ class StreakBannerTests(unittest.TestCase):
         pygame.init()
         self.addCleanup(pygame.quit)
 
-    def test_six_hits_leave_one_readable_banner_on_the_lane_strip(self):
-        """Crossing 3 and 5 inside one banner lifetime leaves one."""
+    def test_twenty_hits_leave_one_readable_banner_on_the_lane_strip(self):
+        """Crossing 10 and 20 inside one banner lifetime leaves one."""
         from finger_rehab.ui.screens import GameplayScreen
         eng = _engine()
         screen = GameplayScreen(eng)
         eng._screens["gameplay"] = screen
-        for _ in range(6):
+        for _ in range(20):
             eng._update_streak(True, "gameplay")
         live = _banners(screen)
         self.assertEqual(len(live), 1,
                          f"banners on screen: {[p.text for p in live]}")
         # The newest count, not the stale one.
-        self.assertEqual(live[0].text, eng._ENCOURAGEMENT[5])
+        self.assertEqual(live[0].text, eng._ENCOURAGEMENT[20])
 
     def test_rhythm_screen_holds_one_banner_too(self) -> None:
         from finger_rehab.ui.screens import RhythmScreen
         eng = _engine()
         screen = RhythmScreen(eng)
         eng._screens["rhythm"] = screen
-        for _ in range(6):
+        for _ in range(20):
             eng._update_streak(True, "rhythm")
         live = _banners(screen)
         self.assertEqual(len(live), 1,
                          f"banners on screen: {[p.text for p in live]}")
-        self.assertEqual(live[0].text, eng._ENCOURAGEMENT[5])
+        self.assertEqual(live[0].text, eng._ENCOURAGEMENT[20])
+
+    def test_nothing_before_ten(self) -> None:
+        from finger_rehab.ui.screens import GameplayScreen
+        eng = _engine()
+        screen = GameplayScreen(eng)
+        eng._screens["gameplay"] = screen
+        for _ in range(9):
+            eng._update_streak(True, "gameplay")
+        self.assertEqual(_banners(screen), [])
 
     def test_a_banner_never_retires_a_lane_popup(self) -> None:
-        """Only banners share the strip. The per-trial wording above a
-        lane is a different thing at a different place and must survive
-        a streak threshold landing on the same frame."""
+        """Only banners share the strip. A popup above a lane is a
+        different thing at a different place and must survive a streak
+        threshold landing on the same frame."""
         from finger_rehab.ui.screens import GameplayScreen
         eng = _engine()
         screen = GameplayScreen(eng)
@@ -90,20 +94,37 @@ class StreakBannerTests(unittest.TestCase):
         import time
         screen.flash_lane(1, (0, 200, 0), 0.4, time.perf_counter(),
                           popup_text="Spot on")
-        for _ in range(3):
+        for _ in range(10):
             eng._update_streak(True, "gameplay")
         texts = [p.text for p in screen._popups if p.alive]
         self.assertIn("Spot on", texts)
         self.assertEqual(len(_banners(screen)), 1)
 
-    def test_the_thresholds_are_close_enough_to_collide(self) -> None:
-        """The bug is only reachable because two thresholds sit within
-        one banner lifetime of each other. If the table ever spreads
-        out, this test says so rather than quietly passing."""
+    def test_the_thresholds_are_at_least_ten_apart(self) -> None:
+        """One message per ten trials at most."""
         from finger_rehab.game.engine import GameEngine
         steps = sorted(GameEngine._ENCOURAGEMENT)
+        self.assertGreaterEqual(steps[0], 10)
         gaps = [b - a for a, b in zip(steps, steps[1:])]
-        self.assertLessEqual(min(gaps), 3)
+        self.assertGreaterEqual(min(gaps), 10)
+
+    def test_banners_sit_below_the_tiles(self) -> None:
+        """On blank page: under the lane tiles on the cadence screen,
+        under the strike tiles on the rhythm screen, and they do not
+        rise back into them."""
+        from finger_rehab.ui.screens import GameplayScreen, RhythmScreen
+        eng = _engine()
+        gp = GameplayScreen(eng)
+        rs = RhythmScreen(eng)
+        eng._screens["gameplay"] = gp
+        eng._screens["rhythm"] = rs
+        gp.add_encouragement("10 in a row")
+        rs.add_encouragement("10 in a row")
+        for screen in (gp, rs):
+            (banner,) = _banners(screen)
+            tiles_bottom = max(ls.rect.bottom for ls in screen.lanes)
+            self.assertGreater(banner.start_pos[1] - 20, tiles_bottom)
+            self.assertEqual(banner.rise_px, 0)
 
 
 if __name__ == "__main__":

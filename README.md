@@ -33,8 +33,9 @@ flowchart LR
 ```
 
 A press is found in the force stream, not by a switch: each pad keeps a slow baseline, and a press crosses the
-gap between that person's resting level and their light press, measured once per hand at login. A failed read
-is sent as 0, so a dead pad and a loose plug look the same. At boot the board buzzes all four motors, about 1.6 s.
+gap between that person's resting level and their light press, measured at login on the hand picked for the
+session. A failed read is sent as 0, so a dead pad and a loose plug look the same. At boot the board buzzes all
+four motors, about 1.6 s.
 
 ## Install
 

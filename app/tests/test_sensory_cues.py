@@ -288,16 +288,18 @@ class AfterPressOnlyOnACorrectPressTests(unittest.TestCase):
                           "buzzed a confirmation on a fumbled trial")
         self.assertEqual(e.audio.hits, 0)
 
-    def test_streak_break_thunk_follows_sound_after(self) -> None:
-        # The low thunk on a streak-breaking miss is still something
-        # the patient hears after touching a sensor, so the post-press
-        # sound switch owns it too.
-        for flag, expected in ((True, 1), (False, 0)):
+    def test_a_streak_breaking_miss_is_silent(self) -> None:
+        # The low thunk on a streak-breaking miss is gone: it was the
+        # one negative cue left. Silent under either sound setting.
+        for flag in (True, False):
             with self.subTest(sound_after=flag):
                 e = _engine(sound_after=flag)
                 e.hit_streak = 4
                 e.log_trial(_trial(0), _result("Miss", rt_ms=None), now=0.0)
-                self.assertEqual(e.audio.misses, expected)
+                self.assertEqual(e.audio.misses, 0)
+                e.current_block = "rhythm"
+                e.log_rhythm_unmatched(lane=2, now=0.0)
+                self.assertEqual(e.audio.misses, 0)
 
     def test_rhythm_no_press_miss_gets_nothing(self) -> None:
         e = _engine(**ALL_ON)

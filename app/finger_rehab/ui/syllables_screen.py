@@ -199,9 +199,6 @@ class SyllablesScreen(Screen):
         Colour names resolve through _stage_colour so the copy can be
         unit-tested without a display."""
         phase = mode.phase
-        if phase == "warmup":
-            return ("WARM UP", "Tap along with the tick. Any finger.",
-                    "accent")
         if phase == "attend":
             return ("LISTEN...", "Here is the word.", "accent")
         if phase == "model":
@@ -262,10 +259,8 @@ class SyllablesScreen(Screen):
         now = time.perf_counter()
         self._draw_top(surf, mode)
         phase = mode.phase
-        if phase == "warmup":
-            self._draw_header(surf, mode)
-            self._draw_warmup(surf, mode, now)
-        elif phase == "break":
+        self._skip_at = None
+        if phase == "break":
             self._draw_header(surf, mode)
             self._draw_break(surf, mode, now)
         elif phase == "gap":
@@ -280,7 +275,14 @@ class SyllablesScreen(Screen):
         remaining = self._countdown_remaining()
         if remaining > 0:
             self._draw_countdown_card(surf, remaining)
-        draw_skip_chip(surf, self.layout, self.theme, self.engine)
+        # The skip control sits under the countdown it cuts short: in
+        # the GET READY card, or under "Next round in" on the break.
+        # The short waits between words draw none (Space still skips).
+        if self._skip_at is not None:
+            draw_skip_chip(surf, self.layout, self.theme, self.engine,
+                           centre=self._skip_at)
+        else:
+            self.engine._skip_chip_rect = None
         if self.engine.paused and not self.engine.exit_overlay_active:
             self._draw_paused_overlay(surf)
 
@@ -295,9 +297,11 @@ class SyllablesScreen(Screen):
             self._dim_cache.fill((0, 0, 0, 60))
         surf.blit(self._dim_cache, (0, 0))
         accent = self._accent()
-        card_rect = pygame.Rect(0, 0, 420, 240)
+        # Tall enough for the skip control under the number.
+        card_rect = pygame.Rect(0, 0, 420, 300)
         card_rect.center = (self.layout.width // 2,
                             self.layout.height // 2)
+        self._skip_at = (card_rect.centerx, card_rect.bottom - 38)
         fill_surf = pygame.Surface(card_rect.size, pygame.SRCALPHA)
         pygame.draw.rect(fill_surf, (*self.theme.background, 245),
                          fill_surf.get_rect(), border_radius=22)
@@ -315,8 +319,6 @@ class SyllablesScreen(Screen):
 
     # ---- top strip ---------------------------------------------------------
     def _top_label(self, mode) -> str:
-        if mode.phase == "warmup":
-            return "Warm up"
         if mode.phase == "break":
             return "Rest"
         done, total = mode.words_done, mode.words_total
@@ -364,27 +366,6 @@ class SyllablesScreen(Screen):
         surf.blit(score_label, score_label.get_rect(
             midright=(score_rect.left - 10, score_rect.centery)))
 
-    # ---- warm-up -----------------------------------------------------------
-    def _draw_warmup(self, surf: pygame.Surface, mode, now: float) -> None:
-        cx = self.layout.width // 2
-        cy = (self.TOP_Y + self.EXIT_Y) // 2
-        # A circle that swells on each beat, phased off the beat GRID
-        # rather than the wall clock, so a child cueing off the circle
-        # instead of the metronome does not tap with a constant offset
-        # against the very asynchronies this probe measures.
-        beats = getattr(mode, "_warmup_beats", None)
-        anchor = beats[0] if beats else now
-        phase = ((now - anchor) % mode.ioi_s) / mode.ioi_s
-        r = 60 + int(26 * math.exp(-4.0 * phase))
-        pygame.draw.circle(surf, self._accent(), (cx, cy), r)
-        pygame.draw.circle(surf, self.theme.background, (cx, cy),
-                           max(6, r - 16))
-        done = getattr(mode, "_warmup_done", 0)
-        draw_text(surf, f"{min(done, mode.warmup_total)} of "
-                        f"{mode.warmup_total} taps",
-                  (cx, cy + 120), self.theme, self.layout,
-                  pt=FONT_BODY, centre=True, colour=self.theme.muted)
-
     # ---- break -------------------------------------------------------------
     def stop_name(self, k: int) -> str:
         """Stop `k` (0-based round index) on the session's walk. One
@@ -399,10 +380,12 @@ class SyllablesScreen(Screen):
         draw_text(surf, f"Next round in {left}",
                   (cx, self.SUB_Y + 40), self.theme, self.layout,
                   pt=FONT_H2, centre=True, colour=self.theme.muted)
+        # The skip control goes straight under the countdown.
+        self._skip_at = (cx, self.SUB_Y + 86)
         band = getattr(mode, "band_celebrate", None)
         if band:
             draw_text(surf, "Bigger words next round!",
-                      (cx, self.SUB_Y + 76), self.theme, self.layout,
+                      (cx, self.SUB_Y + 128), self.theme, self.layout,
                       pt=FONT_BODY + 2, centre=True,
                       colour=BAND_COLOURS.get(band, self._accent()))
         self._draw_journey(surf, mode, now)

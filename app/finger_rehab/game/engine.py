@@ -1438,6 +1438,7 @@ class GameEngine:
         from ..ui.buzz_hunt_screen import BuzzHuntScreen
         from ..ui.calibration_screen import CalibrationScreen
         from ..ui.eeg_port_screen import EegPortScreen
+        from ..ui.hand_choice_screen import HandChoiceScreen
         from ..ui.force_pilot_screen import ForcePilotScreen
         from ..ui.quick_calibration_screen import QuickCalibrationScreen
         from ..ui.syllables_screen import SyllablesScreen
@@ -1456,6 +1457,7 @@ class GameEngine:
             "calibration": CalibrationScreen(self),
             "quick_cal": QuickCalibrationScreen(self),
             "eeg_port": EegPortScreen(self),
+            "hand_choice": HandChoiceScreen(self),
         }
 
     def _build_audio(self) -> AudioEngine | None:
@@ -2704,16 +2706,15 @@ class GameEngine:
                  name, age or "(not given)",
                  self.session.visit or "(not given)",
                  self.session.dominant_hand or "(not given)")
-        # Calibration is a session event, so it runs when the session
-        # starts. Every hand the rig can serve goes through the flow
-        # here, once, and the hub follows when it finishes or is
-        # skipped. Doing it at the first GAME instead put a measuring
-        # step between "I picked a game" and playing it, and left the
-        # answer to "is this rig calibrated?" hanging until someone
-        # started something. A keyboard login has nothing to measure
-        # and goes straight through.
-        if not self.maybe_start_quick_calibration(self.show_mode_select):
-            self.show_mode_select()
+        # The hand comes first, once for the whole session: every game
+        # after it uses that hand without asking again. Calibration
+        # follows for the chosen hand or hands only, then the hub.
+        # Doing it at the first GAME instead put a measuring step
+        # between "I picked a game" and playing it. A keyboard login
+        # still picks its hand (the keys differ per hand) and has
+        # nothing to measure.
+        self._session_hand = None
+        self.show_hand_choice()
 
     def session_minutes(self) -> float:
         """Minutes since login, for the End-session summary line.
@@ -2892,6 +2893,7 @@ class GameEngine:
             self.cfg.data["session"][key] = None
         self.session.battery = {}
         self._session_active = False
+        self._session_hand = None
         self._session_started_perf = None
         self._session_games = 0
         self._session_log = []
@@ -3408,7 +3410,12 @@ class GameEngine:
             return False
 
         def mark_and_go():
-            self._session_cal_hands.update(hands)
+            # The flow drops a hand that was never put on the pads, so
+            # only the hands it really measured count as covered.
+            sc = (self._screens or {}).get("quick_cal")
+            covered = getattr(sc, "covered_hands", None)
+            self._session_cal_hands.update(
+                covered if covered is not None else hands)
             continue_cb()
 
         return self.show_quick_calibration(hands, mark_and_go)
@@ -3820,6 +3827,67 @@ class GameEngine:
         avail = getattr(src, "hand_modes_available", None)
         return isinstance(avail, set) and "both" not in avail
 
+    # ---- the session's hand ----------------------------------------------
+    def session_hand_options(self) -> list[str]:
+        """The hands the login screen offers. One board is one hand, so
+        it offers right or left and never both; two boards and a
+        keyboard offer all three."""
+        src = getattr(self, "source", None)
+        if not getattr(src, "provides_samples", True):
+            return ["right", "left", "both"]
+        boards = getattr(src, "hands", None) or []
+        if len(boards) == 1:
+            return ["right", "left"]
+        return ["right", "left", "both"]
+
+    def session_hand(self) -> str:
+        """The hand chosen at login, which every game uses. Falls back
+        to the current hand mode before anyone has chosen."""
+        return (getattr(self, "_session_hand", None)
+                or getattr(self, "hand_mode", "right") or "right")
+
+    def show_hand_choice(self) -> None:
+        sc = (self._screens or {}).get("hand_choice")
+        if sc is None:
+            # Headless engines with a trimmed screen table: keep the
+            # old behaviour, calibrate what is attached, then the hub.
+            if not self.maybe_start_quick_calibration(self.show_mode_select):
+                self.show_mode_select()
+            return
+        if hasattr(sc, "enter"):
+            sc.enter()
+        self.screen_obj = sc
+
+    def choose_session_hand(self, hand: str) -> bool:
+        """Set the hand for the rest of the session, then calibrate it.
+
+        With one board the board IS the hand picked: it is labelled so,
+        which routes its buzz commands and its connection checks to
+        that hand, so a left-hand device plugged in on its own is the
+        left hand rather than whatever plug order called it. Only the
+        chosen hand or hands are calibrated.
+        """
+        if hand not in ("right", "left", "both"):
+            return False
+        if hand not in self.session_hand_options():
+            return False
+        src = getattr(self, "source", None)
+        boards = getattr(src, "hands", None) or []
+        if len(boards) == 1 and hand in ("right", "left"):
+            relabel = getattr(src, "relabel_single", None)
+            if callable(relabel) and relabel(hand):
+                self._hand_port_memory = {}
+                self._remember_hand_ports(src)
+                if getattr(self, "session", None) is not None:
+                    self.session.source_name = getattr(src, "name", "?")
+        self._session_hand = hand
+        self.set_hand_mode(hand)
+        hands = ["left", "right"] if hand == "both" else [hand]
+        if not self.maybe_start_quick_calibration(self.show_mode_select,
+                                                  hands=hands):
+            self.show_mode_select()
+        return True
+
     def set_hand_mode(self, hand: str) -> None:
         """Switch the session to left / right / both and bring the
         detectors and lane strips with it."""
@@ -3876,7 +3944,7 @@ class GameEngine:
             # Bilateral-only by design, so it never asks which hand.
             hand = "both"
         if hand is None:
-            hand = self.hand_mode
+            hand = self.session_hand()
         if hand == "both" and self.second_board_missing():
             return False
         self.set_hand_mode(hand)
@@ -4018,6 +4086,9 @@ class GameEngine:
         session.
         """
         hands = self.calibratable_hands()
+        chosen = getattr(self, "_session_hand", None)
+        if chosen in ("left", "right"):
+            hands = [h for h in hands if h == chosen] or hands
         if not hands:
             return False
 
@@ -4240,10 +4311,10 @@ class GameEngine:
             p_seed=p_seed,
             block_seed=block_seed,
             soc_cycles_per_block=int(
-                self.cfg.get("pattern.soc_cycles_per_block", 5)),
-            warmup_trials=int(self.cfg.get("pattern.warmup_trials", 20)),
+                self.cfg.get("pattern.soc_cycles_per_block", 4)),
+            warmup_trials=int(self.cfg.get("pattern.warmup_trials", 12)),
             random_block_trials=int(
-                self.cfg.get("pattern.random_block_trials", 64)),
+                self.cfg.get("pattern.random_block_trials", 48)),
             probe_pool_size=int(
                 self.cfg.get("pattern.probe_pool_size", 4)),
             rsi_s=float(self.cfg.get("pattern.rsi_ms", 500)) / 1000.0,
@@ -4409,7 +4480,13 @@ class GameEngine:
             words_total=int(self.cfg.get("syllables.words_per_block", 40)),
             round_size=int(self.cfg.get("syllables.round_size", 10)),
             break_s=float(self.cfg.get("syllables.break_s", 30)),
-            warmup_taps=int(self.cfg.get("syllables.warmup_taps", 5)),
+            warmup_taps=0,
+            prompt=bool(self.cfg.get("syllables.prompt", True)),
+            prompt_at=float(self.cfg.get("syllables.prompt_at", 0.75)),
+            prompt_fade_after=int(
+                self.cfg.get("syllables.prompt_fade_after", 2)),
+            prompt_return_after=int(
+                self.cfg.get("syllables.prompt_return_after", 2)),
             attend_s=float(self.cfg.get("syllables.attend_s", 1.5)),
             tap_debounce_ms=float(
                 self.cfg.get("syllables.tap_debounce_ms", 150)),
@@ -6020,7 +6097,10 @@ class GameEngine:
         hand = step.get("hand")
         if hand is None:
             # The legacy path: no hand named, so the block runs on the
-            # hand already set, through the starter directly.
+            # session's hand (mirror sets both for itself), through the
+            # starter directly.
+            if mode != "mirror" and self.hand_mode != self.session_hand():
+                self.set_hand_mode(self.session_hand())
             self.block_starter(mode)()
             return
         if mode == "rhythm":
@@ -7029,37 +7109,28 @@ class GameEngine:
             self.session.battery = {}
 
     # ---- per-outcome colour --------------------------------------------------
-    # Three tiers so the patient knows roughly how well they did at a
-    # glance:
-    #   red    = Miss (didn't press the right lane in time)
-    #   orange = Late / Early (pressed the right lane but timing off)
-    #   green  = Great / Good (pressed in time)
-    #   gold   = Perfect (sub-perfect_ms reaction, biggest reward)
-    # Same map drives the lane-flash AND the floating popup text so they
-    # always agree.
-    _ORANGE_CLOSE = (235, 130, 50)
+    # Nothing on screen reads as a telling-off, so there is no red and
+    # no amber for an outcome:
+    #   grey  = no hit (Miss, or a press before the cue). Neutral: the
+    #           player can still see it did not land, which keeps the
+    #           error information without a verdict.
+    #   green = the press landed (Great, Good, and a Late or rhythm
+    #           Early that still scored)
+    #   gold  = Perfect
     _GOLD = (255, 196, 0)
 
     def _outcome_colour(self, label: str,
                         mode_hint: str | None = None) -> tuple[int, int, int]:
-        """Colour for the lane / ring flash on a trial outcome.
-
-        Rhythm mode uses a softer red->orange mapping for "Miss" because
-        red is reserved there for genuinely-wrong presses (wrong-lane
-        click logged via log_rhythm_unmatched). Classic + adaptive keep
-        the original red for Miss since wrong-lane there is logged
-        inside the same trial via incorrect_presses, not as a separate
-        flash event.
-        """
+        """Colour for the lane / ring flash on a trial outcome."""
         key = label.lower() if label else ""
         if mode_hint is None:
             mode_hint = getattr(self, "current_block", None)
         if key == "miss":
-            if mode_hint == "rhythm":
-                return self._ORANGE_CLOSE    # rhythm: miss = orange
-            return self.theme.lane_miss      # classic / adaptive: red
-        if key in ("late", "early"):
-            return self._ORANGE_CLOSE        # orange (close but off)
+            return self.theme.muted
+        if key == "early" and mode_hint != "rhythm":
+            # A press before the cue scored nothing. Rhythm's Early is
+            # a scored press just ahead of the beat, so it stays green.
+            return self.theme.muted
         if key == "perfect":
             # Gold flash makes a Perfect feel distinctly bigger than a
             # Great. Same gold the Results screen uses for an S grade,
@@ -7350,14 +7421,11 @@ class GameEngine:
         if self.feedback_style == "neutral":
             glyph = feedback_bank.NEUTRAL_GLYPH.get(situation, "open")
             return {"popup_glyph": glyph}
-        # Title case for the popup: it is 42 pt on its own above the
-        # tile, not part of a sentence, and a lower-case "ring" up
-        # there reads as a stray word rather than a finger.
-        target = feedback_bank.finger_words(lane).title()
-        pressed = feedback_bank.finger_words(pressed_lane).title() or target
-        text = self.feedback_phrase(situation, "popup",
-                                     target=target, pressed=pressed)
-        return {"popup_text": text} if text else {}
+        # Encouraging style shows no words per press. The tile flash
+        # already says hit or not, and a word over the lanes on every
+        # press was the clutter players asked to lose. Words come only
+        # with a long streak (_update_streak).
+        return {}
 
     def _park_feedback(self, screen_key: str, lane: int, popup: dict,
                        colour, label: str, marker: bool = True) -> None:
@@ -7431,15 +7499,23 @@ class GameEngine:
     # what the patient is. Trait praise ("Unstoppable!") reads as a
     # verdict on the person and makes people give up sooner after a
     # setback (Mueller and Dweck 1998, J Pers Soc Psychol).
+    #
+    # Big streaks only, so a message is an occasion rather than
+    # something on every few presses. Ten apart at the least keeps it
+    # to one message per ten trials or fewer. Reading text while
+    # playing is a second task, and a second task slows responses and
+    # can stop sequence learning (Bao et al 2019; Schwarb and
+    # Schumacher 2012), so the measured modes in _QUIET_STREAK_MODES
+    # get none at all.
     _ENCOURAGEMENT = {
-        3:  "3 in a row",
-        5:  "5 in a row, nice",
-        8:  "8 in a row, steady hands",
-        12: "12 straight",
-        20: "20 in a row, in the groove",
-        30: "30 straight, that's rhythm",
-        50: "50 in a row",
+        10:  "10 in a row",
+        20:  "20 in a row, steady hands",
+        30:  "30 in a row",
+        50:  "50 in a row, in the groove",
+        75:  "75 in a row",
+        100: "100 in a row",
     }
+    _QUIET_STREAK_MODES = ("reaction", "pattern")
 
     def _update_streak(self, was_hit: bool, screen_key: str) -> None:
         # Misses break the streak. The thresholds we already fired for this
@@ -7469,6 +7545,8 @@ class GameEngine:
         if self.feedback_style == "neutral":
             # No banners in the lab: a streak banner is an unscheduled
             # visual event in the middle of a trial sequence.
+            return
+        if getattr(self, "current_block", None) in self._QUIET_STREAK_MODES:
             return
         text = self._ENCOURAGEMENT[self.hit_streak]
         sc = self._screens.get(screen_key)
@@ -7530,6 +7608,48 @@ class GameEngine:
             self._eeg_send(eeg_trigger.CODES["prep_buzz_lead"],
                            lane=lane, t_event=time.perf_counter())
         self._lead_stim_delivered[trial_id] = delivered
+
+    def on_prompt_buzz(self, lane: int, trial_id: int,
+                       t_perf: float) -> bool | None:
+        """One buzz on `lane` as a prompt, in the middle of a trial.
+
+        Syllables calls this when a set is still unanswered late in its
+        fall: the right finger buzzes and nothing on screen changes.
+        Held under cue.buzz_before like every buzz that comes before a
+        press, and only on a rig with motors. The EEG byte is 52, sent
+        at the STIM command (no flip to anchor to), so the felt buzz
+        follows it by latency.buzzer_ms. Returns whether the STIM went
+        out, or None when no buzz was due at all.
+        """
+        self._ensure_metric_state()
+        cues = self.cue_settings()
+        if not (cues.buzz_before and self.source.provides_samples):
+            if self.raw_logger:
+                self.raw_logger.queue_event(
+                    "prompt_buzz", lane=lane, t_perf=t_perf,
+                    detail=f"delivered=off;trial_id={trial_id}",
+                    hand=self.hand_mode)
+            return None
+        # Same housekeeping as a lead buzz: a held-back STOP or a timed
+        # stop from earlier must not cut this pulse short.
+        self._motor_stop_at = None
+        self._after_cue_until = None
+        self._pulse_stops = {}
+        ok = self._send_stim(lane)
+        if self.raw_logger:
+            self.raw_logger.queue_event(
+                "prompt_buzz", lane=lane, t_perf=t_perf,
+                detail=(f"delivered={'yes' if ok else 'NO'};"
+                        f"trial_id={trial_id}"),
+                hand=self.hand_mode)
+        self._schedule_cue_pulses(lane)
+        if not ok:
+            self._block_stim_failures += 1
+            log.warning("Prompt buzz not delivered for trial %s. "
+                        "Check the Arduino connection.", trial_id)
+        self._eeg_send(eeg_trigger.CODES["stim_choice_prompt"],
+                       lane=lane, t_event=time.perf_counter())
+        return ok
 
     def on_stim_multi(self, lanes: list[int], trial_id: int,
                        t_perf: float, buzz: bool = True) -> None:
@@ -7958,20 +8078,13 @@ class GameEngine:
         is_syllables = self.current_block == "syllables"
         chime_on = correct_press and (
             outcome.label == "Great" if is_syllables else True)
-        thunk_on = (not is_syllables and not correct_press
-                    and self.hit_streak > 0)
+        # No sound for a press that did not land: the streak-break
+        # thunk was the one negative cue left, and nothing in the game
+        # tells the player off.
         if self.audio:
             try:
                 if chime_on and cues.sound_after:
                     self.audio.play_hit(combo=self.hit_streak)
-                elif thunk_on and cues.sound_after:
-                    # Only thunk if the miss BREAKS a real streak. A
-                    # single isolated miss with no streak just gets
-                    # the visual feedback so the audio doesn't nag.
-                    # Held under the same switch as the chime: with
-                    # the post-press sound off, nothing sounds after a
-                    # press at all.
-                    self.audio.play_miss()
             except Exception:
                 pass
             # A loud trial has now played its feedback at the boosted
@@ -8552,9 +8665,6 @@ class GameEngine:
                 rs.flash_lane(lane, colour, 0.6, now)
                 self._park_feedback("rhythm", lane, popup, colour, label)
             else:
-                # RhythmScreen floats self.message above the strike
-                # ring, so the popup wording goes through the message.
-                rs.set_message(popup.get("popup_text", ""), 0.6)
                 rs.flash_lane(lane, colour, 0.6, now, **popup)
         # After-press cues, same rule as the cadence modes. A note the
         # patient actually pressed and landed inside the window is a
@@ -8571,11 +8681,8 @@ class GameEngine:
         correct_press = was_pressed and label != "Miss"
         if self.audio:
             try:
-                if correct_press:
-                    if cues.sound_after:
-                        self.audio.play_hit(combo=streak_before)
-                elif streak_before > 0 and cues.sound_after:
-                    self.audio.play_miss()
+                if correct_press and cues.sound_after:
+                    self.audio.play_hit(combo=streak_before)
             except Exception:
                 pass
         # rhythm.tactile_mode feedback owns the after-press buzz
@@ -8809,22 +8916,12 @@ class GameEngine:
         # unmatched press costs `scoring.wrong_press_penalty` (floored
         # at zero so the score never goes negative).
         self.apply_wrong_press_penalty()
-        # Audio: combo-break thunk so a wrong-lane press has a
-        # distinct aural cue without being harsh. Held under
-        # cue.sound_after, which owns everything the patient hears
-        # after touching a sensor: with it off a wrong-lane press has
-        # to be as silent as a correct one.
-        if self.audio and self.cue_settings().sound_after:
-            try:
-                self.audio.play_miss()
-            except Exception:
-                pass
-        # Visual feedback: flash the lane red so the patient can see
-        # exactly which finger fired wrong.
+        # A quiet grey flash on the lane that fired, so the player can
+        # see which finger it was. No sound and no red.
         rs = self._screens.get("rhythm")
         if rs and hasattr(rs, "flash_lane"):
             try:
-                rs.flash_lane(lane, self.theme.lane_miss, 0.5, now)
+                rs.flash_lane(lane, self.theme.muted, 0.5, now)
             except Exception:
                 pass
 

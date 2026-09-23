@@ -312,6 +312,7 @@ class SessionModalUnchangedTests(_EngineHarness):
         # The heavy exit keeps its modal exactly where it was: game
         # select -> login. The chip exists only mid-block.
         self.eng.begin_session("P1", "")
+        self.eng.choose_session_hand("right")
         self.assertIs(self.eng.screen_obj, self.eng._screens["mode_select"])
         self.eng._handle_escape()
         self.assertTrue(self.eng.exit_confirm_active)

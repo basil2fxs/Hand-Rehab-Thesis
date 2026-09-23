@@ -411,7 +411,10 @@ LOG_TRIAL_MODES = ("classic", "adaptive", "pattern", "mirror", "chords",
 
 class RealEngineWordingTests(unittest.TestCase):
 
-    def test_every_mode_shows_clean_words(self) -> None:
+    def test_no_mode_puts_words_on_a_press(self) -> None:
+        # Minimal pop-ups: a press gets the tile flash and no words,
+        # in every mode and for every outcome. Whatever text a mode
+        # does show is still checked against the banned list.
         from finger_rehab.game.scoring import TrialResult
         with tempfile.TemporaryDirectory() as td:
             eng, gp, _rs = _make_engine(td)
@@ -426,19 +429,21 @@ class RealEngineWordingTests(unittest.TestCase):
                     self.assertEqual(
                         fb.offending(text), [],
                         f"{block} put {text!r} on the screen")
-                self.assertTrue(gp.popups, f"{block} showed no feedback")
+                self.assertEqual(gp.popups, [],
+                                 f"{block} put words on a press")
 
-    def test_a_wrong_finger_names_the_finger_to_use(self) -> None:
+    def test_a_wrong_finger_gets_a_grey_flash_and_no_words(self) -> None:
         from finger_rehab.game.scoring import TrialResult
         with tempfile.TemporaryDirectory() as td:
             eng, gp, _rs = _make_engine(td)
             eng._begin_block("classic")
-            # Cue on lane 2 (the ring), pressed lane 0 (the index).
             trial = _trial(1, 2, pressed=True, wrong_lane=0)
             eng.log_trial(trial, TrialResult("Miss", 0, None), 100.0)
-            joined = " ".join(gp.popups).lower()
-            self.assertIn("ring", joined)
-            self.assertEqual(fb.offending(joined), [])
+            self.assertEqual(gp.all_text(), [])
+            # The flash is the neutral grey, never red.
+            self.assertEqual(eng._outcome_colour("Miss"), eng.theme.muted)
+            self.assertNotEqual(eng._outcome_colour("Miss"),
+                                eng.theme.lane_miss)
 
     def test_rhythm_shows_clean_words(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -455,14 +460,33 @@ class RealEngineWordingTests(unittest.TestCase):
                                   f"rhythm put {text!r} on the screen")
 
     def test_streak_banners_name_the_count_not_the_person(self) -> None:
+        # Only a big streak gets a banner: the first is at ten.
         with tempfile.TemporaryDirectory() as td:
             eng, gp, _rs = _make_engine(td)
             eng._begin_block("classic")
-            for _ in range(5):
+            for _ in range(9):
                 eng._update_streak(was_hit=True, screen_key="gameplay")
-            self.assertEqual(gp.banners, ["3 in a row", "5 in a row, nice"])
+            self.assertEqual(gp.banners, [])
+            for _ in range(11):
+                eng._update_streak(was_hit=True, screen_key="gameplay")
+            self.assertEqual(gp.banners, ["10 in a row",
+                                          "20 in a row, steady hands"])
             for text in gp.banners:
                 self.assertEqual(fb.offending(text), [])
+
+    def test_the_measured_modes_never_get_a_banner(self) -> None:
+        # Reaction and Muscle Memory measure something a message on
+        # screen would disturb, so they get none at any streak.
+        with tempfile.TemporaryDirectory() as td:
+            eng, gp, _rs = _make_engine(td)
+            for block in ("reaction", "pattern"):
+                eng._begin_block(block)
+                eng._streak_fired = set()
+                eng.hit_streak = 0
+                for _ in range(30):
+                    eng._update_streak(was_hit=True,
+                                       screen_key="gameplay")
+            self.assertEqual(gp.banners, [])
 
     def test_the_csv_vocabulary_is_unchanged(self) -> None:
         """The labels are data. The analysis reads them; the patient
@@ -516,27 +540,24 @@ class ReactionWordingTests(unittest.TestCase):
         return PressEvent(lane=lane, t_perf=t, value=0, baseline=0.0,
                           hand="right")
 
-    def test_a_false_start_says_what_to_wait_for(self) -> None:
+    def test_a_false_start_shows_nothing(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             _eng, mode, gp = self._mode(td)
             mode._begin_trial(now=100.0)
             mode._handle_press(self._press(0, 100.5), now=100.5)
-            texts = [m for m, _ in gp.messages]
-            self.assertTrue(texts)
-            for text in texts:
-                self.assertEqual(fb.offending(text), [], text)
-            # Never the amber alarm colour: that belongs to hardware.
-            self.assertNotIn("warn", [k for _, k in gp.messages])
+            self.assertEqual(gp.messages, [])
 
-    def test_a_lapse_keeps_the_number_and_drops_the_verdict(self) -> None:
+    def test_every_rt_is_the_plain_number(self) -> None:
+        # Slow, fast or a new best: the same grey number, no words.
         with tempfile.TemporaryDirectory() as td:
             _eng, mode, gp = self._mode(td)
-            mode._show_rt_feedback(620.0)
-            text = gp.messages[-1][0]
-            self.assertIn("620", text)
-            self.assertEqual(fb.offending(text), [], text)
+            for rt in (620.0, 300.0, 250.0):
+                mode._show_rt_feedback(rt)
+            self.assertEqual(gp.messages, [("620 ms", "info"),
+                                           ("300 ms", "info"),
+                                           ("250 ms", "info")])
 
-    def test_a_wrong_finger_names_the_one_to_use(self) -> None:
+    def test_a_wrong_finger_shows_nothing(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             _eng, mode, gp = self._mode(td)
             mode.sub_mode = "choice"
@@ -545,36 +566,16 @@ class ReactionWordingTests(unittest.TestCase):
             lane = mode.active.lane
             other = (lane + 1) % 4
             mode._handle_press(self._press(other, 203.4), now=203.4)
-            text = gp.messages[-1][0]
-            self.assertEqual(fb.offending(text), [], text)
-            self.assertIn(fb.finger_words(lane), text.lower())
+            self.assertEqual(gp.messages, [])
 
 
 class ChordsWordingTests(unittest.TestCase):
 
-    def test_every_failure_branch_is_clean_and_names_a_finger(
-            self) -> None:
-        from unittest.mock import MagicMock
+    def test_a_chord_has_no_verdict_line(self) -> None:
+        # The per-chord line ("Ring joined in", "Press together") is
+        # gone, so there is no branch left to word.
         from finger_rehab.game.modes.chords import ChordsMode
-        mode = ChordsMode.__new__(ChordsMode)
-        mode.engine = MagicMock()
-        mode.bilateral = False
-        mode.hands = {"right": [0, 1, 2, 3]}
-        mode.lanes = [0, 1, 2, 3]
-        trial = MagicMock()
-        trial.kind = "chord"
-        trial.onsets = {1: 0.2}
-        trial.hold_released = [1]
-        trial.incorrect_presses = [(1, 0.3)]
-        trial.fingers = [0, 1]
-        trial.targets = [0, 1]
-        trial.keys_pressed = []
-        for cls in ("late_chord", "no_hold", "leak_fail", "partial"):
-            text = mode._feedback_text(trial, cls, False, False, 1)
-            self.assertEqual(fb.offending(text), [], f"{cls}: {text!r}")
-            self.assertTrue(text)
-        over = mode._feedback_text(trial, "over_force", True, False)
-        self.assertEqual(fb.offending(over), [], over)
+        self.assertFalse(hasattr(ChordsMode, "_feedback_text"))
 
 
 class EchoWordingTests(unittest.TestCase):

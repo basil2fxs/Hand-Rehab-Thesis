@@ -300,7 +300,10 @@ fsr:
   # press instead of from these figures.
   #
   # Anything measured by the in-app calibration overrides these. Treat
-  # them as the starting point for an uncalibrated device.
+  # them as the starting point for an uncalibrated device. They date
+  # from the 0.40 trigger fraction; the calibration every session runs
+  # now sets 0.30 of the gap, capped (calibration_profile.py), so a
+  # calibrated hand triggers more easily than these figures.
   #
   # RELEASE VALUES ARE CAPPED BY THE DETECTOR, so they are written here
   # already capped rather than being silently rewritten at runtime.
@@ -872,23 +875,27 @@ pattern:
   # the patient a pattern exists. Knowing about it makes the learning
   # worse after stroke, not better.
 
-  # A take is 5 loops of the 12-note sequence = 60 presses, roughly a
-  # minute. Ten takes plus the warm-up run 12 to 25 minutes depending
-  # on the patient's pace. With Both hands the loops are twice as
-  # long, so the mode halves this (5 -> 3 loops of 24 = 72 presses)
-  # to keep takes near the same length.
-  soc_cycles_per_block: 5
+  # A take is 4 loops of the 12-note sequence = 48 presses, under a
+  # minute. Ten takes plus the warm-up run about 10 to 18 minutes
+  # depending on the patient's pace. 48 matches the 50-trial blocks
+  # current serial reaction time studies use with a 12-item sequence
+  # (Oliveira et al. 2024), and the first loop of every take still
+  # leaves 36 presses for the take's RT mean. It was 5 loops (60),
+  # which players found long. With Both hands the loops are twice as
+  # long, so the mode halves this (4 -> 2 loops of 24 = 48 presses).
+  soc_cycles_per_block: 4
   # Settling-in presses before the first take. Not analysed; they let
   # the hand find the keys and surface any calibration problem before
-  # data that matters.
-  warmup_trials: 20
+  # data that matters. One loop's worth.
+  warmup_trials: 12
   # Take 1 is mixed-up material every session: it tracks how fast the
   # patient is in general, so later sessions can tell "faster overall"
   # apart from "knows the riff". A multiple of 8 so the shuffle-bag
   # balances both hands exactly in bimanual play, not just the 4-lane
   # unilateral case; changing this away from a multiple of 8 still
   # runs, but bimanual hand balance is then only within one trial.
-  random_block_trials: 64
+  # 48, the same length as every other take.
+  random_block_trials: 48
   # How many unfamiliar sequences the patient's pool holds. Which two
   # a session uses rotates block to block so none of them gets
   # familiar. Some participants' material only admits 3; the pool
@@ -1078,11 +1085,17 @@ syllables:
   words_per_block: 40
   round_size: 10
   break_s: 30
-  # Free taps along with the tick before the first word: warms the
-  # hand up, checks the sensors are seeing the child's presses, and
-  # gives the analysis a tapping-steadiness reading every session.
-  # Five is also the ceiling (the mode clamps anything higher).
-  warmup_taps: 5
+  # The prompt: a set still unanswered at prompt_at of its fall buzzes
+  # the right finger once. It fades word by word: off after
+  # prompt_fade_after sets of that word answered right before any
+  # buzz, back on after prompt_return_after wrong first presses in a
+  # row or a set that left the screen. The learning measure is the
+  # share of sets answered right BEFORE the buzz. prompt false turns
+  # it off for the whole block.
+  prompt: true
+  prompt_at: 0.75
+  prompt_fade_after: 2
+  prompt_return_after: 2
   # Seconds the whole word is shown and spoken before the syllables
   # are modelled.
   attend_s: 1.5
@@ -1273,7 +1286,7 @@ buzz_hunt:
   # is delivered with no host-side quantisation, it reaches full
   # amplitude, and it sits inside the 50 to 200 ms band Kaaresoja and
   # Linjama (2005) found usable on a phone motor. The mode clamps
-  # anything under 50. Same length as the span stage's pulses, and
+  # anything under 100. Same length as the span stage's pulses, and
   # under motor.cue_ms so it reads as a stimulus, not a cue.
   loc_pulse_ms: 150
   # What gets harder instead: the response window, in seconds,
@@ -1532,7 +1545,7 @@ rhythm:
   #             beat does not suit a player.
   #
   # Measured on a fake wire at 60 Hz through the real engine with the
-  # shipping numbers (lead 150, buzzer latency 45): the STIM command
+  # then-shipping numbers (lead 150, buzzer latency 45): the STIM command
   # led the scored beat by 196 ms on average (range 187 to 206, so
   # jitter within one frame either side) while the tone stayed on the
   # beat. A simulated reactor pressing 200 ms after the felt buzz
@@ -1545,19 +1558,25 @@ rhythm:
   # In feedback mode the STIM followed the press by 8 to 23 ms: the
   # press is scored on the next frame and the command leaves then.
   tactile_mode: lead
-  # Reaction allowance for lead mode, in ms. 150 is the fastest
-  # healthy touch reaction time in the literature (Robinson 1934,
-  # via Kosinski's 2013 review); Bao et al. 2019 put vibrotactile
-  # simple RT at about 200 ms in young adults and 250 ms in older
-  # adults with coin ERM tactors, so a reactor starts a little late
-  # and adaptation raises the lead toward them within three updates.
-  buzz_lead_ms: 150
-  # Adaptation: every buzz_lead_every scored hits, take the median of
-  # the last buzz_lead_window hit offsets (Perfect, Great, Good only;
-  # Early, Late and Miss are excluded so one wild press cannot move
-  # the cue) and move the lead by buzz_lead_gain times that median,
-  # at most buzz_lead_step_ms per update, clamped to 0 and
-  # buzz_lead_max_ms. A late median raises the lead, an early one
+  # Reaction allowance for lead mode, in ms. Bao et al. 2019 put
+  # simple reaction time to a buzz at about 200 to 230 ms in young
+  # adults and 250 to 330 ms in older adults, a coin motor added
+  # about 45 ms over a lab tactor in the same study, and this rig's
+  # motor class takes 87 ms to reach half strength (Precision
+  # Microdrives 310-103 datasheet). 350 lands a typical reactor near
+  # the beat from the first note. It was 150 (the fastest healthy
+  # touch reaction time, Robinson 1934 via Kosinski 2013), which
+  # players felt as every buzz arriving too late to act on.
+  buzz_lead_ms: 350
+  # Adaptation: every buzz_lead_every scored presses, take the median
+  # of the last buzz_lead_window press offsets (Perfect, Great, Good,
+  # Late and Early; a Miss has no offset) and move the lead by
+  # buzz_lead_gain times that median. Late and Early count because
+  # they are the presses that show the lead is wrong: with them left
+  # out, a player landing Late never moved the lead at all. The
+  # median over eight keeps one wild press from moving the cue. The
+  # move is at most buzz_lead_step_ms per update, clamped to 0 and
+  # buzz_lead_max_ms (700, for the slowest older reactors). A late median raises the lead, an early one
   # lowers it. Gain 0.5 on a 4-hit period converges in about three
   # updates without overshoot; 25 ms is under the Great window so one
   # update cannot flip a hit into a miss. A median inside
@@ -1573,7 +1592,7 @@ rhythm:
   buzz_lead_window: 8
   buzz_lead_every: 4
   buzz_lead_gain: 0.5
-  buzz_lead_max_ms: 400
+  buzz_lead_max_ms: 700
   buzz_lead_step_ms: 25
   buzz_lead_deadband_ms: 5
   # Bench-measured command-to-felt time for THIS rig's motors, in ms,

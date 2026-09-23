@@ -949,25 +949,116 @@ class PauseTests(unittest.TestCase):
         self.assertEqual(_raw_details(engine, "trial_restart"), [])
 
 
-class WarmupTests(unittest.TestCase):
+class NoWarmupTests(unittest.TestCase):
 
-    def test_the_warm_up_probe_logs_its_asynchronies(self) -> None:
-        engine, mode = _build_mode(warmup_taps=3)
-        self.assertEqual(mode.phase, "warmup")
-        t = 0.0
-        mode._tick(t)
-        beats = list(mode._warmup_beats)
-        for b in beats[mode.COUNT_IN_BEATS:]:
-            mode.queue_press(_press(0, b + 0.02))
-            mode._tick(b + 0.02)
-        self.assertEqual(mode._warmup_done, 3)
-        details = _raw_details(engine, "warmup_tap")
-        self.assertEqual(len(details), 3)
-        self.assertTrue(all("asyn_ms=" in d for d in details))
+    def test_there_is_no_warm_up_whatever_the_config_asks(self) -> None:
+        engine, mode = _build_mode(warmup_taps=5)
+        self.assertEqual(mode.phase, "gap")
+        self.assertEqual(mode.warmup_total, 0)
+        stats = mode.block_stats()
+        self.assertEqual(stats["warmup_taps"], 0)
+        self.assertIsNone(stats["warmup_asyn_mean_ms"])
 
-    def test_the_warm_up_is_capped_however_the_config_asks(self) -> None:
-        engine, mode = _build_mode(warmup_taps=50)
-        self.assertEqual(mode.warmup_total, mode.WARMUP_TAPS_MAX)
+    def test_the_model_plays_no_buzz(self) -> None:
+        # The model used to roll all four motors for every syllable,
+        # which players felt as everything going off at the start of
+        # each word. Its stimulus call now carries buzz=False.
+        engine, mode = _build_mode()
+        _run_to_choose(mode)
+        model_calls = [c for c in engine.on_stim_multi.call_args_list
+                       if c.kwargs.get("buzz", True)]
+        self.assertEqual(model_calls, [])
+        engine.on_prompt_buzz.assert_not_called()
+
+
+class PromptTests(unittest.TestCase):
+    """The late prompt: the right finger buzzes once at prompt_at of
+    the fall if the set is still unanswered, and the row says whether
+    the answer came before it or after it."""
+
+    def test_an_unanswered_set_buzzes_the_right_finger_at_three_quarters(
+            self) -> None:
+        engine, mode = _build_mode()
+        _run_to_choose(mode)
+        t0, fall = mode._spawn_t, mode.fall_s
+        tlane = mode.option_set.target_lane
+        mode._tick(t0 + 0.74 * fall)
+        engine.on_prompt_buzz.assert_not_called()
+        mode._tick(t0 + 0.76 * fall)
+        engine.on_prompt_buzz.assert_called_once()
+        self.assertEqual(engine.on_prompt_buzz.call_args.args[0], tlane)
+        # Answered after the buzz: counted, scored Good, and classed
+        # as prompted.
+        _answer_set(mode, t0 + 0.8 * fall, delay=0.8 * fall)
+        rec = mode._sets[-1]
+        self.assertTrue(rec.prompted)
+        self.assertEqual(rec.pclass, "prompted_correct")
+        outcome = engine.log_trial.call_args.args[1]
+        self.assertEqual(outcome.label, "Good")
+        stim = engine.log_trial.call_args.kwargs["stimulus"]
+        self.assertIn("prompt=1", stim)
+        self.assertIn("pclass=prompted_correct", stim)
+
+    def test_an_answer_before_the_prompt_cancels_it(self) -> None:
+        engine, mode = _build_mode()
+        t = _run_to_choose(mode)
+        t0, fall = mode._spawn_t, mode.fall_s
+        t = _answer_set(mode, t, delay=0.4)
+        mode._tick(t0 + 0.9 * fall)
+        engine.on_prompt_buzz.assert_not_called()
+        rec = mode._sets[-1]
+        self.assertFalse(rec.prompted)
+        self.assertEqual(rec.pclass, "unprompted_correct")
+        self.assertEqual(engine.log_trial.call_args.args[1].label, "Great")
+
+    def test_a_prompted_answer_does_not_make_the_foils_harder(
+            self) -> None:
+        # Three right first presses in a row would move the rung up,
+        # but these three all came after the buzz: help, not skill.
+        engine, mode = _build_mode(rung=1)
+        t = _run_to_choose(mode)
+        for _ in range(3):
+            t0, fall = mode._spawn_t, mode.fall_s
+            mode._tick(t0 + 0.8 * fall)
+            t = _answer_set(mode, t0 + 0.85 * fall, delay=0.85 * fall)
+            self.assertEqual(mode._sets[-1].pclass, "prompted_correct")
+            t = _wait_for_next_set(mode, t)
+        self.assertEqual(mode.rung, 1)
+
+    def test_the_prompt_fades_per_word(self) -> None:
+        engine, mode = _build_mode()
+        _run_to_choose(mode)
+        self.assertTrue(mode._word_prompt_on())
+        mode._update_prompt_fade("unprompted_correct", missed=False)
+        self.assertTrue(mode._word_prompt_on())
+        mode._update_prompt_fade("unprompted_correct", missed=False)
+        self.assertFalse(mode._word_prompt_on())
+        mode._update_prompt_fade("unprompted_error", missed=False)
+        self.assertFalse(mode._word_prompt_on())
+        mode._update_prompt_fade("unprompted_error", missed=False)
+        self.assertTrue(mode._word_prompt_on())
+        mode._update_prompt_fade("unprompted_correct", missed=False)
+        mode._update_prompt_fade("unprompted_correct", missed=False)
+        self.assertFalse(mode._word_prompt_on())
+        mode._update_prompt_fade("no_response", missed=True)
+        self.assertTrue(mode._word_prompt_on())
+
+    def test_prompt_off_in_the_config_never_buzzes(self) -> None:
+        engine, mode = _build_mode(prompt=False)
+        _run_to_choose(mode)
+        t0, fall = mode._spawn_t, mode.fall_s
+        mode._tick(t0 + 0.9 * fall)
+        engine.on_prompt_buzz.assert_not_called()
+        self.assertIsNone(mode._prompt_due)
+
+    def test_block_stats_carry_the_unprompted_rate(self) -> None:
+        engine, mode = _build_mode()
+        t = _run_to_choose(mode)
+        _answer_set(mode, t, delay=0.4)
+        stats = mode.block_stats()["prompt"]
+        self.assertEqual(stats["classes"]["unprompted_correct"], 1)
+        self.assertEqual(stats["unprompted_correct_rate"], 1.0)
+        self.assertEqual(stats["n_prompted"], 0)
 
 
 class BlockStatsTests(unittest.TestCase):

@@ -609,7 +609,7 @@ class BatteryFlowTests(_BatteryHarness):
         hub = eng._screens["mode_select"]
         ok, label, reason = hub._battery_state()
         self.assertTrue(ok, reason)
-        self.assertEqual(label, "PLAY ALL  (A)")
+        self.assertEqual(label, "Play all")
         # A starts it from the hub.
         eng.show_mode_select()
         hub.handle_event(pygame.event.Event(
@@ -636,7 +636,7 @@ class BatteryFlowTests(_BatteryHarness):
                          ("reaction", "left"))
         eng.finish_block()
         _ok, label, _reason = hub._battery_state()
-        self.assertEqual(label, "PLAY ALL 2/11  (A)")
+        self.assertEqual(label, "Play all 2/11")
         hub.draw(pygame.Surface((1280, 800)))
 
     def test_the_stretch_step_says_so_on_the_card(self) -> None:
@@ -660,8 +660,7 @@ class BatteryFlowTests(_BatteryHarness):
         eng.begin_session("Mara", "40")
         ok, reason = eng.battery_available()
         self.assertFalse(ok)
-        self.assertEqual(reason,
-                         "Play all needs a main hand: pick one at login")
+        self.assertEqual(reason, "Needs the main hand from login")
         self.assertFalse(eng.start_battery())
         self.assertEqual(eng._screens["mode_select"]._battery_state()[0],
                          False)
@@ -863,7 +862,7 @@ class ProgressRowTests(unittest.TestCase):
         self.assertEqual(value_text("adaptive", 160.0), "160 BPM")
         self.assertEqual(value_text("reaction", None), "")
 
-    def test_a_second_go_that_came_in_under_is_said_plainly(self) -> None:
+    def test_a_second_go_that_came_in_under_gets_no_words(self) -> None:
         rows = self._rows([
             {"mode": "reaction", "hand": "right", "status": "completed",
              "summary": self._reaction(290.0)},
@@ -872,8 +871,12 @@ class ProgressRowTests(unittest.TestCase):
         ])
         rx = rows[("reaction", "right")]
         self.assertFalse(rx["better"])
-        # The direction, not a verdict on the round.
-        self.assertEqual(rx["short"], "22 ms behind")
+        # A dip keeps its two numbers and gets no sentence: nothing
+        # the player reads is a step down.
+        self.assertEqual(rx["short"], "")
+        self.assertEqual(rx["text"], "")
+        self.assertEqual((rx["first_text"], rx["latest_text"]),
+                         ("290 ms", "312 ms"))
 
 
 class ProgressStripTests(_BatteryHarness):

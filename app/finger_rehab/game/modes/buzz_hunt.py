@@ -260,15 +260,19 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-# The shortest command a fixed-amplitude ERM reliably delivers as a
-# felt pulse. Kaaresoja and Linjama (2005, World Haptics Conference,
-# pp. 471-472) rated phone-motor control signals and put the usable
-# band at 50 to 200 ms; under 50 ms the rotor has barely started
-# (lag about 40 ms for the 10 mm coin ERM class on this rig, Precision
-# Microdrives 310-103 datasheet) before current stops. Every FIXED
-# pulse this mode plays is clamped to it: loc_pulse_ms, span_pulse_ms
-# and gap_short_ms.
-FELT_PULSE_FLOOR_MS = 50.0
+# The shortest command this mode will ever send, whatever the config
+# or the legacy staircase asks for. Kaaresoja and Linjama (2005, World
+# Haptics Conference, pp. 471-472) put the usable band for a phone
+# motor at 50 to 200 ms, but the 310-103 class ERM on this rig takes
+# about 40 ms to start and 87 ms to reach half amplitude (Precision
+# Microdrives datasheet), so a 50 ms command ends before the motor is
+# at half strength. On this rig anything under 100 ms felt like a
+# twitch (docs/research/new_modes/ranked.md). 100 is the floor so a
+# buzz is always a buzz. Every pulse this mode plays is clamped to it:
+# loc_pulse_ms, span_pulse_ms, gap_short_ms and the legacy duration
+# staircase's floor. Nothing that adapts (the response-window ladder,
+# the gap staircase) can take a pulse under it.
+FELT_PULSE_FLOOR_MS = 100.0
 # A silent gap shorter than the motor's spin-down is not silent: the
 # 310-103 class stop time is about 115 ms after current off, so the
 # gap staircase never asks for a gap under this.
@@ -292,13 +296,12 @@ GAP_FLOOR_MS = 150.0
 # already running is cut to a blip.
 FIRMWARE_HOLD_S = 0.150
 # The LEGACY duration staircase's floor (buzz_hunt.duration_staircase
-# true): the 20 ms command floor plus one-frame stretch means requests
-# under about 40 ms all deliver much the same twitch (measured
-# 2026-08). Kept exactly as it was so the flag reproduces earlier
-# blocks. It is a host-side floor, not a perceptual one, which is the
-# reason localisation no longer runs a duration staircase (module
-# docstring: WHY THE PULSE IS FIXED).
-LEVEL_FLOOR_MS = 40.0
+# true). It was 40 ms, a host-side number rather than a felt one, and
+# a good player walked the pulse down to a twitch. It now shares the
+# felt-pulse floor, so even the legacy flag cannot make a buzz too
+# short to feel. Earlier blocks that reached under 100 ms replay with
+# their bottom levels lifted to 100.
+LEVEL_FLOOR_MS = FELT_PULSE_FLOOR_MS
 # Frame quantisation on the early-STOP path: steps below one display
 # frame ask for differences the hardware cannot express.
 MIN_STEP_MS = 17.0
@@ -373,6 +376,14 @@ def parse_lanes(token) -> list[int]:
 # function, so what was played and what is logged cannot drift apart.
 
 
+def _felt(ms) -> float:
+    """A pulse length no shorter than the felt-pulse floor. The last
+    check before a pulse is planned: the constructor already clamps
+    every configured length, and this catches anything that slips past
+    it (a hand-edited trial, a replayed legacy row)."""
+    return max(FELT_PULSE_FLOOR_MS, float(ms))
+
+
 def pulses_from_params(waveform: str,
                        p: dict) -> list[tuple[int, float, float]]:
     if waveform == "buzz":
@@ -383,17 +394,17 @@ def pulses_from_params(waveform: str,
         if "distractor_lane" in p:
             lead_s = float(p["distractor_lead_ms"]) / 1000.0
             out.append((int(float(p["distractor_lane"])), 0.0,
-                        float(p["distractor_ms"])))
-        out.append((int(float(p["lane"])), lead_s, float(p["dur_ms"])))
+                        _felt(p["distractor_ms"])))
+        out.append((int(float(p["lane"])), lead_s, _felt(p["dur_ms"])))
         return out
     if waveform == "buzz_seq":
         seq = parse_lanes(p["seq"])
         ioi = float(p["ioi_ms"]) / 1000.0
-        dur = float(p["pulse_ms"])
+        dur = _felt(p["pulse_ms"])
         return [(lane, i * ioi, dur) for i, lane in enumerate(seq)]
     if waveform == "buzz_gap":
         lane = int(float(p["lane"]))
-        short = float(p["short_ms"])
+        short = _felt(p["short_ms"])
         gap = float(p["gap_ms"])
         if int(round(float(p["two"]))):
             return [(lane, 0.0, short),
@@ -691,7 +702,9 @@ class BuzzHuntMode(WaitSkip):
         self.distractor_lead_ms = max(0.0, float(distractor_lead_ms))
         self.span_start = max(2, int(span_start))
         self.span_pulse_ms = max(FELT_PULSE_FLOOR_MS, float(span_pulse_ms))
-        self.span_ioi_ms = max(self.span_pulse_ms + 100.0,
+        # Onset to onset: the pulse plus a full spin-down gap, so two
+        # buzzes on the same finger never run together into one.
+        self.span_ioi_ms = max(self.span_pulse_ms + GAP_FLOOR_MS,
                                float(span_ioi_ms))
         self.hebb_every = max(2, int(hebb_every))
         # The gap stage keeps its staircase (a gap IS a duration), but

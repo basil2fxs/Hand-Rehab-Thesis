@@ -92,6 +92,11 @@ def apply_cue_setting(engine, key: str, value: bool) -> None:
 
 
 class Screen:
+    # Where this frame's wait card wants the skip control (see
+    # draw_skip_chip). A block screen's card sets it while drawing and
+    # the screen reads it at the end of the frame.
+    _skip_at: tuple[int, int] | None = None
+
     def __init__(self, engine: "GameEngine") -> None:
         self.engine = engine
         self.theme: Theme = engine.theme
@@ -177,46 +182,58 @@ class Screen:
                   colour=self.theme.muted)
 
 
-# Bottom-centre band the skip control sits in, measured up from the
-# bottom edge. Above the mode message chip (height - 42) on the
-# gameplay screen and above Buzz Hunt's own bottom line, so the three
-# never stack on each other.
+# Bottom-centre band the skip control falls back to when no card is
+# up to hold it, measured up from the bottom edge.
 SKIP_CHIP_BOTTOM_GAP = 110
+
+# Card titles for waits that have no card of their own. The GET READY
+# countdown, the Muscle Memory rest card and the per-mode break screens
+# draw their own and put the skip control inside them.
+WAIT_CARD_TITLES = {
+    "prep": "GET READY",
+    "rest": "REST",
+    "long_rest": "REST",
+    "fatigue_rest": "REST",
+    "break": "BREAK",
+    "settle": "REST YOUR FINGERS",
+}
 
 
 def draw_skip_chip(surf: pygame.Surface, layout: Layout, theme: Theme,
-                   engine) -> None:
+                   engine, centre: tuple[int, int] | None = None,
+                   ) -> pygame.Rect | None:
     """The one skip control, drawn the same on every block screen.
 
-    Reads the wait straight off the engine, so a mode that arms a wait
-    gets the control for free and no screen has to know which waits
-    exist. The rect it draws at is stored on the engine, which is what
-    a click is tested against: what the patient aims at is what
-    answers. Waits too short to aim at draw nothing (see
-    rest_skip.DEFAULT_CHIP_MIN_S), and the keyboard skip still works
-    on those.
+    `centre` puts it inside the wait's card, just under the countdown,
+    which is where the player is already looking. Without one it falls
+    back to the bottom band. Reads the wait straight off the engine,
+    so a mode that arms a wait gets the control for free. The rect it
+    draws at is stored on the engine, which is what a click is tested
+    against: what the patient aims at is what answers. Waits too short
+    to aim at draw nothing (see rest_skip.DEFAULT_CHIP_MIN_S), and the
+    keyboard skip still works on those.
     """
     engine._skip_chip_rect = None
     try:
         view = engine.current_wait_view()
     except Exception:
-        return
+        return None
     if not view or not view.get("show"):
-        return
+        return None
     if getattr(engine, "paused", False):
         # A paused block is already frozen; offering to skip a wait
         # that is not counting down would be a lie.
-        return
-    remaining = max(0.0, float(view.get("remaining", 0.0) or 0.0))
-    label = f"{view.get('label', 'Skip')}  (Space)   {remaining:.0f}s"
+        return None
+    # The card shows the seconds, so the control only names the key.
+    label = f"{view.get('label', 'Skip')}  (Space)"
     font = layout.font(FONT_BODY)
     text_surf = font.render(label, True, theme.accent)
     pad_x, pad_y = 20, 10
     rect = pygame.Rect(0, 0,
                        text_surf.get_width() + pad_x * 2,
                        text_surf.get_height() + pad_y * 2)
-    rect.center = (layout.width // 2,
-                   layout.height - SKIP_CHIP_BOTTOM_GAP)
+    rect.center = centre or (layout.width // 2,
+                             layout.height - SKIP_CHIP_BOTTOM_GAP)
     pill = pygame.Surface(rect.size, pygame.SRCALPHA)
     pygame.draw.rect(pill, (*theme.accent, 40), pill.get_rect(),
                      border_radius=rect.height // 2)
@@ -225,6 +242,56 @@ def draw_skip_chip(surf: pygame.Surface, layout: Layout, theme: Theme,
     surf.blit(pill, rect.topleft)
     surf.blit(text_surf, text_surf.get_rect(center=rect.center))
     engine._skip_chip_rect = rect
+    return rect
+
+
+def wait_card_view(engine) -> dict | None:
+    """The wait a generic card should show, or None."""
+    try:
+        view = engine.current_wait_view()
+    except Exception:
+        return None
+    if not view or not view.get("show"):
+        return None
+    if getattr(engine, "paused", False):
+        return None
+    return view
+
+
+def draw_wait_card(surf: pygame.Surface, layout: Layout, theme: Theme,
+                   view: dict, accent: tuple[int, int, int],
+                   ) -> tuple[int, int]:
+    """Centre card for a wait: what it is, the seconds left, and room
+    underneath for the skip control. Returns where the control goes.
+
+    One card per wait, so the countdown and the way out of it are read
+    together instead of the control sitting on its own at the bottom.
+    """
+    w, h = 440, 250
+    dim = pygame.Surface(surf.get_size(), pygame.SRCALPHA)
+    dim.fill((0, 0, 0, 60))
+    surf.blit(dim, (0, 0))
+    card = pygame.Rect(0, 0, w, h)
+    card.center = (layout.width // 2, layout.height // 2)
+    body = pygame.Surface(card.size, pygame.SRCALPHA)
+    pygame.draw.rect(body, (*theme.background, 246), body.get_rect(),
+                     border_radius=22)
+    pygame.draw.rect(body, (*accent, 150), body.get_rect(), 3,
+                     border_radius=22)
+    surf.blit(body, card.topleft)
+    title = WAIT_CARD_TITLES.get(str(view.get("kind", "")), "NEXT UP")
+    draw_text(surf, title, (card.centerx, card.y + 46), theme, layout,
+              pt=FONT_H1, centre=True, colour=theme.muted)
+    remaining = float(view.get("remaining", 0.0) or 0.0)
+    if remaining > 0.05:
+        draw_text(surf, f"{math.ceil(remaining)}",
+                  (card.centerx, card.y + 124), theme, layout, pt=96,
+                  centre=True, colour=accent)
+    else:
+        draw_text(surf, "Whenever you're ready",
+                  (card.centerx, card.y + 124), theme, layout,
+                  pt=FONT_H2, centre=True, colour=theme.foreground)
+    return (card.centerx, card.bottom - 42)
 
 
 def _chip(surf: pygame.Surface, layout: Layout,
@@ -1363,58 +1430,27 @@ class ModeSelectScreen(Screen):
     # produces is actually a reaction time. begin_classic_block survives
     # for old sessions and tests, it just is not offered here.
     #
-    # Card descriptions follow one line pattern: what you do + what it
-    # helps with, in patient-readable words. Each claim is drawn from
-    # the mode's own docstring research case and never overclaims:
-    # measurement modes (Reaction, Buzz Hunt) say "measures", training
-    # modes say "trains" or "builds" only where the docstring's
-    # evidence base carries it (Taud 2021 for force tracking, Carey
-    # 2011 for touch discrimination, the National Reading Panel
-    # meta-analysis for sound awareness). Rhythm and Mirror say
-    # "practise" because their docstrings mark the therapy evidence
-    # contested. A layout test pins every description inside its card
-    # in both columns.
+    # One short line per card, a few words on what you do. The longer
+    # what-it-trains lines made the menu busy; the research case for
+    # each mode lives in its own docstring, not on the menu.
+    #
+    # The pattern card must not mention that a sequence repeats, or
+    # even use the word "pattern": the patient can read this screen,
+    # and explicit knowledge of the sequence impairs the implicit
+    # learning the mode measures (Boyd and Winstein 2003/2004; see
+    # modes/pattern.py). Titled "Muscle Memory" for the same reason;
+    # the internal mode key stays "pattern".
     MODES = [
-        ("reaction", "Reaction",
-         "Press the key that lights up, fast. Measures eye-to-hand speed."),
-        ("adaptive", "Adaptive",
-         "Hit cued keys as the pace adapts to you. Keeps practice at "
-         "the right challenge."),
-        # The pattern card must not mention that a sequence repeats, or
-        # even use the word "pattern": the patient can read this
-        # screen, and explicit knowledge of the sequence impairs the
-        # implicit learning the mode measures (Boyd and Winstein
-        # 2003/2004; see modes/pattern.py). Titled "Muscle Memory"
-        # rather than "Patterns" for the same reason (audit finding
-        # #10) -- the internal mode key stays "pattern".
-        ("pattern", "Muscle Memory",
-         "Record takes of a piano riff, session by session. Builds "
-         "muscle memory."),
-        ("chords", "Chords",
-         "Press 2-4 keys as one chord. Trains fingers to move "
-         "together, and to stay still."),
-        ("rhythm", "Rhythm",
-         "Press in time with a song. Practises movement timing to "
-         "a beat."),
-        ("syllables", "Syllables",
-         "Catch the right part of the word as it falls. Builds the "
-         "sound skills reading rests on."),
-        ("mirror", "Mirror",
-         "Same finger, both hands, pressed as one. Practises moving "
-         "the hands together."),
-        ("force_pilot", "Force Pilot",
-         "Keep your press inside a moving corridor. Trains smooth "
-         "force control."),
-        ("buzz_hunt", "Buzz Hunt",
-         "Feel which finger buzzed and press it. Measures and trains "
-         "the sense of touch."),
-        # Echo is measurement-first like Reaction and Buzz Hunt, so
-        # the card says "measures" and promises nothing therapeutic.
-        # Unlike the pattern card there is no secret to keep: explicit
-        # memorising IS the task here.
-        ("echo", "Echo",
-         "Watch the keys light up, then play them back in order. "
-         "Measures memory span."),
+        ("reaction", "Reaction", "Press the key that lights up"),
+        ("adaptive", "Adaptive", "The pace follows you"),
+        ("pattern", "Muscle Memory", "Play takes of a piano riff"),
+        ("chords", "Chords", "Press keys together"),
+        ("rhythm", "Rhythm", "Press in time with a song"),
+        ("syllables", "Syllables", "Catch the right word part"),
+        ("mirror", "Mirror", "Both hands as one"),
+        ("force_pilot", "Force Pilot", "Keep a steady press"),
+        ("buzz_hunt", "Buzz Hunt", "Feel the buzz, press that finger"),
+        ("echo", "Echo", "Watch, then play it back"),
     ]
     # Every stage of these two needs a real analogue signal (a
     # continuous force trace or the vibration motors themselves) --
@@ -1542,13 +1578,21 @@ class ModeSelectScreen(Screen):
         self.battery_btn = Button(
             pygame.Rect(720, engine.layout.height - 58, 300,
                         BUTTON_H - 16),
-            "PLAY ALL  (A)", self._battery,
+            "Play all", self._battery,
             self.theme, self.layout,
         )
         self.skip_btn = Button(
             pygame.Rect(1036, engine.layout.height - 58, 150,
                         BUTTON_H - 16),
-            "Skip step  (S)", self._skip_step,
+            "Skip step", self._skip_step,
+            self.theme, self.layout,
+        )
+        # The session's hand, top-right. Every game plays it; this is
+        # the one place to change it without logging out.
+        self.hand_btn = Button(
+            pygame.Rect(engine.layout.width - 40 - 190, 26, 190,
+                        BUTTON_H - 16),
+            "Right hand", self._change_hand,
             self.theme, self.layout,
         )
         self.battery_note = ""
@@ -1582,14 +1626,14 @@ class ModeSelectScreen(Screen):
             progress = None
         if isinstance(progress, dict):
             if progress.get("finished"):
-                return False, "PLAY ALL DONE", ""
-            return (True, f"PLAY ALL {progress['done']}/"
-                          f"{progress['of']}  (A)", "")
+                return False, "Play all done", ""
+            return (True, f"Play all {progress['done']}/"
+                          f"{progress['of']}", "")
         try:
             ok, reason = self.engine.battery_available()
         except Exception as e:
             ok, reason = False, str(e)
-        return ok, "PLAY ALL  (A)", ("" if ok else reason)
+        return ok, "Play all", ("" if ok else reason)
 
     def _battery(self) -> None:
         ok, _label, reason = self._battery_state()
@@ -1603,6 +1647,18 @@ class ModeSelectScreen(Screen):
     def _skip_step(self) -> None:
         if self._battery_pending():
             self.engine.skip_protocol_step()
+
+    HAND_LABELS = {"right": "Right hand", "left": "Left hand",
+                   "both": "Both hands"}
+
+    def _session_hand_label(self) -> str:
+        hand = getattr(self.engine, "_session_hand", None)
+        return self.HAND_LABELS.get(str(hand), "")
+
+    def _change_hand(self) -> None:
+        show = getattr(self.engine, "show_hand_choice", None)
+        if callable(show) and getattr(self.engine, "_session_hand", None):
+            show()
 
     def _can_calibrate(self) -> bool:
         try:
@@ -1663,6 +1719,21 @@ class ModeSelectScreen(Screen):
             self.engine.begin_game("mirror")
             return
         self.engine.cfg.data.setdefault("game", {})["mode"] = mode_key
+        # The hand was chosen once at login, so a game starts straight
+        # from its card. The per-game hand picker only remains for a
+        # session that never chose one.
+        if getattr(self.engine, "_session_hand", None):
+            started = self.engine.begin_game(mode_key)
+            if self.engine.screen_obj is self:
+                refusal = (getattr(self.engine, "pattern_refusal", "")
+                           if mode_key == "pattern" else "")
+                if refusal:
+                    self.pick_note = refusal
+                elif not started:
+                    self.pick_note = (self.NO_HARDWARE_NOTE
+                                      if mode_key in self.NEEDS_HARDWARE
+                                      else self.NO_SECOND_BOARD_NOTE)
+            return
         self.engine.show_setup()
 
     # Number-key shortcuts for the ten cards, 1-9 then 0, matching
@@ -1683,6 +1754,8 @@ class ModeSelectScreen(Screen):
                                    self.battery_btn]
         if self._battery_pending():
             controls.append(self.skip_btn)
+        if self._session_hand_label():
+            controls.append(self.hand_btn)
         for b in controls:
             b.handle_event(e)
         if e.type == pygame.KEYDOWN and e.key in self._DIGIT_KEYS:
@@ -1704,6 +1777,9 @@ class ModeSelectScreen(Screen):
             self._battery()
         elif e.type == pygame.KEYDOWN and e.key == pygame.K_s:
             self._skip_step()
+        # H changes the session's hand.
+        elif e.type == pygame.KEYDOWN and e.key == pygame.K_h:
+            self._change_hand()
 
     # Descriptions render as up to two wrapped lines under the title.
     # The cap is part of the card contract: a description that needs a
@@ -1899,13 +1975,28 @@ class ModeSelectScreen(Screen):
         _draw_header(surf, "Pick a game",
                      self.pick_note or self.eeg_recording_line(),
                      self.theme, self.layout)
-        draw_session_strip(
-            surf,
-            pygame.Rect(40, self.STRIP_TOP, self.layout.width - 80,
-                        SESSION_STRIP_H),
-            self.engine, self.theme, self.layout,
-            show_flourish=True,
-        )
+        # The strip only once there is something on it: an empty
+        # "No games played yet" bar was one more line to read.
+        try:
+            any_played = bool(self.engine.session_games_log())
+        except Exception:
+            any_played = False
+        try:
+            battery_on = self.engine.battery_progress() is not None
+        except Exception:
+            battery_on = False
+        if any_played or battery_on:
+            draw_session_strip(
+                surf,
+                pygame.Rect(40, self.STRIP_TOP, self.layout.width - 80,
+                            SESSION_STRIP_H),
+                self.engine, self.theme, self.layout,
+                show_flourish=True,
+            )
+        hand_label = self._session_hand_label()
+        if hand_label:
+            self.hand_btn.label = hand_label
+            self.hand_btn.draw(surf)
         try:
             played = set(self.engine.session_modes_played())
         except Exception:
@@ -2001,7 +2092,7 @@ class ModeSelectScreen(Screen):
                 draw_text(surf, badge,
                           (b.rect.right - 14 - badge_w, b.rect.y + 14),
                           self.theme, self.layout, pt=FONT_SMALL,
-                          centre=False, colour=self.theme.error)
+                          centre=False, colour=self.theme.muted)
             if key == "mirror" and self._second_board_missing():
                 # Same up-front rule for mirror on a one-board rig:
                 # bilateral-only, so with one board the second hand's
@@ -2012,7 +2103,7 @@ class ModeSelectScreen(Screen):
                 draw_text(surf, badge,
                           (b.rect.right - 14 - badge_w, b.rect.y + 14),
                           self.theme, self.layout, pt=FONT_SMALL,
-                          centre=False, colour=self.theme.error)
+                          centre=False, colour=self.theme.muted)
             elif key in played and not (
                     no_hardware and key in self.NEEDS_HARDWARE):
                 # A tick, not a lock: a played mode is still one press
@@ -2059,7 +2150,13 @@ class ModeSelectScreen(Screen):
         else:
             bnote = self.battery_note or reason
             if bnote:
-                draw_text(surf, bnote,
+                # Clipped to the room left of the screen edge: a long
+                # reason used to run straight off it.
+                room = (self.layout.width - 16
+                        - (self.battery_btn.rect.right + 16))
+                draw_text(surf,
+                          _fit_text(bnote, self.layout.font(FONT_SMALL),
+                                    room),
                           (self.battery_btn.rect.right + 16,
                            self.battery_btn.rect.centery - 8),
                           self.theme, self.layout, pt=FONT_SMALL,
@@ -2598,18 +2695,13 @@ class GameplayScreen(Screen):
                     self._spawn_popup(ls, self.theme.foreground, "",
                                        glyph=popup_glyph)
                     continue
-                # Float a quick popup above the lane that just scored.
-                # `popup_text` (the outcome label) wins over whatever
-                # message happens to be live, so the popup always
-                # describes THIS trial. Reaction skips the popup: its
-                # RT chip is the trial feedback (bigger there, tinted
-                # by outcome), and the rising tier text crossed the
-                # chip at exactly the moment the patient should read
-                # the number (before/after screenshots, upgrade
-                # folder). The tile flash stays.
+                # Only an explicit popup_text floats; a live mode
+                # message never does, or every flash would repeat it
+                # over the lanes. The engine sends none per press now,
+                # so this is quiet unless a caller asks. Reaction never
+                # floats one: the tile flash is its whole feedback.
                 if getattr(self.engine, "current_block", "") != "reaction":
-                    self._spawn_popup(ls, colour,
-                                      popup_text or self.message)
+                    self._spawn_popup(ls, colour, popup_text or "")
 
     def _spawn_popup(self, lane: LaneStrip,
                       colour: tuple[int, int, int],
@@ -2661,11 +2753,14 @@ class GameplayScreen(Screen):
         cx = self.layout.width // 2
         self._popups = [p for p in self._popups
                         if not getattr(p, "is_banner", False)]
+        # Between the tile baseline (height - 140) and the bottom
+        # message band (height - 42), touching neither, and still: a
+        # banner that rises climbs into the tiles it must stay off.
         banner = FloatingText(
-            text, (cx, self.layout.height - 88), self.theme.success,
-            font_pt=FONT_TITLE - 4,
+            text, (cx, self.layout.height - 96), self.theme.success,
+            font_pt=FONT_H1,
             lifetime_s=1.8,
-            rise_px=30,
+            rise_px=0,
         )
         banner.is_banner = True
         self._popups.append(banner)
@@ -2793,6 +2888,7 @@ class GameplayScreen(Screen):
             "total": total,
             "msg": live_msg,
             "msg_colour": self._message_colour(),
+            "msg_kind": getattr(self, "message_kind", "info"),
             "best": self._reaction_best(),
         }
 
@@ -2874,6 +2970,9 @@ class GameplayScreen(Screen):
         surf.fill(self.theme.background)
         cx = self.layout.width // 2
         block = getattr(self.engine, "current_block", "")
+        # Where this frame's card wants the skip control; set by the
+        # card that draws, read at the end of the frame.
+        self._skip_at = None
         # Reaction runs on a frame that must not move while a trial is
         # open. `static` says this is that block at all; `frozen` says
         # a trial is open right now, which is when every HUD number
@@ -2917,17 +3016,24 @@ class GameplayScreen(Screen):
         # Centre: big SCORE with a brief pulse on change. Single
         # focal element above the lane row so the patient's eye
         # always returns here for "how am I doing".
+        # Reaction draws it smaller and higher: the score is not what
+        # that mode is about, and a big number above the tiles pulls
+        # the eye off the stimulus.
+        score_label_y, score_y, score_base_pt = (
+            (30, 64, FONT_H1) if block == "reaction"
+            else (36, 96, FONT_TITLE))
         draw_text(surf, "SCORE",
-                  (cx, 36), self.theme, self.layout, pt=FONT_SMALL + 2,
+                  (cx, score_label_y), self.theme, self.layout,
+                  pt=FONT_SMALL + 2,
                   centre=True, colour=self.theme.muted)
         age_pulse = time.perf_counter() - self._score_pulse_t
         if age_pulse < 0.35 and self._score_pulse_t > 0:
             pulse_scale = 1.0 + (1.0 - age_pulse / 0.35) * 0.18
-            score_pt = int(FONT_TITLE * pulse_scale)
+            score_pt = int(score_base_pt * pulse_scale)
         else:
-            score_pt = FONT_TITLE
+            score_pt = score_base_pt
         draw_text(surf, f"{self._held('score', self.engine.score)}",
-                  (cx, 96), self.theme, self.layout, pt=score_pt,
+                  (cx, score_y), self.theme, self.layout, pt=score_pt,
                   centre=True, colour=self.theme.accent)
 
         # Streak pill. Only shows when streak >= 2 - a streak of 1
@@ -2935,16 +3041,11 @@ class GameplayScreen(Screen):
         # celebrating yet, and an empty streak chip is dead pixels
         # in the patient's focal area. Goes gold at 5+ to mark the
         # "you're really on a run" moment.
-        #
-        # Mirror mode parks the chip at the top-LEFT (mirroring the
-        # mode pill at the top-right) so the centre column under the
-        # score stays clear for the "PRESS TOGETHER" bracket + label.
-        # Before, the chip at (cx, 170) collided with the bracket
-        # sitting just above the lane tiles in bilateral layout. All
-        # other modes keep the centred chip - the bracket only
-        # appears when 2+ lanes are lit at once.
         streak = self._held("streak", self.engine.hit_streak)
-        if streak >= 2:
+        # Reaction shows no streak at all: its screen carries the
+        # stimulus, a small score and the RT in the corner, nothing
+        # that changes with how the last trial went.
+        if streak >= 2 and block != "reaction":
             streak_label = f"x{streak} STREAK"
             if streak >= 10:
                 streak_colour = self.theme.success    # bright green
@@ -2954,42 +3055,26 @@ class GameplayScreen(Screen):
                 # Base tier wears the mode's accent so even a small
                 # streak reinforces which game the patient is in.
                 streak_colour = mode_accent
-            # Mirror AND chords park the chip top-left: both draw the
-            # PRESS TOGETHER bracket above the tiles, and the centred
-            # chip sat exactly where the bracket bar + label go.
-            # Reaction parks it top-RIGHT under the mode pill instead:
-            # its feedback chip renders larger and higher (the RT
-            # number is the mode's whole feedback loop), and the
-            # centred streak chip at (cx, 170) sat inside it.
-            block_now = getattr(self.engine, "current_block", None)
-            side_chip = block_now in ("mirror", "chords")
-            under_pill = block_now == "reaction"
-            if side_chip or under_pill:
-                # Render the chip pre-sized so it can be edge-anchored
-                # against the same 28 px margin the mode pill uses:
-                # left at the mode-pill height for mirror/chords,
-                # right just below the mode pill for reaction.
-                chip_pt = FONT_SMALL + 2
-                chip_font = self.layout.font(chip_pt)
-                chip_text = chip_font.render(
-                    streak_label, True, (255, 255, 255))
-                pad_x = 12
-                pad_y = 4
-                chip_w = chip_text.get_width() + pad_x * 2
-                chip_h = chip_text.get_height() + pad_y * 2
-                chip_rect = pygame.Rect(28, 30 - chip_h // 2 + 12,
-                                         chip_w, chip_h)
-                if under_pill:
-                    chip_rect.topright = (self.layout.width - 28, 66)
-                pygame.draw.rect(surf, streak_colour, chip_rect,
-                                  border_radius=chip_h // 2)
-                surf.blit(chip_text,
-                           chip_text.get_rect(center=chip_rect.center))
-            else:
-                self._draw_chip(surf, (cx, 170),
-                                 streak_label,
-                                 streak_colour,
-                                 font_pt=FONT_BODY)
+            # Every mode parks the chip top-left, level with the mode
+            # pill on the right. Centred at (cx, 170) it sat over the
+            # PRESS TOGETHER bracket in mirror and chords, and in the
+            # middle of the echo sequence the player is watching.
+            # Rendered pre-sized so it can be edge-anchored against
+            # the same 28 px margin the mode pill uses.
+            chip_pt = FONT_SMALL + 2
+            chip_font = self.layout.font(chip_pt)
+            chip_text = chip_font.render(
+                streak_label, True, (255, 255, 255))
+            pad_x = 12
+            pad_y = 4
+            chip_w = chip_text.get_width() + pad_x * 2
+            chip_h = chip_text.get_height() + pad_y * 2
+            chip_rect = pygame.Rect(28, 30 - chip_h // 2 + 12,
+                                     chip_w, chip_h)
+            pygame.draw.rect(surf, streak_colour, chip_rect,
+                              border_radius=chip_h // 2)
+            surf.blit(chip_text,
+                       chip_text.get_rect(center=chip_rect.center))
 
         # Mode badge top-right. Small pill in the mode's accent
         # colour. Keeps the visual identity from the mode-select
@@ -3081,6 +3166,7 @@ class GameplayScreen(Screen):
                     if self.message and time.perf_counter() < msg_until
                     else "")
         msg_colour = self._message_colour()
+        msg_kind = getattr(self, "message_kind", "info")
         if static:
             # Held from the moment the wait armed. A chip that arrives
             # or times out mid-trial is a luminance step in the middle
@@ -3090,7 +3176,20 @@ class GameplayScreen(Screen):
             # vanishing 800 ms into a 2.5 s wait.
             msg_text = self._held("msg", msg_text)
             msg_colour = self._held("msg_colour", msg_colour)
-        if (msg_text and not pattern_resting
+            msg_kind = self._held("msg_kind", msg_kind)
+        # A rest or break card owns the middle of the screen and says
+        # the same thing with room to spare, so the chip stays out.
+        wait_card_up = self._wait_card_due()
+        if (static and msg_text and msg_kind != "cue"
+                and not self.engine.exit_overlay_active):
+            # Reaction: the RT and any prompt as one small grey line
+            # in the top-right corner under the mode pill. Nothing in
+            # the centre but the stimulus. The lab's "Ready" (kind
+            # cue) is the one exception below: it is the S1 the CNV is
+            # measured from, so it stays where the eyes are.
+            self._draw_corner_readout(surf, msg_text)
+            msg_text = ""
+        if (msg_text and not pattern_resting and not wait_card_up
                 and not self.engine.exit_overlay_active):
             age = time.perf_counter() - self._message_born
             # Reaction's chip IS the mode's feedback (the RT number is
@@ -3194,14 +3293,21 @@ class GameplayScreen(Screen):
         if remaining > 0:
             self._draw_countdown_card(surf, remaining)
 
-        # One skip control for every enforced wait, drawn last so it
-        # sits over the countdown card and the rest material alike.
-        # Held back while a reaction trial is open: reaction arms its
-        # waits between trials (the settle gate), so the chip has
-        # nothing to offer there and its countdown text would be the
-        # one thing on the frame still ticking.
+        # One skip control for every enforced wait, inside the card
+        # that shows the wait: the countdown card or the Muscle Memory
+        # rest card when one is up (they leave self._skip_at), else a
+        # plain rest card drawn here. Held back while a reaction trial
+        # is open: reaction arms its waits between trials (the settle
+        # gate), so the control has nothing to offer there.
         if not frozen:
-            draw_skip_chip(surf, self.layout, self.theme, self.engine)
+            at = self._skip_at
+            if at is None and wait_card_up:
+                view = wait_card_view(self.engine)
+                if view is not None:
+                    at = draw_wait_card(surf, self.layout, self.theme,
+                                        view, mode_accent)
+            draw_skip_chip(surf, self.layout, self.theme, self.engine,
+                           centre=at)
 
         # Either exit guard (engine-drawn, above this screen) is the
         # frame's one message; stacking PAUSED under the session
@@ -3209,6 +3315,29 @@ class GameplayScreen(Screen):
         # frozen frame.
         if self.engine.paused and not self.engine.exit_overlay_active:
             self._draw_paused_overlay(surf)
+
+    def _draw_corner_readout(self, surf: pygame.Surface,
+                             text: str) -> pygame.Rect:
+        """Reaction's one line of text: small, grey, top-right under
+        the mode pill, clear of the tiles."""
+        f = self.layout.font(FONT_BODY)
+        t = f.render(text, True, self.theme.muted)
+        rect = t.get_rect(topright=(self.layout.width - 28, 66))
+        surf.blit(t, rect)
+        return rect
+
+    def _wait_card_due(self) -> bool:
+        """True when a wait long enough for the skip control is running
+        and no card of its own (GET READY, the Muscle Memory rest card)
+        is up to hold it, so the plain rest card goes up instead."""
+        if self._countdown_remaining() > 0:
+            return False
+        mode = self.engine.mode
+        if (getattr(self.engine, "current_block", "") == "pattern"
+                and mode is not None
+                and getattr(mode, "phase", "") == "rest"):
+            return False
+        return wait_card_view(self.engine) is not None
 
     def _draw_controls_note(self, surf: pygame.Surface) -> None:
         """Corner Controls note for keyboard-fallback sessions, shared
@@ -3250,9 +3379,11 @@ class GameplayScreen(Screen):
             self.theme.accent,
         )
         card_w = 420
-        card_h = 240
+        # Tall enough for the skip control under the number.
+        card_h = 300
         card_rect = pygame.Rect(0, 0, card_w, card_h)
         card_rect.center = (cx, self.layout.height // 2)
+        self._skip_at = (cx, card_rect.bottom - 38)
         # Soft drop shadow built off-screen for a smooth fade.
         shadow_surf = pygame.Surface(
             (card_w + 24, card_h + 24), pygame.SRCALPHA,
@@ -3789,15 +3920,17 @@ class GameplayScreen(Screen):
         # the title and the countdown. Height follows the rows that
         # actually render.
         card_w = 480
-        card_h = 200 if forced else 260
+        card_h = 250 if forced else 310
         card_rect = pygame.Rect(0, 0, card_w, card_h)
         card_rect.center = (cx, cy)
         # Row baselines, measured from the card top. The forced card
-        # drops the two star rows and closes the gap they leave.
+        # drops the two star rows and closes the gap they leave. The
+        # skip control sits straight under the rest countdown.
         if forced:
-            y_title, y_status, y_dots = 50, 112, 162
+            y_title, y_status, y_skip, y_dots = 50, 112, 162, 214
         else:
-            y_title, y_status, y_dots = 52, 168, 218
+            y_title, y_status, y_skip, y_dots = 52, 168, 218, 272
+        self._skip_at = (cx, card_rect.y + y_skip)
         # The breath: a soft accent halo swelling over 4 s.
         breath = (math.sin(now * (2 * math.pi / 4.0)) + 1) * 0.5
         grow = int(10 + 16 * breath)
@@ -4029,9 +4162,10 @@ class RhythmScreen(Screen):
             "rhythm", self.theme.accent)
 
     def add_encouragement(self, text: str) -> None:
-        # Below the streak pill, above the falling-note run. The old
-        # spot at y=200 rose straight up into the streak pill at the
-        # exact moment a streak threshold refreshed it.
+        # In the strip under the strike tiles, the one band no note
+        # ever crosses. At y=250 it sat in the falling-note run and
+        # covered the notes the player was reading. It does not rise:
+        # rising would carry it back into the tiles.
         cx = self.layout.width // 2
         # One banner at a time, same reason as the cadence screen: two
         # thresholds inside the 1.8 s lifetime drew on top of each other
@@ -4039,10 +4173,10 @@ class RhythmScreen(Screen):
         self._popups = [p for p in self._popups
                         if not getattr(p, "is_banner", False)]
         banner = FloatingText(
-            text, (cx, 250), self.theme.success,
-            font_pt=FONT_TITLE - 4,
+            text, (cx, self.layout.height - 30), self.theme.success,
+            font_pt=FONT_H1,
             lifetime_s=1.8,
-            rise_px=30,
+            rise_px=0,
         )
         banner.is_banner = True
         self._popups.append(banner)
@@ -4066,18 +4200,19 @@ class RhythmScreen(Screen):
                         self.theme.foreground, font_pt=36,
                         glyph=popup_glyph,
                     ))
-                elif popup_text or self.message:
+                elif popup_text:
                     self._popups.append(FloatingText(
-                        popup_text or self.message,
+                        popup_text,
                         (ls.rect.centerx, strike_y - 64),
                         colour, font_pt=36,
                     ))
                 # Particle burst centred on the strike-line ring for
-                # this lane. Skip on the "Miss" red flash (a satisfying
-                # hit shouldn't be the same celebration as missing). The
-                # strike-line y matches what draw() uses.
+                # this lane, for a press that landed only. The grey
+                # no-hit flash gets no burst. The strike-line y matches
+                # what draw() uses.
                 from .widgets import HitBurst
-                is_hit = colour != self.theme.lane_miss
+                is_hit = colour not in (self.theme.lane_miss,
+                                        self.theme.muted)
                 if is_hit:
                     strike_y = self.layout.height - 290
                     self._bursts.append(HitBurst(
@@ -4369,6 +4504,7 @@ class RhythmScreen(Screen):
         # press yet. An earlier version sat between the guide lines
         # and the rings, which let the rings poke through the card
         # and undercut the "wait" message.
+        skip_at = None
         if self.engine.mode:
             countdown = getattr(self.engine.mode, "countdown_remaining_s", 0.0)
             if countdown > 0:
@@ -4381,9 +4517,11 @@ class RhythmScreen(Screen):
                     self._dim_cache.fill((0, 0, 0, 60))
                 surf.blit(self._dim_cache, (0, 0))
                 card_w = 420
-                card_h = 240
+                # Tall enough for the skip control under the number.
+                card_h = 300
                 card_rect = pygame.Rect(0, 0, card_w, card_h)
                 card_rect.center = (cx, self.layout.height // 2)
+                skip_at = (cx, card_rect.bottom - 38)
                 # Soft drop shadow built off-screen so the fade is
                 # smooth into the page background.
                 shadow_surf = pygame.Surface(
@@ -4437,8 +4575,15 @@ class RhythmScreen(Screen):
 
         # One skip control for every enforced wait. Rhythm's own wait
         # is the countdown and silent lead welded to the front of the
-        # note-fall timeline, armed by the mode.
-        draw_skip_chip(surf, self.layout, self.theme, self.engine)
+        # note-fall timeline, armed by the mode. The control lives in
+        # the countdown card; once the card is gone the first notes
+        # are falling, and a control over the lanes would cover them
+        # (Space still skips).
+        if skip_at is not None:
+            draw_skip_chip(surf, self.layout, self.theme, self.engine,
+                           centre=skip_at)
+        else:
+            self.engine._skip_chip_rect = None
 
         # Skipped under either exit guard, same as GameplayScreen: the
         # guard is the frame's one message.
@@ -5172,12 +5317,9 @@ class ResultsScreen(Screen):
         return None
 
     def _progress_colour(self, better) -> tuple[int, int, int]:
-        """Green for better, amber for worse, grey for a change too
-        small to print. Grey is not a failure state: it is the honest
-        answer when the number did not move."""
-        if better is None:
-            return self.theme.muted
-        return self.theme.success if better else self.theme.warning
+        """Green for better, grey otherwise. Nothing on this screen is
+        amber or red: a dip shows its numbers and no verdict."""
+        return self.theme.success if better else self.theme.muted
 
     @staticmethod
     def _progress_label(mode: str, hand: str) -> str:
@@ -5383,6 +5525,16 @@ class ResultsScreen(Screen):
             return "D", "Big effort. Rest, then again"
         return "E", "Every press was practice. Rest up"
 
+    def _hit_rate_card(self) -> tuple:
+        """HIT RATE, the share of trials that landed. It replaced a
+        NOT CAUGHT count in red: the same information, said as what
+        went right."""
+        hits = int(getattr(self.engine, "hits", 0) or 0)
+        misses = int(getattr(self.engine, "misses", 0) or 0)
+        total = hits + misses
+        text = f"{hits / total * 100:.0f}%" if total else "n/a"
+        return ("HIT RATE", text, self.theme.success)
+
     def _grade_colour(self, letter: str) -> tuple[int, int, int]:
         if letter == "S":
             return (255, 196, 0)               # gold
@@ -5390,9 +5542,9 @@ class ResultsScreen(Screen):
             return self.theme.success
         if letter == "B":
             return self.theme.accent
-        if letter == "C":
-            return self.theme.warning
-        return self.theme.error
+        # C and below in the plain accent too: a grade is never amber
+        # or red.
+        return self.theme.accent
 
     def _force_pilot_summary(self) -> dict | None:
         """The force_pilot section of the block summary, or None for
@@ -5591,8 +5743,8 @@ class ResultsScreen(Screen):
         if first is None:
             return None
         if first < 0.45:
-            return ("Supervisor: close to guessing. An easier band "
-                    "and a lower level next session.")
+            return ("Supervisor: an easier band and a lower level may "
+                    "suit next session.")
         if first > 0.95:
             return ("Supervisor: try the next band next session; the "
                     "words stopped asking anything.")
@@ -5799,11 +5951,10 @@ class ResultsScreen(Screen):
             fill = self.theme.lane_idle[finger % len(self.theme.lane_idle)]
             if h > 0:
                 pygame.draw.rect(surf, fill, bar_rect, border_radius=4)
-            # Red outline on the worst-performing lane (misclick chart
-            # only). 2 px stroke so it pops without overpowering the
-            # pastel fill.
+            # Grey outline on the lane with the most (misclick chart
+            # only), for the therapist's eye. Grey, not red.
             if lane == worst_lane and v > 0:
-                pygame.draw.rect(surf, self.theme.error, bar_rect,
+                pygame.draw.rect(surf, self.theme.muted, bar_rect,
                                   width=2, border_radius=4)
             # Value text above the bar (showing "245" or "3" etc.).
             if v > 0:
@@ -5995,7 +6146,9 @@ class ResultsScreen(Screen):
         key = next_up_mode(self.engine, after)
         if key is None:
             return None, ""
-        hand = str(getattr(self.engine, "hand_mode", "right") or "right")
+        session_hand = getattr(self.engine, "session_hand", None)
+        hand = (str(session_hand()) if callable(session_hand)
+                else str(getattr(self.engine, "hand_mode", "right") or "right"))
         if key == "mirror":
             hand = "both"
         return key, hand
@@ -6192,7 +6345,7 @@ class ResultsScreen(Screen):
                              else self.theme.muted)
         if stretch:
             _strip_pill(surf, self.layout, rect.x + 30 + pill_w + 10,
-                        rect.y + 186, stretch, self.theme.warning)
+                        rect.y + 186, stretch, self.theme.accent)
         draw_text(surf, f"{self._hand_phrase(hand)}, already set up",
                   (rect.x + 30, rect.y + 216),
                   self.theme, self.layout, pt=FONT_BODY,
@@ -6253,9 +6406,10 @@ class ResultsScreen(Screen):
             self._draw_progress_row(surf, chip_left, chip_y, chip_right)
         else:
             chip = getattr(self.engine, "vs_last", None)
-            if isinstance(chip, dict) and chip.get("text"):
-                chip_colour = (self.theme.success if chip.get("better")
-                               else self.theme.warning)
+            # Only an improvement on last time gets a chip.
+            if (isinstance(chip, dict) and chip.get("text")
+                    and chip.get("better")):
+                chip_colour = self.theme.success
                 used = _strip_pill(surf, self.layout, chip_left, chip_y,
                                    str(chip["text"]), chip_colour,
                                    font_pt=FONT_SMALL + 2)
@@ -6305,7 +6459,7 @@ class ResultsScreen(Screen):
             if sy_note:
                 draw_text(surf, sy_note, (cx, 658), self.theme,
                           self.layout, pt=FONT_SMALL + 2, centre=True,
-                          colour=self.theme.warning)
+                          colour=self.theme.muted)
 
         self.retry_btn.draw(surf)
         self.again_btn.draw(surf)
@@ -6445,8 +6599,9 @@ class ResultsScreen(Screen):
                 (f"OFF THE LINE{level_note}",
                  (f"{mae:.1f}%" if mae is not None else "n/a"),
                  self.theme.foreground),
-                ("EXITS", f"{overall.get('stalls', 0)}",
-                 self.theme.error),
+                ("RINGS", (f"{overall.get('rings_collected', 0)} of "
+                           f"{overall.get('rings_total', 0)}"),
+                 self.theme.foreground),
                 ("BEST SECTION", str(best_sec), self.theme.success),
             ]
         elif bh is not None:
@@ -6466,6 +6621,7 @@ class ResultsScreen(Screen):
             acc = loc.get("accuracy")
             span = (bh.get("span") or {}).get("max_correct")
             fa = (loc.get("catch") or {}).get("false_alarms")
+            catch_n = int((loc.get("catch") or {}).get("n") or 0)
             cards = [
                 ("SCORE", f"{int(round(self.engine.score * entry))}",
                  self.theme.accent),
@@ -6474,9 +6630,10 @@ class ResultsScreen(Screen):
                  self.theme.success),
                 ("SPAN", (f"{span}" if span else "n/a"),
                  self.theme.foreground),
-                ("FALSE ALARMS",
-                 (f"{fa}" if fa is not None else "n/a"),
-                 self.theme.error),
+                ("QUIET WAITS",
+                 (f"{max(0, catch_n - fa)} of {catch_n}"
+                  if fa is not None and catch_n else "n/a"),
+                 self.theme.foreground),
             ]
             # The window ladder is the localisation difficulty now;
             # the THRESHOLD cards only exist for a block that ran the
@@ -6540,9 +6697,12 @@ class ResultsScreen(Screen):
                     ("SPAN x CORRECT", f"{ec.get('product_score') or 0}",
                      self.theme.foreground),
                 ]
+            n_ec = int(ec.get("n_trials") or 0)
             cards.append(
-                ("NO REPLY", f"{ec.get('n_omissions') or 0}",
-                 self.theme.error))
+                ("REPLIES",
+                 (f"{max(0, n_ec - int(ec.get('n_omissions') or 0))} of "
+                  f"{n_ec}" if n_ec else "n/a"),
+                 self.theme.foreground))
         elif pat is not None:
             # Pattern's own docstring (WHAT THE PATIENT SEES) is
             # explicit that "RT numbers are never shown": Boyd and
@@ -6580,8 +6740,7 @@ class ResultsScreen(Screen):
                  self.theme.accent),
                 ("TAKES", f"{n_takes}", self.theme.success),
                 ("ACCURACY", acc_str, self.theme.foreground),
-                ("NOT CAUGHT", f"{int(round(self.engine.misses * entry))}",
-                 self.theme.error),
+                self._hit_rate_card(),
                 ("STARS EARNED", f"{total_stars} / {n_takes * 3}",
                  self.theme.success),
                 ("BEST 3-STAR RUN", run_str, (255, 196, 0)),
@@ -6612,12 +6771,10 @@ class ResultsScreen(Screen):
             acc_str = "n/a"
             if accuracy is not None:
                 acc_str = f"{accuracy * 100:.0f}%"
-                if accuracy < 0.80:
-                    acc_colour = self.theme.error
-                elif accuracy < 0.90:
-                    acc_colour = self.theme.warning
-                else:
-                    acc_colour = self.theme.success
+                # Green when it is high, plain otherwise: never red or
+                # amber on a player's own result.
+                acc_colour = (self.theme.success if accuracy >= 0.90
+                              else self.theme.foreground)
             fifth = (("ACCURACY", acc_str, acc_colour)
                      if accuracy is not None
                      else ("FASTEST (P10)", p10_str, self.theme.success))
@@ -6631,8 +6788,7 @@ class ResultsScreen(Screen):
                 ("HITS", f"{int(round(self.engine.hits * entry))}",
                  self.theme.success),
                 ("MEDIAN RT", median_str, self.theme.foreground),
-                ("NOT CAUGHT", f"{int(round(self.engine.misses * entry))}",
-                 self.theme.error),
+                self._hit_rate_card(),
                 fifth,
                 sixth,
             ]
@@ -6675,8 +6831,12 @@ class ResultsScreen(Screen):
                 ("HIGHEST LEVEL",
                  (f"{level_highest}" if level_highest is not None
                   else "n/a"), self.theme.foreground),
-                ("LEAK FAILS", f"{leak_fails}", self.theme.error),
-                ("OVER-FORCE", f"{over_force}", self.theme.warning),
+                ("STILL FINGERS",
+                 (f"{max(0, n_all - leak_fails)} of {n_all}"
+                  if n_all else "n/a"), self.theme.foreground),
+                ("LIGHT TOUCH",
+                 (f"{max(0, n_all - over_force)} of {n_all}"
+                  if n_all else "n/a"), self.theme.foreground),
             ]
         elif sy is not None:
             # Syllables' own outcome vocabulary (audit finding #30):
@@ -6715,8 +6875,7 @@ class ResultsScreen(Screen):
                  self.theme.accent),
                 ("WORDS CORRECT", acc_str, self.theme.success),
                 ("BAND", str(band), self.theme.foreground),
-                ("NOT CAUGHT", f"{int(round(self.engine.misses * entry))}",
-                 self.theme.error),
+                self._hit_rate_card(),
                 fifth,
                 sixth,
             ]
@@ -6739,8 +6898,7 @@ class ResultsScreen(Screen):
                 ("HITS", f"{int(round(self.engine.hits * entry))}",
                  self.theme.success),
                 ("SYNC GAP", gap_str, self.theme.foreground),
-                ("NOT CAUGHT", f"{int(round(self.engine.misses * entry))}",
-                 self.theme.error),
+                self._hit_rate_card(),
                 ("RIGHT HAND RT", r_str, self.theme.foreground),
                 ("LEFT HAND RT", l_str, self.theme.foreground),
             ]
@@ -6761,8 +6919,7 @@ class ResultsScreen(Screen):
                 ("HITS", f"{int(round(self.engine.hits * entry))}",
                  self.theme.success),
                 ("TOP PACE", top_str, self.theme.success),
-                ("NOT CAUGHT", f"{int(round(self.engine.misses * entry))}",
-                 self.theme.error),
+                self._hit_rate_card(),
                 ("FINAL PACE", fin_str, self.theme.foreground),
                 ("HIT RATE", f"{rate * 100 * entry:.0f}%",
                  self.theme.foreground),
@@ -6775,8 +6932,7 @@ class ResultsScreen(Screen):
                  self.theme.success),
                 ("HIT RATE", f"{rate * 100 * entry:.0f}%",
                  self.theme.foreground),
-                ("NOT CAUGHT", f"{int(round(self.engine.misses * entry))}",
-                 self.theme.error),
+                self._hit_rate_card(),
                 (avg_label, avg_str, self.theme.foreground),
                 (best_label, best_str, self.theme.success),
             ]

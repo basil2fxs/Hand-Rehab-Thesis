@@ -518,16 +518,34 @@ class PulseReconstructionTests(unittest.TestCase):
         # the gap.
         from finger_rehab.game.modes.buzz_hunt import (pulses_from_params,
                                                 stimulus_span_s)
-        one = {"lane": 3, "two": 0, "short_ms": 80.0, "gap_ms": 60.0,
+        one = {"lane": 3, "two": 0, "short_ms": 150.0, "gap_ms": 160.0,
                "window_ms": 2000.0}
-        two = {"lane": 3, "two": 1, "short_ms": 80.0, "gap_ms": 60.0,
+        two = {"lane": 3, "two": 1, "short_ms": 150.0, "gap_ms": 160.0,
                "window_ms": 2000.0}
         self.assertEqual(pulses_from_params("buzz_gap", one),
-                         [(3, 0.0, 220.0)])
+                         [(3, 0.0, 460.0)])
         self.assertEqual(pulses_from_params("buzz_gap", two),
-                         [(3, 0.0, 80.0), (3, 0.14, 80.0)])
+                         [(3, 0.0, 150.0), (3, 0.31, 150.0)])
         self.assertAlmostEqual(stimulus_span_s("buzz_gap", one),
                                stimulus_span_s("buzz_gap", two))
+
+    def test_no_planned_pulse_is_ever_too_short_to_feel(self):
+        # The redundancy under the config clamps: whatever a trial's
+        # params say, every pulse that is planned is at least the
+        # felt-pulse floor, so a fast player can never be handed a
+        # buzz the motor cannot deliver.
+        from finger_rehab.game.modes.buzz_hunt import (
+            FELT_PULSE_FLOOR_MS, pulses_from_params)
+        self.assertEqual(FELT_PULSE_FLOOR_MS, 100.0)
+        loc = {"catch": 0, "lane": 1, "dur_ms": 20.0,
+               "distractor_lane": 5, "distractor_ms": 30.0,
+               "distractor_lead_ms": 150.0}
+        seq = {"seq": "0-2", "pulse_ms": 40.0, "ioi_ms": 400.0}
+        gap = {"lane": 3, "two": 1, "short_ms": 50.0, "gap_ms": 160.0}
+        for wf, p in (("buzz", loc), ("buzz_seq", seq),
+                      ("buzz_gap", gap)):
+            for _lane, _on, dur in pulses_from_params(wf, p):
+                self.assertGreaterEqual(dur, FELT_PULSE_FLOOR_MS, wf)
 
     def test_params_round_trip_through_the_packed_cell(self):
         from finger_rehab.data.logger import (pack_waveform_params,
@@ -2395,7 +2413,45 @@ class ScreenTests(unittest.TestCase):
             sc.draw(surf)
         self.assertEqual(calls, [])
 
-    def test_feedback_names_the_buzzed_and_pressed_fingers(self):
+    def test_the_pause_before_a_trial_has_no_get_ready_text(self):
+        # The announce phase used to say "Get ready..." with the
+        # stage's instruction under it before every trial. It is now
+        # the dimmed dot and the top strip, nothing else.
+        import finger_rehab.ui.buzz_hunt_screen as bs
+        sc, m, surf = self._screen_and_mode()
+        t = 1000.0
+        m._tick(t)
+        m._tick(t + m.stage_intro_s + 0.01)
+        self.assertEqual(m.phase, "announce")
+        seen = []
+        original = bs.draw_text
+
+        def recorder(s, text, pos, *a, **k):
+            seen.append(str(text))
+            return original(s, text, pos, *a, **k)
+
+        bs.draw_text = recorder
+        try:
+            sc.draw(surf)
+        finally:
+            bs.draw_text = original
+        joined = " | ".join(seen).lower()
+        self.assertNotIn("get ready", joined)
+        self.assertNotIn("press the finger", joined)
+        # Nor at the foot of the screen during the trial.
+        m._tick(t + m.stage_intro_s + m.announce_s + 0.02)
+        self.assertEqual(m.phase, "trial")
+        seen.clear()
+        bs.draw_text = recorder
+        try:
+            sc.draw(surf)
+        finally:
+            bs.draw_text = original
+        self.assertNotIn("press the finger", " | ".join(seen).lower())
+
+    def test_feedback_is_a_green_dot_and_no_words(self):
+        # A right answer turns the dot green for a moment; nothing is
+        # written, and a wrong answer shows nothing at all.
         import finger_rehab.ui.buzz_hunt_screen as bs
         sc, m, surf = self._screen_and_mode()
         t = _to_trial(m)
@@ -2415,9 +2471,12 @@ class ScreenTests(unittest.TestCase):
             sc.draw(surf)
         finally:
             bs.draw_text = original
-        joined = " | ".join(seen)
-        self.assertIn("FOUND IT", joined)
-        self.assertIn("The buzz was on", joined)
+        joined = " | ".join(seen).upper()
+        for word in ("FOUND IT", "THE BUZZ WAS ON", "YOU PRESSED",
+                     "IT WAS", "NEXT TRIAL"):
+            self.assertNotIn(word, joined)
+        self.assertEqual(tuple(surf.get_at((sc.DOT_CX, sc.DOT_CY)))[:3],
+                         tuple(sc.theme.success))
 
     def test_a_blocked_gate_says_so_on_screen(self):
         # A quiet gate that keeps resetting used to show nothing at

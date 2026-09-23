@@ -349,7 +349,6 @@ import pygame
 
 from ...hardware.eeg_trigger import CODES as EEG_CODES
 from ...hardware.fsr_detector import PressEvent
-from ...ui import feedback_bank
 from ..rest_skip import WaitSkip
 from ..scheduling import BalancedScheduler
 from ..scoring import ScoreConfig, TrialResult, classify
@@ -364,7 +363,6 @@ log = logging.getLogger(__name__)
 
 
 FINGER_LETTERS = ("I", "M", "R", "P")
-FINGER_NAMES = ("Index", "Middle", "Ring", "Pinky")
 # Enslavability weights from the independence ranking of Hager-Ross and
 # Schieber (2000): ring least independent, then middle and pinky, index
 # best of the four sensor fingers.
@@ -680,7 +678,6 @@ class ChordsMode(WaitSkip):
             self.subblocks = max(1, int(subblocks))
         self._sub_idx = 0
         self._sub_done = 0
-        self._announced: set[str] = set()
         # Two-axis balance, the PairedBalancedScheduler shape: which
         # hand goes next is its own shuffle bag (counts never drift
         # apart by more than one), and within each hand the chords
@@ -934,6 +931,9 @@ class ChordsMode(WaitSkip):
                 pass
         try:
             on_delta = list(self.engine.cfg.get("fsr.on_delta") or [])
+            # 0.40 is the fraction the shipped fsr.on_delta defaults
+            # were set at, not the live PRESS_FRACTION: this rebuilds
+            # the gap those defaults stand for.
             v = float(on_delta[finger]) / 0.40
             if v > 0:
                 return v
@@ -1290,31 +1290,11 @@ class ChordsMode(WaitSkip):
         self.phase = "stim"
         self._quiet_since = None
         self._settle_t0 = None
-        self._announce(scope, hand)
         # ALL target fingers light at once; with the buzzer channel on,
         # the engine turns a same-board multi-lane stim into the
         # arpeggio (see engine.on_stim_multi). A cross-hand chord is
         # two boards, and two boards buzz together.
         self.engine.on_stim_multi(list(targets), self.trial_counter, now)
-
-    def _announce(self, scope: str, hand: str) -> None:
-        """The words that keep the session legible: the first chord
-        announces the game, and in bilateral play each chord names
-        its side. Side naming is suppressed when the screen may not
-        name the target: a hand label is half the answer."""
-        show_target = True
-        try:
-            show_target = bool(self.engine.cue_settings().show_target)
-        except Exception:
-            pass
-        if "chords" not in self._announced:
-            self._announced.add("chords")
-            self._set_message("Chords: press together", 1.8,
-                              kind="best")
-            return
-        if self.bilateral and show_target:
-            self._set_message("Both hands" if scope == "cross"
-                              else f"{hand.title()} hand", 0.9)
 
     # ---- presses -----------------------------------------------------------
     def _handle_press(self, ev: PressEvent, now: float) -> None:
@@ -1352,10 +1332,6 @@ class ChordsMode(WaitSkip):
                     # patient rather than added to the hold.
                     self._hold_t0 = ev.t_perf
                     self._hold_until = ev.t_perf + self.hold_s
-                    # Words for the ring that starts filling now; the
-                    # outcome message replaces this at trial close.
-                    self._set_message("Keep holding",
-                                      max(0.6, self.hold_s))
                 else:
                     self._finish(now, hold_achieved=None)
         else:
@@ -1433,7 +1409,6 @@ class ChordsMode(WaitSkip):
         er_by_hand: dict[str, float | None] = {}
         press_by_hand: dict[str, float] = {}
         max_leak_ratio = None
-        max_leak_lane = None
         over_force = False
         light_press = False
         leak_norms: dict[int, float] = {}
@@ -1477,8 +1452,6 @@ class ChordsMode(WaitSkip):
                     worst = max(h_leaks.values()) / hp
                     if max_leak_ratio is None or worst > max_leak_ratio:
                         max_leak_ratio = worst
-                        max_leak_lane = max(h_leaks,
-                                            key=h_leaks.get)
                 else:
                     er_by_hand[h] = None
                 leak_norms.update(h_leaks)
@@ -1589,13 +1562,10 @@ class ChordsMode(WaitSkip):
                               correct_lanes=list(trial.targets),
                               hand=(None if trial.scope == "cross"
                                     else trial.hand))
-        self._set_message(self._feedback_text(trial, cls, over_force,
-                                              light_press, max_leak_lane),
-                          0.9,
-                          # "warn" amber is the hardware colour. A
-                          # chord that did not form is information,
-                          # so it gets the neutral chip.
-                          kind="success" if cls == "hit" else "info")
+        # No words after a chord. The tile flash says whether it landed
+        # and the quiet-finger ticks below reward a still hand; the
+        # line that used to follow every chord ("Ring joined in",
+        # "Press together") was the clutter players asked to lose.
         # Quiet-fingers reward moment: a clean chord leaves the
         # untargeted fingers wearing a brief tick on the gameplay
         # screen: its own hand's for a within chord, both hands' for a
@@ -1721,88 +1691,6 @@ class ChordsMode(WaitSkip):
         else:
             self._staircase(cls == "hit")
         self._advance(now)
-
-    def _finger_name(self, trial: PendingChordTrial, lane: int) -> str:
-        """The finger's name for feedback, hand-prefixed in bilateral
-        play so "Ring" can never mean the wrong hand. The prefix is
-        the LANE's own hand, which for a within-hand chord is the
-        trial's hand and for a cross-hand chord is whichever side the
-        named finger sits on."""
-        f = max(0, min(3, self._finger_of_lane(lane)))
-        name = FINGER_NAMES[f]
-        if self.bilateral:
-            return f"{self._hand_of_lane(lane).title()} {name.lower()}"
-        return name
-
-    def _phrase(self, situation: str, **slots) -> str:
-        """One line from the chords sub-bank, through the engine's
-        seeded deck when there is a real engine behind it."""
-        return feedback_bank.phrase_via(
-            self.engine, situation, "line", "chords", **slots)
-
-    def _feedback_text(self, trial: PendingChordTrial, cls: str,
-                       over_force: bool, light: bool,
-                       max_leak_lane: int | None = None) -> str:
-        """Feedback says the ACTION, never the mechanism: which finger
-        lifted, which came in behind the others, which is still to
-        land. The old "Hold it a beat longer" always arrived after the
-        trial had closed, so there was nothing to hold; the live ring
-        now covers the during-the-press half of that job.
-
-        Wording comes from feedback_bank.MODE_LINES["chords"] so it is
-        checked against the banned list with everything else and so
-        the same branch does not read identically ten trials running.
-        """
-        if over_force:
-            return self._phrase("over_force")
-        if cls == "hit":
-            return ("Chord! *" if light and trial.kind == "chord"
-                    else "Chord!")
-        if cls == "late_chord":
-            # Name the finger that closed the span.
-            if trial.onsets:
-                last = max(trial.onsets, key=lambda l: trial.onsets[l])
-                return self._phrase(
-                    "late_chord",
-                    target=self._finger_name(trial, last))
-            return "Press together"
-        if cls == "no_hold":
-            lifted = list(trial.hold_released)
-            if lifted:
-                # Name the first target that came up even when more than
-                # one did. Naming a finger is the whole reason the lifted
-                # lanes are recorded; "hold all of them" told the patient
-                # nothing about which one slipped, and which fingers are
-                # still down at the moment of the check varies run to run,
-                # so the generic line also made the feedback
-                # unreproducible.
-                return self._phrase(
-                    "no_hold",
-                    target=self._finger_name(trial, lifted[0]))
-            return "Hold them a moment longer."
-        if cls == "leak_fail":
-            quiet = [f for f in range(4) if f not in trial.fingers]
-            if trial.incorrect_presses:
-                lane = trial.incorrect_presses[0][0]
-                return self._phrase(
-                    "leak_fail", target=self._finger_name(trial, lane))
-            if max_leak_lane is not None:
-                return self._phrase(
-                    "leak_fail",
-                    target=self._finger_name(trial, max_leak_lane))
-            return ("Quiet fingers, rest them." if quiet
-                    else "Rest the quiet fingers on the pads.")
-        # partial: a target was still to land when the trial closed.
-        missing = [l for l in trial.targets if l not in trial.onsets]
-        if missing and all(l in trial.keys_pressed for l in missing):
-            # Every finger still to land DID arrive at some point but
-            # lifted again before the chord formed: the thing to fix
-            # is togetherness, not reach.
-            return "Press together and keep them down"
-        if len(missing) == 1:
-            return self._phrase(
-                "partial", target=self._finger_name(trial, missing[0]))
-        return "All four down together."
 
     # ---- progression -------------------------------------------------------
     def _staircase(self, hit: bool) -> None:

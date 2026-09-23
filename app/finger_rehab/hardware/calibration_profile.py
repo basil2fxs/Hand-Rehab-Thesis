@@ -42,11 +42,20 @@ FINGER_NAMES = ("index", "middle", "ring", "pinky")
 
 # Fraction of the resting-to-press gap a finger must cover to count as a
 # press, and the fraction it must fall back below to count as released.
-# 0.40 leaves room for a press weaker than the one demonstrated while
-# staying clear of the resting load. The release point sits lower so a
-# finger hovering near the trigger cannot chatter.
-PRESS_FRACTION = 0.40
+# 0.30 leaves room for a press well under the one demonstrated while the
+# noise and preload floors below keep it clear of a resting hand. It was
+# 0.40, and players who pressed firmly during calibration then had to
+# press hard all session. The release point sits lower so a finger
+# hovering near the trigger cannot chatter.
+PRESS_FRACTION = 0.30
 RELEASE_FRACTION = 0.20
+
+# The most a calibration press can raise a finger's trigger: the gap the
+# threshold is taken from is capped at this many times the light-press
+# target's floor. A press far harder than asked for (a nervous first
+# go, or the clinical screen, which sets no ceiling of its own) then
+# cannot leave a trigger only a hard press reaches.
+THRESHOLD_GAP_CAP_MULTIPLE = 3.0
 
 # A press must clear the sensor noise by this multiple whatever the gap
 # says, so a finger that barely moved during calibration cannot end up
@@ -212,6 +221,17 @@ class CalibrationProfile:
         return [target_gap_band(self.preload()[i], self.empty_noise[i])
                 for i in range(N_FINGERS)]
 
+    def threshold_gap(self) -> list[float]:
+        """The gap the thresholds are taken from: the measured gap,
+        capped at THRESHOLD_GAP_CAP_MULTIPLE times the light-press
+        target's floor, so pressing hard at calibration cannot make the
+        game hard to play."""
+        out = []
+        for i in range(N_FINGERS):
+            lo, _ = target_gap_band(self.preload()[i], self.empty_noise[i])
+            out.append(min(self.gap()[i], lo * THRESHOLD_GAP_CAP_MULTIPLE))
+        return out
+
     def on_delta(self) -> list[int]:
         """Press threshold per finger, relative to the tracked baseline.
 
@@ -220,6 +240,7 @@ class CalibrationProfile:
         That is what keeps the pinky usable despite its heavy preload.
         """
         out = []
+        gaps = self.threshold_gap()
         for i in range(N_FINGERS):
             # Two floors. The noise floor stops a finger that barely
             # moved from getting a threshold inside the sensor noise.
@@ -229,7 +250,7 @@ class CalibrationProfile:
             # like a rise. Neither normally binds.
             floor = press_floor_counts(self.preload()[i],
                                        self.empty_noise[i])
-            out.append(int(round(max(floor, self.gap()[i] * PRESS_FRACTION))))
+            out.append(int(round(max(floor, gaps[i] * PRESS_FRACTION))))
         return out
 
     def off_delta(self) -> list[int]:
@@ -242,8 +263,9 @@ class CalibrationProfile:
         pressed finger can always get back down to it.
         """
         out = []
+        gaps = self.threshold_gap()
         for i, on in enumerate(self.on_delta()):
-            rel = self.gap()[i] * RELEASE_FRACTION
+            rel = gaps[i] * RELEASE_FRACTION
             capped = min(rel, on - DETECTOR_HYSTERESIS, on * 0.6)
             out.append(int(round(max(1.0, capped))))
         return out

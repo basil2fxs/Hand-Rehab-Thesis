@@ -721,7 +721,8 @@ class KeyboardIntakeTests(_LoginHarness):
         import pygame
         t = self.title
         went = []
-        self.eng.show_mode_select = lambda: went.append(True)
+        # Login lands on the session's hand choice, then the hub.
+        self.eng.show_hand_choice = lambda: went.append(True)
         t.handle_event(_key_event(pygame.K_TAB))          # code
         for ch, key in (("P", pygame.K_p), ("1", pygame.K_1),
                         ("1", pygame.K_1)):

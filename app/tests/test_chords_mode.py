@@ -1057,7 +1057,7 @@ class HoldTraceReplayTests(unittest.TestCase):
         self.assertLessEqual(progress[-1], 1.0)
         self.assertIsNone(mode.hold_progress())
 
-    def test_a_tap_names_the_finger_that_lifted(self):
+    def test_a_tap_is_a_broken_hold_and_nothing_is_said(self):
         engine, mode, det, screen = self._build()
 
         def plan(targets, stim_t):
@@ -1070,19 +1070,10 @@ class HoldTraceReplayTests(unittest.TestCase):
         self._replay(mode, det, engine, plan)
         rec = mode._records[-1]
         self.assertEqual(rec["class"], "no_hold")
-        from finger_rehab.game.modes.chords import FINGER_NAMES
-        expected = FINGER_NAMES[self._target]
-        # The finger that let go is named, and the line says what to
-        # do about it. The exact wording is drawn from the phrase
-        # bank, so pin the finger and the action, not one sentence.
-        text = self._warn_text(screen)
-        self.assertIn(expected, text)
-        self.assertTrue(
-            any(w in text.lower()
-                for w in ("keep it down", "keep them down", "longer")),
-            text)
-        for (_, txt, _) in screen.messages:
-            self.assertNotIn("beat", txt.lower())
+        # Recorded as a broken hold; the screen says nothing about
+        # it. No line follows a chord any more.
+        self.assertIs(rec["hold"], False)
+        self.assertEqual(self._warn_text(screen), "")
         # The together bonus is forfeited on a broken hold: 6
         # completion + 2 quiet, never the full 10 the old build paid
         # while scolding.
@@ -1110,8 +1101,7 @@ class HoldTraceReplayTests(unittest.TestCase):
         self.assertEqual(rec["class"], "partial")
         close_t = engine.log_trial.call_args[0][2]
         self.assertGreaterEqual(close_t - stim_t, 2.9)
-        self.assertEqual(self._warn_text(screen),
-                         "Press together and keep them down")
+        self.assertEqual(self._warn_text(screen), "")
 
     def test_relanding_the_lifted_finger_recovers_the_chord(self):
         engine, mode, det, screen = self._build()
@@ -1157,12 +1147,12 @@ class RtIsFirstOnsetTests(unittest.TestCase):
         self.assertAlmostEqual(outcome.rt_ms, 300.0, delta=2.0)
 
 
-class LeakFeedbackNamesFingerTests(unittest.TestCase):
-    """Audit finding #26: a measured leak fail (no wrong press) must
-    name the finger it measured, the argmax of leak_norms, not a
-    generic line about the quiet fingers."""
+class LeakFailIsRecordedNotSaidTests(unittest.TestCase):
+    """A measured leak fail (no wrong press) is classed and its leak
+    kept on the record for the analysis, and nothing about it reaches
+    the screen: no line follows a chord any more."""
 
-    def test_measured_leak_fail_names_the_worst_finger(self) -> None:
+    def test_measured_leak_fail_is_recorded_and_silent(self) -> None:
         engine, mode = _build_mode()
         _force_pair(mode)
         mode._fire(5.0)
@@ -1173,26 +1163,15 @@ class LeakFeedbackNamesFingerTests(unittest.TestCase):
         peaks[quiet[0]] = 0.5 * refs[quiet[0]]
         engine._force_window_peak = peaks
         engine._force_window_saw_samples = True
-        orig = mode._feedback_text
-        captured = {}
-
-        def wrap(*a, **kw):
-            text = orig(*a, **kw)
-            captured["text"] = text
-            return text
-        mode._feedback_text = wrap
+        seen = []
+        gp = MagicMock()
+        gp.set_message = lambda text, dur, kind="info": seen.append(text)
+        engine._screens = {"gameplay": gp}
         _complete_chord(mode, 5.4, gap_s=0.01)
         rec = mode._records[-1]
         self.assertEqual(rec["class"], "leak_fail")
-        # The named finger plus what to do with it. Wording comes
-        # from the phrase bank, so pin the finger, not the sentence.
-        from finger_rehab.game.modes.chords import FINGER_NAMES
-        worst = FINGER_NAMES[mode._finger_of_lane(quiet[0])]
-        self.assertIn(worst, captured["text"])
-        self.assertTrue(
-            any(w in captured["text"].lower()
-                for w in ("still", "rest it", "on its pad")),
-            captured["text"])
+        self.assertEqual(seen, [])
+        self.assertFalse(hasattr(mode, "_feedback_text"))
 
 
 class BilateralHandColumnTests(unittest.TestCase):
@@ -1303,8 +1282,12 @@ class ChordsResultsScreenCardsTests(unittest.TestCase):
         self.assertIn("CLEAN HIT RATE", labels)
         self.assertEqual(values["CLEAN HIT RATE"], "20%")
         self.assertIn("MEDIAN ER", labels)
-        self.assertIn("LEAK FAILS", labels)
-        self.assertIn("OVER-FORCE", labels)
+        # Said as what went right: chords whose quiet fingers stayed
+        # still, and chords pressed without over-force.
+        self.assertNotIn("LEAK FAILS", labels)
+        self.assertNotIn("OVER-FORCE", labels)
+        self.assertEqual(values["STILL FINGERS"], "80 of 100")
+        self.assertEqual(values["LIGHT TOUCH"], "97 of 100")
 
     def test_clean_hit_rate_prefers_the_scope_pure_count(self) -> None:
         # The card used to divide by EVERY record, so the 16-32
@@ -1683,14 +1666,17 @@ class DemoAndAnnouncementTests(unittest.TestCase):
             t += 2.0
         self.assertEqual(scopes, ["within", "cross", "within", "cross"])
 
-    def test_first_chord_announcement_reaches_the_screen(self) -> None:
+    def test_a_chord_starts_with_no_words(self) -> None:
+        # The first chord used to announce "Chords: press together"
+        # and every bilateral chord named its side; the lit tiles and
+        # the bracket already say both.
         engine, mode = _build_mode()
         seen = []
         gp = MagicMock()
         gp.set_message = lambda text, dur, kind="info": seen.append(text)
         engine._screens = {"gameplay": gp}
         mode._fire(5.0)
-        self.assertIn("Chords: press together", seen)
+        self.assertEqual(seen, [])
 
 
 class FirstTrialIsAChordTests(unittest.TestCase):

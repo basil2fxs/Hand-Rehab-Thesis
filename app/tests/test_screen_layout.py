@@ -610,8 +610,8 @@ def mode_select_screen():
 
 
 class TestModeSelectCardLayout:
-    """Every mode card carries a what-you-do + what-it-trains
-    description, wrapped to at most two lines. The wrap cap is a
+    """Every mode card carries a short what-you-do line, wrapped to at
+    most two lines. The wrap cap is a
     contract: a third line would silently vanish, so this class
     renders every description with the same font and wrap the screen
     uses and fails when any card in either column runs out of room."""
@@ -669,20 +669,17 @@ class TestModeSelectCardLayout:
                 if i < j:
                     assert not b.rect.colliderect(other.rect)
 
-    def test_measurement_modes_say_measure_not_treat(
-            self, mode_select_screen):
-        # Reaction and Buzz Hunt are measurement-first (their
-        # docstrings refuse therapy claims), so their cards must say
-        # "measures" and no card may promise treatment or recovery.
+    def test_cards_are_short_and_claim_nothing(self, mode_select_screen):
+        # One line of a few words on what you do. The menu makes no
+        # claim about what a game trains or treats; that lives in each
+        # mode's docstring.
         sc, _ = mode_select_screen
         descs = {k: d.lower() for k, _t, d in sc.MODES}
-        assert "measures" in descs["reaction"]
-        assert "measures" in descs["buzz_hunt"]
-        assert "measures" in descs["echo"]
         for key, d in descs.items():
+            assert len(d.split()) <= 6, f"{key} card is busy: {d!r}"
             for banned in ("cure", "recover", "restores", "treats",
-                           "therapy"):
-                assert banned not in d, f"{key} card overclaims: {banned}"
+                           "therapy", "trains", "measures", "builds"):
+                assert banned not in d, f"{key} card claims: {banned}"
 
     def test_pattern_card_still_keeps_the_secret(self, mode_select_screen):
         # Boyd and Winstein: explicit knowledge impairs the implicit

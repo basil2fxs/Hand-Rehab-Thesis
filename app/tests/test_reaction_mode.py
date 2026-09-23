@@ -774,8 +774,10 @@ class ReactionScreenLayerTests(unittest.TestCase):
         finally:
             pygame.quit()
 
-    def test_rt_chip_is_the_headline_and_sits_clear_of_tiles(
+    def test_rt_is_small_in_the_top_right_and_clear_of_tiles(
             self) -> None:
+        # Nothing in the centre: the RT is one small grey line in the
+        # top-right corner, never a chip over the tiles.
         import pygame
         try:
             eng, gp, screens = self._engine_and_screen()
@@ -784,23 +786,29 @@ class ReactionScreenLayerTests(unittest.TestCase):
             original = screens._chip
 
             def recorder(surf, layout, centre, text, fg, **k):
-                chips.append((text, centre, k))
+                chips.append(text)
                 return original(surf, layout, centre, text, fg, **k)
 
+            corner = []
+            real_corner = gp._draw_corner_readout
+
+            def corner_rec(surf, text):
+                rect = real_corner(surf, text)
+                corner.append((text, rect))
+                return rect
+
             screens._chip = recorder
+            gp._draw_corner_readout = corner_rec
             try:
                 gp.draw(pygame.Surface((1280, 800)))
             finally:
                 screens._chip = original
-            rt = [(c, k) for t, c, k in chips if t == "262 ms"]
-            self.assertEqual(len(rt), 1)
-            centre, kwargs = rt[0]
-            # Larger and stronger than the shared 30 pt / alpha 30
-            # default, and high enough that the grown chip still
-            # clears the tallest lane tile (top = 220).
-            self.assertGreaterEqual(kwargs.get("font_pt", 0), 34)
-            self.assertGreaterEqual(kwargs.get("bg_alpha", 0), 40)
-            self.assertLessEqual(centre[1], 190)
+            self.assertNotIn("262 ms", chips)
+            self.assertEqual([t for t, _ in corner], ["262 ms"])
+            rect = corner[0][1]
+            self.assertEqual(rect.right, 1280 - 28)
+            self.assertGreater(rect.left, 1280 // 2)
+            self.assertLess(rect.bottom, 220)
         finally:
             pygame.quit()
 
@@ -996,7 +1004,6 @@ class ReactionStaticStageTests(unittest.TestCase):
         for whatever fraction of a second was left of it, which is the
         PVT's whole motivating loop reduced to a flash."""
         import pygame
-        import finger_rehab.ui.screens as screens
         try:
             eng, gp = self._engine_and_screen()
             eng.mode._phase = "foreperiod"
@@ -1008,17 +1015,14 @@ class ReactionStaticStageTests(unittest.TestCase):
             _frame(gp)                       # arms the tail
             time.sleep(gp.REACT_EPOCH_TAIL_S + 0.05)
             chips = []
-            original = screens._chip
+            real_corner = gp._draw_corner_readout
 
-            def recorder(surf, layout, centre, text, fg, **k):
+            def corner_rec(surf, text):
                 chips.append(str(text))
-                return original(surf, layout, centre, text, fg, **k)
+                return real_corner(surf, text)
 
-            screens._chip = recorder
-            try:
-                _frame(gp)                   # tail expired, stage live
-            finally:
-                screens._chip = original
+            gp._draw_corner_readout = corner_rec
+            _frame(gp)                       # tail expired, stage live
             self.assertIn("212 ms", chips,
                           "the freeze ate the trial's feedback")
         finally:

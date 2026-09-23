@@ -272,14 +272,17 @@ class LeftCalibrationProfileTests(unittest.TestCase):
             self.assertEqual(list(det.cal.on_delta), prof.on_delta())
 
     def test_press_below_the_left_profile_is_rejected(self) -> None:
-        # gap 400 -> on_delta 240 per finger (0.6 of the gap). A rise
-        # of 120 counts would clear the shipped default of 45 but sits
-        # under the profile, so the profile is what must decide.
+        # A pad carrying 40 counts at rest: its trigger is at least the
+        # preload floor, and the 400-count press is capped, so the
+        # profile's index trigger is 62 counts. A rise of 55 clears the
+        # shipped default of 20 but sits under the profile, so the
+        # profile is what must decide.
         with tempfile.TemporaryDirectory() as td:
-            eng, _ = self._engine_with_left_profile(td, gap=400.0)
+            eng, prof = self._engine_with_left_profile(td, gap=400.0)
+            self.assertEqual(prof.on_delta()[0], 62)
             self._feed(eng, lambda i: (50, 50, 50, 50))
             events = self._feed(
-                eng, lambda i: (170, 50, 50, 50) if i > 20
+                eng, lambda i: (105, 50, 50, 50) if i > 20
                 else (50, 50, 50, 50))
             self.assertEqual(events, [],
                              "a press under the left profile's threshold "
@@ -412,10 +415,10 @@ class ScreenMirrorTests(unittest.TestCase):
         self.assertFalse(hasattr(SyllablesScreen, "_draw_finger_row"))
         self.assertFalse(hasattr(SyllablesScreen, "_finger_tiles"))
 
-    def test_syllables_model_names_the_buzzing_hand(self) -> None:
-        # In bilateral play the model's buzz hops between hands on
-        # purpose; the mode must expose which hand carries the current
-        # buzz so the screen can name the hop as it happens.
+    def test_syllables_model_names_the_playing_hand(self) -> None:
+        # In bilateral play the words take turns between the hands;
+        # the model exposes which hand the word is on so the screen
+        # can name the switch as it happens.
         with tempfile.TemporaryDirectory() as td:
             eng = make_engine("both", td)
             eng.cfg.data["game"]["test_mode_enabled"] = True
@@ -731,6 +734,12 @@ class ModeHandMatrixTests(unittest.TestCase):
                         return
                     if clock.t < mode._spawn_t + mode.spawn_lockout_s + 0.1:
                         return
+                    # Wait for the prompt buzz: it is the one buzz this
+                    # mode plays, and it has to reach the board of the
+                    # hand the word is on.
+                    if (mode._prompt_due is not None
+                            and mode._prompted_t is None):
+                        return
                     answered.add(key)
                     lane = mode.option_set.target_lane
                     mode.queue_press(
@@ -746,7 +755,7 @@ class ModeHandMatrixTests(unittest.TestCase):
                 self.assertTrue(
                     set(cued) <= self._expected_lanes(hand_mode), cued)
                 if hand_mode == "both":
-                    # The model's buzzes divide between the hands.
+                    # The words divide between the hands.
                     self.assertEqual(hands_of(cued), {"left", "right"})
                     # Mixed-hand tapping is never wrong: position is
                     # what is checked, not the hand.
@@ -1063,15 +1072,15 @@ class Pattern8SequenceTests(unittest.TestCase):
             self.assertEqual(trained, legacy)
 
     def test_bimanual_take_length_stays_in_the_envelope(self) -> None:
-        # 3 cycles x 24 = 72 trials per take, inside the 50 to 100
-        # trial envelope the research brief works to.
+        # 2 cycles x 24 = 48 trials per take, the same length as the
+        # unilateral 4 x 12.
         with tempfile.TemporaryDirectory() as td:
             eng = make_engine("both", td)
             eng.begin_pattern_block()
             seq_segs = [s for s in eng.mode.segments if s.kind == "seq"]
             self.assertTrue(seq_segs)
             for s in seq_segs:
-                self.assertEqual(len(s.fingers), 72)
+                self.assertEqual(len(s.fingers), 48)
             eng.finish_block()
 
 

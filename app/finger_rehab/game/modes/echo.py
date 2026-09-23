@@ -266,7 +266,6 @@ from ...data.logger import ContinuousTrialLog
 from ...hardware.eeg_trigger import (CODES as EEG_CODES, response_code,
                                      stim_code)
 from ...hardware.fsr_detector import PressEvent
-from ...ui import feedback_bank
 from ..rest_skip import WaitSkip
 from ..scoring import ScoreConfig, TrialResult
 from ._keys import keymap_for_hand, resolve_key
@@ -1080,12 +1079,13 @@ class EchoMode(WaitSkip):
                 rt_ms=None)
             self.total_correct += 1
             self.best_len = max(self.best_len, length)
+            # Words only for a new longest echo, which comes a few
+            # times a game at most. An ordinary right answer gets the
+            # tile flash and the score, not a line.
             if length > self._game_best:
                 self._game_best = length
                 self._set_message(f"Longest echo: {length}", 2.0,
                                   kind="best")
-            else:
-                self._set_message("Great echo!", 1.5, kind="success")
         else:
             # Partial credit still pays per item (never punishing),
             # and the card stays neutral: an "almost" is information,
@@ -1095,23 +1095,8 @@ class EchoMode(WaitSkip):
                 points=(self.score_cfg.miss_points
                         + self.ITEM_POINTS * n_right),
                 rt_ms=None)
-            # The card stays short on purpose: the gameplay screen
-            # centres it over the trial's own Miss label, and a
-            # longer line hides that label. The spare life is
-            # announced on the replay itself instead, which is the
-            # moment the player needs to know (_begin_announce).
-            if kind == "omission":
-                # The count is the credit; the words are not a
-                # buzzer going off. Drawn from the bank so the same
-                # phrasing does not land every round.
-                line = feedback_bank.phrase_via(
-                    self.engine, "omission", "line", "echo",
-                    n=n_right, of=length)
-                self._set_message(
-                    line or f"{n_right} of {length}", 1.8)
-            else:
-                self._set_message(
-                    f"Almost! {n_right} of {length}", 1.8)
+            # Nothing on screen for a round that fell short: the items
+            # it got still score, and the next sequence is the prompt.
         # Press offsets from the "Your turn" moment, milliseconds,
         # packed on the row: the notebook's inter-press intervals (the
         # eCorsi 600 ms motor baseline analogue) fall out of these,

@@ -43,9 +43,8 @@ structure, which is the Reed and Johnson logic carried to eight
 lanes. When a seed's transition graph admits no fully disjoint
 re-ordering, the generator falls back to fresh cycles sharing zero
 (then minimally few) triplets, and the block summary records the
-material either way. Takes run 3 cycles (72 trials) instead of the
-unilateral 5 x 12, keeping take length inside the standard 50 to 100
-trial envelope. Single-hand play is untouched: one hand selected
+material either way. Takes run 2 cycles (48 trials), the same length
+as the unilateral 4 x 12. Single-hand play is untouched: one hand selected
 still runs the 12-item four-finger SOC, and a participant's
 unilateral and bimanual material are derived from the same name seed
 through different generators, so starting one never changes the
@@ -99,10 +98,10 @@ frequency-matched to the trained sequence, which is the Reed and
 Johnson logic.
 
 BLOCK LAYOUT, one engine block = one session of takes:
-    W    warm-up, 20 balanced-random trials, excluded from analysis
-    B1   64 random trials (general-speed baseline, tracked across days;
+    W    warm-up, 12 balanced-random trials, excluded from analysis
+    B1   48 random trials (general-speed baseline, tracked across days;
          a multiple of 8 so bimanual hand balance holds exactly)
-    B2-4 trained sequence, 5 cycles each (60 trials per take)
+    B2-4 trained sequence, 4 cycles each (48 trials per take)
     B5   PROBE, untrained SOC
     B6   trained sequence, then the mandatory 30 s long rest
     B7-8 trained sequence
@@ -113,10 +112,23 @@ and each probe is scored against its two flanking trained takes. Every
 take starts the sequence at cycle position 0 so takes align too. The
 short-session variant (pattern.short_session) is 8 takes: random,
 three trained, probe, trained, probe, trained, keeping both probes
-flanked because the flanker subtraction IS the measurement. Counts sit
-inside the standard SRTT envelope (blocks of 50 to 100 trials, 400 to
-800 sequence trials per session; Nissen and Bullemer found learning
-within 4 blocks of 100). Five training sessions on separate days is
+flanked because the flanker subtraction IS the measurement. Takes are
+48 trials, the length of the 50-trial blocks current SRTT work runs
+with a 12-item SOC (Oliveira et al. 2024), about 380 sequence trials a
+session; Nissen and Bullemer found learning within 4 blocks of 100.
+They were 60, and players found them long. Shorter takes cost a
+little precision per take, which is why the learning score is always
+read across a group and across sessions: the SRTT effect is reliable
+for a group but not for one person (split-half about .66, test-retest
+under .40; Oliveira et al. 2023).
+
+ONE TRAINED SEQUENCE, TWO DIFFERENT PROBES. Each session's two probe
+takes play two different unfamiliar sequences from the pool, so the
+player meets more than one pattern, but there is only ever one
+trained riff per participant. A second trained riff would be learnt
+fine within the session (Stephan et al. 2009) but it interferes with
+next-day retention of the first (Goedert and Willingham 2002), and
+day-to-day retention is what the five-day dose is there to show. Five training sessions on separate days is
 the intended dose: Savion-Lemieux and Penhune (2005, Exp Brain Res)
 found distribution across days matters more than amount per day.
 

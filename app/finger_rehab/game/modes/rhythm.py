@@ -64,12 +64,19 @@ Synchronisation to a pacing beat is prediction, not reaction (Repp
 buzz ON the beat is right for a predictor and wrong for a reactor.
 rhythm.tactile_mode settles it per block:
 
-  lead      the STIM command goes out buzz_lead_ms (150, the fastest
-            healthy touch reaction time, Robinson 1934 via Kosinski
-            2013) plus the motor rise BEFORE the scored zero, so a
-            reaction to the felt buzz lands on the beat. The lead
-            then adapts to the player: every buzz_lead_every scored
-            hits the median of the last buzz_lead_window hit offsets
+  lead      the STIM command goes out buzz_lead_ms (350) plus the
+            motor rise BEFORE the scored zero, so a reaction to the
+            felt buzz lands on the beat. 350 because a reaction to a
+            coin-motor buzz is slower than the textbook figure: about
+            200 to 230 ms in young adults and 250 to 330 ms in older
+            ones (Bao et al. 2019), the coin motor adds about 45 ms
+            over a lab tactor in the same study, and the 310-103 class
+            takes 87 ms to reach half amplitude (datasheet). The old
+            150 was the fastest healthy touch reaction time (Robinson
+            1934 via Kosinski 2013), and players felt every buzz too
+            late to act on. The lead then adapts to the player: every
+            buzz_lead_every scored presses (Late and Early included)
+            the median of the last buzz_lead_window offsets
             moves the lead by buzz_lead_gain times itself, at most
             buzz_lead_step_ms per update, clamped to 0 and
             buzz_lead_max_ms; a median inside buzz_lead_deadband_ms
@@ -201,7 +208,7 @@ class RhythmMode(WaitSkip):
             self._cfg_float("rhythm.buzz_lead_every", 4)))
         self._lead_gain = self._cfg_float("rhythm.buzz_lead_gain", 0.5)
         self._lead_max_ms = max(
-            0.0, self._cfg_float("rhythm.buzz_lead_max_ms", 400.0))
+            0.0, self._cfg_float("rhythm.buzz_lead_max_ms", 700.0))
         self._lead_step_ms = max(
             0.0, self._cfg_float("rhythm.buzz_lead_step_ms", 25.0))
         # A median this close to the beat is ON the beat: dispatch
@@ -210,7 +217,7 @@ class RhythmMode(WaitSkip):
         # player's true asynchrony by a few ms for the whole block.
         self._lead_deadband_ms = max(
             0.0, self._cfg_float("rhythm.buzz_lead_deadband_ms", 5.0))
-        lead_ms = (self._cfg_float("rhythm.buzz_lead_ms", 150.0)
+        lead_ms = (self._cfg_float("rhythm.buzz_lead_ms", 350.0)
                    if mode_name == "lead" else 0.0)
         # Carried within the login session (engine attribute, the same
         # pattern as the other per-session mode state) so block two
@@ -626,7 +633,12 @@ class RhythmMode(WaitSkip):
         best.hit_at = now
         best.early_late_ms = offset_ms
         label, points = classify_offset(offset_ms, self.windows, self.score_cfg)
-        if label in ("Perfect", "Great", "Good"):
+        # Late and Early presses feed the lead too: they are the right
+        # finger with a timing, and they are exactly the presses that
+        # say the lead is wrong. Leaving them out meant a player who
+        # reacted to the buzz and landed Late never moved the lead at
+        # all, and the buzz stayed too late for them all block.
+        if label in ("Perfect", "Great", "Good", "Late", "Early"):
             self._adapt_lead(offset_ms)
         self.engine.log_rhythm_hit(best, offset_ms, label, points, now,
                                    t_press_perf=ev.t_perf)

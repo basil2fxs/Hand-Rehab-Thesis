@@ -71,6 +71,10 @@ class _SessionHarness(unittest.TestCase):
 
     def _login(self, name: str = "P1", age: str = "63") -> None:
         self.eng.begin_session(name, age)
+        # The session's hand is asked once, straight after login.
+        self.assertIs(self.eng.screen_obj,
+                      self.eng._screens["hand_choice"])
+        self.eng.choose_session_hand("right")
 
     def _play_one_game(self):
         """One classic block, one logged trial, natural finish."""
@@ -118,6 +122,10 @@ class LoginFlowTests(_SessionHarness):
         self.assertTrue(self.eng._session_active)
         self.assertEqual(self.eng.session.participant, "Mara")
         self.assertEqual(self.eng.cfg.get("session.age"), "58")
+        # The hand comes next, once for the session, then the hub.
+        self.assertIs(self.eng.screen_obj,
+                      self.eng._screens["hand_choice"])
+        self.eng.choose_session_hand("right")
         self.assertIs(self.eng.screen_obj,
                       self.eng._screens["mode_select"])
 

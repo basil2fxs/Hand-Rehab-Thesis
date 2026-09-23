@@ -388,6 +388,10 @@ class HubCalibrateTests(_EngineHarness):
         button's own work rather than the session's."""
         self.eng.source = source
         self.eng.begin_session("Mara", "58")
+        if self.eng.screen_obj is self.eng._screens.get("hand_choice"):
+            opts = self.eng.session_hand_options()
+            self.eng.choose_session_hand("both" if "both" in opts
+                                         else opts[0])
         while calls:
             _hands, cb = calls.pop()
             if cb is not None:
@@ -419,6 +423,7 @@ class HubCalibrateTests(_EngineHarness):
         calls = self._fake_quick_cal()
         self.eng.source = _TwoBoardSource()
         self.eng.begin_session("Mara", "58")
+        self.eng.choose_session_hand("both")
         login_hands, login_cb = calls[0]
         login_cb()
         self.eng.start_manual_calibration()

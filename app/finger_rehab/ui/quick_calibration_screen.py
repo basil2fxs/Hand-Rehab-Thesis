@@ -148,6 +148,30 @@ QUIET_TRACE_FADE = 0.45
 # instruction has been read is a capture nobody was ready for.
 LEAD_S = 3.0
 
+# A hand resting on the pads from the very start of the hands-off step is
+# its own floor, so movement alone cannot see it. The level the pads read
+# EMPTY last time can: a pad this far above it, or a hand this far above
+# in total, has something on it. The pads' empty level wanders a few
+# counts between days; a resting finger adds 3 to 40.
+REF_LANE_COUNTS = 12.0
+REF_HAND_COUNTS = 20.0
+
+# On the resting step a hand counts as placed when at least PLACED_LANES
+# pads rise PLACED_LANE_COUNTS above this run's empty capture, or the
+# hand rises PLACED_HAND_COUNTS in total.
+PLACED_LANE_COUNTS = 3.0
+PLACED_LANES = 2
+PLACED_HAND_COUNTS = 10.0
+
+# Seconds after the lead that a two-hand run waits for a hand that never
+# comes down before it calibrates only the hand that is resting.
+DROP_HAND_AFTER_S = 6.0
+
+# Seconds the sensors and the person may disagree (a pad whose empty
+# level drifted, a hand that rests very lightly) before Enter is offered
+# to go on anyway, so nobody is ever stuck on a step.
+OVERRIDE_AFTER_S = 10.0
+
 # ---- press-phase geometry, 1280x800 logical -----------------------------
 # Sized to be read at arm's length with a finger already on a pad: the
 # player cannot lean in to check a small bar without changing the press
@@ -219,6 +243,15 @@ class QuickCalibrationScreen(Screen):
 
         self._confirm = False          # Esc guard overlay
         self._dim_cache: pygame.Surface | None = None
+        # Enter pressed to go on past a level check the sensors and the
+        # person disagree on; per step.
+        self._override = False
+        # The empty level each hand's pads read at the last saved
+        # calibration; the reference the hands-off step checks against.
+        self._ref: dict[str, list[float]] = {}
+        # The hands this run actually measured, for the engine to mark
+        # as covered; None until it finishes.
+        self.covered_hands: list[str] | None = None
 
         self._status = ""
         self._buttons: list[Button] = []
@@ -310,7 +343,28 @@ class QuickCalibrationScreen(Screen):
         self._problems = []
         self._confirm = False
         self._status = ""
+        self._override = False
+        self.covered_hands = None
+        self._ref = self._reference_empties()
         self._rebuild_buttons()
+
+    def _reference_empties(self) -> dict[str, list[float]]:
+        """Per hand, the empty level the pads read at the last saved
+        calibration, when there is one."""
+        refs: dict[str, list[float]] = {}
+        profiles = getattr(self.engine, "calibration_profiles", None) or {}
+        finder = getattr(self.engine, "_usable_saved_profile", None)
+        for hand in self.hands:
+            prof = profiles.get(hand) if isinstance(profiles, dict) else None
+            if prof is None and callable(finder):
+                try:
+                    prof = finder(hand)
+                except Exception:
+                    prof = None
+            empty = list(getattr(prof, "empty", None) or [])
+            if len(empty) == N_FINGERS and any(v > 0 for v in empty):
+                refs[hand] = empty
+        return refs
 
     def _reset_finger_state(self) -> None:
         self._hold = 0.0
@@ -544,9 +598,89 @@ class QuickCalibrationScreen(Screen):
         out.sort(reverse=True)
         return [(h, i) for _, h, i in out]
 
+    def _lanes_over_reference(self) -> list[tuple[str, int]]:
+        """(hand, finger) for pads reading above the level they read
+        empty last time: a hand resting on them from the start, which
+        _lanes_down cannot see. Nothing once Enter has overridden it."""
+        if (self.phase != PHASE_OFF or self._override or not self._hist
+                or not getattr(self, "_ref", None)):
+            return []
+        cur = self._hist[-1][1]
+        out: list[tuple[float, str, int]] = []
+        for hand in self.hands:
+            ref = self._ref.get(hand)
+            if not ref:
+                continue
+            here = self._hand_slice(cur, hand)
+            excess = [here[i] - ref[i] for i in range(N_FINGERS)]
+            pads = [(e, hand, i) for i, e in enumerate(excess)
+                    if e >= REF_LANE_COUNTS]
+            if (not pads and sum(max(0.0, e) for e in excess)
+                    >= REF_HAND_COUNTS):
+                pads = [(e, hand, i) for i, e in enumerate(excess) if e > 0]
+            out.extend(pads)
+        out.sort(reverse=True)
+        return [(h, i) for _, h, i in out]
+
+    def _hands_unplaced(self) -> list[str]:
+        """Hands not yet resting on their pads during the resting step:
+        too little rise over this run's own empty capture. Nothing once
+        Enter has overridden it."""
+        if self.phase != PHASE_REST or self._override or not self._hist:
+            return []
+        cur = self._hist[-1][1]
+        out = []
+        for hand in self.hands:
+            here = self._hand_slice(cur, hand)
+            cap = self._captures[hand]
+            rise = [here[i] - cap["empty"][i] for i in range(N_FINGERS)]
+            lanes = sum(1 for i, r in enumerate(rise)
+                        if r >= max(PLACED_LANE_COUNTS,
+                                    3.0 * cap["empty_noise"][i]))
+            if (lanes < PLACED_LANES
+                    and sum(max(0.0, r) for r in rise) < PLACED_HAND_COUNTS):
+                out.append(hand)
+        return out
+
+    def _drop_hands(self, missing: list[str]) -> None:
+        """A two-hand run where one hand never came down: measure the
+        hand that did, and leave the other alone rather than wait."""
+        for hand in missing:
+            if hand in self.hands and len(self.hands) > 1:
+                self.hands.remove(hand)
+                self._captures.pop(hand, None)
+                self._rest_buffers.pop(hand, None)
+                self._ref.pop(hand, None)
+        log.info("quick calibration: %s not on the pads, calibrating %s "
+                 "only", ", ".join(missing), ", ".join(self.hands))
+        self._status = (f"Only the {self.hands[0]} hand is on the pads, so "
+                        f"only it is calibrated.")
+
+    def _override_offered(self) -> bool:
+        """Enter is on offer: a rest step held up only by the level
+        checks, for OVERRIDE_AFTER_S past its lead."""
+        if (self._override or self._collecting
+                or self.phase not in (PHASE_OFF, PHASE_REST)
+                or self._stale()):
+            return False
+        held = (self._lanes_over_reference() if self.phase == PHASE_OFF
+                else self._hands_unplaced())
+        if not held:
+            return False
+        waited = (time.perf_counter() - self._phase_started_at
+                  - self._lead_s())
+        return waited >= OVERRIDE_AFTER_S
+
     def _blockers(self) -> list[tuple[str, int]]:
-        return (self._lanes_down() if self.phase == PHASE_OFF
-                else self._lanes_leaning())
+        if self.phase == PHASE_OFF:
+            seen = set()
+            out = []
+            for lane in self._lanes_down() + self._lanes_over_reference():
+                if lane not in seen:
+                    seen.add(lane)
+                    out.append(lane)
+            return out
+        return self._lanes_leaning()
 
     def _settled(self) -> bool:
         """Whether a rest capture may start. Everything has to be true:
@@ -594,6 +728,15 @@ class QuickCalibrationScreen(Screen):
         through the lead, so a hand that came off early costs nothing.
         """
         now = time.perf_counter()
+        missing = self._hands_unplaced()
+        if missing:
+            placed = [h for h in self.hands if h not in missing]
+            waited = now - self._phase_started_at - self._lead_s()
+            if placed and waited >= DROP_HAND_AFTER_S:
+                self._drop_hands(missing)
+            else:
+                self._quiet_since = 0.0
+                return
         if not self._settled():
             self._quiet_since = 0.0
             return
@@ -623,10 +766,11 @@ class QuickCalibrationScreen(Screen):
                     for c in cols]
             else:
                 cap["resting"] = [statistics.fmean(c) for c in cols]
-        self._status = ""
         self._quiet_since = 0.0
+        self._override = False
         self._phase_started_at = time.perf_counter()
         if empty_step:
+            self._status = ""
             self.phase = PHASE_REST
         else:
             self.phase = PHASE_PRESS
@@ -752,6 +896,7 @@ class QuickCalibrationScreen(Screen):
             self.engine.apply_calibration(prof)
         log.info("quick calibration saved and applied for %s",
                  ", ".join(self._profiles))
+        self.covered_hands = list(self._profiles)
         self._go_on()
 
     def _skip(self) -> None:
@@ -835,6 +980,14 @@ class QuickCalibrationScreen(Screen):
         # Esc arrives through the engine's global path (on_escape), so
         # the KEYDOWN that follows it here must not double-handle.
         if e.type == pygame.KEYDOWN and e.key == pygame.K_ESCAPE:
+            return
+        if (e.type == pygame.KEYDOWN
+                and e.key in (pygame.K_RETURN, pygame.K_KP_ENTER)
+                and not self._confirm and self._override_offered()):
+            # The person says the sensors are wrong: a pad drifted, or
+            # a hand rests too lightly to register. Go on.
+            self._override = True
+            self._quiet_since = 0.0
             return
         if self._confirm:
             for b in self._confirm_buttons:
@@ -996,7 +1149,7 @@ class QuickCalibrationScreen(Screen):
         """(headline, the short line under it, colour) for whatever
         state the rest step is in.
 
-        Four words is the entire budget, deliberately. Somebody
+        Six words is the entire budget, deliberately. Somebody
         holding their hands off a pad, or resting them on one without
         pressing, cannot read a paragraph while doing it. So each
         state here is a thing to DO plus at most two words saying how,
@@ -1017,11 +1170,13 @@ class QuickCalibrationScreen(Screen):
             verb = "LIFT" if self.phase == PHASE_OFF else "RELAX"
             return (f"{verb} YOUR {FINGER_NAMES[i].upper()} FINGER",
                     "", th.warning)
+        if self._hands_unplaced() and not self._collecting:
+            return ("REST YOUR HANDS", "on the pads", th.warning)
         under = "hold still" if self._collecting else None
         if self.phase == PHASE_OFF:
-            return ("HANDS OFF", under or "nothing touching",
+            return ("HANDS OFF THE DEVICE", under or "don't touch",
                     th.foreground)
-        return ("HANDS RESTING", under or "no pressure", th.foreground)
+        return ("REST YOUR HANDS", under or "on the pads", th.foreground)
 
     def _draw_rest_step(self, surf: pygame.Surface) -> None:
         """One state, centred, big enough to read from the chair.
@@ -1065,7 +1220,13 @@ class QuickCalibrationScreen(Screen):
                                 self.hands[0], None, hot[self.hands[0]],
                                 on_pads)
 
-        if self._status:
+        if self._override_offered():
+            line = ("Hands really off? Press Enter."
+                    if self.phase == PHASE_OFF
+                    else "Hands already resting? Press Enter.")
+            draw_text(surf, line, (cx, 742), th, ly, pt=FONT_BODY,
+                      centre=True, colour=th.foreground)
+        elif self._status:
             draw_text(surf, self._status, (cx, 742), th, ly,
                       pt=FONT_SMALL + 2, centre=True, colour=th.warning)
         elif (not self._collecting

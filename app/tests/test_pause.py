@@ -199,15 +199,15 @@ class EncouragementStreakTests(unittest.TestCase):
         return eng
 
     def test_encouragement_fires_at_thresholds(self) -> None:
+        # Big streaks only: nothing before ten.
         eng = self._make_engine_with_stub_screens()
-        for _ in range(5):
+        for _ in range(20):
             eng._update_streak(was_hit=True, screen_key="gameplay")
         calls = eng._screens["gameplay"].add_encouragement.call_args_list
-        # 2 thresholds crossed in 5 hits: 3 and 5.
         self.assertEqual(len(calls), 2)
         # Process praise with the count in it, not a trait.
-        self.assertEqual(calls[0].args[0], "3 in a row")
-        self.assertEqual(calls[1].args[0], "5 in a row, nice")
+        self.assertEqual(calls[0].args[0], "10 in a row")
+        self.assertEqual(calls[1].args[0], "20 in a row, steady hands")
 
     def test_miss_resets_streak(self) -> None:
         eng = self._make_engine_with_stub_screens()
@@ -221,12 +221,12 @@ class EncouragementStreakTests(unittest.TestCase):
 
     def test_threshold_fires_only_once_per_block(self) -> None:
         eng = self._make_engine_with_stub_screens()
-        # Hit 3, miss to reset streak, hit 3 again. The "3 in a row"
+        # Hit 10, miss to reset streak, hit 10 again. The "10 in a row"
         # banner should only fire on the first crossing.
-        for _ in range(3):
+        for _ in range(10):
             eng._update_streak(was_hit=True, screen_key="gameplay")
         eng._update_streak(was_hit=False, screen_key="gameplay")
-        for _ in range(3):
+        for _ in range(10):
             eng._update_streak(was_hit=True, screen_key="gameplay")
         self.assertEqual(eng._screens["gameplay"].add_encouragement.call_count, 1)
 
@@ -244,10 +244,10 @@ class AudioPlaySongStartOffsetTests(unittest.TestCase):
 
 
 class OutcomeColourTests(unittest.TestCase):
-    """Three-tier lane flash so the patient sees how close they got:
-       red    = Miss
-       orange = Late / Early (right lane, off timing)
-       green  = Perfect / Great / Good (clean correct press)
+    """The lane flash never reads as a telling-off:
+       grey  = no hit (Miss, or a press before the cue)
+       green = the press landed (Great, Good, Late)
+       gold  = Perfect
     """
 
     def _make_engine(self):
@@ -257,14 +257,19 @@ class OutcomeColourTests(unittest.TestCase):
         eng.theme = theme_mod.get("clinical")
         return eng
 
-    def test_miss_is_red(self) -> None:
+    def test_miss_is_grey_not_red(self) -> None:
         eng = self._make_engine()
-        self.assertEqual(eng._outcome_colour("Miss"), eng.theme.lane_miss)
+        self.assertEqual(eng._outcome_colour("Miss"), eng.theme.muted)
+        self.assertNotEqual(eng._outcome_colour("Miss"),
+                            eng.theme.lane_miss)
 
-    def test_late_and_early_are_orange(self) -> None:
+    def test_late_counts_as_landed_and_early_is_grey(self) -> None:
         eng = self._make_engine()
-        self.assertEqual(eng._outcome_colour("Late"), eng._ORANGE_CLOSE)
-        self.assertEqual(eng._outcome_colour("Early"), eng._ORANGE_CLOSE)
+        self.assertEqual(eng._outcome_colour("Late"), eng.theme.lane_hit)
+        self.assertEqual(eng._outcome_colour("Early"), eng.theme.muted)
+        # Rhythm's Early is a scored press just ahead of the beat.
+        self.assertEqual(eng._outcome_colour("Early", "rhythm"),
+                         eng.theme.lane_hit)
 
     def test_great_and_good_are_green(self) -> None:
         # Great + Good both flash the standard hit-green; Perfect has

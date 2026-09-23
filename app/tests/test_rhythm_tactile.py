@@ -302,15 +302,19 @@ class LeadAdaptationTests(unittest.TestCase):
 
         _fake_clock(go)
 
-    def test_late_early_and_miss_do_not_move_the_lead(self) -> None:
+    def test_a_miss_does_not_move_the_lead_but_late_presses_do(self) -> None:
+        # +400 is a Miss (no offset to learn from); +200 is Late (past
+        # good_ms 175, inside miss_ms 300). A player landing Late is
+        # the one the lead is too short for, so Late presses count:
+        # left out, that player's lead never moved at all.
         def go(clock):
             mode, engine, _bm = _make_mode()
-            # +200 is Late (past good_ms 175, inside miss_ms 300),
-            # -250 is Early, +400 is a Miss: none count as hits.
-            for offset in (200.0, -250.0, 400.0, 200.0):
-                leads = self._play(mode, clock, lambda lead, o=offset: o, 1)
-            self.assertEqual(mode.buzz_lead_ms, 150.0)
-            self.assertEqual(len(mode._lead_offsets), 0)
+            seq = iter([400.0] * 4 + [200.0] * 4)
+            leads = self._play(mode, clock, lambda lead: next(seq), 8)
+            # Four misses: nothing learnt, nothing moved.
+            self.assertEqual(leads[:4], [150.0] * 4)
+            # Four Late presses: the lead goes up one step.
+            self.assertEqual(leads[-1], 175.0)
 
         _fake_clock(go)
 
@@ -658,7 +662,8 @@ class BlockRecordTests(unittest.TestCase):
         from finger_rehab.config import Config
         cfg = Config.load()
         self.assertEqual(cfg.get("rhythm.tactile_mode"), "lead")
-        self.assertEqual(float(cfg.get("rhythm.buzz_lead_ms")), 150.0)
+        self.assertEqual(float(cfg.get("rhythm.buzz_lead_ms")), 350.0)
+        self.assertEqual(float(cfg.get("rhythm.buzz_lead_max_ms")), 700.0)
         self.assertTrue(cfg.get("rhythm.buzz_lead_adapt"))
         self.assertEqual(float(cfg.get("rhythm.buzz_rise_comp_ms")), 0.0)
         self.assertFalse(cfg.get("latency.measured"))

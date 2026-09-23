@@ -8,15 +8,15 @@ part of the design.
 
 WHAT THE CHILD DOES. ATTEND: the whole word appears at the top as n
 empty slots with the word written large under them, and the word is
-spoken. MODEL: each slot lights in turn at the beat, its chunk shows,
-the syllable is spoken, and one tactile roll runs across all four
-fingers of the playing hand. Then the slots empty again. CHOOSE, once
-per syllable in order: four tiles fall slowly down four lanes that sit
-over the four fingers, one tile is the syllable and three are foils.
-The child presses the finger under the right tile. A correct press
-lifts the tile into the word strip; a wrong press greys that tile and
-nothing else. COMPLETE: the strip is full, the whole word is spoken
-again.
+spoken. MODEL: each slot lights in turn at the beat, its chunk shows
+and the syllable is spoken. No motor runs. Then the slots empty
+again. CHOOSE, once per syllable in order: four tiles fall slowly down
+four lanes that sit over the four fingers, one tile is the syllable
+and three are foils. The child presses the finger under the right
+tile. If the set is still unanswered three quarters of the way down,
+the right finger buzzes once (PROMPT below). A correct press lifts the
+tile into the word strip; a wrong press greys that tile and nothing
+else. COMPLETE: the strip is full, the whole word is spoken again.
 
 WHY A CHOICE TASK AND NOT COUNTING. Phonological awareness
 instruction works (Ehri, Nunes, Willows, Schuster, Yaghoub-Zadeh and
@@ -68,18 +68,39 @@ Shohamy 2011 on the striatal-to-hippocampal shift). So positive
 feedback is immediate and loud (the tile lifts, the chime plays) and
 negative feedback is quiet, informational and late.
 
-NO HINTS, EVER. Fitts and Seeger (1953) showed response selection is
-fastest when the stimulus and the response share a spatial code: a
-tile falling in the lane over the finger that answers it IS that code,
-and it is the only mapping the child gets. Nothing else may carry the
-answer before the press. The model's tactile pulse is therefore a
-four-finger ROLL, not a single buzz (a buzz on one finger during the
-model would announce which lane to press later); the option-set spawn
-goes through the engine's cue path with `silent_stim` set, so it arms
-the force window, the timeout and the EEG marker but fires no tone, no
-screen highlight and no buzzer; the four tiles are drawn identically;
-and the target lane is drawn by a deficit rule with a random
-tie-break, never in a predictable place.
+NO HINT BEFORE THE CHILD HAS HAD TIME. Fitts and Seeger (1953) showed
+response selection is fastest when the stimulus and the response
+share a spatial code: a tile falling in the lane over the finger that
+answers it IS that code. Nothing carries the answer early: the model
+plays no buzz at all; the option-set spawn goes through the engine's
+cue path with `silent_stim` set, so it arms the force window, the
+timeout and the EEG marker but fires no tone, no screen highlight and
+no buzzer; the four tiles are drawn identically; and the target lane
+is drawn by a deficit rule with a random tie-break, never in a
+predictable place.
+
+PROMPT. A late buzz on the right finger, the time-delay prompting
+method from special education: the answer is given only after the
+learner has had a fair chance to find it, and the delay is set from
+the learner's typical response time (Eyler and Ledford 2024 review
+the method; Browder et al. 2009 rate it evidence-based for sight-word
+teaching, from single-case studies of children with intellectual
+disability, not of dyslexia). Here the delay is prompt_at (0.75) of
+the fall, so 1.9 to 3.0 s over the 2.5 to 4 s falls, close to the 3 to
+4 s delays most studies settle on. It fades per word: after
+prompt_fade_after (2) sets of the word answered right before any
+buzz, the word plays with no prompt; prompt_return_after (2) errors in
+a row, or any set that leaves the screen, bring it back. Letting the
+child try first, and helping only late, also fits Gabay (2021): adults
+with dyslexia learn worse from immediate feedback than from delayed.
+What the buzz is not: it carries no letter or sound, so it is a prompt
+to respond, not a reading aid, and there is no evidence a vibration
+prompt helps reading (Stevens et al. 2021 found no effect of the
+multisensory element in Orton-Gillingham). THE LEARNING MEASURE is the
+UNPROMPTED CORRECT rate: sets answered right before any buzz, by
+exposure and by word. The share of correct answers that needed the
+buzz should fall as a word is learnt. A prompted answer scores Good,
+not Great, and does not move the foil staircase.
 
 DIFFICULTY MOVES ON TWO CLOCKS.
 - The FOIL RUNG (1 to 8) controls how similar the wrong options are,
@@ -128,15 +149,17 @@ Weerdenburg, Gompel and Bosman 2018). Everything is lower case:
 reversals only exist in lower case, and print is lower case.
 
 WHAT THE NUMBER MEASURES UNDER THE SHIPPED CUE DEFAULTS. Those
-defaults play the buzzer and the cue tone with the screen, and this
-mode splits them across the phases on purpose. The model is
-audio-tactile-visual: the syllable is spoken, the four-finger roll
-runs, the slot lights. The choice-set spawn is none of those (the
-`silent_stim` path fires no tone, no highlight and no buzz), so the
-rt on a set row is a spoken-to-printed matching time under a silent
-onset, not a cued reaction time, and it is not comparable with the
-rt of any other mode in this suite. The after-press cue on a correct
-press rides cue.buzz_after / cue.sound_after like everywhere else.
+defaults are audio-tactile-visual (the buzzer and the cue tone with
+the screen), and this mode splits them across the phases on purpose.
+The model is audio-visual: the syllable is spoken and the slot lights. The
+choice-set spawn is none of those (the `silent_stim` path fires no
+tone, no highlight and no buzz), so the rt on a set row is a
+spoken-to-printed matching time under a silent onset, not a cued
+reaction time, and it is not comparable with the rt of any other mode
+in this suite. An rt on a prompted set (prompt=1) includes the buzz's
+help and belongs with the prompted answers, not the unprompted ones.
+The after-press cue on a correct press rides cue.buzz_after /
+cue.sound_after like everywhere else.
 The cue_flags column on every row is how the analysis separates
 blocks run under different channel mixes instead of pooling them.
 
@@ -160,7 +183,11 @@ WHAT ONE ROW LOGS. One trials.csv row per option SET, not per word:
     tlane=<1-indexed target lane>;
     presses=<lane>:<t_ms from spawn>:<peak>:<kind>,...;
     first=<ok|wrong|none>;err=<ok|wrong_first|miss>;rt=<ms>;
-    streak=<n>;ease=1 (biased draws only);sup=<0|1>
+    ease=1 (biased draws only);streak=<n>;sup=<0|1>;
+    pon=<0|1, prompt armed for this set>;prompt=<0|1, it fired>;
+    pat=<ms from spawn to the prompt, blank if none>;
+    pclass=<unprompted_correct|unprompted_error|prompted_correct|
+            prompted_error|no_response>
 
 rt is spawn to correct press. time_difference_ms on the row is that
 rt; error_type carries err on Miss rows; correct_keys is the target
@@ -182,9 +209,11 @@ letter position dyslexia or anything else (Kohnen, Nickels, Castles,
 Friedmann and McArthur 2012 needed purpose-built tests for that). The
 tactile channel is engagement and cueing, not a claimed active
 ingredient (Stevens et al. 2021, meta-analytic null on the
-multisensory element). GraphoGame's effects depend on adult support
-(McTigue 2020), so a session played alone is a different condition and
-the `supervised` flag records which one it was. The hardware was built
+multisensory element); the prompt buzz is a response prompt, and a
+rise in unprompted accuracy shows the child learnt the match, not
+that the buzz taught reading. GraphoGame's effects depend on adult
+support (McTigue 2020), so a session played alone is a different
+condition and the `supervised` flag records which one it was. The hardware was built
 and ethically scoped for adult stroke rehabilitation; use with
 children needs new ethics approval, a finger-spacing check and hygiene
 procedures, and none of these parameters have been validated on
@@ -258,6 +287,12 @@ class SetRecord:
     wrong_kind: str | None     # foil kind of the first wrong press
     n_anticip: int = 0
     n_off_hand: int = 0
+    # The prompt buzz: whether it was armed for this set (the word's
+    # fade state), whether it fired, and which of the five outcome
+    # classes the set falls in (see PROMPT in the module docstring).
+    prompt_armed: bool = False
+    prompted: bool = False
+    pclass: str = ""
 
 
 @dataclass
@@ -293,11 +328,10 @@ class SyllablesMode(WaitSkip):
     # schedule, so the reward carries no reward-prediction-error
     # surprise into the EEG record.
     STREAK_MILESTONES = (3, 5, 8)
-    # Hard cap on warm-up taps whatever the config asks for.
-    WARMUP_TAPS_MAX = 5
-    # Metronome count-in beats before the warm-up taps are counted.
-    # The warm-up is the only place a beat grid still exists.
-    COUNT_IN_BEATS = 4
+    # The prompt's outcome classes, in the order the analysis reads
+    # them. "Unprompted correct" is the learning measure.
+    PCLASSES = ("unprompted_correct", "unprompted_error",
+                "prompted_correct", "prompted_error", "no_response")
     # Returns are extra words on top of the block's budget, so they
     # are capped or a child who misses a lot never reaches the end.
     MAX_RETURNS = 6
@@ -336,6 +370,10 @@ class SyllablesMode(WaitSkip):
                  seed: int = 0,
                  demo_trials: int | None = None,
                  lanes_by_hand: dict[str, list[int]] | None = None,
+                 prompt: bool = True,
+                 prompt_at: float = 0.75,
+                 prompt_fade_after: int = 2,
+                 prompt_return_after: int = 2,
                  ) -> None:
         self.engine = engine
         # The lanes of each playing hand, in the hand's own order
@@ -361,8 +399,18 @@ class SyllablesMode(WaitSkip):
         self.ioi_s = max(0.2, float(ioi_ms) / 1000.0)
         self.round_size = max(1, int(round_size))
         self.break_s = max(0.0, float(break_s))
-        self.warmup_total = max(0, min(self.WARMUP_TAPS_MAX,
-                                       int(warmup_taps)))
+        # warmup_taps is accepted and ignored. The tapping warm-up is
+        # gone: no other mode had one, and the timing baseline it took
+        # was never part of what this matching task measures.
+        self.warmup_total = 0
+        # The prompt buzz (PROMPT in the docstring). prompt_at is the
+        # share of the fall after which an unanswered set buzzes the
+        # right finger; clamped so it always lands after the spawn
+        # lockout and before the tiles leave.
+        self.prompt_enabled = bool(prompt)
+        self.prompt_at = min(0.95, max(0.3, float(prompt_at)))
+        self.prompt_fade_after = max(1, int(prompt_fade_after))
+        self.prompt_return_after = max(1, int(prompt_return_after))
         self.attend_s = max(0.2, float(attend_s))
         self.tap_debounce_s = max(0.0, float(tap_debounce_ms) / 1000.0)
         self.inter_trial_gap_s = max(0.0, float(inter_trial_gap_ms) / 1000.0)
@@ -393,10 +441,9 @@ class SyllablesMode(WaitSkip):
         self.speech_volume = float(speech.get("volume", 1.0))
         self.demo = demo_trials is not None
         if self.demo:
-            # Test Mode: a handful of words, no warm-up, token breaks,
-            # so a supervisor demo reaches Results inside a minute.
+            # Test Mode: a handful of words and token breaks, so a
+            # supervisor demo reaches Results inside a minute.
             self.words_total = max(2, int(demo_trials))
-            self.warmup_total = 0
             self.break_s = min(self.break_s, 1.0)
         else:
             self.words_total = max(1, int(words_total))
@@ -420,9 +467,9 @@ class SyllablesMode(WaitSkip):
         self.silent_stim = False                # engine reads this at spawn
 
         # ---- session flow ----
-        # warmup -> gap -> attend -> model -> choose -> complete -> gap
-        # ... with break between rounds and done at the end.
-        self.phase = "warmup" if self.warmup_total else "gap"
+        # gap -> attend -> model -> choose -> complete -> gap ... with
+        # break between rounds and done at the end.
+        self.phase = "gap"
         self.trial_counter = 0
         self.words_done = 0                     # distinct first attempts
         self.active: PendingTrial | None = None
@@ -450,6 +497,11 @@ class SyllablesMode(WaitSkip):
         self._last_tap_t: dict[int, float] = {}
         self._respeak = False
         self.lift_t: float | None = None        # screen: tile lifting
+        self._prompt_due: float | None = None   # when this set buzzes
+        self._prompted_t: float | None = None   # when it did
+        self._prompt_armed = False
+        # Per word: is the prompt on, and the runs that switch it.
+        self._prompt_state: dict[str, dict] = {}
 
         # ---- difficulty ----
         self._run = 0                           # consecutive first-press ok
@@ -473,11 +525,6 @@ class SyllablesMode(WaitSkip):
         self._band_trace: list[str] = [self.band]
         self._recent: deque[bool] = deque(maxlen=10)
         self._since_band_change = 0
-
-        # ---- warm-up probe ----
-        self._warmup_beats: list[float] = []
-        self._warmup_asyn: list[float] = []
-        self._warmup_done = 0
 
         # ---- reward layer ----
         self._streak = 0
@@ -550,7 +597,7 @@ class SyllablesMode(WaitSkip):
     def eeg_stim_code(self) -> int | None:
         """The choice band: 50 for a set on a first attempt, 51 for a
         set on a returned word. None everywhere else, so the model
-        roll keeps the ordinary 30-band cue-condition code."""
+        keeps the ordinary 30-band cue-condition code."""
         if self.phase != "choose":
             return None
         from ...hardware import eeg_trigger
@@ -633,11 +680,11 @@ class SyllablesMode(WaitSkip):
     def on_resume(self, pause_dur: float) -> None:
         for attr in ("_t0", "_phase_t0", "_phase_until", "_model_next_t",
                      "_spawn_t", "_exit_t", "_next_spawn_t",
-                     "_set_close_t", "_correct_t", "_glow_t", "lift_t"):
+                     "_set_close_t", "_correct_t", "_glow_t", "lift_t",
+                     "_prompt_due", "_prompted_t"):
             v = getattr(self, attr)
             if v is not None:
                 setattr(self, attr, v + pause_dur)
-        self._warmup_beats = [t + pause_dur for t in self._warmup_beats]
         # A pause mid-word breaks the presentation the trial rests on
         # (the word was spoken and modelled before the pause, the tiles
         # fall after it), so the fair move is to restart the word from
@@ -691,9 +738,7 @@ class SyllablesMode(WaitSkip):
             self._handle_press(self._presses.popleft(), now)
         if self.phase == "done":
             return
-        if self.phase == "warmup":
-            self._update_warmup(now)
-        elif self.phase == "break":
+        if self.phase == "break":
             if self._phase_until is not None and now >= self._phase_until:
                 self._begin_word(now)
         elif self.phase == "gap":
@@ -709,31 +754,6 @@ class SyllablesMode(WaitSkip):
         elif self.phase == "complete":
             if self._phase_until is not None and now >= self._phase_until:
                 self._after_word(now)
-
-    # ---- warm-up probe -----------------------------------------------------
-    def _update_warmup(self, now: float) -> None:
-        if not self._warmup_beats:
-            first = now + self.ioi_s
-            total = self.COUNT_IN_BEATS + self.warmup_total
-            self._warmup_beats = [first + i * self.ioi_s
-                                  for i in range(total)]
-        if now >= self._warmup_beats[-1] + self.ioi_s:
-            self._stop_metronome()
-            self._enter_phase("gap", now)
-
-    def _warmup_tap(self, ev: PressEvent) -> None:
-        scorable = self._warmup_beats[self.COUNT_IN_BEATS:]
-        if not scorable:
-            return
-        nearest = min(scorable, key=lambda b: abs(ev.t_perf - b))
-        asyn_ms = (ev.t_perf - nearest) * 1000.0
-        self._warmup_asyn.append(asyn_ms)
-        self._warmup_done += 1
-        raw = getattr(self.engine, "raw_logger", None)
-        if raw:
-            raw.queue_event("warmup_tap", lane=ev.lane, t_perf=ev.t_perf,
-                            detail=f"asyn_ms={asyn_ms:.1f}",
-                            hand=self.engine.hand_mode)
 
     # ---- word flow ---------------------------------------------------------
     def _due_return(self) -> dict | None:
@@ -809,10 +829,7 @@ class SyllablesMode(WaitSkip):
         self.clear_wait()
         if phase != "model":
             self.model_hand = None
-        if phase == "warmup":
-            self._warmup_beats = []
-            self._start_metronome()
-        elif phase == "attend":
+        if phase == "attend":
             self._phase_until = now + self.attend_s
         elif phase == "model":
             self._model_idx = -1
@@ -842,16 +859,13 @@ class SyllablesMode(WaitSkip):
         self._after_word(now)
 
     def _update_model(self, now: float) -> None:
-        """Light each slot in turn at the beat, speak its syllable, and
-        fire ONE tactile roll across all four fingers of the playing
-        hand.
+        """Light each slot in turn at the beat and speak its syllable.
 
-        The roll is the whole point: the old tapping mode buzzed the
-        single finger that would answer that syllable, which in a
-        choice task would announce the target lane before the tiles
-        exist. Four lanes in one on_stim_multi call reach the board as
-        an arpeggio (the engine spaces one motor per board), so the
-        child feels the syllable without feeling WHERE it is.
+        No buzz. The model used to run a roll across all four fingers
+        for every syllable, which players felt as every motor going
+        off at the start of each word for no reason. The one buzz this
+        mode now plays is the prompt on the right finger late in a set
+        (PROMPT in the docstring), where it helps.
 
         Beat deadlines are ABSOLUTE: each syllable is due one interval
         after the previous DEADLINE, not one after the frame that
@@ -873,12 +887,12 @@ class SyllablesMode(WaitSkip):
             self._model_next_t = now + self.ioi_s
         self.model_hand = self.word_hand
         self._speak_syllable(self._model_idx)
-        # Every lane of the playing hand, so the roll carries the
-        # syllable without carrying a lane. The trial id is the word's
-        # next set id, which is what the marker stream needs to tie the
-        # 30-band model bytes to the word they belong to.
+        # Still goes through the stimulus path, buzz off, so the
+        # 30-band model byte and the slot light keep their timing. The
+        # trial id is the word's next set id, which ties the byte to
+        # the word it belongs to.
         self.engine.on_stim_multi(self.active_lanes(),
-                                  self.trial_counter, now)
+                                  self.trial_counter, now, buzz=False)
 
     # ---- the choice phase --------------------------------------------------
     def _update_choose(self, now: float) -> None:
@@ -890,8 +904,73 @@ class SyllablesMode(WaitSkip):
             if now >= self._set_close_t:
                 self._close_set(now)
             return
+        if self._prompt_due is not None and now >= self._prompt_due:
+            self._fire_prompt(now)
         if self._exit_t is not None and now >= self._exit_t:
             self._miss_set(now)
+
+    def _fire_prompt(self, now: float) -> None:
+        """Buzz the right finger once: the set is still unanswered at
+        prompt_at of its fall. Nothing on screen changes."""
+        self._prompt_due = None
+        if self.option_set is None:
+            return
+        lane = self.option_set.target_lane
+        self._prompted_t = now
+        fire = getattr(self.engine, "on_prompt_buzz", None)
+        if callable(fire):
+            fire(lane, self.trial_counter, now)
+
+    def _word_prompt_on(self) -> bool:
+        if not self.prompt_enabled or self.word is None:
+            return False
+        st = self._prompt_state.get(self.word.word)
+        return True if st is None else bool(st["on"])
+
+    def _classify_prompt(self) -> tuple[str, bool]:
+        """(outcome class, prompted) for the set in play. Prompted
+        means the buzz came before the child's first real press, so
+        that press may have been helped by it."""
+        first = None
+        for p in self._set_presses:
+            if p.kind in (KIND_ANTICIP, KIND_OFF_HAND):
+                continue
+            first = p
+            break
+        pt = self._prompted_t
+        prompted = pt is not None and (first is None or first.t_perf >= pt)
+        if first is None:
+            return "no_response", prompted
+        ok = first.kind == KIND_CORRECT
+        if prompted:
+            return ("prompted_correct" if ok else "prompted_error"), True
+        return ("unprompted_correct" if ok else "unprompted_error"), False
+
+    def _update_prompt_fade(self, pclass: str, missed: bool) -> None:
+        """Fade the prompt per word: off after prompt_fade_after
+        unprompted correct sets in a row, back on after
+        prompt_return_after unprompted errors in a row or any set that
+        left the screen unanswered."""
+        if self.word is None:
+            return
+        st = self._prompt_state.setdefault(
+            self.word.word, {"on": True, "ok_run": 0, "err_run": 0})
+        if missed:
+            st.update(on=True, ok_run=0, err_run=0)
+            return
+        if pclass == "unprompted_correct":
+            st["ok_run"] += 1
+            st["err_run"] = 0
+            if st["ok_run"] >= self.prompt_fade_after:
+                st["on"] = False
+        elif pclass == "unprompted_error":
+            st["err_run"] += 1
+            st["ok_run"] = 0
+            if st["err_run"] >= self.prompt_return_after:
+                st["on"] = True
+        else:
+            # Needed the buzz: the prompt stays where it is.
+            st["ok_run"] = 0
 
     def _spawn_set(self, now: float) -> None:
         """Four tiles for syllable `self.pos`: build them, open the
@@ -920,6 +999,10 @@ class SyllablesMode(WaitSkip):
         )
         self._spawn_t = now
         self._exit_t = now + self.fall_s
+        self._prompted_t = None
+        self._prompt_armed = self._word_prompt_on()
+        self._prompt_due = (now + self.prompt_at * self.fall_s
+                            if self._prompt_armed else None)
         self._next_spawn_t = None
         self._set_close_t = None
         self._set_presses = []
@@ -948,9 +1031,6 @@ class SyllablesMode(WaitSkip):
             self._speak_syllable(self.pos)
 
     def _handle_press(self, ev: PressEvent, now: float) -> None:
-        if self.phase == "warmup":
-            self._warmup_tap(ev)
-            return
         if self.phase != "choose" or self.option_set is None:
             # No penalty anywhere in this mode: a child fidgeting
             # between words must not lose anything for it.
@@ -975,6 +1055,7 @@ class SyllablesMode(WaitSkip):
             self.filled_lanes[self.pos] = ev.lane
             self._correct_t = ev.t_perf
             self.lift_t = ev.t_perf
+            self._prompt_due = None
             self._score_set(now, ev.t_perf)
             self._set_close_t = ev.t_perf + self.CORRECT_HOLD_S
         elif kind == KIND_WRONG:
@@ -1016,6 +1097,7 @@ class SyllablesMode(WaitSkip):
         self._spawn_t = None
         self._exit_t = None
         self._set_close_t = None
+        self._prompt_due = None
         if missed:
             self._park_word(now)
             self._finish_word(now, completed=False)
@@ -1044,9 +1126,16 @@ class SyllablesMode(WaitSkip):
         rt_ms = ((correct_t - self._spawn_t) * 1000.0
                  if correct_t is not None and self._spawn_t is not None
                  else None)
-        if err == "ok":
+        pclass, prompted = self._classify_prompt()
+        if err == "ok" and not prompted:
             outcome = TrialResult(label="Great",
                                   points=self.score_cfg.great_points,
+                                  rt_ms=rt_ms)
+        elif err == "ok":
+            # Right, with the buzz's help: counted and scored, a step
+            # under an answer found alone.
+            outcome = TrialResult(label="Good",
+                                  points=self.score_cfg.good_points,
                                   rt_ms=rt_ms)
         elif err == "wrong_first":
             outcome = TrialResult(label="Good",
@@ -1070,8 +1159,12 @@ class SyllablesMode(WaitSkip):
                           if p.kind == KIND_ANTICIP),
             n_off_hand=sum(1 for p in self._set_presses
                            if p.kind == KIND_OFF_HAND),
+            prompt_armed=self._prompt_armed,
+            prompted=self._prompted_t is not None,
+            pclass=pclass,
         )
         self._sets.append(rec)
+        self._update_prompt_fade(pclass, missed=(err == "miss"))
         # The EEG response marker must lock to the child's own press,
         # so it is the first press that was neither an anticipation nor
         # an off-hand press; outcome.rt_ms is spawn-to-correct-press,
@@ -1095,7 +1188,9 @@ class SyllablesMode(WaitSkip):
             hand=self.word_hand,
         )
         if self._source_alive():
-            self._move_rung(err in ("ok",), err, now)
+            # The staircase reads answers found alone: a set the
+            # prompt helped does not make the foils harder.
+            self._move_rung(pclass == "unprompted_correct", err, now)
 
     def _move_rung(self, first_ok: bool, err: str, now: float) -> None:
         """The 3-down-1-up staircase (Levitt 1971): three consecutive
@@ -1305,6 +1400,13 @@ class SyllablesMode(WaitSkip):
             parts.append("ease=1")
         parts.append(f"streak={self._streak}")
         parts.append(f"sup={1 if self.supervised else 0}")
+        pat = (f"{(self._prompted_t - self._spawn_t) * 1000.0:.0f}"
+               if self._prompted_t is not None and self._spawn_t is not None
+               else "")
+        parts.append(f"pon={1 if rec.prompt_armed else 0}")
+        parts.append(f"prompt={1 if rec.prompted else 0}")
+        parts.append(f"pat={pat}")
+        parts.append(f"pclass={rec.pclass}")
         return ";".join(parts)
 
     # ---- rewards and rounds ------------------------------------------------
@@ -1373,15 +1475,6 @@ class SyllablesMode(WaitSkip):
                             hand=self.engine.hand_mode)
 
     # ---- audio and speech helpers ------------------------------------------
-    def _start_metronome(self) -> None:
-        audio = getattr(self.engine, "audio", None)
-        if audio is None:
-            return
-        try:
-            audio.start_metronome(60.0 / self.ioi_s)
-        except Exception:
-            pass
-
     def _stop_metronome(self) -> None:
         audio = getattr(self.engine, "audio", None)
         if audio is None:
@@ -1506,6 +1599,33 @@ class SyllablesMode(WaitSkip):
         self.engine.finish_block()
 
     # ---- block summary -----------------------------------------------------
+    def _prompt_stats(self) -> dict:
+        """The prompt's numbers. The learning measure is the
+        unprompted correct rate: answers found before any buzz. The
+        share of correct answers that needed the buzz should fall as
+        a word is learnt."""
+        sets = self._sets
+        counts = {c: sum(1 for r in sets if r.pclass == c)
+                  for c in self.PCLASSES}
+        n = len(sets)
+        correct = counts["unprompted_correct"] + counts["prompted_correct"]
+        return {
+            "enabled": self.prompt_enabled,
+            "at": self.prompt_at,
+            "fade_after": self.prompt_fade_after,
+            "return_after": self.prompt_return_after,
+            "n_sets": n,
+            "n_prompted": sum(1 for r in sets if r.prompted),
+            "classes": counts,
+            "unprompted_correct_rate": (
+                round(counts["unprompted_correct"] / n, 3) if n else None),
+            "prompted_share_of_correct": (
+                round(counts["prompted_correct"] / correct, 3)
+                if correct else None),
+            "words_faded": sum(1 for st in self._prompt_state.values()
+                               if not st["on"]),
+        }
+
     def block_stats(self) -> dict:
         """What finish_block folds into session.json: the settings the
         block ran under, first-press accuracy split every way the
@@ -1589,9 +1709,12 @@ class SyllablesMode(WaitSkip):
                                / len(first_attempts), 3)
                          if first_attempts else None),
             "supervised": self.supervised,
-            "warmup_taps": self._warmup_done,
-            "warmup_asyn_mean_ms": _mean(self._warmup_asyn),
-            "warmup_asyn_sd_ms": _sd(self._warmup_asyn),
+            # The warm-up is gone; the keys stay so older notebooks
+            # and the history reader find them.
+            "warmup_taps": 0,
+            "warmup_asyn_mean_ms": None,
+            "warmup_asyn_sd_ms": None,
+            "prompt": self._prompt_stats(),
             "max_streak": self._max_streak,
             "stickers": self._stickers,
             "n_ease_in": self._n_ease_in,
