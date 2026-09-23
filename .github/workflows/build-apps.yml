@@ -187,6 +187,10 @@ jobs:
             throw "task survived uninstall"
           }
           Write-Host "-- task removed"
+          # The query that proves the task is gone returns non-zero, and
+          # a pwsh step inherits the last exit code, so the whole check
+          # has to say plainly that it passed.
+          exit 0
 
       - name: Upload the Windows installer
         if: runner.os == 'Windows'
