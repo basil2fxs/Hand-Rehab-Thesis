@@ -8479,7 +8479,8 @@ class GameEngine:
         self._maybe_resave_metadata()
 
     def log_rhythm_unmatched(self, lane: int, now: float,
-                             t_press_perf: float | None = None) -> None:
+                             t_press_perf: float | None = None,
+                             wrong_finger: bool = False) -> None:
         # Block-summary counter so the analyst sees wrong-finger
         # activity without scanning raw.csv.
         self._block_rhythm_spurious_presses += 1
@@ -8501,15 +8502,22 @@ class GameEngine:
                 t_perf=(t_press_perf if t_press_perf is not None
                         else time.perf_counter()),
                 hand=self.hand_mode)
-        # EEG: a press with no scheduled note nearby is an idle press
-        # (131, artifact bookkeeping). The wrong-finger band is
-        # reserved for presses inside a trial. apply_wrong_press_penalty
-        # below only docks score; the marker belongs to this event.
-        # `now` is song time; the marker clock is perf_counter, so use
-        # the press's own timestamp (fall back to perf at log time).
-        self._eeg_send(eeg_trigger.CODES["resp_idle"],
-                       t_event=(t_press_perf if t_press_perf is not None
-                                else time.perf_counter()))
+        # EEG. A press on the wrong finger while another finger's
+        # note was due is a commission error and goes out as the
+        # wrong-press band (110 + the lane pressed), so rhythm can
+        # supply the ERN it is listed for. A press with nothing due
+        # at all is idle (131, artifact bookkeeping). The score and
+        # the spurious-press counter treat both the same; only the
+        # marker tells them apart. `now` is song time and the marker
+        # clock is perf_counter, so use the press's own timestamp.
+        t_marker = (t_press_perf if t_press_perf is not None
+                    else time.perf_counter())
+        if wrong_finger:
+            self._eeg_send(eeg_trigger.response_code("wrong", lane),
+                           lane=lane, t_event=t_marker)
+        else:
+            self._eeg_send(eeg_trigger.CODES["resp_idle"],
+                           t_event=t_marker)
         # Score penalty for the wrong-lane press in rhythm mode. Each
         # unmatched press costs `scoring.wrong_press_penalty` (floored
         # at zero so the score never goes negative).

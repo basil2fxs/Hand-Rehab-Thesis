@@ -606,8 +606,21 @@ class RhythmMode(WaitSkip):
                 best_d = ad
                 best = s
         if best is None:
+            # No note for THIS finger. Was one due for another finger
+            # right now? Then this is the wrong finger on the beat: a
+            # commission error, the thing an ERN is made of. Otherwise
+            # nothing was due and the press really is idle. The two
+            # used to share one code, so rhythm could not supply a
+            # single error trial to the ERN analysis it is listed for.
+            wrong_finger = any(
+                s.hit_at is None
+                and not getattr(s, "_miss_logged", False)
+                and s.note.lane != ev.lane
+                and -miss_radius_s <= (now - s.note.t) <= miss_radius_s * 2
+                for s in self.scheduler.scheduled)
             self.engine.log_rhythm_unmatched(ev.lane, now,
-                                             t_press_perf=ev.t_perf)
+                                             t_press_perf=ev.t_perf,
+                                             wrong_finger=wrong_finger)
             return
         offset_ms = (now - best.note.t) * 1000.0
         best.hit_at = now

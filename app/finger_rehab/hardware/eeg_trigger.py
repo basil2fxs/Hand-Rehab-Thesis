@@ -307,7 +307,13 @@ CODE_NOTES: dict[str, tuple[str, str, str, str]] = {
         "reproduced item."),
     "resp_wrong_base": (
         "press sample", "response",
-        "wrong finger, + lane actually pressed", ""),
+        "wrong finger, + lane actually pressed",
+        "Rhythm sends it for the wrong finger pressed while another "
+        "finger's note was due, so rhythm supplies ERN error trials. "
+        "Chords sends it for a discrete wrong-finger press; force that "
+        "leaks into a neighbour without registering as a press is "
+        "enslavement, not a perceived error, and stays a correct "
+        "byte."),
     "resp_anticipation_base": (
         "press sample", "response",
         "press before the go or under the anticipation cut, + lane", ""),
@@ -317,7 +323,10 @@ CODE_NOTES: dict[str, tuple[str, str, str, str]] = {
         "rhythm it lands when the miss window closes, inside the "
         "next note's 22-31 span, and belongs to the earlier note. "
         "Mirror misses send no 130: both hand bytes still go out."),
-    "resp_idle": ("press sample", "response", "press with no trial active", ""),
+    "resp_idle": (
+        "press sample", "response", "press with no trial active",
+        "Rhythm sends it only when no note in any lane was due. A "
+        "wrong finger on the beat is resp_wrong_base instead."),
     "feedback_positive": (
         "flip", "", "outcome glyph or chime for a hit",
         "Only under eeg.feedback_markers. Lab style draws the glyph "
