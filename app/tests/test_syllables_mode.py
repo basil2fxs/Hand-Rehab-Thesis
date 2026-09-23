@@ -972,19 +972,20 @@ class NoWarmupTests(unittest.TestCase):
 
 
 class PromptTests(unittest.TestCase):
-    """The late prompt: the right finger buzzes once at prompt_at of
-    the fall if the set is still unanswered, and the row says whether
-    the answer came before it or after it."""
+    """The late prompt: the right finger, and only that finger, buzzes
+    once if the set is still unanswered at the word's rung of the
+    progressive delay ladder, and the row says whether the answer came
+    before it or after it."""
 
-    def test_an_unanswered_set_buzzes_the_right_finger_at_three_quarters(
+    def test_a_new_word_buzzes_the_right_finger_at_the_first_rung(
             self) -> None:
         engine, mode = _build_mode()
         _run_to_choose(mode)
         t0, fall = mode._spawn_t, mode.fall_s
         tlane = mode.option_set.target_lane
-        mode._tick(t0 + 0.74 * fall)
+        mode._tick(t0 + 0.59 * fall)
         engine.on_prompt_buzz.assert_not_called()
-        mode._tick(t0 + 0.76 * fall)
+        mode._tick(t0 + 0.61 * fall)
         engine.on_prompt_buzz.assert_called_once()
         self.assertEqual(engine.on_prompt_buzz.call_args.args[0], tlane)
         # Answered after the buzz: counted, scored Good, and classed
@@ -996,6 +997,7 @@ class PromptTests(unittest.TestCase):
         outcome = engine.log_trial.call_args.args[1]
         self.assertEqual(outcome.label, "Good")
         stim = engine.log_trial.call_args.kwargs["stimulus"]
+        self.assertIn("pstep=0", stim)
         self.assertIn("prompt=1", stim)
         self.assertIn("pclass=prompted_correct", stim)
 
@@ -1025,23 +1027,58 @@ class PromptTests(unittest.TestCase):
             t = _wait_for_next_set(mode, t)
         self.assertEqual(mode.rung, 1)
 
-    def test_the_prompt_fades_per_word(self) -> None:
+    def test_the_delay_grows_per_word_then_the_prompt_fades(self) -> None:
+        # Progressive time delay: each set answered right before the
+        # buzz moves the word one rung later, past the last it is off;
+        # a wrong first press or a miss moves it one rung back; a set
+        # that needed the buzz leaves it where it is.
         engine, mode = _build_mode()
         _run_to_choose(mode)
-        self.assertTrue(mode._word_prompt_on())
+        fall = mode.fall_s
+        self.assertAlmostEqual(mode._prompt_delay_s(), 0.6 * fall)
         mode._update_prompt_fade("unprompted_correct", missed=False)
+        self.assertAlmostEqual(mode._prompt_delay_s(), 0.75 * fall)
+        mode._update_prompt_fade("prompted_correct", missed=False)
+        self.assertAlmostEqual(mode._prompt_delay_s(), 0.75 * fall)
+        mode._update_prompt_fade("unprompted_correct", missed=False)
+        self.assertAlmostEqual(mode._prompt_delay_s(), 0.9 * fall)
         self.assertTrue(mode._word_prompt_on())
         mode._update_prompt_fade("unprompted_correct", missed=False)
         self.assertFalse(mode._word_prompt_on())
         mode._update_prompt_fade("unprompted_error", missed=False)
-        self.assertFalse(mode._word_prompt_on())
-        mode._update_prompt_fade("unprompted_error", missed=False)
         self.assertTrue(mode._word_prompt_on())
-        mode._update_prompt_fade("unprompted_correct", missed=False)
-        mode._update_prompt_fade("unprompted_correct", missed=False)
-        self.assertFalse(mode._word_prompt_on())
+        self.assertAlmostEqual(mode._prompt_delay_s(), 0.9 * fall)
+        mode._update_prompt_fade("unprompted_error", missed=False)
         mode._update_prompt_fade("no_response", missed=True)
-        self.assertTrue(mode._word_prompt_on())
+        mode._update_prompt_fade("no_response", missed=True)
+        self.assertAlmostEqual(mode._prompt_delay_s(), 0.6 * fall)
+        self.assertEqual(mode.block_stats()["prompt"]["steps"],
+                         [0.6, 0.75, 0.9])
+
+    def test_the_buzz_never_undercuts_the_childs_own_speed(self) -> None:
+        # Three sets answered right unaided at about 2.4 s: the buzz
+        # waits their median plus the 300 ms margin even on the first
+        # rung, and never past 0.9 of the fall.
+        engine, mode = _build_mode()
+        _run_to_choose(mode)
+        fall = mode.fall_s
+        self.assertAlmostEqual(mode._prompt_delay_s(), 0.6 * fall)
+        mode._answer_rts.extend([2.3, 2.4, 2.5])
+        self.assertAlmostEqual(mode._prompt_delay_s(),
+                               min(max(0.6 * fall, 2.7), 0.9 * fall))
+        mode._answer_rts.extend([9.0, 9.0, 9.0])
+        self.assertAlmostEqual(mode._prompt_delay_s(), 0.9 * fall)
+
+    def test_only_unaided_right_answers_set_the_floor(self) -> None:
+        engine, mode = _build_mode()
+        t = _run_to_choose(mode)
+        t0, fall = mode._spawn_t, mode.fall_s
+        mode._tick(t0 + 0.7 * fall)                 # prompted
+        t = _answer_set(mode, t0 + 0.75 * fall, delay=0.75 * fall)
+        self.assertEqual(len(mode._answer_rts), 0)
+        t = _wait_for_next_set(mode, t)
+        _answer_set(mode, t, delay=0.4)
+        self.assertEqual(len(mode._answer_rts), 1)
 
     def test_a_buzz_that_did_not_go_out_prompted_nobody(self) -> None:
         # Keyboard rig, buzzer channel off or a failed STIM: the engine

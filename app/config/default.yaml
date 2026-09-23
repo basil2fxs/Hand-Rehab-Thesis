@@ -1092,17 +1092,21 @@ syllables:
   words_per_block: 40
   round_size: 10
   break_s: 30
-  # The prompt: a set still unanswered at prompt_at of its fall buzzes
-  # the right finger once. It fades word by word: off after
-  # prompt_fade_after sets of that word answered right before any
-  # buzz, back on after prompt_return_after wrong first presses in a
-  # row or a set that left the screen. The learning measure is the
-  # share of sets answered right BEFORE the buzz. prompt false turns
-  # it off for the whole block.
+  # The prompt: a set still unanswered late in its fall buzzes the
+  # right finger once, and only that finger. Progressive time delay,
+  # per word: a new word's prompt comes at the first share of the
+  # fall in prompt_steps; each set of that word answered right before
+  # any buzz moves it to the next, and past the last the word plays
+  # with no prompt. A wrong first press before the buzz, or a set
+  # that leaves the screen, moves it one step back. The buzz never
+  # comes before this child's own median answer time (the last eight
+  # sets answered right unaided, once there are three) plus
+  # prompt_floor_margin_ms, and never after 0.9 of the fall. The
+  # learning measure is the share of sets answered right BEFORE the
+  # buzz. prompt false turns it off for the whole block.
   prompt: true
-  prompt_at: 0.75
-  prompt_fade_after: 2
-  prompt_return_after: 2
+  prompt_steps: [0.6, 0.75, 0.9]
+  prompt_floor_margin_ms: 300
   # Seconds the whole word is shown and spoken before the syllables
   # are modelled.
   attend_s: 1.5

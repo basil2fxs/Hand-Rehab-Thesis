@@ -311,9 +311,9 @@ CODE_NOTES: dict[str, tuple[str, str, str, str]] = {
     "stim_choice_prompt": (
         "STIM command", "prep_buzz_lead",
         "syllables: prompt buzz on the right finger late in the fall",
-        "Only on a set still unanswered at prompt_at of its fall. A "
-        "press after this byte is a prompted answer (pclass on the "
-        "row)."),
+        "Only on a set still unanswered at its prompt delay (the "
+        "word's rung of prompt_steps, pstep on the row). A press "
+        "after this byte is a prompted answer (pclass on the row)."),
     "resp_correct_base": (
         "press sample", "response", "correct press, + lane pressed (0-7)",
         "Mirror sends one per hand (right 0-3, left 4-7). Chords sends "

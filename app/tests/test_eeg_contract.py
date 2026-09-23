@@ -1071,8 +1071,11 @@ class LabPackageTests(unittest.TestCase):
     frozen exe must find the sibling config on its own."""
 
     PKG = LAB_FOLDER
+    # sessions/ ships too: build_lab_package makes sessions/eeg with
+    # its note so ActiView's recordings have a home from day one.
     TOP_LEVEL = ("Finger Rehab.exe", "eeg_lab.yaml",
-                 "run_in_psychopy.py", "README.txt", "source")
+                 "run_in_psychopy.py", "README.txt", "sessions",
+                 "source")
 
     def test_generated_copies_match_their_sources(self) -> None:
         pairs = (

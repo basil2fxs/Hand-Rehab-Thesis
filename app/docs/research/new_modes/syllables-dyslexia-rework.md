@@ -66,8 +66,8 @@ code, and it is the only mapping the child gets. Consequences in the
 build: the model's tactile pulse became a four-finger ROLL (a single
 buzz would announce the lane before the tiles existed; update 23
 September 2026: the roll is gone, the model plays no buzz, and the
-one buzz is a time-delay prompt on the right finger at three quarters
-of the fall, see syllables.py PROMPT), the option-set
+one buzz is a time-delay prompt on the right finger late in the fall,
+see syllables.py PROMPT and PROMPT TIMING below), the option-set
 onset goes through the engine's cue path with a `silent_stim` flag so
 it arms the force window, the timeout and the EEG marker but fires no
 tone, no highlight and no buzzer, all four tiles are drawn identically
@@ -98,6 +98,36 @@ retrieval attempt followed by the answer still helps later learning
 (Kornell, Hays and Bjork 2009). Positive feedback stays immediate and
 loud, because that is what keeps a child playing (Ronimus, Kujala,
 Tolvanen and Lyytinen 2014).
+
+PROMPT TIMING (24 September 2026). The prompt's delay is progressive
+and per word rather than a constant three quarters of the fall. A new
+word's buzz comes at 0.6 of the fall; each set of that word answered
+right before any buzz moves it to 0.75, then 0.9, then off; a wrong
+first press before the buzz or a missed set moves it one step back.
+It never comes before the child's own median unaided answer time plus
+300 ms, and never after 0.9 of the fall. Why, in order of weight:
+- Try first, then help. An unsuccessful retrieval attempt followed by
+  the answer beats being shown the answer (Kornell, Hays and Bjork
+  2009), and errors followed by correction beat error avoidance in
+  typical learners (Metcalfe 2017). So no buzz comes before the child
+  has had their usual thinking time.
+- Help that fades. Guidance given every time keeps performance up
+  while it is there and learning down when it is gone (Salmoni,
+  Schmidt and Walter 1984; Winstein and Schmidt 1990; for haptic
+  guidance in particular, Sigrist, Rauter, Riener and Wolf 2013). A
+  word the child already reads loses its prompt.
+- Progressive over constant delay. Walker (2008) reviewed 22 time
+  delay studies with children with autism: constant delay came with
+  more errors to criterion and a later handover of control from the
+  prompt to the learner than progressive delay. The comparison is
+  indirect and the population is not this one, so it is a reason to
+  prefer the progressive form, not a proven effect here.
+- Not more buzzing. Nothing found shows a vibration teaching reading
+  (Stevens et al 2021 on the multisensory element), and the finger
+  that answers moves every set, so a buzz carries where to press and
+  nothing about the syllable. A buzz before the child has looked
+  would only hand over the answer, and several motors at once carry
+  no information at all.
 
 TWO DIFFICULTY CLOCKS. The foil rung (1 to 8: how similar the wrong
 chunks are, how fast the fall, whether the syllable is spoken again at
@@ -229,14 +259,19 @@ Everything the old docstring said still holds, plus:
 - Levitt H (1971). Transformed up-down methods in psychoacoustics. Journal of the Acoustical Society of America 49(2), 467-477.
 - McTigue EM, Solheim OJ, Zimmer WK, Uppstad PH (2020). Critically reviewing GraphoGame across the world. Reading Research Quarterly 55(1), 45-73.
 - Mehringer H, Fraga-Gonzalez G, Pleisch G, et al (2020). (Swiss) GraphoLearn: an app-based tool to support beginning readers. Research and Practice in Technology Enhanced Learning 15, 5.
+- Metcalfe J (2017). Learning from errors. Annual Review of Psychology 68, 465-489.
 - Metcalfe J, Kornell N, Finn B (2009). Delayed versus immediate feedback in children's and adults' vocabulary learning. Memory and Cognition 37(8), 1077-1087.
 - Mueller B, Richter T, Karageorgos P, Krawietz S, Ennemoser M (2017). Effects of a syllable-based reading intervention in poor-reading fourth graders. Frontiers in Psychology 8, 1635.
 - Proctor RW, Schneider DW (2018). Hick's law for choice reaction time: a review. Quarterly Journal of Experimental Psychology 71(6), 1281-1299.
 - Richardson U, Lyytinen H (2014). The GraphoGame method. Human Technology 10(1), 39-60.
 - Ronimus M, Kujala J, Tolvanen A, Lyytinen H (2014). Children's engagement during digital game-based learning of reading. Computers and Education 71, 237-246.
+- Salmoni AW, Schmidt RA, Walter CB (1984). Knowledge of results and motor learning: a review and critical reappraisal. Psychological Bulletin 95(3), 355-386.
+- Sigrist R, Rauter G, Riener R, Wolf P (2013). Augmented visual, auditory, haptic, and multimodal feedback in motor learning: a review. Psychonomic Bulletin and Review 20(1), 21-53.
 - Stevens EA, Austin C, Moore C, Scammacca N, Boucher AN, Vaughn S (2021). Current state of the evidence: examining the effects of Orton-Gillingham reading interventions. Exceptional Children 87(4), 397-417.
 - Terepocki M, Kruk RS, Willows DM (2002). The incidence and nature of letter orientation errors in reading disability. Journal of Learning Disabilities 35(3), 214-233.
+- Walker G (2008). Constant and progressive time delay procedures for teaching children with autism: a literature review. Journal of Autism and Developmental Disorders 38(2), 261-275.
 - Wery JJ, Diliberto JA (2017). The effect of a specialized dyslexia font, OpenDyslexic, on reading rate and accuracy. Annals of Dyslexia 67(2), 114-127.
+- Winstein CJ, Schmidt RA (1990). Reduced frequency of knowledge of results enhances motor skill learning. Journal of Experimental Psychology: Learning, Memory, and Cognition 16(4), 677-691.
 - Wolff PH, Michel GF, Ovrut M, Drake C (1990). Rate and timing precision of motor coordination in developmental dyslexia. Developmental Psychology 26(3), 349-359.
 - Ziegler JC, Goswami U (2005). Reading acquisition, developmental dyslexia, and skilled reading across languages: a psycholinguistic grain size theory. Psychological Bulletin 131(1), 3-29.
 - Zorzi M, Barbiero C, Facoetti A, et al (2012). Extra-large letter spacing improves reading in dyslexia. PNAS 109(28), 11455-11459.

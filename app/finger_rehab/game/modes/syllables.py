@@ -13,8 +13,8 @@ and the syllable is spoken. No motor runs. Then the slots empty
 again. CHOOSE, once per syllable in order: four tiles fall slowly down
 four lanes that sit over the four fingers, one tile is the syllable
 and three are foils. The child presses the finger under the right
-tile. If the set is still unanswered three quarters of the way down,
-the right finger buzzes once (PROMPT below). A correct press lifts the
+tile. If the set is still unanswered late in its fall, the right
+finger buzzes once (PROMPT below). A correct press lifts the
 tile into the word strip; a wrong press greys that tile and nothing
 else. COMPLETE: the strip is full, the whole word is spoken again.
 
@@ -79,20 +79,36 @@ no buzzer; the four tiles are drawn identically; and the target lane
 is drawn by a deficit rule with a random tie-break, never in a
 predictable place.
 
-PROMPT. A late buzz on the right finger, the time-delay prompting
-method from special education: the answer is given only after the
-learner has had a fair chance to find it, and the delay is set from
-the learner's typical response time (Eyler and Ledford 2024 review
-the method; Browder et al. 2009 rate it evidence-based for sight-word
-teaching, from single-case studies of children with intellectual
-disability, not of dyslexia). Here the delay is prompt_at (0.75) of
-the fall, so 1.9 to 3.0 s over the 2.5 to 4 s falls, close to the 3 to
-4 s delays most studies settle on. It fades per word: after
-prompt_fade_after (2) sets of the word answered right before any
-buzz, the word plays with no prompt; prompt_return_after (2) errors in
-a row, or any set that leaves the screen, bring it back. Letting the
-child try first, and helping only late, also fits Gabay (2021): adults
-with dyslexia learn worse from immediate feedback than from delayed.
+PROMPT. A late buzz on the right finger, and only that finger, the
+time-delay prompting method from special education: the answer is
+given only after the learner has had a fair chance to find it (Eyler
+and Ledford 2024 review the method; Browder et al. 2009 rate it
+evidence-based for sight-word teaching, from single-case studies of
+children with intellectual disability, not of dyslexia). The delay is
+PROGRESSIVE and per word. A new word's prompt comes at the first
+share of the fall in prompt_steps (0.6, then 0.75, then 0.9); each
+set of that word answered right before any buzz moves it one step
+later, and past the last step the word plays with no prompt. A wrong
+first press before the buzz, or a set that leaves the screen, moves
+it one step back. Walker (2008) reviewed constant and progressive
+time delay across 22 studies: constant delay, what this mode used
+before, came with more errors to criterion and a later handover from
+the prompt to the learner, though from indirect comparisons only. The
+fade is the guidance hypothesis at work: help given every time keeps
+performance up and learning down (Salmoni, Schmidt and Walter 1984;
+Winstein and Schmidt 1990, 50 percent feedback beat 100 percent at
+retention; Sigrist, Rauter, Riener and Wolf 2013 for haptic
+guidance). The delay also never undercuts the child: once three sets
+have been answered right unaided, the buzz waits at least their
+median answer time plus prompt_floor_margin_ms (300), which is how
+the method sets the delay from the learner's own latency. It never
+comes after 0.9 of the fall, so it always lands while the tiles are
+there to press. Letting the child try first fits the retrieval
+literature (Kornell, Hays and Bjork 2009; Metcalfe 2017: errors then
+correction beat error avoidance in typical learners) and Gabay
+(2021): adults with dyslexia learn worse from immediate feedback than
+from delayed. One finger only: several motors at once carry no
+information here and read as noise.
 What the buzz is not: it carries no letter or sound, so it is a prompt
 to respond, not a reading aid, and there is no evidence a vibration
 prompt helps reading (Stevens et al. 2021 found no effect of the
@@ -184,7 +200,9 @@ WHAT ONE ROW LOGS. One trials.csv row per option SET, not per word:
     presses=<lane>:<t_ms from spawn>:<peak>:<kind>,...;
     first=<ok|wrong|none>;err=<ok|wrong_first|miss>;rt=<ms>;
     ease=1 (biased draws only);streak=<n>;sup=<0|1>;
-    pon=<0|1, prompt armed for this set>;prompt=<0|1, it fired>;
+    pon=<0|1, prompt armed for this set>;pstep=<the word's rung on
+    the delay ladder, len(prompt_steps) when off>;prompt=<0|1, it
+    fired>;
     pat=<ms from spawn to the prompt, blank if none>;
     pclass=<unprompted_correct|unprompted_error|prompted_correct|
             prompted_error|no_response>
@@ -328,6 +346,12 @@ class SyllablesMode(WaitSkip):
     # schedule, so the reward carries no reward-prediction-error
     # surprise into the EEG record.
     STREAK_MILESTONES = (3, 5, 8)
+    # The latest the prompt may come, as a share of the fall, so it
+    # always lands while the tiles are still there to press.
+    PROMPT_CAP = 0.9
+    # Answer times needed before the child's own speed sets the floor.
+    PROMPT_FLOOR_MIN_N = 3
+
     # The prompt's outcome classes, in the order the analysis reads
     # them. "Unprompted correct" is the learning measure.
     PCLASSES = ("unprompted_correct", "unprompted_error",
@@ -371,9 +395,11 @@ class SyllablesMode(WaitSkip):
                  demo_trials: int | None = None,
                  lanes_by_hand: dict[str, list[int]] | None = None,
                  prompt: bool = True,
-                 prompt_at: float = 0.75,
-                 prompt_fade_after: int = 2,
-                 prompt_return_after: int = 2,
+                 prompt_steps: tuple[float, ...] = (0.6, 0.75, 0.9),
+                 prompt_floor_margin_ms: float = 300.0,
+                 prompt_at: float | None = None,
+                 prompt_fade_after: int | None = None,
+                 prompt_return_after: int | None = None,
                  ) -> None:
         self.engine = engine
         # The lanes of each playing hand, in the hand's own order
@@ -403,14 +429,19 @@ class SyllablesMode(WaitSkip):
         # gone: no other mode had one, and the timing baseline it took
         # was never part of what this matching task measures.
         self.warmup_total = 0
-        # The prompt buzz (PROMPT in the docstring). prompt_at is the
-        # share of the fall after which an unanswered set buzzes the
-        # right finger; clamped so it always lands after the spawn
-        # lockout and before the tiles leave.
+        # The prompt buzz (PROMPT in the docstring). prompt_steps is
+        # the progressive delay ladder, each a share of the fall; a
+        # word starts on the first rung and walks up it. Each rung is
+        # clamped so the buzz lands after the spawn lockout and before
+        # the tiles leave. prompt_at, prompt_fade_after and
+        # prompt_return_after were the constant-delay settings and are
+        # accepted and ignored, like warmup_taps.
         self.prompt_enabled = bool(prompt)
-        self.prompt_at = min(0.95, max(0.3, float(prompt_at)))
-        self.prompt_fade_after = max(1, int(prompt_fade_after))
-        self.prompt_return_after = max(1, int(prompt_return_after))
+        steps = [min(self.PROMPT_CAP, max(0.3, float(x)))
+                 for x in (prompt_steps or ())]
+        self.prompt_steps = tuple(sorted(steps)) or (0.75,)
+        self.prompt_floor_margin_s = max(
+            0.0, float(prompt_floor_margin_ms) / 1000.0)
         self.attend_s = max(0.2, float(attend_s))
         self.tap_debounce_s = max(0.0, float(tap_debounce_ms) / 1000.0)
         self.inter_trial_gap_s = max(0.0, float(inter_trial_gap_ms) / 1000.0)
@@ -500,8 +531,13 @@ class SyllablesMode(WaitSkip):
         self._prompt_due: float | None = None   # when this set buzzes
         self._prompted_t: float | None = None   # when it did
         self._prompt_armed = False
-        # Per word: is the prompt on, and the runs that switch it.
+        self._prompt_step = 0                   # the rung this set used
+        # Per word: the rung of the delay ladder it is on; one past
+        # the last rung is off.
         self._prompt_state: dict[str, dict] = {}
+        # The child's own recent answer times (seconds, unprompted
+        # correct sets only), for the floor under the delay.
+        self._answer_rts: deque = deque(maxlen=8)
 
         # ---- difficulty ----
         self._run = 0                           # consecutive first-press ok
@@ -911,7 +947,7 @@ class SyllablesMode(WaitSkip):
 
     def _fire_prompt(self, now: float) -> None:
         """Buzz the right finger once: the set is still unanswered at
-        prompt_at of its fall. Nothing on screen changes. The set only
+        its prompt delay. Nothing on screen changes. The set only
         counts as prompted when the buzz went out: a keyboard rig, the
         buzzer channel switched off or a failed STIM prompted nobody,
         and the row must not say it did."""
@@ -925,11 +961,31 @@ class SyllablesMode(WaitSkip):
         if delivered:
             self._prompted_t = now
 
+    def _word_prompt_step(self) -> int:
+        if self.word is None:
+            return 0
+        st = self._prompt_state.get(self.word.word)
+        return 0 if st is None else int(st["step"])
+
     def _word_prompt_on(self) -> bool:
         if not self.prompt_enabled or self.word is None:
             return False
-        st = self._prompt_state.get(self.word.word)
-        return True if st is None else bool(st["on"])
+        return self._word_prompt_step() < len(self.prompt_steps)
+
+    def _prompt_delay_s(self) -> float:
+        """Seconds from spawn to the buzz for the set in play: the
+        word's rung of the ladder, never earlier than this child's own
+        usual answer time plus a margin, never later than PROMPT_CAP
+        of the fall."""
+        step = min(self._word_prompt_step(), len(self.prompt_steps) - 1)
+        delay = self.prompt_steps[step] * self.fall_s
+        if len(self._answer_rts) >= self.PROMPT_FLOOR_MIN_N:
+            rts = sorted(self._answer_rts)
+            mid = len(rts) // 2
+            median = (rts[mid] if len(rts) % 2
+                      else (rts[mid - 1] + rts[mid]) / 2.0)
+            delay = max(delay, median + self.prompt_floor_margin_s)
+        return min(delay, self.PROMPT_CAP * self.fall_s)
 
     def _classify_prompt(self) -> tuple[str, bool]:
         """(outcome class, prompted) for the set in play. Prompted
@@ -951,30 +1007,19 @@ class SyllablesMode(WaitSkip):
         return ("unprompted_correct" if ok else "unprompted_error"), False
 
     def _update_prompt_fade(self, pclass: str, missed: bool) -> None:
-        """Fade the prompt per word: off after prompt_fade_after
-        unprompted correct sets in a row, back on after
-        prompt_return_after unprompted errors in a row or any set that
-        left the screen unanswered."""
+        """Walk the word along the delay ladder: a set answered right
+        before the buzz moves it one rung later (past the last rung
+        the word plays with no prompt), a wrong first press before the
+        buzz or a set that left the screen moves it one rung earlier,
+        and an answer that needed the buzz leaves it where it is."""
         if self.word is None:
             return
-        st = self._prompt_state.setdefault(
-            self.word.word, {"on": True, "ok_run": 0, "err_run": 0})
-        if missed:
-            st.update(on=True, ok_run=0, err_run=0)
-            return
-        if pclass == "unprompted_correct":
-            st["ok_run"] += 1
-            st["err_run"] = 0
-            if st["ok_run"] >= self.prompt_fade_after:
-                st["on"] = False
-        elif pclass == "unprompted_error":
-            st["err_run"] += 1
-            st["ok_run"] = 0
-            if st["err_run"] >= self.prompt_return_after:
-                st["on"] = True
-        else:
-            # Needed the buzz: the prompt stays where it is.
-            st["ok_run"] = 0
+        st = self._prompt_state.setdefault(self.word.word, {"step": 0})
+        off = len(self.prompt_steps)
+        if missed or pclass == "unprompted_error":
+            st["step"] = max(0, min(int(st["step"]), off) - 1)
+        elif pclass == "unprompted_correct":
+            st["step"] = min(off, int(st["step"]) + 1)
 
     def _spawn_set(self, now: float) -> None:
         """Four tiles for syllable `self.pos`: build them, open the
@@ -1005,7 +1050,8 @@ class SyllablesMode(WaitSkip):
         self._exit_t = now + self.fall_s
         self._prompted_t = None
         self._prompt_armed = self._word_prompt_on()
-        self._prompt_due = (now + self.prompt_at * self.fall_s
+        self._prompt_step = self._word_prompt_step()
+        self._prompt_due = (now + self._prompt_delay_s()
                             if self._prompt_armed else None)
         self._next_spawn_t = None
         self._set_close_t = None
@@ -1168,6 +1214,8 @@ class SyllablesMode(WaitSkip):
             pclass=pclass,
         )
         self._sets.append(rec)
+        if pclass == "unprompted_correct" and rt_ms is not None:
+            self._answer_rts.append(float(rt_ms) / 1000.0)
         self._update_prompt_fade(pclass, missed=(err == "miss"))
         # The EEG response marker must lock to the child's own press,
         # so it is the first press that was neither an anticipation nor
@@ -1408,6 +1456,7 @@ class SyllablesMode(WaitSkip):
                if self._prompted_t is not None and self._spawn_t is not None
                else "")
         parts.append(f"pon={1 if rec.prompt_armed else 0}")
+        parts.append(f"pstep={self._prompt_step}")
         parts.append(f"prompt={1 if rec.prompted else 0}")
         parts.append(f"pat={pat}")
         parts.append(f"pclass={rec.pclass}")
@@ -1615,9 +1664,8 @@ class SyllablesMode(WaitSkip):
         correct = counts["unprompted_correct"] + counts["prompted_correct"]
         return {
             "enabled": self.prompt_enabled,
-            "at": self.prompt_at,
-            "fade_after": self.prompt_fade_after,
-            "return_after": self.prompt_return_after,
+            "steps": list(self.prompt_steps),
+            "floor_margin_ms": round(self.prompt_floor_margin_s * 1000.0),
             "n_sets": n,
             "n_prompted": sum(1 for r in sets if r.prompted),
             "classes": counts,
@@ -1627,7 +1675,7 @@ class SyllablesMode(WaitSkip):
                 round(counts["prompted_correct"] / correct, 3)
                 if correct else None),
             "words_faded": sum(1 for st in self._prompt_state.values()
-                               if not st["on"]),
+                               if st["step"] >= len(self.prompt_steps)),
         }
 
     def block_stats(self) -> dict:

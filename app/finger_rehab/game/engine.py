@@ -4516,11 +4516,11 @@ class GameEngine:
             break_s=float(self.cfg.get("syllables.break_s", 30)),
             warmup_taps=0,
             prompt=bool(self.cfg.get("syllables.prompt", True)),
-            prompt_at=float(self.cfg.get("syllables.prompt_at", 0.75)),
-            prompt_fade_after=int(
-                self.cfg.get("syllables.prompt_fade_after", 2)),
-            prompt_return_after=int(
-                self.cfg.get("syllables.prompt_return_after", 2)),
+            prompt_steps=tuple(
+                float(x) for x in (self.cfg.get("syllables.prompt_steps")
+                                   or (0.6, 0.75, 0.9))),
+            prompt_floor_margin_ms=float(
+                self.cfg.get("syllables.prompt_floor_margin_ms", 300)),
             attend_s=float(self.cfg.get("syllables.attend_s", 1.5)),
             tap_debounce_ms=float(
                 self.cfg.get("syllables.tap_debounce_ms", 150)),
