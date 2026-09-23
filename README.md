@@ -4,8 +4,20 @@ A hand device and a laptop game for measuring and training finger movement. Four
 vibration motors sit under the fingers of each hand, wired to an Arduino Nano that streams force to the
 laptop over USB. Ten games run on that signal, and every press is logged with its timing and its force.
 
-![The hub, with all ten games](docs/images/hub.png)
-![Reaction, one trial lit](docs/images/reaction.png)
+![The hub, with all ten games](app/docs/images/hub.png)
+![Reaction, one trial lit](app/docs/images/reaction.png)
+
+## Where things are
+
+```
+Local_Runner.command   start the EEG build on this Mac (double-click)
+analysis/              the notebook: this is where results get analysed
+sessions/              recorded sessions, one folder per game
+Installers/            what people install: Windows exe, macOS dmg
+EEG_Lab/               copy this whole folder to the lab PC
+app/                   the code, config, assets, tests, build scripts
+archive/               old material kept for reference, nothing live
+```
 
 ## How it works
 
@@ -34,8 +46,8 @@ Two installers come out of the build-apps run on GitHub (Actions tab, latest run
 - **macOS:** open `FingerRehab-macOS.dmg` and drag Finger Rehab into Applications. The first open is refused
   because the app is not notarised: System Settings, Privacy & Security, Open Anyway. Once is enough.
 
-Local builds: `builds\build_app.bat` (Windows), `builds/build_app.sh` (macOS). From source: `pip install -r
-requirements.txt`, then `python main.py`; tests are `python -m pytest tests`. Nothing plugged in? The keyboard
+Local builds: `app\builds\build_app.bat` (Windows), `app/builds/build_app.sh` (macOS). From source: `pip install -r
+requirements.txt`, then `python app/main.py`; tests are `cd app && python -m pytest tests`. Nothing plugged in? The keyboard
 stands in: `J K L ;` right hand, `F D S A` left, index to little. Force Pilot and Buzz Hunt need the device.
 
 ## When a board is plugged in
@@ -63,7 +75,7 @@ running". On macOS auto-start turns itself on at the first launch from Applicati
 ## Settings
 
 The cog at the bottom right of the login screen: live finger readout, port dropdowns, Test STIM per hand,
-Open data folder, and one column of three repairs (details in [docs/flashing.txt](docs/flashing.txt)).
+Open data folder, and one column of three repairs (details in [app/docs/flashing.txt](app/docs/flashing.txt)).
 
 - **Auto-start:** the switch reads on or off. Off stays off; the next launch does not turn it back on.
 - **Flash firmware:** writes the game firmware to the board with the bundled avrdude, about ten seconds.
@@ -84,12 +96,12 @@ over about ten seconds, not a preload. Reposition the pad flat and calibrate aga
 **The board is not found, or the port keeps changing.** Ports are picked by USB vendor id, then any port with
 a vendor id, ignoring the Mac virtual ports. First board found is the right hand, second the left, and the
 login screen prints what each hand got. To pin one: Settings, Refresh, pick the port per hand, Save, which
-writes `config/user_settings.yaml`. A saved port that no longer exists is ignored and that hand falls back to
+writes `app/config/user_settings.yaml`. A saved port that no longer exists is ignored and that hand falls back to
 plug order, which the login screen says.
 
 **Calibration is asked for every time.** Once per hand per session is the design. Repeats inside one session
 mean the profile was refused: under 20 counts between resting and pressing, a trigger too high in that
-finger's travel, or a pad reading zero when empty. It saves to `config/calibration/current_<hand>.json`; if
+finger's travel, or a pad reading zero when empty. It saves to `app/config/calibration/current_<hand>.json`; if
 that file never appears, the app cannot write beside itself and is using `~/Finger Rehab Data`.
 
 **A buzzer does not buzz.** Settings, Test LEFT STIM or Test RIGHT STIM fires that hand's four motors in
@@ -105,7 +117,7 @@ sensor off 0x04 with the others wired in. Two whole hands swapped is the port as
 or a driver, not the auto-start. Listed means the Auto-start switch should read on; press it if it reads off.
 It only fires when a board arrives, so if it was already in at login, unplug and replug.
 
-**The board needs re-flashing.** Settings, Flash firmware writes `assets/firmware/finger_rehab_nano.hex` with
+**The board needs re-flashing.** Settings, Flash firmware writes `app/assets/firmware/finger_rehab_nano.hex` with
 the bundled avrdude, so no developer tools are needed. A Nano runs one of two bootloaders, 115200 or 57600;
 the app tries one, then the other, and remembers which worked.
 
@@ -113,7 +125,7 @@ the app tries one, then the other, and remembers which worked.
 `~/Finger Rehab Data` when the app cannot write beside itself. Also check Test Mode is off in Settings
 (`game.test_mode_enabled`), because it caps every block at six trials.
 
-**The EEG box does not appear.** Markers are off in the shipped game. The lab preset `config/eeg_lab.yaml` turns
+**The EEG box does not appear.** Markers are off in the shipped game. The lab preset `app/config/eeg_lab.yaml` turns
 them on: the lab folder's exe loads it from beside itself; from source pass `--config config/eeg_lab.yaml`. Set
 `eeg.port` to the box's port. With `eeg.require_port` true the session refuses to start without an openable box;
 false falls back to a logging-only dummy. `eeg.baud` 1200 resets the MMBT-S off the bus, so the writer refuses it.
@@ -135,14 +147,14 @@ save, then Run All. Figures land in the session folder they describe, per-person
 
 ## The lab folder
 
-`docs/lab_package` (the `FingerRehab-EEGLab.zip` from the same build) holds the exe, `eeg_lab.yaml`,
+`EEG_Lab` (the `FingerRehab-EEGLab.zip` from the same build) holds the exe, `eeg_lab.yaml`,
 `run_in_psychopy.py`, `README.txt` and a `source/` copy. The exe loads the yaml beside it and writes every
 marker to the trigger box; the home install carries no EEG anything. Open `run_in_psychopy.py` in PsychoPy
-Coder and press Run. Checklist and code table: [docs/eeg_lab_setup.txt](docs/eeg_lab_setup.txt).
+Coder and press Run. Checklist and code table: [app/docs/eeg_lab_setup.txt](app/docs/eeg_lab_setup.txt).
 
 ## Licence
 
 Thesis work by Basil Toufexis, Curtin University, 2026. No licence file yet, so ask before reusing the code.
 It builds on Satoru Nakayama's 2025 thesis software, whose serial protocol and press detection are kept so
-the old patient data still loads. Third-party terms live with the files: [music](assets/music/ATTRIBUTION.md),
-[icons](assets/icons/LICENSE), [words](assets/words/LICENCE.txt) and [avrdude](tools/avrdude).
+the old patient data still loads. Third-party terms live with the files: [music](app/assets/music/ATTRIBUTION.md),
+[icons](app/assets/icons/LICENSE), [words](app/assets/words/LICENCE.txt) and [avrdude](app/tools/avrdude).
