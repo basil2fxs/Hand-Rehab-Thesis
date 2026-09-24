@@ -1175,12 +1175,15 @@ which the notebook reads as a first pass.
 
 3.5 Where the data lives
 ------------------------
-sessions/ is gitignored and must stay so. The repository currently
-sits in a cloud-synced personal Google Drive folder; participant
-data must not. The study laptop runs the app from a local folder
-whose session.data_dir points at Curtin-approved storage (or a local
-folder that is copied to it at the end of the collection day), and
-the analysis reads from there. Say so in the method.
+sessions/ is gitignored and must stay so: the repository is public
+on GitHub and no participant file ever goes there. The study laptop
+starts the game with Local_Runner.command, which saves into the
+project's top-level sessions/ (the folder the notebook and
+scripts/check_sitting.py read). The project folder syncs to a private
+Google Drive, which is the first backup; the day's folder is copied
+to one more place at the end of the collection day. Files carry codes
+only; the consent forms, the one link between a name and a code, stay
+on paper. Say so in the method.
 
 
 4. ANALYSIS PLAN
@@ -1724,15 +1727,20 @@ healthy cohort cannot give.
     1996 exact F intervals, pinned to the Shrout and Fleiss 1979
     worked example) has one caller, the reliability chapter.
   g DONE. The login intake (Section 3.2); tests/test_intake.py.
-  h TO DO. Bench characterisation of the pads with known masses and
-    a 30 s drift trace, before the first participant (force_pilot.py
-    names it as the precondition).
-  i TO DO on the study laptop, 10 minutes (the procedure is in
-    docs/study_day/before_the_day.md). Audio output latency moves
-    every participant's rhythm asynchrony by the same constant, so
-    Rh2 (the SD) is untouched and Rh1 (the sign of the mean) is read
-    against it. If it is not measured, state that the asynchrony is
-    within-device and that Rh1's sign carries the latency.
+  h TO DO on the rig, five minutes: scripts/pad_bench.py walks each
+    pad through known masses (coins work) and a 30 s drift hold, and
+    prints counts per gram, linearity and drift per pad, flagging one
+    that reads unlike the others (force_pilot.py names this check as
+    its precondition).
+  i MEASURED IN PART, 24 September 2026, scripts/audio_latency.py:
+    play call to microphone 106 to 120 ms for the song path and
+    about 101 ms for a short sound, both including the microphone's
+    own delay; rhythm.audio_offset_ms assumes 40. The --with-board run
+    (a 15 s fingernail tap on the index pad times the microphone)
+    turns these into true output delays for the config. The delay
+    moves every participant's rhythm asynchrony by the same constant,
+    so Rh2 (the SD) is untouched and Rh1 (the sign of the mean) is
+    read against it.
   j DONE. scripts/measure_battery.py plays the plan headless through
     the real engine on a simulated clock and a simulated one-board
     rig, counts the rests and the transitions separately, and reports

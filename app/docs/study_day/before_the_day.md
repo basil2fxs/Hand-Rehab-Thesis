@@ -23,45 +23,51 @@ and the result.
 ## 2. Bench-check the force pads (item h)
 
 Force Pilot's numbers lean on the pads reading the same force the same
-way.
+way. About five minutes, game closed, board plugged in:
 
-1. Board plugged in, app open on Settings from the title screen (the
-   hardware test screen: live counts per pad, and a Test STIM button
-   that buzzes each motor in turn).
-2. For each pad: nothing on it, then a 50 g, 100 g and 200 g mass (or
-   anything weighed on a kitchen scale) placed in the middle of the
-   pad. Write the counts after 3 s.
-3. Leave the 200 g mass on one pad for 30 s and write the counts at 0,
-   10, 20 and 30 s (the drift trace).
-4. Keep the sheet for the thesis appendix: counts against mass per pad
-   is the calibration curve, and the 30 s trace is the drift.
+```
+python3 app/scripts/pad_bench.py --masses 31.1 62.2 155.5
+```
 
-A pad that reads nothing, or reads half what its neighbours read for
-the same mass, gets reseated before the study.
+It walks you through each pad empty and with each mass, then a 30 s
+hold for the drift, and prints counts per gram, how straight each
+pad's line is and whether any pad reads unlike the others. Coins are
+exact weights: a 50c piece is 15.55 g, so 2, 4 and 10 of them are
+31.1, 62.2 and 155.5 g (stack them in a small cup). A pad flagged
+CHECK gets reseated flat and the script run again. Keep the printout
+(and the CSV it writes in `app/config/calibration/`) for the thesis
+appendix.
 
 ## 3. Audio latency of the study laptop (item i)
 
 Rhythm scores each tap against the beat the app schedules. The sound
-reaches the ear a little later than that, by the laptop's audio
-latency, and every participant's mean asynchrony moves by the same
-amount. The SD (Rh2) is unaffected; the sign of the mean (Rh1) is read
-against it.
+reaches the ear later than that by the laptop's audio delay, and the
+game subtracts `rhythm.audio_offset_ms` to make up for it. A wrong
+offset moves every participant's mean asynchrony by the same amount:
+the SD (Rh2) is unaffected, the sign of the mean (Rh1) is not.
 
-1. Put a phone next to the laptop speaker and record slow-motion video
-   (240 fps if it has it) of a finger tapping a pad in time with the
-   rhythm game for 20 beats.
-2. On the video, count frames from the sound of each beat to the tap
-   landing, and compare with the asynchrony the game logs for the same
-   taps (the rhythm block's trials.csv, time_difference_ms).
-3. The average gap is the audio latency. Write it down. If you skip
-   this, the thesis says the asynchrony is within-device and that Rh1's
-   sign includes the latency.
+One command, about two minutes, board plugged in, room quiet:
+
+```
+python3 app/scripts/audio_latency.py --with-board
+```
+
+It plays the study song and a click through the speakers while the
+built-in microphone records, then asks you to tap the index pad with
+a fingernail for 15 seconds (the pad and the microphone catch the same
+instant, which times the microphone itself), then buzzes the index
+motor. It prints the true delays and the config keys they belong to
+(`rhythm.audio_offset_ms`, `latency.tone_ms`, `latency.buzzer_ms`).
+Put the numbers in `app/config/user_settings.yaml`, set
+`latency.measured: true` and the date, before the first participant.
+If macOS asks for microphone access, allow it.
 
 ## 4. The laptop
 
-- [ ] The app runs from a local folder, not a cloud-synced one, and
-      `session.data_dir` points at the folder the sessions will live
-      in. Participant data never goes into the Google Drive repo.
+- [ ] Start the game with `Local_Runner.command` (double-click). It
+      runs the newest code and saves into the project's `sessions/`
+      folder, which is gitignored (never on GitHub) and is where the
+      notebook and `check_sitting.py` look.
 - [ ] Power settings: never sleep on mains, screen never dims.
 - [ ] Notifications off (Focus mode), volume set once to a comfortable
       level and left there. Write the level on the day's first intake

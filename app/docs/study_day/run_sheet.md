@@ -7,8 +7,10 @@ notes box on the intake sheet.
 ## Between participants (2 min)
 
 - [ ] Wipe the pads and the frame with an isopropyl wipe.
-- [ ] Board plugged in and the app on the title screen. If the app
-      was closed, open it and check the board buzzes once per finger.
+- [ ] Board plugged in and the app on the title screen. Start the app
+      with `Local_Runner.command` (double-click). Give the board about
+      three seconds after it opens: it buzzes each finger once as it
+      starts up.
 - [ ] New intake sheet, information sheet and consent form on the
       clipboard.
 
@@ -99,6 +101,13 @@ The order comes from the code, and every game is the right hand:
   Replug it, wait for the buzz, press Start. Note the step.
 - Force Pilot or Buzz Hunt refuses to start: the board is not live.
   Same fix.
+- Force Pilot goes straight back to the menu after MAX PRESS CHECK,
+  with a note under the header: no press came in 25 seconds, so
+  nothing was measured and the step is still waiting. Show a firm
+  press ("as hard as is comfortable when it says PRESS"), then PLAY
+  ALL again.
+- Test Mode left on in Settings does not matter for a study code:
+  Play all switches it off for the sitting and back on afterwards.
 - A game can't be run at all: Skip step (S) on the hub, confirm, and
   write the reason.
 - The app closes: open it, log in with the same code and main hand,
@@ -116,5 +125,18 @@ The order comes from the code, and every game is the right hand:
       people.
 - [ ] Ask the two tiredness questions again and write them down.
 - [ ] End the session from the hub and confirm.
+- [ ] Check the data before they leave. In Terminal, from the project
+      folder:
+
+      ```
+      python3 app/scripts/check_sitting.py
+      ```
+
+      It reads the newest code's folders and prints OK or CHECK for:
+      all 12 steps done, the passes, full counts, the rest, board
+      drops, failed buzzes and the intake fields. READY on the last
+      line means the sitting is complete. A CHECK tells you what to
+      do; a step not finished can still be played now with PLAY ALL
+      if they have time.
 - [ ] Read the [debrief](debrief.md). Thank them.
 - [ ] Wipe the pads and frame.

@@ -17,6 +17,13 @@ print and follow.
 | [end_of_day.md](end_of_day.md) | after the last participant | no |
 | [intake_sheet_template.csv](intake_sheet_template.csv) | typed up at the end of the day | no |
 
+Two commands do the checking, both from the project folder:
+
+- `python3 app/scripts/check_sitting.py` before each participant
+  leaves: READY, or what to fix while they are still there.
+- `python3 app/scripts/audio_latency.py --with-board` once, before
+  the day: the laptop's sound and buzz delays for the config.
+
 ## The one-hour booking
 
 | Minutes | What |

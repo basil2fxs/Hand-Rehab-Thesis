@@ -2,9 +2,12 @@
 
 ## Check the data (5 min)
 
-- [ ] `sessions/<today>/` holds one folder per game played, each with
-      trials.csv, raw.csv and metadata.json. A full sitting is twelve
-      folders per code.
+- [ ] Every code of the day in one go:
+
+      ```
+      python3 app/scripts/check_sitting.py --all
+      ```
+
 - [ ] Nothing from a pilot or a demo is in there (move it out).
 
 ## The intake sheet file (10 min)
@@ -25,11 +28,14 @@ age, sex and hand size, so nothing else needs typing.
 
 ## Back up (5 min)
 
-- [ ] Copy the whole `sessions/` folder to the university storage and
-      to one second place (an external drive). Two copies before
-      anything is deleted anywhere.
-- [ ] Never into the Google Drive repo folder: participant data stays
-      out of anything that syncs to GitHub.
+- [ ] The games save into the project's `sessions/` folder (where
+      `Local_Runner.command` puts them, and where the notebook looks).
+      That folder is gitignored, so nothing in it ever reaches GitHub;
+      it does sync to your Google Drive with the rest of the project,
+      which is the first backup. Codes only, no names.
+- [ ] Copy the day's `sessions/<date>/` folder to one more place (the
+      university storage or an external drive) before anything is
+      deleted anywhere.
 - [ ] Consent forms in their own envelope, apart from the intake
       sheets.
 

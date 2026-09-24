@@ -526,6 +526,32 @@ class ShortFormTests(_BatteryHarness):
         self.assertEqual([w.lvl for w in fp.levels], list(range(1, 13)))
         self.assertEqual(fp.total_runs, 12)
 
+    def test_test_mode_never_shortens_a_study_code_battery(self) -> None:
+        # Test Mode caps every block and marks it a demo, and the
+        # analysis drops demo blocks: a sitting played with it left on
+        # would be lost. A study code's battery plays the full counts
+        # and Test Mode comes back when the battery ends.
+        self._stub_rhythm()
+        eng = self._engine(_Rig())
+        eng.cfg.data["game"]["test_mode_enabled"] = True
+        self._login(eng, "P01", "right")
+        eng.start_battery()
+        m = self._step_to(eng, "reaction")
+        self.assertEqual(m.total_trials, 20)
+        self.assertIsNone(eng._test_mode_trials())
+        eng.end_session()
+        self.assertTrue(eng.cfg.get("game.test_mode_enabled"))
+
+    def test_a_demo_name_keeps_the_short_test_mode_blocks(self) -> None:
+        self._stub_rhythm()
+        eng = self._engine(_Rig())
+        eng.cfg.data["game"]["test_mode_enabled"] = True
+        eng.cfg.data["game"]["test_mode_trials"] = 4
+        self._login(eng, "Supervisor demo", "right")
+        eng.start_battery()
+        m = self._step_to(eng, "reaction")
+        self.assertEqual(m.total_trials, 4)
+
     def test_chords_buzz_hunt_and_pattern_counts(self) -> None:
         self._stub_rhythm()
         eng = self._engine(_Rig())

@@ -1305,6 +1305,8 @@ class ProbeGuardRailTests(unittest.TestCase):
     def test_stalled_probe_ends_the_block_gently(self):
         e, m, t = self._probe_mode()
         e.finish_block = lambda: None
+        e._abandon_if_in_block = lambda: None
+        e.show_mode_select = lambda: None
         # The finger never clears the floor: force sits at 5 counts.
         end = t + m.PROBE_STALL_S + 2.0
         while m.phase == "probe" and t < end:
@@ -1314,6 +1316,39 @@ class ProbeGuardRailTests(unittest.TestCase):
             m._tick(t)
         self.assertEqual(m.phase, "done")
         self.assertEqual(m.end_reason, "probe_timeout")
+
+    def test_a_stall_before_any_run_is_offered_again(self):
+        # No press at the max press check means nothing was measured:
+        # the block is abandoned, so Play all offers Force Pilot again,
+        # and the hub says why. Finishing it recorded a completed Force
+        # Pilot with no runs and moved the battery on.
+        from unittest.mock import MagicMock
+        e, m, t = self._probe_mode()
+        e.finish_block = MagicMock()
+        e._abandon_if_in_block = MagicMock()
+        e.show_mode_select = MagicMock()
+        hub = MagicMock()
+        e._screens = {"mode_select": hub}
+        end = t + m.PROBE_STALL_S + 2.0
+        while m.phase == "probe" and t < end:
+            t += 0.25
+            m.view.counts = 5.0
+            m.view.pct = 1.0
+            m._tick(t)
+        self.assertEqual(m.end_reason, "probe_timeout")
+        e._abandon_if_in_block.assert_called_once()
+        e.finish_block.assert_not_called()
+        self.assertEqual(hub.pick_note, m.PROBE_RETRY_NOTE)
+
+    def test_a_stall_after_runs_keeps_what_was_flown(self):
+        from unittest.mock import MagicMock
+        e, m, t = self._probe_mode()
+        e.finish_block = MagicMock()
+        e._abandon_if_in_block = MagicMock()
+        m._records.append(MagicMock())
+        m._end("probe_timeout")
+        e.finish_block.assert_called_once()
+        e._abandon_if_in_block.assert_not_called()
 
     def test_low_max_is_flagged_not_silent(self):
         e, m, t = self._probe_mode()

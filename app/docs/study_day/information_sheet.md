@@ -45,9 +45,10 @@ without giving a reason.
   which is kept separately from everything else.
 - The games record your presses, timings and the forces on the pads.
   None of it identifies you.
-- Your data is stored on the university's storage, not on personal
-  cloud folders, and is used for my thesis and any paper that comes
-  from it. Nobody is ever named.
+- Your data is kept under your code only, on the researcher's
+  computer and its backups, and is used for my thesis and any paper
+  that comes from it. It is never made public, and nobody is ever
+  named.
 - You can ask for your data to be removed until the analysis starts.
   Just quote your code.
 

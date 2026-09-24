@@ -2176,10 +2176,20 @@ class GameEngine:
         if not self.source.provides_samples:
             return  # Keyboard fallback doesn't connect/disconnect.
         connected = self.source.is_connected
+        if connected:
+            self._source_ever_connected = True
         if self._source_was_connected and not connected:
-            log.warning("Source %s disconnected mid-session. Presses will "
-                         "stop registering until it reconnects.",
+            if not getattr(self, "_source_ever_connected", False):
+                # Not a drop: opening the port resets the board, and
+                # its boot self-test takes about three seconds before
+                # the first sample. Every launch used to log this as
+                # a mid-session disconnect.
+                log.info("Source %s is starting up (board boot)",
                          getattr(self.source, "name", "?"))
+            else:
+                log.warning("Source %s disconnected mid-session. Presses "
+                            "will stop registering until it reconnects.",
+                            getattr(self.source, "name", "?"))
             if self.raw_logger:
                 try:
                     self.raw_logger.queue_event(
@@ -2255,12 +2265,21 @@ class GameEngine:
         # kept the SENSORS LOST banner up for the rest of the run.
         for gone in [h for h in down if h not in hands_now]:
             down.discard(gone)
+        ever = getattr(self, "_hands_ever_connected", None)
+        if ever is None:
+            ever = self._hands_ever_connected = set()
         for hand, ok in hands_now.items():
             was = prev.get(hand, True)
+            if ok:
+                ever.add(hand)
             if was and not ok:
-                log.warning("%s-hand board disconnected mid-session. "
-                            "Its presses will stop registering until "
-                            "it reconnects.", hand)
+                if hand in ever:
+                    log.warning("%s-hand board disconnected mid-session. "
+                                "Its presses will stop registering until "
+                                "it reconnects.", hand)
+                else:
+                    log.info("%s-hand board is starting up (board boot)",
+                             hand)
                 down.add(hand)
                 if self.raw_logger:
                     try:
@@ -6521,7 +6540,23 @@ class GameEngine:
         except BatteryError as e:
             log.warning("battery not started: %s", e)
             return False
-        snapshot = apply_overrides(self.cfg.data, plan.overrides)
+        overrides = dict(plan.overrides)
+        # Test Mode caps every block at a handful of trials and marks
+        # it a demo, and the analysis drops demo blocks, so a study
+        # code played with it left on loses the whole sitting. A study
+        # code's battery always plays the full counts; Test Mode comes
+        # back when the battery ends. A demo under a plain name keeps
+        # the short blocks Test Mode is for.
+        from ..data.intake import is_study_code
+        if (bool(self.cfg.get("game.test_mode_enabled", False))
+                and is_study_code(self.session.participant)):
+            overrides = {**overrides,
+                         "game": {**dict(overrides.get("game") or {}),
+                                  "test_mode_enabled": False}}
+            log.warning("Test Mode is on; switched off for %s's battery "
+                        "so every block plays its full count",
+                        self.session.participant)
+        snapshot = apply_overrides(self.cfg.data, overrides)
         steps = []
         for st in plan.steps:
             steps.append({

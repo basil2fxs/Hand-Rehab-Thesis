@@ -1727,6 +1727,13 @@ class ForcePilotMode(WaitSkip):
             self._enter_announce(now)
 
     # ---- end of block ------------------------------------------------------
+    # What the hub says when the max-press check ended the block before
+    # a single run: the participant never pressed, so nothing was
+    # measured and Play all offers the step again.
+    PROBE_RETRY_NOTE = ("Force Pilot stopped at the max press check: no "
+                        "press came. Show a firm press, then Play all "
+                        "again.")
+
     def _end(self, reason: str) -> None:
         self.phase = "done"
         self.end_reason = reason
@@ -1737,6 +1744,20 @@ class ForcePilotMode(WaitSkip):
         # _force_pilot_levels on a session end; leaving it empty here
         # keeps a stale carry from an older build out of a new block.
         self.engine._force_pilot_levels = {}
+        if reason == "probe_timeout" and not self._records:
+            # Nothing was flown. Finishing the block would record a
+            # completed Force Pilot with no runs, and Play all would
+            # move on: the participant's Force Pilot, and its pass 2
+            # retest pair, lost to one missed instruction. Abandoned
+            # instead, so the step is offered again (engine
+            # _abandon_if_in_block), with the reason on the hub.
+            self.engine._abandon_if_in_block()
+            self.engine.show_mode_select()
+            hub = (getattr(self.engine, "_screens", None) or {}).get(
+                "mode_select")
+            if hub is not None:
+                hub.pick_note = self.PROBE_RETRY_NOTE
+            return
         self.engine.finish_block()
 
     # ---- block summary -----------------------------------------------------
