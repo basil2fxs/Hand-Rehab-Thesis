@@ -64,6 +64,8 @@ sessions/
 app/config/user_settings.yaml
 # The trigger box port picked in the game on this machine.
 app/config/eeg_port.yaml
+# This machine's measured sound and buzz delays (scripts/audio_latency.py).
+app/config/latency_profile.yaml
 
 # The Patterns sequence file a researcher loaded on this machine and its
 # pointer. Per machine, not part of the app.

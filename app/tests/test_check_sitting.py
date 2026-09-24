@@ -22,7 +22,8 @@ COUNTS = {"reaction": 20, "chords": 40, "pattern": 296, "rhythm": 107,
 
 
 def write_sitting(root: Path, code: str = "P01", skip=(), test_mode=(),
-                  fp_runs=12, rest_s=181.0, drops=0, sex="female"):
+                  fp_runs=12, rest_s=181.0, drops=0, sex="female",
+                  measured=True):
     day = root / "2026-10-20"
     for pos, mode in enumerate(ORDER_A, start=1):
         if pos in skip:
@@ -47,7 +48,10 @@ def write_sitting(root: Path, code: str = "P01", skip=(), test_mode=(),
                 "finished_at": f"2026-10-20T{9 + pos:02d}:02:00",
                 "calibration": {"created_at": "2026-10-20T09:55:00"},
                 "config_snapshot": {"game": {
-                    "test_mode_enabled": pos in test_mode}},
+                    "test_mode_enabled": pos in test_mode},
+                    "latency": {"measured": measured,
+                                "measured_on": "2026-10-19"},
+                    "rhythm": {"audio_offset_ms": 87}},
                 "battery": bat, "block_summary": bs}
         (g / "metadata.json").write_text(json.dumps(meta))
 
@@ -81,6 +85,10 @@ class CheckSittingTests(unittest.TestCase):
         self.assertIn("reaction (Test Mode on)", bad)
         self.assertIn("force_pilot (3 of 12 runs)", bad)
         self.assertIn("cut short", bad)
+
+    def test_rhythm_on_estimated_delays_is_flagged(self):
+        bad = " ".join(self._bad(self._check(measured=False)))
+        self.assertIn("audio_latency.py --write", bad)
 
     def test_drops_and_a_blank_intake_field(self):
         bad = " ".join(self._bad(self._check(drops=2, sex="")))

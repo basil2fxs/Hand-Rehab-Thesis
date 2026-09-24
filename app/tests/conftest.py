@@ -45,8 +45,13 @@ def _never_touch_the_real_user_settings(tmp_path_factory):
         except OSError:
             pass
     config.USER_OVERRIDES = fake
+    # A latency profile measured on this machine must not move the
+    # delays under the tests: they are written against default.yaml.
+    real_profile = config.LATENCY_PROFILE
+    config.LATENCY_PROFILE = fake.parent / "latency_profile_absent.yaml"
     yield
     config.USER_OVERRIDES = real
+    config.LATENCY_PROFILE = real_profile
 
 
 @pytest.fixture(autouse=True)

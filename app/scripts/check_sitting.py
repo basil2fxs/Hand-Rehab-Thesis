@@ -209,6 +209,18 @@ def check_code(code: str, rows: list[dict]) -> list[tuple[bool, str]]:
                 "no calibration recorded: force numbers will not be "
                 "comparable"))
 
+    rhythm = [r for r in first if r["mode"] == "rhythm"]
+    if rhythm:
+        snap = rhythm[0]["meta"].get("config_snapshot") or {}
+        lat = snap.get("latency") or {}
+        off = (snap.get("rhythm") or {}).get("audio_offset_ms")
+        out.append((bool(lat.get("measured")),
+                    f"Rhythm scored with this laptop's measured delays "
+                    f"(audio offset {off} ms, measured "
+                    f"{lat.get('measured_on')})" if lat.get("measured") else
+                    "Rhythm ran on estimated delays: run python3 "
+                    "app/scripts/audio_latency.py --write on this laptop "
+                    "before the next participant"))
     starts = [_when(r["meta"].get("started_at")) for r in first]
     ends = [_when(r["meta"].get("finished_at")) for r in first]
     starts = [s for s in starts if s]

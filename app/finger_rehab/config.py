@@ -85,6 +85,42 @@ USER_OVERRIDES = USER_ROOT / "config" / "user_settings.yaml"
 # instead. A lab folder's own eeg_lab.yaml is edited in place, so this
 # file never exists there. See hardware/eeg_port.py.
 EEG_PORT_FILE = USER_ROOT / "config" / "eeg_port.yaml"
+# This machine's measured sound and buzz delays (latency.* and the
+# rhythm offsets), written by scripts/audio_latency.py --write. Per
+# machine, never committed: the same numbers on another laptop would
+# be wrong. Laid over default.yaml and under user_settings.yaml, so a
+# value set by hand still wins.
+LATENCY_PROFILE = USER_ROOT / "config" / "latency_profile.yaml"
+# The only keys it may set.
+LATENCY_PROFILE_KEYS = {
+    "latency": {"measured", "measured_on", "buzzer_ms", "visual_ms",
+                "tone_ms"},
+    "rhythm": {"audio_offset_ms", "metronome_offset_ms"},
+}
+
+
+def read_latency_profile() -> dict:
+    """The measured-delay overlay for this machine, trimmed to
+    LATENCY_PROFILE_KEYS, or {} when there is none or it is unreadable."""
+    path = LATENCY_PROFILE
+    if not path.is_file():
+        return {}
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            raw = yaml.safe_load(f) or {}
+    except Exception as e:
+        log.warning("Could not read %s: %s", path.name, e)
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    out: dict = {}
+    for section, keys in LATENCY_PROFILE_KEYS.items():
+        part = raw.get(section)
+        if isinstance(part, dict):
+            kept = {k: v for k, v in part.items() if k in keys}
+            if kept:
+                out[section] = kept
+    return out
 
 
 def is_bundled_config(path: str | Path) -> bool:
@@ -198,6 +234,15 @@ class Config:
         with DEFAULT_CONFIG.open("r", encoding="utf-8") as f:
             merged = yaml.safe_load(f) or {}
         src = DEFAULT_CONFIG
+        # This machine's measured delays, when scripts/audio_latency.py
+        # has saved them. Before user_settings.yaml so a hand-set value
+        # still wins, and in every mode, the lab included: the delays
+        # belong to the machine, not to the preset.
+        profile = read_latency_profile()
+        if profile:
+            merged = _merge(merged, profile)
+            log.info("Measured delays from %s (%s)", LATENCY_PROFILE.name,
+                     (profile.get("latency") or {}).get("measured_on", "?"))
         # Auto-merge user_settings.yaml if it exists. This is how the
         # Settings screen on the title page persists per-hand COM port
         # assignments and any other user-tweakable config. A malformed
