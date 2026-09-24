@@ -515,11 +515,11 @@ Reliability class: moderate to good for hand-level MAE and time in
 corridor (four runs per hand); per-finger numbers rest on a single
 27 s run and are reported but not given an MDC.
 Claim limits: the probe is a maximal flat-finger press on a pad, not
-grip or pinch MVC; SingleTact accuracy and drift at low force is
-uncharacterised (a bench check with known masses must precede the
-first participant; force_pilot.py says so and the thesis owns it);
-research numbers come from the offline re-score, never the in-game
-score.
+grip or pinch MVC; nothing is reported in newtons (targets and
+errors are percent of the finger's own max on the same pad, so the
+gain cancels), and the pads' noise and drift are measured and inside
+specification (Section 4.8 h); research numbers come from the offline
+re-score, never the in-game score.
 
 1.9 Lighthouse (retired)
 ------------------------
@@ -1727,20 +1727,43 @@ healthy cohort cannot give.
     1996 exact F intervals, pinned to the Shrout and Fleiss 1979
     worked example) has one caller, the reliability chapter.
   g DONE. The login intake (Section 3.2); tests/test_intake.py.
-  h TO DO on the rig, five minutes: scripts/pad_bench.py walks each
-    pad through known masses (coins work) and a 30 s drift hold, and
-    prints counts per gram, linearity and drift per pad, flagging one
-    that reads unlike the others (force_pilot.py names this check as
-    its precondition).
-  i MEASURED IN PART, 24 September 2026, scripts/audio_latency.py:
-    play call to microphone 106 to 120 ms for the song path and
-    about 101 ms for a short sound, both including the microphone's
-    own delay; rhythm.audio_offset_ms assumes 40. The --with-board run
-    (a 15 s fingernail tap on the index pad times the microphone)
-    turns these into true output delays for the config. The delay
-    moves every participant's rhythm asynchrony by the same constant,
-    so Rh2 (the SD) is untouched and Rh1 (the sign of the mean) is
-    read against it.
+  h DONE, 24 September 2026. Force Pilot reports nothing in newtons:
+    targets and errors are percentages of each finger's own maximum,
+    probed on the same pad in the same sitting, so the absolute gain
+    cancels. The rest is characterised by the SingleTact 10 N
+    specification (resolution under 0.2 percent of full scale,
+    repeatability under 1 percent, linearity under 2 percent, drift 2
+    percent a minute at half load) and by measurement on this rig:
+    1.2 to 1.5 counts of noise and at most 1.5 counts of drift over
+    60 s at rest on every pad, under 0.3 percent of full scale, and
+    every 5 ms sample a fresh reading during a real press (none of
+    the moving samples of the 24 September sessions repeats its
+    neighbour, so the stream is a true 200 Hz). scripts/pad_bench.py
+    adds a counts-per-gram line with coins for a thesis figure; the
+    data do not depend on it.
+  i DONE, 24 September 2026, scripts/audio_latency.py --write on
+    the study MacBook, saved as app/config/latency_profile.yaml (per
+    machine; the game lays it over default.yaml at every start and
+    every block records it in its config snapshot). Method: the
+    built-in microphone records the game's own audio paths; its own
+    delay, 31.5 ms, is CoreAudio's fixed input latency (device plus
+    stream plus safety offset, the sum PortAudio's CoreAudio host
+    uses), with each sample timed from the earliest buffer to arrive,
+    which cancels buffer waits (capture chunks of 256, 512 and 2048
+    frames gave the same round trip within 4 ms). Results, medians of
+    five takes each: the song path 87 ms from the play call to the
+    speaker (rhythm.audio_offset_ms, was an estimated 40); a short
+    sound 77 ms (latency.tone_ms and rhythm.metronome_offset_ms, was
+    12); the motors 74 ms from STIM to motion, read on the averaged
+    envelope of ten pulses per motor at the point the datasheets call
+    the lag (latency.buzzer_ms, was 45). The short-sound figure sits
+    inside the 43 to 119 ms that Bridges et al. (2020) measured for
+    pygame-based Expyriment across operating systems, with a similar
+    trial-to-trial spread. The study plays through the laptop's own
+    speakers; any other output is re-measured first. The display lag
+    (latency.visual_ms) is not measured and does not need to be for
+    the checks: it moves where the falling note is drawn, never a
+    score.
   j DONE. scripts/measure_battery.py plays the plan headless through
     the real engine on a simulated clock and a simulated one-board
     rig, counts the rests and the transitions separately, and reports
@@ -1754,10 +1777,17 @@ healthy cohort cannot give.
     through the real one-board Play all, and writes the truth to
     truth.json and the minutes to durations.csv. Its reliability
     numbers describe the simulator, never the device.
-  l TO DO. A two-person pilot on the real board for the clock,
-    before recruiting: if the median session exceeds 46 minutes,
-    apply the trim ladder in Section 2.3 and record which rungs were
-    used. The run sheet and the checks are in docs/study_day/.
+  l DONE as far as the rig goes, 24 September 2026: the full Play all
+    ran on the real board end to end (12 of 12 steps, 1,902 motor
+    commands, none failed, no drop), the EEG build ran the same under
+    PsychoPy with every marker on the wire, and scripts/check_sitting.py
+    reads a sitting back. The clock with real hands is an INTERNAL
+    PILOT, fixed now: the first two participants are checked on the
+    spot (check_sitting.py, and the on-screen minutes). If both are
+    READY and under 46 minutes, nothing changes and they are
+    participants 1 and 2. If either runs over, the trim ladder in
+    Section 2.3 applies from participant 3 and the method says which
+    rungs were used and from when.
 
 4.9 Handedness sensitivity
 --------------------------
@@ -1987,6 +2017,10 @@ Verified this session by web search (venue and year confirmed):
   Basner M, Hermosillo E, Nasrini J, McGuire S, Saxena S, Moore TM,
     Gur RC, Dinges DF (2017). Repeated administration effects on
     psychomotor vigilance test performance. Sleep 41(1):zsx187.
+  Bridges D, Pitiot A, MacAskill MR, Peirce JW (2020). The timing
+    mega-study: comparing a range of experiment generators, both
+    lab-based and online. PeerJ 8:e9414. Audio lag of pygame-based
+    Expyriment 43 to 119 ms by operating system (Table 2).
   Bonett DG (2002). Sample size requirements for estimating
     intraclass correlations with desired precision. Statistics in
     Medicine 21:1331-1335.

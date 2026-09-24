@@ -25,10 +25,11 @@ percent-of-max here therefore matches those studies in construct, not
 in absolute newtons. The median of two or three attempts follows
 standard MVC practice of repeated attempts, but with fewer repeats
 than a formal strength assessment, a deliberate trade against patient
-fatigue. SingleTact accuracy and drift at very low force is
-uncharacterised on this rig (flagged in the ranked brief); rebaseline
-between trials and keep hold segments short until the bench
-characterisation exists.
+fatigue. The pads' noise and drift were characterised on 24 September
+2026 (1.2 to 1.5 counts of noise, at most 1.5 counts of drift in 60 s
+at rest, inside the SingleTact 10 N specification; see force_pilot.py
+WHAT THIS MODE CANNOT CLAIM); the view still rebaselines between
+trials and keeps holds short, which keeps drift out of every run.
 
 Why the view freezes its reference instead of tracking the detector's
 live baseline: the detector's baseline EMA exists to absorb slow

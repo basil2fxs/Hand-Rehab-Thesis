@@ -174,11 +174,20 @@ raw.csv. The in-game score (time-in-corridor, mean absolute error at
 frame rate) is feedback; the analysis notebook re-scores offline from
 the 200 Hz raw samples between the logged bounds.
 
-WHAT THIS MODE CANNOT CLAIM. SingleTact accuracy and drift at very
-low force is uncharacterised on this rig: a bench characterisation
-(known masses, drift over hold durations) must precede any patient
-data collection, and the thesis instrumentation section owns that.
-The probe measures a maximal flat-finger press on a pad, not the grip
+WHAT THIS MODE CANNOT CLAIM. Force in newtons: every target and every
+error is a percentage of the finger's own maximum, probed on the same
+pad in the same sitting, so the sensor's absolute gain cancels and no
+newton figure is ever reported. What is left is characterised. The
+SingleTact 10 N sensor's specification (SingleTact spec sheet V8.0):
+resolution under 0.2 percent of full scale, repeatability under 1
+percent, linearity under 2 percent, hysteresis under 4 percent, drift
+2 percent a minute at half load. Measured on this rig on 24 September
+2026: 1.2 to 1.5 counts of noise and at most 1.5 counts of drift over
+60 s at rest on all four pads (under 0.3 percent of full scale), and
+every 5 ms sample a fresh reading during a real press, so a run of 13
+to 16 s sits far inside the drift figure. The known-mass line
+(scripts/pad_bench.py) is a figure for the thesis, not a condition
+for the data. The probe measures a maximal flat-finger press on a pad, not the grip
 or pinch MVC of the cited protocols, so percent-of-max matches those
 studies in construct rather than in newtons. Frame-rate scoring here
 is for gameplay only; every research number comes from the notebook's

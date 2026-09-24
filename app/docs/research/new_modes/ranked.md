@@ -67,9 +67,10 @@ normalised power 0.1 to 0.3 vs 0.5 to 0.8 Hz, release vs generation
 error, step count and pause duration on slow ramps, per-finger
 asymmetry, session learning curves.
 
-Biggest risk: SingleTact accuracy and drift at very low force is
-uncharacterised; a bench characterisation must come first (and doubles
-as a thesis instrumentation section).
+Biggest risk, since closed (24 September 2026): SingleTact accuracy and
+drift at very low force. The mode works in percent of each finger's own
+max, so the gain cancels, and the pads' noise and drift were measured
+inside specification (healthy_baseline_study.txt Section 4.8 h).
 
 ## Rank 2: Lighthouse (precision hold, feedback fade, force sense)
 
@@ -166,9 +167,13 @@ from staircase reversals plus logistic psychometric fits, d-prime and
 criterion, span curves, Hebb learning slope, threshold learning
 curves, ICC across sessions.
 
-Biggest risk: ERM motor rise and stop time (around 20 ms or more)
-biases every temporal threshold; an accelerometer characterisation of
-the motors must precede data collection.
+Biggest risk: ERM motor rise and stop time biases every temporal
+threshold. Measured on 24 September 2026 with the laptop microphone
+(scripts/audio_latency.py): motion starts 74 ms after the STIM command
+and reaches half strength about 100 to 140 ms after it. The study's
+Buzz Hunt plays localisation and span only, with no temporal
+threshold, so the rise enters no study measure; a gap or duration
+stage would need it.
 
 As built, 2026-09 revision. The duration staircase on localisation
 was played on the rig and failed in exactly the way the risk above

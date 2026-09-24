@@ -4,26 +4,28 @@ Do these once, in the week before the collection day. Each one closes
 an open item in Section 4.8 of the design doc, so write down the date
 and the result.
 
-## 1. Pilot two people on the real rig (item l)
+## 1. The pilot (item l): the first two participants
 
-1. Run two volunteers (friends are fine) through the full
-   [run sheet](run_sheet.md), timing the sitting with a phone
-   stopwatch from LOG IN to the end of the last block.
-2. The app's own estimate is about 43 minutes on the rig. If either
-   pilot goes past 46 minutes, apply the trim ladder in Section 2.3 of
-   the design doc and note which rungs were used.
-3. Run the notebook's cohort chapter on the pilot sessions with
-   `min_n=2`. Every table and figure should fill; the checks will say
-   n is under the minimum, which is right at two.
-4. Move the pilot session folders out of `sessions/` before the first
-   real participant, so they never mix with the study data. The
-   notebook treats any letters-then-digits code (T01 as much as P01)
-   as a study code, so moving the folders is the only safe way.
+The rig side is done: a full Play all ran on the real board end to
+end on 24 September 2026. The clock with real hands is an internal
+pilot, decided in advance so it costs no participants:
 
-## 2. Bench-check the force pads (item h)
+- The first two participants run exactly as the run sheet says.
+- After each, `check_sitting.py` must say READY and the first block
+  to last must be under 46 minutes.
+- Both fine: nothing changes, and they are participants 1 and 2.
+- Either over 46 minutes: apply the trim ladder in Section 2.3 of the
+  design doc from participant 3, and write down which rungs and from
+  which code.
 
-Force Pilot's numbers lean on the pads reading the same force the same
-way. About five minutes, game closed, board plugged in:
+## 2. The pads (item h): nothing to do
+
+Already covered: Force Pilot works in percent of each finger's own
+maximum, so the pads' absolute gain cancels, and their noise and drift
+were measured on 24 September 2026 (1.2 to 1.5 counts of noise, at
+most 1.5 counts of drift in 60 s, every pad). If you want a
+counts-per-gram figure for the thesis appendix, about five minutes,
+game closed, board plugged in:
 
 ```
 python3 app/scripts/pad_bench.py --masses 31.1 62.2 155.5
@@ -46,21 +48,27 @@ game subtracts `rhythm.audio_offset_ms` to make up for it. A wrong
 offset moves every participant's mean asynchrony by the same amount:
 the SD (Rh2) is unaffected, the sign of the mean (Rh1) is not.
 
-One command, about two minutes, board plugged in, room quiet:
+Done for this MacBook on 24 September 2026, and saved: the game reads
+`app/config/latency_profile.yaml` at every start.
 
-```
-python3 app/scripts/audio_latency.py --with-board
-```
+| Setting | Estimate before | Measured |
+|---|---|---|
+| `rhythm.audio_offset_ms` (the song) | 40 | 87 |
+| `latency.tone_ms`, `rhythm.metronome_offset_ms` (short sounds) | 12 | 77 |
+| `latency.buzzer_ms` (STIM to motor motion) | 45 | 74 |
 
-It plays the study song and a click through the speakers while the
-built-in microphone records, then asks you to tap the index pad with
-a fingernail for 15 seconds (the pad and the microphone catch the same
-instant, which times the microphone itself), then buzzes the index
-motor. It prints the true delays and the config keys they belong to
-(`rhythm.audio_offset_ms`, `latency.tone_ms`, `latency.buzzer_ms`).
-Put the numbers in `app/config/user_settings.yaml`, set
-`latency.measured: true` and the date, before the first participant.
-If macOS asks for microphone access, allow it.
+- [ ] Play the study through the laptop's own speakers. The numbers
+      belong to them: headphones or a Bluetooth speaker have their
+      own delay (Bluetooth adds far more). For any other output, or
+      another laptop, re-measure first, about two minutes, board
+      plugged in, room quiet:
+
+      ```
+      python3 app/scripts/audio_latency.py --write
+      ```
+
+`check_sitting.py` says CHECK if a sitting's Rhythm block ran on
+unmeasured delays.
 
 ## 4. The laptop
 

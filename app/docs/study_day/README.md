@@ -21,8 +21,11 @@ Two commands do the checking, both from the project folder:
 
 - `python3 app/scripts/check_sitting.py` before each participant
   leaves: READY, or what to fix while they are still there.
-- `python3 app/scripts/audio_latency.py --with-board` once, before
-  the day: the laptop's sound and buzz delays for the config.
+- `python3 app/scripts/audio_latency.py --write`: the laptop's sound
+  and buzz delays, already measured and saved for this MacBook; run it
+  again only on another laptop or another audio output.
+- `python3 app/scripts/pad_bench.py`: optional, a counts-per-gram
+  figure for the thesis appendix (coins work).
 
 ## The one-hour booking
 
