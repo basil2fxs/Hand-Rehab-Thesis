@@ -26,11 +26,13 @@ At the lab PC
    reads S, set pulse_ms: 10 and box_mode: simple in eeg_lab.yaml.
 2. Start ActiView. The trigger low byte reads 255.
 3. Open run_in_psychopy.py in PsychoPy Coder and press Run (or
-   double-click Finger Rehab.exe). The low byte drops to 0 the moment
-   the game opens the port. If the box is not on COM10, the game opens
-   on a list of ports instead of the login: click the box (unplug it
-   and press Scan again to see which entry goes) and the choice is
-   saved in eeg_lab.yaml. Settings, EEG box, changes it later or
+   double-click Finger Rehab.exe). PsychoPy's first start shows a tip
+   and a list of changes: close both. The low byte drops to 0 the
+   moment the game opens the port. If the box is not on COM10, the
+   game opens on a list of ports instead of the login: click the box,
+   not the entry named USB-SERIAL CH340 (that is the hand board; unplug
+   the box and press Scan again to see which entry goes), then
+   Continue. The choice is saved in eeg_lab.yaml. Settings, EEG box, changes it later or
    reconnects a box that dropped out.
 4. If Windows refuses the exe (it is unsigned; Smart App Control on
    Windows 11 blocks unsigned programs), the launcher runs the same
