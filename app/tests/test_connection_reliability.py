@@ -399,3 +399,39 @@ class TestOneBoardDropInBilateral:
         events = self._events(eng)
         assert ("source_disconnected", "both") in events
         assert ("source_reconnected", "both") in events
+
+
+class TestReadSize:
+    """Each read asks for what is already waiting, one byte when nothing
+    is. A fixed read(256) blocks on Windows' CH340 driver until 256
+    bytes are in, about 60 ms of samples at 200 Hz, and every sample in
+    that bunch gets the same arrival time, so a press was stamped up to
+    60 ms late."""
+
+    class Port:
+        def __init__(self, waiting=None):
+            self.asked = []
+            if waiting is not None:
+                self.in_waiting = waiting
+
+        def read(self, n):
+            self.asked.append(n)
+            return b""
+
+    def _asked(self, port):
+        src = ss.SerialSource.__new__(ss.SerialSource)
+        src._serial = port
+        src._read_chunk()
+        return port.asked
+
+    def test_nothing_waiting_reads_one_byte(self):
+        assert self._asked(self.Port(0)) == [1]
+
+    def test_reads_what_is_waiting(self):
+        assert self._asked(self.Port(37)) == [37]
+
+    def test_a_flood_is_capped(self):
+        assert self._asked(self.Port(10 ** 6)) == [ss.SerialSource.READ_MAX]
+
+    def test_a_port_without_in_waiting_reads_one_byte(self):
+        assert self._asked(self.Port()) == [1]
