@@ -36,7 +36,10 @@ At the lab PC
    Windows 11 blocks unsigned programs), the launcher runs the same
    game from source/ under PsychoPy's own Python. The first time it
    installs what PsychoPy lacks into python_packages/ beside it, which
-   needs the internet once. Needs PsychoPy with Python 3.10 or newer.
+   needs the internet once. Each computer gets its own subfolder there
+   (darwin-arm64-py310, win32-amd64-py310), so a folder tested on the
+   Mac first still starts clean on the lab PC. Needs PsychoPy with
+   Python 3.10 or newer.
 5. Log the participant in. The game menu then shows the recording's
    name, for example "EEG: record ActiView as P07_2026-09-24.bdf in
    EEG_Lab/sessions/eeg". Start ActiView's recording with that name in

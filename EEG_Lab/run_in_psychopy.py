@@ -33,8 +33,19 @@ PACKAGES = {"pygame": "pygame-ce", "serial": "pyserial", "yaml": "pyyaml",
 # folder changes, and deleting the folder undoes it. PsychoPy's own
 # site-packages sits in Program Files on Windows and inside the app on
 # a Mac, and a pip line pasted into a terminal cannot even start the
-# Mac app's Python.
+# Mac app's Python. One subfolder per system, chip and Python version
+# (darwin-arm64-py310, win32-amd64-py310): the compiled parts only load
+# where they were built, so a folder tried on a Mac first still starts
+# clean on the lab's Windows PC.
 PACKAGE_DIR = "python_packages"
+
+
+def package_dir(here: Path) -> Path:
+    """This Python's own package folder inside PACKAGE_DIR."""
+    import platform
+    tag = (f"{sys.platform}-{platform.machine().lower()}-"
+           f"py{sys.version_info[0]}{sys.version_info[1]}")
+    return here / PACKAGE_DIR / tag
 
 # Run by the same Python, with the same environment, the game will get,
 # so what it reports is exactly what the game will find. Classic
@@ -63,7 +74,7 @@ def game_env(here: Path) -> dict:
     """The environment the game runs in: the lab folder's packages
     first on the path, and its data beside this file."""
     env = dict(os.environ)
-    parts = [str(here / PACKAGE_DIR)]
+    parts = [str(package_dir(here))]
     if env.get("PYTHONPATH"):
         parts.append(env["PYTHONPATH"])
     env["PYTHONPATH"] = os.pathsep.join(parts)
@@ -196,10 +207,12 @@ def _installed_version(env: dict):
 
 
 def install_packages(missing: list[str], here: Path, env: dict) -> bool:
-    """One-time install of what is missing into PACKAGE_DIR."""
-    folder = here / PACKAGE_DIR
+    """One-time install of what is missing into this Python's folder
+    inside PACKAGE_DIR."""
+    folder = package_dir(here)
+    shown = f"{PACKAGE_DIR}/{folder.name}"
     print(f"One-time set-up: installing {', '.join(missing)} into "
-          f"{folder.name} beside this file. This needs the internet and "
+          f"{shown} beside this file. This needs the internet and "
           "takes a few minutes.")
     pip = [sys.executable, "-m", "pip", "install",
            "--disable-pip-version-check", "--no-input"]
@@ -214,12 +227,12 @@ def install_packages(missing: list[str], here: Path, env: dict) -> bool:
         report = json.loads(report_path.read_text(encoding="utf-8"))
     wanted = plan_install(report, missing, _installed_version(env),
                           _requires)
-    folder.mkdir(exist_ok=True)
+    folder.mkdir(parents=True, exist_ok=True)
     rc = subprocess.call(pip + ["--no-deps", "--upgrade", "--target",
                                 str(folder)] + wanted, env=env)
     if rc != 0:
         print(f"The install stopped (pip exit code {rc}). Press Run again; "
-              f"if it keeps failing, delete {folder.name} and retry.")
+              f"if it keeps failing, delete {shown} and retry.")
         return False
     return True
 

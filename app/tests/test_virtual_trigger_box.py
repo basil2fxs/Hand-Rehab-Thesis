@@ -91,5 +91,28 @@ class VirtualBoxTests(unittest.TestCase):
         self.assertTrue(lines[1].endswith(",240,session_start"))
 
 
+class LabPackagesTests(unittest.TestCase):
+    """The virtual box puts the same package folder on the game's path
+    as the lab launcher would, for the interpreter that runs the game."""
+
+    def test_same_folder_as_the_launcher(self) -> None:
+        import importlib.util
+        import virtual_trigger_box as vtb
+        lab = ROOT.parent / "EEG_Lab"
+        spec = importlib.util.spec_from_file_location(
+            "lab_launcher", lab / "run_in_psychopy.py")
+        launcher = importlib.util.module_from_spec(spec)
+        # No bytecode beside the launcher: the lab folder's top level
+        # is pinned.
+        before, sys.dont_write_bytecode = sys.dont_write_bytecode, True
+        try:
+            spec.loader.exec_module(launcher)
+        finally:
+            sys.dont_write_bytecode = before
+        got = vtb.lab_packages(Path(sys.executable), dict(os.environ), lab)
+        self.assertEqual(got, launcher.package_dir(lab))
+        self.assertFalse((lab / "__pycache__").exists())
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -121,6 +121,22 @@ def psychopy_python(app: Path) -> tuple[Path, dict]:
     return exe, env
 
 
+def lab_packages(exe: Path, env: dict, lab: Path) -> Path:
+    """The lab folder's package folder for that Python, as the lab
+    launcher names it (one per system and Python version), asked of
+    the same interpreter so the two can never disagree."""
+    code = ("import sys, pathlib; sys.path.insert(0, sys.argv[1]); "
+            "import run_in_psychopy as r; "
+            "print(r.package_dir(pathlib.Path(sys.argv[1])))")
+    out = subprocess.run([str(exe), "-B", "-c", code, str(lab)], env=env,
+                         capture_output=True, text=True)
+    lines = out.stdout.strip().splitlines()
+    if out.returncode != 0 or not lines:
+        raise SystemExit("Could not ask the lab launcher for its package "
+                         f"folder:\n{out.stderr.strip()}")
+    return Path(lines[-1])
+
+
 def logged_markers(sessions: Path, since_wall: float) -> list[dict]:
     """Every marker the game logged in a block folder written since the
     box opened, in wire order, across all of today's blocks."""
@@ -238,7 +254,7 @@ def main() -> int:
             if not cfg.is_file():
                 cfg = args.lab / "source" / "config" / "eeg_lab.yaml"
             env["PYTHONPATH"] = os.pathsep.join(
-                [str(args.lab / "python_packages")]
+                [str(lab_packages(exe, env, args.lab))]
                 + ([env["PYTHONPATH"]] if env.get("PYTHONPATH") else []))
             env["FINGER_REHAB_DATA_ROOT"] = str(args.lab)
             source = args.lab / "source"

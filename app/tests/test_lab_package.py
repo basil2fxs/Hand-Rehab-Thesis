@@ -122,8 +122,8 @@ class LauncherTests(unittest.TestCase):
         # folder's own packages first on the game's path.
         env = call.call_args.kwargs["env"]
         self.assertEqual(env["FINGER_REHAB_DATA_ROOT"], str(self.here))
-        self.assertTrue(env["PYTHONPATH"].startswith(
-            str(self.here / "python_packages")))
+        self.assertEqual(env["PYTHONPATH"].split(os.pathsep)[0],
+                         str(self.mod.package_dir(self.here)))
 
     def test_source_route_falls_back_to_the_bundled_config(self) -> None:
         self._source_layout()
@@ -318,9 +318,25 @@ class LauncherTests(unittest.TestCase):
         final = calls[1]
         self.assertIn("--no-deps", final)
         self.assertEqual(final[final.index("--target") + 1],
-                         str(self.here / "python_packages"))
+                         str(self.mod.package_dir(self.here)))
         self.assertEqual(final[-1], "pygame-ce==2.5.8")
         self.assertIn("needs the internet", out.getvalue())
+
+    def test_packages_are_kept_per_system_and_python(self) -> None:
+        # A folder first run on the Mac carries Mac-only compiled
+        # packages; the lab's Windows PC must get its own folder rather
+        # than trip over them.
+        mac = self.mod.package_dir(self.here)
+        self.assertEqual(mac.parent, self.here / "python_packages")
+        with patch.object(self.mod.sys, "platform", "win32"), \
+                patch("platform.machine", return_value="AMD64"):
+            win = self.mod.package_dir(self.here)
+        self.assertEqual(win.parent, self.here / "python_packages")
+        self.assertTrue(win.name.startswith("win32-amd64-py"))
+        if sys.platform != "win32":
+            self.assertNotEqual(mac, win)
+        py = f"py{sys.version_info[0]}{sys.version_info[1]}"
+        self.assertTrue(mac.name.endswith(py))
 
     def test_an_old_psychopy_python_is_refused_plainly(self) -> None:
         self._source_layout()
