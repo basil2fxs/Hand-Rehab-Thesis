@@ -249,6 +249,31 @@ class WaitingWriterTests(unittest.TestCase):
         w.send(33)
         self.assertEqual(new.written, [33])
 
+    def test_moving_the_markers_frees_the_old_boxs_identity(self):
+        # The old device is free for hand-board duty once the markers
+        # leave it; the new one is kept off the hand boards.
+        from finger_rehab.hardware import eeg_trigger
+        old_id, new_id = "2341:0043:AAA", "2341:0043:BBB"
+        ports = [PortInfo("COM3", "Arduino", 0x2341, 0x43, "AAA"),
+                 PortInfo("COM10", "Arduino", 0x2341, 0x43, "BBB")]
+        w = MarkerWriter(backend=_OpenPort("COM3"), enabled=True)
+        with patch.object(eeg_trigger, "BOX_IDS", {old_id, new_id}), \
+                patch("finger_rehab.hardware.serial_source."
+                      "list_available_ports", return_value=ports):
+            w.use_backend(_OpenPort("COM10"))
+            self.assertEqual(eeg_trigger.BOX_IDS, {new_id})
+
+    def test_the_same_box_back_on_a_new_number_stays_a_box(self):
+        from finger_rehab.hardware import eeg_trigger
+        box_id = "2341:0043:AAA"
+        ports = [PortInfo("COM12", "Arduino", 0x2341, 0x43, "AAA")]
+        w = MarkerWriter(backend=_OpenPort("COM10"), enabled=True)
+        with patch.object(eeg_trigger, "BOX_IDS", {box_id}), \
+                patch("finger_rehab.hardware.serial_source."
+                      "list_available_ports", return_value=ports):
+            w.use_backend(_OpenPort("COM12"))
+            self.assertEqual(eeg_trigger.BOX_IDS, {box_id})
+
     def test_without_the_defer_flag_it_still_refuses(self):
         from finger_rehab.hardware.eeg_trigger import TriggerPortError
         with self.assertRaises(TriggerPortError):
@@ -272,13 +297,17 @@ class PickerScreenTests(unittest.TestCase):
         from finger_rehab.ui.widgets import Layout
         engine = SimpleNamespace(
             theme=CLINICAL, layout=Layout(1280, 800), markers=markers,
-            cfg=SimpleNamespace(data={"eeg": {}},
-                                get=lambda k, d=None: 9600
-                                if k == "eeg.baud" else d),
+            cfg=None,
             source=SimpleNamespace(hands=[SimpleNamespace(port=p)
                                           for p in hands]),
             _hand_source_started=started, running=True,
-            show_title=MagicMock(), eeg_port_ready=MagicMock())
+            show_title=MagicMock(), eeg_port_ready=MagicMock(),
+            release_hand_port=MagicMock(return_value=None),
+            restart_hand_source=MagicMock())
+        data = {"eeg": {"port": "COM10"}}
+        engine.cfg = SimpleNamespace(
+            data=data, get=lambda k, d=None: 9600 if k == "eeg.baud"
+            else data["eeg"].get("port", d) if k == "eeg.port" else d)
         s = EegPortScreen(engine)
         s.scan = MagicMock(return_value=[
             eeg_port.PortChoice("COM7", "USB Serial Device", 0x0403, 1),
@@ -326,12 +355,66 @@ class PickerScreenTests(unittest.TestCase):
         s.saver.assert_not_called()
         engine.eeg_port_ready.assert_not_called()
 
-    def test_running_hand_boards_are_not_offered(self):
+    def test_running_hand_boards_are_offered_and_marked(self):
+        # A marker box that is itself an Arduino looks like a hand
+        # board, and the start-up scan may have taken it for one: it
+        # has to stay pickable, labelled for what it is now.
+        import pygame
         s, _ = self._screen(MarkerWriter(backend=_OpenPort("COM10"),
                                          enabled=True),
                             started=True, hands=("COM3",))
         s.enter(MagicMock())
-        s.scan.assert_called_with(exclude=["COM3"])
+        s.scan.assert_called_with(exclude=[])
+        self.assertEqual(s.hand_ports, ["COM3"])
+        s.draw(pygame.Surface((1280, 800)))
+
+    def test_picking_a_hand_boards_port_moves_it_to_the_markers(self):
+        markers = MarkerWriter(backend=_OpenPort("COM7"), enabled=True)
+        s, engine = self._screen(markers, started=True, hands=("COM3",))
+        box = _OpenPort("COM3")
+        order = []
+        engine.release_hand_port.side_effect = (
+            lambda d: order.append(("release", d)))
+        s.opener = MagicMock(side_effect=lambda d, b: (
+            order.append(("open", d)) or (box, "")))
+        s.enter(MagicMock())
+        s.pick("COM3")
+        # The hand boards let go before the markers open it: Windows
+        # gives a port to one program at a time.
+        self.assertEqual(order, [("release", "COM3"), ("open", "COM3")])
+        self.assertIs(markers.backend, box)
+        s.saver.assert_called_once_with(engine.cfg, "COM3")
+        engine.eeg_port_ready.assert_called_once()
+        self.assertIn("Connected on COM3", s.status)
+
+    def test_a_hand_port_that_will_not_open_goes_back_to_the_hands(self):
+        old = _OpenPort("COM7")
+        markers = MarkerWriter(backend=old, enabled=True)
+        s, engine = self._screen(markers, started=True, hands=("COM3",))
+        engine.cfg.data["eeg"]["port"] = "COM7"
+
+        def release(device):
+            engine.cfg.data["eeg"]["port"] = device
+        engine.release_hand_port.side_effect = release
+        s.opener = MagicMock(return_value=(None, "Access is denied"))
+        s.enter(MagicMock())
+        s.pick("COM3")
+        self.assertEqual(engine.cfg.data["eeg"]["port"], "COM7")
+        engine.restart_hand_source.assert_called_once()
+        self.assertIs(markers.backend, old)
+        s.saver.assert_not_called()
+        self.assertIn("Access is denied", s.status)
+
+    def test_a_hand_port_is_not_taken_mid_game(self):
+        s, engine = self._screen(MarkerWriter(backend=_OpenPort("COM7"),
+                                              enabled=True),
+                                 started=True, hands=("COM3",))
+        engine.release_hand_port.return_value = "Not while a game runs."
+        s.opener = MagicMock()
+        s.enter(MagicMock())
+        s.pick("COM3")
+        s.opener.assert_not_called()
+        self.assertIn("Not while a game runs.", s.status)
 
     def test_at_launch_every_port_is_offered(self):
         # Nothing is open yet, and the box on a new COM number may be
@@ -375,6 +458,49 @@ class PickerScreenTests(unittest.TestCase):
                                          enabled=True))
         s.enter(MagicMock())
         s.draw(surf)
+
+
+class ReleaseHandPortTests(unittest.TestCase):
+    """GameEngine.release_hand_port and restart_hand_source, on a bare
+    stand-in: the hand boards stop (closing every port they held), the
+    port is reserved as eeg.port first so the rebuilt hand source leaves
+    it alone, and nothing moves while a game is running."""
+
+    def _engine(self, running=False):
+        from finger_rehab.game.engine import GameEngine
+        eng = SimpleNamespace(
+            cfg=SimpleNamespace(data={"eeg": {"port": "COM7"}}),
+            source=SimpleNamespace(stop=MagicMock()),
+            _hand_source_started=True,
+            block_is_running=lambda: running,
+            _rechoose_hand_source=MagicMock(),
+            _start_hand_source=MagicMock())
+        eng.release = lambda d: GameEngine.release_hand_port(eng, d)
+        eng.restart = lambda: GameEngine.restart_hand_source(eng)
+        return eng
+
+    def test_the_port_is_reserved_and_the_hands_let_go(self):
+        eng = self._engine()
+        self.assertIsNone(eng.release("COM10"))
+        self.assertEqual(eng.cfg.data["eeg"]["port"], "COM10")
+        eng.source.stop.assert_called_once()
+        self.assertFalse(eng._hand_source_started)
+        # Not counted as a drop: the next boards start fresh.
+        self.assertEqual(eng._hands_down, set())
+        self.assertEqual(eng._hands_ever_connected, set())
+
+    def test_refused_while_a_game_runs(self):
+        eng = self._engine(running=True)
+        self.assertTrue(eng.release("COM10"))
+        self.assertEqual(eng.cfg.data["eeg"]["port"], "COM7")
+        eng.source.stop.assert_not_called()
+        self.assertTrue(eng._hand_source_started)
+
+    def test_restart_chooses_the_boards_again_and_starts_them(self):
+        eng = self._engine()
+        eng.restart()
+        eng._rechoose_hand_source.assert_called_once()
+        eng._start_hand_source.assert_called_once()
 
 
 # ---- FRN bytes follow the glyph and the mode ---------------------------------

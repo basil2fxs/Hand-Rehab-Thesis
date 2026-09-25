@@ -29,10 +29,12 @@ At the lab PC
    double-click Finger Rehab.exe). PsychoPy's first start shows a tip
    and a list of changes: close both. The low byte drops to 0 the
    moment the game opens the port. If the box is not on COM10, the
-   game opens on a list of ports instead of the login: click the box,
-   not the entry named USB-SERIAL CH340 (that is the hand board; unplug
-   the box and press Scan again to see which entry goes), then
-   Continue. The choice is saved in eeg_lab.yaml. Settings, EEG box, changes it later or
+   game opens on a list of ports instead of the login: click the EEG
+   marker's port (unplug it and press Scan again to see which entry
+   goes), then Continue. The choice is saved in eeg_lab.yaml. The lab's
+   marker is an Arduino, so it looks like a hand board: if the game
+   ever takes it for one, Settings, EEG box lists it as "hand board
+   now", and clicking it moves it to the markers and saves it. Settings, EEG box, changes it later or
    reconnects a box that dropped out.
 4. If Windows refuses the exe (it is unsigned; Smart App Control on
    Windows 11 blocks unsigned programs), the launcher runs the same

@@ -12,35 +12,35 @@
 
 eeg:
   enabled: true
-  # The trigger box on the lab's Windows desktop: the NeuroSpec MMBT-S
-  # (Tobii Pro edition, orange case), a virtual COM port. If it comes
-  # up on another COM number the game opens on a port list instead of
-  # the login, and the box picked there is saved on this line; Settings
-  # has the same list. By hand: Device Manager, Ports (COM & LPT),
-  # unplug the box and watch which entry vanishes.
+  # The EEG marker on the lab's Windows PC: an Arduino on COM10 that
+  # puts each byte the game sends onto the EEG's trigger lines. Being
+  # an Arduino it looks like a hand board, so this port is kept off
+  # the hand boards. If it comes up on another COM number the game
+  # opens on a port list instead of the login, and the port picked
+  # there is saved on this line. Settings, EEG box has the same list
+  # and takes a port back from the hand boards. By hand: Device
+  # Manager, Ports (COM & LPT), unplug it and watch which entry goes.
   port: COM10
-  # MMBT-S manual, Table 1. A virtual COM port ignores baud for speed;
-  # 1200 RESETS the box (manual section 3.3), so the writer refuses
-  # it. Welber's old script opened the port at pyserial's default,
-  # which is this same 9600.
+  # The lab's old SRT script opened this port at pyserial's default,
+  # 9600, and the marker's sketch reads at that rate. 1200 is refused:
+  # it resets some boards into their bootloader. Opening the port
+  # restarts an Uno-type Arduino (about 2 s); the first marker goes out
+  # at the first game, long after.
   baud: 9600
   # Refuse to start without the box: a lab block recorded with no
   # markers is worthless, so failing loudly at launch is the feature.
   require_port: true
-  # The box in Pulse Mode (switch beside the USB socket at P, the
-  # factory setting) holds every code 8 ms and resets itself; 8 here
-  # makes metadata.json say what the wire does. 8 ms is 16 samples at
-  # 2048 Hz on the BioSemi, 2 at 256 Hz. If the switch reads S
-  # (Simple Mode) the box holds until our own 0 byte: set 10 here and
-  # box_mode: simple.
+  # The game sends its own 0 byte on the first frame at least this long
+  # after a code, so a marker that holds each byte until the next one
+  # gives pulses of 8 to 17 ms at 60 Hz: 2 or more samples at 256 Hz
+  # and up. Raise it for an amplifier that needs longer pulses.
   pulse_ms: 8
-  # One full 8 ms box cycle after our own 0 byte, plus margin, so the
-  # next code never queues inside the box.
+  # Quiet time after the 0 byte, so two codes never run together.
   gap_ms: 12
-  # Documentation only, copied into metadata.json: which box and
-  # which switch position the session was recorded with.
-  box: mmbt-s
-  box_mode: pulse
+  # Documentation only, copied into metadata.json: which device sent
+  # the markers, and that each pulse ends at the game's own 0 byte.
+  box: arduino
+  box_mode: simple
   # The amplifier's sampling rate, if known, fills the sample column
   # of events.tsv (round(onset * rate)). Left unset the column reads
   # n/a and the onset column in seconds is all a pipeline needs.

@@ -3705,8 +3705,45 @@ class GameEngine:
         hand boards can be chosen and started; from Settings it is
         just a new port and nothing else moves."""
         if not getattr(self, "_hand_source_started", True):
-            self._rechoose_hand_source()
-            self._start_hand_source()
+            self.restart_hand_source()
+
+    def restart_hand_source(self) -> None:
+        """Choose the hand boards again from the ports left and start
+        them."""
+        self._rechoose_hand_source()
+        self._start_hand_source()
+
+    def release_hand_port(self, device: str) -> str | None:
+        """Take `device` off the hand boards so the trigger writer can
+        open it.
+
+        A marker box that is itself an Arduino looks like a hand board
+        to discovery, and a launch without the lab settings, or a wrong
+        pick saved in eeg_lab.yaml, lets the start-up scan take it for
+        one. The EEG box picker calls this before opening such a port.
+        The port is reserved as eeg.port first, so the hand boards
+        chosen again afterwards leave it alone, then the hand source
+        stops, which closes every port it held: Windows lets only one
+        program have a port. Returns None once released, or why not.
+        """
+        if self.block_is_running():
+            return ("Not while a game is running. Finish or end it "
+                    "first.")
+        self.cfg.data.setdefault("eeg", {})["port"] = device
+        try:
+            self.source.stop()
+        except Exception as e:
+            log.debug("Stopping the hand boards raised: %s", e)
+        self._hand_source_started = False
+        # A stop asked for is not a drop: the boards chosen next boot
+        # up fresh, so no SENSORS LOST and no "disconnected" line.
+        self._source_was_connected = False
+        self._hand_was_connected = {}
+        self._hands_ever_connected = set()
+        self._hands_down = set()
+        log.info("%s taken off the hand boards for the EEG markers",
+                 device)
+        return None
 
     def _start_hand_source(self) -> None:
         self.source.start()

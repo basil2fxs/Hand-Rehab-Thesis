@@ -1003,17 +1003,17 @@ class ParityTests(unittest.TestCase):
         self.assertIsInstance(port, str)
         self.assertTrue(port)
         self.assertGreater(float(cfg.get("reaction.fp_eeg_fixed_s")), 0)
-        # The MMBT-S chain: an 8 ms pulse is what the box does in Pulse
-        # Mode (16 samples at 2048 Hz, 2 at 256 Hz), the gap clears one
-        # box cycle, 1200 baud would reset the box, and the recorded
-        # switch position is one of the two the box has.
+        # The marker chain: pulses of 8 ms or more (2 samples at 256 Hz),
+        # a gap no shorter than the pulse, 9600 baud as the lab's old
+        # script used and never 1200, and the device recorded as the
+        # lab's Arduino marker.
         self.assertGreaterEqual(float(cfg.get("eeg.pulse_ms")), 8.0)
         self.assertGreaterEqual(float(cfg.get("eeg.gap_ms")),
                                 float(cfg.get("eeg.pulse_ms")))
         self.assertNotEqual(int(cfg.get("eeg.baud")), 1200)
         self.assertEqual(int(cfg.get("eeg.baud")), 9600)
         self.assertIn(cfg.get("eeg.box_mode"), ("pulse", "simple"))
-        self.assertEqual(cfg.get("eeg.box"), "mmbt-s")
+        self.assertEqual(cfg.get("eeg.box"), "arduino")
         # The overlay must not fork gameplay settings: defaults still
         # supply everything it does not name.
         self.assertIsNotNone(cfg.get("game.timeout_s"))

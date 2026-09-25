@@ -622,6 +622,22 @@ def _remember_box(port: str) -> None:
         log.debug("could not read the trigger box's USB identity: %s", e)
 
 
+def _forget_box(old_port: str, new_port: str) -> None:
+    """The markers moved from old_port to new_port: the old device is
+    free for hand-board duty again, unless it is the same box back on
+    another COM number."""
+    try:
+        from .serial_source import list_available_ports
+        ids = {p.device.strip().lower(): p.hardware_id
+               for p in list_available_ports()}
+    except Exception as e:
+        log.debug("could not read the USB identities: %s", e)
+        return
+    old_id = ids.get(str(old_port).strip().lower())
+    if old_id and old_id != ids.get(str(new_port).strip().lower()):
+        BOX_IDS.discard(old_id)
+
+
 class SerialBackend(TriggerBackend):
     """The real trigger box on a serial port."""
 
@@ -794,6 +810,10 @@ class MarkerWriter:
         one. Queued markers are kept and go out on the new port.
         """
         old = self.backend
+        old_port = getattr(old, "port", None)
+        new_port = getattr(backend, "port", None)
+        if old_port and new_port and old_port != new_port:
+            _forget_box(old_port, new_port)
         if old is not None and old is not backend:
             try:
                 old.write_code(RESET)

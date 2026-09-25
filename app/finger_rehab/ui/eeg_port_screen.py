@@ -6,7 +6,9 @@ only ways out are a port that opens or Quit: a lab session must never
 run unmarked, and this is how that rule gets a way forward other than
 a text editor. From Settings, the "EEG trigger box" button opens it to
 move the markers to another port, or to reconnect a box that dropped
-out mid-session.
+out mid-session. Ports the hand boards hold are listed too: a marker
+box that is itself an Arduino looks like a hand board, and picking it
+takes it off the hand boards first.
 
 Picking a port opens it exactly as the marker writer would, moves the
 markers onto it, and saves it (hardware/eeg_port.save_port) on the
@@ -47,6 +49,7 @@ class EegPortScreen(Screen):
         self.saver = eeg_port.save_port
         self._back = None
         self._choices = []
+        self.hand_ports: list[str] = []
         self._rows: list[tuple[pygame.Rect, str]] = []
         self._hover = -1
         self.status = ""
@@ -89,19 +92,17 @@ class EegPortScreen(Screen):
         return getattr(self.engine.markers.backend, "port", None)
 
     def rescan(self) -> None:
-        """List the ports again. The hand boards' ports are left out
-        once they are running; at launch they have not been opened, so
-        every port is fair game."""
-        exclude = []
+        """List every port. Once the hand boards are running their
+        ports are marked as theirs but still offered: the box may be
+        what the start-up scan took for a hand board. At launch nothing
+        is open yet, so no port is marked."""
+        self.hand_ports = []
         if getattr(self.engine, "_hand_source_started", False):
-            exclude = [getattr(h, "port", None) for h in
-                       (getattr(self.engine.source, "hands", None) or [])]
-            exclude = [p for p in exclude if p]
-        # At launch nothing is open yet, so every port is listed: the
-        # box on a new COM number may be exactly what the start-up scan
-        # took for a hand board, so no port is marked as one either.
+            held = [getattr(h, "port", None) for h in
+                    (getattr(self.engine.source, "hands", None) or [])]
+            self.hand_ports = [p for p in held if p]
         try:
-            self._choices = list(self.scan(exclude=exclude))
+            self._choices = list(self.scan(exclude=[]))
         except Exception as e:
             log.warning("EEG port scan failed: %s", e)
             self._choices = []
@@ -114,6 +115,14 @@ class EegPortScreen(Screen):
         from ..hardware.eeg_port import same_port
         current = self._current_port()
         markers = self.engine.markers
+        taken_from_hands = any(same_port(device, p)
+                               for p in self.hand_ports)
+        previous = self.engine.cfg.get("eeg.port", None)
+        if taken_from_hands:
+            refused = self.engine.release_hand_port(device)
+            if refused:
+                self._say(refused, "error")
+                return
         if same_port(device, current):
             # Picking the port in use always reconnects it. A cable
             # bumped and replugged between blocks leaves a handle that
@@ -127,6 +136,11 @@ class EegPortScreen(Screen):
         baud = int(self.engine.cfg.get("eeg.baud", 115200))
         backend, why = self.opener(device, baud)
         if backend is None:
+            if taken_from_hands:
+                # Give it back: the hand boards had it a moment ago.
+                self.engine.cfg.data.setdefault("eeg", {})["port"] = previous
+                self.engine.restart_hand_source()
+                self.rescan()
             self._say(f"{device} did not open: {why}. Try another.",
                       "error")
             return
@@ -240,7 +254,11 @@ class EegPortScreen(Screen):
             pygame.draw.rect(surf, theme.background, rect, border_radius=12)
             pygame.draw.rect(surf, edge, rect, 3 if in_use or
                              i == self._hover else 2, border_radius=12)
-            label = choice.label + ("   (in use now)" if in_use else "")
+            label = choice.label + (
+                "   (in use now)" if in_use
+                else "   (hand board now)"
+                if any(same_port(device, p) for p in self.hand_ports)
+                else "")
             label = _fit_text(label, row_font, rect.w - 40)
             draw_text(surf, label, (rect.x + 20,
                                     rect.centery - row_font.get_height() // 2),
@@ -264,8 +282,8 @@ class EegPortScreen(Screen):
                 ("The hand boards are in this list too until the game "
                  "starts. The choice is saved in eeg_lab.yaml."
                  if self.at_launch else
-                 "Hand boards in use are not listed. The choice is saved "
-                 "in eeg_lab.yaml."))):
+                 "Picking a hand board's port moves it to the markers. "
+                 "The choice is saved in eeg_lab.yaml."))):
             draw_text(surf, line, (layout.width // 2, hint_y + k * 24),
                       theme, layout, pt=FONT_SMALL + 2, centre=True,
                       colour=theme.muted)
