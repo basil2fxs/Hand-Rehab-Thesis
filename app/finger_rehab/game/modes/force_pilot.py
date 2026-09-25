@@ -21,9 +21,12 @@ measurable from exactly the trace this rig already streams:
   control metrics stayed sensitive where clinical scales saturated,
   which is the case for tracking a rehab cohort session by session.
 - Taud B, et al (2021). Frontiers in Neurology, randomised controlled
-  trial: visuomotor grip-force tracking training itself drove motor
-  recovery after stroke, so the tracking task is the candidate active
-  ingredient, not just the measurement.
+  trial after stroke: every arm did visuomotor grip-force tracking
+  training and only brain stimulation (tDCS) was randomised. Tracking
+  on the trained task improved in all arms and the stimulation added
+  nothing, so the trial shows the training is feasible and the task
+  trainable. With no untrained arm it cannot show that the training
+  drives recovery.
 
 Supporting, verified by the research cluster: Kurillo 2005 (Technology
 and Health Care) is the build template (force sensor plus screen
@@ -191,10 +194,13 @@ for the data. The probe measures a maximal flat-finger press on a pad, not the g
 or pinch MVC of the cited protocols, so percent-of-max matches those
 studies in construct rather than in newtons. Frame-rate scoring here
 is for gameplay only; every research number comes from the notebook's
-offline scoring of the raw stream. Training benefit rests on Taud
-2021 and the Kurillo lineage, in grip tracking after stroke; for the
-other populations this mode is measurement plus practice, not a
-proven therapy. There is no keyboard fallback by design: a keyboard
+offline scoring of the raw stream. No trial has yet shown that
+tracking training itself drives recovery: Taud 2021 trained every arm
+and randomised only brain stimulation, and the Kurillo lineage uses
+tracking for assessment and practice. So for every population this
+mode is measurement plus practice, not a proven therapy; in
+Parkinson's disease no force-tracking training trial exists at all
+(docs/research/new_modes/force-pilot-parkinsons.md). There is no keyboard fallback by design: a keyboard
 cannot produce a continuous force signal, and the mode says so on
 screen instead of pretending.
 
@@ -1400,6 +1406,17 @@ class ForcePilotMode(WaitSkip):
         self.engine._last_cue_code = cues.code
         self.engine._last_target_shown = True
         self.engine._last_stim_timeout_ms = None
+        # The zero this run is read against, frozen since the announce
+        # card's rest tare. Logged with the run so the notebook scores
+        # it from the zero the participant saw: re-taring offline from
+        # the second before the run read a finger already pressing
+        # toward the first hold, 1 to 7 percent of max off on real
+        # runs (25 September 2026). Not a section key, so the flown
+        # plan cannot change.
+        reference = getattr(self.view, "reference", None)
+        ref = reference(self.lane) if callable(reference) else None
+        if ref is not None:
+            self.params["ref_counts"] = round(float(ref), 2)
         raw = getattr(self.engine, "raw_logger", None)
         if raw:
             raw.queue_event(

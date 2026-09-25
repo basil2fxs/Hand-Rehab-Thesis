@@ -43,12 +43,12 @@ Date searched: 2026-08-07. All sources below were found and confirmed in these s
 - Timing precision in continuation and synchronization tapping. Psychological Research 2000 (Springer, PubMed 10946587). Paradigm reference.
 
 ### 2.2 Cueing evidence in PD
-- Ghai et al. (2018). Effect of rhythmic auditory cueing on parkinsonian gait: A systematic review and meta-analysis. Scientific Reports 8:506. 50 studies, 1892 participants. Positive effects on gait velocity and stride length, negative on cadence. (Author list confirmed only as far as the paper being the well-known Scientific Reports meta-analysis; PMC5764963.)
+- Ghai S, Ghai I, Schmitz G, Effenberg AO (2018). Effect of rhythmic auditory cueing on parkinsonian gait: a systematic review and meta-analysis. Scientific Reports 8:506 (PMID 29323122). 50 studies, 1892 participants. Positive effects on gait velocity and stride length, negative on cadence.
 - Effects of Rhythmic Auditory Stimulation on Gait and Motor Function in Parkinson's Disease: systematic review and meta-analysis of RCTs (PMC9053573, 2022). Corroborates.
 - Rose D, Delevoye-Turrell Y, Ott L, Annett LE, Lovatt PJ (2019). Music and Metronomes Differentially Impact Motor Timing in People with and without Parkinson's Disease. Parkinson's Disease 2019:6530838.
   - 30 PD (H&Y mean 1.78), 26 older controls, 36 young. Tempi 81, 116, 140 BPM. Finger tapping, toe tapping, stepping.
   - Music gave better entrainment than metronome at medium and fast tempi; finger tapping asynchrony about 39 ms; PD did not differ from controls on synchronisation at these tempi (mild cohort). So a cued tapping game is playable by PD patients, and the deficit shows at higher rates (see 1.4) and in continuation, not simple sync at comfortable tempo.
-- Rhythmic priming across effector systems: A randomized controlled trial with Parkinson's disease patients. Human Movement Science, 2019 (ScienceDirect S0167945718305979; authors not confirmed in my searches, paywalled).
+- Braun Janzen T, Haase M, Thaut MH (2019). Rhythmic priming across effector systems: a randomized controlled trial with Parkinson's disease patients. Human Movement Science 64:355-365 (PMID 30852469).
   - 37 PD randomised: finger-tap training n=11, arm swing n=14, control n=12.
   - Intervention: four minutes total (three 1-min blocks), tapping the index finger of the less affected hand to a metronome set 20% faster than pre-training walking cadence, seated.
   - Result: gait velocity +9.5% (69.75 to 76.03 m/min), cadence +8%. No change in arm-swing or control groups. Seated finger tapping to a beat transferred to gait. This is the strongest impact case for a cued tapping mode as therapy, not just measurement.
@@ -92,7 +92,7 @@ Date searched: 2026-08-07. All sources below were found and confirmed in these s
 ## 6. PD force control (release deficit)
 
 - Neely KA, Planetta PJ, Prodoehl J, et al. (2013). Force Control Deficits in Individuals with Parkinson's Disease, Multiple Systems Atrophy, and Progressive Supranuclear Palsy. PLOS ONE 8(3):e58403. 12 PD, 12 MSA-P, 8 PSP, 12 controls, off medication. Ten 2 s pulses at 15% MVC with precision grip on a force transducer. All patient groups slower to contract AND to relax, longer pulses; PSP produced extra unintended pulses.
-- Grip force release is impaired in Parkinson's disease during a force tracking task. Experimental Brain Research, 2024 (Springer s00221-024-06966-w; authors not confirmed). PD less accurate with greater error and trial-to-trial variability specifically during release.
+- Davidson S, Learman K, Zimmerman E, Rosenfeldt AB, Alberts JL. Grip force release is impaired in Parkinson's disease during a force tracking task. Experimental Brain Research 243(1):16 (online 5 December 2024; cited by its authors as 2025). PD less accurate with greater error and trial-to-trial variability specifically during release.
 - Parkinson's disease impairs grip force release during a sinusoidal force tracking task (PMC12916958, approx 2026). Sinusoidal tracking: older adults show generation and release deficits vs young; PD shows global decline with release disproportionately affected; two-point discrimination correlated with tracking accuracy.
 - Design consequence: tracking tasks must score the down-ramp separately from the up-ramp.
 
@@ -154,3 +154,5 @@ Hardware fit notes:
 - Reliability study design: repeat sessions across days, compute ICC and CV, compare against published bars (KS30 CV 6%, DFT ICCs above 0.9, SFI high reliability in MS).
 - Discrimination potential if patient cohorts become available: published AUCs (0.90 DFT alone, 0.95 combined; 0.84 pyramidal, 0.83 cerebellar in MS) give effect-size context for power calculations.
 - All modes run on unmodified hardware; the only new engineering is software plus one bench characterisation of pad accuracy at low force.
+
+The full verified Parkinson's literature base for Force Pilot (94 sources, checked on PubMed on 25 September 2026) is force-pilot-parkinsons.md in this folder.

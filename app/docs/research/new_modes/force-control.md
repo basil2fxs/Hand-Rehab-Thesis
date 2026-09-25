@@ -56,9 +56,10 @@ comfortably sufficient.
   Longitudinal force control metrics are sensitive where clinical scales
   saturate.
 
-- Archer DB, Kang N, Misra G, Marble S, Patten C, Coombes SA (2017).
-  Visual feedback alters force control and functional activity in the
-  visuomotor network after stroke. NeuroImage: Clinical 17: 505-517.
+- Archer DB, Kang N, Misra G, Marble S, Patten C, Coombes SA (2018,
+  online 2017). Visual feedback alters force control and functional
+  activity in the visuomotor network after stroke. NeuroImage: Clinical
+  17: 505-517.
   15 chronic stroke vs 15 controls, grip at 15 percent MVC under three
   visual gains. Stroke vs control force error gap shrank from about 21
   percent MVC at low gain to about 3 percent at high gain. Visual gain
@@ -87,16 +88,18 @@ comfortably sufficient.
   used both as assessment (32 healthy across ages) and as a training
   tool in 10 post-stroke patients.
 
-- Effect of task-oriented training assisted by force feedback hand
-  rehabilitation robot on finger grasping function in stroke patients
-  with hemiplegia: a randomised controlled trial. Journal of
-  NeuroEngineering and Rehabilitation 21 (2024), 10.1186/s12984-024-01372-3.
+- Li Y, Lian Y, Chen X, Zhang H, Xu G, Duan H, et al (2024). Effect of
+  task-oriented training assisted by force feedback hand rehabilitation
+  robot on finger grasping function in stroke patients with hemiplegia:
+  a randomised controlled trial. Journal of NeuroEngineering and
+  Rehabilitation 21: 77, 10.1186/s12984-024-01372-3.
   44 hemiplegic stroke patients, 22 per arm, 4 weeks. Experimental group
   beat controls on FMA-Hand, ARAT, grip strength, active range of motion.
 
-- Effects of Computer-Aided Interlimb Force Coupling Training on Paretic
+- Lin CH, Chou LW, Luo HJ, Tsai PY, Lieu FK, Chiang SL, et al (2015).
+  Effects of Computer-Aided Interlimb Force Coupling Training on Paretic
   Hand and Arm Motor Control following Chronic Stroke: A Randomized
-  Controlled Trial. PLOS ONE 2015, 10.1371/journal.pone.0131048.
+  Controlled Trial. PLOS ONE 10(7): e0131048.
   Bilateral isometric handgrip force training, 4-week intervention,
   blinded assessment.
 
@@ -114,15 +117,18 @@ comfortably sufficient.
   All eight studies in healthy older adults reported reduced tremor or
   improved steadiness and dexterity after training.
 
-- Relationship Between Force Steadiness and Functionality in Older
-  Adults: A Systematic Review With Meta-Analysis. Scandinavian Journal
-  of Medicine and Science in Sports, 10.1111/sms.70040. Found in search;
-  year not pinned down from the capture, listed for follow-up.
+- Camacho-Villa MA, Giráldez-García MA, Sevilla-Sanchez M,
+  Rivera-Mejía SL, Carballeira E (2025). Relationship Between Force
+  Steadiness and Functionality in Older Adults: A Systematic Review With
+  Meta-Analysis. Scandinavian Journal of Medicine and Science in Sports
+  35(4): e70040. Upper limb steadiness correlated with task performance
+  at r = 0.58 across 15 pooled studies.
 
-- Handgrip force steadiness in young and older adults: a reproducibility
-  study. BMC Musculoskeletal Disorders 2018,
-  10.1186/s12891-018-2015-9. Reproducibility data for steadiness
-  protocols; authors not captured in my search snippet.
+- Blomkvist AW, Eika F, de Bruin ED, Andersen S, Jorgensen M (2018).
+  Handgrip force steadiness in young and older adults: a reproducibility
+  study. BMC Musculoskeletal Disorders 19: 96. CV measures reproduced
+  well a week apart (ICC about 0.81); everyone improved on the second
+  visit.
 
 ### Carpal tunnel syndrome
 
@@ -135,11 +141,11 @@ comfortably sufficient.
   higher in both conditions. The vision-removed condition is the CTS
   discriminator, which a game can implement as a feedback-fade level.
 
-- Functional sensibility assessment. Part II: Effects of sensory
-  improvement on precise pinch force modulation after transverse carpal
-  tunnel release. PMID 19402148 (2009). Sensory recovery after release
-  surgery restored precise pinch force modulation. Venue not captured in
-  snippet; verify before citing in the thesis.
+- Hsu HY, Kuo LC, Chiu HY, Jou IM, Su FC (2009). Functional sensibility
+  assessment. Part II: Effects of sensory improvement on precise pinch
+  force modulation after transverse carpal tunnel release. Journal of
+  Orthopaedic Research 27(11): 1534-1539. Sensory recovery after release
+  surgery restored precise pinch force modulation.
 
 - Additional CTS papers surfaced but details unverified by me: CTS
   impairs reach-to-pinch (PMC3954882), CTS impairs index finger
@@ -159,25 +165,31 @@ comfortably sufficient.
   medication, 10 older, 10 young. PD disproportionately impaired on
   force release versus generation, beyond normal ageing.
 
-- Rate control deficits during pinch grip and ankle dorsiflexion in
-  early-stage Parkinson's disease. PLOS ONE 2023,
-  10.1371/journal.pone.0282203. Slower rates of force development and
-  relaxation in PD across effectors.
+- Chung JW, Knight CA, Bower AE, Martello JP, Jeka JJ, Burciu RG (2023).
+  Rate control deficits during pinch grip and ankle dorsiflexion in
+  early-stage Parkinson's disease. PLOS ONE 18(3): e0282203. 20 early PD
+  off medication vs 21 older adults, fast pulses to 15 percent MVC. In
+  the hand only relaxation was slower in PD; rate of rise and force
+  variability did not differ.
 
-- Measures of motor segmentation from rapid isometric force pulses are
-  reliable and differentiate Parkinson's disease from age-related
-  slowing. PMID 35768733 (2022). Segmented force-time curves; pulse
-  duration prolonged with large effect sizes; measures reliable.
+- Howard SL, Grenet D, Bellumori M, Knight CA (2022). Measures of motor
+  segmentation from rapid isometric force pulses are reliable and
+  differentiate Parkinson's disease from age-related slowing.
+  Experimental Brain Research 240: 2205-2217. Segmented force-time
+  curves; pulse duration prolonged with large effect sizes; measures
+  reliable.
 
-- Force Control Deficits in Individuals with Parkinson's Disease,
-  Multiple Systems Atrophy, and Progressive Supranuclear Palsy. PLOS ONE
-  2013, 10.1371/journal.pone.0058403. Force control deficits extend
-  across parkinsonian syndromes.
+- Neely KA, Planetta PJ, Prodoehl J, Corcos DM, Comella CL, Goetz CG,
+  et al (2013). Force Control Deficits in Individuals with Parkinson's
+  Disease, Multiple Systems Atrophy, and Progressive Supranuclear Palsy.
+  PLOS ONE 8(3): e58403. Force control deficits extend across
+  parkinsonian syndromes.
 
-- Older adults are impaired in the release of grip force during a force
-  tracking task (PMC10894767). Release also degrades with normal ageing,
-  so release metrics matter for older users generally. Venue not
-  captured; verify.
+- Davidson S, Learman K, Zimmerman E, Rosenfeldt AB, Koop M, Alberts JL
+  (2024). Older adults are impaired in the release of grip force during
+  a force tracking task. Experimental Brain Research 242(3): 665-674.
+  Release also degrades with normal ageing, so release metrics matter
+  for older users generally.
 
 ### Multiple sclerosis
 
@@ -226,34 +238,33 @@ comfortably sufficient.
 
 ### Visual feedback as a controlled variable
 
-- Intermittent visual information and the multiple time scales of visual
-  motor control of continuous isometric force production. PMID 15971695
-  (2005). Force variability decreased and force output irregularity
+- Sosnoff JJ, Newell KM (2005). Intermittent visual information and the
+  multiple time scales of visual motor control of continuous isometric
+  force production. Perception and Psychophysics 67(2): 335-344. Force variability decreased and force output irregularity
   increased as visual intermittency rate rose; vision influences force
   structure up to about 12 Hz.
 
-- Greater amount of visual feedback decreases force variability by
+- Baweja HS, Kennedy DM, Vu J, Vaillancourt DE, Christou EA (2010).
+  Greater amount of visual feedback decreases force variability by
   reducing force oscillations from 0-1 and 3-7 Hz. European Journal of
-  Applied Physiology 2010, 10.1007/s00421-009-1301-5.
+  Applied Physiology 108(5): 935-943.
 
-- Modulation of Force below 1 Hz: Age-Associated Differences and the
-  Effect of Magnified Visual Feedback (PMC3569433). Magnified feedback
-  changes sub-1 Hz force modulation in older adults. Venue not captured
-  in snippet; verify.
+- Fox EJ, Baweja HS, Kim C, Kennedy DM, Vaillancourt DE, Christou EA
+  (2013). Modulation of Force below 1 Hz: Age-Associated Differences and
+  the Effect of Magnified Visual Feedback. PLOS ONE 8(2): e55970.
+  Magnified feedback changes sub-1 Hz force modulation in older adults.
 
-- Enoka-lab style overview: Force Steadiness: From Motor Units to
-  Voluntary Actions. Physiology, DOI 10.1152/physiol.00027.2020.
-  Framework review linking motor unit discharge variability to
-  steadiness. Author list not captured in my search snippet, so I have
-  not attributed it; confirm before citing.
+- Enoka RM, Farina D (2021). Force Steadiness: From Motor Units to
+  Voluntary Actions. Physiology 36(2): 114-130. Framework review linking
+  motor unit discharge variability to steadiness.
 
 ### Grip force scaling (context for the cluster)
 
-- Grip force control during object manipulation in cerebral stroke.
-  Clinical Neurophysiology 2003 (ScienceDirect S1388245703000427).
-  Grip forces massively increased with excessive safety margins after
-  stroke; sensory loss and impaired sensorimotor integration named as
-  the major source. Authors not captured; verify.
+- Hermsdörfer J, Hagl E, Nowak DA, Marquardt C (2003). Grip force
+  control during object manipulation in cerebral stroke. Clinical
+  Neurophysiology 114(5): 915-929. Grip forces massively increased with
+  excessive safety margins after stroke; sensory loss and impaired
+  sensorimotor integration named as the major source.
 - Parametric control of fingertip forces during precision grip lifts in
   children with DCD and DAMP. Neuropsychologia 2001 (S0028393200001329).
   Excessive grip force and high safety margins in DCD. Suggests
@@ -272,12 +283,12 @@ comfortably sufficient.
 2. These measures correlate with clinical scales (Fugl-Meyer), predict
    function (pegboard about 45 percent explained by steadiness), and
    remain sensitive when clinical scores saturate (Pennati 2020).
-3. They are trainable: tracking training in stroke (Kurillo 2005; JNER
-   RCT 2024), steadiness practice in older adults (Marmon 2011; Sports
+3. They are trainable: tracking training in stroke (Kurillo 2005; Li
+   2024), steadiness practice in older adults (Marmon 2011; Sports
    Medicine 2019 review), force sense home training (J Hand Ther 2024,
    35 percent error cut).
 4. Visual feedback gain and availability are validated difficulty
-   levers with quantified effects (Archer 2017; intermittency work).
+   levers with quantified effects (Archer 2018; intermittency work).
 5. Condition-specific discriminators exist and map to game levels:
    feedback removal for CTS (Li 2014), release phase for PD (Davidson
    2026) and stroke (Naik 2011), low-force steadiness for ageing.
@@ -299,8 +310,9 @@ gentle hills (slow sine) to canyons (steps) to storms (pseudorandom),
 per-finger characters.
 
 Difficulty: corridor width, waveform frequency and predictability,
-visual gain (Archer 2017 shows gain shifts patient error by an order of
-magnitude), intermittent cursor blanking at expert levels.
+visual gain (in Archer 2018 the stroke minus control error gap shrank
+from about 21 to 3 percent MVC between low and high gain), intermittent
+cursor blanking at expert levels.
 
 Log per sample: t, finger, hand, raw force, target, corridor half
 width, gain, feedback state. Per trial: MVC reference, waveform id.
@@ -421,10 +433,9 @@ adults (release impairment), MS.
 
 ## 6. Unverified items flagged
 
-- Enoka and Farina attribution for the Physiology steadiness review:
-  title and DOI confirmed, author list not captured in my search.
-- Venue for PMC10894767 (older adults release impairment), PMC3569433
-  (sub-1 Hz magnified feedback), PMID 19402148 (sensibility after
-  carpal tunnel release), and the 2003 Clinical Neurophysiology stroke
-  grip scaling paper's author list: confirm before thesis citation.
-- Scand J Med Sci Sports steadiness meta-analysis year: confirm.
+The items once flagged here were checked on PubMed on 25 September 2026
+and their authors, years and venues are filled in above. One summary
+changed in the check: Chung 2023 found only slower relaxation in the
+hand, not slower force development. The verified list, with PMIDs and
+DOIs, is force-pilot-parkinsons.md (sections A1, A6, A7 and A8) in this
+folder.

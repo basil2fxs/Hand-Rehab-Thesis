@@ -640,6 +640,33 @@ class RunScoringTests(unittest.TestCase):
             self.assertAlmostEqual(start - run_t0, sec.start_s, places=4)
             self.assertAlmostEqual(end - run_t0, sec.end_s, places=4)
 
+    def test_trial_row_carries_the_zero_the_run_was_read_against(self):
+        # The notebook re-scores from raw counts, so it needs the tare
+        # the participant's force was shown against. Re-taring from
+        # the second before a run read fingers already pressing toward
+        # the first hold on real runs.
+        from finger_rehab.data.logger import parse_waveform_params
+        from finger_rehab.game.modes.force_pilot import sections_from_params
+        m = self._ready_mode()
+        m.view.reference = lambda lane: 123.456
+        t = _to_run_phase(m)
+        sections = [(s.name, s.start_s, s.end_s) for s in m.sections]
+        _play_run(m, t, lambda t_run, target: target)
+        params = parse_waveform_params(
+            m.engine.trial_logger.rows[0]["waveform_params"])
+        self.assertEqual(params["ref_counts"], 123.46)
+        self.assertEqual([(s.name, s.start_s, s.end_s)
+                          for s in sections_from_params(params)], sections)
+
+    def test_a_view_without_a_zero_logs_no_zero(self):
+        from finger_rehab.data.logger import parse_waveform_params
+        m = self._ready_mode()
+        t = _to_run_phase(m)
+        _play_run(m, t, lambda t_run, target: target)
+        params = parse_waveform_params(
+            m.engine.trial_logger.rows[0]["waveform_params"])
+        self.assertNotIn("ref_counts", params)
+
     def test_segment_markers_bracket_the_run_in_raw(self):
         m = self._ready_mode()
         t = _to_run_phase(m)

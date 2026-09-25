@@ -402,6 +402,20 @@ class ForceViewTests(unittest.TestCase):
         # value has settled at 150.
         self.assertAlmostEqual(r.counts, 50.0, delta=1.0)
 
+    def test_reference_reports_the_zero_a_read_uses(self):
+        # Force Pilot logs this with every run, so it has to be the
+        # same number read() subtracts: the calibrated rest before any
+        # rebaseline, the captured level after one.
+        e = _engine()
+        det = _add_detector(e, "right")
+        e.calibration_profiles["right"] = _profile()
+        self._settle(det, 150)
+        v = self._view(e)
+        self.assertAlmostEqual(v.reference(0), 100.0)
+        v.rebaseline([0])
+        self.assertAlmostEqual(v.reference(0), 150.0, delta=1.0)
+        self.assertAlmostEqual(v.read(0).counts, 0.0, delta=1.0)
+
     def test_percent_needs_a_probed_max(self):
         e = _engine()
         det = _add_detector(e, "right")

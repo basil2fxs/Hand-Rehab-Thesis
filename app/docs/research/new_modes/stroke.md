@@ -487,7 +487,10 @@ model, not just descriptive stats.
 
 1. Force Pilot: biggest deficit-to-asset match (unused analogue signal),
    strongest and most direct training literature (Carey 2002, Kurillo 2005,
-   Taud 2021 all trained tracking itself), richest signal analysis.
+   Taud 2021 all used tracking itself as the training; Taud 2021
+   trained every arm and randomised only brain stimulation, so it
+   shows feasibility, not a training effect), richest signal
+   analysis.
 2. Vibration Detective: turns the motors into a second therapy channel,
    RCT-backed principle (SENSe), publishable psychophysics, and the active
    sensory training evidence gap is a genuine opening.

@@ -488,16 +488,22 @@ Known effects to reproduce:
   F2 Visuomotor lag positive, of order 100 to 300 ms (a sanity
      check on the corridor timing, not a literature norm).
   F3 Release error approximately equal to press error in young
-     adults. Release-specific impairment is the Parkinson's and
-     ageing marker (Davidson 2026; Naik 2011, in force_pilot.py), so
-     a young cohort should show a small difference; report the
-     paired difference with its CI as an equivalence statement.
+     adults. Release-specific impairment is the Parkinson's marker
+     (Davidson 2025; Davidson 2026; Chung 2023) and an ageing one
+     (Davidson 2024), so a young cohort should show a small
+     difference; report the paired difference with its CI as an
+     equivalence statement. Read on the symmetric shapes only (Tide,
+     Hills, and the rising and falling halves of each sine): Dunes
+     releases about three times faster than it climbs, so a normal
+     150 ms lag alone would put its release error above its press
+     error with no release deficit at all.
   F4 Time in corridor at or above 0.8 on most runs, reported PER
      LEVEL across the climb. 0.8 is force_pilot.py's GREAT_TIC, the
      game's own Great feedback tier, not a promotion criterion:
      force_pilot.py has no staircase, the ladder is fixed, and
-     nothing promotes or demotes. The corridor also narrows from 8
-     to 4 percent of max up the twelve waves, so a single pooled
+     nothing promotes or demotes. The corridor also narrows from a
+     half-width of 8 to 4 percent of max (16 to 8 percent wide) up
+     the twelve waves, so a single pooled
      median mixes corridor widths; the per-level breakdown is the
      one to read. This row says the corridor is flyable at each
      level for a healthy hand, which is what the ladder needs to be

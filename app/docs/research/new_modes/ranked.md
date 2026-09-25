@@ -58,8 +58,9 @@ Verified anchors:
 
 Supporting (verified by the source cluster, not re-checked here):
 Kurillo 2005 build template; Archer 2017 visual gain lever; Taud 2021
-Frontiers in Neurology RCT where tracking training itself drove
-recovery; Naik 2011 ramp segmentation; Davidson 2026 PD release
+Frontiers in Neurology RCT in which every arm did tracking training
+and only brain stimulation was randomised (feasibility, not a
+training effect); Naik 2011 ramp segmentation; Davidson 2026 PD release
 deficit.
 
 Notebook: RMSE, CoV, time in corridor, cross-correlation lag,

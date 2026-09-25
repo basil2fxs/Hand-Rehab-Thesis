@@ -171,6 +171,19 @@ class ForceView:
             if base is not None:
                 self._reference[lane] = float(base)
 
+    def reference(self, lane: int) -> float | None:
+        """The frozen tare this lane is read against right now, in raw
+        counts, or None before any sample. Force Pilot logs it with
+        every run: the pre-run window the notebook used to re-tare
+        from catches a finger already pressing toward the first hold,
+        and a finger lifted off the pad, so only the logged value
+        rebuilds exactly the force the participant saw."""
+        resolved = self._resolve(lane)
+        if resolved is None:
+            return None
+        hand, idx, det = resolved
+        return self._reference_for(lane, hand, idx, det)
+
     # ---- reads ----------------------------------------------------
 
     def active_lanes(self) -> list[int]:
