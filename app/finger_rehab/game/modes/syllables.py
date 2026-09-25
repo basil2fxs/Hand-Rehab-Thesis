@@ -1210,7 +1210,7 @@ class SyllablesMode(WaitSkip):
             kinds = kinds_for_rung(self.rung, self.homophone_foils)
         if (prof.guard_unstressed_vowels and self.word is not None
                 and self.pos != self.word.stress
-                and not self.chunks_spelt()):
+                and not self.chunks_spelt(self.word.syllables[self.pos])):
             kinds = tuple("F7" if k == "F3" else k for k in kinds)
         return kinds
 
@@ -1816,11 +1816,16 @@ class SyllablesMode(WaitSkip):
         path = self.chunk_speech_path(self.word.syllables[k])
         return max(self.ioi_s, self.speech_seconds(path) + 0.15)
 
-    def chunks_spelt(self) -> bool:
+    def chunks_spelt(self, chunk: str | None = None) -> bool:
         """Whether the chunk recordings are spelling pronunciations
-        (the recording kit's manifest says chunk_form spelling)."""
+        (the recording kit's manifest says chunk_form spelling). Given a
+        chunk, also whether that one has a file: the voice can be made
+        for some age pools and not others, and a chunk with no file is
+        said by `say` or not at all, never in its spelt form."""
         self._speech_manifest()
-        return (self._manifest_meta or {}).get("chunk_form") == "spelling"
+        if (self._manifest_meta or {}).get("chunk_form") != "spelling":
+            return False
+        return chunk is None or self.chunk_speech_path(chunk) is not None
 
     def _speak_syllable_after(self, k: int, now: float) -> None:
         """Speak syllable k now, or sound_lead_s after the print for a

@@ -202,7 +202,9 @@ empty and the game runs silent without it, logging once per word.
 Whoever renders must check the provider's current terms on using
 synthesised audio inside a distributed application, record the voice
 and the date in the manifest, and listen to a sample of the syllable
-files.
+files. (25 September 2026: the folder now ships a free synthetic
+voice, made by scripts/syllables_tts.py; see syllables-all-ages.md,
+D1.)
 
 ## LIMITS: what this mode may not claim
 

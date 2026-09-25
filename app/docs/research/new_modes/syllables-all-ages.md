@@ -6,7 +6,7 @@ What was built from this review, and what was left as it was on purpose.
 
 - **The study's block is unchanged.** Basil kept the healthy baseline battery exactly as pre-registered (Section 1.4, S6 and S7), so the battery pins a `classic` profile and nothing below reaches it. The one exception is a fix, not a design change: foils that sound like the target are no longer drawn (C4), in every profile.
 - **Built:** the age profiles (C2) in `syllables_profiles.py`, chosen from the intake age: `6-9`, `10-12`, `13-15`, `16+` and `60+`, with the fall tables, the adult fall-only 4-down-1-up staircase and its threshold (C3), print fading (C6), foil shares with the new morphological F9 (C7), the sound lead for children (C8), plain adult presentation and larger tiles for 60 and over (C9), and one replay per set on R (C11). Teen and adult word pools and 60 made-up words are in `assets/words/syllables_pools.json` (C5), built by `scripts/build_syllables_pools.py`.
-- **Audio (C1, section D):** Basil will record the voice. `scripts/syllables_recording_kit.py` writes the reading script with a spelling-pronunciation hint per chunk, cuts the recorded pages into files, levels them and writes the manifest; the game plays a recorded chunk for every word that holds it and stretches the model beat to fit. About 380 items for the adult pool, 1,860 for everything.
+- **Audio (C1, section D):** Basil chose a free text-to-speech voice over recording (D1). `scripts/syllables_tts.py` made every chunk and word in the bank (923 chunks, 935 words) with Kokoro-82M, British voice bf_emma: chunks as spelling pronunciations from the recording kit's own rules, with the kit's "?" chunks and the spellings its rules misread settled by their example words; real words read by espeak-ng; made-up words built from their own chunks. Every pool is covered because the battery's classic profile plays the child bank. The game plays a chunk's file for every word that holds it and stretches the model beat to fit. `scripts/syllables_recording_kit.py` stays as the way to a recorded Australian voice.
 - **Not done:** word norms (CYP-LEX, SUBTLEX-UK, Kuperman AoA) were not checked, since that needs the files downloaded; the pools were chosen by hand for length and morphology and say so. The split-policy change for the child bank's -er words (C10) and the stress step (C12) were not made: the first would change the study's own material, and the second belongs outside the battery.
 - The notebook reads the new row fields (`prof`, `lex`, `print`, `replay`), keeps S1 to S7 on the child design, and summarises the older profiles apart (`sec_syllables_profiles`).
 
@@ -215,8 +215,12 @@ Galuschka et al 2014 (*PLOS ONE*, PMID 24587110); McTigue et al 2020 (*RRQ* 55(1
 - **R10** Piper TTS: rhasspy/piper was archived on 6 October 2025 under MIT; development moved to OHF-Voice/piper1-gpl (GPL-3.0 according to secondary sources; the repository's licence file was not read). The voice list has en_GB and en_US voices and no en_AU voice. Model cards: en_GB "cori" was trained on public-domain LibriVox audio; en_GB "southern_english_female" on OpenSLR 83 (CC BY-SA 4.0). Verified: GitHub repository page, VOICES.md, Hugging Face model cards.
 - **R11** Microsoft support, "Appendix A: supported languages and voices" (Windows): English (Australia) has the standard voices James and Catherine; no natural (neural) en-AU voice is listed. Verified: support.microsoft.com.
 - **R12** ITU-R BS.1770-5 (11/2023), Algorithms to measure audio programme loudness and true-peak audio level. Verified: ITU page.
+- **R13** Kokoro-82M (hexgrad/Kokoro-82M on Hugging Face): Apache 2.0 weights, 82 million parameters, trained on misaki phonemes; British English voices bf_emma (grade B-), bf_isabella and bm_fable (C) and five graded D or D+. Verified: model card and VOICES.md.
+- **R14** MeloTTS (github.com/myshell-ai/MeloTTS): MIT licence; English speakers EN-US, EN-BR, EN_INDIA, EN-AU and EN-Default; CPU inference. Phoneme input is not documented. Verified: repository README.
+- **R15** misaki (github.com/hexgrad/misaki), `espeak.py`: the EspeakFallback table that turns espeak-ng phonemes into Kokoro's symbols, with its British lines. Verified: source file.
+- **R16** kokoro-onnx (github.com/thewh1teagle/kokoro-onnx): MIT; model-files-v1.0 release (kokoro-v1.0.onnx, 310 MB; voices-v1.0.bin, 26 MB); `create(..., is_phonemes=True)` takes phonemes. Verified: README, release assets and package source.
 
-Count: 140 literature entries (125 not in the existing note; 15 carried from it and re-verified, 6 of them numbered above with new detail and 9 listed in A10) plus 12 data and tool sources. About 24 are meta-analyses or systematic reviews and 10 are randomised trials.
+Count: 140 literature entries (125 not in the existing note; 15 carried from it and re-verified, 6 of them numbered above with new detail and 9 listed in A10) plus 16 data and tool sources. About 24 are meta-analyses or systematic reviews and 10 are randomised trials.
 
 ---
 
@@ -392,7 +396,9 @@ Each change lists what to do, the parameters, the evidence and the risk to the h
 - **Offline TTS, no credentials needed.** Piper with an en_GB voice is licence-clean (engine MIT or GPL-3.0; "cori" voice trained on public-domain audio, R10) but British, and no en_AU Piper voice exists. Reading lone syllables would need phoneme input, which I have not tested. Windows' own en-AU voices (James and Catherine, R11) could speak at run time on the lab PC with nothing redistributed, but they are older standard voices, and how they read single syllables and whether they honour SSML phoneme tags is untested (unverified).
 - **Cloud neural TTS.** Google, Azure and Polly have en-AU voices but need accounts and credentials, so they are out of scope here. The evidence on neural TTS is mixed: one study found it less intelligible in noise than older concatenative TTS (S12); another found AI speech behaved like human speech in noise for younger and older adults (S13).
 - **macOS `say`.** Development only. The project's own note records that Apple's licence does not allow shipping these recordings; I did not re-check the licence text.
-- **Decision.** Record a human voice. Do the adult pool first (it is what the battery uses), then the child bank. Allow TTS only as a development placeholder, flagged in the manifest.
+- **Kokoro-82M, offline.** Apache 2.0 weights, so the audio can ship; runs on a laptop CPU; takes phonemes as well as text, so each chunk's spelling pronunciation is exact (R13, R15, R16). British and American voices only; bf_emma is the best graded British voice (B-, R13).
+- **MeloTTS EN-AU, offline.** MIT licence and a real Australian voice, but text input only, so a lone chunk would be read by its own spelling guesses (R14).
+- **Decision.** The review recommended a human recording (above). On 25 September 2026 Basil chose free TTS instead: Kokoro, bf_emma, every pool, every chunk spelt by the kit's rules, the manifest naming the model, voice and date. The accent and the evidence on synthetic single words (S10, S11, S14, S15) still favour a recorded Australian speaker, who can replace the files through the recording kit.
 
 | Option | Accent | Control of chunk form | Licence | Effort | Credentials |
 |---|---|---|---|---|---|
@@ -400,6 +406,8 @@ Each change lists what to do, the parameters, the evidence and the risk to the h
 | Piper en_GB, offline | British | Phoneme input, untested | Engine MIT or GPL-3.0; voice data public domain (cori) or CC BY-SA | Half a day plus setup | None |
 | Windows en-AU at run time | Australian | Unknown | Nothing redistributed | Code for the Windows speech API | None |
 | Cloud neural en-AU | Australian | SSML phonemes | Provider terms | Half a day | Required (excluded) |
+| Kokoro-82M bf_emma (chosen) | British | Phoneme input, used for every chunk | Apache 2.0 weights | Done, about 8 minutes a render | None |
+| MeloTTS EN-AU | Australian | Text only | MIT | Half a day plus setup | None |
 | macOS `say` | Australian voice available | Poor | Not shippable (project note) | None | None |
 
 ### D2. How each item is spoken
@@ -444,7 +452,7 @@ Each change lists what to do, the parameters, the evidence and the risk to the h
 
 **Methods justification**
 - Four options: fits the hardware, gives a 25 percent chance line, and three working distractors is the usual ceiling in item-writing research (O1, O3).
-- Audio: one Australian English speaker; chunks as spelling pronunciations; natural words (S2 to S9, S14 to S16).
+- Audio: a synthetic British voice (Kokoro-82M, bf_emma, R13); chunks as spelling pronunciations; real words read naturally; made-up words built from their chunks (S2 to S9, S14 to S16).
 - Adult profile: fall-only 4-down-1-up staircase (T6 to T8), no prompt and no printed model (F8), pseudowords to measure decoding apart from vocabulary (L3, L4, W16, W17), fixed item order for all participants.
 - Fall tables by age from speed development (T1 to T5). Correct the existing claim: children are about 1.8 times slower than adults at 10 and 1.5 times at 12 (T1), not "1.5 to 1.8 at age 8".
 - Foil legality includes a sound check (O2, S4).
@@ -458,7 +466,7 @@ Each change lists what to do, the parameters, the evidence and the risk to the h
 - Healthy adults only; no children or readers with dyslexia; no standardised reading measure; no control group; one session.
 - Foil weights, fall tables and sound timings are design choices built from indirect evidence (neural integration studies, RT development), not validated for this task.
 - Spelling-pronunciation audio is a teaching convention; the literature supports it for spelling memory and decoding, not for this game in particular.
-- One Australian English speaker; results may not carry to other accents.
+- A synthetic British voice, not an Australian speaker: an unfamiliar accent costs young children most and slows adults in noise (S14, S15), and synthetic single words are less intelligible to children than natural speech (S10, S11).
 - Short block (12 words, about 40 sets), so the threshold is coarse, and its reliability is unknown (Syllables is not in the pass-2 retest core).
 
 **Framing line**

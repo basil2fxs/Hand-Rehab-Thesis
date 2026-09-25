@@ -17,7 +17,9 @@ Australian English, recorded once, gives full control of how each
 chunk sounds and raises no licence question once the speaker agrees
 in writing to the recordings shipping with the software. The evidence
 and the full protocol are in docs/research/new_modes/
-syllables-all-ages.md, section D.
+syllables-all-ages.md, section D. What ships today is synthetic
+(scripts/syllables_tts.py, made to these same rules); cut replaces it,
+with --force over the synthetic manifest.
 
 HOW A CHUNK IS SPOKEN. Once per unique chunk, reused in every word
 that holds it (assets/speech/chunks/<chunk>.wav), as a SPELLING

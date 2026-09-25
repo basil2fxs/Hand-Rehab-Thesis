@@ -23,7 +23,8 @@ to use it. None of them is part of the game.
 | **Syllables material** | |
 | [`build_syllables_bank.py`](build_syllables_bank.py) | Build the child word bank |
 | [`build_syllables_pools.py`](build_syllables_pools.py) | Build the teen, adult and made-up word pools |
-| [`syllables_recording_kit.py`](syllables_recording_kit.py) | Record the Syllables voice: reading script, cutter, check |
-| [`render_syllables_speech.py`](render_syllables_speech.py) | The older synthetic voice; the recorded one replaces it |
+| [`syllables_tts.py`](syllables_tts.py) | Make the Syllables voice with Kokoro, a free text-to-speech model (the one that ships) |
+| [`syllables_recording_kit.py`](syllables_recording_kit.py) | Record a human voice to replace it: reading script, cutter, check |
+| [`render_syllables_speech.py`](render_syllables_speech.py) | The older per-word synthetic voice |
 
 <sub>[Back to app](../README.md)</sub>

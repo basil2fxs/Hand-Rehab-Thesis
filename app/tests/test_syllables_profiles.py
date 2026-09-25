@@ -232,15 +232,33 @@ class YoungChildren(unittest.TestCase):
         m.rung = 4
         self.assertFalse(m.show_print)
 
-    def test_no_vowel_foil_on_a_reduced_syllable_without_spelt_audio(self):
+    def _reduced(self, meta, has_file):
+        """A 6-9 mode on a word's unstressed syllable at rung 4 (F2, F3,
+        F7), with the speech manifest and this chunk's file pinned, so
+        the answer does not hang on what assets/speech ships with."""
         _e, m = _build_mode(age_band="6-9")
+        m._manifest_entries, m._manifest_meta = {}, meta
+        m.chunk_speech_path = lambda chunk: Path("x.wav") if has_file else None
         m._begin_word(0.0)
-        m.rung = 4                                # F2, F3, F7
-        stressed = m.word.stress
-        m.pos = next(i for i in range(m.n_syll) if i != stressed)
+        m.rung = 4
+        m.pos = next(i for i in range(m.n_syll) if i != m.word.stress)
+        return m
+
+    def test_no_vowel_foil_on_a_reduced_syllable_without_spelt_audio(self):
+        m = self._reduced({}, has_file=False)
         self.assertNotIn("F3", m._foil_kinds())
-        m.pos = stressed
+        m.pos = m.word.stress
         self.assertIn("F3", m._foil_kinds())
+
+    def test_spelt_audio_for_the_chunk_allows_the_vowel_foil(self):
+        m = self._reduced({"chunk_form": "spelling"}, has_file=True)
+        self.assertIn("F3", m._foil_kinds())
+
+    def test_a_spelt_manifest_does_not_cover_a_chunk_with_no_file(self):
+        # The voice made for the adult pools only: a child's chunk has
+        # no file, so it is not heard in its spelt form.
+        m = self._reduced({"chunk_form": "spelling"}, has_file=False)
+        self.assertNotIn("F3", m._foil_kinds())
 
     def test_the_sound_trails_the_print(self):
         _e, m = _build_mode(age_band="6-9")

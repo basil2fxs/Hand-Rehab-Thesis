@@ -8,6 +8,8 @@
 Writes assets/speech/<word>.ogg (or .wav) and <word>_<k>.<ext> for the
 k-th syllable, plus manifest.json recording the provider, the voice
 and the render date. The game never calls this: it plays the files.
+The voice that ships comes from scripts/syllables_tts.py instead (one
+file per chunk, spelt); this is the older per-word path.
 
 WHY FILES AND NOT LIVE SPEECH. Speech is a stimulus in this mode, not
 a nicety: the spoken syllable and the printed chunk have to be the
