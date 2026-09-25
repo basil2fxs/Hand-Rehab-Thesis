@@ -23,7 +23,7 @@ step, so a design change is a config edit, not a code change.
 from __future__ import annotations
 
 import copy
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from ..data.intake import cell_for, normalise_code
@@ -214,6 +214,11 @@ def build_plan(cfg, participant: str, dominant_hand: str,
         ))
     if not steps:
         raise BatteryError(f"Preset '{preset}' order '{order_key}' is empty")
+    swaps = raw.get("swap_once")
+    if isinstance(swaps, dict) and swaps:
+        steps = swap_once(steps, {str(k).strip().lower():
+                                  str(v).strip().lower()
+                                  for k, v in swaps.items()})
     overrides = raw.get("overrides") or {}
     if not isinstance(overrides, dict):
         overrides = {}
@@ -230,6 +235,39 @@ def build_plan(cfg, participant: str, dominant_hand: str,
         rest_min_s=rest_min_s,
         hard_stop_min=float(raw.get("hard_stop_min", 0.0) or 0.0),
     )
+
+
+def swap_once(steps: list[BatteryStep],
+              swaps: dict[str, str]) -> list[BatteryStep]:
+    """The first step of each swapped mode becomes its replacement and
+    every later step of that mode is left out. The EEG lab's build uses
+    it to play the lab's own SRT once where the study plays Reaction
+    twice (config/eeg_lab.yaml). A rest or stretch that stood before a
+    left-out step moves to the step after it, so the sitting keeps its
+    break; positions are renumbered."""
+    seen: set[str] = set()
+    out: list[BatteryStep] = []
+    carry: BatteryStep | None = None
+    for st in steps:
+        if st.mode in swaps:
+            if st.mode in seen:
+                if st.rest_before_s > 0 or st.stretch_before_s > 0:
+                    carry = st
+                continue
+            seen.add(st.mode)
+            st = replace(st, mode=swaps[st.mode], track=None,
+                         difficulty=None)
+        if carry is not None:
+            if carry.rest_before_s > 0 and st.rest_before_s <= 0:
+                st = replace(st, rest_before_s=carry.rest_before_s,
+                             rest_min_s=carry.rest_min_s,
+                             stretch_before_s=0.0)
+            elif (carry.stretch_before_s > 0 and st.stretch_before_s <= 0
+                  and st.rest_before_s <= 0):
+                st = replace(st, stretch_before_s=carry.stretch_before_s)
+            carry = None
+        out.append(st)
+    return [replace(st, position=i + 1) for i, st in enumerate(out)]
 
 
 # Sentinel for a key the config did not have before the override, so

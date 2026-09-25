@@ -1431,6 +1431,12 @@ class ModeSelectScreen(Screen):
     # produces is actually a reaction time. begin_classic_block survives
     # for old sessions and tests, it just is not offered here.
     #
+    # The Reaction card is now the lab's SRT (mode key srt, the task
+    # in Welber Marinovic's PsychoPy script), opened on its setup
+    # screen. The randomised-wait block above lives on as the study
+    # battery's "reaction" step and is no longer a card. Like the
+    # pattern card, this one must never say that anything repeats.
+    #
     # One short line per card, a few words on what you do. The longer
     # what-it-trains lines made the menu busy; the research case for
     # each mode lives in its own docstring, not on the menu.
@@ -1442,7 +1448,7 @@ class ModeSelectScreen(Screen):
     # modes/pattern.py). Titled "Muscle Memory" for the same reason;
     # the internal mode key stays "pattern".
     MODES = [
-        ("reaction", "Reaction", "Press the key that lights up"),
+        ("srt", "Reaction", "Press the square that flashes red"),
         ("adaptive", "Adaptive", "The pace follows you"),
         ("pattern", "Muscle Memory", "Play takes of a piano riff"),
         ("chords", "Chords", "Press keys together"),
@@ -1474,6 +1480,8 @@ class ModeSelectScreen(Screen):
         # overlapping any of the lane-tile finger pastels.
         "mirror":   (20, 184, 166),   # teal - "synchronised hands"
         "reaction": (239, 68, 68),    # red - "speed"
+        # The SRT carries Reaction's red: it is the Reaction card.
+        "srt": (239, 68, 68),
         "pattern":  (245, 158, 11),   # amber - "a path forming"
         "chords":   (14, 165, 233),   # sky blue - "keys together"
         "syllables": (236, 72, 153),  # pink - "language, playful"
@@ -1887,6 +1895,15 @@ class ModeSelectScreen(Screen):
                 (stem_x, stem_top + size // 5),
             ]
             pygame.draw.polygon(surf, colour, flag_pts)
+        elif kind == "srt":
+            # Four squares in a row, one lit: the task's own screen.
+            sq = size * 2 // 7
+            gap = max(2, size // 10)
+            x = cx - (4 * sq + 3 * gap) // 2
+            for i in range(4):
+                r = pygame.Rect(x + i * (sq + gap), cy - sq // 2, sq, sq)
+                pygame.draw.rect(surf, colour, r, 0 if i == 1 else 3,
+                                 border_radius=3)
         elif kind == "reaction":
             # Lightning bolt: speed.
             s = size
@@ -5672,6 +5689,28 @@ class ResultsScreen(Screen):
                 return None
         return None
 
+    def _srt_summary(self) -> dict | None:
+        """The srt section of the block summary, or None for every
+        other mode. Same read path as _force_pilot_summary:
+        session.block_summary first, live mode stats as fallback."""
+        if str(getattr(self.engine, "current_block", "")) != "srt":
+            return None
+        summary = getattr(getattr(self.engine, "session", None),
+                          "block_summary", None)
+        if isinstance(summary, dict):
+            sr = summary.get("srt")
+            if isinstance(sr, dict):
+                return sr
+        stats_fn = getattr(getattr(self.engine, "mode", None),
+                           "block_stats", None)
+        if callable(stats_fn):
+            try:
+                sr = stats_fn()
+                return sr if isinstance(sr, dict) else None
+            except Exception:
+                return None
+        return None
+
     def _buzz_hunt_summary(self) -> dict | None:
         """The buzz_hunt section of the block summary, or None for
         every other mode. Same read path as _force_pilot_summary:
@@ -6104,8 +6143,7 @@ class ResultsScreen(Screen):
         # so the patient never sees the word "pattern" (audit finding
         # #10), and the results pill has to say the same thing or the
         # rename leaks right back in on the very next screen.
-        mode_label = ("MUSCLE MEMORY" if block_name.lower() == "pattern"
-                      else block_name.replace("_", " ").upper())
+        mode_label = mode_title(block_name.lower()).upper()
         mf = self.layout.font(FONT_SMALL + 2)
         mt_label = mf.render(mode_label, True, (255, 255, 255))
         pill_rect = pygame.Rect(0, 0, mt_label.get_width() + 24,
@@ -6548,6 +6586,7 @@ class ResultsScreen(Screen):
         "echo": (1, 2, 0),            # longest echo | items right | score
         "pattern": (2, 4, 1),         # accuracy | stars | takes
         "reaction": (2, 4, 0),        # median RT | accuracy or p10
+        "srt": (0, 1, 2),             # learning effect | accuracy | recall
         "chords": (1, 2, 0),          # clean hit rate | median ER
         "syllables": (1, 2, 0),       # words correct | band | score
         "mirror": (2, 0, 1),          # sync gap | score | hits
@@ -6566,6 +6605,7 @@ class ResultsScreen(Screen):
             "bh": self._buzz_hunt_summary(),
             "ec": self._echo_summary(),
             "rx": self._reaction_summary(),
+            "srt": self._srt_summary(),
             "pat": self._pattern_summary(),
             "ch": self._chords_summary(),
             "sy": self._syllables_summary(),
@@ -6592,6 +6632,7 @@ class ResultsScreen(Screen):
         bh = _sums["bh"]
         ec = _sums["ec"]
         rx = _sums["rx"]
+        srt = _sums["srt"]
         pat = _sums["pat"]
         ch = _sums["ch"]
         sy = _sums["sy"]
@@ -6801,6 +6842,40 @@ class ResultsScreen(Screen):
                 ("STARS EARNED", f"{total_stars} / {n_takes * 3}",
                  self.theme.success),
                 ("BEST 3-STAR RUN", run_str, (255, 196, 0)),
+            ]
+        elif srt is not None:
+            # The SRT's own vocabulary. The learning effect (post-test
+            # random RT minus the last learning block) is what the
+            # task exists to measure, so it leads; accuracy and the
+            # recall follow. Nothing here names a sequence: another
+            # implicit task (Muscle Memory) can follow in the same
+            # sitting.
+            def _ms(v, signed=False):
+                if v is None:
+                    return "n/a"
+                return f"{v:+.0f} ms" if signed else f"{v:.0f} ms"
+            learn = srt.get("learning") or []
+            last = learn[-1].get("median_rt_ms") if learn else None
+            rec = srt.get("recall") or {}
+            acc = srt.get("accuracy")
+            cards = [
+                ("LEARNING EFFECT", _ms(srt.get("sequence_effect_ms"),
+                                        signed=True),
+                 self.theme.accent),
+                ("ACCURACY", (f"{acc * 100:.0f}%" if acc is not None
+                              else "n/a"),
+                 (self.theme.success if acc is not None and acc >= 0.9
+                  else self.theme.foreground)),
+                ("RECALL", (f"{rec.get('n_correct')} of {rec.get('of')}"
+                            if rec.get("n_correct") is not None
+                            else "n/a"), self.theme.foreground),
+                ("PRACTICE RT", _ms((srt.get("practice") or {})
+                                    .get("median_rt_ms")),
+                 self.theme.foreground),
+                ("LAST BLOCK RT", _ms(last), self.theme.foreground),
+                ("POST-TEST RT", _ms((srt.get("posttest") or {})
+                                     .get("median_rt_ms")),
+                 self.theme.foreground),
             ]
         elif rx is not None:
             # Reaction's own research case (reaction.py's module

@@ -37,9 +37,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
-# The eight that play on keys, and the block starter for each.
+# The eight that play on keys, and the block starter for each. The
+# Reaction card is the lab's SRT (mode key srt).
 KEYBOARD_MODES = {
-    "reaction": "begin_reaction_block",
+    "srt": "begin_srt_block",
     "adaptive": "begin_adaptive_block",
     "pattern": "begin_pattern_block",
     "chords": "begin_chords_block",
@@ -68,13 +69,15 @@ def _engine(root: Path, screens_stub: bool = True):
     cfg.data["session"]["age"] = "30"
     cfg.data["session"]["suggest_code"] = "never"
     cfg.data["report"] = {"enabled": False}
+    cfg.data["srt"]["setups_file"] = str(root / "srt_setups.json")
     eng = GameEngine(cfg, KeyboardOnlySource())
     if screens_stub:
         gp = MagicMock()
         gp.lanes = []
         eng._screens = {"gameplay": gp, "results": MagicMock(),
                         "rhythm": gp, "syllables": gp, "echo": gp,
-                        "mirror": gp, "mode_select": MagicMock()}
+                        "mirror": gp, "srt": gp,
+                        "mode_select": MagicMock()}
     else:
         eng._screens = eng._build_screens()
     del pygame
@@ -271,11 +274,11 @@ class SensorOnlyModesAreRefusedTests(unittest.TestCase):
             # A playable card clears the note and moves on.
             hub.handle_event(pygame.event.Event(
                 pygame.MOUSEBUTTONDOWN,
-                {"pos": hub.buttons[keys.index("reaction")].rect.center,
+                {"pos": hub.buttons[keys.index("srt")].rect.center,
                  "button": 1}))
             hub.handle_event(pygame.event.Event(
                 pygame.MOUSEBUTTONUP,
-                {"pos": hub.buttons[keys.index("reaction")].rect.center,
+                {"pos": hub.buttons[keys.index("srt")].rect.center,
                  "button": 1}))
             self.assertEqual(hub.pick_note, "")
             self.assertIs(eng.screen_obj, eng._screens["setup"])

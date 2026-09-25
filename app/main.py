@@ -11,7 +11,7 @@ from pathlib import Path
 # checks it against GameEngine._BLOCK_STARTERS so the two cannot drift.
 MODE_KEYS = ("reaction", "adaptive", "rhythm", "mirror", "pattern",
              "chords", "syllables", "force_pilot", "buzz_hunt", "echo",
-             "classic")
+             "classic", "srt")
 
 # Exit code for a launch refused because another copy holds the lock.
 ALREADY_RUNNING = 7

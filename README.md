@@ -62,7 +62,7 @@ running". On macOS auto-start turns itself on at the first launch from Applicati
 
 | Game | What the patient does, and what it measures |
 | --- | --- |
-| **Reaction** | Press the finger that lights up. Measures how fast the hand answers the eye. |
+| **Reaction** | The lab's sequence task: press the finger whose square flashes red. Measures sequence learning. |
 | **Adaptive** | The same, with the pace following the player. Measures speed at a held difficulty. |
 | **Muscle Memory** | Play a piano riff, take after take. Measures learning of a repeated sequence. |
 | **Chords** | Press two to four fingers at once. Measures moving fingers together and holding the rest still. |

@@ -62,6 +62,23 @@ reaction:
   # trade the flat hazard away.
   fp_eeg_fixed_s: 2.5
 
+protocol:
+  presets:
+    study_battery:
+      # Play all in the lab plays the lab's own SRT (the Reaction
+      # card, modes/srt.py) once, where the study plays its first
+      # Reaction block, and leaves the second Reaction block out. The
+      # rest that stood before that block moves to the next one.
+      swap_once:
+        reaction: srt
+      # A lab sitting is not the healthy study's sitting, so it keeps
+      # its own id. Its clock allows for the SRT's 16 minutes in
+      # place of two short Reaction blocks: an estimate until the lab
+      # rig is timed with scripts/measure_battery.py.
+      id: eeg_lab_srt_v1
+      budget_min: 57
+      hard_stop_min: 62
+
 force_pilot:
   # No background track in the lab: an EEG block is recorded in
   # silence so the only sounds in the record are the cues themselves.

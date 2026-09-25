@@ -2,10 +2,12 @@ EEG lab setup
 =============
 
 The lab task is the shipping game with config/eeg_lab.yaml loaded on
-top: markers on, trigger box required, fixed 2.5 s reaction foreperiod
-with a visible Ready cue, no music in Force Pilot, neutral feedback
-(one ring glyph 800 ms after the press, no words, no chime), FRN bytes
-in reaction, chords and Force Pilot. The folder that goes to the lab is
+top: markers on, trigger box required, no music in Force Pilot,
+neutral feedback (one ring glyph 800 ms after the press, no words, no
+chime), FRN bytes in chords and Force Pilot. The Reaction card is the
+lab's own SRT task (Welber's PsychoPy script, replicated trial for
+trial), and Play all runs it once in place of the study's two
+Reaction blocks. The folder that goes to the lab is
 EEG_Lab at the top of the project (FingerRehab-EEGLab.zip on CI):
 Finger Rehab.exe, eeg_lab.yaml, run_in_psychopy.py, README.txt, a
 source/ copy, and sessions/ with an empty eeg/ folder for ActiView's
@@ -60,9 +62,12 @@ At the lab PC
    game refuses eeg.baud 1200. Leave the port's settings alone.
 9. Keep vsync on for the game window, or visual markers lead the
    screen by an unknown amount.
-10. Reaction blocks run on a still screen: from code 21 to a second
-   after the response only the cued tile changes. Score, streak and
-   progress update between trials.
+10. Reaction opens on its setup screen: pick the participant's timing
+   group (or a saved setup) and their musical experience, then START.
+   The setup is kept for the next participant. The task itself is the
+   old script's: black screen, four grey squares, one 30 per red
+   flash, SPACE between blocks, the recall at the end, and the
+   script's three CSVs in the game's folder beside trials.csv.
 11. Everything lands in sessions/ beside run_in_psychopy.py, whichever
    way the game started: a dated folder per game with trials.csv,
    raw.csv (an eeg row per marker, with the intended and the actual
@@ -116,7 +121,7 @@ What the Status channel shows
   metadata marks the block degraded. Behaviour stays valid; ERPs from
   that point do not.
 
-Codes (finger_rehab/hardware/eeg_trigger.py, CODES, version 1.5)
+Codes (finger_rehab/hardware/eeg_trigger.py, CODES, version 1.6)
 ----------------------------------------------------------------
  20  GET READY onset
  21  reaction: wait armed (CNV S1)
@@ -127,6 +132,8 @@ Codes (finger_rehab/hardware/eeg_trigger.py, CODES, version 1.5)
  24  Force Pilot: section edge, the run's end included
  25  reaction: virtual onset of a catch trial
  30  stimulus, screen only            31  screen + tone
+     (in an SRT block 30 is the red flash with its tone, as the old
+     script sent it)
  32  screen + buzz                    33  screen + buzz + tone (default)
  34  uncued                           35  tone only
  36  buzz only                        37  buzz + tone
@@ -152,7 +159,7 @@ Codes (finger_rehab/hardware/eeg_trigger.py, CODES, version 1.5)
 200+mode  block start   219  abandoned   220+mode  block end
      mode ids: reaction 0, classic 1, adaptive 2, rhythm 3, mirror 4,
      pattern 5, chords 6, syllables 7, force_pilot 8, buzz_hunt 10,
-     echo 12 (9 retired, 11 reserved)
+     echo 12, srt 13 (9 retired, 11 reserved)
 240  session start   241  session end   242  pause   243  resume
 244  rest start      245  rest end
 
@@ -193,8 +200,9 @@ For the analysis
   mne.find_events(raw, mask=255, mask_type="and"). EEGLAB: File,
   Import event info, from ASCII file, fields latency type duration.
 - Against Welber's old SRT script: it wrote one 30 per flash and
-  nothing else. This game puts the cue condition in the byte, so
-  epoch on the 30 band, not the literal 30. The old script wrote
+  nothing else, and the Reaction card (srt blocks, 213 to 233) does
+  exactly that. The other games put the cue condition in the byte, so
+  epoch them on the 30 band, not the literal 30. The old script wrote
   bytes(chr(code), 'UTF-8'), two bytes for anything above 127, and
   held the line 1 to 4 ms; this game writes bytes([code]) and holds
   8 ms on the wall clock. Recordings made under the old prototype map
@@ -202,7 +210,7 @@ For the analysis
 
 Validate once before the first real recording. In a Python shell on
 the lab PC, `import serial; s = serial.Serial("COM10", 9600);
-s.write(bytes([30]))` shows one 30 in ActiView. Then run one reaction
+s.write(bytes([30]))` shows one 30 in ActiView. Then run one Reaction
 block: the intervals between stimulus bytes in the Status channel must
 match the t_wire intervals in raw.csv to within one sample plus 1 ms.
 Confirm the ActiView sampling rate with Welber and put it in

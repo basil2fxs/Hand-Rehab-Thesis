@@ -25,6 +25,11 @@ SRT_Sequence_learning_Final_v2.py):
   500. Random: each run of ten is 250 x3, 500 x4 and 750 x3, shuffled.
   All three average 500 ms.
 
+The three groups are the random, constant and response-locked RSI
+conditions of Shin (2008, Psychological Research), who found the order
+learnt equally under all three and the predictable timing only making
+responses faster; others disagree (research file, Section 6).
+
 What is new here is that the learning interval can move. Cyclical and
 random then scale with it (half, equal and one and a half times the
 interval) so every group still averages the chosen interval, which is
@@ -193,6 +198,46 @@ def random_targets(n_trials: int, rng: random.Random,
         if ok:
             return result
     raise RuntimeError("Could not draw a random block without repeats")
+
+
+def recall_scores(recalled, seq) -> dict:
+    """Three scores for a recalled order against the repeating
+    sequence.
+
+    positional: items matching the sequence position by position from
+    position 1, the script's own 'correct' column. It undercounts a
+    right order started mid-cycle, which scores 0 to 3 of 10.
+    triplet: the share of the recalled runs of three that occur
+    anywhere in the repeating sequence (the triplet scoring of
+    Destrebecqz et al. 2005), blind to where the recall started.
+    longest_run: the longest stretch that follows the repeating
+    sequence from any point in it.
+
+    Chance, from 100,000 random 10-item recalls of the lab sequence
+    (research file Section 4): positional 2.5 (95th percentile 5);
+    triplet 0.28 with no key repeated (95th percentile about 0.63);
+    longest run 3 to 3.5 items (95th percentile 4 to 5)."""
+    rec = [int(x) for x in recalled]
+    seq = [int(x) for x in seq]
+    n = len(seq)
+    out = {"positional": sum(1 for a, b in zip(rec, seq) if a == b),
+           "triplet": None, "longest_run": 0}
+    if n >= 3 and len(rec) >= 3:
+        known = {tuple(seq[(i + k) % n] for k in range(3))
+                 for i in range(n)}
+        runs = [tuple(rec[i:i + 3]) for i in range(len(rec) - 2)]
+        out["triplet"] = round(sum(1 for t in runs if t in known)
+                               / len(runs), 3)
+    best = 0
+    for start in range(len(rec)):
+        for off in range(n):
+            k = 0
+            while (start + k < len(rec)
+                   and rec[start + k] == seq[(off + k) % n]):
+                k += 1
+            best = max(best, k)
+    out["longest_run"] = best
+    return out
 
 
 @dataclass(frozen=True)

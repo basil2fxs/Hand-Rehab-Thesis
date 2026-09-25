@@ -355,7 +355,7 @@ class EngineExportTests(_EngineHarness):
                 meta = json.loads((root / "metadata.json").read_text())
                 from finger_rehab.hardware.eeg_trigger import CODES
                 self.assertEqual(meta["eeg"]["codes"], CODES)
-                self.assertEqual(meta["eeg"]["codes_version"], "1.5")
+                self.assertEqual(meta["eeg"]["codes_version"], "1.6")
         finally:
             pygame.quit()
 

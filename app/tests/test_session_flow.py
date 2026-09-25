@@ -78,7 +78,8 @@ class NextUpChoiceTests(unittest.TestCase):
     def test_first_suggestion_is_the_first_card(self) -> None:
         from finger_rehab.ui.screens import next_up_mode
         eng = self._Eng(_TwoBoardSource())
-        self.assertEqual(next_up_mode(eng, None), "reaction")
+        # The first card is Reaction, which runs the lab's SRT.
+        self.assertEqual(next_up_mode(eng, None), "srt")
 
     def test_prefers_a_mode_not_played_this_session(self) -> None:
         from finger_rehab.ui.screens import next_up_mode, ModeSelectScreen
@@ -94,7 +95,7 @@ class NextUpChoiceTests(unittest.TestCase):
 
     def test_it_skips_played_modes_even_when_they_come_first(self) -> None:
         from finger_rehab.ui.screens import next_up_mode
-        eng = self._Eng(_TwoBoardSource(), ["reaction", "adaptive"])
+        eng = self._Eng(_TwoBoardSource(), ["srt", "adaptive"])
         # Just finished echo (the last card), so the rotation wraps to
         # the top and has to step over both played modes.
         self.assertEqual(next_up_mode(eng, "echo"), "pattern")
@@ -186,8 +187,8 @@ class NextUpOnePressTests(_EngineHarness):
         results = self.eng._screens["results"]
         self.eng.begin_session("Mara", "58")
         self.eng.set_hand_mode("left")
-        self.eng.current_block = "reaction"
-        self.eng._session_log = [{"mode": "reaction", "hand": "left",
+        self.eng.current_block = "srt"
+        self.eng._session_log = [{"mode": "srt", "hand": "left",
                                   "score": 100, "stars": 3,
                                   "status": "completed"}]
         key, hand = results._next_up_plan()

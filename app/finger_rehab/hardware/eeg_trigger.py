@@ -76,7 +76,11 @@ except ImportError:
 # 1.5: stim_choice_prompt 52 added for syllables' prompt buzz, and the
 # syllables model no longer buzzes (its 30-band byte drops the buzzer
 # bit, 33 becomes 31). No existing code changed meaning.
-CODES_VERSION = "1.5"
+# 1.6: mode id 13 added for the srt block (the lab's SRT task), so
+# block bytes 213 and 233 now occur. Inside an srt block 30 marks the
+# red flash with its lane tone, exactly as the lab's own script sent
+# it; everywhere else 30 keeps its meaning.
+CODES_VERSION = "1.6"
 
 # 0 is the idle line, written after every pulse and in every shutdown
 # path. It never labels an event, so it lives outside CODES.
@@ -189,6 +193,8 @@ MODE_IDS: dict[str, int] = {
     "buzz_hunt": 10,
     "syllables_words": 11,
     "echo": 12,
+    # The lab's serial reaction time task (modes/srt.py).
+    "srt": 13,
 }
 
 # Ids that once belonged to a mode and must never be reissued. The
@@ -268,7 +274,10 @@ CODE_NOTES: dict[str, tuple[str, str, str, str]] = {
     "stim_visual": (
         "flip", "stim_visual", "cue shown, screen highlight only",
         "30-37 code the cue mix in the byte: +1 tone, +2 buzzer, "
-        "+4 target not shown. Lane is on the raw.csv row."),
+        "+4 target not shown. Lane is on the raw.csv row. Inside an "
+        "srt block (213 to 233) 30 is the red flash WITH its lane "
+        "tone, as the lab's script sent it; the only per-trial byte "
+        "there unless srt.response_markers is on."),
     "stim_visual_tone": (
         "flip", "stim_visual", "cue: screen and tone",
         "Syllables: the model, one per syllable, no trials.csv row; "
@@ -364,7 +373,7 @@ CODE_NOTES: dict[str, tuple[str, str, str, str]] = {
         "state", "", "block starts, + mode id",
         "reaction 0, classic 1, adaptive 2, rhythm 3, mirror 4, "
         "pattern 5, chords 6, syllables 7, force_pilot 8, buzz_hunt "
-        "10, echo 12; 9 retired, 11 reserved."),
+        "10, echo 12, srt 13; 9 retired, 11 reserved."),
     "block_abandoned": ("state", "", "block abandoned mid-way (Esc)", ""),
     "block_end_base": ("state", "", "block completed, + mode id", ""),
     "session_start": (

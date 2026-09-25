@@ -9,8 +9,16 @@ serial reaction time task was built to show (Nissen and Bullemer 1987,
 Cognitive Psychology).
 
 WHERE IT COMES FROM. Dr Welber Marinovic's PsychoPy script,
-archive/Webler EEG past program/SRT_Sequence_learning_Final_v2.py,
-which this mode replicates:
+archive/Webler EEG past program/SRT_Sequence_learning_Final_v2.py.
+Its structure is Nissen and Bullemer's (1987) Experiment 1: four
+locations, a ten-item sequence, eight blocks of 100 and a 500 ms wait
+after each response (Schwarb and Schumacher 2012). That wait starts
+at the response, so it is a response-to-stimulus interval (RSI); the
+script and the files call it ISI and so does this code. The lane
+tones are the lab's own addition: location tones improve learning on
+this task (Leow et al. 2025, European Journal of Neuroscience). The
+research file is docs/research/new_modes/srt-sequence-learning.md.
+This mode replicates the script:
 
 - Order: welcome, practice (48 random trials with Correct / Incorrect
   / Miss! feedback), MAIN TASK, eight learning blocks of the sequence
@@ -90,7 +98,7 @@ from ...hardware.eeg_trigger import CODES as EEG_CODES
 from ...hardware.eeg_trigger import response_code
 from ...hardware.fsr_detector import PressEvent
 from ..srt_setup import (LETTERS, SRTSetup, cyclical_pattern, isi_list,
-                         random_targets, sequence_text)
+                         random_targets, recall_scores, sequence_text)
 from ._keys import keymap_for_hand, resolve_key
 
 if TYPE_CHECKING:
@@ -205,7 +213,8 @@ class SRTMode:
         self.perf_rows: list[dict] = []
         self.trial_counter = 0
         self._frame_hist: list[float] = []
-        self.t_start = self._clock()
+        # Set on the first frame, from the clock the frames run on.
+        self.t_start: float | None = None
         self.t_end: float | None = None
 
     # ---- the script, as a list of steps ------------------------------------
@@ -395,6 +404,8 @@ class SRTMode:
     # ---- main tick -------------------------------------------------------------
     def update(self, dt: float) -> None:
         now = self._clock()
+        if self.t_start is None:
+            self.t_start = now
         frame = self._frame()
         nf = self._next_flip(now, frame)
         if 0.0 < dt < 0.1:
@@ -673,7 +684,7 @@ class SRTMode:
         lane_target = self.square_to_lane(tr.square)
         lane_press = (None if tr.press is None
                       else int(tr.press.lane))
-        t0 = getattr(self.engine, "_block_t0", None) or self.t_start
+        t0 = getattr(self.engine, "_block_t0", None) or self.t_start or 0.0
         onset = tr.onset if tr.onset is not None else tr.armed_flip
         row = dict(self._participant_fields())
         row.update({
@@ -706,12 +717,19 @@ class SRTMode:
         stim = (f"srt;{step.phase};b={step.block};pos={seq_pos};"
                 f"sq={tr.square};isi={row['isi_before_ms']};"
                 f"group={self.setup.group};learn_isi={int(self.setup.isi_ms)}")
+        # trials.csv speaks the app's vocabulary, so the notebook's
+        # generic hit rate (anything but Miss) reads these rows right:
+        # a wrong finger is a Miss with had_incorrect_press, as in
+        # Classic. The script's own label rides in feedback and
+        # error_type, and verbatim in the lab-format file.
+        label = {"correct": "Hit",
+                 "anticipatory_correct": "Early"}.get(acc, "Miss")
         csv_row = {
             "trial": self.trial_counter,
             "lane": lane_target + 1,
             "time_difference_ms": ("" if tr.rt_ms is None
                                    else f"{tr.rt_ms:.1f}"),
-            "early_late": acc,
+            "early_late": label,
             "feedback": acc,
             "error_type": "" if acc == "correct" else acc,
             "keys_pressed": "" if lane_press is None else str(lane_press + 1),
@@ -916,11 +934,30 @@ class SRTMode:
         mid = n // 2
         return xs[mid] if n % 2 else (xs[mid - 1] + xs[mid]) / 2.0
 
-    def _rts(self, phase: str, block: int | None = None) -> list[float]:
-        return [float(r["rt_ms"]) for r in self.perf_rows
-                if r["phase"] == phase
-                and (block is None or r["block"] == block)
-                and r["accuracy"] == "correct" and r["rt_ms"] != ""]
+    # RTs over this are left out of the RT measures, as the lab's own
+    # SRT studies did (Leow et al. 2025 and 2026). The trial stays in
+    # the file and in the accuracy counts.
+    RT_MAX_MS = 1000.0
+
+    def _rts(self, phase: str, block: int | None = None,
+             isi: int | None = None) -> list[float]:
+        """Correct RTs (the script's 'correct', anticipations and
+        errors out), without each block's first trial, whose wait is
+        the 1 s block start, and without RTs over RT_MAX_MS. With
+        `isi`, only trials that followed an interval of that length."""
+        out = []
+        for r in self.perf_rows:
+            if (r["phase"] != phase or r["accuracy"] != "correct"
+                    or r["rt_ms"] == "" or r["trial"] == 1):
+                continue
+            if block is not None and r["block"] != block:
+                continue
+            if isi is not None and r["isi_before_ms"] != isi:
+                continue
+            rt = float(r["rt_ms"])
+            if rt <= self.RT_MAX_MS:
+                out.append(rt)
+        return out
 
     def _phase_stats(self, phase: str, block: int | None = None) -> dict:
         rows = [r for r in self.perf_rows if r["phase"] == phase
@@ -931,44 +968,64 @@ class SRTMode:
         def count(label):
             return sum(1 for r in rows if r["accuracy"] == label)
         right = count("correct") + count("anticipatory_correct")
+        wrong = count("incorrect") + count("anticipatory_incorrect")
         return {
             "n": n,
             "accuracy": round(right / n, 3) if n else None,
+            "error_rate": round(wrong / n, 3) if n else None,
             "median_rt_ms": None if med is None else round(med, 1),
             "n_miss": count("miss"),
             "n_incorrect": count("incorrect"),
             "n_anticipatory": (count("anticipatory_correct")
                                + count("anticipatory_incorrect")),
+            "anticipatory_correct_rate": (
+                round(count("anticipatory_correct") / n, 3) if n else None),
         }
 
     def block_stats(self) -> dict:
         """What metadata.json records for the session: the setup, each
         phase and learning block, the learning measures and the
-        recall. Correct, non-anticipatory RTs only, medians because RT
-        distributions are skewed."""
+        recall. RTs are the lab's: correct trials only, each block's
+        first trial out, nothing over 1000 ms; medians, because RT
+        distributions are skewed. The measures follow the research
+        file's Section 4 (docs/research/new_modes/
+        srt-sequence-learning.md)."""
         blocks = [self._phase_stats("learning", b)
                   for b in range(1, self.n_blocks + 1)]
         practice = self._phase_stats("practice")
         post = self._phase_stats("posttest")
         last = blocks[-1]["median_rt_ms"] if blocks else None
         first = blocks[0]["median_rt_ms"] if blocks else None
-        sl = (None if post["median_rt_ms"] is None or last is None
-              else round(post["median_rt_ms"] - last, 1))
+        post_rt = post["median_rt_ms"]
+        sl = (None if post_rt is None or last is None
+              else round(post_rt - last, 1))
+        # The post-test always runs at the random blocks' interval, so
+        # outside a constant 500 ms setup it changes the rhythm as well
+        # as the order. The matched effect compares it with only the
+        # last block's trials that followed that same interval.
+        matched = self._median(self._rts("learning", self.n_blocks,
+                                         isi=self.random_isi_ms))
+        sl_matched = (None if post_rt is None or matched is None
+                      else round(post_rt - matched, 1))
         speedup = (None if first is None or last is None
                    else round(first - last, 1))
+        cost = (None if not blocks or post["error_rate"] is None
+                or blocks[-1]["error_rate"] is None
+                else round(post["error_rate"] - blocks[-1]["error_rate"], 3))
         n_right = sum(1 for r in self.perf_rows
                       if r["accuracy"] in ("correct",
                                            "anticipatory_correct"))
         n_all = len(self.perf_rows)
-        recall_correct = (sum(int(a == b) for a, b in
-                              zip(self.recalled, self.seq))
-                          if self.recall_done else None)
+        scores = (recall_scores(self.recalled, self.seq)
+                  if self.recall_done else {})
+        recall_correct = scores.get("positional")
         audio_latency = None
         try:
             audio_latency = self.engine.cfg.get("latency.tone_ms", None)
         except Exception:
             pass
-        duration = ((self.t_end or self._clock()) - self.t_start)
+        start = self.t_start if self.t_start is not None else self._clock()
+        duration = (self.t_end or self._clock()) - start
         return {
             "setup": self.setup.to_dict(),
             "group": self.setup.group,
@@ -994,17 +1051,26 @@ class SRTMode:
             "learning": blocks,
             "posttest": post,
             # Post-test random RT minus the last learning block: the
-            # cost of losing the sequence, positive when it was learnt.
+            # cost of losing the sequence, positive when it was learnt
+            # (the contrast of Robertson 2007 and Beaulieu et al. 2014).
             "sequence_effect_ms": sl,
+            "sequence_effect_matched_ms": sl_matched,
+            "sequence_effect_prop": (None if sl is None or not post_rt
+                                     else round(sl / post_rt, 3)),
             # First learning block minus the last: general speed-up
             # plus learning, the learning curve's span.
             "learning_speedup_ms": speedup,
+            # Post-test error rate minus the last learning block's.
+            "accuracy_cost": cost,
+            "rt_max_ms": self.RT_MAX_MS,
             "recall": {
                 "done": self.recall_done,
                 "entered": sequence_text(self.recalled) if self.recalled
                 else "",
                 "n_correct": recall_correct,
                 "of": len(self.seq),
+                "triplet": scores.get("triplet"),
+                "longest_run": scores.get("longest_run"),
             },
             "duration_s": round(duration, 1),
         }

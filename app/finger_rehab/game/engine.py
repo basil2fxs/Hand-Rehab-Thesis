@@ -1046,13 +1046,14 @@ class GameEngine:
                 # The flip clock: when this frame reached the screen,
                 # and the running frame period. The SRT schedules its
                 # flash on these, as the lab's script counted frames.
-                self._note_flip(time.perf_counter())
+                t_flip = time.perf_counter()
+                self._note_flip(t_flip)
                 # Stimulus markers ride the frame's own flip: armed in
                 # on_stim_multi, wired here so the byte follows the
                 # photons, not the update order. tick() then runs the
                 # pulse-and-gap protocol (reset after pulse_ms, release
                 # one queued marker per gap).
-                self._flush_eeg_stim()
+                self._flush_eeg_stim(t_flip)
                 self.markers.tick()
                 clock.tick(120)
             return 0
@@ -1349,16 +1350,18 @@ class GameEngine:
         except Exception as e:
             log.warning("EEG events export failed: %s", e)
 
-    def _flush_eeg_stim(self) -> None:
+    def _flush_eeg_stim(self, t_flip: float | None = None) -> None:
         """Wire the stimulus markers armed this frame. Called by the
         frame loop immediately after _present()'s flip, before
         anything else, so t_event is the flip return: the closest
         software timestamp to photons. Serial path adds ~1-2 ms; the
-        monitor's own lag is a constant the photodiode run measures."""
+        monitor's own lag is a constant the photodiode run measures.
+        The loop passes the flip time it recorded, so the byte and the
+        flip clock the SRT reads share one timestamp."""
         pending = getattr(self, "_pending_eeg_stim", None)
         if not pending:
             return
-        now = time.perf_counter()
+        now = time.perf_counter() if t_flip is None else float(t_flip)
         for code, lane in pending:
             self._eeg_send(code, lane=lane, t_event=now)
         pending.clear()
@@ -1477,6 +1480,8 @@ class GameEngine:
         from ..ui.hand_choice_screen import HandChoiceScreen
         from ..ui.force_pilot_screen import ForcePilotScreen
         from ..ui.quick_calibration_screen import QuickCalibrationScreen
+        from ..ui.srt_screen import SRTScreen
+        from ..ui.srt_setup_screen import SRTSetupScreen
         from ..ui.syllables_screen import SyllablesScreen
         return {
             "title": TitleScreen(self),
@@ -1488,6 +1493,8 @@ class GameEngine:
             "syllables": SyllablesScreen(self),
             "force_pilot": ForcePilotScreen(self),
             "buzz_hunt": BuzzHuntScreen(self),
+            "srt": SRTScreen(self),
+            "srt_setup": SRTSetupScreen(self),
             "results": ResultsScreen(self),
             "diagnostics": DiagnosticsScreen(self),
             "calibration": CalibrationScreen(self),
