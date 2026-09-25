@@ -80,3 +80,9 @@ analysis/*.csv
 analysis/.ipynb_checkpoints/
 /figures/
 app/docs/research/rayan/__pycache__/
+
+# Raw Syllables voice takes (scripts/syllables_recording_kit.py list
+# and cut). Hundreds of MB of pages; only the cut files in
+# app/assets/speech ship.
+recordings/
+app/recordings/

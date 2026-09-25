@@ -137,14 +137,25 @@ percent the analysis can draw as a line.
 
 TIMING IS SIZED TO A CHILD READING. Choice reaction time grows with
 the number of alternatives (Hick's law, reviewed in Proctor and
-Schneider 2018) and children are slower than adults by a factor near
-1.5 to 1.8 at age 8 (Kail 1991), so an 8 year old needs roughly a
-second before any READING is done, and a struggling reader needs time
-to read four chunks and compare them. Time pressure is also what
+Schneider 2018) and children are slower than adults: about 1.8 times
+at 10 and 1.5 times at 12 (Hale 1990), and slower still at 8, since
+the gap shrinks exponentially with age (Kail 1991). So an 8 year old
+needs roughly a second before any READING is done, and a struggling
+reader needs time to read four chunks and compare them. Time pressure is also what
 separates dyslexic from typical letter-sound binding (Aravena,
 Snellings, Tijms and van der Molen 2013). So a set is on screen for
 4.0 s at the entry rung and never under 2.5 s: the window is a floor
 for thinking, not a rhythm target.
+
+WHO THE BLOCK IS FOR. Everything above describes the 6 to 9 year old
+the mode was built for. syllables_profiles.py sets it up for older
+readers too, from the intake age: faster falls and derived and made-up
+words from 10, and for adults the word heard without being seen, no
+buzz, rarer derived and made-up words and a fall-time staircase whose
+threshold is the result. The healthy baseline study pinned the design
+as it stood (the classic profile), so its battery block never changes
+with a participant's age. Speech is recorded, one Australian voice,
+each chunk spoken as spelt (scripts/syllables_recording_kit.py).
 
 HANDS. With both hands connected the hands ALTERNATE PER WORD: all
 four tiles sit over the playing hand, the resting hand shows seat
@@ -205,7 +216,10 @@ WHAT ONE ROW LOGS. One trials.csv row per option SET, not per word:
     fired>;
     pat=<ms from spawn to the prompt, blank if none>;
     pclass=<unprompted_correct|unprompted_error|prompted_correct|
-            prompted_error|no_response>
+            prompted_error|no_response>;
+    prof=<classic|6-9|10-12|13-15|16+|60+>;lex=<word|pseudo>;
+    print=<0|1, the word printed before the choice>;
+    replay=<0|1, the chunk replayed with R>
 
 rt is spawn to correct press. time_difference_ms on the row is that
 rt; error_type carries err on Miss rows; correct_keys is the target
@@ -259,8 +273,10 @@ from ..rest_skip import WaitSkip
 from ..scoring import ScoreConfig, TrialResult
 from ._keys import keymap_for_hand, resolve_key
 from .classic import PendingTrial
-from .syllables_foils import Inventory, build_option_set
-from .syllables_words import Word, syllable_lists, words_for
+from .syllables_foils import Inventory, build_option_set, kinds_for_rung
+from .syllables_profiles import Profile, resolve as resolve_profile
+from .syllables_words import (Word, pool_syllable_lists, profile_words,
+                              syllable_lists, words_for)
 
 if TYPE_CHECKING:
     from ..engine import GameEngine
@@ -400,6 +416,8 @@ class SyllablesMode(WaitSkip):
                  prompt_at: float | None = None,
                  prompt_fade_after: int | None = None,
                  prompt_return_after: int | None = None,
+                 age_band: str = "classic",
+                 age=None,
                  ) -> None:
         self.engine = engine
         # The lanes of each playing hand, in the hand's own order
@@ -470,6 +488,9 @@ class SyllablesMode(WaitSkip):
         self.speech_backend = str(speech.get("backend", "auto") or "auto")
         self.speech_dir = str(speech.get("dir", "assets/speech"))
         self.speech_volume = float(speech.get("volume", 1.0))
+        self._speech_len: dict[str, float] = {}
+        self._manifest_entries: dict | None = None
+        self._manifest_meta: dict | None = None
         self.demo = demo_trials is not None
         if self.demo:
             # Test Mode: a handful of words and token breaks, so a
@@ -557,6 +578,7 @@ class SyllablesMode(WaitSkip):
 
         # ---- aggregates ----
         self._sets: list[SetRecord] = []
+        self._set_falls: list[float] = []
         self._records: list[WordRecord] = []
         self._band_trace: list[str] = [self.band]
         self._recent: deque[bool] = deque(maxlen=10)
@@ -573,6 +595,40 @@ class SyllablesMode(WaitSkip):
         self._miss_run = 0
         self._ease_word = False
         self._n_ease_in = 0
+
+        # ---- who the block is for (syllables_profiles.py) ----
+        # classic is the design the study pre-registered and changes
+        # nothing below; every other profile overrides what it names.
+        self.profile: Profile = resolve_profile(age_band, age)
+        prof = self.profile
+        self._bank_bands = prof.pools == ("child",) and not prof.child_bands
+        if prof.fall_table:
+            self._fall_table = [max(prof.min_fall_s, float(v))
+                                for v in prof.fall_table]
+        if prof.respeak_rungs is not None:
+            self.respeak_rungs = set(prof.respeak_rungs)
+        if prof.prompt is not None:
+            self.prompt_enabled = bool(prof.prompt)
+        if prof.prompt_steps:
+            self.prompt_steps = tuple(sorted(
+                min(self.PROMPT_CAP, max(0.3, float(x)))
+                for x in prof.prompt_steps))
+        if not prof.returns:
+            self.return_after = []
+        if not self._bank_bands:
+            self.inventory = Inventory(pool_syllable_lists())
+        self._pseudo_bag: list[Word] = []
+        self.sound_lead_s = max(0.0, prof.sound_lead_ms / 1000.0)
+        self._speech_queue: list[tuple] = []
+        self._replayed = False
+        # The fall-time staircase (adults): the rung and the foil mix
+        # stay put and only the fall moves.
+        self.fall_mode = prof.staircase == "fall"
+        self._fall_now = prof.fall_start_s
+        self._fall_run = 0
+        self._fall_dir = 0
+        self._fall_trace: list[float] = [self._fall_now]
+        self._fall_reversals: list[float] = []
 
     # ---- geometry the screen and the keyboard note share ------------------
     def desk_row(self) -> list[int]:
@@ -620,9 +676,20 @@ class SyllablesMode(WaitSkip):
 
     @property
     def fall_s(self) -> float:
-        """How long this rung's tiles are on screen."""
+        """How long this rung's tiles are on screen, or the adult
+        staircase's current fall."""
+        if getattr(self, "fall_mode", False):
+            return self._fall_now
         idx = max(0, min(len(self._fall_table) - 1, self.rung - 1))
         return self._fall_table[idx]
+
+    @property
+    def show_print(self) -> bool:
+        """Whether the word and its chunks are printed before the
+        choice (ATTEND and MODEL). Always in classic; faded above the
+        profile's print rung otherwise, never for adults, who could
+        answer from the print without listening at all."""
+        return self.rung <= self.profile.print_rungs
 
     @property
     def current_timeout_s(self) -> float:
@@ -644,7 +711,11 @@ class SyllablesMode(WaitSkip):
     def _draw_word(self) -> Word:
         """Shuffle-bag draw over the current band pool, so a round
         cannot repeat one word while another never comes up. The bag
-        rebuilds when it empties or after a band change."""
+        rebuilds when it empties or after a band change. An age
+        profile past the child bank draws its own pools instead, a
+        made-up word at the profile's share."""
+        if not self._bank_bands:
+            return self._draw_profile_word()
         if not self._bag:
             self._bag = [w for w in words_for(self.band,
                                               bilateral=self.bilateral)
@@ -656,6 +727,19 @@ class SyllablesMode(WaitSkip):
                                            bilateral=self.bilateral))
             self.rng.shuffle(self._bag)
         return self._bag.pop()
+
+    def _draw_profile_word(self) -> Word:
+        real, pseudo = profile_words(self.profile, self.band)
+        use_pseudo = bool(pseudo) and (
+            self.rng.random() < self.profile.pseudo_share)
+        bag, source = ((self._pseudo_bag, pseudo) if use_pseudo
+                       else (self._bag, real))
+        if not bag:
+            bag.extend(w for w in source if w.word not in self._retired)
+            if not bag:
+                bag.extend(source)
+            self.rng.shuffle(bag)
+        return bag.pop()
 
     def _best_syllable_count(self) -> int | None:
         """The syllable count the child has done best on so far this
@@ -739,6 +823,10 @@ class SyllablesMode(WaitSkip):
             self._begin_word(time.perf_counter(), reuse_word=True)
 
     def handle_event(self, e: pygame.event.Event) -> None:
+        if (e.type == pygame.KEYDOWN and e.key == pygame.K_r
+                and self.profile.pid != "classic"):
+            self.replay()
+            return
         if e.type == pygame.KEYDOWN:
             # Keyboard fallback stays wired even with an Arduino
             # connected: a busted auto-detect must never leave the
@@ -761,6 +849,22 @@ class SyllablesMode(WaitSkip):
                             "press", lane=lane, t_perf=t_perf,
                             hand=self.engine.hand_mode, detail="keyboard")
 
+    def replay(self) -> bool:
+        """Say this set's chunk once more (R on the keyboard, the
+        supervisor's key for a child). Once per set, logged, and the
+        set is kept out of the adult threshold."""
+        if (self.phase != "choose" or self.option_set is None
+                or self._replayed or self._set_close_t is not None):
+            return False
+        self._replayed = True
+        self._speak_syllable(self.pos)
+        raw = getattr(self.engine, "raw_logger", None)
+        if raw:
+            raw.queue_event("replay", t_perf=time.perf_counter(),
+                            detail=f"trial_id={self.trial_counter}",
+                            hand=self.word_hand)
+        return True
+
     # ---- main tick ---------------------------------------------------------
     def update(self, dt: float) -> None:
         self._tick(time.perf_counter())
@@ -770,6 +874,7 @@ class SyllablesMode(WaitSkip):
             self._t0 = now
             self._enter_phase(self.phase, now)
         self._reap_say()
+        self._flush_speech(now)
         while self._presses:
             self._handle_press(self._presses.popleft(), now)
         if self.phase == "done":
@@ -782,7 +887,10 @@ class SyllablesMode(WaitSkip):
                 self._begin_word(now)
         elif self.phase == "attend":
             if now >= self._phase_until:
-                self._enter_phase("model", now)
+                # Adults hear the word and go straight to the choice:
+                # a modelled, printed chunk is an answer to copy.
+                self._enter_phase("model" if self.profile.model
+                                  else "choose", now)
         elif self.phase == "model":
             self._update_model(now)
         elif self.phase == "choose":
@@ -916,13 +1024,14 @@ class SyllablesMode(WaitSkip):
             self._model_next_t = None
             self._enter_phase("choose", due)
             return
-        self._model_next_t = due + self.ioi_s
+        beat = self.model_ioi_s(self._model_idx)
+        self._model_next_t = due + beat
         if self._model_next_t <= now:
             # The loop stalled past a whole beat (alt-tab, IO).
             # Re-anchor rather than burst-fire catch-up syllables.
-            self._model_next_t = now + self.ioi_s
+            self._model_next_t = now + beat
         self.model_hand = self.word_hand
-        self._speak_syllable(self._model_idx)
+        self._speak_syllable_after(self._model_idx, now)
         # Still goes through the stimulus path, buzz off, so the
         # 30-band model byte and the slot light keep their timing. The
         # trial id is the word's next set id, which ties the byte to
@@ -1034,7 +1143,9 @@ class SyllablesMode(WaitSkip):
         self.option_set = build_option_set(
             self.word, self.pos, self.rung, self.rng, self.inventory,
             lanes, self._lane_targets, self._recent_target_lanes,
-            homophone_foils=self.homophone_foils)
+            homophone_foils=self.homophone_foils,
+            kinds=self._foil_kinds())
+        self._replayed = False
         tlane = self.option_set.target_lane
         self._lane_targets[tlane] = self._lane_targets.get(tlane, 0) + 1
         self._recent_target_lanes.append(tlane)
@@ -1078,7 +1189,30 @@ class SyllablesMode(WaitSkip):
         finally:
             self.silent_stim = False
         if self._respeak:
-            self._speak_syllable(self.pos)
+            self._speak_syllable_after(self.pos, now)
+
+    def _foil_kinds(self) -> tuple[str, ...] | None:
+        """The three foil kinds for this set, or None for the rung
+        schedule unchanged (classic). An age profile draws from its
+        foil shares, far foils only at rung 1 for teens, and swaps a
+        vowel foil on an unstressed syllable for a coda foil while the
+        chunk audio is not spelt, since a reduced vowel sounds alike
+        under ter, tar and tur."""
+        prof = self.profile
+        if prof.pid == "classic":
+            return None
+        if prof.foil_weights and not (prof.far_foils_rung1_only
+                                      and self.rung == 1):
+            names = sorted(prof.foil_weights)
+            kinds = tuple(self.rng.choices(
+                names, weights=[prof.foil_weights[n] for n in names], k=3))
+        else:
+            kinds = kinds_for_rung(self.rung, self.homophone_foils)
+        if (prof.guard_unstressed_vowels and self.word is not None
+                and self.pos != self.word.stress
+                and not self.chunks_spelt()):
+            kinds = tuple("F7" if k == "F3" else k for k in kinds)
+        return kinds
 
     def _handle_press(self, ev: PressEvent, now: float) -> None:
         if self.phase != "choose" or self.option_set is None:
@@ -1214,6 +1348,7 @@ class SyllablesMode(WaitSkip):
             pclass=pclass,
         )
         self._sets.append(rec)
+        self._set_falls.append(self.fall_s)
         if pclass == "unprompted_correct" and rt_ms is not None:
             self._answer_rts.append(float(rt_ms) / 1000.0)
         self._update_prompt_fade(pclass, missed=(err == "miss"))
@@ -1250,6 +1385,9 @@ class SyllablesMode(WaitSkip):
         first press was wrong or missed makes them easier. The run
         counter resets on every move, so a rung cannot move twice off
         one run."""
+        if self.fall_mode:
+            self._move_fall(first_ok, err)
+            return
         old = self.rung
         if first_ok:
             self._run += 1
@@ -1273,6 +1411,59 @@ class SyllablesMode(WaitSkip):
                         f"reason={'run3' if first_ok else err};"
                         f"set_idx={len(self._sets)}"),
                 hand=self.word_hand)
+
+    def _move_fall(self, first_ok: bool, err: str) -> None:
+        """The adult staircase: four unaided right answers in a row
+        shorten the fall by step_down, any error or miss lengthens it
+        by step_up, inside the profile's bounds. 4-down-1-up settles
+        at 84.1 percent correct (Levitt 1971), and step_down over
+        step_up (0.85) is near the ratio Garcia-Perez (1998) gives for
+        that rule. A replayed set leaves the fall where it is. A
+        change of direction is a reversal, and the mean of the last
+        six is the threshold."""
+        prof = self.profile
+        if self._replayed:
+            return
+        old = self._fall_now
+        if first_ok:
+            self._fall_run += 1
+            if self._fall_run >= prof.fall_down_after:
+                self._fall_now = max(prof.fall_lo_s,
+                                     round(old - prof.fall_step_down_s, 3))
+                self._fall_run = 0
+        else:
+            self._fall_run = 0
+            self._fall_now = min(prof.fall_hi_s,
+                                 round(old + prof.fall_step_up_s, 3))
+        if self._fall_now == old:
+            return
+        direction = 1 if self._fall_now > old else -1
+        if self._fall_dir and direction != self._fall_dir:
+            self._fall_reversals.append(old)
+        self._fall_dir = direction
+        self._fall_trace.append(self._fall_now)
+        raw = getattr(self.engine, "raw_logger", None)
+        if raw:
+            raw.queue_event(
+                "fall_change",
+                detail=(f"old={old * 1000:.0f};new={self._fall_now * 1000:.0f};"
+                        f"reason={'run4' if first_ok else err};"
+                        f"set_idx={len(self._sets)}"),
+                hand=self.word_hand)
+
+    def fall_threshold(self) -> dict:
+        """The adult outcome: the mean fall over the last 12 sets, and
+        the mean of the last six reversals when there are six."""
+        falls = self._set_falls[-12:]
+        revs = self._fall_reversals[-6:]
+        return {
+            "fall_last12_s": (round(sum(falls) / len(falls), 3)
+                              if falls else None),
+            "fall_reversal_mean_s": (round(sum(revs) / len(revs), 3)
+                                     if len(revs) >= 6 else None),
+            "n_reversals": len(self._fall_reversals),
+            "fall_trace_s": list(self._fall_trace),
+        }
 
     def _park_word(self, now: float) -> None:
         """A missed word waits, then comes back in full with fresh
@@ -1460,6 +1651,10 @@ class SyllablesMode(WaitSkip):
         parts.append(f"prompt={1 if rec.prompted else 0}")
         parts.append(f"pat={pat}")
         parts.append(f"pclass={rec.pclass}")
+        parts.append(f"prof={self.profile.pid}")
+        parts.append(f"lex={getattr(self.word, 'lex', 'word')}")
+        parts.append(f"print={1 if self.show_print else 0}")
+        parts.append(f"replay={1 if self._replayed else 0}")
         return ";".join(parts)
 
     # ---- rewards and rounds ------------------------------------------------
@@ -1500,6 +1695,8 @@ class SyllablesMode(WaitSkip):
         have run since the last change, so one change cannot cascade
         off the window that triggered it."""
         if len(self._recent) < 10 or self._since_band_change < 10:
+            return
+        if not self._bank_bands:
             return
         wins = sum(1 for c in self._recent if c)
         idx = BANDS.index(self.band)
@@ -1556,6 +1753,92 @@ class SyllablesMode(WaitSkip):
                 return p
         return None
 
+    def chunk_speech_path(self, chunk: str) -> Path | None:
+        """The recorded file for one written chunk, or None. A chunk is
+        recorded once, as a spelling pronunciation (never an 'uh'),
+        and reused in every word that holds it
+        (scripts/syllables_recording_kit.py). It wins over a word_k
+        render because it is the form the choice task needs: a
+        reduced vowel inside a word sounds the same under ter, tar and
+        tur, and only the spelt form tells them apart."""
+        root = self._speech_root() / "chunks"
+        for ext in (".wav", ".ogg"):
+            p = root / f"{chunk}{ext}"
+            if p.exists():
+                return p
+        return None
+
+    def speech_seconds(self, path: Path | None) -> float:
+        """A speech file's length, from the manifest the recording kit
+        writes, else from a WAV header; 0.0 when neither says."""
+        if path is None:
+            return 0.0
+        key = str(path)
+        if key in self._speech_len:
+            return self._speech_len[key]
+        secs = 0.0
+        try:
+            entry = self._speech_manifest().get(
+                f"{path.parent.name}/{path.stem}"
+                if path.parent.name == "chunks" else path.stem) or {}
+            secs = float(entry.get("duration_ms", 0.0)) / 1000.0
+            if secs <= 0.0 and path.suffix == ".wav":
+                import wave
+                with wave.open(str(path), "rb") as w:
+                    secs = w.getnframes() / float(w.getframerate())
+        except Exception:
+            secs = 0.0
+        self._speech_len[key] = secs
+        return secs
+
+    def _speech_manifest(self) -> dict:
+        if self._manifest_entries is None:
+            try:
+                import json
+                data = json.loads((self._speech_root() / "manifest.json")
+                                  .read_text(encoding="utf-8"))
+                self._manifest_entries = dict(data.get("entries") or {})
+                self._manifest_meta = {k: v for k, v in data.items()
+                                       if k != "entries"}
+            except Exception:
+                self._manifest_entries = {}
+                self._manifest_meta = {}
+        return self._manifest_entries
+
+    def model_ioi_s(self, k: int) -> float:
+        """The beat after the k-th modelled syllable: the configured
+        interval, stretched so a recorded chunk finishes with 150 ms to
+        spare. Speech plays on one channel, so the next file would cut
+        the last one off mid-syllable."""
+        if (self.word is None or not (0 <= k < self.n_syll)
+                or self.speech_backend in ("off", "say")):
+            return self.ioi_s
+        path = self.chunk_speech_path(self.word.syllables[k])
+        return max(self.ioi_s, self.speech_seconds(path) + 0.15)
+
+    def chunks_spelt(self) -> bool:
+        """Whether the chunk recordings are spelling pronunciations
+        (the recording kit's manifest says chunk_form spelling)."""
+        self._speech_manifest()
+        return (self._manifest_meta or {}).get("chunk_form") == "spelling"
+
+    def _speak_syllable_after(self, k: int, now: float) -> None:
+        """Speak syllable k now, or sound_lead_s after the print for a
+        child: 11 year olds integrate letters and sound best at a small
+        letter lead, adults near synchrony."""
+        if self.sound_lead_s <= 0.0:
+            self._speak_syllable(k)
+        else:
+            self._speech_queue.append((now + self.sound_lead_s, k))
+
+    def _flush_speech(self, now: float) -> None:
+        if not self._speech_queue:
+            return
+        due = [q for q in self._speech_queue if q[0] <= now]
+        self._speech_queue = [q for q in self._speech_queue if q[0] > now]
+        for _t, k in due:
+            self._speak_syllable(k)
+
     def _speak_word(self) -> None:
         if self.word is not None:
             self._speak(self.word.word, self.word.word)
@@ -1563,9 +1846,10 @@ class SyllablesMode(WaitSkip):
     def _speak_syllable(self, k: int) -> None:
         if self.word is None or not (0 <= k < self.n_syll):
             return
-        self._speak(f"{self.word.word}_{k}", self.word.syllables[k])
+        chunk = self.word.syllables[k]
+        self._speak(f"{self.word.word}_{k}", chunk, chunk=chunk)
 
-    def _speak(self, stem: str, text: str) -> None:
+    def _speak(self, stem: str, text: str, chunk: str | None = None) -> None:
         """Play a rendered speech file, or fall back to the macOS `say`
         command on a developer machine.
 
@@ -1581,7 +1865,11 @@ class SyllablesMode(WaitSkip):
         backend = self.speech_backend
         if backend == "off":
             return
-        path = None if backend == "say" else self.speech_path(stem)
+        path = None
+        if backend != "say":
+            if chunk is not None:
+                path = self.chunk_speech_path(chunk)
+            path = path or self.speech_path(stem)
         if path is not None:
             audio = getattr(self.engine, "audio", None)
             player = getattr(audio, "play_speech", None)
@@ -1772,5 +2060,11 @@ class SyllablesMode(WaitSkip):
             "n_ease_in": self._n_ease_in,
             "demo": self.demo,
             "end_reason": self.end_reason,
+            "profile": self.profile.pid,
+            "unaided_accuracy": (round(sum(
+                1 for s in sets if s.pclass == "unprompted_correct")
+                / n_sets, 3) if n_sets else None),
+            **({"fall_threshold": self.fall_threshold()}
+               if self.fall_mode else {}),
             **self.wait_skip_stats(),
         }

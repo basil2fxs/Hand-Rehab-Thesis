@@ -360,6 +360,17 @@ progressive over constant delay) and never earlier than the reader's
 own median answer time plus 300 ms (syllables.py PROMPT; the
 research note syllables-dyslexia-rework.md, PROMPT TIMING). The
 battery plays 12 words at the mid foil rung (rung 3).
+25 September 2026: the mode gained age profiles for readers past 9
+(syllables_profiles.py; the review is syllables-all-ages.md). The
+battery pins the classic profile, so this block, S6 and S7 are as
+pre-registered whatever a participant's age. One fix reaches it, and
+it removes items rather than changing the design: a foil that sounds
+like the target (ter against tir or tur, cap against kap, bas against
+bass) is no longer drawn, since a set holding one has no answer by
+ear. Speech on the study Mac stays the system voice; the recorded
+voice, when it exists, replaces it and the methods should say which
+the block ran with (the speech events in raw.csv name the file or
+the voice).
 Adults have no reading deficit to measure, so the block is not a
 skill result. What it can check is the game itself, on fluent readers:
   S6 Fluent adults answer before the prompt: cohort median of the

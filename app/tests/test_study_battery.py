@@ -249,6 +249,9 @@ class OverrideTests(unittest.TestCase):
             "echo.games", "echo.max_len",
             "syllables.rung", "syllables.words_per_block",
             "syllables.round_size", "syllables.break_s",
+            # Pins the design the study pre-registered, whatever the
+            # participant's age: a profile, never a scoring rule.
+            "syllables.age_band",
             "game.total_trials",
         }
         self.assertEqual(keys, allowed)

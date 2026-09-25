@@ -29,6 +29,12 @@ actually make, and each has a study behind it:
 - spelling knowledge. F8 is the pseudohomophone (ka for ca), which
   can only be rejected by knowing how the word is written. Off by
   default; the hardest rung.
+- morphology. F9 swaps a real prefix or suffix for another (un for
+  dis, ment for ness), only where the target is that affix at the
+  word's edge. Readers from about 10 lean on morphemes to read long
+  derived words, and morphological teaching helps struggling teens
+  and adults, so the teen and adult profiles use it; the child rung
+  schedule never asks for it.
 
 F1 is the far foil: a real chunk from the bank that shares nothing
 much with the target. It is the entry rung, where the child is
@@ -97,7 +103,7 @@ CODAS = ("b", "ck", "d", "f", "g", "l", "ll", "m", "n", "ng", "p",
 REVERSALS = {"b": "d", "d": "b", "p": "q", "q": "p",
              "n": "u", "u": "n", "m": "w", "w": "m"}
 
-FOIL_KINDS = ("F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8")
+FOIL_KINDS = ("F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9")
 TARGET = "target"
 
 # Which three foil kinds a rung asks for, before they are shuffled
@@ -118,7 +124,7 @@ RUNG_SCHEDULE: dict[int, tuple[str, str, str]] = {
 # ends at F1, which can always be satisfied from the bank.
 FALLBACK: dict[str, str] = {
     "F2": "F1", "F3": "F1", "F4": "F3", "F5": "F7",
-    "F6": "F2", "F7": "F3", "F8": "F3",
+    "F6": "F2", "F7": "F3", "F8": "F3", "F9": "F3",
 }
 # Tries per generator before the fallback. Twenty is generous: the
 # vowel and onset swaps have well under twenty candidates each, so
@@ -384,6 +390,33 @@ def _f8_homophone(target: str, syls, pos: int, inv: Inventory,
     return rng.choice(cands) if cands else None
 
 
+# Affixes F9 may swap, each for others that read differently. tion and
+# sion, able and ible, er and or are left out: read aloud they are
+# the same syllable.
+PREFIX_SWAPS = {"un": ("dis", "mis", "in"), "in": ("un", "dis"),
+                "im": ("un", "dis"), "dis": ("mis", "un"),
+                "mis": ("dis", "un"), "re": ("de", "pre"),
+                "de": ("re", "pre"), "pre": ("pro", "re"),
+                "pro": ("pre", "re"), "ex": ("in", "en"),
+                "en": ("in", "un")}
+SUFFIX_SWAPS = {"ment": ("ness", "less"), "ness": ("ment", "less"),
+                "ful": ("less", "ness"), "less": ("ful", "ness"),
+                "ly": ("ty", "ry"), "ty": ("ly", "ry"),
+                "ist": ("ism", "ing"), "ing": ("ist", "ment"),
+                "ship": ("hood", "ment"), "hood": ("ship", "ness")}
+
+
+def _f9_affix(target: str, syls, pos: int, inv: Inventory,
+              rng: random.Random) -> str | None:
+    """Another real affix in the target's place, only when the target
+    is that affix at the edge of its word."""
+    if pos == 0 and target in PREFIX_SWAPS and len(syls) > 1:
+        return rng.choice(PREFIX_SWAPS[target])
+    if pos == len(syls) - 1 and target in SUFFIX_SWAPS and len(syls) > 1:
+        return rng.choice(SUFFIX_SWAPS[target])
+    return None
+
+
 GENERATORS = {
     "F1": _f1_far,
     "F2": _f2_onset,
@@ -393,6 +426,7 @@ GENERATORS = {
     "F6": _f6_other_position,
     "F7": _f7_coda,
     "F8": _f8_homophone,
+    "F9": _f9_affix,
 }
 
 
@@ -483,7 +517,8 @@ def draw_target_lane(lanes, tally: dict[int, int], recent,
 
 def build_option_set(word, pos: int, rung: int, rng: random.Random,
                      inv: Inventory, lanes, tally: dict[int, int],
-                     recent, homophone_foils: bool = False) -> OptionSet:
+                     recent, homophone_foils: bool = False,
+                     kinds: tuple[str, ...] | None = None) -> OptionSet:
     """The four tiles for syllable `pos` of `word`.
 
     Exactly four options with pairwise distinct texts, the target
@@ -499,7 +534,9 @@ def build_option_set(word, pos: int, rung: int, rng: random.Random,
     rung = max(MIN_RUNG, min(MAX_RUNG, int(rung)))
     taken = {target}
     foils: list[tuple[str, str]] = []
-    for kind in kinds_for_rung(rung, homophone_foils):
+    # An age profile names its own three kinds (its foil shares);
+    # None is the rung schedule, the design the study pre-registered.
+    for kind in (kinds or kinds_for_rung(rung, homophone_foils)):
         text, made = make_foil(kind, target, syls, pos, inv, rng, taken)
         taken.add(text)
         foils.append((text, made))

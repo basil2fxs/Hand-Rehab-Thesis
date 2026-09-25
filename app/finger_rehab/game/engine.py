@@ -4607,6 +4607,11 @@ class GameEngine:
             score_cfg=self.score_cfg,
             seed=seed,
             demo_trials=self._test_mode_trials(),
+            # Who the block is for: auto reads the intake age. The
+            # study battery pins classic, the pre-registered design.
+            age_band=str(self.cfg.get("syllables.age_band", "auto")
+                         or "auto"),
+            age=getattr(self.session, "age", ""),
         )
         self._begin_block("syllables")
         # The seed shaped this block's word order, so it lives next to

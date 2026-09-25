@@ -1092,6 +1092,16 @@ syllables:
   # every move is recorded. The words come from
   # assets/words/syllables_bank.json.
   band: A
+  # Who the block is set up for. auto reads the intake age: 6-9 (the
+  # design below, with print fading above rung 3), 10-12 and 13-15
+  # (faster falls, derived words, 20 percent made-up words, a shorter
+  # buzz ladder), 16+ (the word heard, not seen, no buzz, rarer
+  # derived and made-up words, and the fall time as the thing
+  # measured), 60+ (as 16+ with the slower teen falls and bigger
+  # tiles). A blank age plays 6-9. classic is the design exactly as
+  # the study pre-registered it. The case for every value is in
+  # finger_rehab/game/modes/syllables_profiles.py.
+  age_band: auto
   # Milliseconds between syllables while the word is modelled. 500 is
   # two a second, the pace children this age tap most naturally.
   beat_ioi_ms: 500
@@ -1949,5 +1959,6 @@ protocol:
           words_per_block: 12
           round_size: 6
           break_s: 10
+          age_band: classic           # the pre-registered block, any age
         game:
           total_trials: 40            # pins the adaptive block length

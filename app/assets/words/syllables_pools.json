@@ -1,0 +1,2806 @@
+{
+ "licence": "Project word lists, hand-built; see the script.",
+ "generated_by": "scripts/build_syllables_pools.py",
+ "generated_on": "2026-09-25",
+ "convention": "chunks join to the spelling; stress is the 0-based index of the stressed chunk",
+ "norms_checked": false,
+ "counts": {
+  "teen": 85,
+  "adult": 95,
+  "pseudo": 60
+ },
+ "words": [
+  {
+   "word": "discovery",
+   "syllables": [
+    "dis",
+    "cov",
+    "er",
+    "y"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "unhappy",
+   "syllables": [
+    "un",
+    "hap",
+    "py"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "dishonest",
+   "syllables": [
+    "dis",
+    "hon",
+    "est"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "unusual",
+   "syllables": [
+    "un",
+    "u",
+    "su",
+    "al"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "powerful",
+   "syllables": [
+    "pow",
+    "er",
+    "ful"
+   ],
+   "stress": 0,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "colourful",
+   "syllables": [
+    "col",
+    "our",
+    "ful"
+   ],
+   "stress": 0,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "government",
+   "syllables": [
+    "gov",
+    "ern",
+    "ment"
+   ],
+   "stress": 0,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "environment",
+   "syllables": [
+    "en",
+    "vi",
+    "ron",
+    "ment"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "competition",
+   "syllables": [
+    "com",
+    "pe",
+    "ti",
+    "tion"
+   ],
+   "stress": 2,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "population",
+   "syllables": [
+    "pop",
+    "u",
+    "la",
+    "tion"
+   ],
+   "stress": 2,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "carefully",
+   "syllables": [
+    "care",
+    "ful",
+    "ly"
+   ],
+   "stress": 0,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "quietly",
+   "syllables": [
+    "qui",
+    "et",
+    "ly"
+   ],
+   "stress": 0,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "suddenly",
+   "syllables": [
+    "sud",
+    "den",
+    "ly"
+   ],
+   "stress": 0,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "honestly",
+   "syllables": [
+    "hon",
+    "est",
+    "ly"
+   ],
+   "stress": 0,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "unkindness",
+   "syllables": [
+    "un",
+    "kind",
+    "ness"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "disagree",
+   "syllables": [
+    "dis",
+    "a",
+    "gree"
+   ],
+   "stress": 2,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "replacement",
+   "syllables": [
+    "re",
+    "place",
+    "ment"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "enjoyment",
+   "syllables": [
+    "en",
+    "joy",
+    "ment"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "amazement",
+   "syllables": [
+    "a",
+    "maze",
+    "ment"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "excitement",
+   "syllables": [
+    "ex",
+    "cite",
+    "ment"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "misbehave",
+   "syllables": [
+    "mis",
+    "be",
+    "have"
+   ],
+   "stress": 2,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "misunderstand",
+   "syllables": [
+    "mis",
+    "un",
+    "der",
+    "stand"
+   ],
+   "stress": 3,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "rearrange",
+   "syllables": [
+    "re",
+    "ar",
+    "range"
+   ],
+   "stress": 2,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "prediction",
+   "syllables": [
+    "pre",
+    "dic",
+    "tion"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "protection",
+   "syllables": [
+    "pro",
+    "tec",
+    "tion"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "collection",
+   "syllables": [
+    "col",
+    "lec",
+    "tion"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "direction",
+   "syllables": [
+    "di",
+    "rec",
+    "tion"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "attention",
+   "syllables": [
+    "at",
+    "ten",
+    "tion"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "invention",
+   "syllables": [
+    "in",
+    "ven",
+    "tion"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "performance",
+   "syllables": [
+    "per",
+    "for",
+    "mance"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "appearance",
+   "syllables": [
+    "ap",
+    "pear",
+    "ance"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "remarkable",
+   "syllables": [
+    "re",
+    "mark",
+    "a",
+    "ble"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "unbreakable",
+   "syllables": [
+    "un",
+    "break",
+    "a",
+    "ble"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "reusable",
+   "syllables": [
+    "re",
+    "us",
+    "a",
+    "ble"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "visible",
+   "syllables": [
+    "vis",
+    "i",
+    "ble"
+   ],
+   "stress": 0,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "sensible",
+   "syllables": [
+    "sen",
+    "si",
+    "ble"
+   ],
+   "stress": 0,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "horrible",
+   "syllables": [
+    "hor",
+    "ri",
+    "ble"
+   ],
+   "stress": 0,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "magical",
+   "syllables": [
+    "mag",
+    "i",
+    "cal"
+   ],
+   "stress": 0,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "practical",
+   "syllables": [
+    "prac",
+    "ti",
+    "cal"
+   ],
+   "stress": 0,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "creative",
+   "syllables": [
+    "cre",
+    "a",
+    "tive"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "expensive",
+   "syllables": [
+    "ex",
+    "pen",
+    "sive"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "attractive",
+   "syllables": [
+    "at",
+    "trac",
+    "tive"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "productive",
+   "syllables": [
+    "pro",
+    "duc",
+    "tive"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "memorial",
+   "syllables": [
+    "me",
+    "mo",
+    "ri",
+    "al"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "champion",
+   "syllables": [
+    "cham",
+    "pi",
+    "on"
+   ],
+   "stress": 0,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "championship",
+   "syllables": [
+    "cham",
+    "pi",
+    "on",
+    "ship"
+   ],
+   "stress": 0,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "membership",
+   "syllables": [
+    "mem",
+    "ber",
+    "ship"
+   ],
+   "stress": 0,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "partnership",
+   "syllables": [
+    "part",
+    "ner",
+    "ship"
+   ],
+   "stress": 0,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "leadership",
+   "syllables": [
+    "lead",
+    "er",
+    "ship"
+   ],
+   "stress": 0,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "neighbourhood",
+   "syllables": [
+    "neigh",
+    "bour",
+    "hood"
+   ],
+   "stress": 0,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "brotherhood",
+   "syllables": [
+    "broth",
+    "er",
+    "hood"
+   ],
+   "stress": 0,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "citizen",
+   "syllables": [
+    "cit",
+    "i",
+    "zen"
+   ],
+   "stress": 0,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "volunteer",
+   "syllables": [
+    "vol",
+    "un",
+    "teer"
+   ],
+   "stress": 2,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "scientist",
+   "syllables": [
+    "sci",
+    "en",
+    "tist"
+   ],
+   "stress": 0,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "musician",
+   "syllables": [
+    "mu",
+    "si",
+    "cian"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "electrician",
+   "syllables": [
+    "e",
+    "lec",
+    "tri",
+    "cian"
+   ],
+   "stress": 2,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "librarian",
+   "syllables": [
+    "li",
+    "brar",
+    "i",
+    "an"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "historical",
+   "syllables": [
+    "his",
+    "tor",
+    "i",
+    "cal"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "disapprove",
+   "syllables": [
+    "dis",
+    "ap",
+    "prove"
+   ],
+   "stress": 2,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "uncertain",
+   "syllables": [
+    "un",
+    "cer",
+    "tain"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "incorrect",
+   "syllables": [
+    "in",
+    "cor",
+    "rect"
+   ],
+   "stress": 2,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "impatient",
+   "syllables": [
+    "im",
+    "pa",
+    "tient"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "inactive",
+   "syllables": [
+    "in",
+    "ac",
+    "tive"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "untidy",
+   "syllables": [
+    "un",
+    "ti",
+    "dy"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "disobey",
+   "syllables": [
+    "dis",
+    "o",
+    "bey"
+   ],
+   "stress": 2,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "fearlessly",
+   "syllables": [
+    "fear",
+    "less",
+    "ly"
+   ],
+   "stress": 0,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "hopefully",
+   "syllables": [
+    "hope",
+    "ful",
+    "ly"
+   ],
+   "stress": 0,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "usefulness",
+   "syllables": [
+    "use",
+    "ful",
+    "ness"
+   ],
+   "stress": 0,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "loneliness",
+   "syllables": [
+    "lone",
+    "li",
+    "ness"
+   ],
+   "stress": 0,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "emptiness",
+   "syllables": [
+    "emp",
+    "ti",
+    "ness"
+   ],
+   "stress": 0,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "encourage",
+   "syllables": [
+    "en",
+    "cour",
+    "age"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "encouragement",
+   "syllables": [
+    "en",
+    "cour",
+    "age",
+    "ment"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "mistaken",
+   "syllables": [
+    "mis",
+    "tak",
+    "en"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "unfinished",
+   "syllables": [
+    "un",
+    "fin",
+    "ished"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "unlucky",
+   "syllables": [
+    "un",
+    "luck",
+    "y"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "inspector",
+   "syllables": [
+    "in",
+    "spec",
+    "tor"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "investigate",
+   "syllables": [
+    "in",
+    "ves",
+    "ti",
+    "gate"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "explanation",
+   "syllables": [
+    "ex",
+    "pla",
+    "na",
+    "tion"
+   ],
+   "stress": 2,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "suggestion",
+   "syllables": [
+    "sug",
+    "ges",
+    "tion"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "instruction",
+   "syllables": [
+    "in",
+    "struc",
+    "tion"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "construction",
+   "syllables": [
+    "con",
+    "struc",
+    "tion"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "subtraction",
+   "syllables": [
+    "sub",
+    "trac",
+    "tion"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "addition",
+   "syllables": [
+    "ad",
+    "di",
+    "tion"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "division",
+   "syllables": [
+    "di",
+    "vi",
+    "sion"
+   ],
+   "stress": 1,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "scientific",
+   "syllables": [
+    "sci",
+    "en",
+    "tif",
+    "ic"
+   ],
+   "stress": 2,
+   "pool": "teen",
+   "lex": "word"
+  },
+  {
+   "word": "unavailable",
+   "syllables": [
+    "un",
+    "a",
+    "vail",
+    "a",
+    "ble"
+   ],
+   "stress": 2,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "disagreement",
+   "syllables": [
+    "dis",
+    "a",
+    "gree",
+    "ment"
+   ],
+   "stress": 2,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "independence",
+   "syllables": [
+    "in",
+    "de",
+    "pen",
+    "dence"
+   ],
+   "stress": 2,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "misunderstanding",
+   "syllables": [
+    "mis",
+    "un",
+    "der",
+    "stand",
+    "ing"
+   ],
+   "stress": 3,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "reconstruction",
+   "syllables": [
+    "re",
+    "con",
+    "struc",
+    "tion"
+   ],
+   "stress": 2,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "improbable",
+   "syllables": [
+    "im",
+    "prob",
+    "a",
+    "ble"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "unforgettable",
+   "syllables": [
+    "un",
+    "for",
+    "get",
+    "ta",
+    "ble"
+   ],
+   "stress": 2,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "irresponsible",
+   "syllables": [
+    "ir",
+    "re",
+    "spon",
+    "si",
+    "ble"
+   ],
+   "stress": 2,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "international",
+   "syllables": [
+    "in",
+    "ter",
+    "na",
+    "tion",
+    "al"
+   ],
+   "stress": 2,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "disconnected",
+   "syllables": [
+    "dis",
+    "con",
+    "nect",
+    "ed"
+   ],
+   "stress": 2,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "unbelievable",
+   "syllables": [
+    "un",
+    "be",
+    "liev",
+    "a",
+    "ble"
+   ],
+   "stress": 2,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "communication",
+   "syllables": [
+    "com",
+    "mu",
+    "ni",
+    "ca",
+    "tion"
+   ],
+   "stress": 3,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "organisation",
+   "syllables": [
+    "or",
+    "gan",
+    "i",
+    "sa",
+    "tion"
+   ],
+   "stress": 3,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "development",
+   "syllables": [
+    "de",
+    "vel",
+    "op",
+    "ment"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "adventurous",
+   "syllables": [
+    "ad",
+    "ven",
+    "tur",
+    "ous"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "uncertainty",
+   "syllables": [
+    "un",
+    "cer",
+    "tain",
+    "ty"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "possibility",
+   "syllables": [
+    "pos",
+    "si",
+    "bil",
+    "i",
+    "ty"
+   ],
+   "stress": 2,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "reliable",
+   "syllables": [
+    "re",
+    "li",
+    "a",
+    "ble"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "acceptable",
+   "syllables": [
+    "ac",
+    "cept",
+    "a",
+    "ble"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "determination",
+   "syllables": [
+    "de",
+    "ter",
+    "mi",
+    "na",
+    "tion"
+   ],
+   "stress": 3,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "imagination",
+   "syllables": [
+    "i",
+    "mag",
+    "i",
+    "na",
+    "tion"
+   ],
+   "stress": 3,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "insurance",
+   "syllables": [
+    "in",
+    "sur",
+    "ance"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "resistance",
+   "syllables": [
+    "re",
+    "sist",
+    "ance"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "existence",
+   "syllables": [
+    "ex",
+    "is",
+    "tence"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "confidence",
+   "syllables": [
+    "con",
+    "fi",
+    "dence"
+   ],
+   "stress": 0,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "influential",
+   "syllables": [
+    "in",
+    "flu",
+    "en",
+    "tial"
+   ],
+   "stress": 2,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "essential",
+   "syllables": [
+    "es",
+    "sen",
+    "tial"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "official",
+   "syllables": [
+    "of",
+    "fi",
+    "cial"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "financial",
+   "syllables": [
+    "fi",
+    "nan",
+    "cial"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "defensive",
+   "syllables": [
+    "de",
+    "fen",
+    "sive"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "occasionally",
+   "syllables": [
+    "oc",
+    "ca",
+    "sion",
+    "al",
+    "ly"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "unfortunately",
+   "syllables": [
+    "un",
+    "for",
+    "tu",
+    "nate",
+    "ly"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "immediately",
+   "syllables": [
+    "im",
+    "me",
+    "di",
+    "ate",
+    "ly"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "significant",
+   "syllables": [
+    "sig",
+    "nif",
+    "i",
+    "cant"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "underestimate",
+   "syllables": [
+    "un",
+    "der",
+    "es",
+    "ti",
+    "mate"
+   ],
+   "stress": 2,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "overwhelming",
+   "syllables": [
+    "o",
+    "ver",
+    "whelm",
+    "ing"
+   ],
+   "stress": 2,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "outstanding",
+   "syllables": [
+    "out",
+    "stand",
+    "ing"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "nevertheless",
+   "syllables": [
+    "ne",
+    "ver",
+    "the",
+    "less"
+   ],
+   "stress": 3,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "whatsoever",
+   "syllables": [
+    "what",
+    "so",
+    "ev",
+    "er"
+   ],
+   "stress": 2,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "vocabulary",
+   "syllables": [
+    "vo",
+    "cab",
+    "u",
+    "lar",
+    "y"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "parliament",
+   "syllables": [
+    "par",
+    "lia",
+    "ment"
+   ],
+   "stress": 0,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "architecture",
+   "syllables": [
+    "ar",
+    "chi",
+    "tec",
+    "ture"
+   ],
+   "stress": 0,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "literature",
+   "syllables": [
+    "lit",
+    "er",
+    "a",
+    "ture"
+   ],
+   "stress": 0,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "agriculture",
+   "syllables": [
+    "ag",
+    "ri",
+    "cul",
+    "ture"
+   ],
+   "stress": 0,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "psychology",
+   "syllables": [
+    "psy",
+    "chol",
+    "o",
+    "gy"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "economy",
+   "syllables": [
+    "e",
+    "con",
+    "o",
+    "my"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "democracy",
+   "syllables": [
+    "de",
+    "moc",
+    "ra",
+    "cy"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "curriculum",
+   "syllables": [
+    "cur",
+    "ric",
+    "u",
+    "lum"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "material",
+   "syllables": [
+    "ma",
+    "te",
+    "ri",
+    "al"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "industrial",
+   "syllables": [
+    "in",
+    "dus",
+    "tri",
+    "al"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "opportunity",
+   "syllables": [
+    "op",
+    "por",
+    "tu",
+    "ni",
+    "ty"
+   ],
+   "stress": 2,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "university",
+   "syllables": [
+    "u",
+    "ni",
+    "ver",
+    "si",
+    "ty"
+   ],
+   "stress": 2,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "personality",
+   "syllables": [
+    "per",
+    "son",
+    "al",
+    "i",
+    "ty"
+   ],
+   "stress": 2,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "curiosity",
+   "syllables": [
+    "cu",
+    "ri",
+    "os",
+    "i",
+    "ty"
+   ],
+   "stress": 2,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "generosity",
+   "syllables": [
+    "gen",
+    "er",
+    "os",
+    "i",
+    "ty"
+   ],
+   "stress": 2,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "majority",
+   "syllables": [
+    "ma",
+    "jor",
+    "i",
+    "ty"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "security",
+   "syllables": [
+    "se",
+    "cu",
+    "ri",
+    "ty"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "relationship",
+   "syllables": [
+    "re",
+    "la",
+    "tion",
+    "ship"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "carelessness",
+   "syllables": [
+    "care",
+    "less",
+    "ness"
+   ],
+   "stress": 0,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "helplessness",
+   "syllables": [
+    "help",
+    "less",
+    "ness"
+   ],
+   "stress": 0,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "awareness",
+   "syllables": [
+    "a",
+    "ware",
+    "ness"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "effectiveness",
+   "syllables": [
+    "ef",
+    "fec",
+    "tive",
+    "ness"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "appreciation",
+   "syllables": [
+    "ap",
+    "pre",
+    "ci",
+    "a",
+    "tion"
+   ],
+   "stress": 3,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "administration",
+   "syllables": [
+    "ad",
+    "min",
+    "is",
+    "tra",
+    "tion"
+   ],
+   "stress": 3,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "qualification",
+   "syllables": [
+    "qual",
+    "i",
+    "fi",
+    "ca",
+    "tion"
+   ],
+   "stress": 3,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "recommendation",
+   "syllables": [
+    "rec",
+    "om",
+    "men",
+    "da",
+    "tion"
+   ],
+   "stress": 3,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "interpretation",
+   "syllables": [
+    "in",
+    "ter",
+    "pre",
+    "ta",
+    "tion"
+   ],
+   "stress": 3,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "irregular",
+   "syllables": [
+    "ir",
+    "reg",
+    "u",
+    "lar"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "unreliable",
+   "syllables": [
+    "un",
+    "re",
+    "li",
+    "a",
+    "ble"
+   ],
+   "stress": 2,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "inadequate",
+   "syllables": [
+    "in",
+    "ad",
+    "e",
+    "quate"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "disadvantage",
+   "syllables": [
+    "dis",
+    "ad",
+    "van",
+    "tage"
+   ],
+   "stress": 2,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "predominant",
+   "syllables": [
+    "pre",
+    "dom",
+    "i",
+    "nant"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "inconsistent",
+   "syllables": [
+    "in",
+    "con",
+    "sis",
+    "tent"
+   ],
+   "stress": 2,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "unnecessary",
+   "syllables": [
+    "un",
+    "nec",
+    "es",
+    "sar",
+    "y"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "responsible",
+   "syllables": [
+    "re",
+    "spon",
+    "si",
+    "ble"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "accommodation",
+   "syllables": [
+    "ac",
+    "com",
+    "mo",
+    "da",
+    "tion"
+   ],
+   "stress": 3,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "enthusiastic",
+   "syllables": [
+    "en",
+    "thu",
+    "si",
+    "as",
+    "tic"
+   ],
+   "stress": 3,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "disappointment",
+   "syllables": [
+    "dis",
+    "ap",
+    "point",
+    "ment"
+   ],
+   "stress": 2,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "embarrassment",
+   "syllables": [
+    "em",
+    "bar",
+    "rass",
+    "ment"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "accomplishment",
+   "syllables": [
+    "ac",
+    "com",
+    "plish",
+    "ment"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "establishment",
+   "syllables": [
+    "es",
+    "tab",
+    "lish",
+    "ment"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "advertisement",
+   "syllables": [
+    "ad",
+    "ver",
+    "tise",
+    "ment"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "requirement",
+   "syllables": [
+    "re",
+    "quire",
+    "ment"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "investment",
+   "syllables": [
+    "in",
+    "vest",
+    "ment"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "appointment",
+   "syllables": [
+    "ap",
+    "point",
+    "ment"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "misinterpret",
+   "syllables": [
+    "mis",
+    "in",
+    "ter",
+    "pret"
+   ],
+   "stress": 2,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "overestimate",
+   "syllables": [
+    "o",
+    "ver",
+    "es",
+    "ti",
+    "mate"
+   ],
+   "stress": 2,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "underdeveloped",
+   "syllables": [
+    "un",
+    "der",
+    "de",
+    "vel",
+    "oped"
+   ],
+   "stress": 3,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "counterproductive",
+   "syllables": [
+    "coun",
+    "ter",
+    "pro",
+    "duc",
+    "tive"
+   ],
+   "stress": 3,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "photosynthesis",
+   "syllables": [
+    "pho",
+    "to",
+    "syn",
+    "the",
+    "sis"
+   ],
+   "stress": 2,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "thermometer",
+   "syllables": [
+    "ther",
+    "mom",
+    "e",
+    "ter"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "category",
+   "syllables": [
+    "cat",
+    "e",
+    "go",
+    "ry"
+   ],
+   "stress": 0,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "hypothesis",
+   "syllables": [
+    "hy",
+    "poth",
+    "e",
+    "sis"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "analysis",
+   "syllables": [
+    "a",
+    "nal",
+    "y",
+    "sis"
+   ],
+   "stress": 1,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "consideration",
+   "syllables": [
+    "con",
+    "sid",
+    "er",
+    "a",
+    "tion"
+   ],
+   "stress": 3,
+   "pool": "adult",
+   "lex": "word"
+  },
+  {
+   "word": "melvitrob",
+   "syllables": [
+    "mel",
+    "vit",
+    "rob"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "sidmidkem",
+   "syllables": [
+    "sid",
+    "mid",
+    "kem"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "forsopkem",
+   "syllables": [
+    "for",
+    "sop",
+    "kem"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "torlansopnus",
+   "syllables": [
+    "tor",
+    "lan",
+    "sop",
+    "nus"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "patberpen",
+   "syllables": [
+    "pat",
+    "ber",
+    "pen"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "banberlub",
+   "syllables": [
+    "ban",
+    "ber",
+    "lub"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "rumfinfor",
+   "syllables": [
+    "rum",
+    "fin",
+    "for"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "marvitrob",
+   "syllables": [
+    "mar",
+    "vit",
+    "rob"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "marmeldol",
+   "syllables": [
+    "mar",
+    "mel",
+    "dol"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "kempatnuscum",
+   "syllables": [
+    "kem",
+    "pat",
+    "nus",
+    "cum"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "sopkemlan",
+   "syllables": [
+    "sop",
+    "kem",
+    "lan"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "tobvitfor",
+   "syllables": [
+    "tob",
+    "vit",
+    "for"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "landapvitrum",
+   "syllables": [
+    "lan",
+    "dap",
+    "vit",
+    "rum"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "soplanvit",
+   "syllables": [
+    "sop",
+    "lan",
+    "vit"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "forbansopsid",
+   "syllables": [
+    "for",
+    "ban",
+    "sop",
+    "sid"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "lubpentenmid",
+   "syllables": [
+    "lub",
+    "pen",
+    "ten",
+    "mid"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "lancumsid",
+   "syllables": [
+    "lan",
+    "cum",
+    "sid"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "lantenkemrum",
+   "syllables": [
+    "lan",
+    "ten",
+    "kem",
+    "rum"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "daplubpatkem",
+   "syllables": [
+    "dap",
+    "lub",
+    "pat",
+    "kem"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "banbitcum",
+   "syllables": [
+    "ban",
+    "bit",
+    "cum"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "midnusforvit",
+   "syllables": [
+    "mid",
+    "nus",
+    "for",
+    "vit"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "finloprum",
+   "syllables": [
+    "fin",
+    "lop",
+    "rum"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "fortobkem",
+   "syllables": [
+    "for",
+    "tob",
+    "kem"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "bitberpatmel",
+   "syllables": [
+    "bit",
+    "ber",
+    "pat",
+    "mel"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "tenforvitrum",
+   "syllables": [
+    "ten",
+    "for",
+    "vit",
+    "rum"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "landolrobrum",
+   "syllables": [
+    "lan",
+    "dol",
+    "rob",
+    "rum"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "finpenlop",
+   "syllables": [
+    "fin",
+    "pen",
+    "lop"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "murtobcumnus",
+   "syllables": [
+    "mur",
+    "tob",
+    "cum",
+    "nus"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "kemberdolmid",
+   "syllables": [
+    "kem",
+    "ber",
+    "dol",
+    "mid"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "sidpenmid",
+   "syllables": [
+    "sid",
+    "pen",
+    "mid"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "torkemrum",
+   "syllables": [
+    "tor",
+    "kem",
+    "rum"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "tormurlanten",
+   "syllables": [
+    "tor",
+    "mur",
+    "lan",
+    "ten"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "cumkemsidlan",
+   "syllables": [
+    "cum",
+    "kem",
+    "sid",
+    "lan"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "doltoblub",
+   "syllables": [
+    "dol",
+    "tob",
+    "lub"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "cumforsop",
+   "syllables": [
+    "cum",
+    "for",
+    "sop"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "vitforlop",
+   "syllables": [
+    "vit",
+    "for",
+    "lop"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "banpendap",
+   "syllables": [
+    "ban",
+    "pen",
+    "dap"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "bitberfin",
+   "syllables": [
+    "bit",
+    "ber",
+    "fin"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "fintorbanvit",
+   "syllables": [
+    "fin",
+    "tor",
+    "ban",
+    "vit"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "melpenlan",
+   "syllables": [
+    "mel",
+    "pen",
+    "lan"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "sopmidfor",
+   "syllables": [
+    "sop",
+    "mid",
+    "for"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "cumsopvit",
+   "syllables": [
+    "cum",
+    "sop",
+    "vit"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "tobmidmel",
+   "syllables": [
+    "tob",
+    "mid",
+    "mel"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "midsidlub",
+   "syllables": [
+    "mid",
+    "sid",
+    "lub"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "dolkemdapbit",
+   "syllables": [
+    "dol",
+    "kem",
+    "dap",
+    "bit"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "robtinbit",
+   "syllables": [
+    "rob",
+    "tin",
+    "bit"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "kemberbitnus",
+   "syllables": [
+    "kem",
+    "ber",
+    "bit",
+    "nus"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "loplantenlub",
+   "syllables": [
+    "lop",
+    "lan",
+    "ten",
+    "lub"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "cumrobvit",
+   "syllables": [
+    "cum",
+    "rob",
+    "vit"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "forvitcum",
+   "syllables": [
+    "for",
+    "vit",
+    "cum"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "lubmurtin",
+   "syllables": [
+    "lub",
+    "mur",
+    "tin"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "rumtobkem",
+   "syllables": [
+    "rum",
+    "tob",
+    "kem"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "murdoldap",
+   "syllables": [
+    "mur",
+    "dol",
+    "dap"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "tinfinrum",
+   "syllables": [
+    "tin",
+    "fin",
+    "rum"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "lantorber",
+   "syllables": [
+    "lan",
+    "tor",
+    "ber"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "patnustin",
+   "syllables": [
+    "pat",
+    "nus",
+    "tin"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "murlopsid",
+   "syllables": [
+    "mur",
+    "lop",
+    "sid"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "dolnusrob",
+   "syllables": [
+    "dol",
+    "nus",
+    "rob"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "tobkemfor",
+   "syllables": [
+    "tob",
+    "kem",
+    "for"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  },
+  {
+   "word": "tinbanfinmur",
+   "syllables": [
+    "tin",
+    "ban",
+    "fin",
+    "mur"
+   ],
+   "stress": 0,
+   "pool": "pseudo",
+   "lex": "pseudo"
+  }
+ ]
+}

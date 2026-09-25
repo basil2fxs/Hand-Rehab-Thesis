@@ -66,11 +66,12 @@ log = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class Word:
     word: str
-    band: str                              # A | B | C
+    band: str                              # A | B | C, or the pool name
     syllables: tuple[str, ...]             # chunks that join to `word`
     stress: int                            # 0-based primary stress index
     onset_rime: tuple[str, str] | None = None   # level 5 material
     graphemes: tuple[str, ...] | None = None    # level 6 material
+    lex: str = "word"                      # word | pseudo (made up)
 
     @property
     def n_syll(self) -> int:
@@ -349,6 +350,81 @@ def all_words() -> tuple[Word, ...]:
          if MIN_SYLLABLES <= w.n_syll <= MAX_SYLLABLES),
         key=lambda w: w.word))
     return _ALL_CACHE
+
+
+POOLS_PATH = ("assets", "words", "syllables_pools.json")
+POOL_MAX_SYLLABLES = 5
+_POOL_CACHE: dict[str, tuple[Word, ...]] | None = None
+
+
+def load_pools(path: Path | None = None) -> dict[str, tuple[Word, ...]]:
+    """The pools past the child bank (teen, adult, pseudo), built by
+    scripts/build_syllables_pools.py. Checked like the bank: chunks
+    join to the word, stress inside it, two to five syllables. A
+    missing file leaves every pool empty and the age profiles fall
+    back to the child bank, logged once."""
+    global _POOL_CACHE
+    if path is None and _POOL_CACHE is not None:
+        return _POOL_CACHE
+    target = path or _bank_file().with_name(POOLS_PATH[-1])
+    out: dict[str, list[Word]] = {"teen": [], "adult": [], "pseudo": []}
+    try:
+        data = json.loads(target.read_text())
+        for e in data.get("words", []):
+            syls = tuple(str(x) for x in e.get("syllables", ()))
+            word = str(e.get("word", ""))
+            pool = str(e.get("pool", ""))
+            stress = int(e.get("stress", 0))
+            if (pool not in out or not syls or "".join(syls) != word
+                    or not (0 <= stress < len(syls))
+                    or not (MIN_SYLLABLES <= len(syls)
+                            <= POOL_MAX_SYLLABLES)):
+                continue
+            out[pool].append(Word(word=word, band=pool, syllables=syls,
+                                  stress=stress,
+                                  lex=str(e.get("lex", "word"))))
+    except FileNotFoundError:
+        log.warning("Syllables pools not found at %s; the age profiles "
+                    "play the child bank", target)
+    except Exception as e:
+        log.warning("Syllables pools at %s could not be read (%s)",
+                    target, e)
+    result = {k: tuple(sorted(v, key=lambda w: w.word))
+              for k, v in out.items()}
+    if path is None:
+        _POOL_CACHE = result
+    return result
+
+
+def profile_words(profile, band: str) -> tuple[tuple[Word, ...],
+                                                  tuple[Word, ...]]:
+    """(real words, made-up words) an age profile draws from, inside
+    its syllable range. `child` is the bank at the current band, or at
+    the profile's own bands (teens read B and C); an empty result
+    falls back to the whole bank so a block never stalls."""
+    pools = load_pools()
+    real: list[Word] = []
+    for name in profile.pools:
+        if name == "child":
+            if profile.child_bands:
+                real.extend(w for w in all_words()
+                            if w.band in profile.child_bands)
+            else:
+                real.extend(words_for(band))
+        else:
+            real.extend(pools.get(name, ()))
+    fit = [w for w in real
+           if profile.min_syll <= w.n_syll <= profile.max_syll]
+    pseudo = tuple(w for w in pools.get("pseudo", ())
+                   if profile.min_syll <= w.n_syll <= profile.max_syll)
+    return tuple(fit or real or all_words()), pseudo
+
+
+def pool_syllable_lists() -> tuple[tuple[str, ...], ...]:
+    """The bank's chunks plus every pool's, for an inventory that has
+    to judge foils for adult and made-up words too."""
+    extra = tuple(w.syllables for ws in load_pools().values() for w in ws)
+    return syllable_lists() + extra
 
 
 def syllable_lists() -> tuple[tuple[str, ...], ...]:

@@ -194,11 +194,26 @@ class SyllablesScreen(Screen):
             self.engine.mode.update(dt)
 
     # ---- stage copy --------------------------------------------------------
+    @staticmethod
+    def _style(mode) -> str:
+        """child, neutral (10 to 15) or adult: the age profile's
+        reward style. Stickers, stars and cheering copy are the child
+        layer; guidance for adult learners asks for relevance and
+        respect instead, and none of it has evidence for adults."""
+        return getattr(getattr(mode, "profile", None), "rewards", "child")
+
+    @staticmethod
+    def _prints(mode) -> bool:
+        """Whether the word and its chunks are printed before the
+        choice (the profile's print rung; always in classic)."""
+        return bool(getattr(mode, "show_print", True))
+
     def _stage(self, mode) -> tuple[str, str, str]:
         """(title, instruction, colour name) for the current phase.
         Colour names resolve through _stage_colour so the copy can be
         unit-tested without a display."""
         phase = mode.phase
+        style = self._style(mode)
         if phase == "attend":
             return ("LISTEN...", "Here is the word.", "accent")
         if phase == "model":
@@ -206,14 +221,20 @@ class SyllablesScreen(Screen):
                     "accent")
         if phase == "choose":
             return ("WHICH ONE?",
-                    "Press the finger under the part that comes next.",
+                    "Press the finger under the part that comes next."
+                    if style == "child" else
+                    "Press the finger under the part you heard.",
                     "success")
         if phase == "complete":
-            return ("WONDERFUL!", "", "success")
+            return ({"child": "WONDERFUL!", "neutral": "NICE WORK"}
+                    .get(style, "DONE"), "", "success")
         if phase == "break":
+            done = mode.words_done // mode.round_size
+            if style != "child":
+                return ("REST", f"Round {done} done.", "foreground")
             hands = "hands" if getattr(mode, "bilateral", False) else "hand"
             return ("REST TIME",
-                    f"Round {mode.words_done // mode.round_size} done! "
+                    f"Round {done} done! "
                     f"Shake your {hands} out.", "foreground")
         return ("", "", "muted")
 
@@ -269,7 +290,8 @@ class SyllablesScreen(Screen):
             pass
         else:
             self._draw_word_trial(surf, mode, now)
-        if phase in ("attend", "model", "choose", "complete", "gap"):
+        if (phase in ("attend", "model", "choose", "complete", "gap")
+                and self._style(mode) == "child"):
             self._draw_streak_stars(surf, mode, now)
         self._draw_controls_note(surf, mode)
         remaining = self._countdown_remaining()
@@ -342,10 +364,17 @@ class SyllablesScreen(Screen):
         draw_text(surf, self._top_label(mode),
                   (pad, 34), self.theme, self.layout, pt=FONT_SMALL,
                   colour=self.theme.muted)
-        draw_text(surf, f"Band {mode.band}   Level {mode.rung} of "
-                        f"{mode.rung_max}",
-                  (self.layout.width // 2, 40), self.theme, self.layout,
-                  pt=FONT_SMALL, centre=True, colour=self.theme.muted)
+        # The adult staircase moves the fall, not a level, and a
+        # visible number would only invite chasing it.
+        if not getattr(mode, "fall_mode", False):
+            label = (f"Band {mode.band}   Level {mode.rung} of "
+                     f"{mode.rung_max}"
+                     if getattr(mode, "_bank_bands", True)
+                     else f"Level {mode.rung} of {mode.rung_max}")
+            draw_text(surf, label,
+                      (self.layout.width // 2, 40), self.theme,
+                      self.layout, pt=FONT_SMALL, centre=True,
+                      colour=self.theme.muted)
         accent = self._accent()
         pf = self.layout.font(FONT_SMALL + 2)
         pill_label = pf.render("SYLLABLES", True, (255, 255, 255))
@@ -388,6 +417,8 @@ class SyllablesScreen(Screen):
                       (cx, self.SUB_Y + 128), self.theme, self.layout,
                       pt=FONT_BODY + 2, centre=True,
                       colour=BAND_COLOURS.get(band, self._accent()))
+        if self._style(mode) != "child":
+            return
         self._draw_journey(surf, mode, now)
         n = int(getattr(mode, "stickers", 0) or 0)
         if n:
@@ -535,6 +566,13 @@ class SyllablesScreen(Screen):
                 return font
             pt -= 4
 
+    @staticmethod
+    def _scale(mode) -> float:
+        """Tile text size for the profile: 60 and over read a larger
+        x-height."""
+        return float(getattr(getattr(mode, "profile", None),
+                             "tile_scale", 1.0) or 1.0)
+
     # ---- the word strip ----------------------------------------------------
     def slot_rects(self, mode) -> list[pygame.Rect]:
         """One rect per syllable of the word, left to right across the
@@ -584,7 +622,9 @@ class SyllablesScreen(Screen):
             fill = self._accent()
             lit = phase == "model" and model_idx == i
             if lit:
-                chunk = word.syllables[i]
+                # Above the profile's print rung the slot lights and
+                # the chunk is heard, not shown.
+                chunk = word.syllables[i] if self._prints(mode) else ""
                 b = min(1.0, (now - self._model_lit_t) / 0.4)
                 rect = rect.move(0, -int(10 * math.sin(b * math.pi)))
             elif phase in ("choose", "complete", "attend"):
@@ -600,8 +640,9 @@ class SyllablesScreen(Screen):
                     grow = int(6 * swell)
                     rect = rect.inflate(grow, grow)
                 pygame.draw.rect(surf, fill, rect, border_radius=18)
-                font = self._fitted_tile_font(chunk, rect.width - 26,
-                                              int(FONT_TITLE * 0.8))
+                font = self._fitted_tile_font(
+                    chunk, rect.width - 26,
+                    int(FONT_TITLE * 0.8 * self._scale(mode)))
                 self._draw_tracked(
                     surf, chunk, font,
                     _text_colour_for(fill, (255, 255, 255),
@@ -771,8 +812,9 @@ class SyllablesScreen(Screen):
             if alpha < 255:
                 tile.set_alpha(alpha)
             surf.blit(tile, rect.topleft)
-            font = self._fitted_tile_font(text, rect.width - 30,
-                                          int(FONT_TITLE * 0.75))
+            font = self._fitted_tile_font(
+                text, rect.width - 30,
+                int(FONT_TITLE * 0.75 * self._scale(mode)))
             self._draw_tracked(surf, text, font, ink, rect.center,
                                alpha=alpha)
             if state == "glow" and glow_t is not None:
@@ -802,7 +844,13 @@ class SyllablesScreen(Screen):
                       colour=self._accent())
         self._draw_seats(surf, mode)
         if phase in ("attend", "model"):
-            # The whole word, large, while it is spoken and modelled.
+            # The whole word, large, while it is spoken and modelled;
+            # heard only, above the profile's print rung.
+            if not self._prints(mode):
+                draw_text(surf, "Listen", (cx, (self.TOP_Y + self.EXIT_Y)
+                                           // 2), self.theme, self.layout,
+                          pt=FONT_H2, centre=True, colour=self.theme.muted)
+                return
             font = make_font(int(FONT_TITLE * 1.4), bold=True)
             self._draw_tracked(surf, word.word, font,
                                self.theme.foreground,
@@ -815,10 +863,11 @@ class SyllablesScreen(Screen):
             self._draw_tracked(surf, word.word, font,
                                self.theme.foreground,
                                (cx, (self.TOP_Y + self.EXIT_Y) // 2))
-            draw_text(surf, "You built the whole word!",
-                      (cx, (self.TOP_Y + self.EXIT_Y) // 2 + 96),
-                      self.theme, self.layout, pt=FONT_H2, centre=True,
-                      colour=self.theme.success)
+            if self._style(mode) == "child":
+                draw_text(surf, "You built the whole word!",
+                          (cx, (self.TOP_Y + self.EXIT_Y) // 2 + 96),
+                          self.theme, self.layout, pt=FONT_H2,
+                          centre=True, colour=self.theme.success)
             return
         self._draw_lane_guides(surf, mode)
         self._draw_tiles(surf, mode, now)
@@ -857,7 +906,12 @@ class SyllablesScreen(Screen):
         hand, in keyboard reading order. Empty when the input is the
         real sensors: fingers sit on the pads, a legend would only pull
         the child's eyes off the tiles."""
-        return keyboard_controls_lines(self.engine, mode)
+        lines = keyboard_controls_lines(self.engine, mode)
+        # R replays the chunk. For a child it is the supervisor's key
+        # and needs no legend; an adult presses it themselves.
+        if self._style(mode) == "adult":
+            lines = list(lines) + ["R: hear it again"]
+        return lines
 
     def _draw_controls_note(self, surf: pygame.Surface, mode) -> None:
         lines = self.controls_lines(mode)

@@ -277,3 +277,5 @@ Everything the old docstring said still holds, plus:
 - Zorzi M, Barbiero C, Facoetti A, et al (2012). Extra-large letter spacing improves reading in dyslexia. PNAS 109(28), 11455-11459.
 - ACARA. Australian Curriculum v9.0, English: AC9EFLY09, AC9E1LY12.
 - NSW Education Standards Authority. English K-10 Syllabus (2022), K-2 phonological awareness.
+
+The review for readers past 9 (age profiles, the recorded voice, sound-alike foils, adult and made-up words; 140 verified sources, 25 September 2026) is syllables-all-ages.md in this folder.
