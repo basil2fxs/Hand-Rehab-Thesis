@@ -1043,6 +1043,10 @@ class GameEngine:
                 self._draw_hud(self._screen, clock)
                 # Scale the logical surface up onto the window and flip.
                 self._present()
+                # The flip clock: when this frame reached the screen,
+                # and the running frame period. The SRT schedules its
+                # flash on these, as the lab's script counted frames.
+                self._note_flip(time.perf_counter())
                 # Stimulus markers ride the frame's own flip: armed in
                 # on_stim_multi, wired here so the byte follows the
                 # photons, not the update order. tick() then runs the
@@ -1311,6 +1315,22 @@ class GameEngine:
                             hand=getattr(self, "hand_mode", "right"))
         else:
             log.info("eeg marker outside block: %s", detail)
+
+    def _export_mode_files(self) -> None:
+        """A mode's own files beside trials.csv, when it writes any:
+        the SRT's copies of the lab script's three CSVs. Runs on the
+        abandon path too, so a cut-short session keeps what it
+        collected in the format the lab reads."""
+        export = getattr(getattr(self, "mode", None), "export_files", None)
+        paths = getattr(self, "session_paths", None)
+        if not callable(export) or paths is None:
+            return
+        try:
+            written = export(paths.root)
+            for path in written or []:
+                log.info("Wrote %s", path)
+        except Exception as e:
+            log.warning("mode export failed: %s", e)
 
     def _export_eeg_events(self) -> None:
         """Write events.tsv, events.json and markers_codes.csv beside
@@ -1637,6 +1657,26 @@ class GameEngine:
         """
         pygame.display.flip()
 
+    def _note_flip(self, t: float) -> None:
+        """Record a flip. frame_period_s is the median of the last 61
+        flip gaps, so one dropped frame does not stretch it; it stays
+        None until there are ten gaps to go on."""
+        prev = getattr(self, "last_flip_t", None)
+        self.last_flip_t = t
+        if prev is None:
+            return
+        gap = t - prev
+        if not 0.002 < gap < 0.1:
+            return
+        gaps = getattr(self, "_flip_gaps", None)
+        if gaps is None:
+            from collections import deque
+            gaps = self._flip_gaps = deque(maxlen=61)
+        gaps.append(gap)
+        if len(gaps) >= 10:
+            ordered = sorted(gaps)
+            self.frame_period_s = ordered[len(ordered) // 2]
+
     def _to_logical(self, pos: tuple[int, int]) -> tuple[int, int]:
         """Mouse position in logical coordinates.
 
@@ -1744,7 +1784,7 @@ class GameEngine:
     # one stray key press ending a patient's session is exactly the
     # accident the exit dialog exists to stop.
     _BLOCK_SCREEN_KEYS = ("gameplay", "rhythm", "syllables",
-                          "force_pilot", "buzz_hunt")
+                          "force_pilot", "buzz_hunt", "srt")
 
     # How long the end-game chip stays up waiting for the second Esc.
     # Long enough to read one short line, short enough that a stray
@@ -2652,7 +2692,8 @@ class GameEngine:
         for attr in ("_reaction_level", "_reaction_clean_blocks",
                      "_reaction_best_ms", "_force_pilot_levels",
                      "_buzz_hunt_start_ms",
-                     "_buzz_hunt_window_level", "_rhythm_buzz_lead_ms"):
+                     "_buzz_hunt_window_level", "_rhythm_buzz_lead_ms",
+                     "_srt_musical_experience"):
             if hasattr(self, attr):
                 try:
                     delattr(self, attr)
@@ -3854,6 +3895,18 @@ class GameEngine:
             rs.refresh()
         self.screen_obj = rs
 
+    def show_srt_setup(self) -> None:
+        """The SRT's setup screen: timing group, learning interval,
+        sequence and saved setups, read fresh from the setups file."""
+        sc = (self._screens or {}).get("srt_setup")
+        if sc is None:
+            # A trimmed test engine: run the current setup directly.
+            self.begin_srt_block()
+            return
+        if hasattr(sc, "enter"):
+            sc.enter()
+        self.screen_obj = sc
+
     def show_results(self) -> None:
         rs = self._screens["results"]
         # When the between-blocks card went up. A scheduled rest is
@@ -3888,6 +3941,10 @@ class GameEngine:
         # start, so its "starter" is the song screen. One press still
         # lands on rhythm's own prep, same as every other mode.
         "rhythm": "show_rhythm_setup",
+        # The SRT opens on its setup screen from the menu and from
+        # Play all alike: the timing group is the lab's between-group
+        # condition, so it is confirmed for every participant.
+        "srt": "show_srt_setup",
     }
 
     def block_starter(self, mode_key: str):
@@ -4343,6 +4400,81 @@ class GameEngine:
                         f"window_s={windows[level - 1]}"),
                 hand=self.hand_mode)
         self.screen_obj = self._screens["gameplay"]
+
+    def begin_srt_block(self) -> None:
+        """SRT block: the lab's serial reaction time task, Welber
+        Marinovic's PsychoPy script replicated trial for trial. The
+        research case and every timing rule live in modes/srt.py.
+
+        The setup (timing group, learning interval, sequence) is the
+        current one in the setups file the setup screen writes
+        (game/srt_setup.py), so a group's timing carries from one
+        participant to the next. The protocol counts come from the srt
+        block of the config. Musical experience is asked on the setup
+        screen and belongs to this login only.
+
+        Renders on its own black screen, and has no GET READY card:
+        the script opens on its own SPACE screens, and a countdown in
+        front of them would be a screen the lab's task never had.
+        """
+        from .modes.srt import SRTMode
+        from .srt_setup import SetupStore, protocol_counts, store_path
+        setup = SetupStore(store_path(self.cfg)).current
+        counts = protocol_counts(self.cfg)
+        seed_cfg = self.cfg.get("srt.seed", None)
+        try:
+            seed = (int(seed_cfg) if seed_cfg is not None
+                    else random.randrange(2 ** 32))
+        except (TypeError, ValueError):
+            seed = random.randrange(2 ** 32)
+        tone_dir = self.cfg.resolve_path(
+            self.cfg.get("srt.tone_dir", "assets/srt"))
+        names = (self.cfg.get("srt.tone_files", None)
+                 or ["V.wav", "B.wav", "N.wav", "M.wav"])
+        labels = self.cfg.get("srt.labels", None)
+        self.mode = SRTMode(
+            engine=self,
+            setup=setup,
+            random_trials=counts["random_trials"],
+            learning_blocks=counts["learning_blocks"],
+            learning_reps=counts["learning_reps"],
+            random_isi_ms=counts["random_isi_ms"],
+            first_wait_ms=counts["first_wait_ms"],
+            flash_ms=int(self.cfg.get("srt.flash_ms", 100)),
+            deadline_ms=int(self.cfg.get("srt.deadline_ms", 2500)),
+            anticipation_ms=int(self.cfg.get("srt.anticipation_ms", 100)),
+            miss_pause_ms=int(self.cfg.get("srt.miss_pause_ms", 200)),
+            feedback_ms=counts["feedback_ms"],
+            recall_select_ms=int(self.cfg.get("srt.recall_select_ms", 150)),
+            saved_hold_s=float(self.cfg.get("srt.saved_hold_s", 1.5)),
+            stim_code=int(self.cfg.get("srt.stim_code", 30)),
+            response_markers=bool(
+                self.cfg.get("srt.response_markers", False)),
+            tone_files=[Path(tone_dir) / str(n) for n in names],
+            tone_volume=float(self.cfg.get("srt.tone_volume", 1.0)),
+            tone_lead_ms=float(self.cfg.get("srt.tone_lead_ms", 0.0)),
+            labels=(list(labels) if isinstance(labels, (list, tuple))
+                    else None),
+            musical_experience=getattr(self, "_srt_musical_experience",
+                                       None),
+            seed=seed,
+            demo_trials=self._test_mode_trials(),
+        )
+        self._begin_block("srt")
+        # The seed drew the random blocks and the random group's
+        # intervals, so it lives next to the data it shaped.
+        if self.raw_logger:
+            self.raw_logger.queue_event(
+                "srt_config",
+                detail=(f"seed={seed} group={setup.group} "
+                        f"isi_ms={int(setup.isi_ms)} "
+                        f"seq={'-'.join(str(q) for q in setup.sequence)} "
+                        f"setup={setup.name}"),
+                hand=self.hand_mode)
+        sc = (self._screens or {}).get("srt")
+        if sc is not None and hasattr(sc, "on_block_start"):
+            sc.on_block_start()
+        self.screen_obj = sc or (self._screens or {}).get("gameplay")
 
     def begin_pattern_block(self) -> None:
         """Patterns block: SRTT motor sequence learning, one engine
@@ -5174,6 +5306,9 @@ class GameEngine:
         if kind == "reaction":
             self.begin_reaction_block()
             return
+        if kind == "srt":
+            self.begin_srt_block()
+            return
         if kind == "pattern":
             self.begin_pattern_block()
             return
@@ -5826,6 +5961,16 @@ class GameEngine:
                     summary["echo"] = stats_fn()
                 except Exception as e:
                     log.warning("echo block stats failed: %s", e)
+        # SRT context: the setup, each phase and learning block, the
+        # learning measures and the recall. The phases live in the
+        # mode's own rows, so hits and misses cannot rebuild them.
+        if self.current_block == "srt" and self.mode is not None:
+            stats_fn = getattr(self.mode, "block_stats", None)
+            if callable(stats_fn):
+                try:
+                    summary["srt"] = stats_fn()
+                except Exception as e:
+                    log.warning("srt block stats failed: %s", e)
         # Adaptive-only context.
         bpm_min = getattr(self, "_block_bpm_min", None)
         bpm_max = getattr(self, "_block_bpm_max", None)
@@ -7509,6 +7654,7 @@ class GameEngine:
             except Exception as e:
                 log.warning("Could not save metadata on finish: %s", e)
         self._close_loggers()
+        self._export_mode_files()
         # EEG blocks: events.tsv and the code table, from the closed
         # raw.csv, before the report reads the folder.
         self._export_eeg_events()
@@ -7592,6 +7738,7 @@ class GameEngine:
         except Exception as e:
             log.warning("Could not save abandoned metadata: %s", e)
         self._close_loggers()
+        self._export_mode_files()
         self._export_eeg_events()
         # Partial blocks still get the researcher outputs; the report's
         # status field says "abandoned" so nobody mistakes it for a
@@ -9051,6 +9198,30 @@ class GameEngine:
             self.session.save(self.session_paths.metadata_json)
         except Exception as e:
             log.warning("periodic metadata save failed: %s", e)
+
+    def log_srt_trial(self, row: dict, hit: bool) -> None:
+        """One SRT trial in trials.csv, under the same context columns
+        as every other mode. Counts toward hits and misses for the
+        results ring and nothing else: no score, no streak, no cue and
+        no feedback word, because the SRT draws its practice feedback
+        itself, exactly as the lab's script did, and nothing at all in
+        the learning and post-test blocks."""
+        if hit:
+            self.hits += 1
+        else:
+            self.misses += 1
+        if not self.trial_logger:
+            return
+        out = {
+            "participant": self.session.participant,
+            "age": self.session.age,
+            "hand": self.hand_mode,
+            "block": self.current_block,
+            "phase": getattr(self, "_current_phase", "") or "",
+        }
+        out.update(self._trial_context(self.hit_streak))
+        out.update(row)
+        self.trial_logger.write(out)
 
     def log_reaction_event(self, trial_id: int, lane: int | None,
                             label: str, error_type: str,

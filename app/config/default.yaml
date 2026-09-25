@@ -871,6 +871,56 @@ reaction:
   # block can still be reproduced afterwards.
   seed: null
 
+srt:
+  # The lab's serial reaction time task, Welber Marinovic's PsychoPy
+  # script (archive/Webler EEG past program/SRT_Sequence_learning_
+  # Final_v2.py) replicated trial for trial in modes/srt.py. It is the
+  # Reaction card on the hub. The healthy study battery still plays
+  # the reaction block above; the EEG lab's Play all plays this.
+  #
+  # The part the lab varies between groups (timing group, learning
+  # interval, sequence) is the SETUP, chosen on the setup screen the
+  # card opens and kept in config/srt_setups.json beside the sessions,
+  # where every build finds it. Everything below is the lab's
+  # protocol, as the script has it: change a number here and the task
+  # is no longer the lab's.
+  random_trials: 48        # practice and post-test, 12 per square
+  learning_blocks: 8
+  learning_reps: 10        # sequence repeats per learning block
+  random_isi_ms: 500       # random blocks always run at 500 ms
+  first_wait_ms: 1000      # before the first trial of every block
+  flash_ms: 100            # the red square
+  deadline_ms: 2500        # after the flash: 2.6 s from onset in all
+  anticipation_ms: 100     # presses this close before a flash count
+  miss_pause_ms: 200
+  feedback_ms: 200         # practice only: Correct, Incorrect, Miss!
+  recall_select_ms: 150    # yellow flash on each recalled square
+  saved_hold_s: 1.5        # "Sequence recorded" before the thank you
+  # The lab's four tones, one per square left to right (assets/srt).
+  tone_dir: assets/srt
+  tone_files: [V.wav, B.wav, N.wav, M.wav]
+  tone_volume: 1.0
+  # Play the tone this many ms before the flash is drawn. The script
+  # played it as the flash was drawn (0). Set it to the machine's
+  # measured tone delay (latency.tone_ms) to make the sound and the
+  # red square reach the participant together.
+  tone_lead_ms: 0
+  # EEG: the byte on the flip that shows the red square, the one the
+  # lab's pipeline epochs on. Nothing else per trial unless
+  # response_markers is on (100, 110 and 120 bands, and 130 for a
+  # miss); every RT is in the exported CSV either way.
+  stim_code: 30
+  response_markers: false
+  # Words under the squares. Empty: V B N M on a keyboard, the finger
+  # names on the pads.
+  labels: null
+  # Where the setups live. Empty means config/srt_setups.json under
+  # the data root. Tests point it at a temporary folder.
+  setups_file: null
+  # Set an integer to redraw a session's random blocks and random
+  # intervals exactly. Empty draws a fresh seed and records it.
+  seed: null
+
 pattern:
   # Patterns mode: the patient records "takes" of a piano riff, one
   # key lighting at a time, press it and the next follows half a

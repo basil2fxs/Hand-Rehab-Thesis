@@ -545,6 +545,36 @@ class AudioEngine:
         except Exception:
             return False
 
+    def play_sample(self, path: str | Path, volume: float = 1.0) -> bool:
+        """Play one short file as a stimulus: the SRT's lane tones, the
+        lab's own wav files. Cached by path, and played on any free
+        channel so two tones can overlap, as the lab script's one
+        PsychoPy Sound per lane could. Scaled by the master volume
+        only: the tone is the stimulus, not a cue the cue sliders
+        should be able to turn down. False, never an exception, when
+        the mixer is down or the file is missing."""
+        if not self._initialised or pygame is None:
+            return False
+        p = Path(path)
+        if not hasattr(self, "_sample_cache"):
+            self._sample_cache: dict[str, object] = {}
+        snd = self._sample_cache.get(str(p))
+        if snd is None:
+            if not p.exists():
+                return False
+            try:
+                snd = pygame.mixer.Sound(str(p))
+            except Exception as e:
+                log.warning("Could not load sample %s: %s", p, e)
+                return False
+            self._sample_cache[str(p)] = snd
+        try:
+            snd.set_volume(self._clamp01(self.master_volume * volume))
+            snd.play()
+            return True
+        except Exception:
+            return False
+
     def stop_speech(self) -> None:
         if not self._initialised or pygame is None:
             return
