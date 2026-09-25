@@ -3,7 +3,7 @@
 <p align="center">A hand device and a laptop game for measuring and training finger movement.<br>Four force pads and four vibration motors per hand, an Arduino Nano streaming force over USB,<br>ten games, and every press logged with its timing and its force.</p>
 <p align="center"><a href="https://github.com/basil2fxs/Hand-Rehab-Thesis/actions/workflows/build-apps.yml"><img alt="build-apps" src="https://github.com/basil2fxs/Hand-Rehab-Thesis/actions/workflows/build-apps.yml/badge.svg"></a> <img alt="Runs on Windows and macOS" src="https://img.shields.io/badge/runs%20on-Windows%20%7C%20macOS-2563eb"> <img alt="Python 3.10 or newer" src="https://img.shields.io/badge/python-3.10%2B-3776ab"> <img alt="Curtin University thesis, 2026" src="https://img.shields.io/badge/thesis-Curtin%202026-0f172a"></p>
 <p align="center"><a href="#install">Install</a> &middot; <a href="#the-ten-games">Games</a> &middot; <a href="#troubleshooting">Troubleshooting</a> &middot; <a href="#data">Data</a> &middot; <a href="#the-lab-folder">Lab folder</a></p>
-<p align="center"><img src="app/docs/images/hub.png" width="49%" alt="The hub, with all ten games"> <img src="app/docs/images/reaction.png" width="49%" alt="Reaction, one trial lit"></p>
+<p align="center"><img src="app/docs/images/hub.png" width="88%" alt="The hub, where each game is picked"></p>
 
 ## Where things are
 
@@ -18,6 +18,8 @@
 | [`archive/`](archive) | Old material kept for reference, nothing live |
 
 ## How it works
+
+<p align="center"><img src="app/docs/images/device.jpg" width="46%" alt="The hand device: a drawing of the board and pads, and three photos of the build"><br><sub>The device. The numbered parts are listed in <a href="app/arduino">app/arduino</a>.</sub></p>
 
 ```mermaid
 flowchart LR
@@ -58,10 +60,23 @@ running". On macOS auto-start turns itself on at the first launch from Applicati
 
 ## The ten games
 
+<table>
+<tr>
+<td align="center" width="33%"><img src="app/docs/images/adaptive.png" alt="Adaptive in play, the middle finger's lane lit"><br><sub><b>Adaptive</b>, the lit lane is the finger to press</sub></td>
+<td align="center" width="33%"><img src="app/docs/images/chords.png" alt="Chords in play, four lanes lit as one chord"><br><sub><b>Chords</b>, press every lit lane together</sub></td>
+<td align="center" width="33%"><img src="app/docs/images/rhythm.png" alt="Rhythm in play, notes falling towards the lanes"><br><sub><b>Rhythm</b>, notes fall onto the beat</sub></td>
+</tr>
+<tr>
+<td align="center" width="33%"><img src="app/docs/images/force_pilot.png" alt="Force Pilot in play, the force trace inside the corridor"><br><sub><b>Force Pilot</b>, keep the dot inside the corridor</sub></td>
+<td align="center" width="33%"><img src="app/docs/images/syllables.png" alt="Syllables in play, a word split into its parts"><br><sub><b>Syllables</b>, a word split into its sounds</sub></td>
+<td align="center" width="33%"><img src="app/docs/images/results.png" alt="The results screen after a game"><br><sub><b>Results</b>, grade, key numbers, next game</sub></td>
+</tr>
+</table>
+
 | Game | What the patient does, and what it measures |
 | --- | --- |
 | **Reaction** | The lab's sequence task: press the finger whose square flashes red. Measures sequence learning. |
-| **Adaptive** | The same, with the pace following the player. Measures speed at a held difficulty. |
+| **Adaptive** | Press the finger whose lane lights up, at a pace that follows the player. Measures speed at a held difficulty. |
 | **Muscle Memory** | Play a piano riff, take after take. Measures learning of a repeated sequence. |
 | **Chords** | Press two to four fingers at once. Measures moving fingers together and holding the rest still. |
 | **Rhythm** | Press on the beat of a song. Measures timing error against the beat. |

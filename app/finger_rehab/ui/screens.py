@@ -6131,7 +6131,10 @@ class ResultsScreen(Screen):
             int((FONT_H1 + 6) * self.layout.font_scale), bold=True)
         title_surf = title_font.render(self.RESULTS_TITLE, True,
                                        self.theme.foreground)
-        title_rect = title_surf.get_rect(center=(cx, 80))
+        # Centred at 90, not 80: at 80 the music pill's right end
+        # (x 514, bottom 65) sat on the top of the G (ink from x 480,
+        # y 61). At 90 the ink starts at 71.
+        title_rect = title_surf.get_rect(center=(cx, 90))
         surf.blit(title_surf, title_rect)
         bar_w = max(72, title_rect.w // 3)
         bar_rect = pygame.Rect(0, 0, bar_w, 4)
@@ -6536,7 +6539,9 @@ class ResultsScreen(Screen):
         self._draw_results_header(surf, cx, block_name, accent)
         cards = self._stat_cards(entry)
         if self.show_details:
-            self._draw_grade_ring(surf, (cx, 240), 90, grade, blurb,
+            # 246 keeps the ring's glow off the title's accent rule
+            # (bottom 133) and the blurb still clears the cards at 380.
+            self._draw_grade_ring(surf, (cx, 246), 90, grade, blurb,
                                   grade_colour, entry)
             self._draw_details(surf, cards, entry)
         else:

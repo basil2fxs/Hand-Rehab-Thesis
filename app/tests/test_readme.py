@@ -145,11 +145,15 @@ class ReadmeExistsTests(unittest.TestCase):
                          "README.txt came back; README.md replaced it")
 
     def test_it_stays_short(self):
-        lines = _readme().splitlines()
+        # Lines of text only. The header and the screenshot gallery are
+        # HTML that GitHub draws as pictures, not text anyone reads.
+        lines = [ln for ln in _readme().splitlines()
+                 if not ln.lstrip().startswith("<")]
         # Two deliverables, one page. The bound moves when a feature
         # does and not for padding.
         self.assertLess(len(lines), 162,
-                        f"README is {len(lines)} lines; keep it under 150")
+                        f"README has {len(lines)} lines of text; keep it "
+                        f"under 162")
 
     def test_every_section_is_there_in_order(self):
         found = re.findall(r"^## (.+)$", _readme(), re.M)
@@ -297,12 +301,15 @@ class LinksAndImagesResolveTests(unittest.TestCase):
         return [t for t in found
                 if not t.startswith(("http://", "https://", "#"))]
 
-    def test_both_screenshots_are_committed(self):
-        """One of the hub and one of a game in play. Rendered from the
-        real screens, so a screenshot that vanishes is a README opening
-        on a broken image."""
+    # The hub up top, then the games as they look in play. Rendered
+    # from the real screens by a simulated player, so a screenshot that
+    # vanishes is a README opening on a broken image.
+    SCREENSHOTS = ("hub.png", "adaptive.png", "chords.png", "rhythm.png",
+                   "force_pilot.png", "syllables.png", "results.png")
+
+    def test_the_screenshots_are_committed(self):
         text = _readme()
-        for name in ("hub.png", "reaction.png"):
+        for name in self.SCREENSHOTS:
             shot = REPO / "docs" / "images" / name
             with self.subTest(shot=name):
                 self.assertTrue(shot.is_file(),
