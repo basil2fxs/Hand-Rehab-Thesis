@@ -93,6 +93,23 @@ def _bare_engine_for_summary():
     return eng
 
 
+class PeakStreakTests(unittest.TestCase):
+    """The peak is updated from the streak before each trial, so a best
+    run still going when the block ends has to be finished off."""
+
+    def test_a_best_run_that_ends_the_block_counts_in_full(self) -> None:
+        eng = _bare_engine_for_summary()
+        eng.hits, eng._block_peak_streak, eng.hit_streak = 5, 4, 5
+        s = eng._build_block_summary("completed")
+        self.assertEqual(s["peak_streak"], 5)
+
+    def test_an_earlier_longer_run_still_wins(self) -> None:
+        eng = _bare_engine_for_summary()
+        eng._block_peak_streak, eng.hit_streak = 7, 2
+        s = eng._build_block_summary("completed")
+        self.assertEqual(s["peak_streak"], 7)
+
+
 class BlockSummaryPerLaneTests(unittest.TestCase):
 
     def test_per_lane_block_has_rt_stats_and_rates(self) -> None:

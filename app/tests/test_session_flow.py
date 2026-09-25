@@ -511,6 +511,16 @@ _MODE_CASES = {
                                 "n_reversals": 6}},
         "span": {"max_correct": 4},
         "gap": {"threshold": {}}}}, "LOCALISATION"),
+    "echo": ({"echo": {"rule": "simon", "span": 6, "total_items": 22,
+                       "games_played": [{"life_used_at": None}],
+                       "total_correct": 4, "n_trials": 6}},
+             "LONGEST ECHO"),
+    "srt": ({"srt": {"sequence_effect_ms": 48.0, "accuracy": 0.96,
+                     "recall": {"n_correct": 6, "of": 10},
+                     "practice": {"median_rt_ms": 430.0},
+                     "learning": [{"median_rt_ms": 372.0}],
+                     "posttest": {"median_rt_ms": 420.0}}},
+            "LEARNING EFFECT"),
     "classic": ({}, "SCORE"),
     "rhythm": ({}, "SCORE"),
 }
@@ -605,6 +615,58 @@ class SlimEndScreenTests(unittest.TestCase):
                     full_labels = [lbl for lbl, _v in full]
                     for lbl in slim_labels:
                         self.assertIn(lbl, full_labels)
+        finally:
+            pygame.quit()
+
+    def test_no_mode_repeats_a_card(self) -> None:
+        """Two cards with one label say one number twice and push a
+        real one out of the More detail row. HIT RATE did, twice: left
+        behind when _hit_rate_card replaced NOT CAUGHT."""
+        import pygame
+        try:
+            for block, (summary, _headline) in _MODE_CASES.items():
+                with self.subTest(block=block):
+                    r, _e = self._results(block, summary)
+                    labels = [c[0] for c in r._stat_cards(1.0)]
+                    self.assertEqual(len(labels), len(set(labels)),
+                                     labels)
+        finally:
+            pygame.quit()
+
+    def test_the_repeats_went_without_moving_the_finished_screen(
+            self) -> None:
+        """SLIM_CARDS picks by index, so the replacements had to take
+        the repeats' own places."""
+        import pygame
+        want = {"adaptive": ["TOP PACE", "FINAL PACE", "SCORE"],
+                "classic": ["SCORE", "HIT RATE", "AVG RT"],
+                "rhythm": ["SCORE", "HIT RATE", "AVG OFFSET"]}
+        try:
+            for block, labels in want.items():
+                with self.subTest(block=block):
+                    r, _e = self._results(block, _MODE_CASES[block][0])
+                    slim = r._slim_cards(r._stat_cards(1.0))
+                    self.assertEqual([c[0] for c in slim], labels)
+        finally:
+            pygame.quit()
+
+    def test_the_replacement_cards_read_the_block(self) -> None:
+        import pygame
+
+        def values(r):
+            return {c[0]: c[1] for c in r._stat_cards(1.0)}
+        try:
+            r, _e = self._results("adaptive", {"bpm_final": 74.0,
+                                               "bpm_max": 88.0,
+                                               "bpm_min": 52.0})
+            self.assertEqual(values(r)["LOWEST PACE"], "52 BPM")
+            r, _e = self._results("classic", {"peak_streak": 12})
+            self.assertEqual(values(r)["BEST STREAK"], "12")
+            # Drawn before the summary is written: the longer of the
+            # recorded peak and the run still going (hit_streak 9).
+            r, e = self._results("classic", {})
+            e._block_peak_streak = 4
+            self.assertEqual(values(r)["BEST STREAK"], "9")
         finally:
             pygame.quit()
 

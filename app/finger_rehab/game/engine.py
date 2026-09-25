@@ -5768,7 +5768,11 @@ class GameEngine:
             "misses": self.misses,
             "hit_rate": round(hit_rate, 3),
             "final_score": self.score,
-            "peak_streak": getattr(self, "_block_peak_streak", 0),
+            # The peak is taken from the streak BEFORE each trial, so a
+            # best run still going when the block ends is one short
+            # there; the live count finishes it.
+            "peak_streak": max(getattr(self, "_block_peak_streak", 0),
+                               getattr(self, "hit_streak", 0)),
             "avg_rt_ms": avg_rt_ms,
             "duration_s": duration_s,
             # Wrong-finger activity. classic / adaptive: trials where a

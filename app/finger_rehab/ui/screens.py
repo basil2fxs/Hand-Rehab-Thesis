@@ -5576,6 +5576,20 @@ class ResultsScreen(Screen):
             return "D", "Big effort. Rest, then again"
         return "E", "Every press was practice. Rest up"
 
+    def _best_streak(self) -> int | None:
+        """The longest run of hits in a row this block: the block
+        summary's peak_streak, or the engine's live counts when the
+        results are drawn before the summary is written."""
+        summary = getattr(getattr(self.engine, "session", None),
+                          "block_summary", None)
+        if (isinstance(summary, dict)
+                and summary.get("peak_streak") is not None):
+            return int(summary["peak_streak"])
+        counts = [getattr(self.engine, "_block_peak_streak", None),
+                  getattr(self.engine, "hit_streak", None)]
+        counts = [int(c) for c in counts if isinstance(c, (int, float))]
+        return max(counts) if counts else None
+
     def _hit_rate_card(self) -> tuple:
         """HIT RATE, the share of trials that landed. It replaced a
         NOT CAUGHT count in red: the same information, said as what
@@ -5661,6 +5675,8 @@ class ResultsScreen(Screen):
                 return {
                     "bpm_final": round(float(adapter.bpm), 1),
                     "bpm_max": getattr(self.engine, "_block_bpm_max",
+                                       None),
+                    "bpm_min": getattr(self.engine, "_block_bpm_min",
                                        None),
                 }
             except (TypeError, ValueError):
@@ -7048,8 +7064,14 @@ class ResultsScreen(Screen):
             # hit rate already said.
             top = adp.get("bpm_max")
             fin = adp.get("bpm_final")
+            low = adp.get("bpm_min")
             top_str = f"{float(top):.0f} BPM" if top is not None else "n/a"
             fin_str = f"{float(fin):.0f} BPM" if fin is not None else "n/a"
+            low_str = f"{float(low):.0f} BPM" if low is not None else "n/a"
+            # The last card was a second HIT RATE, left over from when
+            # _hit_rate_card replaced NOT CAUGHT. The lowest pace
+            # completes the range the report prints beside top and
+            # final.
             cards = [
                 ("SCORE", f"{int(round(self.engine.score * entry))}",
                  self.theme.accent),
@@ -7058,10 +7080,15 @@ class ResultsScreen(Screen):
                 ("TOP PACE", top_str, self.theme.success),
                 self._hit_rate_card(),
                 ("FINAL PACE", fin_str, self.theme.foreground),
-                ("HIT RATE", f"{rate * 100 * entry:.0f}%",
-                 self.theme.foreground),
+                ("LOWEST PACE", low_str, self.theme.foreground),
             ]
         else:
+            # A second HIT RATE used to sit at index 3 (see the adaptive
+            # branch). The best streak is the one number here that hits
+            # and hit rate cannot give back.
+            streak = self._best_streak()
+            streak_str = (f"{int(round(streak * entry))}"
+                          if streak is not None else "n/a")
             cards = [
                 ("SCORE", f"{int(round(self.engine.score * entry))}",
                  self.theme.accent),
@@ -7069,7 +7096,7 @@ class ResultsScreen(Screen):
                  self.theme.success),
                 ("HIT RATE", f"{rate * 100 * entry:.0f}%",
                  self.theme.foreground),
-                self._hit_rate_card(),
+                ("BEST STREAK", streak_str, self.theme.success),
                 (avg_label, avg_str, self.theme.foreground),
                 (best_label, best_str, self.theme.success),
             ]
