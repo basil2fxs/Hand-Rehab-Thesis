@@ -1,23 +1,21 @@
-# Finger Rehab
-
-A hand device and a laptop game for measuring and training finger movement. Four force pads and four
-vibration motors sit under the fingers of each hand, wired to an Arduino Nano that streams force to the
-laptop over USB. Ten games run on that signal, and every press is logged with its timing and its force.
-
-![The hub, with all ten games](app/docs/images/hub.png)
-![Reaction, one trial lit](app/docs/images/reaction.png)
+<p align="center"><img src="app/assets/icons/app_icon_256.png" width="96" alt="Finger Rehab icon"></p>
+<h1 align="center">Finger Rehab</h1>
+<p align="center">A hand device and a laptop game for measuring and training finger movement.<br>Four force pads and four vibration motors per hand, an Arduino Nano streaming force over USB,<br>ten games, and every press logged with its timing and its force.</p>
+<p align="center"><a href="https://github.com/basil2fxs/Hand-Rehab-Thesis/actions/workflows/build-apps.yml"><img alt="build-apps" src="https://github.com/basil2fxs/Hand-Rehab-Thesis/actions/workflows/build-apps.yml/badge.svg"></a> <img alt="Runs on Windows and macOS" src="https://img.shields.io/badge/runs%20on-Windows%20%7C%20macOS-2563eb"> <img alt="Python 3.10 or newer" src="https://img.shields.io/badge/python-3.10%2B-3776ab"> <img alt="Curtin University thesis, 2026" src="https://img.shields.io/badge/thesis-Curtin%202026-0f172a"></p>
+<p align="center"><a href="#install">Install</a> &middot; <a href="#the-ten-games">Games</a> &middot; <a href="#troubleshooting">Troubleshooting</a> &middot; <a href="#data">Data</a> &middot; <a href="#the-lab-folder">Lab folder</a></p>
+<p align="center"><img src="app/docs/images/hub.png" width="49%" alt="The hub, with all ten games"> <img src="app/docs/images/reaction.png" width="49%" alt="Reaction, one trial lit"></p>
 
 ## Where things are
 
-```
-Local_Runner.command   start the game on this Mac, newest code (double-click)
-analysis/              the notebook: this is where results get analysed
-sessions/              recorded sessions, one folder per game
-Installers/            what people install: Windows exe, macOS dmg
-EEG_Lab/               copy this whole folder to the lab PC
-app/                   the code, config, assets, tests, build scripts
-archive/               old material kept for reference, nothing live
-```
+| Folder | What is in it |
+| --- | --- |
+| [`Installers/`](Installers) | What people install: the Windows setup and the macOS disk image |
+| [`EEG_Lab/`](EEG_Lab) | Copy this whole folder to the lab PC |
+| [`analysis/`](analysis) | The notebook: this is where results get analysed |
+| `sessions/` | Recorded sessions, one folder per game (kept out of git) |
+| [`app/`](app) | The code, config, assets, tests and build scripts |
+| [`Local_Runner.command`](Local_Runner.command) | Start the game on this Mac from the newest code (double-click) |
+| [`archive/`](archive) | Old material kept for reference, nothing live |
 
 ## How it works
 
@@ -48,7 +46,7 @@ Two installers come out of the build-apps run on GitHub (Actions tab, latest run
   because the app is not notarised: System Settings, Privacy & Security, Open Anyway. Once is enough.
 
 Local builds: `app\builds\build_app.bat` (Windows), `app/builds/build_app.sh` (macOS). From source: `pip install -r
-requirements.txt`, then `python app/main.py`; tests are `cd app && python -m pytest tests`. Nothing plugged in? The keyboard
+app/requirements.txt`, then `python app/main.py`; tests are `cd app && python -m pytest tests`. Nothing plugged in? The keyboard
 stands in: `J K L ;` right hand, `F D S A` left, index to little. Force Pilot and Buzz Hunt need the device.
 
 ## When a board is plugged in

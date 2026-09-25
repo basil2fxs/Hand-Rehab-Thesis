@@ -34,8 +34,10 @@ LAB_FOLDER = REPO.parent / "EEG_Lab"
 
 def repo_file(rel: str) -> Path:
     """Build files live under app/; .github, .gitignore and README.md
-    sit at the top level beside it. Try both."""
-    for base in (REPO, REPO.parent):
+    sit at the top level beside it. Try both, the top level first for
+    those three, since app/ has a short README of its own."""
+    top = rel.split("/")[0] in (".github", ".gitignore", "README.md")
+    for base in ((REPO.parent, REPO) if top else (REPO, REPO.parent)):
         p = base / rel
         if p.exists():
             return p

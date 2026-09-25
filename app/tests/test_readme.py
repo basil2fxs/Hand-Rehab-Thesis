@@ -21,9 +21,10 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 # README.md sits at the top level beside app/: it is the front door of
-# the whole thing, not of the package.
-README = (REPO / "README.md" if (REPO / "README.md").is_file()
-          else REPO.parent / "README.md")
+# the whole thing, not of the package. app/ has a short README of its own
+# for whoever changes the code, so the top level is looked at first.
+README = (REPO.parent / "README.md" if (REPO.parent / "README.md").is_file()
+          else REPO / "README.md")
 ASSET_READMES = sorted((REPO / "assets").glob("*/README.md"))
 # The short instruction files this README points at or sits beside.
 SIDE_DOCS = [
