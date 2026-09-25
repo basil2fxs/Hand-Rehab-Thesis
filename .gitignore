@@ -66,6 +66,8 @@ app/config/user_settings.yaml
 app/config/eeg_port.yaml
 # This machine's measured sound and buzz delays (scripts/audio_latency.py).
 app/config/latency_profile.yaml
+# The SRT setups saved on this machine (the Reaction card's setup screen).
+app/config/srt_setups.json
 
 # The Patterns sequence file a researcher loaded on this machine and its
 # pointer. Per machine, not part of the app.

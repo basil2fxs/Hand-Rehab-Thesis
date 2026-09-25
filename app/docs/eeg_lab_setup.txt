@@ -7,7 +7,8 @@ neutral feedback (one ring glyph 800 ms after the press, no words, no
 chime), FRN bytes in chords and Force Pilot. The Reaction card is the
 lab's own SRT task (Welber's PsychoPy script, replicated trial for
 trial), and Play all runs it once in place of the study's two
-Reaction blocks. The folder that goes to the lab is
+Reaction blocks: about 54 minutes from login, the SRT about 15 of
+them. The folder that goes to the lab is
 EEG_Lab at the top of the project (FingerRehab-EEGLab.zip on CI):
 Finger Rehab.exe, eeg_lab.yaml, run_in_psychopy.py, README.txt, a
 source/ copy, and sessions/ with an empty eeg/ folder for ActiView's

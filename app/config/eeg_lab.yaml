@@ -72,9 +72,12 @@ protocol:
       swap_once:
         reaction: srt
       # A lab sitting is not the healthy study's sitting, so it keeps
-      # its own id. Its clock allows for the SRT's 16 minutes in
-      # place of two short Reaction blocks: an estimate until the lab
-      # rig is timed with scripts/measure_battery.py.
+      # its own id. Its clock allows for the SRT's 15 minutes in place
+      # of two short Reaction blocks. Timed headless with
+      # scripts/measure_battery.py --config config/eeg_lab.yaml: median
+      # 54.2 min over ten simulated sittings (54.0 to 54.4, both
+      # orders), the SRT block 14.6 to 14.7 of it. Re-time it on the
+      # lab rig.
       id: eeg_lab_srt_v1
       budget_min: 57
       hard_stop_min: 62

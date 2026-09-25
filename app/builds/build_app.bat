@@ -69,4 +69,4 @@ if errorlevel 1 (
 echo.
 echo Build complete.
 echo Ready to run: builds\Windows\Finger Rehab.exe
-echo Lab install: copy the whole docs\lab_package folder to the lab PC.
+echo Lab install: copy the whole EEG_Lab folder to the lab PC.

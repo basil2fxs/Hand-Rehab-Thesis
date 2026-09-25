@@ -28,6 +28,9 @@ the reaction and rest floors of every mode are what set the time.
     python3 scripts/measure_battery.py --code P04 --dominant left
     python3 scripts/measure_battery.py --fps 60        coarser frames
     python3 scripts/measure_battery.py --repeats 10    the spread
+    python3 scripts/measure_battery.py --config config/eeg_lab.yaml
+                                  the EEG lab's sitting: the SRT once
+                                  in place of the two Reaction blocks
 
 ONE RUN IS A SAMPLE OF ONE. Several modes draw fresh material every
 block by design (their seed keys in config are empty so a participant
@@ -70,6 +73,17 @@ SAMPLE_HZ = 200.0
 LOGIN_S = 3 * 60.0
 QUICK_CAL_S = 2 * 60.0
 TRANSITION_S = 10.0
+
+# The SRT (the lab's task, played in the EEG lab's sitting) opens on
+# its setup card, where the researcher checks the group and presses
+# START, and between its blocks waits on SPACE screens the participant
+# reads at their own pace. Planning numbers, not measurements: the
+# longer screens are the instructions, "Block k of 8" is a glance.
+SRT_SETUP_S = 20.0
+SRT_READ_S = {"welcome": 8.0, "practice": 6.0, "main": 6.0,
+              "block": 3.0, "final": 5.0, "recall_intro": 4.0,
+              "thanks": 3.0}
+SRT_RECALL_ITEM_S = 1.5     # per item typed back at the recall
 
 
 def wait_before(step: dict) -> float:
@@ -186,6 +200,10 @@ class Participant:
         self.answered: set = set()
         self.pending: list[tuple[float, int, float]] = []   # (t, lane, hold)
         self._probe_phase_t0: float | None = None
+        # When each SRT screen was first seen, and when the next
+        # recalled item is due.
+        self._srt_seen: dict = {}
+        self._srt_next: float | None = None
 
     def begin_block(self) -> None:
         """A new block is about to open. Trial ids restart at 1 in
@@ -195,6 +213,8 @@ class Participant:
         inside a block to inject a learning drift) resets it here."""
         self.answered.clear()
         self.pending.clear()
+        self._srt_seen.clear()
+        self._srt_next = None
 
     def _rt(self) -> float:
         return max(0.18, self.rng.gauss(self.RT_S, 0.06))
@@ -366,6 +386,46 @@ class Participant:
             self.schedule(t, int(lane))
             t += 0.55
 
+    def _srt(self, m, now, eng) -> None:
+        """The lab's SRT: SPACE once each screen has been read, the
+        flashed finger a reaction time after the flash, then the
+        sequence typed back at a steady pace and submitted. SPACE and
+        ENTER are keys on the laptop, so they go in as key events; the
+        answers go in through the pads like every other press."""
+        step = m.step
+        if step is None:
+            return
+        if step.kind == "message":
+            key = ("srt_msg", m.step_i)
+            seen = self._srt_seen.setdefault(key, now)
+            if (key not in self.answered
+                    and now - seen >= SRT_READ_S.get(step.key, 4.0)):
+                self.answered.add(key)
+                _key_event(eng, "space")
+            return
+        if step.kind == "block":
+            tr = m.trial
+            if tr is None or tr.state != "respond":
+                return
+            key = ("srt", m.step_i, tr.index)
+            if key in self.answered:
+                return
+            self.answered.add(key)
+            onset = tr.onset if tr.onset is not None else tr.armed_flip
+            self.schedule(onset + self._rt(), m.square_to_lane(tr.square))
+            return
+        if step.kind == "recall":
+            if self._srt_next is None:
+                self._srt_next = now + SRT_RECALL_ITEM_S
+            if now < self._srt_next:
+                return
+            self._srt_next = now + SRT_RECALL_ITEM_S
+            if len(m.recalled) < len(m.seq):
+                self.hand.press(m.square_to_lane(m.seq[len(m.recalled)]),
+                                now, 0.12)
+            else:
+                _key_event(eng, "return")
+
     def _rhythm(self, m, now, eng) -> None:
         if not getattr(m, "_countdown_done", False):
             return
@@ -418,14 +478,49 @@ class Participant:
             self.schedule(max(now, t0) + self._rt() + 0.15, int(m.lane))
 
 
-def build_engine(code: str, dominant: str, data_dir: Path, rig: FakeRig):
+def _key_event(eng, name: str) -> None:
+    """One key press on the laptop, through the screen showing now,
+    the way the frame loop hands it over."""
+    import pygame
+    code = {"space": pygame.K_SPACE, "return": pygame.K_RETURN}[name]
+    sc = getattr(eng, "screen_obj", None)
+    if sc is not None:
+        sc.handle_event(pygame.event.Event(
+            pygame.KEYDOWN, {"key": code, "mod": 0, "unicode": "",
+                             "scancode": 0}))
+
+
+def confirm_srt_setup(eng, clock: "SimClock") -> float:
+    """Play all opens the SRT on its setup card; the researcher checks
+    the group and presses START (Enter). Returns the seconds that took,
+    0 when no card is up."""
+    sc = (getattr(eng, "_screens", None) or {}).get("srt_setup")
+    if sc is None or eng.screen_obj is not sc:
+        return 0.0
+    clock.t += SRT_SETUP_S
+    _key_event(eng, "return")
+    return SRT_SETUP_S
+
+
+def build_engine(code: str, dominant: str, data_dir: Path, rig: FakeRig,
+                 config: str | None = None):
     import pygame
     pygame.init()
     from finger_rehab.config import Config
     from finger_rehab.game.engine import GameEngine
-    cfg = Config.load()
+    if config:
+        path = Path(config)
+        if not path.is_absolute() and not path.exists():
+            path = Path(__file__).resolve().parents[1] / config
+        cfg = Config.load(path)
+    else:
+        cfg = Config.load()
     cfg.data["ui"]["resolution"] = [1280, 800]
     cfg.data["session"]["data_dir"] = str(data_dir)
+    # The SRT's saved setups stay out of the checkout too: the sitting
+    # plays the lab default.
+    cfg.data.setdefault("srt", {})["setups_file"] = str(
+        Path(data_dir).parent / "srt_setups.json")
     # Keep the calibration store out of the checkout. Force Pilot
     # probes the max press mid-block and saves the profile back, so
     # without this a headless run rewrites the tracked
@@ -511,7 +606,8 @@ def one_sitting(args, seed: int, quiet: bool = False) -> dict | None:
     _time.perf_counter = lambda: clock.t
     wall0 = _time.time()
     try:
-        eng = build_engine(args.code, args.dominant, tmp, rig)
+        eng = build_engine(args.code, args.dominant, tmp, rig,
+                           config=getattr(args, "config", None))
         ok, reason = eng.battery_available()
         if not ok:
             print(f"battery unavailable: {reason}")
@@ -525,7 +621,7 @@ def one_sitting(args, seed: int, quiet: bool = False) -> dict | None:
                   f"{args.dominant}: order {cell['mode_order']}",
                   flush=True)
         rows = []
-        transitions_s = 0.0
+        transitions_s = confirm_srt_setup(eng, clock)
         rests_s = 0.0
         while True:
             if not eng.block_is_running():
@@ -560,6 +656,7 @@ def one_sitting(args, seed: int, quiet: bool = False) -> dict | None:
             transitions_s += TRANSITION_S
             clock.t += TRANSITION_S + wait_s
             eng.continue_protocol()
+            transitions_s += confirm_srt_setup(eng, clock)
         blocks_s = sum(r[3] for r in rows)
         total_s = (LOGIN_S + QUICK_CAL_S + blocks_s + transitions_s
                    + rests_s)
@@ -639,6 +736,10 @@ def main() -> int:
     ap.add_argument("--keep", action="store_true",
                     help="keep the temp sessions folder")
     ap.add_argument("--seed", type=int, default=1)
+    ap.add_argument("--config", default=None,
+                    help="a YAML laid over the defaults, as main.py "
+                         "--config does; config/eeg_lab.yaml times the "
+                         "EEG lab's sitting")
     ap.add_argument("--repeats", type=int, default=1,
                     help="sittings to time, each on its own seed. The "
                          "battery draws fresh material per block, so one "

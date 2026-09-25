@@ -59,7 +59,7 @@ else
     echo "Ready to run: builds/Linux/Finger Rehab"
 fi
 
-# Keep the EEG lab package (docs/lab_package) current with every
+# Keep the EEG lab package (EEG_Lab, beside app/) current with every
 # build: scripts/build_lab_package.py refreshes eeg_lab.yaml, rebuilds
 # source/ and clears old text files. The exe can only be built on
 # Windows (or by CI), so pass a local Windows build through when one
@@ -69,4 +69,4 @@ if [[ -f "builds/Windows/Finger Rehab.exe" ]]; then
 else
     python3 scripts/build_lab_package.py
 fi
-echo "Copy the whole docs/lab_package folder to the lab PC."
+echo "Copy the whole EEG_Lab folder to the lab PC."
