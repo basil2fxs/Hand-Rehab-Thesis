@@ -1,12 +1,9 @@
 """What the quick calibration rest steps say when the device is quiet.
 
 The rest steps carry one state each: a headline of at most four words,
-a short line under it, a countdown ring and a picture of the hand. The
-picture is the only thing on the step that names a finger, so it has
-to agree with the headline. When no samples are arriving the headline
-is NO SIGNAL, and the last readings before the device went quiet are
-not news about the hand: a finger glowing amber under NO SIGNAL asks
-the player to lift something the screen cannot see.
+a short line under it, a countdown ring and a picture of the hand. They
+judge nothing, so no finger is named or lit whatever the pads read.
+When no samples are arriving the headline is NO SIGNAL.
 """
 from __future__ import annotations
 
@@ -28,7 +25,7 @@ def _screen(tmp_path):
     return eng, eng.screen_obj
 
 
-def test_a_loaded_lane_is_named_and_lit(tmp_path):
+def test_a_loaded_lane_is_neither_named_nor_lit(tmp_path):
     _eng, sc = _screen(tmp_path)
     t = 0.0
     for _ in range(120):
@@ -40,8 +37,7 @@ def test_a_loaded_lane_is_named_and_lit(tmp_path):
         sc.on_sample(t, tuple(down))
         t += 0.005
     sc.update(0.01)
-    assert sc._blockers() == [("right", 2)]
-    assert sc._rest_words()[0] == "LIFT YOUR RING FINGER"
+    assert sc._rest_words()[0] == "HANDS OFF THE DEVICE"
 
 
 def test_no_signal_lights_no_finger(tmp_path):
@@ -57,8 +53,7 @@ def test_no_signal_lights_no_finger(tmp_path):
         sc.on_sample(t, tuple(down))
         t += 0.005
     sc.update(0.01)
-    assert sc._blockers()                      # a lane really is loaded
-    sc._last_sample_at = 0.0                   # and then the board stops
+    sc._last_sample_at = 0.0                   # the board stops
     assert sc._stale()
     assert sc._rest_words()[0] == "NO SIGNAL"
     lit: list = []

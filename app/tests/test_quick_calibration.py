@@ -983,11 +983,13 @@ class TestPressCoaching:
 
 # ---- the quiet gate on the two rest captures -----------------------------
 
-class TestQuietGate:
-    """A rest capture taken while a finger is still down averages that
-    press into the zero, and every threshold in the session is then
-    built on it. So the capture starts itself, and only once the
-    sensors agree nothing is happening."""
+class TestRestStepsRunOnTheClock:
+    """The two rest steps give a heads-up on the ring, then capture,
+    whatever the pads read. An earlier gate that waited for the pads
+    to agree the player was still and in place stalled players who
+    were doing exactly what was asked, so nothing is judged now. The
+    only hold is a board sending nothing: there is nothing to capture.
+    """
 
     def _screen(self, tmp_path, hand="right"):
         eng = _engine(tmp_path, hand=hand)
@@ -1001,120 +1003,99 @@ class TestQuietGate:
             t += dt
         return t
 
-    def test_a_loaded_lane_blocks_the_capture_and_is_named(self, tmp_path):
-        from finger_rehab.ui import quick_calibration_screen as q
-        eng, sc = self._screen(tmp_path)
-        t = self._feed(sc, EMPTY)                 # establishes the floor
-        down = list(EMPTY)
-        down[2] += 40                             # ring finger still on
-        t = self._feed(sc, down, t0=t)
-        assert sc._blockers()[0] == ("right", 2)
-        assert not sc._settled()
-        for _ in range(30):
-            sc.update(0.02)
-        assert not sc._collecting
-        assert sc.phase == q.PHASE_OFF
+    def _heads_up_over(self, sc):
+        sc._phase_started_at -= sc._lead_s() + 0.1
 
-    def test_it_starts_itself_once_the_lane_comes_off(self, tmp_path):
+    def test_a_loaded_pad_does_not_hold_the_capture(self, tmp_path):
         eng, sc = self._screen(tmp_path)
         t = self._feed(sc, EMPTY)
         down = list(EMPTY)
-        down[2] += 40
-        t = self._feed(sc, down, t0=t)
+        down[2] += 40                             # ring finger still on
+        self._feed(sc, down, t0=t)
+        self._heads_up_over(sc)
         sc.update(0.02)
-        assert not sc._collecting
-        # Finger lifts, readings settle back onto the floor.
-        t = self._feed(sc, EMPTY, t0=t)
-        assert sc._settled()
-        sc.update(0.02)                           # starts the quiet clock
-        assert sc._quiet_since > 0
-        assert not sc._collecting                 # not long enough yet
-        sc._quiet_since -= q_hold() + 0.1
-        # The lead the step owes the player runs on top of the quiet
-        # clock, so a settled rig still waits it out. Backdated here
-        # because the point of this test is the QUIET gate; the lead
-        # has TestLeadAndRing to itself.
-        sc._phase_started_at -= sc._lead_s() + 0.1
+        assert sc._collecting
+        assert sc._rest_words()[0] == "HANDS OFF THE DEVICE"
+
+    def test_movement_does_not_hold_it(self, tmp_path):
+        eng, sc = self._screen(tmp_path)
+        t = 0.0
+        for k in range(90):                       # ramping, not still
+            sc.on_sample(t, tuple(v + k * 0.5 for v in EMPTY))
+            t += 0.01
+        self._heads_up_over(sc)
         sc.update(0.02)
         assert sc._collecting
 
-    def test_a_moving_reading_is_not_quiet(self, tmp_path):
-        eng, sc = self._screen(tmp_path)
-        t = 0.0
-        for k in range(90):                       # ramping, not settled
-            sc.on_sample(t, tuple(v + k * 0.5 for v in EMPTY))
-            t += 0.01
-        assert not sc._settled()
-        for _ in range(30):
-            sc.update(0.02)
-        assert not sc._collecting
-
-    def test_a_silent_device_says_so_instead_of_waiting(self, tmp_path):
-        eng, sc = self._screen(tmp_path)
-        assert sc._stale()
-        assert not sc._settled()
-        sc.update(0.02)
-        assert not sc._collecting
-
-    def test_the_resting_step_names_a_finger_that_is_pressing(self,
-                                                              tmp_path):
-        """On step 2 the zero is known, so a pad loaded past what the
-        maths can carry is a press, and it is named rather than
-        averaged in as "rest"."""
+    def test_the_resting_step_runs_even_with_a_finger_pressing(self,
+                                                               tmp_path):
         from finger_rehab.ui import quick_calibration_screen as q
         eng, sc = self._screen(tmp_path)
         _finish_rest_step(eng, sc, EMPTY)
         assert sc.phase == q.PHASE_REST
         lean = list(RESTING)
-        lean[1] += 90                             # middle finger pushing
+        lean[1] += 90
         self._feed(sc, lean)
-        assert sc._blockers()[0] == ("right", 1)
-        assert not sc._settled()
-        for _ in range(30):
-            sc.update(0.02)
-        assert not sc._collecting
-        assert sc.phase == q.PHASE_REST
-        # Relaxed, it goes ahead.
-        self._feed(sc, RESTING)
-        assert sc._blockers() == []
-        assert sc._settled()
+        assert sc._rest_words()[0] == "REST YOUR HANDS"
+        self._heads_up_over(sc)
+        sc.update(0.02)
+        assert sc._collecting
 
-    def test_bilateral_blocks_on_either_board(self, tmp_path):
+    def test_a_hand_that_never_comes_down_is_still_measured(self,
+                                                            tmp_path):
+        """Pads reading their empty level on the resting step: no
+        waiting for the hand, no dropping it, no Enter to press."""
+        from finger_rehab.ui import quick_calibration_screen as q
+        eng, sc = self._screen(tmp_path, hand="both")
+        _finish_rest_step(eng, sc, EMPTY * 2)
+        assert sc.phase == q.PHASE_REST
+        self._feed(sc, EMPTY * 2)
+        self._heads_up_over(sc)
+        sc.update(0.02)
+        assert sc._collecting
+        assert sc.hands == ["left", "right"]
+
+    def test_either_board_loaded_on_a_two_board_rig_holds_nothing(
+            self, tmp_path):
         eng, sc = self._screen(tmp_path, hand="both")
         t = self._feed(sc, EMPTY * 2)
-        down = EMPTY * 2
-        down = list(down)
+        down = list(EMPTY * 2)
         down[7] += 40                             # LEFT pinky
         self._feed(sc, down, t0=t)
-        assert sc._blockers()[0] == ("left", 3)
-        assert not sc._settled()
+        self._heads_up_over(sc)
+        sc.update(0.02)
+        assert sc._collecting
 
+    def test_a_silent_device_says_so_and_restarts_the_heads_up(
+            self, tmp_path):
+        eng, sc = self._screen(tmp_path)
+        assert sc._stale()
+        self._heads_up_over(sc)
+        sc.update(0.02)
+        assert not sc._collecting
+        assert sc._rest_words()[0] == "NO SIGNAL"
+        # Once samples arrive the full heads-up runs from the start.
+        self._feed(sc, EMPTY)
+        assert sc._lead_left() > sc._lead_s() - 1.0
 
-def q_hold() -> float:
-    from finger_rehab.ui import quick_calibration_screen as q
-    return q.QUIET_HOLD_S
+    def test_no_finger_is_ever_named_or_lit(self, tmp_path):
+        import pygame
+        eng, sc = self._screen(tmp_path)
+        t = self._feed(sc, EMPTY)
+        down = list(EMPTY)
+        down[2] += 40
+        self._feed(sc, down, t0=t)
+        lit: list = []
+        real = sc._draw_hand_map
 
+        def spy(surf, rect, hand, active, hot, on_pads):
+            lit.append(set(hot or ()))
+            return real(surf, rect, hand, active, hot, on_pads)
 
-class TestSettleScope:
-    def test_the_other_hand_cannot_hold_up_this_hands_capture(self,
-                                                              tmp_path):
-        """A bilateral rig sends all eight sensors whichever hand is
-        being calibrated. A left-only run watching the right board would
-        wait on a hand that is not in the run at all."""
-        eng = _engine(tmp_path, hand="both")
-        eng.apply_calibration(_usable_profile("right"))
-        eng._session_cal_hands = {"right"}
-        assert eng.maybe_start_quick_calibration(lambda: None)
-        sc = eng.screen_obj
-        assert sc.hands == ["left"]
-        t = 0.0
-        for k in range(90):
-            vals = list(EMPTY) + list(EMPTY)      # right then left
-            vals[1] += k * 3.0                    # RIGHT middle moving
-            sc.on_sample(t, tuple(vals))
-            t += 0.01
-        assert sc._settled()
-        assert sc._blockers() == []
+        sc._draw_hand_map = spy
+        sc.draw(pygame.Surface((1280, 800)))
+        assert lit and all(not h for h in lit), lit
+        assert "FINGER" not in sc._rest_words()[0]
 
 
 class TestOneMessagePerFrame:
@@ -1176,14 +1157,8 @@ class TestOneMessagePerFrame:
 
 
 class TestLeadAndRing:
-    """The rest steps give the player time before they take anything.
-
-    The captures start themselves the moment the sensors agree nothing
-    is happening, and with hands already off the pads that agreement
-    is there in a frame: the step would flash up and be measuring
-    before the instruction had been read. So each step owes a lead,
-    counted down on the ring, and only then may it capture.
-    """
+    """Each rest step gives a heads-up, counted down on the ring, and
+    captures only once it has run out."""
 
     def _screen(self, tmp_path, hand="right"):
         eng = _engine(tmp_path, hand=hand)
@@ -1197,27 +1172,29 @@ class TestLeadAndRing:
             t += dt
         return t
 
-    def test_a_settled_rig_still_waits_out_the_lead(self, tmp_path):
+    def test_the_heads_up_comes_before_any_capture(self, tmp_path):
         eng, sc = self._screen(tmp_path)
         self._settle(sc, EMPTY)
-        assert sc._settled()
         assert sc._lead_left() > 0
-        for _ in range(40):                       # well past QUIET_HOLD_S
+        for _ in range(20):
             sc.update(0.05)
         assert not sc._collecting, (
             "the capture started before the player was given time")
         sc._phase_started_at -= sc._lead_s() + 0.1
-        sc._quiet_since -= q_hold() + 0.1
         sc.update(0.02)
         assert sc._collecting
 
-    def test_the_resting_step_gets_its_own_lead(self, tmp_path):
+    def test_five_seconds_of_heads_up_and_three_of_capture(self,
+                                                           tmp_path):
+        eng, sc = self._screen(tmp_path)
+        assert sc._lead_s() == 5.0
+        assert sc._rest_capture_s() == 3.0
+
+    def test_the_resting_step_gets_its_own_heads_up(self, tmp_path):
         from finger_rehab.ui import quick_calibration_screen as q
         eng, sc = self._screen(tmp_path)
         _finish_rest_step(eng, sc, EMPTY)
         assert sc.phase == q.PHASE_REST
-        # Entering the step restarts the clock, so step two is as
-        # readable as step one.
         assert sc._lead_left() > 0
 
     def test_the_lead_is_a_config_knob(self, tmp_path):
@@ -1237,18 +1214,15 @@ class TestLeadAndRing:
         assert span == sc._rest_capture_s()
         assert 0 < left <= span
 
-    def test_a_lane_still_down_parks_the_ring_and_says_so(self, tmp_path):
+    def test_a_loaded_pad_keeps_the_ring_counting(self, tmp_path):
         eng, sc = self._screen(tmp_path)
         t = self._settle(sc, EMPTY)
         down = list(EMPTY)
         down[2] += 40
         self._settle(sc, down, t0=t)
         left, span, colour = sc._ring_state()
-        assert (left, span) == (0.0, 0.0), (
-            "a blocked step must not run a countdown it cannot honour")
-        assert colour == eng.theme.warning
-        head, sub, _ = sc._rest_words()
-        assert "RING" in head and sub == ""
+        assert span == sc._lead_s() and left > 0
+        assert colour != eng.theme.warning
 
 
 class TestRestStepIsFourWords:
@@ -1311,8 +1285,9 @@ class TestRestStepIsFourWords:
         assert seen["hands off"][0] == "HANDS OFF THE DEVICE"
         assert seen["hands resting"][0] == "REST YOUR HANDS"
         assert "still" in seen["hands off, measuring"][1]
-        assert seen["a lane still down"][0] == "LIFT YOUR RING FINGER"
-        assert seen["a finger pressing"][0] == "RELAX YOUR MIDDLE FINGER"
+        # A loaded pad is not the player's problem to fix any more.
+        assert seen["a lane still down"][0] == "HANDS OFF THE DEVICE"
+        assert seen["a finger pressing"][0] == "REST YOUR HANDS"
         assert seen["no signal"][2] == eng.theme.warning
 
     def test_the_step_stopped_being_a_wall_of_readouts(self, tmp_path):

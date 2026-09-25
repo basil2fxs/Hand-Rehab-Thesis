@@ -28,11 +28,9 @@ them.
 
 Flow, kept under a minute per hand:
 
-    hands off      a countdown ring gives the player time to get
-                   clear before anything is captured, then the capture
-                   runs itself once the sensors read QUIET; a lane
-                   still carrying load is named instead
-    hands resting  the tare point, same lead, same ring, same rule
+    hands off      a countdown ring gives the player a clear heads-up,
+                   then the capture runs on the clock
+    hands resting  the tare point, same heads-up, same ring, same clock
     per finger     press the bar into the band, hold the ring round,
                    pop, next finger
     summary        one warm line per finger, then straight to the hub
@@ -90,7 +88,7 @@ from .widgets import (
 )
 from .calibration_screen import _percentile
 from ..hardware.calibration_profile import (
-    CalibrationProfile, FINGER_NAMES, MIN_DELTA_COUNTS, N_FINGERS,
+    CalibrationProfile, FINGER_NAMES, N_FINGERS,
     target_gap_band,
 )
 
@@ -109,31 +107,12 @@ PHASE_DONE = "done"
 # enough that eight fingers still finish inside a minute.
 POP_S = 0.7
 
-# Seconds of samples the live traces draw, and the slice of that used to
-# decide the sensors have stopped moving.
+# Seconds of samples kept for the live traces.
 HIST_S = 3.0
-QUIET_WINDOW_S = 0.6
-
-# Peak-to-peak counts a sensor may wander over QUIET_WINDOW_S and still
-# count as settled. Set above the per-sample noise of a quiet board so a
-# genuinely empty device passes on the first look, and well under
-# MIN_DELTA_COUNTS so a finger coming off the pad does not.
-QUIET_SPREAD_COUNTS = 6.0
-
-# How long the settled reading must hold before a rest capture starts on
-# its own. Long enough that the tail of a hand lifting off does not
-# trigger it, short enough that it feels automatic.
-QUIET_HOLD_S = 0.8
 
 # No sample this recently means the device, not the player, is the
-# problem, and the screen has to say so instead of waiting silently.
+# problem, and the screen has to say so instead of counting down.
 STALE_S = 1.0
-
-# Counts a lane may sit above the lowest it has read during the hands-off
-# phase before the screen calls that finger "still down". MIN_DELTA_COUNTS
-# is the smallest press threshold the maths will ever set, so anything at
-# or above it is a load the empty capture must not include.
-LANE_DOWN_COUNTS = float(MIN_DELTA_COUNTS)
 
 # How far a settled lane's colour is pulled toward the page. The alert
 # amber is drawn at full strength, so every quiet lane has to sit
@@ -141,36 +120,13 @@ LANE_DOWN_COUNTS = float(MIN_DELTA_COUNTS)
 # enough.
 QUIET_TRACE_FADE = 0.45
 
-# Seconds the player is GIVEN before a rest capture may start, on each
-# of the two rest steps. The capture still waits for the sensors to
-# agree nothing is happening, but with hands already off the pads that
-# agreement is instant, and a capture that starts before the
-# instruction has been read is a capture nobody was ready for.
-LEAD_S = 3.0
-
-# A hand resting on the pads from the very start of the hands-off step is
-# its own floor, so movement alone cannot see it. The level the pads read
-# EMPTY last time can: a pad this far above it, or a hand this far above
-# in total, has something on it. The pads' empty level wanders a few
-# counts between days; a resting finger adds 3 to 40.
-REF_LANE_COUNTS = 12.0
-REF_HAND_COUNTS = 20.0
-
-# On the resting step a hand counts as placed when at least PLACED_LANES
-# pads rise PLACED_LANE_COUNTS above this run's empty capture, or the
-# hand rises PLACED_HAND_COUNTS in total.
-PLACED_LANE_COUNTS = 3.0
-PLACED_LANES = 2
-PLACED_HAND_COUNTS = 10.0
-
-# Seconds after the lead that a two-hand run waits for a hand that never
-# comes down before it calibrates only the hand that is resting.
-DROP_HAND_AFTER_S = 6.0
-
-# Seconds the sensors and the person may disagree (a pad whose empty
-# level drifted, a hand that rests very lightly) before Enter is offered
-# to go on anyway, so nobody is ever stuck on a step.
-OVERRIDE_AFTER_S = 10.0
+# Seconds of heads-up each rest step gives, counted down on the ring,
+# before it captures. The steps judge nothing. An earlier gate waited
+# for the pads to agree the player was still and in place, and it
+# stalled players who were doing exactly what was asked: a pad's empty
+# level drifts a few counts between days, and a light hand barely
+# loads its pads. So both steps run on the clock, heads-up then capture.
+LEAD_S = 5.0
 
 # ---- press-phase geometry, 1280x800 logical -----------------------------
 # Sized to be read at arm's length with a finger already on a pad: the
@@ -208,20 +164,10 @@ class QuickCalibrationScreen(Screen):
         self._collect_until = 0.0
         self._rest_buffers: dict[str, list[list[float]]] = {}
 
-        # Rolling raw history, (sample time, whole value vector), used
-        # for every live trace and for the settled test. Sample time is
-        # the device's own, so the window maths works the same headless
-        # as it does at frame rate.
+        # Rolling raw history, (sample time, whole value vector), for
+        # the live traces. Sample time is the device's own.
         self._hist: list[tuple[float, tuple[float, ...]]] = []
         self._last_sample_at = 0.0
-        # Lowest each sensor has read since the hands-off phase began.
-        # The only zero reference available before the empty capture
-        # exists, which is what makes "lift your ring finger" possible
-        # at all. A finger held down for the entire phase reads as its
-        # own floor, so this names a finger that comes off, and the
-        # settled test is what stops the capture running mid-lift.
-        self._floor: list[float] = []
-        self._quiet_since = 0.0
         self._phase_started_at = time.perf_counter()
 
         # Press-game state.
@@ -243,12 +189,6 @@ class QuickCalibrationScreen(Screen):
 
         self._confirm = False          # Esc guard overlay
         self._dim_cache: pygame.Surface | None = None
-        # Enter pressed to go on past a level check the sensors and the
-        # person disagree on; per step.
-        self._override = False
-        # The empty level each hand's pads read at the last saved
-        # calibration; the reference the hands-off step checks against.
-        self._ref: dict[str, list[float]] = {}
         # The hands this run actually measured, for the engine to mark
         # as covered; None until it finishes.
         self.covered_hands: list[str] | None = None
@@ -267,7 +207,7 @@ class QuickCalibrationScreen(Screen):
             return default
 
     def _rest_capture_s(self) -> float:
-        return max(0.5, self._cfgf("rest_capture_s", 2.0))
+        return max(0.5, self._cfgf("rest_capture_s", 3.0))
 
     def _hold_s(self) -> float:
         return max(0.3, self._cfgf("hold_s", 1.0))
@@ -333,8 +273,6 @@ class QuickCalibrationScreen(Screen):
         self._rest_buffers = {}
         self._hist = []
         self._last_sample_at = 0.0
-        self._floor = []
-        self._quiet_since = 0.0
         self._phase_started_at = time.perf_counter()
         self._hand_idx = 0
         self._finger_idx = 0
@@ -343,28 +281,8 @@ class QuickCalibrationScreen(Screen):
         self._problems = []
         self._confirm = False
         self._status = ""
-        self._override = False
         self.covered_hands = None
-        self._ref = self._reference_empties()
         self._rebuild_buttons()
-
-    def _reference_empties(self) -> dict[str, list[float]]:
-        """Per hand, the empty level the pads read at the last saved
-        calibration, when there is one."""
-        refs: dict[str, list[float]] = {}
-        profiles = getattr(self.engine, "calibration_profiles", None) or {}
-        finder = getattr(self.engine, "_usable_saved_profile", None)
-        for hand in self.hands:
-            prof = profiles.get(hand) if isinstance(profiles, dict) else None
-            if prof is None and callable(finder):
-                try:
-                    prof = finder(hand)
-                except Exception:
-                    prof = None
-            empty = list(getattr(prof, "empty", None) or [])
-            if len(empty) == N_FINGERS and any(v > 0 for v in empty):
-                refs[hand] = empty
-        return refs
 
     def _reset_finger_state(self) -> None:
         self._hold = 0.0
@@ -481,21 +399,13 @@ class QuickCalibrationScreen(Screen):
         vals = tuple(float(v) for v in values)
         if self._hist and float(t_perf) < self._hist[-1][0]:
             # Stamps went backwards. A board reconnecting restarts its
-            # clock, and keeping the rows either side would have the
-            # settle window comparing readings from two different ones,
-            # which reads as movement that is not there.
+            # clock, and the traces would join readings from two runs.
             self._hist = []
         self._hist.append((float(t_perf), vals))
         cutoff = float(t_perf) - HIST_S
         if self._hist[0][0] < cutoff:
             self._hist = [row for row in self._hist if row[0] >= cutoff]
         self._last_sample_at = time.perf_counter()
-        if self.phase == PHASE_OFF:
-            if len(self._floor) != len(vals):
-                self._floor = list(vals)
-            else:
-                self._floor = [min(f, v)
-                               for f, v in zip(self._floor, vals)]
         if self._collecting and self.phase in (PHASE_OFF, PHASE_REST):
             for hand in self.hands:
                 self._rest_buffers.setdefault(hand, []).append(
@@ -515,7 +425,7 @@ class QuickCalibrationScreen(Screen):
     def _seconds_left(self) -> float:
         return max(0.0, self._collect_until - time.perf_counter())
 
-    # ---- the settled test ------------------------------------------------
+    # ---- the device check ------------------------------------------------
 
     def _stale(self) -> bool:
         """No sample arrived recently. The device is the problem, and
@@ -523,175 +433,6 @@ class QuickCalibrationScreen(Screen):
         player cannot satisfy."""
         return (self._last_sample_at <= 0.0
                 or time.perf_counter() - self._last_sample_at > STALE_S)
-
-    def _window_rows(self) -> list[tuple[float, ...]]:
-        """Samples inside the settle window, measured against the last
-        sample's own timestamp so the test behaves identically at
-        frame rate and in a headless run."""
-        if not self._hist:
-            return []
-        now = self._hist[-1][0]
-        return [v for (t, v) in self._hist if now - t <= QUIET_WINDOW_S]
-
-    def _spread(self) -> float | None:
-        """Widest peak-to-peak any single sensor shows over the settle
-        window, or None when there is not enough to judge.
-
-        Only the hands this run covers. A bilateral rig always sends all
-        eight sensors, so watching the whole vector would let the OTHER
-        hand, sitting on its pads and doing nothing in particular, hold
-        up a calibration it is not part of.
-        """
-        rows = self._window_rows()
-        if len(rows) < 3:
-            return None
-        worst: float | None = None
-        for hand in self.hands:
-            off = self._hand_offset(hand, len(rows[-1]))
-            for i in range(N_FINGERS):
-                vals = [r[off + i] for r in rows if off + i < len(r)]
-                if len(vals) < 3:
-                    continue
-                worst = max(worst or 0.0, max(vals) - min(vals))
-        return worst
-
-    def _lanes_down(self) -> list[tuple[str, int]]:
-        """(hand, finger) for every lane carrying load during the
-        hands-off phase, worst first."""
-        if self.phase != PHASE_OFF or not self._hist or not self._floor:
-            return []
-        cur = self._hist[-1][1]
-        over: list[tuple[float, str, int]] = []
-        for hand in self.hands:
-            here = self._hand_slice(cur, hand)
-            floor = self._hand_slice(self._floor, hand)
-            for i in range(N_FINGERS):
-                lift = here[i] - floor[i]
-                if lift >= LANE_DOWN_COUNTS:
-                    over.append((lift, hand, i))
-        over.sort(reverse=True)
-        return [(h, i) for _, h, i in over]
-
-    def _lanes_leaning(self) -> list[tuple[str, int]]:
-        """(hand, finger) for every lane so loaded during the resting
-        phase that the maths could not carry it.
-
-        Derived, not guessed: a pad whose load pushes its goal floor
-        above the light-press ceiling a clean pad would get is one no
-        light press can satisfy, which is either a finger pressing or a
-        pad sitting wrong. Either way the run has to say so before it
-        captures the level as "rest".
-        """
-        if self.phase != PHASE_REST or not self._hist:
-            return []
-        cur = self._hist[-1][1]
-        out: list[tuple[float, str, int]] = []
-        for hand in self.hands:
-            here = self._hand_slice(cur, hand)
-            cap = self._captures[hand]
-            for i in range(N_FINGERS):
-                noise = cap["empty_noise"][i]
-                load = max(0.0, here[i] - cap["empty"][i])
-                if target_gap_band(load, noise)[0] > target_gap_band(
-                        0.0, noise)[1]:
-                    out.append((load, hand, i))
-        out.sort(reverse=True)
-        return [(h, i) for _, h, i in out]
-
-    def _lanes_over_reference(self) -> list[tuple[str, int]]:
-        """(hand, finger) for pads reading above the level they read
-        empty last time: a hand resting on them from the start, which
-        _lanes_down cannot see. Nothing once Enter has overridden it."""
-        if (self.phase != PHASE_OFF or self._override or not self._hist
-                or not getattr(self, "_ref", None)):
-            return []
-        cur = self._hist[-1][1]
-        out: list[tuple[float, str, int]] = []
-        for hand in self.hands:
-            ref = self._ref.get(hand)
-            if not ref:
-                continue
-            here = self._hand_slice(cur, hand)
-            excess = [here[i] - ref[i] for i in range(N_FINGERS)]
-            pads = [(e, hand, i) for i, e in enumerate(excess)
-                    if e >= REF_LANE_COUNTS]
-            if (not pads and sum(max(0.0, e) for e in excess)
-                    >= REF_HAND_COUNTS):
-                pads = [(e, hand, i) for i, e in enumerate(excess) if e > 0]
-            out.extend(pads)
-        out.sort(reverse=True)
-        return [(h, i) for _, h, i in out]
-
-    def _hands_unplaced(self) -> list[str]:
-        """Hands not yet resting on their pads during the resting step:
-        too little rise over this run's own empty capture. Nothing once
-        Enter has overridden it."""
-        if self.phase != PHASE_REST or self._override or not self._hist:
-            return []
-        cur = self._hist[-1][1]
-        out = []
-        for hand in self.hands:
-            here = self._hand_slice(cur, hand)
-            cap = self._captures[hand]
-            rise = [here[i] - cap["empty"][i] for i in range(N_FINGERS)]
-            lanes = sum(1 for i, r in enumerate(rise)
-                        if r >= max(PLACED_LANE_COUNTS,
-                                    3.0 * cap["empty_noise"][i]))
-            if (lanes < PLACED_LANES
-                    and sum(max(0.0, r) for r in rise) < PLACED_HAND_COUNTS):
-                out.append(hand)
-        return out
-
-    def _drop_hands(self, missing: list[str]) -> None:
-        """A two-hand run where one hand never came down: measure the
-        hand that did, and leave the other alone rather than wait."""
-        for hand in missing:
-            if hand in self.hands and len(self.hands) > 1:
-                self.hands.remove(hand)
-                self._captures.pop(hand, None)
-                self._rest_buffers.pop(hand, None)
-                self._ref.pop(hand, None)
-        log.info("quick calibration: %s not on the pads, calibrating %s "
-                 "only", ", ".join(missing), ", ".join(self.hands))
-        self._status = (f"Only the {self.hands[0]} hand is on the pads, so "
-                        f"only it is calibrated.")
-
-    def _override_offered(self) -> bool:
-        """Enter is on offer: a rest step held up only by the level
-        checks, for OVERRIDE_AFTER_S past its lead."""
-        if (self._override or self._collecting
-                or self.phase not in (PHASE_OFF, PHASE_REST)
-                or self._stale()):
-            return False
-        held = (self._lanes_over_reference() if self.phase == PHASE_OFF
-                else self._hands_unplaced())
-        if not held:
-            return False
-        waited = (time.perf_counter() - self._phase_started_at
-                  - self._lead_s())
-        return waited >= OVERRIDE_AFTER_S
-
-    def _blockers(self) -> list[tuple[str, int]]:
-        if self.phase == PHASE_OFF:
-            seen = set()
-            out = []
-            for lane in self._lanes_down() + self._lanes_over_reference():
-                if lane not in seen:
-                    seen.add(lane)
-                    out.append(lane)
-            return out
-        return self._lanes_leaning()
-
-    def _settled(self) -> bool:
-        """Whether a rest capture may start. Everything has to be true:
-        samples arriving, nothing moving, no lane carrying load it
-        should not be."""
-        if self._stale():
-            return False
-        sp = self._spread()
-        if sp is None or sp > QUIET_SPREAD_COUNTS:
-            return False
-        return not self._blockers()
 
     # ---- flow ------------------------------------------------------------
 
@@ -709,42 +450,16 @@ class QuickCalibrationScreen(Screen):
             self._update_press_game(dt)
 
     def _maybe_auto_start(self) -> None:
-        """The rest captures start themselves once the sensors go
-        quiet and stay quiet.
-
-        No "I'm ready" button on purpose. A button is a second thing on
-        screen competing with the instruction, and it lets a capture
-        run while a finger is still down: the player says ready, the
-        press gets averaged into the zero, and every threshold in the
-        session is built on it. Waiting for the sensors to agree makes
-        that impossible.
-
-        The lead is the other half of it. Sensors agreeing is not the
-        same as a person being ready, and with hands already off the
-        pads the agreement is there before the instruction has been
-        read: the step would flash up and be measuring inside a frame.
-        So the step owes the player LEAD_S seconds, counted down on the
-        ring, before it may capture at all. The quiet clock runs
-        through the lead, so a hand that came off early costs nothing.
+        """The rest captures run on the clock: LEAD_S of heads-up on
+        the ring, then the capture. Nothing about the player is judged.
+        A board sending nothing holds the step on NO SIGNAL, since there
+        is nothing to capture, and the heads-up starts over once it is
+        back so nobody is measured mid-read.
         """
-        now = time.perf_counter()
-        missing = self._hands_unplaced()
-        if missing:
-            placed = [h for h in self.hands if h not in missing]
-            waited = now - self._phase_started_at - self._lead_s()
-            if placed and waited >= DROP_HAND_AFTER_S:
-                self._drop_hands(missing)
-            else:
-                self._quiet_since = 0.0
-                return
-        if not self._settled():
-            self._quiet_since = 0.0
+        if self._stale():
+            self._phase_started_at = time.perf_counter()
             return
-        if self._quiet_since <= 0.0:
-            self._quiet_since = now
-        elif (now - self._quiet_since >= QUIET_HOLD_S
-                and self._lead_left() <= 0.0):
-            self._quiet_since = 0.0
+        if self._lead_left() <= 0.0:
             self._start_collecting()
 
     def _finish_rest_capture(self) -> None:
@@ -766,8 +481,6 @@ class QuickCalibrationScreen(Screen):
                     for c in cols]
             else:
                 cap["resting"] = [statistics.fmean(c) for c in cols]
-        self._quiet_since = 0.0
-        self._override = False
         self._phase_started_at = time.perf_counter()
         if empty_step:
             self._status = ""
@@ -937,7 +650,6 @@ class QuickCalibrationScreen(Screen):
 
     def _keep_going(self) -> None:
         self._confirm = False
-        self._quiet_since = 0.0
         self._rebuild_buttons()
 
     def _abandon(self) -> None:
@@ -988,14 +700,6 @@ class QuickCalibrationScreen(Screen):
         # Esc arrives through the engine's global path (on_escape), so
         # the KEYDOWN that follows it here must not double-handle.
         if e.type == pygame.KEYDOWN and e.key == pygame.K_ESCAPE:
-            return
-        if (e.type == pygame.KEYDOWN
-                and e.key in (pygame.K_RETURN, pygame.K_KP_ENTER)
-                and not self._confirm and self._override_offered()):
-            # The person says the sensors are wrong: a pad drifted, or
-            # a hand rests too lightly to register. Go on.
-            self._override = True
-            self._quiet_since = 0.0
             return
         if self._confirm:
             for b in self._confirm_buttons:
@@ -1168,18 +872,6 @@ class QuickCalibrationScreen(Screen):
         th = self.theme
         if self._stale():
             return ("NO SIGNAL", "check Settings", th.warning)
-        blockers = self._blockers()
-        if blockers:
-            # No hand word even on a bilateral run: the hand picture
-            # below lights the finger on the hand it belongs to, and
-            # "lift your left ring finger" is a fifth word for
-            # something the player can already see.
-            _, i = blockers[0]
-            verb = "LIFT" if self.phase == PHASE_OFF else "RELAX"
-            return (f"{verb} YOUR {FINGER_NAMES[i].upper()} FINGER",
-                    "", th.warning)
-        if self._hands_unplaced() and not self._collecting:
-            return ("REST YOUR HANDS", "on the pads", th.warning)
         under = "hold still" if self._collecting else None
         if self.phase == PHASE_OFF:
             return ("HANDS OFF THE DEVICE", under or "don't touch",
@@ -1206,15 +898,9 @@ class QuickCalibrationScreen(Screen):
                       centre=True, colour=th.muted)
         self._draw_countdown_ring(surf)
 
-        # The hand picture, under the ring, carrying the one thing the
-        # words gave up: which finger, on which hand.
-        # Nothing is lit while the device is silent: the last readings
-        # before it went quiet are not news about the hand, and a
-        # finger glowing amber under "NO SIGNAL" asks the player to
-        # lift something the screen cannot see.
-        blockers = [] if self._stale() else self._blockers()
-        hot = {h: {i for hh, i in blockers if hh == h}
-               for h in self.hands}
+        # The hand picture, under the ring: which hand, on or off the
+        # pads. No finger is ever lit here; the steps judge nothing.
+        hot = {h: set() for h in self.hands}
         on_pads = self.phase == PHASE_REST
         if len(self.hands) > 1:
             self._draw_hand_map(surf, pygame.Rect(398, 546, 200, 152),
@@ -1228,20 +914,9 @@ class QuickCalibrationScreen(Screen):
                                 self.hands[0], None, hot[self.hands[0]],
                                 on_pads)
 
-        if self._override_offered():
-            line = ("Hands really off? Press Enter."
-                    if self.phase == PHASE_OFF
-                    else "Hands already resting? Press Enter.")
-            draw_text(surf, line, (cx, 742), th, ly, pt=FONT_BODY,
-                      centre=True, colour=th.foreground)
-        elif self._status:
+        if self._status:
             draw_text(surf, self._status, (cx, 742), th, ly,
                       pt=FONT_SMALL + 2, centre=True, colour=th.warning)
-        elif (not self._collecting
-                and time.perf_counter() - self._phase_started_at > 15.0):
-            draw_text(surf, "Not settling? Skip for now keeps the saved "
-                      "settings.", (cx, 742), th, ly, pt=FONT_SMALL + 2,
-                      centre=True, colour=th.muted)
 
     def _ring_state(self) -> tuple[float, float, tuple[int, int, int]]:
         """(seconds left, seconds the whole span is, ring colour).
@@ -1249,15 +924,14 @@ class QuickCalibrationScreen(Screen):
         Two spans wear the same ring on purpose: first the lead the
         player is given to get their hands where they belong, then the
         capture itself. Both drain toward zero, so the ring means one
-        thing throughout: this much longer. A span of zero is the
-        state with no clock at all, a lane holding the step up or a
-        device saying nothing.
+        thing throughout: this much longer. A span of zero is the one
+        state with no clock: a device saying nothing.
         """
         th = self.theme
         if self._collecting:
             return (self._seconds_left(), self._rest_capture_s(),
                     th.accent)
-        if self._stale() or self._blockers():
+        if self._stale():
             return (0.0, 0.0, th.warning)
         left = self._lead_left()
         return (left, self._lead_s(), th.accent if left > 0 else th.success)
@@ -1276,7 +950,7 @@ class QuickCalibrationScreen(Screen):
         if left > 0.0:
             self._bold(surf, f"{int(math.ceil(left - 1e-6))}", c,
                        FONT_TITLE + 10, colour)
-        elif span > 0.0 or not (self._stale() or self._blockers()):
+        elif span > 0.0 or not self._stale():
             # Nothing left to wait for, so the ring says so rather
             # than sitting on a zero: the capture is a breath away.
             pygame.draw.lines(surf, th.success, False,

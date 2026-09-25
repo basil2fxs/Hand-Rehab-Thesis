@@ -335,16 +335,14 @@ quick_cal:
   # (no force to calibrate). Set false to turn the automatic pass off
   # entirely; the hub's Calibrate button still works.
   enabled: true
-  # Seconds each rest capture runs (hands off, then hands resting).
-  # Shorter than the menu flow's 3 s because the player is watched
-  # through it live; long enough to average the sensor noise.
-  rest_capture_s: 2.0
-  # Seconds each rest step gives the player BEFORE it may capture,
-  # counted down on the ring in the middle of the screen. The capture
-  # still waits for the sensors to agree nothing is happening, but
-  # with hands already off the pads that agreement is instant, and the
-  # step would be measuring before anybody had read what it wanted.
-  lead_s: 3.0
+  # Seconds each rest capture runs (hands off, then hands resting),
+  # the same 3 s the menu calibration takes.
+  rest_capture_s: 3.0
+  # Seconds of heads-up each rest step gives, counted down on the ring,
+  # before it captures. The steps run on the clock and judge nothing:
+  # an earlier gate that waited for the pads to agree the player was
+  # still and in place stalled players who were doing it right.
+  lead_s: 5.0
   # Seconds a press must sit inside the target band to count. The held
   # plateau is what the light-press level is read from, so shortening
   # this below ~0.5 s starts sampling the rise instead of the hold.
