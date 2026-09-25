@@ -1439,6 +1439,11 @@ class EchoMode(WaitSkip):
         gp = self._gameplay_screen()
         if gp is None or not hasattr(gp, "lanes"):
             return
+        if lane is not None:
+            # An item lighting is a cue: the last press's feedback ends.
+            end = getattr(self.engine, "end_outcome_flashes", None)
+            if callable(end):
+                end()
         self._lit_lane = lane
         for ls in gp.lanes:
             ls.active = (lane is not None and ls.lane == lane)

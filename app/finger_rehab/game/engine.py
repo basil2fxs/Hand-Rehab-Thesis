@@ -7964,6 +7964,29 @@ class GameEngine:
         self._pending_feedback.append(
             (due, screen_key, lane, dict(popup), colour, code))
 
+    def end_outcome_flashes(self) -> None:
+        """A new cue ends the last press's feedback on the tiles.
+
+        Cues can come faster than a flash lasts. Adaptive fires on a
+        beat counted from the previous cue, so at a quick pace the next
+        cue landed as little as 27 ms after a correct press with that
+        press's 0.4 s green still up beside it, or over it on the same
+        finger, since a tile draws a flash over its cue colour. So every
+        cue stops every flash and halo on the tiles, and a lab feedback
+        ring still waiting out its delay is dropped with its byte: it
+        would appear during this trial.
+        """
+        screens = getattr(self, "_screens", None) or {}
+        gp = screens.get("gameplay")
+        for ls in getattr(gp, "lanes", None) or []:
+            end = getattr(ls, "end_flash", None)
+            if callable(end):
+                end()
+        pending = getattr(self, "_pending_feedback", None)
+        if pending:
+            self._pending_feedback = [e for e in pending
+                                      if e[1] != "gameplay"]
+
     def _drain_feedback(self, force: bool = False) -> None:
         """Spawn every parked glyph whose delay has expired.
 
@@ -7988,12 +8011,18 @@ class GameEngine:
                 continue
             sc = self._screens.get(screen_key)
             if sc and hasattr(sc, "flash_lane"):
-                try:
-                    sc.flash_lane(lane, colour, 0.4, now_perf, **popup)
-                except TypeError:
-                    # A screen without the glyph keyword still gets
-                    # its flash; the feedback is then colour only.
-                    sc.flash_lane(lane, colour, 0.4, now_perf)
+                # The ring alone. The tile flashed at the press, and
+                # flashing it again here put a second green (or grey)
+                # on screen 800 ms later, after the next cue, at the
+                # very moment the feedback ERP is measured on. Newest
+                # keywords first; a screen without them gets the call
+                # it knows.
+                for kwargs in ({**popup, "flash": False}, popup, {}):
+                    try:
+                        sc.flash_lane(lane, colour, 0.4, now_perf, **kwargs)
+                        break
+                    except TypeError:
+                        continue
             if code is not None and now_perf >= due:
                 self._eeg_send(code, t_event=now_perf)
         self._pending_feedback = still
@@ -8252,6 +8281,7 @@ class GameEngine:
         else:
             self._last_stim_bpm = None
             self._last_stim_in_recovery = None
+        self.end_outcome_flashes()
         for key in ("gameplay", "rhythm"):
             sc = self._screens.get(key)
             if sc and hasattr(sc, "lanes"):

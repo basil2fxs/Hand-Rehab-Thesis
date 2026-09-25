@@ -1392,6 +1392,10 @@ class BuzzHuntMode(WaitSkip):
 
     def _begin_play(self, now: float) -> None:
         self.sub = "play"
+        # The buzz is the cue: the last answer's feedback ends here.
+        end = getattr(self.engine, "end_outcome_flashes", None)
+        if callable(end):
+            end()
         # The gate's instruction line comes down the moment the gate
         # opens: leaving it up through the stimulus would put a
         # changing word on screen while the patient is meant to be

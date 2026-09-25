@@ -938,6 +938,12 @@ class LaneStrip:
         # Add a halo at the same time so the lane really pops when scored.
         self.glow_until = now + duration_s
 
+    def end_flash(self) -> None:
+        """Stop an outcome flash and its halo early: a new cue owns the
+        tiles now."""
+        self.flash_until = 0.0
+        self.glow_until = 0.0
+
     @staticmethod
     def _draw_tiny_hand(surf: pygame.Surface, cx: int, cy: int,
                          kind: str, colour: tuple[int, int, int]) -> None:
