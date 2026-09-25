@@ -40,7 +40,20 @@ plain a-z, one to five letters, at least one vowel letter (the Year 1
 curriculum rule AC9E1LY12), and every letter pair in it must occur
 somewhere in the bank's own syllable inventory. That last test is a
 cheap stand-in for a phonotactics library: it keeps "psi" and "tlo"
-out without anybody writing English phonotactics down. A generator
+out without anybody writing English phonotactics down.
+And it must not SOUND like the target. Australian English is
+non-rhotic (Cox and Palethorpe 2007), so ter, tir and tur are one
+syllable read aloud, and cap and kap, bas and bass, cel and cell are
+the same sound spelt two ways. A set holding one of those has no
+defensible answer by ear, the first rule of multiple-choice item
+writing (Haladyna, Downing and Rodriguez 2002), and the only way to
+reject it is spelling knowledge, which is F8's contrast and off by
+default: adults who see misspellings as options spell worse after
+(Brown 1988). sound_key reads a chunk the way a reader decodes it on
+its own and every kind but F8 must key differently from the target.
+Re-running the generator over the bank before this check put a
+sound-alike on about 7 percent of vowel foils for unstressed
+syllables, plus the c/k and double-letter swaps. A generator
 that cannot produce a legal distinct foil in 20 tries falls back to
 another kind, and finally to F1; the kind that is LOGGED is the kind
 actually produced, so the notebook's confusion chart cannot credit a
@@ -62,6 +75,7 @@ the remaining lanes in random order.
 from __future__ import annotations
 
 import random
+import re
 from dataclasses import dataclass
 
 VOWEL_LETTERS = frozenset("aeiouy")
@@ -210,6 +224,39 @@ def split_coda(text: str) -> tuple[str, str]:
     return text[:i], text[i:]
 
 
+# Spellings one sound can take, read as a spelling pronunciation in
+# Australian English. Only the sets the foil generators can produce by
+# swapping one unit: er, ir and ur (and ear before a consonant) are
+# one vowel in a non-rhotic accent, as are or, aw and au; ee and ea,
+# ai and ay, oi and oy are one vowel spelt two ways.
+_SOUND_SETS = (
+    (re.compile(r"ear(?=[^aeiouyr])"), "E"),
+    (re.compile(r"(er|ir|ur)(?![aeiouyr])"), "E"),
+    (re.compile(r"(or|aw|au)(?![aeiouyr])"), "O"),
+    (re.compile(r"ee|ea"), "I"),
+    (re.compile(r"ai|ay"), "A"),
+    (re.compile(r"oi|oy"), "Y"),
+)
+
+
+def sound_key(text: str) -> str:
+    """How a chunk sounds read on its own, as a comparable string.
+    Two chunks with one key are the same syllable by ear: c before a,
+    o, u or a consonant is k and before e, i or y is s, ck is k, ph
+    is f, wh is w, a doubled consonant is one, and the vowel sets
+    above collapse to one symbol each. Deliberately narrow: it only
+    has to catch the sound-alikes a one-unit swap can make."""
+    s = str(text).lower()
+    s = s.replace("ck", "k").replace("ph", "f").replace("wh", "w")
+    s = s.replace("qu", "kw").replace("x", "ks")
+    s = re.sub(r"c(?=[eiy])", "s", s)
+    s = s.replace("c", "k")
+    s = re.sub(r"([bdfghjklmnpqrstvwz])\1", r"\1", s)
+    for pattern, symbol in _SOUND_SETS:
+        s = pattern.sub(symbol.upper() + "_", s)
+    return s
+
+
 def is_legal(text: str, target: str, word_syllables, kind: str,
              inv: Inventory) -> bool:
     """The legality rules in the module docstring, in the order they
@@ -223,6 +270,8 @@ def is_legal(text: str, target: str, word_syllables, kind: str,
     if not (set(text) & VOWEL_LETTERS):
         return False
     if kind != "F6" and text in tuple(word_syllables):
+        return False
+    if kind != "F8" and sound_key(text) == sound_key(target):
         return False
     return inv.pronounceable(text)
 

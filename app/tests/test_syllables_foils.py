@@ -86,6 +86,43 @@ class ShapeTests(unittest.TestCase):
                     self.assertNotEqual(opt.text, target)
                     self.assertTrue(INV.pronounceable(opt.text))
 
+    def test_no_foil_sounds_like_its_target(self) -> None:
+        # ter against tir, cap against kap, bas against bass: the same
+        # syllable read aloud, so a set holding one has no defensible
+        # answer by ear. Only F8, the pseudohomophone kind, may, and
+        # it is off unless asked for.
+        rng = random.Random(31)
+        for i in range(3000):
+            word = rng.choice(WORDS)
+            pos = rng.randrange(word.n_syll)
+            rung = rng.randint(F.MIN_RUNG, F.MAX_RUNG)
+            oset = _draw(word, pos, rung, seed=5000 + i)
+            key = F.sound_key(word.syllables[pos])
+            for opt in oset.options:
+                if opt.kind in (F.TARGET, "F8"):
+                    continue
+                with self.subTest(word=word.word, foil=opt.text,
+                                  kind=opt.kind):
+                    self.assertNotEqual(F.sound_key(opt.text), key)
+
+    def test_the_sound_key_hears_the_known_pairs(self) -> None:
+        same = [("ter", "tir"), ("ter", "tur"), ("cap", "kap"),
+                ("bas", "bass"), ("cel", "cell"), ("phan", "fan"),
+                ("saw", "sor"), ("rain", "rayn"), ("cit", "sit")]
+        different = [("ban", "bin"), ("tor", "tar"), ("cet", "ket"),
+                     ("ter", "ta"), ("bat", "pat")]
+        for a, b in same:
+            self.assertEqual(F.sound_key(a), F.sound_key(b), (a, b))
+        for a, b in different:
+            self.assertNotEqual(F.sound_key(a), F.sound_key(b), (a, b))
+
+    def test_the_homophone_kind_is_still_allowed_its_sound(self) -> None:
+        oset = _draw(next(w for w in WORDS if w.syllables[0] == "ca"
+                          or w.syllables[0].startswith("ca")),
+                     0, 8, homophone=True)
+        kinds = {o.kind for o in oset.options}
+        self.assertIn("F8", kinds)
+
     def test_only_f6_repeats_another_syllable_of_the_word(self) -> None:
         # F6 is the "you are in the wrong place in the word" foil and
         # is the ONLY kind allowed to show a chunk that belongs to
