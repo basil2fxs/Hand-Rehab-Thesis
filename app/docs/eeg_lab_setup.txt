@@ -64,7 +64,9 @@ At the lab PC
 9. Keep vsync on for the game window, or visual markers lead the
    screen by an unknown amount.
 10. Reaction opens on its setup screen: pick the participant's timing
-   group (or a saved setup) and their musical experience, then START.
+   group (or a saved setup), one hand or two (two hands, as the lab's
+   own studies ran it, needs both boards) and their musical
+   experience, then START.
    The setup is kept for the next participant. The task itself is the
    old script's: black screen, four grey squares, one 30 per red
    flash, SPACE between blocks, the recall at the end, and the

@@ -61,6 +61,7 @@ class SRTSetupScreen(Screen):
         self.group = DEFAULT_SETUP.group
         self.isi_ms = int(DEFAULT_SETUP.isi_ms)
         self.sequence = tuple(DEFAULT_SETUP.sequence)
+        self.hands = DEFAULT_SETUP.hands
         self.show_sequence = False
         self.editing = False
         self.note = ""
@@ -83,6 +84,10 @@ class SRTSetupScreen(Screen):
         self.plus_btn = Button(pygame.Rect(lx + 210, ly + 196, 60, 52),
                                "+", lambda: self._nudge(ISI_STEP_MS),
                                self.theme, self.layout, font_pt=FONT_H2)
+        self.hands_seg = Segmented(
+            pygame.Rect(lx + 330, ly + 196, 310, 52), self.theme,
+            self.layout, [("one", "One hand"), ("two", "Two hands")],
+            label="Hands", initial=self.hands)
         self.show_btn = Button(pygame.Rect(lx + 330, ly + 306, 100, 44),
                                "Show", self._toggle_show, self.theme,
                                self.layout, font_pt=FONT_BODY)
@@ -134,7 +139,9 @@ class SRTSetupScreen(Screen):
         self.group = cur.group
         self.isi_ms = int(cur.isi_ms)
         self.sequence = tuple(cur.sequence)
+        self.hands = cur.hands
         self.group_seg.set(self.group)
+        self.hands_seg.set(self.hands)
         self.isi_input.text = str(self.isi_ms)
         self.isi_input.focused = False
         self.show_sequence = False
@@ -152,7 +159,7 @@ class SRTSetupScreen(Screen):
 
     def _values(self, name: str | None = None) -> SRTSetup:
         return SRTSetup(name or self._matching_name(), self.group,
-                        int(self.isi_ms), tuple(self.sequence))
+                        int(self.isi_ms), tuple(self.sequence), self.hands)
 
     def _matching_name(self) -> str:
         store = self.store
@@ -160,7 +167,8 @@ class SRTSetupScreen(Screen):
             return UNSAVED
         for s in store.all():
             if (s.group == self.group and int(s.isi_ms) == int(self.isi_ms)
-                    and tuple(s.sequence) == tuple(self.sequence)):
+                    and tuple(s.sequence) == tuple(self.sequence)
+                    and s.hands == self.hands):
                 return s.name
         return UNSAVED
 
@@ -234,7 +242,9 @@ class SRTSetupScreen(Screen):
         self.group = setup.group
         self.isi_ms = int(setup.isi_ms)
         self.sequence = tuple(setup.sequence)
+        self.hands = setup.hands
         self.group_seg.set(self.group)
+        self.hands_seg.set(self.hands)
         self.isi_input.text = str(self.isi_ms)
         self._delete_armed = None
         if self.store is not None:
@@ -271,6 +281,13 @@ class SRTSetupScreen(Screen):
         self._commit()
         self._say(why or f"Removed {name}", bad=bool(why))
 
+    def _one_board(self) -> bool:
+        check = getattr(self.engine, "second_board_missing", None)
+        try:
+            return bool(check()) if callable(check) else False
+        except Exception:
+            return False
+
     def _back(self) -> None:
         self.engine.show_mode_select()
 
@@ -284,6 +301,8 @@ class SRTSetupScreen(Screen):
             self.sequence = seq
         self.editing = False
         why = self._values().problem()
+        if not why and self.hands == "two" and self._one_board():
+            why = "Two hands needs both boards connected"
         if why:
             self._say(why, bad=True)
             return
@@ -298,8 +317,8 @@ class SRTSetupScreen(Screen):
         was_isi_focused = self.isi_input.focused
         was_name_focused = self.name_input.focused
         was_seq_focused = self.editing and self.seq_input.focused
-        for widget in (self.group_seg, self.isi_input, self.music_seg,
-                       self.name_input):
+        for widget in (self.group_seg, self.hands_seg, self.isi_input,
+                       self.music_seg, self.name_input):
             widget.handle_event(e)
         if self.editing:
             self.seq_input.handle_event(e)
@@ -307,6 +326,12 @@ class SRTSetupScreen(Screen):
         if self.group_seg.value and self.group_seg.value != self.group:
             self.group = self.group_seg.value
             self._commit()
+        if self.hands_seg.value and self.hands_seg.value != self.hands:
+            self.hands = self.hands_seg.value
+            self._commit()
+            if self.hands == "two" and self._one_board():
+                self._say("Two hands needs both boards connected",
+                          bad=True)
         if was_isi_focused and not self.isi_input.focused:
             self._read_isi_field()
         for b in (self.minus_btn, self.plus_btn, self.show_btn,
@@ -361,6 +386,7 @@ class SRTSetupScreen(Screen):
         self.minus_btn.draw(surf)
         self.isi_input.draw(surf)
         self.plus_btn.draw(surf)
+        self.hands_seg.draw(surf)
         short = int(round(self.isi_ms * 0.5))
         long_ = int(round(self.isi_ms * 1.5))
         detail = ("Learning blocks only; the random blocks stay at 500 ms."

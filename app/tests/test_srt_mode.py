@@ -818,6 +818,102 @@ class HandsLabelsAndMarkers(unittest.TestCase):
         self.assertNotIn(13, et.RETIRED_MODE_IDS.values())
 
 
+class TwoHands(unittest.TestCase):
+    """The lab's own studies ran the task on two hands: V and B under
+    the left middle and index fingers, N and M under the right index
+    and middle. A setup can ask for that; it needs both boards."""
+
+    def setUp(self):
+        pygame.init()
+        self.td = tempfile.TemporaryDirectory()
+        self.root = Path(self.td.name)
+        store = ss.SetupStore(self.root / "srt_setups.json")
+        assert not store.set_current(
+            ss.SRTSetup("two", "constant", 500, ss.LAB_SEQUENCE, "two"))
+
+    def tearDown(self):
+        self.td.cleanup()
+        pygame.quit()
+
+    def _start(self):
+        eng = _engine(self.root)
+        eng.set_hand_mode("right")
+        eng.begin_srt_block()
+        self.addCleanup(eng._abandon_if_in_block)
+        return eng, eng.mode
+
+    def test_the_block_runs_on_both_hands_with_the_labs_fingers(self):
+        eng, m = self._start()
+        self.assertEqual(eng.hand_mode, "both")
+        self.assertTrue(m.two_hands)
+        self.assertEqual([m.square_to_lane(q) for q in (1, 2, 3, 4)],
+                         [5, 4, 0, 1])
+        self.assertEqual([m.lane_to_square(ln) for ln in range(8)],
+                         [3, 4, None, None, 2, 1, None, None])
+        eng.source = MagicMock(provides_samples=True)
+        self.assertEqual(m.labels(),
+                         ["L middle", "L index", "R index", "R middle"])
+
+    def test_the_two_hand_keys_answer(self):
+        _eng, m = self._start()
+        for key, square in ((pygame.K_d, 1), (pygame.K_f, 2),
+                            (pygame.K_j, 3), (pygame.K_k, 4),
+                            (pygame.K_v, 1), (pygame.K_m, 4)):
+            self.assertEqual(m.lane_to_square(m._key_lane(key)), square)
+
+    def test_rows_say_which_hand_answered(self):
+        eng, m = self._start()
+        sim = Sim(eng)
+        sim.key(pygame.K_SPACE)
+        sim.frame()
+        sim.key(pygame.K_SPACE)
+        sim.frame()
+        tr = m.trial
+        while tr.onset is None:
+            sim.frame()
+        key = {1: pygame.K_d, 2: pygame.K_f, 3: pygame.K_j,
+               4: pygame.K_k}[tr.square]
+        sim.key(key, at=tr.onset + 0.3)
+        sim.frame()
+        row = m.perf_rows[0]
+        self.assertEqual(row["accuracy"], "correct")
+        self.assertEqual(row["hand"], "both")
+        self.assertIn(row["response_finger"], ("L1", "L2", "R1", "R2"))
+
+    def test_the_choice_is_saved_with_the_setup(self):
+        store = ss.SetupStore(self.root / "srt_setups.json")
+        self.assertEqual(store.current.hands, "two")
+        self.assertIn("two hands", store.current.summary())
+        self.assertEqual(ss.SRTSetup.from_dict(
+            {"name": "old", "group": "random", "isi_ms": 500}).hands, "one")
+
+    def test_the_setup_screen_refuses_two_hands_on_one_board(self):
+        eng = _engine(self.root)
+        eng.show_title()
+        eng.begin_session("P09", "30", dominant_hand="right")
+        eng.choose_session_hand("right")
+        eng.second_board_missing = lambda: True
+        eng.show_srt_setup()
+        sc = eng.screen_obj
+        self.assertEqual(sc.hands, "two")
+        sc._start()
+        self.assertFalse(eng.block_is_running())
+        self.assertTrue(sc.note_bad)
+        self.assertIn("both boards", sc.note)
+
+    def test_play_all_counts_a_two_hand_srt_as_its_step(self):
+        eng = _engine(self.root)
+        eng._battery = {"id": "eeg_lab_srt_v1", "preset": "study_battery",
+                        "cell": {}, "of": 11, "log": []}
+        eng._protocol_current = {"mode": "srt", "hand": "right",
+                                 "position": 1, "phase": "pass1"}
+        eng.set_hand_mode("right")
+        eng.begin_srt_block()
+        self.addCleanup(eng._abandon_if_in_block)
+        self.assertEqual(eng.hand_mode, "both")
+        self.assertEqual(eng.session.battery.get("position"), 1)
+
+
 class TheCardAndTheSetupScreen(unittest.TestCase):
 
     def setUp(self):

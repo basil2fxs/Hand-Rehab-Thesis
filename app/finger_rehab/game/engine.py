@@ -4428,6 +4428,12 @@ class GameEngine:
         from .srt_setup import SetupStore, protocol_counts, store_path
         setup = SetupStore(store_path(self.cfg)).current
         counts = protocol_counts(self.cfg)
+        # Two hands answer on both boards (or the two-hand keymap), so
+        # the block runs as a both-hands block. The setup screen has
+        # already refused a two-hand setup on a one-board rig.
+        if setup.hands == "two" and self.hand_mode != "both" \
+                and not self.second_board_missing():
+            self.set_hand_mode("both")
         seed_cfg = self.cfg.get("srt.seed", None)
         try:
             seed = (int(seed_cfg) if seed_cfg is not None
@@ -6902,9 +6908,12 @@ class GameEngine:
         step = self._protocol_current
         if bat is None or step is None:
             return {}
-        if (str(step.get("mode")) != str(self.current_block)
-                or str(step.get("hand") or self.hand_mode)
-                != str(self.hand_mode)):
+        # The SRT picks its hands from its own setup (one hand, or both
+        # for the two-hand layout), so its step matches on the mode.
+        hand_ok = (str(step.get("hand") or self.hand_mode)
+                   == str(self.hand_mode)
+                   or str(self.current_block) == "srt")
+        if str(step.get("mode")) != str(self.current_block) or not hand_ok:
             return {}
         return {
             "id": bat["id"],

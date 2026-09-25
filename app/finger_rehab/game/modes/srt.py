@@ -78,8 +78,11 @@ WHAT DIFFERS AND WHY.
   machine; tone_lead_ms can move it earlier once measured.
 - Esc raises the app's End-session dialog instead of quitting; an
   abandoned block still writes everything it collected.
-- In two-hand play the right hand answers, since the task is one
-  hand's four fingers; left presses are recorded and ignored.
+- The lab script leaves the hands to the keyboard. Here a setup picks
+  one hand's four fingers or two hands (V and B left, N and M right,
+  as the lab's own studies ran it); two hands needs both boards. With
+  one hand in two-hand play the right hand answers and left presses
+  are recorded and ignored.
 """
 from __future__ import annotations
 
@@ -108,6 +111,13 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 FINGERS = ("Index", "Middle", "Ring", "Little")
+
+# Two hands, as the lab's own studies ran the task: squares 1 to 4 are
+# the left middle, left index, right index and right middle fingers,
+# the fingers that rest on V, B, N and M. Two-hand play numbers the
+# right hand's lanes 0 to 3 and the left's 4 to 7, index first.
+TWO_HAND_LANES = (5, 4, 0, 1)
+TWO_HAND_LABELS = ("L middle", "L index", "R index", "R middle")
 
 # The script's columns, in its order. Extra columns go after these.
 PERF_COLUMNS = ["participant", "age", "gender", "musical_experience",
@@ -185,6 +195,7 @@ class SRTMode:
         self.tone_volume = float(tone_volume)
         self.tone_lead_s = max(0.0, float(tone_lead_ms)) / 1000.0
         self._labels_override = list(labels) if labels else None
+        self.two_hands = getattr(setup, "hands", "one") == "two"
         self.musical_experience = musical_experience
         self.seed = int(seed)
         self.demo = demo_trials is not None
@@ -277,19 +288,27 @@ class SRTMode:
             return list(self._labels_override)
         if not self.on_pads:
             return [c.upper() for c in LETTERS]
+        if self.two_hands:
+            return list(TWO_HAND_LABELS)
         if self._response_hand() == "left":
             return list(reversed(FINGERS))
         return list(FINGERS)
 
     def _response_hand(self) -> str:
+        if self.two_hands:
+            return "both"
         hand = getattr(self.engine, "hand_mode", "right")
         return "left" if hand == "left" else "right"
 
     def lane_to_square(self, lane: int) -> int | None:
         """Square 1..4 for a pressed lane, or None for a lane that
-        does not answer (the left hand in two-hand play)."""
+        does not answer (a ring or little finger with two hands, the
+        left hand in two-hand play with one hand answering)."""
         hand = getattr(self.engine, "hand_mode", "right")
         lane = int(lane)
+        if self.two_hands:
+            return (TWO_HAND_LANES.index(lane) + 1
+                    if lane in TWO_HAND_LANES else None)
         if hand == "both":
             return lane + 1 if 0 <= lane < 4 else None
         if not 0 <= lane < 4:
@@ -299,6 +318,8 @@ class SRTMode:
         return lane + 1
 
     def square_to_lane(self, square: int) -> int:
+        if self.two_hands:
+            return TWO_HAND_LANES[int(square) - 1]
         if getattr(self.engine, "hand_mode", "right") == "left":
             return 4 - int(square)
         return int(square) - 1
@@ -706,8 +727,7 @@ class SRTMode:
             "learning_isi_ms": int(self.setup.isi_ms),
             "sequence": sequence_text(self.seq),
             "input": tr.source if tr.press is not None else "",
-            "response_finger": ("" if lane_press is None
-                                else lane_press % 4 + 1),
+            "response_finger": self._finger_name(lane_press),
             "onset_s": ("" if onset is None else round(onset - t0, 4)),
             "rsi_ms": ("" if onset is None
                        else round((onset - tr.prev_end) * 1000.0, 1)),
@@ -751,6 +771,15 @@ class SRTMode:
             log_row(csv_row, hit=hit)
         if self.response_markers:
             self._response_marker(tr, acc)
+
+    def _finger_name(self, lane: int | None):
+        """The finger that answered, 1 index to 4 little; with two
+        hands, L or R in front of it."""
+        if lane is None:
+            return ""
+        if self.two_hands:
+            return f"{'L' if lane >= 4 else 'R'}{lane % 4 + 1}"
+        return lane % 4 + 1
 
     def _response_marker(self, tr: Trial, acc: str) -> None:
         send = getattr(self.engine, "_eeg_send", None)
@@ -1029,6 +1058,7 @@ class SRTMode:
         return {
             "setup": self.setup.to_dict(),
             "group": self.setup.group,
+            "hands": "two" if self.two_hands else "one",
             "learning_isi_ms": int(self.setup.isi_ms),
             "sequence": sequence_text(self.seq),
             "sequence_letters": sequence_text(self.seq, letters=True),

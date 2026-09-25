@@ -58,6 +58,13 @@ LAB_SEQUENCE = (1, 3, 2, 1, 4, 3, 2, 4, 1, 3)
 
 GROUPS = ("constant", "cyclical", "random")
 
+# One hand's four fingers on the four squares, or two hands as the
+# lab's own SRT studies ran it (Leow et al. 2025 and 2026): V and B
+# under the left middle and index fingers, N and M under the right
+# index and middle. Two hands is what lets the EEG separate the hands
+# (the lateralised readiness potential), and it needs both boards.
+HANDS = ("one", "two")
+
 # Interval ratios for the cyclical and random groups. At 500 ms these
 # are the lab's 250, 500 and 750.
 SHORT_RATIO = 0.5
@@ -246,10 +253,13 @@ class SRTSetup:
     group: str = "constant"
     isi_ms: int = 500
     sequence: tuple[int, ...] = LAB_SEQUENCE
+    hands: str = "one"
 
     def problem(self) -> str:
         if self.group not in GROUPS:
             return f"Unknown timing group '{self.group}'"
+        if self.hands not in HANDS:
+            return f"Hands must be one or two, not '{self.hands}'"
         if not ISI_MIN_MS <= int(self.isi_ms) <= ISI_MAX_MS:
             return (f"Interval must be {ISI_MIN_MS} to {ISI_MAX_MS} ms")
         return sequence_problem(self.sequence)
@@ -262,12 +272,15 @@ class SRTSetup:
         """One line for the setup screen and the logs."""
         seq = ("lab sequence" if self.is_lab_sequence
                else f"custom sequence of {len(self.sequence)}")
-        return f"{self.group.capitalize()}, {int(self.isi_ms)} ms, {seq}"
+        two = ", two hands" if self.hands == "two" else ""
+        return (f"{self.group.capitalize()}, {int(self.isi_ms)} ms, "
+                f"{seq}{two}")
 
     def to_dict(self) -> dict:
         return {"name": self.name, "group": self.group,
                 "isi_ms": int(self.isi_ms),
-                "sequence": [int(s) for s in self.sequence]}
+                "sequence": [int(s) for s in self.sequence],
+                "hands": self.hands}
 
     @classmethod
     def from_dict(cls, d) -> "SRTSetup | None":
@@ -280,7 +293,8 @@ class SRTSetup:
                         group=str(d.get("group") or "constant"),
                         isi_ms=int(d.get("isi_ms", 500)),
                         sequence=tuple(int(s) for s in
-                                       d.get("sequence") or LAB_SEQUENCE))
+                                       d.get("sequence") or LAB_SEQUENCE),
+                        hands=str(d.get("hands") or "one"))
         except (TypeError, ValueError):
             return None
         if not setup.name or setup.problem():
@@ -388,7 +402,7 @@ class SetupStore:
         if self.is_built_in(name):
             return "That name belongs to a lab setup; pick another"
         named = SRTSetup(name, setup.group, int(setup.isi_ms),
-                         tuple(setup.sequence))
+                         tuple(setup.sequence), setup.hands)
         why = named.problem()
         if why:
             return why

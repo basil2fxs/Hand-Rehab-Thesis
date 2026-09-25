@@ -18,7 +18,7 @@ Prepared 25 September 2026 for the thesis replication of Dr Welber Marinovic's P
 
 **Kept as the lab's protocol.** No return-to-sequence block after the post-test; the post-test at 500 ms for every group; one lab sequence (custom sequences are per setup); response bytes off by default (`srt.response_markers` turns on 100, 110, 120 and 130).
 
-**Open for the lab.** The lab's own studies pressed V and B with the left hand and N and M with the right (B7, G1), which is what makes an LRP possible. The pad version answers with one hand's four fingers; a two-hand layout on two boards would match those studies.
+**Hands.** Each setup picks one hand's four fingers or two hands. Two hands follows the lab's own studies (B7, G1): V and B under the left middle and index fingers, N and M under the right index and middle, which is what makes an LRP possible. It needs both boards (or the keyboard), and the performance file's hand column reads `both`.
 
 Short glossary (terms used throughout):
 
