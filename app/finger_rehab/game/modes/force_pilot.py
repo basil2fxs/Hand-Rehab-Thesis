@@ -1036,6 +1036,9 @@ class ForcePilotMode(WaitSkip):
         self.hand: str = self.hand_order[0]
         self.finger: int = self.levels[0].finger
         self.lane: int = self.hands[self.hand][self.finger]
+        # The lane whose run just closed, until the next card opens: a
+        # finger flying twice in a row keeps its last rested zero.
+        self._just_flew_lane: int | None = None
         self.run_seed: int = self.seed
         self.params: dict = {}
         self.sections: list[RunSection] = []
@@ -1336,8 +1339,8 @@ class ForcePilotMode(WaitSkip):
         totalling 12.5 s; the brief asked for little time between
         runs, so they are one card of announce_s (1.8 s shipped) and
         the only other wait in the block is the mid-ladder rest. The
-        card is still long enough for the rest tare below, which the
-        notebook reads from 1.0 s to 0.05 s before a run starts."""
+        rest tare below runs as the card opens; the run logs the zero
+        it took (ref_counts) for the notebook."""
         if not reuse_run:
             pass  # the run was prepared by the caller
         self.phase = "announce"
@@ -1347,8 +1350,15 @@ class ForcePilotMode(WaitSkip):
         self.arm_wait("announce", self._phase_until, self._start_run,
                       started_at=now)
         # Rest tare: the working hand is off the pads or resting during
-        # the announcement, which is the moment to absorb drift.
-        self.view.rebaseline([self.lane])
+        # the announcement, which is the moment to absorb drift. Not
+        # when the finger about to fly is the one that just landed
+        # (Storm into Uncharted): it has not rested, and a partial
+        # press under the press threshold would pass for its zero.
+        # The zero from its last card, about 16 s old, stands.
+        just_flew = self._just_flew_lane
+        self._just_flew_lane = None
+        if just_flew != self.lane:
+            self.view.rebaseline([self.lane])
         self._reset_run_scoring()
 
     def _enter_mid_rest(self, now: float) -> None:
@@ -1361,6 +1371,8 @@ class ForcePilotMode(WaitSkip):
         self._phase_until = now + self.mid_rest_s
         self.arm_wait("rest", self._phase_until, self._after_mid_rest,
                       started_at=now)
+        # A rest is a rest: the card after it tares every finger.
+        self._just_flew_lane = None
         self.view.rebaseline([self.lane])
 
     def _after_mid_rest(self, now: float) -> None:
@@ -1686,6 +1698,7 @@ class ForcePilotMode(WaitSkip):
             self._end("completed")
             return
         rest_due = self._plan_idx in self._rest_after
+        self._just_flew_lane = self.lane
         self._prepare_run()
         if rest_due:
             self._enter_mid_rest(now)
@@ -1746,6 +1759,7 @@ class ForcePilotMode(WaitSkip):
             self._end("completed")
             return
         rest_due = self._plan_idx in self._rest_after
+        self._just_flew_lane = self.lane
         self._prepare_run()
         if rest_due:
             self._enter_mid_rest(now)

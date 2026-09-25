@@ -463,11 +463,35 @@ One-board note (24 September 2026): the block plays the right hand,
 twelve runs, in both passes; its hand-level MAE and time in corridor
 are T2 and T3 in Section 4.5.
 Primary (notebook sec_force_tracking, offline from raw.csv): RMSE
-and MAE in percent of max, time in corridor, cross-correlation lag,
-press versus release MAE, section MAE (hold_in, ramp_up, hold_top,
-release, sine, assess_sos), Lodha sub-1 Hz spectral ratio. Block
-level: force_pilot.overall.mae_pct, time_in_corridor,
-release_mae_pct, press_mae_pct, section_mae_pct.
+and MAE in percent of max, time in corridor, cross-correlation lag
+per wave class, press versus release MAE on the symmetric shapes,
+section MAE (hold_in, ramp_up, hold_top, release, sine, assess_sos),
+Lodha sub-1 Hz spectral ratio. Block level:
+force_pilot.overall.mae_pct, time_in_corridor, release_mae_pct,
+press_mae_pct, section_mae_pct (the in-game split by ramp direction
+is feedback only; the research number is the offline one).
+Scoring notes (25 September 2026, from the first real ladder runs):
+  - The zero. Each run is scored from the zero the game read it
+    against. The game logs it (ref_counts) from 25 September 2026;
+    an older run rebuilds it from the pad reading when the announce
+    card opened, and a run straight after one on the same finger
+    carries that run's zero. The old rule, the median of the second
+    before the run, caught fingers already pressing toward the first
+    hold and moved MAE by up to 5.6 percent of max against the
+    game's own score; the rebuilt zero agrees with the game to a
+    median 0.03 percent. Force is clamped at zero as the game shows
+    it. The game no longer re-tares a finger that flies two levels
+    in a row (Storm into Uncharted), since it has not rested.
+  - The lag. The cross-correlation now scores each lag as a Pearson
+    r over the overlapping samples. The old sum put a cusp at zero
+    lag and read 0 ms on every ramp wave whatever the true lag (on a
+    synthetic Tide: 0 ms for true lags of 50, 150 and 250 ms).
+  - Idle runs, where the finger never pressed (95th percentile of
+    force under 2 percent of max, when the lowest target is 8), are
+    left out like demo runs. Three closed a real block.
+  - Press against release reads only the shapes that ask for both
+    at one rate: Tide, Hills and both halves of every sine. Dunes is
+    reported apart.
 Known effects to reproduce:
   F1 Error grows with target bandwidth and unpredictability. Read
      in the battery as the wave ladder's own ordering: the twelve
@@ -486,7 +510,15 @@ Known effects to reproduce:
      target shape for exactly this reason; Lodha 2013 puts the
      healthy variability structure below 1 Hz).
   F2 Visuomotor lag positive, of order 100 to 300 ms (a sanity
-     check on the corridor timing, not a literature norm).
+     check on the corridor timing, not a literature norm). Read on
+     the non-periodic waves (Open ocean, Storm, Uncharted), runs
+     whose r at the lag is 0.35 or more (Brewer 2009's floor).
+     Periodic waves can be flown ahead of time (lag under 20 ms on
+     repeated patterns, Day 1984) and ramp and step waves are a few
+     edges, so pooling all twelve read prediction as a short lag.
+     With 8 s of corridor visible, even the non-periodic lag may sit
+     under 100 ms; that is anticipation, not a timing fault, when r
+     is high.
   F3 Release error approximately equal to press error in young
      adults. Release-specific impairment is the Parkinson's marker
      (Davidson 2025; Davidson 2026; Chung 2023) and an ageing one
@@ -517,9 +549,26 @@ either, run a separate level pilot: six participants, one extra sitting,
 runs_per_finger 3 with the ladder free, so each finger reaches level
 2 or 3 and MAE by level can be plotted. Cheap, and it belongs in the
 instrumentation section.
+Parkinson's-linked measures (EXPLORATORY, notebook
+sec_force_pilot_pd; no hypothesis, descriptive norms for this
+device): release against press as a ratio and in time within 5
+percent of target (Davidson 2025, 2026); gain and phase per sine
+component from a joint least-squares fit (Davidson 2026); signed
+error (Jordan 1994); the terminal phase after a release (Davidson
+2025); guided rise and release rates as 20 to 80 percent transitions
+(Chung 2023; Neely 2013); decrement across beats and cycles (Tinaz
+2016; Kang 2010); steadiness on the raised holds beside the pad's own
+noise (Tobin 2025; Moritz 2005); pauses on the ramps (Howard 2022;
+Naik 2011); lag by wave class; 2 to 8 Hz error power and sample
+entropy (Brewer 2009; Vaillancourt 2001); enslaving (Park 2012,
+2014). The cohort table carries them as pd_* rows in the normative
+table and an exploratory block of the reliability chapter, never in
+the paired tests. Formulas and sources:
+docs/research/new_modes/force-pilot-parkinsons.md, Table B.
 Reliability class: moderate to good for hand-level MAE and time in
-corridor (four runs per hand); per-finger numbers rest on a single
-27 s run and are reported but not given an MDC.
+corridor (twelve runs per hand per pass); per-finger numbers rest on
+two to four runs of different waves, 13 to 16 s each, and are
+reported but not given an MDC.
 Claim limits: the probe is a maximal flat-finger press on a pad, not
 grip or pinch MVC; nothing is reported in newtons (targets and
 errors are percent of the finger's own max on the same pad, so the

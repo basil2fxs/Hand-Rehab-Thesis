@@ -758,3 +758,18 @@ The note and docstring corrections below were applied on 25 September 2026 (forc
   - `cov_hold` and `hold_mae` include Heartbeat's 1 s rests at base + 2%, which are post-release settles, so relaxation transients enter the steadiness number.
   - Lag is computed per whole run and F2 takes the median over all runs, mixing periodic, non-periodic, step and ramp levels.
   - Storm and Uncharted components sit closer together than one run's frequency resolution (C2).
+
+All five notebook observations are fixed in `analysis/session_analysis.ipynb` (25 September 2026): segmentation reads every task ramp, press and release read the symmetric shapes only with Dunes apart, steadiness reads the raised holds of 2 s or more, lag is read per wave class with F2 on the non-periodic waves, and Storm and Uncharted are fitted jointly. The new chapter is `sec_force_pilot_pd`.
+
+### E5. What the first real ladder runs showed (25 September 2026)
+
+Three blocks of the author's own pilot data (22 runs, 2 people) were re-scored with the new code before anything was fixed. They showed four problems no paper could have flagged, because each comes from this device or this task.
+
+- The zero was wrong. The notebook re-tared each run from the second before it began, and players press toward the 8% first hold during that second, since the corridor shows about 8 s ahead. Error moved by up to 5.6% of max and time in corridor by up to 0.47 against the game's own score. The game logs its zero now (`ref_counts`), older runs rebuild it at the announce card's opening, and the offline score matches the game to a median 0.03% of max. Two game-side changes came with it: force is clamped at zero as the game shows it, and a finger flying two levels in a row (Storm into Uncharted) keeps its rested zero.
+- The lag estimator was biased. It summed the cross-correlation over a shrinking overlap, which puts a cusp at zero lag on any wave whose two ends sit on the same side of the mean. Every ramp level read 0 ms, and a synthetic Tide read 0 ms for true lags of 50, 150 and 250 ms. Each lag is now a Pearson r over the overlapping samples.
+- The 12 Hz filter Davidson used is too wide for rates on these pads. Rate fluctuation on holds was 8.7 %/s at a 3 Hz cut-off and 17 %/s at 12 Hz, larger than the 5 %/s ramps, and a peak rate read up to 3.7 times the rate asked for. Rates now use a 5 Hz low-pass and 20 to 80% transition times (arithmetic check: a 0.5 Hz raised cosine loses nothing below 5 Hz). Pauses on a 5 %/s ramp partly count the normal start-stop of visual correction, so segmentation here is a device norm, not Howard 2022's rapid-pulse measure.
+- The corridor changes what amplitude means. It scores being inside it, and at the easy levels it is wider than the wave, so a player can stay inside while making the wave smaller. The author's sine gain was 0.5 to 0.8 against Davidson's 0.83 in young adults. Gain and the 5% bands read the corridor as much as the hand; Davidson scored error against the line itself.
+
+Also: three runs ended a real block with the finger never pressing (levels 10 to 12). Kept in, they would have faked an error rise with level and propped up F1. Runs whose 95th percentile of force is under 2% of max are now left out as idle, like demo runs.
+
+These belong in the methods (the zero and the lag estimator) and the limitations (the filter, the corridor and amplitude, the pad noise floor under every SD and 5% band) of the thesis.

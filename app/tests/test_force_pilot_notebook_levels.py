@@ -441,9 +441,17 @@ class ForcePilotDemoFlagTests(unittest.TestCase):
 
 class ForcePilotRampSegmentationTests(unittest.TestCase):
     """Audit finding #83: the brief names step count and pause
-    duration on slow ramps (Naik 2011's segmentation measures, a
-    reliable PD discriminator per the cluster notes) as deliverable
-    metrics; the chapter computed none of them."""
+    duration on slow ramps (Naik 2011's segmentation measures; Howard
+    2022 found them to separate PD from ageing) as deliverable
+    metrics; the chapter computed none of them. They now run on every
+    task ramp of the ladder, from the filtered rate (fp_pd_measures);
+    this pins the pause detector itself."""
+
+    @staticmethod
+    def _pauses(ra_ns, t, pct, fs):
+        rate = np.gradient(ra_ns.fp_lowpass(pct, fs), 1.0 / fs)
+        inner = (t >= 0.25) & (t <= t[-1] - 0.25)
+        return ra_ns.fp_pauses(rate[inner], fs, 3.0)
 
     def test_ramp_segmentation_counts_plateaus_not_a_clean_ramp(self):
         ra_ns = _load_ra()
@@ -457,15 +465,14 @@ class ForcePilotRampSegmentationTests(unittest.TestCase):
             m = (t >= a) & (t < b)
             pct[m] = p0 if p1 == p0 else p0 + (p1 - p0) * (t[m] - a) / (
                 b - a)
-        out = ra_ns.ramp_segmentation(t, pct, [("ramp_up", 0.0, 2.3)])
-        self.assertEqual(out["ramp_up"]["steps"], 1)
-        self.assertAlmostEqual(out["ramp_up"]["mean_pause_s"], 0.3,
-                               delta=0.02)
+        pauses = self._pauses(ra_ns, t, pct, fs)
+        self.assertEqual(len(pauses), 1)
+        # The 5 Hz filter rounds the plateau's corners, so the pause
+        # reads a little short of 0.3 s.
+        self.assertAlmostEqual(pauses[0], 0.25, delta=0.06)
 
         t2 = np.arange(0, 2.0, 1.0 / fs)
-        pct2 = 10.0 * t2
-        clean = ra_ns.ramp_segmentation(t2, pct2, [("ramp_up", 0.0, 2.0)])
-        self.assertEqual(clean["ramp_up"]["steps"], 0)
+        self.assertEqual(self._pauses(ra_ns, t2, 10.0 * t2, fs), [])
 
     def test_force_tracking_runs_carries_step_and_pause_columns(self):
         with tempfile.TemporaryDirectory() as td:

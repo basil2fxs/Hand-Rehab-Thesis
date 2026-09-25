@@ -658,6 +658,27 @@ class RunScoringTests(unittest.TestCase):
         self.assertEqual([(s.name, s.start_s, s.end_s)
                           for s in sections_from_params(params)], sections)
 
+    def test_a_finger_flying_twice_keeps_its_rested_zero(self):
+        # Storm (11) and Uncharted (12) are both the index finger, with
+        # only the announce card between them. The finger that just
+        # landed has not rested, so the card must not tare it.
+        m = self._ready_mode(levels=[11, 12], mid_rest_s=0.0)
+        t = _to_run_phase(m)
+        lane = m.lane
+        before = len(m.view.rebaselined)
+        _play_run(m, t, lambda t_run, target: target)
+        self.assertEqual(m.phase, "announce")
+        self.assertEqual(m.lane, lane)
+        self.assertEqual(len(m.view.rebaselined), before)
+
+    def test_a_new_finger_is_tared_as_its_card_opens(self):
+        m = self._ready_mode(levels=[1, 2], mid_rest_s=0.0)  # index, middle
+        t = _to_run_phase(m)
+        before = len(m.view.rebaselined)
+        _play_run(m, t, lambda t_run, target: target)
+        self.assertEqual(m.phase, "announce")
+        self.assertEqual(m.view.rebaselined[before:], [[m.lane]])
+
     def test_a_view_without_a_zero_logs_no_zero(self):
         from finger_rehab.data.logger import parse_waveform_params
         m = self._ready_mode()
