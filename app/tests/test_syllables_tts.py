@@ -24,6 +24,7 @@ os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
 import syllables_recording_kit as K  # noqa: E402
 import syllables_tts as T  # noqa: E402
+from finger_rehab.game.modes.syllables_words import speech_stem  # noqa: E402
 
 SPEECH = ROOT / "assets" / "speech"
 # Every pool: the battery's classic profile plays the child bank, and
@@ -80,14 +81,16 @@ class ChunkSounds(unittest.TestCase):
         items = {stem: ps for stem, _k, _t, ps in T.plan_items(SHIPPED_POOLS)}
         for w in load_pools()["pseudo"]:
             with self.subTest(word=w.word):
-                parts = [items[f"chunks/{c.lower()}"] for c in w.syllables]
-                self.assertEqual(items[w.word].replace("ˈ", ""),
+                parts = [items[f"chunks/{speech_stem(c.lower())}"]
+                         for c in w.syllables]
+                word_ps = items[speech_stem(w.word)]
+                self.assertEqual(word_ps.replace("ˈ", ""),
                                  "".join(parts).replace("ˈ", ""))
                 # Stressed where the bank says: the mark sits in the
                 # stressed chunk's share of the string.
                 before = sum(len(p) - p.count("ˈ")
                              for p in parts[:w.stress])
-                self.assertLessEqual(before, items[w.word].index("ˈ"))
+                self.assertLessEqual(before, word_ps.index("ˈ"))
 
     def test_a_chunk_the_rules_cannot_read_stops_the_run(self):
         with self.assertRaises(ValueError):
@@ -116,7 +119,9 @@ class ShippedVoice(unittest.TestCase):
 
     def test_every_item_the_game_can_play_has_a_file(self):
         chunks, words = K.bank_items(SHIPPED_POOLS)
-        for stem in [f"chunks/{c}" for c in chunks] + list(words):
+        stems = ([f"chunks/{speech_stem(c)}" for c in chunks]
+                 + [speech_stem(w) for w in words])
+        for stem in stems:
             with self.subTest(stem=stem):
                 self.assertTrue((SPEECH / f"{stem}.wav").is_file())
 
@@ -157,6 +162,27 @@ class ShippedVoice(unittest.TestCase):
                 if stem.startswith("chunks/"):
                     self.assertAlmostEqual(rec["rms_dbfs"],
                                            K.CHUNK_RMS_DBFS, delta=0.5)
+
+    def test_a_windows_device_name_ships_under_its_underscore(self):
+        """con.wav cannot be checked out on Windows, which broke the
+        build; the con of confidence is chunks/con_.wav, and the game,
+        the kit and this script all ask speech_stem for the name."""
+        from tests.test_syllables_mode import _build_mode
+        self.assertTrue((SPEECH / "chunks" / "con_.wav").is_file())
+        self.assertFalse((SPEECH / "chunks" / "con.wav").exists())
+        self.assertIn("chunks/con_", self.manifest["entries"])
+        _e, m = _build_mode()
+        self.assertEqual(m.chunk_speech_path("con"),
+                         SPEECH / "chunks" / "con_.wav")
+        self.assertAlmostEqual(
+            m.speech_seconds(m.chunk_speech_path("con")),
+            self.manifest["entries"]["chunks/con_"]["duration_ms"] / 1000.0,
+            places=3)
+        plan = K.make_plan(pools=("adult",))
+        stems = {it["stem"] for page in plan["pages"]
+                 for it in page["items"]}
+        self.assertIn("chunks/con_", stems)
+        self.assertNotIn("chunks/con", stems)
 
     def test_the_game_finds_them_and_counts_them_as_spelt(self):
         from tests.test_syllables_mode import _build_mode

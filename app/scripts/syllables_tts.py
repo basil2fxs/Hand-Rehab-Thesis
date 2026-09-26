@@ -347,18 +347,19 @@ def plan_items(pools, only=None):
     the whole bank; the pools only choose what is made."""
     every, _ = kit.bank_items(kit.ALL_POOLS)
     chunks, words = kit.bank_items(pools)
-    from finger_rehab.game.modes.syllables_words import load_pools
+    from finger_rehab.game.modes.syllables_words import (load_pools,
+                                                         speech_stem)
     pseudo = {w.word: w for w in load_pools().get("pseudo", ())}
     items = []
     for c in sorted(chunks):
-        items.append((f"chunks/{c}", "chunk", c,
+        items.append((f"chunks/{speech_stem(c)}", "chunk", c,
                       chunk_phonemes(c, every[c][0])))
     for w in words:
         made_up = pseudo.get(w)
         ps = (pseudo_phonemes(made_up.syllables, made_up.stress,
                               lambda c: every[c.lower()][0])
               if made_up is not None else WORD_FIXES.get(w))
-        items.append((w, "word", w, ps))
+        items.append((speech_stem(w), "word", w, ps))
     if only:
         items = [it for it in items if it[0] in only]
     return items

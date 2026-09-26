@@ -278,7 +278,7 @@ from .classic import PendingTrial
 from .syllables_foils import Inventory, build_option_set, kinds_for_rung
 from .syllables_profiles import Profile, resolve as resolve_profile
 from .syllables_words import (Word, pool_syllable_lists, profile_words,
-                              syllable_lists, words_for)
+                              speech_stem, syllable_lists, words_for)
 
 if TYPE_CHECKING:
     from ..engine import GameEngine
@@ -1750,7 +1750,7 @@ class SyllablesMode(WaitSkip):
         writes ogg, a hand-made file is likely to be wav."""
         root = self._speech_root()
         for ext in (".ogg", ".wav"):
-            p = root / f"{stem}{ext}"
+            p = root / f"{speech_stem(stem)}{ext}"
             if p.exists():
                 return p
         return None
@@ -1765,7 +1765,7 @@ class SyllablesMode(WaitSkip):
         tur, and only the spelt form tells them apart."""
         root = self._speech_root() / "chunks"
         for ext in (".wav", ".ogg"):
-            p = root / f"{chunk}{ext}"
+            p = root / f"{speech_stem(chunk)}{ext}"
             if p.exists():
                 return p
         return None

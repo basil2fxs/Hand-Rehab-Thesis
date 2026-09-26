@@ -62,6 +62,21 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
+# Windows keeps these names for devices whatever the extension, so a
+# file called con.wav cannot even be checked out there (the build broke
+# on the con of confidence).
+WINDOWS_DEVICE_NAMES = frozenset(
+    ["con", "prn", "aux", "nul"]
+    + [f"com{i}" for i in range(1, 10)]
+    + [f"lpt{i}" for i in range(1, 10)])
+
+
+def speech_stem(text: str) -> str:
+    """The file name a chunk's or a word's speech goes under: the text
+    itself, with a trailing underscore on a Windows device name, so
+    the con of confidence is chunks/con_.wav."""
+    return f"{text}_" if text.lower() in WINDOWS_DEVICE_NAMES else text
+
 
 @dataclass(frozen=True)
 class Word:

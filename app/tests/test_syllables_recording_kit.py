@@ -83,8 +83,12 @@ class ThePlan(unittest.TestCase):
         plan = K.make_plan(seed=5, page_size=50)
         stems = [i["stem"] for p in plan["pages"] for i in p["items"]]
         self.assertEqual(len(stems), len(set(stems)))
-        self.assertEqual(set(stems), {f"chunks/{c}" for c in chunks}
-                         | set(words))
+        # File names, so a Windows device name (con) carries its
+        # underscore.
+        from finger_rehab.game.modes.syllables_words import speech_stem
+        self.assertEqual(set(stems),
+                         {f"chunks/{speech_stem(c)}" for c in chunks}
+                         | {speech_stem(w) for w in words})
         again = K.make_plan(seed=5, page_size=50)
         self.assertEqual(plan["pages"], again["pages"])
         self.assertTrue(all(len(p["items"]) <= 50 for p in plan["pages"]))

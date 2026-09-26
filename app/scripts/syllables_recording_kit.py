@@ -210,10 +210,11 @@ def bank_items(pools=ALL_POOLS):
 def make_plan(seed: int = 2026, page_size: int = PAGE_SIZE,
               only_missing: bool = False, speech_dir: Path = SPEECH_DIR,
               pools=ALL_POOLS):
+    from finger_rehab.game.modes.syllables_words import speech_stem
     chunks, words = bank_items(pools)
     items = []
     for c, (stressed, examples) in sorted(chunks.items()):
-        stem = f"chunks/{c}"
+        stem = f"chunks/{speech_stem(c)}"
         if only_missing and _has_file(speech_dir, stem):
             continue
         hint, unsure = respell(c, stressed)
@@ -221,9 +222,9 @@ def make_plan(seed: int = 2026, page_size: int = PAGE_SIZE,
                       "hint": hint, "unsure": unsure,
                       "examples": examples, "stressed": stressed})
     for w in words:
-        if only_missing and _has_file(speech_dir, w):
+        if only_missing and _has_file(speech_dir, speech_stem(w)):
             continue
-        items.append({"kind": "word", "text": w, "stem": w})
+        items.append({"kind": "word", "text": w, "stem": speech_stem(w)})
     random.Random(seed).shuffle(items)
     pages = []
     for p, start in enumerate(range(0, len(items), page_size), 1):
@@ -485,9 +486,11 @@ def cmd_cut(args) -> int:
 
 def cmd_check(args) -> int:
     root = Path(args.speech_dir)
+    from finger_rehab.game.modes.syllables_words import speech_stem
     chunks, words = bank_items()
-    miss_c = [c for c in sorted(chunks) if not _has_file(root, f"chunks/{c}")]
-    miss_w = [w for w in words if not _has_file(root, w)]
+    miss_c = [c for c in sorted(chunks)
+              if not _has_file(root, f"chunks/{speech_stem(c)}")]
+    miss_w = [w for w in words if not _has_file(root, speech_stem(w))]
     print(f"chunks: {len(chunks) - len(miss_c)} of {len(chunks)} recorded")
     print(f"words:  {len(words) - len(miss_w)} of {len(words)} recorded")
     for label, miss in (("chunks", miss_c), ("words", miss_w)):
