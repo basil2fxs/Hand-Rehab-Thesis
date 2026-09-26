@@ -1246,8 +1246,9 @@ syllables:
   # whoever is working on the mode; file never speaks without a
   # rendered file (the shipping setting for the lab machine, which is
   # Windows and has no say); say never reads a file; off is silent.
-  # Files live under dir as <word>.ogg and <word>_<k>.ogg for the k-th
-  # syllable; scripts/render_syllables_speech.py makes them.
+  # Files live under dir: chunks/<chunk>.wav for each written chunk and
+  # <word>.wav for each word, made by scripts/syllables_tts.py (an older
+  # <word>_<k>.ogg render still plays where a chunk has no file).
   speech:
     backend: auto
     dir: assets/speech

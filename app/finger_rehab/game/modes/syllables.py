@@ -154,8 +154,10 @@ words from 10, and for adults the word heard without being seen, no
 buzz, rarer derived and made-up words and a fall-time staircase whose
 threshold is the result. The healthy baseline study pinned the design
 as it stood (the classic profile), so its battery block never changes
-with a participant's age. Speech is recorded, one Australian voice,
-each chunk spoken as spelt (scripts/syllables_recording_kit.py).
+with a participant's age. Speech is a free synthetic voice (Kokoro,
+British), each chunk spoken as spelt (scripts/syllables_tts.py); a
+recorded Australian voice can replace it
+(scripts/syllables_recording_kit.py).
 
 HANDS. With both hands connected the hands ALTERNATE PER WORD: all
 four tiles sit over the playing hand, the resting hand shows seat
