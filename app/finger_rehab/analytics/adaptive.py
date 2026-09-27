@@ -86,9 +86,12 @@ class AdaptiveConfig:
     bpm_min: float = 10.0
     bpm_max: float = 180.0
     bpm_step: float = 10.0
-    # Weakness bias on lane selection. Lane weights scale as
-    # weakness_bias ** (1 - hit_ema), so a weak lane (hit_ema = 0)
-    # is picked 2.5x more often than a strong one (hit_ema = 1).
+    # Weakness bias on lane selection. A lane's weight is
+    # max(0.05, 1 - hit_ema) ** weakness_bias + 0.1 (lane_weights), so
+    # before the per-finger floor a lane missing everything (hit_ema 0,
+    # weight 1.1) is picked about eleven times as often as one hitting
+    # everything (weight 0.1006). The floor (min_finger_share) then
+    # guarantees every finger its share of the block.
     weakness_bias: float = 2.5
     # Minimum trials per lane before its EMA influences BPM decisions.
     # Stops single-trial noise driving an early speed-up / slow-down.

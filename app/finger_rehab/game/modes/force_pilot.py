@@ -56,7 +56,7 @@ PARAMETER DEFENCES, in config order:
   Naik 2011's lower rates for the climbs, with Dunes deliberately
   three times faster on the way down, since release is the half
   Davidson 2026 found impaired in Parkinson's.
-- component frequencies 0.12 to 0.5 Hz: the Lodha analysis bands plus
+- component frequencies 0.08 to 0.5 Hz: the Lodha analysis bands plus
   Davidson's 0.2 Hz tracking sine, and inside the tracking bandwidth
   argued in THE LADDER below. The multisine levels are non-harmonic
   so they cannot be predicted from one cycle, and every frequency,
@@ -135,8 +135,9 @@ percent of THAT number, never raw counts. Then the ladder: level 1 to
 level 12, one run each, and in a both-hands block each level is flown
 by the first hand then the second so the hand comparison is within a
 level and the resting hand recovers while the other flies. Leaving
-the corridor stalls the craft and buzzes the working finger; rings on
-the centreline reward time-in-corridor.
+the corridor stalls the craft; the working finger also buzzes when
+cue.buzz_after is on, which the study leaves off. Rings on the
+centreline reward time-in-corridor.
 
 Gaps are deliberately short (Basil's brief: not much time between
 runs). One card of announce_s carries the last run's numbers and the
@@ -293,6 +294,14 @@ LADDER_SECTION_LABELS = {
     "storm": "storm",
     "uncharted": "uncharted water",
 }
+
+
+# Ramps that only walk the target from the resting level to where a
+# multisine starts (1 s, at whatever slope the phases ask for). They
+# are not a press or a release the player was asked to make, so they
+# stay out of the in-game press and release split, as they do in the
+# notebook (FP_TRANSITION_RAMPS).
+WALK_IN_RAMPS = frozenset({"approach", "pre_assess"})
 
 
 def section_label(name: str) -> str:
@@ -1039,6 +1048,9 @@ class ForcePilotMode(WaitSkip):
         # The lane whose run just closed, until the next card opens: a
         # finger flying twice in a row keeps its last rested zero.
         self._just_flew_lane: int | None = None
+        # The trial id a no-signal replay stands in for, carried onto
+        # the replay's row; None for a first attempt.
+        self._replays_trial: int | None = None
         self.run_seed: int = self.seed
         self.params: dict = {}
         self.sections: list[RunSection] = []
@@ -1080,7 +1092,9 @@ class ForcePilotMode(WaitSkip):
         self._sec_acc: dict[str, list[float]] = {}
         # Ramp error split by direction, not by section name: every
         # ramp level (Tide, Hills, Dunes) feeds the same two buckets,
-        # so press and release stay comparable across the ladder.
+        # so press and release stay comparable across the ladder. The
+        # walk-in ramps before a multisine are left out
+        # (WALK_IN_RAMPS).
         self._press_acc = [0.0, 0.0]
         self._release_acc = [0.0, 0.0]
         self._stalls = 0
@@ -1129,6 +1143,19 @@ class ForcePilotMode(WaitSkip):
             v = getattr(self, attr)
             if v is not None:
                 setattr(self, attr, v + pause_dur)
+        if self.phase == "probe":
+            # The stall clock and the attempt in progress run on the
+            # same clock as the timers above. Left behind, a pause of
+            # more than PROBE_STALL_S ended the block on the first
+            # frame back as if no press had come.
+            if getattr(self, "_probe_progress_t", None) is not None:
+                self._probe_progress_t += pause_dur
+            probe = self.probe
+            if probe is not None:
+                for attr in ("_press_start", "_rest_since"):
+                    v = getattr(probe, attr, None)
+                    if v is not None:
+                        setattr(probe, attr, v + pause_dur)
         if self.phase == "run":
             # A pause mid-run breaks the trace being scored: the target
             # would freeze while the hand did whatever it did. Restart
@@ -1141,6 +1168,11 @@ class ForcePilotMode(WaitSkip):
                     "run_restart", lane=self.lane,
                     detail=f"trial_id={self.trial_counter}",
                     hand=self.engine.hand_mode)
+            # The finger was flying when the pause came, and the
+            # detectors were not fed during it, so a tare now would
+            # read the force frozen at the pause as the zero. The
+            # run's own card zero stands.
+            self._just_flew_lane = self.lane
             self._enter_announce(time.perf_counter(), reuse_run=True)
 
     # ---- main tick ---------------------------------------------------------
@@ -1284,6 +1316,7 @@ class ForcePilotMode(WaitSkip):
         idx = min(self._next_idx, len(self._plan) - 1)
         self._plan_idx = idx
         self._next_idx = idx + 1
+        self._replays_trial = None
         wave, hand, pass_idx = self._plan[idx]
         self.wave = wave
         self.level = wave.lvl
@@ -1371,13 +1404,27 @@ class ForcePilotMode(WaitSkip):
         self._phase_until = now + self.mid_rest_s
         self.arm_wait("rest", self._phase_until, self._after_mid_rest,
                       started_at=now)
+        # The same rest bytes Pattern, Echo and Chords send, so an
+        # alpha-trend analysis can take the rest out of task time.
+        self._send_rest_marker("rest_start", now)
         # A rest is a rest: the card after it tares every finger.
         self._just_flew_lane = None
         self.view.rebaseline([self.lane])
 
     def _after_mid_rest(self, now: float) -> None:
         self.clear_wait()
+        self._send_rest_marker("rest_end", now)
         self._enter_announce(now)
+
+    def _send_rest_marker(self, name: str, now: float) -> None:
+        send = getattr(self.engine, "_eeg_send", None)
+        if not callable(send):
+            return
+        try:
+            from ...hardware import eeg_trigger
+            send(eeg_trigger.CODES[name], t_event=now)
+        except Exception as e:
+            log.warning("rest EEG marker failed: %s", e)
 
     def _reset_run_scoring(self) -> None:
         self._sec_idx = 0
@@ -1541,7 +1588,7 @@ class ForcePilotMode(WaitSkip):
         if in_c:
             self._in_c_s += dt
         sec = self.sections[idx]
-        if sec.kind == "ramp":
+        if sec.kind == "ramp" and sec.name not in WALK_IN_RAMPS:
             bucket = (self._press_acc if sec.b_pct >= sec.a_pct
                       else self._release_acc)
             bucket[0] += abs(err) * dt
@@ -1569,34 +1616,43 @@ class ForcePilotMode(WaitSkip):
         self.stalled = not in_c
 
     def _exit_buzz(self, now: float) -> None:
-        """Tactile error feedback on corridor exit. Rides the
-        cue.buzz_after switch so a no-buzz block stays separable in
-        the CSV, with a cooldown so a wobble along the corridor edge
-        cannot turn into a motor drone."""
-        cues = self.engine.cue_settings()
-        if not cues.buzz_after:
-            return
+        """Error feedback on a corridor exit. The craft stalls on
+        screen whatever the settings (drawn from self.stalled). The
+        EEG byte 141 marks the exit when the block's feedback markers
+        are on, and the working finger buzzes only under
+        cue.buzz_after, so a no-buzz block stays separable in the
+        CSV. The study leaves buzz_after off: a pulse would sit under
+        the very finger whose force is being scored. The byte follows
+        the stall rather than the buzz, so the laboratory's FRN record
+        does not depend on that switch (with the byte tied to the
+        buzz, Force Pilot sent no 141 at all under either shipped
+        config). One cooldown covers both, so a wobble along the
+        corridor edge cannot turn into a drone of pulses or bytes."""
         if (self._last_buzz_t is not None
                 and now - self._last_buzz_t < self.exit_buzz_cooldown_s):
             return
+        buzz = bool(self.engine.cue_settings().buzz_after)
+        marker = bool(getattr(self.engine, "_eeg_feedback_markers", False))
+        if not (buzz or marker):
+            return
         self._last_buzz_t = now
-        # The EEG spec's 141 for this mode is DEFINED as the corridor-
-        # exit buzz (negative feedback onset for FRN work). pulse_motor
-        # has no marker hook, and the engine's generic trial-close
-        # feedback markers are suppressed for continuous rows, so the
-        # mode emits it here, gated the same way as every other
-        # feedback marker.
-        if getattr(self.engine, "_eeg_feedback_markers", False):
+        # 141 is this mode's negative feedback onset for FRN work.
+        # pulse_motor has no marker hook, and the engine's generic
+        # trial-close feedback markers are suppressed for continuous
+        # rows, so the mode emits it here, gated the same way as every
+        # other feedback marker.
+        if marker:
             try:
                 from ...hardware import eeg_trigger
                 self.engine._eeg_send(
                     eeg_trigger.CODES["feedback_negative"], t_event=now)
             except Exception as e:
-                log.warning("exit-buzz EEG marker failed: %s", e)
-        try:
-            self.engine.pulse_motor(self.lane, self.exit_buzz_ms)
-        except Exception as e:
-            log.warning("exit buzz failed: %s", e)
+                log.warning("corridor-exit EEG marker failed: %s", e)
+        if buzz:
+            try:
+                self.engine.pulse_motor(self.lane, self.exit_buzz_ms)
+            except Exception as e:
+                log.warning("exit buzz failed: %s", e)
 
     # ---- closing a run -----------------------------------------------------
     def _sec_mae(self, name: str) -> float | None:
@@ -1619,8 +1675,13 @@ class ForcePilotMode(WaitSkip):
         # the per-finger tables, showed the patient 'ROUGH RIDE ...
         # Mean error 0.0% of max', and demoted the staircase because
         # the device dropped, not because the patient tracked badly.
+        # Covered time is scored time plus the step-edge grace, which
+        # had a live signal and is only left out of the score by
+        # design. Counting scored time alone read the Stairs graces as
+        # lost signal and voided a Stairs run that a ramp run with the
+        # same dropout kept.
         plan_s = float(self.duration_s or 0.0)
-        if plan_s > 0 and scored < 0.5 * plan_s:
+        if plan_s > 0 and scored + self._grace_s < 0.5 * plan_s:
             self._close_run_no_signal(trial, now, scored, plan_s)
             return
         self._no_signal_streak = 0
@@ -1662,7 +1723,8 @@ class ForcePilotMode(WaitSkip):
             f"press_mae={_fmt(press_mae)};release_mae={_fmt(release_mae)};"
             f"rings={self._rings_collected}/{rings_total};"
             f"stalls={self._stalls};scored_s={scored:.2f};"
-            f"grace_s={self._grace_s:.2f}")
+            f"grace_s={self._grace_s:.2f}"
+            + self._replay_tag())
         segments = [(s.name, (self.run_t0 or 0.0) + s.start_s,
                      (self.run_t0 or 0.0) + s.end_s)
                     for s in self.sections]
@@ -1679,11 +1741,15 @@ class ForcePilotMode(WaitSkip):
             # "timeout" filters that mean "no press before the
             # deadline". This mode has no wrong-finger concept either,
             # so the override is unconditional, not just for Miss.
+            # No after-press confirmation buzz either: a run is not a
+            # press, and with cue.buzz_after on a Great run used to
+            # end on a pulse under the working finger with no byte.
             self.engine.log_trial(trial, outcome, now, stimulus=stimulus,
                                   correct_lanes=[self.lane],
                                   continuous=info,
                                   error_type=("low_tracking"
-                                              if label == "Miss" else None))
+                                              if label == "Miss" else None),
+                                  after_press_cue=False)
 
         self._last_result = {
             "label": label, "tic": tic, "mae": mae,
@@ -1704,6 +1770,13 @@ class ForcePilotMode(WaitSkip):
             self._enter_mid_rest(now)
         else:
             self._enter_announce(now)
+
+    def _replay_tag(self) -> str:
+        """';replays=<id>' on a no-signal replay's row, naming the
+        voided attempt it stands in for; empty on a first attempt."""
+        if self._replays_trial is None:
+            return ""
+        return f";replays={self._replays_trial}"
 
     # How many consecutive signal-starved closes of the same run slot
     # replay it before the slot is abandoned. Keeps a permanently dead
@@ -1726,7 +1799,8 @@ class ForcePilotMode(WaitSkip):
             f"tic=;mae=;press_mae=;release_mae=;rings=0/0;"
             f"stalls={self._stalls};scored_s={scored:.2f};"
             f"grace_s={self._grace_s:.2f};"
-            f"plan_s={plan_s:.2f};no_signal=True")
+            f"plan_s={plan_s:.2f};no_signal=True"
+            + self._replay_tag())
         segments = [(s.name, (self.run_t0 or 0.0) + s.start_s,
                      (self.run_t0 or 0.0) + s.end_s)
                     for s in self.sections]
@@ -1737,7 +1811,8 @@ class ForcePilotMode(WaitSkip):
             self.engine.log_trial(trial, outcome, now, stimulus=stimulus,
                                   correct_lanes=[self.lane],
                                   continuous=info,
-                                  error_type="no_signal")
+                                  error_type="no_signal",
+                                  after_press_cue=False)
         self._no_signal_runs += 1
         self._no_signal_streak += 1
         self._last_result = {
@@ -1749,7 +1824,16 @@ class ForcePilotMode(WaitSkip):
         }
         if self._no_signal_streak <= self.MAX_NO_SIGNAL_RETRIES:
             # Replay the same rung (same level, same phases), like the
-            # pause path: the slot produced no evidence yet.
+            # pause path: the slot produced no evidence yet. The replay
+            # is a run of its own with its own row, so it takes a new
+            # trial id and names the one it replays; sharing the id
+            # made the segment check pair one row's segments with the
+            # other's events. It keeps the voided run's zero: the
+            # reading is frozen at the drop or held at the finger's
+            # last force, and neither is the finger at rest.
+            self._replays_trial = trial.trial_id if trial is not None else None
+            self.trial_counter += 1
+            self._just_flew_lane = self.lane
             self._enter_announce(now, reuse_run=True)
             return
         # Give the rung up and move the ladder on.

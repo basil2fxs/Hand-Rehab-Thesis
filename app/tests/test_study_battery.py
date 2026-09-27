@@ -568,7 +568,11 @@ class ShortFormTests(_BatteryHarness):
         self.assertFalse(ch.bilateral)
         bh = self._step_to(eng, "buzz_hunt")
         plan = list(bh._stage_plan)
-        self.assertEqual(plan.count("loc"), 16)    # one hand
+        # 16 real localisation trials plus the two catch trials dealt on
+        # top of them (27 September 2026).
+        self.assertEqual(plan.count("loc"), 18)    # one hand
+        self.assertEqual(bh.n_loc_real, 16)
+        self.assertEqual(bh.n_catch_planned, 2)
         self.assertEqual(plan.count("span"), 4)
         self.assertEqual(plan.count("dis"), 0)
         self.assertEqual(plan.count("gap"), 0)

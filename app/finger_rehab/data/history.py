@@ -199,9 +199,27 @@ def chip_for(mode: str, current: dict, previous: dict) -> dict | None:
     return {"text": text, "better": better, "delta": round(delta, 3)}
 
 
+def variant_key(mode: str, summary: dict | None):
+    """What has to match for two blocks of one mode to be the same
+    measure. Reaction's simple and choice sub-modes are different
+    measures, not difficulty levels, and its fixed-wait EEG variant is
+    not comparable with the exponential wait (config/default.yaml,
+    reaction block), so a chip reading "faster than last time" across
+    them compares two different tasks. None for every other mode,
+    which matches anything."""
+    if str(mode) != "reaction" or not isinstance(summary, dict):
+        return None
+    stats = summary.get("reaction")
+    if not isinstance(stats, dict):
+        return None
+    return (str(stats.get("sub_mode") or ""), str(stats.get("fp_mode") or ""),
+            str(stats.get("fp_fixed_s") or ""))
+
+
 def previous_block_summary(data_dir: Path | str, participant: str,
                            mode: str, hand: str,
-                           exclude_root: Path | str | None = None
+                           exclude_root: Path | str | None = None,
+                           current: dict | None = None
                            ) -> dict | None:
     """The newest completed block_summary in the sessions tree for the
     same participant, mode and hand, or None on a first play.
@@ -213,8 +231,12 @@ def previous_block_summary(data_dir: Path | str, participant: str,
     Unreadable or half-written metadata files are skipped: this feeds
     a results-screen chip, not an analysis, so a broken folder should
     cost a log line at most.
+
+    `current`, when given, is the block just played: only a block of
+    the same variant (variant_key) counts as last time.
     """
     root = Path(data_dir)
+    want = variant_key(mode, current) if current is not None else None
     if not root.exists():
         return None
     exclude = Path(exclude_root).resolve() if exclude_root else None
@@ -239,6 +261,8 @@ def previous_block_summary(data_dir: Path | str, participant: str,
         if str(summary.get("block") or "") != str(mode):
             continue
         if str(meta.get("hand") or "") != str(hand):
+            continue
+        if want is not None and variant_key(mode, summary) != want:
             continue
         key = (str(meta.get("finished_at") or "")
                or str(meta.get("started_at") or ""))

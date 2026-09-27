@@ -280,6 +280,13 @@ log = logging.getLogger(__name__)
 
 
 # ---- participant-stable material -------------------------------------------
+def _norm_name(name) -> str:
+    """The name as the seeds read it: trimmed, lower case. The
+    prior-game count compares names the same way, so a stray space
+    or capital at login does not replay game 0's sequence."""
+    return str(name or "").strip().lower()
+
+
 def participant_echo_seed(name: str) -> int:
     """Deterministic hidden-sequence seed from the participant name.
     Same convention as pattern's participant_seed and buzz_hunt's
@@ -382,7 +389,7 @@ def count_prior_echo_games(data_dir, participant: str,
                 continue
             if not isinstance(meta, dict):
                 continue
-            if str(meta.get("participant") or "") != str(participant):
+            if _norm_name(meta.get("participant")) != _norm_name(participant):
                 continue
             summary = meta.get("block_summary")
             if not isinstance(summary, dict):
@@ -751,6 +758,10 @@ class EchoMode(WaitSkip):
             v = getattr(self, attr)
             if v is not None:
                 setattr(self, attr, v + pause_dur)
+        # The presses already made this turn move with the turn's
+        # opening, so their offsets on the row exclude the pause.
+        self._entered = [(lane, t + pause_dur)
+                         for lane, t in self._entered]
 
     # ---- main tick ---------------------------------------------------------
     def update(self, dt: float) -> None:
@@ -920,12 +931,18 @@ class EchoMode(WaitSkip):
     def _end_play(self, now: float) -> None:
         """Close the show phase and open reproduction. Reached from
         the play frame when the last light goes off, or from a press
-        that lands at or after that offset (a fast reply)."""
+        that lands at or after that offset (a fast reply). The turn
+        opens at the last item's offset on the grid, not on the frame
+        that noticed it: the frame runs up to 17 ms late, and a fast
+        reply stamped between the two would otherwise sit before the
+        turn's opening and carry a negative offset on the row."""
         self._item_off_due = None
         self._light_lane(None)
+        opened = self._last_offset_due()
+        opened = now if opened is None else min(opened, now)
         self.engine.log_segment_end("stim", self.trial_counter,
-                                    self.sequence[-1], now)
-        self._begin_respond(now)
+                                    self.sequence[-1], opened)
+        self._begin_respond(now, opened)
 
     def _fire_item(self, lane: int, idx: int, now: float) -> None:
         """One playback item: tile light plus buzz, simultaneous
@@ -973,13 +990,16 @@ class EchoMode(WaitSkip):
             pending.append((int(code), lane))
 
     # ---- reproduction ------------------------------------------------------
-    def _begin_respond(self, now: float) -> None:
+    def _begin_respond(self, now: float,
+                       opened: float | None = None) -> None:
         self.phase = "respond"
-        self._respond_t0 = now
+        self._respond_t0 = now if opened is None else opened
+        # The idle window runs from the frame: a safety net, not a
+        # measure, so the grid does not shorten it.
         self._deadline = now + self.idle_timeout_s
         self._set_message("Your turn", 1.5)
         self.engine.log_segment_start("respond", self.trial_counter,
-                                      self.sequence[0], now)
+                                      self.sequence[0], self._respond_t0)
 
     def _respond_frame(self, now: float) -> None:
         if self._deadline is not None and now >= self._deadline:
@@ -1071,6 +1091,14 @@ class EchoMode(WaitSkip):
         n_right = self._match
         length = len(self.sequence)
         correct = kind == "correct"
+        play_t0 = self._play_t0 if self._play_t0 is not None else now
+        # A silent close while a board was away is the rig's, not a
+        # memory result: the hand may have pressed pads nobody was
+        # reading. The engine voids the row on the same test
+        # (log_trial, device_drop); the mode keeps it out of the
+        # span, the misses, the life and the ladder, and replays the
+        # length after the rest.
+        voided = kind == "omission" and self._rig_void(play_t0, now)
         if correct:
             outcome = TrialResult(
                 label="Great",
@@ -1084,8 +1112,13 @@ class EchoMode(WaitSkip):
             # tile flash and the score, not a line.
             if length > self._game_best:
                 self._game_best = length
-                self._set_message(f"Longest echo: {length}", 2.0,
-                                  kind="best")
+                # The lab's neutral style draws no chip: a gold
+                # banner one frame after the last press is an
+                # unscheduled visual event in the EEG record, the
+                # engine's own rule for its streak banners.
+                if getattr(self.engine, "feedback_style", "") != "neutral":
+                    self._set_message(f"Longest echo: {length}", 2.0,
+                                      kind="best")
         else:
             # Partial credit still pays per item (never punishing),
             # and the card stays neutral: an "almost" is information,
@@ -1102,8 +1135,11 @@ class EchoMode(WaitSkip):
         # eCorsi 600 ms motor baseline analogue) fall out of these,
         # and they never touch the score.
         r0 = self._respond_t0 if self._respond_t0 is not None else now
+        # The turn opens on the grid and a pause moves every stamp,
+        # so an offset is never negative; the clamp keeps the packed
+        # field readable by its separator even so.
         press_offsets = "-".join(
-            f"{(t - r0) * 1000.0:.0f}" for _l, t in self._entered)
+            f"{max(0.0, (t - r0) * 1000.0):.0f}" for _l, t in self._entered)
         trial_idx = (self.trial_in_len + 1
                      if self._demo_plan is None else 1)
         # Where the attempt failed, 1-based on the serial position:
@@ -1131,7 +1167,8 @@ class EchoMode(WaitSkip):
                 f"life={1 if self.life_trial else 0};"
                 f"lives_left={self.lives_left};"
                 f"pos={pos};miss={miss_class}")
-        play_t0 = self._play_t0 if self._play_t0 is not None else now
+        if voided:
+            stimulus += ";void=1"
         stim_end = (play_t0 + (length - 1) * self._trial_ioi_s
                     + self.item_on_s)
         info = ContinuousTrialLog(
@@ -1154,11 +1191,20 @@ class EchoMode(WaitSkip):
         # MOTORS ARE SHOW-PHASE ONLY).
         self.engine.log_trial(trial, outcome, now, stimulus=stimulus,
                               correct_lanes=list(self.sequence),
-                              continuous=info, after_press_cue=False)
+                              continuous=info, after_press_cue=False,
+                              error_type="device_drop" if voided else None)
         # Feedback markers, optional as everywhere (FRN work only).
         # The mode emits them itself because continuous rows skip the
-        # engine's feedback path by contract.
-        if getattr(self.engine, "_eeg_feedback_markers", False):
+        # engine's feedback path by contract. Immediate style only:
+        # there the close is the feedback (the last press's tile
+        # flash, the chip). Under a feedback delay nothing is drawn
+        # for an echo trial when the delay is up, so a byte then
+        # would mark no event; the lab build names no echo in
+        # eeg.feedback_markers in any case. A voided close is no
+        # outcome and sends nothing.
+        if (not voided
+                and getattr(self.engine, "_eeg_feedback_markers", False)
+                and not self._delayed_feedback()):
             send = getattr(self.engine, "_eeg_send", None)
             if callable(send):
                 send(EEG_CODES["feedback_positive" if correct
@@ -1177,7 +1223,11 @@ class EchoMode(WaitSkip):
             "life": self.life_trial,
             "pos": pos,
             "miss": miss_class,
+            "void": voided,
         })
+        if voided:
+            self._after_trial_void(now)
+            return
         self._game_trials += 1
         self._game_items += n_right
         if not correct:
@@ -1192,6 +1242,44 @@ class EchoMode(WaitSkip):
                 "life_trial": self.life_trial,
             })
         self._after_trial(now, kind, correct)
+
+    def _rig_void(self, t_from: float, t_to: float) -> bool:
+        """True when a board drop overlapped [t_from, t_to], by the
+        engine's own test. `is True` because a bare test engine
+        answers with a mock, which is not a drop."""
+        check = getattr(self.engine, "_drop_overlaps", None)
+        if not callable(check):
+            return False
+        return check(getattr(self.engine, "hand_mode", None),
+                     t_from, t_to) is True
+
+    def _delayed_feedback(self) -> bool:
+        """Whether the engine holds feedback back by a fixed delay
+        (the lab style). A mock engine has no number here."""
+        delay = getattr(self.engine, "feedback_delay_ms", 0)
+        return isinstance(delay, (int, float)) and float(delay) > 0
+
+    def _after_trial_void(self, now: float) -> None:
+        """After a voided close: the same length again after the
+        ordinary rest, nothing booked. Under the Simon rule the
+        sequence is the game's prefix, so the replay is the same
+        sequence; the ladder redraws its slot, as it does after a
+        fatigue rest. The demo miniature moves on, since its plan is
+        fixed by count, and the session cap still closes the block
+        at a trial close."""
+        if (self._t0 is not None
+                and (now - self._t0) > self.session_cap_s):
+            self._set_message("Great effort. Session done", 2.0)
+            if self.rule == "simon":
+                self._finish_game(now, "time_cap")
+            else:
+                self._end("time_cap")
+            return
+        if (self._demo_plan is not None
+                and len(self._records) >= len(self._demo_plan)):
+            self._end("completed")
+            return
+        self._enter_rest(now, self.rest_s, "between", "")
 
     def _miss_class(self, kind: str, pressed: list[int]) -> str:
         """The serial-recall taxonomy for one failed attempt, computed
@@ -1469,7 +1557,8 @@ class EchoMode(WaitSkip):
                     if r["outcome"] == "correct"), default=0)
         spans = [g["span"] for g in self.game_records]
         per_length: list[dict] = []
-        for r in self._records:
+        scored = [r for r in self._records if not r.get("void")]
+        for r in scored:
             key = (r["run"], r["len"])
             slot = next((p for p in per_length
                          if (p["run"], p["len"]) == key), None)
@@ -1486,7 +1575,7 @@ class EchoMode(WaitSkip):
             "games_played": list(self.game_records),
             "span_mean": (round(sum(spans) / len(spans), 2)
                           if spans else None),
-            "total_items": sum(r["n_right"] for r in self._records),
+            "total_items": sum(r["n_right"] for r in scored),
             "ioi_anchor_len": self.ioi_anchor_len,
             "participant_seed": self.p_seed,
             "block_seed": self.block_seed,
@@ -1514,9 +1603,13 @@ class EchoMode(WaitSkip):
             # Ladder blocks only, by construction (see the docstring).
             "product_score": (span * self.total_correct
                               if self.rule == "ladder" else None),
-            "n_trials": len(self._records),
-            "n_omissions": sum(1 for r in self._records
+            "n_trials": len(scored),
+            "n_omissions": sum(1 for r in scored
                                if r["outcome"] == "omission"),
+            # Closes the rig ate (a board drop over a silent turn):
+            # replayed, out of every number above, on the rows as
+            # device_drop.
+            "n_voided": len(self._records) - len(scored),
             "per_length": per_length,
             "hebb_trials": list(self._hebb_trials),
             "playback_presses": self.playback_presses,

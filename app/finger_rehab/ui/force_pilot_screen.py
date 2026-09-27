@@ -135,7 +135,7 @@ class ForcePilotScreen(Screen):
         # the run never grows memory; 200 frames covers the 2.5 s the
         # 300 px behind the now-line can show at 120 px/s.
         self._trace: deque[tuple[float, float]] = deque(maxlen=200)
-        self._trace_run: int | None = None
+        self._trace_run: tuple | None = None
 
     # ---- shared furniture --------------------------------------------------
     def start_countdown(self, seconds: float) -> None:
@@ -761,7 +761,10 @@ class ForcePilotScreen(Screen):
         the marker wears the finger's colour so who is flying stays
         glanceable next to the chip."""
         span = mode.span_pct
-        run_key = mode.trial_counter
+        # run_t0 as well as the trial id: a run restarted after a pause
+        # keeps its trial id, and its old points (up to the pause) sat
+        # ahead of the now-line until they scrolled away.
+        run_key = (mode.trial_counter, mode.run_t0)
         if self._trace_run != run_key:
             self._trace.clear()
             self._trace_run = run_key

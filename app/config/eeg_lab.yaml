@@ -52,8 +52,10 @@ eeg:
   # press lands among the next trial's stimulus and press bytes and
   # pushes them late in the recording (syllables' 800 ms trial gap
   # puts it on the next stimulus exactly). Reaction and chords leave
-  # 1.5 s or more before the next stimulus; force_pilot's 141 is the
-  # corridor-exit buzz, with no press bytes to collide with.
+  # 1.5 s or more before the next stimulus; force_pilot's 141 marks
+  # the frame the craft leaves the corridor and stalls (with or
+  # without the exit buzz, which cue.buzz_after gates), with no press
+  # bytes to collide with.
   feedback_markers: [reaction, chords, force_pilot]
 
 reaction:

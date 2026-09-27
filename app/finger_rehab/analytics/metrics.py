@@ -208,6 +208,40 @@ def relative_tap_variability(press_times_s: Sequence[float],
     return math.sqrt(var) / mean_ioi
 
 
+def interval_residual_lag1(press_times_s: Sequence[float],
+                           note_times_s: Sequence[float]
+                           ) -> float | None:
+    """Lag-1 autocorrelation of the interval residual, press ITI
+    minus the matched notes' IOI over consecutive hits (which is the
+    change in asynchrony from one hit to the next).
+
+    This is the series Wing and Kristofferson 1973 make a prediction
+    about: with a timekeeper and independent motor delays the
+    intervals correlate negatively at lag 1, between -0.5 and 0. The
+    asynchronies THEMSELVES are expected to correlate positively when
+    a tapper corrects only part of each error, which healthy tappers
+    do (the linear phase-correction model: Vorberg and Wing 1996;
+    Repp 2005), so a positive lag-1 of the asynchronies is not drift.
+    None under four residuals or with no variance.
+    """
+    n = min(len(press_times_s), len(note_times_s))
+    resid = []
+    for i in range(n - 1):
+        ioi = note_times_s[i + 1] - note_times_s[i]
+        if ioi <= 0:
+            continue
+        resid.append((press_times_s[i + 1] - press_times_s[i]) - ioi)
+    if len(resid) < 4:
+        return None
+    mean = sum(resid) / len(resid)
+    denom = sum((r - mean) ** 2 for r in resid)
+    if denom <= 0:
+        return None
+    num = sum((resid[i] - mean) * (resid[i + 1] - mean)
+              for i in range(len(resid) - 1))
+    return num / denom
+
+
 def drift_slope(timestamps_min: Sequence[float],
                  baseline_values: Sequence[float]) -> float | None:
     """Slope of `baseline ~ time` in baseline-units per minute. Used

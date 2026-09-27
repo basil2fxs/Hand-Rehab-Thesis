@@ -269,14 +269,33 @@ class ScorableTrialTests(unittest.TestCase):
         # But the row must not be byte-identical to never pressing:
         # a response at window+150 ms is an extreme lapse, not an
         # absence of response. The press stays on the row with its
-        # own error_type and its latency recoverable from
-        # first_incorrect_ms.
+        # own error_type and its latency in the stimulus column. It
+        # is the RIGHT finger, so it stays off incorrect_presses:
+        # that list is what raises had_incorrect_press and the
+        # 110+lane wrong-finger EEG byte, and neither is true here.
         trial = engine.log_trial.call_args[0][0]
         self.assertEqual(trial.keys_pressed, [target])
-        self.assertEqual(len(trial.incorrect_presses), 1)
+        self.assertEqual(trial.incorrect_presses, [])
         self.assertEqual(
             engine.log_trial.call_args.kwargs.get("error_type"),
             "late_press")
+        self.assertIn(";late_ms=2150.0",
+                      engine.log_trial.call_args.kwargs.get("stimulus"))
+
+    def test_late_press_on_a_wrong_finger_is_still_a_wrong_press(
+            self) -> None:
+        # Only the cued finger's late press is kept off the wrong-
+        # press list; a late press on another finger is both late and
+        # wrong.
+        engine, mode = _build_mode(response_window_s=2.0)
+        mode._begin_trial(now=10.0)
+        mode._fire(now=12.0)
+        wrong = (mode.active.lane + 1) % 4
+        mode._handle_press(_press(lane=wrong, t=14.15), now=14.15)
+        trial = engine.log_trial.call_args[0][0]
+        self.assertEqual(len(trial.incorrect_presses), 1)
+        self.assertNotIn("late_ms",
+                         engine.log_trial.call_args.kwargs.get("stimulus"))
 
     def test_true_timeout_carries_no_late_press_marker(self) -> None:
         engine, mode = _build_mode(response_window_s=2.0)

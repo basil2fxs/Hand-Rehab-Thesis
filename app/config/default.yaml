@@ -402,8 +402,9 @@ cue:
   # mode, so two fingers do not stack two tones onto one beat).
   #
   # In rhythm mode the tone plays on every note, over the music, which
-  # marks the beat the patient has to hit. Turn it off for rhythm
-  # blocks where the song alone should carry the beat.
+  # marks the beat the patient has to hit. It is sent latency.tone_ms
+  # early so it is HEARD on the beat, like the buzz. Turn it off for
+  # rhythm blocks where the song alone should carry the beat.
   sound_before: true
 
   # Confirmation chime after a CORRECT press, meaning the patient
@@ -858,9 +859,10 @@ reaction:
   # trial as a phantom false start.
   rest_gate_s: 0.3
   # How long the millisecond result stays on screen after a press,
-  # how long the "Too soon" notice stays after a false start, and the
-  # blank gap before the next trial arms. Together they set the cycle
-  # at roughly 6 s per trial.
+  # how long the pause after a false start lasts (nothing is shown:
+  # this mode puts no message on screen, only the RT in the corner),
+  # and the blank gap before the next trial arms. Together they set
+  # the cycle at roughly 6 s per trial.
   feedback_s: 1.2
   false_start_feedback_s: 1.5
   inter_trial_gap_s: 0.5
@@ -1039,7 +1041,8 @@ chords:
   # whole session and the session also measures how well the hands
   # work together. Light presses only, everywhere: the game never
   # rewards pressing harder, and pressing much harder than the
-  # calibrated light press earns a "press lighter" prompt.
+  # calibrated light press is recorded as over_force (no prompt is
+  # shown).
 
   # How long the fingers have to land the chord once it lights up.
   # Generous on purpose: a slow chord still teaches the shape, and the
@@ -1066,7 +1069,8 @@ chords:
   # Once the chord is together, all its fingers stay down this long.
   # A ring fills on the held tiles while it runs, so the patient
   # watches the hold complete rather than being told about it after
-  # the trial is over; a finger that lifts early is named on screen.
+  # the trial is over; a finger that lifts early breaks the hold and
+  # is recorded, not named on screen.
   # Kept short on purpose: holding a press makes the unwanted leak
   # onto other fingers grow, which is the opposite of the training
   # goal. Needs the sensors; the keyboard fallback skips the hold.

@@ -223,6 +223,12 @@ Known effects to reproduce:
      2017, Sleep). Restored 24 September 2026, when the second pass
      made it computable; it had been dropped under the one-pass
      design.
+Cue order (27 September 2026, before any participant): the four
+fingers are dealt from one bag of twenty per block, five each, with
+no finger twice running. The old bag of four made the fourth cue of
+every bag the finger not yet seen, so a quarter of the cues could be
+predicted from the three before them; the choice was no longer the
+2-bit one Hick and Hyman describe.
 Reliability class: good to excellent for median RT (the PVT
 tradition; the block is 20 scorable trials, near the validated 3 min
 PVT-B of Basner, Mollicone and Dinges 2011). Tested as T1 (Section
@@ -240,6 +246,14 @@ available.
 Primary: session_learning_score_ms (probe minus flanking trained
 takes, block_stats.pattern.probe_scores) and accuracy_rebound_pct.
 Secondary: per-take mean RT curve, random-take baseline RT.
+Code review, 27 September 2026, before any participant: a trial that
+times out while the board is away is voided (device_drop, counted
+in per_take.n_voided), out of the take's accuracy, the stars, the
+accuracy rebound and the fatigue guard, and out of the notebook's
+take table, as every other mode treats a drop; a block with no
+sequence file is labelled generated (it read builtin_fallback with
+an error); Use built-in riff now holds until a different file is
+dropped.
 Known effects to reproduce:
   P1 Positive learning score in the block (cohort mean above
      zero).
@@ -301,6 +315,22 @@ press), median_span_ms (chord togetherness), clean hit rate
 (chord_outcome_classes.hit / all), per-hand versions in per_hand;
 cross-hand: hit_rate_mirror, hit_rate_nonmirror, median_lag_ms,
 bilateral_deficit.
+Code review, 27 September 2026, before any participant:
+  - The row label follows the outcome class. A clean hit is labelled
+    by its speed tier but never below Good; any other chord that
+    landed reads Late with its class in error_type (late_chord,
+    no_hold, leak_fail, over_force); a chord with some but not all
+    fingers is a Miss with error_type partial and a response byte at
+    its first press. Before, the label was the first finger's speed
+    tier, so most healthy clean chords (630 to 760 ms, Verwey 2023)
+    read Late and the notebook's clean hit rate was a speed rate.
+  - Forces are normalised in counts. Since 23 September 2026 the
+    engine's force window was in newtons, which made over-force and
+    the light band impossible to reach; ER was unaffected.
+  - A chord where a quiet finger pressed has no ER (a misread cue,
+    not enslaving), and every median is a true median.
+  - C3 reads the cohort-mean chord-conditioned matrix, each person
+    counting once, from the trial records.
 Known effects to reproduce:
   C1 Cohort median ER under 0.15. Healthy hands leak roughly 5 to 15
      percent of instructed force at light effort (Abolins et al.
@@ -371,6 +401,20 @@ ear. Speech on the study Mac stays the system voice; the recorded
 voice, when it exists, replaces it and the methods should say which
 the block ran with (the speech events in raw.csv name the file or
 the voice).
+Review note (27 September 2026, before any participant): a set
+answered right after the prompt buzz moves the foil rung neither
+way (it used to move it down, so eight of twelve simulated blocks
+drifted off the rung the design pins); the staircase reads
+answers found alone and wrong first presses only. A set that leaves
+the screen unanswered while the board is away is the rig's: the row
+carries device_drop, nothing is booked (no miss, no return, no
+prompt step) and the chunk is played again; block_summary.syllables
+reports n_voided_sets and the notebook leaves those rows out. A
+pause on the COMPLETE card no longer replays the word, and a pause
+during a returned word past the word budget no longer ends the
+block. The model's stimulus bytes carry the word's next set id and
+the print flag on a row says what the screen showed at the word's
+start.
 Adults have no reading deficit to measure, so the block is not a
 skill result. What it can check is the game itself, on fluent readers:
   S6 Fluent adults answer before the prompt: cohort median of the
@@ -420,9 +464,12 @@ Known effects to reproduce:
   Rh1 Negative mean asynchrony: taps precede the beat by tens of ms
       (Repp 2005, Psychonomic Bulletin and Review; Repp and Su
       2013). One-sample test per hand, mean below zero.
-  Rh2 Asynchrony SD in the tens of ms for a comfortable tempo (Rose
-      et al. 2019 report about 39 ms finger-tapping asynchrony,
-      cited in docs/research/new_modes/movement-disorders.md).
+  Rh2 Asynchrony SD in the tens of ms for a comfortable tempo (Repp
+      2005). Rose et al. 2019's 39 ms, cited in
+      docs/research/new_modes/movement-disorders.md, is an absolute
+      asynchrony (their Parkinson's group, finger tapping at 116
+      beats a minute), so it is read beside the mean absolute offset,
+      not the SD (corrected 27 September 2026).
   Rh3 No strong dominance prediction; report paired.
 Reliability class: good for asynchrony SD and absolute offset,
 moderate for the signed mean (bias is small relative to noise).
@@ -434,10 +481,28 @@ player, which helps a player who reacts to the buzz, but that makes
 the block a reaction task with a per-person stimulus and would let
 a reactor's asynchrony settle at zero by design. Rh1 and Rh2 are
 synchronisation effects, so the study block does not use the lead.
-Claim limits: audio_offset_ms (40) is a configured constant, not a
-measured latency on the study laptop; measure it once with a
-microphone against the trigger event if the thesis wants absolute
-asynchrony, otherwise report within-device numbers. The scoring
+Claim limits: the audio-path delays were measured on the study
+laptop on 24 September 2026 (Section 4.8 i: song 87 ms, cue tone
+77 ms, motor 74 ms) and every score is corrected by the song's
+delay, so the asynchronies are on the audible beat; each block
+records the audio it ran with and the offset applied
+(block_summary.song.audio_source and audio_offset_applied_ms, 0
+with audio off), and the notebook reads that rather than the
+configured constant. Code review, 27 September 2026, before any
+participant: the cue tone is sent its own delay early so it is
+heard on the beat (it was heard about 75 ms after the beat, the
+falling note and the buzz, a second pacing signal that could pull a
+tapper's asynchrony late); the play call's frame lag (0 to 16 ms,
+different each block) is absorbed into the clock and recorded; a
+note now closes on the corrected clock, so the Late tier runs to
+its full 300 ms; a press on the first note before the song starts
+is scored against the zero its cue was placed on; a note that
+scrolled past while the board was away is device_drop, not a miss.
+A press is stamped when the smoothed force crosses the trigger,
+7 to 11 ms after the raw crossing on average (4 to 15 ms per press,
+measured on the detector with realistic presses), the same for
+everyone, so asynchronies read that much less negative than a key
+contact would give. The scoring
 windows are game feel, not research criteria (rhythm.py). The
 rhythm block is the rhythmic auditory cueing arm and the battery
 carries no fixed-cadence control block to set against it, so this
@@ -476,8 +541,10 @@ are T2 and T3 in Section 4.5.
 Primary (notebook sec_force_tracking, offline from raw.csv): RMSE
 and MAE in percent of max, time in corridor, cross-correlation lag
 per wave class, press versus release MAE on the symmetric shapes,
-section MAE (hold_in, ramp_up, hold_top, release, sine, assess_sos),
-Lodha sub-1 Hz spectral ratio. Block level:
+section MAE by each wave's own sections (blocks from before the
+ladder carry the old names hold_in, ramp_up, hold_top, release, sine
+and assess_sos), and the Lodha split as the 0.1 to 0.3 Hz share of
+the two Lodha bands, low / (low + high). Block level:
 force_pilot.overall.mae_pct, time_in_corridor, release_mae_pct,
 press_mae_pct, section_mae_pct (the in-game split by ramp direction
 is feedback only; the research number is the offline one).
@@ -492,7 +559,30 @@ Scoring notes (25 September 2026, from the first real ladder runs):
     game's own score; the rebuilt zero agrees with the game to a
     median 0.03 percent. Force is clamped at zero as the game shows
     it. The game no longer re-tares a finger that flies two levels
-    in a row (Storm into Uncharted), since it has not rested.
+    in a row (Storm into Uncharted), since it has not rested. From 27
+    September 2026 the same rule covers a run restarted after a
+    pause and the replay of a run voided for lost signal: both keep
+    the run's own card zero. Before, the tare read the force frozen
+    at the pause or the drop, and a restarted Slow breath flown
+    perfectly scored a time in corridor of 0.10.
+  - Voided runs. A run with a signal for under half its plan is
+    logged as no_signal and replayed under a new trial id (replays=
+    on the replay's row). The notebook leaves no_signal rows out of
+    every table and counts them, and a run with a gap of more than
+    0.1 s between raw samples keeps its error statistics but not the
+    measures read off the resampled grid (lag, the Lodha split and
+    the grid-based Parkinson's measures), which would otherwise read
+    the straight line bridging the gap.
+  - Feedback and sound. Leaving the corridor stalls the craft on
+    screen. The exit buzz rides cue.buzz_after, which the battery
+    leaves off, so no pulse sits under the finger whose force is
+    being scored; with the laboratory's feedback markers on, 141 is
+    written on the exit frame either way. A quiet background track
+    plays under the block (force_pilot.music_enabled, a random draw
+    from the menu playlist). It is presentation only: the mode never
+    reads the stream and the track is not logged per block, so music
+    is a fixed condition of the study rather than a variable.
+    config/eeg_lab.yaml turns it off.
   - The lag. The cross-correlation now scores each lag as a Pearson
     r over the overlapping samples. The old sum put a cusp at zero
     lag and read 0 ms on every ramp wave whatever the true lag (on a
@@ -601,6 +691,20 @@ design record stays in docs/research/new_modes/force-control.md.
 One-board note (24 September 2026): the block plays the right hand,
 16 localisation trials and 4 span trials. Chance for a four-finger
 localisation is 25 percent; B1 to B5 are unchanged.
+Code review, 27 September 2026, before any participant: the catch
+trials are dealt on top of the 16 real trials, a fixed two per hand
+at random positions (drawn per trial inside the count, 18 percent of
+simulated blocks had none and the real trials ran 9 to 16), so the
+localisation stage is 18 trials and every participant has a
+false-alarm rate; localisation RT runs from the frame the STIM
+command leaves the laptop (it ran from the frame before, 16.7 ms
+early at 60 Hz, against the EEG byte written at the command), and
+it is command-to-press: the motor's measured 74 ms rise is a
+constant on top, reported beside the medians and never subtracted; a
+no-press trial a board drop overlapped is voided (device_drop) like
+a failed buzz; the gap threshold is reported only when the gap stage
+ran; the window level carries to a later block only after a
+completed one.
 Primary: loc.accuracy per hand and per lane at the fixed 150 ms
 pulse, the confusion matrix (adjacent-finger error share), catch
 false-alarm rate and d-prime, median localisation RT, the top
@@ -626,21 +730,32 @@ Known effects to reproduce:
      errors above 0.5 (mislocalisations fall on nearer fingers,
      Schweizer, Maier, Braun and Birbaumer 2000, Somatosensory and
      Motor Research 17:309-316; Weber 2023 in buzz_hunt.py for the
-     misreferral map).
+     misreferral map). 0.5 is exactly chance for a wrong finger
+     drawn at random on four fingers ((1/3 + 2/3 + 2/3 + 1/3) / 4),
+     so the pooled adjacent count is tested against Binomial(n, 0.5),
+     one-sided, and the row passes only above chance (27 September
+     2026; the mean share on its own passed pure guessing half the
+     time).
   B3 Guessing priced: catch false alarms under 10 percent.
   B4 Tactile-only span around 4 items, well below visual span
-     (buzz_hunt.py and echo.py both state the ceiling); Hebb trials
-     at least as accurate as novel trials.
+     (buzz_hunt.py and echo.py both state the ceiling). The Hebb
+     half (Hebb trials at least as accurate as novel trials) is
+     DROPPED for the battery (27 September 2026): with four span
+     trials the hidden sequence plays once, and a first exposure is
+     a novel sequence to the participant, so the contrast measured
+     a length difference. It stands for a block with two or more
+     Hebb trials. Note that four trials from length 2 cap the span
+     at 5, so the band 3 to 5 cannot fail from above in the battery.
   B5 The window ladder climbs: a healthy hand plays at level 1 (the
-     2.0 s window) or higher inside its 12 trials per hand in the
-     battery (16 in free play). A 92 percent responder reaches the
-     top in about 22 trials on the headless simulation, so 12 trials
-     allow one promotion and often a second; top_level counts the
-     highest level a trial was played at, final_level where the
-     ladder ended.
+     2.0 s window) or higher inside its 16 real trials per hand in
+     the battery (32 in free play). A 92 percent responder reaches
+     the top in about 22 trials on the headless simulation, so 16
+     trials allow one promotion and usually a second (the simulated
+     cohort reached level 1 or 2); top_level counts the highest level
+     a trial was played at, final_level where the ladder ended.
 Reliability class: poor for accuracy (ceiling restricts range),
 moderate for span; the top window level is an ordinal with four
-values and 12 trials per hand in the short form, so it is reported
+values and 16 trials per hand in the short form, so it is reported
 as a distribution and a proportion at each level, never as a mean.
 Median RT at the fixed pulse is the continuous localisation number
 and is the one an ICC would be computed on, in the study that can
@@ -666,6 +781,25 @@ past four items holds every lane, so a wrong finger lands on a
 sequence lane by construction and an intrusion cannot happen; no
 number of participants decides it. The eight-lane text below stands
 for a two-board rig.
+Review note (27 September 2026, before any participant): a silent
+turn while the board was away is the rig's, not a memory result.
+The row carries device_drop (the engine's own test), the mode books
+nothing (no life spent, no omission, no span) and replays the same
+length after the ordinary rest; the notebook leaves the row out
+with the other HARDWARE_VOID_ERRORS rows and block_summary.echo
+reports n_voided. Reproduction opens at the last item's offset on
+the presentation grid in every path, and a pause moves the presses
+already made, so the press offsets on the row (pt=) are never
+negative; the notebook still reads a signed value for rows written
+earlier. E2p is one criterion in both tables: the share of misses
+on the newest item against the chance share of one position in L,
+per participant, above zero. The per-selection check reads the E1
+band by the lanes the block played (5 to 9 on four lanes) and drops
+E3 on four lanes, as the cohort table already did. The gold
+"Longest echo" chip is not drawn under the neutral feedback style,
+and Echo's own 140/141 byte leaves at the trial close only in the
+immediate style, since nothing is drawn for an echo trial when a
+feedback delay is up.
 Primary: span, total_correct, product_score (Kessels total: span x
 correct sequences), n_omissions, error taxonomy from the notebook
 (transposition, intrusion, omission), Hebb versus novel accuracy by
@@ -679,7 +813,7 @@ Known effects to reproduce:
      comparison; a cohort median of 5 to 8 is consistent.
   E2 DROPPED. It read Hebb repetition learning, hidden-sequence
      trials more accurate than novel trials at matched length (Hebb
-     1961; Couture and Tremblay 2007, in echo.py). The hidden repeat
+     1961; Couture and Tremblay 2006, in echo.py). The hidden repeat
      is a property of the ladder rule: echo.py sets is_hebb only
      when rule == "ladder", and the battery plays the shipped
      default rule: simon, one sequence per game grown by one item a
@@ -1423,6 +1557,18 @@ pair was identical, or a rank correlation had no variation to
 correlate, the verdict word is "no variation", counted apart from
 "fail". Six of one run's thirteen "fails" were rows of that kind.
 
+Two-part checks (decided 27 September 2026, before any participant).
+C2 (rho of D with hit rate, and with ER) and W4 (ER down, clean hit
+rate up) each have two halves. Each half gets its own verdict. A half
+with no variation (every chord type at a hit rate of 1.0, which
+healthy hands may well give) is reported as no variation and the row
+is decided on the other half; the row fails if any half that can be
+computed fails, and reads no variation only if neither half can be
+computed. For Holm the row carries the larger p of the halves it was
+decided on. The four-finger chord has no quiet finger and so no ER:
+it stays out of C2's ER half rather than being given the median of
+the others.
+
 4.5 What can honestly be said about repeatability and progress
 --------------------------------------------------------------
 Three modes are measured twice, in one sitting, about twenty minutes
@@ -1499,7 +1645,9 @@ question in every case is whether a later trial is a harder trial.
       is the same material for every participant, so windows are
       compared across people at the same k, and a within-person
       trend across windows carries the track's own structure with
-      it.
+      it. The windows are cut by note time (song time from the
+      start of the track), not by hit count, so a missed note moves
+      nothing (27 September 2026).
   Not interpretable as improvement:
     echo, because the sequence lengthens as the participant
       succeeds, so trial index is difficulty,
@@ -1636,6 +1784,9 @@ confirmations:
       A description of the task, not a claim about the hand.
   E2p echo, whether misses fall late in the sequence rather than on
       the first item. Added while reading echo's error structure.
+      Read as the share of misses on the newest item against the
+      chance share 1/L, per participant, in the cohort table and
+      the per-selection check alike (27 September 2026).
 
 Table 2, within-block improvement, pre-specified with a direction
 (Section 4.5b says how each is computed and what it cannot show):
@@ -1650,8 +1801,15 @@ Table 2, within-block improvement, pre-specified with a direction
   W3 pattern     P1 itself: probe minus flanking trained takes above
                  zero at the cohort level.
   W4 chords      sub-block 2 tighter than sub-block 1 (median ER
-                 down, clean hit rate up), both within-hand.
-  W5 buzz hunt   localisation RT falls, at a fixed window level.
+                 down, clean hit rate up), both within-hand. Read per
+                 person from the trial records the mode scored,
+                 chords only (singles and sensor drops out), each
+                 half decided on its own (Section 4.4).
+  W5 buzz hunt   localisation RT falls, with the window level
+                 carried as a covariate (RT centred within level;
+                 the fixed-level form leaves too few trials, since
+                 the ladder promotes on the sixth correct trial).
+                 The fixed-level series is reported beside it.
   W6 force pilot DROPPED. It asked for MAE against run order once
                  the corridor level was regressed out. The battery
                  plays force pilot with passes: 1, so the ladder is
@@ -1769,13 +1927,18 @@ healthy cohort cannot give.
     battery log (rest_taken_s) and to the next block's metadata
     (battery.rest_before_s). tests/test_study_battery.py
     (RestStepTests) checks the card, the floor and the logged length.
-  d DECIDED, not built. The participant's own view reads the
-    within-block series (first third against last third). Showing
-    pass 2 against pass 1 during the sitting was considered and left
-    out: the pass 2 blocks run back to back, so a comparison shown
-    after the first of them could change effort on the next two and
-    bias the very retest Section 4.5c reads. Show it at the debrief
-    if at all, from the notebook, worded as a direction.
+  d DECIDED, and enforced 27 September 2026. The participant's own
+    view reads the within-block series (first third against last
+    third). Showing pass 2 against pass 1 during the sitting was
+    considered and left out: the pass 2 blocks run back to back, so a
+    comparison shown after the first of them could change effort on
+    the next two and bias the very retest Section 4.5c reads. Show it
+    at the debrief if at all, from the notebook, worded as a
+    direction. A code review found three places that still showed it
+    (the Results card's SO FAR row, its vs-last chip, and Reaction's
+    SESSION BEST, which carried the pass 1 best into pass 2); all
+    three now stay silent until the battery is done
+    (tests/test_reaction_review.py).
   e DONE. The notebook's cohort chapter: selection (with the intake
     sheet's LQ), descriptives, dominant against non-dominant (on the
     one-board rig the between-person handedness comparison and the LQ
@@ -2145,7 +2308,7 @@ verified when the mode was written (see the file named):
     2011; Weber 2023; Jerosch-Herold 2016; Borngraber 2022; Levitt
     1971.
   echo.py: Corsi 1972; Berch 1998; Brunetti 2014; Hebb 1961;
-    Couture and Tremblay 2007; Farrell Pagulayan 2006.
+    Couture and Tremblay 2006; Farrell Pagulayan 2006.
   analytics/adaptive.py: Guadagnoli and Lee 2004.
 
 Standard statistical references not re-verified this session:

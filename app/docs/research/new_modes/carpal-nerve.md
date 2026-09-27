@@ -21,9 +21,11 @@ notebook analysis. No thumb.
 - Xia W, Bai Z, Dai R, Zhang J, Lu J, Niu W (2021). "The effects of sensory re-education on hand
   function recovery after peripheral nerve repair: A systematic review." NeuroRehabilitation,
   DOI 10.3233/NRE-201612. Supportive but evidence quality mixed.
-- Vikström P et al. (2017). "Similar 2-point discrimination and stereognosia but better locognosia
-  at long term with an independent home-based sensory reeducation program vs no reeducation after
-  low-median nerve transection and repair." Journal of Hand Therapy. Locognosia (touch
+- Antonopoulos DK, Mavrogenis AF, Megaloikonomos PD, et al. (2019). "Similar 2-point discrimination
+  and stereognosia but better locognosia at long term with an independent home-based sensory
+  reeducation program vs no reeducation after low-median nerve transection and repair." Journal of
+  Hand Therapy 32(3):305-312, DOI 10.1016/j.jht.2017.10.008 (online 2017; earlier notes named it
+  Vikström 2017, which is not the author). Locognosia (touch
   localisation) significantly better in the trained group at 1.5 and 3 years (17 vs 5 patients
   with excellent locognosia at 1.5 y), difference gone at 6 y in a small subsample. Key point:
   localisation is the modality that responded to home training.
@@ -210,8 +212,8 @@ hits vs catch-trial false alarms, RT distributions, session-over-session slopes 
 ICC across repeat sessions for the thesis reliability chapter.
 
 Evidence chain: locognosia is among the most responsive outcomes after nerve repair (effect sizes
-above 0.8, Jerosch-Herold 2003) and improved with home training at 1.5 and 3 years (Vikström
-2017); misreferral mapping is current research practice (Weber 2023, Journal of Neurophysiology);
+above 0.8, Jerosch-Herold 2003) and improved with home training at 1.5 and 3 years (Antonopoulos
+2019); misreferral mapping is current research practice (Weber 2023, Journal of Neurophysiology);
 duration-based staircases are valid psychophysics (PMC4439551). For post-release CTS pitch this
 as objective outcome tracking, because the 2016 RCT says sensory relearning does not beat control
 on tactile outcomes there.

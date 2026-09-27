@@ -520,8 +520,11 @@ class FakeWireTests(unittest.TestCase):
             errs = [(s - (z - 0.195)) * 1000.0 for s, z in zip(stims, zeros)]
             for e in errs:
                 self.assertLessEqual(abs(e), FRAME_S * 1000.0 + 2.0, errs)
-            # The tone stays on the beat.
-            tones = [t for t, _lane in eng.audio.tones]
+            # The tone is HEARD on the beat: it is sent its own output
+            # delay (latency.tone_ms, from this machine's profile when
+            # one is laid over the defaults) early.
+            tone_s = float(eng.cfg.get("latency.tone_ms", 0)) / 1000.0
+            tones = [t + tone_s for t, _lane in eng.audio.tones]
             self.assertEqual(len(tones), 4)
             for t, z in zip(tones, zeros):
                 self.assertLessEqual(abs((t - z) * 1000.0),

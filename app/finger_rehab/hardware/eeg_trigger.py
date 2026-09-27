@@ -343,7 +343,9 @@ CODE_NOTES: dict[str, tuple[str, str, str, str]] = {
         "byte."),
     "resp_anticipation_base": (
         "press sample", "response",
-        "press before the go or under the anticipation cut, + lane", ""),
+        "press before the go or under the anticipation cut, + lane",
+        "Syllables: a press inside a set's spawn lockout, at the press; "
+        "the set stays open and no 130 follows it."),
     "resp_timeout": (
         "state", "", "response window closed with no press",
         "Bookkeeping only; never average response-locked on it. In "
@@ -353,7 +355,9 @@ CODE_NOTES: dict[str, tuple[str, str, str, str]] = {
     "resp_idle": (
         "press sample", "response", "press with no trial active",
         "Rhythm sends it only when no note in any lane was due. A "
-        "wrong finger on the beat is resp_wrong_base instead."),
+        "wrong finger on the beat is resp_wrong_base instead. "
+        "Syllables sends it for a press with no set open (between "
+        "words, or after a set is scored and fading)."),
     "feedback_positive": (
         "flip", "", "full-ring glyph or chime for a hit",
         "Only under eeg.feedback_markers. Lab style draws the glyph "
@@ -361,10 +365,14 @@ CODE_NOTES: dict[str, tuple[str, str, str, str]] = {
         "glyph the block end cuts short gets no byte, so every "
         "feedback byte in a recording is a full-delay one. (Older "
         "recordings: a feedback byte inside one frame of the block-end "
-        "byte was drained at block close; leave it out.)"),
+        "byte was drained at block close; leave it out.) Echo writes "
+        "its own at the trial close, immediate style only: under a "
+        "delay nothing is drawn for an echo trial and no byte leaves."),
     "feedback_negative": (
-        "flip", "", "outcome glyph for a miss; force_pilot: corridor-exit buzz",
-        "Same rule as 140."),
+        "flip", "", "outcome glyph for a miss; force_pilot: corridor exit",
+        "Same rule as 140, except force_pilot, which writes it on the "
+        "frame the craft leaves the corridor and stalls, whether or not "
+        "the exit buzz (cue.buzz_after) is on, at most once a second."),
     "feedback_neutral": (
         "flip", "", "half-ring glyph (Late, Early, near) in the lab style",
         "Same rule as 140. Neither a win nor a loss: keep it out of both "

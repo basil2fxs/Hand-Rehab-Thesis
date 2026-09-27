@@ -30,9 +30,10 @@ Supporting, verified by the research cluster: Weber 2023 (Journal of
 Neurophysiology 130(5):1126-1141) measured touch localisation after
 nerve repair and found misreferrals where touch on one digit is felt
 on another; this mode's per-finger confusion matrix is the digital
-analogue of their measure and is the core log output. Vikstrom 2017
-(Journal of Hand Therapy) found locognosia is the modality that
-responded to home training at 1.5 and 3 years after nerve repair.
+analogue of their measure and is the core log output. Antonopoulos
+et al. 2019 (Journal of Hand Therapy 32(3):305-312) found locognosia
+is the modality that responded to home training at 1.5 and 3 years
+after nerve repair.
 Auld 2014 names the evidence gap in children with unilateral cerebral
 palsy: no proven tactile intervention exists for them. Duration
 staircases are legitimate psychophysics (duration difference limens
@@ -754,6 +755,31 @@ class BuzzHuntMode(WaitSkip):
             self.announce_s = min(self.announce_s, 1.2)
             self.rest_s = min(self.rest_s, 1.5)
             self.stage_intro_s = min(self.stage_intro_s, 2.0)
+        # Catch trials are dealt on TOP of the real localisation
+        # trials, a fixed count per hand (catch_rate of the real
+        # count, at least one) at random positions inside the stage.
+        # Drawn per trial inside the count, as before, 18 percent of
+        # blocks had no catch trial (no false-alarm rate, no d prime,
+        # absent from B3), the real trials ran 9 to 16 and the fingers
+        # were unequal in three blocks of four.
+        n_loc_real = n_loc
+        n_catch = 0
+        if float(catch_rate) > 0.0 and n_loc_real > 0:
+            per_hand = max(1, int(round(float(catch_rate)
+                                        * (n_loc_real / n_hands))))
+            n_catch = per_hand * n_hands
+        n_loc = n_loc_real + n_catch
+        self.n_loc_real = n_loc_real
+        self.n_catch_planned = n_catch
+        # Their own stream, so the deal of everything else keeps the
+        # order it had under the same seed.
+        slot_rng = random.Random(int(seed) ^ 0x5CA7C4)
+        positions = sorted(slot_rng.sample(range(n_loc), n_catch)) \
+            if n_catch else []
+        slot_rng.shuffle(positions)
+        self._catch_slots: dict[int, str] = {
+            pos: self.hand_names[i % n_hands]
+            for i, pos in enumerate(positions)}
         self._stage_counts = {"loc": n_loc, "distractor": n_dis,
                               "span": n_span, "gap": n_gap}
         self._stage_plan: list[str] = []
@@ -1076,19 +1102,24 @@ class BuzzHuntMode(WaitSkip):
         self.gap_two = False
         if self.stage == "loc":
             self.waveform = "buzz"
-            self.catch = draw.random() < self.catch_rate
+            # A catch_rate of 1 or more (set after construction by the
+            # tests and the demo) makes every localisation trial a
+            # catch; otherwise the dealt slots decide.
+            every = float(self.catch_rate) >= 1.0
+            self.catch = every or self.trials_done in self._catch_slots
             if self.catch:
-                self._catch_n += 1
                 self.lane = -1
                 # No real lane fires on a catch, but in bilateral play
-                # it still logically stands in for one hand's worth of
-                # waiting. Drawing that hand fairly (instead of always
-                # hand_names[0]) means a false alarm can be charged to
-                # the hand it happened for, so neither hand's FA rate
-                # is silently undercounted.
-                self.hand = (draw.choice(self.hand_names)
-                             if self.bilateral else self.hand_names[0])
-                self._catch_by_hand[self.hand][0] += 1
+                # it still stands in for one hand's worth of waiting:
+                # the slot carries its hand, dealt evenly, so a false
+                # alarm is charged to the hand it happened for. The
+                # catch is COUNTED when it closes (_close_catch), so a
+                # block the cap ends on the card before it never books
+                # a catch it did not play.
+                self.hand = self._catch_slots.get(
+                    self.trials_done,
+                    draw.choice(self.hand_names) if self.bilateral
+                    else self.hand_names[0])
                 self.params = {"catch": 1, **self._loc_params(self.hand)}
             else:
                 self.lane = self._next_lane(self._loc_sched)
@@ -1435,11 +1466,18 @@ class BuzzHuntMode(WaitSkip):
             self._respond_t0 = start + span
         if self.active is not None:
             self.active.stim_t_perf = self._target_on
-        self.engine.log_segment_start("stim", self.trial_counter,
-                                      max(self.lane, 0), now)
-        self._stim_seg_open = True
+        # The times above are the PLAN. The trial is anchored on the
+        # frame the first STIM command actually leaves (_play_frame),
+        # 0 to one display frame later, and the stim segment opens
+        # there. Anchored here, on the wait frame, every localisation
+        # RT and the response window ran one frame early (16.7 ms at
+        # 60 Hz) against the EEG byte, which is written at the command.
+        self._target_anchored = False
         if not self._pulse_plan:
             # Catch trial: no stimulus, straight to the silent window.
+            self.engine.log_segment_start("stim", self.trial_counter,
+                                          max(self.lane, 0), now)
+            self._stim_seg_open = True
             self._close_stim_marker(now)
             self.sub = "respond"
             self.engine.log_segment_start("respond", self.trial_counter,
@@ -1607,6 +1645,30 @@ class BuzzHuntMode(WaitSkip):
                     # as a burst of blips.
                     self._reanchor_plan(self._pulse_idx, late_s)
                     lane, _on, dur = self._pulse_plan[self._pulse_idx]
+            if self._pulse_idx == 0:
+                # Anchor on the command: move the plan's zero to this
+                # frame so the pulse train, the stim segment and the
+                # response window all run from the moment the STIM
+                # left, not from the wait frame that planned it.
+                late = max(0.0, t - _on)
+                if late > 0.0 and self._play_t0 is not None:
+                    self._play_t0 += late
+                    if self._target_on is not None:
+                        self._target_on += late
+                    if self._respond_t0 is not None:
+                        self._respond_t0 += late
+                self.engine.log_segment_start("stim", self.trial_counter,
+                                              max(self.lane, 0), now)
+                self._stim_seg_open = True
+            if (self.waveform == "buzz" and lane == self.lane
+                    and not self._target_anchored):
+                # The TARGET pulse (the first pulse, or the second on
+                # a distractor trial): RT runs from its command.
+                self._target_anchored = True
+                self._target_on = now
+                self._respond_t0 = now
+            if self.active is not None and self._target_on is not None:
+                self.active.stim_t_perf = self._target_on
             ok = self.engine.pulse_motor(lane, dur)
             self._last_pulse[self._lane_owner(lane)[0]] = (
                 lane, now + max(dur / 1000.0, FIRMWARE_HOLD_S))
@@ -1875,6 +1937,18 @@ class BuzzHuntMode(WaitSkip):
         # correct guess) and pushing the staircase on hardware noise.
         stim_failed = self._stim_delivered is False
         self._note_stim_result(stim_failed)
+        # A no-press close while a board was away is hardware loss,
+        # the same rule the engine applies to the row (device_drop):
+        # it must not move the ladder or enter the accuracy either.
+        dropped = False
+        if not responded and not stim_failed:
+            check = getattr(self.engine, "_drop_overlaps", None)
+            if callable(check):
+                try:
+                    dropped = check(self.hand, self._target_on, now) is True
+                except Exception:
+                    dropped = False
+        voided = stim_failed or dropped
         # Belt-and-braces: a press timestamped before the target
         # actually fired can only reach here through the lured-decoy
         # path above (where it is scored as a miss, not a hit), but
@@ -1906,12 +1980,12 @@ class BuzzHuntMode(WaitSkip):
         ladder = self._window[self.hand]
         level_before = ladder.level
         moved: str | None = None
-        if stim_failed or distractor:
+        if voided or distractor:
             # Distractor trials run at the held difficulty (the fixed
             # pulse and the window the ladder has reached) and never
             # move it: they measure attention at a fixed level. A
-            # failed delivery never moves anything either: nothing
-            # was felt or missed.
+            # failed delivery or a board away never moves anything
+            # either: nothing was felt or missed.
             reversal = False
         elif self.duration_staircase:
             reversal = stair.record(correct)
@@ -1973,6 +2047,7 @@ class BuzzHuntMode(WaitSkip):
                                   error_type=("stim_failed"
                                               if stim_failed
                                               and outcome.label == "Miss"
+                                              else "device_drop" if dropped
                                               else None),
                                   # In this mode the buzz IS the
                                   # stimulus, so a confirmation buzz
@@ -1991,12 +2066,12 @@ class BuzzHuntMode(WaitSkip):
                                   # chime under cue.sound_after is the
                                   # confirmation channel here.
                                   after_press_cue=False)
-        if not stim_failed:
-            # A trial whose buzz never fired is not a perception
-            # sample: it must not water down (or, on a lucky guess,
-            # inflate) localisation or distractor accuracy. The row
-            # above still exists for the notebook to cross-check
-            # against the raw pulse_motor delivered=NO events.
+        if not voided:
+            # A trial whose buzz never fired, or whose window a board
+            # drop overlapped, is not a perception sample: it must not
+            # water down (or, on a lucky guess, inflate) localisation
+            # or distractor accuracy. The row above still exists for
+            # the notebook to cross-check against the raw events.
             rec = {"hand": self.hand, "lane": self.lane,
                    "dur_ms": float(self.params["dur_ms"]),
                    "window_s": float(self.params["window_ms"]) / 1000.0,
@@ -2017,6 +2092,8 @@ class BuzzHuntMode(WaitSkip):
         self._finish_trial(now)
 
     def _close_catch(self, now: float, responded: bool) -> None:
+        self._catch_n += 1
+        self._catch_by_hand.setdefault(self.hand, [0, 0])[0] += 1
         press_lane, press_t = (self._resp_presses[0]
                                if self._resp_presses else (None, None))
         if responded and press_lane is not None:
@@ -2027,7 +2104,7 @@ class BuzzHuntMode(WaitSkip):
                 trial_id=self.trial_counter, lane=None,
                 label="Early", error_type="catch_false_start",
                 pressed_lane=press_lane,
-                stimulus="loc;catch",
+                stimulus=f"loc;catch;hand={self.hand}",
                 # Nothing on this mode's screen ever names a finger,
                 # whatever the show_target toggle says.
                 target_shown=False,
@@ -2044,7 +2121,7 @@ class BuzzHuntMode(WaitSkip):
                 trial_id=self.trial_counter, lane=None,
                 label="CatchOk", error_type="",
                 points=self.CATCH_REWARD,
-                stimulus="loc;catch",
+                stimulus=f"loc;catch;hand={self.hand}",
                 target_shown=False,
                 hand=self.hand)
             try:
@@ -2274,12 +2351,20 @@ class BuzzHuntMode(WaitSkip):
         # safe (easy) direction. The duration carry only exists under
         # the legacy flag, so a flagged block cannot seed a window
         # block or the other way round.
-        self.engine._buzz_hunt_window_level = {
-            hand: ladder.level for hand, ladder in self._window.items()}
-        if self.duration_staircase:
-            self.engine._buzz_hunt_start_ms = {
-                hand: stair.level
-                for hand, stair in self._dur_stair.items()}
+        if reason == "completed":
+            self.engine._buzz_hunt_window_level = {
+                hand: ladder.level for hand, ladder in self._window.items()}
+            if self.duration_staircase:
+                self.engine._buzz_hunt_start_ms = {
+                    hand: stair.level
+                    for hand, stair in self._dur_stair.items()}
+        else:
+            # A block a hardware fault or the cap ended carries nothing:
+            # the retry starts at the longest window, the safe
+            # direction, as the config promises.
+            self.engine._buzz_hunt_window_level = None
+            if self.duration_staircase:
+                self.engine._buzz_hunt_start_ms = None
         self.engine.finish_block()
 
     # ---- detection statistics ----------------------------------------------
@@ -2384,7 +2469,13 @@ class BuzzHuntMode(WaitSkip):
                 "by_level": by_level,
             }
         gap_thresholds: dict[str, dict] = {}
-        for hand, stair in self._gap_stair.items():
+        # Only when the block has a gap stage: an untouched staircase
+        # is not a threshold, and every battery block used to report
+        # a phantom 320 ms gap threshold for a stage the preset leaves
+        # out.
+        for hand, stair in (self._gap_stair.items()
+                            if self._stage_counts.get("gap", 0) > 0
+                            else []):
             est = stair.estimate(self.threshold_reversals)
             landed = est if est is not None else stair.level
             gap_thresholds[hand] = {
@@ -2407,6 +2498,10 @@ class BuzzHuntMode(WaitSkip):
         return {
             "hands": self.hand_names,
             "stages": dict(self._stage_counts),
+            # The localisation stage is loc_real_planned real trials
+            # plus the catch trials dealt on top of them.
+            "loc_real_planned": self.n_loc_real,
+            "catch_planned": self.n_catch_planned,
             # The localisation pulse every loc and distractor trial
             # played (the ladder never touches it); under the legacy
             # flag the staircase level varies and this is its start.

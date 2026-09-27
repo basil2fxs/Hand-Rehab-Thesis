@@ -91,8 +91,9 @@ rhythm.tactile_mode settles it per block:
             press scores Perfect, Great or Good. The fallback Basil
             named for a player the lead does not suit.
 
-Only the buzz moves. The tone, the falling note and the scoring zero
-stay on the audible beat, and the EEG stimulus marker stays on the
+Only the buzz moves against the beat. The tone is sent its own output
+delay early (latency.tone_ms) so it is HEARD on the audible beat, the
+falling note and the scoring zero stay there, and the EEG stimulus marker stays on the
 event the response is scored against: with the buzz split off, the
 beat byte drops its buzzer bit (33 becomes 31) and the buzz is its
 own marker, 22, written at the STIM command. The falling note is
@@ -235,6 +236,28 @@ class RhythmMode(WaitSkip):
         # went out rather than whatever the lead had become by the
         # time the note resolved.
         self._lead_by_note: dict[int, float] = {}
+        # The cue tone's own output delay (latency.tone_ms: 77 ms
+        # measured on the study laptop). The tone is sent that much
+        # early and HEARD on the scored zero, like the buzz (CUES LAND
+        # ON THE BEAT). It used to ride on_stim at the scored zero,
+        # so it was heard tone_ms after the beat, the falling note and
+        # the buzz: a second pacing signal about 75 ms late.
+        self._tone_lead_s = max(
+            0.0, self._cfg_float("latency.tone_ms", 0.0)) / 1000.0
+        # The audio-path offset each note was cued with, by note
+        # index: a press is scored against the zero its cue was placed
+        # on, whatever the live offset is when the press arrives (the
+        # first note's zero was placed with the song's offset before
+        # the song started, and a press before the start was scored
+        # with none).
+        self._offset_by_note: dict[int, float] = {}
+        # What the block's audio actually was, the offset applied to
+        # every score, and how late the play call landed after the
+        # lead: recorded for the block summary, since the config says
+        # what was asked for and not what happened.
+        self._audio_source = "none"
+        self._audio_offset_applied_s = 0.0
+        self._song_start_lag_s: float | None = None
         # True once audio.play_song / start_metronome has been kicked off.
         self._audio_started = False
         # Snapshot of song_time at the moment we paused. While paused the
@@ -309,6 +332,28 @@ class RhythmMode(WaitSkip):
             "buzz_rise_comp_ms": round(self._buzz_rise_comp_s * 1000.0, 1),
         }
 
+    def audio_summary(self) -> dict:
+        """Block-summary record of the audio the block ran with: the
+        source (song, metronome or none), the offset every score was
+        corrected by, the tone lead, and the song-start lag."""
+        return {
+            "audio_source": self._audio_source,
+            "audio_offset_applied_ms": round(
+                self._audio_offset_applied_s * 1000.0, 1),
+            "tone_lead_ms": round(self._tone_lead_s * 1000.0, 1),
+            "song_start_lag_ms": (
+                None if self._song_start_lag_s is None
+                else round(self._song_start_lag_s * 1000.0, 1)),
+        }
+
+    def _note_offset_s(self, s) -> float:
+        """The audio-path offset note `s` was cued with, or, for a note
+        not yet dispatched, the one its cue will be placed with (the
+        predicted offset dispatch uses): a press that arrives before
+        the cue still belongs to that zero."""
+        v = self._offset_by_note.get(s.index)
+        return self._audio_latency_s(predict=True) if v is None else v
+
     @property
     def song_time(self) -> float:
         # If we're paused, hold the song clock at the snapshot we took on
@@ -379,7 +424,11 @@ class RhythmMode(WaitSkip):
         if not self._audio_started:
             first = min((s.note.t for s in self.scheduler.scheduled
                          if s.hit_at is None), default=None)
+            # On the corrected clock: the first note's window opens
+            # miss_ms before its scored zero, which sits the audio
+            # offset after the note time.
             if (first is None or self.song_time
+                    - self._audio_latency_s(predict=True)
                     < first - self.windows.miss_ms / 1000.0):
                 return
         self._presses.append(ev)
@@ -466,12 +515,35 @@ class RhythmMode(WaitSkip):
                 and not self._audio_started
                 and now >= self._pre_song_lead_s):
             self._audio_started = True
+            # The play call lands on the first frame at or after the
+            # lead, 0 to one frame late, while every beat time assumes
+            # the song started exactly at pre_song_lead_s. Move the
+            # clock so that it did: the beats, the cues and the
+            # scoring stay on the song, and the lag (about 8 ms on
+            # average at 60 Hz, a different amount every block) no
+            # longer shifts a whole block's asynchronies late.
+            # Read off the live clock here, not the frame's `now`, so
+            # the shift meets the play call a few lines down.
+            lag = max(0.0, self.song_time - self._pre_song_lead_s)
+            self._song_start_lag_s = lag
+            # Only with audio to stay in step with, and only for a
+            # frame's worth: a stall past that is not dispatch lag.
+            if self.engine.audio and lag <= 0.25:
+                self._t_start += lag
+            now = self.song_time
+            source = "none"
             if self.engine.audio:
                 if self.beatmap.song:
-                    if not self.engine.audio.play_song(self.beatmap.song):
+                    if self.engine.audio.play_song(self.beatmap.song):
+                        source = "song"
+                    else:
                         self.engine.audio.start_metronome(self.beatmap.bpm)
+                        source = "metronome"
                 else:
                     self.engine.audio.start_metronome(self.beatmap.bpm)
+                    source = "metronome"
+            self._audio_source = source
+            self._audio_offset_applied_s = self._audio_latency_s()
         if not self._countdown_done:
             return
 
@@ -500,17 +572,36 @@ class RhythmMode(WaitSkip):
             for due in self.scheduler.leads_due(
                     now - audio_s + lead_s + half_frame):
                 self._lead_by_note[due.index] = self._buzz_lead_ms
+                self._offset_by_note.setdefault(due.index, audio_s)
                 self.engine.on_tactile_lead(
                     due.note.lane, due.index,
                     self._t_start + self._countdown_s + due.note.t
                     + audio_s - lead_s)
+        # The tone leads the beat by its own output delay, on its own
+        # cursor, so it is heard on the scored zero. With no delay
+        # configured it rides the beat dispatch as before.
+        tone_s = self._tone_lead_s
+        tone_split = tone_s > 0.0
+        if tone_split:
+            for due in self.scheduler.tones_due(
+                    now - audio_s + tone_s + half_frame):
+                self._offset_by_note.setdefault(due.index, audio_s)
+                self.engine.on_tone_lead(
+                    due.note.lane, due.index,
+                    self._t_start + self._countdown_s + due.note.t
+                    + audio_s - tone_s)
         for due in self.scheduler.notes_due(now - audio_s + half_frame):
             if not split:
                 self._lead_by_note[due.index] = 0.0
+            self._offset_by_note.setdefault(due.index, audio_s)
+            due.stim_t_perf = (self._t_start + self._countdown_s
+                               + due.note.t + audio_s)
+            # The tone flag only travels when the tone went out ahead:
+            # the older fixtures stub on_stim without it.
+            extra = {"tone": False} if tone_split else {}
             self.engine.on_stim(
-                due.note.lane, due.index,
-                self._t_start + self._countdown_s + due.note.t + audio_s,
-                buzz=not split)
+                due.note.lane, due.index, due.stim_t_perf,
+                buzz=not split, **extra)
 
         # Score any queued press inputs.
         while self._presses:
@@ -520,11 +611,15 @@ class RhythmMode(WaitSkip):
         # Log notes whose miss-window has closed without a hit. Pass
         # was_pressed=False so the trial row records num_presses=0 and
         # an empty keys_pressed - the patient didn't press anything here.
+        # On the corrected clock, the one a press is scored on: closed
+        # on the raw clock, a note expired 87 ms into its own Late
+        # tier, and a Late press then scored as a spurious press with
+        # a penalty and byte 131 while the note went down as a miss.
         miss_radius_s = self.windows.miss_ms / 1000.0
         for s in self.scheduler.scheduled:
             if s.hit_at is not None or getattr(s, "_miss_logged", False):
                 continue
-            if now > s.note.t + miss_radius_s:
+            if now - self._note_offset_s(s) > s.note.t + miss_radius_s:
                 s._miss_logged = True
                 self.engine.log_rhythm_hit(s, 0.0, "Miss",
                                             self.score_cfg.miss_points, now,
@@ -584,8 +679,12 @@ class RhythmMode(WaitSkip):
         # for, and the click-track metronome (512-sample buffer, ~12 ms)
         # has a far smaller latency than a decoded song file, so it gets
         # its own, smaller constant rather than borrowing the song one.
-        offset_s = self._audio_latency_s()
-        now = self._song_time_for(ev.t_perf) - offset_s
+        # Against the zero each note was cued with (_note_offset_s):
+        # the live offset is 0 until the song plays, so a press on the
+        # first note made before the song started used to score 87 ms
+        # early against a zero placed 87 ms later.
+        now_raw = self._song_time_for(ev.t_perf)
+        now = now_raw - self._audio_latency_s(predict=True)
         miss_radius_s = self.windows.miss_ms / 1000.0
         best: ScheduledNote | None = None
         best_d = float("inf")
@@ -594,7 +693,7 @@ class RhythmMode(WaitSkip):
                 continue
             if s.note.lane != ev.lane:
                 continue
-            d = now - s.note.t
+            d = now_raw - self._note_offset_s(s) - s.note.t
             # Early floor is -miss_ms so the documented Early tier
             # (-miss_ms..-good_ms, 1 point) is actually reachable: with
             # a -good_ms floor an anticipation at -250 ms was penalised
@@ -623,12 +722,14 @@ class RhythmMode(WaitSkip):
                 s.hit_at is None
                 and not getattr(s, "_miss_logged", False)
                 and s.note.lane != ev.lane
-                and -miss_radius_s <= (now - s.note.t) <= miss_radius_s * 2
+                and -miss_radius_s <= (now_raw - self._note_offset_s(s)
+                                       - s.note.t) <= miss_radius_s * 2
                 for s in self.scheduler.scheduled)
             self.engine.log_rhythm_unmatched(ev.lane, now,
                                              t_press_perf=ev.t_perf,
                                              wrong_finger=wrong_finger)
             return
+        now = now_raw - self._note_offset_s(best)
         offset_ms = (now - best.note.t) * 1000.0
         best.hit_at = now
         best.early_late_ms = offset_ms

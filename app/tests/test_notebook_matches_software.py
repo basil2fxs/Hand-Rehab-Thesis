@@ -297,7 +297,7 @@ class TestReactionFrameContract:
         import numpy
         import pandas
         names = ["reaction_frame", "mode_rows", "stimulus_parts",
-                 "REACTION_NEVER_SCORABLE"]
+                 "REACTION_NEVER_SCORABLE", "HARDWARE_VOID_ERRORS"]
         tree = ast.parse(source)
         wanted = {}
         for node in tree.body:
@@ -358,6 +358,7 @@ class TestReactionModeChapter:
 
     NAMES = ["sec_reaction_mode", "_reaction_mode_group", "reaction_frame",
              "mode_rows", "stimulus_parts", "REACTION_NEVER_SCORABLE",
+             "HARDWARE_VOID_ERRORS", "reaction_p10",
              "reaction_floor_note", "_reaction_accuracy_warning",
              "_reaction_exgaussian_fit", "_reaction_time_on_task",
              "_nothing", "_show", "_nbins", "ANTICIPATION_MS",

@@ -211,7 +211,7 @@ WHAT ONE ROW LOGS. One trials.csv row per option SET, not per word:
     opts=<lane>:<text>:<kind>,... (four, 1-indexed lanes);
     tlane=<1-indexed target lane>;
     presses=<lane>:<t_ms from spawn>:<peak>:<kind>,...;
-    first=<ok|wrong|none>;err=<ok|wrong_first|miss>;rt=<ms>;
+    first=<ok|wrong|none>;err=<ok|wrong_first|miss|device_drop>;rt=<ms>;
     ease=1 (biased draws only);streak=<n>;sup=<0|1>;
     pon=<0|1, prompt armed for this set>;pstep=<the word's rung on
     the delay ladder, len(prompt_steps) when off>;prompt=<0|1, it
@@ -274,6 +274,7 @@ from ...hardware.fsr_detector import PressEvent
 from ..rest_skip import WaitSkip
 from ..scoring import ScoreConfig, TrialResult
 from ._keys import keymap_for_hand, resolve_key
+from ...hardware.eeg_trigger import CODES as EEG_CODES, response_code
 from .classic import PendingTrial
 from .syllables_foils import Inventory, build_option_set, kinds_for_rung
 from .syllables_profiles import Profile, resolve as resolve_profile
@@ -580,6 +581,14 @@ class SyllablesMode(WaitSkip):
 
         # ---- aggregates ----
         self._sets: list[SetRecord] = []
+        # Sets the rig ate (a board drop over an unanswered set):
+        # logged as device_drop, replayed, out of every number.
+        self._voided_sets: list[SetRecord] = []
+        self._set_voided = False
+        # Whether the word in play was printed at ATTEND and MODEL,
+        # fixed when the word starts: the rung can move inside the
+        # word, and the row must say what was on screen.
+        self._word_printed = True
         self._set_falls: list[float] = []
         self._records: list[WordRecord] = []
         self._band_trace: list[str] = [self.band]
@@ -810,8 +819,10 @@ class SyllablesMode(WaitSkip):
         # A pause mid-word breaks the presentation the trial rests on
         # (the word was spoken and modelled before the pause, the tiles
         # fall after it), so the fair move is to restart the word from
-        # ATTEND rather than salvage half of it.
-        if self.phase in ("attend", "model", "choose", "complete"):
+        # ATTEND rather than salvage half of it. Not on the COMPLETE
+        # card: every set is scored and logged by then, and a restart
+        # there played the word again and logged each set twice.
+        if self.phase in ("attend", "model", "choose"):
             raw = getattr(self.engine, "raw_logger", None)
             if raw:
                 raw.queue_event(
@@ -921,14 +932,19 @@ class SyllablesMode(WaitSkip):
             self._retire(entry, "return_cap")
             entry = self._due_return()
         # Completion and the session cap are checked at word
-        # boundaries so the block never ends mid-word.
-        if self.words_done >= self.words_total and entry is None:
-            self._end("completed")
-            return
-        if (self._t0 is not None
-                and (now - self._t0) > self.session_cap_s):
-            self._end("time_cap")
-            return
+        # boundaries so the block never ends mid-word. A restart of
+        # the word in play (a pause) is not a boundary: a return
+        # playing past the word budget would otherwise end the block
+        # from inside the resume, half played and unrecorded.
+        restart = reuse_word and self.word is not None
+        if not restart:
+            if self.words_done >= self.words_total and entry is None:
+                self._end("completed")
+                return
+            if (self._t0 is not None
+                    and (now - self._t0) > self.session_cap_s):
+                self._end("time_cap")
+                return
         if not reuse_word or self.word is None:
             if entry is not None:
                 self._parked.remove(entry)
@@ -965,6 +981,7 @@ class SyllablesMode(WaitSkip):
         self._set_presses = []
         self._dead_lanes = set()
         self._last_tap_t = {}
+        self._word_printed = self.show_print
         self._enter_phase("attend", now)
         self._speak_word()
 
@@ -1036,10 +1053,10 @@ class SyllablesMode(WaitSkip):
         self._speak_syllable_after(self._model_idx, now)
         # Still goes through the stimulus path, buzz off, so the
         # 30-band model byte and the slot light keep their timing. The
-        # trial id is the word's next set id, which ties the byte to
-        # the word it belongs to.
+        # trial id is the word's next set id (the counter moves at the
+        # spawn), which ties the byte to the word it belongs to.
         self.engine.on_stim_multi(self.active_lanes(),
-                                  self.trial_counter, now, buzz=False)
+                                  self.trial_counter + 1, now, buzz=False)
 
     # ---- the choice phase --------------------------------------------------
     def _update_choose(self, now: float) -> None:
@@ -1148,6 +1165,7 @@ class SyllablesMode(WaitSkip):
             homophone_foils=self.homophone_foils,
             kinds=self._foil_kinds())
         self._replayed = False
+        self._set_voided = False
         tlane = self.option_set.target_lane
         self._lane_targets[tlane] = self._lane_targets.get(tlane, 0) + 1
         self._recent_target_lanes.append(tlane)
@@ -1217,12 +1235,15 @@ class SyllablesMode(WaitSkip):
         return kinds
 
     def _handle_press(self, ev: PressEvent, now: float) -> None:
-        if self.phase != "choose" or self.option_set is None:
+        if (self.phase != "choose" or self.option_set is None
+                or self._set_close_t is not None):
             # No penalty anywhere in this mode: a child fidgeting
-            # between words must not lose anything for it.
-            return
-        if self._set_close_t is not None:
-            # The set is already scored and fading out.
+            # between words, or after a set is scored and fading out,
+            # must not lose anything for it. The EEG record still
+            # books the press as idle (131, no set open), the
+            # artefact bookkeeping the lab document promises for
+            # every press.
+            self._eeg_press_byte(EEG_CODES["resp_idle"], ev)
             return
         last = self._last_tap_t.get(ev.lane)
         if last is not None and (ev.t_perf - last) < self.tap_debounce_s:
@@ -1251,6 +1272,18 @@ class SyllablesMode(WaitSkip):
             if self.active is not None:
                 self.active.incorrect_presses.append((ev.lane, ev.t_perf))
                 self.engine.eeg_wrong_press(self.active.incorrect_presses)
+        elif kind == KIND_ANTICIP:
+            # Inside the spawn lockout: ignored by the score, but a
+            # press all the same, marked as a false start at its own
+            # time (120 + lane) so the record never says "no press".
+            code = response_code("anticipation", ev.lane)
+            if code is not None:
+                self._eeg_press_byte(code, ev)
+
+    def _eeg_press_byte(self, code: int, ev: PressEvent) -> None:
+        send = getattr(self.engine, "_eeg_send", None)
+        if callable(send):
+            send(int(code), lane=ev.lane, t_event=ev.t_perf)
 
     def _classify(self, ev: PressEvent) -> str:
         """The input rule, in the order the docstring states it. Only
@@ -1284,6 +1317,12 @@ class SyllablesMode(WaitSkip):
         self._exit_t = None
         self._set_close_t = None
         self._prompt_due = None
+        if self._set_voided:
+            # The rig ate the set: the same chunk again with fresh
+            # tiles, nothing booked against the word.
+            self._set_voided = False
+            self._next_spawn_t = now + self.set_gap_s
+            return
         if missed:
             self._park_word(now)
             self._finish_word(now, completed=False)
@@ -1309,10 +1348,19 @@ class SyllablesMode(WaitSkip):
             err = "ok" if first == "ok" else "wrong_first"
         else:
             err = "miss"
+        # A set that left the screen unanswered while this hand's
+        # board was away is the rig's, not the reader's: the test the
+        # engine's log_trial runs, taken here as well so the mode
+        # books nothing on it (no miss, no park, no prompt step, no
+        # staircase move) and replays the chunk once the set fades.
+        voided = (err == "miss" and not trial.incorrect_presses
+                  and self._rig_void(now))
         rt_ms = ((correct_t - self._spawn_t) * 1000.0
                  if correct_t is not None and self._spawn_t is not None
                  else None)
         pclass, prompted = self._classify_prompt()
+        if voided:
+            err, pclass = "device_drop", "void"
         if err == "ok" and not prompted:
             outcome = TrialResult(label="Great",
                                   points=self.score_cfg.great_points,
@@ -1349,11 +1397,18 @@ class SyllablesMode(WaitSkip):
             prompted=self._prompted_t is not None,
             pclass=pclass,
         )
-        self._sets.append(rec)
-        self._set_falls.append(self.fall_s)
-        if pclass == "unprompted_correct" and rt_ms is not None:
-            self._answer_rts.append(float(rt_ms) / 1000.0)
-        self._update_prompt_fade(pclass, missed=(err == "miss"))
+        if voided:
+            self._voided_sets.append(rec)
+        else:
+            self._sets.append(rec)
+            # The adult threshold reads the fall of every set the
+            # reader answered on one hearing: a replayed set stays
+            # out, as replay() promises.
+            if not self._replayed:
+                self._set_falls.append(self.fall_s)
+            if pclass == "unprompted_correct" and rt_ms is not None:
+                self._answer_rts.append(float(rt_ms) / 1000.0)
+            self._update_prompt_fade(pclass, missed=(err == "miss"))
         # The EEG response marker must lock to the child's own press,
         # so it is the first press that was neither an anticipation nor
         # an off-hand press; outcome.rt_ms is spawn-to-correct-press,
@@ -1364,6 +1419,12 @@ class SyllablesMode(WaitSkip):
                 continue
             resp_t = p.t_perf
             break
+        if resp_t is None and outcome.label == "Miss":
+            # A press inside the lockout was marked at the press
+            # (120 + lane); telling log_trial a press happened keeps
+            # it from adding a deadline-expired byte (130) on top.
+            resp_t = next((p.t_perf for p in self._set_presses
+                           if p.kind == KIND_ANTICIP), None)
         self.engine.log_trial(
             trial, outcome, now,
             stimulus=self._pack_stimulus(rec),
@@ -1371,15 +1432,31 @@ class SyllablesMode(WaitSkip):
             correct_lanes=[self.option_set.target_lane],
             # A Miss here is a set nobody answered, never a wrong
             # finger: the mode's own code beats the engine's
-            # had_incorrect_press-derived guess.
+            # had_incorrect_press-derived guess. device_drop is the
+            # engine's own void vocabulary.
             error_type=(err if outcome.label == "Miss" else ""),
             response_t_perf=resp_t,
             hand=self.word_hand,
         )
-        if self._source_alive():
+        if voided:
+            self._set_voided = True
+            return
+        if self._source_alive() and pclass != "prompted_correct":
             # The staircase reads answers found alone: a set the
-            # prompt helped does not make the foils harder.
+            # prompt helped neither makes the foils harder nor easier
+            # (docstring, PROMPT: a prompted answer "does not move the
+            # foil staircase"). A wrong first press after the buzz is
+            # still a wrong first press and moves it down.
             self._move_rung(pclass == "unprompted_correct", err, now)
+
+    def _rig_void(self, now: float) -> bool:
+        """True when a board drop on this word's hand overlapped the
+        set on screen, by the engine's own test. `is True` because a
+        bare test engine answers with a mock, which is not a drop."""
+        check = getattr(self.engine, "_drop_overlaps", None)
+        if not callable(check):
+            return False
+        return check(self.word_hand, self._spawn_t, now) is True
 
     def _move_rung(self, first_ok: bool, err: str, now: float) -> None:
         """The 3-down-1-up staircase (Levitt 1971): three consecutive
@@ -1655,7 +1732,7 @@ class SyllablesMode(WaitSkip):
         parts.append(f"pclass={rec.pclass}")
         parts.append(f"prof={self.profile.pid}")
         parts.append(f"lex={getattr(self.word, 'lex', 'word')}")
-        parts.append(f"print={1 if self.show_print else 0}")
+        parts.append(f"print={1 if self._word_printed else 0}")
         parts.append(f"replay={1 if self._replayed else 0}")
         return ";".join(parts)
 
@@ -2027,6 +2104,9 @@ class SyllablesMode(WaitSkip):
             "rung_trace": list(self._rung_trace),
             "ioi_ms": round(self.ioi_s * 1000.0),
             "n_sets": n_sets,
+            # Sets a board drop ate: replayed, out of every number
+            # here, on their rows as device_drop.
+            "n_voided_sets": len(self._voided_sets),
             "first_press_accuracy": (round(first_ok / n_sets, 3)
                                      if n_sets else None),
             "chance_level": round(1.0 / 4, 3),

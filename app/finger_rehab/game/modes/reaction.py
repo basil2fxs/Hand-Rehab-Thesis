@@ -40,10 +40,10 @@ ANTICIPATIONS AND CATCH TRIALS. Responses under 100 ms are not
 physiologically plausible visual reaction times and are scored as false
 starts, never as hits (Luce 1986, Response Times; Basner and Dinges
 2011, Sleep; Whelan 2008, The Psychological Record). A press during the
-foreperiod is likewise a false start; the trial aborts gently (a line
-from the "ahead of the cue" phrase bank, no penalty sound, no score
-loss) and a fresh attempt follows, so false starts never consume
-scorable slots. On a fraction of trials (catch_rate) no stimulus ever
+foreperiod is likewise a false start; the trial aborts gently (nothing
+on screen, no penalty sound, no score loss: this mode shows no
+messages, only the RT in the corner) and a fresh attempt follows, so
+false starts never consume scorable slots. On a fraction of trials (catch_rate) no stimulus ever
 comes; surviving the wait earns a small
 reward. Catch trials are the standard second anticipation control from
 the PVT tradition (Dinges and Powell 1985), kept at 10 percent because
@@ -126,6 +126,7 @@ run from trials.csv alone.
 from __future__ import annotations
 
 import logging
+import math
 import random
 import time
 from collections import deque
@@ -223,12 +224,23 @@ class ReactionMode(WaitSkip):
         if not by_hand:
             by_hand = {"right": [0] if self.sub_mode == "simple"
                        else [0, 1, 2, 3]}
+        # One bag per block rather than per four cues: dealt four at a
+        # time, the fourth finger of every bag was the one not yet
+        # seen, so a quarter of the cues could be worked out from the
+        # three before and choice RT stopped being a clean 2-bit
+        # choice (Hyman 1953). Five copies of each finger for a
+        # 20-trial block keep the counts equal with almost nothing to
+        # predict; the no-repeat rule is unchanged.
+        per_hand_trials = self.total_trials / max(1, len(by_hand))
+        widest = max(len(v) for v in by_hand.values())
+        copies = max(1, math.ceil(per_hand_trials / max(1, widest)))
         if len(by_hand) > 1:
-            self._sched = PairedBalancedScheduler(by_hand, self.rng)
+            self._sched = PairedBalancedScheduler(by_hand, self.rng,
+                                                  copies=copies)
             self._next_lane = self._sched.next_lane
         else:
             self._sched = BalancedScheduler(
-                next(iter(by_hand.values())), self.rng)
+                next(iter(by_hand.values())), self.rng, copies=copies)
             self._next_lane = self._sched.next
 
         # Phase machine: arm -> (foreperiod | catch) -> stim -> rest ->
@@ -260,6 +272,12 @@ class ReactionMode(WaitSkip):
         self.n_catch = 0
         self.n_catch_ok = 0
         self.n_catch_false_start = 0
+        # Closes voided because a board was away during the trial, and
+        # false starts on an attempt whose stability gate was skipped.
+        self.n_device_drop = 0
+        self.n_false_start_gate_skipped = 0
+        self._trial_gate_skipped = False
+        self._late_press_ms: float | None = None
         # Per-valid-trial parallel lists for the median / slope /
         # anticipation diagnostics in block_stats.
         self._valid_rts: list[float] = []
@@ -324,7 +342,8 @@ class ReactionMode(WaitSkip):
     def update(self, dt: float) -> None:
         now = time.perf_counter()
         while self._presses:
-            self._handle_press(self._presses.popleft(), now)
+            self._handle_press(self._prefer_cued(self._presses.popleft()),
+                               now)
         if self._phase == "done":
             return
         if (self.active is None and self._phase in ("arm", "rest")
@@ -486,10 +505,24 @@ class ReactionMode(WaitSkip):
             return self.rng.uniform(2.0, 10.0)
         if self.fp_mean_extra <= 0.0:
             return self.fp_min
-        while True:
+        # fp_max is clamped up to fp_min at construction, so a config
+        # with fp_max_s at or under fp_min_s leaves no room above the
+        # floor: the redraw loop below would then wait for a draw of
+        # exactly zero and never end. Such a config asks for a fixed
+        # wait, so it gets one.
+        if self.fp_max - self.fp_min < 1e-6:
+            return self.fp_min
+        for _ in range(10000):
             fp = self.fp_min + self.rng.expovariate(1.0 / self.fp_mean_extra)
             if fp <= self.fp_max:
                 return fp
+        # A window that narrow against the mean (thousands of redraws
+        # without a hit) gets the same truncated exponential by its
+        # inverse CDF instead of hanging the block.
+        span = self.fp_max - self.fp_min
+        u = self.rng.random()
+        return self.fp_min - self.fp_mean_extra * math.log(
+            1.0 - u * (1.0 - math.exp(-span / self.fp_mean_extra)))
 
     def _fire(self, now: float) -> None:
         lane = self._next_lane()
@@ -518,6 +551,51 @@ class ReactionMode(WaitSkip):
         trials.csv directly."""
         return self.engine._lane_hand(lane) or self.engine.hand_mode
 
+    def _stimulus_tag(self, extra: str = "") -> str:
+        """The stimulus column for this attempt's row: the sub-mode
+        and the scheduled foreperiod, plus gate_skipped when the
+        stability gate was cut short before this attempt. The flag
+        used to be kept on the mode and never written, so a false
+        start the gate existed to prevent read in the data as
+        anticipation."""
+        tag = f"{self.sub_mode};fp={self._fp_scheduled:.3f}"
+        if self._trial_gate_skipped:
+            tag += ";gate_skipped"
+        return tag + extra
+
+    def _board_dropped(self, hand: str | None, t_from: float | None,
+                       t_to: float) -> bool:
+        """Whether a board drop overlapped [t_from, t_to], read from
+        the engine's own drop log (the check engine.log_trial uses to
+        void a dropped Miss). False on engines without one."""
+        check = getattr(self.engine, "_drop_overlaps", None)
+        if not callable(check):
+            return False
+        try:
+            # `is True`, not truthiness: a test double's engine answers
+            # with a mock object, which must not read as a drop.
+            return check(hand, t_from, t_to) is True
+        except Exception:
+            return False
+
+    def _prefer_cued(self, ev: PressEvent) -> PressEvent:
+        """Take the cued finger first when several fingers crossed on
+        the same sample. The detector reports one sample's presses in
+        lane order, so without this a neighbour below the cued finger
+        always won a tie and a two-finger answer was scored as a wrong
+        choice, a bias toward the lower lanes."""
+        trial = self.active
+        if self._phase != "stim" or trial is None or ev.lane == trial.lane:
+            return ev
+        for i, other in enumerate(self._presses):
+            if abs(other.t_perf - ev.t_perf) > 1e-9:
+                break
+            if other.lane == trial.lane:
+                del self._presses[i]
+                self._presses.appendleft(ev)
+                return other
+        return ev
+
     # ---- presses -----------------------------------------------------------
     def _handle_press(self, ev: PressEvent, now: float) -> None:
         # Every press, whatever the phase, restarts the rest gate: a
@@ -540,11 +618,13 @@ class ReactionMode(WaitSkip):
 
     def _false_start(self, ev: PressEvent, now: float) -> None:
         self.n_false_start += 1
+        if self._trial_gate_skipped:
+            self.n_false_start_gate_skipped += 1
         self.engine.log_reaction_event(
             trial_id=self.trial_counter, lane=None,
             label="Early", error_type="false_start",
             pressed_lane=ev.lane, press_t_perf=ev.t_perf,
-            stimulus=f"{self.sub_mode};fp={self._fp_scheduled:.3f}",
+            stimulus=self._stimulus_tag(),
             # No cued lane to derive a side from (the stimulus never
             # fired), but the PRESSING lane did happen and resolves to
             # a board via _lane_hand, so a both-hands block still gets
@@ -558,11 +638,14 @@ class ReactionMode(WaitSkip):
 
     def _catch_false_start(self, ev: PressEvent, now: float) -> None:
         self.n_catch_false_start += 1
+        if self._trial_gate_skipped:
+            self.n_false_start_gate_skipped += 1
         self.engine.log_reaction_event(
             trial_id=self.trial_counter, lane=None,
             label="Early", error_type="catch_false_start",
             pressed_lane=ev.lane, press_t_perf=ev.t_perf,
-            stimulus=f"{self.sub_mode};catch",
+            stimulus=(f"{self.sub_mode};catch"
+                      + (";gate_skipped" if self._trial_gate_skipped else "")),
             hand=self._hand_for_lane(ev.lane),
         )
         self._catch_until = None
@@ -576,7 +659,8 @@ class ReactionMode(WaitSkip):
             trial_id=self.trial_counter, lane=None,
             label="CatchOk", error_type="",
             points=self.CATCH_REWARD,
-            stimulus=f"{self.sub_mode};catch",
+            stimulus=(f"{self.sub_mode};catch"
+                      + (";gate_skipped" if self._trial_gate_skipped else "")),
         )
         # Reward the waiting directly; log_reaction_event touches no
         # counters so the score bump happens here.
@@ -606,8 +690,16 @@ class ReactionMode(WaitSkip):
         # never pressing at all.
         if rt_ms > self.response_window * 1000.0:
             trial.keys_pressed.append(ev.lane)
-            trial.incorrect_presses.append((ev.lane, ev.t_perf))
+            if ev.lane == trial.lane:
+                # The right finger, only late. Kept off
+                # incorrect_presses: that list is what the engine turns
+                # into had_incorrect_press and the 110+lane wrong-finger
+                # byte, and neither is true of this press.
+                self._late_press_ms = rt_ms
+            else:
+                trial.incorrect_presses.append((ev.lane, ev.t_perf))
             self._close_scorable(None, now, late_press=True)
+            self._late_press_ms = None
             return
         # Sub-cut presses are anticipations whichever finger fired: a
         # press that fast cannot be a response to the stimulus, so the
@@ -620,7 +712,7 @@ class ReactionMode(WaitSkip):
                 label="Early", error_type="anticipation",
                 rt_ms=rt_ms, pressed_lane=ev.lane,
                 press_t_perf=ev.t_perf,
-                stimulus=f"{self.sub_mode};fp={self._fp_scheduled:.3f}",
+                stimulus=self._stimulus_tag(),
                 hand=self._hand_for_lane(trial.lane),
             )
             self._clear_lanes()
@@ -628,7 +720,12 @@ class ReactionMode(WaitSkip):
             return
         if ev.lane == trial.lane:
             trial.keys_pressed.append(ev.lane)
-            self._close_scorable(ev, now)
+            # Other fingers that crossed on this same sample are part of
+            # the answer; update() already put the cued one first.
+            co_lanes = [o.lane for o in self._presses
+                        if abs(o.t_perf - ev.t_perf) <= 1e-9
+                        and o.lane != trial.lane]
+            self._close_scorable(ev, now, co_lanes=co_lanes)
             return
         if self.sub_mode == "choice":
             # A wrong choice stops the clock and consumes the trial;
@@ -645,7 +742,7 @@ class ReactionMode(WaitSkip):
                                   rt_ms=None)
             self.engine.log_trial(
                 trial, outcome, now,
-                stimulus=f"{self.sub_mode};fp={self._fp_scheduled:.3f}",
+                stimulus=self._stimulus_tag(),
                 hand=self._hand_for_lane(trial.lane))
             self._enter_rest(now, self.feedback_s)
             return
@@ -659,14 +756,15 @@ class ReactionMode(WaitSkip):
             label="Wrong", error_type="wrong_finger",
             pressed_lane=ev.lane, press_offset_ms=rt_ms,
             press_t_perf=ev.t_perf,
-            stimulus=f"{self.sub_mode};fp={self._fp_scheduled:.3f}",
+            stimulus=self._stimulus_tag(),
             hand=self._hand_for_lane(trial.lane),
         )
         self._clear_lanes()
         self._enter_rest(now, self.feedback_s)
 
     def _close_scorable(self, ev: PressEvent | None, now: float,
-                        late_press: bool = False) -> None:
+                        late_press: bool = False,
+                        co_lanes: list[int] | None = None) -> None:
         """Close a trial that consumes a scorable slot: a valid press
         or a timeout miss. Goes through engine.log_trial so scoring,
         streaks, cues and the trial CSV behave exactly as in Classic
@@ -676,16 +774,42 @@ class ReactionMode(WaitSkip):
         response window: scored and gated exactly like a timeout (no
         RT, points 0), but the row says late_press so a slow-but-
         present response stays distinguishable from total absence
-        without re-scoring raw.csv."""
+        without re-scoring raw.csv. Its latency rides in the stimulus
+        column as late_ms, not as a wrong press: the finger was the
+        right one, so it must not raise had_incorrect_press or the
+        wrong-finger EEG byte.
+
+        `co_lanes` names other fingers whose press landed on the same
+        sample as the cued one; the row carries them as co_press so
+        the analysis can see a two-finger answer."""
         trial = self.active
         if trial is None:
             return
         self.active = None
-        self.completed += 1
         rt_ms = None
         if ev is not None:
             rt_ms = (ev.t_perf - trial.stim_t_perf) * 1000.0
         outcome = classify(rt_ms, self.score_cfg)
+        hand = self._hand_for_lane(trial.lane)
+        if self._board_dropped(hand, trial.stim_t_perf, now):
+            # The board was away somewhere between the cue and this
+            # close. With no press, the patient may have pressed a pad
+            # nobody was reading; with one, the press may be a repeat
+            # of one the drop swallowed. Neither is patient behaviour,
+            # so the row is voided the way engine.log_trial voids a
+            # dropped Miss, and it stays out of every tally here:
+            # counting it as a miss made a hardware fault read as a
+            # lapse in lapse_like_rate. It consumes no scorable slot,
+            # so the block still collects its full set of trials; the
+            # attempt cap still ends it.
+            self.n_device_drop += 1
+            self.engine.log_trial(
+                trial, outcome, now,
+                stimulus=self._stimulus_tag(),
+                hand=hand, error_type="device_drop")
+            self._enter_rest(now, self.false_start_feedback_s)
+            return
+        self.completed += 1
         if rt_ms is None:
             self.n_miss += 1
         else:
@@ -695,10 +819,15 @@ class ReactionMode(WaitSkip):
             self._valid_rts.append(rt_ms)
             self._valid_fps.append(self._fp_scheduled)
             self._valid_idx.append(self.completed)
+        extra = ""
+        if late_press and self._late_press_ms is not None:
+            extra = f";late_ms={self._late_press_ms:.1f}"
+        if co_lanes:
+            extra += ";co_press=" + ",".join(str(int(l)) for l in co_lanes)
         self.engine.log_trial(
             trial, outcome, now,
-            stimulus=f"{self.sub_mode};fp={self._fp_scheduled:.3f}",
-            hand=self._hand_for_lane(trial.lane),
+            stimulus=self._stimulus_tag(extra),
+            hand=hand,
             error_type=("late_press" if late_press else None))
         if rt_ms is not None:
             self._show_rt_feedback(rt_ms)
@@ -722,7 +851,7 @@ class ReactionMode(WaitSkip):
                 self.engine._reaction_best_ms = store
             except Exception:
                 pass
-        key = (self.sub_mode, getattr(self.engine, "hand_mode", "?"))
+        key = self._best_key()
         prev = store.get(key)
         if prev is None or rt_ms < prev:
             store[key] = rt_ms
@@ -738,8 +867,21 @@ class ReactionMode(WaitSkip):
         store = getattr(self.engine, "_reaction_best_ms", None)
         if not isinstance(store, dict):
             return None
-        return store.get(
-            (self.sub_mode, getattr(self.engine, "hand_mode", "?")))
+        return store.get(self._best_key())
+
+    def _best_key(self) -> tuple:
+        """Where this block's session best is kept. Inside a Play all
+        battery the pass is part of the key, so a pass 2 block starts
+        with no best of its own and never shows the pass 1 one: the
+        design leaves every pass 2 against pass 1 comparison out of
+        the sitting, because the retest blocks run back to back and a
+        number from the first go could change effort on the rest
+        (healthy_baseline_study.txt Section 4.8 d). Outside a battery
+        the phase is empty and the key is what it always was."""
+        phase = getattr(self.engine, "_current_phase", "")
+        phase = phase if isinstance(phase, str) else ""
+        return (self.sub_mode, getattr(self.engine, "hand_mode", "?"),
+                phase)
 
     def _enter_rest(self, now: float, feedback_dur: float) -> None:
         self._phase = "rest"
@@ -936,6 +1078,9 @@ class ReactionMode(WaitSkip):
             "n_rest_gate_skipped": getattr(self, "n_gate_skipped", 0),
             **self.wait_skip_stats(),
             "fp_mode": self.fp_mode,
+            # The fixed-wait EEG variant, None on the exponential wait;
+            # the vs-last chip only compares like with like.
+            "fp_fixed_s": self.fp_fixed_s,
             "seed": self.seed,
             "n_scorable": self.completed,
             "n_attempts": self.trial_counter,
@@ -955,6 +1100,13 @@ class ReactionMode(WaitSkip):
             "n_catch": self.n_catch,
             "n_catch_ok": self.n_catch_ok,
             "n_catch_false_start": self.n_catch_false_start,
+            # False starts (foreperiod or catch) on an attempt whose
+            # stability gate was skipped, already inside the totals
+            # above: the analysis can take them out of the
+            # anticipation check they do not belong to.
+            "n_false_start_gate_skipped": self.n_false_start_gate_skipped,
+            # Closes voided by a board drop: in no tally above.
+            "n_device_drop": self.n_device_drop,
             # None (not 0.0) when nothing completed: the metadata must
             # not claim a clean block that never produced a trial.
             "lapse_like_rate": _r(self._lapse_like_rate(), 3),

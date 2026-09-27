@@ -5377,6 +5377,16 @@ class ResultsScreen(Screen):
         side = {"left": " L", "right": " R"}.get(str(hand), "")
         return f"{mode_title(mode)}{side}"
 
+    def _pass_comparisons_hidden(self) -> bool:
+        """True while a Play all battery is still under way. The card
+        then shows no comparison with an earlier go of the same mode,
+        which inside the battery can only be the pass 1 block."""
+        try:
+            progress = self.engine.battery_progress()
+        except Exception:
+            return False
+        return isinstance(progress, dict) and not progress.get("finished")
+
     def _battery_done(self) -> bool:
         """True on the results screen of the LAST PLAY ALL block.
 
@@ -6516,7 +6526,16 @@ class ResultsScreen(Screen):
         here = self._progress_row_for(
             str(self.engine.current_block),
             str(getattr(self.engine, "hand_mode", "")))
-        if here is not None and int(here.get("n") or 0) >= 2:
+        if self._pass_comparisons_hidden():
+            # Mid-battery: no first-go comparison and no vs-last chip.
+            # In pass 2 both compare the block just played with its
+            # pass 1 go, and the retest blocks run back to back, so a
+            # number shown after the first could change effort on the
+            # next two (healthy_baseline_study.txt Section 4.8 d). The
+            # TODAY panel still shows everything once the battery is
+            # done.
+            pass
+        elif here is not None and int(here.get("n") or 0) >= 2:
             self._draw_progress_row(surf, chip_left, chip_y, chip_right)
         else:
             chip = getattr(self.engine, "vs_last", None)
@@ -6764,8 +6783,12 @@ class ResultsScreen(Screen):
             else:
                 cards += self._buzz_hunt_hand_cards(
                     "THRESHOLD", bh.get("threshold") or {})
-            cards += self._buzz_hunt_hand_cards(
-                "GAP", (bh.get("gap") or {}).get("threshold") or {})
+            # GAP cards only when the gap stage ran (the study's short
+            # form leaves it out, and its untouched staircase used to
+            # draw "not reached" cards for a stage nobody played).
+            gap_thr = (bh.get("gap") or {}).get("threshold") or {}
+            if gap_thr:
+                cards += self._buzz_hunt_hand_cards("GAP", gap_thr)
         elif ec is not None:
             # Echo's own vocabulary: the longest echo (span) is the
             # headline. Under the Simon rule the support cards are

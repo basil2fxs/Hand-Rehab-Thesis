@@ -1445,8 +1445,9 @@ class BlockFlowTests(unittest.TestCase):
         self.assertEqual(stats["distractor"]["trials"], 0)
         self.assertEqual(stats["span"]["trials"], 1)
         self.assertEqual(stats["gap"]["trials"], 0)
-        self.assertEqual(stats["gap"]["threshold"]["right"]["n_reversals"],
-                         0)
+        # A stage the block never had reports no threshold: an
+        # untouched staircase is not a measurement (27 September 2026).
+        self.assertEqual(stats["gap"]["threshold"], {})
 
     def test_block_ends_and_carries_the_window_level(self):
         m = _mode(_engine(), catch_rate=0.0)

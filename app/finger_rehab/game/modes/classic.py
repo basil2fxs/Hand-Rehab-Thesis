@@ -71,6 +71,13 @@ class ClassicMode:
         # the active trial instantly time out or the next stim look overdue.
         if self.active is not None:
             self.active.stim_t_perf += pause_dur
+            # Wrong presses hold absolute times too. Shifting only the
+            # stim made first_incorrect_ms (wrong_t - stim_t) shrink by
+            # the pause and go negative, the fault adaptive.py already
+            # fixed for itself.
+            self.active.incorrect_presses = [
+                (lane, t + pause_dur)
+                for lane, t in self.active.incorrect_presses]
         if self.last_trigger_t > 0:
             self.last_trigger_t += pause_dur
 

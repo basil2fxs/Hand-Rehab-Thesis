@@ -1149,6 +1149,19 @@ class GameEngine:
                 hand=self.hand_mode)
         self._eeg_send(eeg_trigger.CODES["resume"])
         self._block_paused_s += pause_dur
+        # An armed skippable wait carries an absolute deadline like the
+        # mode's own timers, so it shifts with them: a rest paused
+        # halfway must come back with the same seconds left on it, not
+        # with the pause counted as rest. Shifted BEFORE on_resume: a
+        # mode that restarts its trial there (Force Pilot, Buzz Hunt,
+        # Syllables) arms a fresh wait from the current clock, and
+        # shifting after that pushed the fresh card out by the whole
+        # pause, so a skip on it booked the pause as skipped rest.
+        if self.mode and hasattr(self.mode, "shift_wait"):
+            try:
+                self.mode.shift_wait(pause_dur)
+            except Exception as e:
+                log.warning("mode.shift_wait failed: %s", e)
         # Tell the mode to shift any in-flight timestamps forward so the
         # active trial doesn't instantly time out and the next-trigger
         # interval doesn't think it's overdue by an entire pause.
@@ -1157,15 +1170,6 @@ class GameEngine:
                 self.mode.on_resume(pause_dur)
             except Exception as e:
                 log.warning("mode.on_resume failed: %s", e)
-        # An armed skippable wait carries an absolute deadline like the
-        # mode's own timers, so it shifts with them: a rest paused
-        # halfway must come back with the same seconds left on it, not
-        # with the pause counted as rest.
-        if self.mode and hasattr(self.mode, "shift_wait"):
-            try:
-                self.mode.shift_wait(pause_dur)
-            except Exception as e:
-                log.warning("mode.shift_wait failed: %s", e)
         # The engine's own per-trial force window must shift with the
         # mode's deadlines. Left at its original absolute end, every
         # press and leak after the resume fell OUTSIDE the window, so a
@@ -4582,8 +4586,15 @@ class GameEngine:
                 late_points=self.score_cfg.good_points),
             demo_trials=self._test_mode_trials(),
             plan=plan,
+            # A reason only when a file was there to fail: no file at
+            # all is the shipped state and the study's state, and
+            # labelled it "builtin_fallback" with an error, which
+            # every study block then carried and the notebook warned
+            # about.
             sequence_file_error=(plan_reason if plan is None
-                                 and plan_reason else None),
+                                 and plan_reason
+                                 and pattern_file.active_path(self.cfg).exists()
+                                 else None),
             battery_overrides_ignored=(plan is not None
                                        and self._battery is not None),
         )
@@ -4853,22 +4864,25 @@ class GameEngine:
     def begin_buzz_hunt_block(self) -> None:
         """Buzz Hunt block: the vibrotactile perception suite, where
         the motors are the stimulus rather than a cue channel. One
-        engine block runs the whole stage ladder (localisation with
-        catch trials and a duration staircase, cross-hand distractors
-        in bilateral play, sequence span with the hidden Hebb repeat,
-        gap detection). The research case lives in the mode file's
-        docstring; buzz_hunt.* in the config says what the patient
-        experiences. Renders on its own near-empty screen: a focus
-        point is not a lane strip, and nothing on screen may name the
-        target finger.
+        engine block runs the whole stage ladder (localisation at a
+        fixed 150 ms pulse with catch trials and a response-window
+        ladder, cross-hand distractors in bilateral play, sequence
+        span with the hidden Hebb repeat, gap detection; the study's
+        short form plays localisation and span). The research case
+        lives in the mode file's docstring; buzz_hunt.* in the config
+        says what the patient experiences. Renders on its own
+        near-empty screen: a focus point is not a lane strip, and
+        nothing on screen may name the target finger.
 
         The stimuli go out through pulse_motor and BYPASS the cue.*
         switches by design (the buzz is the stimulus, not a cue);
-        after-press feedback still respects them. The duration
-        staircase's start level carries across blocks within one app
-        session as `_buzz_hunt_start_ms` (same pattern as the other
-        modes' level carry) so a second block resumes near threshold;
-        a restart falls back to the config start, the easy direction.
+        after-press feedback still respects them. The window ladder's
+        level (or, under the legacy buzz_hunt.duration_staircase flag,
+        the staircase level) carries across blocks within one app
+        session as `_buzz_hunt_window_level` / `_buzz_hunt_start_ms`
+        after a COMPLETED block only, so a second block resumes where
+        the first ended; a block a fault or the cap ended, and a
+        restart, start at the longest window, the easy direction.
         The Hebb material comes from the participant name, so it is
         stable across sessions the way pattern mode's sequence is.
         """
@@ -5866,6 +5880,16 @@ class GameEngine:
                     summary["tactile_cue"] = tactile()
                 except Exception as e:
                     log.warning("rhythm tactile summary failed: %s", e)
+            # What the audio actually was and the offset every score
+            # was corrected by, so the analysis reads what happened
+            # rather than the configured constant.
+            audio_fn = getattr(self.mode, "audio_summary", None) \
+                if self.mode else None
+            if callable(audio_fn):
+                try:
+                    summary["song"].update(audio_fn())
+                except Exception as e:
+                    log.warning("rhythm audio summary failed: %s", e)
         # Reaction-only context: the mode's own outcome tallies and
         # distribution stats (median, anticipation diagnostic, seed).
         # These cannot be rebuilt from hits / misses because false
@@ -6132,24 +6156,28 @@ class GameEngine:
                 getattr(self, "_rhythm_chart_note_times_s", []) or [])
             summary["beat_offset_stats"]["chart_ioi_cv"] = (
                 round(chart_cv, 4) if chart_cv is not None else None)
-            # Lag-1 autocorrelation of signed offsets. This is a
-            # persistence-vs-alternation measure, not a labelled
-            # "tracks the tempo" score: in the standard Wing-
-            # Kristofferson / Vorberg-Wing phase-correction account of
-            # sensorimotor synchronisation, active error correction
-            # produces a NEGATIVE lag-1 r (an early press is followed
-            # by a compensating late one), while a POSITIVE r reflects
-            # slow drift (consecutive offsets stay similar) rather than
-            # correction. r ~= 0 = offsets look like independent
-            # presses landing near the beat by luck. Do not read a
-            # positive number here as "tracking" -- see sec_rhythm in
-            # analysis/session_analysis.ipynb for the printed caveat.
+            # Lag-1 autocorrelation of the signed offsets. Under the
+            # linear phase-correction model (Vorberg and Wing 1996;
+            # Repp 2005) a tapper who corrects only PART of each error,
+            # which healthy tappers do, leaves consecutive asynchronies
+            # positively correlated; full correction gives about zero.
+            # A positive number here is the normal signature, not
+            # drift. (The comment that used to sit here had the sign
+            # the other way round, from reading Wing and Kristofferson
+            # 1973's prediction for INTERVALS as one for asynchronies.)
             offsets = getattr(self, "_rhythm_signed_offsets_ms", [])
             if len(offsets) >= 3:
                 entr = metrics.tempo_entrainment_index(
                     offsets[1:], offsets[:-1])
                 summary["beat_offset_stats"]["entrainment_lag1_r"] = (
                     round(entr, 4) if entr is not None else None)
+            # The series Wing and Kristofferson's prediction is about:
+            # the interval residual (press interval minus note
+            # interval), negative at lag 1, between -0.5 and 0.
+            resid_r = metrics.interval_residual_lag1(
+                self._rhythm_press_times_s, self._rhythm_beat_times_s)
+            summary["beat_offset_stats"]["interval_resid_lag1_r"] = (
+                round(resid_r, 4) if resid_r is not None else None)
             # Tap variability CV (rhythm mode only). Inter-tap-interval
             # consistency, distinct from RT CV. Standard metric in
             # rhythmic-tapping studies (tremor, Parkinson's, stroke).
@@ -7657,6 +7685,7 @@ class GameEngine:
                 hand=str(self.hand_mode),
                 exclude_root=(self.session_paths.root
                               if self.session_paths else None),
+                current=self.session.block_summary,
             )
             if prev is not None:
                 self.vs_last = history.chip_for(
@@ -8260,12 +8289,39 @@ class GameEngine:
 
     # ---- mode callbacks ----------------------------------------------------
     def on_stim(self, lane: int, trial_id: int, t_perf: float,
-                buzz: bool = True) -> None:
+                buzz: bool = True, tone: bool = True) -> None:
         # Single-lane wrapper for the multi-lane path. Mirror mode
         # uses on_stim_multi to light up both hands at once; classic,
         # adaptive, and rhythm all hit one finger at a time and go
         # through this convenience wrapper.
-        self.on_stim_multi([lane], trial_id, t_perf, buzz=buzz)
+        self.on_stim_multi([lane], trial_id, t_perf, buzz=buzz, tone=tone)
+
+    def on_tone_lead(self, lane: int, trial_id: int,
+                     t_perf: float) -> None:
+        """The cue tone, sent AHEAD of the beat by latency.tone_ms so
+        the sound is heard on the scored zero. Rhythm calls this on
+        its tone cursor and the beat then dispatches with tone=False;
+        the stimulus byte still codes the tone bit at the flip, as
+        before. `t_perf` is the scheduled moment, logged on a raw row
+        like the lead buzz. A loud trial's gain is set here as well,
+        since the tone now plays before on_stim_multi raises it."""
+        self._ensure_metric_state()
+        cues = self.cue_settings()
+        silent = bool(getattr(self.mode, "silent_stim", False))
+        if self.audio is not None and cues.sound_before and not silent:
+            try:
+                is_loud = (self._is_loud_trial(self._trials_fired + 1)
+                           and self.current_block != "syllables")
+                self.audio.set_trial_gain(
+                    self._loud_trial_boost if is_loud else 1.0)
+                self.audio.play_stim(lane)
+            except Exception:
+                pass
+        if self.raw_logger:
+            self.raw_logger.queue_event(
+                "stim_tone", lane=lane, t_perf=t_perf,
+                detail=f"lead;trial_id={trial_id}",
+                hand=self.hand_mode)
 
     def on_tactile_lead(self, lane: int, trial_id: int,
                         t_perf: float) -> None:
@@ -8357,7 +8413,8 @@ class GameEngine:
         return ok
 
     def on_stim_multi(self, lanes: list[int], trial_id: int,
-                       t_perf: float, buzz: bool = True) -> None:
+                       t_perf: float, buzz: bool = True,
+                       tone: bool = True) -> None:
         # Light up every lane in `lanes` and arm timing bars on the
         # gameplay screen. Mirror mode passes two same-finger lanes
         # (e.g. right index + left index) so the patient sees both
@@ -8371,6 +8428,8 @@ class GameEngine:
         # before the beat (feedback mode): the tone and the screen
         # still announce the beat, the stimulus byte drops the buzzer
         # bit, and the trial row's delivery flag comes from the lead.
+        # `tone` likewise: False when the cue tone already went out
+        # ahead of the beat through on_tone_lead.
         targets = set(int(l) for l in lanes)
         # Which cue channels the patient gets before the press, and
         # whether the screen is allowed to name the finger. Both halves
@@ -8601,7 +8660,8 @@ class GameEngine:
         # block, for whatever reason the researcher has. play_stim only
         # fires for the lowest target lane in a multi-lane stim so two
         # finger tones don't pile into one beat in mirror mode.
-        if self.audio is not None and cues.sound_before and not silent:
+        if (self.audio is not None and cues.sound_before and not silent
+                and tone):
             try:
                 self.audio.play_stim(min(targets))
             except Exception:
@@ -9400,14 +9460,27 @@ class GameEngine:
         # Snapshot the streak going INTO this trial before _update_streak
         # mutates it. Used by the trial context for motor-learning analysis.
         streak_before = self.hit_streak
-        gained = self._score_for(points, label)
+        # A note that scrolled past unpressed while a board was away
+        # is hardware loss, not a miss: the same rule log_trial applies
+        # to every other mode. Voided out of the score, the streak,
+        # the tallies and the per-lane charts; the row still logs,
+        # as device_drop. Before this, three notes lost to a 2.5 s
+        # drop read as three misses and a broken streak.
+        voided = (not was_pressed and self._drop_overlaps(
+            self.hand_mode, getattr(sched_note, "stim_t_perf", None),
+            time.perf_counter()))
+        if voided:
+            self._block_drop_voided = getattr(
+                self, "_block_drop_voided", 0) + 1
+        gained = 0 if voided else self._score_for(points, label)
         self.score += gained
         self._last_gained = gained
         # Update streak + maybe spawn an encouragement popup. Rhythm misses
         # come through here too so we can reset the streak in one place.
-        self._update_streak(label != "Miss", "rhythm")
+        if not voided:
+            self._update_streak(label != "Miss", "rhythm")
         rs = self._screens.get("rhythm")
-        if rs and hasattr(rs, "flash_lane"):
+        if rs and hasattr(rs, "flash_lane") and not voided:
             colour = self._outcome_colour(label)
             # Same rule as the cadence modes: the label is data, the
             # patient reads the bank's wording. RhythmScreen floats
@@ -9419,13 +9492,18 @@ class GameEngine:
             lane = sched_note.note.lane
             popup = self._feedback_popup(situation, lane)
             # Bolder flash for rhythm: 0.6 s so the green / orange / red
-            # has time to register against fast falling notes.
+            # has time to register against fast falling notes. On the
+            # perf_counter clock the screen compares against: `now` is
+            # song time, and a flash stamped with it ended before the
+            # screen's clock ever reached it, so no outcome flash was
+            # ever drawn in this mode.
+            now_perf = time.perf_counter()
             if self.feedback_delay_ms > 0:
                 rs.set_message("", 0.0)
-                rs.flash_lane(lane, colour, 0.6, now)
+                rs.flash_lane(lane, colour, 0.6, now_perf)
                 self._park_feedback("rhythm", lane, popup, colour, label)
             else:
-                rs.flash_lane(lane, colour, 0.6, now, **popup)
+                rs.flash_lane(lane, colour, 0.6, now_perf, **popup)
         # After-press cues, same rule as the cadence modes. A note the
         # patient actually pressed and landed inside the window is a
         # correct press; a note that scrolled past unpressed arrives
@@ -9456,7 +9534,9 @@ class GameEngine:
                          and label in ("Perfect", "Great", "Good"))
         if (correct_press and cues.buzz_after) or feedback_buzz:
             self._fire_after_press_cue([sched_note.note.lane])
-        if label in ("Miss",):
+        if voided:
+            pass
+        elif label in ("Miss",):
             self.misses += 1
         else:
             self.hits += 1
@@ -9512,7 +9592,7 @@ class GameEngine:
             # after). Used by the lag-1 autocorrelation that drives
             # the rhythm-mode tempo entrainment index in the summary.
             self._rhythm_signed_offsets_ms.append(float(offset_ms))
-        else:
+        elif not voided:
             self._per_lane_misses[lane] = (
                 self._per_lane_misses.get(lane, 0) + 1)
         # Close this note's force window and, on a miss, bank the
@@ -9550,7 +9630,8 @@ class GameEngine:
                 "early_late": label,
                 "points": points,
                 "feedback": label,
-                "error_type": "" if label != "Miss" else "missed_note",
+                "error_type": ("device_drop" if voided
+                               else "" if label != "Miss" else "missed_note"),
                 # keys_pressed reflects what the patient ACTUALLY did.
                 # On a no-press miss it must stay empty - logging the
                 # expected lane would tell a researcher the patient
@@ -9681,7 +9762,8 @@ class GameEngine:
         rs = self._screens.get("rhythm")
         if rs and hasattr(rs, "flash_lane"):
             try:
-                rs.flash_lane(lane, self.theme.muted, 0.5, now)
+                rs.flash_lane(lane, self.theme.muted, 0.5,
+                              time.perf_counter())
             except Exception:
                 pass
 

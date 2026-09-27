@@ -127,7 +127,11 @@ def make_truth(n: int, seed: int) -> dict[str, dict]:
             "span_cap": rng.choice([4, 5, 5, 6, 6, 6, 7, 7, 8]),
             "asyn_s": rng.gauss(-0.030, 0.012),
             "asyn_sd_s": rng.uniform(0.015, 0.035),
-            "loc_acc": rng.uniform(0.86, 1.0),
+            # Healthy adults sit near ceiling at a 150 ms pulse (B1
+            # asks for a cohort above 0.9); the errors they do make
+            # fall mostly on a neighbouring finger (B2).
+            "loc_acc": rng.uniform(0.92, 1.0),
+            "adjacent_err": rng.uniform(0.6, 0.9),
             # How often this reader gets a syllable tile right first
             # press at the easiest rung. The cohort is fluent adult
             # readers, so near ceiling: S6 predicts a median above 0.9.
@@ -486,7 +490,15 @@ class CohortParticipant(mb.Participant):
         if self.rng.random() > float(self.truth["loc_acc"]):
             fingers = list(m.hands[m.hand])
             i = fingers.index(lane) if lane in fingers else 0
-            j = i + 1 if i + 1 < len(fingers) else i - 1
+            near = [j for j in (i - 1, i + 1) if 0 <= j < len(fingers)]
+            far = [j for j in range(len(fingers)) if j != i and j not in near]
+            # Mostly a neighbour, sometimes a finger further away, so
+            # B2 has something to test rather than 1.0 by construction.
+            if far and self.rng.random() > float(
+                    self.truth.get("adjacent_err", 1.0)):
+                j = self.rng.choice(far)
+            else:
+                j = self.rng.choice(near)
             lane = int(fingers[j])
         rt = self.rt_for(lane)
         self.trials_this_block += 1
@@ -523,13 +535,8 @@ def build_engine(code: str, truth: dict, data_dir: Path,
         visit="1",
         hand_length_mm=str(truth["hand_length_mm"]),
         hand_breadth_mm=str(truth["hand_breadth_mm"]))
-    from finger_rehab.hardware.calibration_profile import CalibrationProfile
     for hand in ("right", "left"):
-        prof = CalibrationProfile(hand=hand, participant=code,
-                                  resting=[mb.RESTING] * 4,
-                                  press=[mb.RESTING + 60.0] * 4)
-        prof.set_max_press([mb.MAX_PRESS] * 4)
-        prof.participant = code
+        prof = mb.sim_profile(hand, code)
         prof.session_token = str(getattr(eng, "_session_token", ""))
         eng.apply_calibration(prof)
     eng._uncal_ack = {"left", "right"}

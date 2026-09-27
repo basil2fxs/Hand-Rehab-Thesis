@@ -61,10 +61,31 @@ os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
-RESTING = 100.0          # counts on the pad with the finger resting
+# Counts on the pad with the finger resting. The real board rests near
+# 265 (calibrations of 23 to 25 September 2026: 251 to 301), well
+# above the detector's absolute floor (fsr.abs_on_min, 150). At the
+# old 100 that floor bound instead of the calibrated trigger, and a
+# light tap took three samples to register, which read as 10 to 13 ms
+# of extra reaction time and rhythm lateness in simulated sittings.
+RESTING = 265.0
 MAX_PRESS = 400.0        # counts above resting at a maximal press
-PRESS_COUNTS = 260.0     # a firm tap, well over the on threshold
+# A tap, in counts above resting: 1.4 times the calibration's light
+# press (LIGHT_PRESS), inside Chords' light band (0.5 to 1.5) and
+# clear of its 2.5 times over-force flag, and still two to four times
+# every trigger. It was 260, which only went unnoticed while Chords
+# divided newtons by counts and could never flag over-force.
+PRESS_COUNTS = 84.0
 SAMPLE_HZ = 200.0
+# What the hand resting in position adds to each pad (index, middle,
+# ring, little) and each pad's noise with nothing on it, in counts:
+# the author's right-hand calibration of 25 September 2026, rounded.
+# The profile needs them to set its triggers. Left at zero, the empty
+# reading made the whole resting load look like preload, every
+# trigger sat 100 counts up, and the app's own check (usable()) would
+# have refused the profile.
+PRELOAD = (14.0, 32.0, 12.0, 13.0)
+EMPTY_NOISE = (1.2, 1.4, 0.7, 0.5)
+LIGHT_PRESS = 60.0       # the calibration press, counts above resting
 
 # Fixed allowances the design counts outside the blocks: login,
 # seating and hand placement; the quick calibration for both hands;
@@ -537,17 +558,27 @@ def build_engine(code: str, dominant: str, data_dir: Path, rig: FakeRig,
     eng = GameEngine(cfg, rig)
     eng._screens = eng._build_screens()
     eng.begin_session(code, "25", dominant_hand=dominant, visit="1")
-    from finger_rehab.hardware.calibration_profile import CalibrationProfile
     for hand in ("right", "left"):
-        prof = CalibrationProfile(hand=hand, participant=code,
-                                  resting=[RESTING] * 4,
-                                  press=[RESTING + 60.0] * 4)
-        prof.set_max_press([MAX_PRESS] * 4)
-        prof.participant = code
+        prof = sim_profile(hand, code)
         prof.session_token = str(getattr(eng, "_session_token", ""))
         eng.apply_calibration(prof)
     eng._uncal_ack = {"left", "right"}
     return eng
+
+
+def sim_profile(hand: str, code: str):
+    """The calibration the model hand would give: the measured pad
+    loads and noise, a light press of LIGHT_PRESS counts and the
+    session max. Triggers come out at 18 to 36 counts above rest, as
+    on the real board, and the profile passes usable()."""
+    from finger_rehab.hardware.calibration_profile import CalibrationProfile
+    prof = CalibrationProfile(hand=hand, participant=code,
+                              empty=[RESTING - p for p in PRELOAD],
+                              empty_noise=list(EMPTY_NOISE),
+                              resting=[RESTING] * 4,
+                              press=[RESTING + LIGHT_PRESS] * 4)
+    prof.set_max_press([MAX_PRESS] * 4)
+    return prof
 
 
 def run_block(eng, rig: FakeRig, hand: HandModel, who: Participant,

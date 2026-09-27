@@ -103,17 +103,23 @@ def _run_to_choose(mode, t: float = 0.0, step: float = 0.05) -> float:
 
 
 def _wait_for_next_set(mode, t: float, step: float = 0.05) -> float:
-    """Tick until the next set is on screen (or the word ends)."""
+    """Tick until the NEXT set is on screen, or the block ends.
+
+    Keyed on the trial counter, not on pos: _answer_set ticks past
+    the set's close, which has already advanced pos, so a wait keyed
+    on pos sat through the next set unanswered (a Miss) and returned
+    on the set after that. The prompted-answer test ran three Misses
+    that way and never saw the rung it was testing."""
     guard = 0
-    start_word = mode.word.word if mode.word else None
-    start_pos = mode.pos
+    start = mode.trial_counter
     while True:
         mode._tick(t)
         t += step
         guard += 1
+        if mode.phase == "done":
+            return t
         if (mode.phase == "choose" and mode.option_set is not None
-                and (mode.pos != start_pos
-                     or (mode.word and mode.word.word != start_word))):
+                and mode.trial_counter != start):
             return t
         if guard > 2000:
             raise AssertionError(f"no next set, at {mode.phase}")
@@ -1017,15 +1023,20 @@ class PromptTests(unittest.TestCase):
             self) -> None:
         # Three right first presses in a row would move the rung up,
         # but these three all came after the buzz: help, not skill.
-        engine, mode = _build_mode(rung=1)
+        # And help is not a wrong press either, so the rung does not
+        # come down: it stays where it was. Pinned above the floor,
+        # where a drop can show.
+        engine, mode = _build_mode(rung=4)
         t = _run_to_choose(mode)
         for _ in range(3):
             t0, fall = mode._spawn_t, mode.fall_s
             mode._tick(t0 + 0.8 * fall)
             t = _answer_set(mode, t0 + 0.85 * fall, delay=0.85 * fall)
             self.assertEqual(mode._sets[-1].pclass, "prompted_correct")
+            self.assertEqual(mode.rung, 4)
             t = _wait_for_next_set(mode, t)
-        self.assertEqual(mode.rung, 1)
+        self.assertEqual(mode.rung, 4)
+        self.assertEqual(len(mode._sets), 3)
 
     def test_the_delay_grows_per_word_then_the_prompt_fades(self) -> None:
         # Progressive time delay: each set answered right before the

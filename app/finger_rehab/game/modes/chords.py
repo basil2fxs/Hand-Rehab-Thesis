@@ -12,9 +12,11 @@ PMC7814910: 8-10 percent at about 25 percent MVC). Stroke raises the
 leak and lowers individuation (Lang and Schieber 2003/2004,
 J Neurophysiol), and Xu et al. (2017, J Neurophysiol 118, n=54) showed
 individuation recovers partly separately from strength, so control
-needs its own training target. Individuation is trainable with
-feedback: Chiang, Slobounov and Ray (2004, Clin Neurophysiol) reduced
-enslaving in 12 sessions of accuracy training, and Thielbar et al.
+needs its own training target. Individuation is trainable, but only
+with the right feedback: in Chiang, Slobounov and Ray (2004, Clin
+Neurophysiol 115(5):1033-1043) twelve sessions of force-accuracy
+practice INCREASED enslaving, and the same practice with feedback on
+finger independence reduced it. Thielbar et al.
 (2014, J NeuroEng Rehabil 11:171) got modest gains post-stroke from
 game training that included multi-finger combinations. Direct evidence
 that CHORD practice specifically reduces enslaving is thin; the mode is
@@ -92,8 +94,10 @@ holds train the wrong signal. The hold is visible while it runs: a
 ring fills on the held tiles and completes exactly at hold_ms (a
 single centred bar when the screen may not name the target), because
 feedback that only arrives after the trial closes cannot be acted on.
-A broken hold forfeits the together bonus and the feedback names the
-finger that lifted; late and missing fingers are named the same way.
+A broken hold forfeits the together bonus and classes the chord
+no_hold. No words follow a chord: the tile flash says whether it
+landed, and the fingers that lifted are recorded (hold_released) for
+the analysis rather than named on screen.
 
 SYNCHRONY WINDOW. Skilled pianists land chord tones within about 30 ms
 (Goebl 2001, JASA 110); perceptual simultaneity is 20-50 ms (Rasch
@@ -132,9 +136,9 @@ inflates both enslaving and the force deficit (Danion, Latash, Li and
 Zatsiorsky 2000/2001: four-finger MVC dropped about 43 percent after
 fatiguing exercise), so nothing in this mode ever asks for a hard
 press. The press threshold is the calibrated light-press trigger, a
-peak past 2.5x the calibrated light press is flagged over_force with a
-"press lighter" prompt (never a reward), and holds are capped at
-200 ms. Peaks inside 0.5-1.5x the calibrated press earn a no-points
+peak past 2.5x the calibrated light press is classed over_force (never
+a reward; the class is recorded, and no prompt is shown), and holds
+are capped at 200 ms. Peaks inside 0.5-1.5x the calibrated press earn a no-points
 star flag in the block summary.
 
 PROGRESSION. Challenge-point staircase in the style of the FINGER
@@ -361,6 +365,7 @@ from __future__ import annotations
 
 import logging
 import random
+import statistics
 import time
 from collections import deque
 from dataclasses import dataclass, field
@@ -368,7 +373,7 @@ from typing import TYPE_CHECKING
 
 import pygame
 
-from ...hardware.eeg_trigger import CODES as EEG_CODES
+from ...hardware.eeg_trigger import CODES as EEG_CODES, response_code
 from ...hardware.fsr_detector import PressEvent
 from ..rest_skip import WaitSkip
 from ..scheduling import BalancedScheduler
@@ -884,6 +889,12 @@ class ChordsMode(WaitSkip):
         self._rest_kind = "between"          # between | fatigue
         self._t0: float | None = None        # session clock for the cap
         self._presses: deque[PressEvent] = deque()
+        # A skip of the quiet gate, waiting to release it on the next
+        # frame whatever the hand is doing (see _force_settle).
+        self._settle_forced = False
+        # The trial a sensor drop voided, dealt again before the deck
+        # moves on (see _finish_device_drop).
+        self._redeal: tuple | None = None
 
         # Live FSR data is what makes the hold and the quiet gate real;
         # the keyboard fallback only sees discrete key events, so those
@@ -1122,7 +1133,21 @@ class ChordsMode(WaitSkip):
         if getattr(self.engine, "_force_window_saw_samples", False) \
                 is not True:
             return None
-        return dict(peaks)
+        peaks = dict(peaks)
+        # The engine publishes the window in the block's force unit:
+        # newtons whenever fsr.force_calibration_n_per_count is set,
+        # as it is in the shipped config since 23 September 2026.
+        # Every normaliser here (_reference_counts) is in counts, so
+        # the peaks go back to counts first. Divided as they came,
+        # every normalised force read 0.0195 of its true value: the
+        # ratios (ER, the matrices) survived, but a press needed 128
+        # times the light press to flag over_force and the light band
+        # could never be met.
+        cal = getattr(self.engine, "_force_cal_n_per_count", None)
+        n_per_count = cal() if callable(cal) else None
+        if isinstance(n_per_count, (int, float)) and n_per_count > 0:
+            peaks = {l: v / n_per_count for l, v in peaks.items()}
+        return peaks
 
     # ---- pre-play prep -----------------------------------------------------
     def prep_tick(self, dt: float) -> None:
@@ -1133,6 +1158,12 @@ class ChordsMode(WaitSkip):
         during the countdown fires its first chord the moment play
         starts rather than stacking a second wait on top."""
         now = time.perf_counter()
+        # The countdown screen invites the player to try their
+        # fingers. Those presses are not idle presses between trials:
+        # left in the queue, the first frame of play booked every one
+        # of them as idle, penalised it and sent a 131 stamped at the
+        # end of the countdown rather than at the press.
+        self._presses.clear()
         if self._hand_quiet():
             if self._quiet_since is None:
                 self._quiet_since = now
@@ -1308,15 +1339,58 @@ class ChordsMode(WaitSkip):
         # about the patient, and the settle gate will hold until the
         # hardware is back and the hand is genuinely resting. A
         # sub-block count consumed here would silently shrink the
-        # session's real material.
+        # session's real material. The same chord comes back first:
+        # drawing a fresh card instead left the voided one out of the
+        # deal, so a sub-block could lose its pinky single or carry a
+        # second quad.
+        if cross:
+            self._redeal = ("chord", "cross", "both",
+                            tuple(trial.fingers_left),
+                            tuple(trial.fingers_right))
+        else:
+            self._redeal = (trial.kind, "within", trial.hand,
+                            tuple(trial.fingers), ())
         self._arm_next(now)
 
     # ---- settle gate -------------------------------------------------------
+    def _rig_down(self) -> bool:
+        """Whether the board (or either board) is away right now. The
+        engine clears the press latches on a disconnect, so a dead
+        board reads as a perfectly quiet hand."""
+        if not self._fsr:
+            return False
+        src = getattr(self.engine, "source", None)
+        if src is None:
+            return False
+        if not getattr(src, "is_connected", True):
+            return True
+        down = getattr(self.engine, "_hands_down", None)
+        return isinstance(down, set) and bool(down & set(self.hand_names))
+
     def _update_settle(self, now: float) -> None:
         if self._next_ok_t is not None and now < self._next_ok_t:
             return
+        if self._rig_down():
+            # Held while the hardware is away. The gate used to read
+            # the cleared latches as a still hand and fire a chord a
+            # few seconds apart, each closing at once as a device
+            # drop, buzzing a board that was not there.
+            self._quiet_since = None
+            if (now - self._prompt_t) > self.PROMPT_EVERY_S:
+                self._prompt_t = now
+                self._set_message("Sensor connection lost", 1.2,
+                                  kind="warn")
+            return
         if self._settle_t0 is None:
             self._settle_t0 = now
+        if self._settle_forced:
+            # A skip releases the gate as it says, even with a finger
+            # still down: that is the hand the skip exists for. The
+            # trial carries settle_skipped.
+            self._settle_forced = False
+            self.clear_wait()
+            self._fire(now)
+            return
         # The quiet clock restarts whenever any finger is down, so the
         # chord always launches from a genuinely resting hand.
         if self._hand_quiet():
@@ -1372,6 +1446,10 @@ class ChordsMode(WaitSkip):
         settle_skipped flag on its way."""
         self._quiet_since = now - self.baseline_quiet_s
         self._next_ok_t = None
+        # Backdating alone did nothing while a finger was down (the
+        # next frame reset the quiet clock), yet the skip was counted
+        # and a later trial carried the flag.
+        self._settle_forced = True
 
     # ---- firing ------------------------------------------------------------
     def _next_targets(self) -> tuple[str, str, str,
@@ -1389,6 +1467,10 @@ class ChordsMode(WaitSkip):
         hand's chords come off that hand's own deck; cross-hand
         chords need no hand bag (every trial uses both), so one deck
         deals them."""
+        if self._redeal is not None:
+            again, self._redeal = self._redeal, None
+            if again[1] == self.current_scope:
+                return again
         if self.current_scope == "cross":
             left, right = self._cross_deck.next()
             return "chord", "cross", "both", left, right
@@ -1651,8 +1733,22 @@ class ChordsMode(WaitSkip):
             cls = "hit"
 
         # Points: completion, togetherness and quiet paid separately.
+        #
+        # The row's label follows the outcome CLASS, not the speed of
+        # the first finger. It feeds early_late, the notebook's clean
+        # hit (Perfect, Great or Good), the lab's feedback ring and
+        # its FRN byte. Taken from classify(rt_ms) alone, a clean
+        # chord slower than good_ms (500 ms; healthy two- and
+        # three-finger chords take 630 to 760 ms, Verwey 2023) read
+        # Late with a half ring, while a chord whose hold broke or
+        # whose quiet finger leaked read Good with a full ring. A
+        # clean hit now keeps its speed tier but never drops below
+        # Good; a chord that landed but is not clean reads Late (the
+        # half ring, "near") and names its class in error_type.
         quiet_frac = (1.0 if er is None
                       else max(0.0, 1.0 - min(1.0, er / self.ER_ZERO)))
+        error_type = None
+        response_t = None
         if wrong:
             # Suite convention: a fumbled trial is a Miss row and the
             # per-press penalties already docked the score.
@@ -1666,6 +1762,18 @@ class ChordsMode(WaitSkip):
             pts = int(round(self.COMPLETION_POINTS
                             * n_pressed / n_targets))
             outcome = TrialResult(label="Miss", points=pts, rt_ms=None)
+            if n_pressed:
+                # Some target did land, so this is not a timeout and
+                # its byte is not 130 ("window closed with no press").
+                # The first target's press is the response, as it is
+                # on a full chord.
+                error_type = "partial"
+                first_lane, response_t = min(trial.onsets.items(),
+                                             key=lambda kv: kv[1])
+                send = getattr(self.engine, "_eeg_send", None)
+                code = response_code("correct", first_lane)
+                if callable(send) and code is not None:
+                    send(code, lane=first_lane, t_event=response_t)
         else:
             pts = self.COMPLETION_POINTS
             # The together bonus is forfeited when the hold broke: a
@@ -1679,8 +1787,13 @@ class ChordsMode(WaitSkip):
             if not (max_leak_ratio is not None
                     and max_leak_ratio >= self.LEAK_FAIL_RATIO):
                 pts += int(round(self.QUIET_POINTS * quiet_frac))
-            label = (classify(rt_ms, self.score_cfg).label
-                     if together else "Late")
+            if cls == "hit":
+                tier = classify(rt_ms, self.score_cfg).label
+                label = tier if tier in ("Perfect", "Great", "Good") \
+                    else "Good"
+            else:
+                label = "Late"
+                error_type = cls
             outcome = TrialResult(label=label, points=pts, rt_ms=rt_ms)
 
         # The CSV row. stimulus carries the chord as lane numbers
@@ -1707,7 +1820,9 @@ class ChordsMode(WaitSkip):
                               stimulus=stim,
                               correct_lanes=list(trial.targets),
                               hand=(None if trial.scope == "cross"
-                                    else trial.hand))
+                                    else trial.hand),
+                              error_type=error_type,
+                              response_t_perf=response_t)
         # No words after a chord. The tile flash says whether it landed
         # and the quiet-finger ticks below reward a still hand; the
         # line that used to follow every chord ("Ring joined in",
@@ -1766,8 +1881,13 @@ class ChordsMode(WaitSkip):
                             else round(complete_ms, 1)),
             # er stays a WITHIN-hand number: cross trials leave it
             # empty and carry per-hand values instead, so no
-            # within-hand aggregate can swallow a cross trial.
-            "er": (None if cross or er is None else round(er, 4)),
+            # within-hand aggregate can swallow a cross trial. A chord
+            # where a quiet finger PRESSED has none either: that
+            # finger's force is a misread cue, not enslaving (ER 0.5
+            # and more), and median_er and the per-chord table took
+            # it in while the matrices already left it out.
+            "er": (None if cross or er is None or wrong
+                   else round(er, 4)),
             # Raw material for the enslaving matrices (see SINGLE
             # FINGERS in the docstring): each target's
             # normalised press and each quiet finger's normalised
@@ -1810,8 +1930,10 @@ class ChordsMode(WaitSkip):
                 "asym": cross_mirror_distance(trial.fingers_left,
                                               trial.fingers_right),
                 "er_left": (None if er_by_hand.get("left") is None
+                            or rec["wrong"]
                             else round(er_by_hand["left"], 4)),
                 "er_right": (None if er_by_hand.get("right") is None
+                             or rec["wrong"]
                              else round(er_by_hand["right"], 4)),
                 "press_left": (round(press_by_hand["left"], 4)
                                if press_by_hand.get("left") else None),
@@ -1916,8 +2038,8 @@ class ChordsMode(WaitSkip):
 
     def _close_subblock(self, now: float) -> None:
         n = max(1, self._sub_done)
-        rts = sorted(self._sub_rts)
-        median_rt = rts[len(rts) // 2] if rts else None
+        median_rt = statistics.median(self._sub_rts) if self._sub_rts \
+            else None
         scope = self.current_scope
         stats = {"subblock": self._sub_idx + 1,
                  "scope": scope,
@@ -1970,8 +2092,11 @@ class ChordsMode(WaitSkip):
         if not earlier:
             return False
         first = earlier[0]
+        # A small tolerance: the rates are rounded fractions, and
+        # 0.70 - 0.40 is 0.2999... in floating point, so a drop of
+        # exactly the threshold went unflagged.
         dropped = (first["hit_rate"] - stats["hit_rate"]
-                   >= self.FATIGUE_HIT_DROP)
+                   >= self.FATIGUE_HIT_DROP - 1e-9)
         slowed = (first["median_rt_ms"] is not None
                   and stats["median_rt_ms"] is not None
                   and stats["median_rt_ms"] >= first["median_rt_ms"]
@@ -2143,10 +2268,12 @@ class ChordsMode(WaitSkip):
                 d["ers"].append(r["er"])
 
         def _median(vals: list[float]) -> float | None:
+            # The true median: the upper middle value it used to take
+            # sat above the median in 19 of 24 simulated blocks and
+            # was the larger of two on every per-chord cell with n 2.
             if not vals:
                 return None
-            s = sorted(vals)
-            return round(s[len(s) // 2], 3)
+            return round(statistics.median(vals), 3)
 
         chord_table = [{
             "hand": hand,

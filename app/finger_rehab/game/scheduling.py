@@ -55,12 +55,21 @@ class BalancedScheduler:
     """
 
     def __init__(self, lanes, rng: random.Random | None = None,
-                 avoid_repeats: bool = True) -> None:
+                 avoid_repeats: bool = True, copies: int = 1) -> None:
         self.lanes = list(lanes)
         if not self.lanes:
             raise ValueError("BalancedScheduler needs at least one lane")
         self.rng = rng or random.Random()
         self.avoid_repeats = avoid_repeats
+        # How many times each lane goes into one bag. With one copy a
+        # bag of four is dealt in turn, so the last cue of every bag is
+        # the one finger not yet used: a quarter of all cues can be
+        # worked out from the three before them. A bag the length of
+        # a block (reaction passes five copies for its 20 trials)
+        # keeps the counts equal over the block while leaving almost
+        # nothing to predict. One copy keeps the original behaviour
+        # exactly, so every seeded order recorded before stays valid.
+        self.copies = max(1, int(copies))
         self._bag: list[int] = []
         self._last: int | None = None
         self.counts: dict[int, int] = {ln: 0 for ln in self.lanes}
@@ -72,6 +81,9 @@ class BalancedScheduler:
     _MAX_RESHUFFLES = 20
 
     def _refill(self) -> None:
+        if self.copies > 1:
+            self._bag = self._multi_copy_bag()
+            return
         self._bag = list(self.lanes)
         self.rng.shuffle(self._bag)
         if not (self.avoid_repeats and len(self._bag) > 1
@@ -91,6 +103,69 @@ class BalancedScheduler:
             if self._bag[0] != self._last:
                 return
             self.rng.shuffle(self._bag)
+
+    def _multi_copy_bag(self) -> list[int]:
+        """One bag holding every lane `copies` times, in random order
+        with no finger twice running, including across the join with
+        the bag before.
+
+        Built one cue at a time rather than by reshuffling until a
+        shuffle happens to have no repeat: with five copies of four
+        lanes only about one shuffle in a hundred passes, and at eight
+        copies one in three thousand. Each step draws among the lanes
+        still owed, in proportion to how many each is owed, skipping
+        the one just played and any choice that would leave the rest
+        impossible to lay out without a repeat.
+        """
+        remaining = {ln: self.copies for ln in self.lanes}
+        prev = self._last if self.avoid_repeats else None
+        bag: list[int] = []
+        total = sum(remaining.values())
+        while total > 0:
+            options = []
+            for ln, k in remaining.items():
+                if k <= 0:
+                    continue
+                if self.avoid_repeats and len(remaining) > 1 and ln == prev:
+                    continue
+                if self.avoid_repeats and not self._still_feasible(
+                        remaining, ln, total):
+                    continue
+                options.append((ln, k))
+            if not options:
+                # Only reachable with avoid_repeats off, or with one
+                # lane left owing: take whatever is left.
+                options = [(ln, k) for ln, k in remaining.items() if k > 0]
+            weight_total = sum(k for _, k in options)
+            u = self.rng.random() * weight_total
+            pick = options[-1][0]
+            acc = 0.0
+            for ln, k in options:
+                acc += k
+                if u < acc:
+                    pick = ln
+                    break
+            bag.append(pick)
+            remaining[pick] -= 1
+            total -= 1
+            prev = pick
+        return bag
+
+    @staticmethod
+    def _still_feasible(remaining: dict, pick, total: int) -> bool:
+        """Whether, after placing `pick`, what is left can still be laid
+        out with no lane twice running and without starting on `pick`.
+        A multiset of n items can be arranged with no two neighbours
+        equal when no lane holds more than (n + 1) // 2 of them, and
+        the lane barred from the first place may hold at most n // 2."""
+        n = total - 1
+        if n <= 0:
+            return True
+        after = {ln: (k - 1 if ln == pick else k)
+                 for ln, k in remaining.items()}
+        if max(after.values()) > (n + 1) // 2:
+            return False
+        return after.get(pick, 0) <= n // 2
 
     def next(self) -> int:
         if not self._bag:
@@ -123,14 +198,14 @@ class PairedBalancedScheduler:
     """
 
     def __init__(self, lanes_by_hand: dict, rng: random.Random | None = None,
-                 avoid_repeats: bool = True) -> None:
+                 avoid_repeats: bool = True, copies: int = 1) -> None:
         self.rng = rng or random.Random()
         self.hands = [h for h, v in lanes_by_hand.items() if v]
         if not self.hands:
             raise ValueError("PairedBalancedScheduler needs at least one hand")
         self._per_hand = {
             h: BalancedScheduler(lanes_by_hand[h], self.rng,
-                                 avoid_repeats=avoid_repeats)
+                                 avoid_repeats=avoid_repeats, copies=copies)
             for h in self.hands
         }
         # Which hand goes next is itself balanced, so the hands cannot drift.

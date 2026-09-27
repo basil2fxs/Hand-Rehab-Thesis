@@ -511,10 +511,15 @@ class RhythmAudioOffsetCompensationTests(unittest.TestCase):
         offset_ms = engine.log_rhythm_hit.call_args[0][1]
         self.assertAlmostEqual(offset_ms, 0.0, delta=5.0)
 
-    def test_audio_disabled_no_song_no_metronome_applies_zero(self) -> None:
+    def test_audio_not_started_scores_against_the_cued_zero(self) -> None:
         # Audio engine exists (audio.enabled: true in config) but
-        # nothing is actually playing yet -- neither a song nor the
-        # metronome fallback has started.
+        # nothing is playing yet: neither a song nor the metronome
+        # fallback has started. The note's cue is placed with the
+        # offset the audio WILL run at (the metronome's 12 ms here,
+        # since the chart has no song), and a press is scored against
+        # that same zero, not against the live offset of 0 (27
+        # September 2026 review: a press on the first note before the
+        # song started used to read 87 ms early).
         from unittest.mock import MagicMock
         audio = MagicMock()
         audio._song_path = None
@@ -522,7 +527,7 @@ class RhythmAudioOffsetCompensationTests(unittest.TestCase):
         mode, engine = self._make_mode(audio=audio)
         self._press_on_the_beat(mode)
         offset_ms = engine.log_rhythm_hit.call_args[0][1]
-        self.assertAlmostEqual(offset_ms, 0.0, delta=5.0)
+        self.assertAlmostEqual(offset_ms, -12.0, delta=5.0)
 
     def test_song_playing_applies_the_song_offset(self) -> None:
         from unittest.mock import MagicMock

@@ -592,6 +592,9 @@ class Segment:
     # Filled during play, read by block_stats and the star display.
     n_done: int = field(default=0)
     n_correct: int = field(default=0)
+    # Trials the rig ate (a board away over the response window):
+    # logged as device_drop, in neither n_done nor the accuracy.
+    n_voided: int = field(default=0)
 
 
 class PatternMode(WaitSkip):
@@ -1149,11 +1152,29 @@ class PatternMode(WaitSkip):
                                   points=self.score_cfg.miss_points,
                                   rt_ms=rt_ms)
         correct = outcome.label != "Miss"
-        seg.n_done += 1
-        if correct:
-            seg.n_correct += 1
-        self._trials.append(
-            (self._seg_idx, correct, rt_ms if correct else None))
+        # A timeout while a board was away is the rig's, not the
+        # participant's: the engine writes the row as device_drop and
+        # keeps it out of its own tallies, and the take does the same
+        # here. Counted as a miss, a 12 s drop read as five misses in
+        # the take's accuracy and the stars, and as a fatigue run that
+        # forced a rest (a second drop ended the block).
+        voided = False
+        if ev is None and not trial.incorrect_presses:
+            check = getattr(self.engine, "_drop_overlaps", None)
+            if callable(check):
+                try:
+                    voided = check(getattr(self.engine, "hand_mode", None),
+                                   trial.stim_t_perf, now) is True
+                except Exception:
+                    voided = False
+        if voided:
+            seg.n_voided += 1
+        else:
+            seg.n_done += 1
+            if correct:
+                seg.n_correct += 1
+            self._trials.append(
+                (self._seg_idx, correct, rt_ms if correct else None))
         # THE measurement column: TRUE only for trained-sequence
         # trials. Warm-up, random baseline and probes are all FALSE.
         pattern_trial = (seg.kind == "seq")
@@ -1162,7 +1183,8 @@ class PatternMode(WaitSkip):
             pos = self._trial_in_seg % self.cycle_len
             stim += f";soc={seg.soc_id};pos={pos}"
         self.engine.log_trial(trial, outcome, now,
-                              stimulus=stim, pattern_trial=pattern_trial)
+                              stimulus=stim, pattern_trial=pattern_trial,
+                              error_type=("device_drop" if voided else None))
         # The gap belongs to the item just answered, so it is read
         # BEFORE the position advances. A file's gap list is per item
         # of one cycle, already tiled across the take's repeats, which
@@ -1181,8 +1203,9 @@ class PatternMode(WaitSkip):
             self._end("time_cap")
             return
         # Fatigue guard, non-probe takes only: probe slowing is the
-        # expected result, not exhaustion.
-        if ev is None and seg.kind != "probe":
+        # expected result, not exhaustion, and a voided trial is not
+        # a tired hand.
+        if ev is None and seg.kind != "probe" and not voided:
             self._timeout_run += 1
             if self._timeout_run >= self.fatigue_run:
                 self._timeout_run = 0
@@ -1376,6 +1399,7 @@ class PatternMode(WaitSkip):
         mean_rt = (sum(kept) / len(kept)) if kept else None
         return {
             "n": n,
+            "n_voided": self.segments[seg_idx].n_voided,
             "accuracy": round(n_correct / n, 3) if n else None,
             "mean_rt_ms": round(mean_rt, 1) if mean_rt is not None else None,
             "n_rt_used": len(kept),

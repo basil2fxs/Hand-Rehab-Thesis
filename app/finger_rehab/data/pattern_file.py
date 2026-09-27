@@ -860,19 +860,53 @@ def sync_drop_folder(cfg) -> ImportResult | None:
     if len(raw) <= MAX_BYTES:
         sha = hashlib.sha256(raw).hexdigest()
         ptr = pointer(cfg) or {}
-        if ptr.get("sha256") == sha and active_path(cfg).exists():
+        # The same bytes as the active file, or the same bytes the
+        # researcher cleared: nothing to import. A changed file is a
+        # new file and imports as before.
+        if ptr.get("sha256") == sha and (active_path(cfg).exists()
+                                         or ptr.get("cleared")):
             return None
     return import_file(src, cfg)
 
 
 def clear_active(cfg) -> None:
     """Back to the built-in riff. The archive is kept: a study needs
-    to be able to say what ran, including after someone cleared it."""
-    for p in (active_path(cfg), pointer_path(cfg)):
-        try:
-            p.unlink(missing_ok=True)
-        except OSError as e:
-            log.warning("pattern sequence file not cleared (%s): %s", p, e)
+    to be able to say what ran, including after someone cleared it.
+
+    The drop copy stays where the researcher put it, and a pointer
+    records its hash as cleared so the next menu screen does not
+    import it again: before this, Use built-in riff was undone by the
+    very next hub visit whenever the file had come through the drop
+    folder, and a block could run a file the researcher believed
+    cleared."""
+    try:
+        active_path(cfg).unlink(missing_ok=True)
+    except OSError as e:
+        log.warning("pattern sequence file not cleared (%s): %s",
+                    active_path(cfg), e)
+    sha = None
+    src = drop_dir(cfg) / DROP_NAME
+    try:
+        if src.is_file():
+            raw = src.read_bytes()
+            if len(raw) <= MAX_BYTES:
+                sha = hashlib.sha256(raw).hexdigest()
+    except OSError:
+        sha = None
+    try:
+        if sha is None:
+            pointer_path(cfg).unlink(missing_ok=True)
+        else:
+            _atomic_write(pointer_path(cfg), json.dumps({
+                "version": 1,
+                "cleared": True,
+                "cleared_at": datetime.now().isoformat(timespec="seconds"),
+                "sha256": sha,
+                "file_name": DROP_NAME,
+            }, indent=2, sort_keys=True).encode("utf-8"))
+    except OSError as e:
+        log.warning("pattern sequence pointer not cleared (%s): %s",
+                    pointer_path(cfg), e)
 
 
 def write_templates(cfg) -> list[Path]:
