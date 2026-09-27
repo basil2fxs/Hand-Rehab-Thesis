@@ -25,6 +25,12 @@ if [ -z "$PY" ]; then
     exit 1
 fi
 
+# The lab folder is the same game: refresh EEG_Lab/source and its
+# eeg_lab.yaml from the code about to run, so the lab never lags this
+# Mac. The exe inside EEG_Lab is a Windows build and is left alone.
+"$PY" scripts/build_lab_package.py >/dev/null 2>&1 \
+    || echo "EEG_Lab source not refreshed (scripts/check_lab_sync.py says why)."
+
 echo "Starting Finger Rehab. Close the game window to stop."
 echo "Recordings go to $(cd .. && pwd)/sessions"
 echo

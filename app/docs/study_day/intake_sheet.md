@@ -49,6 +49,8 @@ rest [ ] 10 [ ] 11 [ ] 12 [ ]
 | At the rest | | | |
 | At the end | | | |
 
+At the end: comfort of the pads (0 to 10) ______   clarity of the games (0 to 10) ______
+
 Rest cut short? no / yes, after ______ s
 
 Calibration redone on a finger? no / yes, which: ______

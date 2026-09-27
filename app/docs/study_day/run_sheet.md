@@ -124,6 +124,9 @@ The order comes from the code, and every game is the right hand:
       necessarily a real one, and nobody is being compared with other
       people.
 - [ ] Ask the two tiredness questions again and write them down.
+- [ ] Ask the two ratings and write them down:
+      "How comfortable were the pads?" 0 to 10.
+      "How clear was what each game asked of you?" 0 to 10.
 - [ ] End the session from the hub and confirm.
 - [ ] Check the data before they leave. In Terminal, from the project
       folder:

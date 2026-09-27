@@ -2166,7 +2166,10 @@ CLOCK STARTS (target 45 min, hard stop 50)
       block ended early is offered again.
   [ ] If the app closes mid-sitting, open it, log in with the same
       code and main hand, and press PLAY ALL: blocks finished today
-      are not played again.
+      are not played again. If the close fell inside the rest, the
+      rest step waits on the hub under its hold, counted from the
+      last block's end (its metadata), and the strip's minutes carry
+      on from the first block of the day (27 September 2026 review).
 
   Every block is the right hand.
 
@@ -2206,6 +2209,11 @@ CLOCK STARTS (target 45 min, hard stop 50)
       exactly as worded, 0 = not at all, 10 = completely:
         "Tired in the head?"   0 to 10
         "Tired in the hands?"  0 to 10
+      and, at the end only, two ratings on the same scale (27
+      September 2026, so the study carries a usability number the
+      way past theses on this device did):
+        "How comfortable were the pads?"                  0 to 10
+        "How clear was what each game asked of you?"      0 to 10
       Two sets per session. Note the clock time next to each. The
       60 second stretch is too short to stop for questions.
   [ ] The Start button is held for the first minute of the rest and

@@ -5541,7 +5541,8 @@ class ResultsScreen(Screen):
             return
         if self.mute_btn.handle_event(e):
             return
-        self.retry_btn.handle_event(e)
+        if self._can_retry():
+            self.retry_btn.handle_event(e)
         self.again_btn.handle_event(e)
         self.folder_btn.handle_event(e)
         self.detail_btn.handle_event(e)
@@ -5555,7 +5556,15 @@ class ResultsScreen(Screen):
         # screen was mouse-click only, so a keyboard-only session could
         # not continue past its own results screen).
         if e.type == pygame.KEYDOWN and e.key == pygame.K_RETURN:
-            self.engine.retry_last_block()
+            # Inside a battery the primary action is the NEXT UP step:
+            # a replay of the block just played would be a free,
+            # unstamped block that costs the sitting minutes and
+            # leaves the same step pending (design Section 5.2: after
+            # each block, Start on the NEXT UP card).
+            if self._can_retry():
+                self.engine.retry_last_block()
+            else:
+                self._start_next_up()
         # Every other control on the screen gets a letter, so a
         # keyboard-only session can take the NEXT UP suggestion, walk
         # back to the hub or open the detail view without a mouse. G
@@ -6230,6 +6239,12 @@ class ResultsScreen(Screen):
             return None
         return step if isinstance(step, dict) else None
 
+    def _can_retry(self) -> bool:
+        """Retry is a free-play affordance. While a battery step is
+        pending the block just played is not offered again: Enter and
+        the button both take the NEXT UP step instead."""
+        return self._pending_step() is None
+
     def _next_up_plan(self) -> tuple[str | None, str]:
         """Which game to offer next, and on which hand.
 
@@ -6596,7 +6611,8 @@ class ResultsScreen(Screen):
                           self.layout, pt=FONT_SMALL + 2, centre=True,
                           colour=self.theme.muted)
 
-        self.retry_btn.draw(surf)
+        if self._can_retry():
+            self.retry_btn.draw(surf)
         self.again_btn.draw(surf)
         self.folder_btn.draw(surf)
         self.detail_btn.draw(surf)

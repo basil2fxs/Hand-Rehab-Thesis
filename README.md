@@ -1,174 +1,153 @@
 <p align="center"><img src="app/assets/icons/app_icon_256.png" width="96" alt="Finger Rehab icon"></p>
 <h1 align="center">Finger Rehab</h1>
-<p align="center">A hand device and a laptop game for measuring and training finger movement.<br>Four force pads and four vibration motors per hand, an Arduino Nano streaming force over USB,<br>ten games, and every press logged with its timing and its force.</p>
+<p align="center">A hand device and a laptop game that measure and train finger movement.<br>Four force pads, four vibration motors, an Arduino Nano, ten games, every press logged with its time and force.</p>
 <p align="center"><a href="https://github.com/basil2fxs/Hand-Rehab-Thesis/actions/workflows/build-apps.yml"><img alt="build-apps" src="https://github.com/basil2fxs/Hand-Rehab-Thesis/actions/workflows/build-apps.yml/badge.svg"></a> <img alt="Runs on Windows and macOS" src="https://img.shields.io/badge/runs%20on-Windows%20%7C%20macOS-2563eb"> <img alt="Python 3.10 or newer" src="https://img.shields.io/badge/python-3.10%2B-3776ab"> <img alt="Curtin University thesis, 2026" src="https://img.shields.io/badge/thesis-Curtin%202026-0f172a"></p>
 <p align="center"><a href="#install">Install</a> &middot; <a href="#the-ten-games">Games</a> &middot; <a href="#troubleshooting">Troubleshooting</a> &middot; <a href="#data">Data</a> &middot; <a href="#the-lab-folder">Lab folder</a></p>
 <p align="center"><img src="app/docs/images/hub.png" width="88%" alt="The hub, where each game is picked"></p>
 
 ## Where things are
 
+```mermaid
+flowchart LR
+  R["Hand-Rehab-Thesis"]:::root
+  R --> I["Installers<br>Windows setup, macOS disk image"]:::top
+  R --> E["EEG_Lab<br>the folder for the lab PC"]:::top
+  R --> N["analysis<br>session_analysis.ipynb"]:::top
+  R --> S["sessions<br>recorded data, not in git"]:::top
+  R --> L["Local_Runner.command<br>runs the game from the code"]:::top
+  R --> A["app<br>the game"]:::top
+  A --> A1["finger_rehab: code"]:::sub
+  A --> A2["config: default.yaml, eeg_lab.yaml"]:::sub
+  A --> A3["assets: firmware, icons, music, speech, words"]:::sub
+  A --> A4["arduino: board firmware"]:::sub
+  A --> A5["docs: study kit, research, images"]:::sub
+  A --> A6["scripts and tests"]:::sub
+  classDef root fill:#0f172a,color:#fff,stroke:#0f172a
+  classDef top fill:#2563eb,color:#fff,stroke:#1d4ed8
+  classDef sub fill:#dbeafe,color:#0f172a,stroke:#93c5fd
+```
+
 | Folder | What is in it |
 | --- | --- |
-| [`Installers/`](Installers) | What people install: the Windows setup and the macOS disk image |
+| [`Installers/`](Installers) | What people install |
 | [`EEG_Lab/`](EEG_Lab) | Copy this whole folder to the lab PC |
-| [`analysis/`](analysis) | The notebook: this is where results get analysed |
-| `sessions/` | Recorded sessions, one folder per game (kept out of git) |
-| [`app/`](app) | The code, config, assets, tests and build scripts |
-| [`Local_Runner.command`](Local_Runner.command) | Start the game on this Mac from the newest code (double-click) |
-| [`archive/`](archive) | Old material kept for reference, nothing live |
+| [`analysis/`](analysis) | The notebook that turns sessions into results |
+| [`app/`](app) | Code, config, assets, tests, build scripts |
+| [`archive/`](archive) | Old material, nothing live |
 
 ## How it works
 
-<p align="center"><img src="app/docs/images/device.jpg" width="46%" alt="The hand device: a drawing of the board and pads, and three photos of the build"><br><sub>The device. The numbered parts are listed in <a href="app/arduino">app/arduino</a>.</sub></p>
+<p align="center"><img src="app/docs/images/device.jpg" width="46%" alt="The hand device: a drawing of the board and pads, and three photos of the build"><br><sub>The device. Parts are numbered in <a href="app/arduino">app/arduino</a>.</sub></p>
 
 ```mermaid
 flowchart LR
   H["Fingers on four pads"] --> S["SingleTact 10 N sensors<br>I2C 0x05 to 0x08"]
-  S --> A["Arduino Nano<br>samples at 200 Hz"]
-  A -->|"FSR: a,b,c,d at 115200 baud"| G["Game on the laptop"]
+  S --> A["Arduino Nano<br>200 Hz"]
+  A -->|"FSR: a,b,c,d"| G["Game on the laptop"]
   G -->|"STIM:n"| A
-  A --> M["Four vibration motors<br>D11 D10 D9 D6"]
-  G --> F["sessions folder<br>trials.csv, raw.csv, metadata.json"]
+  A --> M["Four vibration motors"]
+  G --> F["sessions/<br>trials.csv, raw.csv, metadata.json"]
   F --> N["analysis/session_analysis.ipynb"]
 ```
 
-A press is found in the force stream, not by a switch: each pad keeps a slow baseline, and a press crosses the
-gap between that person's resting level and their light press, measured at login on the hand picked for the
-session. A failed read is sent as 0, so a dead pad and a loose plug look the same. At boot the board buzzes all
-four motors, about 1.6 s.
+A press is a crossing of the force stream, not a switch: each pad keeps a slow baseline, and the trigger sits in the gap between that person's resting level and their light press, measured at login.
+
+<p align="center"><img src="app/docs/images/login.png" width="32%" alt="The login screen"> <img src="app/docs/images/hand.png" width="32%" alt="The hand choice screen"> <img src="app/docs/images/calibration.png" width="32%" alt="The quick calibration"><br><sub>Log in, pick the hand, calibrate: under a minute.</sub></p>
 
 ## Install
 
-Two installers come out of the build-apps run on GitHub (Actions tab, latest run):
+- **Windows:** run `FingerRehab-Setup-Windows.exe`. No administrator needed. SmartScreen says "Windows protected your PC": More info, Run anyway.
+- **macOS:** open `FingerRehab-macOS.dmg`, drag Finger Rehab to Applications. First open: System Settings, Privacy & Security, Open Anyway.
 
-- **Windows:** run `FingerRehab-Setup-Windows.exe`. It installs under `%LOCALAPPDATA%\Programs\Finger Rehab`,
-  no administrator needed, and turns auto-start on. SmartScreen says "Windows protected your PC" the first
-  time: More info, then Run anyway. Uninstalling keeps the sessions folder.
-- **macOS:** open `FingerRehab-macOS.dmg` and drag Finger Rehab into Applications. The first open is refused
-  because the app is not notarised: System Settings, Privacy & Security, Open Anyway. Once is enough.
-
-Local builds: `app\builds\build_app.bat` (Windows), `app/builds/build_app.sh` (macOS). From source: `pip install -r
-app/requirements.txt`, then `python app/main.py`; tests are `cd app && python -m pytest tests`. Nothing plugged in? The keyboard
-stands in: `J K L ;` right hand, `F D S A` left, index to little. Force Pilot and Buzz Hunt need the device.
+Both come from the latest [build-apps run](https://github.com/basil2fxs/Hand-Rehab-Thesis/actions/workflows/build-apps.yml). From source: `pip install -r app/requirements.txt`, then `python app/main.py`. No board? The keyboard stands in: `J K L ;` right hand, `F D S A` left.
 
 ## When a board is plugged in
 
-The game opens within a second. A watcher starts at login (a scheduled task on Windows, a LaunchAgent on macOS)
-and checks the ports once a second. It acts only on a board arriving: a board already in at login needs an unplug
-and replug, and closing the game leaves it closed. A second copy is refused with "Finger Rehab is already
-running". On macOS auto-start turns itself on at the first launch from Applications, not from the disk image.
+The game opens within a second: a watcher installed at first launch checks the ports once a second. A board already in at login needs an unplug and replug.
 
 ## The ten games
 
 <table>
 <tr>
-<td align="center" width="33%"><img src="app/docs/images/adaptive.png" alt="Adaptive in play, the middle finger's lane lit"><br><sub><b>Adaptive</b>, the lit lane is the finger to press</sub></td>
-<td align="center" width="33%"><img src="app/docs/images/chords.png" alt="Chords in play, four lanes lit as one chord"><br><sub><b>Chords</b>, press every lit lane together</sub></td>
-<td align="center" width="33%"><img src="app/docs/images/rhythm.png" alt="Rhythm in play, notes falling towards the lanes"><br><sub><b>Rhythm</b>, notes fall onto the beat</sub></td>
+<td align="center" width="33%"><img src="app/docs/images/reaction.png" alt="Reaction"><br><sub><b>Reaction</b></sub></td>
+<td align="center" width="33%"><img src="app/docs/images/adaptive.png" alt="Adaptive"><br><sub><b>Adaptive</b></sub></td>
+<td align="center" width="33%"><img src="app/docs/images/muscle_memory.png" alt="Muscle Memory"><br><sub><b>Muscle Memory</b></sub></td>
 </tr>
 <tr>
-<td align="center" width="33%"><img src="app/docs/images/force_pilot.png" alt="Force Pilot in play, the force trace inside the corridor"><br><sub><b>Force Pilot</b>, keep the dot inside the corridor</sub></td>
-<td align="center" width="33%"><img src="app/docs/images/syllables.png" alt="Syllables in play, a word split into its parts"><br><sub><b>Syllables</b>, a word split into its sounds</sub></td>
-<td align="center" width="33%"><img src="app/docs/images/results.png" alt="The results screen after a game"><br><sub><b>Results</b>, grade, key numbers, next game</sub></td>
+<td align="center" width="33%"><img src="app/docs/images/chords.png" alt="Chords"><br><sub><b>Chords</b></sub></td>
+<td align="center" width="33%"><img src="app/docs/images/rhythm.png" alt="Rhythm"><br><sub><b>Rhythm</b></sub></td>
+<td align="center" width="33%"><img src="app/docs/images/syllables.png" alt="Syllables"><br><sub><b>Syllables</b></sub></td>
+</tr>
+<tr>
+<td align="center" width="33%"><img src="app/docs/images/mirror.png" alt="Mirror"><br><sub><b>Mirror</b></sub></td>
+<td align="center" width="33%"><img src="app/docs/images/force_pilot.png" alt="Force Pilot"><br><sub><b>Force Pilot</b></sub></td>
+<td align="center" width="33%"><img src="app/docs/images/buzz_hunt.png" alt="Buzz Hunt"><br><sub><b>Buzz Hunt</b></sub></td>
+</tr>
+<tr>
+<td align="center" width="33%"><img src="app/docs/images/echo.png" alt="Echo"><br><sub><b>Echo</b></sub></td>
+<td align="center" width="33%"><img src="app/docs/images/results.png" alt="Results"><br><sub><b>Results</b>, after every game</sub></td>
+<td align="center" width="33%"></td>
 </tr>
 </table>
 
-| Game | What the patient does, and what it measures |
+| Game | What the player does, and what it measures |
 | --- | --- |
-| **Reaction** | The lab's sequence task: press the finger whose square flashes red. Measures sequence learning. |
-| **Adaptive** | Press the finger whose lane lights up, at a pace that follows the player. Measures speed at a held difficulty. |
-| **Muscle Memory** | Play a piano riff, take after take. Measures learning of a repeated sequence. |
-| **Chords** | Press two to four fingers at once. Measures moving fingers together and holding the rest still. |
-| **Rhythm** | Press on the beat of a song. Measures timing error against the beat. |
-| **Syllables** | Catch the right part of a spoken word. Measures reading by sound. |
-| **Mirror** | Press the same finger on both hands at once. Measures how well the hands stay together. |
-| **Force Pilot** | Hold a press inside a moving corridor. Measures steady control of force. |
-| **Buzz Hunt** | Feel which finger buzzed, then press it. Measures the sense of touch. |
-| **Echo** | Watch a sequence light up, then repeat it back. Measures memory span. |
+| **Reaction** | The lab's sequence task: press the finger whose square flashes red. Sequence learning. |
+| **Adaptive** | Press the finger whose lane lights up, at a pace that follows the player. Speed at a held difficulty. |
+| **Muscle Memory** | Play a piano riff, take after take. Learning of a repeated sequence. |
+| **Chords** | Press two to four fingers at once. Moving fingers together, holding the rest still. |
+| **Rhythm** | Press on the beat of a song. Timing error against the beat. |
+| **Syllables** | Catch the right part of a spoken word. Reading by sound. |
+| **Mirror** | Press the same finger on both hands at once. How well the hands stay together. |
+| **Force Pilot** | Hold a press inside a moving corridor. Steady control of force. |
+| **Buzz Hunt** | Feel which finger buzzed, then press it. The sense of touch. |
+| **Echo** | Watch a sequence light up, then repeat it back. Memory span. |
 
 ## Settings
 
-The cog at the bottom right of the login screen: live finger readout, port dropdowns, Test STIM per hand,
-Open data folder, and one column of three repairs (details in [app/docs/flashing.txt](app/docs/flashing.txt)).
+<p align="center"><img src="app/docs/images/settings.png" width="72%" alt="The Settings screen"></p>
 
-- **Auto-start:** the switch reads on or off. Off stays off; the next launch does not turn it back on.
+The cog on the login screen: live finger readout, port dropdowns, Test STIM per hand, Open data folder, and three repairs ([app/docs/flashing.txt](app/docs/flashing.txt)).
+
+- **Auto-start:** the switch reads on or off. Off stays off.
 - **Flash firmware:** writes the game firmware to the board with the bundled avrdude, about ten seconds.
 - **Sensor address:** moves one SingleTact to a new I2C address, with only that sensor connected.
 
 ## Troubleshooting
 
-**A sensor reads nothing, or sits at zero.** Its tile in Settings never moves while the others do. A failed
-I2C read is sent as 0, so a loose lead, a dead pad and a pad on the wrong address all look the same. Reseat
-both ends of the lead, then Settings, Sensor address, Scan lists which addresses answer. Calibration refuses a
-pad that reads zero on an empty device.
+**A sensor reads nothing, or sits at zero.** A failed read is sent as 0, so a loose lead, a dead pad and a pad on the wrong address look the same. Reseat both ends of the lead, then Settings, Sensor address, Scan shows which addresses answer.
 
-**A sensor drifts, or reads high at rest.** The finger triggers on its own, or calibration says the trigger
-sits across most of that finger's travel. Thresholds come from the gap between resting and pressing, so a pad
-squashed by the strap eats the gap, and under 20 counts of travel is refused. The baseline absorbs slow drift
-over about ten seconds, not a preload. Reposition the pad flat and calibrate again.
+**A sensor drifts, or reads high at rest.** A pad squashed by the strap eats the gap between resting and pressing, and under 20 counts of travel is refused. Reposition the pad flat and calibrate again.
 
-**The board is not found, or the port keeps changing.** Ports are picked by USB vendor id, then any port with
-a vendor id, ignoring the Mac virtual ports. First board found is the right hand, second the left, and the
-login screen prints what each hand got. To pin one: Settings, Refresh, pick the port per hand, Save, which
-writes `app/config/user_settings.yaml`. A saved port that no longer exists is ignored and that hand falls back to
-plug order, which the login screen says.
+**The board is not found, or the port keeps changing.** First board found is the right hand, second the left. To pin one: Settings, Refresh, pick the port per hand, Save. A saved port that no longer exists falls back to plug order.
 
-**Calibration is asked for every time.** Once per hand per session is the design. Repeats inside one session
-mean the profile was refused: under 20 counts between resting and pressing, a trigger too high in that
-finger's travel, or a pad reading zero when empty. It saves to `app/config/calibration/current_<hand>.json`; if
-that file never appears, the app cannot write beside itself and is using `~/Finger Rehab Data`.
+**Calibration is asked for every time.** Once per hand per session is the design. A repeat inside one session means the profile was refused: under 20 counts of travel, a trigger too high, or a pad reading zero when empty.
 
-**A buzzer does not buzz.** Settings, Test LEFT STIM or Test RIGHT STIM fires that hand's four motors in
-order. If none fire on a board that streams data fine, it is the wiring or the motor driver, not the software.
-If the test works but the buzz before a cue is missing, that cue is switched off in Sensory Cues.
+**A buzzer does not buzz.** Settings, Test LEFT STIM or Test RIGHT STIM fires that hand's motors in order. None firing on a board that streams fine is wiring, not software. A missing buzz before a cue is a cue switched off in Sensory Cues.
 
-**Presses register on the wrong finger.** Two pads are answering the same I2C address. Every SingleTact
-answers 0x04 as well as its own address, so a write to 0x04 hits every sensor at once. Fix it in Settings,
-Sensor address, with only that sensor connected: 0x05 index, 0x06 middle, 0x07 ring, 0x08 pinky. Never move a
-sensor off 0x04 with the others wired in. Two whole hands swapped is the port assignment above.
+**Presses register on the wrong finger.** Two pads answer the same I2C address. Settings, Sensor address, with only that sensor connected: 0x05 index, 0x06 middle, 0x07 ring, 0x08 pinky. Never move a sensor off 0x04 with the others wired in.
 
-**The game does not open when I plug the board in.** Open Settings and press Refresh. Not listed means a lead
-or a driver, not the auto-start. Listed means the Auto-start switch should read on; press it if it reads off.
-It only fires when a board arrives, so if it was already in at login, unplug and replug.
+**The game does not open when I plug the board in.** Settings, Refresh. Not listed is a lead or a driver. Listed means the Auto-start switch should read on. It fires only when a board arrives, so unplug and replug.
 
-**The board needs re-flashing.** Settings, Flash firmware writes `app/assets/firmware/finger_rehab_nano.hex` with
-the bundled avrdude, so no developer tools are needed. A Nano runs one of two bootloaders, 115200 or 57600;
-the app tries one, then the other, and remembers which worked.
+**The board needs re-flashing.** Settings, Flash firmware writes `app/assets/firmware/finger_rehab_nano.hex` with the bundled avrdude. A Nano runs one of two bootloaders; the app tries both and remembers which worked.
 
-**The game runs but no data lands.** Settings, Open data folder opens the folder actually in use, which is
-`~/Finger Rehab Data` when the app cannot write beside itself. Also check Test Mode is off in Settings
-(`game.test_mode_enabled`), because it caps every block at six trials.
+**The game runs but no data lands.** Settings, Open data folder opens the folder in use, which is `~/Finger Rehab Data` when the app cannot write beside itself. Check Test Mode is off (`game.test_mode_enabled`): it caps every block at six trials.
 
-**The EEG box does not appear.** Markers are off in the shipped game. The lab preset `app/config/eeg_lab.yaml` turns
-them on: the lab folder's exe loads it from beside itself; from source pass `--config config/eeg_lab.yaml`. Set
-`eeg.port` to the box's port. With `eeg.require_port` true the session refuses to start without an openable box;
-false falls back to a logging-only dummy. `eeg.baud` 1200 resets the MMBT-S off the bus, so the writer refuses it.
+**The EEG box does not appear.** Markers are off in the shipped game; `app/config/eeg_lab.yaml` turns them on, loaded from beside the lab exe or with `--config config/eeg_lab.yaml` from source. Set `eeg.port` to the box's port. `eeg.require_port` true refuses to start without a box; false logs the markers only. `eeg.baud` 1200 resets the box off the bus, so the writer refuses it.
 
-**Sessions look empty in the notebook.** It walks for `trials.csv` from the first `sessions` folder beside it
-or up to four levels above, so a notebook copied elsewhere finds nothing until `SESSIONS_DIR` is set in the
-setup cell. A folder holding only a header row is a block quit before the first trial closed.
+**Sessions look empty in the notebook.** It walks for `trials.csv` from the first `sessions` folder beside it or up to four levels above; a notebook copied elsewhere needs `SESSIONS_DIR` set in the Setup cell.
 
 ## Data
 
-Sessions land beside the app under `sessions/<date>/<person>_<time>_<mode>/`, or in `~/Finger Rehab Data`
-when that folder cannot be written; Open data folder in Settings opens whichever is in use. `trials.csv` is
-one row per trial: timing, hand, lane, outcome, the keys pressed, peak force and force-time integral.
-`raw.csv` is every sample at 200 Hz plus event rows for presses, cues and EEG markers on the same clock.
-`metadata.json` holds the block summary, the calibration and the software version; `report.html` is the
-readable version. Nothing is overwritten. Open `analysis/session_analysis.ipynb`, run the Setup cell, pick a
-save, then Run All. Figures land in the session folder they describe, per-person summaries in
-`sessions/individual_patient_results/<person>/`, cohort output in `sessions/cohort_results/`.
+Sessions land in `sessions/<date>/<code>_<time>_<game>/`: `trials.csv` one row per trial, `raw.csv` every sample at 200 Hz with the presses, cues and markers on the same clock, `metadata.json` the block summary, calibration and software version. Nothing is overwritten. Open [`analysis/session_analysis.ipynb`](analysis), run the Setup cell, pick a save, Run All.
 
 ## The lab folder
 
-`EEG_Lab` (the `FingerRehab-EEGLab.zip` from the same build) holds the exe, `eeg_lab.yaml`, `run_in_psychopy.py`,
-`README.txt`, a `source/` copy and `sessions/`, where the games save and `sessions/eeg/` takes ActiView's recording
-under the name the game menu shows. The home install carries no EEG anything. Open `run_in_psychopy.py` in PsychoPy
-Coder and press Run. Checklist and code table: [app/docs/eeg_lab_setup.txt](app/docs/eeg_lab_setup.txt).
+`EEG_Lab` (the `FingerRehab-EEGLab.zip` of the same build) holds the exe, `eeg_lab.yaml`, `run_in_psychopy.py`, `README.txt`, a `source/` copy and `sessions/`, where `sessions/eeg/` takes ActiView's recording under the name the game menu shows.
+Open `run_in_psychopy.py` in PsychoPy Coder and press Run. The home install carries no EEG anything.
+`python3 app/scripts/check_lab_sync.py` says whether the lab folder is the same game as the app; `--fix` makes it so, and `Local_Runner.command` does that on every start.
+Checklist and code table: [app/docs/eeg_lab_setup.txt](app/docs/eeg_lab_setup.txt).
 
 ## Licence
 
-Thesis work by Basil Toufexis, Curtin University, 2026. No licence file yet, so ask before reusing the code.
-It builds on Satoru Nakayama's 2025 thesis software, whose serial protocol and press detection are kept so
-the old patient data still loads. Third-party terms live with the files: [music](app/assets/music/ATTRIBUTION.md),
-[icons](app/assets/icons/LICENSE), [words](app/assets/words/LICENCE.txt) and [avrdude](app/tools/avrdude).
+Thesis work by Basil Toufexis, Curtin University, 2026; ask before reusing the code. It builds on Satoru Nakayama's 2025 software, whose serial protocol and press detection are kept so the old patient data still loads. Third-party terms live with the files: [music](app/assets/music/ATTRIBUTION.md), [icons](app/assets/icons/LICENSE), [words](app/assets/words/LICENCE.txt), [avrdude](app/tools/avrdude).

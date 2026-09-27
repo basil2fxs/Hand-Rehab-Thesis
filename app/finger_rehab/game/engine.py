@@ -6443,9 +6443,18 @@ class GameEngine:
         # assumed (design doc Section 2.5).
         self._rest_taken_s = 0.0
         if float(step.get("rest_s") or 0.0) > 0:
-            shown = float(getattr(self, "_step_card_t", 0.0) or 0.0)
-            if shown > 0:
-                self._rest_taken_s = max(0.0, time.perf_counter() - shown)
+            carry = getattr(self, "_rest_carry", None)
+            if carry and carry[0] == int(step.get("position") or 0):
+                # A redo after an abandon: the rest the participant
+                # took was before the first attempt, and the abandoned
+                # block and the hub since are not rest.
+                self._rest_taken_s = float(carry[1])
+                self._rest_carry = None
+            else:
+                shown = float(getattr(self, "_step_card_t", 0.0) or 0.0)
+                if shown > 0:
+                    self._rest_taken_s = max(0.0,
+                                             time.perf_counter() - shown)
         mode = step["mode"]
         hand = step.get("hand")
         if hand is None:
@@ -6831,7 +6840,14 @@ class GameEngine:
             "hard_stop_min": plan.hard_stop_min,
             "overrides_snapshot": snapshot,
             "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
-            "started_perf": time.perf_counter(),
+            # The sitting's clock, for the strip's minutes and its
+            # amber and red: from LOG IN, where the design's budget
+            # and hard stop are counted from (Section 5.2, CLOCK
+            # STARTS at the login step; Section 2.3's first row is the
+            # login and the calibration), not from PLAY ALL, which
+            # read about five minutes early.
+            "started_perf": (getattr(self, "_session_started_perf", None)
+                             or time.perf_counter()),
             "log": [],
             "done": False,
         }
@@ -6859,6 +6875,14 @@ class GameEngine:
         self._protocol_launch_idx = None
         self._battery_cal_offered = set()
         self._battery_wait = []
+        self._rest_carry = None
+        if earlier:
+            # Across a relaunch the clock carries on from the earliest
+            # block completed today rather than restarting at zero.
+            first_perf = self._earliest_block_perf(earlier)
+            if first_perf is not None:
+                self._battery["started_perf"] = min(
+                    self._battery["started_perf"], first_perf)
         log.info("Battery %s started for %s: cell %s%s, %d steps%s",
                  plan.id, self.session.participant,
                  plan.cell.get("mode_order"),
@@ -6895,10 +6919,75 @@ class GameEngine:
                         self.session.source_name = getattr(src, "name",
                                                            "?")
             self._session_hand = only
-        if self._battery_calibrate(sorted(need),
-                                   self._begin_next_protocol_step):
+            if self.hand_mode != only:
+                # The detectors and the lane strips follow the hand.
+                # With the board renamed but hand_mode still left, the
+                # one board's samples fed the left detector while the
+                # quick calibration read the right one: the flow could
+                # not capture a press, and Skip left the block on the
+                # last saved right-hand profile, the previous
+                # participant's.
+                self.set_hand_mode(only)
+        # A relaunch inside the rest between the passes: the rest is
+        # owed from the last block's end, not from now, so the step
+        # waits on the hub under the hold with the clock seeded from
+        # that block's metadata, instead of starting at once with a
+        # rest_before_s of zero (design Section 2.2: the rest holds
+        # the button for its first minute and its length is logged).
+        then = self._begin_next_protocol_step
+        if earlier and self._seed_rest_clock_from_earlier(earlier):
+            then = self._resume_at_rest
+        if self._battery_calibrate(sorted(need), then):
             return True
-        return self._begin_next_protocol_step()
+        return then()
+
+    @staticmethod
+    def _wall_to_perf(stamp) -> float | None:
+        """A metadata wall-clock stamp (%Y-%m-%dT%H:%M:%S) as a time
+        on the performance clock, or None when it does not parse."""
+        try:
+            wall = time.mktime(time.strptime(str(stamp),
+                                             "%Y-%m-%dT%H:%M:%S"))
+        except (TypeError, ValueError, OverflowError):
+            return None
+        return time.perf_counter() - (time.time() - wall)
+
+    def _earlier_metas(self, earlier: dict) -> list[dict]:
+        out = []
+        for folder in earlier.values():
+            try:
+                out.append(json.loads(
+                    (Path(folder) / "metadata.json").read_text(
+                        encoding="utf-8")))
+            except (OSError, ValueError):
+                continue
+        return out
+
+    def _earliest_block_perf(self, earlier: dict) -> float | None:
+        starts = [self._wall_to_perf(m.get("started_at"))
+                  for m in self._earlier_metas(earlier)]
+        starts = [t for t in starts if t is not None]
+        return min(starts) if starts else None
+
+    def _seed_rest_clock_from_earlier(self, earlier: dict) -> bool:
+        """After a relaunch, measure a pending rest from the end of
+        the last block completed today. True when the first pending
+        step carries a rest and that end could be read."""
+        steps = self._protocol_steps
+        if not steps or float(steps[0].get("rest_s") or 0.0) <= 0:
+            return False
+        ends = [self._wall_to_perf(m.get("finished_at"))
+                for m in self._earlier_metas(earlier)]
+        ends = [t for t in ends if t is not None]
+        if not ends:
+            return False
+        self._step_card_t = max(ends)
+        return True
+
+    def _resume_at_rest(self) -> bool:
+        """The hub, with the rest step pending under its hold."""
+        self.show_mode_select()
+        return True
 
     def _lone_board_can_become(self, need: set[str]) -> bool:
         """True when a one-hand plan meets exactly one board that can
@@ -7831,6 +7920,14 @@ class GameEngine:
             self._log_battery_step(current_step, "abandoned")
             self._protocol_index = max(0, self._protocol_index - 1)
             self._protocol_current = None
+            if float(current_step.get("rest_s") or 0.0) > 0:
+                # The rest clock stops here: the redo logs the rest the
+                # first attempt was given, not the old card's time plus
+                # the abandoned block and the hub.
+                self._rest_carry = (int(current_step.get("position") or 0),
+                                    float(getattr(self, "_rest_taken_s",
+                                                  0.0)))
+                self._step_card_t = 0.0
         if isinstance(stamp, dict):
             self.session.battery = {}
 

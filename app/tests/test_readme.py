@@ -304,8 +304,11 @@ class LinksAndImagesResolveTests(unittest.TestCase):
     # The hub up top, then the games as they look in play. Rendered
     # from the real screens by a simulated player, so a screenshot that
     # vanishes is a README opening on a broken image.
-    SCREENSHOTS = ("hub.png", "adaptive.png", "chords.png", "rhythm.png",
-                   "force_pilot.png", "syllables.png", "results.png")
+    SCREENSHOTS = ("hub.png", "login.png", "hand.png", "calibration.png",
+                   "settings.png", "reaction.png", "adaptive.png",
+                   "muscle_memory.png", "chords.png", "rhythm.png",
+                   "syllables.png", "mirror.png", "force_pilot.png",
+                   "buzz_hunt.png", "echo.png", "results.png")
 
     def test_the_screenshots_are_committed(self):
         text = _readme()

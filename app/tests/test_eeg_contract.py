@@ -1035,14 +1035,20 @@ class ParityTests(unittest.TestCase):
         self.assertNotIn("eeg_lab", command[0])
         self.assertNotIn("--no-eeg-box", command[0])
         self.assertNotIn("--eeg-port", command[0])
-        # No other python entry point may be invoked. The basename
-        # must be exactly main.py: an endswith check would let a
-        # forked lab_main.py through, and the assertIn above is
-        # satisfied by "lab_main.py --config ..." as a substring.
+        # No other game entry point may be invoked. The basename must
+        # be exactly main.py: an endswith check would let a forked
+        # lab_main.py through, and the assertIn above is satisfied by
+        # "lab_main.py --config ..." as a substring. The one other
+        # script the runner may name is the lab folder refresh
+        # (scripts/build_lab_package.py, and check_lab_sync.py in its
+        # message): it copies the game about to run into
+        # EEG_Lab/source, so the lab is never on an older game than
+        # this Mac. It starts no game.
+        allowed = {"main.py", "build_lab_package.py", "check_lab_sync.py"}
         for match in re.findall(r"\S+\.py\b", text):
             base = match.replace("\\", "/").rsplit("/", 1)[-1]
-            self.assertEqual(base, "main.py",
-                             f"Local_Runner.command invokes {match}")
+            self.assertIn(base, allowed,
+                          f"Local_Runner.command invokes {match}")
 
     def test_exactly_one_game_engine_class_exists(self) -> None:
         hits = []
@@ -1091,6 +1097,24 @@ class LabPackageTests(unittest.TestCase):
                 continue
             self.assertEqual(copy.read_text(), source.read_text(),
                              f"{copy.name} forked from {source}")
+
+    def test_the_lab_source_is_the_app(self) -> None:
+        # The lab runs the same game as everyone else, with only the
+        # eeg_lab.yaml overlay on top. A source/ copy that lags the
+        # app is a lab on an older build than the home installs and
+        # this Mac, so every file build_lab_package ships must match.
+        # Local_Runner.command and both build scripts refresh it;
+        # scripts/check_lab_sync.py --fix does it by hand.
+        if not (self.PKG / "source").is_dir():
+            self.skipTest("no EEG_Lab/source on this machine")
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "check_lab_sync", REPO / "scripts" / "check_lab_sync.py")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        diffs = mod.differences(REPO, self.PKG)
+        self.assertEqual(diffs, [], "EEG_Lab lags the app; run "
+                         "python3 scripts/check_lab_sync.py --fix")
 
     def test_built_package_is_complete(self) -> None:
         # An exe without eeg_lab.yaml beside it would start the plain
