@@ -126,7 +126,8 @@ What the Status channel shows
 
 Codes (finger_rehab/hardware/eeg_trigger.py, CODES, version 1.6)
 ----------------------------------------------------------------
- 20  GET READY onset
+ 20  GET READY onset (not in srt blocks, which have no card: they
+     open on the lab script's own SPACE screens)
  21  reaction: wait armed (CNV S1)
  22  rhythm: leading buzz, at the STIM command. In the study battery
      (tactile_mode on_beat) it leads the beat's own byte by the

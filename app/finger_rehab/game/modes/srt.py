@@ -124,8 +124,12 @@ PERF_COLUMNS = ["participant", "age", "gender", "musical_experience",
                 "group", "phase", "block", "trial", "seq_position",
                 "target_lane", "response_key", "accuracy", "rt_ms",
                 "isi_before_ms", "monitor_hz"]
+# flag says when a row is not a lab trial: "paused" (a pause landed
+# between the flash and the answer, so the RT is not a lab RT; the
+# row stays in the accuracy counts) or "device_drop" (the board was
+# away on a silent trial: the rig's miss, out of every count).
 PERF_EXTRA = ["hand", "setup", "learning_isi_ms", "sequence", "input",
-              "response_finger", "onset_s", "rsi_ms"]
+              "response_finger", "onset_s", "rsi_ms", "flag"]
 
 
 @dataclass
@@ -156,6 +160,11 @@ class Trial:
     press_square: int | None = None
     source: str = ""
     rt_ms: float | None = None
+    # A pause between the flash and the answer: onset moves with the
+    # pause so the window holds, the flash's own flip stays here for
+    # the row, and the row says it was paused.
+    onset_flash: float | None = None
+    paused: bool = False
 
 
 class SRTMode:
@@ -406,6 +415,13 @@ class SRTMode:
     def on_resume(self, pause_dur: float) -> None:
         tr = self.trial
         if tr is not None:
+            if (tr.state == "respond" and tr.onset is not None
+                    and tr.press is None):
+                # Flash shown, no answer yet: the lab's script has no
+                # pause, so this trial's RT is not a lab RT.
+                if tr.onset_flash is None:
+                    tr.onset_flash = tr.onset
+                tr.paused = True
             for attr in ("flash_due", "prev_end", "armed_at", "armed_flip",
                          "onset"):
                 v = getattr(tr, attr)
@@ -707,6 +723,13 @@ class SRTMode:
                       else int(tr.press.lane))
         t0 = getattr(self.engine, "_block_t0", None) or self.t_start or 0.0
         onset = tr.onset if tr.onset is not None else tr.armed_flip
+        flash = tr.onset_flash if tr.onset_flash is not None else onset
+        # A board away between the flash and the deadline on a silent
+        # trial is the rig's miss, not the participant's: the engine's
+        # own test, as log_trial applies it to every other mode.
+        voided = acc == "miss" and self._rig_void(onset, end)
+        flag = ("device_drop" if voided
+                else ("paused" if tr.paused else ""))
         row = dict(self._participant_fields())
         row.update({
             "group": self.setup.group,
@@ -728,9 +751,10 @@ class SRTMode:
             "sequence": sequence_text(self.seq),
             "input": tr.source if tr.press is not None else "",
             "response_finger": self._finger_name(lane_press),
-            "onset_s": ("" if onset is None else round(onset - t0, 4)),
+            "onset_s": ("" if flash is None else round(flash - t0, 4)),
             "rsi_ms": ("" if onset is None
                        else round((onset - tr.prev_end) * 1000.0, 1)),
+            "flag": flag,
         })
         self.perf_rows.append(row)
         hit = acc in ("correct", "anticipatory_correct")
@@ -751,7 +775,8 @@ class SRTMode:
                                    else f"{tr.rt_ms:.1f}"),
             "early_late": label,
             "feedback": acc,
-            "error_type": "" if acc == "correct" else acc,
+            "error_type": ("device_drop" if voided
+                           else ("" if acc == "correct" else acc)),
             "keys_pressed": "" if lane_press is None else str(lane_press + 1),
             "correct_keys": str(lane_target + 1),
             "num_presses": 0 if lane_press is None else 1,
@@ -768,9 +793,18 @@ class SRTMode:
         }
         log_row = getattr(self.engine, "log_srt_trial", None)
         if callable(log_row):
-            log_row(csv_row, hit=hit)
+            log_row(csv_row, hit=hit, void=voided)
         if self.response_markers:
             self._response_marker(tr, acc)
+
+    def _rig_void(self, t_from, t_to) -> bool:
+        """True when a board drop on the answering hand overlapped the
+        trial, by the engine's own test (is True: a bare test engine
+        answers with a mock, which is not a drop)."""
+        check = getattr(self.engine, "_drop_overlaps", None)
+        if not callable(check) or t_from is None:
+            return False
+        return check(self._response_hand(), t_from, t_to) is True
 
     def _finger_name(self, lane: int | None):
         """The finger that answered, 1 index to 4 little; with two
@@ -977,7 +1011,8 @@ class SRTMode:
         out = []
         for r in self.perf_rows:
             if (r["phase"] != phase or r["accuracy"] != "correct"
-                    or r["rt_ms"] == "" or r["trial"] == 1):
+                    or r["rt_ms"] == "" or r["trial"] == 1
+                    or r.get("flag")):
                 continue
             if block is not None and r["block"] != block:
                 continue
@@ -990,7 +1025,8 @@ class SRTMode:
 
     def _phase_stats(self, phase: str, block: int | None = None) -> dict:
         rows = [r for r in self.perf_rows if r["phase"] == phase
-                and (block is None or r["block"] == block)]
+                and (block is None or r["block"] == block)
+                and r.get("flag") != "device_drop"]
         n = len(rows)
         med = self._median(self._rts(phase, block))
 
@@ -1041,10 +1077,12 @@ class SRTMode:
         cost = (None if not blocks or post["error_rate"] is None
                 or blocks[-1]["error_rate"] is None
                 else round(post["error_rate"] - blocks[-1]["error_rate"], 3))
-        n_right = sum(1 for r in self.perf_rows
+        scored = [r for r in self.perf_rows
+                  if r.get("flag") != "device_drop"]
+        n_right = sum(1 for r in scored
                       if r["accuracy"] in ("correct",
                                            "anticipatory_correct"))
-        n_all = len(self.perf_rows)
+        n_all = len(scored)
         scores = (recall_scores(self.recalled, self.seq)
                   if self.recall_done else {})
         recall_correct = scores.get("positional")
@@ -1075,6 +1113,11 @@ class SRTMode:
             "tone_lead_ms": round(self.tone_lead_s * 1000.0, 1),
             "musical_experience": self.musical_experience,
             "n_trials": n_all,
+            # Trials the rig ate (device_drop) and trials a pause
+            # landed in (paused, kept in the counts, out of the RTs).
+            "n_voided": len(self.perf_rows) - n_all,
+            "n_paused": sum(1 for r in self.perf_rows
+                            if r.get("flag") == "paused"),
             "n_planned": self.n_trials_total,
             "accuracy": round(n_right / n_all, 3) if n_all else None,
             "practice": practice,

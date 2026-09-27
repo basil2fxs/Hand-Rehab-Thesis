@@ -133,6 +133,7 @@ class MirrorMode:
         )
         self.adapter.bpm = max(self.adapter.cfg.bpm_min,
                                 min(self.adapter.cfg.bpm_max, start_bpm))
+        self.seed = int(seed)
         self.rng = random.Random(seed)
         self._floor = None
         self.min_finger_share = min_finger_share

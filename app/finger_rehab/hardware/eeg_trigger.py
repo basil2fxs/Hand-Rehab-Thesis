@@ -251,7 +251,8 @@ CODE_NOTES: dict[str, tuple[str, str, str, str]] = {
         "state", "", "GET READY card shown at block start",
         "Sent back to back with the block-start byte; the two can "
         "leave in either order when the line is busy, so sort by "
-        "t_event, not wire order."),
+        "t_event, not wire order. Not sent for an srt block, which "
+        "has no card: it opens on the lab script's own SPACE screens."),
     "prep_foreperiod": (
         "state", "", "reaction: ready cue shown, wait armed (CNV S1)",
         "Fixed 2.5 s ahead of the go in the lab preset."),

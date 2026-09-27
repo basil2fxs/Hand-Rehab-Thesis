@@ -5239,6 +5239,17 @@ class GameEngine:
         # always reads from the adapter).
         trigger = float(self.cfg.get("game.trigger_interval_s", 1.2)) + 0.3
         timeout = float(self.cfg.get("game.timeout_s", 1.0)) + 0.3
+        # mirror.seed reproduces a block's finger order exactly; the
+        # default draws a fresh one and records it (raw.csv event
+        # below plus the block summary), the reaction convention.
+        # With one fixed seed every block a participant played
+        # without a miss replayed the same finger order.
+        seed_cfg = self.cfg.get("mirror.seed", None)
+        try:
+            seed = (int(seed_cfg) if seed_cfg is not None
+                    else random.randrange(2 ** 32))
+        except (TypeError, ValueError):
+            seed = random.randrange(2 ** 32)
         self.mode = MirrorMode(
             engine=self,
             min_finger_share=float(
@@ -5252,8 +5263,13 @@ class GameEngine:
             adaptive_cfg=ac,
             start_bpm=start_bpm,
             max_async_ms=float(self.cfg.get("mirror.max_async_ms", 350.0)),
+            seed=seed,
         )
         self._begin_block("mirror")
+        if self.raw_logger:
+            self.raw_logger.queue_event(
+                "mirror_config", detail=f"seed={seed}",
+                hand=self.hand_mode)
         self.screen_obj = self._screens["gameplay"]
 
     def begin_rhythm_block(self, beatmap) -> None:
@@ -5603,9 +5619,13 @@ class GameEngine:
         # the block start, which is when that lead-in begins.
         self._eeg_send(eeg_trigger.block_code(name, "start"),
                        t_event=self._block_t0)
-        self._eeg_send(eeg_trigger.CODES["prep_countdown"],
-                       t_event=(countdown_t if countdown_t is not None
-                                else self._block_t0))
+        # The SRT has no GET READY card (it opens on the lab script's
+        # own SPACE screens), so no byte 20 for it: that would name a
+        # card that was never shown.
+        if name != "srt":
+            self._eeg_send(eeg_trigger.CODES["prep_countdown"],
+                           t_event=(countdown_t if countdown_t is not None
+                                    else self._block_t0))
         # Reset detectors at block start so old baselines don't leak in.
         for d in self.detectors.values():
             d.reset()
@@ -5919,6 +5939,7 @@ class GameEngine:
             r_rts = getattr(self, "_mirror_right_rts_ms", [])
             l_rts = getattr(self, "_mirror_left_rts_ms", [])
             summary["mirror"] = {
+                "seed": getattr(self.mode, "seed", None),
                 "mean_gap_ms": (round(sum(gaps) / len(gaps), 1)
                                  if gaps else None),
                 "n_clean_pairs": len(gaps),
@@ -9279,14 +9300,20 @@ class GameEngine:
         except Exception as e:
             log.warning("periodic metadata save failed: %s", e)
 
-    def log_srt_trial(self, row: dict, hit: bool) -> None:
+    def log_srt_trial(self, row: dict, hit: bool,
+                      void: bool = False) -> None:
         """One SRT trial in trials.csv, under the same context columns
         as every other mode. Counts toward hits and misses for the
         results ring and nothing else: no score, no streak, no cue and
         no feedback word, because the SRT draws its practice feedback
         itself, exactly as the lab's script did, and nothing at all in
-        the learning and post-test blocks."""
-        if hit:
+        the learning and post-test blocks. `void` is a silent trial
+        the board was away for: the rig's, counted with the other
+        modes' device_drop rows and in neither tally."""
+        if void:
+            self._block_drop_voided = getattr(
+                self, "_block_drop_voided", 0) + 1
+        elif hit:
             self.hits += 1
         else:
             self.misses += 1

@@ -774,6 +774,11 @@ mirror:
   # what actually does. A pair further apart than this downgrades to
   # a Miss even if both landed inside the window.
   max_async_ms: 350
+  # Seed for the finger order (weakness-weighted random). Empty draws
+  # a fresh seed per block and records it in raw.csv (mirror_config)
+  # and the block summary, so any block is reproducible after the
+  # fact; a number replays one order exactly.
+  seed: null
 
 reaction:
   # Reaction mode: a randomised wait, then press as fast as you can.
