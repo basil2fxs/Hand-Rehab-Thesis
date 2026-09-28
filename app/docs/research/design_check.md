@@ -1,6 +1,6 @@
 # Design check: will the collection give the thesis what it needs?
 
-28 September 2026, before any participant, for the setup as it will run: one device on the right hand with the calibrated pad set, each student coming once for 15 minutes to an hour. Each thesis aim against what the current setup collects, the gaps, and better options where there are any. The evidence: 12 simulated people through the real engine and the full notebook, simulated statistics at each sample size, and the sources at the end (each checked against the paper or its publisher's page).
+28 September 2026, before any participant, for the setup as it will run: one device on the right hand with the calibrated pad set, 5 to 20 students each coming once for 15 minutes to an hour on the lab PC, supervised by Basil or a teammate, one EEG session, and a couple of readers with dyslexia seen separately. Each thesis aim against what the current setup collects, the gaps, and better options where there are any. The evidence: 12 simulated people through the real engine and the full notebook, simulated statistics at each sample size, and the sources at the end (each checked against the paper or its publisher's page).
 
 ## The answer
 
@@ -34,7 +34,9 @@ The collection day sets n. What n buys, from 4,000 simulated studies per cell (t
 
 The guidance asks for more than one day gives. Bonett's formula needs 24 people to hold an ICC of 0.8 to plus or minus 0.15 [1]. Koo and Li suggest at least 30, and say to read the class off the interval, not the point estimate [2]. Hopkins suggests about 50 people and three or more trials [3]. Planning on the average width also leaves a real chance of a wider interval [4]. At n = 10 a true ICC of 0.8 reads 0.38 to 0.95, across three of Koo and Li's bands, which is why the thesis compares each T row with its predicted class rather than testing it.
 
-**Better:** book 12 so that 10 finish. A second day of 8 to 10 more makes every interval about a third narrower. Say plainly in the method that n was set by the collection day.
+**Better:** book 12 so that 10 finish. A second day of 8 to 10 more makes every interval about a third narrower. Say plainly in the method that n was set by who could take part.
+
+**At 5 to 20 students** (28 September): under 8 in the full family nothing is tested, and rightly. With 5, a two-sided signed-rank test cannot reach 5 percent at all: its smallest p is 2/32 = 0.0625. In the 12-person dry run 9 pre-specified checks carried a p value, so Holm's first threshold is 0.05/9 = 0.0056, which the one-sided exact test first gets under at 8 people (1/256 = 0.0039), and then only when nearly everyone shows the effect. Ten or more leaves room for a person or two going the other way.
 
 ## 2. Same session against another day
 
@@ -79,16 +81,16 @@ Each student plays the longest length their slot allows: the 60 if they can stay
 
 ## 7. The EEG lab
 
-One lab visit covers V6: the "Validate once" check on the first Reaction block. Three to five recorded people give a descriptive SRT learning curve. Nothing in the software reads the amplifier's BDF file yet, so the Status channel comparison is done in EEGLAB or MNE by hand, as the lab note describes. A short script would make it repeatable if the lab work grows.
+One EEG session is planned. It covers V6, the "Validate once" check on the first Reaction block, and gives one person's recording; a descriptive SRT learning curve would need three to five, so it is left out. Nothing in the software reads the amplifier's BDF file yet, so the Status channel comparison is done in EEGLAB or MNE by hand, as the lab note describes. A short script would make it repeatable if the lab work grows.
 
 ## 8. The Syllables case
 
-One session with no baseline is a case description, outside the single-case reporting guideline [22] and short of the design standards [23]. It can show that the game works with the readers it was built for: finished, logged, the error pattern and the timing. It cannot claim the game helped anyone read. The notebook keeps the code out of the healthy n.
+A couple of readers, one session each with no baseline, are case descriptions, outside the single-case reporting guideline [22] and short of the design standards [23]. It can show that the game works with the readers it was built for: finished, logged, the error pattern and the timing. It cannot claim the game helped anyone read. The notebook keeps the code out of the healthy n.
 
 ## What to change, in order
 
 1. Done, 28 September: R3 and F3 on the 90 percent interval (Section 3); the thesis moved to the bench-only sensor comparison and the four lengths (Sections 4 and 6).
-2. Book hour-long slots for as many students as possible: 10 finished in the full family is the target, 8 the least.
+2. Book hour-long slots for as many students as the lab allows: 10 or more in the full family is the aim, and under 8 no check is tested.
 3. Bench each pad set with `pad_bench.py --characterise`: the calibrated set now, the uncalibrated one on the left-hand device once it is built.
 4. Optional: a script for the EEG Status channel check (Section 7).
 

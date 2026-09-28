@@ -1,14 +1,16 @@
 # Run sheet, one participant
 
-60 minutes booked. About 44 minutes on the rig, the rest is welcome,
-paperwork and debrief. Tick as you go; anything unusual goes in the
+Booked for the longest length the student can give: an hour for the
+45 (75 minutes for the 60), less for the 30 or 15. About 15 minutes
+of it is welcome, paperwork and debrief. Tick as you go; anything unusual goes in the
 notes box on the intake sheet.
 
 ## Between participants (2 min)
 
 - [ ] Wipe the pads and the frame with an isopropyl wipe.
-- [ ] Board plugged in and the app on the title screen. Start the app
-      with `Local_Runner.command` (double-click). Give the board about
+- [ ] Board plugged in and the app on the title screen. On the lab
+      PC, start Finger Rehab from the Start menu; on the Mac, with
+      `Local_Runner.command` (double-click). Give the board about
       three seconds after it opens: it buzzes each finger once as it
       starts up.
 - [ ] New intake sheet, information sheet and consent form on the
@@ -134,8 +136,10 @@ the hub.
       "How comfortable were the pads?" 0 to 10.
       "How clear was what each game asked of you?" 0 to 10.
 - [ ] End the session from the hub and confirm.
-- [ ] Check the data before they leave. In Terminal, from the project
-      folder:
+- [ ] Check the data before they leave. On the lab PC: the strip
+      shows every step done; the READY check below runs later on the
+      laptop, once the data is copied (FINAL TRIAL RESULTS, After each
+      day). On the Mac, in Terminal, from the project folder:
 
       ```
       python3 app/scripts/check_sitting.py

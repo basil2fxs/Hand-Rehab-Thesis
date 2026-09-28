@@ -1,5 +1,5 @@
 # 4 Syllables case
 
-The reader with dyslexia, code D01, played from the hub on a separate day. Reported as one described case, apart from the healthy study.
+The readers with dyslexia, codes D01 upward, each played from the hub in a session of their own. Each is reported as a described case, apart from the healthy study.
 
-Copy that code's folders from the project's `sessions/` in here, as `sessions/`, keeping the dated folder they sit in.
+Copy those codes' folders from the laptop's `sessions/` in here, as `sessions/`, keeping the dated folders they sit in.

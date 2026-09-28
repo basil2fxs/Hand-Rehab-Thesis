@@ -6,9 +6,10 @@ right-hand device, in TWO PASSES. Pass 1 plays the eight one-hand
 modes once; after a 3 minute rest, pass 2 plays Reaction, Rhythm,
 Force Pilot and Chords again with the same counts. Twelve blocks,
 about 44 minutes on the rig and about 60 minutes booked per person,
-run as one collection day at the end of semester. No return visit.
-A student with less or more time plays the 15, 30 or 60 minute
-length instead (28 September 2026, below).
+run on the lab PC over the collection period, supervised by Basil
+or a teammate, 5 to 20 students expected. No return visit. A student
+with less or more time plays the 15, 30 or 60 minute length instead
+(28 September 2026, below).
 The battery preset that runs it is protocol.presets.study_battery, id
 healthy_one_hand_v3. Syllables is not in it: it is played with a
 dyslexic participant on its own (28 September 2026).
