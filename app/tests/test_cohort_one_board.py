@@ -221,6 +221,9 @@ class OneBoardTwoPassCohortTests(unittest.TestCase):
         self.assertGreater(r3["value"], -20)
         self.assertEqual(r3["reference"], 20.0)
         self.assertIn("TOST", str(r3["detail"]))
+        self.assertIn("90% CI", str(r3["criterion"]))
+        self.assertLess(r3["ci_lo"], r3["value"])
+        self.assertLess(r3["value"], r3["ci_hi"])
 
     def test_e1_uses_the_four_lane_band(self) -> None:
         e1 = self.validity.set_index("id").loc["E1"]

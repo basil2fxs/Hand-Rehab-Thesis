@@ -631,6 +631,7 @@ class CohortNotebookTests(unittest.TestCase):
                     "C4", "Rh2", "M1", "M2", "F1", "F2", "F3", "F4",
                     "B1", "B2", "B3", "B4", "E1", "E2", "E3"):
             self.assertIn(cid, v.index, cid)
+        self.assertIn("90% CI", str(v.loc["F3", "criterion"]))
         # R2's interval clears zero, but with five people its p is
         # 0.031 and E3's exact test sits in the same Holm family, so
         # the adjusted p is doubled past 0.05 and the row says
@@ -972,6 +973,26 @@ class CohortStatisticsHelperTests(unittest.TestCase):
         self.assertTrue(ok)
         _p, ok = self.ra.tost_paired(base, far, 20.0)
         self.assertFalse(ok)
+
+    def test_equivalence_reads_the_ninety_percent_interval(self):
+        # Ten differences with mean 8 and SD 18.5 against a 20 ms band:
+        # the 90 percent interval ends at 18.7, inside, and the 95
+        # percent one at 21.2, outside. R3 and F3 read the 90 (two
+        # one-sided tests at 5 percent each); until 28 September 2026
+        # they also needed the 95, and this set failed.
+        import numpy as np
+        z = np.array([-1.6, -1.1, -0.7, -0.3, 0.0, 0.2, 0.5, 0.8, 1.1, 1.4])
+        z = (z - z.mean()) / z.std(ddof=1)
+        d = 8.0 + 18.5 * z
+        self.assertEqual(self.ra.COHORT_EQUIV_CI_LEVEL, 0.90)
+        m, lo, hi, inside = self.ra.equivalence_interval(d, 20.0)
+        self.assertAlmostEqual(m, 8.0)
+        self.assertAlmostEqual(hi, 18.72, places=2)
+        self.assertTrue(inside)
+        _p, ok = self.ra.tost_paired(np.zeros(10), d, 20.0)
+        self.assertTrue(ok)
+        *_, inside95 = self.ra.equivalence_interval(d, 20.0, level=0.95)
+        self.assertFalse(inside95)
 
     def test_wilson_stays_inside_zero_to_one_at_the_edges(self) -> None:
         for k, n in ((0, 10), (10, 10), (1, 3)):

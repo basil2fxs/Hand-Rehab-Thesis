@@ -1,17 +1,17 @@
 # Design check: will the collection give the thesis what it needs?
 
-28 September 2026, before any participant, for the setup as it will run: one device on the right hand, one pad set, and each student coming once. Each thesis aim against what the current setup collects, the gaps, and better options where there are any. The evidence: 12 simulated people through the real engine and the full notebook, simulated statistics at each sample size, and the sources at the end (each checked against the paper or its publisher's page).
+28 September 2026, before any participant, for the setup as it will run: one device on the right hand with the calibrated pad set, each student coming once for 15 minutes to an hour. Each thesis aim against what the current setup collects, the gaps, and better options where there are any. The evidence: 12 simulated people through the real engine and the full notebook, simulated statistics at each sample size, and the sources at the end (each checked against the paper or its publisher's page).
 
 ## The answer
 
-Every aim is covered but one. The sensor comparison (V4, SQ3, thesis Section 4.3) can only be a bench test: nobody plays both pad sets, so there is no paired part, and the thesis still describes one. One pre-registered check, R3, needs a second look before the first participant.
+Every aim is covered, the sensor comparison (V4, SQ3, thesis Section 4.3) as a bench test only: nobody plays both pad sets, so there is no paired part. R3 and F3, the two equivalence checks, now read the standard 90 percent interval (Section 3).
 
 | Aim | What it needs | What the setup gives | Verdict |
 | --- | --- | --- | --- |
 | V1 Normal ranges (4.4) | pass 1 from everyone | every block finished in all 12 simulated sittings | Covered, as descriptive ranges |
-| V2 Known effects (4.5) | pass 1 | every pre-specified check computes; 13 dropped by design, each with its reason | Covered; R3 needs a look (Section 3) |
+| V2 Known effects (4.5) | pass 1 | every pre-specified check computes; 13 dropped by design, each with its reason | Covered; R3 decided (Section 3) |
 | V3 Reliability (4.6) | pass 1 against pass 2 | T1 to T5 compute; Rhythm's second go is an exploratory row | Covered within one session, with wide intervals |
-| V4 Sensors (4.3) | bench, and paired game measures on both sensor sets | `pad_bench.py` for the bench; one pad set in play, so no paired part | **Bench only**: the thesis text needs to match (Section 4) |
+| V4 Sensors (4.3) | bench figures for both sensor sets | `pad_bench.py --characterise` on each set; one set in play, so no paired part | **Bench only** (Section 4) |
 | V5 Feasibility (4.1) | minutes, blocks, rests | the feasibility chapter | Covered |
 | V6 EEG markers (4.8) | the marker log against the amplifier record | the notebook audits the game's side; the amplifier side is checked by hand ([eeg_lab_setup.txt](../eeg_lab_setup.txt), "Validate once") | Covered by one lab visit |
 | Handedness (4.7) | left-handers | pooled numbers and a rerun without them | Descriptive: about 1 in 10 people |
@@ -51,7 +51,7 @@ R3 predicts no practice effect on Reaction (95% interval of pass 2 minus pass 1 
 1. The Reaction block is four-choice, the task where a second go shows practice [14]. R3 may well fail, and that is an honest result if it stays as written.
 2. A 95% interval inside the margin is an equivalence test at 2.5% each side. The usual form reads the 90% interval, 5% each side [15]. At n = 10 and a true shift of 0, the chance R3 passes is 0.80 with a 90% interval against 0.61 with a 95% one, when two blocks of one person differ by 20 ms (SD); at 25 ms it is 0.52 against 0.30.
 
-Both are decisions to make and date before any data, like the changes of 24 and 28 September.
+**Decided, 28 September, before any data:** R3 and F3 read the 90 percent interval, the standard form, and R3's basis names the four-choice caveat, so a fail reads as practice. The prediction and the 20 ms margin stay. At n = 10 with a true shift of zero and 20 ms (SD) between a person's two blocks, R3 now passes about 80 percent of the time instead of 60.
 
 ## 4. The sensor comparison: bench only
 
@@ -61,11 +61,11 @@ What the maker says: the calibrated and standard 10 N pads list the same resolut
 
 | Way | How | What it can claim | With one device |
 | --- | --- | --- | --- |
-| **Bench only** | `pad_bench.py` on both pad sets, no people, about 20 minutes | Counts per newton, linearity, hysteresis, noise and drift for each set: where calibration matters in newtons. Nothing about the game measures | **Fits.** This is the study's comparison |
+| **Bench only** | `pad_bench.py --characterise` on each pad set, no people, about 20 minutes a set: 100 g to 1 kg up and back down on every pad, then half load held for ten minutes | Counts per newton, linearity, hysteresis, noise and drift for each set: where calibration matters in newtons. Nothing about the game measures | **Fits.** This is the study's comparison |
 | Split the day | the first half of the participants on one set, the rest on the other | Unpaired, about 5 a side: only large differences show | Needs a pad swap mid-day; not planned |
 | A sensor pass | each person plays four blocks again on the second set, about 15 minutes more | Paired, the only way to test the thesis margins | Needs both sets in one sitting; not possible |
 
-These three are not the thesis's options A, B and C in Section 3.7, which allocate hands. The study is that table's C, one right-hand board for everyone, except that it keeps one pad set rather than swapping sets between participants.
+These three are not the thesis's options A, B and C in Section 3.7, which allocate hands. The study is that table's C, one right-hand board for everyone, except that it keeps one pad set rather than swapping sets between participants. The calibrated set is fitted for everyone; the uncalibrated set is benched at the end of semester if time allows, and it needs its four standard interface boards to be read at all.
 
 For the thesis, SQ3 and Section 4.3 become the bench question: where calibration matters in newtons and where it does not, with the maker's figures as the prediction for the game measures. The paired analysis and its margins table go. Little is lost: at n = 10 each limit of agreement would be known only to about plus or minus 1.1 SD of the differences [18]; Bland recommends about 100 people [18], and a formal agreement claim can need hundreds [19].
 
@@ -75,7 +75,7 @@ Reference intervals need about 120 people [20]. A veterinary guideline that mirr
 
 ## 6. The sittings
 
-Everyone plays the 45 minute sitting. It holds: counterbalanced orders, the rest as the retest interval, pass 2 in pass 1's order, and every table filling in the dry run. The 60, 15 and 30 stay in the software for other studies: the 60 holds the 45 block for block, so the two would pool, while the 15 and 30 play shortened games and are read on their own.
+Each student plays the longest length their slot allows: the 60 if they can stay about 75 minutes, the 45 in an hour, then the 30, then the 15. The 45 holds: counterbalanced orders, the rest as the retest interval, pass 2 in pass 1's order, and every table filling in the dry run. The 60 holds the 45 block for block, so the two pool as the full family, and it adds P2 and a second go at every game. The 15 and 30 play shortened games, so they are read on their own as the short family (`COHORT_FAMILY = "short"`). Every student in the short family is one fewer in the full family's n, which carries the checks and the reliability table: book hour-long slots wherever the students can give them, and the 30 before the 15.
 
 ## 7. The EEG lab
 
@@ -87,9 +87,9 @@ One session with no baseline is a case description, outside the single-case repo
 
 ## What to change, in order
 
-1. Decide R3: keep it, move it to the 90% interval, or re-base its prediction (Section 3).
-2. Bring the thesis in line with one pad set (Section 4 here): its SQ3, V4 and Sections 3.5, 3.7 and 4.3 still describe a paired sensor comparison.
-3. Book 12 per collection day, and a second day of new people if the rooms allow.
+1. Done, 28 September: R3 and F3 on the 90 percent interval (Section 3); the thesis moved to the bench-only sensor comparison and the four lengths (Sections 4 and 6).
+2. Book hour-long slots for as many students as possible: 10 finished in the full family is the target, 8 the least.
+3. Bench each pad set with `pad_bench.py --characterise`: the calibrated set now, the uncalibrated one at the end of semester once its interface boards are in hand.
 4. Optional: a script for the EEG Status channel check (Section 7).
 
 ## Sources

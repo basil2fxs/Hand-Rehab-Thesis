@@ -71,8 +71,8 @@ A real sitting adds questions and slower changeovers, about 3 minutes on the 45.
 
 ## Recommendation
 
-- **Collection day:** 45 for everyone. The checks and the reliability table need n more than anything else.
+- **Each student:** the longest length their slot allows (28 September 2026). The checks and the reliability table come from the full family, the 45 and the 60, so hour-long slots come first.
 - **Someone who can stay 75 minutes:** 60. Nothing of the 45 is lost, and every game shows its change.
-- **A short slot:** 30 before 15. Only the 30 plays every game.
+- **A short slot:** 30 before 15. Only the 30 plays every game. The short family is read on its own and needs 8 of its own.
 - **The EEG lab:** no SESSION picker. A length would start its games before the recording is running, so the RA starts ActiView from the name the game menu shows, then PLAY ALL runs the lab's sitting.
 - **Syllables:** from the hub, with a dyslexic participant, on its own.

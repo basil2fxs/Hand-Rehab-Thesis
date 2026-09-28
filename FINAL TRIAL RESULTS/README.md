@@ -3,28 +3,27 @@
 
 ## What to collect
 
-Participants are students. Each comes once and plays the one device on the right hand.
+Participants are students. Each comes once and plays the one device on the right hand, with the calibrated pads.
 
 | What | How many | Time | Thesis |
 | --- | --- | --- | --- |
-| The 45 minute sitting | 12 booked, 10 finished, 8 at the least | 60 min slot | 4.1, 4.4 to 4.7 |
+| One sitting each, the longest the slot allows: 60, 45, 30 or 15 min | 10 finished at 45 or 60, 8 at the least; any 15s and 30s on top | the length, plus about 15 min off the rig | 4.1, 4.4 to 4.7 |
 | The EEG lab sitting | 1 at the least; 3 to 5 for a learning curve | 55 min, plus the cap | 4.8 |
-| Sensor bench, no participants | both pad sets | 5 min a set | 4.3 |
+| Sensor bench, no participants | each pad set once: calibrated now, uncalibrated at the end of semester if time allows | about 20 min a set | 4.3 |
 
-The software fixes the games: Reaction 20 trials, Rhythm 107 notes, Force Pilot 12 runs and Chords 40 trials, each played twice, plus Echo, Buzz Hunt, Muscle Memory and Adaptive once. The only number left to choose is people: 20 instead of 10 makes a reliability interval about a third narrower ([design check](../app/docs/research/design_check.md)). The Syllables case is separate, below.
+The software fixes the games. The 45 plays Reaction 20 trials, Rhythm 107 notes, Force Pilot 12 runs and Chords 40 trials, each twice, plus Echo, Buzz Hunt, Muscle Memory and Adaptive once; the 60 plays those four twice as well. The results come from the 45s and 60s together, so hour-long slots come first: the 15 and 30 play shortened games and are read on their own. With 20 people instead of 10, a reliability interval is about a third narrower ([design check](../app/docs/research/design_check.md)). The Syllables case is separate, below.
 
 ## Before the day
 
-- [ ] **Check R3.** It predicts no practice effect on Reaction, but the block is four-choice, where a second go shows practice, and its 95% interval is stricter than the usual equivalence test. Keep it, move it to the 90% interval, or re-base it (design check, Section 3), and date the choice.
 - [ ] Print the [study-day kit](../app/docs/study_day/README.md): the run sheet, and per person an information sheet, a consent form and an intake sheet.
-- [ ] Book 12 slots of 60 minutes, and a spare. The first two people are the pilot and count ([before the day](../app/docs/study_day/before_the_day.md)).
+- [ ] Book 12 hour-long slots (75 minutes for anyone sitting the 60) and a spare, and shorter slots only for students who cannot give an hour. The first two people are the pilot and count ([before the day](../app/docs/study_day/before_the_day.md)).
 - [ ] On the study laptop, start the game with `Local_Runner.command`: newest code, data into `sessions/`.
-- [ ] Sensor bench, each pad set in turn, board plugged in, game closed: `python3 app/scripts/pad_bench.py --masses 31.1 62.2 155.5` (2, 4 and 10 fifty-cent coins).
+- [ ] Quick pad check, board plugged in, game closed: `python3 app/scripts/pad_bench.py --masses 31.1 62.2 155.5` (2, 4 and 10 fifty-cent coins).
 
 ## Each participant
 
 1. Consent and the intake sheet (10 min).
-2. Log in: the code (P01 upward) in NAME, age, main hand, SESSION 45 min, LOG IN.
+2. Log in: the code (P01 upward) in NAME, age, main hand, SESSION the longest length the slot allows, LOG IN.
 3. Play all runs everything. Follow the [run sheet](../app/docs/study_day/run_sheet.md).
 4. Before they leave: `python3 app/scripts/check_sitting.py` says READY.
 
@@ -33,6 +32,12 @@ The software fixes the games: Reaction 20 trials, Rhythm 107 notes, Force Pilot 
 1. `python3 app/scripts/check_sitting.py --all`
 2. Type each code's Edinburgh LQ into `sessions/intake_sheet.csv`.
 3. Copy `sessions/<date>/` to one more place. Consent forms stay on paper, apart from the intake sheets.
+
+## The sensor bench
+
+1. Once per pad set, board plugged in, game closed: `python3 app/scripts/pad_bench.py --characterise --label calibrated`. It walks every pad from empty up to 1 kg and back down, then holds 500 g on the index pad for ten minutes (about 20 minutes in all).
+2. Masses of 100, 250, 500 and 1000 g, each weighed on a kitchen scale with the coin it stands on; the coin sits centred on the pad.
+3. The uncalibrated set the same way with `--label uncalibrated`, at the end of semester if time allows. It needs its four standard interface boards to be read at all.
 
 ## The Syllables case
 
@@ -59,7 +64,7 @@ The software fixes the games: Reaction 20 trials, Rhythm 107 notes, Force Pilot 
    | [`4 Syllables case`](4%20Syllables%20case) | D01's folders |
    | [`5 Thesis results`](5%20Thesis%20results) | the tables and figures that go in the thesis |
 
-2. Open `analysis/session_analysis.ipynb`. In the Setup cell, set `SESSIONS_DIR` to a dataset's `sessions` folder, then Run All. The cohort chapter writes to `sessions/cohort_results/` beside it.
+2. Open `analysis/session_analysis.ipynb`. In the Setup cell, set `SESSIONS_DIR` to a dataset's `sessions` folder, then Run All. The cohort chapter reads the 45s and 60s and writes to `sessions/cohort_results/` beside it; for the 15s and 30s, set `COHORT_FAMILY = "short"` and run it again.
 3. Copy what the thesis uses into `5 Thesis results/<section>/`, mostly from `cohort_results/`:
 
    | Thesis | Files |

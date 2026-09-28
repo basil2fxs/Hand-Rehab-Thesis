@@ -43,7 +43,8 @@ notes box on the intake sheet.
       goes compared with your first few." Don't repeat it and don't
       comment on scores during the session.
 - [ ] Login screen: type the code in NAME, then age, sex and hand
-      length. SESSION: 45 min.
+      length. SESSION: the longest length the slot allows, 60 (a 75
+      minute slot), 45 (an hour), then 30, then 15.
 - [ ] MAIN HAND: ask "Which hand do you write with?" and pick that one,
       Left or Right. This is their real handedness, recorded for the
       analysis. It does not change the device.
@@ -53,14 +54,13 @@ notes box on the intake sheet.
       one light press per finger. If a finger fails, redo it once,
       then carry on and note it.
 
-## Play all (about 44 minutes on the rig)
+## Play all (about 44 minutes on the rig for the 45)
 
 - [ ] The first game starts after the calibration. After each game
       press Start on the NEXT UP card (or N). The strip shows PLAY ALL
-      k/12 and the minutes: amber past 45, red past the 50 minute hard
-      stop. (The 15, 30 and 60 minute SESSION lengths are for sittings
-      that cannot take 45 minutes or can take an hour:
-      docs/research/trial_mode.md.)
+      k/12 on the 45 and the minutes: amber past the length, red past its hard
+      stop (18, 35, 50 or 65 minutes). The 60 plays every game twice;
+      the 15 and 30 play shortened games (docs/research/trial_mode.md).
 - [ ] Don't coach during a game. Let them skip a game's own rest
       (Space) only when they say they're ready.
 - [ ] Tick each game on the intake sheet as it ends.
@@ -116,7 +116,7 @@ the hub.
 - A game can't be run at all: Skip step (S) on the hub, confirm, and
   write the reason.
 - The app closes: open it, log in with the same code, main hand and
-  SESSION (45 min). It carries on from the first game not finished;
+  SESSION length. It carries on from the first game not finished;
   finished games are not played again.
 - Past 50 minutes: let the current game finish, stop, write down what
   was missed. Pattern is the one to lose.

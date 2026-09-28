@@ -7,13 +7,14 @@ modes once; after a 3 minute rest, pass 2 plays Reaction, Rhythm,
 Force Pilot and Chords again with the same counts. Twelve blocks,
 about 44 minutes on the rig and about 60 minutes booked per person,
 run as one collection day at the end of semester. No return visit.
+A student with less or more time plays the 15, 30 or 60 minute
+length instead (28 September 2026, below).
 The battery preset that runs it is protocol.presets.study_battery, id
 healthy_one_hand_v3. Syllables is not in it: it is played with a
 dyslexic participant on its own (28 September 2026).
 
 The authority on the design is Basil's own plan file, "Data
-Collection Plan.md", under
-Uni/Semester 2/Thesis/Current Thesis Part B/00_Key Facts/. This
+Collection Plan.md", under Uni/Semester 2/Thesis/Notes/. This
 document is the working detail behind that plan and follows it.
 
 HOW THE DESIGN GOT HERE (every change made before any participant):
@@ -47,6 +48,20 @@ HOW THE DESIGN GOT HERE (every change made before any participant):
     that plays games twice wherever the minutes allow, the 15 and 30
     with shortened games (Section 2.5, docs/research/trial_mode.md).
     Hand breadth is no longer measured: no check or table read it.
+  - 28 September 2026, later the same day: FOUR LENGTHS, THE SENSOR
+    BENCH, THE 90 PERCENT INTERVAL. Each student plays the longest
+    SESSION length their slot allows (60, 45, 30, then 15), on the
+    one device with the calibrated sensor set. The 45 and the 60 are
+    read together (the 60 holds the 45 block for block); the 15 and
+    the 30 play shortened games and are read on their own. With one
+    board and one visit per person nobody plays both sensor sets, so
+    the calibrated against uncalibrated comparison is the bench:
+    scripts/pad_bench.py --characterise on each set (slope, linearity,
+    hysteresis, noise, drift), the uncalibrated set at the end of
+    semester if time allows. R3 and F3, the two equivalence checks,
+    read the 90 percent interval: two one-sided tests at 5 percent
+    each, the standard form (Lakens 2017). They had also required the
+    95 percent interval, a 2.5 percent test on each side.
 
 What one board costs, and the thesis says it in the same breath as
 the results:
@@ -227,16 +242,20 @@ Known effects to reproduce:
      DROPPED on the one-board rig (24 September 2026): every block
      is the right hand, so nobody plays both, and right- against
      left-handers on one hand would compare people, not hands.
-  R3 No practice effect on median RT from pass 1 to pass 2: the 95
+  R3 No practice effect on median RT from pass 1 to pass 2: the 90
      percent CI of pass 2 minus pass 1 inside +/- 20 ms, by two
-     one-sided tests (equivalence, the form F3 uses). 20 ms is a
-     little over one 60 Hz frame (16.7 ms), the rig's own timing
-     grain, and about 5 percent of a four-choice RT. The basis: the
-     PVT family the block is modelled on shows no change in median
-     RT or lapses over 16 repeated administrations (Basner et al.
-     2017, Sleep). Restored 24 September 2026, when the second pass
-     made it computable; it had been dropped under the one-pass
-     design.
+     one-sided tests at 5 percent (equivalence, the form F3 uses;
+     Lakens 2017). 20 ms is a little over one 60 Hz frame (16.7 ms),
+     the rig's own timing grain, and about 5 percent of a four-choice
+     RT. The basis: the PVT family the block is modelled on shows no
+     change in median RT or lapses over 16 repeated administrations
+     (Basner et al. 2017, Sleep). The block is four-choice, though,
+     and four-choice RT does fall with repeated testing (Woods et al.
+     2015, visual choice RT), so a fail is read as practice, not as a
+     fault. Restored 24 September 2026, when the second pass made it
+     computable; it had been dropped under the one-pass design. Read
+     on the 90 percent interval from 28 September 2026 (it had also
+     required the 95).
 Cue order (27 September 2026, before any participant): the four
 fingers are dealt from one bag of twenty per block, five each, with
 no finger twice running. The old bag of four made the fourth cue of
@@ -646,8 +665,9 @@ Known effects to reproduce:
      adults. Release-specific impairment is the Parkinson's marker
      (Davidson 2025; Davidson 2026; Chung 2023) and an ageing one
      (Davidson 2024), so a young cohort should show a small
-     difference; report the paired difference with its CI as an
-     equivalence statement. Read on the symmetric shapes only (Tide,
+     difference; report the paired difference with its 90 percent
+     CI as an equivalence statement against +/- 2 percent of max
+     (two one-sided tests at 5 percent, as R3). Read on the symmetric shapes only (Tide,
      Hills, and the rising and falling halves of each sine): Dunes
      releases about three times faster than it climbs, so a normal
      150 ms lag alone would put its release error above its press
