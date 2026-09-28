@@ -25,7 +25,7 @@ from unittest.mock import MagicMock
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from tests.realtime import ON_CI  # noqa: E402
+from tests.realtime import ON_CI, real_time  # noqa: E402
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
@@ -1151,8 +1151,12 @@ class LabSessionTests(unittest.TestCase):
         bh = lab["buzz_hunt"]
         self.assertGreaterEqual(bh["nonzero"].count(38), len(bh["trials"]))
         self.assertFalse([c for c in bh["nonzero"] if 100 <= c <= 131])
-        # Rhythm: a 22 ahead of every 31, one per note.
-        rh = lab["rhythm"]
+
+    @real_time
+    def test_rhythm_sends_a_lead_byte_ahead_of_every_beat(self) -> None:
+        # Rhythm: a 22 ahead of every 31, one per note. The rhythm
+        # scenario runs on the real clock (tests/realtime.py).
+        rh = _lab()["rhythm"]
         self.assertEqual(rh["nonzero"].count(22), rh["nonzero"].count(31))
         self.assertEqual(rh["nonzero"].count(31), len(rh["trials"]))
 
