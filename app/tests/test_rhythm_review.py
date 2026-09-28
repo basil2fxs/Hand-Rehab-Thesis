@@ -131,7 +131,8 @@ class SongStartTests(unittest.TestCase):
                                          real(bpm)))
             eng.begin_rhythm_block(_beatmap(2))
             mode = eng.mode
-            _pump(eng, 1.0)
+            frames: list[float] = []
+            _pump(eng, 1.0, on_frame=frames.append)
             self.assertEqual(len(called), 1)
             self.assertAlmostEqual(
                 called[0], mode._t_start + mode._countdown_s + 0.5,
@@ -140,8 +141,15 @@ class SongStartTests(unittest.TestCase):
             self.assertEqual(summary["audio_source"], "metronome")
             self.assertEqual(summary["audio_offset_applied_ms"], 12.0)
             self.assertGreaterEqual(summary["song_start_lag_ms"], 0.0)
+            # The play call lands on the first frame at or after the
+            # lead, so the lag is at most one frame gap. The bound is
+            # this run's longest gap, not FRAME_S: a real sleep
+            # overshoots by a millisecond or two on a busy machine,
+            # which failed the FRAME_S bound in 3 of 48 runs (18.0 ms
+            # against 17.7).
+            longest = max(b - a for a, b in zip(frames, frames[1:]))
             self.assertLess(summary["song_start_lag_ms"],
-                            FRAME_S * 1000.0 + 1.0)
+                            longest * 1000.0 + 1.0)
 
     def test_no_audio_records_none_and_zero(self):
         with tempfile.TemporaryDirectory() as td:

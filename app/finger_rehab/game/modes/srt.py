@@ -1,6 +1,6 @@
 """SRT: the lab's serial reaction time task, trial for trial.
 
-WHAT IT IS. Four grey squares in a row. One flashes red with its own
+WHAT IT IS. Four finger cards in a row. One lights up with its own
 tone and the participant presses that finger as fast as they can.
 Between two random blocks the flashes follow a fixed ten-item order
 nobody mentions. Getting faster on the fixed order, and slower again
@@ -25,7 +25,7 @@ This mode replicates the script:
   ten times over (100 trials each), FINAL PHASE (48 random), the
   explicit recall, thank you. Every screen between them waits for
   SPACE; every block opens with a 1000 ms wait.
-- A trial: the interval, then the target turns red for 100 ms with
+- A trial: the interval, then the target lights for 100 ms with
   its lane tone (the lab's own V, B, N and M wav files, E5 F5 G5 A5),
   and the first press within 2.6 s of the flash ends it (the 100 ms
   flash plus the 2.5 s deadline, as the script counts it). No press:
@@ -38,7 +38,7 @@ This mode replicates the script:
 - Timing groups for the learning blocks: constant, cyclical and
   random, all averaging the learning interval (game/srt_setup.py).
   Random blocks always run at 500 ms.
-- EEG: byte 30 on the flip that first shows the red square, reset by
+- EEG: byte 30 on the flip that first shows the lit card, reset by
   the marker writer, nothing else per trial. Inside an srt block (mode
   id 13) a 30 is the flash and its tone together, as the lab's
   pipeline has always read it.
@@ -49,16 +49,16 @@ This mode replicates the script:
   (engine.last_flip_t) rather than by counting frames, so a dropped
   frame shifts one onset instead of every onset after it.
 - Recall: the participant enters the sequence they think they saw,
-  one square at a time (the finger, or V B N M on a keyboard), with
-  BACKSPACE to undo and ENTER or SPACE to submit once every item is
-  in; each entry lights its square yellow for 150 ms, and presses in
-  that 150 ms are dropped as the script drops them.
+  one card at a time (the finger, V B N M on a keyboard, or a click
+  on the card), with BACKSPACE to undo and ENTER or SPACE to submit
+  once every item is in; each entry lights its card for 150 ms, and
+  presses in that 150 ms are dropped as the script drops them.
 - Exports: the script's three CSVs, same names and columns, in the
   session folder (export_files), beside the app's own trials.csv.
 
 WHAT IS NEW. The learning interval, the timing group and the sequence
 come from a setup chosen on the setup screen and kept between
-sessions (game/srt_setup.py). The squares' labels name the finger on
+sessions (game/srt_setup.py). The recall line names the finger on
 the pads and the key on a keyboard. The performance CSV gains columns
 after the script's own (hand, setup, onset time, the interval the
 participant actually got), so the lab's readers still find every
@@ -70,9 +70,11 @@ WHAT DIFFERS AND WHY.
   sample time; key presses are timed when the frame loop reads them,
   up to one frame late, where the script's PsychoPy keyboard stamped
   each key to the millisecond. Pad RTs are the ones to report.
-- Screen geometry is the script's norm units laid over the app's
-  1280 x 800 surface, so the squares keep their size and spacing
-  relative to the window.
+- The look is the app's, not PsychoPy's (28 September 2026): the
+  finger cards every lane game draws, on the light page, with the
+  target lit in its finger's stronger colour where the script turned
+  a grey square red (ui/srt_screen.py). Timing, order, counts, tones,
+  markers and files are the script's; only the drawing changed.
 - The tone plays when the flash is drawn, before the flip, as the
   script's sound.play() did. Its delay to the speaker belongs to the
   machine; tone_lead_ms can move it earlier once measured.
@@ -290,9 +292,9 @@ class SRTMode:
         return bool(getattr(src, "provides_samples", False))
 
     def labels(self) -> list[str]:
-        """What sits under each square: the script's key letters on a
-        keyboard, the finger on the pads (mirrored for the left hand,
-        whose little finger is the leftmost)."""
+        """What each square is called in the recall line: the script's
+        key letters on a keyboard, the finger on the pads (mirrored for
+        the left hand, whose little finger is the leftmost)."""
         if self._labels_override and len(self._labels_override) == 4:
             return list(self._labels_override)
         if not self.on_pads:
@@ -350,13 +352,8 @@ class SRTMode:
         return None
 
     def handle_event(self, e: pygame.event.Event) -> None:
-        if e.type == pygame.MOUSEBUTTONDOWN and getattr(e, "button", 0) == 1:
-            step = self.step
-            if step is not None and step.kind == "recall":
-                sq = self._square_at(getattr(e, "pos", (-1, -1)))
-                if sq is not None:
-                    self._recall_add(sq, self._clock())
-            return
+        # A click on a recall card is the screen's to place: it knows
+        # where the cards are and calls recall_square.
         if e.type != pygame.KEYDOWN:
             return
         lane = self._key_lane(e.key)
@@ -595,7 +592,7 @@ class SRTMode:
         self._flash_now = tr.square
         if not tr.tone_played:
             self._play_tone(tr.square)
-        # The byte rides the flip that shows the red square: armed now,
+        # The byte rides the flip that shows the lit card: armed now,
         # written by the frame loop straight after the flip.
         pending = getattr(self.engine, "_pending_eeg_stim", None)
         if isinstance(pending, list):
@@ -693,7 +690,7 @@ class SRTMode:
 
     @property
     def flash_square(self) -> int | None:
-        """The square drawn red on this frame, or None."""
+        """The square whose card is lit on this frame, or None."""
         return self._flash_now
 
     # ---- logging -------------------------------------------------------------------
@@ -836,40 +833,25 @@ class SRTMode:
         self.recalled.append(int(square))
         self._select = (int(square), now + self.recall_select_s)
 
+    def recall_square(self, square: int) -> None:
+        """Enter one square in the recall, as a click on its card does.
+        Ignored outside the recall step."""
+        step = self.step
+        if step is not None and step.kind == "recall":
+            self._recall_add(int(square), self._clock())
+
     @property
     def select_square(self) -> int | None:
         if self._select is None:
             return None
         return self._select[0] if self._clock() < self._select[1] else None
 
-    def square_rects(self, width: int, height: int) -> list[pygame.Rect]:
-        """The script's squares in its norm units over a width x height
-        window: 0.13 wide and high, centres at x -0.225 -0.075 0.075
-        0.225, y 0."""
-        out = []
-        w = int(round(0.13 * width / 2))
-        h = int(round(0.13 * height / 2))
-        for x_norm in (-0.225, -0.075, 0.075, 0.225):
-            cx = (x_norm + 1.0) / 2.0 * width
-            cy = height / 2.0
-            r = pygame.Rect(0, 0, w, h)
-            r.center = (int(round(cx)), int(round(cy)))
-            out.append(r)
-        return out
-
-    def _square_at(self, pos) -> int | None:
-        layout = getattr(self.engine, "layout", None)
-        w = getattr(layout, "width", 1280)
-        h = getattr(layout, "height", 800)
-        for i, r in enumerate(self.square_rects(w, h)):
-            if r.collidepoint(pos):
-                return i + 1
-        return None
-
     # ---- words ----------------------------------------------------------------------
     def instruction(self) -> str:
         what = "finger" if self.on_pads else "key"
-        return f"Press the {what} that matches the flashing square as fast as you can"
+        if what == "finger":
+            return "Press the finger that lights up, as fast as you can"
+        return "Press the key for the card that lights up, as fast as you can"
 
     def message_text(self, step: Step | None = None) -> str:
         step = step or self.step
@@ -881,17 +863,17 @@ class SRTMode:
         what = "finger" if pads else "key"
         texts = {
             "welcome": ("Welcome to the experiment.\n\n"
-                        "Four grey squares will appear on screen.\n"
-                        f"When a square flashes RED, press the matching {which}"
+                        "Four finger cards will appear on screen.\n"
+                        f"When a card lights up, press the matching {which}"
                         "\n\nPress SPACE to begin."),
             "practice": ("PRACTICE\n\n"
                          "Get familiar with the task.\n"
-                         f"Press the {what} that matches the red square "
+                         f"Press the {what} that matches the lit card "
                          "as fast as you can.\n\n"
                          "Press SPACE to start."),
             "main": ("MAIN TASK\n\n"
                      "You will now complete several blocks.\n"
-                     "Keep responding to the flashing square as fast "
+                     "Keep responding to the lit card as fast "
                      "as you can.\n\n"
                      "Press SPACE to start."),
             "block": (f"Block {step.block} of {self.n_blocks}\n\n"

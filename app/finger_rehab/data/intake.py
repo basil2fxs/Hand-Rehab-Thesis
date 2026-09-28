@@ -1,9 +1,10 @@
-"""Participant intake: study codes, the next free code, the visit
-number, the counterbalancing cell, and the carry-over of hand size
-and pickers from an identity's last game.
+"""Participant intake: study codes, the visit number, the
+counterbalancing cell, and the carry-over of hand size and pickers
+from an identity's last game.
 
-The login screen asks for a participant code or a name. A study
-participant is a code (P01, P02, ...) and never a name: the code keys
+The login screen asks for a name and opens empty. A study participant
+types a code there instead (P01, P02, ..., given out on paper in order
+of consent) and never a name: the code keys
 every session folder, the sessions index, the notebook's who column
 and the hidden sequences in pattern, buzz hunt and echo (all three
 seed from the trimmed, case-folded identity, so P01 at visit 1 and
@@ -33,7 +34,6 @@ from pathlib import Path
 # P32 for the healthy baseline study; the prefix is free so a second
 # cohort (S01, HC01) can share the tree without colliding.
 CODE_RE = re.compile(r"^([A-Za-z]{1,3})(\d{2,4})$")
-DEFAULT_PREFIX = "P"
 DAY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 GAME_RE = re.compile(r"^(.*)_(\d{6})(?:_(.*))?$")
 
@@ -79,17 +79,13 @@ def normalise_code(text: str | None) -> str:
     return m.group(1).upper() + m.group(2)
 
 
-def format_code(prefix: str, number: int, width: int = 2) -> str:
-    return f"{prefix.upper()}{number:0{width}d}"
-
-
 def scan_participants(data_dir: Path | str | None) -> dict[str, set[str]]:
     """Every participant identity in the sessions tree, mapped to the
     days it played on, read from folder names alone.
 
     Missing or unreadable trees are an empty answer, never an error:
     this runs on the login screen, where a broken folder should cost
-    nothing more than an empty suggestion.
+    nothing more than a visit count of one.
     """
     out: dict[str, set[str]] = {}
     if not data_dir:
@@ -116,38 +112,6 @@ def scan_participants(data_dir: Path | str | None) -> dict[str, set[str]]:
                 continue
             out.setdefault(who, set()).add(day_dir.name)
     return out
-
-
-def known_codes(data_dir: Path | str | None,
-                prefix: str = DEFAULT_PREFIX) -> dict[str, set[str]]:
-    """The study codes with the given prefix already in the tree,
-    canonical spelling, mapped to their days."""
-    want = prefix.upper()
-    out: dict[str, set[str]] = {}
-    for who, days in scan_participants(data_dir).items():
-        parsed = parse_code(who)
-        if parsed is None or parsed[0] != want:
-            continue
-        out.setdefault(normalise_code(who), set()).update(days)
-    return out
-
-
-def suggest_next_code(data_dir: Path | str | None,
-                      prefix: str = DEFAULT_PREFIX) -> str:
-    """The next unused code: one past the highest number on disk, or
-    P01 on an empty tree. Gaps are not refilled on purpose: a code
-    that was assigned and never played (a no-show) must stay retired,
-    or two people could end up sharing it."""
-    highest = 0
-    width = 2
-    for code in known_codes(data_dir, prefix):
-        parsed = parse_code(code)
-        if parsed is None:
-            continue
-        _p, n = parsed
-        highest = max(highest, n)
-        width = max(width, len(code) - len(prefix))
-    return format_code(prefix, highest + 1, width)
 
 
 def suggest_visit(data_dir: Path | str | None, participant: str | None,
@@ -201,12 +165,13 @@ def cell_for(participant: str | None) -> dict:
     }
 
 
-# Intake fields worth carrying from one visit to the next. Hand size
+# Intake fields worth carrying from one visit to the next. Hand length
 # does not change between visits, the main hand and sex do not either,
 # so an RA should not have to look them up on the intake sheet twice.
 # Age is left out on purpose: it is part of the match key for a name.
-CARRY_FIELDS = ("hand_length_mm", "hand_breadth_mm", "dominant_hand",
-                "sex")
+# Hand breadth is no longer asked (28 September 2026), so it is not
+# carried either.
+CARRY_FIELDS = ("hand_length_mm", "dominant_hand", "sex")
 
 
 def _folder_identity(text: str) -> str:

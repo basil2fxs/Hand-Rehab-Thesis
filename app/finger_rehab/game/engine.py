@@ -260,6 +260,9 @@ class GameEngine:
         # snapshot the overrides replaced, and one row per step that
         # reached an end. None when no battery is running.
         self._battery: dict | None = None
+        # The preset PLAY ALL runs this session: the study battery, or
+        # the Trial Mode length picked at login (protocol.trials).
+        self._session_preset = "study_battery"
         # Patterns sequence file (data/pattern_file.py): the last
         # import or sync result for the Settings status line, and the
         # refusal when a loaded file does not match the hand picked.
@@ -2730,7 +2733,8 @@ class GameEngine:
                       edinburgh_lq: str | None = None,
                       visit: str | None = None,
                       hand_length_mm: str | None = None,
-                      hand_breadth_mm: str | None = None) -> None:
+                      hand_breadth_mm: str | None = None,
+                      trial: str | None = None) -> None:
         """Log in: the login screen's commit. One session spans every
         game played from here until end_session (or an app quit), so
         the identity typed once tags every block's files and no game
@@ -2806,7 +2810,21 @@ class GameEngine:
         # still picks its hand (the keys differ per hand) and has
         # nothing to measure.
         self._session_hand = None
+        # Trial Mode: a length picked at login is PLAY ALL's preset for
+        # the whole session, and it starts now. The plan names its own
+        # hand and runs the quick calibration for it, so the hand
+        # screen is not needed. Should the plan not start (no preset,
+        # no main hand), the session carries on as free play and the
+        # hub's PLAY ALL line says why.
+        self._session_preset = str(trial or "study_battery")
+        if trial and self.start_battery(self._session_preset):
+            return
         self.show_hand_choice()
+
+    @property
+    def battery_preset(self) -> str:
+        """The preset PLAY ALL runs this session."""
+        return getattr(self, "_session_preset", None) or "study_battery"
 
     def session_minutes(self) -> float:
         """Minutes since login, for the End-session summary line.
@@ -2985,6 +3003,7 @@ class GameEngine:
             self.cfg.data["session"][key] = None
         self.session.battery = {}
         self._session_active = False
+        self._session_preset = "study_battery"
         self._session_hand = None
         self._session_started_perf = None
         self._session_games = 0
@@ -4842,6 +4861,8 @@ class GameEngine:
             seed=seed,
             demo_trials=self._test_mode_trials(),
             demo_levels=demo_levels,
+            short_ladder=bool(self.cfg.get("force_pilot.short_ladder",
+                                           False)),
         )
         self._begin_block("force_pilot")
         # The ladder identity, the hand order and the seed that drew
@@ -6736,11 +6757,13 @@ class GameEngine:
         return True
 
     # ---- study battery ------------------------------------------------------
-    def battery_available(self, preset: str = "study_battery"
+    def battery_available(self, preset: str | None = None
                           ) -> tuple[bool, str]:
         """Whether the hub may start the battery, and if not, the one
-        line that says why."""
+        line that says why. The preset defaults to this session's
+        (battery_preset)."""
         from .battery import build_plan, BatteryError, load_preset
+        preset = preset or self.battery_preset
         if load_preset(self.cfg, preset) is None:
             return False, "No play all preset in the config"
         if not getattr(self, "_session_active", False):
@@ -6776,7 +6799,7 @@ class GameEngine:
                                "plug it in")
         return True, ""
 
-    def start_battery(self, preset: str = "study_battery") -> bool:
+    def start_battery(self, preset: str | None = None) -> bool:
         """Start the study battery for the logged-in participant.
 
         The plan comes from game/battery.build_plan: the cell from the
@@ -6792,6 +6815,7 @@ class GameEngine:
         from .battery import build_plan, BatteryError, apply_overrides
         if self._battery is not None:
             return self.continue_protocol()
+        preset = preset or self.battery_preset
         ok, why = self.battery_available(preset)
         if not ok:
             log.warning("battery not started: %s", why)
@@ -6833,6 +6857,7 @@ class GameEngine:
         self._battery = {
             "id": plan.id,
             "preset": plan.preset,
+            "family": plan.family,
             "cell": dict(plan.cell),
             "dominant_hand": plan.dominant_hand,
             "of": len(steps),
@@ -7060,6 +7085,7 @@ class GameEngine:
         return {
             "id": bat["id"],
             "preset": bat["preset"],
+            "family": str(bat.get("family") or "full"),
             "cell": dict(bat["cell"]),
             "position": int(step.get("position") or 0),
             "of": int(bat["of"]),

@@ -433,6 +433,26 @@ class LadderOrderTests(unittest.TestCase):
         self.assertEqual(self._plan(m1), self._plan(m2))
         self.assertEqual(len(m1._plan), 24)
 
+    def test_the_short_ladder_flies_six_waves_in_ladder_order(self):
+        # Trial Mode's short block (28 September 2026): six of the
+        # twelve, named in the mode file, the mid rest halfway.
+        from finger_rehab.game.modes.force_pilot import SHORT_LADDER
+        m = _mode(_engine(), short_ladder=True)
+        self.assertEqual(SHORT_LADDER, (2, 4, 5, 8, 11, 12))
+        self.assertEqual([w.lvl for w, _h, _p in m._plan],
+                         list(SHORT_LADDER))
+        self.assertTrue(m.ladder_info["short"])
+        self.assertEqual([lv["lvl"] for lv in m.ladder_info["levels"]],
+                         list(SHORT_LADDER))
+        self.assertEqual(m._rest_after, {2})
+        # The full ladder says it is not the short one.
+        self.assertFalse(_mode(_engine()).ladder_info["short"])
+
+    def test_test_mode_keeps_its_own_rungs_over_the_short_ladder(self):
+        m = _mode(_engine(), short_ladder=True, demo_trials=4)
+        self.assertEqual([w.lvl for w in m.levels], [1, 4, 7, 12])
+        self.assertFalse(m.ladder_info["short"])
+
     def test_one_hand_climbs_one_to_twelve(self):
         m = _mode(_engine())
         self.assertEqual([w.lvl for w, _h, _p in m._plan],

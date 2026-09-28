@@ -556,14 +556,37 @@ class DroppedCheckTests(unittest.TestCase):
         self.assertIn("Simon rule", row["criterion"])
 
     def test_the_two_repeat_rows_keep_their_own_reason(self) -> None:
-        # P2 is always dropped; R3 only on a tree with no second
-        # reaction block (the two-pass battery plays it twice).
+        # R3 drops on a tree with no second reaction block (the
+        # two-pass battery plays it twice); P2 drops unless a 60 minute
+        # Trial Mode sitting played Muscle Memory twice.
         for cid, says in (("R3", "repeats no reaction block"),
-                          ("P2", "no block is repeated")):
+                          ("P2", "played Muscle Memory twice")):
             row = self.ra._dropped_row(cid)
             self.assertEqual(row["verdict"], "dropped")
             self.assertIn("played twice", row["detail"])
             self.assertIn(says, row["criterion"])
+
+    def test_p2_is_read_when_muscle_memory_is_played_twice(self) -> None:
+        # The 60 minute Trial Mode sitting plays Muscle Memory a second
+        # time (28 September 2026), so the pre-specified P2 is tested
+        # whenever the tree has both goes, and dropped when it has not.
+        import pandas as pd
+        rows = []
+        for i in range(8):
+            who = f"P{i + 1:02d}"
+            for phase, score in (("pass1", 40.0 + i),
+                                 ("pass2", 60.0 + 3 * i)):
+                rows.append({"participant": who, "mode": "pattern",
+                             "hand": "right", "hand_role": "dominant",
+                             "metric": "learning_score_ms",
+                             "value": score, "n": 30, "phase": phase})
+        long = pd.DataFrame(rows)
+        row = self.ra._p2_row(long, 8)
+        self.assertNotEqual(row["verdict"], "dropped")
+        self.assertEqual(row["n"], 8)
+        self.assertGreater(row["value"], 0)
+        one_go = long[long["phase"] == "pass1"]
+        self.assertEqual(self.ra._p2_row(one_go, 8)["verdict"], "dropped")
 
     def test_the_design_document_carries_the_same_three(self) -> None:
         doc = (ROOT / "docs" / "research"

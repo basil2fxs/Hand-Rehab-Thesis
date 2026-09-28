@@ -32,24 +32,26 @@ os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
 
-# One board, two passes. Pass 1 is the nine one-hand modes; pass 2 is
-# the reliability core in the order pass 1 played it. Order A starts
-# with the timing work, order B with the force and vibration work.
+# One board, two passes. Pass 1 is the eight one-hand modes (Syllables
+# left the healthy sitting on 28 September 2026: it is run on its own
+# with a dyslexic participant); pass 2 is the reliability core plus
+# Rhythm, in the order pass 1 played them. Order A starts with the
+# timing work, order B with the force and vibration work.
 PASS1_A = ["reaction", "rhythm", "echo", "force_pilot", "chords",
-           "buzz_hunt", "pattern", "adaptive", "syllables"]
+           "buzz_hunt", "pattern", "adaptive"]
 PASS1_B = ["force_pilot", "chords", "buzz_hunt", "adaptive",
-           "syllables", "reaction", "rhythm", "echo", "pattern"]
-ORDER_A = PASS1_A + ["reaction", "force_pilot", "chords"]
-ORDER_B = PASS1_B + ["force_pilot", "chords", "reaction"]
-PASS2_MODES = {"reaction", "force_pilot", "chords"}
+           "reaction", "rhythm", "echo", "pattern"]
+ORDER_A = PASS1_A + ["reaction", "rhythm", "force_pilot", "chords"]
+ORDER_B = PASS1_B + ["force_pilot", "chords", "reaction", "rhythm"]
+PASS2_MODES = {"reaction", "rhythm", "force_pilot", "chords"}
 N_STEPS = 12
-N_PASS1 = 9
+N_PASS1 = 8
 # The phase word separates the passes. A test that finds "battery",
 # pre, mid or post here means an older design has crept back in.
 PHASES = ["pass1"] * N_PASS1 + ["pass2"] * (N_STEPS - N_PASS1)
 BUDGET_MIN = 45.0
 HARD_STOP_MIN = 50.0
-BATTERY_ID = "healthy_one_hand_v2"
+BATTERY_ID = "healthy_one_hand_v3"
 # The step after which the rest sits: the first block of pass 2.
 REST_POSITION = N_PASS1 + 1
 
@@ -247,11 +249,8 @@ class OverrideTests(unittest.TestCase):
             # synchronisation to one pacing signal for everybody.
             "rhythm.tactile_mode",
             "echo.games", "echo.max_len",
-            "syllables.rung", "syllables.words_per_block",
-            "syllables.round_size", "syllables.break_s",
-            # Pins the design the study pre-registered, whatever the
-            # participant's age: a profile, never a scoring rule.
-            "syllables.age_band",
+            # Syllables left the healthy sitting (28 September 2026),
+            # so its block settings left the preset with it.
             "game.total_trials",
         }
         self.assertEqual(keys, allowed)
@@ -430,7 +429,6 @@ class BatteryOrderTests(_BatteryHarness):
             self.assertEqual(snap["reaction"]["response_windows_s"], [2.0])
             self.assertEqual(snap["force_pilot"]["passes"], 1)
             self.assertEqual(snap["chords"]["subblocks"], 2)
-            self.assertEqual(snap["syllables"]["words_per_block"], 12)
         # The phase column is cleared once the battery ends.
         self.assertEqual(eng._current_phase, "")
         progress = eng.battery_progress()
@@ -813,7 +811,7 @@ class RestStepTests(_BatteryHarness):
             heading, _pill, wait = results._battery_card_lines(step)
             self.assertEqual(wait, line)
             self.assertEqual(results._rest_lock(step)[0], held)
-        self.assertIn("step 10 of 12", heading)
+        self.assertIn(f"step {REST_POSITION} of {N_STEPS}", heading)
 
     def test_n_is_refused_until_the_floor_then_starts_early(self) -> None:
         import pygame

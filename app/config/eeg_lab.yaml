@@ -65,6 +65,12 @@ reaction:
   fp_eeg_fixed_s: 2.5
 
 protocol:
+  # No SESSION picker in the lab. A length starts its games at LOG IN,
+  # before the RA has started ActiView's recording under the name the
+  # game menu shows, and the home lengths play the app's own Reaction
+  # block rather than the lab's task. PLAY ALL on the menu runs the
+  # lab's sitting below, as it always has.
+  trials: []
   presets:
     study_battery:
       # Play all in the lab plays the lab's own SRT (the Reaction

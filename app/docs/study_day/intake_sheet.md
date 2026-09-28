@@ -37,8 +37,6 @@ Main hand picked at login (the writing hand): Left / Right
 
 Length, wrist crease to middle fingertip: ______ mm
 
-Breadth, across the knuckles, index to little: ______ mm
-
 ## During the session (researcher)
 
 Games finished (tick): 1 [ ] 2 [ ] 3 [ ] 4 [ ] 5 [ ] 6 [ ] 7 [ ] 8 [ ] 9 [ ]

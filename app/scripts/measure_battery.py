@@ -31,6 +31,8 @@ the reaction and rest floors of every mode are what set the time.
     python3 scripts/measure_battery.py --config config/eeg_lab.yaml
                                   the EEG lab's sitting: the SRT once
                                   in place of the two Reaction blocks
+    python3 scripts/measure_battery.py --preset trial_30
+                                  a Trial Mode length (protocol.trials)
 
 ONE RUN IS A SAMPLE OF ONE. Several modes draw fresh material every
 block by design (their seed keys in config are empty so a participant
@@ -639,11 +641,12 @@ def one_sitting(args, seed: int, quiet: bool = False) -> dict | None:
     try:
         eng = build_engine(args.code, args.dominant, tmp, rig,
                            config=getattr(args, "config", None))
-        ok, reason = eng.battery_available()
+        preset = getattr(args, "preset", None) or "study_battery"
+        ok, reason = eng.battery_available(preset)
         if not ok:
             print(f"battery unavailable: {reason}")
             return None
-        if not eng.start_battery():
+        if not eng.start_battery(preset):
             print("battery did not start")
             return None
         cell = eng._battery["cell"]
@@ -771,6 +774,9 @@ def main() -> int:
                     help="a YAML laid over the defaults, as main.py "
                          "--config does; config/eeg_lab.yaml times the "
                          "EEG lab's sitting")
+    ap.add_argument("--preset", default="study_battery",
+                    help="the protocol preset to time; the Trial Mode "
+                         "lengths are trial_15, trial_30 and trial_60")
     ap.add_argument("--repeats", type=int, default=1,
                     help="sittings to time, each on its own seed. The "
                          "battery draws fresh material per block, so one "

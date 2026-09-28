@@ -67,7 +67,6 @@ def _engine(root: Path, screens_stub: bool = True):
     cfg.data["session"]["prefs_file"] = str(root / "prefs.json")
     cfg.data["session"]["participant"] = "P09"
     cfg.data["session"]["age"] = "30"
-    cfg.data["session"]["suggest_code"] = "never"
     cfg.data["report"] = {"enabled": False}
     cfg.data["srt"]["setups_file"] = str(root / "srt_setups.json")
     eng = GameEngine(cfg, KeyboardOnlySource())

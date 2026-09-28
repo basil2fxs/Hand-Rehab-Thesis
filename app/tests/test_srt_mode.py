@@ -32,6 +32,7 @@ os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 import pygame  # noqa: E402
 
 from finger_rehab.game import srt_setup as ss  # noqa: E402
+from finger_rehab.ui.widgets import LaneStrip  # noqa: E402
 
 APP = Path(__file__).resolve().parents[1]
 SCRIPT = (APP.parent / "archive" / "Webler EEG past program"
@@ -64,7 +65,6 @@ def _engine(root: Path, source=None, screens: bool = True, **srt):
     cfg.data["session"]["prefs_file"] = str(root / "prefs.json")
     cfg.data["session"]["participant"] = "P09"
     cfg.data["session"]["age"] = "30"
-    cfg.data["session"]["suggest_code"] = "never"
     cfg.data["report"] = {"enabled": False}
     cfg.data["srt"]["setups_file"] = str(root / "srt_setups.json")
     cfg.data["srt"]["seed"] = 11
@@ -202,17 +202,11 @@ class TheScriptsConstantsAreTheDefaults(unittest.TestCase):
         self.assertEqual(ss.cyclical_pattern(500, 10),
                          list(self.c["CYCLICAL_ISI"]))
 
-    def test_marker_and_squares(self):
+    def test_marker(self):
+        # The squares' size and place are the app's now (AppLook below);
+        # the byte that marks a flash is still the script's.
         self.assertEqual(self.cfg.get("srt.stim_code"),
                          self.c["MARKER_FLASH_ONSET"])
-        from finger_rehab.game.modes.srt import SRTMode
-        rects = SRTMode.square_rects(None, 1280, 800)
-        size = self.c["SQUARE_SIZE"]
-        for r, x in zip(rects, self.c["LANE_POSITIONS"]):
-            self.assertEqual(r.w, round(size * 640))
-            self.assertEqual(r.h, round(size * 400))
-            self.assertEqual(r.centerx, round((x + 1) / 2 * 1280))
-            self.assertEqual(r.centery, 400)
 
     def test_the_tones_are_the_labs_files(self):
         src = SCRIPT.parent / "sounds"
@@ -914,6 +908,233 @@ class TwoHands(unittest.TestCase):
         self.assertEqual(eng.session.battery.get("position"), 1)
 
 
+class AppLook(unittest.TestCase):
+    """The lab's task drawn in the app's own look (28 September 2026):
+    the lane games' finger cards on the theme's page, the target card
+    lit for the flash and nothing else changing. Each of these fails on
+    the screen that drew the script's black window."""
+
+    def setUp(self):
+        pygame.init()
+        self.td = tempfile.TemporaryDirectory()
+        _use(Path(self.td.name))
+
+    def tearDown(self):
+        self.td.cleanup()
+        pygame.quit()
+
+    def _run(self, hand="right", **srt):
+        eng = _engine(Path(self.td.name), **{**_fast_cfg(), **srt})
+        eng.set_hand_mode(hand)
+        eng.begin_srt_block()
+        self.addCleanup(eng._abandon_if_in_block)
+        return eng, eng._screens["srt"], Sim(eng)
+
+    def _to_flash(self, sim):
+        sim.key(pygame.K_SPACE)
+        sim.frame()
+        sim.key(pygame.K_SPACE)
+        sim.frame()
+        while sim.mode.flash_square is None:
+            sim.frame()
+
+    def test_the_cards_are_the_lane_games_cards(self):
+        for hand in ("right", "left"):
+            eng, sc, _sim = self._run(hand)
+            gp = eng._screens["gameplay"]
+            gp.rebuild_lanes()
+            by_square = {eng.mode.lane_to_square(ls.lane): ls.rect
+                         for ls in gp.lanes}
+            self.assertEqual(sc.lane_rects(eng.mode),
+                             [by_square[s] for s in (1, 2, 3, 4)], hand)
+            names = [LaneStrip.FINGER_LABELS[ls.finger]
+                     for ls in sc.lanes(eng.mode)]
+            want = ["Index", "Middle", "Ring", "Pinky"]
+            self.assertEqual(names, want if hand == "right"
+                             else list(reversed(want)))
+
+    def test_only_the_target_card_lights_and_nothing_else_moves(self):
+        eng, sc, sim = self._run()
+        self._to_flash(sim)
+        surf = pygame.Surface((1280, 800))
+        sc.draw(surf)
+        lit = [i + 1 for i, ls in enumerate(sc.lanes(eng.mode)) if ls.active]
+        self.assertEqual(lit, [eng.mode.flash_square])
+        for ls in sc.lanes(eng.mode):
+            self.assertFalse(ls.show_halos)
+            self.assertFalse(ls.show_timing_bar)
+            self.assertFalse(ls.is_pressed)
+        while eng.mode.flash_square is not None:
+            sim.frame()
+        sc.draw(surf)
+        self.assertEqual([ls for ls in sc.lanes(eng.mode) if ls.active], [])
+
+    def test_the_page_is_the_theme_not_the_scripts_black(self):
+        eng, sc, sim = self._run()
+        self._to_flash(sim)
+        surf = pygame.Surface((1280, 800))
+        sc.draw(surf)
+        self.assertEqual(tuple(surf.get_at((4, 4)))[:3], eng.theme.background)
+
+    def test_a_click_on_a_recall_card_enters_it(self):
+        eng, sc, _sim = self._run()
+        m = eng.mode
+        m.step_i = next(i for i, s in enumerate(m.steps)
+                        if s.kind == "recall")
+        rect = sc.lane_rects(m, recall=True)[2]
+        sc.handle_event(pygame.event.Event(
+            pygame.MOUSEBUTTONDOWN, {"button": 1, "pos": rect.center}))
+        self.assertEqual(m.recalled, [3])
+        # A click off the cards enters nothing.
+        m._select = None
+        sc.handle_event(pygame.event.Event(
+            pygame.MOUSEBUTTONDOWN, {"button": 1, "pos": (5, 5)}))
+        self.assertEqual(m.recalled, [3])
+
+    def test_the_words_name_cards_not_squares(self):
+        eng, _sc, _sim = self._run()
+        m = eng.mode
+        texts = [m.message_text(s) for s in m.steps if s.kind == "message"]
+        texts.append(m.instruction())
+        for text in texts:
+            for word in ("square", "RED", "grey", "red "):
+                self.assertNotIn(word, text)
+        self.assertIn("lights up", m.instruction())
+
+
+class EveryHand(unittest.TestCase):
+    """The app look on every hand the task can run on: the right hand,
+    the left hand (mirrored, little finger leftmost), both boards with
+    a one-hand setup (the right hand answers), and the lab's two-hand
+    layout (left middle, left index, right index, right middle). For
+    each: the cards on screen are the fingers that answer, a pad press
+    on the lit card's finger scores correct, and a click on a recall
+    card enters that card."""
+
+    CASES = {
+        # name: (hand picked, setup hands, (hand, finger) left to right)
+        "right": ("right", "one", [("right", 0), ("right", 1),
+                                   ("right", 2), ("right", 3)]),
+        "left": ("left", "one", [("left", 3), ("left", 2),
+                                 ("left", 1), ("left", 0)]),
+        "both, one-hand setup": ("both", "one", [("right", 0), ("right", 1),
+                                                 ("right", 2), ("right", 3)]),
+        "two-hand setup": ("right", "two", [("left", 1), ("left", 0),
+                                            ("right", 0), ("right", 1)]),
+    }
+
+    def setUp(self):
+        pygame.init()
+
+    def tearDown(self):
+        pygame.quit()
+
+    def _run(self, hand, hands):
+        td = tempfile.TemporaryDirectory()
+        self.addCleanup(td.cleanup)
+        root = Path(td.name)
+        store = ss.SetupStore(root / "srt_setups.json")
+        assert not store.set_current(ss.SRTSetup(
+            "test", "constant", 500, ss.LAB_SEQUENCE, hands))
+        eng = _engine(root, **_fast_cfg())
+        eng.set_hand_mode(hand)
+        eng.begin_srt_block()
+        self.addCleanup(eng._abandon_if_in_block)
+        return eng, eng._screens["srt"], Sim(eng)
+
+    def test_the_cards_are_the_fingers_that_answer(self):
+        for name, (hand, hands, want) in self.CASES.items():
+            with self.subTest(name):
+                eng, sc, _sim = self._run(hand, hands)
+                m = eng.mode
+                got = [(ls.hand, ls.finger) for ls in sc.lanes(m)]
+                self.assertEqual(got, want)
+                # Each card is the finger its square answers to.
+                for square, ls in enumerate(sc.lanes(m), start=1):
+                    lane = m.square_to_lane(square)
+                    self.assertEqual(m.lane_to_square(lane), square)
+                    self.assertEqual(lane % 4, ls.finger)
+                    self.assertEqual("left" if (lane >= 4 or (
+                        not m.two_hands and eng.hand_mode == "left"))
+                        else "right", ls.hand)
+
+    def test_a_pad_press_on_the_lit_finger_is_correct(self):
+        from finger_rehab.hardware.fsr_detector import PressEvent
+        for name, (hand, hands, _want) in self.CASES.items():
+            with self.subTest(name):
+                eng, sc, sim = self._run(hand, hands)
+                m = eng.mode
+                sim.key(pygame.K_SPACE)
+                sim.frame()
+                sim.key(pygame.K_SPACE)
+                sim.frame()
+                tr = m.trial
+                while tr.onset is None:
+                    sim.frame()
+                surf = pygame.Surface((1280, 800))
+                sc.draw(surf)
+                lit = [i + 1 for i, ls in enumerate(sc.lanes(m))
+                       if ls.active]
+                self.assertEqual(lit, [tr.square])
+                lane = m.square_to_lane(tr.square)
+                m.queue_press(PressEvent(
+                    lane=lane, t_perf=tr.onset + 0.3, value=0,
+                    baseline=0.0,
+                    hand="left" if lane >= 4 else eng.hand_mode))
+                sim.frame()
+                self.assertEqual(m.perf_rows[0]["accuracy"], "correct")
+
+    def test_a_recall_click_enters_the_card_clicked(self):
+        for name, (hand, hands, _want) in self.CASES.items():
+            with self.subTest(name):
+                eng, sc, _sim = self._run(hand, hands)
+                m = eng.mode
+                m.step_i = next(i for i, s in enumerate(m.steps)
+                                if s.kind == "recall")
+                for square in (1, 4, 2):
+                    rect = sc.lane_rects(m, recall=True)[square - 1]
+                    m._select = None
+                    sc.handle_event(pygame.event.Event(
+                        pygame.MOUSEBUTTONDOWN,
+                        {"button": 1, "pos": rect.center}))
+                self.assertEqual(m.recalled, [1, 4, 2])
+
+    def test_the_practice_word_is_drawn_in_the_pages_colours(self):
+        eng, sc, sim = self._run("right", "one")
+        m = eng.mode
+        seen = []
+        real_font = sc.layout.font
+
+        class _SpyFont:
+            def __init__(self, font):
+                self._font = font
+
+            def render(self, text, aa, colour, *args, **kwargs):
+                seen.append((str(text), tuple(colour)[:3]))
+                return self._font.render(text, aa, colour, *args, **kwargs)
+
+            def __getattr__(self, name):
+                return getattr(self._font, name)
+        sc.layout.font = lambda pt, bold=False: _SpyFont(real_font(pt, bold))
+        self.addCleanup(setattr, sc.layout, "font", real_font)
+        sim.key(pygame.K_SPACE)
+        sim.frame()
+        sim.key(pygame.K_SPACE)
+        sim.frame()
+        tr = m.trial
+        while tr.onset is None:
+            sim.frame()
+        sim.key(Sim.KEYS[tr.square - 1], at=tr.onset + 0.3)
+        for _ in range(60):
+            sim.frame()
+            if m.feedback_now:
+                break
+        self.assertEqual(m.feedback_now[0], "Correct")
+        sc.draw(pygame.Surface((1280, 800)))
+        colours = [c for text, c in seen if text == "Correct"]
+        self.assertEqual(colours, [eng.theme.success])
+
+
 class TheCardAndTheSetupScreen(unittest.TestCase):
 
     def setUp(self):
@@ -988,6 +1209,77 @@ class TheCardAndTheSetupScreen(unittest.TestCase):
         sc.draw(surf)
         self.eng.show_srt_setup()
         self.assertFalse(self.eng.screen_obj.show_sequence)
+
+    def _drawn(self, sc) -> list[str]:
+        """Every string the setup screen renders through its layout."""
+        seen: list[str] = []
+        real_font = sc.layout.font
+
+        class _SpyFont:
+            def __init__(self, font):
+                self._font = font
+
+            def render(self, text, *args, **kwargs):
+                seen.append(str(text))
+                return self._font.render(text, *args, **kwargs)
+
+            def __getattr__(self, name):
+                return getattr(self._font, name)
+        sc.layout.font = lambda pt, bold=False: _SpyFont(real_font(pt, bold))
+        try:
+            sc.draw(pygame.Surface((1280, 800)))
+        finally:
+            sc.layout.font = real_font
+        return seen
+
+    def test_the_first_view_holds_only_what_changes_per_person(self):
+        # The screen used to show every control at once. The first
+        # view is the timing group, musical experience and START; the
+        # rest waits behind More options (28 September 2026).
+        self.eng.show_srt_setup()
+        sc = self.eng.screen_obj
+        blob = " | ".join(self._drawn(sc))
+        for word in ("Timing group", "Musical experience", "START",
+                     "More options"):
+            self.assertIn(word, blob)
+        for word in ("Learning interval", "Saved setups", "Hands",
+                     "Sequence", "Save these settings"):
+            self.assertNotIn(word, blob)
+        sc._toggle_more()
+        blob = " | ".join(self._drawn(sc))
+        for word in ("Learning interval", "Saved setups", "Hands",
+                     "Sequence", "Done"):
+            self.assertIn(word, blob)
+        self.assertNotIn("Timing group", blob)
+
+    def test_a_change_in_more_options_is_said_on_the_first_view(self):
+        self.eng.show_srt_setup()
+        sc = self.eng.screen_obj
+        self.assertNotIn("Changed in More options",
+                         " | ".join(self._drawn(sc)))
+        sc._toggle_more()
+        sc._nudge(-100)
+        sc._toggle_more()
+        self.assertFalse(sc.more)
+        blob = " | ".join(self._drawn(sc))
+        self.assertIn("Changed in More options", blob)
+        self.assertIn("400", blob)
+
+    def test_enter_on_the_first_view_starts_the_task(self):
+        self.eng.show_srt_setup()
+        sc = self.eng.screen_obj
+        sc.handle_event(pygame.event.Event(
+            pygame.KEYDOWN, {"key": pygame.K_RETURN, "mod": 0,
+                             "unicode": "\r", "scancode": 0}))
+        self.assertTrue(self.eng.block_is_running())
+        self.assertEqual(self.eng.current_block, "srt")
+
+    def test_the_setup_opens_on_the_first_view(self):
+        self.eng.show_srt_setup()
+        sc = self.eng.screen_obj
+        sc._toggle_more()
+        self.eng.show_srt_setup()
+        self.assertFalse(self.eng.screen_obj.more)
 
     def test_musical_experience_belongs_to_the_login(self):
         self.eng._srt_musical_experience = 4

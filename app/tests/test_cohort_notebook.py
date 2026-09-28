@@ -613,7 +613,11 @@ class CohortNotebookTests(unittest.TestCase):
         self.assertIn("modes_missing", tbl.columns)
         self.assertTrue(tbl["modes_missing"].str.contains("chords").all())
         self.assertIn("COHORT: FEASIBILITY", self.out)
-        self.assertIn("finished all", self.out)
+        self.assertIn("finished every block of their sitting", self.out)
+        # Each participant is read against their own sitting: here the
+        # study battery for everyone.
+        self.assertIn("sitting", tbl.columns)
+        self.assertIn("budget_min", tbl.columns)
         self.assertIn("chassis fit", self.out)
         # Whether the rig found its ports or had them written in by
         # hand depends on the laptop, so what is pinned is that the

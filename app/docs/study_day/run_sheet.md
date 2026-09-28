@@ -18,17 +18,16 @@ notes box on the intake sheet.
 
 - [ ] Give the information sheet. Let them read it and ask questions.
 - [ ] Consent form signed. No signature, no session.
-- [ ] Assign the next code (the login screen suggests the next free
-      one, P01, P02 and so on). Write it on the intake sheet and the
-      consent form. The code is the only link to their name, and the
-      consent forms are kept apart from everything else.
+- [ ] Assign the next code in order of consent: P01, P02 and so on.
+      Write it on the intake sheet and the consent form. The code is
+      the only link to their name, and the consent forms are kept
+      apart from everything else.
 - [ ] Intake sheet: age, sex, the four Edinburgh questions (they tick
       the boxes themselves), caffeine in the last 2 hours, hours of
       sleep, any hand pain or injury today (if yes, thank them and
       stop: they cannot take part today).
 - [ ] Measure the RIGHT hand with the ruler: length from the wrist
-      crease to the tip of the middle finger, breadth across the
-      knuckles (index to little finger). Millimetres.
+      crease to the tip of the middle finger. Millimetres.
 
 ## Seat and log in (5 min)
 
@@ -43,23 +42,25 @@ notes box on the intake sheet.
 - [ ] Say once: "After each game the screen shows how your last few
       goes compared with your first few." Don't repeat it and don't
       comment on scores during the session.
-- [ ] Login screen: code, age, sex, hand length and breadth.
+- [ ] Login screen: type the code in NAME, then age, sex and hand
+      length. SESSION: 45 min.
 - [ ] MAIN HAND: ask "Which hand do you write with?" and pick that one,
       Left or Right. This is their real handedness, recorded for the
       analysis. It does not change the device.
-- [ ] LOG IN.
-- [ ] Hand screen: pick RIGHT HAND. The device is the right hand for
-      everyone, left-handers included. (Picking Left by mistake is not
-      fatal: Play all moves the board to the right hand anyway.)
-- [ ] Quick calibration: hand off, hand resting, then one light press
-      per finger. If a finger fails, redo it once, then carry on and
-      note it.
+- [ ] LOG IN. The app puts the board on the right hand, the device
+      hand for everyone, left-handers included.
+- [ ] Quick calibration opens by itself: hand off, hand resting, then
+      one light press per finger. If a finger fails, redo it once,
+      then carry on and note it.
 
-## Play all (about 43 minutes on the rig)
+## Play all (about 44 minutes on the rig)
 
-- [ ] Press PLAY ALL on the hub (or A). After each game press Start on
-      the NEXT UP card (or N). The strip shows PLAY ALL k/12 and the
-      minutes: amber past 45, red past the 50 minute hard stop.
+- [ ] The first game starts after the calibration. After each game
+      press Start on the NEXT UP card (or N). The strip shows PLAY ALL
+      k/12 and the minutes: amber past 45, red past the 50 minute hard
+      stop. (The 15, 30 and 60 minute SESSION lengths are for sittings
+      that cannot take 45 minutes or can take an hour:
+      docs/research/trial_mode.md.)
 - [ ] Don't coach during a game. Let them skip a game's own rest
       (Space) only when they say they're ready.
 - [ ] Tick each game on the intake sheet as it ends.
@@ -110,8 +111,9 @@ The order comes from the code, and every game is the right hand:
   Play all switches it off for the sitting and back on afterwards.
 - A game can't be run at all: Skip step (S) on the hub, confirm, and
   write the reason.
-- The app closes: open it, log in with the same code and main hand,
-  press PLAY ALL. Finished games are not played again.
+- The app closes: open it, log in with the same code, main hand and
+  SESSION (45 min). It carries on from the first game not finished;
+  finished games are not played again.
 - Past 50 minutes: let the current game finish, stop, write down what
   was missed. Pattern is the one to lose.
 - They want to stop: stop. No reason needed. Write down where.

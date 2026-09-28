@@ -33,7 +33,7 @@ Two commands do the checking, both from the project folder:
 |---|---|
 | 0 to 10 | Welcome, information sheet, consent, intake sheet with the Edinburgh short form, hand measurements |
 | 10 to 15 | Hands washed, seated, login, quick calibration |
-| 15 to 58 | Play all: pass 1 (nine games), a 3 minute rest, pass 2 (three games again). The app measures this at about 43 minutes on the rig including login and calibration |
+| 15 to 58 | Play all: pass 1 (nine games), a 3 minute rest, pass 2 (three games again). The app measures this at about 44 minutes on the rig including login and calibration |
 | 58 to 60 | Results screen, two fatigue questions, end the session, debrief |
 | after | Wipe the pads, reset for the next person |
 

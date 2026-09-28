@@ -394,6 +394,19 @@ LADDER: tuple[WaveLevel, ...] = (
 
 LADDER_BY_LVL = {w.lvl: w for w in LADDER}
 
+# The short ladder a Trial Mode short block flies
+# (force_pilot.short_ladder, docs/research/trial_mode.md): six of the
+# twelve waves, in ladder order, keeping one of each thing the measures
+# read. Tide is a rise, a hold and an ease off; Stairs the steps; Hills
+# the slow ramps; Dunes the slow climb and fast drop the release
+# measures need; Storm and Uncharted the pair that separates learning
+# these waves from getting used to the pad. Defined here and not in the
+# config, for the same reason the ladder is: a config edit must not be
+# able to change which waves a result rests on. A block records the
+# levels it flew (ladder_info), so a short block is never pooled with a
+# full one by accident.
+SHORT_LADDER: tuple[int, ...] = (2, 4, 5, 8, 11, 12)
+
 
 def _hold(name: str, dur: float, a: float) -> dict:
     return {"nm": name, "k": "h", "d": float(dur), "a": round(float(a), 4)}
@@ -890,6 +903,7 @@ class ForcePilotMode(WaitSkip):
                  demo_trials: int | None = None,
                  demo_levels: list[int] | None = None,
                  levels: list[int] | None = None,
+                 short_ladder: bool = False,
                  hand_order: list[str] | None = None
                  ) -> None:
         self.engine = engine
@@ -922,6 +936,10 @@ class ForcePilotMode(WaitSkip):
         wanted = list(levels) if levels else None
         if wanted is None and self.demo:
             wanted = list(demo_levels or [1, 4, 7, 12])
+        elif wanted is None and short_ladder:
+            wanted = list(SHORT_LADDER)
+        self.short_ladder = (wanted is not None and not self.demo
+                             and tuple(wanted) == SHORT_LADDER)
         self.levels: list[WaveLevel] = [
             LADDER_BY_LVL[int(n)] for n in (wanted or [w.lvl for w in LADDER])
             if int(n) in LADDER_BY_LVL]
@@ -982,6 +1000,7 @@ class ForcePilotMode(WaitSkip):
         # with this one, and the results screen reads it per frame.
         self.ladder_info = {
             "id": LADDER_ID,
+            "short": bool(self.short_ladder),
             "passes": self.passes,
             "hand_order": list(self.hand_order),
             "levels": [

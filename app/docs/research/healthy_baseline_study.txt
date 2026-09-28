@@ -35,6 +35,11 @@ HOW THE DESIGN GOT HERE (every change made before any participant):
     used to take now buy a second pass of the three core modes,
     which gives the design the within-session test-retest it did not
     have. The Syllables prompt became progressive (Section 1.4).
+  - 28 September 2026: TRIAL MODE. The login's SESSION picker runs
+    this sitting (45 min, unchanged) or a 15, 30 or 60 minute length
+    built from its own blocks with its own settings (Section 2.5,
+    docs/research/trial_mode.md). Hand breadth is no longer measured:
+    no check or table read it.
 
 What one board costs, and the thesis says it in the same breath as
 the results:
@@ -1037,6 +1042,12 @@ P06 over both orders, P04 and P06 left-handed), 48 in all: medians
 minute budget and none near the 50 minute hard stop. Quote the median
 and the range, not one run.
 
+Re-measured 28 September 2026, after the code review of 27 September,
+with the same 48 sittings: medians 43.9 to 44.3 minutes, range 43.4
+to 45.2. Three of 48 ran up to 9 seconds past the 45 minute budget
+and none came near the hard stop, so the trim ladder below is still
+untouched.
+
 Read the headroom honestly: about a minute against the budget. The
 model hand is a healthy adult on a good day, so a slower participant
 turns the strip amber, and amber means "into the booking's buffer"
@@ -1101,10 +1112,8 @@ and
 config_snapshot shows the short-form keys the block ran under. A
 block that follows the scheduled rest also carries
 battery.rest_before_s, the rest the participant actually took.
-No --config file and no per-participant yaml is needed; a study
-laptop only needs session.suggest_code: always so the login offers
-P01 on an empty tree (the default, auto, offers a code once one
-exists on the machine).
+No --config file and no per-participant yaml is needed; the RA
+types the code into the login's NAME field, which opens empty.
 
 The two waits are preset keys, not code: stretch_s 60 (a suggestion,
 the button is never locked), rest_s 180 and rest_min_s 60 (the
@@ -1243,6 +1252,32 @@ Statistical cost of each short form:
   in the session so that every one-hand mode is played and so the
   sitting changes pace.
 
+2.5 Trial Mode: shorter and longer sittings (28 September 2026)
+--------------------------------------------------------------
+The login's SESSION picker offers Free play or a timed length, and a
+length starts its games at LOG IN. Every length plays this sitting's
+own blocks with this sitting's own settings (protocol.presets,
+overrides_from: study_battery), so a block of one pass pools across
+lengths. The reasoning and the per-block value table are in
+docs/research/trial_mode.md; in brief, timed over 48 sittings each:
+
+  Length  Blocks                                   Median   Range
+  15      Reaction, Adaptive, Chords, Force Pilot  14.3-14.5 13.9-15.2
+  30      the 15 plus Syllables, a 3 minute rest,  28.2-28.6 27.6-29.4
+          then Reaction, Chords, Force Pilot again
+  45      this sitting, unchanged                  43.9-44.3 43.4-45.2
+  60      this sitting, then a second go at        57.4-57.7 56.9-58.7
+          Rhythm, Echo, Muscle Memory, Adaptive
+
+The 45 stays the sitting for the collection day. The 60 is the 45
+block for block with four more blocks after it, so a participant who
+sits it gives every number the 45 gives, plus P2 (Section 4.6) and an
+exploratory second-go table. The 30 keeps the whole test-retest core
+(T1 to T5 and R3). The 15 gives the core's pass 1 only. The lab's own
+build shows no SESSION picker (config/eeg_lab.yaml): a length starts
+at LOG IN, before the RA has started the EEG recording, so PLAY ALL on
+the menu runs the lab's sitting as before.
+
 
 3. PARTICIPANT INTAKE, ANONYMITY AND KEYING
 ============================================
@@ -1254,10 +1289,10 @@ is the only identity the software ever sees. The consent log (name,
 code, contact) is a separate paper or encrypted file held by the
 supervisor and destroyed at study close.
 
-The login screen suggests the next free code off the sessions tree
-(one past the highest P-code on disk, gaps never refilled) and the
-RA presses Enter to take it, or types over it. This matters twice:
-the code keys every session folder
+The login's NAME field opens empty and the RA types the code.
+Nothing is suggested: bench sessions on the same machine would push a
+suggestion past P01 (the author's laptop offered P674). The code
+matters twice: it keys every session folder
 (sessions/YYYY-MM-DD/P01_HHMMSS_<mode>/), the sessions_index.csv
 participant column, the notebook's who column and
 sessions/individual_patient_results/P01/summary.html; and the
@@ -1281,7 +1316,7 @@ well (Section 5.2):
 
   Field                    Where it goes
   -----------------------------------------------------------------
-  participant code         login field (suggested); metadata
+  participant code         login NAME field; metadata
                            participant
   age, years               login field; metadata age
   sex                      login picker: female, male, other, not
@@ -1305,16 +1340,17 @@ well (Section 5.2):
                            edinburgh_lq stays in the file, empty
                            for new sessions, so old data reads on.
   hand length, mm          login field; metadata hand_length_mm
-                           (main hand; the sheet keeps both). The
+                           (the device hand, as measured). The
                            login fills it from an earlier session
                            when the code (or name and age) matches,
                            tagged "from before" on screen; typing
                            over replaces it. With one session per
                            person that path is only used for a
                            repeated pilot code.
-  hand breadth, mm         login field; metadata hand_breadth_mm,
-                           filled the same way (so are main hand
-                           and sex)
+  hand breadth, mm         not asked since 28 September 2026 (no
+                           check or table read it); metadata
+                           hand_breadth_mm stays, empty, so old
+                           data reads on
   cell (A/B, hand first)   derived from the code (data/intake.py
                            cell_for); written as battery.cell in
                            every battery block's metadata
@@ -1337,16 +1373,16 @@ cohort is identified by the code and by the battery id in every
 battery block's metadata, and the intake sheet carries "healthy
 control".
 
-Hand measurements: hand length from the distal wrist crease to the
-tip of the middle finger, hand breadth across the metacarpal heads,
-ruler or calliper, the right hand (the device hand), once. They feed
-the existing sec_hand_size check against the chassis sizing range.
+Hand measurement: hand length from the distal wrist crease to the
+tip of the middle finger, ruler or calliper, the right hand (the
+device hand), once. It feeds sec_hand_size against the chassis sizing
+range (objective A3).
 
 3.3 Per-participant config
 --------------------------
 None is needed. The login intake replaced the per-participant yaml
-idea: the RA launches the app as shipped, the login suggests the
-code and works out the visit, the fields above take a few seconds,
+idea: the RA launches the app as shipped, types the code, the
+login works out the visit, the fields above take a few seconds,
 and the PLAY ALL button does the rest. The config keys session.sex,
 session.edinburgh_lq and session.visit still exist so a yaml passed
 as --config can pre-fill the screen (or record an LQ), and a value
@@ -1747,8 +1783,11 @@ Rows carry the word DROPPED and their reason, so that a reader who
 finds them in Section 1 finds out here what happened to them:
 
   P2  pattern, larger learning score on the second go and a faster
-      trained-take RT. DROPPED: needs the pattern block played
-      twice. P1 and P3 are unaffected and Pattern still has checks.
+      trained-take RT. DROPPED from the 45 minute sitting: needs the
+      pattern block played twice. P1 and P3 are unaffected and
+      Pattern still has checks. The 60 minute Trial Mode sitting
+      plays Muscle Memory twice, and the notebook tests P2 on
+      whoever sat it (Section 2.5).
   E2  echo, hidden-sequence trials more accurate than novel ones at
       matched length. DROPPED: the hidden repeat only exists under
       echo's ladder rule and the battery plays the Simon rule, so
@@ -2116,7 +2155,7 @@ person.
 
 BEFORE THE FIRST SESSION OF THE DAY (10 min)
   [ ] Laptop on mains power, app launched as shipped; the login
-      screen suggests the next free code (Pxx).
+      screen opens with NAME empty.
   [ ] Plug in the one board, fitted in the right-hand chassis. It
       self-tests with a short buzz. Nothing else is plugged in.
   [ ] Pads and frame wiped. Finger cots, ruler, intake sheets and
@@ -2129,8 +2168,8 @@ BEFORE EACH SESSION (5 min, inside the 15)
       last two hours (yes/no), hours of sleep last night.
 
 ARRIVAL (15 min, off the clock)
-  [ ] Consent, EHI short form, hand length and breadth of the right
-      hand, code assigned. A left-hander may take part: tick
+  [ ] Consent, EHI short form, hand length of the right hand, code
+      assigned. A left-hander may take part: tick
       "left-handed, device on the non-dominant hand" on the sheet.
   [ ] Hands washed. Seat height so forearms rest flat, fingers index
       to little on the four pads, thumbs off the frame.
@@ -2148,15 +2187,13 @@ ARRIVAL (15 min, off the clock)
 
 CLOCK STARTS (target 45 min, hard stop 50)
   [ ] Check the login: code, age, sex, MAIN HAND (Left or Right,
-      required), hand length and breadth. The EHI score stays on the
-      sheet. LOG IN, then pick RIGHT HAND on the hand screen. Quick
-      calibration runs: hand off, hand resting, then a light press
-      per finger. If a finger fails, redo once, then continue and
-      note it. (Picking Left by mistake is not fatal: PLAY ALL puts
-      the board on the right hand and calibrates it first.)
-  [ ] Press PLAY ALL on the hub (or A). The app plays the order
-      below; after each block press Start on the NEXT UP card (or
-      N). The card names the step and the pass; the strip reads PLAY
+      required), hand length, SESSION 45 min. The EHI score stays on
+      the sheet. LOG IN: the app puts the board on the right hand and
+      runs the quick calibration (hand off, hand resting, then a
+      light press per finger; if a finger fails, redo once, then
+      continue and note it), then the first block starts.
+  [ ] The app plays the order below; after each block press Start on
+      the NEXT UP card (or N). The card names the step and the pass; the strip reads PLAY
       ALL k/12 with the minutes beside it, amber past the target and
       red past the hard stop. If the board drops between blocks the
       card says "Waiting for the board" and the step stays put: plug
@@ -2165,8 +2202,8 @@ CLOCK STARTS (target 45 min, hard stop 50)
       (S), which asks first, and the reason written on the sheet; a
       block ended early is offered again.
   [ ] If the app closes mid-sitting, open it, log in with the same
-      code and main hand, and press PLAY ALL: blocks finished today
-      are not played again. If the close fell inside the rest, the
+      code, main hand and SESSION: blocks finished today are not
+      played again. If the close fell inside the rest, the
       rest step waits on the hub under its hold, counted from the
       last block's end (its metadata), and the strip's minutes carry
       on from the first block of the day (27 September 2026 review).

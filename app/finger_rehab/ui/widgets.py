@@ -1345,16 +1345,10 @@ class TextInput:
         self.font_pt = font_pt
         self.focused = False
         self.hover = False
-        # Type-over state for a field pre-filled with a SUGGESTION (the
-        # next free participant code): the first character typed
-        # replaces the whole text instead of appending to it, so a
-        # name is one keystroke away from a suggested code. Cleared by
-        # any edit, and by a click into the field.
-        self.select_all = False
         # Filled from an earlier visit's metadata (hand size on the
         # login screen). Drawn with a small tag so the RA can see the
-        # value was not typed today, and typed over as a whole, the
-        # same way a suggestion is. Cleared by any edit.
+        # value was not typed today, and typed over as a whole: the
+        # first character typed replaces it. Cleared by any edit.
         self.prefilled = False
         self._born = time.perf_counter()
 
@@ -1366,20 +1360,16 @@ class TextInput:
         """Fill the field from an earlier record and mark it so."""
         self.text = str(text)
         self.prefilled = bool(self.text)
-        self.select_all = False
 
     def handle_event(self, e: pygame.event.Event) -> None:
         if e.type == pygame.MOUSEMOTION:
             self.hover = self.rect.collidepoint(e.pos)
         elif e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
             self.focused = self.rect.collidepoint(e.pos)
-            if self.focused:
-                self.select_all = False
         elif e.type == pygame.KEYDOWN and self.focused:
-            replace_whole = self.select_all or self.prefilled
+            replace_whole = self.prefilled
             if e.key == pygame.K_BACKSPACE:
                 self.text = "" if replace_whole else self.text[:-1]
-                self.select_all = False
                 self.prefilled = False
             elif e.key in (pygame.K_RETURN, pygame.K_TAB, pygame.K_ESCAPE):
                 # Defocus on Enter / Tab / Esc so global handlers can
@@ -1398,7 +1388,6 @@ class TextInput:
                         return
                 if replace_whole:
                     self.text = ""
-                    self.select_all = False
                     self.prefilled = False
                 if len(self.text) < self.max_len:
                     self.text += ch

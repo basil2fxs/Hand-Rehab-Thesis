@@ -545,9 +545,11 @@ def build_engine(code: str, truth: dict, data_dir: Path,
 
 def play_session(code: str, truth: dict, data_dir: Path,
                  clock: mb.SimClock, fps: float, cap_s: float,
-                 seed: int) -> tuple[list, float]:
+                 seed: int, preset: str = "study_battery"
+                 ) -> tuple[list, float]:
     """One sitting: login, battery, every NEXT UP and every rest, end
-    session. Returns (rows per block, total simulated minutes)."""
+    session. Returns (rows per block, total simulated minutes).
+    `preset` is the sitting: the study battery or a Trial Mode length."""
     rig = mb.FakeRig()
     hand = mb.HandModel(rng=random.Random(seed))
     noise_rng = random.Random(seed + 7)
@@ -557,10 +559,10 @@ def play_session(code: str, truth: dict, data_dir: Path,
     waits_s = 0.0
     rests_s = 0.0
     try:
-        ok, reason = eng.battery_available()
+        ok, reason = eng.battery_available(preset)
         if not ok:
             raise SystemExit(f"{code}: battery unavailable: {reason}")
-        if not eng.start_battery():
+        if not eng.start_battery(preset):
             raise SystemExit(f"{code}: battery did not start")
         while eng.block_is_running():
             mode = str(eng.current_block)
@@ -619,7 +621,12 @@ def main() -> int:
     ap.add_argument("--fps", type=float, default=120.0)
     ap.add_argument("--cap-min", type=float, default=20.0)
     ap.add_argument("--seed", type=int, default=2026)
+    ap.add_argument("--presets", default="study_battery",
+                    help="comma-separated sittings, dealt to the codes in "
+                         "turn: study_battery, or the Trial Mode lengths "
+                         "trial_15, trial_30 and trial_60")
     args = ap.parse_args()
+    presets = [s.strip() for s in args.presets.split(",") if s.strip()]
 
     out = Path(args.out).resolve()
     if REPO in out.parents or out == REPO:
@@ -651,12 +658,14 @@ def main() -> int:
         for i, (code, t) in enumerate(truth.items()):
             if code not in todo:
                 continue
+            preset = presets[i % len(presets)]
             rows, total_min = play_session(
                 code, t, root, clock, args.fps, args.cap_min * 60.0,
-                args.seed * 100 + i)
+                args.seed * 100 + i, preset)
             block_rows.extend(rows)
             completed = sum(1 for r in rows if r["status"] == "completed")
-            session_rows.append({"code": code, "dominant": t["dominant"],
+            session_rows.append({"code": code, "preset": preset,
+                                 "dominant": t["dominant"],
                                  "blocks": len(rows),
                                  "completed": completed,
                                  "minutes": round(total_min, 2)})
@@ -675,15 +684,25 @@ def main() -> int:
             w.writerows(rows)
     mins = sorted(r["minutes"] for r in session_rows)
     mid = mins[len(mins) // 2]
-    # The shipped target, read off the preset rather than typed here,
-    # so a config change cannot leave this line quoting a dead number.
+    # Each sitting's own target, read off its preset rather than typed
+    # here, so a config change cannot leave this line quoting a dead
+    # number, and a 60 minute trial is not called over a 45 minute one.
     from finger_rehab.config import Config
-    budget = float((Config.load().get("protocol.presets.study_battery")
-                    or {}).get("budget_min") or 45.0)
+    cfg = Config.load()
+
+    def budget_of(name: str) -> float:
+        return float((cfg.get(f"protocol.presets.{name}") or {})
+                     .get("budget_min") or 45.0)
+    over = sum(1 for r in session_rows
+               if r["minutes"] > budget_of(r["preset"]))
+    targets = sorted({budget_of(r["preset"]) for r in session_rows})
     print()
     print(f"  {len(mins)} sessions: min {mins[0]:.1f}, median {mid:.1f}, "
-          f"max {mins[-1]:.1f} min against a {budget:.0f} min target; "
-          f"{sum(1 for m in mins if m > budget)} over")
+          f"max {mins[-1]:.1f} min against "
+          + (f"a {targets[0]:.0f} min target" if len(targets) == 1
+             else "each sitting's own target ("
+             + ", ".join(f"{b:.0f}" for b in targets) + " min)")
+          + f"; {over} over")
     print(f"  wall time {(_time.time() - wall0) / 60.0:.1f} min; "
           f"sessions at {root}")
     return 0

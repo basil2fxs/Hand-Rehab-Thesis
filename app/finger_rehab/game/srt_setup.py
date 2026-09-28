@@ -106,7 +106,8 @@ def parse_sequence(text: str) -> tuple[tuple[int, ...] | None, str]:
         elif ch in LETTERS:
             out.append(LETTERS.index(ch) + 1)
         else:
-            return None, f"'{ch}' is not a square: use 1 to 4 or v b n m"
+            return None, (f"'{ch}' is not a card: use 1 to 4 (the cards "
+                          "left to right) or v b n m")
     seq = tuple(out)
     why = sequence_problem(seq)
     return (None, why) if why else (seq, "")
@@ -124,21 +125,21 @@ def sequence_problem(seq) -> str:
     try:
         seq = tuple(int(s) for s in seq)
     except (TypeError, ValueError):
-        return "The sequence holds something that is not a square"
+        return "The sequence holds something that is not a card"
     if not SEQ_MIN_LEN <= len(seq) <= SEQ_MAX_LEN:
         return (f"Use {SEQ_MIN_LEN} to {SEQ_MAX_LEN} items "
                 f"(this one has {len(seq)})")
     if any(s not in (1, 2, 3, 4) for s in seq):
-        return "Squares are numbered 1 to 4"
+        return "Cards are numbered 1 to 4, left to right"
     if set(seq) != {1, 2, 3, 4}:
         missing = sorted({1, 2, 3, 4} - set(seq))
-        return ("Every square must appear; missing "
+        return ("Every card must appear; missing "
                 + ", ".join(str(m) for m in missing))
     for i in range(len(seq)):
         if seq[i] == seq[i - 1]:
             where = ("the last and the first" if i == 0
                      else f"items {i} and {i + 1}")
-            return f"No square twice in a row ({where} match)"
+            return f"No card twice in a row ({where} match)"
     return ""
 
 

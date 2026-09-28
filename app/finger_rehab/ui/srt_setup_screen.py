@@ -1,9 +1,15 @@
 """The SRT setup screen: what the Reaction card opens.
 
-The researcher picks this participant's timing here and starts the
-task. Everything on it is kept (game/srt_setup.py): the current setup
-is written to the setups file on every change, so the next participant
-in the same group needs one click, and named setups hold each group's
+Two views. The first holds the only things that change from one
+participant to the next: the timing group, the lab script's 0 to 5
+musical experience question, and START. Everything else (the learning
+interval, one or two hands, the sequence, and named setups) sits behind
+More options, because most runs never touch it and seeing it every
+time made the screen hard to read (Basil, 28 September 2026).
+
+Everything on it is kept (game/srt_setup.py): the current setup is
+written to the setups file on every change, so the next participant in
+the same group needs one click, and named setups hold each group's
 timing for good. The lab's three groups at 500 ms are always listed.
 
 The sequence stays hidden until Show is pressed. The participant is
@@ -11,9 +17,9 @@ often sitting in front of this screen, and knowing the order is
 exactly what the task must not hand them before it starts (explicit
 knowledge changes what an SRT measures).
 
-Musical experience is the lab script's 0 to 5 question. It belongs to
-the person logged in, not to the setup, so it is kept for this login
-only and written into the performance file with every trial.
+Musical experience belongs to the person logged in, not to the setup,
+so it is kept for this login only and written into the performance
+file with every trial.
 """
 from __future__ import annotations
 
@@ -36,21 +42,29 @@ if TYPE_CHECKING:
     from ..game.engine import GameEngine
 
 
-GROUP_LINES = {
-    "constant": "Every interval is the learning interval.",
-    "cyclical": ("Intervals follow the sequence position: half, equal, "
-                 "one and a half times, repeating."),
-    "random": ("Intervals shuffle within every pass of the sequence: "
-               "half, equal, one and a half times."),
-}
 UNSAVED = "Unsaved setup"
 ISI_STEP_MS = 50
 
 
+def group_line(group: str, isi_ms: int) -> str:
+    """The timing group in one plain line, with this setup's numbers."""
+    short = int(round(isi_ms * 0.5))
+    long_ = int(round(isi_ms * 1.5))
+    if group == "constant":
+        return f"Every gap before a flash is {isi_ms} ms."
+    if group == "cyclical":
+        return (f"Gaps of {short}, {isi_ms} and {long_} ms, in a set "
+                f"order that follows the sequence.")
+    return f"Gaps of {short}, {isi_ms} and {long_} ms, shuffled."
+
+
 class SRTSetupScreen(Screen):
 
-    LEFT = pygame.Rect(40, 132, 700, 560)
-    RIGHT = pygame.Rect(760, 132, 480, 560)
+    # The first view: one card in the middle of the page.
+    MAIN = pygame.Rect(190, 146, 900, 446)
+    # More options: the two cards the whole screen used to be.
+    LEFT = pygame.Rect(40, 132, 700, 520)
+    RIGHT = pygame.Rect(760, 132, 480, 520)
     ROW_H = 56
     ROWS_TOP = 188
     ROWS_SHOWN = 5
@@ -62,6 +76,7 @@ class SRTSetupScreen(Screen):
         self.isi_ms = int(DEFAULT_SETUP.isi_ms)
         self.sequence = tuple(DEFAULT_SETUP.sequence)
         self.hands = DEFAULT_SETUP.hands
+        self.more = False
         self.show_sequence = False
         self.editing = False
         self.note = ""
@@ -69,46 +84,49 @@ class SRTSetupScreen(Screen):
         self._delete_armed: str | None = None
         self._scroll = 0
         self._row_rects: list[tuple[pygame.Rect, SRTSetup]] = []
-        lx, ly = self.LEFT.x + 30, self.LEFT.y
+        # The first view.
+        mx, my = self.MAIN.x + 40, self.MAIN.y
         self.group_seg = Segmented(
-            pygame.Rect(lx, ly + 80, 640, 52), self.theme, self.layout,
+            pygame.Rect(mx, my + 74, 820, 64), self.theme, self.layout,
             [(g, g.capitalize()) for g in GROUPS], label="Timing group",
             initial=self.group)
-        self.minus_btn = Button(pygame.Rect(lx, ly + 196, 60, 52), "-",
+        self.music_seg = Segmented(
+            pygame.Rect(mx, my + 250, 480, 56), self.theme, self.layout,
+            [(str(i), str(i)) for i in range(6)],
+            label="Musical experience",
+            hotkeys={str(i): str(i) for i in range(6)})
+        # More options.
+        lx, ly = self.LEFT.x + 30, self.LEFT.y
+        self.minus_btn = Button(pygame.Rect(lx, ly + 78, 60, 52), "-",
                                 lambda: self._nudge(-ISI_STEP_MS),
                                 self.theme, self.layout, font_pt=FONT_H2)
         self.isi_input = TextInput(
-            pygame.Rect(lx + 70, ly + 196, 130, 52), self.theme,
+            pygame.Rect(lx + 70, ly + 78, 130, 52), self.theme,
             self.layout, label="Learning interval (ms)",
             initial=str(self.isi_ms), max_len=4, numeric=True)
-        self.plus_btn = Button(pygame.Rect(lx + 210, ly + 196, 60, 52),
+        self.plus_btn = Button(pygame.Rect(lx + 210, ly + 78, 60, 52),
                                "+", lambda: self._nudge(ISI_STEP_MS),
                                self.theme, self.layout, font_pt=FONT_H2)
         self.hands_seg = Segmented(
-            pygame.Rect(lx + 330, ly + 196, 310, 52), self.theme,
+            pygame.Rect(lx + 330, ly + 78, 310, 52), self.theme,
             self.layout, [("one", "One hand"), ("two", "Two hands")],
             label="Hands", initial=self.hands)
-        self.show_btn = Button(pygame.Rect(lx + 330, ly + 306, 100, 44),
+        self.show_btn = Button(pygame.Rect(lx + 330, ly + 222, 100, 44),
                                "Show", self._toggle_show, self.theme,
                                self.layout, font_pt=FONT_BODY)
-        self.edit_btn = Button(pygame.Rect(lx + 440, ly + 306, 90, 44),
+        self.edit_btn = Button(pygame.Rect(lx + 440, ly + 222, 90, 44),
                                "Edit", self._toggle_edit, self.theme,
                                self.layout, font_pt=FONT_BODY)
-        self.lab_btn = Button(pygame.Rect(lx + 540, ly + 306, 100, 44),
+        self.lab_btn = Button(pygame.Rect(lx + 540, ly + 222, 100, 44),
                               "Lab", self._lab_sequence, self.theme,
                               self.layout, font_pt=FONT_BODY)
         self.seq_input = TextInput(
-            pygame.Rect(lx, ly + 364, 520, 48), self.theme, self.layout,
+            pygame.Rect(lx, ly + 286, 520, 48), self.theme, self.layout,
             placeholder="1321432413 or v n b v m n b m v n",
             max_len=40)
-        self.use_btn = Button(pygame.Rect(lx + 530, ly + 364, 110, 48),
+        self.use_btn = Button(pygame.Rect(lx + 530, ly + 286, 110, 48),
                               "Use", self._use_typed, self.theme,
                               self.layout, font_pt=FONT_BODY, primary=True)
-        self.music_seg = Segmented(
-            pygame.Rect(lx, ly + 452, 360, 48), self.theme, self.layout,
-            [(str(i), str(i)) for i in range(6)],
-            label="Musical experience (this participant)",
-            hotkeys={str(i): str(i) for i in range(6)})
         rx = self.RIGHT.x + 24
         self.name_input = TextInput(
             pygame.Rect(rx, self.RIGHT.bottom - 160, 300, 48), self.theme,
@@ -122,10 +140,14 @@ class SRTSetupScreen(Screen):
             pygame.Rect(rx, self.RIGHT.bottom - 92, 200, 44),
             "Delete setup", self._delete, self.theme, self.layout,
             font_pt=FONT_BODY)
+        # Both views.
         h = engine.layout.height
         w = engine.layout.width
         self.back_btn = Button(pygame.Rect(40, h - 88, 180, BUTTON_H - 10),
                                "Back", self._back, self.theme, self.layout)
+        self.more_btn = Button(
+            pygame.Rect(w // 2 - 120, h - 88, 240, BUTTON_H - 10),
+            "More options", self._toggle_more, self.theme, self.layout)
         self.start_btn = Button(pygame.Rect(w - 260, h - 94, 220, BUTTON_H),
                                 "START", self._start, self.theme,
                                 self.layout, font_pt=FONT_H2, primary=True)
@@ -144,6 +166,7 @@ class SRTSetupScreen(Screen):
         self.hands_seg.set(self.hands)
         self.isi_input.text = str(self.isi_ms)
         self.isi_input.focused = False
+        self.more = False
         self.show_sequence = False
         self.editing = False
         self.seq_input.text = ""
@@ -212,6 +235,17 @@ class SRTSetupScreen(Screen):
             self._set_isi(value)
         else:
             self.isi_input.text = str(self.isi_ms)
+
+    def _toggle_more(self) -> None:
+        """Between the first view and More options. Leaving More
+        options closes an open sequence edit and settles the interval
+        field, so nothing half typed is left behind."""
+        if self.more:
+            self._read_isi_field()
+            self.editing = False
+            self.seq_input.focused = False
+            self.name_input.focused = False
+        self.more = not self.more
 
     def _toggle_show(self) -> None:
         self.show_sequence = not self.show_sequence
@@ -314,18 +348,26 @@ class SRTSetupScreen(Screen):
 
     # ---- events ------------------------------------------------------------------
     def handle_event(self, e: pygame.event.Event) -> None:
+        if not self.more:
+            for widget in (self.group_seg, self.music_seg):
+                widget.handle_event(e)
+            if self.group_seg.value and self.group_seg.value != self.group:
+                self.group = self.group_seg.value
+                self._commit()
+            for b in (self.back_btn, self.more_btn, self.start_btn):
+                b.handle_event(e)
+            if (e.type == pygame.KEYDOWN
+                    and e.key in (pygame.K_RETURN, pygame.K_KP_ENTER)):
+                self._start()
+            return
         was_isi_focused = self.isi_input.focused
         was_name_focused = self.name_input.focused
         was_seq_focused = self.editing and self.seq_input.focused
-        for widget in (self.group_seg, self.hands_seg, self.isi_input,
-                       self.music_seg, self.name_input):
+        for widget in (self.hands_seg, self.isi_input, self.name_input):
             widget.handle_event(e)
         if self.editing:
             self.seq_input.handle_event(e)
             self.use_btn.handle_event(e)
-        if self.group_seg.value and self.group_seg.value != self.group:
-            self.group = self.group_seg.value
-            self._commit()
         if self.hands_seg.value and self.hands_seg.value != self.hands:
             self.hands = self.hands_seg.value
             self._commit()
@@ -336,7 +378,8 @@ class SRTSetupScreen(Screen):
             self._read_isi_field()
         for b in (self.minus_btn, self.plus_btn, self.show_btn,
                   self.edit_btn, self.lab_btn, self.save_btn,
-                  self.delete_btn, self.back_btn, self.start_btn):
+                  self.delete_btn, self.back_btn, self.more_btn,
+                  self.start_btn):
             b.handle_event(e)
         if e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
             for rect, setup in self._row_rects:
@@ -362,40 +405,79 @@ class SRTSetupScreen(Screen):
     def draw(self, surf: pygame.Surface) -> None:
         surf.fill(self.theme.background)
         cx = self.layout.width // 2
-        draw_text(surf, "Reaction setup", (cx, 52), self.theme, self.layout,
-                  pt=FONT_H1, centre=True)
-        draw_text(surf, "The lab's sequence task. Set this participant's "
-                  "timing, then start.", (cx, 96), self.theme, self.layout,
-                  pt=FONT_BODY, centre=True, colour=self.theme.muted)
-        Card(self.LEFT, self.theme, layout=self.layout).draw(surf)
-        Card(self.RIGHT, self.theme, layout=self.layout).draw(surf)
-        self._draw_left(surf)
-        self._draw_right(surf)
+        if self.more:
+            draw_text(surf, "Reaction: more options", (cx, 58), self.theme,
+                      self.layout, pt=FONT_H1, centre=True)
+            draw_text(surf, "Kept for the next participant. Most runs "
+                      "never need these.", (cx, 102), self.theme,
+                      self.layout, pt=FONT_BODY, centre=True,
+                      colour=self.theme.muted)
+            Card(self.LEFT, self.theme, layout=self.layout).draw(surf)
+            Card(self.RIGHT, self.theme, layout=self.layout).draw(surf)
+            self._draw_left(surf)
+            self._draw_right(surf)
+            self.more_btn.label = "Done"
+        else:
+            draw_text(surf, "Reaction", (cx, 58), self.theme, self.layout,
+                      pt=FONT_H1, centre=True)
+            draw_text(surf, "Pick this participant's timing group, then "
+                      "press START.", (cx, 102), self.theme, self.layout,
+                      pt=FONT_BODY, centre=True, colour=self.theme.muted)
+            Card(self.MAIN, self.theme, layout=self.layout).draw(surf)
+            self._draw_main(surf)
+            self.more_btn.label = "More options"
         self.back_btn.draw(surf)
+        self.more_btn.draw(surf)
         self.start_btn.draw(surf)
         self._draw_footer(surf)
+
+    def _draw_main(self, surf: pygame.Surface) -> None:
+        mx, my = self.MAIN.x + 40, self.MAIN.y
+        muted = self.theme.muted
+        self.group_seg.draw(surf)
+        draw_text(surf, group_line(self.group, int(self.isi_ms)),
+                  (mx, my + 156), self.theme, self.layout, pt=FONT_BODY)
+        self.music_seg.draw(surf)
+        me = self.music_seg.value
+        caption = (MUSICAL_EXPERIENCE[int(me)][4:] if me is not None
+                   else "ask: none, or years of lessons")
+        draw_text(surf, caption, (mx + 500, my + 266), self.theme,
+                  self.layout, pt=FONT_BODY, colour=muted)
+        counts = protocol_counts(self.engine.cfg)
+        mins = estimate_minutes(self._values(), counts)
+        draw_text(surf,
+                  f"About {mins:.0f} min: practice, "
+                  f"{counts['learning_blocks']} learning blocks, a final "
+                  f"test, then recall.",
+                  (mx, my + 360), self.theme, self.layout,
+                  pt=FONT_BODY, colour=muted)
+        setup = self._values()
+        changed = (not setup.is_lab_sequence or int(self.isi_ms) != 500
+                   or self.hands != "one")
+        if changed:
+            # Anything set away from the lab's own run is said here, so
+            # a change made in More options is never invisible.
+            draw_text(surf, "Changed in More options: "
+                      + self._values().summary() + ".",
+                      (mx, my + 392), self.theme, self.layout,
+                      pt=FONT_SMALL + 2, colour=self.theme.warning)
 
     def _draw_left(self, surf: pygame.Surface) -> None:
         lx, ly = self.LEFT.x + 30, self.LEFT.y
         muted = self.theme.muted
         draw_text(surf, "This run", (lx, ly + 4), self.theme, self.layout,
                   pt=FONT_H2)
-        self.group_seg.draw(surf)
-        draw_text(surf, GROUP_LINES.get(self.group, ""), (lx, ly + 142),
-                  self.theme, self.layout, pt=FONT_SMALL + 2, colour=muted)
         self.minus_btn.draw(surf)
         self.isi_input.draw(surf)
         self.plus_btn.draw(surf)
         self.hands_seg.draw(surf)
-        short = int(round(self.isi_ms * 0.5))
-        long_ = int(round(self.isi_ms * 1.5))
-        detail = ("Learning blocks only; the random blocks stay at 500 ms."
-                  if self.group == "constant" else
-                  f"Learning blocks only: {short}, {self.isi_ms} and "
-                  f"{long_} ms. Random blocks stay at 500 ms.")
-        draw_text(surf, detail, (lx, ly + 256), self.theme,
-                  self.layout, pt=FONT_SMALL + 2, colour=muted)
-        draw_text(surf, "Sequence", (lx, ly + 290), self.theme, self.layout,
+        draw_text(surf, group_line(self.group, int(self.isi_ms)),
+                  (lx, ly + 142), self.theme, self.layout,
+                  pt=FONT_SMALL + 2, colour=muted)
+        draw_text(surf, "Practice and the final test always use 500 ms.",
+                  (lx, ly + 164), self.theme, self.layout,
+                  pt=FONT_SMALL + 2, colour=muted)
+        draw_text(surf, "Sequence", (lx, ly + 206), self.theme, self.layout,
                   pt=FONT_SMALL + 4, colour=muted)
         lab = tuple(self.sequence) == LAB_SEQUENCE
         if self.show_sequence:
@@ -403,7 +485,7 @@ class SRTSetupScreen(Screen):
         else:
             text = (f"Lab sequence, {len(self.sequence)} items" if lab
                     else f"Custom, {len(self.sequence)} items")
-        draw_text(surf, text, (lx, ly + 318), self.theme, self.layout,
+        draw_text(surf, text, (lx, ly + 234), self.theme, self.layout,
                   pt=FONT_BODY)
         self.show_btn.label = "Hide" if self.show_sequence else "Show"
         self.show_btn.draw(surf)
@@ -413,25 +495,14 @@ class SRTSetupScreen(Screen):
         if self.editing:
             self.seq_input.draw(surf)
             self.use_btn.draw(surf)
+            draw_text(surf, "1 to 4 are the cards left to right. 4 to 16 "
+                      "items, every card, none twice in a row.",
+                      (lx, ly + 346), self.theme, self.layout,
+                      pt=FONT_SMALL + 1, colour=muted)
         else:
             draw_text(surf, "Hidden until Show, so the participant does "
-                      "not see the order.", (lx, ly + 374), self.theme,
+                      "not see the order.", (lx, ly + 296), self.theme,
                       self.layout, pt=FONT_SMALL + 1, colour=muted)
-        self.music_seg.draw(surf)
-        me = self.music_seg.value
-        caption = (MUSICAL_EXPERIENCE[int(me)][4:] if me is not None
-                   else "not asked yet")
-        draw_text(surf, caption, (lx + 380, ly + 466), self.theme,
-                  self.layout, pt=FONT_SMALL + 2, colour=muted)
-        counts = protocol_counts(self.engine.cfg)
-        mins = estimate_minutes(self._values(), counts)
-        n_learn = counts["learning_reps"] * len(self.sequence)
-        draw_text(surf,
-                  f"About {mins:.0f} min: {counts['random_trials']} practice, "
-                  f"{counts['learning_blocks']} x {n_learn} learning, "
-                  f"{counts['random_trials']} post-test, then recall",
-                  (lx, ly + 520), self.theme, self.layout,
-                  pt=FONT_SMALL + 2, colour=muted)
 
     def _draw_right(self, surf: pygame.Surface) -> None:
         rx = self.RIGHT.x + 24
@@ -473,17 +544,14 @@ class SRTSetupScreen(Screen):
         y = self.layout.height - 64
         if self.note:
             colour = self.theme.error if self.note_bad else self.theme.success
-            draw_text(surf, self.note, (cx, y - 14), self.theme,
+            draw_text(surf, self.note, (cx, y - 58), self.theme,
                       self.layout, pt=FONT_BODY, centre=True, colour=colour)
-        step = None
         pending = getattr(self.engine, "_protocol_current", None)
         if (getattr(self.engine, "_battery", None) is not None
                 and isinstance(pending, dict)
                 and pending.get("mode") == "srt"):
-            step = pending
-        if step is not None:
             of = (self.engine._battery or {}).get("of", "?")
-            draw_text(surf, f"Play all: step {step.get('position', '?')} "
-                      f"of {of}", (cx, y + 18), self.theme, self.layout,
+            draw_text(surf, f"Play all: step {pending.get('position', '?')} "
+                      f"of {of}", (cx, y + 44), self.theme, self.layout,
                       pt=FONT_SMALL + 2, centre=True,
                       colour=self.theme.muted)

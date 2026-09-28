@@ -52,7 +52,7 @@ flowchart LR
 
 A press is a crossing of the force stream, not a switch: each pad keeps a slow baseline, and the trigger sits in the gap between that person's resting level and their light press, measured at login.
 
-<p align="center"><img src="app/docs/images/login.png" width="32%" alt="The login screen"> <img src="app/docs/images/hand.png" width="32%" alt="The hand choice screen"> <img src="app/docs/images/calibration.png" width="32%" alt="The quick calibration"><br><sub>Log in, pick the hand, calibrate: under a minute.</sub></p>
+<p align="center"><img src="app/docs/images/login.png" width="32%" alt="The login screen"> <img src="app/docs/images/hand.png" width="32%" alt="The hand choice screen"> <img src="app/docs/images/calibration.png" width="32%" alt="The quick calibration"><br><sub>Log in with free play or a timed session (15 to 60 minutes, games in order), pick the hand, calibrate.</sub></p>
 
 ## Install
 
@@ -139,7 +139,7 @@ The cog on the login screen: live finger readout, port dropdowns, Test STIM per 
 
 ## Data
 
-Sessions land in `sessions/<date>/<code>_<time>_<game>/`: `trials.csv` one row per trial, `raw.csv` every sample at 200 Hz with the presses, cues and markers on the same clock, `metadata.json` the block summary, calibration and software version. Nothing is overwritten. Open [`analysis/session_analysis.ipynb`](analysis), run the Setup cell, pick a save, Run All.
+Sessions land in `sessions/<date>/<name>_<time>_<game>/`: `trials.csv` one row per trial, `raw.csv` every sample at 200 Hz with the presses, cues and markers on the same clock, `metadata.json` the block summary, calibration and software version. Nothing is overwritten. Open [`analysis/session_analysis.ipynb`](analysis), run the Setup cell, pick a save, Run All.
 
 ## The lab folder
 

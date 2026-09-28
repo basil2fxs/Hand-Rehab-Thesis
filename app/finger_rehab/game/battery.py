@@ -89,6 +89,10 @@ class BatteryPlan:
     # Where the run sheet stops the session. 0 means "no hard stop",
     # which is what a preset without the key gets.
     hard_stop_min: float = 0.0
+    # Which set of game lengths the sitting plays: "full" (the study
+    # sitting's counts) or "short" (Trial Mode's shortened games).
+    # Blocks pool within a family and never across.
+    family: str = "full"
 
 
 class BatteryError(ValueError):
@@ -219,10 +223,9 @@ def build_plan(cfg, participant: str, dominant_hand: str,
         steps = swap_once(steps, {str(k).strip().lower():
                                   str(v).strip().lower()
                                   for k, v in swaps.items()})
-    overrides = raw.get("overrides") or {}
-    if not isinstance(overrides, dict):
-        overrides = {}
+    overrides = resolved_overrides(cfg, preset)
     return BatteryPlan(
+        family=preset_family(cfg, preset),
         id=str(raw.get("id") or preset),
         preset=preset,
         cell=cell,
@@ -235,6 +238,86 @@ def build_plan(cfg, participant: str, dominant_hand: str,
         rest_min_s=rest_min_s,
         hard_stop_min=float(raw.get("hard_stop_min", 0.0) or 0.0),
     )
+
+
+def preset_family(cfg, preset: str) -> str:
+    """The preset's family, or the family of the preset it takes its
+    settings from, or "full"."""
+    seen: set[str] = set()
+    name = preset
+    while name and name not in seen:
+        seen.add(name)
+        raw = load_preset(cfg, name) or {}
+        fam = str(raw.get("family") or "").strip().lower()
+        if fam:
+            return fam
+        name = str(raw.get("overrides_from") or "").strip()
+    return "full"
+
+
+def resolved_overrides(cfg, preset: str) -> dict:
+    """A preset's per-game settings with its overrides_from chain laid
+    underneath: a Trial Mode length plays the study battery's own blocks
+    (overrides_from: study_battery), and a short length takes the short
+    set, which itself sits on the study battery's (overrides_from:
+    trial_short). Each preset's own overrides win over what it
+    inherits."""
+    chain: list[dict] = []
+    seen: set[str] = set()
+    name = preset
+    while name:
+        if name in seen:
+            raise BatteryError(f"Preset '{preset}' takes its settings in "
+                               f"a circle through '{name}'")
+        seen.add(name)
+        raw = load_preset(cfg, name)
+        if raw is None:
+            raise BatteryError(f"Preset '{preset}' takes its settings "
+                               f"from '{name}', which is not there")
+        chain.append(raw)
+        name = str(raw.get("overrides_from") or "").strip()
+    out: dict = {}
+    for raw in reversed(chain):
+        own = raw.get("overrides") or {}
+        if isinstance(own, dict):
+            out = _merged(out, own)
+    return out
+
+
+def _merged(base: dict, over: dict) -> dict:
+    """`over` laid on a deep copy of `base`, dict by dict."""
+    out = copy.deepcopy(base)
+    for k, v in over.items():
+        if isinstance(out.get(k), dict) and isinstance(v, dict):
+            out[k] = _merged(out[k], v)
+        else:
+            out[k] = copy.deepcopy(v)
+    return out
+
+
+def trial_options(cfg) -> list[tuple[int, str]]:
+    """What the login's SESSION picker offers besides Free play:
+    (minutes, preset name), shortest first, from protocol.trials.
+    Entries whose preset is missing, or whose minutes are not a whole
+    positive number, are left out rather than offered and refused."""
+    raw = cfg.get("protocol.trials") if cfg is not None else None
+    out: list[tuple[int, str]] = []
+    if not isinstance(raw, list):
+        return out
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        try:
+            minutes = int(entry.get("minutes"))
+        except (TypeError, ValueError):
+            continue
+        name = str(entry.get("preset") or "").strip()
+        if minutes <= 0 or not name or load_preset(cfg, name) is None:
+            continue
+        if any(m == minutes for m, _n in out):
+            continue
+        out.append((minutes, name))
+    return sorted(out)
 
 
 def swap_once(steps: list[BatteryStep],

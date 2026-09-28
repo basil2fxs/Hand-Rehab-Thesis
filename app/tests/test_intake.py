@@ -1,14 +1,15 @@
-"""Participant intake at login: codes, suggestions, the commit into
-the Session, and what the analysis sees afterwards.
+"""Participant intake at login: codes, the empty name field, the
+commit into the Session, and what the analysis sees afterwards.
 
 Three layers:
 
   1. data/intake.py pure functions: what counts as a study code, the
-     next free code off the sessions tree, the visit number from the
-     days already played, and the counterbalancing cell.
-  2. The login screen through the real engine: every field lands in
-     the Session and in metadata.json, the visit is worked out
-     without a field, a code needs its main hand, a name does not,
+     visit number from the days already played, and the
+     counterbalancing cell.
+  2. The login screen through the real engine: the name field says
+     NAME and opens empty, every field lands in the Session and in
+     metadata.json, the visit is worked out without a field, a code
+     needs its main hand, a name does not,
      hand size and the pickers fill from the identity's last game,
      and the whole screen is keyboard-only drivable.
   3. The sessions tree and the notebook: a code keys the folders and
@@ -74,58 +75,6 @@ class CodeParsingTests(unittest.TestCase):
         self.assertEqual(normalise_code("  Mara "), "Mara")
 
 
-class NextCodeSuggestionTests(unittest.TestCase):
-    def test_empty_tree_suggests_p01(self) -> None:
-        from finger_rehab.data.intake import suggest_next_code
-        with tempfile.TemporaryDirectory() as td:
-            self.assertEqual(suggest_next_code(td), "P01")
-            self.assertEqual(suggest_next_code(Path(td) / "missing"), "P01")
-
-    def test_next_code_is_one_past_the_highest(self) -> None:
-        from finger_rehab.data.intake import suggest_next_code
-        with tempfile.TemporaryDirectory() as td:
-            root = Path(td)
-            _game_folder(root, "2026-09-01", "P01")
-            _game_folder(root, "2026-09-01", "P02", mode="echo")
-            _game_folder(root, "2026-09-02", "p02")
-            self.assertEqual(suggest_next_code(root), "P03")
-
-    def test_gaps_are_not_refilled(self) -> None:
-        # A code assigned and never played (a no-show) stays retired.
-        from finger_rehab.data.intake import suggest_next_code
-        with tempfile.TemporaryDirectory() as td:
-            root = Path(td)
-            _game_folder(root, "2026-09-01", "P01")
-            _game_folder(root, "2026-09-01", "P05")
-            self.assertEqual(suggest_next_code(root), "P06")
-
-    def test_names_and_other_prefixes_do_not_count(self) -> None:
-        from finger_rehab.data.intake import suggest_next_code
-        with tempfile.TemporaryDirectory() as td:
-            root = Path(td)
-            _game_folder(root, "2026-09-01", "Mara")
-            _game_folder(root, "2026-09-01", "HC04")
-            _game_folder(root, "2026-09-01", "NA")
-            self.assertEqual(suggest_next_code(root), "P01")
-            self.assertEqual(suggest_next_code(root, prefix="HC"), "HC05")
-
-    def test_width_follows_the_tree(self) -> None:
-        from finger_rehab.data.intake import suggest_next_code
-        with tempfile.TemporaryDirectory() as td:
-            root = Path(td)
-            _game_folder(root, "2026-09-01", "P099")
-            self.assertEqual(suggest_next_code(root), "P100")
-            _game_folder(root, "2026-09-01", "P100")
-            self.assertEqual(suggest_next_code(root), "P101")
-
-    def test_the_results_folder_is_ignored(self) -> None:
-        from finger_rehab.data.intake import suggest_next_code
-        with tempfile.TemporaryDirectory() as td:
-            root = Path(td)
-            (root / "individual_patient_results" / "P09").mkdir(parents=True)
-            self.assertEqual(suggest_next_code(root), "P01")
-
-
 class VisitSuggestionTests(unittest.TestCase):
     def test_fresh_code_is_visit_one(self) -> None:
         from finger_rehab.data.intake import suggest_visit
@@ -157,6 +106,18 @@ class VisitSuggestionTests(unittest.TestCase):
             _game_folder(root, "2026-08-27", "P03")
             self.assertEqual(suggest_visit(root, "P03", today="2026-08-27"),
                              2)
+
+    def test_the_results_folder_is_not_a_visit(self) -> None:
+        # Only YYYY-MM-DD folders are days; the results folder sits
+        # beside them and never counts, even with a day folder inside.
+        from finger_rehab.data.intake import suggest_visit
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "individual_patient_results" / "P09").mkdir(parents=True)
+            _game_folder(root / "individual_patient_results", "2026-08-20",
+                         "P09")
+            self.assertEqual(suggest_visit(root, "P09", today="2026-09-03"),
+                             1)
 
 
 class CellTests(unittest.TestCase):
@@ -206,7 +167,7 @@ class _LoginHarness(unittest.TestCase):
         self.root = Path(self._td.name)
         self.eng = self._engine()
 
-    def _engine(self, suggest: str | None = None, seed_tree=None):
+    def _engine(self, seed_tree=None):
         from finger_rehab.config import Config
         from finger_rehab.game.engine import GameEngine
         from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
@@ -215,8 +176,6 @@ class _LoginHarness(unittest.TestCase):
         cfg = Config.load()
         cfg.data["ui"]["resolution"] = [1280, 800]
         cfg.data["session"]["data_dir"] = str(self.root)
-        if suggest is not None:
-            cfg.data["session"]["suggest_code"] = suggest
         cfg.data["audio"]["enabled"] = False
         cfg.data["report"] = {"enabled": False}
         eng = GameEngine(cfg, KeyboardOnlySource())
@@ -260,7 +219,6 @@ class LoginCommitTests(_LoginHarness):
         t.sex_seg.set("female")
         t.hand_seg.set("left")
         t.length_input.text = "181"
-        t.breadth_input.text = "80"
         t._begin()
         s = self.eng.session
         self.assertTrue(self.eng._session_active)
@@ -273,7 +231,9 @@ class LoginCommitTests(_LoginHarness):
         # Not typed: a fresh code is visit 1.
         self.assertEqual(s.visit, "1")
         self.assertEqual(s.hand_length_mm, "181")
-        self.assertEqual(s.hand_breadth_mm, "80")
+        # Breadth is not asked any more (28 September 2026): recorded
+        # empty so the column stays and old data reads on.
+        self.assertEqual(s.hand_breadth_mm, "")
         self.assertEqual(self.eng.cfg.get("session.dominant_hand"), "left")
         self.assertEqual(self.eng.cfg.get("session.visit"), "1")
         paths = self._play_one_game()
@@ -281,7 +241,7 @@ class LoginCommitTests(_LoginHarness):
         for key, want in (("participant", "P07"), ("sex", "female"),
                           ("dominant_hand", "left"), ("edinburgh_lq", ""),
                           ("visit", "1"), ("hand_length_mm", "181"),
-                          ("hand_breadth_mm", "80"), ("battery", {})):
+                          ("hand_breadth_mm", ""), ("battery", {})):
             self.assertEqual(meta[key], want, key)
         # The folder and the index are keyed by the code.
         self.assertTrue(paths.root.name.startswith("P07_"))
@@ -292,9 +252,10 @@ class LoginCommitTests(_LoginHarness):
     def test_the_screen_has_no_visit_or_edinburgh_field(self) -> None:
         t = self.title
         labels = [getattr(f, "label", "") for f in t._fields]
-        self.assertEqual(labels, ["PARTICIPANT CODE OR NAME", "AGE",
+        self.assertEqual(labels, ["NAME", "AGE",
                                   "SEX  (optional)", "MAIN HAND",
-                                  "HAND LENGTH mm", "HAND BREADTH mm"])
+                                  "HAND LENGTH mm", "SESSION"])
+        self.assertFalse(hasattr(t, "breadth_input"))
         self.assertFalse(hasattr(t, "visit_input"))
         self.assertFalse(hasattr(t, "ehi_input"))
         self.assertEqual([c for _k, c in t.hand_seg.options],
@@ -360,65 +321,85 @@ class LoginCommitTests(_LoginHarness):
         self.assertEqual(self.eng.session.dominant_hand, "")
 
 
-class CodeSuggestionOnScreenTests(_LoginHarness):
+class EmptyNameFieldTests(_LoginHarness):
+    """The name field says NAME and opens empty: no study code is
+    filled in, however many codes are already on disk (Basil's call,
+    28 September 2026). The first four fail on the screen that
+    suggested the next free code; the last guards the one fill that
+    stays."""
+
     @staticmethod
     def _two_codes(root: Path) -> None:
         _game_folder(root, "2026-08-20", "P01")
         _game_folder(root, "2026-08-27", "P02")
 
-    def test_auto_suggests_once_a_code_exists(self) -> None:
-        self.eng = self._engine(seed_tree=self._two_codes)
-        t = self.title
-        self.assertEqual(t.name_input.text, "P03")
-        self.assertTrue(t.name_input.select_all)
-
-    def test_auto_stays_blank_on_a_clinic_machine(self) -> None:
-        # Names only on disk: no code is ever suggested unasked.
-        self.eng = self._engine(seed_tree=lambda r: _game_folder(
-            r, "2026-08-20", "Mara"))
-        self.assertEqual(self.title.name_input.text, "")
-
-    def test_always_and_never(self) -> None:
-        self.eng = self._engine(suggest="always")
-        self.assertEqual(self.title.name_input.text, "P01")
-        self.eng = self._engine(suggest="never", seed_tree=self._two_codes)
-        self.assertEqual(self.title.name_input.text, "")
-
-    def test_typing_replaces_the_suggestion(self) -> None:
+    def _drawn_text(self, info: bool = False) -> list[str]:
+        """Every string the login screen renders through its layout."""
         import pygame
-        self.eng = self._engine(seed_tree=self._two_codes)
         t = self.title
-        t.name_input.focused = True
-        t.handle_event(_key_event(pygame.K_m, "M"))
-        t.handle_event(_key_event(pygame.K_a, "a"))
-        self.assertEqual(t.name_input.text, "Ma")
-        self.assertFalse(t.name_input.select_all)
+        seen: list[str] = []
+        real_font = t.layout.font
 
-    def test_backspace_clears_the_suggestion_whole(self) -> None:
-        import pygame
+        class _SpyFont:
+            def __init__(self, font):
+                self._font = font
+
+            def render(self, text, *args, **kwargs):
+                seen.append(str(text))
+                return self._font.render(text, *args, **kwargs)
+
+            def __getattr__(self, name):
+                return getattr(self._font, name)
+        t.layout.font = lambda pt, bold=False: _SpyFont(real_font(pt, bold))
+        t._show_info = info
+        try:
+            t.draw(pygame.Surface((1280, 800)))
+        finally:
+            t.layout.font = real_font
+            t._show_info = False
+        return seen
+
+    def test_codes_on_disk_are_not_filled_in(self) -> None:
         self.eng = self._engine(seed_tree=self._two_codes)
         t = self.title
-        t.name_input.focused = True
-        t.handle_event(_key_event(pygame.K_BACKSPACE))
+        self.assertEqual(t.name_input.label, "NAME")
         self.assertEqual(t.name_input.text, "")
+        self.assertEqual(t.name_input.placeholder, "")
 
-    def test_enter_on_the_suggestion_logs_that_code_in(self) -> None:
+    def test_the_screen_and_its_info_card_never_say_code(self) -> None:
+        self.eng = self._engine(seed_tree=self._two_codes)
+        for info in (False, True):
+            drawn = self._drawn_text(info=info)
+            self.assertIn("NAME", drawn)
+            said = [s for s in drawn if "code" in s.lower()]
+            self.assertEqual(said, [], f"info card open: {info}")
+
+    def test_enter_on_a_fresh_screen_logs_nobody_in(self) -> None:
         import pygame
         self.eng = self._engine(seed_tree=self._two_codes)
         t = self.title
         t.hand_seg.set("right")
         t.handle_event(_key_event(pygame.K_RETURN))
-        self.assertTrue(self.eng._session_active)
-        self.assertEqual(self.eng.session.participant, "P03")
+        self.assertFalse(self.eng._session_active)
+        self.assertIn("NA", t.begin_note)
 
-    def test_the_suggestion_moves_on_after_a_session(self) -> None:
+    def test_the_field_is_empty_again_after_a_session(self) -> None:
         self.eng = self._engine(seed_tree=self._two_codes)
         t = self.title
+        t.name_input.text = "P03"
         t.hand_seg.set("right")
         t._begin()
         self._play_one_game()
         self.eng.end_session()
-        self.assertEqual(self.title.name_input.text, "P04")
+        self.assertEqual(self.title.name_input.text, "")
+
+    def test_a_config_participant_is_the_only_fill(self) -> None:
+        # A yaml passed as --config can still pre-set the name; the
+        # sessions tree never does.
+        self.eng = self._engine(seed_tree=self._two_codes)
+        self.eng.cfg.data["session"]["participant"] = "Mara"
+        self.eng.show_title()
+        self.assertEqual(self.title.name_input.text, "Mara")
 
 
 class VisitOnLoginTests(_LoginHarness):
@@ -441,7 +422,7 @@ class VisitOnLoginTests(_LoginHarness):
         return visit
 
     def test_visit_follows_the_typed_code(self) -> None:
-        self.eng = self._engine(suggest="never", seed_tree=self._history)
+        self.eng = self._engine(seed_tree=self._history)
         self.assertEqual(self._login("P03"), "3")
         self.assertEqual(self._login("P04"), "2")
         self.assertEqual(self._login("P05"), "1")
@@ -449,7 +430,7 @@ class VisitOnLoginTests(_LoginHarness):
     def test_a_config_visit_wins_over_the_derived_one(self) -> None:
         # A yaml passed as --config can pin session.visit; the login
         # honours it, and end_session clears it for the next person.
-        self.eng = self._engine(suggest="never", seed_tree=self._history)
+        self.eng = self._engine(seed_tree=self._history)
         self.eng.cfg.data["session"]["visit"] = "9"
         self.assertEqual(self._login("P03"), "9")
         self.assertEqual(self._login("P03"), "3")
@@ -457,7 +438,7 @@ class VisitOnLoginTests(_LoginHarness):
     def test_visit_is_committed_without_a_frame_in_between(self) -> None:
         # The RA types the code and presses Enter at once: the visit
         # is still worked out for that code.
-        self.eng = self._engine(suggest="never", seed_tree=self._history)
+        self.eng = self._engine(seed_tree=self._history)
         t = self.title
         t.name_input.text = "P03"
         t.hand_seg.set("left")
@@ -488,7 +469,8 @@ class PreviousIntakeTests(unittest.TestCase):
                 dominant_hand="left", sex="female"))
             found = previous_intake(root, "p03", "99")
             self.assertEqual(found["hand_length_mm"], "181")
-            self.assertEqual(found["hand_breadth_mm"], "80")
+            # Breadth is no longer carried: nothing on the login takes it.
+            self.assertNotIn("hand_breadth_mm", found)
             self.assertEqual(found["dominant_hand"], "left")
             self.assertEqual(found["sex"], "female")
             self.assertEqual(found["day"], "2026-08-20")
@@ -546,15 +528,14 @@ class AutofillOnScreenTests(_LoginHarness):
             "Mara", "52", hand_length_mm="175", dominant_hand="right"))
 
     def test_a_code_fills_the_fields_and_marks_them(self) -> None:
-        self.eng = self._engine(suggest="never", seed_tree=self._tree)
+        self.eng = self._engine(seed_tree=self._tree)
         t = self.title
         t.name_input.text = "P03"
         t.update(0.016)
         self.assertEqual(t.length_input.text, "181")
-        self.assertEqual(t.breadth_input.text, "80")
         self.assertEqual(t.hand_seg.value, "left")
         self.assertEqual(t.sex_seg.value, "female")
-        for f in (t.length_input, t.breadth_input, t.hand_seg, t.sex_seg):
+        for f in (t.length_input, t.hand_seg, t.sex_seg):
             self.assertTrue(f.prefilled, f.label)
         note = t._prefill_note()
         self.assertIn("P03", note)
@@ -562,7 +543,7 @@ class AutofillOnScreenTests(_LoginHarness):
         self.assertIn("hand length", note.lower())
 
     def test_a_name_fills_only_with_its_age(self) -> None:
-        self.eng = self._engine(suggest="never", seed_tree=self._tree)
+        self.eng = self._engine(seed_tree=self._tree)
         t = self.title
         t.name_input.text = "Mara"
         t.update(0.016)
@@ -571,12 +552,12 @@ class AutofillOnScreenTests(_LoginHarness):
         t.update(0.016)
         self.assertEqual(t.length_input.text, "175")
         self.assertEqual(t.hand_seg.value, "right")
-        # Breadth was never recorded: stays empty and optional.
-        self.assertEqual(t.breadth_input.text, "")
-        self.assertFalse(t.breadth_input.prefilled)
+        # Sex was never recorded for Mara: stays at not said.
+        self.assertEqual(t.sex_seg.value, "")
+        self.assertFalse(t.sex_seg.prefilled)
 
     def test_changing_identity_drops_the_carried_values(self) -> None:
-        self.eng = self._engine(suggest="never", seed_tree=self._tree)
+        self.eng = self._engine(seed_tree=self._tree)
         t = self.title
         t.name_input.text = "P03"
         t.update(0.016)
@@ -589,7 +570,7 @@ class AutofillOnScreenTests(_LoginHarness):
         self.assertEqual(t._prefill_note(), "")
 
     def test_a_typed_value_is_never_overwritten(self) -> None:
-        self.eng = self._engine(suggest="never", seed_tree=self._tree)
+        self.eng = self._engine(seed_tree=self._tree)
         t = self.title
         t.length_input.text = "200"
         t.hand_seg.set("right")
@@ -598,13 +579,13 @@ class AutofillOnScreenTests(_LoginHarness):
         self.assertEqual(t.length_input.text, "200")
         self.assertFalse(t.length_input.prefilled)
         self.assertEqual(t.hand_seg.value, "right")
-        # The empty field still fills.
-        self.assertEqual(t.breadth_input.text, "80")
-        self.assertTrue(t.breadth_input.prefilled)
+        # The untouched picker still fills.
+        self.assertEqual(t.sex_seg.value, "female")
+        self.assertTrue(t.sex_seg.prefilled)
 
     def test_typing_over_replaces_the_carried_value_whole(self) -> None:
         import pygame
-        self.eng = self._engine(suggest="never", seed_tree=self._tree)
+        self.eng = self._engine(seed_tree=self._tree)
         t = self.title
         t.name_input.text = "P03"
         t.update(0.016)
@@ -623,11 +604,11 @@ class AutofillOnScreenTests(_LoginHarness):
         # And the hand-edited value is what the session records.
         t._begin()
         self.assertEqual(self.eng.session.hand_length_mm, "190")
-        self.assertEqual(self.eng.session.hand_breadth_mm, "80")
+        self.assertEqual(self.eng.session.hand_breadth_mm, "")
         self.assertEqual(self.eng.session.dominant_hand, "right")
 
     def test_carried_values_reach_the_metadata(self) -> None:
-        self.eng = self._engine(suggest="never", seed_tree=self._tree)
+        self.eng = self._engine(seed_tree=self._tree)
         t = self.title
         t.name_input.text = "P03"
         # Enter straight after typing: no frame in between.
@@ -637,14 +618,14 @@ class AutofillOnScreenTests(_LoginHarness):
         paths = self._play_one_game()
         meta = json.loads(paths.metadata_json.read_text(encoding="utf-8"))
         self.assertEqual(meta["hand_length_mm"], "181")
-        self.assertEqual(meta["hand_breadth_mm"], "80")
+        self.assertEqual(meta["hand_breadth_mm"], "")
         self.assertEqual(meta["sex"], "female")
         self.assertEqual(meta["visit"], "2")
 
     def test_the_tag_is_drawn_for_a_carried_field(self) -> None:
         import pygame
         from finger_rehab.ui import widgets
-        self.eng = self._engine(suggest="never", seed_tree=self._tree)
+        self.eng = self._engine(seed_tree=self._tree)
         t = self.title
         t.name_input.text = "P03"
         t.update(0.016)
@@ -666,7 +647,7 @@ class AutofillOnScreenTests(_LoginHarness):
             t.draw(pygame.Surface((1280, 800)))
         finally:
             t.layout.font = real_font
-        self.assertGreaterEqual(seen.count(widgets.PREFILLED_TAG), 4)
+        self.assertGreaterEqual(seen.count(widgets.PREFILLED_TAG), 3)
 
 
 class KeyboardIntakeTests(_LoginHarness):
@@ -674,7 +655,7 @@ class KeyboardIntakeTests(_LoginHarness):
         import pygame
         t = self.title
         order = [t.name_input, t.age_input, t.sex_seg, t.hand_seg,
-                 t.length_input, t.breadth_input]
+                 t.length_input, t.trial_seg]
         for field in order:
             t.handle_event(_key_event(pygame.K_TAB))
             focused = [f for f in t._fields if f.focused]

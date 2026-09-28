@@ -44,16 +44,6 @@ session:
   sex: null                  # female | male | other | null (not said)
   edinburgh_lq: null         # Edinburgh short-form LQ, -100 to 100
   visit: null                # visit number in a repeated study
-  # Whether the login pre-fills the participant field with the next
-  # free study code (P01, P02, ...) read off the sessions tree.
-  #   auto    pre-fill once a coded participant exists on this machine,
-  #           so a clinic install that only ever types names never
-  #           sees a code it did not ask for
-  #   always  pre-fill from P01 on an empty tree (a study laptop)
-  #   never   leave the field blank
-  # Typing over the suggestion replaces it, so a name is one keystroke
-  # away either way.
-  suggest_code: auto
   # Per-participant preferences (today: the menu music mute), keyed by
   # the same identity the session folders use. Kept apart from
   # user_settings.yaml because that file describes the machine and is
@@ -1288,6 +1278,12 @@ force_pilot:
   # How many times the ladder runs inside one block. 1 ships; 2 gives
   # a within-block learning curve at the cost of another 6.7 minutes.
   passes: 1
+  # Fly the six-wave short ladder the mode file defines (Tide, Stairs,
+  # Hills, Dunes, Storm, Uncharted) instead of all twelve. Off ships;
+  # only a Trial Mode short block turns it on (protocol.presets
+  # trial_short). The config can switch between the two ladders but
+  # cannot name levels, for the reason above.
+  short_ladder: false
   # Force-to-altitude mapping: 0 to span_pct of the finger's max fills
   # the screen height. Low force is where the cited deficits live, and
   # staying under half of max keeps repeated runs sub-fatiguing. The
@@ -1894,27 +1890,31 @@ protocol:
   # block writes, just from fewer trials.
   presets:
     study_battery:
-      id: healthy_one_hand_v2
+      id: healthy_one_hand_v3
       # ONE sitting, ONE board, TWO passes. The device is the printed
       # right-hand chassis, so every block plays the right hand, for
       # every participant: the dominant hand of a right-hander, the
       # non-dominant hand of a left-hander (the analysis reports those
       # separately). Mirror needs two boards and is not played.
       #
-      # Pass 1 plays the nine one-hand modes once. After the rest,
-      # pass 2 plays the reliability core again, same task, same
-      # counts: Reaction (the anchor, with a known test-retest
-      # literature), Force Pilot (the device's force measure) and
-      # Chords (its finger-independence measure). Pass 1 against pass
-      # 2 gives WITHIN-SESSION test-retest: ICC, SEM, MDC95,
-      # Bland-Altman and the practice effect. Norms and the
-      # known-effect checks read pass 1 only, the single
-      # administration a clinic would give.
+      # Pass 1 plays the eight one-hand modes once. Syllables left the
+      # sitting on 28 September 2026, before any participant: it is
+      # built for readers with dyslexia, the students are not, and the
+      # author runs it with a dyslexic participant on its own. After
+      # the rest, pass 2 plays four modes again, same task, same
+      # counts: the reliability core, Reaction (the anchor, with a
+      # known test-retest literature), Force Pilot (the device's force
+      # measure) and Chords (its finger-independence measure), and
+      # Rhythm, which took the minutes Syllables gave back. Pass 1
+      # against pass 2 gives WITHIN-SESSION test-retest and the
+      # practice change. Norms and the known-effect checks read pass 1
+      # only, the single administration a clinic would give.
       #
       # budget_min is the design target from LOG IN to the last
       # block; hard_stop_min is where the run sheet stops the session.
       # scripts/measure_battery.py measures the plan against both on a
       # one-board rig. Quote its median and range, not one run.
+      family: full
       budget_min: 45
       hard_stop_min: 50
       # Waits between blocks. The stretch sits before the first Force
@@ -1942,9 +1942,10 @@ protocol:
           - {mode: buzz_hunt, hand: right, phase: pass1}
           - {mode: pattern, hand: right, phase: pass1}
           - {mode: adaptive, hand: right, phase: pass1}
-          - {mode: syllables, hand: right, phase: pass1}
           - {mode: reaction, hand: right, phase: pass2,
              rest_before: true}
+          - {mode: rhythm, hand: right, phase: pass2,
+             track: Easy_Lemon.mp3, difficulty: medium}
           - {mode: force_pilot, hand: right, phase: pass2}
           - {mode: chords, hand: right, phase: pass2}
         B:
@@ -1953,7 +1954,6 @@ protocol:
              stretch_before: true}
           - {mode: buzz_hunt, hand: right, phase: pass1}
           - {mode: adaptive, hand: right, phase: pass1}
-          - {mode: syllables, hand: right, phase: pass1}
           - {mode: reaction, hand: right, phase: pass1}
           - {mode: rhythm, hand: right, phase: pass1,
              track: Easy_Lemon.mp3, difficulty: medium}
@@ -1963,6 +1963,8 @@ protocol:
              rest_before: true}
           - {mode: chords, hand: right, phase: pass2}
           - {mode: reaction, hand: right, phase: pass2}
+          - {mode: rhythm, hand: right, phase: pass2,
+             track: Easy_Lemon.mp3, difficulty: medium}
       # Code number mod 4 -> which order. With one hand there is no
       # hand order left to cross, so two cells would do; four keep the
       # code-to-cell rule data/intake.cell_for applies everywhere.
@@ -2014,11 +2016,201 @@ protocol:
         echo:
           games: 2                    # best of two, and their spread
           max_len: 10                 # ceiling, to hold the 3 min line
-        syllables:
-          rung: 3                     # the mid rung, played once
-          words_per_block: 12
-          round_size: 6
-          break_s: 10
-          age_band: classic           # the pre-registered block, any age
         game:
           total_trials: 40            # pins the adaptive block length
+
+    # Trial Mode: the login's SESSION picker (protocol.trials, below).
+    # Every length plays these games and only these, the study
+    # sitting's eight, and plays games TWICE wherever the minutes
+    # allow, because a second go is what shows improvement (the pass 2
+    # minus pass 1 change) and what gives test-retest. The 45 and the
+    # 60 play full-length games (family full: the study sitting's own
+    # counts); the 15 and the 30 play shortened games (family short,
+    # trial_short below) so that more games fit twice. Blocks pool
+    # within a family and never across, because a shortened game is
+    # not the same measure. Measured minutes and the reasoning:
+    # docs/research/trial_mode.md.
+    #
+    # The short set: half-length games, same tasks, same scoring.
+    # Only a preset's overrides_from points here; it has no order of
+    # its own and is not offered on the picker.
+    trial_short:
+      family: short
+      overrides_from: study_battery
+      overrides:
+        reaction:
+          block_trials: 12            # 20 in the full set
+        chords:
+          subblocks: 1                # one size mix of 20, not two
+          trials_per_subblock: 20
+        force_pilot:
+          short_ladder: true          # the mode file's six waves
+        buzz_hunt:
+          loc_trials_per_hand: 8      # 16 in the full set
+          span_trials: 2              # 4 in the full set
+        echo:
+          games: 1                    # 2 in the full set
+        pattern:
+          soc_cycles_per_block: 2     # 3 in the full set
+          random_block_trials: 24     # 32 in the full set
+    # 15 min: three games, twice. Reaction is the control (no practice
+    # effect expected, so any change it shows is warm-up), Chords and
+    # Force Pilot are the two measures the device is built around,
+    # and Force Pilot's Storm and Uncharted pair separates learning
+    # those waves from getting used to the pad. A 30 second rest.
+    trial_15:
+      id: trial_15_v2
+      family: short
+      overrides_from: trial_short
+      budget_min: 15
+      hard_stop_min: 18
+      rest_s: 30
+      rest_min_s: 30
+      orders:
+        A:
+          - {mode: reaction, hand: right, phase: pass1}
+          - {mode: chords, hand: right, phase: pass1}
+          - {mode: force_pilot, hand: right, phase: pass1}
+          - {mode: reaction, hand: right, phase: pass2,
+             rest_before: true}
+          - {mode: chords, hand: right, phase: pass2}
+          - {mode: force_pilot, hand: right, phase: pass2}
+        B:
+          - {mode: force_pilot, hand: right, phase: pass1}
+          - {mode: chords, hand: right, phase: pass1}
+          - {mode: reaction, hand: right, phase: pass1}
+          - {mode: force_pilot, hand: right, phase: pass2,
+             rest_before: true}
+          - {mode: chords, hand: right, phase: pass2}
+          - {mode: reaction, hand: right, phase: pass2}
+      cells:
+        1: {order: A}
+        2: {order: B}
+        3: {order: A}
+        0: {order: B}
+    # 30 min: all eight games once, shortened, then after a 2 minute
+    # rest the three of the 15 and Adaptive again. Every game is in,
+    # Muscle Memory's learning score (P1) included, and four games
+    # show their second-go change.
+    trial_30:
+      id: trial_30_v2
+      family: short
+      overrides_from: trial_short
+      budget_min: 30
+      hard_stop_min: 35
+      rest_s: 120
+      rest_min_s: 60
+      orders:
+        A:
+          - {mode: reaction, hand: right, phase: pass1}
+          - {mode: rhythm, hand: right, phase: pass1,
+             track: Easy_Lemon.mp3, difficulty: medium}
+          - {mode: echo, hand: right, phase: pass1}
+          - {mode: force_pilot, hand: right, phase: pass1}
+          - {mode: chords, hand: right, phase: pass1}
+          - {mode: buzz_hunt, hand: right, phase: pass1}
+          - {mode: pattern, hand: right, phase: pass1}
+          - {mode: adaptive, hand: right, phase: pass1}
+          - {mode: reaction, hand: right, phase: pass2,
+             rest_before: true}
+          - {mode: force_pilot, hand: right, phase: pass2}
+          - {mode: chords, hand: right, phase: pass2}
+          - {mode: adaptive, hand: right, phase: pass2}
+        B:
+          - {mode: force_pilot, hand: right, phase: pass1}
+          - {mode: chords, hand: right, phase: pass1}
+          - {mode: buzz_hunt, hand: right, phase: pass1}
+          - {mode: adaptive, hand: right, phase: pass1}
+          - {mode: reaction, hand: right, phase: pass1}
+          - {mode: rhythm, hand: right, phase: pass1,
+             track: Easy_Lemon.mp3, difficulty: medium}
+          - {mode: echo, hand: right, phase: pass1}
+          - {mode: pattern, hand: right, phase: pass1}
+          - {mode: force_pilot, hand: right, phase: pass2,
+             rest_before: true}
+          - {mode: chords, hand: right, phase: pass2}
+          - {mode: adaptive, hand: right, phase: pass2}
+          - {mode: reaction, hand: right, phase: pass2}
+      cells:
+        1: {order: A}
+        2: {order: B}
+        3: {order: A}
+        0: {order: B}
+    # 45 min is study_battery itself.
+    #
+    # 60 min: every game twice. The 45 minute sitting block for block,
+    # then after a stretch a second go at the four games it plays
+    # once: Echo, Buzz Hunt, Muscle Memory and Adaptive, in the order
+    # pass 1 played them. Every game gets its second-go change, the
+    # second Muscle Memory block restores P2, and all eight get an
+    # exploratory test-retest.
+    trial_60:
+      id: trial_60_v2
+      family: full
+      overrides_from: study_battery
+      budget_min: 60
+      hard_stop_min: 65
+      stretch_s: 60
+      rest_s: 180
+      rest_min_s: 60
+      orders:
+        A:
+          - {mode: reaction, hand: right, phase: pass1}
+          - {mode: rhythm, hand: right, phase: pass1,
+             track: Easy_Lemon.mp3, difficulty: medium}
+          - {mode: echo, hand: right, phase: pass1}
+          - {mode: force_pilot, hand: right, phase: pass1,
+             stretch_before: true}
+          - {mode: chords, hand: right, phase: pass1}
+          - {mode: buzz_hunt, hand: right, phase: pass1}
+          - {mode: pattern, hand: right, phase: pass1}
+          - {mode: adaptive, hand: right, phase: pass1}
+          - {mode: reaction, hand: right, phase: pass2,
+             rest_before: true}
+          - {mode: rhythm, hand: right, phase: pass2,
+             track: Easy_Lemon.mp3, difficulty: medium}
+          - {mode: force_pilot, hand: right, phase: pass2}
+          - {mode: chords, hand: right, phase: pass2}
+          - {mode: echo, hand: right, phase: pass2,
+             stretch_before: true}
+          - {mode: buzz_hunt, hand: right, phase: pass2}
+          - {mode: pattern, hand: right, phase: pass2}
+          - {mode: adaptive, hand: right, phase: pass2}
+        B:
+          - {mode: force_pilot, hand: right, phase: pass1}
+          - {mode: chords, hand: right, phase: pass1,
+             stretch_before: true}
+          - {mode: buzz_hunt, hand: right, phase: pass1}
+          - {mode: adaptive, hand: right, phase: pass1}
+          - {mode: reaction, hand: right, phase: pass1}
+          - {mode: rhythm, hand: right, phase: pass1,
+             track: Easy_Lemon.mp3, difficulty: medium}
+          - {mode: echo, hand: right, phase: pass1}
+          - {mode: pattern, hand: right, phase: pass1}
+          - {mode: force_pilot, hand: right, phase: pass2,
+             rest_before: true}
+          - {mode: chords, hand: right, phase: pass2}
+          - {mode: reaction, hand: right, phase: pass2}
+          - {mode: rhythm, hand: right, phase: pass2,
+             track: Easy_Lemon.mp3, difficulty: medium}
+          - {mode: buzz_hunt, hand: right, phase: pass2,
+             stretch_before: true}
+          - {mode: adaptive, hand: right, phase: pass2}
+          - {mode: echo, hand: right, phase: pass2}
+          - {mode: pattern, hand: right, phase: pass2}
+      cells:
+        1: {order: A}
+        2: {order: B}
+        3: {order: A}
+        0: {order: B}
+
+  # What the login's SESSION picker offers besides Free play, shortest
+  # first: minutes on the picker, and the preset above that runs.
+  # Picking one starts that preset straight after LOG IN; Free play is
+  # the hub as it always was. A list in an overlay replaces this one,
+  # which is how config/eeg_lab.yaml offers none.
+  trials:
+    - {minutes: 15, preset: trial_15}
+    - {minutes: 30, preset: trial_30}
+    - {minutes: 45, preset: study_battery}
+    - {minutes: 60, preset: trial_60}

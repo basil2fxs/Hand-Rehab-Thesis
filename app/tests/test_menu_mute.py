@@ -112,7 +112,6 @@ class _Harness(unittest.TestCase):
         cfg.data["ui"]["resolution"] = [1280, 800]
         cfg.data["session"]["data_dir"] = str(self.root / "sessions")
         cfg.data["session"]["prefs_file"] = str(self.root / "prefs.json")
-        cfg.data["session"]["suggest_code"] = "never"
         cfg.data["audio"]["enabled"] = False
         cfg.data["report"] = {"enabled": False}
         self.eng = GameEngine(cfg, KeyboardOnlySource())

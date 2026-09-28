@@ -703,19 +703,19 @@ class TitleScreen(Screen):
     # runs, which is what the previous four-mode wording did.
     INFO_TITLE = "Session protocol"
     INFO_STEPS = [
-        "1. Enter the participant code (or name), age and main hand,",
+        "1. Enter the name, age and main hand, pick the SESSION,",
         "      then press LOG IN.",
-        "2. A study visit presses PLAY ALL on the hub. It runs twelve",
-        "      blocks on the right hand, in the order set by the code:",
-        "      Reaction, Rhythm, Echo, Force Pilot, Chords, Buzz Hunt,",
-        "      Muscle Memory, Adaptive, Syllables, then after a rest",
-        "      Reaction, Force Pilot and Chords again.",
-        "3. Outside a study visit, pick modes from the hub as prescribed.",
+        "2. A timed SESSION runs its games in order. 45 min is the",
+        "      study's sitting: twelve blocks on the right hand, in the",
+        "      order set at login: Reaction, Rhythm, Echo, Force Pilot,",
+        "      Chords, Buzz Hunt, Muscle Memory, Adaptive, Syllables,",
+        "      then after a rest Reaction, Force Pilot and Chords again.",
+        "3. Free play: pick modes from the hub as prescribed.",
         "      Mirror is 32 trials and needs two boards; Adaptive is 40.",
         "4. Finish every block. Quitting early leaves gaps in the data.",
     ]
-    INFO_FOOTER = ("About 45 minutes on the rig for the full PLAY ALL "
-                   "run, rest and stretch included.")
+    INFO_FOOTER = ("About 45 minutes on the rig for the 45 minute "
+                   "session, rest and stretch included.")
 
     # Vertical rhythm, in logical pixels against the 1280x800 render
     # surface. Held as constants because the card, the inputs and the
@@ -756,9 +756,10 @@ class TitleScreen(Screen):
         cx = engine.layout.width // 2
         w, h = engine.layout.width, engine.layout.height
 
-        # The intake card. Row one is the identity (code or name, age,
-        # sex); row two is what the study needs per person (main hand,
-        # hand size). Everything is set once here and reused for every
+        # The intake card. Row one is the identity (name, age, sex);
+        # row two is what the study needs per person (main hand, hand
+        # length) and how the session runs (free play, or a timed
+        # trial that starts at LOG IN). Everything is set once here and reused for every
         # block the participant plays this session, so every CSV row
         # and every session folder is tagged the same way. The visit
         # number is not a field: it is worked out from the days this
@@ -772,13 +773,14 @@ class TitleScreen(Screen):
         r1 = self.CARD_TOP + self.ROW1_Y
         r2 = self.CARD_TOP + self.ROW2_Y
         fh = self.FIELD_H
-        # `name_input` keeps its name: the identity field is the same
-        # field it always was, it just accepts a study code as well.
+        # The identity field. It says NAME and opens empty: nothing is
+        # suggested or filled in for the next person (Basil's call,
+        # 28 September 2026). A study code typed here (P01) is still
+        # read as a code by data/intake.py.
         self.name_input = TextInput(
             pygame.Rect(x0, r1, 330, fh),
             self.theme, self.layout,
-            label="PARTICIPANT CODE OR NAME",
-            placeholder="P01, or a name",
+            label="NAME",
             max_len=40,
         )
         self.age_input = TextInput(
@@ -797,27 +799,36 @@ class TitleScreen(Screen):
         # `hand_seg` keeps its name and the metadata key stays
         # dominant_hand, so old sessions and the analysis read on.
         self.hand_seg = Segmented(
-            pygame.Rect(x0, r2, 260, fh),
+            pygame.Rect(x0, r2, 200, fh),
             self.theme, self.layout,
             options=self.HAND_OPTIONS, label="MAIN HAND",
             initial=None, hotkeys=self.HAND_HOTKEYS,
         )
+        # Hand length stays: it is the only evidence for objective A3
+        # (the chassis fits the 5th to 95th percentile hand). Hand
+        # breadth fed no check and no table, so it went (Basil,
+        # 28 September 2026); old sessions keep their recorded value.
         self.length_input = TextInput(
-            pygame.Rect(x0 + 300, r2, 260, fh),
+            pygame.Rect(x0 + 216, r2, 170, fh),
             self.theme, self.layout,
             label="HAND LENGTH mm", placeholder="optional",
             max_len=3, numeric=True,
         )
-        self.breadth_input = TextInput(
-            pygame.Rect(x0 + 600, r2, 260, fh),
+        # Trial Mode. Free play is the hub as it always was; a length
+        # starts that preset's games at LOG IN (protocol.trials).
+        self.trial_seg = Segmented(
+            pygame.Rect(x0 + 402, r2, 458, fh),
             self.theme, self.layout,
-            label="HAND BREADTH mm", placeholder="optional",
-            max_len=3, numeric=True,
+            options=self._trial_options(), label="SESSION",
+            initial="", font_pt=FONT_BODY - 2,
         )
-        # One focus order for Tab, text fields and pickers alike.
+        # One focus order for Tab, text fields and pickers alike. The
+        # SESSION picker is left out, and so not drawn, when the config
+        # offers no length (the EEG lab's build).
         self._fields = [self.name_input, self.age_input, self.sex_seg,
-                        self.hand_seg, self.length_input,
-                        self.breadth_input]
+                        self.hand_seg, self.length_input]
+        if len(self.trial_seg.options) > 1:
+            self._fields.append(self.trial_seg)
         # Carry-over bookkeeping: the (identity, age) the fields were
         # last filled for, and what was written, so a value the RA
         # typed by hand is never overwritten by the lookup and a
@@ -913,8 +924,8 @@ class TitleScreen(Screen):
 
     # ---- intake helpers ---------------------------------------------------
     def _data_dir(self):
-        """The sessions tree the suggestions read, or None on an
-        engine with no config (a bare test double)."""
+        """The sessions tree the carry-over and the visit count read,
+        or None on an engine with no config (a bare test double)."""
         try:
             cfg = self.engine.cfg
             return cfg.resolve_path(cfg.get("session.data_dir", "sessions"))
@@ -929,23 +940,19 @@ class TitleScreen(Screen):
         s = str(v if v is not None else "").strip()
         return "" if s in ("None", "NA") else s
 
-    def _suggested_code(self) -> str:
-        """The next free study code, or '' when the config says not to
-        suggest one (or, in auto mode, when nobody on this machine has
-        ever logged in with a code, so a clinic never sees one)."""
-        from ..data.intake import known_codes, suggest_next_code
-        mode = self._cfg_str("session.suggest_code").lower() or "auto"
-        if mode == "never":
-            return ""
-        data_dir = self._data_dir()
-        if mode == "auto" and not known_codes(data_dir):
-            return ""
-        return suggest_next_code(data_dir)
+    def _trial_options(self) -> list[tuple[str, str]]:
+        """Free play, then each Trial Mode length the config offers."""
+        from ..game.battery import trial_options
+        try:
+            lengths = trial_options(self.engine.cfg)
+        except Exception:
+            lengths = []
+        return [("", "Free play")] + [(name, f"{m} min")
+                                      for m, name in lengths]
 
     # Which login field carries each carried-over intake key.
     def _carry_targets(self) -> dict:
         return {"hand_length_mm": self.length_input,
-                "hand_breadth_mm": self.breadth_input,
                 "dominant_hand": self.hand_seg,
                 "sex": self.sex_seg}
 
@@ -996,7 +1003,6 @@ class TitleScreen(Screen):
         if not src:
             return ""
         words = {"hand_length_mm": "hand length",
-                 "hand_breadth_mm": "hand breadth",
                  "dominant_hand": "main hand", "sex": "sex"}
         carried = [words[k] for k, f in self._carry_targets().items()
                    if getattr(f, "prefilled", False)]
@@ -1043,10 +1049,12 @@ class TitleScreen(Screen):
         # and the analysis's hand contrast both hang off it, and it
         # cannot be recovered after the visit. A name (the clinic
         # path) is not held to this.
-        if is_study_code(name) and self.hand_seg.value is None:
-            self.begin_note = ("Pick the main hand for a study code "
-                               "(click Left or Right, or Tab to the "
-                               "field and press L or R).")
+        trial = self.trial_seg.value or None
+        if ((is_study_code(name) or trial)
+                and self.hand_seg.value is None):
+            self.begin_note = ("Pick the main hand (click Left or "
+                               "Right, or Tab to the field and press "
+                               "L or R).")
             return
         self._na_warned = False
         self.begin_note = ""
@@ -1068,7 +1076,7 @@ class TitleScreen(Screen):
             dominant_hand=self.hand_seg.value or "",
             visit=self._derived_visit(name),
             hand_length_mm=self.length_input.value,
-            hand_breadth_mm=self.breadth_input.value,
+            trial=trial,
         )
 
     def _draw_device_icon(self, surf: pygame.Surface,
@@ -1140,21 +1148,18 @@ class TitleScreen(Screen):
         """Re-sync every field with the current cfg values. Called by
         engine.show_title() so coming BACK to the login screen (a
         session just ended, which clears the participant) shows the
-        cleared state instead of the stale text from last time, and
-        re-reads the sessions tree for the next free code."""
-        prefill_name = self._cfg_str("session.participant")
-        self.name_input.select_all = False
-        if not prefill_name:
-            prefill_name = self._suggested_code()
-            # A suggestion is typed over, not appended to.
-            self.name_input.select_all = bool(prefill_name)
-        self.name_input.text = prefill_name
+        cleared state instead of the stale text from last time. The
+        name opens empty unless a yaml passed as --config sets
+        session.participant."""
+        self.name_input.text = self._cfg_str("session.participant")
         self.age_input.text = self._cfg_str("session.age")
         self.sex_seg.set(self._cfg_str("session.sex").lower())
         hand = self._cfg_str("session.dominant_hand").lower()
         self.hand_seg.set(hand if hand in ("left", "right") else None)
         self.length_input.text = self._cfg_str("session.hand_length_mm")
-        self.breadth_input.text = self._cfg_str("session.hand_breadth_mm")
+        # Each person's session starts as free play: a trial left
+        # picked would start the next participant's games unasked.
+        self.trial_seg.set("")
         for f in self._fields:
             f.focused = False
             f.prefilled = False
@@ -1270,9 +1275,6 @@ class TitleScreen(Screen):
         # controls, and the button can never drift away from the fields
         # it commits.
         Card(self.card_rect, self.theme, layout=self.layout).draw(surf)
-        draw_text(surf, "SESSION LOG IN",
-                  (cx, self.card_rect.y + 20), self.theme, self.layout,
-                  pt=FONT_SMALL + 2, centre=True, colour=self.theme.muted)
         for f in self._fields:
             f.draw(surf)
         self.start_btn.draw(surf)
@@ -1283,12 +1285,6 @@ class TitleScreen(Screen):
                       (cx, self.card_rect.y + self.NOTE_Y),
                       self.theme, self.layout, pt=FONT_SMALL + 1,
                       centre=True, colour=self.theme.warning)
-        elif self.name_input.select_all and self.name_input.text:
-            draw_text(surf, f"Next free code {self.name_input.text} "
-                      "suggested. Type to replace it, Enter to use it.",
-                      (cx, self.card_rect.y + self.NOTE_Y),
-                      self.theme, self.layout, pt=FONT_SMALL + 1,
-                      centre=True, colour=self.theme.muted)
         elif self._prefill_note():
             draw_text(surf, self._prefill_note(),
                       (cx, self.card_rect.y + self.NOTE_Y),
@@ -1448,7 +1444,7 @@ class ModeSelectScreen(Screen):
     # modes/pattern.py). Titled "Muscle Memory" for the same reason;
     # the internal mode key stays "pattern".
     MODES = [
-        ("srt", "Reaction", "Press the square that flashes red"),
+        ("srt", "Reaction", "Press the finger that lights up"),
         ("adaptive", "Adaptive", "The pace follows you"),
         ("pattern", "Muscle Memory", "Play takes of a piano riff"),
         ("chords", "Chords", "Press keys together"),
@@ -1896,12 +1892,15 @@ class ModeSelectScreen(Screen):
             ]
             pygame.draw.polygon(surf, colour, flag_pts)
         elif kind == "srt":
-            # Four squares in a row, one lit: the task's own screen.
-            sq = size * 2 // 7
-            gap = max(2, size // 10)
+            # Four finger cards, one lit: the task's own screen, as tall
+            # as the fingers they stand for.
+            sq = size * 2 // 9
+            gap = max(2, size // 12)
             x = cx - (4 * sq + 3 * gap) // 2
-            for i in range(4):
-                r = pygame.Rect(x + i * (sq + gap), cy - sq // 2, sq, sq)
+            for i, ratio in enumerate(GameplayScreen.FINGER_LENGTH_RATIO):
+                h = int(size * 0.8 * ratio)
+                r = pygame.Rect(x + i * (sq + gap), cy + size * 2 // 5 - h,
+                                sq, h)
                 pygame.draw.rect(surf, colour, r, 0 if i == 1 else 3,
                                  border_radius=3)
         elif kind == "reaction":

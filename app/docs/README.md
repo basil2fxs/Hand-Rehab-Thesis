@@ -3,7 +3,7 @@
 | Path | What it is |
 | --- | --- |
 | [`study_day/`](study_day) | The collection-day kit: run sheet, consent, intake, debrief |
-| [`research/`](research) | The study design and the literature behind each game |
+| [`research/`](research) | The study design, the Trial Mode lengths ([`trial_mode.md`](research/trial_mode.md)) and the literature behind each game |
 | [`eeg_lab_setup.txt`](eeg_lab_setup.txt) | The EEG lab checklist and the full marker code table |
 | [`flashing.txt`](flashing.txt) | Re-flashing the board and moving a sensor to a new address |
 | [`pattern_sequences/`](pattern_sequences) | Example sequence files for Muscle Memory |
