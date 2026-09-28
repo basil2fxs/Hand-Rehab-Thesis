@@ -6,6 +6,8 @@ describes is the one the workflow really does.
 from __future__ import annotations
 
 import re
+import shutil
+import subprocess
 import unittest
 from pathlib import Path
 from urllib.parse import unquote
@@ -14,6 +16,16 @@ REPO = Path(__file__).resolve().parents[2]
 APP = REPO / "app"
 GUIDE = REPO / "CONTRIBUTING.md"
 WORKFLOW = REPO / ".github" / "workflows" / "build-apps.yml"
+
+
+def _ignored(rel: str) -> bool:
+    """A file git leaves out on purpose: a generated copy or a setting
+    for one machine. A fresh clone does not have it, and the guide says
+    where it comes from."""
+    if not (shutil.which("git") and (REPO / ".git").exists()):
+        return False
+    return subprocess.run(["git", "check-ignore", "-q", rel], cwd=REPO,
+                          capture_output=True).returncode == 0
 
 
 class ContributingTests(unittest.TestCase):
@@ -37,7 +49,9 @@ class ContributingTests(unittest.TestCase):
                                r"yaml|spec|txt|ipynb|command))`", self.text):
             with self.subTest(path=path):
                 self.assertTrue((REPO / path).exists()
-                                or (APP / path).exists(), path)
+                                or (APP / path).exists()
+                                or _ignored(path) or _ignored(f"app/{path}"),
+                                path)
 
     def test_commands_name_real_scripts(self) -> None:
         for script in re.findall(r"python3? ((?:scripts|builds)/\w+\.py)",

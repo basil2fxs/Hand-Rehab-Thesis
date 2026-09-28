@@ -21,6 +21,7 @@ from unittest.mock import MagicMock
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from tests.realtime import real_time  # noqa: E402
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
@@ -1543,6 +1544,7 @@ class WireProtocolTests(_WireHarness):
                                  f"{codes[i + 1][1]}, not reset")
             self.assertEqual(codes[-1][1], 0, "line left latched high")
 
+    @real_time
     def test_pulse_width_is_ten_ms_within_two(self) -> None:
         # The old file held the code by frame counting and actually
         # delivered 1-4 ms; the spec's fix is 10 ms on the wall clock.

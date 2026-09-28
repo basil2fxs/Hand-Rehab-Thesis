@@ -33,6 +33,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from tests.realtime import real_time  # noqa: E402
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
@@ -51,6 +52,7 @@ def _zero(mode, note, offset_s):
     return mode._t_start + mode._countdown_s + note.t + offset_s
 
 
+@real_time
 class ToneOnTheBeatTests(unittest.TestCase):
 
     def test_the_tone_is_heard_on_the_scored_zero(self):
@@ -71,6 +73,7 @@ class ToneOnTheBeatTests(unittest.TestCase):
             self.assertEqual(mode.audio_summary()["tone_lead_ms"], 77.0)
 
 
+@real_time
 class DeviceDropTests(unittest.TestCase):
 
     def test_notes_lost_to_a_board_drop_are_not_misses(self):
@@ -93,6 +96,7 @@ class DeviceDropTests(unittest.TestCase):
             self.assertEqual(sum(eng._per_lane_misses.values()), 2)
 
 
+@real_time
 class LateWindowTests(unittest.TestCase):
 
     def test_a_late_press_inside_the_window_still_scores(self):
@@ -118,6 +122,7 @@ class LateWindowTests(unittest.TestCase):
             self.assertEqual(eng.hits, 3)
 
 
+@real_time
 class SongStartTests(unittest.TestCase):
 
     def test_the_clock_meets_the_play_call(self):
@@ -200,6 +205,7 @@ class FirstNoteTests(unittest.TestCase):
         _fake_clock(go)
 
 
+@real_time
 class FlashClockTests(unittest.TestCase):
 
     def test_the_outcome_flash_is_on_the_screen_clock(self):
@@ -222,6 +228,7 @@ class FlashClockTests(unittest.TestCase):
             self.assertLess(abs(stamp - time.perf_counter()), 2.0)
 
 
+@real_time
 class ResidualLagTests(unittest.TestCase):
 
     @staticmethod

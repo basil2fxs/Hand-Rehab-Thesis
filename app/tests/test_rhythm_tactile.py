@@ -33,6 +33,7 @@ from unittest.mock import MagicMock
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from tests.realtime import real_time  # noqa: E402
 
 
 FRAME_S = 1.0 / 60.0
@@ -502,6 +503,7 @@ class FakeWireTests(unittest.TestCase):
         import pygame
         pygame.quit()
 
+    @real_time
     def test_lead_mode_stim_precedes_the_beat_by_the_lead_total(self):
         with tempfile.TemporaryDirectory() as td:
             eng, board = _make_engine(td, {"tactile_mode": "lead",
@@ -534,6 +536,7 @@ class FakeWireTests(unittest.TestCase):
             self.assertGreater(min(gaps), 195.0 - FRAME_S * 1000.0 * 2)
             self.assertLess(max(gaps), 195.0 + FRAME_S * 1000.0 * 2)
 
+    @real_time
     def test_feedback_mode_buzzes_only_after_a_scored_hit(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             eng, board = _make_engine(td, {"tactile_mode": "feedback"})
@@ -572,6 +575,7 @@ class FakeWireTests(unittest.TestCase):
                               if c.startswith("STIM:")],
                              ["STIM:1", "STIM:4"])
 
+    @real_time
     def test_on_beat_mode_with_zero_latency_buzzes_on_the_beat(self):
         with tempfile.TemporaryDirectory() as td:
             eng, board = _make_engine(td, {"tactile_mode": "on_beat",
@@ -604,6 +608,7 @@ class BlockRecordTests(unittest.TestCase):
         import pygame
         pygame.quit()
 
+    @real_time
     def test_rows_summary_and_metadata_carry_the_tactile_state(self):
         with tempfile.TemporaryDirectory() as td:
             eng, board = _make_engine(td, {"tactile_mode": "lead",

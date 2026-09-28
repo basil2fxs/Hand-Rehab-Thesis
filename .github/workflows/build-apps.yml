@@ -37,9 +37,9 @@ jobs:
   test:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -62,16 +62,16 @@ jobs:
   firmware:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
       # The AVR toolchain is about 200 MB and does not change between
       # runs, so caching it turns a two-minute job into a ten-second one.
       - name: Cache the PlatformIO toolchain
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.platformio/.cache
@@ -84,7 +84,7 @@ jobs:
       - name: Build the hexes
         run: python builds/build_firmware.py
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: firmware-hex
           path: app/assets/firmware
@@ -97,11 +97,11 @@ jobs:
         os: [macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # 3.12: newest CPython with mature wheels for the whole stack
       # (librosa's numba dependency lags the very latest Python).
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -119,9 +119,9 @@ jobs:
 
       # The hexes the firmware job just compiled, from this same commit,
       # so a released app can never carry firmware from a different one.
-      # v4 artefacts are scoped to the run, so no token is needed.
+      # Artefacts are scoped to the run, so no token is needed.
       - name: Fetch the firmware hexes
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: firmware-hex
           path: app/assets/firmware
@@ -150,7 +150,7 @@ jobs:
 
       - name: Upload the disk image (macOS)
         if: runner.os == 'macOS'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: FingerRehab-macOS
           path: app/bin/dist/FingerRehab-macOS.dmg
@@ -222,7 +222,7 @@ jobs:
 
       - name: Upload the Windows installer
         if: runner.os == 'Windows'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: FingerRehab-Setup-Windows
           path: app/bin/dist/FingerRehab-Setup-Windows.exe
@@ -243,7 +243,7 @@ jobs:
 
       - name: Upload EEG lab package (Windows)
         if: runner.os == 'Windows'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: FingerRehab-EEGLab
           path: app/bin/dist/FingerRehab-EEGLab.zip
@@ -298,13 +298,13 @@ jobs:
       group: release-main
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Read the version
         run: echo "APP_VERSION=$(python3 builds/version.py)" >> "$GITHUB_ENV"
 
       - name: Fetch the three files
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: FingerRehab-*
           path: dist

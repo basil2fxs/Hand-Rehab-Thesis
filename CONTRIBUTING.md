@@ -39,7 +39,7 @@ cd app
 python -m pytest tests -q
 ```
 
-The whole suite runs headless in about five minutes. Every change comes with a test that fails without it. CI runs the same suite on every push and releases nothing while it fails. After changing a study sitting, time it again: `python3 scripts/measure_battery.py --preset study_battery --repeats 8`.
+The whole suite runs headless in about five minutes. Every change comes with a test that fails without it. CI runs the same suite on every push and releases nothing while it fails. A few tests play real 60 Hz frames and time them to within one frame, which a shared CI runner cannot do, so CI skips those ([`app/tests/realtime.py`](app/tests/realtime.py)); run the whole suite on your own machine before a release. After changing a study sitting, time it again: `python3 scripts/measure_battery.py --preset study_battery --repeats 8`.
 
 ## Build and release
 
