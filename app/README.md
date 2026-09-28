@@ -12,7 +12,7 @@ flowchart LR
   A --> R["arduino<br>board firmware"]:::top
   A --> D["docs<br>study kit, research, images"]:::top
   A --> P["scripts<br>bench and study tools"]:::top
-  A --> T["tests<br>3,720 tests, headless"]:::top
+  A --> T["tests<br>3,721 tests, headless"]:::top
   A --> B["builds<br>installer scripts"]:::top
   classDef root fill:#0f172a,color:#fff,stroke:#0f172a
   classDef top fill:#2563eb,color:#fff,stroke:#1d4ed8
