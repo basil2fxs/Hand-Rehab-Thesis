@@ -31,6 +31,7 @@ from unittest.mock import MagicMock
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from tests.realtime import real_time  # noqa: E402
 
 
 def _profile(hand="right"):
@@ -557,6 +558,7 @@ class PulseMotorTests(unittest.TestCase):
         from finger_rehab.game.engine import GameEngine
         self.assertGreaterEqual(GameEngine.MIN_PULSE_MS, 1000.0 / 60.0)
 
+    @real_time
     def test_delivered_length_matches_the_measurement(self):
         # Compact re-run of the measurement behind MIN_PULSE_MS: drain
         # at the display's 60 Hz cadence and time STIM to STOP for a
