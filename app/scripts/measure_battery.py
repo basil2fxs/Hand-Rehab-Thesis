@@ -1,11 +1,12 @@
 """Measure the study battery's clock cost headless.
 
 The healthy baseline design runs on ONE board, the right-hand
-device, in one sitting of two passes: pass 1 plays the nine one-hand
-modes once, a rest, then pass 2 plays Reaction, Force Pilot and
-Chords again for the within-session test-retest. It targets 45
-minutes on the rig and stops at 50 (Data Collection Plan, 24
-September 2026). This script plays the whole plan through the real
+device, in one sitting of two passes: pass 1 plays the eight one-hand
+modes once, a rest, then pass 2 plays Reaction, Rhythm, Force Pilot
+and Chords again for the within-session test-retest and the practice
+change. It targets 45 minutes on the rig and stops at 50 (Data
+Collection Plan; Syllables left the sitting on 28 September 2026).
+--preset times a Trial Mode length instead. This script plays the whole plan through the real
 engine, real modes and real loggers with a simulated participant, on
 a simulated clock and a simulated one-board rig, and reports what the
 blocks actually cost in seconds. No display, no audio, no hardware.

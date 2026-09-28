@@ -2,11 +2,11 @@
 design, run through the real engine's protocol runner.
 
 The design runs on ONE board, the right-hand device, in one sitting
-of two passes: pass 1 plays the nine one-hand modes once, a rest,
-then pass 2 plays Reaction, Force Pilot and Chords again for the
-within-session test-retest (Data Collection Plan, 24 September 2026).
-Every block is the right hand, whatever the main hand; Mirror is not
-played.
+of two passes: pass 1 plays the eight one-hand modes once, a rest,
+then pass 2 plays Reaction, Rhythm, Force Pilot and Chords again for
+the within-session test-retest (Data Collection Plan, 24 September
+2026, amended 28 September). Every block is the right hand, whatever
+the main hand; Mirror and Syllables are not played.
 
   1. game/battery.py: the plan for a code (cell, order, hands), the
      override snapshot and its restore.
@@ -118,7 +118,8 @@ class PlanTests(unittest.TestCase):
                              list(range(1, N_STEPS + 1)))
             modes = [s.mode for s in plan.steps]
             pass1, pass2 = modes[:N_PASS1], modes[N_PASS1:]
-            # Nine one-hand modes once, no Mirror: it needs two boards.
+            # Eight one-hand modes once. No Mirror: it needs two boards.
+            # No Syllables: it runs on its own with a dyslexic reader.
             self.assertEqual(len(set(pass1)), N_PASS1, code)
             self.assertNotIn("mirror", modes)
             # Pass 2 is the reliability core, in pass 1's order, so
@@ -412,6 +413,7 @@ class BatteryOrderTests(_BatteryHarness):
                 encoding="utf-8"))
             bat = meta["battery"]
             self.assertEqual(bat["id"], BATTERY_ID, mode)
+            self.assertEqual(bat["family"], "full", mode)
             self.assertEqual(bat["position"], pos, mode)
             self.assertEqual(bat["of"], N_STEPS)
             self.assertEqual(bat["phase"], PHASES[pos - 1], mode)

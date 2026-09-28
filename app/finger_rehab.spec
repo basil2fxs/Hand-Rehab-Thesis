@@ -149,8 +149,8 @@ if IS_MAC:
             # Must equal SOFTWARE_VERSION in finger_rehab/data/session.py;
             # test_screen_layout pins the two together, and the Windows
             # installer reads the same number through builds/version.py.
-            "CFBundleShortVersionString": "3.2",
-            "CFBundleVersion": "3.2",
+            "CFBundleShortVersionString": "4.0",
+            "CFBundleVersion": "4.0",
             "NSHighResolutionCapable": True,
             "LSApplicationCategoryType":
                 "public.app-category.healthcare-fitness",

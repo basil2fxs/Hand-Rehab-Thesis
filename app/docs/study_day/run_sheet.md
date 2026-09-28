@@ -1,6 +1,6 @@
 # Run sheet, one participant
 
-60 minutes booked. About 43 minutes on the rig, the rest is welcome,
+60 minutes booked. About 44 minutes on the rig, the rest is welcome,
 paperwork and debrief. Tick as you go; anything unusual goes in the
 notes box on the intake sheet.
 
@@ -36,7 +36,7 @@ notes box on the intake sheet.
       to little on the four pads, thumb off the frame.
 - [ ] Say once: "This runs about three quarters of an hour, all on
       your right hand, with a short stretch early on and a proper
-      break later, after which three of the games come round again.
+      break later, after which four of the games come round again.
       Press lightly, like typing. Some games have a hidden rule; don't
       try to work it out, just play."
 - [ ] Say once: "After each game the screen shows how your last few
@@ -73,15 +73,19 @@ The order comes from the code, and every game is the right hand:
 | 2 | Rhythm | (60 s stretch) Chords |
 | 3 | Echo | Buzz Hunt |
 | 4 | (60 s stretch) Force Pilot | Adaptive |
-| 5 | Chords | Syllables |
-| 6 | Buzz Hunt | Reaction |
-| 7 | Pattern | Rhythm |
-| 8 | Adaptive | Echo |
-| 9 | Syllables | Pattern |
+| 5 | Chords | Reaction |
+| 6 | Buzz Hunt | Rhythm |
+| 7 | Pattern | Echo |
+| 8 | Adaptive | Pattern |
 | rest | 3 minutes | 3 minutes |
-| 10 | Reaction | Force Pilot |
-| 11 | Force Pilot | Chords |
-| 12 | Chords | Reaction |
+| 9 | Reaction | Force Pilot |
+| 10 | Rhythm | Chords |
+| 11 | Force Pilot | Reaction |
+| 12 | Chords | Rhythm |
+
+Syllables is not in the sitting. It is built for readers with
+dyslexia and is played with a dyslexic participant on its own, from
+the hub.
 
 ### At the 3 minute rest
 
@@ -93,7 +97,7 @@ The order comes from the code, and every game is the right hand:
       and reads "Start early"; only use it if they ask to go on, and
       write down that the rest was cut short. The reliability numbers
       are measured across this gap.
-- [ ] Pass 2 is the same three games again. Don't say they are
+- [ ] Pass 2 is four of the games again. Don't say they are
       repeats and don't mention the first scores.
 
 ### If something goes wrong

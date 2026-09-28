@@ -1,8 +1,8 @@
 <p align="center"><img src="app/assets/icons/app_icon_256.png" width="96" alt="Finger Rehab icon"></p>
 <h1 align="center">Finger Rehab</h1>
 <p align="center">A hand device and a laptop game that measure and train finger movement.<br>Four force pads, four vibration motors, an Arduino Nano, ten games, every press logged with its time and force.</p>
-<p align="center"><a href="https://github.com/basil2fxs/Hand-Rehab-Thesis/actions/workflows/build-apps.yml"><img alt="build-apps" src="https://github.com/basil2fxs/Hand-Rehab-Thesis/actions/workflows/build-apps.yml/badge.svg"></a> <img alt="Runs on Windows and macOS" src="https://img.shields.io/badge/runs%20on-Windows%20%7C%20macOS-2563eb"> <img alt="Python 3.10 or newer" src="https://img.shields.io/badge/python-3.10%2B-3776ab"> <img alt="Curtin University thesis, 2026" src="https://img.shields.io/badge/thesis-Curtin%202026-0f172a"></p>
-<p align="center"><a href="#install">Install</a> &middot; <a href="#the-ten-games">Games</a> &middot; <a href="#troubleshooting">Troubleshooting</a> &middot; <a href="#data">Data</a> &middot; <a href="#the-lab-folder">Lab folder</a></p>
+<p align="center"><a href="https://github.com/basil2fxs/Hand-Rehab-Thesis/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/basil2fxs/Hand-Rehab-Thesis?label=release&color=16a34a"></a> <a href="https://github.com/basil2fxs/Hand-Rehab-Thesis/actions/workflows/build-apps.yml"><img alt="build-apps" src="https://github.com/basil2fxs/Hand-Rehab-Thesis/actions/workflows/build-apps.yml/badge.svg"></a> <img alt="Runs on Windows and macOS" src="https://img.shields.io/badge/runs%20on-Windows%20%7C%20macOS-2563eb"> <img alt="Python 3.10 or newer" src="https://img.shields.io/badge/python-3.10%2B-3776ab"> <img alt="Curtin University thesis, 2026" src="https://img.shields.io/badge/thesis-Curtin%202026-0f172a"></p>
+<p align="center"><a href="#install">Install</a> &middot; <a href="#the-ten-games">Games</a> &middot; <a href="#troubleshooting">Troubleshooting</a> &middot; <a href="#data">Data</a> &middot; <a href="#the-lab-folder">Lab folder</a> &middot; <a href="CONTRIBUTING.md">Working on the code</a></p>
 <p align="center"><img src="app/docs/images/hub.png" width="88%" alt="The hub, where each game is picked"></p>
 
 ## Where things are
@@ -11,6 +11,7 @@
 flowchart LR
   R["Hand-Rehab-Thesis"]:::root
   R --> I["Installers<br>Windows setup, macOS disk image"]:::top
+  R --> Y["FINAL TRIAL RESULTS<br>the study: steps and results"]:::top
   R --> E["EEG_Lab<br>the folder for the lab PC"]:::top
   R --> N["analysis<br>session_analysis.ipynb"]:::top
   R --> S["sessions<br>recorded data, not in git"]:::top
@@ -30,6 +31,7 @@ flowchart LR
 | Folder | What is in it |
 | --- | --- |
 | [`Installers/`](Installers) | What people install |
+| [`FINAL TRIAL RESULTS/`](FINAL%20TRIAL%20RESULTS) | The study: what to do, and where each result goes |
 | [`EEG_Lab/`](EEG_Lab) | Copy this whole folder to the lab PC |
 | [`analysis/`](analysis) | The notebook that turns sessions into results |
 | [`app/`](app) | Code, config, assets, tests, build scripts |
@@ -56,10 +58,10 @@ A press is a crossing of the force stream, not a switch: each pad keeps a slow b
 
 ## Install
 
-- **Windows:** run `FingerRehab-Setup-Windows.exe`. No administrator needed. SmartScreen says "Windows protected your PC": More info, Run anyway.
-- **macOS:** open `FingerRehab-macOS.dmg`, drag Finger Rehab to Applications. First open: System Settings, Privacy & Security, Open Anyway.
+- **Windows:** run [`FingerRehab-Setup-Windows.exe`](https://github.com/basil2fxs/Hand-Rehab-Thesis/releases/latest/download/FingerRehab-Setup-Windows.exe). No administrator needed. SmartScreen says "Windows protected your PC": More info, Run anyway.
+- **macOS:** open [`FingerRehab-macOS.dmg`](https://github.com/basil2fxs/Hand-Rehab-Thesis/releases/latest/download/FingerRehab-macOS.dmg), drag Finger Rehab to Applications. First open: System Settings, Privacy & Security, Open Anyway.
 
-Both come from the latest [build-apps run](https://github.com/basil2fxs/Hand-Rehab-Thesis/actions/workflows/build-apps.yml). From source: `pip install -r app/requirements.txt`, then `python app/main.py`. No board? The keyboard stands in: `J K L ;` right hand, `F D S A` left.
+Both are on the [latest release](https://github.com/basil2fxs/Hand-Rehab-Thesis/releases/latest), built and tested from the same commit. From source: `pip install -r app/requirements.txt`, then `python app/main.py`. No board? The keyboard stands in: `J K L ;` right hand, `F D S A` left.
 
 ## When a board is plugged in
 
@@ -92,7 +94,7 @@ The game opens within a second: a watcher installed at first launch checks the p
 
 | Game | What the player does, and what it measures |
 | --- | --- |
-| **Reaction** | The lab's sequence task: press the finger whose square flashes red. Sequence learning. |
+| **Reaction** | The lab's sequence task: press the finger whose card lights up. Sequence learning. |
 | **Adaptive** | Press the finger whose lane lights up, at a pace that follows the player. Speed at a held difficulty. |
 | **Muscle Memory** | Play a piano riff, take after take. Learning of a repeated sequence. |
 | **Chords** | Press two to four fingers at once. Moving fingers together, holding the rest still. |
@@ -143,7 +145,7 @@ Sessions land in `sessions/<date>/<name>_<time>_<game>/`: `trials.csv` one row p
 
 ## The lab folder
 
-`EEG_Lab` (the `FingerRehab-EEGLab.zip` of the same build) holds the exe, `eeg_lab.yaml`, `run_in_psychopy.py`, `README.txt`, a `source/` copy and `sessions/`, where `sessions/eeg/` takes ActiView's recording under the name the game menu shows.
+`EEG_Lab` (the `FingerRehab-EEGLab.zip` of the same build) holds the exe, `eeg_lab.yaml`, `run_in_psychopy.py`, `README.md`, a `source/` copy and `sessions/`, where `sessions/eeg/` takes ActiView's recording under the name the game menu shows.
 Open `run_in_psychopy.py` in PsychoPy Coder and press Run. The home install carries no EEG anything.
 `python3 app/scripts/check_lab_sync.py` says whether the lab folder is the same game as the app; `--fix` makes it so, and `Local_Runner.command` does that on every start.
 Checklist and code table: [app/docs/eeg_lab_setup.txt](app/docs/eeg_lab_setup.txt).

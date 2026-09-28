@@ -17,6 +17,7 @@ from __future__ import annotations
 import re
 import unittest
 from pathlib import Path
+from urllib.parse import unquote
 
 
 REPO = Path(__file__).resolve().parents[1]
@@ -33,7 +34,7 @@ SIDE_DOCS = [
     REPO / "docs" / "eeg_lab_setup.txt",
     # The lab folder sits at the top level, beside app/, because it is
     # the thing that gets copied to a USB stick.
-    REPO.parent / "EEG_Lab" / "README.txt",
+    REPO.parent / "EEG_Lab" / "README.md",
 ]
 # The house rule bans these outright. The em dash and the section sign
 # are the two that keep coming back from pasted text.
@@ -323,8 +324,9 @@ class LinksAndImagesResolveTests(unittest.TestCase):
         for target in self._targets():
             with self.subTest(target=target):
                 # Links are relative to the README, which sits at the
-                # top level, not to the package root.
-                self.assertTrue((README.parent / target).exists(),
+                # top level, not to the package root. A folder with
+                # spaces in its name is linked with %20.
+                self.assertTrue((README.parent / unquote(target)).exists(),
                                 f"README links to {target}, which is gone")
 
 

@@ -10,23 +10,25 @@ trial), and Play all runs it once in place of the study's two
 Reaction blocks: about 54 minutes from login, the SRT about 15 of
 them. The folder that goes to the lab is
 EEG_Lab at the top of the project (FingerRehab-EEGLab.zip on CI):
-Finger Rehab.exe, eeg_lab.yaml, run_in_psychopy.py, README.txt, a
+Finger Rehab.exe, eeg_lab.yaml, run_in_psychopy.py, README.md, a
 source/ copy, and sessions/ with an empty eeg/ folder for ActiView's
 recordings. The exe loads the yaml beside it on its own, so a game
 update is a lab update.
 
-The chain: game -> USB -> NeuroSpec MMBT-S trigger box (orange Tobii
-Pro case, a virtual COM port) -> D-Sub 25 to D-Sub 37 cable -> BioSemi
-ActiveTwo USB receiver -> ActiView. One byte per write sets the box's
-eight lines, which land on trigger inputs 1 to 8, the low byte of the
-Status channel. Nothing comes back: the game only sends.
+The chain: game -> USB -> the lab's marker, an Arduino on COM10 at
+9600 baud (box: arduino in eeg_lab.yaml; a NeuroSpec MMBT-S trigger box
+works the same way) -> the trigger cable -> BioSemi ActiveTwo USB
+receiver -> ActiView. One byte per write sets the marker's eight lines,
+which land on trigger inputs 1 to 8, the low byte of the Status
+channel. Nothing comes back: the game only sends.
 
 At the lab PC
 -------------
-1. Plug the box in, and the hand boards if they are used, before
-   pressing Run. The switch beside the box's USB socket should read P
-   (Pulse Mode: the box holds each code 8 ms and resets itself). If it
-   reads S, set pulse_ms: 10 and box_mode: simple in eeg_lab.yaml.
+1. Plug the marker in, and the hand boards if they are used, before
+   pressing Run. With a NeuroSpec MMBT-S box instead, the switch beside
+   its USB socket should read P (Pulse Mode: the box holds each code
+   8 ms and resets itself); if it reads S, set pulse_ms: 10 and
+   box_mode: simple in eeg_lab.yaml.
 2. Start ActiView. The trigger low byte reads 255.
 3. Open run_in_psychopy.py in PsychoPy Coder and press Run (or
    double-click Finger Rehab.exe). PsychoPy's first start shows a tip

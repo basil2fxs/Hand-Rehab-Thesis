@@ -1,11 +1,13 @@
 """Check one participant's sitting before they leave the room.
 
 Reads the session folders the game wrote and says, in a few lines,
-whether the sitting is complete and usable for the study: all twelve
-Play all steps finished once, in their passes, on the right hand, with
-the files every analysis reads, full counts (no Test Mode blocks), the
-rest between the passes taken, no board drops or failed buzzes, and
-the intake filled in. Anything that needs a look is printed as CHECK
+whether the sitting is complete and usable for the study: every step
+of its plan finished once, in their passes, on the right hand, with
+the files every analysis reads, the counts its games should play (no
+Test Mode blocks), the rest between the passes taken, no board drops
+or failed buzzes, and the intake filled in. The plan is read off the
+sitting's own blocks, so the 45 minute study sitting and every Trial
+Mode length are checked against themselves. Anything that needs a look is printed as CHECK
 with what to do; the last line says READY or how many items to check.
 
     python3 app/scripts/check_sitting.py            newest code today
@@ -32,17 +34,23 @@ DAY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 GAME_RE = re.compile(r"^(?P<who>.+)_(?P<clock>\d{6})_(?P<mode>[a-z_]+)$")
 CODE_RE = re.compile(r"^[A-Za-z]{1,3}\d{2,4}$")
 
-# The shipped plan (protocol.presets.study_battery, healthy_one_hand_v2):
-# twelve steps, nine in pass 1 and three in pass 2. The exact counts a
-# full block of these modes plays; the rest vary with the player and
-# only need to be above zero.
+# The study sitting's plan (protocol.presets.study_battery,
+# healthy_one_hand_v3): twelve steps, eight in pass 1 and four in pass
+# 2, a 3 minute rest and a 50 minute stop. A block stamps its own step
+# count, preset and family, and those win; these are what a block
+# written before the stamps carried them is read against.
 N_STEPS = 12
-PASS2_FROM = 10
-EXACT_TRIALS = {"reaction": 20, "chords": 40, "pattern": 296}
-FORCE_PILOT_RUNS = 12
 REST_PLANNED_S = 180.0
-INTAKE_FIELDS = ("age", "sex", "dominant_hand", "hand_length_mm",
-                 "hand_breadth_mm")
+HARD_STOP_MIN = 50.0
+# The exact counts a block of these modes plays, per family: the study
+# sitting's full-length games, and Trial Mode's shortened ones
+# (protocol.presets.trial_short). The rest vary with the player and
+# only need to be above zero.
+EXACT_TRIALS = {"full": {"reaction": 20, "chords": 40, "pattern": 296},
+                "short": {"reaction": 12, "chords": 20, "pattern": 204}}
+FORCE_PILOT_RUNS = {"full": 12, "short": 6}
+# Hand breadth left the login on 28 September 2026.
+INTAKE_FIELDS = ("age", "sex", "dominant_hand", "hand_length_mm")
 
 
 def _read_meta(folder: Path) -> dict | None:
@@ -100,7 +108,27 @@ def check_code(code: str, rows: list[dict]) -> list[tuple[bool, str]]:
 
     done = {p: [r for r in rs if status(r) == "completed"]
             for p, rs in by_pos.items()}
-    missing = [p for p in range(1, N_STEPS + 1) if not done.get(p)]
+    # The sitting's own plan: step count, family, and the preset as the
+    # block's config recorded it (its rest and its stop).
+    stamps = [(r["meta"].get("battery") or {}) for r in battery]
+    n_steps = max((int(s.get("of") or 0) for s in stamps),
+                  default=0) or N_STEPS
+    family = next((str(s["family"]) for s in stamps if s.get("family")),
+                  "full")
+    preset = {}
+    for r in battery:
+        name = str((r["meta"].get("battery") or {}).get("preset") or "")
+        snap = (((r["meta"].get("config_snapshot") or {})
+                 .get("protocol") or {}).get("presets") or {})
+        if name and isinstance(snap.get(name), dict):
+            preset = snap[name]
+            break
+    # A preset with no rest_s has no rest (the 15 minute length); a
+    # block too old to carry its preset is the study sitting's.
+    rest_planned = (float(preset.get("rest_s") or 0.0) if preset
+                    else REST_PLANNED_S)
+    hard_stop = float(preset.get("hard_stop_min") or HARD_STOP_MIN)
+    missing = [p for p in range(1, n_steps + 1) if not done.get(p)]
     twice = [p for p, rs in done.items() if len(rs) > 1]
     retried = [p for p, rs in by_pos.items()
                if any(status(r) == "abandoned" for r in rs) and done.get(p)]
@@ -112,7 +140,7 @@ def check_code(code: str, rows: list[dict]) -> list[tuple[bool, str]]:
                            f"to play them, or write down why they were "
                            f"skipped"))
     else:
-        out.append((True, f"all {N_STEPS} steps finished"))
+        out.append((True, f"all {n_steps} steps finished"))
     if twice:
         out.append((False, f"step(s) finished twice: {twice}. The "
                            f"notebook averages them; note why"))
@@ -122,13 +150,20 @@ def check_code(code: str, rows: list[dict]) -> list[tuple[bool, str]]:
 
     first = sorted((r for rs in done.values() for r in rs),
                    key=lambda r: int(r["meta"]["battery"]["position"]))
+    pass2_from = min((int(r["meta"]["battery"]["position"]) for r in first
+                      if r["meta"]["battery"].get("phase") == "pass2"),
+                     default=None)
     wrong_phase = [int(r["meta"]["battery"]["position"]) for r in first
                    if (r["meta"]["battery"].get("phase") or "")
-                   != ("pass2" if int(r["meta"]["battery"]["position"])
-                       >= PASS2_FROM else "pass1")]
-    out.append((not wrong_phase,
-                "passes stamped: steps 1 to 9 pass 1, 10 to 12 pass 2"
-                if not wrong_phase else
+                   != ("pass2" if pass2_from is not None
+                       and int(r["meta"]["battery"]["position"])
+                       >= pass2_from else "pass1")]
+    if pass2_from is None:
+        stamped = "passes stamped: every step pass 1"
+    else:
+        stamped = (f"passes stamped: steps 1 to {pass2_from - 1} pass 1, "
+                   f"{pass2_from} to {n_steps} pass 2")
+    out.append((not wrong_phase, stamped if not wrong_phase else
                 f"pass stamp wrong on step(s) {wrong_phase}"))
     hands = {str(r["meta"].get("hand")) for r in first}
     out.append((hands == {"right"},
@@ -157,12 +192,12 @@ def check_code(code: str, rows: list[dict]) -> list[tuple[bool, str]]:
             continue
         if mode == "force_pilot":
             runs = int(((bs.get("force_pilot") or {}).get("runs")) or 0)
-            if runs != FORCE_PILOT_RUNS:
-                short.append(f"force_pilot ({runs} of {FORCE_PILOT_RUNS} "
-                             f"runs)")
+            want_runs = FORCE_PILOT_RUNS.get(family, FORCE_PILOT_RUNS["full"])
+            if runs != want_runs:
+                short.append(f"force_pilot ({runs} of {want_runs} runs)")
             continue
         n = int(bs.get("trials") or 0)
-        want = EXACT_TRIALS.get(mode)
+        want = EXACT_TRIALS.get(family, EXACT_TRIALS["full"]).get(mode)
         if (want and n != want) or n <= 0:
             short.append(f"{mode} ({n} trials"
                          + (f" of {want})" if want else ")"))
@@ -171,13 +206,16 @@ def check_code(code: str, rows: list[dict]) -> list[tuple[bool, str]]:
                 + ". Replay from the hub if the participant has time"))
 
     rest = next((r["meta"]["battery"].get("rest_before_s") for r in first
-                 if int(r["meta"]["battery"]["position"]) == PASS2_FROM),
+                 if pass2_from is not None
+                 and int(r["meta"]["battery"]["position"]) == pass2_from),
                 None)
-    if rest is None:
+    if pass2_from is None or rest_planned <= 0:
+        pass              # a plan with no second pass or no rest
+    elif rest is None:
         out.append((False, "no rest recorded before pass 2"))
     else:
         rest = float(rest)
-        ok = rest >= REST_PLANNED_S - 5
+        ok = rest >= rest_planned - 5
         out.append((ok,
                     f"rest before pass 2: {rest / 60:.1f} min"
                     + ("" if ok else " (cut short: write it on the intake "
@@ -227,8 +265,10 @@ def check_code(code: str, rows: list[dict]) -> list[tuple[bool, str]]:
     ends = [e for e in ends if e]
     if starts and ends:
         mins = (max(ends) - min(starts)).total_seconds() / 60.0
-        out.append((mins <= 50.0, f"first block to last: {mins:.0f} min"
-                    + ("" if mins <= 50.0 else " (past the 50 min stop)")))
+        out.append((mins <= hard_stop,
+                    f"first block to last: {mins:.0f} min"
+                    + ("" if mins <= hard_stop else
+                       f" (past the {hard_stop:.0f} min stop)")))
     if free:
         out.append((True, f"{len(free)} free-play block(s) as well; they "
                           f"stay out of the analysis"))

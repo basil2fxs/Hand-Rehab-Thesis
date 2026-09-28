@@ -4,7 +4,7 @@ Its top level holds exactly five entries and nothing else:
   Finger Rehab.exe     the frozen game (Windows build or CI)
   eeg_lab.yaml         copy of config/eeg_lab.yaml
   run_in_psychopy.py   committed launcher: runs the exe or source/
-  README.txt           committed, fifteen lines, what the lab does
+  README.md            committed: the steps and the marker cheat sheet
   source/              fresh copy of the game for PsychoPy's own Python
 
 builds/build_app.sh, builds/build_app.bat and the CI workflow all call
@@ -38,7 +38,7 @@ def lab_folder(root: pathlib.Path) -> pathlib.Path:
 PACKAGE = lab_folder(REPO)
 EXE = "Finger Rehab.exe"
 LAUNCHER = "run_in_psychopy.py"
-README = "README.txt"
+README = "README.md"
 # The two committed files that travel with the package unchanged.
 COMMITTED = (LAUNCHER, README)
 TOP_LEVEL = {EXE, "eeg_lab.yaml", LAUNCHER, README, "source",
@@ -54,7 +54,7 @@ SOURCE_ITEMS = ("main.py", "requirements.txt", "finger_rehab",
                 "config/default.yaml", "config/eeg_lab.yaml", "assets")
 # Shipped by earlier package layouts, plus editor and OS cruft.
 STALE = ("eeg_lab_setup.txt", "EEG Lab.bat", "run_from_source.py",
-         "__pycache__", ".DS_Store")
+         "README.txt", "__pycache__", ".DS_Store")
 IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store",
                                 ".pytest_cache")
 
@@ -127,7 +127,7 @@ def assemble(repo: Path = REPO, pkg: Path = PACKAGE,
     for name in STALE:
         _remove(pkg / name)
     shutil.copy2(repo / "config" / "eeg_lab.yaml", pkg / "eeg_lab.yaml")
-    # The launcher and the README live in docs/lab_package; they only
+    # The launcher and the README live in EEG_Lab itself; they only
     # need copying when the package is assembled somewhere else (CI's
     # zip folder).
     for name in COMMITTED:

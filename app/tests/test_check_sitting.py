@@ -15,43 +15,52 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 ORDER_A = ["reaction", "rhythm", "echo", "force_pilot", "chords",
-           "buzz_hunt", "pattern", "adaptive", "syllables",
-           "reaction", "force_pilot", "chords"]
+           "buzz_hunt", "pattern", "adaptive",
+           "reaction", "rhythm", "force_pilot", "chords"]
 COUNTS = {"reaction": 20, "chords": 40, "pattern": 296, "rhythm": 107,
-          "echo": 20, "buzz_hunt": 20, "adaptive": 40, "syllables": 25}
+          "echo": 20, "buzz_hunt": 20, "adaptive": 40}
+# The 15 minute Trial Mode length: three shortened games, twice.
+ORDER_15 = ["reaction", "chords", "force_pilot",
+            "reaction", "chords", "force_pilot"]
+COUNTS_SHORT = {"reaction": 12, "chords": 20}
 
 
 def write_sitting(root: Path, code: str = "P01", skip=(), test_mode=(),
                   fp_runs=12, rest_s=181.0, drops=0, sex="female",
-                  measured=True):
+                  measured=True, order=ORDER_A, counts=COUNTS,
+                  family="full", preset="study_battery", pass2_from=9,
+                  preset_cfg=None):
     day = root / "2026-10-20"
-    for pos, mode in enumerate(ORDER_A, start=1):
+    for pos, mode in enumerate(order, start=1):
         if pos in skip:
             continue
         g = day / f"{code}_{9 + pos:02d}0000_{mode}"
         g.mkdir(parents=True)
         (g / "trials.csv").write_text("h\n1\n")
         (g / "raw.csv").write_text("h\n1\n")
-        bs = {"status": "completed", "trials": COUNTS.get(mode, 12),
+        bs = {"status": "completed", "trials": counts.get(mode, 12),
               "connection": {"drops": drops if pos == 2 else 0},
               "stim_cue_failures": 0}
         if mode == "force_pilot":
             bs["force_pilot"] = {"runs": fp_runs}
-        bat = {"id": "healthy_one_hand_v2", "position": pos,
-               "phase": "pass2" if pos >= 10 else "pass1"}
-        if pos == 10:
+        bat = {"id": "x", "preset": preset, "family": family,
+               "position": pos, "of": len(order),
+               "phase": "pass2" if pos >= pass2_from else "pass1"}
+        if pos == pass2_from and rest_s is not None:
             bat["rest_before_s"] = rest_s
+        snap = {"game": {"test_mode_enabled": pos in test_mode},
+                "latency": {"measured": measured,
+                            "measured_on": "2026-10-19"},
+                "rhythm": {"audio_offset_ms": 87}}
+        if preset_cfg is not None:
+            snap["protocol"] = {"presets": {preset: preset_cfg}}
         meta = {"participant": code, "hand": "right",
                 "dominant_hand": "left", "age": "22", "sex": sex,
-                "hand_length_mm": "184", "hand_breadth_mm": "81",
+                "hand_length_mm": "184",
                 "started_at": f"2026-10-20T{9 + pos:02d}:00:00",
                 "finished_at": f"2026-10-20T{9 + pos:02d}:02:00",
                 "calibration": {"created_at": "2026-10-20T09:55:00"},
-                "config_snapshot": {"game": {
-                    "test_mode_enabled": pos in test_mode},
-                    "latency": {"measured": measured,
-                                "measured_on": "2026-10-19"},
-                    "rhythm": {"audio_offset_ms": 87}},
+                "config_snapshot": snap,
                 "battery": bat, "block_summary": bs}
         (g / "metadata.json").write_text(json.dumps(meta))
 
@@ -94,6 +103,34 @@ class CheckSittingTests(unittest.TestCase):
         bad = " ".join(self._bad(self._check(drops=2, sex="")))
         self.assertIn("2 board drop(s)", bad)
         self.assertIn("sex", bad)
+        # Hand breadth left the login: it is never asked for.
+        self.assertNotIn("breadth", bad)
+
+    def test_the_passes_are_read_off_the_sitting(self):
+        good = " ".join(line for ok, line in self._check() if ok)
+        self.assertIn("steps 1 to 8 pass 1, 9 to 12 pass 2", good)
+        self.assertIn("all 12 steps finished", good)
+
+    def test_a_short_trial_length_is_checked_against_itself(self):
+        # The 15: six shortened blocks, no rest, an 18 minute stop.
+        # Its short counts are its full counts, not short blocks.
+        result = self._check(order=ORDER_15, counts=COUNTS_SHORT,
+                             family="short", preset="trial_15",
+                             pass2_from=4, fp_runs=6, rest_s=None,
+                             preset_cfg={"hard_stop_min": 18})
+        bad = self._bad(result)
+        self.assertEqual(len(bad), 1, bad)
+        self.assertIn("18 min stop", bad[0])
+        good = " ".join(line for ok, line in result if ok)
+        self.assertIn("all 6 steps finished", good)
+        self.assertIn("full counts in every block", good)
+        self.assertNotIn("rest", good)
+        # A full-length Force Pilot in a short sitting is not its plan.
+        bad = " ".join(self._bad(self._check(
+            order=ORDER_15, counts=COUNTS_SHORT, family="short",
+            preset="trial_15", pass2_from=4, fp_runs=12, rest_s=None,
+            preset_cfg={"hard_stop_min": 18})))
+        self.assertIn("force_pilot (12 of 6 runs)", bad)
 
 
 if __name__ == "__main__":

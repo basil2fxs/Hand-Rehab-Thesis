@@ -941,8 +941,8 @@ class SittingSpreadTests(unittest.TestCase):
         self.assertEqual(got["blocks"], 12)
         self.assertGreater(got["total_min"], 20.0)
         self.assertLess(got["total_min"], got["budget_min"] + 5.0)
-        # Nine one-hand modes; pass 2 replays three of them.
-        self.assertEqual(len(got["by_mode_min"]), 9)
+        # Eight one-hand modes; pass 2 replays four of them.
+        self.assertEqual(len(got["by_mode_min"]), 8)
         self.assertEqual(len(got["by_block_min"]), 12)
         # Quiet means quiet: the per-block lines belong to the first
         # sitting only, or a --repeats 30 run is 330 lines of noise.

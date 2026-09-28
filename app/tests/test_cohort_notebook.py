@@ -716,12 +716,16 @@ class CohortNotebookTests(unittest.TestCase):
         pre-specified family. Their ids continue the per-session
         literature lists (A1 to A4, S1 to S5 mean other things there).
         This short cohort plays neither, so their rows say so rather
-        than going missing."""
+        than going missing: Adaptive's as not testable, Syllables' as
+        DROPPED, because Syllables left the healthy sitting on 28
+        September 2026 and runs with a dyslexic participant on its
+        own."""
         v = self.validity.set_index("id")
-        for cid in ("A5", "A6", "S6", "S7"):
+        for cid, verdict in (("A5", "not testable"), ("A6", "not testable"),
+                             ("S6", "dropped"), ("S7", "dropped")):
             self.assertIn(cid, v.index, cid)
             self.assertEqual(v.loc[cid, "family"], "pre-specified", cid)
-            self.assertEqual(v.loc[cid, "verdict"], "not testable", cid)
+            self.assertEqual(v.loc[cid, "verdict"], verdict, cid)
         pre = self.validity[self.validity["family"] == "pre-specified"]
         self.assertEqual(set(pre["mode"]), set(self.ra.COHORT_MODES))
 
@@ -1032,9 +1036,13 @@ class CohortStatisticsHelperTests(unittest.TestCase):
             again = {s.get("mode") for s in order
                      if s.get("phase") == "pass2"}
             self.assertTrue(again <= first, name)
-            self.assertEqual(
-                again, {m for _i, m, *_r in
-                        self.ra.COHORT_RELIABILITY_METRICS}, name)
+            # The T rows read the reliability core; any other second go
+            # (Rhythm, since 28 September 2026) is read in the
+            # exploratory second-go table.
+            core = {m for _i, m, *_r in self.ra.COHORT_RELIABILITY_METRICS}
+            self.assertTrue(core <= again, name)
+            self.assertTrue(again - core <= {
+                m for m, *_r in self.ra.COHORT_SECOND_GO_METRICS}, name)
 
 
 if __name__ == "__main__":

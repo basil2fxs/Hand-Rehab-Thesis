@@ -4,7 +4,7 @@ EEG_Lab/source must be a copy of what build_lab_package.py ships
 (finger_rehab, main.py, requirements.txt, config/default.yaml,
 config/eeg_lab.yaml, assets) and EEG_Lab/eeg_lab.yaml a copy of
 config/eeg_lab.yaml. Only the lab's own additions may differ: the
-eeg_lab.yaml overlay beside the exe, run_in_psychopy.py, README.txt.
+eeg_lab.yaml overlay beside the exe, run_in_psychopy.py, README.md.
 
 Exit 1 with the differences listed; --fix rebuilds source/ and the
 yaml copy from the working tree. The exe is not touched: only a

@@ -47,12 +47,13 @@ sys.path.insert(0, str(REPO))
 LAUNCHER = LAB_FOLDER / "run_in_psychopy.py"
 BUILDER = REPO / "scripts" / "build_lab_package.py"
 TARGET = {"Finger Rehab.exe", "eeg_lab.yaml", "run_in_psychopy.py",
-          "README.txt", "source", "sessions"}
+          "README.md", "source", "sessions"}
 # What the game imports at run time; see PACKAGES in the launcher.
 NEEDED = {"pygame-ce", "pyserial", "pyyaml", "numpy", "scipy", "librosa",
           "soundfile", "matplotlib"}
 # Shipped by earlier package layouts; must never come back.
-STALE = ("eeg_lab_setup.txt", "EEG Lab.bat", "run_from_source.py")
+STALE = ("eeg_lab_setup.txt", "EEG Lab.bat", "run_from_source.py",
+         "README.txt")
 
 
 def _load(path: Path):
@@ -404,7 +405,7 @@ class BuilderTests(unittest.TestCase):
             "tests/test_x.py": "", "sessions/P01/trials.csv": "",
             "docs/eeg_lab_setup.txt": "notes",
             "EEG_Lab/run_in_psychopy.py": "# launcher\n",
-            "EEG_Lab/README.txt": "lab readme\n",
+            "EEG_Lab/README.md": "lab readme\n",
         }
         for rel, text in files.items():
             # EEG_Lab sits BESIDE the package root in the real tree, the
@@ -456,13 +457,23 @@ class BuilderTests(unittest.TestCase):
         self.assertEqual(set(names), TARGET)
         self.assertEqual((pkg / "run_in_psychopy.py").read_text(),
                          "# launcher\n")
-        self.assertEqual((pkg / "README.txt").read_text(), "lab readme\n")
+        self.assertEqual((pkg / "README.md").read_text(), "lab readme\n")
 
     def test_readme_is_short_and_plain(self) -> None:
-        # Fifteen lines at most, ASCII only: the lab reads it once.
-        text = (LAB_FOLDER / "README.txt").read_text()
-        self.assertLessEqual(len(text.strip().splitlines()), 15)
+        # One screen, ASCII only: the lab reads it once, on GitHub or
+        # in Notepad on the lab PC.
+        text = (LAB_FOLDER / "README.md").read_text()
+        self.assertLessEqual(len(text.strip().splitlines()), 35)
         self.assertTrue(text.isascii())
+        # The steps, then the cheat sheet in both themes.
+        self.assertIn("run_in_psychopy.py", text)
+        for theme in ("dark", "light"):
+            name = f"eeg_cheat_sheet_{theme}.svg"
+            self.assertIn(name, text)
+            self.assertTrue((REPO / "docs" / "images" / name).is_file(),
+                            name)
+        self.assertFalse((LAB_FOLDER / "README.txt").exists(),
+                         "README.md replaced README.txt")
 
     def test_without_an_exe_the_rest_still_builds(self) -> None:
         # A Mac build cannot make the exe: the folder keeps the one

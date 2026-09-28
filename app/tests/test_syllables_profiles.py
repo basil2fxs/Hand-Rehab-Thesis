@@ -72,11 +72,17 @@ class Resolution(unittest.TestCase):
         self.assertEqual(resolve("10-15", 14).pid, "13-15")
         self.assertEqual(resolve("10-15", "").pid, "10-12")
 
-    def test_the_study_battery_pins_classic(self):
+    def test_the_study_battery_leaves_syllables_out(self):
+        # Syllables left the healthy sitting on 28 September 2026. It
+        # is played from the hub with a dyslexic reader, on the profile
+        # the shipped default picks from the age at login.
         import yaml
         cfg = yaml.safe_load((ROOT / "config" / "default.yaml").read_text())
-        over = cfg["protocol"]["presets"]["study_battery"]["overrides"]
-        self.assertEqual(over["syllables"]["age_band"], "classic")
+        preset = cfg["protocol"]["presets"]["study_battery"]
+        self.assertNotIn("syllables", preset["overrides"])
+        modes = {s["mode"] for order in preset["orders"].values()
+                 for s in order}
+        self.assertNotIn("syllables", modes)
         self.assertEqual(cfg["syllables"]["age_band"], "auto")
 
     def test_the_engine_passes_the_intake_age(self):

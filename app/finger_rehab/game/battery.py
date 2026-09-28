@@ -12,10 +12,11 @@ Pure functions over dicts so the plan can be tested without a screen
 and the engine's part stays small: start, continue, finish.
 
 The design the shipped preset implements runs on ONE board, the
-right-hand device, in one sitting of two passes: nine one-hand modes,
-a rest, then Reaction, Force Pilot and Chords again for the
-within-session test-retest. Data Collection Plan.md of 24 September
-2026, and the amendment at the top of
+right-hand device, in one sitting of two passes: eight one-hand
+modes, a rest, then Reaction, Rhythm, Force Pilot and Chords again
+for the within-session test-retest. Data Collection Plan.md of 24
+September 2026 as amended on 28 September (Syllables out, Rhythm's
+second go in), and the amendment at the top of
 docs/research/healthy_baseline_study.txt. Nothing in this module
 knows about passes beyond copying the preset's phase word onto the
 step, so a design change is a config edit, not a code change.

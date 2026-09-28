@@ -8,9 +8,10 @@ Thanks for doing that. A few things I couldn't tell you beforehand:
   and slower on the switch is how the game measures learning without
   you trying to learn. In Buzz Hunt a few trials had no buzz at all,
   on purpose, to check that nobody answers when nothing happens.
-- **Why three games came round again.** Playing Reaction, Force Pilot
-  and Chords twice lets me check the device gives the same answer
-  twice for the same hand. That's the reliability part of the study.
+- **Why four games came round again.** Playing Reaction, Rhythm,
+  Force Pilot and Chords twice lets me check the device gives the
+  same answer twice for the same hand, and see what a second go
+  changes. That's the reliability part of the study.
 - **What your numbers mean.** The screen compared the start and end of
   each game for you. That shows how you changed over a few minutes of
   practice. It doesn't show what you'd keep tomorrow, and it isn't a

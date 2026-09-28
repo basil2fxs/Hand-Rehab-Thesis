@@ -1,70 +1,78 @@
 # Trial Mode
 
-The login's SESSION picker: Free play, or a sitting of 15, 30, 45 or 60 minutes that runs its games in order from LOG IN. This page is why each length plays what it plays. Measured 28 September 2026.
+The login's SESSION picker: Free play, or a sitting of 15, 30, 45 or 60 minutes that runs its games in order from LOG IN. This page is why each length plays what it plays. Redesigned 28 September 2026.
+
+No length plays Syllables. It is built for readers with dyslexia, the study's participants are healthy students, and the author runs it with a dyslexic participant on its own, from the hub.
 
 ## The rule
 
-Every length plays the study sitting's own blocks with the study sitting's own settings (`overrides_from: study_battery` in [`config/default.yaml`](../../config/default.yaml)). A Reaction block in a 15 minute sitting is the same task, scored the same way, as pass 1 Reaction in the 45. So a block of one pass pools across lengths, and someone who only had 15 minutes still adds to every number their blocks feed. What changes is which blocks, and how many passes.
+Improvement needs repetition. A game played twice in one sitting, the same way both times, gives two things one game cannot: the change from the first go to the second, and a test-retest estimate of how repeatable the game is. So every length plays as many games twice as its minutes allow.
 
-The 45 is the pre-registered sitting ([`healthy_baseline_study.txt`](healthy_baseline_study.txt)) and stays the one for the collection day.
+To fit more games twice into the 15 and the 30, their games are shortened: same task, same scoring, fewer trials. The 45 and the 60 keep the study sitting's full-length games. Each block records its family, full or short, and the notebook reads one family at a time, because a shortened game is not the same measure as a full one.
 
-## What each block buys
+## Full and short games
 
-Minutes are the study sitting's measured block times. Checks are the design's pre-specified rows (its Section 4.6).
+Minutes are measured through the real engine with a model participant.
 
-| Game | Minutes | Checks | Where change shows |
+| Game | Full | Short | Where improvement shows |
 |---|---|---|---|
-| Reaction | 2.4 | R1, W1 | Not expected: its drift is the yardstick for every other game's trend |
-| Adaptive | 0.5 | A5, A6, objective A1 | A second go: the pace reached |
-| Chords | 2.7 | C1, C2, C3, C6, W4 | Inside the block (W4), and a second go |
-| Force Pilot | 3.5 | F1 to F4, the Parkinson's table | A second go (the T2 and T3 shift) |
-| Syllables | 1.8 | S6, S7, the dyslexia extension | Little: healthy adults sit near its ceiling |
-| Rhythm | 2.1 | Rh1, Rh2, objective B1 | A second go |
-| Buzz Hunt | 2.4 | B1 to B4, W5 | Inside the block (W5) |
-| Echo | 3.1 | E1 | A second go (inside a block the span grows by design) |
-| Muscle Memory | 6.3 | P1, P3, W3 | Inside the block (P1), and a second go (P2) |
+| Reaction | 20 trials, 2.4 min | 12 trials, 1.3 min | Not expected: it is the control, so its change is warm-up |
+| Rhythm | the song, 2.1 min | the same | A second go |
+| Echo | best of 2 games, 3.1 min | 1 game, 1.5 min | A second go; inside a block the span grows by design |
+| Force Pilot | 12 waves, 3.5 min | 6 waves, 1.9 min | A second go; Storm against Uncharted separates learning these waves from getting used to the pad |
+| Chords | 40 chords, 2.7 min | 20 chords, 1.1 min | Inside the block (full only), and a second go |
+| Buzz Hunt | 16 + 4 trials, 2.6 min | 8 + 2 trials, 1.4 min | Inside the block, and a second go |
+| Muscle Memory | 296 presses, 6.3 min | 204 presses, 4.9 min | Inside the block (P1), and a second go (P2) |
+| Adaptive | 40 trials, 0.5 min | the same | A second go: the pace reached |
 
-Fixed costs: 5 minutes for login, seating and calibration, 10 seconds between games, and a 3 minute rest before any second go. A second go is the only way to get test-retest (T1 to T5) and the pass 2 minus pass 1 change, which is where improvement across a sitting shows.
+The short Force Pilot flies six waves the mode file names: Tide, Stairs, Hills, Dunes, Storm and Uncharted. They keep a ramp and hold, the steps, the fast release, and the learned-against-novel pair. The config can switch between the two ladders but cannot list levels.
+
+What shortening costs: fewer trials make each block noisier, Chords needs its full two halves for its inside-the-block reading, and Echo loses its best-of-two.
+
+Fixed costs: 5 minutes for login, seating and calibration, 10 seconds between games, and a 2 or 3 minute rest before the second goes.
 
 ## The four lengths
 
-| Length | Plays | Gives |
-|---|---|---|
-| 15 | Reaction, Adaptive, Chords, Force Pilot | The anchor, finger independence, force control and the Parkinson's measures: 13 pre-specified rows |
-| 30 | The 15 plus Syllables, a rest, then Reaction, Chords and Force Pilot again | The whole reliability table (T1 to T5), R3, the practice shift for the core, the dyslexia checks |
-| 45 | The study sitting | Everything pre-registered |
-| 60 | The 45 block for block, then Rhythm, Echo, Muscle Memory and Adaptive again | The 45's numbers, plus P2 and an exploratory second-go table |
+| Length | Family | Plays | Games twice |
+|---|---|---|---|
+| 15 | short | Reaction, Chords, Force Pilot, then the same three again | 3 |
+| 30 | short | All eight, a 2 minute rest, then Reaction, Force Pilot, Chords and Adaptive again | 4 |
+| 45 | full | All eight, a 3 minute rest, then Reaction, Rhythm, Force Pilot and Chords again | 4 |
+| 60 | full | The 45, then Echo, Buzz Hunt, Muscle Memory and Adaptive again | all 8 |
 
-Why these:
+Why these, from the candidates timed (one sitting each):
 
-- **The core goes in first.** Reaction, Chords and Force Pilot carry the reliability chapter and what the device is for, and Reaction calibrates every within-block trend.
-- **Adaptive is nearly free.** Half a minute for two checks.
-- **The 30 spends 11.5 minutes on the rest and three second goes.** Only a second go gives the reliability table, so that beats adding Rhythm or Echo once.
-- **The 60's Muscle Memory second go restores P2**, the one pre-registered learning check the 45 dropped for time. Syllables was taken out of the second goes: adults sit near its ceiling, and with it the sitting ran past 60 minutes (median 59.6).
+- **15:** the most repetition in the least time. Reaction is the control, and Chords and Force Pilot are the two measures the device is built around. The second go follows straight on; a rest took it past 15. With a 1 minute rest, adding Adaptive ran 16.7 minutes, and Buzz Hunt and Adaptive in place of Force Pilot ran 15.4.
+- **30:** every game once, so all eight carry their first-go checks, Muscle Memory's learning score included; then the reliability core (Reaction, Force Pilot, Chords) and Adaptive, the shortest game, twice. Seven games twice without Muscle Memory ran 29.6 minutes but lost its learning score; all eight twice ran 39.9.
+- **45:** the study sitting. The 1.75 minutes Syllables gave back went to a second go at Rhythm, whose asynchrony is expected to be repeatable; a second Adaptive would only repeat a ceiling. A second Buzz Hunt and Adaptive instead ran 45.8.
+- **60:** every game twice at full length. Every game gets its improvement reading and a test-retest, and Muscle Memory's second go brings P2 back.
 
 ## Timing
 
-Through the real engine with a model participant (`scripts/measure_battery.py --preset trial_30`, and so on): 8 sittings on each of 6 codes, both orders, 2 left-handed, 48 per length.
+The shipped config, eight sittings on each of six codes, both orders, two left-handed: 48 per length. Medians are per code.
 
-| Length | Medians, min | Range, min | Over the length | Hard stop |
+| Length | Medians, min | Range, min | Past the length | Hard stop |
 |---|---|---|---|---|
-| 15 | 14.3 to 14.5 | 13.9 to 15.2 | 1 of 48 | 18 |
-| 30 | 28.2 to 28.6 | 27.6 to 29.4 | 0 | 35 |
-| 45 | 43.9 to 44.3 | 43.4 to 45.2 | 3 of 48, by 9 s at most | 50 |
-| 60 | 57.4 to 57.7 | 56.9 to 58.7 | 0 | 65 |
+| 15 | 14.4 to 14.8 | 14.0 to 15.3 | 4 of 48, by 17 s at most | 18 |
+| 30 | 28.0 to 28.5 | 27.7 to 29.3 | 0 | 35 |
+| 45 | 44.1 to 44.9 | 43.9 to 45.1 | 2 of 48, by 5 s at most | 50 |
+| 60 | 58.3 to 58.7 | 57.8 to 59.5 | 0 | 65 |
 
-A real sitting adds questions and slower changeovers, about 3 minutes on the 45.
+The games draw fresh material every block, so no two sittings take the same time. A second batch of the same settings moved a code's median by up to half a minute (the 45 came out at 44.2 to 44.4, one sitting past by 11 s; the 15 at 14.4 to 14.8, eight past by 15 s at most), so plan on the ranges.
 
-## What mixing lengths costs
+A real sitting adds questions and slower changeovers, about 3 minutes on the 45. The EEG lab's sitting, the same order with the lab's Reaction task in place of both Reaction blocks, times at a median of 54.6 minutes over 12 sittings.
 
-- n per game is whoever played it: a 15 minute participant adds nothing to Rhythm.
-- Both orders run inside every length, so a game's place in the sitting is balanced within a length but not across lengths.
-- The gap between a game's two goes is shorter in the 30, whose first pass is five games instead of nine. The notebook pools the passes, so say which lengths the T rows came from.
-- The notebook names each participant's sitting and reads feasibility against that sitting's own budget.
+## Reading the results
+
+- **One family at a time.** The notebook reads the full family by default: the 45, the 60 and the lab. Set `COHORT_FAMILY = "short"` in its setup cell to read the 15 and the 30.
+- **Improvement** is each game's second go minus its first. Reaction, Force Pilot and Chords are the T rows; the rest are the second-go table. Read each against Reaction's own change, the warm-up.
+- **P2** is tested for whoever sat the 60.
+- **S6 and S7**, the Syllables checks, print as DROPPED with the reason: Syllables runs on its own with a dyslexic participant.
 
 ## Recommendation
 
 - **Collection day:** 45 for everyone. The checks and the reliability table need n more than anything else.
-- **Someone who can stay 75 minutes:** 60. Nothing of the 45 is lost, and P2 comes back.
-- **A short slot:** 30 before 15. Only the 30 keeps the retest.
-- **The EEG lab:** no SESSION picker. A length would start its games before the recording is running; the RA starts ActiView from the name the game menu shows, then PLAY ALL runs the lab's sitting as before.
+- **Someone who can stay 75 minutes:** 60. Nothing of the 45 is lost, and every game shows its change.
+- **A short slot:** 30 before 15. Only the 30 plays every game.
+- **The EEG lab:** no SESSION picker. A length would start its games before the recording is running, so the RA starts ActiView from the name the game menu shows, then PLAY ALL runs the lab's sitting.
+- **Syllables:** from the hub, with a dyslexic participant, on its own.

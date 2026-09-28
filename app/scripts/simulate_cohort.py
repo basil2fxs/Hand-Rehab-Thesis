@@ -9,8 +9,9 @@ supplies the model hand on a fake 200 Hz sensor stream and the
 simulated clock); only the person is synthetic.
 
 The design runs on ONE board, the right-hand device, in two passes:
-pass 1 plays the nine one-hand modes once, pass 2 replays Reaction,
-Force Pilot and Chords after the rest. Every code is a person with
+pass 1 plays the eight one-hand modes once, pass 2 replays Reaction,
+Rhythm, Force Pilot and Chords after the rest (--presets deals Trial
+Mode lengths to the codes instead). Every code is a person with
 fixed traits and every block draws fresh trial noise around them, so
 pass 1 against pass 2 gives the reliability chapter something honest
 to recover: how much of a block's score is the person and how much is

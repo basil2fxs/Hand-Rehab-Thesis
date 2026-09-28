@@ -1082,7 +1082,7 @@ class LabPackageTests(unittest.TestCase):
     # scripts/build_lab_package.py USER_DATA, less sessions (shipped).
     USER_DATA = ("config", "python_packages")
     TOP_LEVEL = ("Finger Rehab.exe", "eeg_lab.yaml",
-                 "run_in_psychopy.py", "README.txt", "sessions",
+                 "run_in_psychopy.py", "README.md", "sessions",
                  "source")
 
     def test_generated_copies_match_their_sources(self) -> None:

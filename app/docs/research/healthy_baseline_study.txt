@@ -1,14 +1,15 @@
 HEALTHY BASELINE STUDY
 Design for the psychology-student cohort, Thesis Project A
 
-Status: 2026-09-24. ONE SITTING per participant on ONE BOARD, the
-right-hand device, in TWO PASSES. Pass 1 plays the nine one-hand
-modes once; after a 3 minute rest, pass 2 plays Reaction, Force Pilot
-and Chords again with the same counts. Twelve blocks, about 44
-minutes on the rig and about 60 minutes booked per person, run as one
-collection day at the end of semester. No return visit. The battery
-preset that runs it is protocol.presets.study_battery, id
-healthy_one_hand_v2.
+Status: 2026-09-28. ONE SITTING per participant on ONE BOARD, the
+right-hand device, in TWO PASSES. Pass 1 plays the eight one-hand
+modes once; after a 3 minute rest, pass 2 plays Reaction, Rhythm,
+Force Pilot and Chords again with the same counts. Twelve blocks,
+about 44 minutes on the rig and about 60 minutes booked per person,
+run as one collection day at the end of semester. No return visit.
+The battery preset that runs it is protocol.presets.study_battery, id
+healthy_one_hand_v3. Syllables is not in it: it is played with a
+dyslexic participant on its own (28 September 2026).
 
 The authority on the design is Basil's own plan file, "Data
 Collection Plan.md", under
@@ -35,11 +36,17 @@ HOW THE DESIGN GOT HERE (every change made before any participant):
     used to take now buy a second pass of the three core modes,
     which gives the design the within-session test-retest it did not
     have. The Syllables prompt became progressive (Section 1.4).
-  - 28 September 2026: TRIAL MODE. The login's SESSION picker runs
-    this sitting (45 min, unchanged) or a 15, 30 or 60 minute length
-    built from its own blocks with its own settings (Section 2.5,
-    docs/research/trial_mode.md). Hand breadth is no longer measured:
-    no check or table read it.
+  - 28 September 2026: SYLLABLES OUT, TRIAL MODE IN, v3. Syllables
+    left the sitting before any participant: it is built for readers
+    with dyslexia, the students are not, and the author plays it with
+    a dyslexic participant on its own. S6 and S7 leave the healthy
+    study's table with it. Its minutes buy a second go at Rhythm, so
+    pass 2 is Reaction, Rhythm, Force Pilot and Chords (id
+    healthy_one_hand_v3). The login's SESSION picker runs this
+    sitting as its 45 minute length, or a 15, 30 or 60 minute length
+    that plays games twice wherever the minutes allow, the 15 and 30
+    with shortened games (Section 2.5, docs/research/trial_mode.md).
+    Hand breadth is no longer measured: no check or table read it.
 
 What one board costs, and the thesis says it in the same breath as
 the results:
@@ -138,13 +145,15 @@ DECISIONS IN ONE SCREEN
 
 - One sitting, ONE board, the right-hand device, for everybody.
   Booking 60 minutes: 15 minutes of consent and intake off the clock,
-  then a PLAY ALL run measured (M) at medians of 43.7 to 44.2 minutes
-  over 48 sittings on six codes, range 43.2 to 44.9, none over the
-  budget of 45 or the hard stop at 50 (Section 2.3).
+  then a PLAY ALL run measured (M) at medians of 44.1 to 44.9 minutes
+  over 48 sittings on six codes, range 43.9 to 45.1, two over the
+  budget of 45 by 5 seconds at most and none near the hard stop at 50
+  (Section 2.3, the v3 sitting of 28 September 2026).
 - Twelve blocks. Pass 1: reaction, rhythm, echo, force pilot,
-  chords, buzz hunt, pattern, adaptive, syllables, each once. Pass 2,
-  after the rest: reaction, force pilot, chords, in the order pass 1
-  played them. Mirror is not played.
+  chords, buzz hunt, pattern, adaptive, each once. Pass 2, after the
+  rest: reaction, rhythm, force pilot, chords, in the order pass 1
+  played them. Mirror is not played, and Syllables is played with a
+  dyslexic participant on its own.
 - One 3 minute rest, between the passes: it is the test-retest
   interval. It counts down on the NEXT UP card and holds the Start
   button for the first 60 seconds; the rest actually taken is logged.
@@ -384,6 +393,14 @@ per-chord and per-single cells are cohort-pooled, never per person.
 
 1.4 Syllables (played once, two ceiling checks)
 -----------------------------------------------
+28 September 2026: NOT IN THE HEALTHY SITTING. The game is built for
+readers with dyslexia and the students are fluent readers, so S6 and
+S7 below could only ever show a ceiling. The author plays it with a
+dyslexic participant on its own, from the hub, under a code outside
+the P series (D01). A hub game is in no cohort table, and the
+notebook names a code with hub games only and leaves it out of n
+(cohort_sitting_people). What follows is kept as the case for the
+mode and for that participant.
 A paediatric reading game: a word is heard and seen, then its
 syllables fall one set at a time as four written options over four
 fingers, and the child presses the finger under the right chunk. If a
@@ -849,13 +866,14 @@ the closest this rig gets to Corsi's nine.
 -----------------------
 Strong for a healthy cohort (known effect, expected good
 reliability): reaction, rhythm, force pilot, chords (C1 to C3),
-echo. Reaction, force pilot and chords are also the three the second
-pass replays, so they carry the reliability result. Group-level only: pattern (P1 reliable at the
-group level, individual score unreliable by published
-meta-analysis).
+echo. Reaction, force pilot and chords come round again in the
+second pass and carry the reliability result; rhythm comes round
+again too, read as exploratory. Group-level only: pattern (P1
+reliable at the group level, individual score unreliable by
+published meta-analysis).
 Ceiling or floor limited: buzz hunt (accuracy ceiling; the window
 ladder tops out at level 3), adaptive (bpm cap). Wrong population:
-syllables.
+syllables, which is why it left the sitting (Section 1.4).
 
 
 2. STUDY DESIGN
@@ -865,8 +883,8 @@ syllables.
 ---------------------
 ONE session, ONE board, the right-hand device, TWO passes. Every
 block is the right hand. The only repeated factor is the pass: pass 1
-plays the nine one-hand modes once, pass 2 replays Reaction, Force
-Pilot and Chords after the rest. The main hand picked at login, with
+plays the eight one-hand modes once, pass 2 replays Reaction,
+Rhythm, Force Pilot and Chords after the rest. The main hand picked at login, with
 the Edinburgh short form on the paper intake sheet as the check, says
 whether the device hand is the participant's dominant hand.
 
@@ -948,13 +966,13 @@ to 12 participants four to six sit in each order; order is not a
 factor anything is tested on and is reported as a description.
 
   Order A, pass 1: reaction, rhythm, echo, force pilot, chords, buzz
-  hunt, pattern, adaptive, syllables.
+  hunt, pattern, adaptive.
   Order B, pass 1: force pilot, chords, buzz hunt, adaptive,
-  syllables, reaction, rhythm, echo, pattern.
-  Pass 2, both orders: reaction, force pilot and chords, in the order
-  pass 1 played them (A: reaction, force pilot, chords; B: force
-  pilot, chords, reaction), so each mode's gap between its two blocks
-  is as even as the order allows.
+  reaction, rhythm, echo, pattern.
+  Pass 2, both orders: reaction, rhythm, force pilot and chords, in
+  the order pass 1 played them (A: reaction, rhythm, force pilot,
+  chords; B: force pilot, chords, reaction, rhythm), so each mode's
+  gap between its two blocks is as even as the order allows.
 
 Pattern is the last block of pass 1 in order B and the seventh in
 order A. It is the longest single block and the one whose individual
@@ -1047,6 +1065,18 @@ with the same 48 sittings: medians 43.9 to 44.3 minutes, range 43.4
 to 45.2. Three of 48 ran up to 9 seconds past the 45 minute budget
 and none came near the hard stop, so the trim ladder below is still
 untouched.
+
+v3, the same day: Syllables' 1.75 minutes out, Rhythm's second 2.05
+in, the rest of the table above unchanged. On the shipped config, 48
+sittings: medians 44.1 to 44.9 minutes, range 43.9 to 45.1, two past
+the budget by 5 seconds at most, none near the hard stop. An earlier
+48 on the same settings gave medians 44.2 to 44.4 and range 43.5 to
+45.2, one past by 11 seconds: a code's median moves by up to half a
+minute between batches, so plan on the range. Code P05, order A, the
+sitting closest to the median (44.4): reaction 2.16 and 2.40, rhythm
+2.05 twice, echo 3.06, force pilot 3.54 twice, chords 2.73 and 2.63,
+buzz hunt 2.66, pattern 6.27, adaptive 0.46, with the same login,
+rest, transitions and stretch as above.
 
 Read the headroom honestly: about a minute against the budget. The
 model hand is a healthy adult on a good day, so a slower participant
@@ -1148,11 +1178,6 @@ window or detection key can never creep in through the preset):
   echo:
     games: 2                      # best of two, and their spread
     max_len: 10                   # ceiling, to hold the 3 min line
-  syllables:
-    rung: 3                       # the mid rung, played once
-    words_per_block: 12
-    round_size: 6
-    break_s: 10
   game:
     total_trials: 40              # pins the adaptive block length
   rhythm:
@@ -1247,33 +1272,43 @@ Statistical cost of each short form:
   a within-block trend has only 20 points to sit on. If the pilot
   clock has room, this is the first rung to give back (Section 2.3).
 
-  Syllables and adaptive, one block each, in pass 1. Two ceiling
-  checks each (A5, A6, S6, S7) and no within-block check. They are
-  in the session so that every one-hand mode is played and so the
-  sitting changes pace.
+  Adaptive, one block, in pass 1: two ceiling checks (A5, A6) and no
+  within-block check, in the session so that every one-hand mode is
+  played and so the sitting changes pace. Syllables and its keys left
+  the preset on 28 September 2026 (Section 1.4).
 
 2.5 Trial Mode: shorter and longer sittings (28 September 2026)
 --------------------------------------------------------------
 The login's SESSION picker offers Free play or a timed length, and a
-length starts its games at LOG IN. Every length plays this sitting's
-own blocks with this sitting's own settings (protocol.presets,
-overrides_from: study_battery), so a block of one pass pools across
-lengths. The reasoning and the per-block value table are in
-docs/research/trial_mode.md; in brief, timed over 48 sittings each:
+length starts its games at LOG IN. No length plays Syllables. Every
+length plays games twice wherever the minutes allow, because a second
+go is what shows improvement and what gives test-retest. The 45 and
+the 60 play this sitting's full-length games (family full). The 15
+and the 30 play shortened games (family short: protocol.presets
+trial_short, half the trials, Force Pilot's six-wave short ladder) so
+that more games fit twice. Blocks pool within a family and never
+across; the notebook reads one family at a time (COHORT_FAMILY). The
+reasoning, the full and short games and the rejected candidates are
+in docs/research/trial_mode.md; in brief, timed over 48 sittings
+each:
 
-  Length  Blocks                                   Median   Range
-  15      Reaction, Adaptive, Chords, Force Pilot  14.3-14.5 13.9-15.2
-  30      the 15 plus Syllables, a 3 minute rest,  28.2-28.6 27.6-29.4
-          then Reaction, Chords, Force Pilot again
-  45      this sitting, unchanged                  43.9-44.3 43.4-45.2
-  60      this sitting, then a second go at        57.4-57.7 56.9-58.7
-          Rhythm, Echo, Muscle Memory, Adaptive
+  Length  Family  Plays                         Median     Range
+  15      short   Reaction, Chords, Force       14.4-14.8  14.0-15.3
+                  Pilot, then all three again
+  30      short   all eight, 2 min rest, then   28.0-28.5  27.7-29.3
+                  Reaction, Force Pilot,
+                  Chords, Adaptive again
+  45      full    this sitting                  44.1-44.9  43.9-45.1
+  60      full    this sitting, then Echo,      58.3-58.7  57.8-59.5
+                  Buzz Hunt, Muscle Memory,
+                  Adaptive again
 
 The 45 stays the sitting for the collection day. The 60 is the 45
-block for block with four more blocks after it, so a participant who
-sits it gives every number the 45 gives, plus P2 (Section 4.6) and an
-exploratory second-go table. The 30 keeps the whole test-retest core
-(T1 to T5 and R3). The 15 gives the core's pass 1 only. The lab's own
+block for block with the other four games again after it, so every
+game is played twice: a participant who sits it gives every number
+the 45 gives, plus P2 (Section 4.6) and an exploratory second-go
+table for every game. The 30 plays every game and four of them twice;
+the 15 plays three games twice. The lab's own
 build shows no SESSION picker (config/eeg_lab.yaml): a length starts
 at LOG IN, before the RA has started the EEG recording, so PLAY ALL on
 the menu runs the lab's sitting as before.
@@ -1607,10 +1642,13 @@ the others.
 
 4.5 What can honestly be said about repeatability and progress
 --------------------------------------------------------------
-Three modes are measured twice, in one sitting, about twenty minutes
-apart; the other six once. That gives one honest reliability number
-for three modes, (c) below, and rules out the rest, and the plan is
-written so no reader can mistake one for the other.
+Four modes are measured twice, in one sitting, about twenty minutes
+apart; the other four once. The reliability core, Reaction, Force
+Pilot and Chords, carries the pre-specified T rows, (c) below.
+Rhythm's second go, added on 28 September 2026 when Syllables left,
+is read in an exploratory second-go table beside them with no class
+predicted, and the plan is written so no reader can mistake one for
+the other.
 
 (a) Internal consistency inside a block. For every metric that can
 be recomputed from a subset of a block's trials, split the block's
@@ -1753,9 +1791,9 @@ twenty minutes apart, same seat, same calibration. It leaves out
 every source of variance that acts between days (sleep, strap
 position, a new calibration, a different room temperature), so the
 ICC is an upper bound on day-to-day reliability and the MDC95 a lower
-bound on a real change between sessions. It covers three of the nine
-modes. Between-day test-retest for all of them is the next study's
-first job.
+bound on a real change between sessions. It covers three of the
+eight modes, four with Rhythm's exploratory row. Between-day
+test-retest for all of them is the next study's first job.
 
 (d) Still dropped, with the reason, so a reader looking for them
 stops looking: the pre-to-post change with its responder count; the
@@ -1769,7 +1807,9 @@ Two tables, both decided before the data comes in.
 
 Table 1, known effects, one row per check, from Section 1, read on
 each participant's first-pass block: R1 R2 R3, P1 P3, C1 C2 C3 C4 C6,
-Rh1 Rh2, M1 M2, F1 F2 F3 F4, B1 B2 B3 B4, E1 E3, A5 A6, S6 S7. A5,
+Rh1 Rh2, M1 M2, F1 F2 F3 F4, B1 B2 B3 B4, E1 E3, A5 A6, S6 S7. S6
+and S7 print as DROPPED since 28 September 2026: Syllables left the
+healthy sitting (Section 1.4). A5,
 A6, S6 and S7 were added on 23 September 2026, before any
 participant, so every mode has a row; they are decided on the
 interval, carry no p value and so do not enter the family-wise
@@ -1947,9 +1987,9 @@ healthy cohort cannot give.
 4.8 Build work before the first participant
 -------------------------------------------
   a DONE. The preset (protocol.presets.study_battery in
-    config/default.yaml, id healthy_one_hand_v2) carries twelve
-    steps per order, every one on the right hand: nine in pass 1,
-    three in pass 2 after the rest, budget_min 45 and hard_stop_min
+    config/default.yaml, id healthy_one_hand_v3) carries twelve
+    steps per order, every one on the right hand: eight in pass 1,
+    four in pass 2 after the rest, budget_min 45 and hard_stop_min
     50. tests/test_study_battery.py drives the real engine through
     every step for every order and reads the stamps, the passes and
     the rest lengths back out of metadata.json; it also checks that a
@@ -2036,9 +2076,9 @@ healthy cohort cannot give.
     the real engine on a simulated clock and a simulated one-board
     rig, counts the rests and the transitions separately, and reports
     the minutes per block and per pass against budget_min and
-    hard_stop_min: 48 sittings on six codes, medians 43.7 to 44.2,
-    range 43.2 to 44.9 (Section 2.3). Re-run it after any change to
-    the preset.
+    hard_stop_min: 48 sittings on six codes, medians 44.1 to 44.9,
+    range 43.9 to 45.1 for the v3 sitting (Section 2.3). Re-run it
+    after any change to the preset.
   k DONE. scripts/simulate_cohort.py plays people with fixed traits
     (a per-person chord cost among them) and fresh per-block noise,
     about one in eight left-handed,
@@ -2217,24 +2257,24 @@ CLOCK STARTS (target 45 min, hard stop 50)
    3 Echo                             Chords
    4 (60 s stretch)                 3 Buzz Hunt
      Force Pilot                    4 Adaptive
-   5 Chords                         5 Syllables
-   6 Buzz Hunt                      6 Reaction
-   7 Pattern                        7 Rhythm, Easy_Lemon, Medium
-   8 Adaptive                       8 Echo
-   9 Syllables                      9 Pattern
+   5 Chords                         5 Reaction
+   6 Buzz Hunt                      6 Rhythm, Easy_Lemon, Medium
+   7 Pattern                        7 Echo
+   8 Adaptive                       8 Pattern
   (REST, 3 min)                    (REST, 3 min)
   Pass 2                           Pass 2
-  10 Reaction                      10 Force Pilot
-  11 Force Pilot                   11 Chords
-  12 Chords                        12 Reaction
+   9 Reaction                       9 Force Pilot
+  10 Rhythm, Easy_Lemon, Medium    10 Chords
+  11 Force Pilot                   11 Reaction
+  12 Chords                        12 Rhythm, Easy_Lemon, Medium
 
   Per block: read the on-screen card, confirm the participant is
   ready, start. Do not coach during a block. Let the participant
   skip a mode's own internal rests with Space only when they say
   they are ready. Force Pilot and Buzz Hunt refuse to start without
   the board; if it has dropped, reconnect and note the block. Pass 2
-  is the same three games again: do not say they are repeats, and
-  do not mention the first scores.
+  is four of the games again: do not say they are repeats, and do
+  not mention the first scores.
   [ ] Tick each block on the sheet as it ends; write the reason for
       any early end or skip.
 

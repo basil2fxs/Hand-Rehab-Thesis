@@ -79,8 +79,10 @@ def captured_text(screen, monkeypatch) -> list[str]:
 
 
 class TestVersionIsOneNumber:
-    def test_software_version_is_3_2(self):
-        assert SOFTWARE_VERSION == "3.2"
+    def test_software_version_is_4_0(self):
+        # 4.0 is the build the study collects with, and the first one
+        # published as a GitHub release (28 September 2026).
+        assert SOFTWARE_VERSION == "4.0"
 
     def test_the_mac_bundle_records_the_same_version(self):
         """finger_rehab.spec repeats the number as a literal, so it can
@@ -99,7 +101,7 @@ class TestVersionIsOneNumber:
 
 
 class TestTitleFooter:
-    EXPECTED = "Basil Toufexis | Curtin University 2026 | v3.2"
+    EXPECTED = f"Basil Toufexis | Curtin University 2026 | v{SOFTWARE_VERSION}"
 
     def test_footer_reads_exactly_as_asked(self, title_screen, monkeypatch):
         screen, _ = title_screen

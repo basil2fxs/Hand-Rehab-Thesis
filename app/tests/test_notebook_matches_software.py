@@ -923,16 +923,20 @@ class TestCohortChapterContract:
         say and however many participants turn up.
         """
         (dropped,) = _notebook_names(source, ["COHORT_DROPPED_CHECKS"])
-        assert set(dropped) == {"R3", "P2", "E2", "W6"}
+        # S6 and S7 joined on 28 September 2026: Syllables left the
+        # healthy sitting and runs with a dyslexic participant.
+        assert set(dropped) == {"R3", "P2", "E2", "W6", "S6", "S7"}
         for cid, (mode, _check, reason, criterion) in dropped.items():
             assert mode in ("reaction", "pattern", "echo",
-                            "force_pilot"), cid
+                            "force_pilot", "syllables"), cid
             assert criterion.startswith("DROPPED:"), cid
             if cid == "E2":
                 assert "ladder" in reason and "simon" in reason, cid
             elif cid == "W6":
                 assert "fixed order" in reason, cid
                 assert "construction" in reason, cid
+            elif cid in ("S6", "S7"):
+                assert "dyslexi" in reason, cid
             else:
                 assert "twice" in reason, cid
 

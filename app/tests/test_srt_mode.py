@@ -897,7 +897,7 @@ class TwoHands(unittest.TestCase):
 
     def test_play_all_counts_a_two_hand_srt_as_its_step(self):
         eng = _engine(self.root)
-        eng._battery = {"id": "eeg_lab_srt_v1", "preset": "study_battery",
+        eng._battery = {"id": "eeg_lab_srt_v2", "preset": "study_battery",
                         "cell": {}, "of": 11, "log": []}
         eng._protocol_current = {"mode": "srt", "hand": "right",
                                  "position": 1, "phase": "pass1"}
@@ -1315,7 +1315,7 @@ class TheLabsPlayAll(unittest.TestCase):
                                  list(range(1, len(plan.steps) + 1)))
                 srt = next(s for s in plan.steps if s.mode == "srt")
                 self.assertEqual(srt.phase, "pass1")
-                self.assertEqual(plan.id, "eeg_lab_srt_v1")
+                self.assertEqual(plan.id, "eeg_lab_srt_v2")
                 # The rest between the passes survives the drop.
                 rests = [s for s in plan.steps if s.rest_before_s > 0]
                 self.assertEqual(len(rests), 1)

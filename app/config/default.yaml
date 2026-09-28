@@ -1880,8 +1880,9 @@ protocol:
   #
   # The study_battery preset is the healthy baseline battery for the
   # ONE-BOARD rig: one device, on the right hand, for every
-  # participant (Data Collection Plan.md, 24 September 2026, and the
-  # amendment at the top of docs/research/healthy_baseline_study.txt).
+  # participant (Data Collection Plan.md of 24 September 2026, as
+  # amended on 28 September, and the amendment at the top of
+  # docs/research/healthy_baseline_study.txt).
   # Section 1 of that document, what each mode measures and the
   # literature behind it, still carries the design.
   # Every override below changes a COUNT or freezes a difficulty
@@ -2057,30 +2058,28 @@ protocol:
     # effect expected, so any change it shows is warm-up), Chords and
     # Force Pilot are the two measures the device is built around,
     # and Force Pilot's Storm and Uncharted pair separates learning
-    # those waves from getting used to the pad. A 30 second rest.
+    # those waves from getting used to the pad. The second go follows
+    # straight on: a rest would not fit, and a quarter hour leaves
+    # little fatigue to rest from.
     trial_15:
       id: trial_15_v2
       family: short
       overrides_from: trial_short
       budget_min: 15
       hard_stop_min: 18
-      rest_s: 30
-      rest_min_s: 30
       orders:
         A:
           - {mode: reaction, hand: right, phase: pass1}
           - {mode: chords, hand: right, phase: pass1}
           - {mode: force_pilot, hand: right, phase: pass1}
-          - {mode: reaction, hand: right, phase: pass2,
-             rest_before: true}
+          - {mode: reaction, hand: right, phase: pass2}
           - {mode: chords, hand: right, phase: pass2}
           - {mode: force_pilot, hand: right, phase: pass2}
         B:
           - {mode: force_pilot, hand: right, phase: pass1}
           - {mode: chords, hand: right, phase: pass1}
           - {mode: reaction, hand: right, phase: pass1}
-          - {mode: force_pilot, hand: right, phase: pass2,
-             rest_before: true}
+          - {mode: force_pilot, hand: right, phase: pass2}
           - {mode: chords, hand: right, phase: pass2}
           - {mode: reaction, hand: right, phase: pass2}
       cells:
@@ -2142,8 +2141,9 @@ protocol:
     # then after a stretch a second go at the four games it plays
     # once: Echo, Buzz Hunt, Muscle Memory and Adaptive, in the order
     # pass 1 played them. Every game gets its second-go change, the
-    # second Muscle Memory block restores P2, and all eight get an
-    # exploratory test-retest.
+    # second Muscle Memory block restores P2, and the five games
+    # outside the reliability core get an exploratory test-retest
+    # beside the T rows.
     trial_60:
       id: trial_60_v2
       family: full

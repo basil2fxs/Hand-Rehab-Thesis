@@ -1,12 +1,17 @@
-# Build the Finger Rehab installers for Windows and macOS, and the EEG
-# lab folder.
+# Test, build and release Finger Rehab: the Windows installer, the
+# macOS disk image and the EEG lab folder.
 #
 # PyInstaller cannot cross-compile, so each OS builds its own app on a
-# matching GitHub runner. Run it from the Actions tab (workflow_dispatch)
-# or push to main or a tag like v1.0.0. Download from the run page:
-#   FingerRehab-Setup-Windows   FingerRehab-Setup-Windows.exe, run it
-#   FingerRehab-macOS           FingerRehab-macOS.dmg, drag to Applications
-#   FingerRehab-EEGLab          FingerRehab-EEGLab.zip, the lab folder
+# matching GitHub runner. Every push to main runs the test suite and the
+# builds. When both pass, the release job publishes the three files as
+# the GitHub release for the version the code carries (SOFTWARE_VERSION
+# in app/finger_rehab/data/session.py):
+#   FingerRehab-Setup-Windows.exe   run it
+#   FingerRehab-macOS.dmg           drag to Applications
+#   FingerRehab-EEGLab.zip          the lab folder
+# A new version number makes a new release; another push of the same
+# number replaces that release's files with the newer build. The files
+# are also on each run's page for 30 days.
 #
 # All are self-contained: Python, pygame, numpy, librosa and matplotlib
 # ship inside. Nothing to install on the target machine.
@@ -26,6 +31,29 @@ defaults:
     working-directory: app
 
 jobs:
+  # The whole suite, headless, on the platform it is written on. A push
+  # whose tests fail still builds (the files stay on the run page) but
+  # is never released.
+  test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Run the tests
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: python -m pytest tests -q -p no:cacheprovider
+
   # Compile the two Arduino hexes once, on Linux, and hand them to both
   # app builds. The clinic PC never compiles anything: the app flashes a
   # prebuilt hex with a bundled avrdude. Building here (rather than
@@ -254,3 +282,55 @@ jobs:
           if ($LASTEXITCODE -eq 0) { Write-Host "The lab exe registered auto-start"; exit 1 }
           Write-Host "Lab exe: lab mode, port picker, no auto-start."
           exit 0
+
+  # Publish the build as the release for its version. Only a push to
+  # main whose tests and builds all passed gets here. The tag v<version>
+  # is moved to this commit, so a release's files and its tag always
+  # come from the same build. A newer push cancels an older one still
+  # waiting, so the newest build wins.
+  release:
+    needs: [test, build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: release-main
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read the version
+        run: echo "APP_VERSION=$(python3 builds/version.py)" >> "$GITHUB_ENV"
+
+      - name: Fetch the three files
+        uses: actions/download-artifact@v4
+        with:
+          pattern: FingerRehab-*
+          path: dist
+          merge-multiple: true
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v$APP_VERSION"
+          DIST="$GITHUB_WORKSPACE/dist"
+          ls -l "$DIST"
+          for f in FingerRehab-Setup-Windows.exe FingerRehab-macOS.dmg FingerRehab-EEGLab.zip; do
+            test -f "$DIST/$f" || { echo "missing $f"; exit 1; }
+          done
+          python3 builds/release_notes.py "$APP_VERSION" "$GITHUB_SHA" > notes.md
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/$TAG" \
+              -f sha="$GITHUB_SHA" -F force=true > /dev/null \
+            || gh api "repos/$GITHUB_REPOSITORY/git/refs" \
+              -f ref="refs/tags/$TAG" -f sha="$GITHUB_SHA" > /dev/null
+            gh release upload "$TAG" "$DIST"/FingerRehab-* --clobber
+            gh release edit "$TAG" --title "Finger Rehab $APP_VERSION" \
+              --notes-file notes.md --latest
+          else
+            gh release create "$TAG" "$DIST"/FingerRehab-* \
+              --target "$GITHUB_SHA" --title "Finger Rehab $APP_VERSION" \
+              --notes-file notes.md --latest
+          fi

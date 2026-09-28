@@ -19,4 +19,6 @@ Rebuild after changing the source: build_app.bat on Windows (Python 3.12,
 Inno Setup 6 for the installer) or build_app.sh on a Mac. Both drop their
 files here and refresh EEG_Lab, beside app/, the folder that goes to the lab.
 The build-apps run on GitHub makes the same two installers plus
-FingerRehab-EEGLab.zip.
+FingerRehab-EEGLab.zip, and when the tests pass it publishes all three
+as the GitHub release for the version in finger_rehab/data/session.py
+(SOFTWARE_VERSION). Raise that number to start a new release.

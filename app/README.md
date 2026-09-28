@@ -1,6 +1,6 @@
 # app
 
-The game: one program, [`main.py`](main.py), and what it ships with. Users want the [front page](../README.md); this page is for whoever changes the code.
+The game: one program, [`main.py`](main.py), and what it ships with. Users want the [front page](../README.md); this page is for whoever changes the code, and [CONTRIBUTING.md](../CONTRIBUTING.md) is the whole loop from a fresh clone to a release.
 
 ```mermaid
 flowchart LR
@@ -12,7 +12,7 @@ flowchart LR
   A --> R["arduino<br>board firmware"]:::top
   A --> D["docs<br>study kit, research, images"]:::top
   A --> P["scripts<br>bench and study tools"]:::top
-  A --> T["tests<br>3,692 tests, headless"]:::top
+  A --> T["tests<br>3,720 tests, headless"]:::top
   A --> B["builds<br>installer scripts"]:::top
   classDef root fill:#0f172a,color:#fff,stroke:#0f172a
   classDef top fill:#2563eb,color:#fff,stroke:#1d4ed8

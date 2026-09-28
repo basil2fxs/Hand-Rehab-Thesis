@@ -210,7 +210,13 @@ class RelaunchTests(_BatteryHarness):
         held, left = eng2.battery_rest_hold()
         self.assertFalse(held)
         self.assertAlmostEqual(left, 90.0, delta=2.0)
-        self.assertGreater(eng2.battery_progress()["minutes"], 25.0)
+        # The clock carries on from the sitting's first block, not
+        # from the relaunch: every pass 1 block, the gaps between them,
+        # and the 90 s of the close and the relaunch.
+        carried = ((REST_POSITION - 1) * 150.0
+                   + (REST_POSITION - 2) * 10.0 + 90.0) / 60.0
+        self.assertAlmostEqual(eng2.battery_progress()["minutes"], carried,
+                               delta=0.2)
         clock.advance(10.0)
         self.assertTrue(eng2.continue_protocol())
         self.assertEqual(eng2.session.battery["position"], REST_POSITION)
