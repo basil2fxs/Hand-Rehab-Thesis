@@ -3,34 +3,28 @@
 
 ## What to collect
 
-| What | How many | Time each | Thesis |
+Participants are students. Each comes once and plays the one device on the right hand.
+
+| What | How many | Time | Thesis |
 | --- | --- | --- | --- |
-| Healthy sitting, 45 min | 12 booked, 10 finished, 8 at the least | 60 min booked | 4.1, 4.4 to 4.7 |
-| The 60 min sitting, instead of the 45 | anyone who can stay 75 min | 75 min booked | adds P2 and every second go |
-| Sensor bench | both sensor sets, every pad | 5 min a set | 4.3 |
-| Sensor sitting | 10 healthy people (decide first) | about 15 min more | 4.3 |
-| EEG lab | 1 recording at the least; 3 to 5 for a learning curve | the lab sitting, 55 min, plus the cap | 4.8 |
-| Syllables case | 1 reader with dyslexia, 1 or 2 blocks of 40 words | 30 min | 3.5, 4.9 |
+| The 45 minute sitting | 12 booked, 10 finished, 8 at the least | 60 min slot | 4.1, 4.4 to 4.7 |
+| The EEG lab sitting | 1 at the least; 3 to 5 for a learning curve | 55 min, plus the cap | 4.8 |
+| Sensor bench, no participants | both pad sets | 5 min a set | 4.3 |
 
-Each sitting's games are fixed by the software: Reaction 20 trials, Rhythm 107 notes, Force Pilot 12 runs and Chords 40 trials, each played twice, plus Echo, Buzz Hunt, Muscle Memory and Adaptive once. More people is the one lever left: with 20 instead of 10, a reliability interval is a third narrower. The reasoning is in the [design check](../app/docs/research/design_check.md).
-
-## Decide first
-
-- [ ] **The sensor comparison.** The thesis promises calibrated against uncalibrated sensors (SQ3, Section 4.3), and nothing collects the paired part yet. The bench half needs no decision. For the paired half, pick one option from the [design check](../app/docs/research/design_check.md); the software then gets the sitting before the day.
-- [ ] **Check R3.** It predicts no practice effect on Reaction, but the block is four-choice, where a second go shows practice, and its 95% interval is stricter than the usual equivalence test. Keep it, move it to the 90% interval, or re-base it (design check, Section 3). Date the decision.
-- [ ] **The booking.** 60 minute slots for everyone, or 75 minutes for whoever can stay for the 60 minute sitting.
+The software fixes the games: Reaction 20 trials, Rhythm 107 notes, Force Pilot 12 runs and Chords 40 trials, each played twice, plus Echo, Buzz Hunt, Muscle Memory and Adaptive once. The only number left to choose is people: 20 instead of 10 makes a reliability interval about a third narrower ([design check](../app/docs/research/design_check.md)). The Syllables case is separate, below.
 
 ## Before the day
 
+- [ ] **Check R3.** It predicts no practice effect on Reaction, but the block is four-choice, where a second go shows practice, and its 95% interval is stricter than the usual equivalence test. Keep it, move it to the 90% interval, or re-base it (design check, Section 3), and date the choice.
 - [ ] Print the [study-day kit](../app/docs/study_day/README.md): the run sheet, and per person an information sheet, a consent form and an intake sheet.
-- [ ] Book 12 slots and a spare. The first two people are the pilot and count ([before the day](../app/docs/study_day/before_the_day.md)).
+- [ ] Book 12 slots of 60 minutes, and a spare. The first two people are the pilot and count ([before the day](../app/docs/study_day/before_the_day.md)).
 - [ ] On the study laptop, start the game with `Local_Runner.command`: newest code, data into `sessions/`.
-- [ ] Sensor bench, each set, board plugged in, game closed: `python3 app/scripts/pad_bench.py --masses 31.1 62.2 155.5` (2, 4 and 10 fifty-cent coins).
+- [ ] Sensor bench, each pad set in turn, board plugged in, game closed: `python3 app/scripts/pad_bench.py --masses 31.1 62.2 155.5` (2, 4 and 10 fifty-cent coins).
 
 ## Each participant
 
 1. Consent and the intake sheet (10 min).
-2. Log in: the code (P01 upward) in NAME, age, main hand, SESSION 45 min (or 60), LOG IN.
+2. Log in: the code (P01 upward) in NAME, age, main hand, SESSION 45 min, LOG IN.
 3. Play all runs everything. Follow the [run sheet](../app/docs/study_day/run_sheet.md).
 4. Before they leave: `python3 app/scripts/check_sitting.py` says READY.
 
@@ -60,7 +54,7 @@ Each sitting's games are fixed by the software: Reaction 20 trials, Rhythm 107 n
    | Folder | What goes in |
    | --- | --- |
    | [`1 Healthy study`](1%20Healthy%20study) | the collection days' `sessions/`, with `intake_sheet.csv` |
-   | [`2 Sensor comparison`](2%20Sensor%20comparison) | the `pad_bench.py` CSVs, and the sensor sittings |
+   | [`2 Sensor comparison`](2%20Sensor%20comparison) | the `pad_bench.py` CSVs |
    | [`3 EEG lab`](3%20EEG%20lab) | the lab's `sessions/`, `eeg/` included |
    | [`4 Syllables case`](4%20Syllables%20case) | D01's folders |
    | [`5 Thesis results`](5%20Thesis%20results) | the tables and figures that go in the thesis |
@@ -71,11 +65,11 @@ Each sitting's games are fixed by the software: Reaction 20 trials, Rhythm 107 n
    | Thesis | Files |
    | --- | --- |
    | 4.1 Participants and feasibility | `cohort_participants.csv`, `cohort_feasibility.csv` |
-   | 4.3 Sensor comparison | the `pad_bench.py` CSVs, and the sensor chapter once it exists |
+   | 4.3 Sensor comparison | the `pad_bench.py` CSVs |
    | 4.4 Normal ranges | `cohort_describe.csv`, `figures/cohort_norm_*.png` |
    | 4.5 Validity checks | `cohort_validity.csv`, `cohort_within_block_*.csv` |
    | 4.6 Reliability | `cohort_reliability.csv`, `cohort_second_goes.csv`, the ICC and Bland-Altman figures |
    | 4.7 Handedness | `cohort_handedness_*.csv`, `cohort_sensitivity.csv` |
    | 4.8 EEG lab | the EEG markers and SRT chapters run on `3 EEG lab`, and the Status channel check |
 
-The 45 and the 60 pool; a 15 or a 30 is read on its own (`COHORT_FAMILY = "short"`). The design behind every number: [healthy_baseline_study.txt](../app/docs/research/healthy_baseline_study.txt) and [trial_mode.md](../app/docs/research/trial_mode.md).
+The design behind every number: [healthy_baseline_study.txt](../app/docs/research/healthy_baseline_study.txt) and [trial_mode.md](../app/docs/research/trial_mode.md).

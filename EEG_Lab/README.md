@@ -18,6 +18,8 @@
 
 Every session also saves `markers_codes.csv`: the full map it was recorded under.
 
+A press byte (100 and up) goes out when the finger's smoothed force first passes its trigger, 30% of the way from resting to the light press at calibration. It leaves 0 to one frame (17 ms) after that 200 Hz sample, and `raw.csv` keeps both times, so response-locked epochs move back to the sample (`t_event`).
+
 ## In this folder
 
 | | |

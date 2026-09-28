@@ -475,6 +475,19 @@ class BuilderTests(unittest.TestCase):
         self.assertFalse((LAB_FOLDER / "README.txt").exists(),
                          "README.md replaced README.txt")
 
+    def test_readme_press_timing_matches_the_code(self) -> None:
+        # The lab reads the press rule off this page, so its numbers
+        # are the detector's own: the trigger fraction and the rate.
+        from finger_rehab.hardware.calibration_profile import PRESS_FRACTION
+        text = (LAB_FOLDER / "README.md").read_text()
+        config = (REPO / "arduino" / "firmware_on_device" / "lib" / "Config"
+                  / "Config.cpp").read_text()
+        rate = re.search(r"sampleRate\s*=\s*(\d+)", config).group(1)
+        self.assertIn(f"{round(PRESS_FRACTION * 100)}% of the way from "
+                      "resting to the light press", text)
+        self.assertIn(f"after that {rate} Hz sample", text)
+        self.assertIn("`t_event`", text)
+
     def test_without_an_exe_the_rest_still_builds(self) -> None:
         # A Mac build cannot make the exe: the folder keeps the one
         # already there, or ships without until CI supplies it.

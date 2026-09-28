@@ -13,6 +13,7 @@ flowchart LR
   R --> I["Installers<br>Windows setup, macOS disk image"]:::top
   R --> Y["FINAL TRIAL RESULTS<br>the study: steps and results"]:::top
   R --> E["EEG_Lab<br>the folder for the lab PC"]:::top
+  R --> W["hardware<br>parts, wiring, the printed chassis"]:::top
   R --> N["analysis<br>session_analysis.ipynb"]:::top
   R --> S["sessions<br>recorded data, not in git"]:::top
   R --> L["Local_Runner.command<br>runs the game from the code"]:::top
@@ -33,6 +34,7 @@ flowchart LR
 | [`Installers/`](Installers) | What people install |
 | [`FINAL TRIAL RESULTS/`](FINAL%20TRIAL%20RESULTS) | The study: what to do, and where each result goes |
 | [`EEG_Lab/`](EEG_Lab) | Copy this whole folder to the lab PC |
+| [`hardware/`](hardware) | Build the device: parts, wiring, pins, CAD and print files |
 | [`analysis/`](analysis) | The notebook that turns sessions into results |
 | [`app/`](app) | Code, config, assets, tests, build scripts |
 | [`archive/`](archive) | Old material, nothing live |
