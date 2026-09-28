@@ -65,7 +65,7 @@ What the maker says: the calibrated and standard 10 N pads list the same resolut
 | Split the day | the first half of the participants on one set, the rest on the other | Unpaired, about 5 a side: only large differences show | Needs a pad swap mid-day; not planned |
 | A sensor pass | each person plays four blocks again on the second set, about 15 minutes more | Paired, the only way to test the thesis margins | Needs both sets in one sitting; not possible |
 
-These three are not the thesis's options A, B and C in Section 3.7, which allocate hands. The study is that table's C, one right-hand board for everyone, except that it keeps one pad set rather than swapping sets between participants. The calibrated set is fitted for everyone; the uncalibrated set is benched at the end of semester if time allows, and it needs its four standard interface boards to be read at all.
+These three are not the thesis's options A, B and C in Section 3.7, which allocate hands. The study is that table's C, one right-hand board for everyone, except that it keeps one pad set rather than swapping sets between participants. The calibrated set is fitted for everyone. The uncalibrated set is going into a left-hand device, which may not be ready for the lab; it is benched there once that device reads. A working second device would also allow allocation A of the thesis table later: both hands, the sets swapped between sides for half the participants, the paired comparison this study cannot make.
 
 For the thesis, SQ3 and Section 4.3 become the bench question: where calibration matters in newtons and where it does not, with the maker's figures as the prediction for the game measures. The paired analysis and its margins table go. Little is lost: at n = 10 each limit of agreement would be known only to about plus or minus 1.1 SD of the differences [18]; Bland recommends about 100 people [18], and a formal agreement claim can need hundreds [19].
 
@@ -89,7 +89,7 @@ One session with no baseline is a case description, outside the single-case repo
 
 1. Done, 28 September: R3 and F3 on the 90 percent interval (Section 3); the thesis moved to the bench-only sensor comparison and the four lengths (Sections 4 and 6).
 2. Book hour-long slots for as many students as possible: 10 finished in the full family is the target, 8 the least.
-3. Bench each pad set with `pad_bench.py --characterise`: the calibrated set now, the uncalibrated one at the end of semester once its interface boards are in hand.
+3. Bench each pad set with `pad_bench.py --characterise`: the calibrated set now, the uncalibrated one on the left-hand device once it is built.
 4. Optional: a script for the EEG Status channel check (Section 7).
 
 ## Sources

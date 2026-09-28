@@ -40,11 +40,11 @@ flowchart LR
 | Vibration motor on a motor PCB, with connector | 4 | | Supplied by the Curtin electronics team, 2026 |
 | Force sensor connector | 4 | | One per pad |
 | Threaded screw | 4 | | Fine adjustment of each finger rest |
-| Linear actuator with motor driver | 1 | 45 | Two were bought; the right-hand device uses one |
+| Linear actuator with motor driver | 1 | 45 | Two were bought, one for each hand |
 | Neodymium magnet | 4 | 5 | Hold the top shell on |
 | PLA and PETG filament | 2 spools | 30 | The chassis is PLA: about 370 cm3 of solid plastic, less with infill |
 
-From Rayan's diagram ([`images/parts_and_wiring.jpg`](images/parts_and_wiring.jpg)) and the thesis cost table.
+From Rayan's diagram ([`images/parts_and_wiring.jpg`](images/parts_and_wiring.jpg)) and the thesis cost table. A left-hand device is being built with the uncalibrated pads and the second actuator, from the mirrored left half of the model.
 
 ## Wiring
 

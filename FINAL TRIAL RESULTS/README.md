@@ -37,7 +37,7 @@ The software fixes the games. The 45 plays Reaction 20 trials, Rhythm 107 notes,
 
 1. Once per pad set, board plugged in, game closed: `python3 app/scripts/pad_bench.py --characterise --label calibrated`. It walks every pad from empty up to 1 kg and back down, then holds 500 g on the index pad for ten minutes (about 20 minutes in all).
 2. Masses of 100, 250, 500 and 1000 g, each weighed on a kitchen scale with the coin it stands on; the coin sits centred on the pad.
-3. The uncalibrated set the same way with `--label uncalibrated`, at the end of semester if time allows. It needs its four standard interface boards to be read at all.
+3. The uncalibrated set the same way with `--label uncalibrated`, on the left-hand device it is being built into, once that device reads (end of semester if time allows).
 
 ## The Syllables case
 
