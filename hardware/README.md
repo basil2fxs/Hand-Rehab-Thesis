@@ -31,8 +31,8 @@ flowchart LR
 
 | Part | Qty | AUD each | Notes |
 | --- | --- | --- | --- |
-| SingleTact 8 mm 10 N pad, calibrated, with its electronics | 4 | 192 | The study device. A failed pad costs 192 to replace |
-| *or* SingleTact 8 mm 10 N pad, uncalibrated | 4 | 53 | Needs the board below. A failed pad costs 53; its board is kept |
+| SingleTact 8 mm 10 N pad, calibrated, with its electronics | 4 | 192 | From the 2025 project. A failed pad costs 192 to replace |
+| *or* SingleTact 8 mm 10 N pad, uncalibrated | 4 | 53 | Bought for the sensor comparison. Needs the board below; a failed pad costs 53 and its board is kept |
 | SingleTact standard electronics (board and jumper wires) | 4 | 62 | Only with the uncalibrated pads |
 | Arduino Nano | 2 | 15 to 48 | One reads the pads and drives the motors, one drives the actuator. Clones work |
 | USB A to micro B cable | 1 | 17 | Jaycar |
