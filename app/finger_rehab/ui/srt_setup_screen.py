@@ -1,21 +1,21 @@
 """The SRT setup screen: what the Reaction card opens.
 
-Two views. The first holds the only things that change from one
-participant to the next: the timing group, the lab script's 0 to 5
-musical experience question, and START. Everything else (the learning
-interval, one or two hands, the sequence, and named setups) sits behind
-More options, because most runs never touch it and seeing it every
-time made the screen hard to read (Basil, 28 September 2026).
+One view (Basil, 28 September 2026): the timing group, the lab script's
+0 to 5 musical experience question, and START. The hands are not asked
+here: they are the session's, picked at login, and the screen says
+which will play (both hands runs the lab's two-hand layout). The rest
+runs as the lab ran it, 500 ms and the lab's sequence. A different
+interval or sequence can be written into the setups file by hand
+(config/srt_setups.json, game/srt_setup.py), and the screen then names
+it, so a change is never invisible.
 
-Everything on it is kept (game/srt_setup.py): the current setup is
-written to the setups file on every change, so the next participant in
-the same group needs one click, and named setups hold each group's
-timing for good. The lab's three groups at 500 ms are always listed.
+The timing group picked is written to the setups file straight away,
+so the next participant in the same group needs one click.
 
-The sequence stays hidden until Show is pressed. The participant is
-often sitting in front of this screen, and knowing the order is
-exactly what the task must not hand them before it starts (explicit
-knowledge changes what an SRT measures).
+The sequence is never shown. The participant is often sitting in front
+of this screen, and knowing the order is exactly what the task must not
+hand them before it starts (explicit knowledge changes what an SRT
+measures).
 
 Musical experience belongs to the person logged in, not to the setup,
 so it is kept for this login only and written into the performance
@@ -23,27 +23,33 @@ file with every trial.
 """
 from __future__ import annotations
 
+import dataclasses
 from typing import TYPE_CHECKING
 
 import pygame
 
 from ..game.srt_setup import (
-    DEFAULT_SETUP, GROUPS, ISI_MAX_MS, ISI_MIN_MS, LAB_SEQUENCE,
-    MUSICAL_EXPERIENCE, SRTSetup, SetupStore, estimate_minutes,
-    parse_sequence, protocol_counts, sequence_text, store_path,
+    DEFAULT_SETUP, GROUPS, LAB_SEQUENCE, MUSICAL_EXPERIENCE, SRTSetup,
+    SetupStore, estimate_minutes, protocol_counts, store_path,
 )
 from .screens import Screen
-from .widgets import (
-    BUTTON_H, FONT_BODY, FONT_H1, FONT_H2, FONT_SMALL, Button, Card,
-    Segmented, TextInput, draw_text,
-)
+from .widgets import (BUTTON_H, FONT_BODY, FONT_H1, FONT_H2, FONT_SMALL,
+                      Button, Card, Segmented, draw_text)
 
 if TYPE_CHECKING:
     from ..game.engine import GameEngine
 
 
 UNSAVED = "Unsaved setup"
-ISI_STEP_MS = 50
+LAB_ISI_MS = 500
+
+# What the hands picked at login will play.
+HANDS_LINE = {
+    "right": "Right hand, as picked at login.",
+    "left": "Left hand, as picked at login.",
+    "both": ("Both hands, as picked at login: left middle and index, "
+             "right index and middle."),
+}
 
 
 def group_line(group: str, isi_ms: int) -> str:
@@ -60,14 +66,7 @@ def group_line(group: str, isi_ms: int) -> str:
 
 class SRTSetupScreen(Screen):
 
-    # The first view: one card in the middle of the page.
     MAIN = pygame.Rect(190, 146, 900, 446)
-    # More options: the two cards the whole screen used to be.
-    LEFT = pygame.Rect(40, 132, 700, 520)
-    RIGHT = pygame.Rect(760, 132, 480, 520)
-    ROW_H = 56
-    ROWS_TOP = 188
-    ROWS_SHOWN = 5
 
     def __init__(self, engine: "GameEngine") -> None:
         super().__init__(engine)
@@ -75,114 +74,60 @@ class SRTSetupScreen(Screen):
         self.group = DEFAULT_SETUP.group
         self.isi_ms = int(DEFAULT_SETUP.isi_ms)
         self.sequence = tuple(DEFAULT_SETUP.sequence)
-        self.hands = DEFAULT_SETUP.hands
-        self.more = False
-        self.show_sequence = False
-        self.editing = False
         self.note = ""
         self.note_bad = False
-        self._delete_armed: str | None = None
-        self._scroll = 0
-        self._row_rects: list[tuple[pygame.Rect, SRTSetup]] = []
-        # The first view.
         mx, my = self.MAIN.x + 40, self.MAIN.y
         self.group_seg = Segmented(
             pygame.Rect(mx, my + 74, 820, 64), self.theme, self.layout,
             [(g, g.capitalize()) for g in GROUPS], label="Timing group",
             initial=self.group)
         self.music_seg = Segmented(
-            pygame.Rect(mx, my + 250, 480, 56), self.theme, self.layout,
+            pygame.Rect(mx, my + 236, 480, 56), self.theme, self.layout,
             [(str(i), str(i)) for i in range(6)],
             label="Musical experience",
             hotkeys={str(i): str(i) for i in range(6)})
-        # More options.
-        lx, ly = self.LEFT.x + 30, self.LEFT.y
-        self.minus_btn = Button(pygame.Rect(lx, ly + 78, 60, 52), "-",
-                                lambda: self._nudge(-ISI_STEP_MS),
-                                self.theme, self.layout, font_pt=FONT_H2)
-        self.isi_input = TextInput(
-            pygame.Rect(lx + 70, ly + 78, 130, 52), self.theme,
-            self.layout, label="Learning interval (ms)",
-            initial=str(self.isi_ms), max_len=4, numeric=True)
-        self.plus_btn = Button(pygame.Rect(lx + 210, ly + 78, 60, 52),
-                               "+", lambda: self._nudge(ISI_STEP_MS),
-                               self.theme, self.layout, font_pt=FONT_H2)
-        self.hands_seg = Segmented(
-            pygame.Rect(lx + 330, ly + 78, 310, 52), self.theme,
-            self.layout, [("one", "One hand"), ("two", "Two hands")],
-            label="Hands", initial=self.hands)
-        self.show_btn = Button(pygame.Rect(lx + 330, ly + 222, 100, 44),
-                               "Show", self._toggle_show, self.theme,
-                               self.layout, font_pt=FONT_BODY)
-        self.edit_btn = Button(pygame.Rect(lx + 440, ly + 222, 90, 44),
-                               "Edit", self._toggle_edit, self.theme,
-                               self.layout, font_pt=FONT_BODY)
-        self.lab_btn = Button(pygame.Rect(lx + 540, ly + 222, 100, 44),
-                              "Lab", self._lab_sequence, self.theme,
-                              self.layout, font_pt=FONT_BODY)
-        self.seq_input = TextInput(
-            pygame.Rect(lx, ly + 286, 520, 48), self.theme, self.layout,
-            placeholder="1321432413 or v n b v m n b m v n",
-            max_len=40)
-        self.use_btn = Button(pygame.Rect(lx + 530, ly + 286, 110, 48),
-                              "Use", self._use_typed, self.theme,
-                              self.layout, font_pt=FONT_BODY, primary=True)
-        rx = self.RIGHT.x + 24
-        self.name_input = TextInput(
-            pygame.Rect(rx, self.RIGHT.bottom - 160, 300, 48), self.theme,
-            self.layout, label="Save these settings as",
-            placeholder="e.g. Constant 300", max_len=40)
-        self.save_btn = Button(
-            pygame.Rect(rx + 310, self.RIGHT.bottom - 160, 122, 48),
-            "Save", self._save_as, self.theme, self.layout,
-            font_pt=FONT_BODY)
-        self.delete_btn = Button(
-            pygame.Rect(rx, self.RIGHT.bottom - 92, 200, 44),
-            "Delete setup", self._delete, self.theme, self.layout,
-            font_pt=FONT_BODY)
-        # Both views.
         h = engine.layout.height
         w = engine.layout.width
         self.back_btn = Button(pygame.Rect(40, h - 88, 180, BUTTON_H - 10),
                                "Back", self._back, self.theme, self.layout)
-        self.more_btn = Button(
-            pygame.Rect(w // 2 - 120, h - 88, 240, BUTTON_H - 10),
-            "More options", self._toggle_more, self.theme, self.layout)
         self.start_btn = Button(pygame.Rect(w - 260, h - 94, 220, BUTTON_H),
                                 "START", self._start, self.theme,
                                 self.layout, font_pt=FONT_H2, primary=True)
 
     # ---- state ----------------------------------------------------------------
     def enter(self) -> None:
-        """Fresh read of the setups file every visit, so a setup saved
-        on another launch (or edited by hand) is what shows."""
+        """Fresh read of the setups file every visit, so a setup edited
+        by hand is what shows."""
         self.store = SetupStore(store_path(self.engine.cfg))
         cur = self.store.current
         self.group = cur.group
         self.isi_ms = int(cur.isi_ms)
         self.sequence = tuple(cur.sequence)
-        self.hands = cur.hands
         self.group_seg.set(self.group)
-        self.hands_seg.set(self.hands)
-        self.isi_input.text = str(self.isi_ms)
-        self.isi_input.focused = False
-        self.more = False
-        self.show_sequence = False
-        self.editing = False
-        self.seq_input.text = ""
-        self.seq_input.focused = False
-        self.name_input.text = ""
-        self.name_input.focused = False
-        self._delete_armed = None
-        self._scroll = 0
         me = getattr(self.engine, "_srt_musical_experience", None)
         self.music_seg.set(None if me is None else str(me))
         self.note = ""
         self.note_bad = False
 
-    def _values(self, name: str | None = None) -> SRTSetup:
-        return SRTSetup(name or self._matching_name(), self.group,
-                        int(self.isi_ms), tuple(self.sequence), self.hands)
+    def _hand_mode(self) -> str:
+        hand = str(getattr(self.engine, "hand_mode", "right") or "right")
+        return hand if hand in HANDS_LINE else "right"
+
+    @property
+    def hands(self) -> str:
+        """The session's hands in the setup's words."""
+        return "two" if self._hand_mode() == "both" else "one"
+
+    @property
+    def custom(self) -> bool:
+        """True when the setups file holds an interval or a sequence
+        other than the lab's."""
+        return (int(self.isi_ms) != LAB_ISI_MS
+                or tuple(self.sequence) != LAB_SEQUENCE)
+
+    def _values(self) -> SRTSetup:
+        return SRTSetup(self._matching_name(), self.group, int(self.isi_ms),
+                        tuple(self.sequence), self.hands)
 
     def _matching_name(self) -> str:
         store = self.store
@@ -190,8 +135,7 @@ class SRTSetupScreen(Screen):
             return UNSAVED
         for s in store.all():
             if (s.group == self.group and int(s.isi_ms) == int(self.isi_ms)
-                    and tuple(s.sequence) == tuple(self.sequence)
-                    and s.hands == self.hands):
+                    and tuple(s.sequence) == tuple(self.sequence)):
                 return s.name
         return UNSAVED
 
@@ -208,135 +152,11 @@ class SRTSetupScreen(Screen):
         self.note_bad = bad
 
     # ---- controls ----------------------------------------------------------------
-    def _nudge(self, delta: int) -> None:
-        self._read_isi_field()
-        self._set_isi(int(self.isi_ms) + delta)
-
-    def _set_isi(self, value: int) -> None:
-        value = max(ISI_MIN_MS, min(ISI_MAX_MS, int(value)))
-        self.isi_ms = value
-        self.isi_input.text = str(value)
-        self._commit()
-
-    def _read_isi_field(self) -> None:
-        txt = self.isi_input.value
-        if not txt:
-            self.isi_input.text = str(self.isi_ms)
-            return
-        try:
-            value = int(txt)
-        except ValueError:
-            self.isi_input.text = str(self.isi_ms)
-            return
-        if not ISI_MIN_MS <= value <= ISI_MAX_MS:
-            self._say(f"Interval kept to {ISI_MIN_MS} to {ISI_MAX_MS} ms",
-                      bad=True)
-        if max(ISI_MIN_MS, min(ISI_MAX_MS, value)) != self.isi_ms:
-            self._set_isi(value)
-        else:
-            self.isi_input.text = str(self.isi_ms)
-
-    def _toggle_more(self) -> None:
-        """Between the first view and More options. Leaving More
-        options closes an open sequence edit and settles the interval
-        field, so nothing half typed is left behind."""
-        if self.more:
-            self._read_isi_field()
-            self.editing = False
-            self.seq_input.focused = False
-            self.name_input.focused = False
-        self.more = not self.more
-
-    def _toggle_show(self) -> None:
-        self.show_sequence = not self.show_sequence
-
-    def _toggle_edit(self) -> None:
-        self.editing = not self.editing
-        self.seq_input.focused = self.editing
-        self.seq_input.text = ""
-
-    def _lab_sequence(self) -> None:
-        self.sequence = tuple(LAB_SEQUENCE)
-        self.editing = False
-        self._commit()
-        self._say("Lab sequence in use")
-
-    def _use_typed(self) -> None:
-        seq, why = parse_sequence(self.seq_input.value)
-        if seq is None:
-            self._say(why, bad=True)
-            return
-        self.sequence = seq
-        self.editing = False
-        self.seq_input.focused = False
-        self._commit()
-        self._say(f"Sequence of {len(seq)} in use")
-
-    def _load(self, setup: SRTSetup) -> None:
-        self.group = setup.group
-        self.isi_ms = int(setup.isi_ms)
-        self.sequence = tuple(setup.sequence)
-        self.hands = setup.hands
-        self.group_seg.set(self.group)
-        self.hands_seg.set(self.hands)
-        self.isi_input.text = str(self.isi_ms)
-        self._delete_armed = None
-        if self.store is not None:
-            self.store.set_current(setup)
-        self._say(f"Loaded {setup.name}")
-
-    def _save_as(self) -> None:
-        if self.store is None:
-            return
-        self._read_isi_field()
-        name = self.name_input.value
-        why = self.store.save_as(name, self._values(name or UNSAVED))
-        if why:
-            self._say(why, bad=True)
-            return
-        self.name_input.text = ""
-        self.name_input.focused = False
-        self._say(f"Saved {name}")
-
-    def _delete(self) -> None:
-        if self.store is None:
-            return
-        name = self._matching_name()
-        if name == UNSAVED or self.store.is_built_in(name):
-            self._say("Load a saved setup first; lab setups stay",
-                      bad=True)
-            return
-        if self._delete_armed != name:
-            self._delete_armed = name
-            self._say(f"Press Delete setup again to remove {name}")
-            return
-        self._delete_armed = None
-        why = self.store.delete(name)
-        self._commit()
-        self._say(why or f"Removed {name}", bad=bool(why))
-
-    def _one_board(self) -> bool:
-        check = getattr(self.engine, "second_board_missing", None)
-        try:
-            return bool(check()) if callable(check) else False
-        except Exception:
-            return False
-
     def _back(self) -> None:
         self.engine.show_mode_select()
 
     def _start(self) -> None:
-        self._read_isi_field()
-        if self.editing and self.seq_input.value:
-            seq, why = parse_sequence(self.seq_input.value)
-            if seq is None:
-                self._say(why, bad=True)
-                return
-            self.sequence = seq
-        self.editing = False
         why = self._values().problem()
-        if not why and self.hands == "two" and self._one_board():
-            why = "Two hands needs both boards connected"
         if why:
             self._say(why, bad=True)
             return
@@ -348,86 +168,29 @@ class SRTSetupScreen(Screen):
 
     # ---- events ------------------------------------------------------------------
     def handle_event(self, e: pygame.event.Event) -> None:
-        if not self.more:
-            for widget in (self.group_seg, self.music_seg):
-                widget.handle_event(e)
-            if self.group_seg.value and self.group_seg.value != self.group:
-                self.group = self.group_seg.value
-                self._commit()
-            for b in (self.back_btn, self.more_btn, self.start_btn):
-                b.handle_event(e)
-            if (e.type == pygame.KEYDOWN
-                    and e.key in (pygame.K_RETURN, pygame.K_KP_ENTER)):
-                self._start()
-            return
-        was_isi_focused = self.isi_input.focused
-        was_name_focused = self.name_input.focused
-        was_seq_focused = self.editing and self.seq_input.focused
-        for widget in (self.hands_seg, self.isi_input, self.name_input):
+        for widget in (self.group_seg, self.music_seg):
             widget.handle_event(e)
-        if self.editing:
-            self.seq_input.handle_event(e)
-            self.use_btn.handle_event(e)
-        if self.hands_seg.value and self.hands_seg.value != self.hands:
-            self.hands = self.hands_seg.value
+        if self.group_seg.value and self.group_seg.value != self.group:
+            self.group = self.group_seg.value
             self._commit()
-            if self.hands == "two" and self._one_board():
-                self._say("Two hands needs both boards connected",
-                          bad=True)
-        if was_isi_focused and not self.isi_input.focused:
-            self._read_isi_field()
-        for b in (self.minus_btn, self.plus_btn, self.show_btn,
-                  self.edit_btn, self.lab_btn, self.save_btn,
-                  self.delete_btn, self.back_btn, self.more_btn,
-                  self.start_btn):
+        for b in (self.back_btn, self.start_btn):
             b.handle_event(e)
-        if e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
-            for rect, setup in self._row_rects:
-                if rect.collidepoint(e.pos):
-                    self._load(setup)
-                    break
-        elif e.type == pygame.MOUSEWHEEL:
-            rows = len(self.store.all()) if self.store else 0
-            self._scroll = max(0, min(max(0, rows - self.ROWS_SHOWN),
-                                      self._scroll - int(e.y)))
-        elif (e.type == pygame.KEYDOWN
-              and e.key in (pygame.K_RETURN, pygame.K_KP_ENTER)):
-            # Enter finishes whatever field it was typed in; with no
-            # field in use it starts the task.
-            if was_seq_focused:
-                self._use_typed()
-            elif was_name_focused:
-                self._save_as()
-            elif not was_isi_focused:
-                self._start()
+        if (e.type == pygame.KEYDOWN
+                and e.key in (pygame.K_RETURN, pygame.K_KP_ENTER)):
+            self._start()
 
     # ---- draw ---------------------------------------------------------------------
     def draw(self, surf: pygame.Surface) -> None:
         surf.fill(self.theme.background)
         cx = self.layout.width // 2
-        if self.more:
-            draw_text(surf, "Reaction: more options", (cx, 58), self.theme,
-                      self.layout, pt=FONT_H1, centre=True)
-            draw_text(surf, "Kept for the next participant. Most runs "
-                      "never need these.", (cx, 102), self.theme,
-                      self.layout, pt=FONT_BODY, centre=True,
-                      colour=self.theme.muted)
-            Card(self.LEFT, self.theme, layout=self.layout).draw(surf)
-            Card(self.RIGHT, self.theme, layout=self.layout).draw(surf)
-            self._draw_left(surf)
-            self._draw_right(surf)
-            self.more_btn.label = "Done"
-        else:
-            draw_text(surf, "Reaction", (cx, 58), self.theme, self.layout,
-                      pt=FONT_H1, centre=True)
-            draw_text(surf, "Pick this participant's timing group, then "
-                      "press START.", (cx, 102), self.theme, self.layout,
-                      pt=FONT_BODY, centre=True, colour=self.theme.muted)
-            Card(self.MAIN, self.theme, layout=self.layout).draw(surf)
-            self._draw_main(surf)
-            self.more_btn.label = "More options"
+        draw_text(surf, "Reaction", (cx, 58), self.theme, self.layout,
+                  pt=FONT_H1, centre=True)
+        draw_text(surf, "Pick this participant's timing group, then "
+                  "press START.", (cx, 102), self.theme, self.layout,
+                  pt=FONT_BODY, centre=True, colour=self.theme.muted)
+        Card(self.MAIN, self.theme, layout=self.layout).draw(surf)
+        self._draw_main(surf)
         self.back_btn.draw(surf)
-        self.more_btn.draw(surf)
         self.start_btn.draw(surf)
         self._draw_footer(surf)
 
@@ -441,103 +204,26 @@ class SRTSetupScreen(Screen):
         me = self.music_seg.value
         caption = (MUSICAL_EXPERIENCE[int(me)][4:] if me is not None
                    else "ask: none, or years of lessons")
-        draw_text(surf, caption, (mx + 500, my + 266), self.theme,
+        draw_text(surf, caption, (mx + 500, my + 252), self.theme,
                   self.layout, pt=FONT_BODY, colour=muted)
+        draw_text(surf, HANDS_LINE[self._hand_mode()], (mx, my + 322),
+                  self.theme, self.layout, pt=FONT_BODY, colour=muted)
         counts = protocol_counts(self.engine.cfg)
         mins = estimate_minutes(self._values(), counts)
         draw_text(surf,
                   f"About {mins:.0f} min: practice, "
                   f"{counts['learning_blocks']} learning blocks, a final "
                   f"test, then recall.",
-                  (mx, my + 360), self.theme, self.layout,
+                  (mx, my + 354), self.theme, self.layout,
                   pt=FONT_BODY, colour=muted)
-        setup = self._values()
-        changed = (not setup.is_lab_sequence or int(self.isi_ms) != 500
-                   or self.hands != "one")
-        if changed:
-            # Anything set away from the lab's own run is said here, so
-            # a change made in More options is never invisible.
-            draw_text(surf, "Changed in More options: "
-                      + self._values().summary() + ".",
+        if self.custom:
+            # Set away from the lab's own run in the setups file: said
+            # here, so the change is never invisible.
+            lab_hands = dataclasses.replace(self._values(), hands="one")
+            draw_text(surf, "Custom setup from config/srt_setups.json: "
+                      + lab_hands.summary() + ".",
                       (mx, my + 392), self.theme, self.layout,
                       pt=FONT_SMALL + 2, colour=self.theme.warning)
-
-    def _draw_left(self, surf: pygame.Surface) -> None:
-        lx, ly = self.LEFT.x + 30, self.LEFT.y
-        muted = self.theme.muted
-        draw_text(surf, "This run", (lx, ly + 4), self.theme, self.layout,
-                  pt=FONT_H2)
-        self.minus_btn.draw(surf)
-        self.isi_input.draw(surf)
-        self.plus_btn.draw(surf)
-        self.hands_seg.draw(surf)
-        draw_text(surf, group_line(self.group, int(self.isi_ms)),
-                  (lx, ly + 142), self.theme, self.layout,
-                  pt=FONT_SMALL + 2, colour=muted)
-        draw_text(surf, "Practice and the final test always use 500 ms.",
-                  (lx, ly + 164), self.theme, self.layout,
-                  pt=FONT_SMALL + 2, colour=muted)
-        draw_text(surf, "Sequence", (lx, ly + 206), self.theme, self.layout,
-                  pt=FONT_SMALL + 4, colour=muted)
-        lab = tuple(self.sequence) == LAB_SEQUENCE
-        if self.show_sequence:
-            text = sequence_text(self.sequence)
-        else:
-            text = (f"Lab sequence, {len(self.sequence)} items" if lab
-                    else f"Custom, {len(self.sequence)} items")
-        draw_text(surf, text, (lx, ly + 234), self.theme, self.layout,
-                  pt=FONT_BODY)
-        self.show_btn.label = "Hide" if self.show_sequence else "Show"
-        self.show_btn.draw(surf)
-        self.edit_btn.label = "Close" if self.editing else "Edit"
-        self.edit_btn.draw(surf)
-        self.lab_btn.draw(surf)
-        if self.editing:
-            self.seq_input.draw(surf)
-            self.use_btn.draw(surf)
-            draw_text(surf, "1 to 4 are the cards left to right. 4 to 16 "
-                      "items, every card, none twice in a row.",
-                      (lx, ly + 346), self.theme, self.layout,
-                      pt=FONT_SMALL + 1, colour=muted)
-        else:
-            draw_text(surf, "Hidden until Show, so the participant does "
-                      "not see the order.", (lx, ly + 296), self.theme,
-                      self.layout, pt=FONT_SMALL + 1, colour=muted)
-
-    def _draw_right(self, surf: pygame.Surface) -> None:
-        rx = self.RIGHT.x + 24
-        draw_text(surf, "Saved setups", (rx, self.RIGHT.y + 4), self.theme,
-                  self.layout, pt=FONT_H2)
-        self._row_rects = []
-        setups = self.store.all() if self.store is not None else []
-        current = self._matching_name()
-        shown = setups[self._scroll:self._scroll + self.ROWS_SHOWN]
-        for i, s in enumerate(shown):
-            r = pygame.Rect(rx, self.ROWS_TOP + i * self.ROW_H,
-                            self.RIGHT.w - 48, self.ROW_H - 4)
-            picked = s.name == current
-            fill = (tuple(min(255, c + (255 - c) * 3 // 4)
-                          for c in self.theme.accent)
-                    if picked else tuple(max(0, c - 8)
-                                         for c in self.theme.background))
-            pygame.draw.rect(surf, fill, r, border_radius=10)
-            if picked:
-                pygame.draw.rect(surf, self.theme.accent, r, 2,
-                                 border_radius=10)
-            draw_text(surf, s.name, (r.x + 14, r.y + 6), self.theme,
-                      self.layout, pt=FONT_BODY)
-            draw_text(surf, s.summary(), (r.x + 14, r.y + 29), self.theme,
-                      self.layout, pt=FONT_SMALL + 1,
-                      colour=self.theme.muted)
-            self._row_rects.append((r, s))
-        if len(setups) > self.ROWS_SHOWN:
-            draw_text(surf, f"Scroll for more ({len(setups)} in all)",
-                      (rx, self.ROWS_TOP + self.ROWS_SHOWN * self.ROW_H),
-                      self.theme, self.layout, pt=FONT_SMALL + 1,
-                      colour=self.theme.muted)
-        self.name_input.draw(surf)
-        self.save_btn.draw(surf)
-        self.delete_btn.draw(surf)
 
     def _draw_footer(self, surf: pygame.Surface) -> None:
         cx = self.layout.width // 2

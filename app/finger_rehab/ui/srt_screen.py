@@ -4,10 +4,11 @@ The task is the lab script's, trial for trial (game/modes/srt.py): the
 same order, counts, timing, tones and markers. The screen is the one
 every other game uses: the light page, four finger cards laid out as
 the lane games lay theirs out (GameplayScreen), the mode pill at the
-top right and, on a keyboard, the Controls note in the corner. Where
+top right and, on a keyboard, the Controls note in the corner. The
+waiting cards are a neutral grey, as the script's squares were; where
 the script turned a grey square red for 100 ms, the target card lights
-in its finger's stronger colour with the thicker border for the same
-100 ms, the way the app's own reaction block lights a card.
+in its finger's colour with the thicker border for the same 100 ms,
+so the flash is the only colour on the row.
 
 Nothing else moves: no score, no timer, no progress bar, no halo and
 no glow on a press. The flash stays the one visual event in a trial,
@@ -147,6 +148,7 @@ class SRTScreen(Screen):
                 ls.show_value_readout = False
                 ls.show_halos = False
                 ls.show_timing_bar = False
+                ls.neutral_idle = True
                 self._lanes.append(ls)
         return self._lanes
 

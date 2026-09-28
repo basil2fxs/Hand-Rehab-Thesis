@@ -80,11 +80,13 @@ WHAT DIFFERS AND WHY.
   machine; tone_lead_ms can move it earlier once measured.
 - Esc raises the app's End-session dialog instead of quitting; an
   abandoned block still writes everything it collected.
-- The lab script leaves the hands to the keyboard. Here a setup picks
-  one hand's four fingers or two hands (V and B left, N and M right,
-  as the lab's own studies ran it); two hands needs both boards. With
-  one hand in two-hand play the right hand answers and left presses
-  are recorded and ignored.
+- The lab script leaves the hands to the keyboard. Here the session's
+  hands, picked at login, decide: one hand plays its four fingers, and
+  both hands play the lab's two-hand layout (V and B left, N and M
+  right, as the lab's own studies ran it), which needs both boards or
+  the keyboard. A one-hand setup in two-hand play (the right hand
+  answers, left presses recorded and ignored) is still handled, though
+  the menu no longer starts one.
 """
 from __future__ import annotations
 

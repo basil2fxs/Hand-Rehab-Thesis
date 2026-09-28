@@ -3926,8 +3926,9 @@ class GameEngine:
         self.screen_obj = rs
 
     def show_srt_setup(self) -> None:
-        """The SRT's setup screen: timing group, learning interval,
-        sequence and saved setups, read fresh from the setups file."""
+        """The SRT's setup screen: one view, the timing group and the
+        musical experience question, read fresh from the setups file.
+        The hands are the session's."""
         sc = (self._screens or {}).get("srt_setup")
         if sc is None:
             # A trimmed test engine: run the current setup directly.
@@ -4439,9 +4440,12 @@ class GameEngine:
         The setup (timing group, learning interval, sequence) is the
         current one in the setups file the setup screen writes
         (game/srt_setup.py), so a group's timing carries from one
-        participant to the next. The protocol counts come from the srt
-        block of the config. Musical experience is asked on the setup
-        screen and belongs to this login only.
+        participant to the next. The hands are not the setup's: they
+        are the session's, picked at login (both hands runs the lab's
+        two-hand layout, one hand that hand's four fingers), so the task
+        never asks again. The protocol counts come from the srt block
+        of the config. Musical experience is asked on the setup screen
+        and belongs to this login only.
 
         Renders on its own black screen, and has no GET READY card:
         the script opens on its own SPACE screens, and a countdown in
@@ -4450,13 +4454,9 @@ class GameEngine:
         from .modes.srt import SRTMode
         from .srt_setup import SetupStore, protocol_counts, store_path
         setup = SetupStore(store_path(self.cfg)).current
+        setup = dataclasses.replace(
+            setup, hands=("two" if self.hand_mode == "both" else "one"))
         counts = protocol_counts(self.cfg)
-        # Two hands answer on both boards (or the two-hand keymap), so
-        # the block runs as a both-hands block. The setup screen has
-        # already refused a two-hand setup on a one-board rig.
-        if setup.hands == "two" and self.hand_mode != "both" \
-                and not self.second_board_missing():
-            self.set_hand_mode("both")
         seed_cfg = self.cfg.get("srt.seed", None)
         try:
             seed = (int(seed_cfg) if seed_cfg is not None

@@ -3272,6 +3272,9 @@ class GameplayScreen(Screen):
             # window in words at the top of the screen instead, so the
             # lit tile is a step and then nothing.
             ls.show_timing_bar = not static
+            # Waiting tiles are grey in reaction: the cue is the only
+            # colour until the press's outcome flash.
+            ls.neutral_idle = static
             ls.draw(surf, now)
 
         # Stim ignition: catch the frame a lane goes active and fire a

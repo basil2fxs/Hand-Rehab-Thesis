@@ -904,6 +904,11 @@ class LaneStrip:
         # window it is asking for is already named in words at the top
         # of that screen.
         self.show_timing_bar = True
+        # Reaction draws every waiting card in a neutral grey, border
+        # and badge included, so the only colour on the row is the card
+        # a cue lights (Basil, 28 September 2026). The lit card and an
+        # outcome flash keep their colours.
+        self.neutral_idle = False
 
     def set_pressed(self, is_pressed: bool, now: float,
                      min_hold_s: float = 0.10) -> None:
@@ -970,12 +975,28 @@ class LaneStrip:
             return (255, 255, 255)
         return self.theme.foreground
 
+    def neutral_colours(self) -> tuple[tuple[int, int, int],
+                                       tuple[int, int, int]]:
+        """(fill, border) for a neutral waiting card: the page colour
+        moved a little and then further towards the ink, so it reads as
+        grey on the light, dark and high-contrast themes alike."""
+        bg, fg = self.theme.background, self.theme.foreground
+
+        def mix(t: float) -> tuple[int, int, int]:
+            return tuple(int(round(b + (f - b) * t))
+                         for b, f in zip(bg, fg))
+        return mix(0.10), mix(0.38)
+
     def draw(self, surf: pygame.Surface, now: float) -> None:
         # Background fill
-        if now < self.flash_until and self.flash_colour:
+        flashing = bool(now < self.flash_until and self.flash_colour)
+        neutral = self.neutral_idle and not self.active and not flashing
+        if flashing:
             fill = self.flash_colour
         elif self.active:
             fill = self.theme.lane_active[self.finger % len(self.theme.lane_active)]
+        elif neutral:
+            fill = self.neutral_colours()[0]
         else:
             fill = self.theme.lane_idle[self.finger % len(self.theme.lane_idle)]
 
@@ -990,7 +1011,8 @@ class LaneStrip:
                               border_radius=22)
             surf.blit(ts, halo.topleft)
 
-        border_colour = self.HAND_BADGE.get(self.hand, self.theme.foreground)
+        border_colour = (self.neutral_colours()[1] if neutral else
+                         self.HAND_BADGE.get(self.hand, self.theme.foreground))
 
         # Target-lane attention pulse. While `active` is True (a stim
         # has fired and we're waiting for a press), wrap the tile in
