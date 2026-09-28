@@ -1710,8 +1710,9 @@ latency:
   #
   # measured: false means every number here is a datasheet or
   # first-principles estimate for this class of hardware, not a
-  # measurement of this rig. scripts/audio_latency.py --write measures
-  # this laptop's sound paths and the motors with the built-in
+  # measurement of this rig. Settings, Audio delay (or
+  # scripts/audio_latency.py --write) measures this computer's sound
+  # paths and the motors with the built-in
   # microphone and saves config/latency_profile.yaml, which is laid
   # over these values at every start (per machine, never committed);
   # the study MacBook was measured on 24 September 2026. The display

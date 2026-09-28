@@ -72,6 +72,9 @@ hidden += collect_submodules("librosa")
 hidden += collect_submodules("soundfile")
 hidden += collect_submodules("scipy")
 hidden += ["pkg_resources.extern", "sklearn.utils._cython_blas"]
+# Settings, Audio delay records the microphone through SDL's capture
+# device (audio/latency_measure.py), which nothing else imports.
+hidden += ["pygame._sdl2", "pygame._sdl2.audio"]
 
 # Platform icon: .icns on macOS, .ico on Windows (each format is what
 # that OS expects; PyInstaller ignores an icon it cannot use).
@@ -152,6 +155,11 @@ if IS_MAC:
             "CFBundleShortVersionString": "4.0",
             "CFBundleVersion": "4.0",
             "NSHighResolutionCapable": True,
+            # Settings, Audio delay listens to the game's own sounds and
+            # buzzes; without this macOS stops the app at the microphone.
+            "NSMicrophoneUsageDescription":
+                "Finger Rehab listens to its own sounds and buzzes once, "
+                "to measure this computer's audio delay.",
             "LSApplicationCategoryType":
                 "public.app-category.healthcare-fitness",
         },

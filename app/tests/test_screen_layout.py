@@ -272,7 +272,7 @@ class TestSettingsGroups:
         screen.draw(pygame.Surface((1280, 800)))
         assert seen == ["SENSORY CUES", "LEVELS", "FINGER TEST",
                         "ARDUINO PORTS", "SESSION DATA",
-                        "ARDUINO FIRMWARE"]
+                        "SETUP"]
 
     def test_the_groups_do_not_overlap(self, settings_screen):
         screen, _ = settings_screen
@@ -325,6 +325,8 @@ class TestSettingsGroups:
             "Open data folder": screen._data_rect(),
             "Flash firmware": screen._firmware_rect(),
             "Sensor address": screen._firmware_rect(),
+            "Measure audio delay": screen._firmware_rect(),
+            "Audio delay: measured": screen._firmware_rect(),
             "Auto-start: on": screen._firmware_rect(),
             "Auto-start: off": screen._firmware_rect(),
         }

@@ -766,10 +766,13 @@ class HandsLabelsAndMarkers(unittest.TestCase):
                          [4, 3, 2, 1])
         self.assertEqual(m.square_to_lane(1), 3)
 
-    def test_two_hands_answer_with_the_right(self):
+    def test_both_hands_play_the_labs_two_hand_layout(self):
+        # The session's hands decide (28 September 2026): both hands at
+        # login is the lab's two-hand layout, with nothing to ask.
         _eng, m = self._mode("both")
+        self.assertTrue(m.two_hands)
         self.assertEqual([m.lane_to_square(i) for i in range(8)],
-                         [1, 2, 3, 4, None, None, None, None])
+                         [3, 4, None, None, 2, 1, None, None])
 
     def test_labels(self):
         eng, m = self._mode("right")
@@ -815,23 +818,26 @@ class HandsLabelsAndMarkers(unittest.TestCase):
 class TwoHands(unittest.TestCase):
     """The lab's own studies ran the task on two hands: V and B under
     the left middle and index fingers, N and M under the right index
-    and middle. A setup can ask for that; it needs both boards."""
+    and middle. Both hands picked at login asks for that; a saved setup
+    no longer does (28 September 2026)."""
 
     def setUp(self):
         pygame.init()
         self.td = tempfile.TemporaryDirectory()
         self.root = Path(self.td.name)
-        store = ss.SetupStore(self.root / "srt_setups.json")
-        assert not store.set_current(
-            ss.SRTSetup("two", "constant", 500, ss.LAB_SEQUENCE, "two"))
 
     def tearDown(self):
         self.td.cleanup()
         pygame.quit()
 
-    def _start(self):
+    def _save(self, hands):
+        store = ss.SetupStore(self.root / "srt_setups.json")
+        assert not store.set_current(
+            ss.SRTSetup("saved", "constant", 500, ss.LAB_SEQUENCE, hands))
+
+    def _start(self, hand="both"):
         eng = _engine(self.root)
-        eng.set_hand_mode("right")
+        eng.set_hand_mode(hand)
         eng.begin_srt_block()
         self.addCleanup(eng._abandon_if_in_block)
         return eng, eng.mode
@@ -874,28 +880,24 @@ class TwoHands(unittest.TestCase):
         self.assertEqual(row["hand"], "both")
         self.assertIn(row["response_finger"], ("L1", "L2", "R1", "R2"))
 
-    def test_the_choice_is_saved_with_the_setup(self):
-        store = ss.SetupStore(self.root / "srt_setups.json")
-        self.assertEqual(store.current.hands, "two")
-        self.assertIn("two hands", store.current.summary())
+    def test_a_saved_two_hand_setup_no_longer_changes_the_hand(self):
+        self._save("two")
+        eng, m = self._start("right")
+        self.assertEqual(eng.hand_mode, "right")
+        self.assertFalse(m.two_hands)
+        self.assertEqual(m.setup.hands, "one")
+
+    def test_both_hands_play_two_hands_whatever_the_file_says(self):
+        self._save("one")
+        eng, m = self._start("both")
+        self.assertTrue(m.two_hands)
+        self.assertEqual(m.setup.hands, "two")
+        # A file from before the field existed still loads, as one hand.
         self.assertEqual(ss.SRTSetup.from_dict(
             {"name": "old", "group": "random", "isi_ms": 500}).hands, "one")
 
-    def test_the_setup_screen_refuses_two_hands_on_one_board(self):
-        eng = _engine(self.root)
-        eng.show_title()
-        eng.begin_session("P09", "30", dominant_hand="right")
-        eng.choose_session_hand("right")
-        eng.second_board_missing = lambda: True
-        eng.show_srt_setup()
-        sc = eng.screen_obj
-        self.assertEqual(sc.hands, "two")
-        sc._start()
-        self.assertFalse(eng.block_is_running())
-        self.assertTrue(sc.note_bad)
-        self.assertIn("both boards", sc.note)
-
-    def test_play_all_counts_a_two_hand_srt_as_its_step(self):
+    def test_play_all_runs_the_srt_on_the_steps_hand(self):
+        self._save("two")
         eng = _engine(self.root)
         eng._battery = {"id": "eeg_lab_srt_v2", "preset": "study_battery",
                         "cell": {}, "of": 11, "log": []}
@@ -904,7 +906,8 @@ class TwoHands(unittest.TestCase):
         eng.set_hand_mode("right")
         eng.begin_srt_block()
         self.addCleanup(eng._abandon_if_in_block)
-        self.assertEqual(eng.hand_mode, "both")
+        self.assertEqual(eng.hand_mode, "right")
+        self.assertFalse(eng.mode.two_hands)
         self.assertEqual(eng.session.battery.get("position"), 1)
 
 
@@ -969,6 +972,30 @@ class AppLook(unittest.TestCase):
         sc.draw(surf)
         self.assertEqual([ls for ls in sc.lanes(eng.mode) if ls.active], [])
 
+    def test_waiting_cards_are_grey_and_only_the_cue_has_colour(self):
+        # Basil, 28 September 2026: every finger a neutral grey, and a
+        # finger's colour only on the card a cue lights.
+        eng, sc, sim = self._run()
+        self._to_flash(sim)
+        surf = pygame.Surface((1280, 800))
+        sc.draw(surf)
+        lanes = sc.lanes(eng.mode)
+        grey = lanes[0].neutral_colours()[0]
+        for ls in lanes:
+            self.assertTrue(ls.neutral_idle)
+            px = tuple(surf.get_at((ls.rect.centerx,
+                                    ls.rect.y + ls.rect.h // 3)))[:3]
+            want = (eng.theme.lane_active[ls.finger] if ls.active
+                    else grey)
+            self.assertEqual(px, want, ls.finger)
+        while eng.mode.flash_square is not None:
+            sim.frame()
+        sc.draw(surf)
+        for ls in lanes:
+            px = tuple(surf.get_at((ls.rect.centerx,
+                                    ls.rect.y + ls.rect.h // 3)))[:3]
+            self.assertEqual(px, grey)
+
     def test_the_page_is_the_theme_not_the_scripts_black(self):
         eng, sc, sim = self._run()
         self._to_flash(sim)
@@ -1004,23 +1031,24 @@ class AppLook(unittest.TestCase):
 
 class EveryHand(unittest.TestCase):
     """The app look on every hand the task can run on: the right hand,
-    the left hand (mirrored, little finger leftmost), both boards with
-    a one-hand setup (the right hand answers), and the lab's two-hand
-    layout (left middle, left index, right index, right middle). For
-    each: the cards on screen are the fingers that answer, a pad press
-    on the lit card's finger scores correct, and a click on a recall
-    card enters that card."""
+    the left hand (mirrored, little finger leftmost), and both hands,
+    the lab's two-hand layout (left middle, left index, right index,
+    right middle). The hands are the session's: a two-hand setup saved
+    in the file changes nothing. For each: the cards on screen are the
+    fingers that answer, a pad press on the lit card's finger scores
+    correct, and a click on a recall card enters that card."""
 
     CASES = {
-        # name: (hand picked, setup hands, (hand, finger) left to right)
+        # name: (hand at login, saved setup hands, (hand, finger) left
+        # to right)
         "right": ("right", "one", [("right", 0), ("right", 1),
                                    ("right", 2), ("right", 3)]),
         "left": ("left", "one", [("left", 3), ("left", 2),
                                  ("left", 1), ("left", 0)]),
-        "both, one-hand setup": ("both", "one", [("right", 0), ("right", 1),
-                                                 ("right", 2), ("right", 3)]),
-        "two-hand setup": ("right", "two", [("left", 1), ("left", 0),
-                                            ("right", 0), ("right", 1)]),
+        "both hands": ("both", "one", [("left", 1), ("left", 0),
+                                       ("right", 0), ("right", 1)]),
+        "right, two-hand setup saved": ("right", "two", [
+            ("right", 0), ("right", 1), ("right", 2), ("right", 3)]),
     }
 
     def setUp(self):
@@ -1163,52 +1191,24 @@ class TheCardAndTheSetupScreen(unittest.TestCase):
         self.assertIs(self.eng.screen_obj, self.eng._screens["srt_setup"])
         self.assertFalse(self.eng.block_is_running())
 
-    def test_changes_are_kept_and_start_runs_them(self):
+    def test_the_group_is_kept_and_start_runs_it(self):
         self.eng.show_srt_setup()
         sc = self.eng.screen_obj
         sc.group_seg.set("random")
         sc.handle_event(pygame.event.Event(pygame.MOUSEMOTION,
                                            {"pos": (0, 0), "rel": (0, 0),
                                             "buttons": (0, 0, 0)}))
-        sc._nudge(-100)
         sc.music_seg.set("3")
-        sc.name_input.text = "Random 400"
-        sc._save_as()
         store = ss.SetupStore(self.root / "srt_setups.json")
-        self.assertEqual(store.current.name, "Random 400")
-        self.assertEqual((store.current.group, store.current.isi_ms),
-                         ("random", 400))
+        self.assertEqual(store.current.group, "random")
+        self.assertEqual(store.current.name, "Lab random 500")
         sc._start()
         self.assertTrue(self.eng.block_is_running())
         self.assertEqual(self.eng.current_block, "srt")
-        self.assertEqual(self.eng.mode.setup.isi_ms, 400)
+        self.assertEqual(self.eng.mode.setup.group, "random")
+        self.assertEqual(self.eng.mode.setup.isi_ms, 500)
         self.assertEqual(self.eng.mode.musical_experience, 3)
         self.assertIs(self.eng.screen_obj, self.eng._screens["srt"])
-
-    def test_a_bad_typed_sequence_is_refused_with_a_reason(self):
-        self.eng.show_srt_setup()
-        sc = self.eng.screen_obj
-        sc._toggle_edit()
-        sc.seq_input.text = "1231"
-        sc._use_typed()
-        self.assertTrue(sc.note_bad)
-        self.assertEqual(sc.sequence, ss.LAB_SEQUENCE)
-        sc.seq_input.text = "1234 3214"
-        sc._use_typed()
-        self.assertEqual(sc.sequence, (1, 2, 3, 4, 3, 2, 1, 4))
-        self.assertEqual(ss.SetupStore(self.root / "srt_setups.json")
-                         .current.sequence, (1, 2, 3, 4, 3, 2, 1, 4))
-
-    def test_the_sequence_is_hidden_until_asked(self):
-        self.eng.show_srt_setup()
-        sc = self.eng.screen_obj
-        surf = pygame.Surface((1280, 800))
-        sc.draw(surf)
-        self.assertFalse(sc.show_sequence)
-        sc._toggle_show()
-        sc.draw(surf)
-        self.eng.show_srt_setup()
-        self.assertFalse(self.eng.screen_obj.show_sequence)
 
     def _drawn(self, sc) -> list[str]:
         """Every string the setup screen renders through its layout."""
@@ -1232,40 +1232,55 @@ class TheCardAndTheSetupScreen(unittest.TestCase):
             sc.layout.font = real_font
         return seen
 
-    def test_the_first_view_holds_only_what_changes_per_person(self):
-        # The screen used to show every control at once. The first
-        # view is the timing group, musical experience and START; the
-        # rest waits behind More options (28 September 2026).
+    def test_one_view_with_only_what_changes_per_person(self):
+        # One menu (Basil, 28 September 2026): the timing group, musical
+        # experience and START. No More options, no hand question: the
+        # hands are the session's and the screen only says which.
         self.eng.show_srt_setup()
         sc = self.eng.screen_obj
         blob = " | ".join(self._drawn(sc))
         for word in ("Timing group", "Musical experience", "START",
-                     "More options"):
+                     "Right hand, as picked at login"):
             self.assertIn(word, blob)
-        for word in ("Learning interval", "Saved setups", "Hands",
-                     "Sequence", "Save these settings"):
+        for word in ("More options", "Learning interval", "Saved setups",
+                     "Sequence", "Save these settings", "One hand",
+                     "Two hands"):
             self.assertNotIn(word, blob)
-        sc._toggle_more()
-        blob = " | ".join(self._drawn(sc))
-        for word in ("Learning interval", "Saved setups", "Hands",
-                     "Sequence", "Done"):
-            self.assertIn(word, blob)
-        self.assertNotIn("Timing group", blob)
+        self.assertFalse(hasattr(sc, "hands_seg"))
 
-    def test_a_change_in_more_options_is_said_on_the_first_view(self):
+    def test_the_hands_line_is_the_sessions(self):
+        self.eng.set_hand_mode("both")
         self.eng.show_srt_setup()
         sc = self.eng.screen_obj
-        self.assertNotIn("Changed in More options",
-                         " | ".join(self._drawn(sc)))
-        sc._toggle_more()
-        sc._nudge(-100)
-        sc._toggle_more()
-        self.assertFalse(sc.more)
-        blob = " | ".join(self._drawn(sc))
-        self.assertIn("Changed in More options", blob)
-        self.assertIn("400", blob)
+        self.assertEqual(sc.hands, "two")
+        self.assertIn("Both hands, as picked at login",
+                      " | ".join(self._drawn(sc)))
 
-    def test_enter_on_the_first_view_starts_the_task(self):
+    def test_the_sequence_is_never_drawn(self):
+        self.eng.show_srt_setup()
+        blob = " | ".join(self._drawn(self.eng.screen_obj))
+        self.assertNotIn(ss.sequence_text(ss.LAB_SEQUENCE), blob)
+        self.assertNotIn(ss.sequence_text(ss.LAB_SEQUENCE, letters=True),
+                         blob)
+
+    def test_a_custom_setup_in_the_file_is_said_and_run(self):
+        store = ss.SetupStore(self.root / "srt_setups.json")
+        assert not store.set_current(
+            ss.SRTSetup("mine", "constant", 400, ss.LAB_SEQUENCE))
+        self.eng.show_srt_setup()
+        sc = self.eng.screen_obj
+        blob = " | ".join(self._drawn(sc))
+        self.assertIn("Custom setup from config/srt_setups.json", blob)
+        self.assertIn("400", blob)
+        sc._start()
+        self.assertEqual(self.eng.mode.setup.isi_ms, 400)
+
+    def test_the_labs_own_run_says_nothing_extra(self):
+        self.eng.show_srt_setup()
+        self.assertNotIn("Custom setup",
+                         " | ".join(self._drawn(self.eng.screen_obj)))
+
+    def test_enter_starts_the_task(self):
         self.eng.show_srt_setup()
         sc = self.eng.screen_obj
         sc.handle_event(pygame.event.Event(
@@ -1273,13 +1288,6 @@ class TheCardAndTheSetupScreen(unittest.TestCase):
                              "unicode": "\r", "scancode": 0}))
         self.assertTrue(self.eng.block_is_running())
         self.assertEqual(self.eng.current_block, "srt")
-
-    def test_the_setup_opens_on_the_first_view(self):
-        self.eng.show_srt_setup()
-        sc = self.eng.screen_obj
-        sc._toggle_more()
-        self.eng.show_srt_setup()
-        self.assertFalse(self.eng.screen_obj.more)
 
     def test_musical_experience_belongs_to_the_login(self):
         self.eng._srt_musical_experience = 4

@@ -1071,6 +1071,37 @@ class ReactionStaticStageTests(unittest.TestCase):
         finally:
             pygame.quit()
 
+    def test_waiting_tiles_are_grey_in_reaction_only(self) -> None:
+        """Every waiting tile is a neutral grey in reaction, so the cue
+        is the only colour on the row (Basil, 28 September 2026).
+        Every other mode keeps its finger colours."""
+        import pygame
+        try:
+            eng, gp = self._engine_and_screen()
+            eng.mode._phase = "foreperiod"
+            _frame(gp)
+            self.assertTrue(all(ls.neutral_idle for ls in gp.lanes))
+            eng.current_block = "adaptive"
+            _frame(gp)
+            self.assertTrue(all(not ls.neutral_idle for ls in gp.lanes))
+        finally:
+            pygame.quit()
+
+    def test_the_grey_is_neutral_on_every_theme(self) -> None:
+        import pygame
+        from finger_rehab.ui import theme as th
+        from finger_rehab.ui.widgets import LaneStrip
+        for t in th.THEMES.values():
+            with self.subTest(theme=t.name):
+                ls = LaneStrip(0, pygame.Rect(0, 0, 120, 300), t, None)
+                fill, border = ls.neutral_colours()
+                for c in (fill, border):
+                    self.assertLessEqual(max(c) - min(c), 30, c)
+                    self.assertNotIn(c, t.lane_idle)
+                    self.assertNotIn(c, t.lane_active)
+                self.assertNotEqual(fill, t.background)
+                self.assertNotEqual(fill, border)
+
     def test_no_chevron_and_no_ignition_ring_in_reaction(self) -> None:
         """Both draw outside the tile and both are animated. The tile
         going from its idle colour to its active one is the cue."""

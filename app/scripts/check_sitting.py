@@ -256,9 +256,10 @@ def check_code(code: str, rows: list[dict]) -> list[tuple[bool, str]]:
                     f"Rhythm scored with this laptop's measured delays "
                     f"(audio offset {off} ms, measured "
                     f"{lat.get('measured_on')})" if lat.get("measured") else
-                    "Rhythm ran on estimated delays: run python3 "
-                    "app/scripts/audio_latency.py --write on this laptop "
-                    "before the next participant"))
+                    "Rhythm ran on estimated delays: measure them on this "
+                    "computer before the next participant (Settings, "
+                    "Audio delay, or python3 app/scripts/audio_latency.py "
+                    "--write)"))
     starts = [_when(r["meta"].get("started_at")) for r in first]
     ends = [_when(r["meta"].get("finished_at")) for r in first]
     starts = [s for s in starts if s]

@@ -111,11 +111,12 @@ The game opens within a second: a watcher installed at first launch checks the p
 
 <p align="center"><img src="app/docs/images/settings.png" width="72%" alt="The Settings screen"></p>
 
-The cog on the login screen: live finger readout, port dropdowns, Test STIM per hand, Open data folder, and three repairs ([app/docs/flashing.txt](app/docs/flashing.txt)).
+The cog on the login screen: live finger readout, port dropdowns, Test STIM per hand, Open data folder, and four setup jobs ([app/docs/flashing.txt](app/docs/flashing.txt)).
 
 - **Auto-start:** the switch reads on or off. Off stays off.
 - **Flash firmware:** writes the game firmware to the board with the bundled avrdude, about ten seconds.
 - **Sensor address:** moves one SingleTact to a new I2C address, with only that sensor connected.
+- **Audio delay:** once on a new computer, times its sound and buzz with the microphone so Rhythm lands on the beat. About two minutes in a quiet room, board plugged in; on Windows it asks for taps on the index pad.
 
 ## Troubleshooting
 

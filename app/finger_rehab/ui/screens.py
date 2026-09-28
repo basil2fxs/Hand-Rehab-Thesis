@@ -7682,8 +7682,10 @@ class DiagnosticsScreen(Screen):
     # Three buttons stacked in the firmware panel: flash, sensor
     # address, auto-start. 36 high with a 6 gap fits three under the
     # heading inside PANEL_HEIGHT; the 40 the port rows use would not.
-    FIRMWARE_BTN_H = 36
-    FIRMWARE_ROW_GAP = 6
+    # Four rows since Audio delay joined (28 September 2026): 28 px, the
+    # height of the Riff file button beside them.
+    FIRMWARE_BTN_H = 28
+    FIRMWARE_ROW_GAP = 4
     FIRMWARE_ROW_TOP = 38
 
     def _cues_rect(self) -> pygame.Rect:
@@ -7769,7 +7771,8 @@ class DiagnosticsScreen(Screen):
                            self.PANEL_HEIGHT)
 
     def _firmware_row_y(self, i: int) -> int:
-        """Top of firmware button i (0 flash, 1 address, 2 auto-start)."""
+        """Top of setup button i (0 flash, 1 address, 2 audio delay,
+        3 auto-start)."""
         return (self._panel_top() + self.FIRMWARE_ROW_TOP
                 + i * (self.FIRMWARE_BTN_H + self.FIRMWARE_ROW_GAP))
 
@@ -8309,20 +8312,27 @@ class DiagnosticsScreen(Screen):
         self._panel_buttons.append(Button(
             pygame.Rect(fw_x, self._firmware_row_y(0), fw_w, fw_h),
             "Flash firmware", self._open_flash_dialog,
-            self.theme, self.layout, font_pt=FONT_BODY - 2,
+            self.theme, self.layout, font_pt=FONT_BODY - 4,
         ))
         self._panel_buttons.append(Button(
             pygame.Rect(fw_x, self._firmware_row_y(1), fw_w, fw_h),
             "Sensor address", self._open_address_dialog,
-            self.theme, self.layout, font_pt=FONT_BODY - 2,
+            self.theme, self.layout, font_pt=FONT_BODY - 4,
+        ))
+        # This computer's sound and buzz delays, measured with its own
+        # microphone: what a new computer needs before Rhythm is scored.
+        self._panel_buttons.append(Button(
+            pygame.Rect(fw_x, self._firmware_row_y(2), fw_w, fw_h),
+            self._audio_btn_label(), self._open_audio_dialog,
+            self.theme, self.layout, font_pt=FONT_BODY - 4,
         ))
         # The third job the old Setup app did. The label carries the
         # current state and a press flips it.
         self._panel_buttons.append(Button(
-            pygame.Rect(fw_x, self._firmware_row_y(2), fw_w, fw_h),
+            pygame.Rect(fw_x, self._firmware_row_y(3), fw_w, fw_h),
             "Auto-start: on" if self._autostart_on else "Auto-start: off",
             self._toggle_autostart,
-            self.theme, self.layout, font_pt=FONT_BODY - 2,
+            self.theme, self.layout, font_pt=FONT_BODY - 4,
         ))
 
     # ---- auto-start -------------------------------------------------------
@@ -8423,6 +8433,74 @@ class DiagnosticsScreen(Screen):
     def _close_firmware_dialog(self) -> None:
         self._dialog = None
 
+    # ---- audio delay -----------------------------------------------------
+
+    def _audio_measured(self) -> bool:
+        return bool(self.engine.cfg.get("latency.measured", False))
+
+    def _audio_btn_label(self) -> str:
+        return ("Audio delay: measured" if self._audio_measured()
+                else "Measure audio delay")
+
+    def _audio_now_line(self) -> str:
+        g = self.engine.cfg.get
+        if not self._audio_measured():
+            return "estimates, not measured on this computer."
+        return (f"song {g('rhythm.audio_offset_ms', '?')} ms, short "
+                f"sounds {g('latency.tone_ms', '?')} ms, buzz "
+                f"{g('latency.buzzer_ms', '?')} ms, measured "
+                f"{g('latency.measured_on', '?')}.")
+
+    def _open_audio_dialog(self) -> None:
+        from ..hardware import flasher
+        from .audio_delay_dialog import AudioDelayDialog
+        why = self.engine.firmware_job_allowed()
+        if why:
+            self._port_status = why
+            return
+        try:
+            ports = flasher.candidate_ports(self.engine.cfg,
+                                            self.engine.source)
+        except Exception as e:
+            log.warning("Could not list boards for the audio delay: %s", e)
+            ports = []
+        self._audio_port = ports[0][0] if ports else None
+        self._dialog = AudioDelayDialog(
+            self.theme, self.layout, now_line=self._audio_now_line(),
+            has_board=self._audio_port is not None,
+            on_measure=self._start_audio_job,
+            on_close=self._close_firmware_dialog)
+
+    def _start_audio_job(self):
+        """Silence the game and hand the port over on the main thread,
+        then start the measurement's thread."""
+        from ..audio.latency_measure import TRACK, LatencyJob
+        why = self.engine.firmware_job_allowed()
+        if why:
+            self._port_status = why
+            return None
+        self.engine.begin_audio_measurement()
+        job = LatencyJob(self.engine.cfg.resolve_path(TRACK),
+                         getattr(self, "_audio_port", None))
+        job.start()
+        return job
+
+    def _poll_audio_job(self) -> None:
+        """Once the measurement is done: the port and the music back,
+        the new delays into the running config, the card and the
+        button told."""
+        from ..audio import latency_measure
+        dlg = self._dialog
+        job = getattr(dlg, "job", None)
+        if job is None or not job.done:
+            return
+        back = self.engine.end_audio_measurement()
+        if job.ok:
+            latency_measure.apply(self.engine.cfg, job.values)
+        dlg.finish(job.message, job.ok, now_line=self._audio_now_line())
+        self._port_status = f"{job.message} {back}".strip()
+        self.rebuild_panel()
+
     def _start_firmware_job(self, port: str):
         """Hand the port to avrdude, then start the thread.
 
@@ -8467,6 +8545,10 @@ class DiagnosticsScreen(Screen):
         here, on the main thread, once the thread has set `done`.
         """
         dlg = self._dialog
+        from .audio_delay_dialog import AudioDelayDialog
+        if isinstance(dlg, AudioDelayDialog):
+            self._poll_audio_job()
+            return
         if dlg is None or dlg.job is None or not dlg.job.done:
             return
         job = dlg.job
@@ -8970,7 +9052,7 @@ class DiagnosticsScreen(Screen):
         # for it; the third button row took the line the caption had.
         fw_rect = self._firmware_rect()
         fw_caption, _fw_colour = self._firmware_caption()
-        self._draw_band(surf, fw_rect, "ARDUINO FIRMWARE", fw_caption)
+        self._draw_band(surf, fw_rect, "SETUP", fw_caption)
         # Buttons for both bottom panels (test STIM, refresh, save, open
         # folder), then the dropdowns on top of whatever they overlap.
         for b in self._panel_buttons:

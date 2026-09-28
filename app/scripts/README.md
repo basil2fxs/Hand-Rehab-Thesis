@@ -8,7 +8,7 @@ Tools run by hand from `app/`, for example `python3 scripts/pad_bench.py`. Each 
 | [`test_device.py`](test_device.py) | Full hardware check of the hand device |
 | [`pad_bench.py`](pad_bench.py) | Bench the four pads with known masses: a quick check before a collection day, or `--characterise` for the sensor comparison |
 | [`force_check.py`](force_check.py) | Check the newton scale with known masses |
-| [`audio_latency.py`](audio_latency.py) | Measure this laptop's sound and buzz delays and save them for the game |
+| [`audio_latency.py`](audio_latency.py) | This computer's sound and buzz delays, saved for the game: Settings, Audio delay from a terminal |
 | [`latency_check.py`](latency_check.py) | The bench procedure for the cue delays |
 | [`buzz_soak.py`](buzz_soak.py) | Run the motors for a long time and log failures |
 | **On a study day** | |

@@ -96,13 +96,14 @@ SETTINGS_CONTROLS = [
     "Scan",
 ]
 
-# The three repairs the Settings section lists, one bold lead each,
-# and the label the UI draws for each. The auto-start switch carries
-# its state in the label.
+# The four setup jobs the Settings section lists, one bold lead each,
+# and the label the UI draws for each. The auto-start switch and the
+# audio delay carry their state in the label.
 REPAIRS = {
     "Auto-start": "Auto-start: on",
     "Flash firmware": "Flash firmware",
     "Sensor address": "Sensor address",
+    "Audio delay": "Measure audio delay",
 }
 
 # Config keys the README quotes by name. A key renamed in default.yaml
@@ -196,7 +197,7 @@ class TwoDeliverablesTests(unittest.TestCase):
         self.assertEqual(len(lines), 4, lines)
         self.assertIn("run_in_psychopy.py", "\n".join(lines))
 
-    def test_the_settings_section_lists_the_three_repairs(self):
+    def test_the_settings_section_lists_the_four_setup_jobs(self):
         ui = "\n".join(p.read_text(encoding="utf-8")
                        for p in sorted((REPO / "finger_rehab" / "ui")
                                        .glob("*.py")))

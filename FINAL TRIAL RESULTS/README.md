@@ -10,7 +10,7 @@
 
 ## Student sittings
 
-1. Lab PC: install `FingerRehab-Setup-Windows.exe` from the [latest release](https://github.com/basil2fxs/Hand-Rehab-Thesis/releases/latest) (EEG off). Print the [study-day kit](../app/docs/study_day/README.md).
+1. Lab PC: install `FingerRehab-Setup-Windows.exe` from the [latest release](https://github.com/basil2fxs/Hand-Rehab-Thesis/releases/latest) (EEG off), then once, board plugged in: Settings, Audio delay, Measure. Print the [study-day kit](../app/docs/study_day/README.md).
 2. Each student, with you or your teammate: consent and intake, then log in with the next code (P01 upward) and the longest SESSION their slot allows. Play all runs the rest; follow the [run sheet](../app/docs/study_day/run_sheet.md).
 3. After each day: copy `%LOCALAPPDATA%\Programs\Finger Rehab\sessions` into `1 Healthy study/sessions`, add each code's Edinburgh LQ to its `intake_sheet.csv`, then check it: `python3 app/scripts/check_sitting.py --all --data "FINAL TRIAL RESULTS/1 Healthy study/sessions" --day <date>`.
 

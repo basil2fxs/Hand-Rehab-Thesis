@@ -1541,9 +1541,13 @@ class GameEngine:
         if self.menu_music is None:
             from ..audio.menu_music import MenuMusicPlayer
             self.menu_music = MenuMusicPlayer(self.audio, self.cfg)
+        # Silent while Settings measures the audio delay: the
+        # microphone is listening for the game's own sounds.
         self.menu_music.update(self.current_screen_key(),
                                self.block_is_running(),
-                               muted=self.menu_music_muted())
+                               muted=(self.menu_music_muted()
+                                      or getattr(self, "_measuring_audio",
+                                                 False)))
 
     # ---- per-participant preferences -------------------------------------
     @property
@@ -3175,6 +3179,24 @@ class GameEngine:
                 src.stop()
             except Exception as e:
                 log.warning("Stopping the source for a flash raised: %s", e)
+
+    def begin_audio_measurement(self) -> None:
+        """Settings, Audio delay: silence the menu music at once (no
+        fade into the recording) and hand the board's port to the
+        measurement, as a flash does."""
+        self._measuring_audio = True
+        player = getattr(self, "menu_music", None)
+        if player is not None:
+            try:
+                player.stop_now()
+            except Exception as e:
+                log.warning("Stopping menu music to measure raised: %s", e)
+        self.begin_firmware_job()
+
+    def end_audio_measurement(self) -> str:
+        """Take the port back and let the menu music return."""
+        self._measuring_audio = False
+        return self.end_firmware_job()
 
     def end_firmware_job(self) -> str:
         """Take the port back. Returns a line for the screen."""

@@ -17,13 +17,13 @@ print and follow.
 | [end_of_day.md](end_of_day.md) | after the last participant | no |
 | [intake_sheet_template.csv](intake_sheet_template.csv) | typed up at the end of the day | no |
 
-Two commands do the checking, both from the project folder:
+The checking:
 
 - `python3 app/scripts/check_sitting.py` before each participant
   leaves: READY, or what to fix while they are still there.
-- `python3 app/scripts/audio_latency.py --write`: the laptop's sound
-  and buzz delays, already measured and saved for this MacBook; run it
-  again only on another laptop or another audio output.
+- Settings, Audio delay: the computer's sound and buzz delays, already
+  measured and saved for this MacBook; measure once on any other
+  computer (the lab PC too) or audio output.
 - `python3 app/scripts/pad_bench.py`: optional, a counts-per-gram
   figure for the thesis appendix (coins work).
 

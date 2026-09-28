@@ -3,7 +3,7 @@
 
 ## Run it
 
-1. Plug the trigger box in first.
+1. Plug the trigger box in first. On a new lab PC, measure its sound delays once: Settings, Audio delay, Measure.
 2. Open `run_in_psychopy.py` in PsychoPy Coder and press **Run**. ActiView's trigger byte goes 255 to 0 when the port opens. A port list instead: pick the EEG marker's port (COM10), then **Continue**.
 3. Log in. The menu shows the recording's name, for example `P07_2026-09-24.bdf`. Start ActiView under that name, saved in `sessions/eeg`.
 4. **Play all** runs the lab sitting in the code's order, with the lab's Reaction task in place of both Reaction blocks. Reaction opens on its setup screen: pick the timing group, then **START**.

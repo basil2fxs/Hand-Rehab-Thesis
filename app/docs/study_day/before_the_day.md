@@ -60,12 +60,10 @@ Done for this MacBook on 24 September 2026, and saved: the game reads
 - [ ] Play the study through the laptop's own speakers. The numbers
       belong to them: headphones or a Bluetooth speaker have their
       own delay (Bluetooth adds far more). For any other output, or
-      another laptop, re-measure first, about two minutes, board
-      plugged in, room quiet:
-
-      ```
-      python3 app/scripts/audio_latency.py --write
-      ```
+      another computer (the lab PC too), measure first: Settings,
+      Audio delay, Measure. About two minutes, board plugged in, room
+      quiet. The same from a terminal:
+      `python3 app/scripts/audio_latency.py --write`.
 
 `check_sitting.py` says CHECK if a sitting's Rhythm block ran on
 unmeasured delays.
