@@ -767,6 +767,7 @@ class ResponseAnchorTests(_EngineHarness):
             pygame.quit()
 
 
+@real_time
 class RhythmLeadMarkerTests(_EngineHarness):
     """The buzz that leads the beat is its own marker (22) and the
     beat byte drops the buzzer bit; with nothing to lead by, one byte

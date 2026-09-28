@@ -65,7 +65,7 @@ Rebuild these after changing what they come from. Commands run from `app/`.
 
 ## Newer libraries
 
-`pip install --upgrade -r app/requirements.txt`, run the tests, push. CI builds with Python 3.12, set in the workflow; move it on once every package in `app/requirements.txt` has wheels for the newer Python.
+CI installs the newest version of every package in `app/requirements.txt` on each push, so a library change that breaks something fails there first, before it reaches a release. To catch up on your own machine: `pip install --upgrade -r app/requirements.txt`, then run the tests. CI builds with Python 3.12, set in the workflow; move it on once every package has wheels for the newer Python.
 
 ## House rules
 
