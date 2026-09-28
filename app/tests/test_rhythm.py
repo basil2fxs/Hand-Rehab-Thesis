@@ -66,10 +66,16 @@ class LibrosaIntegrationTests(unittest.TestCase):
             self.skipTest("librosa / soundfile not installed")
         from unittest import mock
 
-        import audioread
         import librosa
         import numpy as np
         from finger_rehab.audio import beatmap as bmod
+        try:
+            import audioread
+        except ModuleNotFoundError:
+            # librosa 1.0 no longer installs audioread, so there is no
+            # aifc import to fail; the read through soundfile must still
+            # match librosa.load exactly.
+            audioread = None
         song = Path(__file__).resolve().parents[1] / "assets" / "music" \
             / "Easy_Lemon.mp3"
         if not song.is_file():
@@ -79,11 +85,15 @@ class LibrosaIntegrationTests(unittest.TestCase):
         def no_aifc():
             raise ModuleNotFoundError("No module named 'aifc'")
 
-        with mock.patch.object(audioread, "available_backends", no_aifc):
-            with self.assertRaises(ModuleNotFoundError):
-                librosa.load(str(song), mono=True)
+        if audioread is None:
             got, got_sr = bmod.decode_mono(song)
             bm = bmod.extract_beatmap(song, difficulty="medium")
+        else:
+            with mock.patch.object(audioread, "available_backends", no_aifc):
+                with self.assertRaises(ModuleNotFoundError):
+                    librosa.load(str(song), mono=True)
+                got, got_sr = bmod.decode_mono(song)
+                bm = bmod.extract_beatmap(song, difficulty="medium")
         self.assertEqual(got_sr, sr)
         self.assertTrue(np.array_equal(got, want))
         self.assertEqual(bm.song, str(song))

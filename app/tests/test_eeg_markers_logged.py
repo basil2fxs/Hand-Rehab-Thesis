@@ -557,6 +557,17 @@ def _lab_engine(td: str, participant: str, source=None,
     # clock could be bound to the frozen one and drain() would never
     # see the pulse end.
     eng.markers._clock = REAL_PERF
+    # A marker with no timestamp of its own (a block start, a session
+    # start) is stamped on the game clock, as in the app, where the
+    # writer and the game share one clock. Stamped on the real clock,
+    # its onset depended on how long the machine had been up: a fresh
+    # CI runner read the block start 9,747 s before the block.
+    send = eng.markers.send
+
+    def _send(code, lane=None, t_event=None):
+        return send(code, lane,
+                    time.perf_counter() if t_event is None else t_event)
+    eng.markers.send = _send
     return eng, port
 
 
@@ -1100,8 +1111,12 @@ class LabSessionTests(unittest.TestCase):
             self.assertEqual(onsets, sorted(onsets), name)
             # The block-start byte's t_event is the block clock zero,
             # which can sit a fraction of a frame before the first
-            # force sample; anything earlier is a wrong reference.
+            # force sample; anything earlier is a wrong reference. Every
+            # byte falls inside its block, so one an hour out was stamped
+            # on another clock (the block-end byte once was, which only
+            # a freshly booted machine showed).
             self.assertGreaterEqual(onsets[0], -1.0 / 60.0, name)
+            self.assertLess(onsets[-1], 3600.0, name)
             self.assertEqual(scn["sidecar"]["CodesVersion"], CODES_VERSION)
             self.assertTrue(scn["codes_csv"], name)
             self.assertEqual(scn["meta_eeg"]["codes"], CODES, name)
