@@ -9,5 +9,12 @@ if not exist "Finger Rehab.exe" (
   exit /b 1
 )
 start "EEG simulator" "Finger Rehab.exe" --eeg-simulator
-timeout /t 4 /nobreak >nul
+rem Wait until the simulator is listening (up to 20 s), so the game
+rem finds it on the first try instead of opening its port picker.
+powershell -NoProfile -Command "for($i=0;$i -lt 40;$i++){try{$c=New-Object Net.Sockets.TcpClient('127.0.0.1',50410);$c.Close();exit 0}catch{Start-Sleep -Milliseconds 500}};exit 1"
+if errorlevel 1 (
+  echo The simulator did not start. Close any other copy and run this again.
+  pause
+  exit /b 1
+)
 start "Finger Rehab" "Finger Rehab.exe" --windowed --eeg-port socket://127.0.0.1:50410
