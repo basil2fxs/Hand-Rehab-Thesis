@@ -1744,6 +1744,17 @@ class DeveloperFolderTests(unittest.TestCase):
             self.assertIn(b"\r\n", raw, name)
             self.assertNotIn(b"\n", raw.replace(b"\r\n", b""), name)
 
+    def test_the_psychopy_installer_is_checked_before_it_runs(self) -> None:
+        # The file is half a gigabyte from the internet: it only starts
+        # if its SHA-256 matches the one GitHub lists for the release.
+        import re
+        text = (self.DEV / "Get PsychoPy.cmd").read_text()
+        m = re.search(r"set SHA256=([0-9a-f]{64})\s", text)
+        self.assertIsNotNone(m, "no SHA-256 in the script")
+        check = text.index("certutil -hashfile")
+        self.assertLess(check, text.index('start ""'))
+        self.assertIn('del "downloads\\%FILE%"', text[check:])
+
     def test_the_simulator_script_feeds_the_simulator(self) -> None:
         text = (self.DEV / "EEG simulator.cmd").read_text()
         self.assertIn("--eeg-simulator", text)

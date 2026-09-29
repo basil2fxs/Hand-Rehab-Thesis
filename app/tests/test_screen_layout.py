@@ -345,14 +345,49 @@ class TestSettingsGroups:
                     assert not a.rect.colliderect(b.rect), (a.label,
                                                             b.label)
 
-    def test_the_cue_switches_clear_the_menu_music_button(
-            self, settings_screen):
-        screen, _ = settings_screen
-        menu = screen._cue_menu
-        last = menu._row_rect(len(menu.rows) - 1)
-        mm = next(b for b in screen._panel_buttons
-                  if b.label.startswith("Menu music"))
-        assert last.bottom < mm.rect.top
+    def test_the_menu_music_switch_sits_on_its_slider_row(
+            self, settings_screen, monkeypatch):
+        # Basil, 29 September 2026: the on/off belongs with the level it
+        # switches, so the cues card holds only cues.
+        import pygame
+        from finger_rehab.ui.widgets import FONT_BODY, FONT_SMALL, Slider
+        screen, eng = settings_screen
+        switch = screen._music_switch
+        music = screen._vol_sliders["music"]
+        assert screen._levels_rect().contains(switch.rect)
+        label_y = music.rect.y - Slider.LABEL_GAP
+        assert abs(switch.rect.centery - (label_y + 10)) <= 6
+        # Clear of the label on its left and the value on its right.
+        label_w = screen.layout.font(FONT_SMALL + 4).size(music.label)[0]
+        assert switch.rect.x > music.rect.x + label_w
+        value_w = screen.layout.font(FONT_BODY).size("100%")[0]
+        assert switch.rect.right + 48 < music.rect.right - value_w
+        assert not any(b.label.startswith("Menu music")
+                       for b in screen._panel_buttons)
+        # A click flips the machine's setting.
+        monkeypatch.setattr(eng.cfg, "save_user_overrides",
+                            lambda values: None)
+        screen._switch_tab("sound")
+        before = bool(eng.cfg.get("audio.menu_music_enabled", True))
+        screen.handle_event(pygame.event.Event(
+            pygame.MOUSEBUTTONDOWN, button=1, pos=switch.rect.center))
+        assert bool(eng.cfg.get("audio.menu_music_enabled")) is not before
+
+    def test_the_setup_rows_fit_on_the_lab_pc(self, settings_screen):
+        # Windows adds the USB driver row and the lab build the EEG box:
+        # six rows, and every one stays inside the card.
+        screen, eng = settings_screen
+        screen._show_usb_row = True
+
+        class _Markers:
+            enabled = True
+        eng.markers = _Markers()
+        assert screen._setup_row_count() == 6
+        card = screen._firmware_rect()
+        for i in range(6):
+            assert card.contains(screen._setup_btn_rect(i)), i
+        last_top = screen._firmware_row_y(5)
+        assert last_top + screen._setup_row_h() <= card.bottom
 
     def test_every_cue_switch_has_a_row(self, settings_screen):
         """Grouped by when the patient meets them, so the screen switch

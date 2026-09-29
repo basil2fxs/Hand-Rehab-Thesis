@@ -435,16 +435,15 @@ class MuteButton:
         muted = self.muted()
         label = "MUSIC OFF  (M)" if muted else "MUSIC ON  (M)"
         r = self.rect
-        if muted:
-            bg = tuple(max(0, c - 30) for c in theme.background)
-            fg = theme.muted
-        else:
-            bg = theme.accent if self.hover else tuple(
-                max(0, c - 30) for c in theme.background)
-            fg = (255, 255, 255) if self.hover else theme.foreground
-        if muted and self.hover:
-            bg = tuple(max(0, c - 48) for c in theme.background)
+        # The login's utility pills: a light fill and a thin edge, blue
+        # when hovered, so the corner reads as one of them.
+        edge = tuple(max(0, c - 34) for c in theme.background)
+        bg = tuple(max(0, c - 10) for c in theme.background)
+        fg = theme.muted if muted else theme.foreground
+        if self.hover:
+            bg, fg, edge = theme.accent, (255, 255, 255), theme.accent
         pygame.draw.rect(surf, bg, r, border_radius=r.h // 2)
+        pygame.draw.rect(surf, edge, r, 1, border_radius=r.h // 2)
         font = layout.font(FONT_SMALL + 1)
         text = font.render(label, True, fg)
         # A small speaker glyph, crossed when muted, then the label.
@@ -836,6 +835,14 @@ class TitleScreen(Screen):
                         self.hand_seg, self.length_input]
         if len(self.trial_seg.options) > 1:
             self._fields.append(self.trial_seg)
+        else:
+            # No picker: the two fields share the row, so it spans the
+            # card as the first row does.
+            row_w = self.sex_seg.rect.right - x0
+            half = (row_w - 16) // 2
+            self.hand_seg.rect = pygame.Rect(x0, r2, half, fh)
+            self.length_input.rect = pygame.Rect(
+                x0 + half + 16, r2, row_w - half - 16, fh)
         # Carry-over bookkeeping: the (identity, age) the fields were
         # last filled for, and what was written, so a value the RA
         # typed by hand is never overwritten by the lookup and a
@@ -1421,8 +1428,8 @@ class TitleScreen(Screen):
             plan = build_plan(self.engine.cfg, "P01", "right")
         except Exception:
             return list(self.INFO_STEPS), self.INFO_FOOTER
-        # A game's name never breaks across lines: its spaces are held
-        # as underscores through the wrap.
+        # A game's name never breaks across lines: its spaces become
+        # "_" for the wrap and spaces again after it.
         names = [mode_title(s.mode).replace(" ", "_") for s in plan.steps]
         cut = next((i for i, s in enumerate(plan.steps)
                     if i and s.rest_before_s > 0), len(names))
@@ -1662,10 +1669,14 @@ class ModeSelectScreen(Screen):
         right = engine.layout.width - 40
         opts = self._session_options()
         # Every option as wide as the longest label needs, so "Lab
-        # session" fits as well as "15 min".
-        seg_font = make_font(int((FONT_SMALL + 2) * self.layout.font_scale),
-                             bold=True)
-        opt_w = max([84] + [seg_font.size(c)[0] + 28 for _k, c in opts])
+        # session" fits as well as "15 min". Measured only once fonts
+        # are up; a screen built headless for a test draws nothing.
+        opt_w = 84
+        if pygame.font.get_init():
+            seg_font = make_font(
+                int((FONT_SMALL + 2) * self.layout.font_scale), bold=True)
+            opt_w = max([opt_w] + [seg_font.size(c)[0] + 28
+                                   for _k, c in opts])
         seg_w = opt_w * len(opts)
         start_w = 120
         self.session_seg = Segmented(
@@ -8105,14 +8116,14 @@ class DiagnosticsScreen(Screen):
         # The machine's menu music on/off, on its own slider's row. The
         # corner pill is the logged-in person's own mute.
         music = self._vol_sliders["music"]
-        label_w = self.layout.font(FONT_SMALL + 4).size(music.label)[0]
         self._music_switch = Switch(
-            pygame.Rect(music.rect.x + label_w + 16,
-                        music.rect.y - Slider.LABEL_GAP - 1, 46, 24),
+            pygame.Rect(music.rect.x, music.rect.y - Slider.LABEL_GAP - 1,
+                        46, 24),
             self.theme, self.layout,
             lambda: bool(self.engine.cfg.get("audio.menu_music_enabled",
                                              True)),
             self._toggle_menu_music)
+        self._place_music_switch()
         # Buzzer cue length. Vibration STRENGTH is fixed in the firmware
         # (STIM_PWM is a compile-time constant and there is no command to
         # change it), so length is the only thing the host can vary, and
@@ -8128,6 +8139,17 @@ class DiagnosticsScreen(Screen):
             step=50.0, label="Buzz length",
             value_format="{:.0f} ms",
         )
+
+    def _place_music_switch(self) -> None:
+        """Just right of the Menu music label. Measured once fonts are
+        up (they are by the first draw); a screen built headless for a
+        test gets a place from the label's length."""
+        music = self._vol_sliders["music"]
+        if pygame.font.get_init():
+            label_w = self.layout.font(FONT_SMALL + 4).size(music.label)[0]
+        else:
+            label_w = 11 * len(music.label)
+        self._music_switch.rect.x = music.rect.x + label_w + 16
 
     def _apply_volumes_live(self) -> None:
         """Push the current slider values into the in-memory config and
@@ -9309,6 +9331,7 @@ class DiagnosticsScreen(Screen):
                         "Drag to set; saved when you let go")
         for s in self._vol_sliders.values():
             s.draw(surf)
+        self._place_music_switch()
         self._music_switch.draw(surf)
         cues = self._cues_rect()
         self._draw_band(surf, cues, "CUES",

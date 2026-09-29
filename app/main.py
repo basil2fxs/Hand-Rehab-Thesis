@@ -70,6 +70,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--eeg-port", default=None,
                    help="Serial port of the EEG trigger box, e.g. "
                         "/dev/cu.usbmodem1101 or COM7")
+    # The game boots fullscreen. The EEG simulator's rehearsal opens it
+    # in a window so the simulator can sit beside it on one screen.
+    p.add_argument("--windowed", action="store_true",
+                   help="Open in a window rather than fullscreen")
     # Whether this install can flash the board with nothing else
     # installed. Writes a JSON report and exits 0 when it can; CI runs
     # it on each build's installed copy. A file, not print: the
@@ -183,6 +187,8 @@ def main() -> int:
         cfg.data.setdefault("eeg", {})["port"] = args.eeg_port
     if args.no_eeg_box:
         cfg.data.setdefault("eeg", {})["require_port"] = False
+    if args.windowed:
+        cfg.data.setdefault("ui", {})["fullscreen"] = False
     if args.hand:
         cfg.data.setdefault("bilateral", {})["hand"] = args.hand
     if args.mode:

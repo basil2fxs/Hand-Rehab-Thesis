@@ -492,13 +492,41 @@ class SimulatorApp:
             self.note = str(save_csv(self.rx.snapshot(), Path.cwd()))
         return True
 
+    def window_plan(self, desktops: list[tuple[int, int]]
+                    ) -> tuple[int, tuple[int, int]]:
+        """(display, window size). With a second screen the simulator
+        takes it at full size, leaving the game the first. On one
+        screen it opens at most two thirds of the screen wide, in
+        proportion, and the window can be dragged to any size: the
+        picture scales to fit."""
+        if len(desktops) > 1:
+            w, h = desktops[1]
+            scale = min(1.0, (w - 40) / self.W, (h - 80) / self.H)
+            return 1, (int(self.W * scale), int(self.H * scale))
+        if desktops:
+            w, h = desktops[0]
+            scale = min(1.0, (w * 2 // 3) / self.W, (h - 80) / self.H)
+            return 0, (int(self.W * scale), int(self.H * scale))
+        return 0, (self.W, self.H)
+
     def run(self) -> int:
         import os
         import pygame
         os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
         pygame.init()
-        screen = pygame.display.set_mode((self.W, self.H))
+        try:
+            desktops = list(pygame.display.get_desktop_sizes())
+        except Exception:
+            desktops = []
+        display, size = self.window_plan(desktops)
+        try:
+            window = pygame.display.set_mode(size, pygame.RESIZABLE,
+                                             display=display)
+        except Exception:
+            window = pygame.display.set_mode(size, pygame.RESIZABLE)
         pygame.display.set_caption("EEG simulator")
+        # Drawn at its own size, then scaled to whatever the window is.
+        canvas = pygame.Surface((self.W, self.H))
         clock = pygame.time.Clock()
         self.rx.start()
         running = True
@@ -511,7 +539,18 @@ class SimulatorApp:
             now = time.perf_counter()
             if not self.paused:
                 self.eeg.advance(now, self.rx.snapshot()[-50:])
-            self.draw(screen, now)
+            self.draw(canvas, now)
+            window = pygame.display.get_surface()
+            if window.get_size() == canvas.get_size():
+                window.blit(canvas, (0, 0))
+            else:
+                window.fill((248, 250, 252))
+                ww, wh = window.get_size()
+                scale = min(ww / self.W, wh / self.H)
+                fit = (max(1, int(self.W * scale)),
+                       max(1, int(self.H * scale)))
+                window.blit(pygame.transform.smoothscale(canvas, fit),
+                            ((ww - fit[0]) // 2, (wh - fit[1]) // 2))
             pygame.display.flip()
             clock.tick(60)
         self.rx.stop()

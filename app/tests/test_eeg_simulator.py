@@ -13,7 +13,8 @@ from pathlib import Path
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 
 from finger_rehab.utils import eeg_simulator as sim  # noqa: E402
 
@@ -90,6 +91,20 @@ def test_close_numbers_stack_instead_of_covering_each_other():
         == [0, 20, 40, 0]
 
 
+def test_the_window_fits_the_screens_it_has():
+    app = sim.SimulatorApp(sim.ByteReceiver())
+    # A second screen: the simulator takes it, at full size.
+    display, size = app.window_plan([(1920, 1080), (1920, 1080)])
+    assert display == 1 and size == (app.W, app.H)
+    # One laptop screen: two thirds of its width at most, in proportion,
+    # so the windowed game still has room beside it.
+    display, (w, h) = app.window_plan([(1920, 1080)])
+    assert display == 0 and w <= 1280 and abs(w / h - app.W / app.H) < 0.01
+    display, (w, h) = app.window_plan([(1366, 768)])
+    assert w <= 1366 * 2 // 3 and h <= 768 - 80
+    assert app.window_plan([]) == (0, (app.W, app.H))
+
+
 def test_the_window_draws_and_saves(tmp_path):
     import pygame
     pygame.init()
@@ -120,3 +135,11 @@ def test_the_game_starts_it_from_the_command_line():
     sys.argv = ["main.py", "--eeg-simulator", "--listen", "50411"]
     args = main.parse_args()
     assert args.eeg_simulator and args.listen == 50411
+    # The rehearsal opens the game in a window beside the simulator.
+    sys.argv = ["main.py", "--windowed", "--eeg-port",
+                "socket://127.0.0.1:50410"]
+    args = main.parse_args()
+    assert args.windowed and args.eeg_port.startswith("socket://")
+    cmd = (ROOT.parent / "EEG_Lab" / "developer"
+           / "EEG simulator.cmd").read_text(encoding="utf-8")
+    assert "--windowed --eeg-port socket://127.0.0.1:50410" in cmd

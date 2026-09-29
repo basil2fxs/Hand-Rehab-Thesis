@@ -10,4 +10,4 @@ if not exist "Finger Rehab.exe" (
 )
 start "EEG simulator" "Finger Rehab.exe" --eeg-simulator
 timeout /t 4 /nobreak >nul
-start "Finger Rehab" "Finger Rehab.exe" --eeg-port socket://127.0.0.1:50410
+start "Finger Rehab" "Finger Rehab.exe" --windowed --eeg-port socket://127.0.0.1:50410

@@ -17,7 +17,7 @@ Tools for setting up and rehearsing the lab session. This folder stays on my PC 
 
 ## The simulator
 
-Double-click `EEG simulator.cmd`. Two windows open: the simulator, then the game in lab mode. Play as in the lab and every marker shows up as a line on the simulated EEG, with its number and what it means on the right. The EEG is made up; the markers are the real bytes the lab box would get, with their pulse widths.
+Double-click `EEG simulator.cmd`. Two windows open: the simulator, then the game in lab mode, in a window rather than fullscreen. With a second screen the simulator opens on it; on one screen, drag the two side by side (the simulator scales to any size). Play as in the lab and every marker shows up as a line on the simulated EEG, with its number and what it means on the right. The EEG is made up; the markers are the real bytes the lab box would get, with their pulse widths.
 
 Keys in the simulator: Space pauses, Up and Down change the gain, Left and Right change the time span, S saves the markers to a CSV, Esc quits.
 

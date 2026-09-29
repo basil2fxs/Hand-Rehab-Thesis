@@ -9,7 +9,7 @@ Basil, after playing it: a syllable should sound the way it does in the whole wo
 - **The cost, and the rule for it.** A weak vowel sounds alike under ter, tar and tur (B1), so on a syllable heard with a weak vowel every profile, classic included, swaps the vowel foil (F3) for a coda foil (F7).
 - **The blend.** The model now ends by lighting every slot and saying the whole word again, the last graphosyllabic step. The gap between modelled syllables stays short (half a second of quiet): Gonzalez-Frey and Ehri (2021, Scientific Studies of Reading 25(3), 272-285) found kindergartners taught to pause between the sounds of a word forgot the first sound when blending.
 - **Slower.** Child falls 6.0 s at entry down to 4.5 s (were 4.0 to 2.5), floor 4.0 s; teen, 60+ and adult tables half as long again, adult staircase from 3.6 s (ceiling 4.5 s); word shown 3 s (was 1.5), a right tile held 0.8 s (0.3), 1 s between sets (0.4), 1.5 s between words (0.8), the finished word 3 s (1.4). The voice itself keeps its normal rate: slowed or stretched speech has no evidence of benefit (D2, I20). 30 words a block (was 40), about 11 minutes at 1.2 s an answer.
-- **Waiting on:** the 343 new sounds need the Kokoro model files (336 MB, not on this computer); until they are rendered the game keeps playing the spelt chunk files.
+- **Rendered (29 September 2026):** the 343 new sounds, Kokoro-82M v1.0 with bf_emma, 0.30 to 0.67 s each, in `assets/speech/syllables/`. Every one of the 2,687 files the map names is on disk, so every word now plays its syllables as they sound in it.
 
 ## Status in the code, 25 September 2026
 
