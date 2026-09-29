@@ -40,18 +40,24 @@ log = logging.getLogger(__name__)
 # 10 ** (-10 / 20) = 0.316. Kept as the reference the default sits
 # under.
 HALF_LOUDNESS = 0.316
-# The menu playlist's default level: 25 percent of master. The game
+# The menu playlist's default level: 12 percent of master. The game
 # music (rhythm songs, the Force Pilot track) plays at 100 percent of
-# master, so the menus sit well under it, about 12 dB down, a little
-# quieter than half as loud. Basil asked for the menus at 20 to 30
-# percent with only the in-game music at full level.
-DEFAULT_MENU_LEVEL = 0.25
+# master, so the menus sit about 18 dB under it, roughly a quarter as
+# loud. It was 25 percent until 29 September 2026, when Basil asked for
+# every menu to be very quiet and only the games loud.
+DEFAULT_MENU_LEVEL = 0.12
+# The loudest any menu may play, whatever the Settings slider or a
+# saved user_settings.yaml says: 30 percent of master, still well under
+# the game. Without a ceiling one drag of the slider made the menus as
+# loud as a game, and the saved value kept them there.
+MENU_LEVEL_CEILING = 0.30
 
 
 def menu_music_level(cfg) -> float:
-    """The menu playlist level as a fraction of master_volume: the
-    number in audio.menu_music_volume when one is set (the Settings
-    MUSIC slider writes one), else DEFAULT_MENU_LEVEL."""
+    """The menu level as a fraction of master_volume: the number in
+    audio.menu_music_volume when one is set (the Settings slider writes
+    one), else DEFAULT_MENU_LEVEL, never above MENU_LEVEL_CEILING. The
+    menu playlist and the Rhythm song preview both play at it."""
     raw = cfg.get("audio.menu_music_volume", None)
     if raw is None or raw == "":
         return DEFAULT_MENU_LEVEL
@@ -59,7 +65,7 @@ def menu_music_level(cfg) -> float:
         v = float(raw)
     except (TypeError, ValueError):
         return DEFAULT_MENU_LEVEL
-    return max(0.0, min(1.0, v))
+    return max(0.0, min(MENU_LEVEL_CEILING, v))
 
 
 class MenuMusicPlayer:

@@ -54,6 +54,9 @@ class AudioEngine:
         # Low "thunk" sound used as a combo-break / miss cue.
         self._miss_thunk = None
         self._song_path: str | None = None
+        # The song's level on top of master: 1.0 in a game, the menu
+        # level for a Rhythm preview (play_song).
+        self._song_volume = 1.0
         self._song_start_perf: float | None = None
         self._metronome_period: float | None = None
         self._next_metronome_t: float | None = None
@@ -191,15 +194,19 @@ class AudioEngine:
         if (self._initialised and pygame is not None
                 and self._song_path is not None):
             try:
-                pygame.mixer.music.set_volume(self._clamp01(self.master_volume))
+                pygame.mixer.music.set_volume(self._clamp01(
+                    self.master_volume
+                    * getattr(self, "_song_volume", 1.0)))
             except Exception:
                 pass
 
     def play_song(self, path: str | Path, loops: int = 0,
-                  start_s: float = 0.0) -> bool:
+                  start_s: float = 0.0, volume: float = 1.0) -> bool:
         """Play a song from `start_s` seconds in. start_s > 0 is used by the
         pause-resume path; behaviour depends on the audio format (OGG and
-        WAV typically support seeking; MP3 is hit and miss with pygame)."""
+        WAV typically support seeking; MP3 is hit and miss with pygame).
+        `volume` (0..1, on top of master) is 1.0 for gameplay; the Rhythm
+        song picker previews at the quiet menu level."""
         if not self._initialised or pygame is None:
             return False
         p = Path(path)
@@ -211,7 +218,9 @@ class AudioEngine:
             # Music rides the whole-game master level. The cue / feedback
             # sliders shape the discrete click + chime sounds, not the
             # backing track.
-            pygame.mixer.music.set_volume(self._clamp01(self.master_volume))
+            self._song_volume = self._clamp01(float(volume))
+            pygame.mixer.music.set_volume(
+                self._clamp01(self.master_volume * self._song_volume))
             pygame.mixer.music.play(loops=loops, start=max(0.0, start_s))
             # The game owns the one music stream from here; any menu
             # or block track that was on it has just been replaced.
@@ -271,11 +280,15 @@ class AudioEngine:
             except Exception:
                 pass
         self._song_path = None
+        self._song_volume = 1.0
         self._song_start_perf = None
         self._metronome_period = None
         self._next_metronome_t = None
         self._menu_active = False
         self._block_music_active = False
+        # A block that ends on a loud trial must not leave the boost
+        # behind: every sound in the menus after it would play louder.
+        self.trial_gain = 1.0
 
     @property
     def is_playing(self) -> bool:

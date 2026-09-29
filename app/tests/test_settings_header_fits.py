@@ -49,35 +49,39 @@ def _settings_screen():
     return eng._screens["diagnostics"]
 
 
-class HeaderLineTests(unittest.TestCase):
-    """The line under "Settings" ends before the pill column."""
+class HeaderChipTests(unittest.TestCase):
+    """The connection chip and the Test Mode chip at the top right
+    clear the title and the tabs in every state (the header line that
+    used to collide with the pills went with the tabs, 29 September
+    2026)."""
 
     STATES = ("CONNECTED", "KEYBOARD", "DISCONNECTED", "NO DATA")
 
-    def test_the_line_clears_the_pills_in_every_state(self):
+    def test_the_chips_clear_the_title_and_the_tabs(self):
         screen = _settings_screen()
-        from finger_rehab.ui import screens as mod
+        chips = []
+        real = screen._draw_chip
+
+        def spy(*a, **k):
+            r = real(*a, **k)
+            chips.append(r)
+            return r
+
+        screen._draw_chip = spy
+        screen.engine.cfg.data["game"]["test_mode_enabled"] = True
+        title_font = screen.layout.font(42)
+        title_right = 640 + title_font.size("Settings")[0] // 2
         for state in self.STATES:
             with self.subTest(state=state):
-                seen = {}
-
-                def header(surf, title, subtitle, theme, layout, **kw):
-                    seen["subtitle"] = subtitle
-                    seen["pt"] = kw.get("subtitle_pt", mod.FONT_BODY)
-
+                chips.clear()
                 with patch.object(screen, "_connection_state",
-                                  lambda: (state, screen.theme.muted)), \
-                        patch.object(mod, "_draw_header", header):
-                    surf = _RecordingSurface((1280, 800))
-                    screen.draw(surf)
-                width = screen.layout.font(seen["pt"]).size(
-                    seen["subtitle"])[0]
-                right_edge = 640 + width // 2
-                pill_left = screen._test_mode_rect.left
-                self.assertLess(right_edge, pill_left - 8,
-                                f"{state}: line ends at {right_edge}, "
-                                f"pills start at {pill_left}")
-                self.assertGreaterEqual(seen["pt"], mod.FONT_SMALL + 2)
+                                  lambda: (state, screen.theme.muted)):
+                    screen.draw(_RecordingSurface((1280, 800)))
+                self.assertEqual(len(chips), 2)
+                for chip in chips:
+                    self.assertGreater(chip.left, title_right + 16)
+                    self.assertLessEqual(chip.right, 1280)
+                    self.assertLess(chip.bottom, screen._tab_rect(0).top)
 
 
 class SliderLabelTests(unittest.TestCase):

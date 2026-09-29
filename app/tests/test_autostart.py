@@ -478,9 +478,12 @@ class SettingsSwitchTests(unittest.TestCase):
         import pygame
         b = self._button()
         self.assertTrue(self.screen._firmware_rect().contains(b.rect))
-        for other in self.screen._panel_buttons:
-            if other is not b:
+        # Nothing else on the Setup tab overlaps it.
+        for other, tab in zip(self.screen._panel_buttons,
+                              self.screen._panel_tabs):
+            if other is not b and tab == "setup":
                 self.assertFalse(b.rect.colliderect(other.rect), other.label)
+        self.screen._switch_tab("setup")
         self.screen.draw(pygame.Surface((1280, 800)))
 
     def test_it_reads_off_then_turns_on_for_the_games_own_path(self):

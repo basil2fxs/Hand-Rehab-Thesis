@@ -92,10 +92,11 @@ class _FakeAudio:
         return self.block_path is not None
 
     # -- surface the game engine uses during a block -----------------
-    def play_song(self, path, loops=0, start_s=0.0) -> bool:
+    def play_song(self, path, loops=0, start_s=0.0, volume=1.0) -> bool:
         self.menu_path = None
         self.block_path = None
         self.game_song = str(path)
+        self.game_song_volume = volume
         return True
 
     def start_metronome(self, bpm, first_click_in_s=None) -> None:
@@ -142,7 +143,7 @@ class _FakeCfg:
     """Just enough Config for the player: dotted get + resolve_path."""
 
     def __init__(self, root: Path, tracks: list[str],
-                 enabled: bool = True, volume: float = 0.5) -> None:
+                 enabled: bool = True, volume: float = 0.2) -> None:
         self.root = Path(root)
         self.data = {
             "audio": {
@@ -178,7 +179,7 @@ class _Clock:
 
 
 def _player(tmp: str, tracks=("a.mp3", "b.mp3", "c.mp3"),
-            listed=None, enabled=True, volume=0.5):
+            listed=None, enabled=True, volume=0.2):
     """A MenuMusicPlayer on a fake audio + fake cfg + fake clock."""
     from finger_rehab.audio.menu_music import MenuMusicPlayer
     root = Path(tmp)
@@ -381,35 +382,54 @@ class MenuMusicPlayerFadeTests(unittest.TestCase):
 
 class MenuMusicPlayerVolumeTests(unittest.TestCase):
 
-    def test_default_level_is_a_quarter_of_the_game_music(self) -> None:
-        """No number in the config means 25 percent of master, under
-        the half-loudness line (10 dB down, 0.32), while the game
-        music plays at the full master level."""
+    def test_default_level_is_very_quiet(self) -> None:
+        """No number in the config means 12 percent of master, about
+        18 dB under the game music, which plays at the full master
+        level (Basil, 29 September 2026: every menu very quiet)."""
         from finger_rehab.audio.menu_music import (DEFAULT_MENU_LEVEL,
                                                    HALF_LOUDNESS,
+                                                   MENU_LEVEL_CEILING,
                                                    MenuMusicPlayer,
                                                    menu_music_level)
-        self.assertAlmostEqual(DEFAULT_MENU_LEVEL, 0.25)
+        self.assertAlmostEqual(DEFAULT_MENU_LEVEL, 0.12)
         self.assertLess(DEFAULT_MENU_LEVEL, HALF_LOUDNESS)
+        self.assertLess(MENU_LEVEL_CEILING, 1.0)
         with tempfile.TemporaryDirectory() as td:
             p, audio, cfg, clock = _player(td, volume=None)
-            self.assertAlmostEqual(menu_music_level(cfg), 0.25)
+            self.assertAlmostEqual(menu_music_level(cfg), 0.12)
             p.update("title", False)
             clock.step(MenuMusicPlayer.FADE_IN_S + 0.1)
             p.update("title", False)
-            self.assertAlmostEqual(audio.menu_volume, 0.25, places=3)
+            self.assertAlmostEqual(audio.menu_volume, 0.12, places=3)
             # A number pins it; a broken value falls back.
-            cfg.data["audio"]["menu_music_volume"] = 0.7
-            self.assertAlmostEqual(menu_music_level(cfg), 0.7)
+            cfg.data["audio"]["menu_music_volume"] = 0.2
+            self.assertAlmostEqual(menu_music_level(cfg), 0.2)
             cfg.data["audio"]["menu_music_volume"] = "loud"
-            self.assertAlmostEqual(menu_music_level(cfg), 0.25)
+            self.assertAlmostEqual(menu_music_level(cfg), 0.12)
 
-    def test_shipped_config_puts_the_menus_at_a_quarter(self) -> None:
+    def test_no_saved_level_can_make_a_menu_loud(self) -> None:
+        """A saved slider value of 100 percent used to make the menus
+        as loud as a game; the ceiling holds whatever is saved."""
+        from finger_rehab.audio.menu_music import (MENU_LEVEL_CEILING,
+                                                   MenuMusicPlayer,
+                                                   menu_music_level)
+        with tempfile.TemporaryDirectory() as td:
+            p, audio, cfg, clock = _player(td, volume=1.0)
+            self.assertAlmostEqual(menu_music_level(cfg),
+                                   MENU_LEVEL_CEILING)
+            p.update("results", False)
+            clock.step(MenuMusicPlayer.DUCK_S + MenuMusicPlayer.FADE_IN_S
+                       + 0.1)
+            p.update("results", False)
+            self.assertAlmostEqual(audio.menu_volume, MENU_LEVEL_CEILING,
+                                   places=3)
+
+    def test_shipped_config_puts_the_menus_low(self) -> None:
         import yaml
         repo = Path(__file__).resolve().parents[1]
         cfg = yaml.safe_load(
             (repo / "config" / "default.yaml").read_text())
-        self.assertEqual(cfg["audio"]["menu_music_volume"], 0.25)
+        self.assertEqual(cfg["audio"]["menu_music_volume"], 0.12)
         self.assertEqual(cfg["force_pilot"]["music_volume"], 1.0)
 
     def test_the_mute_fades_the_track_out_and_keeps_it_off(self) -> None:
@@ -435,18 +455,18 @@ class MenuMusicPlayerVolumeTests(unittest.TestCase):
     def test_volume_reaches_the_slider_level_after_fade_in(self) -> None:
         from finger_rehab.audio.menu_music import MenuMusicPlayer
         with tempfile.TemporaryDirectory() as td:
-            p, audio, _cfg, clock = _player(td, volume=0.6)
+            p, audio, _cfg, clock = _player(td, volume=0.26)
             p.update("title", False)
             clock.step(MenuMusicPlayer.FADE_IN_S + 0.1)
             p.update("title", False)
-            self.assertAlmostEqual(audio.menu_volume, 0.6, places=3)
+            self.assertAlmostEqual(audio.menu_volume, 0.26, places=3)
 
     def test_volume_slider_is_live_between_tracks_too(self) -> None:
         # The player reads cfg every tick, which is what lets the
         # Settings slider work with no wiring to the player at all.
         from finger_rehab.audio.menu_music import MenuMusicPlayer
         with tempfile.TemporaryDirectory() as td:
-            p, audio, cfg, clock = _player(td, volume=0.6)
+            p, audio, cfg, clock = _player(td, volume=0.26)
             p.update("title", False)
             clock.step(MenuMusicPlayer.FADE_IN_S + 0.1)
             p.update("title", False)
@@ -459,32 +479,32 @@ class MenuMusicPlayerVolumeTests(unittest.TestCase):
         # so the track opens held down instead of fighting it.
         from finger_rehab.audio.menu_music import MenuMusicPlayer
         with tempfile.TemporaryDirectory() as td:
-            p, audio, _cfg, clock = _player(td, volume=0.8)
+            p, audio, _cfg, clock = _player(td, volume=0.28)
             p.update("results", False)
             self.assertAlmostEqual(
-                audio.menu_volume, 0.8 * MenuMusicPlayer.DUCK_FACTOR,
+                audio.menu_volume, 0.28 * MenuMusicPlayer.DUCK_FACTOR,
                 places=3)
             # Still held during the duck window.
             clock.step(MenuMusicPlayer.DUCK_S * 0.5)
             p.update("results", False)
             self.assertAlmostEqual(
-                audio.menu_volume, 0.8 * MenuMusicPlayer.DUCK_FACTOR,
+                audio.menu_volume, 0.28 * MenuMusicPlayer.DUCK_FACTOR,
                 places=3)
             # Fully up after duck + rise.
             clock.step(MenuMusicPlayer.DUCK_S
                        + MenuMusicPlayer.FADE_IN_S + 0.1)
             p.update("results", False)
-            self.assertAlmostEqual(audio.menu_volume, 0.8, places=3)
+            self.assertAlmostEqual(audio.menu_volume, 0.28, places=3)
 
     def test_ordinary_menus_start_from_silence_not_ducked_hold(self) -> None:
         from finger_rehab.audio.menu_music import MenuMusicPlayer
         with tempfile.TemporaryDirectory() as td:
-            p, audio, _cfg, clock = _player(td, volume=0.8)
+            p, audio, _cfg, clock = _player(td, volume=0.28)
             p.update("title", False)
             self.assertAlmostEqual(audio.menu_volume, 0.0, places=3)
             clock.step(MenuMusicPlayer.FADE_IN_S + 0.1)
             p.update("title", False)
-            self.assertAlmostEqual(audio.menu_volume, 0.8, places=3)
+            self.assertAlmostEqual(audio.menu_volume, 0.28, places=3)
 
 
 class MenuMusicPlaylistTests(unittest.TestCase):

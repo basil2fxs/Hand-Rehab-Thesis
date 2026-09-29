@@ -253,13 +253,27 @@ class TestTitleClicks:
 
 
 class TestSettingsGroups:
-    """Six labelled panels, every control inside the one it belongs to."""
+    """Four tabs, one job each (29 September 2026), every control inside
+    the card it belongs to and nothing on a tab overlapping."""
 
-    def test_the_group_headings_are_drawn(self, settings_screen,
-                                          monkeypatch):
+    def _cards(self, screen):
+        return {
+            "device": [screen._fingers_rect(), screen._ports_rect()],
+            "sound": [screen._levels_rect(), screen._cues_rect()],
+            "setup": [screen._firmware_rect()],
+            "data": [screen._data_rect()],
+        }
+
+    def test_the_tabs_and_their_card_headings(self, settings_screen,
+                                               monkeypatch):
         import pygame
         import finger_rehab.ui.screens as screens_mod
         screen, _ = settings_screen
+        assert [k for k, _l in screen.TABS] == ["device", "sound",
+                                                "setup", "data"]
+        # Hand device opens first: checking the fingers is what
+        # Settings is opened for most.
+        assert screen.tab == "device"
         seen: list[str] = []
         original = screens_mod.DiagnosticsScreen._draw_band
 
@@ -269,80 +283,76 @@ class TestSettingsGroups:
 
         monkeypatch.setattr(screens_mod.DiagnosticsScreen,
                             "_draw_band", recorder)
-        screen.draw(pygame.Surface((1280, 800)))
-        assert seen == ["SENSORY CUES", "LEVELS", "FINGER TEST",
-                        "ARDUINO PORTS", "SESSION DATA",
-                        "SETUP"]
+        for key, _l in screen.TABS:
+            screen._switch_tab(key)
+            screen.draw(pygame.Surface((1280, 800)))
+        assert seen == ["FINGER TEST", "BOARDS", "LEVELS", "CUES", "", ""]
 
-    def test_the_groups_do_not_overlap(self, settings_screen):
+    def test_the_cards_on_a_tab_do_not_overlap(self, settings_screen):
         screen, _ = settings_screen
-        groups = {
-            "cues": screen._cues_rect(),
-            "levels": screen._levels_rect(),
-            "fingers": screen._fingers_rect(),
-            "ports": screen._ports_rect(),
-            "data": screen._data_rect(),
-            "firmware": screen._firmware_rect(),
-        }
-        names = list(groups)
-        for i, a in enumerate(names):
-            for b in names[i + 1:]:
-                assert not groups[a].colliderect(groups[b]), \
-                    f"{a} panel overlaps {b} panel"
+        for tab, cards in self._cards(screen).items():
+            for i, a in enumerate(cards):
+                for b in cards[i + 1:]:
+                    assert not a.colliderect(b), tab
 
-    def test_the_groups_stay_on_screen(self, settings_screen):
+    def test_the_cards_stay_on_screen_and_clear_the_tabs(
+            self, settings_screen):
         screen, _ = settings_screen
         w, h = screen.layout.width, screen.layout.height
-        for rect in (screen._cues_rect(), screen._levels_rect(),
-                     screen._fingers_rect(), screen._ports_rect(),
-                     screen._data_rect(), screen._firmware_rect()):
-            assert rect.left >= 0 and rect.right <= w
-            assert rect.top >= 0 and rect.bottom <= h
+        tabs_bottom = screen._tab_rect(0).bottom
+        for cards in self._cards(screen).values():
+            for rect in cards:
+                assert rect.left >= 0 and rect.right <= w
+                assert rect.top > tabs_bottom and rect.bottom <= h
+                assert rect.bottom < screen.back_btn.rect.top
 
-    def test_the_cue_pill_sits_in_the_cues_panel(self, settings_screen):
+    def test_the_cue_list_sits_in_the_cues_card(self, settings_screen):
         screen, _ = settings_screen
-        assert screen._cues_rect().contains(screen._cue_menu.rect)
+        card = screen._cues_rect()
+        menu = screen._cue_menu
+        assert card.contains(menu.rect)
+        for i, _row in enumerate(menu.rows):
+            assert card.contains(menu._row_rect(i)), i
 
-    def test_the_sliders_sit_in_the_levels_panel(self, settings_screen):
+    def test_the_sliders_sit_in_the_levels_card(self, settings_screen):
         screen, _ = settings_screen
         panel = screen._levels_rect()
         for name, slider in screen._vol_sliders.items():
-            assert panel.left <= slider.rect.left, name
-            assert slider.rect.right <= panel.right, name
+            assert panel.contains(slider.rect.inflate(0, slider.KNOB_R)), \
+                name
 
-    def test_the_finger_tiles_sit_in_the_finger_panel(self, settings_screen):
+    def test_the_finger_tiles_sit_in_the_finger_card(self, settings_screen):
         screen, _ = settings_screen
         panel = screen._fingers_rect()
         for ls in screen.lanes:
             assert panel.contains(ls.rect), f"lane {ls.lane} escapes"
 
-    def test_the_port_controls_sit_in_the_ports_panel(self, settings_screen):
+    def test_every_button_sits_in_its_tab_card(self, settings_screen):
         screen, _ = settings_screen
-        panel = screen._ports_rect()
         for dd in screen._port_dropdowns.values():
-            assert panel.contains(dd.rect)
-        homes = {
-            "Open data folder": screen._data_rect(),
-            "Flash firmware": screen._firmware_rect(),
-            "Sensor address": screen._firmware_rect(),
-            "Measure audio delay": screen._firmware_rect(),
-            "Audio delay: measured": screen._firmware_rect(),
-            "Auto-start: on": screen._firmware_rect(),
-            "Auto-start: off": screen._firmware_rect(),
-        }
-        for b in screen._panel_buttons:
-            assert homes.get(b.label, panel).contains(b.rect), b.label
+            assert screen._ports_rect().contains(dd.rect)
+        home = {"device": screen._ports_rect(), "sound": screen._cues_rect(),
+                "setup": screen._firmware_rect(),
+                "data": screen._data_rect()}
+        for b, tab in zip(screen._panel_buttons, screen._panel_tabs):
+            assert home[tab].contains(b.rect), b.label
+        # And no two buttons on one tab overlap.
+        for tab in home:
+            mine = [b for b, t in zip(screen._panel_buttons,
+                                      screen._panel_tabs) if t == tab]
+            for i, a in enumerate(mine):
+                for b in mine[i + 1:]:
+                    assert not a.rect.colliderect(b.rect), (a.label,
+                                                            b.label)
 
-    def test_the_sliders_do_not_reach_into_the_finger_tiles(
+    def test_the_cue_switches_clear_the_menu_music_button(
             self, settings_screen):
-        """Slider hit rects are inflated vertically so the knob is easy
-        to grab. That generosity must not extend over the tiles below,
-        or a drag near the panel edge would buzz a finger."""
         screen, _ = settings_screen
-        top = screen._fingers_rect().top
-        for name, slider in screen._vol_sliders.items():
-            hit = slider.rect.inflate(0, slider.KNOB_R * 2)
-            assert hit.bottom < top, name
+        menu = screen._cue_menu
+        last = menu._row_rect(len(menu.rows) - 1)
+        mm = next(b for b in screen._panel_buttons
+                  if b.label.startswith("Menu music"))
+        assert last.bottom < mm.rect.top
 
     def test_every_cue_switch_has_a_row(self, settings_screen):
         """Grouped by when the patient meets them, so the screen switch
@@ -379,44 +389,32 @@ class TestSettingsHitBoxes:
             screen.handle_event(pygame.event.Event(
                 kind, {"button": 1, "pos": pos}))
 
-    def test_the_cue_pill_opens_the_menu_where_it_is_drawn(
-            self, settings_screen):
+    def test_a_tab_is_picked_where_it_is_drawn(self, settings_screen):
         screen, _ = settings_screen
-        assert screen._cue_menu.is_open is False
-        self._click(screen, screen._cue_menu.rect.center)
-        assert screen._cue_menu.is_open is True
+        for i, (key, _l) in enumerate(screen.TABS):
+            self._click(screen, screen._tab_rect(i).center)
+            assert screen.tab == key
+        import pygame
+        screen.handle_event(pygame.event.Event(
+            pygame.KEYDOWN, {"key": pygame.K_1, "mod": 0, "unicode": "1",
+                             "scancode": 0}))
+        assert screen.tab == "device"
 
-    def test_an_open_row_click_does_not_buzz_the_tile_underneath(
-            self, settings_screen):
-        """The open menu covers the finger tiles. Without the consume,
-        toggling a cue would also fire a motor."""
+    def test_a_cue_switch_flips_where_it_is_drawn(self, settings_screen):
         screen, _ = settings_screen
-        buzzed: list[int] = []
-        screen._buzz_finger = lambda ls: buzzed.append(ls.lane)
+        screen._switch_tab("sound")
+        flipped: list[tuple[str, bool]] = []
+        screen._cue_menu.on_toggle = lambda k, v: flipped.append((k, v))
         menu = screen._cue_menu
-        menu.is_open = True
-        # Click where a row and a tile genuinely share pixels, not just
-        # the centre of a row that happens to overlap by a few pixels at
-        # its edge. Only a point inside both proves the row wins.
-        shared = None
-        for i, (key, _l, _h) in enumerate(menu.rows):
-            if key is None:
-                continue
-            row = menu._row_rect(i)
-            for ls in screen.lanes:
-                overlap = row.clip(ls.rect)
-                if overlap.width > 2 and overlap.height > 2:
-                    shared = overlap
-                    break
-            if shared:
-                break
-        assert shared is not None, "the open menu is expected to cover a tile"
-        assert any(ls.rect.collidepoint(shared.center) for ls in screen.lanes)
-        self._click(screen, shared.center)
-        assert buzzed == [], "the cue row click also buzzed a finger"
-        assert menu.is_open is True, "a row click should leave the menu open"
+        i = next(i for i, (k, _l, _h) in enumerate(menu.rows)
+                 if k == "cue.buzz_after")
+        self._click(screen, menu._row_rect(i).center)
+        assert flipped and flipped[0][0] == "cue.buzz_after"
+        # Pinned: a click on the heading does not close anything.
+        self._click(screen, menu.rect.center)
+        assert menu.is_open is True
 
-    def test_a_tile_click_buzzes_that_tile_when_the_menu_is_shut(
+    def test_a_tile_click_buzzes_only_on_the_hand_device_tab(
             self, settings_screen):
         screen, _ = settings_screen
         buzzed: list[int] = []
@@ -424,23 +422,30 @@ class TestSettingsHitBoxes:
         target = screen.lanes[0]
         self._click(screen, target.rect.center)
         assert buzzed == [target.lane]
+        screen._switch_tab("sound")
+        self._click(screen, target.rect.center)
+        assert buzzed == [target.lane], "a hidden tile buzzed"
 
-    def test_the_test_mode_pill_is_hit_where_it_was_drawn(
+    def test_the_test_mode_switch_is_hit_where_it_was_drawn(
             self, settings_screen):
-        """The pill's rect is measured from the rendered label during
-        draw and cached for the hit test, so the two agree only if draw
-        ran first. A click before any draw must not toggle anything."""
+        """Test Mode lives on the Data tab; its click reaches it there
+        and nowhere else."""
         import pygame
         screen, eng = settings_screen
-        flipped: list[bool] = []
-        screen._toggle_test_mode = lambda: flipped.append(True)
-        assert screen._test_mode_rect.width == 0
-        self._click(screen, (1200, 85))
-        assert flipped == []
-
+        was = bool(eng.cfg.get("game.test_mode_enabled", False))
+        b = next(b for b in screen._panel_buttons
+                 if b.label.startswith("Test Mode"))
+        self._click(screen, b.rect.center)
+        assert bool(eng.cfg.get("game.test_mode_enabled", False)) == was
+        screen._switch_tab("data")
         screen.draw(pygame.Surface((1280, 800)))
         assert screen._test_mode_rect.width > 0
-        self._click(screen, screen._test_mode_rect.center)
+        flipped: list[bool] = []
+        screen._toggle_test_mode = lambda: flipped.append(True)
+        screen.rebuild_panel()
+        b = next(b for b in screen._panel_buttons
+                 if b.label.startswith("Test Mode"))
+        self._click(screen, b.rect.center)
         assert flipped == [True]
 
     def test_the_lane_tiles_do_not_overlap_each_other(self, settings_screen):

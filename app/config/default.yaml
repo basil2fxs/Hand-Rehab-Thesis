@@ -873,7 +873,7 @@ srt:
   # script (archive/Webler EEG past program/SRT_Sequence_learning_
   # Final_v2.py) replicated trial for trial in modes/srt.py. It is the
   # Reaction card on the hub. The healthy study battery still plays
-  # the reaction block above; the EEG lab's Play all plays this.
+  # the reaction block above; the EEG lab's Lab session plays this.
   #
   # The part the lab varies between groups (timing group, learning
   # interval, sequence) is the SETUP, chosen on the setup screen the
@@ -1788,13 +1788,11 @@ audio:
   # session.prefs_file, not here.
   menu_music_enabled: true
   # Level as a fraction of master_volume, like the other category
-  # levels. 0.25: the menus play at a quarter of master while the game
-  # music (rhythm songs, the Force Pilot track) plays at the full
-  # master level, so only the in-game music is at 100 percent. About
-  # 12 dB down, a little quieter than half as loud (loudness halves
-  # per 10 dB, the sone scale). null falls back to the same 0.25. The
-  # Settings MUSIC slider writes a number here.
-  menu_music_volume: 0.25
+  # levels. 0.12: every menu is very quiet (about 18 dB under the game)
+  # and only the games are loud; the Rhythm song picker's preview plays
+  # at this level too. Never above 0.30, whatever is saved. null falls
+  # back to 0.12. The Settings menu music slider writes a number here.
+  menu_music_volume: 0.12
   # Which files from music_dir the menu playlist draws on. Named
   # explicitly rather than "everything in the folder" so the rhythm
   # library can grow without the menus picking up a slow ambient track

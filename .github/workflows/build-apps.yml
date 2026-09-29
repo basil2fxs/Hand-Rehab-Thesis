@@ -136,6 +136,16 @@ jobs:
       - name: Build
         run: python -m PyInstaller --noconfirm --workpath bin/build --distpath bin/dist finger_rehab.spec
 
+      # The built Mac app must flash from its own bundle too.
+      - name: Check the flashing tools (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          code=0
+          "bin/dist/Finger Rehab.app/Contents/MacOS/Finger Rehab" \
+              --check-tools "$RUNNER_TEMP/tools.json" || code=$?
+          cat "$RUNNER_TEMP/tools.json" || true
+          exit $code
+
       # macOS: a disk image with the app and an Applications link, the
       # drag target. UDZO is compressed and read-only.
       - name: Make the disk image (macOS)
@@ -195,6 +205,16 @@ jobs:
           schtasks /Query /TN FingerRehabAutostart | Out-Null
           if ($LASTEXITCODE) { throw "auto-start task missing" }
           Write-Host "-- task registered"
+          # Settings' Flash firmware and Sensor address must work from
+          # this install alone: both firmware images, the bundled
+          # avrdude starting, pyserial, on a runner with no Arduino
+          # tools of its own.
+          Write-Host "-- flashing tools in the installed copy"
+          $report = Join-Path $env:RUNNER_TEMP "tools.json"
+          $c = Start-Process -FilePath $exe -ArgumentList "--check-tools","`"$report`"" -Wait -PassThru
+          if (Test-Path $report) { Get-Content $report } else { throw "no tools report" }
+          if ($c.ExitCode -ne 0) { throw "the installed app cannot flash (exit $($c.ExitCode))" }
+          Write-Host "-- the installed app can flash"
           $unins = Get-ChildItem -Path $dir -Filter "unins*.exe" |
             Select-Object -First 1
           if (-not $unins) { throw "no uninstaller in $dir" }

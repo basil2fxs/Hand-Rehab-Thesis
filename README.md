@@ -1,7 +1,7 @@
 <p align="center"><img src="app/assets/icons/app_icon_256.png" width="96" alt="Finger Rehab icon"></p>
 <h1 align="center">Finger Rehab</h1>
 <p align="center">A hand device and a laptop game that measure and train finger movement.<br>Four force pads, four vibration motors, an Arduino Nano, ten games, every press logged with its time and force.</p>
-<p align="center"><a href="https://github.com/basil2fxs/Hand-Rehab-Thesis/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/basil2fxs/Hand-Rehab-Thesis?label=release&color=16a34a"></a> <a href="https://github.com/basil2fxs/Hand-Rehab-Thesis/actions/workflows/build-apps.yml"><img alt="build-apps" src="https://github.com/basil2fxs/Hand-Rehab-Thesis/actions/workflows/build-apps.yml/badge.svg"></a> <img alt="Runs on Windows and macOS" src="https://img.shields.io/badge/runs%20on-Windows%20%7C%20macOS-2563eb"> <img alt="Python 3.10 or newer" src="https://img.shields.io/badge/python-3.10%2B-3776ab"> <img alt="Curtin University thesis, 2026" src="https://img.shields.io/badge/thesis-Curtin%202026-0f172a"></p>
+<p align="center"><a href="https://github.com/basil2fxs/Hand-Rehab-Thesis/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/basil2fxs/Hand-Rehab-Thesis?label=release&color=16a34a"></a> <a href="https://github.com/basil2fxs/Hand-Rehab-Thesis/actions/workflows/build-apps.yml"><img alt="build-apps" src="https://github.com/basil2fxs/Hand-Rehab-Thesis/actions/workflows/build-apps.yml/badge.svg"></a></p>
 <p align="center"><a href="#install">Install</a> &middot; <a href="#the-ten-games">Games</a> &middot; <a href="#troubleshooting">Troubleshooting</a> &middot; <a href="#data">Data</a> &middot; <a href="#the-lab-folder">Lab folder</a> &middot; <a href="CONTRIBUTING.md">Working on the code</a></p>
 <p align="center"><img src="app/docs/images/hub.png" width="88%" alt="The hub, where each game is picked"></p>
 
@@ -33,7 +33,7 @@ flowchart LR
 | --- | --- |
 | [`Installers/`](Installers) | What people install |
 | [`FINAL TRIAL RESULTS/`](FINAL%20TRIAL%20RESULTS) | The study: what to do, and where each result goes |
-| [`EEG_Lab/`](EEG_Lab) | Copy this whole folder to the lab PC |
+| [`EEG_Lab/`](EEG_Lab) | The folder for the lab PC, and a `developer/` folder that stays here |
 | [`hardware/`](hardware) | Build the device: parts, wiring, pins, CAD and print files |
 | [`analysis/`](analysis) | The notebook that turns sessions into results |
 | [`app/`](app) | Code, config, assets, tests, build scripts |
@@ -54,9 +54,9 @@ flowchart LR
   F --> N["analysis/session_analysis.ipynb"]
 ```
 
-A press is a crossing of the force stream, not a switch: each pad keeps a slow baseline, and the trigger sits in the gap between that person's resting level and their light press, measured at login.
+There's no switch under a finger. Each pad keeps a slow baseline, and a press counts when the force crosses a trigger set between that person's resting level and their light press, both measured at login.
 
-<p align="center"><img src="app/docs/images/login.png" width="32%" alt="The login screen"> <img src="app/docs/images/hand.png" width="32%" alt="The hand choice screen"> <img src="app/docs/images/calibration.png" width="32%" alt="The quick calibration"><br><sub>Log in with free play or a timed session (15 to 60 minutes, games in order), pick the hand, calibrate.</sub></p>
+<p align="center"><img src="app/docs/images/login.png" width="32%" alt="The login screen"> <img src="app/docs/images/hand.png" width="32%" alt="The hand choice screen"> <img src="app/docs/images/calibration.png" width="32%" alt="The quick calibration"><br><sub>Log in with free play or a timed session (15 to 60 minutes, games in order), pick the hand, calibrate. The hub has the same session picker, so free play can turn into a timed session without logging out.</sub></p>
 
 ## Install
 
@@ -67,7 +67,7 @@ Both are on the [latest release](https://github.com/basil2fxs/Hand-Rehab-Thesis/
 
 ## When a board is plugged in
 
-The game opens within a second: a watcher installed at first launch checks the ports once a second. A board already in at login needs an unplug and replug.
+The game opens within a second. A watcher installed at first launch checks the ports once a second, so a board that was already in at login needs unplugging and plugging back in.
 
 ## The ten games
 
@@ -111,12 +111,14 @@ The game opens within a second: a watcher installed at first launch checks the p
 
 <p align="center"><img src="app/docs/images/settings.png" width="72%" alt="The Settings screen"></p>
 
-The cog on the login screen: live finger readout, port dropdowns, Test STIM per hand, Open data folder, and four setup jobs ([app/docs/flashing.txt](app/docs/flashing.txt)).
+The cog on the login screen. Four tabs: Hand device (the finger test, which board is which hand, a test buzz), Sound and cues (the levels and the cue switches), Setup, and Data (the data folder, the Muscle Memory riff, Test Mode). The Setup jobs ([app/docs/flashing.txt](app/docs/flashing.txt)):
 
-- **Auto-start:** the switch reads on or off. Off stays off.
-- **Flash firmware:** writes the game firmware to the board with the bundled avrdude, about ten seconds.
+- **Auto-start:** opens the game when the board is plugged in. The switch reads on or off, and off stays off.
+- **Flash firmware:** writes the game firmware to the board with the avrdude bundled in the app, about ten seconds.
 - **Sensor address:** moves one SingleTact to a new I2C address, with only that sensor connected.
-- **Audio delay:** once on a new computer, times its sound and buzz with the microphone so Rhythm lands on the beat. About two minutes in a quiet room, board plugged in; on Windows it asks for taps on the index pad.
+- **Audio delay:** once on a new computer, times its sound and buzz with the microphone so Rhythm lands on the beat. About two minutes in a quiet room with the board plugged in; on Windows it asks for taps on the index pad.
+
+On Windows there's also USB driver: if a board is plugged in but never shows up, it gets the board's driver from Windows Update.
 
 ## Troubleshooting
 
@@ -124,19 +126,19 @@ The cog on the login screen: live finger readout, port dropdowns, Test STIM per 
 
 **A sensor drifts, or reads high at rest.** A pad squashed by the strap eats the gap between resting and pressing, and under 20 counts of travel is refused. Reposition the pad flat and calibrate again.
 
-**The board is not found, or the port keeps changing.** First board found is the right hand, second the left. To pin one: Settings, Refresh, pick the port per hand, Save. A saved port that no longer exists falls back to plug order.
+**The board is not found, or the port keeps changing.** The first board found is the right hand, the second the left. To pin one: Settings, Hand device, pick the port per hand, Save. A saved port that no longer exists falls back to plug order. On Windows, a board that never shows up at all usually has no driver yet: Settings, Setup, USB driver.
 
 **Calibration is asked for every time.** Once per hand per session is the design. A repeat inside one session means the profile was refused: under 20 counts of travel, a trigger too high, or a pad reading zero when empty.
 
-**A buzzer does not buzz.** Settings, Test LEFT STIM or Test RIGHT STIM fires that hand's motors in order. None firing on a board that streams fine is wiring, not software. A missing buzz before a cue is a cue switched off in Sensory Cues.
+**A buzzer does not buzz.** Settings, Hand device, Test buzz fires that hand's motors in order, and clicking a finger tile buzzes just that finger. None firing on a board that streams fine is wiring, not software. No buzz before a cue means the cue is switched off in Sound and cues.
 
 **Presses register on the wrong finger.** Two pads answer the same I2C address. Settings, Sensor address, with only that sensor connected: 0x05 index, 0x06 middle, 0x07 ring, 0x08 pinky. Never move a sensor off 0x04 with the others wired in.
 
-**The game does not open when I plug the board in.** Settings, Refresh. Not listed is a lead or a driver. Listed means the Auto-start switch should read on. It fires only when a board arrives, so unplug and replug.
+**The game does not open when I plug the board in.** Settings, Hand device, Refresh. If the board isn't listed, it's the lead or the driver (Setup, USB driver). If it is, Auto-start should read on; it only fires when a board arrives, so unplug and replug.
 
 **The board needs re-flashing.** Settings, Flash firmware writes `app/assets/firmware/finger_rehab_nano.hex` with the bundled avrdude. A Nano runs one of two bootloaders; the app tries both and remembers which worked.
 
-**The game runs but no data lands.** Settings, Open data folder opens the folder in use, which is `~/Finger Rehab Data` when the app cannot write beside itself. Check Test Mode is off (`game.test_mode_enabled`): it caps every block at six trials.
+**The game runs but no data lands.** Settings, Data, Open data folder opens the folder in use, which is `~/Finger Rehab Data` when the app can't write beside itself. Check Test Mode is off (`game.test_mode_enabled`): it caps every block at six trials.
 
 **The EEG box does not appear.** Markers are off in the shipped game; `app/config/eeg_lab.yaml` turns them on, loaded from beside the lab exe or with `--config config/eeg_lab.yaml` from source. Set `eeg.port` to the box's port. `eeg.require_port` true refuses to start without a box; false logs the markers only. `eeg.baud` 1200 resets the box off the bus, so the writer refuses it.
 
@@ -148,7 +150,7 @@ Sessions land in `sessions/<date>/<name>_<time>_<game>/`: `trials.csv` one row p
 
 ## The lab folder
 
-`EEG_Lab` (the `FingerRehab-EEGLab.zip` of the same build) holds the exe, `eeg_lab.yaml`, `run_in_psychopy.py`, `README.md`, a `source/` copy and `sessions/`, where `sessions/eeg/` takes ActiView's recording under the name the game menu shows.
+`EEG_Lab` (the `FingerRehab-EEGLab.zip` of the same build) holds the exe, `eeg_lab.yaml`, `run_in_psychopy.py`, `README.md`, a `source/` copy and `sessions/`, where `sessions/eeg/` takes ActiView's recording under the name the game menu shows. Its `developer/` folder stays on my PC: an EEG simulator for rehearsing, the PsychoPy download and a new-PC check.
 Open `run_in_psychopy.py` in PsychoPy Coder and press Run. The home install carries no EEG anything.
 `python3 app/scripts/check_lab_sync.py` says whether the lab folder is the same game as the app; `--fix` makes it so, and `Local_Runner.command` does that on every start.
 Checklist and code table: [app/docs/eeg_lab_setup.txt](app/docs/eeg_lab_setup.txt).

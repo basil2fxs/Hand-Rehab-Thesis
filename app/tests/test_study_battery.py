@@ -663,14 +663,23 @@ class BatteryFlowTests(_BatteryHarness):
         eng = self._engine(_Rig())
         self._login(eng, "P01", "right")
         hub = eng._screens["mode_select"]
+        # Free play is picked to begin with: nothing to start yet.
+        self.assertEqual(hub.session_seg.value, "")
+        self.assertEqual(hub._battery_state(), (False, "Start", ""))
+        # L steps the SESSION picker to the 45 min sitting (the study
+        # battery, which Play all used to run), A starts it.
+        eng.show_mode_select()
+        key = lambda k, u: hub.handle_event(pygame.event.Event(
+            pygame.KEYDOWN, {"key": k, "mod": 0, "unicode": u,
+                             "scancode": 0}))
+        while hub.session_seg.value != "study_battery":
+            key(pygame.K_l, "l")
         ok, label, reason = hub._battery_state()
         self.assertTrue(ok, reason)
-        self.assertEqual(label, "Play all")
-        # A starts it from the hub.
-        eng.show_mode_select()
-        hub.handle_event(pygame.event.Event(
-            pygame.KEYDOWN, {"key": pygame.K_a, "mod": 0, "unicode": "a",
-                             "scancode": 0}))
+        self.assertEqual(label, "Start")
+        hub.draw(pygame.Surface((1280, 800)))
+        key(pygame.K_a, "a")
+        self.assertEqual(eng.battery_preset, "study_battery")
         self.assertTrue(eng.block_is_running())
         self.assertEqual(eng.current_block, "reaction")
         eng.finish_block()
@@ -680,8 +689,8 @@ class BatteryFlowTests(_BatteryHarness):
         self.assertEqual((key, hand), ("rhythm", "right"))
         heading, pill, stretch = results._battery_card_lines(
             eng.pending_protocol_step())
-        self.assertEqual(heading, "PLAY ALL  step 2 of 12")
-        self.assertEqual(pill, "Play all step 2, pass 1")
+        self.assertEqual(heading, "SESSION  step 2 of 12")
+        self.assertEqual(pill, "Session step 2, pass 1")
         self.assertEqual(stretch, "")
         results.draw(pygame.Surface((1280, 800)))
         # N takes the step.
@@ -692,7 +701,7 @@ class BatteryFlowTests(_BatteryHarness):
                          ("rhythm", "right"))
         eng.finish_block()
         _ok, label, _reason = hub._battery_state()
-        self.assertEqual(label, "Play all 2/12")
+        self.assertEqual(label, "Continue 2/12")
         hub.draw(pygame.Surface((1280, 800)))
 
     def test_the_stretch_step_says_so_on_the_card(self) -> None:

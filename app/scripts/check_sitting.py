@@ -95,8 +95,9 @@ def check_code(code: str, rows: list[dict]) -> list[tuple[bool, str]]:
                and (r["meta"].get("battery") or {}).get("id")]
     free = [r for r in mine if r not in battery]
     if not battery:
-        out.append((False, f"no Play all block for {code}: was the "
-                           f"sitting started with PLAY ALL?"))
+        out.append((False, f"no session block for {code}: was the "
+                           f"sitting started from the hub's SESSION "
+                           f"picker?"))
         return out
     by_pos: dict[int, list[dict]] = {}
     for r in battery:
@@ -136,8 +137,8 @@ def check_code(code: str, rows: list[dict]) -> list[tuple[bool, str]]:
         names = ", ".join(
             f"{p} ({by_pos[p][0]['mode']}, ended early)" if p in by_pos
             else str(p) for p in missing)
-        out.append((False, f"steps not finished: {names}. Press PLAY ALL "
-                           f"to play them, or write down why they were "
+        out.append((False, f"steps not finished: {names}. Press Continue "
+                           f"on the hub to play them, or write down why they were "
                            f"skipped"))
     else:
         out.append((True, f"all {n_steps} steps finished"))

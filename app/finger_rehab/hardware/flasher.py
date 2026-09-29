@@ -601,6 +601,80 @@ def wait_for_banner(port: str, banner: str, timeout_s: float = 6.0,
 
 
 # ---------------------------------------------------------------------
+# The self check
+# ---------------------------------------------------------------------
+
+def self_check(cfg, runner=subprocess.run) -> dict:
+    """Whether this install can flash the board and change a pad's
+    address with nothing else installed: both firmware images present
+    and matching the build's manifest, the bundled avrdude found and
+    actually starting, pyserial importable, and on Windows the board's
+    USB driver. `Finger Rehab --check-tools report.json` writes this,
+    and CI runs it on every build's installed copy, so a release that
+    could not flash on a new PC fails before anyone downloads it."""
+    report: dict = {"platform": sys.platform,
+                    "frozen": bool(getattr(sys, "frozen", False))}
+    problems: list[str] = []
+    for kind in ("game", "addr_tool"):
+        image = find_hex(kind, cfg)
+        if image is None:
+            report[kind] = None
+            problems.append(f"no {kind} firmware")
+            continue
+        size = flash_bytes(image.path)
+        report[kind] = {"file": image.path.name, "sha256": image.sha256,
+                        "flash_bytes": size, "dev_build": image.dev_build,
+                        "git_sha": image.git_sha}
+        if size > MAX_FLASH_BYTES:
+            problems.append(f"{kind} firmware too big for the chip")
+    tool = find_avrdude(cfg)
+    if tool is None:
+        report["avrdude"] = None
+        problems.append("no avrdude")
+    else:
+        entry = {"path": tool.argv[0], "origin": tool.origin,
+                 "conf": str(tool.conf) if tool.conf else None}
+        try:
+            argv = list(tool.argv)
+            if tool.conf is not None:
+                argv += ["-C", str(tool.conf)]
+            res = runner(argv + ["-?"], capture_output=True, text=True,
+                         timeout=30,
+                         **({"creationflags": getattr(
+                             subprocess, "CREATE_NO_WINDOW", 0)}
+                            if sys.platform == "win32" else {}))
+            text = (getattr(res, "stdout", "") or "") + (
+                getattr(res, "stderr", "") or "")
+            entry["runs"] = "usage" in text.lower()
+            first = next((ln for ln in text.splitlines()
+                          if "version" in ln.lower()), "")
+            entry["version"] = first.strip()[:120]
+        except (OSError, subprocess.SubprocessError) as e:
+            entry["runs"] = False
+            entry["error"] = str(e)
+        report["avrdude"] = entry
+        if not entry.get("runs"):
+            problems.append("avrdude does not start")
+    try:
+        import serial  # noqa: F401
+        import serial.tools.list_ports  # noqa: F401
+        report["pyserial"] = True
+    except ImportError:
+        report["pyserial"] = False
+        problems.append("no pyserial")
+    from . import usb_driver
+    boards = usb_driver.find_boards()
+    report["usb_boards"] = boards
+    line, missing = usb_driver.describe(boards)
+    report["usb_driver"] = line
+    if missing:
+        problems.append("board plugged in without a driver")
+    report["problems"] = problems
+    report["ready"] = not problems
+    return report
+
+
+# ---------------------------------------------------------------------
 # Messages
 # ---------------------------------------------------------------------
 
@@ -626,9 +700,8 @@ _MESSAGES = {
     "unknown": "The flash failed. See the log for what avrdude said.",
 }
 
-NO_PORT_MESSAGE = ("No Arduino found. Plug it in. If Windows never shows "
-                   "a port, the CH340 driver is missing: install CH341SER "
-                   "from wch-ic.com.")
+NO_PORT_MESSAGE = ("No Arduino found. Plug it in. On Windows, if it never "
+                   "shows up, Setup, USB driver gets its driver.")
 NO_HEX_MESSAGE = ("No firmware in this build. Run builds/build_firmware.py "
                   "(needs PlatformIO) or use a CI build.")
 NO_AVRDUDE_MESSAGE = ("avrdude is not in this build. Run "

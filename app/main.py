@@ -70,6 +70,25 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--eeg-port", default=None,
                    help="Serial port of the EEG trigger box, e.g. "
                         "/dev/cu.usbmodem1101 or COM7")
+    # Whether this install can flash the board with nothing else
+    # installed. Writes a JSON report and exits 0 when it can; CI runs
+    # it on each build's installed copy. A file, not print: the
+    # windowed build has no console.
+    # The EEG lab rehearsed without the lab: a window that stands in
+    # for the trigger box and the amplifier (utils/eeg_simulator.py).
+    # Start the game with --eeg-port socket://127.0.0.1:50410 to feed
+    # it; EEG_Lab/developer/EEG simulator.cmd starts both.
+    p.add_argument("--eeg-simulator", action="store_true",
+                   help="Open the EEG simulator window instead of the "
+                        "game")
+    p.add_argument("--listen", type=int, default=50410,
+                   help="Port the EEG simulator listens on")
+    p.add_argument("--sim-port", default=None,
+                   help="Serial port the EEG simulator reads instead, "
+                        "the far end of a virtual pair such as COM11")
+    p.add_argument("--check-tools", default=None, metavar="REPORT",
+                   help="Check the flashing tools, write a JSON report "
+                        "to REPORT and exit")
     return p.parse_args()
 
 
@@ -116,6 +135,18 @@ def main() -> int:
         # Most likely a YAML parse error from a hand-edited override.
         print(f"Could not load config: {e}", file=sys.stderr)
         return 5
+    if args.eeg_simulator:
+        from finger_rehab.utils import eeg_simulator
+        return eeg_simulator.main(args.listen, args.sim_port)
+    if args.check_tools:
+        import json
+        from finger_rehab.hardware import flasher
+        report = flasher.self_check(cfg)
+        Path(args.check_tools).write_text(
+            json.dumps(report, indent=1, default=str), encoding="utf-8")
+        print("ready" if report["ready"] else
+              "not ready: " + ", ".join(report["problems"]))
+        return 0 if report["ready"] else 1
     if args.register_autostart or args.unregister_autostart:
         from finger_rehab.hardware import autostart
         if args.register_autostart:

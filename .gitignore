@@ -48,6 +48,8 @@ EEG_Lab/source/
 # Left by running the lab folder on this machine.
 EEG_Lab/config/
 EEG_Lab/python_packages/
+# The PsychoPy installer Get PsychoPy.cmd downloads, about 530 MB.
+EEG_Lab/developer/downloads/
 
 # Firmware images and the bundled avrdude. Build products of
 # app/builds/build_firmware.py and app/builds/fetch_avrdude.py, rebuilt

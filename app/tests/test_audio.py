@@ -230,5 +230,30 @@ class StopClearsStateTests(unittest.TestCase):
         self.assertEqual(a.song_time(), 0.0)
 
 
+class GameLevelsStayInTheGameTests(unittest.TestCase):
+    """A game's loudness never follows the player into the menus."""
+
+    def test_stop_drops_a_loud_trial_boost(self) -> None:
+        from finger_rehab.audio.engine import AudioEngine
+        a = AudioEngine()
+        a.set_trial_gain(1.35)
+        a.stop()
+        self.assertEqual(a.trial_gain, 1.0)
+
+    def test_a_song_can_play_at_the_menu_level(self) -> None:
+        from unittest.mock import patch
+        import tempfile
+        from finger_rehab.audio import engine as audio_mod
+        a = audio_mod.AudioEngine(master_volume=0.8)
+        a._initialised = True
+        with patch.object(audio_mod.pygame.mixer, "music") as music:
+            with tempfile.NamedTemporaryFile(suffix=".mp3") as f:
+                self.assertTrue(a.play_song(f.name, volume=0.12))
+            music.set_volume.assert_called_with(0.8 * 0.12)
+            with tempfile.NamedTemporaryFile(suffix=".mp3") as f:
+                self.assertTrue(a.play_song(f.name))
+            music.set_volume.assert_called_with(0.8)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -355,6 +355,41 @@ class SessionStripTests(_EngineHarness):
         hub.draw(pygame.Surface((1280, 800)))
         self.assertEqual(len(ticked), 1)
 
+    def test_the_session_picker_replaced_play_all(self) -> None:
+        # Basil, 29 September 2026: no Play all on the hub; the login's
+        # lengths instead, Free play picked, Start greyed until a
+        # length is picked, and nothing on the row overlapping.
+        import pygame
+        hub = self.eng._screens["mode_select"]
+        self.assertEqual([c for _k, c in hub.session_seg.options],
+                         ["Free play", "15 min", "30 min", "45 min",
+                          "60 min"])
+        self.assertEqual(hub.session_seg.value, "")
+        surf = pygame.Surface((1280, 800))
+        hub.draw(surf)
+        self.assertEqual(hub.battery_btn.label, "Start")
+        note_right = (hub.cal_btn.rect.right + 18
+                      + self.eng.layout.font(14).size(
+                          hub.CAL_UNAVAILABLE)[0])
+        self.assertLess(note_right, hub.session_seg.rect.left)
+        self.assertLessEqual(hub.battery_btn.rect.right, 1280 - 16)
+        self.assertFalse(hub.battery_btn.rect.colliderect(
+            hub.session_seg.rect))
+        lowest = max(b.rect.bottom for b in hub.buttons)
+        self.assertLess(lowest, hub.session_seg.rect.top - 26)
+        # A click on 30 min picks it; Start then starts that length.
+        seg = hub.session_seg
+        thirty = seg._segment_rects()[2]
+        hub.handle_event(pygame.event.Event(
+            pygame.MOUSEBUTTONDOWN, {"pos": thirty.center, "button": 1}))
+        self.assertEqual(seg.value, "trial_30")
+        started = []
+        self.eng.start_session_length = lambda preset: (
+            started.append(preset) or True)
+        self.eng.battery_available = lambda preset=None: (True, "")
+        hub._battery()
+        self.assertEqual(started, ["trial_30"], hub.battery_note)
+
     def test_the_hub_grid_still_clears_its_buttons(self) -> None:
         hub = self.eng._screens["mode_select"]
         lowest = max(b.rect.bottom for b in hub.buttons)

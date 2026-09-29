@@ -629,7 +629,7 @@ def draw_session_strip(surf: pygame.Surface, rect: pygame.Rect,
         right_limit -= nw + 16
 
     x = rect.x + 18
-    # PLAY ALL progress leads the strip while the battery is running:
+    # SESSION progress leads the strip while the battery is running:
     # the one line the RA checks against the run sheet. Filled so it
     # reads as status, not as another game chip.
     try:
@@ -638,9 +638,9 @@ def draw_session_strip(surf: pygame.Surface, rect: pygame.Rect,
         progress = None
     if isinstance(progress, dict):
         if progress.get("finished"):
-            text = f"PLAY ALL DONE {progress['done']}/{progress['of']}"
+            text = f"SESSION DONE {progress['done']}/{progress['of']}"
         else:
-            text = f"PLAY ALL {progress['done']}/{progress['of']}"
+            text = f"SESSION {progress['done']}/{progress['of']}"
             nxt = progress.get("next")
             if isinstance(nxt, dict) and nxt.get("mode"):
                 text += f"  next {mode_title(str(nxt['mode']))}"
@@ -695,7 +695,7 @@ def draw_session_strip(surf: pygame.Surface, rect: pygame.Rect,
 
 class TitleScreen(Screen):
     # Session protocol shown in the Info overlay. A study visit is the
-    # PLAY ALL battery: eleven blocks, every mode once, in the order the
+    # session battery: eleven blocks, every mode once, in the order the
     # participant's code sets (protocol.presets.study_battery in
     # config/default.yaml). tests/test_info_overlay.py checks these
     # lines against that preset and the mirror count against the
@@ -723,18 +723,22 @@ class TitleScreen(Screen):
     # and so are the controls inside it, so neither can drift from the
     # other. The intake card is two rows of fields plus the button, so
     # the wordmark sits higher than it did with one row.
-    ICON_Y = 92
-    WORDMARK_Y = 196
-    TAGLINE_Y = 246
-    CARD_TOP = 282
+    # The header is a small device mark over a two-tone wordmark; the
+    # card is white and sized to its fields, LOG IN runs its full
+    # width, and the board status is one chip under it (Basil, 29
+    # September 2026: a better-looking main menu).
+    ICON_Y = 90
+    WORDMARK_Y = 170
+    TAGLINE_Y = 216
+    CARD_TOP = 260
     CARD_W = 940
-    CARD_H = 372
+    CARD_H = 344
     # Field rows inside the card, offsets from CARD_TOP. Labels draw 26
     # px above each field.
-    ROW1_Y = 70
-    ROW2_Y = 160
-    BUTTON_Y = 240
-    NOTE_Y = 330
+    ROW1_Y = 62
+    ROW2_Y = 152
+    BUTTON_Y = 234
+    NOTE_Y = 318
     FIELD_H = 54
     # Utility strip along the bottom: one row of equal-height pills on a
     # single baseline, with a hairline rule above it.
@@ -847,8 +851,8 @@ class TitleScreen(Screen):
         # game select. Filled in green (independent of the blue theme
         # accent) so it reads as a "go" action.
         self.start_btn = Button(
-            pygame.Rect(cx - BUTTON_W // 2, self.CARD_TOP + self.BUTTON_Y,
-                        BUTTON_W, BUTTON_H + 12),
+            pygame.Rect(x0, self.CARD_TOP + self.BUTTON_Y,
+                        self.card_rect.right - 40 - x0, BUTTON_H - 2),
             "LOG IN", self._begin,
             self.theme, self.layout,
             font_pt=FONT_H2,
@@ -1080,16 +1084,16 @@ class TitleScreen(Screen):
         )
 
     def _draw_device_icon(self, surf: pygame.Surface,
-                           cx: int, cy: int) -> None:
+                           cx: int, cy: int, scale: float = 1.0) -> None:
         """Stylised render of the finger-rehab device. Four vertical
         sensor pads with LED dots on top, sitting on a curved base
         plate. One pad at a time goes dark blue (cycling through the
         four) to read as "this finger is selected", which is exactly
         what the lane strips do in-game when a stim fires.
         """
-        pad_w = 26
-        pad_h = 86
-        gap = 18
+        pad_w = int(26 * scale)
+        pad_h = int(86 * scale)
+        gap = int(18 * scale)
         n = 4
         block_w = pad_w * n + gap * (n - 1)
         x0 = cx - block_w // 2
@@ -1112,7 +1116,8 @@ class TitleScreen(Screen):
             pad_rect = pygame.Rect(x, cy - pad_h // 2, pad_w, pad_h)
             is_active = (i == active_pad)
             body = active_body if is_active else default_body
-            pygame.draw.rect(surf, body, pad_rect, border_radius=10)
+            pygame.draw.rect(surf, body, pad_rect,
+                             border_radius=max(4, int(10 * scale)))
             # Highlight stripe only on default pads. The active pad
             # stays clean dark blue so it really pops as selected.
             if not is_active:
@@ -1123,20 +1128,21 @@ class TitleScreen(Screen):
             # Small LED dot on top of each pad. Colour matches the pad
             # below so the dot reads as part of the same sensor unit.
             led_cx = x + pad_w // 2
-            led_cy = cy - pad_h // 2 - 8
-            pygame.draw.circle(surf, body, (led_cx, led_cy), 6)
+            led_cy = cy - pad_h // 2 - int(8 * scale)
+            pygame.draw.circle(surf, body, (led_cx, led_cy),
+                               max(3, int(6 * scale)))
 
         # Base plate that the pads sit on. Wider than the pad block so
         # it reads as a device housing, with a slight downward curve
         # via a rounded rect with bigger radius on the bottom.
-        base_w = block_w + 60
-        base_h = 22
+        base_w = block_w + int(60 * scale)
+        base_h = max(8, int(22 * scale))
         base_x = cx - base_w // 2
-        base_y = cy + pad_h // 2 + 4
+        base_y = cy + pad_h // 2 + max(2, int(4 * scale))
         base_body = tuple(int(c * 0.4) for c in accent)
         pygame.draw.rect(surf, base_body,
                           pygame.Rect(base_x, base_y, base_w, base_h),
-                          border_radius=11)
+                          border_radius=base_h // 2)
         # Brand strip on the base: small darker line down the centre
         # for a sense of detail.
         pygame.draw.line(surf, base_body,
@@ -1236,28 +1242,24 @@ class TitleScreen(Screen):
         surf.fill(self.theme.background)
         cx = self.layout.width // 2
 
-        # Finger-sensor device graphic above the title. Four vertical
-        # sensor pads with LED-style dots sitting on a curved base
-        # plate. Mirrors what the actual hardware looks like, rather
-        # than the old abstract concentric rings.
-        self._draw_device_icon(surf, cx, self.ICON_Y)
+        # The device mark: four pads on a base, one lit in turn, the
+        # way a lane lights in a game. Small, so the card below is
+        # what the eye lands on.
+        self._draw_device_icon(surf, cx, self.ICON_Y, scale=0.62)
 
-        # Big bold wordmark in the app typeface. A soft neutral shadow
-        # one pixel below the text gives a faint lift without the old
-        # heavy accent-coloured offset that read as a 3-D drop. The main
-        # text carries the accent colour on its own.
-        title_text = "FINGER REHAB"
-        title_pt = int((FONT_TITLE + 14) * self.layout.font_scale)
+        # Wordmark in two tones: Finger in the page's ink, Rehab in the
+        # accent. No shadow and no capitals, which read as shouting.
+        title_pt = int((FONT_TITLE + 4) * self.layout.font_scale)
         title_font = make_font(title_pt, bold=True)
-        shadow = title_font.render(title_text, True, (15, 23, 42))
-        shadow.set_alpha(28)
-        surf.blit(shadow, shadow.get_rect(center=(cx, self.WORDMARK_Y + 2)))
-        main = title_font.render(title_text, True, self.theme.accent)
-        surf.blit(main, main.get_rect(center=(cx, self.WORDMARK_Y)))
-        # Tagline.
+        left = title_font.render("Finger ", True, self.theme.foreground)
+        right = title_font.render("Rehab", True, self.theme.accent)
+        x = cx - (left.get_width() + right.get_width()) // 2
+        surf.blit(left, left.get_rect(midleft=(x, self.WORDMARK_Y)))
+        surf.blit(right, right.get_rect(
+            midleft=(x + left.get_width(), self.WORDMARK_Y)))
         draw_text(surf, "Multi-modal finger rehabilitation",
                   (cx, self.TAGLINE_Y), self.theme, self.layout,
-                  pt=FONT_BODY + 4, centre=True, colour=self.theme.muted)
+                  pt=FONT_BODY, centre=True, colour=self.theme.muted)
         # The one line main.py's auto-start sync may have for this
         # launch: the installed copy just registered itself, or it is
         # running from a disk image and could not. Sits between the
@@ -1269,12 +1271,11 @@ class TitleScreen(Screen):
                       pt=FONT_SMALL + 1, centre=True,
                       colour=self.theme.accent)
 
-        # Card holding the whole "start a session" job: who is playing,
-        # how old they are, and the button that begins. Grouping them
-        # means the eye lands on one block instead of three loose
-        # controls, and the button can never drift away from the fields
-        # it commits.
-        Card(self.card_rect, self.theme, layout=self.layout).draw(surf)
+        # The card holding the whole "start a session" job: who is
+        # playing and the button that begins. White on the tinted page,
+        # a hairline edge and a soft shadow, so it reads as the one
+        # thing to fill in.
+        self._draw_login_card(surf)
         for f in self._fields:
             f.draw(surf)
         self.start_btn.draw(surf)
@@ -1291,22 +1292,13 @@ class TitleScreen(Screen):
                       self.theme, self.layout, pt=FONT_SMALL + 1,
                       centre=True, colour=self.theme.muted)
 
-        # Utility strip. A hairline rule separates the session job above
-        # from the setup actions below, so the bottom row reads as tools
-        # rather than as part of the flow.
-        rule_y = self.quit_rect.top - 26
-        rule_colour = tuple(max(0, c - 22) for c in self.theme.background)
-        pygame.draw.line(surf, rule_colour,
-                         (self.EDGE, rule_y),
-                         (self.layout.width - self.EDGE, rule_y), 1)
-        # Hardware line just above the rule: which port went to which
-        # hand (auto plug order: first board = right, second = left),
-        # or the keyboard fallback. Lives on the login screen so a
-        # therapist knows both hands connected before starting.
+        # Which port each hand got (first board = right, second =
+        # left), or the keyboard fallback, as one chip under the card:
+        # green dot for a board, grey for the keyboard, amber when a
+        # saved port was ignored.
         hw_line, hw_colour = self._hardware_status()
-        draw_text(surf, hw_line, (cx, rule_y - 22),
-                  self.theme, self.layout, pt=FONT_SMALL + 1,
-                  centre=True, colour=hw_colour)
+        self._draw_status_chip(surf, hw_line, hw_colour,
+                               self.card_rect.bottom + 34)
         mouse = self.engine._to_logical(pygame.mouse.get_pos())
         for rect, label, icon, _action in self._pills:
             self._draw_pill(surf, rect, label, icon,
@@ -1319,44 +1311,81 @@ class TitleScreen(Screen):
         draw_text(surf,
                   f"Basil Toufexis | Curtin University 2026 "
                   f"| v{SOFTWARE_VERSION}",
-                  (cx, self.layout.height - 20), self.theme, self.layout,
-                  pt=FONT_SMALL + 1, centre=True, colour=self.theme.muted)
+                  (cx, self.layout.height - 18), self.theme, self.layout,
+                  pt=FONT_SMALL, centre=True, colour=self.theme.muted)
 
         # Modal protocol overlay, drawn last so it sits on top of
         # everything else when open.
         if self._show_info:
             self._draw_info_overlay(surf)
 
+    def _draw_login_card(self, surf: pygame.Surface) -> None:
+        r = self.card_rect
+        # A soft shadow that falls below the card only, so the edges
+        # stay crisp against the page.
+        shadow = pygame.Surface((r.w, r.h + 16), pygame.SRCALPHA)
+        for dy, alpha in ((3, 14), (7, 9), (12, 5)):
+            pygame.draw.rect(shadow, (15, 23, 42, alpha),
+                             pygame.Rect(0, dy, r.w, r.h),
+                             border_radius=22)
+        surf.blit(shadow, (r.x, r.y))
+        pygame.draw.rect(surf, (255, 255, 255), r, border_radius=22)
+        edge = tuple(max(0, c - 18) for c in self.theme.background)
+        pygame.draw.rect(surf, edge, r, 1, border_radius=22)
+
+    def _draw_status_chip(self, surf: pygame.Surface, text: str,
+                          colour: tuple[int, int, int], cy: int) -> None:
+        font = self.layout.font(FONT_SMALL + 1)
+        label = font.render(text, True, self.theme.foreground)
+        if colour == self.theme.warning:
+            dot = self.theme.warning
+        elif text.startswith("Arduino"):
+            dot = self.theme.success
+        else:
+            dot = self.theme.muted
+        w = label.get_width() + 44
+        chip = pygame.Rect(0, 0, w, 32)
+        chip.center = (self.layout.width // 2, cy)
+        pygame.draw.rect(surf, tuple(max(0, c - 8)
+                                     for c in self.theme.background),
+                         chip, border_radius=16)
+        pygame.draw.circle(surf, dot, (chip.x + 18, chip.centery), 5)
+        surf.blit(label, label.get_rect(midleft=(chip.x + 30,
+                                                 chip.centery)))
+
     def _draw_pill(self, surf: pygame.Surface, rect: pygame.Rect,
                    label: str, icon: str, hovered: bool) -> None:
         """One utility pill: icon plus word, centred as a unit.
 
-        Quit is filled red at rest because it closes the app and that
-        difference has to be readable at a glance; the rest sit quiet
-        until hovered.
+        All four sit quiet, outlined on the page, until hovered. Quit
+        keeps its difference in red ink rather than a solid red slab,
+        so the row does not shout; hovered, it fills red.
         """
+        red = getattr(self.theme, "error", (200, 60, 60))
+        edge = tuple(max(0, c - 34) for c in self.theme.background)
         if icon == "close":
-            base_red = getattr(self.theme, "error", (200, 60, 60))
-            bg = base_red if hovered else tuple(int(c * 0.85)
-                                                for c in base_red)
-            fg = (255, 255, 255)
+            bg = red if hovered else self.theme.background
+            fg = (255, 255, 255) if hovered else red
+            line = red
         else:
             bg = (self.theme.accent if hovered
-                  else tuple(max(0, c - 30) for c in self.theme.background))
+                  else tuple(max(0, c - 10) for c in self.theme.background))
             fg = (255, 255, 255) if hovered else self.theme.foreground
-        pygame.draw.rect(surf, bg, rect, border_radius=12)
-        font = self.layout.font(FONT_BODY)
+            line = self.theme.accent if hovered else edge
+        pygame.draw.rect(surf, bg, rect, border_radius=rect.h // 2)
+        pygame.draw.rect(surf, line, rect, 1, border_radius=rect.h // 2)
+        font = self.layout.font(FONT_BODY - 2)
         text = font.render(label, True, fg)
-        icon_r, gap = 8, 10
+        icon_r, gap = 7, 10
         total_w = icon_r * 2 + gap + text.get_width()
         icx = rect.centerx - total_w // 2 + icon_r
         icy = rect.centery
         if icon == "close":
             # An X, so the pill reads as "exit" without a Unicode glyph.
             pygame.draw.line(surf, fg, (icx - icon_r + 2, icy - icon_r + 2),
-                             (icx + icon_r - 2, icy + icon_r - 2), 3)
+                             (icx + icon_r - 2, icy + icon_r - 2), 2)
             pygame.draw.line(surf, fg, (icx + icon_r - 2, icy - icon_r + 2),
-                             (icx - icon_r + 2, icy + icon_r - 2), 3)
+                             (icx - icon_r + 2, icy + icon_r - 2), 2)
         elif icon == "cog":
             pygame.draw.circle(surf, fg, (icx, icy), icon_r, 2)
             pygame.draw.circle(surf, fg, (icx, icy), 3)
@@ -1369,7 +1398,7 @@ class TitleScreen(Screen):
             # Lowercase i in a ring.
             pygame.draw.circle(surf, fg, (icx, icy), icon_r, 2)
             pygame.draw.circle(surf, fg, (icx, icy - 3), 1)
-            pygame.draw.line(surf, fg, (icx, icy - 1), (icx, icy + 4), 2)
+            pygame.draw.line(surf, fg, (icx, icy - 1), (icx, icy + 3), 2)
         surf.blit(text, text.get_rect(
             midleft=(icx + icon_r + gap, icy)))
 
@@ -1551,7 +1580,7 @@ class ModeSelectScreen(Screen):
         # button since the six-row grid took the old row's space; the
         # layout test keeps the two apart.
         self.back_btn = Button(
-            pygame.Rect(40, engine.layout.height - 58, 180,
+            pygame.Rect(40, engine.layout.height - 58, 170,
                         BUTTON_H - 16),
             "End session", engine.request_end_session,
             self.theme, self.layout,
@@ -1563,7 +1592,7 @@ class ModeSelectScreen(Screen):
         # ending the session. Re-running re-captures and re-applies
         # through the same path.
         self.cal_btn = Button(
-            pygame.Rect(236, engine.layout.height - 58, 200,
+            pygame.Rect(222, engine.layout.height - 58, 170,
                         BUTTON_H - 16),
             "Calibrate", self._calibrate,
             self.theme, self.layout,
@@ -1572,23 +1601,36 @@ class ModeSelectScreen(Screen):
         # calibrated; drawn under the button instead of silently
         # doing nothing.
         self.cal_note = ""
-        # PLAY ALL: one press runs the fixed block order for this
-        # participant (game/battery.py, the study battery; the button
-        # says "play all" because that is what it does, and the study
-        # wording stays in the config and the docs), stopping at
-        # results between blocks. Sits right of the calibrate note's
-        # room so the two never overlap on a keyboard rig. Skip only
-        # shows while a step is pending, for a block that cannot be
-        # run.
-        self.battery_btn = Button(
-            pygame.Rect(720, engine.layout.height - 58, 300,
-                        BUTTON_H - 16),
-            "Play all", self._battery,
-            self.theme, self.layout,
+        # SESSION: the lengths the login offers, picked here as well,
+        # so a free-play session can start a timed one without logging
+        # out. It replaced the Play all button (Basil, 29 September
+        # 2026); Play all's sitting is the 45 min length. Free play is
+        # picked to begin with, and Start appears once a length is. A
+        # timed session under way swaps the picker for Continue and
+        # Skip step, which run its steps in order with results
+        # between them (game/battery.py).
+        row_y = engine.layout.height - 58
+        row_h = BUTTON_H - 16
+        right = engine.layout.width - 40
+        opts = self._session_options()
+        seg_w = 84 * len(opts)
+        start_w = 120
+        self.session_seg = Segmented(
+            pygame.Rect(right - start_w - 12 - seg_w, row_y, seg_w, row_h),
+            self.theme, self.layout, options=opts, label="SESSION",
+            initial="", font_pt=FONT_SMALL + 2,
         )
+        self.battery_btn = Button(
+            pygame.Rect(right - start_w, row_y, start_w, row_h),
+            "Start", self._battery,
+            self.theme, self.layout,
+            colour=(34, 197, 94),     # green, as the login's LOG IN
+        )
+        # While a session runs: Continue where the picker was, Skip
+        # step beside it for a block that cannot be run.
+        self.continue_rect = pygame.Rect(700, row_y, 230, row_h)
         self.skip_btn = Button(
-            pygame.Rect(1036, engine.layout.height - 58, 150,
-                        BUTTON_H - 16),
+            pygame.Rect(944, row_y, 150, row_h),
             "Skip step", self._skip_step,
             self.theme, self.layout,
         )
@@ -1608,7 +1650,7 @@ class ModeSelectScreen(Screen):
         self.mute_btn = MuteButton(
             engine, pygame.Rect(28, 26, MuteButton.W, MuteButton.H))
 
-    CAL_UNAVAILABLE = "Calibration needs the sensor hardware"
+    CAL_UNAVAILABLE = "Needs the sensors"
     # The refusals, worded so they read as a fact about the rig rather
     # than a fault of the person clicking.
     NO_HARDWARE_NOTE = ("This game needs the sensor hardware. "
@@ -1623,24 +1665,53 @@ class ModeSelectScreen(Screen):
         except Exception:
             return False
 
+    def _session_options(self) -> list[tuple[str, str]]:
+        """Free play, then each timed length the config offers, the
+        same list as the login's SESSION picker. The EEG lab's build
+        offers no lengths: there the one timed choice is its own
+        sitting, the study battery with the lab's Reaction task."""
+        from ..game.battery import trial_options
+        try:
+            lengths = trial_options(self.engine.cfg)
+        except Exception:
+            lengths = []
+        if not lengths:
+            return [("", "Free play"), ("study_battery", "Lab session")]
+        return [("", "Free play")] + [(name, f"{m} min")
+                                      for m, name in lengths]
+
+    def _session_running(self) -> bool:
+        """A timed session is under way and not yet finished."""
+        try:
+            progress = self.engine.battery_progress()
+        except Exception:
+            return False
+        return isinstance(progress, dict) and not progress.get("finished")
+
     def _battery_state(self) -> tuple[bool, str, str]:
-        """(available, label, reason) for the battery button."""
+        """(available, label, reason) for the session button: Continue
+        while a session runs, else Start for the picked length."""
         try:
             progress = self.engine.battery_progress()
         except Exception:
             progress = None
-        if isinstance(progress, dict):
-            if progress.get("finished"):
-                return False, "Play all done", ""
-            return (True, f"Play all {progress['done']}/"
+        if isinstance(progress, dict) and not progress.get("finished"):
+            return (True, f"Continue {progress['done']}/"
                           f"{progress['of']}", "")
+        preset = self.session_seg.value or ""
+        if not preset:
+            return False, "Start", ""
         try:
-            ok, reason = self.engine.battery_available()
+            ok, reason = self.engine.battery_available(preset)
         except Exception as e:
             ok, reason = False, str(e)
-        return ok, "Play all", ("" if ok else reason)
+        return ok, "Start", ("" if ok else reason)
 
     def _battery(self) -> None:
+        running = self._session_running()
+        if not running and not self.session_seg.value:
+            self.battery_note = "Pick a session length, or pick a game."
+            return
         ok, _label, reason = self._battery_state()
         if not ok:
             self.battery_note = reason
@@ -1648,13 +1719,30 @@ class ModeSelectScreen(Screen):
         self.battery_note = ""
         hold = getattr(self.engine, "battery_rest_hold", None)
         if callable(hold) and hold()[0]:
-            # The scheduled rest holds Play all here too; the line
+            # The scheduled rest holds the session here too; the line
             # beside the button counts it down.
             return
-        if not self.engine.start_battery():
+        if running:
+            started = self.engine.start_battery()
+        else:
+            begin = getattr(self.engine, "start_session_length", None)
+            started = (begin(self.session_seg.value) if callable(begin)
+                       else self.engine.start_battery(
+                           self.session_seg.value))
+        if not started:
             wait = getattr(self.engine, "battery_wait_line", None)
             self.battery_note = ((wait() if callable(wait) else "")
-                                 or "Play all could not start")
+                                 or "The session could not start")
+
+    def _cycle_session(self) -> None:
+        """L steps the picker, so the hub stays keyboard-only."""
+        if self._session_running():
+            return
+        keys = [k for k, _c in self.session_seg.options]
+        i = keys.index(self.session_seg.value or "") if (
+            (self.session_seg.value or "") in keys) else 0
+        self.session_seg.set(keys[(i + 1) % len(keys)])
+        self.battery_note = ""
 
     def _skip_step(self) -> None:
         if self._battery_pending():
@@ -1778,10 +1866,23 @@ class ModeSelectScreen(Screen):
     def handle_event(self, e: pygame.event.Event) -> None:
         if self.mute_btn.handle_event(e):
             return
-        controls = self.buttons + [self.back_btn, self.cal_btn,
-                                   self.battery_btn]
-        if self._battery_pending():
-            controls.append(self.skip_btn)
+        controls = self.buttons + [self.back_btn, self.cal_btn]
+        if self._session_running():
+            self.battery_btn.rect = self.continue_rect
+            controls.append(self.battery_btn)
+            if self._battery_pending():
+                controls.append(self.skip_btn)
+        else:
+            before = self.session_seg.value
+            self.session_seg.handle_event(e)
+            if self.session_seg.value != before:
+                self.battery_note = ""
+            self.battery_btn.rect = pygame.Rect(
+                self.session_seg.rect.right + 12, self.session_seg.rect.y,
+                self.layout.width - 40 - self.session_seg.rect.right - 12,
+                self.session_seg.rect.h)
+            if self.session_seg.value:
+                controls.append(self.battery_btn)
         if self._session_hand_label():
             controls.append(self.hand_btn)
         for b in controls:
@@ -1799,8 +1900,11 @@ class ModeSelectScreen(Screen):
         # control on the screen.
         elif e.type == pygame.KEYDOWN and e.key == pygame.K_c:
             self._calibrate()
-        # A starts or continues PLAY ALL, S skips its pending step, so
+        # L steps the SESSION picker, A starts the picked length or
+        # continues the one under way, S skips its pending step, so
         # the study path is keyboard-only too.
+        elif e.type == pygame.KEYDOWN and e.key == pygame.K_l:
+            self._cycle_session()
         elif e.type == pygame.KEYDOWN and e.key == pygame.K_a:
             self._battery()
         elif e.type == pygame.KEYDOWN and e.key == pygame.K_s:
@@ -2172,36 +2276,60 @@ class ModeSelectScreen(Screen):
                        self.cal_btn.rect.centery - 8),
                       self.theme, self.layout, pt=FONT_SMALL,
                       centre=False, colour=self.theme.muted)
-        # Battery button: label follows the battery's state, and an
-        # unavailable battery reads inactive with its reason beside
+        # SESSION picker and Start, or Continue while a session runs.
+        # An unavailable length reads inactive with its reason above
         # it, the same rule the calibrate button follows.
         ok, label, reason = self._battery_state()
         self.battery_btn.label = label
-        if ok:
-            self.battery_btn.colour = None
-            self.battery_btn.primary = self._battery_pending()
+        muted_fill = tuple(int(c + (255 - c) * 0.55)
+                           for c in self.theme.muted)
+        if self._session_running():
+            self.battery_btn.rect = self.continue_rect
+            self.battery_btn.colour = None if ok else muted_fill
+            self.battery_btn.primary = ok and self._battery_pending()
+            self.battery_btn.draw(surf)
+            if self._battery_pending():
+                self.skip_btn.draw(surf)
+                bnote = self._battery_live_line()
+                left_x = self.skip_btn.rect.right + 16
+            else:
+                bnote = self.battery_note
+                left_x = self.battery_btn.rect.right + 16
+            if bnote:
+                # Clipped to the room left of the screen edge: a long
+                # line used to run straight off it.
+                room = self.layout.width - 16 - left_x
+                draw_text(surf,
+                          _fit_text(bnote, self.layout.font(FONT_SMALL),
+                                    room),
+                          (left_x, self.battery_btn.rect.centery - 8),
+                          self.theme, self.layout, pt=FONT_SMALL,
+                          centre=False, colour=self.theme.muted)
         else:
+            seg = self.session_seg
+            seg.draw(surf)
+            self.battery_btn.rect = pygame.Rect(
+                seg.rect.right + 12, seg.rect.y,
+                self.layout.width - 40 - seg.rect.right - 12, seg.rect.h)
+            # Start is always there, greyed until a length is picked,
+            # so the row reads the same whatever is picked.
             self.battery_btn.primary = False
-            self.battery_btn.colour = tuple(
-                int(c + (255 - c) * 0.55) for c in self.theme.muted)
-        self.battery_btn.draw(surf)
-        if self._battery_pending():
-            self.skip_btn.draw(surf)
-            bnote = self._battery_live_line()
-            left_x = self.skip_btn.rect.right + 16
-        else:
+            self.battery_btn.colour = ((34, 197, 94) if ok
+                                       else muted_fill)
+            self.battery_btn.label = "Start"
+            self.battery_btn.draw(surf)
             bnote = self.battery_note or reason
-            left_x = self.battery_btn.rect.right + 16
-        if bnote:
-            # Clipped to the room left of the screen edge: a long
-            # reason used to run straight off it.
-            room = self.layout.width - 16 - left_x
-            draw_text(surf,
-                      _fit_text(bnote, self.layout.font(FONT_SMALL),
-                                room),
-                      (left_x, self.battery_btn.rect.centery - 8),
-                      self.theme, self.layout, pt=FONT_SMALL,
-                      centre=False, colour=self.theme.muted)
+            if bnote:
+                # On the label row, right of SESSION, so a reason never
+                # crowds the calibrate note on the left.
+                font = self.layout.font(FONT_SMALL)
+                room = self.layout.width - 40 - seg.rect.x - 90
+                text = _fit_text(bnote, font, room)
+                draw_text(surf, text,
+                          (self.layout.width - 40 - font.size(text)[0],
+                           seg.rect.y - 24),
+                          self.theme, self.layout, pt=FONT_SMALL,
+                          centre=False, colour=self.theme.muted)
         self.mute_btn.draw(surf, self.theme, self.layout)
 
     def eeg_recording_line(self) -> str:
@@ -4896,7 +5024,12 @@ class RhythmSetupScreen(Screen):
             # check above on the retry.
             self._preview_asked = asked_for
             return
-        if self.engine.audio.play_song(self._selected_track):
+        # A preview is menu sound, so it plays at the quiet menu level;
+        # the song is only loud once the game starts.
+        from ..audio.menu_music import menu_music_level
+        if self.engine.audio.play_song(
+                self._selected_track,
+                volume=menu_music_level(self.engine.cfg)):
             self._previewing = True
             self._preview_stop_at = self._clock() + self.PREVIEW_S
 
@@ -5387,7 +5520,7 @@ class ResultsScreen(Screen):
         return f"{mode_title(mode)}{side}"
 
     def _pass_comparisons_hidden(self) -> bool:
-        """True while a Play all battery is still under way. The card
+        """True while a session battery is still under way. The card
         then shows no comparison with an earlier go of the same mode,
         which inside the battery can only be the pass 1 block."""
         try:
@@ -5397,7 +5530,7 @@ class ResultsScreen(Screen):
         return isinstance(progress, dict) and not progress.get("finished")
 
     def _battery_done(self) -> bool:
-        """True on the results screen of the LAST PLAY ALL block.
+        """True on the results screen of the LAST session block.
 
         The card then has no next step to offer, and the last thing a
         study participant should be looking at is a rotation
@@ -5421,7 +5554,7 @@ class ResultsScreen(Screen):
 
     def _draw_today_panel(self, surf: pygame.Surface,
                           rect: pygame.Rect) -> None:
-        """PLAY ALL DONE: every mode played today, first go against
+        """SESSION DONE: every mode played today, first go against
         latest, in the mode's own words.
 
         Only this participant's own numbers, and no comparison with
@@ -5556,7 +5689,7 @@ class ResultsScreen(Screen):
         self.folder_btn.handle_event(e)
         self.detail_btn.handle_event(e)
         self.title_btn.handle_event(e)
-        # The button is not drawn once PLAY ALL is done (the card is
+        # The button is not drawn once the session is done (the card is
         # the TODAY table then), so it must not take clicks either.
         if not self.show_details and not self._battery_done():
             self.next_btn.handle_event(e)
@@ -6365,7 +6498,7 @@ class ResultsScreen(Screen):
             progress = {}
         of = int(progress.get("of") or 0)
         pos = int(step.get("position") or 0)
-        heading = f"PLAY ALL  step {pos} of {of}" if of else "PLAY ALL"
+        heading = f"SESSION  step {pos} of {of}" if of else "SESSION"
         requested = str(step.get("hand_requested") or "")
         role = {"hand1": "hand 1", "hand2": "hand 2",
                 "dominant": "main hand",
@@ -6375,7 +6508,7 @@ class ResultsScreen(Screen):
         phase = str(step.get("phase") or "")
         if not role and phase.startswith("pass") and phase[4:].isdigit():
             role = f"pass {phase[4:]}"
-        reason = f"Play all step {pos}" + (f", {role}" if role else "")
+        reason = f"Session step {pos}" + (f", {role}" if role else "")
         wait = ""
         try:
             stretch_s = float(step.get("stretch_s") or 0.0)
@@ -7523,21 +7656,27 @@ class DiagnosticsScreen(Screen):
     def __init__(self, engine: "GameEngine") -> None:
         super().__init__(engine)
         self.back_btn = Button(
-            pygame.Rect(40, engine.layout.height - 90, 180, BUTTON_H - 10),
+            pygame.Rect(40, engine.layout.height - 88, 180, BUTTON_H - 10),
             "Back", engine.show_title,
             self.theme, self.layout,
         )
-        # The EEG trigger box's port, in the EEG build only: the other
-        # end of the bottom strip from Back, so it never crowds a
-        # panel. Its label carries the port the markers use right now.
+        # The tab showing. Hand device first: checking the fingers and
+        # the boards before a session is what Settings is opened for
+        # most (Basil, 29 September 2026: a cleaner Settings, every
+        # setting kept, one job per tab).
+        self.tab = "device"
+        # The USB driver row (Windows): the last check's line, whether
+        # a board is missing its driver, and the check or fix running
+        # on its own thread (PowerShell takes a second or more).
+        import sys as _sys
+        self._show_usb_row = _sys.platform == "win32"
+        self._usb_line = "Not checked yet."
+        self._usb_missing = False
+        self._usb_job: dict | None = None
+        # The EEG trigger box's port, in the EEG build only: a row of
+        # the Setup tab, built in rebuild_panel. Its label carries the
+        # port the markers use right now.
         self.eeg_btn: Button | None = None
-        if getattr(getattr(engine, "markers", None), "enabled", False):
-            self.eeg_btn = Button(
-                pygame.Rect(engine.layout.width - 40 - self.EEG_BTN_W,
-                            engine.layout.height - 90, self.EEG_BTN_W,
-                            BUTTON_H - 10),
-                "EEG trigger box", self._open_eeg_port,
-                self.theme, self.layout)
         self.lanes: list[LaneStrip] = []
         # Held-key tracker for keyboard mode. Key id -> pygame.K_*.
         self._held_keys: set[int] = set()
@@ -7623,113 +7762,116 @@ class DiagnosticsScreen(Screen):
         self._port_watch_gen = getattr(
             getattr(engine, "port_watcher", None), "generation", 0)
 
-    # ---- screen groups ----------------------------------------------------
-    # Five labelled panels in three rows: the cue switches beside the
-    # levels, then the eight finger tiles, then the Arduino ports beside
-    # the data folder. Every control is positioned from the numbers below
-    # and every panel is drawn from them, so a control can never sit
-    # outside the group it belongs to and a hit box can never land where
-    # nothing was drawn. The screen had grown to eleven loose controls on
-    # a plain background and a therapist had to already know where each
-    # one was; the grouping is what makes it findable.
-    BAND_X = 30
-    BAND_PAD = 18
-    EEG_BTN_W = 280
+    # ---- layout -------------------------------------------------------------
+    # Four tabs, one job each, every control positioned from the numbers
+    # below and every card drawn from them, so a control can never sit
+    # outside the card it belongs to and a hit box can never land where
+    # nothing was drawn. Until 29 September 2026 the screen was one page
+    # of six cramped panels with two music switches and a status name
+    # printed twice; the tabs give each job room and say less.
+    TABS = (("device", "Hand device"), ("sound", "Sound and cues"),
+            ("setup", "Setup"), ("data", "Data"))
+    TAB_Y = 132
+    TAB_H = 44
+    TAB_W = 210
+    BODY_TOP = 196
+    BODY_BOTTOM = 690
+    BAND_X = 40
+    BAND_PAD = 22
+    BAND_GAP = 16
 
-    # Row 1, side by side: what the patient feels and hears, then how loud
-    # and how long it is.
-    # Starts below the header subtitle, which runs to about y=146.
-    ROW1_TOP = 156
-    ROW1_H = 112
-    ROW1_GAP = 16
-    CUES_W = 360
-    # Shared centre line for the cue pill and the slider tracks, so the
-    # row reads as one line of controls rather than two stacks that
-    # nearly line up. Slider.draw puts its caption LABEL_GAP above the
-    # track, which lands the captions clear of the panel headings.
-    CUES_ROW_MID = 236
-    CUE_PILL_W = 324
-    CUE_PILL_H = 42
-    CUE_HINT_Y = 188
-    SLIDER_H = 24
-    SLIDER_GAP = 36
-
-    # Row 2, the eight finger tiles.
-    FINGERS_TOP = 278
-    FINGERS_H = 244
-    HAND_LABEL_Y = 320
-    LANES_TOP = 344
-    LANES_PAD = 14
-    LANES_GUTTER = 18       # between two tiles of the same hand
-    LANES_SPLIT = 64        # between the two hands
-
-    # Row 3, side by side: which Arduino is on which hand, then where the
-    # recordings land. Sits on the bottom of the usable height, above the
-    # Back button and the footer.
-    PANEL_HEIGHT = 170
-    PANEL_BOTTOM_GAP = 100
-    PORTS_W = 724
-    PORTS_LABEL_X = 48
-    PORTS_LABEL_W = 70
-    PORTS_DROPDOWN_W = 290
-    PORTS_TEST_W = 170
+    # Hand device: the eight finger tiles, then the boards under them.
+    FINGERS_H = 292
+    HAND_LABEL_OFFSET = 58     # LEFT / RIGHT heading centre, card top
+    LANES_OFFSET = 80          # tiles start, from the card top
+    LANES_PAD = 16
+    LANES_GUTTER = 18          # between two tiles of the same hand
+    LANES_SPLIT = 64           # between the two hands
+    PORTS_ROW_TOP = 50         # first board row, from the card top
+    PORTS_LABEL_W = 90
+    PORTS_DROPDOWN_W = 330
+    PORTS_TEST_W = 150
     PORTS_ROW_H = 40
     PORTS_ROW_GAP = 12
-    PORTS_BTN_W = 100
+    PORTS_BTN_W = 120
     PORTS_COL_GAP = 20
-    DATA_X = 770
-    DATA_BTN_W = 210
-    # The data panel used to run to the right edge. It now stops at a
-    # fixed width so the firmware panel can have the rest. 246 is the
-    # floor: "Open data folder" is DATA_BTN_W wide inside BAND_PAD each
-    # side, and a button that pokes out of its band is a real bug (a
-    # click lands where nothing was drawn), which test_screen_layout
-    # pins.
-    DATA_W = 250
-    # Three buttons stacked in the firmware panel: flash, sensor
-    # address, auto-start. 36 high with a 6 gap fits three under the
-    # heading inside PANEL_HEIGHT; the 40 the port rows use would not.
-    # Four rows since Audio delay joined (28 September 2026): 28 px, the
-    # height of the Riff file button beside them.
-    FIRMWARE_BTN_H = 28
-    FIRMWARE_ROW_GAP = 4
-    FIRMWARE_ROW_TOP = 38
 
-    def _cues_rect(self) -> pygame.Rect:
-        return pygame.Rect(self.BAND_X, self.ROW1_TOP,
-                           self.CUES_W, self.ROW1_H)
+    # Sound and cues: the levels on the left, the cue switches right.
+    LEVELS_W = 690
+    SLIDER_H = 24
+    SLIDER_FIRST = 96          # first track centre, from the card top
+    SLIDER_ROW = 80
+    CUE_PILL_H = 40
 
-    def _levels_rect(self) -> pygame.Rect:
-        x = self.BAND_X + self.CUES_W + self.ROW1_GAP
-        return pygame.Rect(x, self.ROW1_TOP,
-                           self.layout.width - self.BAND_X - x, self.ROW1_H)
+    # Setup and Data: one row per job, its button on the right.
+    SETUP_ROW_TOP = 18
+    SETUP_ROW_H = 92
+    SETUP_BTN_W = 270
+    SETUP_BTN_H = 44
+    DATA_ROW_H = 156
+    RIFF_BTN_H = 44
+
+    def _tab_rect(self, i: int) -> pygame.Rect:
+        x0 = (self.layout.width - self.TAB_W * len(self.TABS)) // 2
+        return pygame.Rect(x0 + i * self.TAB_W, self.TAB_Y,
+                           self.TAB_W, self.TAB_H)
+
+    def _body_rect(self) -> pygame.Rect:
+        return pygame.Rect(self.BAND_X, self.BODY_TOP,
+                           self.layout.width - self.BAND_X * 2,
+                           self.BODY_BOTTOM - self.BODY_TOP)
 
     def _fingers_rect(self) -> pygame.Rect:
-        return pygame.Rect(self.BAND_X, self.FINGERS_TOP,
-                           self.layout.width - self.BAND_X * 2,
-                           self.FINGERS_H)
-
-    def _panel_top(self) -> int:
-        return self.layout.height - self.PANEL_BOTTOM_GAP - self.PANEL_HEIGHT
+        body = self._body_rect()
+        return pygame.Rect(body.x, body.y, body.w, self.FINGERS_H)
 
     def _ports_rect(self) -> pygame.Rect:
-        return pygame.Rect(self.BAND_X, self._panel_top(),
-                           self.PORTS_W, self.PANEL_HEIGHT)
+        top = self._fingers_rect().bottom + self.BAND_GAP
+        return pygame.Rect(self.BAND_X, top,
+                           self.layout.width - self.BAND_X * 2,
+                           self.BODY_BOTTOM - top)
+
+    def _levels_rect(self) -> pygame.Rect:
+        body = self._body_rect()
+        return pygame.Rect(body.x, body.y, self.LEVELS_W, body.h)
+
+    def _cues_rect(self) -> pygame.Rect:
+        body = self._body_rect()
+        x = body.x + self.LEVELS_W + self.BAND_GAP
+        return pygame.Rect(x, body.y, body.right - x, body.h)
+
+    def _firmware_rect(self) -> pygame.Rect:
+        """The Setup tab's card: flashing, the sensor address, the
+        audio delay, auto-start, and the EEG box in the lab build."""
+        return self._body_rect()
 
     def _data_rect(self) -> pygame.Rect:
-        return pygame.Rect(self.DATA_X, self._panel_top(),
-                           self.DATA_W, self.PANEL_HEIGHT)
+        """The Data tab's card: the recordings, the riff file and Test
+        Mode."""
+        return self._body_rect()
 
-    # The sequence-file button sits on the last free line of the data
-    # panel, under the sessions path. Shorter than the buttons above it
-    # (28 against 40) because that is the room the panel has left, and
-    # it opens a card rather than doing anything on its own.
-    RIFF_BTN_H = 28
+    def _setup_btn_rect(self, i: int) -> pygame.Rect:
+        card = self._firmware_rect()
+        y = (card.y + self.SETUP_ROW_TOP + i * self.SETUP_ROW_H
+             + (self.SETUP_ROW_H - self.SETUP_BTN_H) // 2)
+        return pygame.Rect(card.right - self.BAND_PAD - self.SETUP_BTN_W,
+                           y, self.SETUP_BTN_W, self.SETUP_BTN_H)
+
+    def _firmware_row_y(self, i: int) -> int:
+        """Top of Setup row i (0 flash, 1 address, 2 audio delay,
+        3 auto-start, then the rows only some builds have)."""
+        return (self._firmware_rect().y + self.SETUP_ROW_TOP
+                + i * self.SETUP_ROW_H)
+
+    def _data_btn_rect(self, i: int) -> pygame.Rect:
+        card = self._data_rect()
+        y = (card.y + self.SETUP_ROW_TOP + i * self.DATA_ROW_H
+             + (self.DATA_ROW_H - self.SETUP_BTN_H) // 2)
+        return pygame.Rect(card.right - self.BAND_PAD - self.SETUP_BTN_W,
+                           y, self.SETUP_BTN_W, self.SETUP_BTN_H)
 
     def _riff_btn_rect(self) -> pygame.Rect:
-        d = self._data_rect()
-        return pygame.Rect(d.x + self.BAND_PAD, self._ports_row_y(1) + 38,
-                           self.DATA_BTN_W, self.RIFF_BTN_H)
+        return self._data_btn_rect(1)
 
     def _refresh_riff_button(self) -> None:
         """Build the button if it is missing and keep its label in step
@@ -7743,12 +7885,12 @@ class DiagnosticsScreen(Screen):
         name = line.split(" (", 1)[0] if line else ""
         label = f"Riff file: {name}" if name else "Riff file: built-in"
         rect = self._riff_btn_rect()
-        font = self.layout.font(FONT_BODY - 4)
+        font = self.layout.font(FONT_BODY - 2)
         label = _fit_text(label, font, rect.w - 16) or "Riff file"
         if not self._riff_buttons:
             self._riff_buttons = [Button(
                 rect, label, self._open_riff_panel,
-                self.theme, self.layout, font_pt=FONT_BODY - 4)]
+                self.theme, self.layout, font_pt=FONT_BODY - 2)]
         else:
             self._riff_buttons[0].rect = rect
             self._riff_buttons[0].label = label
@@ -7765,29 +7907,11 @@ class DiagnosticsScreen(Screen):
             if self._riff_panel.open:
                 self._riff_panel.status = str(text)
 
-    def _firmware_x(self) -> int:
-        return self.DATA_X + self.DATA_W + self.ROW1_GAP
-
-    def _firmware_rect(self) -> pygame.Rect:
-        """The Arduino firmware panel, right of the data folder. Takes
-        whatever the row has left, which is 214 px at the 1280 wide
-        render size ui.resolution fixes."""
-        x = self._firmware_x()
-        return pygame.Rect(x, self._panel_top(),
-                           self.layout.width - self.BAND_X - x,
-                           self.PANEL_HEIGHT)
-
-    def _firmware_row_y(self, i: int) -> int:
-        """Top of setup button i (0 flash, 1 address, 2 audio delay,
-        3 auto-start)."""
-        return (self._panel_top() + self.FIRMWARE_ROW_TOP
-                + i * (self.FIRMWARE_BTN_H + self.FIRMWARE_ROW_GAP))
-
     def _ports_row_y(self, i: int) -> int:
-        """Top of port row i. Used by rebuild_panel for the dropdown and
+        """Top of board row i. Used by rebuild_panel for the dropdown and
         the buttons, and by draw for the LEFT / RIGHT label beside them,
         so the label always sits on the row it names."""
-        return (self._panel_top() + 50
+        return (self._ports_rect().y + self.PORTS_ROW_TOP
                 + i * (self.PORTS_ROW_H + self.PORTS_ROW_GAP))
 
     def _open_eeg_port(self) -> None:
@@ -7803,23 +7927,47 @@ class DiagnosticsScreen(Screen):
 
     def _status_pos(self) -> tuple[int, int]:
         """Where the message line goes: the bottom strip, starting to the
-        right of the Back button. It carries messages from every group
+        right of the Back button. It carries messages from every tab
         (cue help, a saved level, a port write, a buzzer test), so it
-        belongs to the screen rather than to any one panel."""
-        return (self.back_btn.rect.right + 20,
+        belongs to the screen rather than to any one card."""
+        return (self.back_btn.rect.right + 24,
                 self.back_btn.rect.centery - 10)
+
+    def _switch_tab(self, key: str) -> None:
+        if key in {k for k, _l in self.TABS} and key != self.tab:
+            self.tab = key
+            for dd in self._port_dropdowns.values():
+                dd.is_open = False
+
+    def _draw_tabs(self, surf: pygame.Surface) -> None:
+        first, last = self._tab_rect(0), self._tab_rect(len(self.TABS) - 1)
+        bar = pygame.Rect(first.x, first.y, last.right - first.x, first.h)
+        pygame.draw.rect(surf, tuple(max(0, c - 12)
+                                     for c in self.theme.background),
+                         bar, border_radius=bar.h // 2)
+        font = self.layout.font(FONT_BODY - 1)
+        for i, (key, label) in enumerate(self.TABS):
+            r = self._tab_rect(i)
+            on = key == self.tab
+            if on:
+                pygame.draw.rect(surf, self.theme.accent, r.inflate(-6, -6),
+                                 border_radius=(r.h - 6) // 2)
+            text = font.render(label, True, (255, 255, 255) if on
+                               else self.theme.foreground)
+            surf.blit(text, text.get_rect(center=r.center))
 
     def _draw_band(self, surf: pygame.Surface, rect: pygame.Rect,
                    title: str, hint: str = "") -> None:
-        """Soft panel plus its heading. One look for all five groups so
-        the screen reads as a handful of jobs rather than a wall of
-        controls. `hint` is right-aligned in the heading row and is
-        truncated to whatever space the heading leaves."""
-        bg = tuple(max(0, c - 14) for c in self.theme.background)
-        pygame.draw.rect(surf, bg, rect, border_radius=12)
-        head_font = self.layout.font(FONT_SMALL + 4)
+        """A white card and its heading, one look for every group so the
+        tabs read as a few jobs rather than a wall of controls. `hint`
+        is right-aligned in the heading row and truncated to whatever
+        space the heading leaves."""
+        pygame.draw.rect(surf, (255, 255, 255), rect, border_radius=16)
+        edge = tuple(max(0, c - 18) for c in self.theme.background)
+        pygame.draw.rect(surf, edge, rect, 1, border_radius=16)
+        head_font = self.layout.font(FONT_SMALL + 3)
         head = head_font.render(title, True, self.theme.muted)
-        surf.blit(head, (rect.x + self.BAND_PAD, rect.y + 8))
+        surf.blit(head, (rect.x + self.BAND_PAD, rect.y + 14))
         if hint:
             f = self.layout.font(FONT_SMALL + 2)
             room = (rect.w - self.BAND_PAD * 2 - head.get_width() - 24)
@@ -7827,50 +7975,62 @@ class DiagnosticsScreen(Screen):
             if hint:
                 s = f.render(hint, True, self.theme.muted)
                 surf.blit(s, s.get_rect(
-                    topright=(rect.right - self.BAND_PAD, rect.y + 10)))
+                    topright=(rect.right - self.BAND_PAD, rect.y + 16)))
+
+    def _draw_row_text(self, surf: pygame.Surface, x: int, y: int,
+                       title: str, lines: list[tuple[str, tuple]],
+                       width: int) -> None:
+        """A row's title and up to three lines under it, each clipped to
+        the room left of the row's button."""
+        tfont = make_font(int((FONT_BODY + 1) * self.layout.font_scale),
+                          bold=True)
+        surf.blit(tfont.render(title, True, self.theme.foreground), (x, y))
+        font = self.layout.font(FONT_SMALL + 2)
+        for k, (text, colour) in enumerate(lines[:3]):
+            if not text:
+                continue
+            draw_text(surf, _fit_text(text, font, width),
+                      (x, y + 30 + k * 20), self.theme, self.layout,
+                      pt=FONT_SMALL + 2, centre=False, colour=colour)
 
     def _build_volume_sliders(self) -> None:
-        """Four sliders in the levels panel: master scales the whole
-        game, cue is the pre-press click, feedback the post-press chime,
-        and buzzer is how long a cue pulse runs. Initial values come from
-        the merged config so a saved level shows up on reopen."""
-        # Labels stay short: four sliders across one panel leaves little
-        # room before a label runs into its right-aligned value.
+        """Five sliders stacked in the levels card: master scales the
+        whole game, the cue is the pre-press click, feedback the
+        post-press chime, menu music the quiet level every menu plays
+        at, and the buzz is how long a cue pulse runs. Initial values
+        come from the merged config so a saved level shows on reopen."""
         specs = (
-            ("master", "MASTER", "audio.master_volume", 0.8),
-            ("cue", "CUE", "audio.cue_volume", 1.0),
-            ("feedback", "FEEDBACK", "audio.feedback_volume", 1.0),
-            # Menu playlist level. The on/off switch for it is the
-            # MENU MUSIC pill in the top-right metadata column.
-            ("music", "MUSIC", "audio.menu_music_volume", 0.25),
+            ("master", "Master volume", "audio.master_volume", 0.8),
+            ("cue", "Cue click", "audio.cue_volume", 1.0),
+            ("feedback", "Feedback chime", "audio.feedback_volume", 1.0),
+            # Menu playlist level, capped quiet. The on/off switch is
+            # the Menu music button in the cues card.
+            ("music", "Menu music (menus stay quiet)",
+             "audio.menu_music_volume", 0.12),
         )
-        n = len(specs) + 1     # + the buzzer cue-length slider
-        gap = self.SLIDER_GAP
         panel = self._levels_rect()
         x0 = panel.x + self.BAND_PAD
-        total_w = panel.right - self.BAND_PAD - x0
-        sw = (total_w - gap * (n - 1)) // n
-        # Same vertical centre as the cue pill in the panel alongside, so
-        # the whole row reads as one line of controls rather than as two
-        # stacks that nearly line up.
-        track_y = self.CUES_ROW_MID - self.SLIDER_H // 2
+        w = panel.w - self.BAND_PAD * 2
         self._vol_sliders = {}
-        from ..audio.menu_music import menu_music_level
+        from ..audio.menu_music import MENU_LEVEL_CEILING, menu_music_level
         for i, (key, label, cfgkey, dflt) in enumerate(specs):
-            rect = pygame.Rect(x0 + i * (sw + gap), track_y, sw,
+            cy = panel.y + self.SLIDER_FIRST + i * self.SLIDER_ROW
+            rect = pygame.Rect(x0, cy - self.SLIDER_H // 2, w,
                                self.SLIDER_H)
+            top = 1.0
             if key == "music":
-                # The shipped default is derived (half as loud as the
-                # game music), so the knob opens on that level rather
-                # than on a number the config does not hold.
+                # The menus stay quiet: the knob stops at the ceiling,
+                # and opens on the level actually in use.
                 initial = menu_music_level(self.engine.cfg)
+                top = MENU_LEVEL_CEILING
             else:
                 initial = float(self.engine.cfg.get(cfgkey, dflt))
             self._vol_sliders[key] = Slider(
                 rect, self.theme, self.layout,
-                min_value=0.0, max_value=1.0,
+                min_value=0.0, max_value=top,
                 initial=initial,
-                step=0.05, label=label, value_format="{:.0%}",
+                step=0.02 if key == "music" else 0.05, label=label,
+                value_format="{:.0%}",
             )
         # Buzzer cue length. Vibration STRENGTH is fixed in the firmware
         # (STIM_PWM is a compile-time constant and there is no command to
@@ -7878,13 +8038,13 @@ class DiagnosticsScreen(Screen):
         # it is what makes a cue easy or hard to feel. Range matches the
         # vibrotactile literature: 150 ms is one firmware pulse, beyond
         # about 400 ms the cue starts overlapping the patient's response.
-        rect = pygame.Rect(x0 + len(specs) * (sw + gap), track_y, sw,
-                           self.SLIDER_H)
+        cy = panel.y + self.SLIDER_FIRST + len(specs) * self.SLIDER_ROW
         self._vol_sliders["buzz"] = Slider(
-            rect, self.theme, self.layout,
+            pygame.Rect(x0, cy - self.SLIDER_H // 2, w, self.SLIDER_H),
+            self.theme, self.layout,
             min_value=150.0, max_value=450.0,
             initial=float(self.engine.cfg.get("motor.cue_ms", 250)),
-            step=50.0, label="BUZZER",
+            step=50.0, label="Buzz length",
             value_format="{:.0f} ms",
         )
 
@@ -7934,15 +8094,15 @@ class DiagnosticsScreen(Screen):
     CUE_ROWS = CUE_ROWS
 
     def _cue_pill_rect(self) -> pygame.Rect:
-        """Where the closed cue pill sits: filling the cues panel's
-        control row. One source for the widget's rect, which is what it
-        draws AND what it hit-tests."""
-        return pygame.Rect(self._cues_rect().x + self.BAND_PAD,
-                           self.CUES_ROW_MID - self.CUE_PILL_H // 2,
-                           self.CUE_PILL_W, self.CUE_PILL_H)
+        """The cue list's heading bar, at the top of the cues card; the
+        switches sit under it. One source for the widget's rect, which
+        is what it draws AND what it hit-tests."""
+        card = self._cues_rect()
+        return pygame.Rect(card.x + self.BAND_PAD, card.y + 48,
+                           card.w - self.BAND_PAD * 2, self.CUE_PILL_H)
 
     def _build_cue_menu(self) -> ToggleMenu:
-        """The Sensory Cues menu.
+        """The Sensory Cues switches.
 
         Four independent cue channels plus the screen reveal, any
         combination allowed. This is the comparison the project line
@@ -7952,22 +8112,16 @@ class DiagnosticsScreen(Screen):
         records the state in cue_flags, so blocks run under different
         settings can be pooled and split again in the analysis.
 
-        It is a menu rather than five checkboxes laid out on the panel
-        because five rows plus their labels do not fit a panel that also
-        has to leave room for the finger tiles below. Opening it covers
-        those tiles, which is harmless: they are for testing hardware and
-        nothing is being tested while the cues are being set. The pill
-        carries the on-count so the state is readable without opening it.
-
-        The pill is titled for what it counts rather than repeating the
-        panel heading above it.
+        Pinned open: the Sound and cues tab has room for every switch,
+        so there is nothing to open. The heading carries the on-count
+        and a hovered row explains itself on the status line.
         """
         return ToggleMenu(
             self._cue_pill_rect(), list(self.CUE_ROWS),
             get_value=lambda k: bool(self.engine.cfg.get(k, True)),
             on_toggle=self._set_cue,
             theme=self.theme, layout=self.layout,
-            title="Channels on",
+            title="Channels on", pinned=True,
         )
 
     def _set_cue(self, key: str, value: bool) -> None:
@@ -7998,6 +8152,7 @@ class DiagnosticsScreen(Screen):
             if new_value else
             "Test Mode OFF. Blocks run their normal full length."
         )
+        self.rebuild_panel()
 
     def _toggle_menu_music(self) -> None:
         """Flip audio.menu_music_enabled and persist it the same way
@@ -8019,12 +8174,13 @@ class DiagnosticsScreen(Screen):
         if not new_value and player is not None:
             player.stop_now()
         self._port_status = (
-            "Menu music ON. Plays on the menu screens, never in a game."
-            if new_value else "Menu music OFF."
+            "Menu music on. It plays quietly on the menus, never in a "
+            "game." if new_value else "Menu music off."
         )
+        self.rebuild_panel()
 
     def _lanes_bottom_y(self) -> int:
-        """Bottom of the finger tiles: the inside of the finger panel."""
+        """Bottom of the finger tiles: the inside of the finger card."""
         return self._fingers_rect().bottom - self.LANES_PAD
 
     def _hand_block_x(self, hand: str) -> int:
@@ -8051,7 +8207,7 @@ class DiagnosticsScreen(Screen):
         zero) so the layout is harmless even on a single-Arduino
         rig."""
         self.lanes = []
-        y = self.LANES_TOP
+        y = self._fingers_rect().y + self.LANES_OFFSET
         h = self._lanes_bottom_y() - y
         # Bilateral layout: right hand on the right half of the
         # screen with index closest to centre, left hand on the
@@ -8236,25 +8392,33 @@ class DiagnosticsScreen(Screen):
         return options
 
     def rebuild_panel(self) -> None:
-        """(Re)build the bottom row: two port dropdowns, two STIM test
-        buttons, Refresh and Save in the Arduino panel, and the folder
-        button in the data panel.
+        """(Re)build every button and the two port dropdowns, each with
+        the tab it lives on (_panel_tabs, in step with _panel_buttons):
+        the boards' test buzz, Refresh and Save on Hand device; Menu
+        music on Sound and cues; the four setup jobs, and the EEG box
+        in the lab build, on Setup; the data folder and Test Mode on
+        Data.
 
         Called on init AND after every port re-scan so the dropdown
         options reflect what was just detected. Every rect comes off the
-        group geometry, so a button is hit-tested exactly where the panel
-        drew it."""
+        tab geometry, so a button is hit-tested exactly where it was
+        drawn."""
         from .widgets import Dropdown
         self._panel_buttons = []
+        self._panel_tabs = []
+
+        def add(tab: str, button: Button) -> Button:
+            self._panel_buttons.append(button)
+            self._panel_tabs.append(tab)
+            return button
+
         row_h = self.PORTS_ROW_H
-        # Per-hand row layout:
-        #   [HAND label] [dropdown ......]   [Test STIM]
-        # Refresh sits on the first row and Save under it, so the two
-        # write actions are one above the other rather than lost among
-        # the per-hand controls.
-        dd_x = self.PORTS_LABEL_X + self.PORTS_LABEL_W
+        ports = self._ports_rect()
+        # Per-hand row:  [HAND] [dropdown ......] [Test buzz]
+        # Refresh and Save stack at the right, one per row.
+        dd_x = ports.x + self.BAND_PAD + self.PORTS_LABEL_W
         test_x = dd_x + self.PORTS_DROPDOWN_W + self.PORTS_COL_GAP
-        btn_x = test_x + self.PORTS_TEST_W + self.PORTS_COL_GAP
+        btn_x = ports.right - self.BAND_PAD - self.PORTS_BTN_W
         options = self._dropdown_options()
         for i, hand in enumerate(("left", "right")):
             y = self._ports_row_y(i)
@@ -8273,74 +8437,92 @@ class DiagnosticsScreen(Screen):
                 existing.rect = dd_rect
                 existing.set_options(options)
                 existing.current_value = current
-            # Test STIM button per hand.
-            self._panel_buttons.append(Button(
+            # The four motors of this hand, one after another.
+            add("device", Button(
                 pygame.Rect(test_x, y, self.PORTS_TEST_W, row_h),
-                f"Test {hand.upper()} STIM",
+                "Test buzz",
                 lambda h=hand: self._start_stim_test(h),
                 self.theme, self.layout, font_pt=FONT_BODY - 2,
             ))
-        self._panel_buttons.append(Button(
+        add("device", Button(
             pygame.Rect(btn_x, self._ports_row_y(0),
                         self.PORTS_BTN_W, row_h),
             "Refresh", self._rescan_ports,
             self.theme, self.layout, font_pt=FONT_BODY - 2,
         ))
-        # Save button. Green when unsaved changes exist so it stands
-        # out as the next thing to click, muted when there's nothing
-        # to save.
-        save_colour = ((34, 197, 94) if self._has_unsaved
-                       else None)
-        self._panel_buttons.append(Button(
+        # Save goes green when there is something to save.
+        add("device", Button(
             pygame.Rect(btn_x, self._ports_row_y(1),
                         self.PORTS_BTN_W, row_h),
             "Save", self._save_ports,
             self.theme, self.layout, font_pt=FONT_BODY - 2,
-            colour=save_colour,
+            colour=(34, 197, 94) if self._has_unsaved else None,
         ))
-        # Opens the sessions folder in Finder / Explorer so the
-        # researcher can reach every recording without hunting through
-        # the filesystem. Lives in the data panel, away from the port
-        # controls, because it has nothing to do with the hardware.
-        self._panel_buttons.append(Button(
-            pygame.Rect(self._data_rect().x + self.BAND_PAD,
-                        self._ports_row_y(0), self.DATA_BTN_W, row_h),
-            "Open data folder", self.engine.open_sessions_folder,
+        # The machine's menu music switch, under the cue switches. The
+        # corner pill is the logged-in person's own mute.
+        cues = self._cues_rect()
+        mm_on = bool(self.engine.cfg.get("audio.menu_music_enabled", True))
+        add("sound", Button(
+            pygame.Rect(cues.x + self.BAND_PAD,
+                        cues.bottom - self.BAND_PAD - self.SETUP_BTN_H,
+                        cues.w - self.BAND_PAD * 2, self.SETUP_BTN_H),
+            "Menu music: on" if mm_on else "Menu music: off",
+            self._toggle_menu_music,
             self.theme, self.layout, font_pt=FONT_BODY - 2,
         ))
-        # Firmware panel. Writing the Arduino used to mean the Arduino
-        # IDE, a PlatformIO project and four manual uploads per sensor
-        # swap; these two buttons are that job with the developer tools
-        # taken out of it.
-        fw = self._firmware_rect()
-        fw_x = fw.x + self.BAND_PAD
-        fw_w = fw.w - self.BAND_PAD * 2
-        fw_h = self.FIRMWARE_BTN_H
-        self._panel_buttons.append(Button(
-            pygame.Rect(fw_x, self._firmware_row_y(0), fw_w, fw_h),
-            "Flash firmware", self._open_flash_dialog,
-            self.theme, self.layout, font_pt=FONT_BODY - 4,
-        ))
-        self._panel_buttons.append(Button(
-            pygame.Rect(fw_x, self._firmware_row_y(1), fw_w, fw_h),
-            "Sensor address", self._open_address_dialog,
-            self.theme, self.layout, font_pt=FONT_BODY - 4,
-        ))
+        # Setup. Writing the Arduino used to mean the Arduino IDE, a
+        # PlatformIO project and four manual uploads per sensor swap;
+        # the first two rows are that job with the tools inside the app.
+        fpt = FONT_BODY - 2
+        add("setup", Button(self._setup_btn_rect(0), "Flash firmware",
+                            self._open_flash_dialog, self.theme,
+                            self.layout, font_pt=fpt))
+        add("setup", Button(self._setup_btn_rect(1), "Sensor address",
+                            self._open_address_dialog, self.theme,
+                            self.layout, font_pt=fpt))
         # This computer's sound and buzz delays, measured with its own
         # microphone: what a new computer needs before Rhythm is scored.
-        self._panel_buttons.append(Button(
-            pygame.Rect(fw_x, self._firmware_row_y(2), fw_w, fw_h),
-            self._audio_btn_label(), self._open_audio_dialog,
-            self.theme, self.layout, font_pt=FONT_BODY - 4,
-        ))
-        # The third job the old Setup app did. The label carries the
-        # current state and a press flips it.
-        self._panel_buttons.append(Button(
-            pygame.Rect(fw_x, self._firmware_row_y(3), fw_w, fw_h),
-            "Auto-start: on" if self._autostart_on else "Auto-start: off",
-            self._toggle_autostart,
-            self.theme, self.layout, font_pt=FONT_BODY - 4,
-        ))
+        add("setup", Button(self._setup_btn_rect(2),
+                            self._audio_btn_label(),
+                            self._open_audio_dialog, self.theme,
+                            self.layout, font_pt=fpt))
+        # The label carries the current state and a press flips it.
+        add("setup", Button(self._setup_btn_rect(3),
+                            "Auto-start: on" if self._autostart_on
+                            else "Auto-start: off",
+                            self._toggle_autostart, self.theme,
+                            self.layout, font_pt=fpt))
+        row = 4
+        if self._show_usb_row:
+            label = ("Working..." if self._usb_job is not None
+                     else "Get the driver" if self._usb_missing
+                     else "Check USB driver")
+            add("setup", Button(self._setup_btn_rect(row), label,
+                                self._usb_driver_action, self.theme,
+                                self.layout, font_pt=fpt))
+            row += 1
+        self.eeg_btn = None
+        if getattr(getattr(self.engine, "markers", None), "enabled", False):
+            self.eeg_btn = add("setup", Button(
+                self._setup_btn_rect(row), "EEG trigger box",
+                self._open_eeg_port, self.theme, self.layout,
+                font_pt=fpt))
+            row += 1
+        # Data. The folder every recording lands in, then Test Mode;
+        # the riff file's button (between them) is built on draw.
+        add("data", Button(self._data_btn_rect(0), "Open data folder",
+                           self.engine.open_sessions_folder, self.theme,
+                           self.layout, font_pt=fpt))
+        tm_on = bool(self.engine.cfg.get("game.test_mode_enabled", False))
+        add("data", Button(self._data_btn_rect(2),
+                           "Test Mode: on" if tm_on else "Test Mode: off",
+                           self._toggle_test_mode, self.theme, self.layout,
+                           font_pt=fpt,
+                           colour=(34, 197, 94) if tm_on else None))
+
+    def _tab_buttons(self) -> list[Button]:
+        return [b for b, t in zip(self._panel_buttons, self._panel_tabs)
+                if t == self.tab]
 
     # ---- auto-start -------------------------------------------------------
 
@@ -8418,6 +8600,13 @@ class DiagnosticsScreen(Screen):
             return
         ports = flasher.candidate_ports(self.engine.cfg, self.engine.source)
         if not ports:
+            if self._show_usb_row and self._usb_job is None:
+                # Plugged in but not a port is almost always the USB
+                # driver: check it now, and the row offers the fix.
+                self._start_usb_job(fix=False)
+                self._port_status = ("No board port found. Checking the "
+                                     "USB driver...")
+                return
             self._port_status = flasher.NO_PORT_MESSAGE
             return
         self._firmware_tool = tool
@@ -8439,6 +8628,65 @@ class DiagnosticsScreen(Screen):
 
     def _close_firmware_dialog(self) -> None:
         self._dialog = None
+
+    # ---- the board's USB driver (Windows) --------------------------------
+
+    def _usb_driver_action(self) -> None:
+        """Check the driver, or, when a board is missing one, get it
+        from Windows Update; either runs on its own thread."""
+        if self._usb_job is not None:
+            return
+        self._start_usb_job(fix=self._usb_missing)
+
+    def _start_usb_job(self, fix: bool) -> None:
+        import threading
+        from ..hardware import usb_driver
+        job: dict = {"done": False, "fix": fix}
+
+        def run() -> None:
+            try:
+                if fix:
+                    job["install"] = usb_driver.install_from_windows_update()
+                job["boards"] = usb_driver.find_boards()
+            except Exception as e:
+                job["error"] = str(e)
+                job["boards"] = []
+            job["done"] = True
+
+        self._usb_job = job
+        self._port_status = ("Asking Windows Update for the board's "
+                             "driver. Windows asks for permission once."
+                             if fix else "Checking the USB driver...")
+        self.rebuild_panel()
+        threading.Thread(target=run, name="usb-driver", daemon=True).start()
+
+    def _poll_usb_job(self) -> None:
+        job = self._usb_job
+        if job is None or not job.get("done"):
+            return
+        from ..hardware import usb_driver
+        self._usb_job = None
+        line, missing = usb_driver.describe(job.get("boards") or [])
+        self._usb_line, self._usb_missing = line, missing
+        if job.get("fix"):
+            result = job.get("install") or {}
+            if missing:
+                # Windows Update could not do it from here: its own page
+                # lists the same driver to tick.
+                usb_driver.open_optional_updates()
+                self._port_status = (
+                    (result.get("message") or "The driver did not "
+                     "install.") + " Windows Update is open: tick the "
+                    "board's driver under Optional updates.")
+            else:
+                self._port_status = ("Driver installed. Unplug the board "
+                                     "and plug it back in.")
+                self._rescan_ports()
+        elif missing:
+            self._port_status = (line + " Press Get the driver.")
+        else:
+            self._port_status = line
+        self.rebuild_panel()
 
     # ---- audio delay -----------------------------------------------------
 
@@ -8636,6 +8884,8 @@ class DiagnosticsScreen(Screen):
         )
         self.rebuild_panel()
 
+    TAB_KEYS = {pygame.K_1: 0, pygame.K_2: 1, pygame.K_3: 2, pygame.K_4: 3}
+
     def handle_event(self, e: pygame.event.Event) -> None:
         # The firmware modal eats everything while it is up. Nothing
         # under a dim layer may react: a stray click on Back mid flash
@@ -8645,75 +8895,66 @@ class DiagnosticsScreen(Screen):
             if self._dialog is not None and self._dialog.wants_close:
                 self._dialog = None
             return
-        # The sequence-file card is modal too: while it is up a click
-        # must not reach a port dropdown or a finger tile drawn under
-        # the dim layer.
+        # The sequence-file card is modal too.
         if self._riff_panel.handle_event(e):
             return
-        # Dropdowns first so an open dropdown's option click is
-        # consumed before the underlying STIM / Save button can fire.
+        # The tabs, by click or by 1 to 4.
+        if e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
+            for i, (key, _label) in enumerate(self.TABS):
+                if self._tab_rect(i).collidepoint(e.pos):
+                    self._switch_tab(key)
+                    return
+        if e.type == pygame.KEYDOWN and e.key in self.TAB_KEYS:
+            i = self.TAB_KEYS[e.key]
+            if i < len(self.TABS):
+                self._switch_tab(self.TABS[i][0])
+        # An open dropdown, and the cue switches, take a click before
+        # anything drawn under them can.
         consumed = False
-        # Sensory Cues menu goes first for the same reason: while it is
-        # open its rows overlap the lane tiles, and a row click must not
-        # also buzz the finger drawn underneath it.
-        if self._cue_menu.handle_event(e):
+        if self.tab == "sound" and self._cue_menu.handle_event(e):
             consumed = True
-        for dd in self._port_dropdowns.values():
-            if dd.handle_event(e):
-                consumed = True
-        # If a dropdown is open and the click landed inside its popup,
-        # don't dispatch the event further (otherwise a buttons sitting
-        # behind the popup would also fire).
+        if self.tab == "device":
+            for dd in self._port_dropdowns.values():
+                if dd.handle_event(e):
+                    consumed = True
         if consumed:
             return
         if self.mute_btn.handle_event(e):
             return
-        # Volume sliders. Snapshot values so we only apply / save when a
-        # level actually moved (a stray click on the track still counts).
-        before = {k: s.value for k, s in self._vol_sliders.items()}
-        for s in self._vol_sliders.values():
-            s.handle_event(e)
-        if any(self._vol_sliders[k].value != v for k, v in before.items()):
-            self._apply_volumes_live()
-        if (e.type == pygame.MOUSEBUTTONUP and e.button == 1
-                and self._vol_dirty):
-            self._save_volumes()
+        if self.tab == "sound":
+            # Snapshot the levels so a save happens only when one moved
+            # (a stray click on the track still counts).
+            before = {k: s.value for k, s in self._vol_sliders.items()}
+            for s in self._vol_sliders.values():
+                s.handle_event(e)
+            if any(self._vol_sliders[k].value != v
+                   for k, v in before.items()):
+                self._apply_volumes_live()
+            if (e.type == pygame.MOUSEBUTTONUP and e.button == 1
+                    and self._vol_dirty):
+                self._save_volumes()
         self.back_btn.handle_event(e)
-        if self.eeg_btn is not None:
-            self.eeg_btn.handle_event(e)
-        for b in self._panel_buttons:
+        for b in self._tab_buttons():
             b.handle_event(e)
-        # Built lazily on the first draw, so a headless click before any
-        # frame has rendered gets it built here too.
-        if not self._riff_buttons:
-            self._refresh_riff_button()
-        for b in self._riff_buttons:
-            b.handle_event(e)
+        if self.tab == "data":
+            # Built lazily on the first draw, so a headless click before
+            # any frame has rendered gets it built here too.
+            if not self._riff_buttons:
+                self._refresh_riff_button()
+            for b in self._riff_buttons:
+                b.handle_event(e)
         # Click a finger tile to buzz JUST that finger (fire its STIM
         # motor on its own). Press-to-test-sensor and click-to-test-buzzer
         # sit side by side: a physical press drives the FSR readout, a
         # mouse click pulses that finger's actuator.
-        if e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
+        if (self.tab == "device" and e.type == pygame.MOUSEBUTTONDOWN
+                and e.button == 1):
             for ls in self.lanes:
                 if ls.rect.collidepoint(e.pos):
                     self._buzz_finger(ls)
                     return
-        # Test Mode toggle pill in the top-right. Hand-rolled hit-test
-        # rather than a Button widget because the pill style (filled
-        # green or muted with a coloured outline) is bespoke.
-        if (e.type == pygame.MOUSEBUTTONDOWN and e.button == 1
-                and self._test_mode_rect.w > 0
-                and self._test_mode_rect.collidepoint(e.pos)):
-            self._toggle_test_mode()
-            return
-        # Menu-music on/off pill, directly below Test Mode.
-        if (e.type == pygame.MOUSEBUTTONDOWN and e.button == 1
-                and self._menu_music_rect.w > 0
-                and self._menu_music_rect.collidepoint(e.pos)):
-            self._toggle_menu_music()
-            return
-        # Track held keys so the visual responds even when the source
-        # doesn't push samples (keyboard mode).
+        # Track held keys so the tiles respond even when the source
+        # does not push samples (keyboard mode).
         if e.type == pygame.KEYDOWN:
             self._held_keys.add(e.key)
         elif e.type == pygame.KEYUP:
@@ -8739,6 +8980,7 @@ class DiagnosticsScreen(Screen):
         return False
 
     def update(self, dt: float) -> None:
+        self._poll_usb_job()
         # A firmware job holds the port. Polling the watcher, driving
         # the STIM queue or reading the detectors would all be talking
         # to a source that is deliberately stopped, so the whole frame
@@ -8843,261 +9085,92 @@ class DiagnosticsScreen(Screen):
             return ("NO DATA", self.theme.error)
         return ("CONNECTED", self.theme.success)
 
+    CONNECTION_WORDS = {"KEYBOARD": "Keyboard mode",
+                        "CONNECTED": "Board connected",
+                        "DISCONNECTED": "Board not connected",
+                        "NO DATA": "No sensor data"}
+
+    def _draw_chip(self, surf: pygame.Surface, text: str,
+                   dot: tuple[int, int, int], topright: tuple[int, int],
+                   fill=None) -> pygame.Rect:
+        font = self.layout.font(FONT_SMALL + 2)
+        label = font.render(text, True, self.theme.foreground)
+        chip = pygame.Rect(0, 0, label.get_width() + 40, 30)
+        chip.topright = topright
+        pygame.draw.rect(surf, fill or tuple(
+            max(0, c - 10) for c in self.theme.background),
+            chip, border_radius=15)
+        pygame.draw.circle(surf, dot, (chip.x + 16, chip.centery), 5)
+        surf.blit(label, label.get_rect(midleft=(chip.x + 28,
+                                                 chip.centery)))
+        return chip
+
     def draw(self, surf: pygame.Surface) -> None:
         surf.fill(self.theme.background)
-        # Header.
-        source_name = getattr(self.engine.source, "name", "?")
+        _draw_header(surf, "Settings", "", self.theme, self.layout)
+        # How the hand device is connected, one chip at the top right,
+        # and Test Mode under it while it is on, since it shortens every
+        # block and must not be forgotten.
         state_text, state_colour = self._connection_state()
-        # The finger-test instruction lives on the FINGER TEST band
-        # itself, so this line only covers the ports.
-        sub = "Ports auto-assign by plug order; override below only if needed."
-        if state_text == "KEYBOARD":
-            sub = ("Keyboard mode. Press FDSA / JKL; to test each "
-                    "lane, or plug an Arduino in: it connects itself.")
-        elif state_text == "DISCONNECTED":
-            sub = ("Source not connected. Plug the Arduino in and it "
-                    "reconnects on its own; Refresh forces a re-scan.")
-        elif state_text == "NO DATA":
-            sub = ("Port is open but no FSR data is arriving. "
-                    "Check the Arduino is sending FSR: lines.")
-        # The TEST MODE and MENU MUSIC pills sit on this line's row at
-        # the right, so the line must end before their column. Step
-        # the point size down until it does; the widest pill label
-        # sets the column, so the guard holds whichever pill is up.
-        pill_font = self.layout.font(FONT_SMALL + 2)
-        column = pill_font.size("MENU MUSIC  OFF")[0] + 28 + 30 + 16
-        limit = self.layout.width - 2 * column
-        sub_pt = FONT_BODY
-        while (sub_pt > FONT_SMALL + 1
-               and self.layout.font(sub_pt).size(sub)[0] > limit):
-            sub_pt -= 1
-        _draw_header(surf, "Settings", sub, self.theme, self.layout,
-                     subtitle_pt=sub_pt)
-        # Source name pill top-right. Strip "Source(...)" wrappers so
-        # long names like KeyboardOnlySource don't clip off the edge.
-        clean_name = source_name
-        if "Source" in clean_name:
-            clean_name = clean_name.replace("OnlySource", "")
-            clean_name = clean_name.replace("Source", "")
-        nfont = self.layout.font(FONT_SMALL + 4)
-        nsurf = nfont.render(clean_name, True, self.theme.muted)
-        surf.blit(nsurf,
-                   nsurf.get_rect(topright=(self.layout.width - 30, 28)))
-        sfont = self.layout.font(FONT_BODY)
-        st = sfont.render(state_text, True, state_colour)
-        surf.blit(st, st.get_rect(
-            topright=(self.layout.width - 30, 50)))
-        # Test Mode toggle pill. Sits below the state text in the same
-        # top-right metadata column. Green filled when on (matches the
-        # Start Session "go" pill on the title screen so the visual
-        # language for "active / live" carries over), muted-outlined
-        # when off so it reads as an inactive switch. Click toggles.
+        chip = self._draw_chip(
+            surf, self.CONNECTION_WORDS.get(state_text, state_text),
+            state_colour, (self.layout.width - 30, 28))
         tm_on = bool(self.engine.cfg.get("game.test_mode_enabled", False))
-        n_trials = int(self.engine.cfg.get("game.test_mode_trials", 6))
-        tm_label = (f"TEST MODE  ON ({n_trials})" if tm_on
-                     else "TEST MODE  OFF")
-        tm_font = self.layout.font(FONT_SMALL + 2)
-        tm_text_colour = ((255, 255, 255) if tm_on
-                           else self.theme.foreground)
-        tm_text = tm_font.render(tm_label, True, tm_text_colour)
-        tm_pad_x = 14
-        tm_pad_y = 5
-        tm_w = tm_text.get_width() + tm_pad_x * 2
-        tm_h = tm_text.get_height() + tm_pad_y * 2
-        tm_rect = pygame.Rect(0, 0, tm_w, tm_h)
-        tm_rect.topright = (self.layout.width - 30, 78)
-        # Fill colour: green when on, transparent (background) when off.
+        self._test_mode_rect = pygame.Rect(0, 0, 0, 0)
         if tm_on:
-            pygame.draw.rect(surf, (34, 197, 94), tm_rect,
-                              border_radius=tm_h // 2)
-        else:
-            pygame.draw.rect(surf, self.theme.muted, tm_rect,
-                              width=2, border_radius=tm_h // 2)
-        surf.blit(tm_text, tm_text.get_rect(center=tm_rect.center))
-        # Cache rect for the hit-test in handle_event.
-        self._test_mode_rect = tm_rect
-        # Menu-music pill, same visual language directly underneath:
-        # filled accent when the playlist is on, muted outline when
-        # off. The level lives on the MUSIC slider in the levels
-        # panel; this is only the switch.
-        mm_on = bool(self.engine.cfg.get("audio.menu_music_enabled", True))
-        mm_label = "MENU MUSIC  ON" if mm_on else "MENU MUSIC  OFF"
-        mm_text = tm_font.render(
-            mm_label, True,
-            (255, 255, 255) if mm_on else self.theme.foreground)
-        mm_rect = pygame.Rect(0, 0, mm_text.get_width() + tm_pad_x * 2,
-                              mm_text.get_height() + tm_pad_y * 2)
-        mm_rect.topright = (self.layout.width - 30, tm_rect.bottom + 8)
-        if mm_on:
-            pygame.draw.rect(surf, self.theme.accent, mm_rect,
-                             border_radius=mm_rect.h // 2)
-        else:
-            pygame.draw.rect(surf, self.theme.muted, mm_rect,
-                             width=2, border_radius=mm_rect.h // 2)
-        surf.blit(mm_text, mm_text.get_rect(center=mm_rect.center))
-        self._menu_music_rect = mm_rect
-        # Group 1, what the patient feels and hears. The five switches
-        # live behind one pill because the panel has to leave room for
-        # the tiles below; the pill carries the on-count so the state is
-        # readable without opening it. Closed pill here, open list in the
-        # overlay pass at the end of draw so it covers the tiles rather
-        # than sliding under them.
-        cues_rect = self._cues_rect()
-        self._draw_band(surf, cues_rect, "SENSORY CUES")
-        draw_text(surf, "Buzzer, sound and screen, each on its own",
-                  (cues_rect.x + self.BAND_PAD, self.CUE_HINT_Y),
-                  self.theme, self.layout, pt=FONT_SMALL,
-                  colour=self.theme.muted)
-        self._cue_menu.draw_closed(surf)
-        # Group 2, how loud and how long those cues are. Master scales
-        # the whole game; cue is the pre-press click; feedback is the
-        # post-press chime; buzzer is the pulse length. Drag to set; it
-        # applies live and saves on release.
-        self._draw_band(surf, self._levels_rect(), "LEVELS",
-                        "drag to set, saves on release")
-        for s in self._vol_sliders.values():
-            s.draw(surf)
-        # Group 3, the finger tiles.
-        now = time.perf_counter()
-        fingers_rect = self._fingers_rect()
-        finger_hint = ("press a finger to test its sensor, "
-                       "click a tile to buzz it")
-        if not self.engine.source.provides_samples:
-            finger_hint = "keyboard mode: press FDSA / JKL; to test a lane"
-        self._draw_band(surf, fingers_rect, "FINGER TEST", finger_hint)
-        # Bilateral hand headings, always rendered because Settings
-        # always shows all 8 lanes (even when the session-level
-        # hand_mode is left or right only). Without them the therapist
-        # wouldn't know which half of the panel is which hand. Centred
-        # over the block of tiles they name rather than over the screen
-        # quarter, so the heading moves with the tiles.
-        half = self._hand_block_w() // 2
-        for hand in ("left", "right"):
-            draw_text(surf, hand.upper(),
-                      (self._hand_block_x(hand) + half, self.HAND_LABEL_Y),
-                      self.theme, self.layout, pt=FONT_H2, centre=True,
-                      colour=LaneStrip.HAND_BADGE[hand])
-        for ls in self.lanes:
-            ls.draw(surf, now)
-        # Group 4, which Arduino is on which hand. The heading row
-        # states the auto rule, then the detected ports as short names
-        # (the basename after /dev/cu.) so several fit on one line.
-        ports_rect = self._ports_rect()
-        auto_rule = "auto: first board = right, second = left"
-        if self._detected_ports:
-            shorts = [self._short_port(p) for p in self._detected_ports]
-            detected_label = auto_rule + " | detected: " + ", ".join(shorts)
-        else:
-            detected_label = auto_rule + " | none detected"
-        self._draw_band(surf, ports_rect, "ARDUINO PORTS", detected_label)
-        # Per-hand row labels (LEFT / RIGHT) beside each dropdown, off
-        # the same row geometry the dropdown was built from.
-        for i, hand in enumerate(("left", "right")):
-            y = self._ports_row_y(i)
-            colour = LaneStrip.HAND_BADGE.get(hand, self.theme.foreground)
-            draw_text(surf, hand.upper(),
-                      (self.PORTS_LABEL_X, y + self.PORTS_ROW_H // 2 - 9),
-                      self.theme, self.layout, pt=FONT_BODY,
-                      centre=False, colour=colour)
-        # Live result line: the port each hand actually has right now,
-        # so the auto assignment (or an override) is never a mystery.
-        live_hands = getattr(self.engine.source, "hands", None)
-        if live_hands:
-            now_txt = "now: " + "   ".join(
-                f"{h.hand.upper()} = {self._short_port(h.port)}"
-                for h in live_hands)
-        else:
-            now_txt = "now: keyboard (no Arduino connected)"
-        draw_text(surf, now_txt,
-                  (self.PORTS_LABEL_X, ports_rect.bottom - 24),
-                  self.theme, self.layout, pt=FONT_SMALL,
-                  centre=False, colour=self.theme.muted)
-        # Group 5, where the recordings land. Says the path out loud next
-        # to the button that opens it so the location is never a mystery.
-        data_rect = self._data_rect()
-        self._draw_band(surf, data_rect, "SESSION DATA")
-        try:
-            sessions_dir = str(self.engine.cfg.resolve_path(
-                self.engine.cfg.get("session.data_dir", "sessions")))
-        except Exception:
-            sessions_dir = "sessions"
-        cap_x = data_rect.x + self.BAND_PAD
-        cap_w = data_rect.right - self.BAND_PAD - cap_x
-        cap_font = self.layout.font(FONT_SMALL)
-        # Pulled up eight pixels from the port row it used to line up
-        # with: the riff button now takes the bottom line of this
-        # panel, and the path was sitting on top of it.
-        cap_y = self._ports_row_y(1) - 8
-        draw_text(surf, "Every session is saved here:", (cap_x, cap_y),
-                  self.theme, self.layout, pt=FONT_SMALL,
-                  centre=False, colour=self.theme.muted)
-        # Tail of the path, since the full one is usually longer than the
-        # panel. Trimmed from the left so the session folder itself, the
-        # part that identifies it, always stays visible.
-        shown = sessions_dir
-        while shown and cap_font.size("..." + shown)[0] > cap_w:
-            shown = shown[1:]
-        if shown != sessions_dir:
-            shown = "..." + shown
-        draw_text(surf, shown, (cap_x, cap_y + 20),
-                  self.theme, self.layout, pt=FONT_SMALL,
-                  centre=False, colour=self.theme.foreground)
-        # The one button for the Muscle Memory sequence file. It sits
-        # here rather than in a panel of its own because a loaded file
-        # says what the recordings are OF, and the bottom row has no
-        # width left for a seventh group. It replaced the "one folder
-        # per day" caption, which said nothing the path above it does
-        # not already show.
-        # Its label carries the answer to the only question a therapist
-        # asks about it in passing (is a custom riff loaded, and which
-        # one), so the panel needs no extra caption row for it.
+            n = int(self.engine.cfg.get("game.test_mode_trials", 6))
+            self._draw_chip(surf, f"Test Mode on: {n} trials a block",
+                            self.theme.warning,
+                            (self.layout.width - 30, chip.bottom + 8))
+        self._draw_tabs(surf)
+        # Kept current on every tab: the riff file can change from the
+        # card, a drop on the window or the drop folder.
         self._refresh_riff_button()
-        for b in self._riff_buttons:
+        now = time.perf_counter()
+        if self.tab == "device":
+            self._draw_device_tab(surf, now)
+        elif self.tab == "sound":
+            self._draw_sound_tab(surf)
+        elif self.tab == "setup":
+            self._draw_setup_tab(surf)
+        else:
+            self._draw_data_tab(surf)
+        for b in self._tab_buttons():
+            if b is self.eeg_btn:
+                b.label = self._eeg_btn_label()
             b.draw(surf)
-        # Group 6, writing the Arduino and the auto-start. The heading
-        # hint names the bundled firmware where the heading leaves room
-        # for it; the third button row took the line the caption had.
-        fw_rect = self._firmware_rect()
-        fw_caption, _fw_colour = self._firmware_caption()
-        self._draw_band(surf, fw_rect, "SETUP", fw_caption)
-        # Buttons for both bottom panels (test STIM, refresh, save, open
-        # folder), then the dropdowns on top of whatever they overlap.
+        if self.tab == "device":
+            for dd in self._port_dropdowns.values():
+                dd.draw_closed(surf)
+        # Kept for the hit-test tests: the rects of the two switches.
         for b in self._panel_buttons:
-            b.draw(surf)
-        for dd in self._port_dropdowns.values():
-            dd.draw_closed(surf)
+            if b.label.startswith("Test Mode"):
+                self._test_mode_rect = (pygame.Rect(b.rect)
+                                        if self.tab == "data"
+                                        else pygame.Rect(0, 0, 0, 0))
+            elif b.label.startswith("Menu music"):
+                self._menu_music_rect = pygame.Rect(b.rect)
         self.back_btn.draw(surf)
-        if self.eeg_btn is not None:
-            self.eeg_btn.label = self._eeg_btn_label()
-            self.eeg_btn.draw(surf)
-        # Message line along the bottom, running right from the Back
-        # button. Coloured orange while a port change is unsaved. A
-        # hovered cue row takes the line over so the switch can say what
-        # the patient will actually experience.
-        status_line = self._cue_menu.hover_help() or self._port_status
+        # Message line along the bottom, running right from Back.
+        # Orange while a port change is unsaved; a hovered cue switch
+        # takes it over to say what the patient will experience.
+        help_line = (self._cue_menu.hover_help() if self.tab == "sound"
+                     else "")
+        status_line = help_line or self._port_status
         if status_line:
             sx, sy = self._status_pos()
             status_font = self.layout.font(FONT_SMALL + 2)
-            right = (self.eeg_btn.rect.x - 20 if self.eeg_btn is not None
-                     else self.layout.width - self.BAND_X)
+            right = self.layout.width - self.BAND_X
             status = _fit_text(status_line, status_font, right - sx)
-            status_colour = (self.theme.warning
-                              if self._has_unsaved
-                              else self.theme.foreground)
-            draw_text(surf, status, (sx, sy),
-                      self.theme, self.layout, pt=FONT_SMALL + 2,
-                      centre=False, colour=status_colour)
-        # Dropdown popup overlays drawn LAST so they sit on top of
-        # everything else, including the back button.
-        for dd in self._port_dropdowns.values():
-            dd.draw_overlay(surf)
+            draw_text(surf, status, (sx, sy), self.theme, self.layout,
+                      pt=FONT_SMALL + 2, centre=False,
+                      colour=(self.theme.warning if self._has_unsaved
+                              else self.theme.foreground))
+        # Popups last, so they sit over everything.
+        if self.tab == "device":
+            for dd in self._port_dropdowns.values():
+                dd.draw_overlay(surf)
         self.mute_btn.draw(surf, self.theme, self.layout)
-        self._cue_menu.draw_overlay(surf)
-        # Footer hint.
-        draw_text(surf, "Esc returns to the title screen",
-                  (self.layout.width // 2, self.layout.height - 30),
-                  self.theme, self.layout, pt=FONT_SMALL + 2,
-                  centre=True, colour=self.theme.muted)
         # The firmware modal last of all: it dims the whole screen, so
         # anything drawn after it would float above the dim layer and
         # look clickable when it is not.
@@ -9105,6 +9178,152 @@ class DiagnosticsScreen(Screen):
             self._dialog.draw(surf)
         # Same rule for the sequence-file card.
         self._riff_panel.draw(surf)
+
+    def _draw_device_tab(self, surf: pygame.Surface, now: float) -> None:
+        fingers = self._fingers_rect()
+        state_text, _c = self._connection_state()
+        if not self.engine.source.provides_samples:
+            hint = "Keyboard mode: press F D S A and J K L ; to test each finger"
+        elif state_text == "DISCONNECTED":
+            hint = "Plug the board in and it reconnects on its own"
+        elif state_text == "NO DATA":
+            hint = "The port is open but no pad readings are arriving"
+        else:
+            hint = "Press a finger to test its pad, click a tile to buzz it"
+        self._draw_band(surf, fingers, "FINGER TEST", hint)
+        # Both hands, always: Settings shows all eight tiles whatever
+        # the next session's hand, so either board can be checked.
+        half = self._hand_block_w() // 2
+        for hand in ("left", "right"):
+            draw_text(surf, hand.upper(),
+                      (self._hand_block_x(hand) + half,
+                       fingers.y + self.HAND_LABEL_OFFSET),
+                      self.theme, self.layout, pt=FONT_H2, centre=True,
+                      colour=LaneStrip.HAND_BADGE[hand])
+        for ls in self.lanes:
+            ls.draw(surf, now)
+        ports = self._ports_rect()
+        self._draw_band(surf, ports, "BOARDS",
+                        "The first board plugged in is the right hand, "
+                        "the second the left")
+        for i, hand in enumerate(("left", "right")):
+            y = self._ports_row_y(i)
+            draw_text(surf, hand.upper(),
+                      (ports.x + self.BAND_PAD,
+                       y + self.PORTS_ROW_H // 2 - 10),
+                      self.theme, self.layout, pt=FONT_BODY,
+                      centre=False,
+                      colour=LaneStrip.HAND_BADGE.get(
+                          hand, self.theme.foreground))
+        # The port each hand actually has right now, so the automatic
+        # choice (or a saved one) is never a mystery.
+        live_hands = getattr(self.engine.source, "hands", None)
+        if live_hands:
+            now_txt = "Now: " + "   ".join(
+                f"{h.hand.upper()} = {self._short_port(h.port)}"
+                for h in live_hands)
+        else:
+            now_txt = "Now: keyboard, no board connected"
+        draw_text(surf, now_txt,
+                  (ports.x + self.BAND_PAD, ports.bottom - 30),
+                  self.theme, self.layout, pt=FONT_SMALL + 2,
+                  centre=False, colour=self.theme.muted)
+
+    def _draw_sound_tab(self, surf: pygame.Surface) -> None:
+        self._draw_band(surf, self._levels_rect(), "LEVELS",
+                        "Drag to set; saved when you let go")
+        for s in self._vol_sliders.values():
+            s.draw(surf)
+        cues = self._cues_rect()
+        self._draw_band(surf, cues, "CUES",
+                        "Hover a switch to see what it does")
+        self._cue_menu.draw_closed(surf)
+        self._cue_menu.draw_overlay(surf)
+
+    def _setup_rows(self) -> list[tuple[str, list[tuple[str, tuple]]]]:
+        """(title, lines) for each Setup row, in button order."""
+        muted, ok = self.theme.muted, self.theme.foreground
+        fw_caption, fw_colour = self._firmware_caption()
+        rows = [
+            ("Firmware", [
+                ("Writes the game's code to the hand device's Arduino. "
+                 "For a new or wiped board.", muted),
+                (f"In this build: {fw_caption}", fw_colour)]),
+            ("Sensor address", [
+                ("Gives a new force pad its finger's address. Plug in "
+                 "only that pad.", muted)]),
+            ("Audio delay", [
+                ("Times this computer's sound and buzz with its "
+                 "microphone. Once per computer.", muted),
+                (self._audio_now_line(), ok)]),
+            ("Auto-start", [
+                ("Opens Finger Rehab when the hand device is plugged "
+                 "in.", muted)]),
+        ]
+        if self._show_usb_row:
+            rows.append(("USB driver", [
+                ("The hand device's USB chip needs a Windows driver. "
+                 "Windows usually adds it when online.", muted),
+                (self._usb_line, self.theme.warning if self._usb_missing
+                 else ok)]))
+        if self.eeg_btn is not None:
+            rows.append(("EEG trigger box", [
+                ("The port the lab's marker box is on.", muted)]))
+        return rows
+
+    def _draw_setup_tab(self, surf: pygame.Surface) -> None:
+        card = self._firmware_rect()
+        self._draw_band(surf, card, "")
+        x = card.x + self.BAND_PAD
+        width = self._setup_btn_rect(0).x - 28 - x
+        edge = tuple(max(0, c - 12) for c in self.theme.background)
+        for i, (title, lines) in enumerate(self._setup_rows()):
+            top = self._firmware_row_y(i)
+            if i:
+                pygame.draw.line(surf, edge, (x, top),
+                                 (card.right - self.BAND_PAD, top), 1)
+            self._draw_row_text(surf, x, top + 16, title, lines, width)
+
+    def _draw_data_tab(self, surf: pygame.Surface) -> None:
+        card = self._data_rect()
+        self._draw_band(surf, card, "")
+        x = card.x + self.BAND_PAD
+        width = self._data_btn_rect(0).x - 28 - x
+        muted, fg = self.theme.muted, self.theme.foreground
+        try:
+            sessions_dir = str(self.engine.cfg.resolve_path(
+                self.engine.cfg.get("session.data_dir", "sessions")))
+        except Exception:
+            sessions_dir = "sessions"
+        # The tail of the path when it is long: the folder names that
+        # say where it is stay visible.
+        font = self.layout.font(FONT_SMALL + 2)
+        shown = sessions_dir
+        while shown and font.size("..." + shown)[0] > width:
+            shown = shown[1:]
+        if shown != sessions_dir:
+            shown = "..." + shown
+        n = int(self.engine.cfg.get("game.test_mode_trials", 6))
+        rows = [
+            ("Session data", [("Every session is saved in this folder:",
+                               muted), (shown, fg)]),
+            ("Muscle Memory riff", [
+                ("The riff Muscle Memory plays. Built in, unless a "
+                 "researcher loads a file.", muted)]),
+            ("Test Mode", [
+                (f"Short blocks for demos: every game runs {n} trials.",
+                 muted),
+                ("Keep it off for real sessions.", muted)]),
+        ]
+        edge = tuple(max(0, c - 12) for c in self.theme.background)
+        for i, (title, lines) in enumerate(rows):
+            top = card.y + self.SETUP_ROW_TOP + i * self.DATA_ROW_H
+            if i:
+                pygame.draw.line(surf, edge, (x, top),
+                                 (card.right - self.BAND_PAD, top), 1)
+            self._draw_row_text(surf, x, top + 44, title, lines, width)
+        for b in self._riff_buttons:
+            b.draw(surf)
 
     def _firmware_caption(self) -> tuple[str, tuple[int, int, int]]:
         """What is under the two firmware buttons, and in what colour.

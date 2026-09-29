@@ -24,7 +24,7 @@ Python 3.12 is what CI builds with and has wheels for every package; 3.10 or new
 | A game | `app/finger_rehab/game/modes/<game>.py` (its docstring is the research case) and its screen in `app/finger_rehab/ui/` |
 | A setting, or the study sittings | `app/config/default.yaml`, every key commented; the sittings are `protocol.presets` |
 | The lab version | `app/config/eeg_lab.yaml`, laid over `default.yaml` |
-| Login, sessions, Play all | `app/finger_rehab/game/engine.py`, `app/finger_rehab/game/battery.py`, `app/finger_rehab/data/` |
+| Login, sessions, timed sessions | `app/finger_rehab/game/engine.py`, `app/finger_rehab/game/battery.py`, `app/finger_rehab/data/` |
 | Boards, presses, EEG markers | `app/finger_rehab/hardware/` (the marker map is `eeg_trigger.py`) |
 | The device itself: parts, wiring, CAD | `hardware/` |
 | The board's firmware | `app/arduino/` |

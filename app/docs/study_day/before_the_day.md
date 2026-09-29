@@ -6,7 +6,7 @@ and the result.
 
 ## 1. The pilot (item l): the first two participants
 
-The rig side is done: a full Play all ran on the real board end to
+The rig side is done: a full 45 minute session ran on the real board end to
 end on 24 September 2026. The clock with real hands is an internal
 pilot, decided in advance so it costs no participants:
 

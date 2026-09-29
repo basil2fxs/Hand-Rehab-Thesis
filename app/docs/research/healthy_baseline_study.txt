@@ -161,7 +161,7 @@ DECISIONS IN ONE SCREEN
 
 - One sitting, ONE board, the right-hand device, for everybody.
   Booking 60 minutes: 15 minutes of consent and intake off the clock,
-  then a PLAY ALL run measured (M) at medians of 44.1 to 44.9 minutes
+  then a session run measured (M) at medians of 44.1 to 44.9 minutes
   over 48 sittings on six codes, range 43.9 to 45.1, two over the
   budget of 45 by 5 seconds at most and none near the hard stop at 50
   (Section 2.3, the v3 sitting of 28 September 2026).
@@ -192,7 +192,7 @@ DECISIONS IN ONE SCREEN
   sequences. Names live only in the consent log.
 - What the participant sees: after each block, that block's own
   first trials against its own last trials, in the mode's own words,
-  and at PLAY ALL DONE a TODAY table with one row per mode. Nothing
+  and at SESSION DONE a TODAY table with one row per mode. Nothing
   on it calls a change real: the only noise floor is within-session
   (Section 4.5a).
 - Primary outputs: the normative table from pass 1 (n, median, IQR,
@@ -1131,7 +1131,7 @@ min a hand (A); adaptive 40 trials 30 to 43 s in the recorded test
 blocks on disk (M).
 
 Simulated cohort (scripts/simulate_cohort.py): codes play one sitting
-each through the real engine and the real one-board Play all, the way
+each through the real engine and the real one-board session, the way
 the RA runs it. Each code is a person with fixed traits (base RT,
 span, asynchrony, force lag and steadiness, enslaving, reading
 accuracy), about one in eight left-handed, and every block draws
@@ -1147,15 +1147,16 @@ ICCs describe the simulator, never the device.
 2.4 Short forms and frozen ladders: exact config keys
 -----------------------------------------------------
 The battery is a protocol preset in config/default.yaml
-(protocol.presets.study_battery). The hub's PLAY ALL button (or A)
-builds the plan for the logged-in code (the order from the code;
-every block on the right hand, the one board renamed to it if Left
-was picked at login) and runs it through the engine's
+(protocol.presets.study_battery). The hub's SESSION picker set to
+45 min, then Start (or L to pick and A to start), builds the plan
+for the logged-in code (the order from the code; every block on the
+right hand, the one board renamed to it if Left was picked at login)
+and runs it through the engine's
 protocol runner, laying the keys below over the live config for the
 length of the run and putting them back when the last block ends or
 the session ends. Between blocks the results screen shows as usual
 and NEXT UP carries the next step, so every block keeps its GET
-READY countdown and its own rests; the session strip reads PLAY ALL
+READY countdown and its own rests; the session strip reads SESSION
 k/12 with the running minutes beside it, and the NEXT UP card names
 the pass. Each block's metadata.json carries battery.id,
 battery.cell, battery.position and battery.phase (pass1 or pass2),
@@ -1229,7 +1230,7 @@ with config/user_settings.yaml left at its defaults on the study
 laptop: the cue mix (buzz and sound before the target, nothing
 after, target shown), test mode off, balanced targets, reports on,
 EEG off, quick calibration on, the one board auto-assigned and put
-on the right hand by PLAY ALL. The preset does not write these; the run sheet
+on the right hand by the session. The preset does not write these; the run sheet
 checks them and every block's config_snapshot records them. The
 intake fields the software does not hold (affected side, impairment
 score) stay empty for a study code; the cohort is identified by the
@@ -1330,9 +1331,10 @@ game is played twice: a participant who sits it gives every number
 the 45 gives, plus P2 (Section 4.6) and an exploratory second-go
 table for every game. The 30 plays every game and four of them twice;
 the 15 plays three games twice. The lab's own
-build shows no SESSION picker (config/eeg_lab.yaml): a length starts
-at LOG IN, before the RA has started the EEG recording, so PLAY ALL on
-the menu runs the lab's sitting as before.
+build has no lengths at login (config/eeg_lab.yaml): a length starts
+at LOG IN, before the RA has started the EEG recording, so the hub's
+picker offers Lab session instead, which runs the lab's sitting as
+before.
 
 
 3. PARTICIPANT INTAKE, ANONYMITY AND KEYING
@@ -1439,7 +1441,7 @@ range (objective A3).
 None is needed. The login intake replaced the per-participant yaml
 idea: the RA launches the app as shipped, types the code, the
 login works out the visit, the fields above take a few seconds,
-and the PLAY ALL button does the rest. The config keys session.sex,
+and 45 min then Start on the hub does the rest. The config keys session.sex,
 session.edinburgh_lq and session.visit still exist so a yaml passed
 as --config can pre-fill the screen (or record an LQ), and a value
 entered on the screen always wins over the file.
@@ -2103,10 +2105,10 @@ healthy cohort cannot give.
   k DONE. scripts/simulate_cohort.py plays people with fixed traits
     (a per-person chord cost among them) and fresh per-block noise,
     about one in eight left-handed,
-    through the real one-board Play all, and writes the truth to
+    through the real one-board session, and writes the truth to
     truth.json and the minutes to durations.csv. Its reliability
     numbers describe the simulator, never the device.
-  l DONE as far as the rig goes, 24 September 2026: the full Play all
+  l DONE as far as the rig goes, 24 September 2026: the full session
     ran on the real board end to end (12 of 12 steps, 1,902 motor
     commands, none failed, no drop), the EEG build ran the same under
     PsychoPy with every marker on the wire, and scripts/check_sitting.py

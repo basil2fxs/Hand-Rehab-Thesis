@@ -683,19 +683,27 @@ class SerialBackend(TriggerBackend):
         if self.is_open:
             return True
         try:
-            self._serial = serial.Serial(
-                self.port, self.baud,
-                bytesize=serial.EIGHTBITS,
-                parity=serial.PARITY_NONE,
-                stopbits=serial.STOPBITS_ONE,
-                timeout=0,
-                # A yanked cable or wedged box must not hang the frame
-                # loop: any single write is capped at 0.5 s.
-                write_timeout=0.5,
-            )
+            if "://" in str(self.port):
+                # A pyserial URL, e.g. socket://127.0.0.1:50410: the EEG
+                # simulator (utils/eeg_simulator.py) standing in for the
+                # box. Same write calls, so the game runs as in the lab.
+                self._serial = serial.serial_for_url(
+                    str(self.port), baudrate=self.baud, timeout=0,
+                    write_timeout=0.5)
+            else:
+                self._serial = serial.Serial(
+                    self.port, self.baud,
+                    bytesize=serial.EIGHTBITS,
+                    parity=serial.PARITY_NONE,
+                    stopbits=serial.STOPBITS_ONE,
+                    timeout=0,
+                    # A yanked cable or wedged box must not hang the
+                    # frame loop: any single write is capped at 0.5 s.
+                    write_timeout=0.5,
+                )
+                _remember_box(self.port)
             log.info("EEG trigger on %s @ %d", self.port, self.baud)
             self.last_error = ""
-            _remember_box(self.port)
             return True
         except Exception as e:
             log.warning("Could not open EEG trigger port %s: %s",

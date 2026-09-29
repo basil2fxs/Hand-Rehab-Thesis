@@ -6,7 +6,7 @@ top: markers on, trigger box required, no music in Force Pilot,
 neutral feedback (one ring glyph 800 ms after the press, no words, no
 chime), FRN bytes in chords and Force Pilot. The Reaction card is the
 lab's own SRT task (Welber's PsychoPy script, replicated trial for
-trial), and Play all runs it once in place of the study's two
+trial), and the Lab session runs it once in place of the study's two
 Reaction blocks: about 54 minutes from login, the SRT about 15 of
 them. The folder that goes to the lab is
 EEG_Lab at the top of the project (FingerRehab-EEGLab.zip on CI):
@@ -55,7 +55,7 @@ At the lab PC
    that folder, then pick the first game. The line turns to "EEG
    recording ... is in ..." once the file is there. A second login the
    same day gets _2, _3 and so on, so nothing is overwritten.
-6. Play the games. Keep Test Mode off in Settings for real data. P
+6. Play the games. Keep Test Mode off (Settings, Data) for real data. P
    pauses; Esc twice ends one game. A red "EEG markers lost" means the
    box dropped out: finish that game, then Settings, EEG box, and pick
    it again.

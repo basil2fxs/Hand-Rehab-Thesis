@@ -237,7 +237,7 @@ class SRTSetupScreen(Screen):
                 and isinstance(pending, dict)
                 and pending.get("mode") == "srt"):
             of = (self.engine._battery or {}).get("of", "?")
-            draw_text(surf, f"Play all: step {pending.get('position', '?')} "
+            draw_text(surf, f"Session: step {pending.get('position', '?')} "
                       f"of {of}", (cx, y + 44), self.theme, self.layout,
                       pt=FONT_SMALL + 2, centre=True,
                       colour=self.theme.muted)

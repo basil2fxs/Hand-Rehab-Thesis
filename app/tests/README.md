@@ -1,6 +1,6 @@
 # tests
 
-3,721 tests, all headless: no screen, sound or board needed.
+All headless: no screen, sound or board needed.
 
 ```bash
 cd app

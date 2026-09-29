@@ -260,7 +260,7 @@ class GameEngine:
         # snapshot the overrides replaced, and one row per step that
         # reached an end. None when no battery is running.
         self._battery: dict | None = None
-        # The preset PLAY ALL runs this session: the study battery, or
+        # The preset the hub's session runs: the study battery, or
         # the Trial Mode length picked at login (protocol.trials).
         self._session_preset = "study_battery"
         # Patterns sequence file (data/pattern_file.py): the last
@@ -2814,12 +2814,12 @@ class GameEngine:
         # still picks its hand (the keys differ per hand) and has
         # nothing to measure.
         self._session_hand = None
-        # Trial Mode: a length picked at login is PLAY ALL's preset for
+        # Trial Mode: a length picked at login is the session's preset for
         # the whole session, and it starts now. The plan names its own
         # hand and runs the quick calibration for it, so the hand
         # screen is not needed. Should the plan not start (no preset,
         # no main hand), the session carries on as free play and the
-        # hub's PLAY ALL line says why.
+        # hub's session line says why.
         self._session_preset = str(trial or "study_battery")
         if trial and self.start_battery(self._session_preset):
             return
@@ -2827,8 +2827,24 @@ class GameEngine:
 
     @property
     def battery_preset(self) -> str:
-        """The preset PLAY ALL runs this session."""
+        """The preset the session's timed run plays: the length picked
+        at login or on the hub, else the study battery."""
         return getattr(self, "_session_preset", None) or "study_battery"
+
+    def start_session_length(self, preset: str) -> bool:
+        """Start a timed session from the hub's SESSION picker: the
+        same run a length picked at login starts, so the session
+        records the length it is playing."""
+        if not preset:
+            return False
+        if self._battery is not None:
+            return self.continue_protocol()
+        previous = getattr(self, "_session_preset", None)
+        self._session_preset = str(preset)
+        if self.start_battery(self._session_preset):
+            return True
+        self._session_preset = previous
+        return False
 
     def session_minutes(self) -> float:
         """Minutes since login, for the End-session summary line.
@@ -3994,8 +4010,8 @@ class GameEngine:
         # start, so its "starter" is the song screen. One press still
         # lands on rhythm's own prep, same as every other mode.
         "rhythm": "show_rhythm_setup",
-        # The SRT opens on its setup screen from the menu and from
-        # Play all alike: the timing group is the lab's between-group
+        # The SRT opens on its setup screen from the menu and from a
+        # session alike: the timing group is the lab's between-group
         # condition, so it is confirmed for every participant.
         "srt": "show_srt_setup",
     }
@@ -6718,7 +6734,7 @@ class GameEngine:
     def battery_rest_hold(self) -> tuple[bool, float]:
         """(held, seconds of the scheduled rest still to run) for the
         pending step. The results screen holds NEXT UP for the rest's
-        floor; the hub's Play all asks this so it cannot walk round
+        floor; the hub's Continue asks this so it cannot walk round
         the floor by going to the menu first."""
         step = self.pending_protocol_step()
         if not isinstance(step, dict):
@@ -6787,7 +6803,7 @@ class GameEngine:
         from .battery import build_plan, BatteryError, load_preset
         preset = preset or self.battery_preset
         if load_preset(self.cfg, preset) is None:
-            return False, "No play all preset in the config"
+            return False, "No session preset in the config"
         if not getattr(self, "_session_active", False):
             return False, "Log in first"
         if self._battery is not None:
@@ -6817,8 +6833,8 @@ class GameEngine:
                 absent = []
             if absent:
                 names = " and ".join(h for h in absent)
-                return False, (f"Play all needs the {names} board too: "
-                               "plug it in")
+                return False, (f"This session needs the {names} board "
+                               "too: plug it in")
         return True, ""
 
     def start_battery(self, preset: str | None = None) -> bool:
@@ -6891,7 +6907,7 @@ class GameEngine:
             # amber and red: from LOG IN, where the design's budget
             # and hard stop are counted from (Section 5.2, CLOCK
             # STARTS at the login step; Section 2.3's first row is the
-            # login and the calibration), not from PLAY ALL, which
+            # login and the calibration), not from the hub's Start, which
             # read about five minutes early.
             "started_perf": (getattr(self, "_session_started_perf", None)
                              or time.perf_counter()),
@@ -6958,7 +6974,7 @@ class GameEngine:
             if self._lone_board_can_become(need):
                 src = self.source
                 if src.hands[0].hand != only and src.relabel_single(only):
-                    log.info("Play all put the one board on the %s "
+                    log.info("The session put the one board on the %s "
                              "hand", only)
                     self._hand_port_memory = {}
                     self._remember_hand_ports(src)

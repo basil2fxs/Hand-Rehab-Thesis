@@ -110,6 +110,17 @@ class _Harness(unittest.TestCase):
 
 
 class PreviewTests(_Harness):
+    def test_the_preview_is_as_quiet_as_the_menus(self) -> None:
+        # The song picker is a menu: its preview plays at the menu
+        # level, and only the game itself plays the song loud (Basil,
+        # 29 September 2026).
+        from finger_rehab.audio.menu_music import menu_music_level
+        self._enter()
+        self.assertTrue(self.screen._previewing)
+        self.assertAlmostEqual(self.eng.audio.game_song_volume,
+                               menu_music_level(self.eng.cfg))
+        self.assertLess(self.eng.audio.game_song_volume, 0.5)
+
     def test_entry_previews_the_default_pick_for_four_seconds(self) -> None:
         self._enter()
         self.assertEqual(self.screen.PREVIEW_S, 4.0)

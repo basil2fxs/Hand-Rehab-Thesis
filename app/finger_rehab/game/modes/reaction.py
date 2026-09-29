@@ -870,7 +870,7 @@ class ReactionMode(WaitSkip):
         return store.get(self._best_key())
 
     def _best_key(self) -> tuple:
-        """Where this block's session best is kept. Inside a Play all
+        """Where this block's session best is kept. Inside a session
         battery the pass is part of the key, so a pass 2 block starts
         with no best of its own and never shows the pass 1 one: the
         design leaves every pass 2 against pass 1 comparison out of

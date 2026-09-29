@@ -578,7 +578,8 @@ class ToggleMenu:
                  on_toggle: Callable[[str, bool], None],
                  theme: Theme, layout: Layout,
                  title: str = "Sensory Cues",
-                 open_upwards: bool = False) -> None:
+                 open_upwards: bool = False,
+                 pinned: bool = False) -> None:
         self.rect = rect
         self.rows = rows
         self.get_value = get_value
@@ -591,7 +592,10 @@ class ToggleMenu:
         # would run off the bottom and the rows past the edge could not
         # be clicked at all.
         self.open_upwards = open_upwards
-        self.is_open = False
+        # Pinned: always open, the pill only a heading. Settings has a
+        # tab of its own for the cues, so the list can just be shown.
+        self.pinned = pinned
+        self.is_open = bool(pinned)
         self._hover_idx = -1
 
     def _list_height(self) -> int:
@@ -636,8 +640,16 @@ class ToggleMenu:
         drawn underneath the popup)."""
         if e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
             if self.rect.collidepoint(e.pos):
-                self.is_open = not self.is_open
+                if not self.pinned:
+                    self.is_open = not self.is_open
                 return True
+            if self.pinned:
+                for i, (key, _label, _help) in enumerate(self.rows):
+                    if key is not None and self._row_rect(
+                            i).collidepoint(e.pos):
+                        self.on_toggle(key, not bool(self.get_value(key)))
+                        return True
+                return False
             if self.is_open:
                 for i, (key, _label, _help) in enumerate(self.rows):
                     if key is None:
@@ -671,6 +683,14 @@ class ToggleMenu:
         """The always-visible pill. Shows how many switches are on, so
         the state is readable without opening the menu."""
         on, total = self._on_count()
+        if self.pinned:
+            # A heading over the switches, not a control.
+            font = self.layout.font(FONT_SMALL + 2)
+            text = f"{on} of {total} cues on"
+            surf.blit(font.render(text, True, self.theme.foreground),
+                      (self.rect.x, self.rect.centery
+                       - font.get_height() // 2))
+            return
         bg = tuple(max(0, c - 22) for c in self.theme.background)
         pygame.draw.rect(surf, bg, self.rect,
                           border_radius=self.BORDER_RADIUS)
@@ -682,6 +702,8 @@ class ToggleMenu:
         surf.blit(font.render(label, True, self.theme.foreground),
                    (self.rect.x + 12,
                     self.rect.centery - font.get_height() // 2))
+        if self.pinned:
+            return
         cx = self.rect.right - 16
         cy = self.rect.centery
         if self.is_open:
@@ -698,10 +720,11 @@ class ToggleMenu:
         # click shield all agree about which way the list opened.
         plate = pygame.Rect(self.rect.x, self._list_top() - 4,
                              self.rect.w, self._total_h())
-        pygame.draw.rect(surf, self.theme.background, plate,
-                          border_radius=self.BORDER_RADIUS)
-        pygame.draw.rect(surf, self.theme.muted, plate, 1,
-                          border_radius=self.BORDER_RADIUS)
+        if not self.pinned:
+            pygame.draw.rect(surf, self.theme.background, plate,
+                             border_radius=self.BORDER_RADIUS)
+            pygame.draw.rect(surf, self.theme.muted, plate, 1,
+                             border_radius=self.BORDER_RADIUS)
         font = self.layout.font(FONT_SMALL + 2)
         head_font = self.layout.font(FONT_SMALL)
         for i, (key, label, _help) in enumerate(self.rows):

@@ -16,7 +16,7 @@ flowchart LR
 
 | Package | What it does |
 | --- | --- |
-| [`game/`](game) | The engine, Play all ([`battery.py`](game/battery.py)), scoring, scheduling |
+| [`game/`](game) | The engine, timed sessions ([`battery.py`](game/battery.py)), scoring, scheduling |
 | [`game/modes/`](game/modes) | One file per game; each file's docstring is that game's research case |
 | [`ui/`](ui) | Every screen |
 | [`hardware/`](hardware) | Serial boards, press detection, calibration, EEG markers, auto-start, flashing |

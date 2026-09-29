@@ -166,7 +166,7 @@ class HandModel:
 class FakeRig:
     """The study rig: ONE board, the right-hand device, fed by the
     HandModel. It can be renamed the way a real lone board is, so
-    Play all puts it on the plan's hand."""
+    the session puts it on the plan's hand."""
     provides_samples = True
     is_connected = True
     name = "SimulatedOneBoardRig"
@@ -515,7 +515,7 @@ def _key_event(eng, name: str) -> None:
 
 
 def confirm_srt_setup(eng, clock: "SimClock") -> float:
-    """Play all opens the SRT on its setup card; the researcher checks
+    """A session opens the SRT on its setup card; the researcher checks
     the group and presses START (Enter). Returns the seconds that took,
     0 when no card is up."""
     sc = (getattr(eng, "_screens", None) or {}).get("srt_setup")

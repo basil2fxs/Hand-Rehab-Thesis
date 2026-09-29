@@ -1083,6 +1083,9 @@ class LabPackageTests(unittest.TestCase):
     # its note so ActiView's recordings have a home from day one.
     # scripts/build_lab_package.py USER_DATA, less sessions (shipped).
     USER_DATA = ("config", "python_packages")
+    # The developer's own tools (the EEG simulator, the PsychoPy
+    # download, the PC check): kept beside the package, never shipped.
+    DEVELOPER = ("developer",)
     TOP_LEVEL = ("Finger Rehab.exe", "eeg_lab.yaml",
                  "run_in_psychopy.py", "README.md", "sessions",
                  "source")
@@ -1133,7 +1136,8 @@ class LabPackageTests(unittest.TestCase):
         # build_lab_package.py makes, and never shipped by CI.
         present = sorted(p.name for p in self.PKG.iterdir()
                          if p.name != ".DS_Store"
-                         and p.name not in self.USER_DATA)
+                         and p.name not in self.USER_DATA
+                         and p.name not in self.DEVELOPER)
         self.assertEqual(present, sorted(self.TOP_LEVEL))
 
     def test_frozen_exe_picks_up_sibling_lab_config(self) -> None:
@@ -1722,6 +1726,41 @@ class EpochingPipelineSmokeTests(_WireHarness):
             onsets = [t for t, c in self._codes(scn) if lo <= c <= hi]
             for a, b in zip(onsets, onsets[1:]):
                 self.assertGreater(b - a, 0.2)
+
+
+class DeveloperFolderTests(unittest.TestCase):
+    """EEG_Lab/developer: the simulator, the PsychoPy download and the
+    PC check, for a new PC and for rehearsing, never sent to the lab."""
+
+    DEV = LAB_FOLDER / "developer"
+
+    def test_the_tools_are_there_with_windows_line_endings(self) -> None:
+        for name in ("README.md", "EEG simulator.cmd", "Get PsychoPy.cmd",
+                     "Check this PC.cmd"):
+            self.assertTrue((self.DEV / name).is_file(), name)
+        for name in ("EEG simulator.cmd", "Get PsychoPy.cmd",
+                     "Check this PC.cmd"):
+            raw = (self.DEV / name).read_bytes()
+            self.assertIn(b"\r\n", raw, name)
+            self.assertNotIn(b"\n", raw.replace(b"\r\n", b""), name)
+
+    def test_the_simulator_script_feeds_the_simulator(self) -> None:
+        text = (self.DEV / "EEG simulator.cmd").read_text()
+        self.assertIn("--eeg-simulator", text)
+        self.assertIn("--eeg-port socket://127.0.0.1:50410", text)
+        import main as entry
+        old = sys.argv
+        try:
+            sys.argv = ["main.py", "--eeg-simulator"]
+            self.assertEqual(entry.parse_args().listen, 50410)
+        finally:
+            sys.argv = old
+
+    def test_it_never_ships(self) -> None:
+        sys.path.insert(0, str(REPO / "scripts"))
+        import build_lab_package as blp
+        self.assertIn("developer", blp.DEVELOPER)
+        self.assertNotIn("developer", blp.TOP_LEVEL)
 
 
 if __name__ == "__main__":

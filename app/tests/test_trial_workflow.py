@@ -144,8 +144,9 @@ class PlayAllAndTheBoards(_BatteryHarness):
         self.assertFalse(eng.start_battery())
         self.assertIsNone(eng.battery_progress())
         hub = eng._screens["mode_select"]
-        self.assertEqual(hub._battery_state(),
-                         (False, "Play all", why))
+        # The hub's SESSION picker on that sitting (45 min) says why.
+        hub.session_seg.set("study_battery")
+        self.assertEqual(hub._battery_state(), (False, "Start", why))
 
 
 # ---------------------------------------------------------------------

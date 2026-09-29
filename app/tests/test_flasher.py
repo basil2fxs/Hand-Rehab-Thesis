@@ -677,9 +677,65 @@ class TestSettingsWiring:
             flasher, "find_hex",
             lambda kind, cfg: flasher.FirmwareImage(
                 kind, Path("x.hex"), "0" * 64, 1))
+        screen._show_usb_row = False
         screen._open_flash_dialog()
         assert screen._dialog is None
-        assert "CH341SER" in screen._port_status
+        assert "USB driver" in screen._port_status
+
+    def test_on_windows_no_port_checks_the_usb_driver(self, settings,
+                                                       monkeypatch):
+        # A board plugged in with no driver shows no port. On Windows
+        # the flash checks the driver at once, and the Setup row then
+        # offers to get it from Windows Update.
+        import time
+        from finger_rehab.hardware import usb_driver
+        screen, _ = settings
+        screen._show_usb_row = True
+        screen.rebuild_panel()
+        monkeypatch.setattr(flasher, "candidate_ports",
+                            lambda cfg, source=None: [])
+        monkeypatch.setattr(flasher, "find_avrdude",
+                            lambda cfg: flasher.AvrdudeTool(argv=["x"]))
+        monkeypatch.setattr(
+            flasher, "find_hex",
+            lambda kind, cfg: flasher.FirmwareImage(
+                kind, Path("x.hex"), "0" * 64, 1))
+        monkeypatch.setattr(usb_driver, "find_boards", lambda: [
+            {"name": "USB2.0-Serial", "chip": "CH340",
+             "instance_id": "USB\\VID_1A86&PID_7523\\1",
+             "has_driver": False}])
+        screen._open_flash_dialog()
+        assert screen._dialog is None
+        assert "USB driver" in screen._port_status
+        for _ in range(200):
+            screen.update(0.01)
+            if screen._usb_job is None:
+                break
+            time.sleep(0.01)
+        assert screen._usb_missing
+        labels = [b.label for b, t in zip(screen._panel_buttons,
+                                          screen._panel_tabs)
+                  if t == "setup"]
+        assert "Get the driver" in labels
+        assert "no driver" in screen._usb_line
+        # The fix asks Windows Update, then checks again.
+        asked = []
+        monkeypatch.setattr(usb_driver, "install_from_windows_update",
+                            lambda: asked.append(1) or {
+                                "ok": True, "message": "Installed: CH340"})
+        monkeypatch.setattr(usb_driver, "find_boards", lambda: [
+            {"name": "USB-SERIAL CH340 (COM3)", "chip": "CH340",
+             "instance_id": "x", "has_driver": True}])
+        screen._rescan_ports = lambda: None
+        screen._usb_driver_action()
+        for _ in range(200):
+            screen.update(0.01)
+            if screen._usb_job is None:
+                break
+            time.sleep(0.01)
+        assert asked == [1]
+        assert not screen._usb_missing
+        assert "Driver installed" in screen._port_status
 
     def test_a_missing_avrdude_says_so(self, settings, monkeypatch):
         screen, _ = settings

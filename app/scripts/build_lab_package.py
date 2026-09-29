@@ -47,6 +47,9 @@ TOP_LEVEL = {EXE, "eeg_lab.yaml", LAUNCHER, README, "source",
 # calibration and saved settings, and the packages a run from source
 # installs. Allowed, never deleted, never shipped by CI.
 USER_DATA = {"sessions", "config", "python_packages"}
+# Kept beside the package on the developer's machine, never shipped:
+# the EEG simulator, the PsychoPy download and the PC check.
+DEVELOPER = {"developer"}
 # What main.py needs to run from source/: the package, the two configs,
 # the music and icons. No tests, docs, sessions, calibration or user
 # settings.
@@ -110,7 +113,7 @@ def make_eeg_folder(pkg: Path) -> Path:
 def check(pkg: Path, need_exe: bool = False) -> list[str]:
     """Return the top-level names; fail on anything outside TOP_LEVEL."""
     names = sorted(p.name for p in pkg.iterdir())
-    extra = set(names) - TOP_LEVEL - USER_DATA
+    extra = set(names) - TOP_LEVEL - USER_DATA - DEVELOPER
     missing = TOP_LEVEL - set(names)
     if not need_exe:
         missing.discard(EXE)

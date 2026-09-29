@@ -1,12 +1,12 @@
 <h1 align="center">EEG lab folder</h1>
-<p align="center">Finger Rehab for the EEG lab: the game, its marker settings and a PsychoPy launcher.<br>Copy this whole folder onto the lab PC.</p>
+<p align="center">Finger Rehab for the EEG lab: the game, its marker settings and a PsychoPy launcher.<br>Copy it to the lab PC without <code>developer/</code>, or use <code>FingerRehab-EEGLab.zip</code> from the release, which leaves it out.</p>
 
 ## Run it
 
-1. Plug the trigger box in first. On a new lab PC, measure its sound delays once: Settings, Audio delay, Measure.
-2. Open `run_in_psychopy.py` in PsychoPy Coder and press **Run**. ActiView's trigger byte goes 255 to 0 when the port opens. A port list instead: pick the EEG marker's port (COM10), then **Continue**.
+1. Plug the trigger box in first. On a new lab PC, measure its sound delays once: Settings, Setup, Audio delay.
+2. Open `run_in_psychopy.py` in PsychoPy Coder and press **Run**. ActiView's trigger byte goes 255 to 0 when the port opens. If a port list shows instead, pick the EEG marker's port (COM10), then **Continue**.
 3. Log in. The menu shows the recording's name, for example `P07_2026-09-24.bdf`. Start ActiView under that name, saved in `sessions/eeg`.
-4. **Play all** runs the lab sitting in the code's order, with the lab's Reaction task in place of both Reaction blocks. Reaction opens on its setup screen: pick the timing group, then **START**.
+4. On the hub, pick **Lab session**, then **Start**. It runs the lab sitting in the code's order, with the lab's Reaction task in place of both Reaction blocks. Reaction opens on its setup screen: pick the timing group, then **START**.
 5. Take the whole `sessions` folder home. The games and `eeg/` go together.
 
 ## Markers
@@ -29,5 +29,6 @@ A press byte (100 and up) goes out when the finger's smoothed force first passes
 | `eeg_lab.yaml` | Lab settings: COM10, 9600 baud, 8 ms pulses |
 | `source/` | The game's code, for PsychoPy's own Python |
 | `sessions/` | Everything recorded here |
+| `developer/` | Mine, not the lab's: an EEG simulator for rehearsing, the PsychoPy download and a new-PC check ([README](developer/README.md)) |
 
 `eeg_lab.yaml` and `source/` are copies of the app, never edited here: `python3 app/scripts/check_lab_sync.py --fix` rebuilds them. Full checklist: [eeg_lab_setup.txt](../app/docs/eeg_lab_setup.txt).

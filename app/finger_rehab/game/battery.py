@@ -98,8 +98,8 @@ class BatteryPlan:
 
 class BatteryError(ValueError):
     """The preset cannot be turned into a plan for this participant.
-    The message is written for the hub's note line, under the PLAY ALL
-    button (the hub's name for the battery)."""
+    The message is written for the hub's note line, beside the SESSION
+    picker's Start button."""
 
 
 def load_preset(cfg, preset: str = DEFAULT_PRESET) -> dict | None:

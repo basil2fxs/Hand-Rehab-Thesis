@@ -56,10 +56,10 @@ notes box on the intake sheet.
       one light press per finger. If a finger fails, redo it once,
       then carry on and note it.
 
-## Play all (about 44 minutes on the rig for the 45)
+## The session (about 44 minutes on the rig for the 45)
 
 - [ ] The first game starts after the calibration. After each game
-      press Start on the NEXT UP card (or N). The strip shows PLAY ALL
+      press Start on the NEXT UP card (or N). The strip shows SESSION
       k/12 on the 45 and the minutes: amber past the length, red past its hard
       stop (18, 35, 50 or 65 minutes). The 60 plays every game twice;
       the 15 and 30 play shortened games (docs/research/trial_mode.md).
@@ -111,10 +111,10 @@ the hub.
 - Force Pilot goes straight back to the menu after MAX PRESS CHECK,
   with a note under the header: no press came in 25 seconds, so
   nothing was measured and the step is still waiting. Show a firm
-  press ("as hard as is comfortable when it says PRESS"), then PLAY
-  ALL again.
+  press ("as hard as is comfortable when it says PRESS"), then
+  Continue on the hub.
 - Test Mode left on in Settings does not matter for a study code:
-  Play all switches it off for the sitting and back on afterwards.
+  the session switches it off for the sitting and back on afterwards.
 - A game can't be run at all: Skip step (S) on the hub, confirm, and
   write the reason.
 - The app closes: open it, log in with the same code, main hand and
@@ -149,7 +149,7 @@ the hub.
       all 12 steps done, the passes, full counts, the rest, board
       drops, failed buzzes and the intake fields. READY on the last
       line means the sitting is complete. A CHECK tells you what to
-      do; a step not finished can still be played now with PLAY ALL
-      if they have time.
+      do; a step not finished can still be played now with Continue
+      on the hub if they have time.
 - [ ] Read the [debrief](debrief.md). Thank them.
 - [ ] Wipe the pads and frame.

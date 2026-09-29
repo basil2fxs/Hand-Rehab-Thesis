@@ -1,8 +1,8 @@
-Flashing from Settings. The first two buttons in the Arduino firmware column of the Settings screen (the third is the Auto-start switch); the hexes and avrdude ship inside the app, so nothing is installed.
-Flash firmware: press, confirm, wait about ten seconds. The board restarts and buzzes all four motors, which is the confirmation. The caption under the buttons names the hex the app carries (a short commit).
+Flashing from Settings, Setup tab. The hexes and avrdude ship inside the app, so nothing is installed; every build is checked for this on a fresh Windows machine (Finger Rehab --check-tools report.json does the same check by hand).
+Flash firmware: press, confirm, wait about ten seconds. The board restarts and buzzes all four motors, which is the confirmation. The line under Firmware names the hex the app carries (a short commit).
 Sensor address: connect ONE sensor, enter the old and new address, confirm. The app flashes a small tool sketch, moves the sensor, then puts the game firmware back. Scan lists what answers on the bus.
 Every SingleTact also answers 0x04, so a change from 0x04 with other sensors wired in would move all of them; the app refuses that case. The device wants 0x05 index, 0x06 middle, 0x07 ring, 0x08 little.
-No Arduino found: plug it in. No port on Windows at all: install the CH340 driver, CH341SER from wch-ic.com. macOS 10.14 and later need no driver.
+No Arduino found: plug it in. No port on Windows at all: the board's USB chip (CH340) has no driver yet. Windows usually adds it by itself when online; if not, Setup, USB driver, Get the driver asks Windows Update for it (one administrator prompt), and opens Windows Update's optional drivers if that fails. macOS 10.14 and later need no driver.
 Did not answer at 115200 or 57600: a Nano carries one of two bootloaders and the app tries both. Check the cable (some are charge only), unplug and replug, try again.
 Could not open the port: close the Arduino IDE, any serial monitor, or the other copy of the app. "The GAME firmware is NOT on the board": press Flash firmware.
 This Mac needs Rosetta: run softwareupdate --install-rosetta in Terminal once, then try again.
