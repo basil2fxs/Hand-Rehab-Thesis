@@ -1767,6 +1767,14 @@ class DeveloperFolderTests(unittest.TestCase):
         finally:
             sys.argv = old
 
+    def test_the_wait_for_the_simulator_is_bounded_by_the_clock(self) -> None:
+        # Counting tries was not a time limit: a refused connect can
+        # take about two seconds on Windows, so "40 tries" ran near 100 s.
+        text = (self.DEV / "EEG simulator.cmd").read_text()
+        self.assertIn("Stopwatch", text)
+        self.assertIn("TotalSeconds -lt 20", text)
+        self.assertIn("ConnectAsync('127.0.0.1',50410).Wait(500)", text)
+
     def test_it_never_ships(self) -> None:
         sys.path.insert(0, str(REPO / "scripts"))
         import build_lab_package as blp

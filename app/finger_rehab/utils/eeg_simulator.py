@@ -26,12 +26,14 @@ and the measured pulse width. The EEG is simulated and says so; only
 the markers are real.
 
 Keys: Space pause, Up and Down gain, Left and Right time span, C clear,
-S save the markers to a CSV beside the game, Esc quit.
+S save the markers to a CSV in Finger Rehab Data/EEG simulator under the
+home folder, Esc quit.
 """
 from __future__ import annotations
 
 import csv
 import math
+import os
 import socket
 import threading
 import time
@@ -152,12 +154,13 @@ class ByteReceiver:
 
     def _run_socket(self) -> None:
         srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        # On Windows SO_REUSEADDR lets a second simulator bind the same
-        # port, and the game would feed whichever it reached; exclusive
-        # use makes the second one say the port is taken instead.
-        if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
-            srv.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
-        else:
+        # As socket.create_server does. On POSIX, SO_REUSEADDR lets a
+        # restart take the port back while the last connection winds
+        # down. On Windows it would let a second simulator share the
+        # port, and the default already refuses that. Exclusive use
+        # refused the restart too, for as long as the game held its old
+        # connection open.
+        if os.name != "nt":
             srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             srv.bind(("127.0.0.1", self.listen_port))

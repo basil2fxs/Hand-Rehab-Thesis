@@ -412,6 +412,31 @@ class TestSettingsGroups:
             pos=(s.rect.x, s.rect.centery)))
         assert s.value == held
 
+    def test_esc_mid_drag_saves_and_ends_the_drag(self, settings_screen,
+                                                  monkeypatch):
+        # Esc while a slider is held left Settings with the level unsaved
+        # and the slider still following the mouse (second review).
+        import pygame
+        screen, eng = settings_screen
+        saved = []
+        monkeypatch.setattr(eng.cfg, "save_user_overrides",
+                            lambda values: saved.append(values))
+        screen._switch_tab("sound")
+        s = screen._vol_sliders["master"]
+        screen.handle_event(pygame.event.Event(
+            pygame.MOUSEBUTTONDOWN, button=1,
+            pos=(s.rect.x + 40, s.rect.centery)))
+        screen.handle_event(pygame.event.Event(
+            pygame.MOUSEMOTION, buttons=(1, 0, 0), rel=(20, 0),
+            pos=(s.rect.x + 60, s.rect.centery)))
+        held = s.value
+        assert screen.on_escape() is False
+        assert saved, "the level set by the drag was not saved"
+        screen.handle_event(pygame.event.Event(
+            pygame.MOUSEMOTION, buttons=(0, 0, 0), rel=(-60, 0),
+            pos=(s.rect.x, s.rect.centery)))
+        assert s.value == held
+
     def test_the_setup_rows_fit_on_the_lab_pc(self, settings_screen):
         # Windows adds the USB driver row and the lab build the EEG box:
         # six rows, and every one stays inside the card.

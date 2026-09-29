@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import os
 import random
+import re
 import sys
 import unittest
 from pathlib import Path
@@ -356,10 +357,42 @@ class WeakVowelTests(unittest.TestCase):
     def test_a_vowel_swap_is_recognised(self):
         self.assertTrue(F.is_vowel_swap("tar", "ter"))
         self.assertTrue(F.is_vowel_swap("tur", "ter"))
+        # A vowel of another length counts too: weak, "our" says "uh"
+        # like "er" (colour, harbour), found by the second review.
+        self.assertTrue(F.is_vowel_swap("our", "er"))
+        self.assertTrue(F.is_vowel_swap("teer", "ter"))
         self.assertFalse(F.is_vowel_swap("tre", "ter"))    # transposed
-        self.assertFalse(F.is_vowel_swap("teer", "ter"))   # longer vowel
         self.assertFalse(F.is_vowel_swap("ter", "ter"))
         self.assertFalse(F.is_vowel_swap("ber", "ter"))
+        self.assertFalse(F.is_vowel_swap("ters", "ter"))   # a coda foil
+
+    def test_a_weak_er_is_never_offered_our(self):
+        # The second review's case: discovery, its weak third syllable
+        # "er", rung 1, Random(92) gave the options our, min, er, pos.
+        from finger_rehab.game.modes.syllables_words import load_pools
+        from finger_rehab.game.modes.syllables_words import (
+            pool_syllable_lists)
+        pools = [w for ws in load_pools().values() for w in ws]
+        word = next(w for w in pools if w.word == "discovery")
+        inv = F.Inventory(syllable_lists() + pool_syllable_lists())
+        pos = [i for i, s in enumerate(word.syllables) if s == "er"]
+        self.assertTrue(pos, word.syllables)
+        def sounds_alike(a, b):
+            # Written out here rather than borrowed from the code under
+            # test, so the check still bites if that code goes wrong.
+            def squash(s):
+                return re.sub(r"[aeiouy]+", "V", s.lower())
+            return a.lower() != b.lower() and squash(a) == squash(b)
+
+        for seed in range(300):
+            opts = F.build_option_set(
+                word, pos[0], 1, random.Random(seed), inv, LANES, {}, [],
+                avoid=frozenset({"F3"}))
+            for o in opts.options:
+                if o.text != opts.target:
+                    self.assertNotIn(o.text, {"our", "air"}, seed)
+                    self.assertFalse(sounds_alike(o.text, opts.target),
+                                     (seed, o.text))
 
     def test_the_chain_never_lands_on_a_vowel_swap(self):
         # The coda foil failing sends the chain F7 -> F3 -> F1; F3 is

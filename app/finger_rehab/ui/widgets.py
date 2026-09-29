@@ -492,6 +492,45 @@ class Dropdown:
                     break
         return False
 
+    def _current_index(self) -> int:
+        return next((i for i, (v, _l) in enumerate(self.options)
+                     if v == self.current_value), 0)
+
+    def open_from_keys(self) -> None:
+        """Open the list with the current option lit, so Up and Down
+        start from what is picked now."""
+        self.is_open = True
+        self._hover_idx = self._current_index()
+
+    def handle_key(self, e: pygame.event.Event) -> bool:
+        """Keys for an open list: Up and Down walk it, Enter or Space
+        takes the lit option, Esc shuts it. True means the key was
+        used here."""
+        if not self.is_open or e.type != pygame.KEYDOWN:
+            return False
+        n = len(self.options)
+        if e.key in (pygame.K_UP, pygame.K_DOWN):
+            if n:
+                # Opened by the mouse, nothing is lit: step from the
+                # option picked now, as a keyboard open would.
+                if not 0 <= self._hover_idx < n:
+                    self._hover_idx = self._current_index()
+                step = 1 if e.key == pygame.K_DOWN else -1
+                self._hover_idx = (self._hover_idx + step) % n
+            return True
+        if e.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):
+            self.is_open = False
+            if 0 <= self._hover_idx < n:
+                v = self.options[self._hover_idx][0]
+                if v != self.current_value:
+                    self.current_value = v
+                    self.on_change(v)
+            return True
+        if e.key == pygame.K_ESCAPE:
+            self.is_open = False
+            return True
+        return False
+
     def draw_closed(self, surf: pygame.Surface) -> None:
         """Render the always-visible pill. Call from screen.draw()
         wherever the dropdown's resting position is."""

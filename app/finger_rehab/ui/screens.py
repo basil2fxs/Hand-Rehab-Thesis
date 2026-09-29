@@ -696,8 +696,8 @@ def draw_session_strip(surf: pygame.Surface, rect: pygame.Rect,
 
 class TitleScreen(Screen):
     # Session protocol shown in the Info overlay. A study visit is the
-    # session battery: eleven blocks, every mode once, in the order the
-    # participant's code sets (protocol.presets.study_battery in
+    # 45 minute session: twelve blocks in the order the participant's
+    # code sets (protocol.presets.study_battery in
     # config/default.yaml). tests/test_info_overlay.py checks these
     # lines against that preset and the mirror count against the
     # config, so the card cannot describe a protocol the app no longer
@@ -1821,7 +1821,10 @@ class ModeSelectScreen(Screen):
                 getattr(self.engine, "_login_length_refused", None) or "")
             self.battery_note = ""
         elif self._picker_was_running and not running:
+            # A line left from the session (a rest being held, a step
+            # that would not start) no longer applies to Free play.
             self.session_seg.set("")
+            self.battery_note = ""
         self._picker_was_running = running
 
     def _cycle_session(self) -> None:
@@ -7768,6 +7771,10 @@ class DiagnosticsScreen(Screen):
         self._show_usb_row = _sys.platform == "win32"
         self._usb_line = "Not checked yet."
         self._usb_missing = False
+        # Set when Windows Update installed a driver but the board still
+        # reads driverless: it binds on a replug, so the row offers a
+        # check next, never a second install.
+        self._usb_await_replug = False
         self._usb_job: dict | None = None
         # The EEG trigger box's port, in the EEG build only: a row of
         # the Setup tab, built in rebuild_panel. Its label carries the
@@ -8048,14 +8055,17 @@ class DiagnosticsScreen(Screen):
             self.tab = key
             for dd in self._port_dropdowns.values():
                 dd.is_open = False
-            # A drag cut short by a tab key: the release would land on
-            # another tab and never reach the slider, which would then
-            # follow the bare mouse on the way back. End it here and
-            # keep what it had set.
-            for s in self._vol_sliders.values():
-                s._dragging = False
-            if self._vol_dirty:
-                self._save_volumes()
+            self._end_slider_drags()
+
+    def _end_slider_drags(self) -> None:
+        """A drag cut short by a key (a tab number, or Esc leaving
+        Settings): the release lands elsewhere and never reaches the
+        slider, which would then follow the bare mouse on the way back.
+        End it here and keep what it had set."""
+        for s in self._vol_sliders.values():
+            s._dragging = False
+        if self._vol_dirty:
+            self._save_volumes()
 
     def _draw_tabs(self, surf: pygame.Surface) -> None:
         first, last = self._tab_rect(0), self._tab_rect(len(self.TABS) - 1)
@@ -8623,7 +8633,8 @@ class DiagnosticsScreen(Screen):
         row = 4
         if self._show_usb_row:
             label = ("Working..." if self._usb_job is not None
-                     else "Get the driver" if self._usb_missing
+                     else "Get the driver" if (self._usb_missing
+                                               and not self._usb_await_replug)
                      else "Check USB driver")
             # The fix is the one thing on this tab worth doing now when a
             # board has no driver, so it takes the primary colour then.
@@ -8631,6 +8642,7 @@ class DiagnosticsScreen(Screen):
                                 self._usb_driver_action, self.theme,
                                 self.layout, font_pt=fpt,
                                 primary=(self._usb_missing
+                                         and not self._usb_await_replug
                                          and self._usb_job is None)))
             row += 1
         self.eeg_btn = None
@@ -8768,7 +8780,8 @@ class DiagnosticsScreen(Screen):
         from Windows Update; either runs on its own thread."""
         if self._usb_job is not None:
             return
-        self._start_usb_job(fix=self._usb_missing)
+        self._start_usb_job(fix=(self._usb_missing
+                                 and not self._usb_await_replug))
 
     def _start_usb_job(self, fix: bool) -> None:
         import threading
@@ -8810,16 +8823,21 @@ class DiagnosticsScreen(Screen):
             result = job.get("install") or {}
             said = str(result.get("message") or "").strip().rstrip(".")
             if result.get("ok") and not missing:
+                # Rescan first: its own status line would otherwise
+                # replace this one before anyone saw it.
+                self._usb_await_replug = False
+                self._rescan_ports()
                 self._port_status = ("Driver installed. Unplug the board "
                                      "and plug it back in.")
-                self._rescan_ports()
             elif result.get("ok"):
                 # Installed, but the board has not taken it yet: a
-                # driver binds when the board is plugged in again.
+                # driver binds when the board is plugged in again, so
+                # the button checks next rather than installing again.
+                self._usb_await_replug = True
                 self._port_status = (
                     f"{said or 'Driver installed'}. Unplug the board, "
                     "plug it back in, then press Check USB driver.")
-            else:
+            elif missing:
                 # Windows Update could not do it from here: its own page
                 # lists the same driver to tick.
                 usb_driver.open_optional_updates()
@@ -8827,9 +8845,15 @@ class DiagnosticsScreen(Screen):
                     f"{said or 'The driver did not install'}. Windows "
                     "Update is open: tick the board's driver under "
                     "Optional updates.")
+            else:
+                self._port_status = f"{said or 'Nothing installed'}. {line}"
         elif missing:
+            # A check after a replug that still reads driverless: the
+            # install is offered again.
+            self._usb_await_replug = False
             self._port_status = (line + " Press Get the driver.")
         else:
+            self._usb_await_replug = False
             self._port_status = line
         self.rebuild_panel()
 
@@ -8990,6 +9014,8 @@ class DiagnosticsScreen(Screen):
             if dd.is_open:
                 dd.is_open = False
                 return True
+        # Leaving Settings: a slider held down goes with it, saved.
+        self._end_slider_drags()
         return False
 
     def _sync_with_port_watcher(self) -> None:
@@ -9033,7 +9059,7 @@ class DiagnosticsScreen(Screen):
         self._port_status = (
             f"Re-scanned. Found {n} Arduino-family port(s)."
             if n > 0 else
-            "Re-scanned. No Arduino detected - keyboard fallback "
+            "Re-scanned. No Arduino detected: keyboard fallback "
             "will run when you start a session."
         )
         self.rebuild_panel()

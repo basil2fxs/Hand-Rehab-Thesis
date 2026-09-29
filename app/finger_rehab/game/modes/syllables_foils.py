@@ -430,17 +430,18 @@ GENERATORS = {
 }
 
 
+_VOWEL_RUN = re.compile(r"[aeiouy]+")
+
+
 def is_vowel_swap(cand: str, target: str) -> bool:
-    """Whether `cand` is `target` with only its vowels changed (ter,
-    tar, tur): the same letters in every consonant slot and vowels in
-    the same slots, at least one of them different."""
-    if cand == target or len(cand) != len(target):
+    """Whether `cand` is `target` with only its vowels changed: the same
+    consonants in the same order with a vowel in the same places,
+    whatever the vowels' spelling or length. Heard weak, ter, tar and
+    tur all say "tuh", and so do er and our (colour, harbour)."""
+    c, t = cand.lower(), target.lower()
+    if c == t:
         return False
-    for x, y in zip(cand.lower(), target.lower()):
-        xv, yv = x in VOWEL_LETTERS, y in VOWEL_LETTERS
-        if xv != yv or (not xv and x != y):
-            return False
-    return True
+    return _VOWEL_RUN.sub("V", c) == _VOWEL_RUN.sub("V", t)
 
 
 def make_foil(kind: str, target: str, syls, pos: int, inv: Inventory,

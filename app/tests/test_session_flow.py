@@ -413,9 +413,12 @@ class SessionStripTests(_EngineHarness):
         hub._picker_was_running = True
         hub.sync_session_picker()
         self.assertEqual(hub.session_seg.value, "trial_15")
+        hub.battery_note = "The session could not start"
         runs["on"] = False
         hub.sync_session_picker()
         self.assertEqual(hub.session_seg.value, "")
+        # Nor does a line left from the session stay on Free play.
+        self.assertEqual(hub.battery_note, "")
 
     def test_a_login_length_that_cannot_start_says_why(self) -> None:
         # The engine's promise: a length picked at login that does not

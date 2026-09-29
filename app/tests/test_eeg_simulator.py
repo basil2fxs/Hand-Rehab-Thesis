@@ -11,6 +11,8 @@ import sys
 import time
 from pathlib import Path
 
+import pytest
+
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 ROOT = Path(__file__).resolve().parents[1]
@@ -63,6 +65,84 @@ def test_the_games_trigger_code_reaches_it_over_a_socket():
         assert all(m.pulse_ms is not None and m.pulse_ms > 5 for m in got)
         assert rx.state == "connected"
         be.close()
+    finally:
+        rx.stop()
+
+
+def _wait_for(rx, pred, tries=100):
+    for _ in range(tries):
+        if pred(rx.state):
+            return rx.state
+        time.sleep(0.02)
+    return rx.state
+
+
+def test_a_second_simulator_is_told_the_port_is_taken():
+    # Two listening at once would leave the game feeding whichever it
+    # reached first.
+    port = _free_port()
+    first = sim.ByteReceiver(listen_port=port)
+    first.start()
+    second = sim.ByteReceiver(listen_port=port)
+    try:
+        assert _wait_for(first, lambda s: s == "waiting") == "waiting"
+        second.start()
+        state = _wait_for(second, lambda s: s.startswith("cannot"))
+        assert state.startswith(f"cannot listen on {port}"), state
+    finally:
+        first.stop()
+        second.stop()
+
+
+def test_a_restart_gets_the_port_back_while_the_game_holds_on():
+    # Closed with the game still connected, a simulator started again
+    # has to be able to listen at once. Exclusive use on Windows
+    # refused that until the game let go of its old connection.
+    port = _free_port()
+    first = sim.ByteReceiver(listen_port=port)
+    first.start()
+    # Connect only once it listens: a connect that beats listen() is
+    # refused at once on macOS and Linux.
+    assert _wait_for(first, lambda s: s == "waiting") == "waiting"
+    game = socket.create_connection(("127.0.0.1", port), timeout=2)
+    again = None
+    try:
+        assert _wait_for(first, lambda s: s == "connected") == "connected"
+        first.stop()
+        first._thread.join(3)
+        assert not first._thread.is_alive()
+        again = sim.ByteReceiver(listen_port=port)
+        again.start()
+        state = _wait_for(again, lambda s: s != "starting")
+        assert state == "waiting", state
+    finally:
+        game.close()
+        first.stop()
+        if again is not None:
+            again.stop()
+
+
+@pytest.mark.skipif(os.name != "nt", reason="the launcher is a Windows script")
+def test_the_launchers_wait_is_bounded_and_finds_the_simulator():
+    # The exact line from EEG simulator.cmd, run as cmd.exe runs it.
+    import subprocess
+    cmd = (ROOT.parent / "EEG_Lab" / "developer"
+           / "EEG simulator.cmd").read_text(encoding="utf-8")
+    probe = next(line for line in cmd.splitlines()
+                 if line.startswith("powershell "))
+    # Nothing listening: it gives up by the clock.
+    t0 = time.perf_counter()
+    done = subprocess.run(probe, shell=True, timeout=90)
+    took = time.perf_counter() - t0
+    assert done.returncode == 1 and 18 < took < 35, took
+    rx = sim.ByteReceiver(listen_port=sim.LISTEN_PORT)
+    rx.start()
+    try:
+        assert _wait_for(rx, lambda s: s == "waiting") == "waiting"
+        t0 = time.perf_counter()
+        done = subprocess.run(probe, shell=True, timeout=90)
+        assert done.returncode == 0, done.returncode
+        assert time.perf_counter() - t0 < 15
     finally:
         rx.stop()
 
@@ -135,17 +215,17 @@ def test_saving_where_it_cannot_write_says_so(tmp_path, monkeypatch):
     pygame.init()
     try:
         app = sim.SimulatorApp(sim.ByteReceiver())
-        locked = tmp_path / "locked"
-        locked.mkdir()
-        locked.chmod(0o500)
-        monkeypatch.setattr(sim, "save_folder", lambda: locked / "x")
+        # A folder under a plain file cannot be made on any system (a
+        # read-only folder still takes new files on Windows).
+        blocker = tmp_path / "a file"
+        blocker.write_text("", encoding="utf-8")
+        monkeypatch.setattr(sim, "save_folder", lambda: blocker / "x")
         assert app.handle_key(pygame.K_s) is True
         assert app.note.startswith("Could not save")
         monkeypatch.setattr(sim, "save_folder", lambda: tmp_path / "ok")
         app.handle_key(pygame.K_s)
         assert app.note.startswith("Saved ")
         assert list((tmp_path / "ok").glob("eeg_simulator_*.csv"))
-        locked.chmod(0o700)
     finally:
         pygame.quit()
 

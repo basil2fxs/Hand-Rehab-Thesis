@@ -110,6 +110,16 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt pyinstaller
 
+      # The test job runs on macOS, but the lab PC runs Windows, and the
+      # EEG simulator listens for the game differently on each. Its
+      # tests run here too, so the Windows side is checked on Windows.
+      - name: EEG simulator tests (Windows)
+        if: runner.os == 'Windows'
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: python -m pytest tests/test_eeg_simulator.py -q -p no:cacheprovider
+
       # One version string for the exe, the app bundle and the
       # installer: SOFTWARE_VERSION in finger_rehab/data/session.py,
       # the same number every session's metadata records.

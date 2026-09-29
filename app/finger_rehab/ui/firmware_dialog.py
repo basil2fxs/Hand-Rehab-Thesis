@@ -133,6 +133,41 @@ class FirmwareDialog:
 
     def _pick_new(self, value) -> None:
         self.new_value = value if value is None else int(value)
+        # "other..." brings up the OTHER field with the typing cursor in
+        # it, and only there: OLD may still hold the cursor from a
+        # click. A finger address hides OTHER, and a hidden field must
+        # not keep the cursor or it would swallow keys unseen.
+        items = self._focusables()
+        target = (self.other_input if self._other_shown()
+                  else self.new_dropdown)
+        if target in items:
+            self.focus = items.index(target)
+            self._apply_focus(items)
+
+    def _form_open(self) -> bool:
+        """The fields take part only while the form is on the card. A
+        running or finished job draws its progress there instead."""
+        return not self.busy and not self.finished
+
+    def _other_shown(self) -> bool:
+        return (self._form_open() and self.other_input is not None
+                and self.new_value is None)
+
+    def _dropdowns(self) -> list:
+        if not self._form_open():
+            return []
+        return [dd for dd in (self.port_dropdown, self.new_dropdown)
+                if dd is not None]
+
+    def _park_the_form(self) -> None:
+        """A job has started or ended: shut any open list and take the
+        cursor out of the fields, which are no longer drawn."""
+        for dd in (self.port_dropdown, self.new_dropdown):
+            if dd is not None:
+                dd.is_open = False
+        for ti in (self.old_input, self.other_input):
+            if ti is not None:
+                ti.focused = False
 
     def _focus_the_safe_button(self) -> None:
         """Put the ring on Cancel (or Close), never on a field.
@@ -218,6 +253,7 @@ class FirmwareDialog:
         self.job = job
         self.busy = True
         self.finished = False
+        self._park_the_form()
         self._build_buttons()
 
     def _start_flash(self) -> None:
@@ -253,6 +289,7 @@ class FirmwareDialog:
         self.finished = True
         self.result_text = text
         self.result_ok = bool(ok)
+        self._park_the_form()
         self._build_buttons()
 
     def close(self) -> None:
@@ -268,50 +305,87 @@ class FirmwareDialog:
         """True means the dialog swallowed the key.
 
         A running job swallows Esc without acting on it: avrdude is
-        mid-write and there is nothing safe to cancel.
+        mid-write and there is nothing safe to cancel. An open list
+        shuts first and the dialog stays.
         """
         if self.busy:
             return True
+        for dd in self._dropdowns():
+            if dd.is_open:
+                dd.is_open = False
+                return True
         self.close()
         return True
 
     def _focusables(self) -> list:
         items: list = []
-        if not self.busy and not self.finished:
+        if self._form_open():
             if self.port_dropdown is not None:
                 items.append(self.port_dropdown)
             if self.old_input is not None:
                 items.append(self.old_input)
             if self.new_dropdown is not None:
                 items.append(self.new_dropdown)
+            if self._other_shown():
+                items.append(self.other_input)
         items.extend(self.buttons)
         return items
+
+    def _text_fields(self) -> list:
+        """The fields on show: none once a job has started, and OTHER
+        only while it is drawn."""
+        if not self._form_open():
+            return []
+        return [ti for ti in (self.old_input, self.other_input)
+                if ti is not None
+                and (ti is not self.other_input or self._other_shown())]
 
     def handle_event(self, e: pygame.event.Event) -> bool:
         """Always returns True: the dialog is modal, so nothing behind
         the dim layer may react to anything."""
         if self.busy:
             return True
+        # Once the job is done only Close is on the card, so only the
+        # buttons hear anything: a click where OLD was drawn used to
+        # reach the hidden field.
+        dds = self._dropdowns()
         if e.type in (pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN,
                       pygame.MOUSEBUTTONUP):
-            consumed = False
-            for dd in (self.port_dropdown, self.new_dropdown):
-                if dd is not None and dd.handle_event(e):
-                    consumed = True
-            if consumed:
-                return True
-            for ti in (self.old_input, self.other_input):
-                if ti is not None:
-                    ti.handle_event(e)
+            # An open list is drawn over the fields below it, so it
+            # hears the click first, and one click works one control.
+            # The port list covers the NEW picker: a pick there used
+            # to open NEW as well.
+            for dd in sorted(dds, key=lambda d: not d.is_open):
+                if dd.handle_event(e):
+                    for other in dds:
+                        if other is not dd:
+                            other.is_open = False
+                    return True
+            for ti in self._text_fields():
+                ti.handle_event(e)
+                if e.type == pygame.MOUSEBUTTONDOWN and ti.focused:
+                    # The ring follows the click, so Tab walks on from
+                    # the field being typed in.
+                    items = self._focusables()
+                    if ti in items:
+                        self.focus = items.index(ti)
             for b in self.buttons:
                 b.handle_event(e)
             return True
         if e.type == pygame.KEYDOWN:
+            # An open list holds the keys until it shuts. Tab shuts it
+            # and walks on as usual.
+            for dd in dds:
+                if dd.is_open:
+                    if e.key != pygame.K_TAB:
+                        dd.handle_key(e)
+                        return True
+                    dd.is_open = False
             # A focused text field takes the key first so typing an
             # address does not walk the focus ring.
-            for ti in (self.old_input, self.other_input):
-                if ti is not None and ti.focused and e.key not in (
-                        pygame.K_TAB, pygame.K_ESCAPE):
+            for ti in self._text_fields():
+                if ti.focused and e.key not in (pygame.K_TAB,
+                                                pygame.K_ESCAPE):
                     ti.handle_event(e)
                     return True
             items = self._focusables()
@@ -330,7 +404,7 @@ class FirmwareDialog:
                 if isinstance(item, Button):
                     item.on_click()
                 elif isinstance(item, Dropdown):
-                    item.is_open = not item.is_open
+                    item.open_from_keys()
                 elif isinstance(item, TextInput):
                     item.focused = True
             return True
@@ -383,9 +457,8 @@ class FirmwareDialog:
             ring = focused.rect.inflate(10, 10)
             pygame.draw.rect(surf, th.accent, ring, 3, border_radius=14)
         # Popups last so an open list covers the buttons under it.
-        for dd in (self.port_dropdown, self.new_dropdown):
-            if dd is not None and not self.busy and not self.finished:
-                dd.draw_overlay(surf)
+        for dd in self._dropdowns():
+            dd.draw_overlay(surf)
 
     def _board_line(self) -> str:
         for p, label in self.ports:

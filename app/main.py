@@ -76,8 +76,8 @@ def parse_args() -> argparse.Namespace:
                    help="Open in a window rather than fullscreen")
     # Whether this install can flash the board with nothing else
     # installed. Writes a JSON report and exits 0 when it can; CI runs
-    # it on each build's installed copy. A file, not print: the
-    # windowed build has no console.
+    # it on the installed Windows copy and the built macOS app. A file,
+    # not print: the windowed build has no console.
     # The EEG lab rehearsed without the lab: a window that stands in
     # for the trigger box and the amplifier (utils/eeg_simulator.py).
     # Start the game with --eeg-port socket://127.0.0.1:50410 to feed

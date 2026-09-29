@@ -155,10 +155,11 @@ def test_the_tools_check_reports_the_board_on_every_system(monkeypatch):
 
 
 def test_the_tools_check_passes_wherever_the_tools_are(tmp_path):
-    """The same check CI runs on each build's installed copy. Here it
-    must say ready whenever this checkout holds avrdude for this OS and
-    both firmware files (a developer Mac or Windows PC); CI's test job
-    has neither, so there it checks the report and the exit code agree."""
+    """The same check CI runs on the installed Windows copy and the
+    built macOS app. Here it must say ready whenever this checkout holds
+    avrdude for this OS and both firmware files (a developer Mac or
+    Windows PC); CI's test job has neither, so there it checks the
+    report and the exit code agree."""
     report = tmp_path / "tools.json"
     res = subprocess.run([sys.executable, str(ROOT / "main.py"),
                           "--check-tools", str(report)],

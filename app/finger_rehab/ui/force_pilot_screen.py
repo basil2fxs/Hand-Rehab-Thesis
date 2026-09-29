@@ -452,7 +452,7 @@ class ForcePilotScreen(Screen):
         card time went back into the ladder."""
         label = str(res.get("label") or "")
         if label == "NoSignal":
-            draw_text(surf, "SIGNAL LOST - that run was not scored",
+            draw_text(surf, "SIGNAL LOST: that run was not scored",
                       (cx, y), self.theme, self.layout, pt=FONT_H2,
                       centre=True, colour=self.theme.error)
             return
@@ -708,7 +708,7 @@ class ForcePilotScreen(Screen):
         self._draw_finger_chip(surf, mode.hand, mode.finger, 130, 90)
         self._draw_run_stats(surf, mode, t_run)
         if mode.signal_stale:
-            draw_text(surf, "SIGNAL LOST - check the sensor connection",
+            draw_text(surf, "SIGNAL LOST: check the sensor connection",
                       (self.layout.width // 2, self.PLOT_TOP - 24),
                       self.theme, self.layout, pt=FONT_BODY, centre=True,
                       colour=self.theme.warning)

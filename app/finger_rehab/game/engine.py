@@ -2045,14 +2045,14 @@ class GameEngine:
         if not getattr(src, "provides_samples", True):
             return None
         if not src.is_connected:
-            return "SENSOR CONNECTION LOST - presses are not registering"
+            return "SENSOR CONNECTION LOST: presses are not registering"
         down = sorted(getattr(self, "_hands_down", None) or set())
         if down:
             return (f"{' and '.join(h.upper() for h in down)} HAND "
-                    f"SENSORS LOST - that hand cannot register presses")
+                    f"SENSORS LOST: that hand cannot register presses")
         has_data = getattr(src, "has_recent_data", None)
         if callable(has_data) and not has_data(1.5):
-            return "NO SENSOR DATA ARRIVING - check the connection"
+            return "NO SENSOR DATA ARRIVING: check the connection"
         return None
 
     def _draw_connection_banner(self, surf) -> None:

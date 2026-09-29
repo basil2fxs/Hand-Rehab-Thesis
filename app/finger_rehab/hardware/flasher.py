@@ -425,34 +425,50 @@ def avrdude_argv(tool: AvrdudeTool, port: str, hex_path: Path,
     return argv
 
 
-# Substring tables, checked against the lowercased output. Order
-# matters only in that the first table to match wins.
+# Substring tables, checked against the lowercased output. The first
+# table to match wins, so the order is the argument:
+#   - a wrong chip or a bad read-back only prints after a good sync, so
+#     either one outranks a sync line left over from a first attempt
+#     that failed before a later one got through;
+#   - the sync lines only print once the port has opened, so they
+#     outrank "busy";
+#   - avrdude 8 ends a failed sync with "unable to open port ... for
+#     programmer arduino", which reads as busy on its own. Read as
+#     busy, the retry at 57600 never ran and an old bootloader Nano
+#     (most FTDI ones) never flashed (found on a real FTDI Nano, 29
+#     September 2026).
 _CLASSIFY_TABLE: tuple[tuple[str, tuple[str, ...]], ...] = (
     # "gone" and "busy" get separate messages. Telling a therapist to
     # close the Arduino IDE when the board is simply unplugged sends
-    # them hunting for a program that was never running.
+    # them hunting for a program that was never running. Windows words
+    # a missing port its own way.
     ("port_missing", (
-        "no such file", "no such device",
+        "no such file", "no such device", "cannot find the file",
     )),
-    # Before "busy": the sync lines only print once the port has
-    # opened, and avrdude 8 ends every failed sync with "unable to open
-    # port ... for programmer arduino". Read as busy, that stopped the
-    # retry at 57600, so an old-bootloader Nano (most FTDI ones) never
-    # flashed (found on a real FTDI Nano, 29 September 2026).
+    # Not "device signature =": avrdude 6.3 prints that on every good
+    # sync, so a failed read-back came out as "not a Nano, nothing was
+    # written" (seen on the real Nano, 29 September 2026).
+    ("wrong_chip", (
+        "expected signature", "invalid device signature",
+    )),
+    ("verify_failed", (
+        "verification mismatch", "verification error", "first mismatch",
+    )),
+    # avrdude 8 words a sync lost to a stray byte as "cannot
+    # communicate with device", and one lost mid-write as "out of
+    # sync"; neither has a "not in sync" line before it.
     ("sync_failed", (
         "not responding", "not in sync", "getsync",
-        "unable to open programmer",
+        "communicate with device", "out of sync",
     )),
     ("port_busy", (
         "access is denied", "permission denied", "resource busy",
         "cannot open port", "can't open device", "unable to open port",
     )),
-    ("wrong_chip", (
-        "expected signature", "invalid device signature",
-        "device signature =",
-    )),
-    ("verify_failed", (
-        "verification mismatch", "verification error", "first mismatch",
+    # avrdude 7 ends a busy port and a failed sync alike with "unable to
+    # open programmer", so it only means sync once busy is ruled out.
+    ("sync_failed", (
+        "unable to open programmer",
     )),
 )
 
@@ -621,8 +637,9 @@ def self_check(cfg, runner=subprocess.run) -> dict:
     and matching the build's manifest, the bundled avrdude found and
     actually starting, pyserial importable, and on Windows the board's
     USB driver. `Finger Rehab --check-tools report.json` writes this,
-    and CI runs it on every build's installed copy, so a release that
-    could not flash on a new PC fails before anyone downloads it."""
+    and CI runs it on the installed Windows copy and the built macOS
+    app, so a release that could not flash on a new PC fails before
+    anyone downloads it."""
     report: dict = {"platform": sys.platform,
                     "frozen": bool(getattr(sys, "frozen", False))}
     problems: list[str] = []

@@ -742,7 +742,11 @@ class TestSettingsWiring:
         monkeypatch.setattr(usb_driver, "find_boards", lambda: [
             {"name": "USB-SERIAL CH340 (COM3)", "chip": "CH340",
              "instance_id": "x", "has_driver": True}])
-        screen._rescan_ports = lambda: None
+        # The rescan writes its own line; the result must still be the
+        # line left showing (it was overwritten at once).
+        def rescan():
+            screen._port_status = "Re-scanned. Found 1 port."
+        screen._rescan_ports = rescan
         screen._usb_driver_action()
         for _ in range(200):
             screen.update(0.01)
@@ -815,12 +819,33 @@ class TestSettingsWiring:
             time.sleep(0.01)
         status = screen._port_status
         assert status.startswith(message.rstrip(".") + ". ")
+        labels = [b.label for b, t in zip(screen._panel_buttons,
+                                          screen._panel_tabs)
+                  if t == "setup"]
         if installed:
             assert opened == []
             assert "plug it back in" in status
+            # The next press checks: a second install would find nothing
+            # and send the user to Windows Update for a working board.
+            assert "Check USB driver" in labels
+            installs = []
+            monkeypatch.setattr(usb_driver, "install_from_windows_update",
+                                lambda: installs.append(1) or {"ok": True})
+            monkeypatch.setattr(usb_driver, "find_boards", lambda: [
+                {"name": "USB-SERIAL CH340 (COM3)", "chip": "CH340",
+                 "instance_id": "x", "has_driver": True}])
+            screen._usb_driver_action()
+            for _ in range(200):
+                screen.update(0.01)
+                if screen._usb_job is None:
+                    break
+                time.sleep(0.01)
+            assert installs == [] and opened == []
+            assert screen._port_status.startswith("Driver working")
         else:
             assert opened == [1]
             assert "Optional updates" in status
+            assert "Get the driver" in labels
 
     def test_a_missing_avrdude_says_so(self, settings, monkeypatch):
         screen, _ = settings
@@ -960,6 +985,81 @@ class TestClassifyRealAvrdude8:
         assert res.kind == "sync_failed" and not res.ok
 
 
+class TestClassifyReadBackAndOlderAvrdudes:
+    """Read-back failures captured from the real Nano with read-only
+    verify runs (29 September 2026), and the wording of the avrdude
+    builds the app can fall back to."""
+
+    VERIFY_63 = (
+        "avrdude: AVR device initialized and ready to accept instructions\n"
+        "avrdude: Device signature = 0x1e950f (probably m328p)\n"
+        "avrdude: verifying ...\n"
+        "avrdude: verification error, first mismatch at byte 0x0002\n"
+        "         0x60 != 0xf3\n"
+        "avrdude: verification error; content mismatch\n"
+        "\navrdude done.  Thank you.\n")
+    VERIFY_8 = (
+        "Verifying 5830 bytes of flash against input file x.hex\n"
+        "Warning: flash verification mismatch\n"
+        "  device 0x60 != input 0xf3 at addr 0x0002 (error)\n"
+        "Error: flash verification mismatch\n\nAvrdude done.  Thank you.\n")
+
+    def test_a_bad_read_back_on_avrdude_63_is_not_a_wrong_chip(self):
+        # 6.3 prints the signature on every good sync. Read as a wrong
+        # chip, the message said nothing had been written.
+        assert flasher.classify(self.VERIFY_63, 1) == "verify_failed"
+
+    def test_a_bad_read_back_on_avrdude_8(self):
+        assert flasher.classify(self.VERIFY_8, 1) == "verify_failed"
+
+    def test_a_wrong_chip_on_avrdude_63(self):
+        text = ("avrdude: Device signature = 0x1e9587 (probably m32u4)\n"
+                "avrdude: Expected signature for ATmega328P is 1E 95 0F\n")
+        assert flasher.classify(text, 1) == "wrong_chip"
+
+    def test_a_late_failure_outranks_an_early_sync_retry(self):
+        # A first sync attempt can fail and a later one get through;
+        # what went wrong after that is the story, not the retry.
+        text = ("Warning: attempt 1 of 10: not in sync: resp=0x00\n"
+                + self.VERIFY_8)
+        assert flasher.classify(text, 1) == "verify_failed"
+
+    def test_a_busy_port_on_avrdude_7_is_busy(self):
+        # avrdude 7 closes a busy port and a failed sync alike with
+        # "unable to open programmer".
+        text = ('avrdude: ser_open(): can\'t open device '
+                '"/dev/cu.usbserial-AI04VRMU": Resource busy\n'
+                "avrdude main() error: unable to open programmer arduino "
+                "on port /dev/cu.usbserial-AI04VRMU\n")
+        assert flasher.classify(text, 1) == "port_busy"
+
+    def test_a_failed_sync_on_avrdude_7_is_a_sync_failure(self):
+        text = ("avrdude: stk500_recv(): programmer is not responding\n"
+                "avrdude: stk500_getsync() attempt 10 of 10: not in sync: "
+                "resp=0x00\n"
+                "avrdude main() error: unable to open programmer arduino "
+                "on port /dev/cu.usbserial-AI04VRMU\n")
+        assert flasher.classify(text, 1) == "sync_failed"
+
+    @pytest.mark.parametrize("text", [
+        # A stray first byte at the wrong speed: sync gets 0x14, then
+        # not the byte after it. Wording from the bundled avrdude 8.
+        "Error: cannot communicate with device: resp=0x1c\n"
+        "Error: unable to open port /dev/cu.usbserial-AI04VRMU for "
+        "programmer arduino\n",
+        "Error: programmer is out of sync\n",
+    ])
+    def test_the_other_avrdude_8_sync_losses_are_sync_failures(self, text):
+        # Read as busy, the retry at 57600 never ran and the message
+        # blamed another program.
+        assert flasher.classify(text, 1) == "sync_failed"
+
+    def test_a_missing_port_on_windows_is_missing(self):
+        text = ("Error: cannot open port \\\\.\\COM9: The system cannot "
+                "find the file specified.\n")
+        assert flasher.classify(text, 1) == "port_missing"
+
+
 class TestFirmwareDialog:
 
     def _dialog(self, settings, mode="address", ports=None):
@@ -1024,6 +1124,134 @@ class TestFirmwareDialog:
         dlg._start_change()
         assert started == []
         assert "the same" in dlg.result_text
+
+    @staticmethod
+    def _click(dlg, pos):
+        import pygame
+        dlg.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN,
+                                            button=1, pos=pos))
+        dlg.handle_event(pygame.event.Event(pygame.MOUSEBUTTONUP,
+                                            button=1, pos=pos))
+
+    @staticmethod
+    def _key(dlg, key, uni=""):
+        import pygame
+        dlg.handle_event(pygame.event.Event(pygame.KEYDOWN, key=key, mod=0,
+                                            unicode=uni))
+
+    def test_a_pick_in_the_port_list_does_not_open_new(self, settings):
+        # The open port list lies over the NEW picker. The click that
+        # picked a port used to open NEW as well.
+        dlg = self._dialog(settings, "address", ports=[
+            ("COM7", "RIGHT hand, COM7"), ("COM8", "LEFT hand, COM8")])
+        board, new = dlg.port_dropdown, dlg.new_dropdown
+        self._click(dlg, board.rect.center)
+        assert board.is_open
+        spot = (new.rect.x + 40, new.rect.centery)
+        assert board._option_rect(1).collidepoint(spot)
+        self._click(dlg, spot)
+        assert dlg.port == "COM8"
+        assert not board.is_open and not new.is_open
+
+    def test_the_new_address_can_be_picked_from_the_keyboard(self,
+                                                              settings):
+        import pygame
+        dlg = self._dialog(settings)
+        dlg.focus = dlg._focusables().index(dlg.new_dropdown)
+        self._key(dlg, pygame.K_RETURN)
+        assert dlg.new_dropdown.is_open
+        self._key(dlg, pygame.K_DOWN)
+        self._key(dlg, pygame.K_RETURN)
+        assert dlg.new_value == 0x06
+        assert not dlg.new_dropdown.is_open
+
+    def test_down_steps_from_the_pick_in_a_list_the_mouse_opened(self,
+                                                                 settings):
+        import pygame
+        dlg = self._dialog(settings)
+        self._click(dlg, dlg.new_dropdown.rect.center)
+        assert dlg.new_dropdown.is_open
+        self._key(dlg, pygame.K_DOWN)
+        self._key(dlg, pygame.K_RETURN)
+        assert dlg.new_value == 0x06
+
+    def test_other_takes_the_cursor_and_joins_the_ring(self, settings):
+        import pygame
+        dlg = self._dialog(settings)
+        dlg.focus = dlg._focusables().index(dlg.new_dropdown)
+        self._key(dlg, pygame.K_RETURN)
+        for _ in range(4):              # past the four fingers
+            self._key(dlg, pygame.K_DOWN)
+        self._key(dlg, pygame.K_RETURN)
+        assert dlg.new_value is None
+        assert dlg.other_input in dlg._focusables()
+        assert dlg.other_input.focused
+        for ch in "0x2a":
+            self._key(dlg, ord(ch), ch)
+        assert dlg.chosen_new() == 0x2A
+        # Tab walks on from OTHER to Cancel.
+        self._key(dlg, pygame.K_TAB)
+        focused = dlg._focusables()[dlg.focus]
+        assert getattr(focused, "label", None) == "Cancel"
+
+    def test_a_hidden_other_field_takes_no_clicks_or_keys(self, settings):
+        import pygame
+        dlg = self._dialog(settings)
+        dlg._pick_new(None)
+        dlg._pick_new(0x06)
+        assert not dlg.other_input.focused
+        assert dlg.other_input not in dlg._focusables()
+        self._click(dlg, dlg.other_input.rect.center)
+        assert not dlg.other_input.focused
+        self._key(dlg, pygame.K_7, "7")
+        assert dlg.other_input.text == ""
+
+    def test_a_mouse_pick_of_other_moves_the_cursor_out_of_old(self,
+                                                               settings):
+        # Clicked into OLD, then "other..." picked with the mouse: the
+        # typing went into OLD while the caret showed in OTHER too.
+        import pygame
+        dlg = self._dialog(settings)
+        self._click(dlg, dlg.old_input.rect.center)
+        assert dlg.old_input.focused
+        new = dlg.new_dropdown
+        self._click(dlg, new.rect.center)
+        self._click(dlg, new._option_rect(len(new.options) - 1).center)
+        assert dlg.new_value is None
+        assert dlg.other_input.focused and not dlg.old_input.focused
+        for ch in "2a":
+            self._key(dlg, ord(ch), ch)
+        assert dlg.other_input.text == "2a"
+        assert dlg.old_input.text == "0x04"
+        assert dlg.chosen_new() == 0x2A
+
+    @pytest.mark.parametrize("picked", [0x06, None])
+    def test_a_finished_card_only_answers_close(self, settings, picked):
+        # After Scan or Change the card shows the result and Close. A
+        # click where OLD, NEW or OTHER had been drawn crashed the game.
+        import pygame
+        dlg = self._dialog(settings)
+        dlg._pick_new(picked)
+        dlg.finish("No sensor answered.", False)
+        spots = [dlg.old_input.rect.center, dlg.new_dropdown.rect.center,
+                 dlg.other_input.rect.center, (dlg.card.centerx,
+                                               dlg.card.y + 312)]
+        for spot in spots:
+            self._click(dlg, spot)
+        assert not dlg.new_dropdown.is_open
+        assert not dlg.old_input.focused and not dlg.other_input.focused
+        self._key(dlg, pygame.K_7, "7")
+        assert dlg.old_input.text == "0x04" and dlg.other_input.text == ""
+        self._key(dlg, pygame.K_RETURN)
+        assert dlg.wants_close
+
+    def test_esc_shuts_an_open_list_before_the_dialog(self, settings):
+        dlg = self._dialog(settings)
+        dlg.new_dropdown.open_from_keys()
+        assert dlg.on_escape() is True
+        assert not dlg.new_dropdown.is_open and not dlg.wants_close
+        assert dlg.on_escape() is True
+        assert dlg.wants_close
 
     def test_the_warning_about_0x04_is_on_the_card(self, settings,
                                                   monkeypatch):
