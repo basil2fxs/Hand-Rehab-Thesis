@@ -49,8 +49,8 @@ This mode replicates the script:
   (engine.last_flip_t) rather than by counting frames, so a dropped
   frame shifts one onset instead of every onset after it.
 - Recall: the participant enters the sequence they think they saw,
-  one card at a time (the finger, V B N M on a keyboard, or a click
-  on the card), with BACKSPACE to undo and ENTER or SPACE to submit
+  one card at a time (the finger, the hand's own keys on a keyboard,
+  or a click on the card), with BACKSPACE to undo and ENTER or SPACE to submit
   once every item is in; each entry lights its card for 150 ms, and
   presses in that 150 ms are dropped as the script drops them.
 - Exports: the script's three CSVs, same names and columns, in the
@@ -293,14 +293,28 @@ class SRTMode:
         src = getattr(self.engine, "source", None)
         return bool(getattr(src, "provides_samples", False))
 
+    def key_names(self) -> list[str]:
+        """The hand's own keys for squares 1 to 4, the keys every game
+        uses (J K L ; right, F D S A left), not the lab script's V B N M
+        (Basil, 29 September 2026)."""
+        km = self.engine.cfg.get(
+            keymap_for_hand(getattr(self.engine, "hand_mode", "right")),
+            {}) or {}
+        by_lane = {int(v): str(k) for k, v in km.items()}
+        names = []
+        for square in range(1, 5):
+            key = by_lane.get(self.square_to_lane(square), "?")
+            names.append(";" if key == "semicolon" else key.upper())
+        return names
+
     def labels(self) -> list[str]:
-        """What each square is called in the recall line: the script's
-        key letters on a keyboard, the finger on the pads (mirrored for
-        the left hand, whose little finger is the leftmost)."""
+        """What each square is called in the recall line: its key on a
+        keyboard, the finger on the pads (mirrored for the left hand,
+        whose little finger is the leftmost)."""
         if self._labels_override and len(self._labels_override) == 4:
             return list(self._labels_override)
         if not self.on_pads:
-            return [c.upper() for c in LETTERS]
+            return self.key_names()
         if self.two_hands:
             return list(TWO_HAND_LABELS)
         if self._response_hand() == "left":
@@ -341,16 +355,13 @@ class SRTMode:
         self._presses.append(ev)
 
     def _key_lane(self, key: int) -> int | None:
-        """The lane a key stands for: the hand's keymap first, then the
-        script's V B N M, which answer in every hand mode."""
+        """The lane a key stands for, from the hand's keymap: the same
+        keys as every other game, and nothing else."""
         km = self.engine.cfg.get(
             keymap_for_hand(getattr(self.engine, "hand_mode", "right")), {})
         for key_name, lane in (km or {}).items():
             if resolve_key(key_name) == key:
                 return int(lane)
-        for i, letter in enumerate(LETTERS):
-            if resolve_key(letter) == key:
-                return self.square_to_lane(i + 1)
         return None
 
     def handle_event(self, e: pygame.event.Event) -> None:
@@ -860,8 +871,10 @@ class SRTMode:
         if step is None:
             return ""
         pads = self.on_pads
+        a, b, c, d = self.key_names()
         which = ("finger\nas quickly as you can." if pads
-                 else "key\n(V, B, N, or M) as quickly as you can.")
+                 else f"key\n({a}, {b}, {c}, or {d}) as quickly as you "
+                      f"can.")
         what = "finger" if pads else "key"
         texts = {
             "welcome": ("Welcome to the experiment.\n\n"
@@ -894,8 +907,9 @@ class SRTMode:
 
     def recall_text(self) -> str:
         n = len(self.seq)
+        k = self.key_names()
         enter = ("Press the matching fingers" if self.on_pads
-                 else "Press V, B, N, or M")
+                 else f"Press {k[0]}, {k[1]}, {k[2]}, or {k[3]}")
         return ("Did you notice a repeating sequence during the main task?"
                 "\n\n"
                 f"{enter} to enter the {n}-item sequence you learned.\n\n"

@@ -2889,6 +2889,13 @@ class GameplayScreen(Screen):
     # in. A beat later is out of it.
     REACT_EPOCH_TAIL_S = 1.0
 
+    # Games whose waiting tiles are a neutral grey, so colour on a tile
+    # means one thing: this finger now (Basil, 28 and 29 September
+    # 2026). The cue lights a tile in its finger's colour; outcome
+    # flashes and press feedback are unchanged.
+    NEUTRAL_IDLE_BLOCKS = frozenset({"reaction", "adaptive", "pattern",
+                                     "chords", "echo", "mirror"})
+
     def _reaction_stage(self) -> bool:
         """Whether this block gets the static treatment.
 
@@ -3272,9 +3279,9 @@ class GameplayScreen(Screen):
             # window in words at the top of the screen instead, so the
             # lit tile is a step and then nothing.
             ls.show_timing_bar = not static
-            # Waiting tiles are grey in reaction: the cue is the only
+            # Waiting tiles are grey in these games: the cue is the only
             # colour until the press's outcome flash.
-            ls.neutral_idle = static
+            ls.neutral_idle = block in self.NEUTRAL_IDLE_BLOCKS
             ls.draw(surf, now)
 
         # Stim ignition: catch the frame a lane goes active and fire a

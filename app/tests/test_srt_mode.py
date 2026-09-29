@@ -694,7 +694,8 @@ class RecallAndMessages(unittest.TestCase):
     def test_the_message_words_are_the_scripts(self):
         text = self.mode.message_text(self.mode.steps[0])
         self.assertTrue(text.startswith("Welcome to the experiment."))
-        self.assertIn("(V, B, N, or M)", text)
+        self.assertIn("(J, K, L, or ;)", text)
+        self.assertNotIn("V, B", text)
         blocks = [s for s in self.mode.steps if s.key == "block"]
         self.assertEqual(self.mode.message_text(blocks[1]),
                          "Block 2 of 2\n\nPress SPACE when ready.")
@@ -713,13 +714,13 @@ class RecallAndMessages(unittest.TestCase):
             later(after)
             sim.key(k)
             sim.frame()
-        press(pygame.K_v, after=0.0)
+        press(Sim.KEYS[0], after=0.0)
         self.assertEqual(m.recalled, [1])
         self.assertEqual(m.select_square, 1)
         # Inside the 150 ms yellow flash: dropped, as the script drops it.
-        press(pygame.K_n, after=0.05)
+        press(Sim.KEYS[2], after=0.05)
         self.assertEqual(m.recalled, [1])
-        press(pygame.K_n)
+        press(Sim.KEYS[2])
         self.assertEqual(m.recalled, [1, 3])
         later(0.2)
         sim.key(pygame.K_BACKSPACE)
@@ -776,21 +777,32 @@ class HandsLabelsAndMarkers(unittest.TestCase):
 
     def test_labels(self):
         eng, m = self._mode("right")
-        self.assertEqual(m.labels(), ["V", "B", "N", "M"])
+        self.assertEqual(m.labels(), ["J", "K", "L", ";"])
         eng.source = MagicMock(provides_samples=True)
         self.assertEqual(m.labels(), ["Index", "Middle", "Ring", "Little"])
         eng.hand_mode = "left"
         self.assertEqual(m.labels(), ["Little", "Ring", "Middle", "Index"])
         self.assertIn("finger", m.instruction())
 
-    def test_vbnm_answer_in_every_hand_mode(self):
-        for hand in ("right", "left", "both"):
+    def test_only_the_apps_own_keys_answer(self):
+        # The keys every game uses, J K L ; and F D S A, and not the
+        # lab script's V B N M as well (Basil, 29 September 2026).
+        keys = {"right": ((pygame.K_j, pygame.K_k, pygame.K_l,
+                           pygame.K_SEMICOLON), ["J", "K", "L", ";"]),
+                "left": ((pygame.K_a, pygame.K_s, pygame.K_d, pygame.K_f),
+                         ["A", "S", "D", "F"]),
+                "both": ((pygame.K_d, pygame.K_f, pygame.K_j, pygame.K_k),
+                         ["D", "F", "J", "K"])}
+        for hand, (ks, names) in keys.items():
             with self.subTest(hand=hand):
                 _eng, m = self._mode(hand)
-                for i, k in enumerate((pygame.K_v, pygame.K_b, pygame.K_n,
-                                       pygame.K_m)):
+                for i, k in enumerate(ks):
                     self.assertEqual(m.lane_to_square(m._key_lane(k)),
                                      i + 1)
+                for k in (pygame.K_v, pygame.K_b, pygame.K_n, pygame.K_m):
+                    self.assertIsNone(m._key_lane(k))
+                self.assertEqual(m.labels(), names)
+                self.assertNotIn("V, B", m.recall_text())
 
     def test_response_bytes_only_when_asked(self):
         eng, m = self._mode("right", response_markers=True)
@@ -857,8 +869,7 @@ class TwoHands(unittest.TestCase):
     def test_the_two_hand_keys_answer(self):
         _eng, m = self._start()
         for key, square in ((pygame.K_d, 1), (pygame.K_f, 2),
-                            (pygame.K_j, 3), (pygame.K_k, 4),
-                            (pygame.K_v, 1), (pygame.K_m, 4)):
+                            (pygame.K_j, 3), (pygame.K_k, 4)):
             self.assertEqual(m.lane_to_square(m._key_lane(key)), square)
 
     def test_rows_say_which_hand_answered(self):

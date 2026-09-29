@@ -1071,17 +1071,17 @@ class ReactionStaticStageTests(unittest.TestCase):
         finally:
             pygame.quit()
 
-    def test_waiting_tiles_are_grey_in_reaction_only(self) -> None:
+    def test_waiting_tiles_are_grey_in_reaction(self) -> None:
         """Every waiting tile is a neutral grey in reaction, so the cue
-        is the only colour on the row (Basil, 28 September 2026).
-        Every other mode keeps its finger colours."""
+        is the only colour on the row (Basil, 28 September 2026); the
+        other grey games are in test_grey_until_cued.py."""
         import pygame
         try:
             eng, gp = self._engine_and_screen()
             eng.mode._phase = "foreperiod"
             _frame(gp)
             self.assertTrue(all(ls.neutral_idle for ls in gp.lanes))
-            eng.current_block = "adaptive"
+            eng.current_block = "classic"
             _frame(gp)
             self.assertTrue(all(not ls.neutral_idle for ls in gp.lanes))
         finally:

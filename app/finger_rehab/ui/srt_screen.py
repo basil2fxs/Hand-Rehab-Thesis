@@ -208,11 +208,10 @@ class SRTScreen(Screen):
 
     def _draw_controls(self, surf: pygame.Surface, mode) -> None:
         """The corner Controls note on a keyboard, as every lane game
-        draws it, plus the lab's own V B N M, which answer too."""
+        draws it: the same keys, and only those."""
         if mode.on_pads:
             return
         lines = keyboard_controls_lines(self.engine, mode)
-        lines.append("or V B N M")
         font = self.layout.font(FONT_SMALL)
         right = self.layout.width - 24
         y = self.layout.height - 22 - 18 * len(lines)
