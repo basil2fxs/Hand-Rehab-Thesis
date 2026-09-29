@@ -357,9 +357,13 @@ class ScoringUnaffectedTests(unittest.TestCase):
         _play_run(m, t, lambda t_run, target: target + 3.0)
         rec = m._records[0]
         # The written cells only: the stub engine's identity fields
-        # are MagicMocks, which differ by object and say nothing.
+        # are MagicMocks, which differ by object and say nothing. The
+        # wall-clock stamp is when the row was written, so two runs a
+        # second boundary apart differ there by design (CI, 29
+        # September 2026).
         row = {k: v for k, v in e.trial_logger.rows[0].items()
-               if isinstance(v, (str, int, float, type(None)))}
+               if isinstance(v, (str, int, float, type(None)))
+               and k != "iso_ts"}
         return {"tic": rec.tic_frac, "mae": rec.mae_pct,
                 "stalls": rec.stalls, "rings": rec.rings_collected}, row
 
