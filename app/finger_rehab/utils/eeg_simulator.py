@@ -363,6 +363,7 @@ class SimulatorApp:
         surf.blit(f_bold.render("Trig", True, muted), (16, ty - 10))
         base = ty + row_h * 0.35
         pygame.draw.line(surf, (148, 163, 184), (r.x, base), (r.right, base))
+        chips = []
         for m in markers:
             x = r.right - (view_now - m.t) * px_per_s
             if x < r.x or x > r.right:
@@ -372,11 +373,16 @@ class SimulatorApp:
             w = max(2, int(pulse * px_per_s))
             h = row_h * 0.6 * (m.code / 255.0) + 4
             pygame.draw.rect(surf, colour, (int(x), int(base - h), w, int(h)))
-            # The line through every channel, and the number at the top.
+            # The line through every channel; its number goes on top.
             pygame.draw.line(surf, colour, (x, r.y + 4), (x, base), 1)
-            lab = f_small.render(str(m.code), True, (255, 255, 255))
+            chips.append((x, colour, m.code))
+        # A press and its feedback land a frame apart, so a number that
+        # would cover the one before it drops to the next row down.
+        for x, colour, code, top in stack_labels(
+                chips, lambda c: f_small.size(str(c))[0] + 8, r.y + 4):
+            lab = f_small.render(str(code), True, (255, 255, 255))
             chip = pygame.Rect(0, 0, lab.get_width() + 8, 18)
-            chip.midtop = (int(x), r.y + 4)
+            chip.midtop = (int(x), top)
             pygame.draw.rect(surf, colour, chip, border_radius=4)
             surf.blit(lab, lab.get_rect(center=chip.center))
         # Time axis.
@@ -511,6 +517,23 @@ class SimulatorApp:
         self.rx.stop()
         pygame.quit()
         return 0
+
+
+def stack_labels(chips, width_of, top: int, rows: int = 3,
+                 row_h: int = 20, gap: int = 2):
+    """(x, colour, code, y) for each chip, left to right: the first row
+    where it clears the chip before it, or else the row that frees up
+    soonest."""
+    ends = [float("-inf")] * rows
+    out = []
+    for x, colour, code in sorted(chips, key=lambda c: c[0]):
+        w = width_of(code)
+        left = x - w / 2
+        row = next((i for i in range(rows) if left >= ends[i] + gap),
+                   min(range(rows), key=lambda i: ends[i]))
+        ends[row] = x + w / 2
+        out.append((x, colour, code, top + row * row_h))
+    return out
 
 
 def _fit(text: str, font, width: int) -> str:

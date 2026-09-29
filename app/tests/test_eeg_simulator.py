@@ -76,6 +76,20 @@ def test_a_pulse_is_the_time_to_the_zero_after_it():
     assert got[1].code == 112 and got[1].pulse_ms == 0.0
 
 
+def test_close_numbers_stack_instead_of_covering_each_other():
+    # A cue, then a press and its feedback 17 ms apart, then a cue
+    # well clear of them: 30 px chips at 82 px a second.
+    chips = [(100.0, "c", 33), (130.0, "c", 101), (131.4, "c", 140),
+             (300.0, "c", 21)]
+    got = sim.stack_labels(chips, lambda code: 30, top=10)
+    tops = [y for _x, _c, _code, y in got]
+    assert tops == [10, 30, 50, 10]
+    # More than three at one spot reuse the row that frees up first.
+    crowd = [(100.0 + i, "c", 100 + i) for i in range(4)]
+    assert [y for *_r, y in sim.stack_labels(crowd, lambda c: 30, 0)] \
+        == [0, 20, 40, 0]
+
+
 def test_the_window_draws_and_saves(tmp_path):
     import pygame
     pygame.init()
