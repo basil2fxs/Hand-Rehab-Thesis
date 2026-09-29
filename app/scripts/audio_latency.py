@@ -2,7 +2,7 @@
 game: rhythm.audio_offset_ms, rhythm.metronome_offset_ms,
 latency.tone_ms and latency.buzzer_ms.
 
-The same measurement runs from the app itself: Settings, Audio delay,
+The same measurement runs from the app itself: Settings, Setup, Audio delay,
 which is the way on a new computer (nothing to install). This script is
 its command-line front end. How it measures is set out in
 finger_rehab/audio/latency_measure.py.

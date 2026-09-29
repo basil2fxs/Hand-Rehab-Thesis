@@ -3197,7 +3197,7 @@ class GameEngine:
                 log.warning("Stopping the source for a flash raised: %s", e)
 
     def begin_audio_measurement(self) -> None:
-        """Settings, Audio delay: silence the menu music at once (no
+        """Settings, Setup, Audio delay: silence the menu music at once (no
         fade into the recording) and hand the board's port to the
         measurement, as a flash does."""
         self._measuring_audio = True

@@ -1,4 +1,4 @@
-"""Settings, Audio delay: this computer's sound and buzz delays measured
+"""Settings, Setup, Audio delay: this computer's sound and buzz delays measured
 from inside the app (Basil, 28 September 2026), so a new computer, the
 lab's included, needs nothing installed before Rhythm is scored.
 

@@ -318,7 +318,7 @@ rebounds can be temporary adaptation (Trofimova 2020 in
 pattern.py); P2 is the memory claim. Never tell participants a
 sequence exists (Boyd and Winstein, in pattern.py).
 Riff files: a sequence file loaded on the study laptop
-(config/pattern_sequence.yaml, Settings > Riff file) REPLACES the
+(config/pattern_sequence.yaml, Settings > Data > Riff file) REPLACES the
 built-in ten-take layout and the name-seeded riff for every pattern
 block. Everything above assumes the built-in material, so either run
 the cohort with no file loaded, or load the SAME file for every

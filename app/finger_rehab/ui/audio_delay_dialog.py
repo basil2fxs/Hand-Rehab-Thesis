@@ -1,4 +1,4 @@
-"""The modal behind Settings, Audio delay.
+"""The modal behind Settings, Setup, Audio delay.
 
 One card: what the measurement is for and what it needs, the delays
 this computer uses now, and one button. While it runs the card shows

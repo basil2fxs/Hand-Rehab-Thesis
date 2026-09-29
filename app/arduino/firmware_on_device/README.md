@@ -1,7 +1,7 @@
 # Game firmware (PlatformIO)
 
 The sketch the Arduino Nano runs in play: it reads the four SingleTact pads at 200 Hz, streams them to the laptop
-and drives the four motors on `STIM` commands. Settings, Flash firmware installs the built hex, so these steps are
+and drives the four motors on `STIM` commands. Settings, Setup, Flash firmware installs the built hex, so these steps are
 only for building it by hand.
 
 1. **Board.** A Nano labelled NANO is `board = nanoatmega328`; a Nano with no label is

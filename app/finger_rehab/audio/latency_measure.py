@@ -2,7 +2,7 @@
 game: rhythm.audio_offset_ms, rhythm.metronome_offset_ms,
 latency.tone_ms and latency.buzzer_ms.
 
-Two front ends share this module: Settings, Audio delay (so a new
+Two front ends share this module: Settings, Setup, Audio delay (so a new
 computer needs nothing installed), and scripts/audio_latency.py.
 
 Rhythm scores a tap against song_time, which starts the moment the

@@ -1,7 +1,7 @@
 # Bundled avrdude
 
 avrdude is the uploader the Arduino IDE runs under the bonnet. Shipping it inside the exe and the .app is what makes
-Settings, Flash firmware a single click on a clinic PC with no developer tools installed. Nothing here is
+Settings, Setup, Flash firmware a single click on a clinic PC with no developer tools installed. Nothing here is
 committed; fetch it with:
 
 ```bash

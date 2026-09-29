@@ -12,7 +12,7 @@
 | [`linear_actuator/`](linear_actuator) | The sketch that moves the finger rests in and out |
 | [`images/`](images) | The CAD render, the cross-section, both halves, and the parts and wiring diagram |
 
-The game board's firmware is in [`app/arduino`](../app/arduino). The app flashes it (Settings, Flash firmware), so nobody needs the Arduino IDE.
+The game board's firmware is in [`app/arduino`](../app/arduino). The app flashes it (Settings, Setup, Flash firmware), so nobody needs the Arduino IDE.
 
 ## How it fits together
 
@@ -59,7 +59,7 @@ The game board, an Arduino Nano on the custom PCB:
 | D6 | Little finger motor |
 | USB | The laptop |
 
-- **Pads:** index 0x05, middle 0x06, ring 0x07, little 0x08. A new pad arrives on a factory address; move it with Settings, Sensor address, with only that pad plugged in.
+- **Pads:** index 0x05, middle 0x06, ring 0x07, little 0x08. A new pad arrives on a factory address; move it with Settings, Setup, Sensor address, with only that pad plugged in.
 - **Readings:** the board reads 6 bytes from each pad 200 times a second and sends `FSR: a,b,c,d` over USB at 115200 baud.
 - **Buzz:** `STIM:n` from the game drives motor n (1 to 4) for 150 ms at PWM 200 of 255 (240 on the little finger).
 

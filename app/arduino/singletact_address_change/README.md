@@ -4,8 +4,8 @@ A throwaway sketch that moves one SingleTact interface board from one I2C addres
 game firmware on the Nano for a few seconds and is then replaced by the game firmware again. The game firmware
 is read only and has no I2C write command, which is why the job needs its own sketch.
 
-**Who runs it:** the app. Settings, Sensor address flashes this hex, talks to it over serial, then flashes the
-game hex back. Nobody has to open the Arduino IDE.
+The app runs it: Settings, Setup, Sensor address flashes this hex, talks to it over serial, then flashes the game
+hex back. Nobody has to open the Arduino IDE.
 
 ## Serial protocol
 
@@ -18,7 +18,7 @@ game hex back. Nobody has to open the Arduino IDE.
 | `SCAN` | `FOUND: 0x04,0x05,0x06` (or `FOUND: none`) |
 | `CHANGE:0x04,0x05` | `OK: 0x04 -> 0x05` (or `ERR: reason`) |
 
-## The one rule that matters
+## One sensor at a time
 
 Every SingleTact interface answers I2C address 0x04 as well as the address held in its own flash (SingleTact
 manual section 2.3). A write to 0x04 therefore reaches every sensor on the bus at once. Change a sensor from 0x04
