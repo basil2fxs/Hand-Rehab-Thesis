@@ -168,6 +168,10 @@ class FakePort:
 def cfg(tmp_path):
     from finger_rehab.config import Config
     c = Config.load()
+    # A flash on this machine saves the bootloader speed that answered
+    # (user_settings.yaml, firmware.preferred_baud). The tests start
+    # from the shipped order, whatever board this computer last saw.
+    c.data.setdefault("firmware", {})["preferred_baud"] = None
     c.data.setdefault("ui", {})["resolution"] = [1280, 800]
     c.data.setdefault("audio", {})["enabled"] = False
     c.data["session"]["data_dir"] = str(tmp_path)
@@ -582,6 +586,18 @@ class TestAddressJob:
         assert not job.ok
         assert "did not take the new address" in job.summary
         assert "calibrated unit" in job.summary
+        # The game firmware went back on, and it says so, as on the real
+        # FTDI Nano where a change with no pad was refused.
+        assert job.summary.endswith("Game firmware restored.")
+
+    def test_a_refused_change_still_says_the_board_is_playable(
+            self, fake_tool, cfg, tmp_path):
+        job = _run_address_job(
+            fake_tool, cfg, tmp_path,
+            {"SCAN": "FOUND: 0x04,0x05,0x06,0x07"},
+            change=True, old=0x04, new=0x08)
+        assert job.refused and not job.ok
+        assert job.summary.endswith("Game firmware restored.")
 
     def test_a_failed_restore_says_the_board_is_not_playable(
             self, fake_tool, cfg, tmp_path, monkeypatch):
@@ -893,6 +909,55 @@ class TestSettingsWiring:
         # Still on Settings, dialog untouched.
         assert eng.screen_obj is screen
         assert screen._dialog is dlg
+
+
+class TestClassifyRealAvrdude8:
+    """avrdude 8.0 output captured from real boards."""
+
+    SYNC_THEN_OPEN = (
+        "Warning: attempt 1 of 10: not in sync: resp=0x00\n"
+        "Warning: attempt 10 of 10: not in sync: resp=0x00\n"
+        "Error: unable to open port /dev/cu.usbserial-AI04VRMU for "
+        "programmer arduino\n\nAvrdude done.  Thank you.\n")
+    BUSY = (
+        "Error: cannot open port /dev/cu.usbserial-AI04VRMU: Resource "
+        "busy\nError: unable to open port /dev/cu.usbserial-AI04VRMU for "
+        "programmer arduino\n\nAvrdude done.  Thank you.\n")
+
+    def test_a_failed_sync_is_a_sync_failure_not_a_busy_port(self):
+        # An FTDI Nano on the old bootloader: 115200 gets no sync, and
+        # avrdude 8 then says "unable to open port". Read as busy, the
+        # retry at 57600 never ran and the message blamed another
+        # program.
+        assert flasher.classify(self.SYNC_THEN_OPEN, 1) == "sync_failed"
+
+    def test_a_busy_port_is_still_busy(self):
+        assert flasher.classify(self.BUSY, 1) == "port_busy"
+
+    def test_a_sync_failure_at_115200_goes_on_to_57600(self, tmp_path):
+        seen = []
+
+        def fake_run(tool, port, hex_path, baud, **kw):
+            seen.append(int(baud))
+            return flasher.AvrdudeResult(
+                returncode=1, kind=flasher.classify(self.SYNC_THEN_OPEN, 1),
+                output=self.SYNC_THEN_OPEN, seconds=0.1)
+
+        class _Cfg:
+            def get(self, key, default=None):
+                return default
+        real = flasher.run_avrdude
+        flasher.run_avrdude = fake_run
+        try:
+            res = flasher.flash_image(
+                flasher.AvrdudeTool(argv=["x"]), "/dev/null",
+                flasher.FirmwareImage("game", tmp_path / "x.hex", "0" * 64,
+                                      1),
+                _Cfg(), baud_order=[115200, 57600])
+        finally:
+            flasher.run_avrdude = real
+        assert seen == [115200, 57600]
+        assert res.kind == "sync_failed" and not res.ok
 
 
 class TestFirmwareDialog:

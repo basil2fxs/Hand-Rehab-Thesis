@@ -132,6 +132,28 @@ def test_a_turned_down_prompt_says_so(tmp_path, monkeypatch):
     assert not got["ok"] and "prompt" in got["message"]
 
 
+def test_the_tools_check_reports_the_board_on_every_system(monkeypatch):
+    # Windows asks Plug and Play and flags a missing driver. A Mac or
+    # Linux has the drivers built in, so it names the board's port: it
+    # used to say "No hand device plugged in" with a Nano attached.
+    from finger_rehab.config import Config
+    from finger_rehab.hardware import flasher
+    cfg = Config.load()
+    monkeypatch.setattr(U, "find_boards",
+                        lambda runner=None: U.parse_devices(NO_DRIVER))
+    monkeypatch.setattr(flasher, "candidate_ports", lambda cfg, source=None:
+                        [("/dev/cu.usbserial-AI04VRMU", "usbserial-AI04VRMU")])
+    monkeypatch.setattr(flasher, "_on_windows", lambda: True)
+    report = flasher.self_check(cfg)
+    assert "no driver" in report["usb_driver"]
+    assert "board plugged in without a driver" in report["problems"]
+    monkeypatch.setattr(flasher, "_on_windows", lambda: False)
+    report = flasher.self_check(cfg)
+    assert report["usb_driver"] == ("Board port: usbserial-AI04VRMU. No "
+                                    "driver needed on this system.")
+    assert "board plugged in without a driver" not in report["problems"]
+
+
 def test_the_tools_check_passes_wherever_the_tools_are(tmp_path):
     """The same check CI runs on each build's installed copy. Here it
     must say ready whenever this checkout holds avrdude for this OS and

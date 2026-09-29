@@ -434,6 +434,15 @@ _CLASSIFY_TABLE: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("port_missing", (
         "no such file", "no such device",
     )),
+    # Before "busy": the sync lines only print once the port has
+    # opened, and avrdude 8 ends every failed sync with "unable to open
+    # port ... for programmer arduino". Read as busy, that stopped the
+    # retry at 57600, so an old-bootloader Nano (most FTDI ones) never
+    # flashed (found on a real FTDI Nano, 29 September 2026).
+    ("sync_failed", (
+        "not responding", "not in sync", "getsync",
+        "unable to open programmer",
+    )),
     ("port_busy", (
         "access is denied", "permission denied", "resource busy",
         "cannot open port", "can't open device", "unable to open port",
@@ -444,10 +453,6 @@ _CLASSIFY_TABLE: tuple[tuple[str, tuple[str, ...]], ...] = (
     )),
     ("verify_failed", (
         "verification mismatch", "verification error", "first mismatch",
-    )),
-    ("sync_failed", (
-        "not responding", "not in sync", "getsync",
-        "unable to open programmer",
     )),
 )
 
@@ -604,6 +609,12 @@ def wait_for_banner(port: str, banner: str, timeout_s: float = 6.0,
 # The self check
 # ---------------------------------------------------------------------
 
+def _on_windows() -> bool:
+    """Whether the board drivers are Windows' to find (a test swaps
+    this rather than sys.platform, which the standard library reads)."""
+    return sys.platform == "win32"
+
+
 def self_check(cfg, runner=subprocess.run) -> dict:
     """Whether this install can flash the board and change a pad's
     address with nothing else installed: both firmware images present
@@ -663,9 +674,24 @@ def self_check(cfg, runner=subprocess.run) -> dict:
         report["pyserial"] = False
         problems.append("no pyserial")
     from . import usb_driver
-    boards = usb_driver.find_boards()
-    report["usb_boards"] = boards
-    line, missing = usb_driver.describe(boards)
+    if _on_windows():
+        boards = usb_driver.find_boards()
+        report["usb_boards"] = boards
+        line, missing = usb_driver.describe(boards)
+    else:
+        # The driver query is Windows' own (Get-PnpDevice). macOS and
+        # Linux carry the board drivers, so the ports are the answer;
+        # the query would have said "No hand device" with a board in.
+        report["usb_boards"] = []
+        try:
+            ports = candidate_ports(cfg)
+        except Exception:
+            ports = []
+        names = ", ".join(label for _p, label in ports)
+        line = ((f"Board port: {names}." if ports
+                 else "No hand device plugged in.")
+                + " No driver needed on this system.")
+        missing = False
     report["usb_driver"] = line
     if missing:
         problems.append("board plugged in without a driver")
@@ -1105,8 +1131,11 @@ class AddressJob(_Job):
             if res.ok:
                 if self.baud is None:
                     self.baud = res.baud
-                if self.ok:
-                    self.summary += " Game firmware restored."
+                # Said on a refusal or a failed change too: without it a
+                # therapist could not tell whether the board was left
+                # holding the address tool.
+                self.summary = (self.summary.rstrip()
+                                + " Game firmware restored.").strip()
                 return
             self.ok = False
             self.summary = (self.RESTORE_FAILED + " " + self.summary).strip()
