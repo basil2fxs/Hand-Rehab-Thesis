@@ -1085,9 +1085,11 @@ class SyllablesMode(WaitSkip):
         if self._model_idx == self.n_syll:
             # The blend: every slot shows its part and the whole word
             # is said again, the last step of graphosyllabic analysis
-            # (Bhattacharya and Ehri 2004).
-            self._speak_word()
-            self._model_next_t = max(now, due) + self.blend_s()
+            # (Bhattacharya and Ehri 2004), with the same print lead
+            # as each syllable.
+            self._speak_syllable_after(None, now)
+            self._model_next_t = (max(now, due) + self.sound_lead_s
+                                  + self.blend_s())
             return
         if self._model_idx > self.n_syll:
             self._model_idx = -1
@@ -2013,14 +2015,21 @@ class SyllablesMode(WaitSkip):
             return False
         return chunk is None or self.chunk_speech_path(chunk) is not None
 
-    def _speak_syllable_after(self, k: int, now: float) -> None:
-        """Speak syllable k now, or sound_lead_s after the print for a
-        child: 11 year olds integrate letters and sound best at a small
-        letter lead, adults near synchrony."""
+    def _speak_syllable_after(self, k: int | None, now: float) -> None:
+        """Speak syllable k (None: the whole word, at the blend) now,
+        or sound_lead_s after the print for a child: 11 year olds
+        integrate letters and sound best at a small letter lead,
+        adults near synchrony."""
         if self.sound_lead_s <= 0.0:
-            self._speak_syllable(k)
+            self._say_part(k)
         else:
             self._speech_queue.append((now + self.sound_lead_s, k))
+
+    def _say_part(self, k: int | None) -> None:
+        if k is None:
+            self._speak_word()
+        else:
+            self._speak_syllable(k)
 
     def _flush_speech(self, now: float) -> None:
         if not self._speech_queue:
@@ -2028,7 +2037,7 @@ class SyllablesMode(WaitSkip):
         due = [q for q in self._speech_queue if q[0] <= now]
         self._speech_queue = [q for q in self._speech_queue if q[0] > now]
         for _t, k in due:
-            self._speak_syllable(k)
+            self._say_part(k)
 
     def _speak_word(self) -> None:
         if self.word is not None:

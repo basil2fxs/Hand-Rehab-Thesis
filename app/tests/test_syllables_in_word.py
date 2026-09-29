@@ -144,6 +144,30 @@ class ThePlan(unittest.TestCase):
                             for line in out.splitlines()))
 
 
+class TheShippedVoice(unittest.TestCase):
+
+    def test_every_file_the_map_names_ships_for_every_word(self):
+        """Once the in-word syllables are rendered, every word the game
+        can play has one existing file per syllable. Until then the
+        manifest carries no map and the game plays the chunk files."""
+        data = json.loads((ROOT / "assets" / "speech" / "manifest.json")
+                          .read_text(encoding="utf-8"))
+        smap = data.get("syllable_map") or {}
+        if not smap:
+            self.assertNotIn("syllable_form", data)
+            return
+        self.assertEqual(data.get("syllable_form"), "word")
+        for w in T.pool_words(K.ALL_POOLS):
+            with self.subTest(word=w.word):
+                got = smap[w.word]
+                self.assertEqual(len(got["files"]), len(w.syllables))
+                self.assertEqual(len(got["weak"]), len(w.syllables))
+                for f in got["files"]:
+                    self.assertTrue(
+                        (ROOT / "assets" / "speech" / f"{f}.wav").exists(), f)
+                    self.assertIn(f, data["entries"])
+
+
 def _wav(path: Path, seconds: float) -> None:
     from scipy.io import wavfile
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -295,6 +319,22 @@ class TheBlend(unittest.TestCase):
                 eng._abandon_if_in_block()
         finally:
             pygame.quit()
+
+    def test_the_blend_word_trails_the_print_as_a_syllable_does(self):
+        # A child hears each part 175 ms after it is printed; the blend
+        # keeps that lead, so the quiet before the word is not cut.
+        _e, mode = _build_mode(age_band="6-9")
+        heard = []
+        mode._speak_word = lambda: heard.append(("word", t))
+        mode._speak_syllable = lambda k: heard.append((k, t))
+        t, lit = 0.0, None
+        while not (mode.phase == "choose" and mode.option_set is not None):
+            mode._tick(t)
+            if mode.blending and lit is None:
+                lit = t
+            t += 0.005
+        word_t = [at for what, at in heard if what == "word"][-1]
+        self.assertAlmostEqual(word_t - lit, mode.sound_lead_s, delta=0.01)
 
     def test_adults_have_no_model_and_so_no_blend(self):
         _e, mode = _build_mode(age_band="16+")
