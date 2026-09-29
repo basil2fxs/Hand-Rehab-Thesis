@@ -6,6 +6,10 @@
         --voices voices-v1.0.bin
     tts/bin/python scripts/syllables_tts.py --only chunks/ven,tiger \\
         --out /tmp/try          # a few items somewhere else, to listen
+    tts/bin/python scripts/syllables_tts.py --syllables-only \\
+        --model kokoro-v1.0.onnx --voices voices-v1.0.bin
+    python3 scripts/syllables_tts.py --syllables-only --dry-run
+                                # each word's syllables, no model needed
 
 kokoro-v1.0.onnx (310 MB) and voices-v1.0.bin (26 MB) are the
 model-files-v1.0 release of github.com/thewh1teagle/kokoro-onnx. Neither
@@ -35,6 +39,24 @@ espeak-ng (British). A made-up word is its own chunks run together,
 stressed where the bank says, so it holds exactly the chunks the game
 plays for it: espeak guesses at them and read "dol" as "dole" in one
 word and "doll" in the next.
+
+HOW A WORD'S SYLLABLES ARE SAID (29 September 2026). As they sound
+in that word, not as spelt: the word's own phonemes are cut at its
+written chunks (word_syllables) and each piece is said on its own,
+stressed so it is clear. So the "ger" of tiger is "guh" and the "ger"
+of ginger is "juh", where one spelt file said "jer" for both. This is
+the graphosyllabic method the mode rests on (Bhattacharya and Ehri
+2004): each syllable as close as it can be to its sound in the whole
+word, then the syllables blended back into the word. The cut matches
+the consonant sounds each chunk's letters spell against the word's
+phonemes (a double letter closes one syllable and opens the next:
+rab-bit), and a syllable running speech drops is given back the
+vowel a careful speaker says (cam-e-ra). A piece that sounds exactly
+like its chunk's spelt file reuses that file, so only the syllables
+that differ are made (--syllables-only). The manifest's syllable_map
+names each word's files in order and which of them have a weak vowel
+(uh, ih), where ter, tar and tur sound alike and the game stops
+offering vowel foils.
 
 Both then go into Kokoro in the phoneme symbols it was trained on (the
 misaki set: "A" for the vowel in day, "Q" for the one in go, "ʤ" for
@@ -305,6 +327,274 @@ def pseudo_phonemes(syllables, stress: int, stressed_anywhere) -> str:
     return "".join(parts)
 
 
+# ---- a word's own syllables --------------------------------------------------
+
+# Vowel symbols of the misaki set; ᵊ marks a syllabic l or n (bottle).
+VOWEL_SOUNDS = frozenset("AIQWYaæeiouɑɒɔəɛɜɪʊʌᵊ")
+STRESS_MARKS = "ˈˌ"
+# A vowel that loses its letter's sound when unstressed: ter, tar and
+# tur all come out as "tuh", be and bi as "bih".
+WEAK_VOWELS = frozenset({"ə", "ᵊ", "ɪ", "i"})
+# Sounds one spelling gives in different words, so a mismatch between
+# them costs half a substitution: n before k or g (finger), s as z
+# (lars), t or s as sh or ch (tion, ture, sure), soft and hard c and g.
+NEAR = frozenset(frozenset(p) for p in (
+    ("n", "ŋ"), ("s", "z"), ("s", "ʃ"), ("t", "ʧ"), ("d", "ʤ"), ("z", "ʒ"),
+    ("s", "ʒ"), ("t", "ʃ"), ("k", "ʃ"), ("ɡ", "ʤ"), ("k", "s")))
+# A vowel put back into a syllable running speech drops (cam-e-ra):
+# the one its letter suggests.
+PUT_BACK = {"i": "ɪ", "y": "i"}
+
+
+def phoneme_tokens(ps: str) -> list[tuple[str, str, str]]:
+    """(V or C, sound, stress mark) per sound. A long mark joins its
+    vowel; ɪə and ʊə are one vowel until the chunks say otherwise."""
+    out, pending, i = [], "", 0
+    while i < len(ps):
+        ch = ps[i]
+        if ch in STRESS_MARKS:
+            pending = ch
+            i += 1
+            continue
+        if ch in VOWEL_SOUNDS:
+            sound = ch
+            i += 1
+            if i < len(ps) and ps[i] == "ː":
+                sound += "ː"
+                i += 1
+            if sound in ("ɪ", "ʊ") and i < len(ps) and ps[i] == "ə":
+                sound += "ə"
+                i += 1
+            out.append(("V", sound, pending))
+            pending = ""
+            continue
+        out.append(("C", "t" if ch == "T" else ch, ""))
+        i += 1
+    return out
+
+
+def letter_edges(chunk: str, last: bool = True) -> tuple[str, str, str]:
+    """(onset letters, coda letters, first vowel letter) of a chunk.
+    A final consonant plus le is its own syllable only at a word's end
+    (ta-ble, noo-dles, not cle-ver); a silent final e leaves the
+    consonant before it as the coda (some, tive)."""
+    c = chunk.lower()
+    vowel = []
+    for i, ch in enumerate(c):
+        v = ch in "aeiou" or (ch == "y" and not (
+            i == 0 and i + 1 < len(c) and c[i + 1] in "aeiou"))
+        if ch == "w" and i > 0 and c[i - 1] in "aeo":
+            v = True                          # aw, ew, ow
+        vowel.append(v)
+    if not any(vowel):
+        return c, "", ""
+    a = vowel.index(True)
+    b = len(c) - vowel[::-1].index(True)
+    onset, coda = c[:a], c[b:]
+    base = c[:-1] if c.endswith("les") else c
+    if (last and base.endswith("le") and len(base) >= 3
+            and base[-3] not in "aeiou"):
+        onset, coda = base[:-2], "l" + c[len(base):]
+    elif len(c) >= 3 and c.endswith("e") and not vowel[-2] and any(
+            vowel[:-2]):
+        j = len(c) - 1
+        while j > 0 and not vowel[j - 1]:
+            j -= 1
+        coda = c[j:-1]
+    return onset, coda, c[a]
+
+
+def _spelt(letters: str, after: str = "") -> list[str]:
+    if not letters:
+        return []
+    try:
+        return [s for s in consonants(letters, after)]
+    except ValueError:
+        return list(letters)
+
+
+def _edges(chunk: str, nxt: str) -> tuple:
+    """The consonant sounds a chunk's letters spell at each edge. An r
+    after the vowel is silent (non-rhotic) but may link to the next
+    syllable (fer-ent, rent); a u may carry a y sound (u-ni, cu-cum)."""
+    onset, coda, v = letter_edges(chunk, last=not nxt)
+    on = _spelt(onset, v)
+    co = [s for s in _spelt(coda, nxt[:1]) if s != "ɹ"]
+    return on, co, "r" in coda, v
+
+
+def _dist(want, got, free_first=(), free_last=()) -> float:
+    """Edit distance between spelt and heard sounds: substitute 2, a
+    near sound 1, add or drop 1. A linking r first in `got`, or a y
+    sound last before its vowel, costs nothing."""
+    want, got = list(want), list(got)
+    if got and got[0] in free_first and (not want or want[0] != got[0]):
+        got = got[1:]
+    if got and got[-1] in free_last and (not want or want[-1] != got[-1]):
+        got = got[:-1]
+    d = [[float(i + j) if i == 0 or j == 0 else 0.0
+          for j in range(len(got) + 1)] for i in range(len(want) + 1)]
+    for i in range(1, len(want) + 1):
+        for j in range(1, len(got) + 1):
+            a, b = want[i - 1], got[j - 1]
+            sub = 0 if a == b else (1 if frozenset((a, b)) in NEAR else 2)
+            d[i][j] = min(d[i - 1][j] + 1, d[i][j - 1] + 1,
+                          d[i - 1][j - 1] + sub)
+    return d[-1][-1]
+
+
+def _cut(tokens, chunks):
+    """(pieces, cost) with one vowel per chunk, or None."""
+    vi = [i for i, t in enumerate(tokens) if t[0] == "V"]
+    if len(vi) != len(chunks):
+        return None
+    low = [c.lower() for c in chunks]
+    edges = [_edges(c, low[k + 1] if k + 1 < len(low) else "")
+             for k, c in enumerate(low)]
+    cost = _dist(edges[0][0], [t[1] for t in tokens[:vi[0]]])
+    cost += _dist(edges[-1][1], [t[1] for t in tokens[vi[-1] + 1:]])
+    starts, ends = [0], []
+    for k in range(len(low) - 1):
+        a, b = vi[k], vi[k + 1]
+        cluster = [t[1] for t in tokens[a + 1:b]]
+        coda_want, on_want = edges[k][1], edges[k + 1][0]
+        link = ("ɹ",) if edges[k][2] else ()
+        yod = ("j",) if edges[k + 1][3] == "u" else ()
+        left = letter_edges(low[k], last=False)[1]
+        right = letter_edges(low[k + 1], last=k + 2 == len(low))[0]
+        double = bool(left and right and left[-1] == right[0])
+        options = []
+        for s in range(len(cluster) + 1):
+            c = (_dist(coda_want, cluster[:s])
+                 + _dist(on_want, cluster[s:], link, yod))
+            options.append((c, 0.5 if double else 0.0, s, s))
+            if s >= 1:
+                # One sound closes this syllable and opens the next.
+                c = (_dist(coda_want, cluster[:s])
+                     + _dist(on_want, cluster[s - 1:], link, yod))
+                options.append((c, 0.0 if double else 0.5, s, s - 1))
+        c, _tie, end, start = min(options)
+        cost += c
+        ends.append(a + 1 + end)
+        starts.append(a + 1 + start)
+    ends.append(len(tokens))
+    return [tokens[s:e] for s, e in zip(starts, ends)], cost
+
+
+def _variants(tokens, n: int):
+    """The token lists one step nearer n vowels, each with its cost."""
+    have = sum(1 for t in tokens if t[0] == "V")
+    out = []
+    if have > n:
+        # fire, sour, require: a rising vowel and its schwa are one.
+        for i in range(len(tokens) - 1):
+            a, b = tokens[i], tokens[i + 1]
+            if (a[0] == b[0] == "V" and a[1] in ("I", "W")
+                    and b[1] == "ə"):
+                out.append((tokens[:i] + [("V", a[1] + "ə", a[2])]
+                            + tokens[i + 2:], 0))
+    elif have < n:
+        # a-quar-i-um, cu-ri-ous: ɪə across two syllables.
+        for i, t in enumerate(tokens):
+            if t[0] == "V" and t[1] in ("ɪə", "ʊə"):
+                out.append((tokens[:i] + [("V", t[1][0], t[2]),
+                                          ("V", "ə", "")] + tokens[i + 1:],
+                            0))
+        # cam-e-ra, choc-o-late: a vowel speech drops, put back.
+        for i in range(1, len(tokens)):
+            for v in ("ə", "ɪ"):
+                out.append((tokens[:i] + [("V", v, "+")] + tokens[i:], 2))
+    return out
+
+
+def word_syllables(chunks, phonemes: str):
+    """A word's own phonemes cut into its written chunks: a list of
+    token pieces, one per chunk, or None when no cut fits."""
+    n = len(chunks)
+    frontier, seen, best = [(phoneme_tokens(phonemes), 0)], set(), None
+    while frontier:
+        tokens, extra = frontier.pop()
+        key = tuple(tokens)
+        if key in seen:
+            continue
+        seen.add(key)
+        if sum(1 for t in tokens if t[0] == "V") != n:
+            frontier.extend((t, extra + c) for t, c in _variants(tokens, n))
+            continue
+        got = _cut(tokens, chunks)
+        if got is None:
+            continue
+        pieces, cost = got
+        cost += extra
+        for piece, chunk in zip(pieces, chunks):
+            for kind, sound, mark in piece:
+                if kind == "V" and mark == "+":
+                    letter = next((ch for ch in chunk.lower()
+                                   if ch in "aeiouy"), "e")
+                    if (sound == "ɪ") != (letter in "iy"):
+                        cost += 1
+        if best is None or cost < best[1]:
+            best = (pieces, cost)
+    return best[0] if best else None
+
+
+def said_alone(piece) -> str:
+    """One syllable as its own utterance: primary stress on its vowel,
+    so a weak one is still clear, and a syllabic l said with a schwa."""
+    return "".join(("ˈ" + ("ə" if s == "ᵊ" else s)) if k == "V" else s
+                   for k, s, _mark in piece)
+
+
+def is_weak(piece) -> bool:
+    """The syllable's vowel is unstressed and weak in the word, so a
+    vowel foil would sound the same as the answer."""
+    _k, sound, mark = next(t for t in piece if t[0] == "V")
+    return mark in ("", "+") and sound in WEAK_VOWELS
+
+
+def syllable_plan(words, word_phonemes, stressed_anywhere):
+    """Each word's syllable files and weak flags, and the new sounds
+    to render.
+
+    words: Word records; word_phonemes(word) gives a real word's
+    phonemes or None; stressed_anywhere(chunk) as in pseudo_phonemes.
+    Returns (syllable_map, new) where syllable_map[word] is
+    {"files": [...], "weak": [0 or 1, ...]} and new maps a file stem
+    to the phonemes it must say. A piece that says exactly what its
+    chunk's spelt file says reuses that file; any other sound is made
+    once, named after the first word that needs it."""
+    from finger_rehab.game.modes.syllables_words import speech_stem
+    syllable_map, new, by_sound = {}, {}, {}
+    for w in words:
+        chunks = [c.lower() for c in w.syllables]
+        spelt = [chunk_phonemes(c, stressed_anywhere(c)) for c in chunks]
+        pieces = None
+        if w.lex != "pseudo":
+            ps = word_phonemes(w.word)
+            pieces = word_syllables(chunks, ps) if ps else None
+        if pieces is None:
+            # A made-up word is said as its chunks, so its syllables
+            # are theirs. A word with no cut keeps the spelt files.
+            said = spelt
+            weak = [0] * len(chunks)
+        else:
+            said = [said_alone(p) for p in pieces]
+            weak = [1 if is_weak(p) else 0 for p in pieces]
+        files = []
+        for k, (chunk, sound, own) in enumerate(zip(chunks, said, spelt)):
+            if sound == own:
+                files.append(f"chunks/{speech_stem(chunk)}")
+                continue
+            stem = by_sound.get(sound)
+            if stem is None:
+                stem = f"syllables/{speech_stem(w.word)}_{k}"
+                by_sound[sound] = stem
+                new[stem] = sound
+            files.append(stem)
+        syllable_map[w.word] = {"files": files, "weak": weak}
+    return syllable_map, new
+
+
 # ---- the engine --------------------------------------------------------------
 
 class Voice:
@@ -365,26 +655,33 @@ def plan_items(pools, only=None):
     return items
 
 
-def render(items, voice: Voice, out: Path, meta: dict) -> dict:
+def say_to_file(voice: Voice, stem: str, ps: str, out: Path,
+                kind: str) -> dict:
+    """One item said, trimmed, levelled and written as out/stem.wav;
+    returns its manifest record."""
     from scipy.io import wavfile
+    bad = set(ps) - KOKORO_SYMBOLS
+    if bad:
+        raise ValueError(f"{stem}: symbols Kokoro was not trained on "
+                         f"{sorted(bad)} in {ps!r}")
+    x = voice.say(ps)
+    spans = kit.utterances(x)
+    if not spans:
+        raise ValueError(f"{stem}: Kokoro returned silence for {ps!r}")
+    y, rec = kit.finish(x, (spans[0][0], spans[-1][1]), kind)
+    rec["phonemes"] = ps
+    path = out / f"{stem}.wav"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    wavfile.write(str(path), kit.RATE,
+                  np.clip(y * 32767.0, -32768, 32767).astype(np.int16))
+    return rec
+
+
+def render(items, voice: Voice, out: Path, meta: dict) -> dict:
     records = {}
     for stem, kind, text, extra in items:
         ps = extra if extra is not None else voice.word_phonemes(text)
-        bad = set(ps) - KOKORO_SYMBOLS
-        if bad:
-            raise ValueError(f"{stem}: symbols Kokoro was not trained on "
-                             f"{sorted(bad)} in {ps!r}")
-        x = voice.say(ps)
-        spans = kit.utterances(x)
-        if not spans:
-            raise ValueError(f"{stem}: Kokoro returned silence for {ps!r}")
-        y, rec = kit.finish(x, (spans[0][0], spans[-1][1]), kind)
-        rec["phonemes"] = ps
-        path = out / f"{stem}.wav"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        wavfile.write(str(path), kit.RATE,
-                      np.clip(y * 32767.0, -32768, 32767).astype(np.int16))
-        records[stem] = rec
+        records[stem] = say_to_file(voice, stem, ps, out, kind)
     manifest_path = out / "manifest.json"
     manifest = dict(meta, entries={})
     if manifest_path.exists():
@@ -402,6 +699,60 @@ def render(items, voice: Voice, out: Path, meta: dict) -> dict:
     return records
 
 
+def pool_words(pools):
+    """The Word records behind kit.bank_items(pools), in its order."""
+    from finger_rehab.game.modes.syllables_words import all_words, load_pools
+    loaded = load_pools()
+    child = list(all_words()) if "child" in pools else []
+    pooled = [w for name in pools if name != "child"
+              for w in loaded.get(name, ())]
+    out, seen = [], set()
+    for w in child + pooled:
+        if len(w.syllables) < 2 or w.word in seen:
+            continue
+        seen.add(w.word)
+        out.append(w)
+    return out
+
+
+def render_syllables(voice, out: Path, pools, dry_run: bool = False) -> dict:
+    """Every word's syllables as they sound in it: the new sounds made,
+    and the manifest's syllable_map written, with the chunk and word
+    files left as they are. Real words are cut from the phonemes the
+    manifest already holds for them, so no espeak is needed."""
+    from finger_rehab.game.modes.syllables_words import speech_stem
+    manifest_path = out / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    entries = manifest.get("entries") or {}
+    every, _ = kit.bank_items(kit.ALL_POOLS)
+    words = pool_words(pools)
+    syllable_map, new = syllable_plan(
+        words,
+        lambda w: (entries.get(speech_stem(w)) or {}).get("phonemes"),
+        lambda c: every[c.lower()][0])
+    if dry_run:
+        for w in words:
+            got = syllable_map[w.word]
+            said = [new.get(f) or (entries.get(f) or {}).get("phonemes", "?")
+                    for f in got["files"]]
+            print(f"{w.word:18s} " + " | ".join(
+                f"{p}{'*' if f in new else ''}{'.' if weak else ''}"
+                for f, p, weak in zip(got["files"], said, got["weak"])))
+        print(f"{len(new)} new sounds (*), weak vowels marked (.)")
+        return {}
+    records = {stem: say_to_file(voice, stem, ps, out, "chunk")
+               for stem, ps in sorted(new.items())}
+    entries.update(records)
+    manifest["entries"] = entries
+    manifest["syllable_map"] = dict(
+        manifest.get("syllable_map") or {}, **syllable_map)
+    manifest["syllable_form"] = "word"
+    manifest["syllables_rendered_on"] = date.today().isoformat()
+    manifest_path.write_text(json.dumps(manifest, indent=1, sort_keys=True),
+                             encoding="utf-8")
+    return records
+
+
 def _sha256(path: Path) -> str:
     h = hashlib.sha256()
     with open(path, "rb") as f:
@@ -412,8 +763,8 @@ def _sha256(path: Path) -> str:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--model", required=True, help="kokoro-v1.0.onnx")
-    ap.add_argument("--voices", required=True, help="voices-v1.0.bin")
+    ap.add_argument("--model", help="kokoro-v1.0.onnx")
+    ap.add_argument("--voices", help="voices-v1.0.bin")
     ap.add_argument("--voice", default=VOICE)
     ap.add_argument("--pools", default=",".join(kit.ALL_POOLS),
                     help="child, teen, adult, pseudo (the battery's classic "
@@ -424,10 +775,22 @@ def main(argv=None) -> int:
     ap.add_argument("--out", default=str(kit.SPEECH_DIR))
     ap.add_argument("--dry-run", action="store_true",
                     help="print each item's phonemes, write nothing")
+    ap.add_argument("--syllables-only", action="store_true",
+                    help="make only the syllables that sound different in "
+                         "their word, and the syllable_map")
     args = ap.parse_args(argv)
-    model, voices = Path(args.model).resolve(), Path(args.voices).resolve()
     out = Path(args.out).resolve()
     pools = tuple(p.strip() for p in args.pools.split(",") if p.strip())
+    if args.syllables_only and args.dry_run:
+        render_syllables(None, out, pools, dry_run=True)
+        return 0
+    if not (args.model and args.voices):
+        ap.error("--model and --voices are needed to make sound")
+    model, voices = Path(args.model).resolve(), Path(args.voices).resolve()
+    if args.syllables_only:
+        made = render_syllables(Voice(model, voices, args.voice), out, pools)
+        print(f"{len(made)} syllable files written to {out / 'syllables'}")
+        return 0
     only = {s.strip() for s in args.only.split(",") if s.strip()}
     items = plan_items(pools, only)
     if args.dry_run:
@@ -448,6 +811,9 @@ def main(argv=None) -> int:
                    if s.startswith("chunks/")), default=0.0)
     print(f"{len(records)} files written to {out}; longest chunk "
           f"{longest:.0f} ms")
+    if not only:
+        made = render_syllables(voice, out, pools)
+        print(f"{len(made)} syllable files written")
     return 0
 
 

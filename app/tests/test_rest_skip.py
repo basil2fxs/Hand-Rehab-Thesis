@@ -753,10 +753,12 @@ class BlockDurationTests(unittest.TestCase):
         "force_pilot": 7.0,
         "chords": 14.0,
         # 10.0 with the old word bank (8.5 min measured). The
-        # two-plus-syllable bank of September 2026 measures 10.2 min
-        # here at 40 words; the config comment on words_per_block
-        # says whose call the word count now is.
-        "syllables": 10.5,
+        # two-plus-syllable bank of September 2026 measured 10.2 min
+        # here at 40 words. On 29 September 2026 the mode was slowed
+        # (longer falls, a blend after the model, longer gaps) and cut
+        # to 30 words, which measures 11.2 min; the config comment on
+        # words_per_block says whose call the word count is.
+        "syllables": 12.0,
         "buzz_hunt": 10.5,
         "reaction": 5.0,
         "classic": 2.0,

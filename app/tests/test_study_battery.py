@@ -468,7 +468,7 @@ class BatteryOrderTests(_BatteryHarness):
                          [2.0, 1.5, 1.2])
         self.assertEqual(eng.cfg.get("chords.subblocks"), 5)
         self.assertEqual(eng.cfg.get("buzz_hunt.gap_trials_per_hand"), 20)
-        self.assertEqual(eng.cfg.get("syllables.words_per_block"), 40)
+        self.assertEqual(eng.cfg.get("syllables.words_per_block"), 30)
         self.assertEqual(eng.cfg.get("syllables.rung"), 1)
         # A free game after the battery is a standard block again and
         # carries no stamp.

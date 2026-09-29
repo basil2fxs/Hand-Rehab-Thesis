@@ -1147,13 +1147,17 @@ syllables:
   # buzz ladder), 16+ (the word heard, not seen, no buzz, rarer
   # derived and made-up words, and the fall time as the thing
   # measured), 60+ (as 16+ with the slower teen falls and bigger
-  # tiles). A blank age plays 6-9. classic is the design exactly as
-  # the study pre-registered it. The case for every value is in
+  # tiles). A blank age plays 6-9. classic is the design the study
+  # pre-registered, at the slower pace set on 29 September 2026. The
+  # case for every value is in
   # finger_rehab/game/modes/syllables_profiles.py.
   age_band: auto
-  # Milliseconds between syllables while the word is modelled. 500 is
-  # two a second, the pace children this age tap most naturally.
-  beat_ioi_ms: 500
+  # Milliseconds between syllables while the word is modelled, at the
+  # least: a syllable's own sound always finishes with half a second
+  # of quiet before the next. After the syllables the whole word is
+  # said again (the blend). 500 until 29 September 2026, when play
+  # felt rushed.
+  beat_ioi_ms: 900
   # Session shape: rounds of words with a proper rest between rounds,
   # and a whole-session ceiling so an engaged child still stops in
   # time. Each finished round stamps a sticker onto the session's
@@ -1161,8 +1165,10 @@ syllables:
   # first time light up to three corner stars (3, 5 and 8 in a row),
   # and moving up a word band shows a one-shot Bigger words card. All
   # of it is fixed and earned, never random, and nothing is ever taken
-  # away.
-  words_per_block: 40
+  # away. 30 words is about 11 minutes at the slower pace; 40 (the
+  # count until 29 September 2026) would be about 16. The count is
+  # Basil's call.
+  words_per_block: 30
   round_size: 10
   break_s: 30
   # The prompt: a set still unanswered late in its fall buzzes the
@@ -1182,14 +1188,14 @@ syllables:
   prompt_floor_margin_ms: 300
   # Seconds the whole word is shown and spoken before the syllables
   # are modelled.
-  attend_s: 1.5
+  attend_s: 3.0
   # Two touches on one finger inside this window count once. Sits on
   # top of the hardware debounce so a bouncy little finger cannot rack
   # up phantom presses.
   tap_debounce_ms: 150
   # Quiet gap between words, and the session ceiling. The block ends
   # politely at the next word boundary after the cap.
-  inter_trial_gap_ms: 800
+  inter_trial_gap_ms: 1500
   session_cap_min: 20
 
   # How hard the wrong chunks are. Rung 1 is far-off foils, a slow
@@ -1204,12 +1210,13 @@ syllables:
   rung_min: 1
   rung_max: 8
   # Seconds a set of chunks is on screen, one entry per rung. Never
-  # under 2.5 (the mode clamps it): the fall is a floor for thinking,
+  # under 4.0 (the mode clamps it): the fall is a floor for thinking,
   # not a race, and reading four chunks and comparing them takes a
   # child of this age most of a second before any deciding starts.
-  fall_s: [4.0, 4.0, 3.5, 3.5, 3.0, 3.0, 2.5, 2.5]
+  # Half as long again as the first table (4.0 down to 2.5).
+  fall_s: [6.0, 6.0, 5.5, 5.5, 5.0, 5.0, 4.5, 4.5]
   # Quiet gap after one set clears before the next falls.
-  set_gap_s: 0.4
+  set_gap_s: 1.0
   # Presses in this window after the chunks appear are recorded as
   # anticipations and ignored: the tiles are still fading in, so a
   # press that early answered a set nobody could have read. 0.2 is the
@@ -1226,7 +1233,7 @@ syllables:
   # worth meeting again.
   return_after: [2, 4]
   # Seconds the finished word is shown and spoken before the next one.
-  complete_s: 1.4
+  complete_s: 3.0
   # Allow the same-sound-different-spelling foil (ka for ca) at rungs
   # 7 and 8. Off by default: it can only be answered by knowing how
   # the word is spelt, which is past what this mode trains.
@@ -1245,9 +1252,12 @@ syllables:
   # whoever is working on the mode; file never speaks without a
   # rendered file (the shipping setting for the lab machine, which is
   # Windows and has no say); say never reads a file; off is silent.
-  # Files live under dir: chunks/<chunk>.wav for each written chunk and
-  # <word>.wav for each word, made by scripts/syllables_tts.py (an older
-  # <word>_<k>.ogg render still plays where a chunk has no file).
+  # Files live under dir: <word>.wav for each word, and each word's
+  # syllables as they sound in that word (the manifest's syllable_map
+  # names them: a chunks/<chunk>.wav where the chunk said alone sounds
+  # the same, a syllables/<word>_<k>.wav where it does not), made by
+  # scripts/syllables_tts.py. A word the map does not cover plays its
+  # chunks' spelt files.
   speech:
     backend: auto
     dir: assets/speech

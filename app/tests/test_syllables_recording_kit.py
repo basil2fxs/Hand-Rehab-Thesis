@@ -180,12 +180,18 @@ class TheGameSide(unittest.TestCase):
             chunk = mode.word.syllables[0]
             _write(root / f"{mode.word.word}_0.wav", np.zeros(RATE // 10))
             self.assertEqual(mode.chunk_speech_path(chunk), None)
-            self.assertAlmostEqual(mode.model_ioi_s(0), mode.ioi_s)
+            self.assertEqual(mode.syllable_file(0),
+                             root / f"{mode.word.word}_0.wav")
+            self.assertAlmostEqual(mode.model_ioi_s(0), max(
+                mode.ioi_s, 0.1 + mode.MODEL_GAP_S), delta=0.01)
             _write(root / "chunks" / f"{chunk}.wav",
                    np.zeros(int(0.7 * RATE)))
             self.assertEqual(mode.chunk_speech_path(chunk),
                              root / "chunks" / f"{chunk}.wav")
-            self.assertAlmostEqual(mode.model_ioi_s(0), 0.85, delta=0.01)
+            self.assertEqual(mode.syllable_file(0),
+                             root / "chunks" / f"{chunk}.wav")
+            self.assertAlmostEqual(mode.model_ioi_s(0),
+                                   0.7 + mode.MODEL_GAP_S, delta=0.01)
 
 
 if __name__ == "__main__":

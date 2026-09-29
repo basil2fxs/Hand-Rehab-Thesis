@@ -4,7 +4,7 @@ syllables-all-ages.md (verified 25 September 2026).
 
 WHY AGE CHANGES THE GAME. The mode was built for 6 to 9 year olds:
 familiar words, the word printed before the choice, a late buzz on the
-right finger, falls of 4.0 down to 2.5 s. Each of those is right for a
+right finger, falls of 6.0 down to 4.5 s. Each of those is right for a
 young reader and wrong for an older one.
 
 - Speed. Children are about 1.8 times slower than adults at 10 and 1.5
@@ -38,16 +38,20 @@ young reader and wrong for an older one.
   print a little for children and not at all for adults.
   Neural integration studies, not teaching trials: design values.
 
-THE STUDY'S PROFILE. `classic` is the design exactly as the healthy
-baseline study pre-registered it (Section 1.4, S6 and S7), and the
-study battery pins it, so no participant's age can change the block
-the checks were written for. Every other profile is for play and for
-later studies.
+THE STUDY'S PROFILE. `classic` is the design as the healthy baseline
+study pre-registered it (Section 1.4, S6 and S7), at the slower pace
+set on 29 September 2026. Syllables left that
+study's sitting on 28 September 2026, before any participant, so no
+preset pins it now; it stays for age_band: classic. Every other
+profile is for play and for the dyslexia case sessions.
 
 WHAT THE NUMBERS ARE. The fall tables scale the child table by those
 speed ratios; the foil shares follow the error literature; none is a
 measured optimum for this task, and the thesis must report them as
-design choices.
+design choices. On 29 September 2026 every table and the adult
+staircase's start and ceiling were made half as long again, and the
+child table's floor raised to 4.0 s, because play felt rushed; the
+ratios between the bands are unchanged.
 """
 from __future__ import annotations
 
@@ -76,15 +80,15 @@ class Profile:
     pseudo_share: float = 0.0
     # None keeps the configured table and the class floor.
     fall_table: tuple[float, ...] | None = None
-    min_fall_s: float = 2.5
+    min_fall_s: float = 4.0
     # "rung": 3-down-1-up on first-press correctness moves the rung.
     # "fall": the rung and the foil mix stay put and only the fall time
     # moves, 4-down-1-up (84.1 percent, Levitt 1971), +step_up after
     # an error or a miss, -step_down after four unaided right.
     staircase: str = "rung"
-    fall_start_s: float = 2.4
+    fall_start_s: float = 3.6
     fall_lo_s: float = 1.0
-    fall_hi_s: float = 3.0
+    fall_hi_s: float = 4.5
     fall_step_up_s: float = 0.20
     fall_step_down_s: float = 0.17
     fall_down_after: int = 4
@@ -114,16 +118,16 @@ PROFILES: dict[str, Profile] = {
     "10-12": Profile(
         "10-12", pools=("child", "teen"), child_bands=("B", "C"),
         pseudo_share=0.2,
-        fall_table=(3.2, 3.2, 2.8, 2.8, 2.4, 2.4, 2.0, 2.0),
-        min_fall_s=2.0, print_rungs=2, respeak_rungs=(1, 2, 3, 4),
+        fall_table=(4.8, 4.8, 4.2, 4.2, 3.6, 3.6, 3.0, 3.0),
+        min_fall_s=3.0, print_rungs=2, respeak_rungs=(1, 2, 3, 4),
         prompt=True, prompt_steps=(0.75, 0.9), sound_lead_ms=100,
         rewards="neutral", foil_weights=TEEN_FOILS,
         far_foils_rung1_only=True, guard_unstressed_vowels=True),
     "13-15": Profile(
         "13-15", pools=("child", "teen"), child_bands=("B", "C"),
         pseudo_share=0.2,
-        fall_table=(2.8, 2.8, 2.4, 2.4, 2.0, 2.0, 1.7, 1.6),
-        min_fall_s=1.6, print_rungs=2, respeak_rungs=(1, 2, 3, 4),
+        fall_table=(4.2, 4.2, 3.6, 3.6, 3.0, 3.0, 2.6, 2.4),
+        min_fall_s=2.4, print_rungs=2, respeak_rungs=(1, 2, 3, 4),
         prompt=True, prompt_steps=(0.75, 0.9), sound_lead_ms=100,
         rewards="neutral", foil_weights=TEEN_FOILS,
         far_foils_rung1_only=True, guard_unstressed_vowels=True),
@@ -134,8 +138,8 @@ PROFILES: dict[str, Profile] = {
         foil_weights=ADULT_FOILS),
     "60+": Profile(
         "60+", pools=("adult",), min_syll=3, max_syll=4, pseudo_share=0.3,
-        fall_table=(2.8, 2.8, 2.4, 2.4, 2.0, 2.0, 1.7, 1.6),
-        min_fall_s=1.6, print_rungs=0, model=False,
+        fall_table=(4.2, 4.2, 3.6, 3.6, 3.0, 3.0, 2.6, 2.4),
+        min_fall_s=2.4, print_rungs=0, model=False,
         respeak_rungs=tuple(range(1, 9)), prompt=False, rewards="adult",
         foil_weights=ADULT_FOILS, tile_scale=1.3),
 }

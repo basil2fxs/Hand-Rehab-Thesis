@@ -675,10 +675,10 @@ class StaircaseTests(unittest.TestCase):
 
     def test_fall_time_and_respeak_follow_the_rung(self) -> None:
         engine, mode = _build_mode(rung=1)
-        self.assertEqual(mode.fall_s, 4.0)
+        self.assertEqual(mode.fall_s, 6.0)
         self.assertIn(1, mode.respeak_rungs)
         mode.rung = 7
-        self.assertEqual(mode.fall_s, 2.5)
+        self.assertEqual(mode.fall_s, 4.5)
         self.assertNotIn(7, mode.respeak_rungs)
         # Whatever the config asks for, the fall never goes under the
         # floor the mode's timing argument rests on.
@@ -692,7 +692,7 @@ class StaircaseTests(unittest.TestCase):
         row = _parse_stimulus(_stimuli(engine)[0])
         self.assertEqual(row["rung"], 6)
         self.assertEqual(row["respeak"], 0)
-        self.assertEqual(row["fall"], 3000.0)
+        self.assertEqual(row["fall"], 5000.0)
 
     def test_a_dead_source_freezes_the_staircase(self) -> None:
         engine, mode = _build_mode()
@@ -1170,8 +1170,11 @@ class TimingTests(unittest.TestCase):
     """How long a block actually takes, measured rather than guessed."""
 
     def _minutes(self, words: int, latency: float) -> float:
+        # The shipped pace (config/default.yaml), not the shrunk test
+        # knobs _build_mode uses elsewhere.
         engine, mode = _build_mode(words_total=words, round_size=10,
-                                   break_s=30.0, inter_trial_gap_ms=800)
+                                   break_s=30.0, inter_trial_gap_ms=1500,
+                                   attend_s=3.0, ioi_ms=900)
         t = 0.0
         start = t
         guard = 0
@@ -1190,18 +1193,19 @@ class TimingTests(unittest.TestCase):
 
     def test_a_compliant_child_finishes_inside_the_rest_skip_cap(
             self) -> None:
-        # tests/test_rest_skip.py caps a syllables block at 10.5
-        # minutes with a compliant patient at 1.2 s per answer. The
-        # numbers for 32 and 40 words are printed so the words per
-        # block stays Basil's call rather than drifting.
+        # tests/test_rest_skip.py caps a syllables block at 12 minutes
+        # with a compliant patient at 1.2 s per answer. The numbers for
+        # 30 and 40 words are printed so the words per block stays
+        # Basil's call rather than drifting: the slower pace of 29
+        # September 2026 took the block from 40 words to 30.
+        m30 = self._minutes(30, 1.2)
         m40 = self._minutes(40, 1.2)
-        m32 = self._minutes(32, 1.2)
         print(f"\nsyllables block length at 1.2 s per set: "
-              f"40 words {m40:.1f} min, 32 words {m32:.1f} min")
-        self.assertLess(m40, 10.5,
-                        f"40 words runs {m40:.1f} min, over the "
-                        "10.5 min cap in tests/test_rest_skip.py")
-        self.assertGreater(m32, 0.5)
+              f"30 words {m30:.1f} min, 40 words {m40:.1f} min")
+        self.assertLess(m30, 12.0,
+                        f"30 words runs {m30:.1f} min, over the "
+                        "12 min cap in tests/test_rest_skip.py")
+        self.assertGreater(m40, m30)
 
 
 if __name__ == "__main__":

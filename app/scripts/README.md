@@ -19,7 +19,7 @@ Tools run by hand from `app/`, for example `python3 scripts/pad_bench.py`. Each 
 | [`simulate_cohort.py`](simulate_cohort.py) | A cohort of model hands with known traits, for checking the notebook |
 | **Syllables** | |
 | [`build_syllables_bank.py`](build_syllables_bank.py), [`build_syllables_pools.py`](build_syllables_pools.py) | Word lists into the files the game reads |
-| [`syllables_tts.py`](syllables_tts.py), [`render_syllables_speech.py`](render_syllables_speech.py) | The synthetic voice for every chunk and word |
+| [`syllables_tts.py`](syllables_tts.py), [`render_syllables_speech.py`](render_syllables_speech.py) | The synthetic voice for every word, chunk and syllable |
 | [`syllables_recording_kit.py`](syllables_recording_kit.py) | Record a real voice instead |
 | **The repository** | |
 | [`build_lab_package.py`](build_lab_package.py) | Assemble the EEG lab folder from the app |

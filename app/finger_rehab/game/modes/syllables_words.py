@@ -36,7 +36,9 @@ percent (V|CV, ti-ger) of the words they apply to. So the bank stores
 ONE split per word, chosen by the spoken boundary, and the game never
 asks a child to place a boundary: it asks them to pick the chunk that
 was spoken. That is also why the spoken syllable and the printed chunk
-have to be the same thing (the speech assets are rendered per chunk).
+have to be the same thing: each syllable is rendered as it sounds in
+its word, cut from the word's own phonemes at these chunks
+(scripts/syllables_tts.py).
 
 WHAT THE OLD SUB-SYLLABLE MATERIAL IS DOING HERE. onset_rime and
 graphemes are kept on the Word record and the one-syllable entries are

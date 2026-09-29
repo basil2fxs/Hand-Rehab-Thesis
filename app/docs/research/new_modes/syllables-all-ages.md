@@ -1,5 +1,16 @@
 # Syllables for all ages: evidence review and design recommendations
 
+## Status in the code, 29 September 2026
+
+Basil, after playing it: a syllable should sound the way it does in the whole word (the spelt "ger" of tiger came out as "jer"), and the mode was rushed. Syllables had already left the healthy study on 28 September, so no pre-registered block changes.
+
+- **Syllables as they sound in their word.** `scripts/syllables_tts.py` now cuts each real word's own phonemes at its written chunks and says each piece on its own, stressed so it is clear. The cut matches the consonant sounds each chunk's letters spell against the word's phonemes; a double letter closes one syllable and opens the next (rab-bit); a syllable running speech drops gets back the vowel a careful speaker says (cam-e-ra). All 875 real words cut. A piece that sounds exactly like its chunk's spelt file reuses that file, so 343 new sounds cover the rest; the manifest's `syllable_map` names each word's files and flags weak vowels. Made-up words keep their chunks, which are their pronunciation.
+- **Why the change.** Bhattacharya and Ehri's graphosyllabic analysis, the syllable-level print study this mode rests on, pronounces each syllable as close as possible to its sound in the whole word and then blends the syllables back into the word (the five steps as published by the New York State RtI middle-school tool, nysrti.org, "Graphosyllabic Analysis"; the original is Bhattacharya and Ehri 2004, Journal of Learning Disabilities 37(4), 331-348). The spelt form (D2 below) is the right aid for remembering a spelling (S5, S6), which the choice task does not ask. S2 (syllables cut from running speech are poorly identified) does not apply: each piece is synthesised as its own utterance, not cut from a recording.
+- **The cost, and the rule for it.** A weak vowel sounds alike under ter, tar and tur (B1), so on a syllable heard with a weak vowel every profile, classic included, swaps the vowel foil (F3) for a coda foil (F7).
+- **The blend.** The model now ends by lighting every slot and saying the whole word again, the last graphosyllabic step. The gap between modelled syllables stays short (half a second of quiet): Gonzalez-Frey and Ehri (2021, Scientific Studies of Reading 25(3), 272-285) found kindergartners taught to pause between the sounds of a word forgot the first sound when blending.
+- **Slower.** Child falls 6.0 s at entry down to 4.5 s (were 4.0 to 2.5), floor 4.0 s; teen, 60+ and adult tables half as long again, adult staircase from 3.6 s (ceiling 4.5 s); word shown 3 s (was 1.5), a right tile held 0.8 s (0.3), 1 s between sets (0.4), 1.5 s between words (0.8), the finished word 3 s (1.4). The voice itself keeps its normal rate: slowed or stretched speech has no evidence of benefit (D2, I20). 30 words a block (was 40), about 11 minutes at 1.2 s an answer.
+- **Waiting on:** the 343 new sounds need the Kokoro model files (336 MB, not on this computer); until they are rendered the game keeps playing the spelt chunk files.
+
 ## Status in the code, 25 September 2026
 
 What was built from this review, and what was left as it was on purpose.
@@ -419,6 +430,7 @@ Each change lists what to do, the parameters, the evidence and the risk to the h
   3. Consonant plus -le chunks (tle, ble, ple): one consistent light form, "tul".
   4. Write the intended form (IPA or a respelling) next to every chunk in the bank before recording, and have a second listener check a 10 percent sample against it.
 - **Why this form.** Syllables cut from running speech are poorly identified (S2); 62 percent of targets are unstressed and usually reduced (S3); spelling pronunciations help children and adults remember spellings, including schwa letters (S5, S6); and moving from a spelling pronunciation to the real word is a separate, trainable skill that predicts reading (S7 to S9). The game trains that step every time it plays the natural word after the chunks. It also keeps vowel foils answerable by sound (B1, C4).
+- **Superseded for the game on 29 September 2026** (status note at the top): each syllable is now said as it sounds in its word. The rules above still hold for a recorded voice made with the kit.
 - **Pseudowords.** Reuse the chunk files. Record each whole pseudoword naturally with the stress written in the list, and avoid chunks with ambiguous graphemes (W15).
 
 ### D3. Timing relative to print

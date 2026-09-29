@@ -217,6 +217,8 @@ class SyllablesScreen(Screen):
         if phase == "attend":
             return ("LISTEN...", "Here is the word.", "accent")
         if phase == "model":
+            if getattr(mode, "blending", False):
+                return ("WATCH", "Now the parts together.", "accent")
             return ("WATCH", "Hands off. See and hear each part.",
                     "accent")
         if phase == "choose":
@@ -620,13 +622,16 @@ class SyllablesScreen(Screen):
             # wears the mode's own accent instead of borrowing a
             # finger colour that would mean nothing.
             fill = self._accent()
-            lit = phase == "model" and model_idx == i
+            blend = phase == "model" and getattr(mode, "blending", False)
+            lit = phase == "model" and (model_idx == i or blend)
             if lit:
                 # Above the profile's print rung the slot lights and
-                # the chunk is heard, not shown.
+                # the chunk is heard, not shown. At the blend every
+                # slot is lit at once, still, while the word is said.
                 chunk = word.syllables[i] if self._prints(mode) else ""
-                b = min(1.0, (now - self._model_lit_t) / 0.4)
-                rect = rect.move(0, -int(10 * math.sin(b * math.pi)))
+                if not blend:
+                    b = min(1.0, (now - self._model_lit_t) / 0.4)
+                    rect = rect.move(0, -int(10 * math.sin(b * math.pi)))
             elif phase in ("choose", "complete", "attend"):
                 filled = getattr(mode, "filled", [])
                 lanes = getattr(mode, "filled_lanes", [])

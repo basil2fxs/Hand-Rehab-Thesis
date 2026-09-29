@@ -4765,8 +4765,8 @@ class GameEngine:
             lanes=lanes,
             lanes_by_hand=hands if self.hand_mode == "both" else None,
             band=str(self.cfg.get("syllables.band", "A")),
-            ioi_ms=float(self.cfg.get("syllables.beat_ioi_ms", 500)),
-            words_total=int(self.cfg.get("syllables.words_per_block", 40)),
+            ioi_ms=float(self.cfg.get("syllables.beat_ioi_ms", 900)),
+            words_total=int(self.cfg.get("syllables.words_per_block", 30)),
             round_size=int(self.cfg.get("syllables.round_size", 10)),
             break_s=float(self.cfg.get("syllables.break_s", 30)),
             warmup_taps=0,
@@ -4776,25 +4776,25 @@ class GameEngine:
                                    or (0.6, 0.75, 0.9))),
             prompt_floor_margin_ms=float(
                 self.cfg.get("syllables.prompt_floor_margin_ms", 300)),
-            attend_s=float(self.cfg.get("syllables.attend_s", 1.5)),
+            attend_s=float(self.cfg.get("syllables.attend_s", 3.0)),
             tap_debounce_ms=float(
                 self.cfg.get("syllables.tap_debounce_ms", 150)),
             inter_trial_gap_ms=float(
-                self.cfg.get("syllables.inter_trial_gap_ms", 800)),
+                self.cfg.get("syllables.inter_trial_gap_ms", 1500)),
             session_cap_min=float(
                 self.cfg.get("syllables.session_cap_min", 20)),
             rung=int(self.cfg.get("syllables.rung", 1)),
             rung_min=int(self.cfg.get("syllables.rung_min", 1)),
             rung_max=int(self.cfg.get("syllables.rung_max", 8)),
             fall_s=list(self.cfg.get("syllables.fall_s", None) or []) or None,
-            set_gap_s=float(self.cfg.get("syllables.set_gap_s", 0.4)),
+            set_gap_s=float(self.cfg.get("syllables.set_gap_s", 1.0)),
             spawn_lockout_s=float(
                 self.cfg.get("syllables.spawn_lockout_s", 0.25)),
             respeak_rungs=list(
                 self.cfg.get("syllables.respeak_rungs", None) or []) or None,
             return_after=list(
                 self.cfg.get("syllables.return_after", None) or []) or None,
-            complete_s=float(self.cfg.get("syllables.complete_s", 1.4)),
+            complete_s=float(self.cfg.get("syllables.complete_s", 3.0)),
             homophone_foils=bool(
                 self.cfg.get("syllables.homophone_foils", False)),
             alternate_hands=bool(
@@ -4804,8 +4804,8 @@ class GameEngine:
             score_cfg=self.score_cfg,
             seed=seed,
             demo_trials=self._test_mode_trials(),
-            # Who the block is for: auto reads the intake age. The
-            # study battery pins classic, the pre-registered design.
+            # Who the block is for: auto reads the intake age;
+            # classic is the design the study pre-registered.
             age_band=str(self.cfg.get("syllables.age_band", "auto")
                          or "auto"),
             age=getattr(self.session, "age", ""),

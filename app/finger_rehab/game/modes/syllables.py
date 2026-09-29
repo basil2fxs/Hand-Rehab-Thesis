@@ -9,8 +9,10 @@ part of the design.
 WHAT THE CHILD DOES. ATTEND: the whole word appears at the top as n
 empty slots with the word written large under them, and the word is
 spoken. MODEL: each slot lights in turn at the beat, its chunk shows
-and the syllable is spoken. No motor runs. Then the slots empty
-again. CHOOSE, once per syllable in order: four tiles fall slowly down
+and the syllable is spoken as it sounds in that word; then every slot
+shows its chunk at once and the whole word is said again, the blend.
+No motor runs. Then the slots empty again. CHOOSE, once per syllable
+in order: four tiles fall slowly down
 four lanes that sit over the four fingers, one tile is the syllable
 and three are foils. The child presses the finger under the right
 tile. If the set is still unanswered late in its fall, the right
@@ -37,6 +39,21 @@ Carter 1974: 46 percent of four year olds could tap syllables and none
 could tap phonemes; Ziegler and Goswami's 2005 grain size theory
 explains why English readers need the big units as well as the small
 ones), so the syllable is the right grain to start at.
+
+WHY EACH SYLLABLE SOUNDS AS IT DOES IN ITS WORD. Bhattacharya and
+Ehri's graphosyllabic method says the word, splits it into spoken
+syllables as close as possible to their sounds in the whole word,
+matches each to its spelling, then blends them back into the word.
+The model does exactly that, so the ti and ger of tiger are "tie" and
+"guh" and blend back into tiger. Until 29 September 2026 every chunk
+had one spelt recording reused in every word, which said the ger of
+tiger as "jer" (the ginger reading) and never blended back. The cost
+of the in-word form is that a weak vowel ("uh", "ih") sounds the same
+under ter, tar and tur, so on those syllables a vowel foil could only
+be rejected by spelling knowledge: every profile swaps it for a coda
+foil there (_foil_kinds). Spelling pronunciations remain the better
+aid for REMEMBERING spellings (Ocal and Ehri 2017; Hilte and Reitsma
+2006), which is not what the choice task asks.
 
 THE GAME SHAPE COMES FROM GRAPHOGAME. Richardson and Lyytinen (2014)
 describe the method this mode copies: multiple-choice trials pairing
@@ -144,20 +161,26 @@ needs roughly a second before any READING is done, and a struggling
 reader needs time to read four chunks and compare them. Time pressure is also what
 separates dyslexic from typical letter-sound binding (Aravena,
 Snellings, Tijms and van der Molen 2013). So a set is on screen for
-4.0 s at the entry rung and never under 2.5 s: the window is a floor
-for thinking, not a rhythm target.
+6.0 s at the entry rung and never under 4.0 s: the window is a floor
+for thinking, not a rhythm target. The pace around the sets is as
+unhurried: the word is shown for 3 s, each modelled syllable ends
+with half a second of quiet, a right tile is held 0.8 s as it lifts,
+1 s passes between sets and 1.5 s between words. These were 4.0 and
+2.5 s, 1.5 s and about 0.15, 0.3, 0.4 and 0.8 s until 29 September
+2026, when play-testing found the mode rushed; the numbers are design
+choices, not measured optima.
 
 WHO THE BLOCK IS FOR. Everything above describes the 6 to 9 year old
 the mode was built for. syllables_profiles.py sets it up for older
 readers too, from the intake age: faster falls and derived and made-up
 words from 10, and for adults the word heard without being seen, no
 buzz, rarer derived and made-up words and a fall-time staircase whose
-threshold is the result. The healthy baseline study pinned the design
-as it stood (the classic profile), so its battery block never changes
-with a participant's age. Speech is a free synthetic voice (Kokoro,
-British), each chunk spoken as spelt (scripts/syllables_tts.py); a
-recorded Australian voice can replace it
-(scripts/syllables_recording_kit.py).
+threshold is the result. The classic profile is the design the
+healthy baseline study pre-registered, before Syllables left that
+study on 28 September 2026. Speech is a free synthetic voice (Kokoro,
+British), each syllable said as it sounds in its word
+(scripts/syllables_tts.py); a recorded Australian voice can replace
+it (scripts/syllables_recording_kit.py), with each chunk spelt.
 
 HANDS. With both hands connected the hands ALTERNATE PER WORD: all
 four tiles sit over the playing hand, the resting hand shows seat
@@ -352,12 +375,21 @@ class SyllablesMode(WaitSkip):
 
     # How long the set stays on screen after the correct press, so the
     # tile is seen lifting into the word strip before the next set.
-    CORRECT_HOLD_S = 0.3
+    # 0.3 s until 29 September 2026, when play felt rushed.
+    CORRECT_HOLD_S = 0.8
     # The corrective display on a missed set: the right tile glows on
     # its way out and the syllable is spoken. Delayed by construction
     # (it lands one to three seconds after any wrong press), which is
-    # the feedback timing the docstring defends.
-    MISS_GLOW_S = 0.6
+    # the feedback timing the docstring defends. Long enough to hear
+    # the syllable out and see which tile it was.
+    MISS_GLOW_S = 1.5
+    # The model: silence after each spoken syllable before the next,
+    # and after the syllables the whole word again (the blend), held
+    # this long before the first set. Kept short between syllables on
+    # purpose: pauses between the parts of a word make children forget
+    # the first part when they blend (Gonzalez-Frey and Ehri 2021).
+    MODEL_GAP_S = 0.5
+    BLEND_HOLD_S = 1.2
     # A greyed tile drifts off over this long. Screen-side only.
     GREY_DRIFT_S = 0.5
     # Fixed streak milestones, in WORDS answered with every first
@@ -381,8 +413,9 @@ class SyllablesMode(WaitSkip):
     # The floor on the fall window, whatever the config says. Below
     # this the task measures reading speed under time pressure, which
     # is the thing Aravena et al. (2013) showed dyslexic readers fail
-    # for reasons that have nothing to do with this game.
-    MIN_FALL_S = 2.5
+    # for reasons that have nothing to do with this game. 2.5 s until
+    # 29 September 2026.
+    MIN_FALL_S = 4.0
 
     def __init__(self, engine: "GameEngine",
                  lanes: list[int],
@@ -401,11 +434,11 @@ class SyllablesMode(WaitSkip):
                  rung_min: int = 1,
                  rung_max: int = 8,
                  fall_s: list[float] | None = None,
-                 set_gap_s: float = 0.4,
+                 set_gap_s: float = 1.0,
                  spawn_lockout_s: float = 0.25,
                  respeak_rungs: list[int] | None = None,
                  return_after: list[int] | None = None,
-                 complete_s: float = 1.4,
+                 complete_s: float = 3.0,
                  homophone_foils: bool = False,
                  alternate_hands: bool = True,
                  supervised: bool = True,
@@ -473,8 +506,8 @@ class SyllablesMode(WaitSkip):
         self.rung = max(self.rung_min, min(self.rung_max, int(rung)))
         self.rung_start = self.rung
         self._fall_table = [max(self.MIN_FALL_S, float(v))
-                            for v in (fall_s or [4.0, 4.0, 3.5, 3.5,
-                                                 3.0, 3.0, 2.5, 2.5])]
+                            for v in (fall_s or [6.0, 6.0, 5.5, 5.5,
+                                                 5.0, 5.0, 4.5, 4.5])]
         self.set_gap_s = max(0.0, float(set_gap_s))
         # The lockout has a floor as well as a config value: the tiles
         # are still fading in below it, so a press there answered a
@@ -494,6 +527,9 @@ class SyllablesMode(WaitSkip):
         self._speech_len: dict[str, float] = {}
         self._manifest_entries: dict | None = None
         self._manifest_meta: dict | None = None
+        # Each word's syllable files as they sound in that word, and
+        # which have a weak vowel (the manifest's syllable_map).
+        self._manifest_syllables: dict = {}
         self.demo = demo_trials is not None
         if self.demo:
             # Test Mode: a handful of words and token breaks, so a
@@ -693,6 +729,13 @@ class SyllablesMode(WaitSkip):
             return self._fall_now
         idx = max(0, min(len(self._fall_table) - 1, self.rung - 1))
         return self._fall_table[idx]
+
+    @property
+    def blending(self) -> bool:
+        """The model's last step: every part shown and the whole word
+        said again."""
+        return (self.phase == "model" and self.n_syll > 0
+                and self._model_idx >= self.n_syll)
 
     @property
     def show_print(self) -> bool:
@@ -1022,7 +1065,8 @@ class SyllablesMode(WaitSkip):
         self._after_word(now)
 
     def _update_model(self, now: float) -> None:
-        """Light each slot in turn at the beat and speak its syllable.
+        """Light each slot in turn at the beat and speak its syllable,
+        then show them all and say the whole word (the blend).
 
         No buzz. The model used to run a roll across all four fingers
         for every syllable, which players felt as every motor going
@@ -1038,7 +1082,14 @@ class SyllablesMode(WaitSkip):
         if due is None or now < due:
             return
         self._model_idx += 1
-        if self._model_idx >= self.n_syll:
+        if self._model_idx == self.n_syll:
+            # The blend: every slot shows its part and the whole word
+            # is said again, the last step of graphosyllabic analysis
+            # (Bhattacharya and Ehri 2004).
+            self._speak_word()
+            self._model_next_t = max(now, due) + self.blend_s()
+            return
+        if self._model_idx > self.n_syll:
             self._model_idx = -1
             self._model_next_t = None
             self._enter_phase("choose", due)
@@ -1214,23 +1265,32 @@ class SyllablesMode(WaitSkip):
     def _foil_kinds(self) -> tuple[str, ...] | None:
         """The three foil kinds for this set, or None for the rung
         schedule unchanged (classic). An age profile draws from its
-        foil shares, far foils only at rung 1 for teens, and swaps a
-        vowel foil on an unstressed syllable for a coda foil while the
-        chunk audio is not spelt, since a reduced vowel sounds alike
-        under ter, tar and tur."""
+        foil shares, far foils only at rung 1 for teens.
+
+        A vowel foil becomes a coda foil where the syllable is HEARD
+        with a weak vowel, since ter, tar and tur all say "tuh" and
+        only spelling knowledge could pick one: in every profile when
+        the syllable_map says the syllable is weak in its word, and,
+        for a word the map does not cover, on any unstressed syllable
+        in the profiles that guard it while its chunk audio is not
+        spelt."""
         prof = self.profile
-        if prof.pid == "classic":
+        weak = (self.heard_weak(self.pos) if self.word is not None
+                else None)
+        if prof.pid == "classic" and not weak:
             return None
-        if prof.foil_weights and not (prof.far_foils_rung1_only
-                                      and self.rung == 1):
+        if (prof.pid != "classic" and prof.foil_weights
+                and not (prof.far_foils_rung1_only and self.rung == 1)):
             names = sorted(prof.foil_weights)
             kinds = tuple(self.rng.choices(
                 names, weights=[prof.foil_weights[n] for n in names], k=3))
         else:
             kinds = kinds_for_rung(self.rung, self.homophone_foils)
-        if (prof.guard_unstressed_vowels and self.word is not None
-                and self.pos != self.word.stress
-                and not self.chunks_spelt(self.word.syllables[self.pos])):
+        if weak is None:
+            weak = (prof.guard_unstressed_vowels and self.word is not None
+                    and self.pos != self.word.stress
+                    and not self.chunks_spelt(self.word.syllables[self.pos]))
+        if weak:
             kinds = tuple("F7" if k == "F3" else k for k in kinds)
         return kinds
 
@@ -1836,16 +1896,49 @@ class SyllablesMode(WaitSkip):
         """The recorded file for one written chunk, or None. A chunk is
         recorded once, as a spelling pronunciation (never an 'uh'),
         and reused in every word that holds it
-        (scripts/syllables_recording_kit.py). It wins over a word_k
-        render because it is the form the choice task needs: a
-        reduced vowel inside a word sounds the same under ter, tar and
-        tur, and only the spelt form tells them apart."""
+        (scripts/syllables_recording_kit.py). The fallback for a word
+        the syllable_map does not cover (syllable_file)."""
         root = self._speech_root() / "chunks"
         for ext in (".wav", ".ogg"):
             p = root / f"{speech_stem(chunk)}{ext}"
             if p.exists():
                 return p
         return None
+
+    def _word_syllables(self) -> dict:
+        """The syllable_map entry of the word in play, or {}."""
+        if self.word is None:
+            return {}
+        self._speech_manifest()
+        return dict((self._manifest_syllables or {}).get(self.word.word)
+                    or {})
+
+    def syllable_file(self, k: int) -> Path | None:
+        """The file for syllable k of the word in play: as it sounds IN
+        that word (the manifest's syllable_map, 29 September 2026), so
+        the parts blend back into the word, the ger of tiger a "guh"
+        and the ger of ginger a "juh". A word the map does not cover
+        falls back to its chunk's spelt file, then to a word_k render."""
+        if self.word is None or not (0 <= k < self.n_syll):
+            return None
+        files = self._word_syllables().get("files") or []
+        if k < len(files):
+            base = self._speech_root() / str(files[k])
+            for ext in (".wav", ".ogg"):
+                p = base.with_name(base.name + ext)
+                if p.exists():
+                    return p
+        return (self.chunk_speech_path(self.word.syllables[k])
+                or self.speech_path(f"{self.word.word}_{k}"))
+
+    def heard_weak(self, k: int) -> bool | None:
+        """Whether syllable k is heard with a weak vowel (uh, ih) as it
+        is in its word, where ter, tar and tur sound alike. None when
+        the syllable_map does not cover the word."""
+        weak = self._word_syllables().get("weak")
+        if not weak or not (0 <= k < len(weak)):
+            return None
+        return bool(weak[k])
 
     def speech_seconds(self, path: Path | None) -> float:
         """A speech file's length, from the manifest the recording kit
@@ -1859,7 +1952,8 @@ class SyllablesMode(WaitSkip):
         try:
             entry = self._speech_manifest().get(
                 f"{path.parent.name}/{path.stem}"
-                if path.parent.name == "chunks" else path.stem) or {}
+                if path.parent.name in ("chunks", "syllables")
+                else path.stem) or {}
             secs = float(entry.get("duration_ms", 0.0)) / 1000.0
             if secs <= 0.0 and path.suffix == ".wav":
                 import wave
@@ -1878,22 +1972,35 @@ class SyllablesMode(WaitSkip):
                                   .read_text(encoding="utf-8"))
                 self._manifest_entries = dict(data.get("entries") or {})
                 self._manifest_meta = {k: v for k, v in data.items()
-                                       if k != "entries"}
+                                       if k not in ("entries",
+                                                    "syllable_map")}
+                self._manifest_syllables = dict(
+                    data.get("syllable_map") or {})
             except Exception:
                 self._manifest_entries = {}
                 self._manifest_meta = {}
+                self._manifest_syllables = {}
         return self._manifest_entries
 
     def model_ioi_s(self, k: int) -> float:
         """The beat after the k-th modelled syllable: the configured
-        interval, stretched so a recorded chunk finishes with 150 ms to
-        spare. Speech plays on one channel, so the next file would cut
-        the last one off mid-syllable."""
+        interval, stretched so the syllable's file finishes with
+        MODEL_GAP_S of quiet before the next. Speech plays on one
+        channel, so the next file would cut the last one off."""
         if (self.word is None or not (0 <= k < self.n_syll)
                 or self.speech_backend in ("off", "say")):
             return self.ioi_s
-        path = self.chunk_speech_path(self.word.syllables[k])
-        return max(self.ioi_s, self.speech_seconds(path) + 0.15)
+        path = self.syllable_file(k)
+        return max(self.ioi_s, self.speech_seconds(path) + self.MODEL_GAP_S)
+
+    def blend_s(self) -> float:
+        """How long the blend holds: the whole word said, then
+        BLEND_HOLD_S before the first set."""
+        said = 0.0
+        if self.word is not None and self.speech_backend not in ("off",
+                                                                 "say"):
+            said = self.speech_seconds(self.speech_path(self.word.word))
+        return max(self.ioi_s, said) + self.BLEND_HOLD_S
 
     def chunks_spelt(self, chunk: str | None = None) -> bool:
         """Whether the chunk recordings are spelling pronunciations
@@ -1931,9 +2038,11 @@ class SyllablesMode(WaitSkip):
         if self.word is None or not (0 <= k < self.n_syll):
             return
         chunk = self.word.syllables[k]
-        self._speak(f"{self.word.word}_{k}", chunk, chunk=chunk)
+        self._speak(f"{self.word.word}_{k}", chunk, chunk=chunk,
+                    path=self.syllable_file(k))
 
-    def _speak(self, stem: str, text: str, chunk: str | None = None) -> None:
+    def _speak(self, stem: str, text: str, chunk: str | None = None,
+               path: Path | None = None) -> None:
         """Play a rendered speech file, or fall back to the macOS `say`
         command on a developer machine.
 
@@ -1949,8 +2058,9 @@ class SyllablesMode(WaitSkip):
         backend = self.speech_backend
         if backend == "off":
             return
-        path = None
-        if backend != "say":
+        if backend == "say":
+            path = None
+        elif path is None:
             if chunk is not None:
                 path = self.chunk_speech_path(chunk)
             path = path or self.speech_path(stem)

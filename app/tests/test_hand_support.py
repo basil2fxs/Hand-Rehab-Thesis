@@ -430,7 +430,8 @@ class ScreenMirrorTests(unittest.TestCase):
             mode._tick(t)
             seen = set()
             guard = 0
-            while mode.phase != "respond" and guard < 500:
+            # Through the first word's model and on to its first set.
+            while not (seen and mode.phase == "choose") and guard < 2000:
                 t += 0.05
                 mode._tick(t)
                 if mode.phase == "model" and mode.model_hand:
@@ -440,6 +441,7 @@ class ScreenMirrorTests(unittest.TestCase):
             self.assertTrue(seen, "model never exposed a buzzing hand")
             # Outside the model the tag is cleared: nothing on screen
             # should name a hand while the child is tapping.
+            self.assertEqual(mode.phase, "choose")
             self.assertIsNone(mode.model_hand)
             eng.finish_block()
 

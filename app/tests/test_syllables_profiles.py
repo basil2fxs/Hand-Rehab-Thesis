@@ -1,8 +1,8 @@
 """Syllables across ages: the profiles and the study's pin.
 
 The healthy baseline study pre-registered the Syllables block as it
-stood (Section 1.4, S6 and S7), so the battery pins the classic
-profile and nothing else may move it; every test of the classic block
+stood (Section 1.4, S6 and S7) as the classic profile; Syllables left
+that study on 28 September 2026, and every test of the classic block
 in test_syllables_mode.py still runs against that profile. The other
 profiles each change something a reader of that age needs changed,
 and each change is pinned here: adults hear the word without seeing
@@ -212,8 +212,8 @@ class Teens(unittest.TestCase):
     def test_faster_falls_and_print_to_rung_two(self):
         _e, m = _build_mode(age_band="auto", age="11")
         self.assertEqual(m.profile.pid, "10-12")
-        self.assertEqual(m._fall_table[0], 3.2)
-        self.assertEqual(min(m._fall_table), 2.0)
+        self.assertEqual(m._fall_table[0], 4.8)
+        self.assertEqual(min(m._fall_table), 3.0)
         m.rung = 2
         self.assertTrue(m.show_print)
         m.rung = 3
@@ -342,5 +342,8 @@ class TheNotebook(unittest.TestCase):
             out = ra.sec_syllables_profiles(sy)
             checks = ra.sec_syllables_checks(trials)
         self.assertIn("16+", out["summary"].index)
-        self.assertLess(out["summary"].loc["16+", "threshold_ms"], 2400)
+        # Thirty quick right answers walk the staircase down from its
+        # start.
+        self.assertLess(out["summary"].loc["16+", "threshold_ms"],
+                        m.profile.fall_start_s * 1000.0)
         self.assertTrue(checks["checks"].empty)
