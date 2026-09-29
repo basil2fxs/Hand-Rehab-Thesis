@@ -79,17 +79,28 @@ protocol:
       # rest that stood before that block moves to the next one.
       swap_once:
         reaction: srt
+      # No Muscle Memory in the lab (Basil, 29 September 2026). The SRT
+      # plays before it in both orders and ends by asking whether the
+      # participant noticed a repeating sequence, so by Muscle Memory
+      # they know to look for one, and its score is only implicit for
+      # a player who does not know. The SRT is the lab's sequence
+      # learning measure. A rest before a left-out block moves on.
+      leave_out:
+        - pattern
       # A lab sitting is not the healthy study's sitting, so it keeps
       # its own id. Its clock allows for the SRT's 15 minutes in place
       # of two short Reaction blocks. v2 (28 September 2026) follows
       # the study sitting's v3: no Syllables, and Rhythm a second
-      # time after the rest. Timed headless with
+      # time after the rest. v3 (29 September 2026) leaves out Muscle
+      # Memory, 6.3 min of v2's 54.6. Timed headless with
       # scripts/measure_battery.py --config config/eeg_lab.yaml: median
-      # 54.6 min over twelve simulated sittings, both orders, the SRT
-      # block 14.6 to 14.7 of it. Re-time it on the lab rig.
-      id: eeg_lab_srt_v2
-      budget_min: 57
-      hard_stop_min: 62
+      # 48.1 to 48.2 min over twelve simulated sittings, six per
+      # order, range 48.0 to 48.2, the SRT block 14.6 of it. The
+      # budget and hard stop keep v2's margins over the median.
+      # Re-time it on the lab rig.
+      id: eeg_lab_srt_v3
+      budget_min: 51
+      hard_stop_min: 56
 
 force_pilot:
   # No background track in the lab: an EEG block is recorded in

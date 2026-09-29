@@ -3,7 +3,7 @@
 | File | What it is |
 | --- | --- |
 | [`default.yaml`](default.yaml) | Every setting, each one commented. The game reads this first |
-| [`eeg_lab.yaml`](eeg_lab.yaml) | The lab's changes over the defaults: markers on, the SRT in the Lab session |
+| [`eeg_lab.yaml`](eeg_lab.yaml) | The lab's changes over the defaults: markers on, and a Lab session that plays the SRT and leaves out Muscle Memory |
 | [`calibration/`](calibration) | Saved hand calibrations, `current_<hand>.json` and a dated history |
 | [`pattern_sequence_template.yaml`](pattern_sequence_template.yaml) | A blank sequence file for Muscle Memory |
 

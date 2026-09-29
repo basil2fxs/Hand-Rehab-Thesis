@@ -60,7 +60,7 @@ The shipped config, eight sittings on each of six codes, both orders, two left-h
 
 The games draw fresh material every block, so no two sittings take the same time. A second batch of the same settings moved a code's median by up to half a minute (the 45 came out at 44.2 to 44.4, one sitting past by 11 s; the 15 at 14.4 to 14.8, eight past by 15 s at most), so plan on the ranges.
 
-A real sitting adds questions and slower changeovers, about 3 minutes on the 45. The EEG lab's sitting, the same order with the lab's Reaction task in place of both Reaction blocks, times at a median of 54.6 minutes over 12 sittings.
+A real sitting adds questions and slower changeovers, about 3 minutes on the 45. The EEG lab's sitting, the same order with the lab's Reaction task in place of both Reaction blocks and no Muscle Memory, times at a median of 48.1 minutes over 12 sittings.
 
 ## Reading the results
 
@@ -74,5 +74,5 @@ A real sitting adds questions and slower changeovers, about 3 minutes on the 45.
 - **Each student:** the longest length their slot allows (28 September 2026). The checks and the reliability table come from the full family, the 45 and the 60, so hour-long slots come first.
 - **Someone who can stay 75 minutes:** 60. Nothing of the 45 is lost, and every game shows its change.
 - **A short slot:** 30 before 15. Only the 30 plays every game. The short family is read on its own and needs 8 of its own.
-- **The EEG lab:** no SESSION picker. A length would start its games before the recording is running, so the RA starts ActiView from the name the game menu shows, then the hub's Lab session runs the lab's sitting.
+- **The EEG lab:** no session lengths. A length would start its games before the recording is running, so the RA starts ActiView from the name the game menu shows, then the hub's Lab session runs the lab's sitting.
 - **Syllables:** from the hub, with a dyslexic participant, on its own.

@@ -1333,8 +1333,10 @@ table for every game. The 30 plays every game and four of them twice;
 the 15 plays three games twice. The lab's own
 build has no lengths at login (config/eeg_lab.yaml): a length starts
 at LOG IN, before the RA has started the EEG recording, so the hub's
-picker offers Lab session instead, which runs the lab's sitting as
-before.
+picker offers Lab session instead: the lab's SRT in place of both
+Reaction blocks, and no Muscle Memory, since the SRT's recall
+question comes first and would tell the participant a sequence
+exists (config/eeg_lab.yaml, eeg_lab_srt_v3).
 
 
 3. PARTICIPANT INTAKE, ANONYMITY AND KEYING

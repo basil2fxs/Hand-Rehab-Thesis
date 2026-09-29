@@ -52,10 +52,13 @@ class FirmwareDialog:
     thread where they belong.
     """
 
-    CARD_W = 680
-    CARD_H = 300
+    CARD_W = 720
+    # The address card is taller: the 0x04 warning sits in its own box
+    # above the board and the two addresses.
+    CARD_H = {"flash": 330, "address": 420}
     BTN_W = 180
     BTN_H = 50
+    FIELD_H = 40
 
     def __init__(self, mode: str, theme: Theme, layout: Layout,
                  *, ports: list[tuple[str, str]],
@@ -79,15 +82,21 @@ class FirmwareDialog:
         self._dim_cache: pygame.Surface | None = None
 
         cx = layout.width // 2
+        card_h = self.CARD_H.get(mode, self.CARD_H["flash"])
         self.card = pygame.Rect(cx - self.CARD_W // 2,
-                                layout.height // 2 - self.CARD_H // 2,
-                                self.CARD_W, self.CARD_H)
+                                layout.height // 2 - card_h // 2,
+                                self.CARD_W, card_h)
 
+        # Rows from the card top: the board, then (address) the two
+        # addresses. Every field spans what it needs, so a long port
+        # name never runs under the arrow.
+        x = self.card.x + 28
+        self.board_y = self.card.y + (178 if mode == "address" else 110)
         self.port = self.ports[0][0] if self.ports else ""
         self.port_dropdown: Dropdown | None = None
         if len(self.ports) > 1:
             self.port_dropdown = Dropdown(
-                pygame.Rect(self.card.x + 28, self.card.y + 96, 300, 36),
+                pygame.Rect(x, self.board_y, self.CARD_W - 56, self.FIELD_H),
                 [(p, label) for p, label in self.ports], self.port,
                 on_change=self._pick_port, theme=theme, layout=layout,
                 placeholder="pick a board",
@@ -98,17 +107,18 @@ class FirmwareDialog:
         self.other_input: TextInput | None = None
         self.new_value: int | None = 0x05
         if mode == "address":
+            row = self.card.y + 262
             self.old_input = TextInput(
-                pygame.Rect(self.card.x + 28, self.card.y + 168, 120, 36),
-                theme, layout, label="OLD", initial="0x04", max_len=6,
+                pygame.Rect(x, row, 130, self.FIELD_H),
+                theme, layout, label="", initial="0x04", max_len=6,
                 font_pt=FONT_BODY)
             self.new_dropdown = Dropdown(
-                pygame.Rect(self.card.x + 176, self.card.y + 168, 190, 36),
+                pygame.Rect(x + 150, row, 220, self.FIELD_H),
                 list(FINGER_ADDRESSES) + [(None, "other...")], 0x05,
                 on_change=self._pick_new, theme=theme, layout=layout,
                 placeholder="NEW")
             self.other_input = TextInput(
-                pygame.Rect(self.card.x + 380, self.card.y + 168, 100, 36),
+                pygame.Rect(x + 390, row, 130, self.FIELD_H),
                 theme, layout, label="", initial="", max_len=6,
                 font_pt=FONT_BODY)
 
@@ -135,7 +145,7 @@ class FirmwareDialog:
         self.focus = max(0, len(items) - len(self.buttons))
 
     def _build_buttons(self) -> None:
-        y = self.card.bottom - self.BTN_H - 24
+        y = self.card.bottom - self.BTN_H - 26
         x = self.card.x + 28
         self.buttons = []
         if self.finished:
@@ -351,11 +361,11 @@ class FirmwareDialog:
         card = self.card
         pygame.draw.rect(surf, th.background, card, border_radius=18)
         pygame.draw.rect(surf, th.muted, card, 2, border_radius=18)
-        rule = pygame.Rect(0, 0, 96, 4)
-        rule.center = (card.centerx, card.top + 2)
-        pygame.draw.rect(surf, th.accent, rule, border_radius=2)
-        draw_text(surf, self._title(), (card.centerx, card.y + 20), th, ly,
+        draw_text(surf, self._title(), (card.centerx, card.y + 40), th, ly,
                   pt=FONT_H2, centre=True)
+        rule = pygame.Rect(0, 0, 72, 4)
+        rule.center = (card.centerx, card.y + 72)
+        pygame.draw.rect(surf, th.accent, rule, border_radius=2)
 
         x = card.x + 28
         if self.busy or self.finished:
@@ -383,56 +393,68 @@ class FirmwareDialog:
                 return label
         return self.port or "no board"
 
+    def _label(self, surf, text: str, x: int, field_y: int) -> None:
+        """The small caps name over a field, one style for all."""
+        draw_text(surf, text, (x, field_y - 22), self.theme, self.layout,
+                  pt=FONT_SMALL, centre=False, colour=self.theme.muted)
+
+    def _draw_board(self, surf, x: int) -> None:
+        """BOARD and its picker, or the one board there is."""
+        th, ly = self.theme, self.layout
+        self._label(surf, "BOARD", x, self.board_y)
+        if self.port_dropdown is not None:
+            self.port_dropdown.draw_closed(surf)
+        else:
+            draw_text(surf, self._board_line(), (x, self.board_y + 6), th,
+                      ly, pt=FONT_BODY, centre=False)
+
     def _draw_flash_form(self, surf, x: int) -> None:
         th, ly = self.theme, self.layout
         card = self.card
-        if self.port_dropdown is not None:
-            draw_text(surf, "BOARD", (x, card.y + 74), th, ly,
-                      pt=FONT_SMALL, centre=False, colour=th.muted)
-            self.port_dropdown.draw_closed(surf)
-        else:
-            draw_text(surf, "Board: " + self._board_line(),
-                      (x, card.y + 84), th, ly, pt=FONT_BODY, centre=False)
+        self._draw_board(surf, x)
         draw_text(surf, "Firmware: " + self.firmware_label,
-                  (x, card.y + 146), th, ly, pt=FONT_BODY, centre=False,
-                  colour=th.muted)
+                  (x, card.y + 170), th, ly, pt=FONT_BODY, centre=False,
+                  colour=th.foreground)
         draw_text(surf, "Takes about ten seconds. The buzzers self test "
                         "when the board restarts.",
-                  (x, card.y + 176), th, ly, pt=FONT_SMALL + 2,
+                  (x, card.y + 200), th, ly, pt=FONT_SMALL + 2,
                   centre=False, colour=th.muted)
         if self.result_text:
-            draw_text(surf, self.result_text, (x, card.y + 206), th, ly,
+            draw_text(surf, self.result_text, (x, card.y + 226), th, ly,
                       pt=FONT_SMALL + 2, centre=False, colour=th.warning)
 
     def _draw_address_form(self, surf, x: int) -> None:
         th, ly = self.theme, self.layout
         card = self.card
+        # The warning in a tinted box of its own: it is the one thing
+        # on this card that cannot be undone if it is missed.
+        box = pygame.Rect(x, card.y + 84, card.w - 56, 60)
+        tint = tuple(int(c + (255 - c) * 0.86) for c in th.warning)
+        ink = tuple(int(c * 0.72) for c in th.warning)
+        pygame.draw.rect(surf, tint, box, border_radius=10)
+        pygame.draw.rect(surf, th.warning, box, 1, border_radius=10)
         draw_text(surf, "Every SingleTact also answers 0x04. A change from "
                         "0x04 reaches every",
-                  (x, card.y + 54), th, ly, pt=FONT_SMALL + 2,
-                  centre=False, colour=th.warning)
+                  (box.x + 14, box.y + 9), th, ly, pt=FONT_SMALL + 2,
+                  centre=False, colour=ink)
         draw_text(surf, "sensor on the bus. Connect ONE sensor only.",
-                  (x, card.y + 74), th, ly, pt=FONT_SMALL + 2,
-                  centre=False, colour=th.warning)
-        if self.port_dropdown is not None:
-            self.port_dropdown.draw_closed(surf)
-        else:
-            draw_text(surf, "Board: " + self._board_line(),
-                      (x, card.y + 104), th, ly, pt=FONT_BODY, centre=False)
+                  (box.x + 14, box.y + 31), th, ly, pt=FONT_SMALL + 2,
+                  centre=False, colour=ink)
+        self._draw_board(surf, x)
         if self.old_input is not None:
+            self._label(surf, "OLD", self.old_input.rect.x,
+                        self.old_input.rect.y)
             self.old_input.draw(surf)
         if self.new_dropdown is not None:
-            draw_text(surf, "NEW", (self.new_dropdown.rect.x,
-                                    self.new_dropdown.rect.y - 26),
-                      th, ly, pt=FONT_SMALL, centre=False, colour=th.muted)
+            self._label(surf, "NEW", self.new_dropdown.rect.x,
+                        self.new_dropdown.rect.y)
             self.new_dropdown.draw_closed(surf)
         if self.new_value is None and self.other_input is not None:
-            draw_text(surf, "OTHER", (self.other_input.rect.x,
-                                      self.other_input.rect.y - 26),
-                      th, ly, pt=FONT_SMALL, centre=False, colour=th.muted)
+            self._label(surf, "OTHER", self.other_input.rect.x,
+                        self.other_input.rect.y)
             self.other_input.draw(surf)
         if self.result_text:
-            draw_text(surf, self.result_text, (x, card.y + 220), th, ly,
+            draw_text(surf, self.result_text, (x, card.y + 312), th, ly,
                       pt=FONT_SMALL + 2, centre=False, colour=th.warning)
 
     def _draw_progress(self, surf, x: int) -> None:
@@ -449,7 +471,7 @@ class FirmwareDialog:
         room = card.w - 56
         for i, chunk in enumerate(
                 _wrap(str(line), ly.font(FONT_BODY), room)[:5]):
-            draw_text(surf, chunk, (x, card.y + 88 + i * 28), th, ly,
+            draw_text(surf, chunk, (x, card.y + 96 + i * 28), th, ly,
                       pt=FONT_BODY, centre=False, colour=colour)
         if self.busy:
             draw_text(surf, "Do not unplug the board.",

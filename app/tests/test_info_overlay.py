@@ -17,14 +17,15 @@ os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
 
 class InfoOverlayTests(unittest.TestCase):
-    def _title_screen(self):
+    def _title_screen(self, config=None):
         import pygame
         pygame.init()
         pygame.font.init()
         from finger_rehab.config import Config
         from finger_rehab.game.engine import GameEngine
         from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
-        cfg = Config.load()
+        cfg = Config.load(config)
+        cfg.data["eeg"]["enabled"] = False
         cfg.data["ui"]["resolution"] = [1280, 800]
         cfg.data["audio"]["enabled"] = False
         pygame.display.set_mode((1280, 800))
@@ -110,6 +111,31 @@ class InfoOverlayTests(unittest.TestCase):
         self.assertEqual(int(m.group(1)),
                          int(preset["overrides"]["game"]["total_trials"]))
         self.assertIn(str(preset["budget_min"]), ts.INFO_FOOTER)
+
+    def test_the_lab_card_walks_the_lab_session(self):
+        # The lab build has no lengths at login, so the home card's
+        # 45 minute sitting is not what it runs (Basil, 29 September
+        # 2026). Its card is read off the lab's own plan.
+        from finger_rehab.game.battery import build_plan
+        config = Path(__file__).resolve().parents[1] / "config" / "eeg_lab.yaml"
+        eng, ts = self._title_screen(config)
+        steps, footer = ts._info_content()
+        blob = " ".join(s.strip() for s in steps)
+        self.assertIn("Lab session", blob)
+        self.assertIn("ten blocks", blob)
+        self.assertNotIn("45 min", blob)
+        self.assertNotIn("Muscle Memory", blob)
+        plan = build_plan(eng.cfg, "P01", "right")
+        for s in plan.steps:
+            name = self._NAMES.get(s.mode, "Reaction")
+            self.assertIn(name, blob)
+        for line in steps:
+            self.assertLessEqual(len(line.strip()), 56, line)
+        self.assertNotIn("Force\n", "\n".join(steps))
+        self.assertIn(str(int(plan.budget_min)), footer)
+        ts._show_info = True
+        import pygame
+        ts.draw(pygame.Surface((1280, 800)))
 
     def test_protocol_renders_without_error(self):
         import pygame

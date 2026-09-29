@@ -550,6 +550,56 @@ class Dropdown:
                         r.centery - label_font.get_height() // 2))
 
 
+class Switch:
+    """An on/off switch: a round-ended track, green with the knob right
+    when on, grey with it left when off, and the word beside it so the
+    state never rests on colour alone. State lives outside, as in
+    ToggleMenu: get_value() is asked on every draw and on_toggle() is
+    called on a click."""
+
+    ON = (34, 197, 94)
+
+    def __init__(self, rect: pygame.Rect, theme: Theme, layout: Layout,
+                 get_value: Callable[[], bool],
+                 on_toggle: Callable[[], None]) -> None:
+        self.rect = rect
+        self.theme = theme
+        self.layout = layout
+        self.get_value = get_value
+        self.on_toggle = on_toggle
+        self.hover = False
+
+    def _hit(self) -> pygame.Rect:
+        # The word beside the track is part of the target too.
+        return pygame.Rect(self.rect.x - 4, self.rect.y - 4,
+                           self.rect.w + 48, self.rect.h + 8)
+
+    def handle_event(self, e: pygame.event.Event) -> bool:
+        if e.type == pygame.MOUSEMOTION:
+            self.hover = self._hit().collidepoint(e.pos)
+        elif (e.type == pygame.MOUSEBUTTONDOWN and e.button == 1
+              and self._hit().collidepoint(e.pos)):
+            self.on_toggle()
+            return True
+        return False
+
+    def draw(self, surf: pygame.Surface) -> None:
+        on = bool(self.get_value())
+        r = self.rect
+        off = tuple(int(c + (255 - c) * 0.45) for c in self.theme.muted)
+        track = self.ON if on else off
+        if self.hover:
+            track = _darker(track, 0.08)
+        pygame.draw.rect(surf, track, r, border_radius=r.h // 2)
+        knob_r = r.h // 2 - 3
+        cx = r.right - r.h // 2 if on else r.x + r.h // 2
+        pygame.draw.circle(surf, (255, 255, 255), (cx, r.centery), knob_r)
+        word = self.layout.font(FONT_SMALL + 2).render(
+            "On" if on else "Off", True,
+            self.theme.foreground if on else self.theme.muted)
+        surf.blit(word, word.get_rect(midleft=(r.right + 8, r.centery)))
+
+
 class ToggleMenu:
     """Dropdown whose rows are checkboxes rather than one choice.
 
@@ -565,7 +615,8 @@ class ToggleMenu:
     somewhere else still shows correctly here.
 
     A row whose key is None is a separator: it draws its label as a
-    heading and cannot be clicked.
+    heading and cannot be clicked. With "note" as its help text it is
+    a note instead, drawn as the sentence it is.
     """
 
     ROW_H = 34
@@ -632,7 +683,8 @@ class ToggleMenu:
         needing room for a paragraph."""
         if not self.is_open or not (0 <= self._hover_idx < len(self.rows)):
             return ""
-        return self.rows[self._hover_idx][2]
+        key, _label, help_text = self.rows[self._hover_idx]
+        return "" if key is None else help_text
 
     def handle_event(self, e: pygame.event.Event) -> bool:
         """True when the event was consumed, so the caller can stop
@@ -730,8 +782,8 @@ class ToggleMenu:
         for i, (key, label, _help) in enumerate(self.rows):
             r = self._row_rect(i)
             if key is None:
-                surf.blit(head_font.render(label.upper(), True,
-                                            self.theme.muted),
+                text = label if _help == "note" else label.upper()
+                surf.blit(head_font.render(text, True, self.theme.muted),
                            (r.x + 12,
                             r.centery - head_font.get_height() // 2))
                 continue
@@ -1153,7 +1205,12 @@ class LaneStrip:
             hand_word = ("Right hand" if self.hand == "right"
                          else "Left hand" if self.hand == "left" else "")
             if hand_word:
-                hl = hand_font.render(hand_word, True, border)
+                # On a dark tile (the ring finger) the hand colour is
+                # lifted most of the way to white so it stays readable.
+                ink = border
+                if self._label_colour(fill) == (255, 255, 255):
+                    ink = tuple(int(c + (255 - c) * 0.6) for c in border)
+                hl = hand_font.render(hand_word, True, ink)
                 surf.blit(hl, hl.get_rect(midbottom=(
                     self.rect.centerx, self.rect.bottom - 16,
                 )))
@@ -1163,8 +1220,11 @@ class LaneStrip:
         # noise during a real session, so gameplay screens hide it.
         if self.show_value_readout:
             small = self.layout.font(FONT_SMALL)
+            ink = (tuple(int(c + (255 - c) * 0.6) for c in self.theme.muted)
+                   if self._label_colour(fill) == (255, 255, 255)
+                   else self.theme.muted)
             info = small.render(f"{int(self.value)}/{int(self.baseline)}",
-                                True, self.theme.muted)
+                                True, ink)
             surf.blit(info, info.get_rect(topright=(self.rect.right - 8,
                                                      self.rect.top + 8)))
 

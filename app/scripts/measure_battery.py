@@ -31,7 +31,8 @@ the reaction and rest floors of every mode are what set the time.
     python3 scripts/measure_battery.py --repeats 10    the spread
     python3 scripts/measure_battery.py --config config/eeg_lab.yaml
                                   the EEG lab's sitting: the SRT once
-                                  in place of the two Reaction blocks
+                                  in place of the two Reaction blocks,
+                                  no Muscle Memory
     python3 scripts/measure_battery.py --preset trial_30
                                   a Trial Mode length (protocol.trials)
 

@@ -224,6 +224,11 @@ def build_plan(cfg, participant: str, dominant_hand: str,
         steps = swap_once(steps, {str(k).strip().lower():
                                   str(v).strip().lower()
                                   for k, v in swaps.items()})
+    dropped = raw.get("leave_out")
+    if isinstance(dropped, (list, tuple)) and dropped:
+        steps = leave_out(steps, {str(m).strip().lower() for m in dropped})
+        if not steps:
+            raise BatteryError(f"Preset '{preset}' leaves out every step")
     overrides = resolved_overrides(cfg, preset)
     return BatteryPlan(
         family=preset_family(cfg, preset),
@@ -342,16 +347,44 @@ def swap_once(steps: list[BatteryStep],
             st = replace(st, mode=swaps[st.mode], track=None,
                          difficulty=None)
         if carry is not None:
-            if carry.rest_before_s > 0 and st.rest_before_s <= 0:
-                st = replace(st, rest_before_s=carry.rest_before_s,
-                             rest_min_s=carry.rest_min_s,
-                             stretch_before_s=0.0)
-            elif (carry.stretch_before_s > 0 and st.stretch_before_s <= 0
-                  and st.rest_before_s <= 0):
-                st = replace(st, stretch_before_s=carry.stretch_before_s)
+            st = _take_break(st, carry)
             carry = None
         out.append(st)
     return [replace(st, position=i + 1) for i, st in enumerate(out)]
+
+
+def leave_out(steps: list[BatteryStep],
+              modes: set[str]) -> list[BatteryStep]:
+    """Every step of these modes is left out, with swap_once's rule for
+    the break that stood before one. The EEG lab's build leaves out
+    Muscle Memory: its sitting opens the lab's SRT first, whose recall
+    question tells the participant a sequence was there, and Muscle
+    Memory's score only means something to a player who does not know
+    (config/eeg_lab.yaml)."""
+    out: list[BatteryStep] = []
+    carry: BatteryStep | None = None
+    for st in steps:
+        if st.mode in modes:
+            if st.rest_before_s > 0 or st.stretch_before_s > 0:
+                carry = st
+            continue
+        if carry is not None:
+            st = _take_break(st, carry)
+            carry = None
+        out.append(st)
+    return [replace(st, position=i + 1) for i, st in enumerate(out)]
+
+
+def _take_break(st: BatteryStep, carry: BatteryStep) -> BatteryStep:
+    """The rest or stretch of a left-out step, moved onto the next one
+    unless that step already has its own."""
+    if carry.rest_before_s > 0 and st.rest_before_s <= 0:
+        return replace(st, rest_before_s=carry.rest_before_s,
+                       rest_min_s=carry.rest_min_s, stretch_before_s=0.0)
+    if (carry.stretch_before_s > 0 and st.stretch_before_s <= 0
+            and st.rest_before_s <= 0):
+        return replace(st, stretch_before_s=carry.stretch_before_s)
+    return st
 
 
 # Sentinel for a key the config did not have before the override, so

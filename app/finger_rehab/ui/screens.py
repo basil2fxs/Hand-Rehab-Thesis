@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import math
+import textwrap
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -20,7 +21,7 @@ log = logging.getLogger(__name__)
 from .theme import Theme
 from .widgets import (
     Button, Card, FloatingText, LaneStrip, Layout, Segmented, Slider,
-    TextInput, ToggleMenu,
+    Switch, TextInput, ToggleMenu,
     FONT_TITLE, FONT_H1, FONT_H2, FONT_BODY, FONT_SMALL,
     BUTTON_H, BUTTON_W, PADDING, draw_text, keyboard_controls_lines,
     make_font,
@@ -62,8 +63,10 @@ CUE_ROWS: tuple[tuple[str | None, str, str], ...] = (
          "thunk when a streak ends, so nothing sounds after a press."),
         # Note row, not a switch: in Buzz Hunt the buzz IS the
         # stimulus, so its pulses ignore the before-press switches by
-        # design (the after-press switches still apply there).
-        (None, "Buzz Hunt stimuli skip Before cues", ""),
+        # design (the after-press switches still apply there). "note"
+        # draws it as a sentence rather than a heading.
+        (None, "Buzz Hunt skips the before-press cues: its buzz is "
+               "the task.", "note"),
 )
 
 
@@ -1402,6 +1405,48 @@ class TitleScreen(Screen):
         surf.blit(text, text.get_rect(
             midleft=(icx + icon_r + gap, icy)))
 
+    _COUNT_WORDS = ("", "one", "two", "three", "four", "five", "six",
+                    "seven", "eight", "nine", "ten", "eleven", "twelve",
+                    "thirteen", "fourteen", "fifteen")
+
+    def _info_content(self) -> tuple[list[str], str]:
+        """The Info card's lines and footer. A build with no session
+        lengths at login is the EEG lab's, so its card walks the Lab
+        session instead, read off the lab's own plan: it cannot name a
+        game the lab no longer plays."""
+        if len(self.trial_seg.options) > 1:
+            return list(self.INFO_STEPS), self.INFO_FOOTER
+        try:
+            from ..game.battery import build_plan
+            plan = build_plan(self.engine.cfg, "P01", "right")
+        except Exception:
+            return list(self.INFO_STEPS), self.INFO_FOOTER
+        # A game's name never breaks across lines: its spaces are held
+        # as underscores through the wrap.
+        names = [mode_title(s.mode).replace(" ", "_") for s in plan.steps]
+        cut = next((i for i, s in enumerate(plan.steps)
+                    if i and s.rest_before_s > 0), len(names))
+        order = ", ".join(names[:cut])
+        rest = names[cut:]
+        if rest:
+            again = (", ".join(rest[:-1]) + " and " + rest[-1]
+                     if len(rest) > 1 else rest[0])
+            order += f", then after a rest {again} again"
+        n = len(names)
+        count = (self._COUNT_WORDS[n] if n < len(self._COUNT_WORDS)
+                 else str(n))
+        body = textwrap.wrap(f"{count} blocks on the right hand, in the "
+                             f"order set at login: {order}.", 56)
+        steps = ["1. Enter the name, age and main hand, then LOG IN.",
+                 "2. Start the EEG recording under the name on the menu.",
+                 "3. On the hub pick Lab session, then Start. It plays"]
+        steps += ["      " + line.replace("_", " ") for line in body]
+        steps.append("4. Finish every block. Quitting early leaves gaps.")
+        minutes = int(round(plan.budget_min)) if plan.budget_min else 0
+        footer = (f"About {minutes} minutes from login, rest included."
+                  if minutes else "Rest included.")
+        return steps, footer
+
     def _draw_info_overlay(self, surf: pygame.Surface) -> None:
         """Dim the screen and draw a centred card listing the session
         protocol. Mirrors the paused-overlay pattern used in-game."""
@@ -1422,11 +1467,12 @@ class TitleScreen(Screen):
         pad = 36
         x = card.left + pad
         y = card.top + pad
+        steps, footer = self._info_content()
         draw_text(surf, self.INFO_TITLE, (card.centerx, y),
                   self.theme, self.layout, pt=FONT_H2, centre=True,
                   colour=self.theme.accent)
         y += 54
-        for line in self.INFO_STEPS:
+        for line in steps:
             indented = line.startswith("      ")
             draw_text(surf, line.strip() if indented else line,
                       (x + (28 if indented else 0), y),
@@ -1435,8 +1481,7 @@ class TitleScreen(Screen):
                               else self.theme.foreground))
             y += 38 if not indented else 32
         y += 8
-        # Footer wraps to the card width.
-        draw_text(surf, self.INFO_FOOTER, (x, y),
+        draw_text(surf, footer, (x, y),
                   self.theme, self.layout, pt=FONT_SMALL,
                   colour=self.theme.muted)
         draw_text(surf, "Click anywhere or press Esc to close",
@@ -1449,6 +1494,9 @@ class ModeSelectScreen(Screen):
     """Pick adaptive / classic / rhythm / mirror. Each option is a
     card with a short description so a clinician can pick without
     prior knowledge."""
+
+    # Start, Continue and the login's LOG IN share one "go" green.
+    GO_GREEN = (34, 197, 94)
 
     # Reaction replaces Classic as the baseline mode. Classic's fixed
     # 6-trial loop was learnable in seconds, so half of what it measured
@@ -1613,7 +1661,12 @@ class ModeSelectScreen(Screen):
         row_h = BUTTON_H - 16
         right = engine.layout.width - 40
         opts = self._session_options()
-        seg_w = 84 * len(opts)
+        # Every option as wide as the longest label needs, so "Lab
+        # session" fits as well as "15 min".
+        seg_font = make_font(int((FONT_SMALL + 2) * self.layout.font_scale),
+                             bold=True)
+        opt_w = max([84] + [seg_font.size(c)[0] + 28 for _k, c in opts])
+        seg_w = opt_w * len(opts)
         start_w = 120
         self.session_seg = Segmented(
             pygame.Rect(right - start_w - 12 - seg_w, row_y, seg_w, row_h),
@@ -1624,7 +1677,7 @@ class ModeSelectScreen(Screen):
             pygame.Rect(right - start_w, row_y, start_w, row_h),
             "Start", self._battery,
             self.theme, self.layout,
-            colour=(34, 197, 94),     # green, as the login's LOG IN
+            colour=self.GO_GREEN,     # green, as the login's LOG IN
         )
         # While a session runs: Continue where the picker was, Skip
         # step beside it for a block that cannot be run.
@@ -2285,8 +2338,12 @@ class ModeSelectScreen(Screen):
                            for c in self.theme.muted)
         if self._session_running():
             self.battery_btn.rect = self.continue_rect
-            self.battery_btn.colour = None if ok else muted_fill
-            self.battery_btn.primary = ok and self._battery_pending()
+            # Green when the next step is ready, the colour of Start
+            # and LOG IN; plain while a step is still being played.
+            ready = ok and self._battery_pending()
+            self.battery_btn.colour = (self.GO_GREEN if ready
+                                       else None if ok else muted_fill)
+            self.battery_btn.primary = False
             self.battery_btn.draw(surf)
             if self._battery_pending():
                 self.skip_btn.draw(surf)
@@ -2314,7 +2371,7 @@ class ModeSelectScreen(Screen):
             # Start is always there, greyed until a length is picked,
             # so the row reads the same whatever is picked.
             self.battery_btn.primary = False
-            self.battery_btn.colour = ((34, 197, 94) if ok
+            self.battery_btn.colour = (self.GO_GREEN if ok
                                        else muted_fill)
             self.battery_btn.label = "Start"
             self.battery_btn.draw(surf)
@@ -7850,10 +7907,24 @@ class DiagnosticsScreen(Screen):
         Mode."""
         return self._body_rect()
 
+    def _setup_row_count(self) -> int:
+        """Four rows everywhere, the USB driver on Windows and the EEG
+        box in the lab build: six on the lab PC."""
+        markers = getattr(self.engine, "markers", None)
+        return (4 + bool(getattr(self, "_show_usb_row", False))
+                + bool(getattr(markers, "enabled", False)))
+
+    def _setup_row_h(self) -> int:
+        """Rows share the card: the full height while five fit, less
+        on the lab PC so the sixth stays inside it."""
+        room = self._firmware_rect().h - self.SETUP_ROW_TOP - 8
+        return min(self.SETUP_ROW_H, room // max(1, self._setup_row_count()))
+
     def _setup_btn_rect(self, i: int) -> pygame.Rect:
         card = self._firmware_rect()
-        y = (card.y + self.SETUP_ROW_TOP + i * self.SETUP_ROW_H
-             + (self.SETUP_ROW_H - self.SETUP_BTN_H) // 2)
+        row_h = self._setup_row_h()
+        y = (card.y + self.SETUP_ROW_TOP + i * row_h
+             + (row_h - self.SETUP_BTN_H) // 2)
         return pygame.Rect(card.right - self.BAND_PAD - self.SETUP_BTN_W,
                            y, self.SETUP_BTN_W, self.SETUP_BTN_H)
 
@@ -7861,7 +7932,7 @@ class DiagnosticsScreen(Screen):
         """Top of Setup row i (0 flash, 1 address, 2 audio delay,
         3 auto-start, then the rows only some builds have)."""
         return (self._firmware_rect().y + self.SETUP_ROW_TOP
-                + i * self.SETUP_ROW_H)
+                + i * self._setup_row_h())
 
     def _data_btn_rect(self, i: int) -> pygame.Rect:
         card = self._data_rect()
@@ -8003,10 +8074,9 @@ class DiagnosticsScreen(Screen):
             ("master", "Master volume", "audio.master_volume", 0.8),
             ("cue", "Cue click", "audio.cue_volume", 1.0),
             ("feedback", "Feedback chime", "audio.feedback_volume", 1.0),
-            # Menu playlist level, capped quiet. The on/off switch is
-            # the Menu music button in the cues card.
-            ("music", "Menu music (menus stay quiet)",
-             "audio.menu_music_volume", 0.12),
+            # Menu playlist level, capped quiet. Its on/off switch sits
+            # beside the label (built below).
+            ("music", "Menu music", "audio.menu_music_volume", 0.12),
         )
         panel = self._levels_rect()
         x0 = panel.x + self.BAND_PAD
@@ -8032,6 +8102,17 @@ class DiagnosticsScreen(Screen):
                 step=0.02 if key == "music" else 0.05, label=label,
                 value_format="{:.0%}",
             )
+        # The machine's menu music on/off, on its own slider's row. The
+        # corner pill is the logged-in person's own mute.
+        music = self._vol_sliders["music"]
+        label_w = self.layout.font(FONT_SMALL + 4).size(music.label)[0]
+        self._music_switch = Switch(
+            pygame.Rect(music.rect.x + label_w + 16,
+                        music.rect.y - Slider.LABEL_GAP - 1, 46, 24),
+            self.theme, self.layout,
+            lambda: bool(self.engine.cfg.get("audio.menu_music_enabled",
+                                             True)),
+            self._toggle_menu_music)
         # Buzzer cue length. Vibration STRENGTH is fixed in the firmware
         # (STIM_PWM is a compile-time constant and there is no command to
         # change it), so length is the only thing the host can vary, and
@@ -8458,18 +8539,6 @@ class DiagnosticsScreen(Screen):
             self.theme, self.layout, font_pt=FONT_BODY - 2,
             colour=(34, 197, 94) if self._has_unsaved else None,
         ))
-        # The machine's menu music switch, under the cue switches. The
-        # corner pill is the logged-in person's own mute.
-        cues = self._cues_rect()
-        mm_on = bool(self.engine.cfg.get("audio.menu_music_enabled", True))
-        add("sound", Button(
-            pygame.Rect(cues.x + self.BAND_PAD,
-                        cues.bottom - self.BAND_PAD - self.SETUP_BTN_H,
-                        cues.w - self.BAND_PAD * 2, self.SETUP_BTN_H),
-            "Menu music: on" if mm_on else "Menu music: off",
-            self._toggle_menu_music,
-            self.theme, self.layout, font_pt=FONT_BODY - 2,
-        ))
         # Setup. Writing the Arduino used to mean the Arduino IDE, a
         # PlatformIO project and four manual uploads per sensor swap;
         # the first two rows are that job with the tools inside the app.
@@ -8497,9 +8566,13 @@ class DiagnosticsScreen(Screen):
             label = ("Working..." if self._usb_job is not None
                      else "Get the driver" if self._usb_missing
                      else "Check USB driver")
+            # The fix is the one thing on this tab worth doing now when a
+            # board has no driver, so it takes the primary colour then.
             add("setup", Button(self._setup_btn_rect(row), label,
                                 self._usb_driver_action, self.theme,
-                                self.layout, font_pt=fpt))
+                                self.layout, font_pt=fpt,
+                                primary=(self._usb_missing
+                                         and self._usb_job is None)))
             row += 1
         self.eeg_btn = None
         if getattr(getattr(self.engine, "markers", None), "enabled", False):
@@ -8922,6 +8995,8 @@ class DiagnosticsScreen(Screen):
         if self.mute_btn.handle_event(e):
             return
         if self.tab == "sound":
+            if self._music_switch.handle_event(e):
+                return
             # Snapshot the levels so a save happens only when one moved
             # (a stray click on the track still counts).
             before = {k: s.value for k, s in self._vol_sliders.items()}
@@ -9234,6 +9309,7 @@ class DiagnosticsScreen(Screen):
                         "Drag to set; saved when you let go")
         for s in self._vol_sliders.values():
             s.draw(surf)
+        self._music_switch.draw(surf)
         cues = self._cues_rect()
         self._draw_band(surf, cues, "CUES",
                         "Hover a switch to see what it does")
@@ -9277,12 +9353,14 @@ class DiagnosticsScreen(Screen):
         x = card.x + self.BAND_PAD
         width = self._setup_btn_rect(0).x - 28 - x
         edge = tuple(max(0, c - 12) for c in self.theme.background)
+        # A tighter row starts its text higher so two lines still fit.
+        inset = max(4, 16 - (self.SETUP_ROW_H - self._setup_row_h()))
         for i, (title, lines) in enumerate(self._setup_rows()):
             top = self._firmware_row_y(i)
             if i:
                 pygame.draw.line(surf, edge, (x, top),
                                  (card.right - self.BAND_PAD, top), 1)
-            self._draw_row_text(surf, x, top + 16, title, lines, width)
+            self._draw_row_text(surf, x, top + inset, title, lines, width)
 
     def _draw_data_tab(self, surf: pygame.Surface) -> None:
         card = self._data_rect()

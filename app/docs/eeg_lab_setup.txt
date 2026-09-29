@@ -7,13 +7,15 @@ neutral feedback (one ring glyph 800 ms after the press, no words, no
 chime), FRN bytes in chords and Force Pilot. The Reaction card is the
 lab's own SRT task (Welber's PsychoPy script, replicated trial for
 trial), and the Lab session runs it once in place of the study's two
-Reaction blocks: about 54 minutes from login, the SRT about 15 of
-them. The folder that goes to the lab is
-EEG_Lab at the top of the project (FingerRehab-EEGLab.zip on CI):
-Finger Rehab.exe, eeg_lab.yaml, run_in_psychopy.py, README.md, a
-source/ copy, and sessions/ with an empty eeg/ folder for ActiView's
-recordings. The exe loads the yaml beside it on its own, so a game
-update is a lab update.
+Reaction blocks. It leaves out Muscle Memory: the SRT's recall
+question comes first and tells the participant a sequence was there,
+and Muscle Memory's score only holds for a player who does not know.
+About 48 minutes from login, the SRT about 15 of them. The folder that
+goes to the lab is EEG_Lab at the top of the project
+(FingerRehab-EEGLab.zip on CI): Finger Rehab.exe, eeg_lab.yaml,
+run_in_psychopy.py, README.md, a source/ copy, and sessions/ with an
+empty eeg/ folder for ActiView's recordings. The exe loads the yaml
+beside it on its own, so a game update is a lab update.
 
 The chain: game -> USB -> the lab's marker, an Arduino on COM10 at
 9600 baud (box: arduino in eeg_lab.yaml; a NeuroSpec MMBT-S trigger box

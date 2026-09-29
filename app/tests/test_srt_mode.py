@@ -1306,7 +1306,7 @@ class TheCardAndTheSetupScreen(unittest.TestCase):
         self.assertIsNone(getattr(self.eng, "_srt_musical_experience", None))
 
 
-class TheLabsPlayAll(unittest.TestCase):
+class TheLabSession(unittest.TestCase):
 
     def _plan(self, code, lab):
         from finger_rehab.config import Config
@@ -1329,16 +1329,43 @@ class TheLabsPlayAll(unittest.TestCase):
                 modes = [s.mode for s in plan.steps]
                 self.assertEqual(modes.count("srt"), 1)
                 self.assertNotIn("reaction", modes)
-                self.assertEqual(len(plan.steps), len(study.steps) - 1)
+                # The second Reaction block and Muscle Memory are out.
+                self.assertEqual(len(plan.steps), len(study.steps) - 2)
                 self.assertEqual([s.position for s in plan.steps],
                                  list(range(1, len(plan.steps) + 1)))
                 srt = next(s for s in plan.steps if s.mode == "srt")
                 self.assertEqual(srt.phase, "pass1")
-                self.assertEqual(plan.id, "eeg_lab_srt_v2")
+                self.assertEqual(plan.id, "eeg_lab_srt_v3")
                 # The rest between the passes survives the drop.
                 rests = [s for s in plan.steps if s.rest_before_s > 0]
                 self.assertEqual(len(rests), 1)
                 self.assertEqual(rests[0].phase, "pass2")
+
+    def test_the_lab_leaves_out_muscle_memory(self):
+        # The SRT's recall question comes first in both orders and
+        # tells the player a sequence was there (Basil, 29 September
+        # 2026); the home sitting keeps its Muscle Memory block.
+        for code in ("P001", "P002"):
+            with self.subTest(code=code):
+                modes = [s.mode for s in self._plan(code, True).steps]
+                self.assertNotIn("pattern", modes)
+                self.assertIn("pattern",
+                              [s.mode for s in self._plan(code, False).steps])
+
+    def test_leave_out_moves_a_rest_forward(self):
+        from finger_rehab.game.battery import BatteryStep, leave_out
+        steps = [BatteryStep("srt", "right", "right", "pass1"),
+                 BatteryStep("pattern", "right", "right", "pass2",
+                             rest_before_s=180, rest_min_s=60),
+                 BatteryStep("chords", "right", "right", "pass2",
+                             stretch_before_s=30),
+                 BatteryStep("pattern", "right", "right", "pass2")]
+        out = leave_out(steps, {"pattern"})
+        self.assertEqual([s.mode for s in out], ["srt", "chords"])
+        # The rest wins over the stretch the next block had.
+        self.assertEqual((out[1].rest_before_s, out[1].rest_min_s,
+                          out[1].stretch_before_s), (180, 60, 0.0))
+        self.assertEqual([s.position for s in out], [1, 2])
 
     def test_swap_once_moves_a_rest_forward(self):
         from finger_rehab.game.battery import BatteryStep, swap_once
