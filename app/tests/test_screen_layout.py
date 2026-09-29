@@ -373,6 +373,45 @@ class TestSettingsGroups:
             pygame.MOUSEBUTTONDOWN, button=1, pos=switch.rect.center))
         assert bool(eng.cfg.get("audio.menu_music_enabled")) is not before
 
+    def test_the_cue_note_fits_both_menus(self, settings_screen):
+        # The results screen's cue menu is narrower than Settings'; the
+        # Buzz Hunt note ran past its plate there.
+        from finger_rehab.ui.screens import CUE_ROWS
+        from finger_rehab.ui.widgets import FONT_SMALL
+        screen, _ = settings_screen
+        font = screen.layout.font(FONT_SMALL)
+        notes = [label for key, label, kind in CUE_ROWS
+                 if key is None and kind == "note"]
+        assert notes
+        for label in notes:
+            assert font.size(label)[0] <= 306 - 24, label
+
+    def test_a_tab_key_mid_drag_ends_the_drag(self, settings_screen,
+                                              monkeypatch):
+        # 1 to 4 while a slider is held: the release lands on another
+        # tab, so the slider used to follow the bare mouse afterwards.
+        import pygame
+        screen, eng = settings_screen
+        saved = []
+        monkeypatch.setattr(eng.cfg, "save_user_overrides",
+                            lambda values: saved.append(values))
+        screen._switch_tab("sound")
+        s = screen._vol_sliders["master"]
+        screen.handle_event(pygame.event.Event(
+            pygame.MOUSEBUTTONDOWN, button=1,
+            pos=(s.rect.x + 40, s.rect.centery)))
+        screen.handle_event(pygame.event.Event(
+            pygame.MOUSEMOTION, buttons=(1, 0, 0), rel=(20, 0),
+            pos=(s.rect.x + 60, s.rect.centery)))
+        held = s.value
+        screen._switch_tab("device")
+        assert saved, "the level set by the drag was not saved"
+        screen._switch_tab("sound")
+        screen.handle_event(pygame.event.Event(
+            pygame.MOUSEMOTION, buttons=(0, 0, 0), rel=(-60, 0),
+            pos=(s.rect.x, s.rect.centery)))
+        assert s.value == held
+
     def test_the_setup_rows_fit_on_the_lab_pc(self, settings_screen):
         # Windows adds the USB driver row and the lab build the EEG box:
         # six rows, and every one stays inside the card.

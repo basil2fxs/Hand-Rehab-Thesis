@@ -390,6 +390,49 @@ class SessionStripTests(_EngineHarness):
         hub._battery()
         self.assertEqual(started, ["trial_30"], hub.battery_note)
 
+    def test_the_picker_starts_on_free_play_for_each_login(self) -> None:
+        # The next participant must not inherit the last one's length,
+        # and a finished session must not leave its length armed for a
+        # stray Start or A (found driving a whole session through the
+        # hub, 29 September 2026).
+        import pygame
+        hub = self.eng._screens["mode_select"]
+        self.eng.begin_session("P07", "34")
+        self.eng.show_mode_select()
+        hub.session_seg.set("trial_15")
+        hub.draw(pygame.Surface((1280, 800)))
+        self.assertEqual(hub.session_seg.value, "trial_15")
+        self.eng.end_session()
+        self.eng.begin_session("P08", "29")
+        self.eng.show_mode_select()
+        self.assertEqual(hub.session_seg.value, "")
+        # A session that runs its course hands the hub back on Free play.
+        hub.session_seg.set("trial_15")
+        runs = {"on": True}
+        hub._session_running = lambda: runs["on"]
+        hub._picker_was_running = True
+        hub.sync_session_picker()
+        self.assertEqual(hub.session_seg.value, "trial_15")
+        runs["on"] = False
+        hub.sync_session_picker()
+        self.assertEqual(hub.session_seg.value, "")
+
+    def test_a_login_length_that_cannot_start_says_why(self) -> None:
+        # The engine's promise: a length picked at login that does not
+        # start leaves the hub saying why.
+        import pygame
+        hub = self.eng._screens["mode_select"]
+        self.eng.start_battery = lambda preset=None: False
+        self.eng.battery_available = lambda preset=None: (
+            False, "This session needs the left board too: plug it in")
+        self.eng.begin_session("P09", "31", trial="trial_30")
+        self.eng.show_mode_select()
+        self.assertEqual(hub.session_seg.value, "trial_30")
+        ok, label, reason = hub._battery_state()
+        self.assertFalse(ok)
+        self.assertIn("plug it in", reason)
+        hub.draw(pygame.Surface((1280, 800)))
+
     def test_the_hub_grid_still_clears_its_buttons(self) -> None:
         hub = self.eng._screens["mode_select"]
         lowest = max(b.rect.bottom for b in hub.buttons)

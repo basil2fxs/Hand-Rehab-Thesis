@@ -2821,8 +2821,13 @@ class GameEngine:
         # no main hand), the session carries on as free play and the
         # hub's session line says why.
         self._session_preset = str(trial or "study_battery")
+        self._login_length_refused = None
         if trial and self.start_battery(self._session_preset):
             return
+        if trial:
+            # The hub opens with this length picked and Start greyed,
+            # so its row says why it could not start.
+            self._login_length_refused = str(trial)
         self.show_hand_choice()
 
     @property
@@ -3950,7 +3955,11 @@ class GameEngine:
         # last time a menu was open, so the no-click route works
         # without a restart.
         self.sync_pattern_sequence_file()
-        self.screen_obj = self._screens["mode_select"]
+        hub = self._screens["mode_select"]
+        sync = getattr(hub, "sync_session_picker", None)
+        if callable(sync):
+            sync()
+        self.screen_obj = hub
 
     def show_setup(self) -> None:
         self.screen_obj = self._screens["setup"]
@@ -6807,6 +6816,10 @@ class GameEngine:
         if not getattr(self, "_session_active", False):
             return False, "Log in first"
         if self._battery is not None:
+            # One timed sitting per login: a second would share its
+            # session folder, and the analysis reads one sitting there.
+            if self._battery.get("done"):
+                return False, "Session done. Log in again for another."
             return True, ""
         try:
             plan = build_plan(self.cfg, self.session.participant,
@@ -7808,6 +7821,11 @@ class GameEngine:
         # code table flags a feedback byte this close to the block-end
         # byte as one to leave out of FRN averages.
         self._drain_feedback(force=True)
+        # The last trial has had its feedback, at its own gain. A block
+        # that ends on a loud trial must not leave the boost behind:
+        # every sound in the menus after it would play louder.
+        if self.audio is not None:
+            self.audio.set_trial_gain(1.0)
         # Pump the last trial's bytes out before the block-end byte is
         # sent. The writer sheds the lowest-priority marker when more
         # than three queue at once, and a response byte, a parked
@@ -7928,6 +7946,7 @@ class GameEngine:
         if self.audio:
             try:
                 self.audio.stop()
+                self.audio.set_trial_gain(1.0)
             except Exception:
                 pass
         if self.raw_logger:

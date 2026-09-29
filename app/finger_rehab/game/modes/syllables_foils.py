@@ -430,29 +430,56 @@ GENERATORS = {
 }
 
 
+def is_vowel_swap(cand: str, target: str) -> bool:
+    """Whether `cand` is `target` with only its vowels changed (ter,
+    tar, tur): the same letters in every consonant slot and vowels in
+    the same slots, at least one of them different."""
+    if cand == target or len(cand) != len(target):
+        return False
+    for x, y in zip(cand.lower(), target.lower()):
+        xv, yv = x in VOWEL_LETTERS, y in VOWEL_LETTERS
+        if xv != yv or (not xv and x != y):
+            return False
+    return True
+
+
 def make_foil(kind: str, target: str, syls, pos: int, inv: Inventory,
-              rng: random.Random, taken: set[str]) -> tuple[str, str]:
+              rng: random.Random, taken: set[str],
+              avoid: frozenset = frozenset()) -> tuple[str, str]:
     """One legal foil and the kind that actually produced it.
 
     Walks the fallback chain when a kind cannot deliver (a target with
     no b, d, p, q, n, u, m or w has no reversal; a one-syllable-word
     set has no other position). The returned kind is what gets logged,
     so a fallback can never be read as evidence for a confusion type
-    that was never on screen."""
+    that was never on screen.
+
+    `avoid` names kinds the chain must pass over. A syllable heard with
+    a weak vowel avoids F3: ter, tar and tur all say "tuh" there, so a
+    vowel swap from any kind, the F1 floor included, would sound the
+    same as the target."""
+    no_vowel_swap = "F3" in avoid
+
+    def fits(cand: str, as_kind: str) -> bool:
+        return (bool(cand) and cand not in taken
+                and not (no_vowel_swap and is_vowel_swap(cand, target))
+                and is_legal(cand, target, syls, as_kind, inv))
+
     seen_kinds: list[str] = []
     cur = kind
     while cur is not None and cur not in seen_kinds:
         seen_kinds.append(cur)
+        if cur in avoid:
+            cur = FALLBACK.get(cur)
+            continue
         gen = GENERATORS[cur]
         for _ in range(MAX_TRIES):
             cand = gen(target, syls, pos, inv, rng)
-            if (cand and cand not in taken
-                    and is_legal(cand, target, syls, cur, inv)):
+            if fits(cand, cur):
                 return cand, cur
         cur = FALLBACK.get(cur)
     # F1 is the floor: any chunk in the bank that is legal and unused.
-    pool = [c for c in inv.chunks
-            if c not in taken and is_legal(c, target, syls, "F1", inv)]
+    pool = [c for c in inv.chunks if fits(c, "F1")]
     if pool:
         return rng.choice(pool), "F1"
     # Nothing in the bank fits (a bank small enough that every chunk
@@ -468,6 +495,8 @@ def make_foil(kind: str, target: str, syls, pos: int, inv: Inventory,
             if cand in taken or cand == target:
                 continue
             if cand in tuple(syls):
+                continue
+            if no_vowel_swap and is_vowel_swap(cand, target):
                 continue
             return cand, "F1"
     raise RuntimeError("no legal foil could be built for "
@@ -518,7 +547,8 @@ def draw_target_lane(lanes, tally: dict[int, int], recent,
 def build_option_set(word, pos: int, rung: int, rng: random.Random,
                      inv: Inventory, lanes, tally: dict[int, int],
                      recent, homophone_foils: bool = False,
-                     kinds: tuple[str, ...] | None = None) -> OptionSet:
+                     kinds: tuple[str, ...] | None = None,
+                     avoid: frozenset = frozenset()) -> OptionSet:
     """The four tiles for syllable `pos` of `word`.
 
     Exactly four options with pairwise distinct texts, the target
@@ -537,7 +567,8 @@ def build_option_set(word, pos: int, rung: int, rng: random.Random,
     # An age profile names its own three kinds (its foil shares);
     # None is the rung schedule, the design the study pre-registered.
     for kind in (kinds or kinds_for_rung(rung, homophone_foils)):
-        text, made = make_foil(kind, target, syls, pos, inv, rng, taken)
+        text, made = make_foil(kind, target, syls, pos, inv, rng, taken,
+                               avoid)
         taken.add(text)
         foils.append((text, made))
     target_lane = draw_target_lane(lanes, tally, recent, rng)

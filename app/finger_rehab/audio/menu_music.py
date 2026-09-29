@@ -51,6 +51,11 @@ DEFAULT_MENU_LEVEL = 0.12
 # the game. Without a ceiling one drag of the slider made the menus as
 # loud as a game, and the saved value kept them there.
 MENU_LEVEL_CEILING = 0.30
+# The default before 29 September 2026. Moving any Settings slider then
+# saved all five levels, this one included, so a user_settings.yaml can
+# hold it without anyone having chosen it. The slider moves in 0.02
+# steps now and cannot land on it, so it is read as the new default.
+OLD_DEFAULT_LEVEL = 0.25
 
 
 def menu_music_level(cfg) -> float:
@@ -64,6 +69,8 @@ def menu_music_level(cfg) -> float:
     try:
         v = float(raw)
     except (TypeError, ValueError):
+        return DEFAULT_MENU_LEVEL
+    if abs(v - OLD_DEFAULT_LEVEL) < 1e-9:
         return DEFAULT_MENU_LEVEL
     return max(0.0, min(MENU_LEVEL_CEILING, v))
 

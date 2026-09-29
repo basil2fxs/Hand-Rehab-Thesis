@@ -65,8 +65,7 @@ CUE_ROWS: tuple[tuple[str | None, str, str], ...] = (
         # stimulus, so its pulses ignore the before-press switches by
         # design (the after-press switches still apply there). "note"
         # draws it as a sentence rather than a heading.
-        (None, "Buzz Hunt skips the before-press cues: its buzz is "
-               "the task.", "note"),
+        (None, "Buzz Hunt skips the before-press cues.", "note"),
 )
 
 
@@ -1707,6 +1706,11 @@ class ModeSelectScreen(Screen):
             self.theme, self.layout,
         )
         self.battery_note = ""
+        # Which login the picker's choice belongs to, and whether a
+        # timed session was under way when the hub last looked
+        # (sync_session_picker).
+        self._picker_owner = None
+        self._picker_was_running = False
         # Set when a pick is refused, cleared by the next pick that is
         # not. Sits under the header where the subtitle would be.
         self.pick_note = ""
@@ -1793,10 +1797,32 @@ class ModeSelectScreen(Screen):
             started = (begin(self.session_seg.value) if callable(begin)
                        else self.engine.start_battery(
                            self.session_seg.value))
-        if not started:
+        if started:
+            # The games start at once, so the hub may not look again
+            # until the session is over.
+            self._picker_was_running = True
+        else:
             wait = getattr(self.engine, "battery_wait_line", None)
             self.battery_note = ((wait() if callable(wait) else "")
                                  or "The session could not start")
+
+    def sync_session_picker(self) -> None:
+        """Free play again for every new login, and once a timed
+        session has run its course or been ended, so a stray Start or A
+        never begins a length nobody picked for this sitting. Runs when
+        the hub is shown and on its own events and frames."""
+        owner = getattr(self.engine, "_session_started_perf", None)
+        running = self._session_running()
+        if owner != self._picker_owner:
+            self._picker_owner = owner
+            # A length picked at login that could not start stays
+            # picked, so the row says why; anything else is Free play.
+            self.session_seg.set(
+                getattr(self.engine, "_login_length_refused", None) or "")
+            self.battery_note = ""
+        elif self._picker_was_running and not running:
+            self.session_seg.set("")
+        self._picker_was_running = running
 
     def _cycle_session(self) -> None:
         """L steps the picker, so the hub stays keyboard-only."""
@@ -1928,6 +1954,7 @@ class ModeSelectScreen(Screen):
     )
 
     def handle_event(self, e: pygame.event.Event) -> None:
+        self.sync_session_picker()
         if self.mute_btn.handle_event(e):
             return
         controls = self.buttons + [self.back_btn, self.cal_btn]
@@ -2175,6 +2202,7 @@ class ModeSelectScreen(Screen):
                              1, border_radius=4)
 
     def draw(self, surf: pygame.Surface) -> None:
+        self.sync_session_picker()
         surf.fill(self.theme.background)
         # No subtitle: the strip below says what the old line claimed
         # ("every game comes back here"), and says it with the games
@@ -8020,6 +8048,14 @@ class DiagnosticsScreen(Screen):
             self.tab = key
             for dd in self._port_dropdowns.values():
                 dd.is_open = False
+            # A drag cut short by a tab key: the release would land on
+            # another tab and never reach the slider, which would then
+            # follow the bare mouse on the way back. End it here and
+            # keep what it had set.
+            for s in self._vol_sliders.values():
+                s._dragging = False
+            if self._vol_dirty:
+                self._save_volumes()
 
     def _draw_tabs(self, surf: pygame.Surface) -> None:
         first, last = self._tab_rect(0), self._tab_rect(len(self.TABS) - 1)
@@ -8497,10 +8533,11 @@ class DiagnosticsScreen(Screen):
     def rebuild_panel(self) -> None:
         """(Re)build every button and the two port dropdowns, each with
         the tab it lives on (_panel_tabs, in step with _panel_buttons):
-        the boards' test buzz, Refresh and Save on Hand device; Menu
-        music on Sound and cues; the four setup jobs, and the EEG box
-        in the lab build, on Setup; the data folder and Test Mode on
-        Data.
+        the boards' test buzz, Refresh and Save on Hand device; the
+        setup jobs, with the USB driver on Windows and the EEG box in
+        the lab build, on Setup; the data folder and Test Mode on Data.
+        Sound and cues has no buttons: its menu music switch sits on
+        the Levels card (_music_switch).
 
         Called on init AND after every port re-scan so the dropdown
         options reflect what was just detected. Every rect comes off the
@@ -8763,20 +8800,33 @@ class DiagnosticsScreen(Screen):
         self._usb_job = None
         line, missing = usb_driver.describe(job.get("boards") or [])
         self._usb_line, self._usb_missing = line, missing
-        if job.get("fix"):
+        if job.get("error"):
+            # No answer is not a clean answer: an empty board list here
+            # would read as "installed" or "no board".
+            self._usb_line = "Not checked: the check did not run."
+            self._port_status = ("The USB driver check did not run: "
+                                 f"{job['error']}")
+        elif job.get("fix"):
             result = job.get("install") or {}
-            if missing:
+            said = str(result.get("message") or "").strip().rstrip(".")
+            if result.get("ok") and not missing:
+                self._port_status = ("Driver installed. Unplug the board "
+                                     "and plug it back in.")
+                self._rescan_ports()
+            elif result.get("ok"):
+                # Installed, but the board has not taken it yet: a
+                # driver binds when the board is plugged in again.
+                self._port_status = (
+                    f"{said or 'Driver installed'}. Unplug the board, "
+                    "plug it back in, then press Check USB driver.")
+            else:
                 # Windows Update could not do it from here: its own page
                 # lists the same driver to tick.
                 usb_driver.open_optional_updates()
                 self._port_status = (
-                    (result.get("message") or "The driver did not "
-                     "install.") + " Windows Update is open: tick the "
-                    "board's driver under Optional updates.")
-            else:
-                self._port_status = ("Driver installed. Unplug the board "
-                                     "and plug it back in.")
-                self._rescan_ports()
+                    f"{said or 'The driver did not install'}. Windows "
+                    "Update is open: tick the board's driver under "
+                    "Optional updates.")
         elif missing:
             self._port_status = (line + " Press Get the driver.")
         else:
@@ -8923,15 +8973,24 @@ class DiagnosticsScreen(Screen):
         return self._dialog is not None
 
     def on_escape(self) -> bool:
-        """Esc while a firmware dialog is up belongs to the dialog.
+        """Esc closes whatever sits on top of Settings first: the
+        firmware or audio delay dialog (which keeps it while a job
+        runs), then the riff file panel, then an open board list.
 
-        Returns True when it was swallowed, so the engine leaves the
-        Settings screen alone.
+        Returns True when it was used, so the engine leaves the
+        Settings screen alone. Only with nothing open does Esc leave.
         """
         dlg = self._dialog
-        if dlg is None:
-            return False
-        return dlg.on_escape()
+        if dlg is not None:
+            return dlg.on_escape()
+        if self._riff_panel.open:
+            self._riff_panel.close()
+            return True
+        for dd in self._port_dropdowns.values():
+            if dd.is_open:
+                dd.is_open = False
+                return True
+        return False
 
     def _sync_with_port_watcher(self) -> None:
         """Redraw the Arduino panel when the watcher says the port list

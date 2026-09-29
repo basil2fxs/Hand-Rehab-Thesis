@@ -106,7 +106,14 @@ def _chip(instance_id: str) -> str:
 
 def parse_devices(text: str) -> list[dict]:
     """Get-PnpDevice's JSON (one object or a list) as plain dicts:
-    name, chip, instance_id, has_driver."""
+    name, chip, instance_id, problem, has_driver, working.
+
+    One board can list several entries: an FTDI Nano a "USB Serial
+    Converter" (class USB) beside its COM port, a Leonardo a composite
+    and an HID entry. So each entry is judged by its own status and
+    problem code, never by its class. Problem 28 is Windows' "the
+    drivers for this device are not installed"; any other problem is
+    a fault a driver download will not fix."""
     try:
         data = json.loads(text or "[]")
     except ValueError:
@@ -117,16 +124,32 @@ def parse_devices(text: str) -> list[dict]:
     for d in data if isinstance(data, list) else []:
         if not isinstance(d, dict):
             continue
-        status = str(d.get("Status") or "")
-        cls = str(d.get("Class") or "")
-        problem = d.get("Problem")
-        ok = (status.upper() == "OK" and cls.lower() == "ports"
-              and problem in (None, 0, "CM_PROB_NONE", ""))
+        status = str(d.get("Status") or "").upper()
+        problem = _problem_code(d.get("Problem"))
+        no_driver = problem == 28 or (not d.get("Class")
+                                      and status != "OK")
         out.append({"name": str(d.get("FriendlyName") or "USB device"),
                     "chip": _chip(d.get("InstanceId")),
                     "instance_id": str(d.get("InstanceId") or ""),
-                    "has_driver": ok})
+                    "is_port": str(d.get("Class") or "").lower() == "ports",
+                    "problem": problem,
+                    "has_driver": not no_driver,
+                    "working": status == "OK" and problem == 0})
     return out
+
+
+def _problem_code(value) -> int:
+    """Get-PnpDevice gives the problem as a number, or on some systems
+    as its name (CM_PROB_NONE, CM_PROB_FAILED_INSTALL)."""
+    names = {"CM_PROB_NONE": 0, "CM_PROB_FAILED_INSTALL": 28}
+    if value in (None, ""):
+        return 0
+    if isinstance(value, str) and value.strip().upper() in names:
+        return names[value.strip().upper()]
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return -1
 
 
 def find_boards(runner=subprocess.run) -> list[dict]:
@@ -146,14 +169,22 @@ def find_boards(runner=subprocess.run) -> list[dict]:
 
 
 def describe(boards: list[dict]) -> tuple[str, bool]:
-    """(one line for the Setup tab, whether a driver is missing)."""
-    missing = [b for b in boards if not b["has_driver"]]
+    """(one line for the Setup tab, whether a driver is missing). Only
+    a missing driver is offered the Windows Update fix."""
+    missing = [b for b in boards if not b.get("has_driver", True)]
     if missing:
         b = missing[0]
         return (f"{b['chip']} board plugged in, but Windows has no driver "
                 f"for it yet.", True)
+    faulty = [b for b in boards if not b.get("working", True)]
+    if faulty:
+        b = faulty[0]
+        return (f"{b['name']}: Windows reports a problem with it (code "
+                f"{b.get('problem')}). Unplug it and plug it back in.",
+                False)
     if boards:
-        return (f"Driver working: {boards[0]['name']}.", False)
+        port = next((b for b in boards if b.get("is_port")), boards[0])
+        return (f"Driver working: {port['name']}.", False)
     return ("No hand device plugged in.", False)
 
 

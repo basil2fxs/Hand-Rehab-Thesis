@@ -1367,6 +1367,21 @@ class TheLabSession(unittest.TestCase):
                           out[1].stretch_before_s), (180, 60, 0.0))
         self.assertEqual([s.position for s in out], [1, 2])
 
+    def test_two_left_out_in_a_row_keep_the_rest(self):
+        # A rest, then a stretch, both on left-out steps: the enforced
+        # rest must survive, not the stretch that came after it.
+        from finger_rehab.game.battery import BatteryStep, leave_out
+        steps = [BatteryStep("srt", "right", "right", "pass1"),
+                 BatteryStep("pattern", "right", "right", "pass2",
+                             rest_before_s=180, rest_min_s=60),
+                 BatteryStep("pattern", "right", "right", "pass2",
+                             stretch_before_s=30),
+                 BatteryStep("chords", "right", "right", "pass2")]
+        out = leave_out(steps, {"pattern"})
+        self.assertEqual([s.mode for s in out], ["srt", "chords"])
+        self.assertEqual((out[1].rest_before_s, out[1].rest_min_s),
+                         (180, 60))
+
     def test_swap_once_moves_a_rest_forward(self):
         from finger_rehab.game.battery import BatteryStep, swap_once
         steps = [BatteryStep("reaction", "right", "right", "pass1"),

@@ -737,6 +737,75 @@ class TestSettingsWiring:
         assert not screen._usb_missing
         assert "Driver installed" in screen._port_status
 
+    @pytest.mark.parametrize("how", ["refused", "raises"])
+    def test_a_failed_fix_never_reads_as_installed(self, settings,
+                                                  monkeypatch, how):
+        # A refused install with the board gone from the list, or an
+        # install that raises, used to say "Driver installed".
+        import time
+        from finger_rehab.hardware import usb_driver
+        screen, _ = settings
+        screen._show_usb_row = True
+        screen._usb_missing = True
+        screen.rebuild_panel()
+
+        def install():
+            if how == "raises":
+                raise OSError("powershell not found")
+            return {"ok": False, "message": "No answer: the administrator "
+                    "prompt was turned down or Windows Update is off."}
+        monkeypatch.setattr(usb_driver, "install_from_windows_update",
+                            install)
+        monkeypatch.setattr(usb_driver, "find_boards", lambda: [])
+        monkeypatch.setattr(usb_driver, "open_optional_updates",
+                            lambda: True)
+        screen._usb_driver_action()
+        for _ in range(200):
+            screen.update(0.01)
+            if screen._usb_job is None:
+                break
+            time.sleep(0.01)
+        assert "installed" not in screen._port_status.lower()
+        if how == "raises":
+            assert "did not run" in screen._port_status
+
+    @pytest.mark.parametrize("installed", [True, False])
+    def test_a_board_still_without_its_driver_after_the_fix(
+            self, settings, monkeypatch, installed):
+        # Installed but not yet taken: the board needs plugging in again,
+        # so Windows Update is not opened. Not installed: its optional
+        # updates page is the way on, and the sentences stay apart.
+        import time
+        from finger_rehab.hardware import usb_driver
+        screen, _ = settings
+        screen._show_usb_row = True
+        screen._usb_missing = True
+        screen.rebuild_panel()
+        message = ("Installed: wch.cn - Ports" if installed
+                   else "Windows Update has no driver for the board.")
+        monkeypatch.setattr(usb_driver, "install_from_windows_update",
+                            lambda: {"ok": installed, "message": message})
+        monkeypatch.setattr(usb_driver, "find_boards", lambda: [
+            {"name": "USB2.0-Serial", "chip": "CH340",
+             "instance_id": "x", "has_driver": False}])
+        opened = []
+        monkeypatch.setattr(usb_driver, "open_optional_updates",
+                            lambda: opened.append(1) or True)
+        screen._usb_driver_action()
+        for _ in range(200):
+            screen.update(0.01)
+            if screen._usb_job is None:
+                break
+            time.sleep(0.01)
+        status = screen._port_status
+        assert status.startswith(message.rstrip(".") + ". ")
+        if installed:
+            assert opened == []
+            assert "plug it back in" in status
+        else:
+            assert opened == [1]
+            assert "Optional updates" in status
+
     def test_a_missing_avrdude_says_so(self, settings, monkeypatch):
         screen, _ = settings
         monkeypatch.setattr(flasher, "find_avrdude", lambda cfg: None)
@@ -791,6 +860,27 @@ class TestSettingsWiring:
     def test_escape_with_no_dialog_leaves_settings_alone(self, settings):
         screen, _ = settings
         assert screen.on_escape() is False
+
+    def test_escape_closes_the_riff_panel_and_a_board_list_first(
+            self, settings):
+        # Esc used to walk straight out of Settings past an open riff
+        # panel, leaving it open for the next visit.
+        screen, eng = settings
+        eng.screen_obj = screen
+        eng._screens["diagnostics"] = screen
+        screen._riff_panel.show()
+        eng._handle_escape()
+        assert eng.screen_obj is screen
+        assert not screen._riff_panel.open
+        dd = next(iter(screen._port_dropdowns.values()))
+        dd.is_open = True
+        eng._handle_escape()
+        assert eng.screen_obj is screen and not dd.is_open
+        # With nothing open, Esc leaves for the login screen.
+        left = []
+        eng.show_title = lambda: left.append(1)
+        eng._handle_escape()
+        assert left == [1]
 
     def test_the_engine_routes_escape_through_the_screen(self, settings):
         from finger_rehab.ui.firmware_dialog import FirmwareDialog

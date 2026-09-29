@@ -233,12 +233,51 @@ class StopClearsStateTests(unittest.TestCase):
 class GameLevelsStayInTheGameTests(unittest.TestCase):
     """A game's loudness never follows the player into the menus."""
 
-    def test_stop_drops_a_loud_trial_boost(self) -> None:
+    def test_a_boost_lasts_through_a_pause_and_ends_with_the_block(
+            self) -> None:
+        # A pause stops the stream mid-trial, so stop() must keep a loud
+        # trial loud for when play resumes (the trial CSV says loud);
+        # the block's end is what clears it for the menus.
+        import os
+        import tempfile
+        os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+        os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+        import pygame
         from finger_rehab.audio.engine import AudioEngine
+        from finger_rehab.config import Config
+        from finger_rehab.game.engine import GameEngine
+        from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
         a = AudioEngine()
         a.set_trial_gain(1.35)
         a.stop()
-        self.assertEqual(a.trial_gain, 1.0)
+        self.assertEqual(a.trial_gain, 1.35)
+        pygame.init()
+        pygame.display.set_mode((1280, 800))
+        try:
+            with tempfile.TemporaryDirectory() as td:
+                cfg = Config.load()
+                cfg.data["ui"]["resolution"] = [1280, 800]
+                cfg.data["session"]["data_dir"] = td
+                cfg.data["session"]["calibration_dir"] = td
+                cfg.data["audio"]["enabled"] = False
+                cfg.data["report"] = {"enabled": False}
+                cfg.data["eeg"] = {"enabled": False}
+                cfg.data.setdefault("serial", {})["watch_ports"] = False
+                eng = GameEngine(cfg, KeyboardOnlySource(cfg))
+                eng._screens = eng._build_screens()
+                eng.audio = AudioEngine()
+                eng.begin_session("P07", "34", dominant_hand="right",
+                                  visit="1")
+                self.assertTrue(eng.begin_game("reaction", "right"))
+                eng.audio.set_trial_gain(1.35)
+                eng._pause_now()
+                eng._resume_now()
+                self.assertEqual(eng.audio.trial_gain, 1.35)
+                eng._abandon_if_in_block()
+                self.assertEqual(eng.audio.trial_gain, 1.0)
+                eng._close_loggers()
+        finally:
+            pygame.quit()
 
     def test_a_song_can_play_at_the_menu_level(self) -> None:
         from unittest.mock import patch

@@ -340,8 +340,7 @@ def swap_once(steps: list[BatteryStep],
     for st in steps:
         if st.mode in swaps:
             if st.mode in seen:
-                if st.rest_before_s > 0 or st.stretch_before_s > 0:
-                    carry = st
+                carry = _keep_break(carry, st)
                 continue
             seen.add(st.mode)
             st = replace(st, mode=swaps[st.mode], track=None,
@@ -365,14 +364,25 @@ def leave_out(steps: list[BatteryStep],
     carry: BatteryStep | None = None
     for st in steps:
         if st.mode in modes:
-            if st.rest_before_s > 0 or st.stretch_before_s > 0:
-                carry = st
+            carry = _keep_break(carry, st)
             continue
         if carry is not None:
             st = _take_break(st, carry)
             carry = None
         out.append(st)
     return [replace(st, position=i + 1) for i, st in enumerate(out)]
+
+
+def _keep_break(carry: BatteryStep | None,
+                st: BatteryStep) -> BatteryStep | None:
+    """The break to carry past a left-out step. Of two left out in a
+    row, a rest outranks a stretch, as it does on one card: the rest
+    is the enforced one."""
+    if st.rest_before_s <= 0 and st.stretch_before_s <= 0:
+        return carry
+    if carry is not None and carry.rest_before_s > 0 >= st.rest_before_s:
+        return carry
+    return st
 
 
 def _take_break(st: BatteryStep, carry: BatteryStep) -> BatteryStep:

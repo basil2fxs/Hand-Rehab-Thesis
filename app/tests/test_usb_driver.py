@@ -32,11 +32,54 @@ class _Res:
 
 def test_a_board_with_no_driver_is_found_whatever_the_language():
     boards = U.parse_devices(NO_DRIVER)
-    assert boards == [{"name": "USB2.0-Serial", "chip": "CH340",
-                       "instance_id": "USB\\VID_1A86&PID_7523\\5&2C3F1A&0&2",
-                       "has_driver": False}]
+    assert len(boards) == 1
+    b = boards[0]
+    assert (b["name"], b["chip"], b["problem"], b["has_driver"],
+            b["working"]) == ("USB2.0-Serial", "CH340", 28, False, False)
     line, missing = U.describe(boards)
     assert missing and "no driver" in line
+    # Some systems name the problem instead of numbering it.
+    named = NO_DRIVER.replace('"Problem": 28',
+                              '"Problem": "CM_PROB_FAILED_INSTALL"')
+    assert U.parse_devices(named)[0]["has_driver"] is False
+
+
+def test_an_ftdi_or_composite_board_with_its_driver_is_working():
+    # An FTDI Nano lists a USB Serial Converter (class USB) beside its
+    # COM port; a Leonardo a composite and an HID entry. None of them
+    # is a missing driver.
+    ftdi = json.dumps([
+        {"Status": "OK", "Class": "USB", "FriendlyName":
+         "USB Serial Converter", "InstanceId":
+         "FTDIBUS\\VID_0403+PID_6001+A10K1234A\\0000", "Problem": 0},
+        {"Status": "OK", "Class": "Ports", "FriendlyName":
+         "USB Serial Port (COM4)", "InstanceId":
+         "FTDIBUS\\VID_0403+PID_6001+A10K1234A\\0000", "Problem": 0}])
+    line, missing = U.describe(U.parse_devices(ftdi))
+    assert not missing and line == "Driver working: USB Serial Port (COM4)."
+    leo = json.dumps([
+        {"Status": "OK", "Class": "USB", "FriendlyName":
+         "USB Composite Device", "InstanceId":
+         "USB\\VID_2341&PID_8036\\7", "Problem": 0},
+        {"Status": "OK", "Class": "HIDClass", "FriendlyName":
+         "USB Input Device", "InstanceId":
+         "USB\\VID_2341&PID_8036&MI_02\\8", "Problem": 0},
+        {"Status": "OK", "Class": "Ports", "FriendlyName":
+         "Arduino Leonardo (COM5)", "InstanceId":
+         "USB\\VID_2341&PID_8036&MI_00\\9", "Problem": 0}])
+    line, missing = U.describe(U.parse_devices(leo))
+    assert not missing and "Arduino Leonardo (COM5)" in line
+
+
+def test_a_fault_that_is_not_a_missing_driver_is_not_offered_the_fix():
+    # Code 10, the device cannot start: a driver download will not fix
+    # it, so the Setup tab says so and does not offer Get the driver.
+    faulty = json.dumps({"Status": "Error", "Class": "Ports",
+                         "FriendlyName": "USB-SERIAL CH340 (COM3)",
+                         "InstanceId": "USB\\VID_1A86&PID_7523\\1",
+                         "Problem": 10})
+    line, missing = U.describe(U.parse_devices(faulty))
+    assert not missing and "code 10" in line and "plug it back in" in line
 
 
 def test_a_working_board_and_no_board():
@@ -89,8 +132,11 @@ def test_a_turned_down_prompt_says_so(tmp_path, monkeypatch):
     assert not got["ok"] and "prompt" in got["message"]
 
 
-def test_the_install_can_flash_with_nothing_else_installed(tmp_path):
-    """The same check CI runs on each build's installed copy."""
+def test_the_tools_check_passes_wherever_the_tools_are(tmp_path):
+    """The same check CI runs on each build's installed copy. Here it
+    must say ready whenever this checkout holds avrdude for this OS and
+    both firmware files (a developer Mac or Windows PC); CI's test job
+    has neither, so there it checks the report and the exit code agree."""
     report = tmp_path / "tools.json"
     res = subprocess.run([sys.executable, str(ROOT / "main.py"),
                           "--check-tools", str(report)],
@@ -100,6 +146,14 @@ def test_the_install_can_flash_with_nothing_else_installed(tmp_path):
     assert set(data) >= {"game", "addr_tool", "avrdude", "pyserial",
                          "usb_driver", "problems", "ready"}
     assert data["ready"] == (res.returncode == 0)
+    plat = {"darwin": "darwin", "win32": "win32"}.get(sys.platform)
+    fw = ROOT / "assets" / "firmware"
+    have_tools = bool(
+        plat and list((ROOT / "tools" / "avrdude" / plat).glob("avrdude*"))
+        and (fw / "finger_rehab_nano.hex").is_file()
+        and (fw / "singletact_address_change.hex").is_file())
+    if have_tools:
+        assert data["ready"], data["problems"]
     if data["ready"]:
         assert data["avrdude"]["runs"]
         assert data["game"]["flash_bytes"] > 0

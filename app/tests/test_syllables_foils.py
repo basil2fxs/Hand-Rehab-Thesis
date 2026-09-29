@@ -348,6 +348,35 @@ class InventoryTests(unittest.TestCase):
                                   LANES, {}, [])
         self.assertEqual(len({o.text for o in oset.options}), 4)
 
+class WeakVowelTests(unittest.TestCase):
+    """On a syllable heard with a weak vowel (ter, tar and tur all say
+    "tuh") no option may be the target with only its vowel changed:
+    not the vowel foil, and not a fallback that lands on one."""
+
+    def test_a_vowel_swap_is_recognised(self):
+        self.assertTrue(F.is_vowel_swap("tar", "ter"))
+        self.assertTrue(F.is_vowel_swap("tur", "ter"))
+        self.assertFalse(F.is_vowel_swap("tre", "ter"))    # transposed
+        self.assertFalse(F.is_vowel_swap("teer", "ter"))   # longer vowel
+        self.assertFalse(F.is_vowel_swap("ter", "ter"))
+        self.assertFalse(F.is_vowel_swap("ber", "ter"))
+
+    def test_the_chain_never_lands_on_a_vowel_swap(self):
+        # The coda foil failing sends the chain F7 -> F3 -> F1; F3 is
+        # passed over and no F1 pick may be a vowel swap either.
+        real = F.GENERATORS["F7"]
+        F.GENERATORS["F7"] = lambda *a, **k: None
+        try:
+            for seed in range(200):
+                rng = random.Random(seed)
+                text, made = F.make_foil(
+                    "F7", "ter", ("win", "ter"), 1, INV, rng, {"ter"},
+                    frozenset({"F3"}))
+                self.assertNotEqual(made, "F3")
+                self.assertFalse(F.is_vowel_swap(text, "ter"), text)
+        finally:
+            F.GENERATORS["F7"] = real
+
 
 if __name__ == "__main__":
     unittest.main()

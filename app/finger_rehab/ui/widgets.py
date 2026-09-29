@@ -783,6 +783,11 @@ class ToggleMenu:
             r = self._row_rect(i)
             if key is None:
                 text = label if _help == "note" else label.upper()
+                # Never past the plate: the results screen's menu is
+                # narrower than the one in Settings.
+                room = r.w - 24
+                while len(text) > 2 and head_font.size(text)[0] > room:
+                    text = text[:-2].rstrip() + "."
                 surf.blit(head_font.render(text, True, self.theme.muted),
                            (r.x + 12,
                             r.centery - head_font.get_height() // 2))

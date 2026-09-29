@@ -152,7 +152,13 @@ class ByteReceiver:
 
     def _run_socket(self) -> None:
         srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        # On Windows SO_REUSEADDR lets a second simulator bind the same
+        # port, and the game would feed whichever it reached; exclusive
+        # use makes the second one say the port is taken instead.
+        if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            srv.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        else:
+            srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             srv.bind(("127.0.0.1", self.listen_port))
         except OSError as e:
@@ -225,6 +231,8 @@ class FakeEEG:
         self._drift = np.zeros(len(CHANNELS))
         self._alpha_amp = 1.0
         self._next_blink = 3.0
+        # What is left of a blink that ran past the last stretch.
+        self._blink_tail = np.zeros(0)
         # Alpha is strongest over the back of the head.
         self._alpha_gain = np.array([0.3, 0.4, 0.6, 0.6, 0.6, 1.0, 1.4, 1.4])
 
@@ -234,7 +242,11 @@ class FakeEEG:
         k = min(due - self.sample, self.n)
         if k <= 0:
             return
-        t = (self.sample + np.arange(k)) / RATE
+        if due - self.sample > self.n:
+            # Longer away than the buffer holds (a long pause): only
+            # the newest samples are made, stamped with their own time.
+            self._blink_tail = np.zeros(0)
+        t = (due - k + np.arange(k)) / RATE
         noise = self.rng.normal(0.0, 0.35, (len(CHANNELS), k))
         # Slow wander, a random walk pulled back to zero.
         steps = self.rng.normal(0.0, 0.03, (len(CHANNELS), k))
@@ -249,16 +261,23 @@ class FakeEEG:
         alpha = (self._alpha_amp * np.sin(2 * math.pi * 10.0 * t)
                  + 0.25 * np.sin(2 * math.pi * 21.0 * t + 1.0))
         block = noise + walk + np.outer(self._alpha_gain, alpha)
-        # A blink every few seconds, big at the front of the head.
+        # A blink every few seconds, big at the front of the head. One
+        # frame is a handful of samples, so a blink runs on into the
+        # next stretches rather than stopping at this one's end.
+        if self._blink_tail.size:
+            m = min(k, self._blink_tail.size)
+            block[0, :m] += self._blink_tail[:m]
+            block[1, :m] += self._blink_tail[:m] * 0.4
+            self._blink_tail = self._blink_tail[m:]
         for j in range(k):
             ts = t[j]
             if ts >= self._next_blink:
                 self._next_blink = ts + self.rng.uniform(3.0, 7.0)
-                length = int(0.3 * RATE)
-                end = min(k, j + length)
-                shape = np.hanning(length)[: end - j] * 7.0
-                block[0, j:end] += shape
-                block[1, j:end] += shape * 0.4
+                shape = np.hanning(int(0.3 * RATE)) * 7.0
+                end = min(k, j + shape.size)
+                block[0, j:end] += shape[: end - j]
+                block[1, j:end] += shape[: end - j] * 0.4
+                self._blink_tail = shape[end - j:]
         # After-effects of the markers in this stretch of time.
         for m in markers:
             dt = t - (m.t - self.t0)
@@ -397,8 +416,13 @@ class SimulatorApp:
                          muted)
         help_line = ("Space pause   Up/Down gain   Left/Right span   "
                      "C clear   S save   Esc quit")
-        surf.blit(f_small.render(help_line, True, muted),
-                  (self.LEFT, self.H - 20))
+        help_img = f_small.render(help_line, True, muted)
+        surf.blit(help_img, (self.LEFT, self.H - 20))
+        if self.note:
+            # Where S saved to, or why it could not, beside the keys.
+            x = self.LEFT + help_img.get_width() + 24
+            text = _fit(self.note, f_small, self.W - 16 - x)
+            surf.blit(f_small.render(text, True, ink), (x, self.H - 20))
         if self.paused:
             p = f_bold.render("PAUSED", True, (220, 38, 38))
             surf.blit(p, (r.right - p.get_width() - 10, r.y + 26))
@@ -489,7 +513,15 @@ class SimulatorApp:
         elif key == pygame.K_c:
             self.rx.clear()
         elif key == pygame.K_s:
-            self.note = str(save_csv(self.rx.snapshot(), Path.cwd()))
+            try:
+                path = save_csv(self.rx.snapshot(), save_folder())
+                try:
+                    shown = "~/" + path.relative_to(Path.home()).as_posix()
+                except ValueError:
+                    shown = str(path)
+                self.note = f"Saved {shown}"
+            except OSError as e:
+                self.note = f"Could not save: {e}"
         return True
 
     def window_plan(self, desktops: list[tuple[int, int]]
@@ -598,8 +630,15 @@ def _wrap(text: str, font, width: int) -> list[str]:
     return lines
 
 
+def save_folder() -> Path:
+    """Where S saves: the app's own fallback data folder, the same on
+    every PC and never inside the repository or the lab's sessions."""
+    return Path.home() / "Finger Rehab Data" / "EEG simulator"
+
+
 def save_csv(markers: list[Marker], folder: Path) -> Path:
     """The markers so far, one row each, for checking against a run."""
+    folder.mkdir(parents=True, exist_ok=True)
     path = folder / time.strftime("eeg_simulator_%Y-%m-%d_%H%M%S.csv")
     t0 = markers[0].t if markers else 0.0
     with open(path, "w", newline="", encoding="utf-8") as fh:

@@ -105,6 +105,51 @@ def test_the_window_fits_the_screens_it_has():
     assert app.window_plan([]) == (0, (app.W, app.H))
 
 
+def test_a_blink_shows_in_full_at_the_frame_rate():
+    # A frame is a handful of samples; each blink used to stop at the
+    # end of the frame it began in, so live blinks never showed.
+    eeg = sim.FakeEEG(seed=3)
+    t0 = eeg.t0
+    for i in range(1, 60 * 12):
+        eeg.advance(t0 + i / 60, [])
+    assert eeg.data[0].max() > 5.0     # Fp1: a blink peaks near 7
+
+
+def test_a_long_pause_keeps_the_markers_on_time():
+    # Away longer than the buffer holds: the newest samples must carry
+    # their own times, or a cue's Pz response lands in the wrong place.
+    eeg = sim.FakeEEG(seed=3)
+    t0 = eeg.t0
+    eeg.advance(t0 + 1.0, [])
+    cue = sim.Marker(t0 + 39.0, 33)
+    eeg.advance(t0 + 40.0, [cue])
+    pz = eeg.data[5]
+    peak_at = (40.0 - 39.3) * sim.RATE        # 0.3 s after the cue
+    i = eeg.n - int(round(peak_at))
+    window = pz[i - 10:i + 10]
+    assert window.mean() > pz[: eeg.n // 2].mean() + 1.5
+
+
+def test_saving_where_it_cannot_write_says_so(tmp_path, monkeypatch):
+    import pygame
+    pygame.init()
+    try:
+        app = sim.SimulatorApp(sim.ByteReceiver())
+        locked = tmp_path / "locked"
+        locked.mkdir()
+        locked.chmod(0o500)
+        monkeypatch.setattr(sim, "save_folder", lambda: locked / "x")
+        assert app.handle_key(pygame.K_s) is True
+        assert app.note.startswith("Could not save")
+        monkeypatch.setattr(sim, "save_folder", lambda: tmp_path / "ok")
+        app.handle_key(pygame.K_s)
+        assert app.note.startswith("Saved ")
+        assert list((tmp_path / "ok").glob("eeg_simulator_*.csv"))
+        locked.chmod(0o700)
+    finally:
+        pygame.quit()
+
+
 def test_the_window_draws_and_saves(tmp_path):
     import pygame
     pygame.init()

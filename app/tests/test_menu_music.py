@@ -406,6 +406,13 @@ class MenuMusicPlayerVolumeTests(unittest.TestCase):
             self.assertAlmostEqual(menu_music_level(cfg), 0.2)
             cfg.data["audio"]["menu_music_volume"] = "loud"
             self.assertAlmostEqual(menu_music_level(cfg), 0.12)
+            # The old default, saved in passing by any slider move before
+            # 29 September, reads as the new one; the slider's 0.02 steps
+            # cannot land on it.
+            cfg.data["audio"]["menu_music_volume"] = 0.25
+            self.assertAlmostEqual(menu_music_level(cfg), 0.12)
+            cfg.data["audio"]["menu_music_volume"] = 0.26
+            self.assertAlmostEqual(menu_music_level(cfg), 0.26)
 
     def test_no_saved_level_can_make_a_menu_loud(self) -> None:
         """A saved slider value of 100 percent used to make the menus

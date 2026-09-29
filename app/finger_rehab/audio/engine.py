@@ -286,9 +286,10 @@ class AudioEngine:
         self._next_metronome_t = None
         self._menu_active = False
         self._block_music_active = False
-        # A block that ends on a loud trial must not leave the boost
-        # behind: every sound in the menus after it would play louder.
-        self.trial_gain = 1.0
+        # trial_gain is left alone: a pause stops the stream mid-trial
+        # and the loud trial must still sound loud when play resumes.
+        # The engine clears it where a block ends (finish_block and
+        # the abandon path).
 
     @property
     def is_playing(self) -> bool:

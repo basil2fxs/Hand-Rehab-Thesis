@@ -518,6 +518,9 @@ class SyllablesMode(WaitSkip):
                              for v in (return_after or [2, 4])] or [2, 4]
         self.complete_s = max(0.2, float(complete_s))
         self.homophone_foils = bool(homophone_foils)
+        # Whether the set being built is on a syllable heard with a
+        # weak vowel (set by _foil_kinds, read by _spawn_set).
+        self._weak_set = False
         self.alternate_hands = bool(alternate_hands)
         self.supervised = bool(supervised)
         speech = dict(speech or {})
@@ -1212,11 +1215,13 @@ class SyllablesMode(WaitSkip):
         of the call so nothing is heard, felt or highlighted. A cue on
         the target lane here would hand the child the answer."""
         lanes = self.active_lanes()
+        kinds = self._foil_kinds()
         self.option_set = build_option_set(
             self.word, self.pos, self.rung, self.rng, self.inventory,
             lanes, self._lane_targets, self._recent_target_lanes,
-            homophone_foils=self.homophone_foils,
-            kinds=self._foil_kinds())
+            homophone_foils=self.homophone_foils, kinds=kinds,
+            avoid=(frozenset({"F3"}) if self._weak_set
+                   else frozenset()))
         self._replayed = False
         self._set_voided = False
         tlane = self.option_set.target_lane
@@ -1279,6 +1284,7 @@ class SyllablesMode(WaitSkip):
         prof = self.profile
         weak = (self.heard_weak(self.pos) if self.word is not None
                 else None)
+        self._weak_set = bool(weak)
         if prof.pid == "classic" and not weak:
             return None
         if (prof.pid != "classic" and prof.foil_weights
@@ -1292,6 +1298,9 @@ class SyllablesMode(WaitSkip):
             weak = (prof.guard_unstressed_vowels and self.word is not None
                     and self.pos != self.word.stress
                     and not self.chunks_spelt(self.word.syllables[self.pos]))
+        # Kept for the set being built: the fallback chain and every
+        # kind must stay clear of a vowel swap too (_spawn_set).
+        self._weak_set = bool(weak)
         if weak:
             kinds = tuple("F7" if k == "F3" else k for k in kinds)
         return kinds
