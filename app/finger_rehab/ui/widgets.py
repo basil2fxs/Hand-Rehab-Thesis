@@ -1082,6 +1082,23 @@ class LaneStrip:
         if icon is not None:
             surf.blit(icon, icon.get_rect(center=(cx, cy + 1)))
 
+    def label_pt(self) -> int:
+        """Point size of the finger name. It steps down until the word
+        fits inside the tile with a real margin: a bilateral row is
+        eight tiles wide, and at a fixed 32 pt "Middle" ran edge to
+        edge with the border touching both ends of the word. The
+        widest name sets the size, not this tile's own, so every tile
+        in a row (all the same width) prints its name at one size;
+        fitted word by word, Mirror's "Middle" came out smaller than
+        the names beside it."""
+        widest = max(self.FINGER_LABELS,
+                     key=lambda w: self.layout.font(32).size(w)[0])
+        max_w = max(24, self.rect.w - 20)
+        for pt in (32, 30, 28, 26, 24, 22, 20, 18):
+            if self.layout.font(pt).size(widest)[0] <= max_w:
+                return pt
+        return 18
+
     def _label_colour(self, fill: tuple[int, int, int]
                        ) -> tuple[int, int, int]:
         """Readable text colour for a given tile fill. Uses the standard
@@ -1225,16 +1242,8 @@ class LaneStrip:
         # text colour follows the tile fill rather than the theme, so
         # the label stays readable on a dark finger colour (the ring
         # finger's black tile would swallow near-black text).
-        # Point size steps down until the word fits inside the tile
-        # with a real margin. A bilateral row is eight tiles wide, and
-        # at the fixed 32 pt "Middle" ran edge to edge with the border
-        # touching both ends of the word.
         label_text = self.FINGER_LABELS[self.finger % 4]
-        max_w = max(24, self.rect.w - 20)
-        for pt in (32, 30, 28, 26, 24, 22, 20, 18):
-            font = self.layout.font(pt)
-            if font.size(label_text)[0] <= max_w:
-                break
+        font = self.layout.font(self.label_pt())
         label = font.render(label_text, True, self._label_colour(fill))
         surf.blit(label, label.get_rect(midbottom=(
             self.rect.centerx, self.rect.bottom - 44,

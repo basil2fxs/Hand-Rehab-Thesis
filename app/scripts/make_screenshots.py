@@ -1,11 +1,12 @@
 """Render the game's screens to docs/images/*.png, headless.
 
 Real engine, real screens, a simulated player: the keyboard source for
-the lane games and the menus, the test suite's wire rig (a fake board
-streaming 200 Hz samples) for Buzz Hunt and the quick calibration. The
-clock is stepped by hand, so every picture is the same on every
-machine. The READMEs show these pictures and tests/test_readme.py
-checks they exist.
+the lane games, Rhythm and the menus, the test suite's wire rig (a fake
+board streaming 200 Hz samples) for Buzz Hunt, Force Pilot and the
+quick calibration. The clock is stepped by hand, so every picture is
+the same on every machine. The READMEs show these pictures;
+tests/test_readme.py checks they exist and tests/test_lane_screen_polish.py
+that this script makes every one of them.
 
 Run from app/:  python3 scripts/make_screenshots.py [--out docs/images]
 """
@@ -28,6 +29,12 @@ import pygame  # noqa: E402
 
 SIZE = (1280, 800)
 FRAME = 1.0 / 60.0
+
+# Every picture main() writes, by file name without .png.
+NAMES = ("login", "hand", "hub", "settings", "eeg_port", "reaction_setup",
+         "adaptive", "muscle_memory", "chords", "echo", "mirror",
+         "syllables", "results", "reaction", "rhythm", "buzz_hunt",
+         "calibration", "force_pilot")
 
 
 class _Clock:
@@ -260,6 +267,91 @@ def reaction(out: Path, clock) -> None:
         eng._close_loggers()
 
 
+def rhythm(out: Path, clock) -> None:
+    """Rhythm on the battery's song and difficulty, eight seconds in,
+    every note so far pressed on its beat so the score and the streak
+    are not zero. Without the song in assets/music the chart is a
+    90 BPM procedural one."""
+    from finger_rehab.audio.beatmap import extract_beatmap, procedural_beatmap
+    from finger_rehab.game.battery import find_track
+    with tempfile.TemporaryDirectory() as td:
+        eng = _keyboard_engine(Path(td))
+        _login(eng)
+        track = find_track(eng.cfg, "Easy_Lemon.mp3")
+        bm = (extract_beatmap(str(track), difficulty="medium", num_lanes=4)
+              if track is not None
+              else procedural_beatmap(bpm=90, beats=180))
+        eng.begin_rhythm_block(bm)
+        mode = eng.mode
+        _frame(eng, clock)
+        mode.skip_wait()
+        pressed: set = set()
+        while mode.song_time < 8.0:
+            for i, note in enumerate(mode.beatmap.notes):
+                if i not in pressed and note.t <= mode.song_time:
+                    pressed.add(i)
+                    mode.queue_press(_press(note.lane, clock.t))
+            _frame(eng, clock)
+        _snap(eng, out, "rhythm", eng._screens["rhythm"])
+        eng._abandon_if_in_block()
+        eng._close_loggers()
+
+
+def force_pilot(out: Path) -> None:
+    """Force Pilot on the fake board, six seconds into the first run,
+    the index finger following the wave a little off its centre."""
+    import math
+    from tests.test_echo_mode import (RESTING, _make_wire_engine,
+                                      patched_clock)
+    with tempfile.TemporaryDirectory() as td, patched_clock() as clock:
+        eng, rig = _make_wire_engine(td, clock, buzz_after=False)
+        # The rig runs the short test ladder; the picture shows the game.
+        eng.cfg.data["game"]["test_mode_enabled"] = False
+        eng.cfg.data["game"]["start_countdown_s"] = 0
+        eng._screens = eng._build_screens()
+        max_counts = eng.calibration_profiles["right"].max_press
+        next_sample = clock.t
+
+        def frame(mode=None) -> None:
+            nonlocal next_sample
+            clock.t += FRAME
+            while next_sample <= clock.t:
+                vals = [RESTING] * 4
+                target = getattr(mode, "target_now", None)
+                if getattr(mode, "phase", "") == "run" and target is not None:
+                    pct = target + 1.5 * math.sin(next_sample * 3.0)
+                    vals[mode.lane] = int(round(
+                        RESTING + pct / 100.0 * max_counts[mode.finger]))
+                rig.push(next_sample, vals)
+                next_sample += 1.0 / 200.0
+            eng._pump_source()
+            eng.screen_obj.update(FRAME)
+            eng._drain_motor_queue()
+
+        for _ in range(300):
+            if (eng.detectors.get("right") is not None
+                    and eng.detectors["right"].baseline[0] is not None):
+                break
+            frame()
+        eng.begin_force_pilot_block()
+        mode = eng.mode
+        # Straight to the first run: the max-press probes need a real
+        # squeeze and the calibration already carries the maximum. The
+        # mode prepares run 1 on its first tick and announces it; the
+        # finger stays off until the run, since the announce re-tares.
+        mode._probe_queue.clear()
+        for _ in range(600):
+            if mode.phase == "announce":
+                break
+            frame(mode)
+        mode.skip_wait()
+        for _ in range(6 * 60):
+            frame(mode)
+        _snap(eng, out, "force_pilot", eng._screens["force_pilot"])
+        eng._abandon_if_in_block()
+        eng._close_loggers()
+
+
 def wire_games(out: Path) -> None:
     """Buzz Hunt and the quick calibration on the fake board."""
     from tests.test_echo_mode import _Pump, _make_wire_engine, patched_clock
@@ -315,10 +407,14 @@ def main(argv=None) -> int:
             results(out, clock)
         if go("reaction"):
             reaction(out, clock)
+        if go("rhythm"):
+            rhythm(out, clock)
     finally:
         clock.restore()
     if go("buzz_hunt") or go("calibration"):
         wire_games(out)
+    if go("force_pilot"):
+        force_pilot(out)
     pygame.quit()
     return 0
 

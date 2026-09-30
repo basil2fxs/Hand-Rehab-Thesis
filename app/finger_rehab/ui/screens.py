@@ -2998,6 +2998,14 @@ class GameplayScreen(Screen):
         self._popups.append(FloatingText(text, (x, y), colour, font_pt=42,
                                           glyph=glyph))
 
+    @staticmethod
+    def _msg_chip_place(block: str) -> tuple[int, int, int, int]:
+        """(point size, centre y, background alpha, vertical padding)
+        of the mode message chip at rest, above the lane row."""
+        if block == "reaction":
+            return 34, 184, 42, 10
+        return 30, 165, 30, 6
+
     def set_message(self, text: str, duration_s: float,
                     kind: str = "info") -> None:
         """`kind` tints the message chip: info (neutral), success
@@ -3481,17 +3489,24 @@ class GameplayScreen(Screen):
             age = time.perf_counter() - self._message_born
             # Reaction's chip IS the mode's feedback (the RT number is
             # the PVT's self-motivating loop), so it renders a step
-            # larger and stronger there than the shared default, and
-            # sits a little higher so the bigger chip still clears the
-            # tallest lane tile (top = 220).
-            base_pt = 34 if block == "reaction" else 30
-            chip_cy = 188 if block == "reaction" else 201
-            chip_alpha = 42 if block == "reaction" else 30
+            # larger and stronger there than the shared default.
+            # Both live in the band between the SCORE number and the
+            # lane row. The shared chip used to sit at y 201 with 10 px
+            # of padding, 61 px tall: it ran 11 px into the tallest
+            # tile (top 220) and over the chevron bobbing up to 28 px
+            # above a lit tile, which Echo's "Watch the echo..." did on
+            # every trial. Slimmer padding and a higher centre keep it
+            # between the score and that chevron. Reaction has no
+            # chevron and a smaller score, so its bigger chip only has
+            # to clear the tile top.
+            base_pt, chip_cy, chip_alpha, pad_y = self._msg_chip_place(
+                block)
             if bracket_up:
                 self._msg_in_bottom_band = True
                 base_pt = 26
                 chip_cy = self.layout.height - 42
                 chip_alpha = 36
+                pad_y = 10
             pt = base_pt
             # The pop-in is a scale animation, so reaction never gets
             # it: the chip is drawn at one size or not at all.
@@ -3499,7 +3514,7 @@ class GameplayScreen(Screen):
                 pt = int(base_pt * (1.0 + 0.22 * (1.0 - age / 0.18)))
             _chip(surf, self.layout, (cx, chip_cy), msg_text,
                   msg_colour, bg_alpha=chip_alpha,
-                  pad_x=24, pad_y=10, font_pt=pt)
+                  pad_x=24, pad_y=pad_y, font_pt=pt)
 
         now = time.perf_counter()
         for ls in self.lanes:

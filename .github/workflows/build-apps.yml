@@ -378,7 +378,7 @@ jobs:
             retry sh -c 'gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/$0" -f sha="$GITHUB_SHA" -F force=true > /dev/null || gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$0" -f sha="$GITHUB_SHA" > /dev/null' "$TAG"
             retry gh release upload "$TAG" "$DIST"/FingerRehab-* --clobber
             retry gh release edit "$TAG" --title "Finger Rehab $APP_VERSION" \
-              --notes-file notes.md --latest
+              --target "$GITHUB_SHA" --notes-file notes.md --latest
           else
             retry gh release create "$TAG" "$DIST"/FingerRehab-* \
               --target "$GITHUB_SHA" --title "Finger Rehab $APP_VERSION" \
@@ -393,6 +393,8 @@ jobs:
           DIST="$GITHUB_WORKSPACE/dist"
           sha=$(gh api "repos/$GITHUB_REPOSITORY/git/refs/tags/$TAG" --jq .object.sha)
           test "$sha" = "$GITHUB_SHA" || { echo "tag $TAG is $sha, not $GITHUB_SHA"; exit 1; }
+          target=$(gh release view "$TAG" --json targetCommitish --jq .targetCommitish)
+          test "$target" = "$GITHUB_SHA" || { echo "release $TAG names $target, not $GITHUB_SHA"; exit 1; }
           latest=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)
           test "$latest" = "$TAG" || { echo "latest release is $latest, not $TAG"; exit 1; }
           gh release view "$TAG" --json body --jq .body | grep -q "${GITHUB_SHA:0:7}" \

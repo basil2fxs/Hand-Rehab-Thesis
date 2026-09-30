@@ -45,10 +45,14 @@ class ReleaseWorkflowTests(unittest.TestCase):
             self.assertIn(call, run)
         self.assertIn("--clobber", run)
         self.assertIn("--latest", run)
+        # The release record names the commit its tag points at.
+        edit = run[run.index("retry gh release edit"):]
+        self.assertIn('--target "$GITHUB_SHA"', edit.split("else")[0])
 
     def test_the_release_is_checked_against_this_build(self):
         run = self.steps["Check the release is this build"]["run"]
         for what in ("git/refs/tags/", "releases/latest", "GITHUB_SHA",
+                     "targetCommitish",
                      "FingerRehab-Setup-Windows.exe", "FingerRehab-macOS.dmg",
                      "FingerRehab-EEGLab.zip", "exit 1"):
             self.assertIn(what, run)
