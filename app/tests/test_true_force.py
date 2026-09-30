@@ -207,6 +207,25 @@ class SrtModelTests(unittest.TestCase):
         self.assertIn("sequence effect", buf.getvalue())
 
 
+class BlandAltmanLimitTests(unittest.TestCase):
+
+    def test_each_limit_carries_its_interval(self):
+        """Bland and Altman (1986): a limit's standard error is about
+        sqrt(3 SD^2 / n), so its 95 percent interval is the limit
+        plus or minus t(n - 1) times that."""
+        from scipy import stats
+        ns = nb()
+        rng = np.random.default_rng(9)
+        p1 = pd.Series(rng.normal(300.0, 30.0, 10))
+        p2 = p1 + rng.normal(5.0, 12.0, 10)
+        st = ns.cohort_retest_stats(p1, p2)
+        sd = float(np.std((p2 - p1).values, ddof=1))
+        half = stats.t.ppf(0.975, 9) * np.sqrt(3.0 * sd ** 2 / 10)
+        for key in ("loa_lo", "loa_hi"):
+            self.assertAlmostEqual(st[f"{key}_ci_lo"], st[key] - half, places=9)
+            self.assertAlmostEqual(st[f"{key}_ci_hi"], st[key] + half, places=9)
+
+
 class PatternNoProbeTests(unittest.TestCase):
 
     def test_scores_keep_their_columns_without_a_probe(self):

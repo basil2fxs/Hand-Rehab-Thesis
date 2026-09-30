@@ -11,7 +11,7 @@ Rayan's work is R (RStudio: dplyr, ggplot2, lmerTest, emmeans, pbkrtest) plus on
 The analysis of record stays in `analysis/session_analysis.ipynb`, for four reasons:
 
 - The game and the analysis share code. The Teasdale onset detector, the 250 ms look-back zero and the mixed model live in `finger_rehab/analytics/` and the notebook carries verbatim copies, pinned by tests, so the analysis measures a press exactly the way the game does.
-- Several hundred tests (23 test files load the notebook or its package twins) hold the analysis to known answers, including Rayan's own output files to the last decimal and his emmeans plot. A MATLAB or R port would start that checking again from nothing.
+- Several hundred tests, in two dozen test files that load the notebook or its package twins, hold the analysis to known answers, including Rayan's own output files to the last decimal and his emmeans plot. A MATLAB or R port would start that checking again from nothing.
 - It runs on the lab and home computers without a licence, and the thesis build takes its figures directly.
 - Nothing in these analyses needs a MATLAB toolbox. The one statistical tool the Python stack lacked, the mixed model Rayan fitted with lme4, is now implemented and checked (Section 2).
 
@@ -60,7 +60,7 @@ His model now also runs on the lab's SRT task, which has his design: practice (r
 | Tests from a mixed model | REML with Satterthwaite or Kenward-Roger degrees of freedom (Luke 2017; Kuznetsova, Brockhoff and Christensen 2017) | REML, Satterthwaite | Closed |
 | Movement onset | Teasdale, Bard, Fleury, Young and Proteau (1993) | His exact port | Closed |
 | Force in newtons | Per-press zero, calibrated conversion | 250 ms look-back zero; bench slope per pad when measured | Open until the bench is run on both sensor sets |
-| Test-retest reliability | ICC with its form and 95 percent interval, SEM, MDC (Koo and Li 2016); Bland-Altman limits (Bland and Altman 1999) | ICC(2,1) with intervals, SEM, MDC95, Bland-Altman panels | Limits are drawn without their own confidence intervals |
+| Test-retest reliability | ICC with its form and 95 percent interval, SEM, MDC (Koo and Li 2016); Bland-Altman limits with their own intervals (Bland and Altman 1999) | ICC(2,1) with intervals, SEM, MDC95, Bland-Altman panels; each limit's 95 percent interval now in the table and shaded on the figure | Closed |
 | Internal consistency | Report reliability routinely, permutation split-half (Parsons, Kruijt and Fox 2019) | Permutation split-half, Spearman-Brown corrected | Closed |
 | Known-effect checks | Pre-specified tests, family-wise correction, equivalence by two one-sided tests | Wilcoxon with rank-biserial and dz, Holm, TOST on the 90 percent interval; feasibility checks named as such | Closed |
 | Normal ranges | Reference intervals need large samples; small samples are descriptive | Median, IQR and every participant's point; no percentiles below n = 20 | Closed |
