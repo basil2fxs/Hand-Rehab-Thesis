@@ -295,8 +295,15 @@ jobs:
           $lab = Join-Path $env:RUNNER_TEMP "labrun"
           Copy-Item -Recurse "bin/dist/Finger Rehab EEG Lab" $lab
           $p = Start-Process -FilePath (Join-Path $lab "Finger Rehab.exe") -WorkingDirectory $lab -PassThru
-          Start-Sleep -Seconds 30
           $log = Join-Path $lab "sessions/rehab.log"
+          # Wait for the line itself, up to two minutes. A cold start on a
+          # fresh runner took 10 s one day and 30 s the next, so a fixed
+          # 30 s wait failed a build that was fine.
+          $deadline = (Get-Date).AddSeconds(120)
+          while ((Get-Date) -lt $deadline -and -not $p.HasExited) {
+            if ((Test-Path $log) -and (Select-String -Path $log -Pattern "waiting on the port picker" -Quiet)) { break }
+            Start-Sleep -Seconds 1
+          }
           $alive = -not $p.HasExited
           if ($alive) { Stop-Process -Id $p.Id -Force }
           if (-not (Test-Path $log)) {
