@@ -1609,7 +1609,11 @@ echo:
   # seed + N). Empty means each game draws from the participant's
   # name and their game count, so the same person on their third
   # game always meets the same sequence and no two games repeat.
+  # seed_follows_game_count counts N from the participant's earlier
+  # games instead of from this block's first, so a fixed seed gives
+  # everyone the same sequences without repeating any (the study).
   seed: null
+  seed_follows_game_count: false
 
 rhythm:
   difficulty: medium     # easy | medium | hard
@@ -2046,8 +2050,19 @@ protocol:
           # pacing signal that is the same for everybody.
           tactile_mode: on_beat
         echo:
-          games: 2                    # best of two, and their spread
+          games: 2                    # the mean of two, and the best
           max_len: 10                 # ceiling, to hold the 3 min line
+          # The same material for everyone (1 October 2026): game N
+          # of a participant's Echo games plays seed + N, and this
+          # seed's first four sequences are all typical of the
+          # generator (four lanes within five items, no alternation
+          # past three, two returns in eight, about half the steps to
+          # a neighbour). Sequence structure moves span several-fold.
+          seed: 20415096
+          seed_follows_game_count: true
+          # A silent miss gets the ordinary rest before its replay,
+          # like a wrong press; the long rest was a fatigue guard.
+          fatigue_rest_s: 2.0
         game:
           total_trials: 40            # pins the adaptive block length
 

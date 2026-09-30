@@ -63,14 +63,17 @@ notes box on the intake sheet.
       k/12 on the 45 and the minutes: amber past the length, red past its hard
       stop (18, 35, 50 or 65 minutes). The 60 plays every game twice;
       the 15 and 30 play shortened games (docs/research/trial_mode.md).
-- [ ] The first time Reaction and Rhythm come up, say that game's line
-      once before it starts. Order A starts Reaction as soon as the
+- [ ] The first time Reaction, Rhythm and Echo come up, say that
+      game's line once before it starts. Order A starts Reaction as soon as the
       calibration ends, so say its line as the calibration finishes.
       Reaction: "When a finger lights up and buzzes, press that finger
       as fast as you can. Sometimes nothing comes: keep still."
       Rhythm: "Press each finger as its ball reaches the ring, in time
       with the music. The buzz and the tone come at that moment, so
       don't wait for them."
+      Echo: "Watch the lights, then press the same fingers in the same
+      order. Each round adds one more to the end of the same pattern.
+      Speed doesn't count. If you're not sure, make your best guess."
 - [ ] Don't coach during a game. Let them skip a game's own rest
       (Space) only when they say they're ready.
 - [ ] Don't pause a Rhythm game. If one pauses, Retry it from the

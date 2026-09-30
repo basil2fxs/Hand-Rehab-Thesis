@@ -20,21 +20,27 @@ is: one trial per length, one miss ends everything, so a single motor
 slip costs the whole measurement. Woods, Kishiyama, Yund, Herron,
 Edwards, Poliva, Hink and Reed (2011, Journal of Clinical and
 Experimental Neuropsychology 33:101-111) showed exactly this on digit
-span: the maximum-length score retested at r = 0.68 while the
-two-error discontinue score managed r = 0.39, because a rule that
-stops at the first errors throws away the trials that carry the
-information. Conway, Kane, Bunting, Hambrick, Wilhelm and Engle (2005,
-Psychonomic Bulletin and Review 12:769-786) make the same argument for
-partial credit over all-or-nothing scoring, which is why a failed
-attempt here still pays per item. A toy Monte Carlo over this rule
+span: the maximum length over 14 staircase trials that CONTINUED after
+errors retested at r = 0.68, while the two-error discontinue score
+managed r = 0.39, because a rule that stops at the first errors throws
+away the trials that carry the information. The spare life softens the
+stop rule; it does not remove it. A failed attempt still pays per item,
+as game feel: Conway et al.'s (2005, Psychonomic Bulletin and Review
+12:769-786) case for partial credit assumes every item of each list is
+recalled, and an attempt here stops at its first wrong press, so the
+per-item count is not their better-behaved score (Echo review, 1
+October 2026). A toy Monte Carlo over this rule
 (20 000 games per cell, per-trial success a logistic in length with
 the true span at p = 0.5) puts a true span of 6 at a mean of 5.14
 (SD 1.05) with no life and 5.81 (SD 0.81) with one, against 5.95
 (SD 0.83) for the full Kessels ladder at about 1.5 times the trials.
 One life removes most of the single-shot downward bias and its fat
 lower tail. It does not make a one-game span as stable as a ladder,
-which is why the study battery plays two games and reports the best
-and the mean.
+which is why the study battery plays two games. The MEAN of the two is
+the headline (about 0.69 reliable against 0.63 for the best of two
+and 0.52 for one game, in simulation; mean-type spans retest better
+than maximum-type ones, Woods et al. 2015); the best of two runs about
+half an item high and is reported beside it.
 
 WHY ONE SEQUENCE PER GAME, AND WHAT THAT COSTS. Growing one sequence
 means every prefix is presented again on every trial, so the score
@@ -52,13 +58,14 @@ retention. Musfeld, Souza and Oberauer (2023, PNAS 120:e2218042120)
 found repetition learning to be explicit and abrupt rather than
 gradual and implicit, so nothing here is claimed as implicit learning.
 The consequence for the numbers: a Simon span is NOT a Corsi span and
-the two never pool. Gendle and Ransom (2006, Journal of Behavioral and
-Neuroscience Research 4:1-7) ran the retail SIMON with 94 college
-students over four games with 30 s rests, found no habituation,
-practice or interference across the games, and reported spans around
-seven on four buttons (quoted via Mathy, Fartoukh, Gauvrit and Guida
-2016, Frontiers in Psychology 7:201, the primary PDF being unobtainable)
-against the Corsi mean of 6.2 on nine blocks. The toy lets a colour
+the two never pool. Gendle and Ransom (Journal of Behavioral and
+Neuroscience Research 4:1-7; the year is given as 2006 by Mathy 2016
+and 2009 by Chekaf 2018) ran the retail SIMON with college students
+over several games, found no practice across them, and reported spans
+around seven on four buttons (as quoted by Mathy, Fartoukh, Gauvrit and
+Guida 2016, Frontiers in Psychology 7:201; the primary is unobtainable,
+and its sample size and rests are unverified) against the Corsi mean of
+6.2 on nine blocks. The toy lets a colour
 repeat straight away and Echo does not (SEQUENCE MATERIAL), which on
 its own may put Echo's spans a little under seven.
 
@@ -69,7 +76,12 @@ sessions tree plus the game's number inside this block. Same person,
 same game count, same sequence, so any game is replayable in analysis;
 different games get different material. echo.seed overrides it for a
 deliberate replay, and Test Mode uses game_index -1 and never advances
-the count.
+the count. The study battery sets echo.seed with
+echo.seed_follows_game_count (1 October 2026): everyone meets the same
+sequences in the order of their Echo games, because sequence structure
+moves span several-fold and standard span tests fix their items
+(Ginsberg et al. 2017; Zhao et al. 2026); the seed was chosen so its
+first four sequences are typical of the generator.
 
 THE LEGACY LADDER (echo.rule: ladder). The Kessels 2000 Corsi ladder
 is kept behind the config switch so old configs, old sessions and the
@@ -92,9 +104,10 @@ reviewed 25 years of Corsi use and found administration parameters
 (tapping rate, discontinuance rule, scoring) varied so much across labs
 that results could not be compared. That is why every presentation
 parameter here is pinned in config, logged per trial and in
-block_stats, and never depends on how the player is doing: the classic
-Simon toy speeds up as you survive, and that acceleration is exactly
-the kind of drift Berch catalogued.
+block_stats, and never depends on how the player is doing. The toy's
+tempo steps up after the 5th, 9th and 13th signals of a sequence (the
+1978 manual), a fixed function of position, like Echo's own length
+schedule below.
 
 PRESENTATION RATE. One item per second is the standard administration
 (Kessels 2000; WAIS digit span); eCorsi (Brunetti, Del Gatto and Delogu
@@ -127,10 +140,8 @@ literature puts the load of motor impairment on the RESPONSE side:
 Corsi recall is untimed by convention and ran under standard
 presentation in Kessels' own cerebral-lesion sample. So REPRODUCTION
 is self-paced up to a generous idle timeout and reproduction speed is
-never scored. A config deviation (say for paediatric use, where
-presentation pacing measurably moves performance: Simpson 2021,
-PMC8366059) is allowed but lands in block_stats so the analysis can
-split those blocks out.
+never scored. A config deviation (say for paediatric use) is allowed
+but lands in block_stats so the analysis can split those blocks out.
 
 BIMODAL PRESENTATION. Each playback item lights the lane tile AND
 buzzes that finger with simultaneous onset. With cue.sound_before on,
@@ -141,10 +152,12 @@ temporally congruent multisensory stimulation aids encoding and
 learning relative
 to unisensory input (Shams and Seitz 2008, Trends in Cognitive Sciences
 12:411-417), and multisensory protocols are an active strand of
-post-stroke cognitive rehab (Cheng 2022, J Clin Med 11:6324; Johansson
-2012). Two honest limits: no study directly compares light-plus-buzz
-against light-only in a span game, so the bimodal choice rests on the
-general multisensory-learning literature, not a task-level trial; and
+post-stroke cognitive rehab (Parisi et al. 2022, J Clin Med 11:6324, a
+review of ten mostly virtual-reality studies). Two honest limits: no
+study directly compares light-plus-buzz against light-only in a span
+game, and the closest adult study found no multisensory gain in span
+(Karpicke and Pisoni 2004), so the bimodal choice rests on the general
+multisensory-learning literature, not a task-level trial; and
 the motors' lag was measured only once, on the study laptop with its
 microphone (74 ms from command to motion, 24 September 2026), while
 their rise time is a datasheet class value, so onset simultaneity is
@@ -465,10 +478,11 @@ def pulses_from_params(waveform: str, p: dict) -> list:
 class EchoMode(WaitSkip):
     name = "Echo"
 
-    # Points per correctly reproduced item (paid on partial attempts
-    # too: partial-credit scoring is the better-behaved span quantity,
-    # Conway 2005) plus the completed-sequence bonus taken from the
-    # shared score config. Nothing here reads speed.
+    # Points per correctly reproduced item, paid on a failed attempt
+    # too as game feel (the attempt stops at its first wrong press, so
+    # this is not Conway 2005's full-recall partial credit), plus the
+    # completed-sequence bonus taken from the shared score config.
+    # Nothing here reads speed.
     ITEM_POINTS = 2
     # Gap between the "Watch the echo" card and the first item. The
     # turn hand-over has no gap of its own: reproduction opens at the
@@ -516,7 +530,8 @@ class EchoMode(WaitSkip):
                  participant: str = "",
                  game_index_base: int = 0,
                  forced_seed: int | None = None,
-                 ioi_anchor_len: int | None = None) -> None:
+                 ioi_anchor_len: int | None = None,
+                 seed_follows_game_count: bool = False) -> None:
         self.engine = engine
         # Lanes in play: one hand's four, or all eight bilaterally
         # (right 0..3 then left 4..7, engine global numbering). Same
@@ -609,6 +624,12 @@ class EchoMode(WaitSkip):
         self.game_index_base = int(game_index_base)
         self.forced_seed = (None if forced_seed is None
                             else int(forced_seed))
+        # With a fixed seed, count on from the player's earlier games
+        # rather than from this block's first: the study gives everyone
+        # the same material, and a second Echo block in one sitting
+        # then meets the next two sequences instead of the first two
+        # again.
+        self.seed_follows_game_count = bool(seed_follows_game_count)
         self.game_index = -1 if demo_trials is not None else int(
             game_index_base)
         self.game_seed = 0
@@ -664,12 +685,18 @@ class EchoMode(WaitSkip):
         its first t items, so the material a player meets is fixed
         before their first press. echo.seed pins it for a deliberate
         replay (offset by the game number so two games in one block
-        still differ); otherwise the seed is the participant's name
+        still differ), or, with echo.seed_follows_game_count, gives
+        every participant the same sequences in order of the games
+        they have played (the study battery, 1 October 2026: sequence
+        structure moves span several-fold, so standard span tests fix
+        their items); otherwise the seed is the participant's name
         and their game count."""
         self.game_index = (-1 if self.demo_trials is not None
                            else self.game_index_base + self.run_idx)
         if self.forced_seed is not None:
-            self.game_seed = self.forced_seed + self.run_idx
+            step = (max(0, self.game_index) if self.seed_follows_game_count
+                    else self.run_idx)
+            self.game_seed = self.forced_seed + step
         else:
             self.game_seed = participant_simon_seed(
                 self.participant, self.game_index)
@@ -804,7 +831,7 @@ class EchoMode(WaitSkip):
         # rather than the rig having lost its place.
         self._set_message(
             "One more go" if self.life_trial else "Watch the echo...",
-            1.2)
+            0.9)
         # _turn_due doubles as the announce deadline: one absolute
         # clock per phase transition keeps on_resume's shifting simple.
         self._turn_due = now + self.LEAD_S
@@ -1140,9 +1167,10 @@ class EchoMode(WaitSkip):
             # Nothing on screen for a round that fell short: the items
             # it got still score, and the next sequence is the prompt.
         # Press offsets from the "Your turn" moment, milliseconds,
-        # packed on the row: the notebook's inter-press intervals (the
-        # eCorsi 600 ms motor baseline analogue) fall out of these,
-        # and they never touch the score.
+        # packed on the row: the notebook's first-press latency and
+        # inter-press intervals fall out of these (eCorsi tablet taps
+        # run about 593 ms apart, arm movements rather than finger
+        # presses, Brunetti 2014), and they never touch the score.
         r0 = self._respond_t0 if self._respond_t0 is not None else now
         # The turn opens on the grid and a pause moves every stamp,
         # so an offset is never negative; the clamp keeps the packed
@@ -1402,22 +1430,22 @@ class EchoMode(WaitSkip):
             else:
                 self._enter_rest(now, self.rest_s, "between", "")
             return
-        # Second miss: the game is over. Two omissions in a row is a
-        # hand that stopped answering rather than a memory limit, so
-        # it ends the whole block as fatigue instead of opening
-        # another game the player cannot play.
-        both_silent = (kind == "omission"
-                       and len(self.misses) >= 2
-                       and self.misses[-2]["kind"] == "omission")
-        if both_silent:
-            self._set_message("Great effort. Session done", 2.0)
-        self._finish_game(now, "fatigue" if both_silent
-                          else "second_miss")
+        # Second miss: the game is over, and the next game still
+        # plays. Two silent misses used to end the whole block as
+        # fatigue, so a player who waited when unsure lost game 2 and
+        # the block read as exhaustion; omissions are ordinary errors
+        # in healthy spatial span (Woods et al. 2016), and three of the
+        # pilot's four misses were silent (Echo review, 1 October
+        # 2026). The game record keeps whether both misses were silent.
+        self._both_silent = (kind == "omission"
+                             and len(self.misses) >= 2
+                             and self.misses[-2]["kind"] == "omission")
+        self._finish_game(now, "second_miss")
 
     def _finish_game(self, now: float, reason: str) -> None:
         """Close one Simon game, record it, and either start the next
-        or end the block. time_cap and fatigue end the block whatever
-        games are left: both mean the player has had enough."""
+        or end the block. time_cap ends the block whatever games are
+        left."""
         self._run_end_reasons.append(reason)
         self.game_records.append({
             "game_index": self.game_index,
@@ -1433,12 +1461,13 @@ class EchoMode(WaitSkip):
                              for r in self._records
                              if r["run"] == self.run_idx + 1),
             "end_reason": reason,
+            "both_silent": bool(getattr(self, "_both_silent", False)),
             "misses": list(self.misses),
         })
+        self._both_silent = False
         self.run_idx += 1
-        if self.run_idx >= self.games or reason in ("time_cap", "fatigue"):
-            self._end("completed" if reason not in ("time_cap", "fatigue")
-                      else reason)
+        if self.run_idx >= self.games or reason == "time_cap":
+            self._end("time_cap" if reason == "time_cap" else "completed")
             return
         # Next game: fresh sequence, fresh life, back to one item.
         self.length = self.start_len

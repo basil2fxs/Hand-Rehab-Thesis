@@ -666,8 +666,10 @@ class SimonRuleTests(unittest.TestCase):
                     mode.queue_press(_press(wrong, clock.t))
         self.assertEqual(mode._records[0]["miss"], "intrusion")
 
-    def test_silence_spends_the_life_then_ends_the_game_as_fatigue(
-            self) -> None:
+    def test_silence_spends_the_life_then_ends_the_game(self) -> None:
+        # Two silent misses end the game like any second miss, and the
+        # record says both were silent. They used to end the block as
+        # "fatigue" (Echo review, 1 October 2026).
         eng, mode = _simon_mode(idle_timeout_s=1.0, fatigue_rest_s=1.0)
         with patched_clock() as clock:
             _drive(mode, clock, responder=None, step_s=0.1,
@@ -677,9 +679,10 @@ class SimonRuleTests(unittest.TestCase):
                          ["omission", "omission"])
         self.assertEqual([r["life"] for r in mode._records],
                          [False, True])
-        self.assertEqual(stats["end_reason"], "fatigue")
+        self.assertEqual(stats["end_reason"], "completed")
         self.assertEqual(stats["games_played"][0]["end_reason"],
-                         "fatigue")
+                         "second_miss")
+        self.assertTrue(stats["games_played"][0]["both_silent"])
         self.assertEqual(stats["n_omissions"], 2)
         # The forced rest between them is the recovery rest, and it
         # went out on the EEG rest band like every other forced rest.
@@ -687,6 +690,38 @@ class SimonRuleTests(unittest.TestCase):
         from finger_rehab.hardware.eeg_trigger import CODES
         self.assertIn(CODES["rest_start"], sent)
         self.assertIn(CODES["rest_end"], sent)
+
+    def test_two_silent_misses_leave_game_two_to_play(self) -> None:
+        """A player who waits when unsure keeps their second game: the
+        registered score is over two games, and before 1 October 2026
+        a double silence in game 1 ended the block there."""
+        eng, mode = _simon_mode(games=2, max_len=4, idle_timeout_s=1.0,
+                                fatigue_rest_s=1.0)
+        with patched_clock() as clock:
+            play = _simon_play(mode, clock)
+
+            def responder(clk) -> None:
+                # Silent through game 1, then play game 2 cleanly.
+                if mode.run_idx >= 1:
+                    play(clk)
+            _drive(mode, clock, responder=responder, step_s=0.05,
+                   max_steps=40000)
+        stats = mode.block_stats()
+        self.assertEqual(len(stats["games_played"]), 2)
+        self.assertTrue(stats["games_played"][0]["both_silent"])
+        self.assertEqual(stats["games_played"][0]["span"], 0)
+        self.assertGreater(stats["games_played"][1]["span"], 0)
+        self.assertEqual(stats["end_reason"], "completed")
+
+    def test_a_fixed_seed_follows_the_game_count(self) -> None:
+        from finger_rehab.game.modes.echo import simon_stream
+        eng, mode = _simon_mode(games=2, max_len=10,
+                                forced_seed=20415096,
+                                seed_follows_game_count=True,
+                                game_index_base=2)
+        self.assertEqual(mode.game_seed, 20415096 + 2)
+        self.assertEqual(mode.game_seq,
+                         simon_stream(20415096 + 2, mode.lanes, 10))
 
     def test_no_life_is_the_strict_arcade_rule(self) -> None:
         eng, mode = _simon_mode(lives=0, max_len=8)

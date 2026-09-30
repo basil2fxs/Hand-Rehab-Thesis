@@ -5153,6 +5153,8 @@ class GameEngine:
             game_index_base=game_index_base,
             forced_seed=forced_seed,
             ioi_anchor_len=int(self.cfg.get("echo.ioi_anchor_len", 2)),
+            seed_follows_game_count=bool(
+                self.cfg.get("echo.seed_follows_game_count", False)),
         )
         self._begin_block("echo")
         # What shaped this block's material, next to the data it

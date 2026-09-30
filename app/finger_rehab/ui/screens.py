@@ -3683,9 +3683,14 @@ class GameplayScreen(Screen):
             getattr(self.engine, "current_block", "").lower(),
             self.theme.accent,
         )
-        card_w = 420
+        lines = self.GET_READY_LINES.get(
+            str(getattr(self.engine, "current_block", "") or ""), ())
+        # A third line of text buys the card a little room: wider for
+        # the longest line, taller so the number clears the text.
+        extra = max(0, len(lines) - 2)
+        card_w = 460 if lines else 420
         # Tall enough for the skip control under the number.
-        card_h = 300
+        card_h = 300 + 20 * extra
         card_rect = pygame.Rect(0, 0, card_w, card_h)
         card_rect.center = (cx, self.layout.height // 2)
         self._skip_at = (cx, card_rect.bottom - 38)
@@ -3708,13 +3713,33 @@ class GameplayScreen(Screen):
                           fill_surf.get_rect(), 3, border_radius=22)
         surf.blit(fill_surf, card_rect.topleft)
         draw_text(surf, "GET READY",
-                  (card_rect.centerx, card_rect.y + 56),
+                  (card_rect.centerx, card_rect.y + (46 if lines else 56)),
                   self.theme, self.layout, pt=FONT_H1,
                   centre=True, colour=self.theme.muted)
+        for i, line in enumerate(lines):
+            draw_text(surf, line,
+                      (card_rect.centerx, card_rect.y + 84 + 24 * i),
+                      self.theme, self.layout, pt=FONT_BODY,
+                      centre=True, colour=self.theme.foreground)
+        # The number drops and shrinks a little for a third line, so
+        # it clears the text and still sits above the skip control.
         draw_text(surf, f"{remaining:.1f}",
-                  (card_rect.centerx, card_rect.y + 156),
-                  self.theme, self.layout, pt=140,
+                  (card_rect.centerx,
+                   card_rect.y + (180 + 18 * extra if lines else 156)),
+                  self.theme, self.layout,
+                  pt=(112 - 12 * min(1, extra)) if lines else 140,
                   centre=True, colour=accent)
+
+    # What to do, said once on the GET READY card of a game whose
+    # rule the menu line cannot carry. Echo (1 October 2026): nothing
+    # said the sequence grows by one or that speed does not count, and
+    # a player who waits when unsure times out; a guess keeps the
+    # attempt a memory answer.
+    GET_READY_LINES = {
+        "echo": ("Each round adds one more to the end.",
+                 "Speed doesn't count.",
+                 "If you're not sure, make your best guess."),
+    }
 
     def _draw_target_indicator(self, surf: pygame.Surface,
                                 now: float) -> None:

@@ -27,9 +27,13 @@ latent skill plus a per-person within-block drift:
              warm-up that fades over the first trials
   mirror     the dominant hand's press leads the other by 15 ms
   rhythm     a per-person negative asynchrony with a per-person SD
-  echo       a per-person span ceiling; past it the first items come
-             back right and a later one goes wrong, usually a
-             transposition
+  echo       a per-person 50 percent point near seven items with a
+             logistic fall of 1.2 per item (about 30 percent per item
+             near span, Woods et al. 2016), fresh odds every attempt,
+             a small shift per block and a per-person share of silent
+             misses, so the two games of a block disagree the way real
+             games do; a miss lands on the newest item six times in
+             ten, usually as a transposition
   buzz hunt  a per-person localisation accuracy, errors landing on
              the neighbouring finger
   chords     a per-person chord cost (the first press comes later
@@ -73,6 +77,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 import os
 import random
 import sys
@@ -101,14 +106,27 @@ CHORD_WITHIN_BLOCK_FACTOR = 0.85
 # not a learning curve.
 WITHIN_BLOCK_WARMUP_S = 0.020
 WARMUP_TRIALS = 8.0
+# Echo's player (Echo review, 1 October 2026). An attempt at length L
+# comes back right with odds 1 / (1 + exp(ECHO_SLOPE (L - mu))), mu
+# being the person's 50 percent point under the Simon rule, drawn once
+# around ECHO_MU with an SD of ECHO_MU_SD and shifted by ECHO_BLOCK_SD
+# per block. A miss lands on the newest item ECHO_NEWEST of the time.
+# The old player had a fixed span cap, so both games of a block
+# scored the same and nothing could test the between-game numbers.
+ECHO_MU = 7.0
+ECHO_MU_SD = 1.0
+ECHO_SLOPE = 1.2
+ECHO_BLOCK_SD = 0.25
+ECHO_NEWEST = 0.6
 
 
 def make_truth(n: int, seed: int) -> dict[str, dict]:
     """The latent skill behind each code, drawn once."""
     rng = random.Random(seed)
     # The chord cost has its own stream, so adding it left every other
-    # trait of every code where it was.
+    # trait of every code where it was. Echo's player has its own too.
     cost_rng = random.Random(seed + 7)
+    echo_rng = random.Random(seed + 11)
     truth: dict[str, dict] = {}
     for i in range(1, n + 1):
         code = f"P{i:02d}"
@@ -162,6 +180,14 @@ def make_truth(n: int, seed: int) -> dict[str, dict]:
             # chord: Verwey 2023 measured about 126 ms from one to
             # three keys in healthy students.
             "chord_cost_s": max(0.03, cost_rng.gauss(0.110, 0.030)),
+            # Echo: the 50 percent point, the share of misses left
+            # silent (the pilot's were mostly silent; the GET READY
+            # line now asks for a guess), and a seed for the attempt
+            # draws, so Echo never moves another mode's noise.
+            "echo_mu": min(10.5, max(3.5, echo_rng.gauss(ECHO_MU,
+                                                         ECHO_MU_SD))),
+            "echo_silent": echo_rng.uniform(0.0, 0.3),
+            "echo_seed": echo_rng.randrange(1 << 30),
             # The per-person within-block warm-up. Clamped at zero:
             # nobody warms up backwards on purpose, and the
             # measurement noise supplies the people who look as
@@ -193,10 +219,13 @@ class CohortParticipant(mb.Participant):
         self.trials_this_block = 0
         from collections import deque
         self._force_trace: deque = deque()
+        self._echo_rng = random.Random(int(truth.get("echo_seed", 0)))
+        self._echo_mu_block = None
 
     def begin_block(self) -> None:
         super().begin_block()
         self.trials_this_block = 0
+        self._echo_mu_block = None
         self._force_trace.clear()
         self.hand.leak.clear()
 
@@ -376,36 +405,39 @@ class CohortParticipant(mb.Participant):
         self.answered.add(key)
         t = now + 0.4
         seq = list(m.sequence)
-        cap = int(self.truth["span_cap"])
-        if len(seq) > cap:
-            # Past the span: the first cap items come back right and
-            # the next one goes wrong, late in the sequence (E2p).
-            # Usually another lane of the sequence, a transposition;
-            # sometimes a finger that is not in the sequence, an
-            # intrusion (E3: more transpositions than chance). The cap is
-            # a fixed property of the person, so the span the block
-            # reports is a normative number and nothing else.
-            for lane in seq[:cap]:
+        er = self._echo_rng
+        if self._echo_mu_block is None:
+            self._echo_mu_block = (float(self.truth.get("echo_mu", ECHO_MU))
+                                   + er.gauss(0.0, ECHO_BLOCK_SD))
+        n = len(seq)
+        p = 1.0 / (1.0 + math.exp(ECHO_SLOPE
+                                  * (n - self._echo_mu_block)))
+        if er.random() < p:
+            for lane in seq:
                 self.schedule(t, int(lane))
                 t += 0.55
-            # A Simon game fails at length cap + 1, so there is never an
-            # item after the failing one to jump to. A transposition is
-            # any other lane of the sequence; the old pick needed
-            # seq[cap + 1] and so only ever made intrusions.
-            right = int(seq[cap])
-            in_seq = sorted({int(l) for l in seq} - {right})
-            others = [int(l) for l in m.lanes if int(l) not in seq]
-            if in_seq and (self.rng.random() < 0.7 or not others):
-                wrong = self.rng.choice(in_seq)
-            elif others:
-                wrong = self.rng.choice(others)
-            else:
-                wrong = next(int(l) for l in m.lanes if int(l) != right)
-            self.schedule(t, wrong)
             return
-        for lane in seq:
+        if er.random() < float(self.truth.get("echo_silent", 0.0)):
+            return          # a silent miss: the idle timeout closes it
+        # Where it fails: the newest item ECHO_NEWEST of the time (the
+        # prefix has been rehearsed, E2p), otherwise anywhere before it.
+        pos = (n if n == 1 or er.random() < ECHO_NEWEST
+               else er.randint(1, n - 1))
+        for lane in seq[:pos - 1]:
             self.schedule(t, int(lane))
             t += 0.55
+        # Usually another lane of the sequence, a transposition;
+        # sometimes a finger it does not hold, an intrusion.
+        right = int(seq[pos - 1])
+        in_seq = sorted({int(l) for l in seq} - {right})
+        others = [int(l) for l in m.lanes if int(l) not in seq]
+        if in_seq and (er.random() < 0.7 or not others):
+            wrong = er.choice(in_seq)
+        elif others:
+            wrong = er.choice(others)
+        else:
+            wrong = next(int(l) for l in m.lanes if int(l) != right)
+        self.schedule(t, wrong)
 
     def _rhythm(self, m, now, eng) -> None:
         if not getattr(m, "_countdown_done", False):

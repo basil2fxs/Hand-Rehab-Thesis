@@ -101,9 +101,20 @@ HOW THE DESIGN GOT HERE (every change made before any participant):
     the song's own hit. The Rhythm GET READY card says to press as
     the ball reaches the ring and not to wait for the buzz, and the
     run sheet gives both blocks a line to say. The Reaction task
-    itself is unchanged (Basil, 1 October 2026). The text below is
-    corrected where the reviews found a claim the evidence
-    contradicts.
+    itself is unchanged (Basil, 1 October 2026). Echo next. Two
+    silent misses in one game ended the whole block as fatigue, so a
+    player who waited when unsure lost game 2 (three of the pilot's
+    four misses were silent); now they end that game only, the next
+    game still plays, and the replay after a silent miss gets the
+    ordinary 2 s rest. Everyone meets the same sequences: the battery
+    fixes echo.seed at 20415096 and the seed follows the game count,
+    because sequence structure moves span several-fold and standard
+    span tests fix their items. The mean of the two games is the
+    headline, with the best of two beside it; E1 is unchanged and
+    read as a feasibility check. The GET READY card says each round
+    adds one more to the end, that speed does not count and to guess
+    when unsure. The text below is corrected where the reviews found
+    a claim the evidence contradicts.
 
 What one board costs, and the thesis says it in the same breath as
 the results:
@@ -947,9 +958,10 @@ a buzz fired.
 One-board note (24 September 2026): the block plays the right hand's
 four lanes, the layout of the retail SIMON toy. E1 reads the four-lane
 Simon band: college students reach spans of about seven on four
-buttons (Gendle and Ransom 2006, read only through Mathy et al. 2016;
-the retail toy lets a colour repeat straight away and Echo does not),
-so a cohort median of 5 to 9 is consistent. Each item is light, buzz
+buttons (Gendle and Ransom, dated 2006 by Mathy et al. 2016 and 2009
+by Chekaf et al. 2018, read only through Mathy; the retail toy lets a
+colour repeat straight away and Echo does not), so a cohort median of
+5 to 9 is consistent. Each item is light, buzz
 and a lane tone, so a sequence is also a four-note melody. E3 is DROPPED on the one-board rig: a sequence
 past four items holds every lane, so a wrong finger lands on a
 sequence lane by construction and an intrusion cannot happen; no
@@ -974,13 +986,39 @@ E3 on four lanes, as the cohort table already did. The gold
 and Echo's own 140/141 byte leaves at the trial close only in the
 immediate style, since nothing is drawn for an echo trial when a
 feedback delay is up.
-Primary (Simon rule, the battery): span (best of two games),
-span_mean, total_items (partial credit), edit_score_mean, n_omissions,
-life_used_share, the games stopped by the ceiling (their span is
-censored at it). Partial credit retested better than span on a
-digital Corsi (0.68 against 0.58 at one month, Bergman et al. 2025).
-The product score and the Hebb contrast exist only under the ladder
-rule.
+Deep review note (1 October 2026, before any participant;
+docs/research/deep/echo.md). Two silent misses in one game used to
+end the block as fatigue, so game 2 never played; they now end that
+game only (the game record keeps both_silent), and the battery gives
+the replay after a silent miss the ordinary 2 s rest
+(echo.fatigue_rest_s) rather than 20 s, which had made it a delayed
+repeat for silent misses alone. Omissions are ordinary serial-recall
+errors in healthy adults (Woods et al. 2016), not a sign of a motor
+limit. The battery fixes the material: echo.seed 20415096 with
+echo.seed_follows_game_count, so everyone meets the same sequences
+in the order of their Echo games and a second Echo block meets new
+ones. Sequence structure changes span accuracy several-fold
+(Ginsberg et al. 2017; Zhao et al. 2026) and standard span tests fix
+their items; the seed was chosen so the first four sequences are
+typical of the generator (all four lanes early, no long
+alternation). The GET READY card and the run sheet say each round
+adds one more to the end, that speed does not count and to guess
+when unsure. The chip before item 1 lasts 0.9 s, so it is gone when
+the first light comes on.
+Primary (Simon rule, the battery): span_mean (the mean of the two
+games, the headline since 1 October 2026), span (the best of two,
+which runs about half an item high and is what E1 reads),
+n_omissions, the games stopped by the ceiling (their span is
+censored at it). Exploratory: total_items (items reproduced before
+the first error, summed over the attempts; it tracks the span, r
+about 0.97 in simulation), edit_score_mean, life_recovered_share and
+life_gain_items (what the spare life recovered and added; the old
+life_used_share was one minus the ceiling share), and the first-press
+latency. Partial credit retested better than span on a digital Corsi
+(0.68 against 0.58 at one month, Bergman et al. 2025), but there every
+list is recalled in full; an Echo attempt stops at its first error,
+so that result does not carry over. The product score and the Hebb
+contrast exist only under the ladder rule.
 Known effects to reproduce:
   E1 Cohort span in the region of the Corsi norm: healthy adults
      average 6.2 blocks, SD 1.3 (Kessels et al. 2000, Applied
@@ -988,6 +1026,12 @@ Known effects to reproduce:
      bimodal presentation and a press response are named
      deviations, so E1 is a plausibility band, not a norm
      comparison; a cohort median of 5 to 8 is consistent.
+     Read as a feasibility check (1 October 2026): a plausible
+     healthy cohort passes it in 89 to 99 percent of simulated
+     cohorts centred on 6 to 7.5 and fails outright only from above,
+     so a pass shows the game is playable, not that memory is
+     normal. A span at the ceiling counts inside the per-selection
+     band.
   E2 DROPPED. It read Hebb repetition learning, hidden-sequence
      trials more accurate than novel trials at matched length (Hebb
      1961; Couture and Tremblay 2006, in echo.py). The hidden repeat
@@ -1009,8 +1053,11 @@ Known effects to reproduce:
      count decides on its own (six items on eight lanes hold about
      half the lanes). Omissions carry no lane and are reported, not
      tested.
-Reliability class: moderate for total_items and span_mean, the upper
-end for span (a coarse integer from one game).
+Reliability class: moderate for span_mean (about 0.65 to 0.69 in
+simulation); lower for span, the best of two (about 0.6), and for one
+game (about 0.5). The between-game ICC(2,1) is printed with its exact
+interval and stepped up to two games by Spearman-Brown; it is internal
+consistency within one block, not test-retest.
 Claim limits: never read against Kessels or Farrell Pagulayan norms
 as a test result; the bilateral block is a bimanual span and is
 never pooled with unilateral echo blocks (none are run here).
@@ -1251,7 +1298,8 @@ Trim ladder, if the pilot's median clock exceeds 46 minutes. Apply
 in this order and record it in the preset comment:
   1 buzz hunt loc_trials_per_hand 16 to 12 (about 0.4 min);
   2 echo games 2 to 1 (about 1.5 min; it costs the within-block span
-    read);
+    read and lowers the expected reliability of the Echo headline
+    from about 0.69 to 0.52, in simulation);
   3 pass 2 drops chords (about 2.8 min; T4 and T5 go with it, so it
     is the last one).
 Chords is already at 40 a block in both passes, down from 60, so the
@@ -1334,7 +1382,10 @@ window or detection key can never creep in through the preset):
     soc_cycles_per_block: 3
     random_block_trials: 32
   echo:
-    games: 2                      # best of two, and their spread
+    games: 2                      # their mean leads, the best beside it
+    seed: 20415096                # the same sequences for everyone
+    seed_follows_game_count: true
+    fatigue_rest_s: 2.0           # the ordinary rest after a silent miss
     max_len: 10                   # ceiling, to hold the 3 min line
   game:
     total_trials: 40              # pins the adaptive block length
@@ -1492,9 +1543,11 @@ matters twice: it keys every session folder
 (sessions/YYYY-MM-DD/P01_HHMMSS_<mode>/), the sessions_index.csv
 participant column, the notebook's who column and
 sessions/individual_patient_results/P01/summary.html; and the
-hidden sequences in pattern, buzz hunt and echo are SHA-256 seeded
-from the trimmed, case-folded name, so a code always draws the same
-trained sequence, and "P01" and "P1" would draw different ones. With
+hidden sequences in pattern and buzz hunt are SHA-256 seeded from
+the trimmed, case-folded name, so a code always draws the same
+trained sequence, and "P01" and "P1" would draw different ones.
+Echo's sequences are the same for everyone in the battery (a fixed
+seed since 1 October 2026) and seeded from the name elsewhere. With
 one block per mode each participant meets their own sequence once,
 which is what makes the Hebb comparison within a block the same
 comparison for everybody.
@@ -1677,8 +1730,10 @@ screen and the number in the thesis cannot drift apart.
               rt_nondominant_ms
   rhythm      asyn_mean_ms, asyn_sd_ms, asyn_abs_mean_ms, hit_rate,
               interval_cv (per hand where a lane maps to a hand)
-  echo        span, span_mean, total_items, edit_score_mean,
-              n_omissions, life_used_share, ceiling_games (Simon);
+  echo        span_mean (the headline), span, n_omissions,
+              ceiling_games, games_played, short_block (Simon);
+              exploratory: total_items, edit_score_mean,
+              life_recovered_share, life_gain_items, ftl_median_ms;
               total_correct, product_score, hebb_minus_novel_acc
               only under the ladder rule
   force_pilot mae_pct, rmse_pct, time_in_corridor, lag_ms,
@@ -2021,7 +2076,8 @@ B4 and A5 cannot fail for a healthy hand on this task: Rh2's band
 takes any SD from 10 to 100 ms, B4's four trials cap the span at 5,
 and A5 fails only when early misses send the pace down first. C1
 passes on the pads' own noise at the study's light presses (Section
-1.3). They stay in Table 1 as registered, and the thesis reports them
+1.3). E1 joined them on 1 October 2026: a healthy cohort cannot fail
+it from below (Section 1.11). They stay in Table 1 as registered, and the thesis reports them
 as checks that the device and the task ran as designed, not as
 findings about the hand.
 
@@ -2141,7 +2197,8 @@ healthy cohort cannot give.
       mirror       right-minus-left onset gap per clean pair
                    (two-board rig only)
       rhythm       asynchrony SD per 30 s window of the track
-      echo         longest correct length so far, per ladder trial
+      echo         longest correct length so far, starting again at
+                   each game
       force_pilot  MAE percent per run, per hand, with the level
       chords       median ER and clean rate per sub-block
       buzz_hunt    localisation RT per trial, with the window level
@@ -2354,7 +2411,9 @@ Participants may withdraw their data until analysis begins.
 
 The information sheet and the debrief say: no deception beyond the
 standard "some games repeat a hidden pattern you are not told about"
-(pattern, buzz hunt, echo), explained in the debrief; no clinical
+(Muscle Memory's repeating pattern and Buzz Hunt's empty trials; Echo
+has no hidden repeat under the Simon rule), explained in the
+debrief; no clinical
 assessment or feedback is given; the device is a research prototype,
 not a medical device; one session only, and nobody is contacted
 again after the day. The study-day kit (docs/study_day/) has the

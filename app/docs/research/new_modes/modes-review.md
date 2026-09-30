@@ -59,7 +59,7 @@ The pads: one count is 0.0195 N. Over a chord's 3.2 s window a resting finger's 
 
 - A Simon span (one trial per length, a spare life, the prefix shown again) is not a Corsi span. The only comparable figure is about 7 on the retail toy, from Gendle and Ransom 2006 read only through [E-L3]. The toy lets a colour repeat straight away and Echo does not.
 - Each item is a light, a buzz and a lane tone, so a sequence is also a melody.
-- Partial credit retested better than span on a digital Corsi, 0.68 against 0.58 at one month [E-L1], and edit distance scores as well or better [E-L4]. Both are now reported.
+- Partial credit retested better than span on a digital Corsi, 0.68 against 0.58 at one month [E-L1], and edit distance scores as well or better [E-L4]. Both are now reported. Correction (1 October 2026, [deep/echo.md](../deep/echo.md)): both results come from lists recalled in full, and an Echo attempt stops at its first error, so neither carries over; the two scores are exploratory, and the mean of the two games is the headline.
 - E2p follows from the rule: the game grows only after the whole prefix came back right. Games at the 10-item ceiling are censored.
 - Not to claim: Corsi norms, a visuospatial-only span, a real change between two games, or training and transfer [E-L10].
 
@@ -116,7 +116,7 @@ The pads: one count is 0.0195 N. Over a chord's 3.2 s window a resting finger's 
 - Every ICC here is within one sitting, so it is an upper bound on day-to-day reliability. At n = 10 the lower end of the interval for a true ICC of 0.75 is about 0.28 (design_check.md).
 - Runs needed for 0.8 (arithmetic): Echo span 2.9 and partial credit 1.9 [E-L1]; a force individuation index 4.3 at 0.48 to 1.0 at 0.80 [C-L7]; the SRTT 10.3 at 0.28 [MM-L1].
 - The family Holm corrects is P1, P3, C2, C6, W4, Rh1, B2 and F1, plus P2 for 60 minute sitters. With eight tests Holm's first threshold is 0.00625, which a one-sided exact signed-rank test reaches at n = 8 only when all eight go the same way (arithmetic).
-- Rh2, B4, A5 and C1 are decided on an interval and cannot fail for a healthy hand here. They are reported as feasibility checks.
+- Rh2, B4, A5 and C1 are decided on an interval and cannot fail for a healthy hand here. They are reported as feasibility checks, and E1 with them since 1 October 2026 ([deep/echo.md](../deep/echo.md)).
 
 ## Sources
 

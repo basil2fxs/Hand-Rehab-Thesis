@@ -250,6 +250,11 @@ class OverrideTests(unittest.TestCase):
             # synchronisation to one pacing signal for everybody.
             "rhythm.tactile_mode",
             "echo.games", "echo.max_len",
+            # Material and a rest, never a scoring rule (1 October
+            # 2026): everyone meets the same Echo sequences, and a
+            # silent miss gets the ordinary rest before its replay.
+            "echo.seed", "echo.seed_follows_game_count",
+            "echo.fatigue_rest_s",
             # Syllables left the healthy sitting (28 September 2026),
             # so its block settings left the preset with it.
             "game.total_trials",
