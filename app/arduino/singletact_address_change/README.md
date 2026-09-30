@@ -1,13 +1,10 @@
 # SingleTact address tool
 
-A throwaway sketch that moves one SingleTact interface board from one I2C address to another. It replaces the
-game firmware on the Nano for a few seconds and is then replaced by the game firmware again. The game firmware
-is read only and has no I2C write command, which is why the job needs its own sketch.
+A small sketch that moves one SingleTact board to a new I2C address. The game firmware can't write to the sensors,
+so this job has its own sketch. The app runs it for you: Settings, Setup, Sensor address flashes it, sends the
+change, then puts the game firmware back.
 
-The app runs it: Settings, Setup, Sensor address flashes this hex, talks to it over serial, then flashes the game
-hex back. Nobody has to open the Arduino IDE.
-
-## Serial protocol
+## Commands
 
 115200 baud, one command per line.
 
@@ -20,9 +17,8 @@ hex back. Nobody has to open the Arduino IDE.
 
 ## One sensor at a time
 
-Every SingleTact interface answers I2C address 0x04 as well as the address held in its own flash (SingleTact
-manual section 2.3). A write to 0x04 therefore reaches every sensor on the bus at once. Change a sensor from 0x04
-with only that one sensor connected, or all of them end up on the same address.
+Every SingleTact board also answers address 0x04 (SingleTact manual, section 2.3), so a change sent to 0x04 reaches
+every sensor on the bus. Change a sensor with only that one connected.
 
 ## Building it by hand
 
@@ -30,7 +26,4 @@ with only that one sensor connected, or all of them end up on the same address.
 pio run -d arduino/singletact_address_change -e nanoatmega328new
 ```
 
-The hex lands in `.pio/build/nanoatmega328new/firmware.hex`. `builds/build_firmware.py` does this and copies the
-result into `assets/firmware/`, where the app looks for it.
-
-<sub>[Back to arduino](../README.md)</sub>
+`builds/build_firmware.py` does this and copies the hex into `assets/firmware/`, where the app looks for it.

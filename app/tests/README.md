@@ -4,7 +4,7 @@ All headless: no screen, sound or board needed.
 
 ```bash
 cd app
-python -m pytest tests                    # everything, about four minutes
+python -m pytest tests                    # everything, about five minutes
 python -m pytest tests/test_srt_mode.py   # one file
 ```
 

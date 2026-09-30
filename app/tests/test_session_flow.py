@@ -368,10 +368,17 @@ class SessionStripTests(_EngineHarness):
         surf = pygame.Surface((1280, 800))
         hub.draw(surf)
         self.assertEqual(hub.battery_btn.label, "Start")
-        note_right = (hub.cal_btn.rect.right + 18
-                      + self.eng.layout.font(14).size(
-                          hub.CAL_UNAVAILABLE)[0])
-        self.assertLess(note_right, hub.session_seg.rect.left)
+        # The calibrate note sits centred above its button, clear of
+        # the game cards and of the session picker.
+        w, h = self.eng.layout.font(14).size(hub.CAL_UNAVAILABLE)
+        note = pygame.Rect(0, 0, w, h)
+        note.center = hub.cal_note_centre()
+        self.assertLess(note.bottom, hub.cal_btn.rect.top)
+        self.assertGreaterEqual(note.left, 0)
+        self.assertGreater(note.top, max(b.rect.bottom
+                                         for b in hub.buttons))
+        self.assertLess(note.right, hub.session_seg.rect.left)
+        self.assertFalse(note.colliderect(hub.back_btn.rect))
         self.assertLessEqual(hub.battery_btn.rect.right, 1280 - 16)
         self.assertFalse(hub.battery_btn.rect.colliderect(
             hub.session_seg.rect))

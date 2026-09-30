@@ -1,43 +1,40 @@
 <p align="center"><img src="app/assets/icons/app_icon_256.png" width="96" alt="Finger Rehab icon"></p>
 <h1 align="center">Finger Rehab</h1>
-<p align="center">A hand device and a laptop game that measure and train finger movement.<br>Four force pads, four vibration motors, an Arduino Nano, ten games, every press logged with its time and force.</p>
+<p align="center">A hand device and a game for Windows and macOS that measure and train finger movement.<br>Four force pads, four vibration motors and an Arduino Nano. Ten games. Every press is logged with its time and force.</p>
 <p align="center"><a href="https://github.com/basil2fxs/Hand-Rehab-Thesis/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/basil2fxs/Hand-Rehab-Thesis?label=release&color=16a34a"></a> <a href="https://github.com/basil2fxs/Hand-Rehab-Thesis/actions/workflows/build-apps.yml"><img alt="build-apps" src="https://github.com/basil2fxs/Hand-Rehab-Thesis/actions/workflows/build-apps.yml/badge.svg"></a></p>
 <p align="center"><a href="#install">Install</a> &middot; <a href="#the-ten-games">Games</a> &middot; <a href="#troubleshooting">Troubleshooting</a> &middot; <a href="#data">Data</a> &middot; <a href="#the-lab-folder">Lab folder</a> &middot; <a href="CONTRIBUTING.md">Working on the code</a></p>
 <p align="center"><img src="app/docs/images/hub.png" width="88%" alt="The hub, where each game is picked"></p>
 
 ## Where things are
 
-```mermaid
-flowchart LR
-  R["Hand-Rehab-Thesis"]:::root
-  R --> I["Installers<br>Windows setup, macOS disk image"]:::top
-  R --> Y["FINAL TRIAL RESULTS<br>the study: steps and results"]:::top
-  R --> E["EEG_Lab<br>the folder for the lab PC"]:::top
-  R --> W["hardware<br>parts, wiring, the printed chassis"]:::top
-  R --> N["analysis<br>session_analysis.ipynb"]:::top
-  R --> S["sessions<br>recorded data, not in git"]:::top
-  R --> L["Local_Runner.command<br>runs the game from the code"]:::top
-  R --> A["app<br>the game"]:::top
-  A --> A1["finger_rehab: code"]:::sub
-  A --> A2["config: default.yaml, eeg_lab.yaml"]:::sub
-  A --> A3["assets: firmware, icons, music, speech, words"]:::sub
-  A --> A4["arduino: board firmware"]:::sub
-  A --> A5["docs: study kit, research, images"]:::sub
-  A --> A6["scripts and tests"]:::sub
-  classDef root fill:#0f172a,color:#fff,stroke:#0f172a
-  classDef top fill:#2563eb,color:#fff,stroke:#1d4ed8
-  classDef sub fill:#dbeafe,color:#0f172a,stroke:#93c5fd
+```text
+Hand-Rehab-Thesis/
+|
+|-- Installers/               The Windows and macOS installers, from the latest release
+|
+|-- EEG_Lab/                  The folder that goes on the EEG lab computer
+|   `-- developer/            Stays with me: the EEG simulator and lab set-up tools
+|
+|-- FINAL TRIAL RESULTS/      The study: what to run, and where each result goes
+|
+|-- analysis/                 The notebook that turns recorded sessions into results
+|
+|-- app/                      The game
+|   |-- main.py               Starts it
+|   |-- finger_rehab/         The code: games, screens, boards, data logging
+|   |-- config/               Settings files (eeg_lab.yaml turns on the lab's markers)
+|   |-- assets/               Board firmware, icons, music, speech and word lists
+|   |-- arduino/              Source code of the board firmware
+|   |-- docs/                 Study-day forms, research notes, screenshots
+|   |-- scripts/              Tools run by hand: device checks, simulations, lab sync
+|   |-- tests/                Automated tests
+|   `-- builds/               Scripts that build the installers
+|
+|-- hardware/                 Build the device: parts, wiring, pins, CAD and print files
+|-- archive/                  Old material. Nothing here runs
+|-- sessions/                 Recorded data (kept off GitHub)
+`-- Local_Runner.command      Runs the game straight from the code on a Mac
 ```
-
-| Folder | What is in it |
-| --- | --- |
-| [`Installers/`](Installers) | What people install |
-| [`FINAL TRIAL RESULTS/`](FINAL%20TRIAL%20RESULTS) | The study: what to do, and where each result goes |
-| [`EEG_Lab/`](EEG_Lab) | The folder for the lab PC, and a `developer/` folder that stays here |
-| [`hardware/`](hardware) | Build the device: parts, wiring, pins, CAD and print files |
-| [`analysis/`](analysis) | The notebook that turns sessions into results |
-| [`app/`](app) | Code, config, assets, tests, build scripts |
-| [`archive/`](archive) | Old material, nothing live |
 
 ## How it works
 
@@ -47,7 +44,7 @@ flowchart LR
 flowchart LR
   H["Fingers on four pads"] --> S["SingleTact 10 N sensors<br>I2C 0x05 to 0x08"]
   S --> A["Arduino Nano<br>200 Hz"]
-  A -->|"FSR: a,b,c,d"| G["Game on the laptop"]
+  A -->|"FSR: a,b,c,d"| G["The game"]
   G -->|"STIM:n"| A
   A --> M["Four vibration motors"]
   G --> F["sessions/<br>trials.csv, raw.csv, metadata.json"]
@@ -56,7 +53,7 @@ flowchart LR
 
 There's no switch under a finger. Each pad keeps a slow baseline, and a press counts when the force crosses a trigger set between that person's resting level and their light press, both measured at login.
 
-<p align="center"><img src="app/docs/images/login.png" width="32%" alt="The login screen"> <img src="app/docs/images/hand.png" width="32%" alt="The hand choice screen"> <img src="app/docs/images/calibration.png" width="32%" alt="The quick calibration"><br><sub>Log in with free play or a timed session (15 to 60 minutes, games in order), pick the hand, calibrate. The hub has the same session picker, so free play can turn into a timed session without logging out.</sub></p>
+<p align="center"><img src="app/docs/images/login.png" width="32%" alt="The login screen"> <img src="app/docs/images/hand.png" width="32%" alt="The hand choice screen"> <img src="app/docs/images/calibration.png" width="32%" alt="The quick calibration"><br><sub>Log in (free play, or a timed session of 15 to 60 minutes), pick the hand, calibrate. The game menu has the same session picker.</sub></p>
 
 ## Install
 

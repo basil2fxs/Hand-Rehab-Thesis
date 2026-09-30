@@ -10,7 +10,7 @@ Science, Curtin University. Contact: ____________________
 I'm building a device to help people practise finger movements after
 a stroke: a 3D printed frame with a small force pad under each
 fingertip and a tiny vibration motor for each finger, played through
-short games on a laptop. Before it can be used with anyone who has an
+short games on a computer. Before it can be used with anyone who has an
 injury, I need to know what a healthy hand does on it. That's what
 you'd be helping with.
 
@@ -19,7 +19,7 @@ you'd be helping with.
 - One visit of about an hour. Nothing after that.
 - Four questions about which hand you use for everyday things, your
   age and sex, and a ruler measurement of your right hand.
-- About 45 minutes of short games on a laptop, all with your right
+- About 45 minutes of short games on a computer, all with your right
   hand resting on the frame, whether you're right- or left-handed.
   You press the pads lightly, like typing.
 - A small motor sometimes buzzes a fingertip for a quarter of a
@@ -30,7 +30,7 @@ you'd be helping with.
 ## Is there any risk?
 
 The only thing you might feel is some mild finger tiredness, or
-boredom. The device runs off the laptop's USB port at 5 V, nothing
+boredom. The device runs off the computer's USB port at 5 V, nothing
 electrical touches your skin, and the pads are cleaned between people.
 If anything is uncomfortable, say so and we'll stop or change it.
 

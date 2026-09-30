@@ -138,7 +138,7 @@ the hub.
 - [ ] End the session from the hub and confirm.
 - [ ] Check the data before they leave. On the lab PC: the strip
       shows every step done; the READY check below runs later on the
-      laptop, once the data is copied (FINAL TRIAL RESULTS, After each
+      Mac, once the data is copied (FINAL TRIAL RESULTS, After each
       day). On the Mac, in Terminal, from the project folder:
 
       ```

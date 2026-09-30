@@ -1,16 +1,11 @@
 # Game firmware (PlatformIO)
 
-The sketch the Arduino Nano runs in play: it reads the four SingleTact pads at 200 Hz, streams them to the laptop
-and drives the four motors on `STIM` commands. Settings, Setup, Flash firmware installs the built hex, so these steps are
-only for building it by hand.
+What the Arduino Nano runs during play: it reads the four SingleTact pads at 200 Hz, sends them to the computer
+and buzzes the motors on `STIM` commands. Settings, Setup, Flash firmware installs it, so these steps are only for
+building it by hand.
 
-1. **Board.** A Nano labelled NANO is `board = nanoatmega328`; a Nano with no label is
-   `board = nanoatmega328new`. Set it in `platformio.ini`.
-2. **Port.** In a terminal, `mode` (Windows) lists the COM ports; unplug the board and run it again, and the one
-   that disappears is the board. Put it in `platformio.ini` as `upload_port` and `monitor_port`.
-3. **Upload, then start the game.** The board buzzes all four motors on connect (about 1.6 s) and then streams.
-
-The game finds the board on its own; nothing needs setting on the Python side. These steps came with the
-handover from the 2025 build.
-
-<sub>[Back to arduino](../README.md)</sub>
+1. **Board.** A Nano labelled NANO is `board = nanoatmega328`; an unlabelled one is `board = nanoatmega328new`.
+   Set it in `platformio.ini`.
+2. **Port.** Run `mode` (Windows) with the board plugged in and again without it; the COM port that disappears is
+   the board. Put it in `platformio.ini` as `upload_port` and `monitor_port`.
+3. **Upload, then start the game.** The board buzzes all four motors when it connects (about 1.6 s), then streams.

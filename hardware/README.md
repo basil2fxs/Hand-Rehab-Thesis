@@ -20,7 +20,7 @@ The game board's firmware is in [`app/arduino`](../app/arduino). The app flashes
 flowchart LR
   P["Four SingleTact pads<br>under the fingertips"] --> S["SingleTact boards<br>I2C 0x05 to 0x08"]
   S --> N["Arduino Nano<br>on the custom PCB"]
-  N -->|"USB: FSR a,b,c,d<br>200 times a second"| L["Laptop, the game"]
+  N -->|"USB: FSR a,b,c,d<br>200 times a second"| L["The game, on Windows or macOS"]
   L -->|"STIM:n"| N
   N --> M["Four vibration motors<br>on motor PCBs"]
   B["Two buttons"] --> A["Second Arduino<br>and motor driver"]
@@ -57,7 +57,7 @@ The game board, an Arduino Nano on the custom PCB:
 | D10 | Middle finger motor |
 | D9 | Ring finger motor |
 | D6 | Little finger motor |
-| USB | The laptop |
+| USB | The computer |
 
 - **Pads:** index 0x05, middle 0x06, ring 0x07, little 0x08. A new pad arrives on a factory address; move it with Settings, Setup, Sensor address, with only that pad plugged in.
 - **Readings:** the board reads 6 bytes from each pad 200 times a second and sends `FSR: a,b,c,d` over USB at 115200 baud.

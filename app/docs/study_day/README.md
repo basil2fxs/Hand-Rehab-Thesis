@@ -9,7 +9,7 @@ print and follow.
 | File | When | Print |
 |---|---|---|
 | [before_the_day.md](before_the_day.md) | once, in the week before | no |
-| [run_sheet.md](run_sheet.md) | every participant, beside the laptop | one copy, laminated or in a sleeve |
+| [run_sheet.md](run_sheet.md) | every participant, beside the computer | one copy, laminated or in a sleeve |
 | [information_sheet.md](information_sheet.md) | handed over on arrival | one per participant |
 | [consent_form.md](consent_form.md) | signed on arrival | one per participant |
 | [intake_sheet.md](intake_sheet.md) | filled during the sitting | one per participant |
@@ -21,9 +21,8 @@ The checking:
 
 - `python3 app/scripts/check_sitting.py` before each participant
   leaves: READY, or what to fix while they are still there.
-- Settings, Setup, Audio delay: the computer's sound and buzz delays, already
-  measured and saved for this MacBook; measure once on any other
-  computer (the lab PC too) or audio output.
+- Settings, Setup, Audio delay: the computer's sound and buzz delays.
+  Measure once on each computer (the lab PC too) and each audio output.
 - `python3 app/scripts/pad_bench.py`: optional, a counts-per-gram
   figure for the thesis appendix (coins work).
 

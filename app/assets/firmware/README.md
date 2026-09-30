@@ -1,3 +1,3 @@
-Build products, not source: `finger_rehab_nano.hex` (from arduino/firmware_on_device), `singletact_address_change.hex` (from arduino/singletact_address_change) and `manifest.json` (sha256, size, board and commit per hex).
-Everything but this file is gitignored. `python3 builds/build_firmware.py` rebuilds them with PlatformIO; CI does it on every push and hands the result to the app build, so an app always carries hexes from its own commit.
-The app checks each hex against the manifest before flashing and refuses a damaged file; `python3 builds/build_firmware.py --check-only` verifies a staged folder.
+`finger_rehab_nano.hex` (the game firmware), `singletact_address_change.hex` (the sensor address tool) and `manifest.json` (a checksum and details for each).
+They are built from `arduino/`, not kept in git: `python3 builds/build_firmware.py` rebuilds them, and CI does it on every push so each app carries firmware from its own commit.
+The app checks each hex against the manifest before flashing and refuses a damaged one.

@@ -1,27 +1,22 @@
 # Bundled avrdude
 
-avrdude is the uploader the Arduino IDE runs under the bonnet. Shipping it inside the exe and the .app is what makes
-Settings, Setup, Flash firmware a single click on a clinic PC with no developer tools installed. Nothing here is
-committed; fetch it with:
+avrdude is the uploader the Arduino IDE uses. It ships inside the app so Settings, Setup, Flash firmware works on a
+computer with no developer tools. It isn't kept in git; fetch it with:
 
 ```bash
-python3 builds/fetch_avrdude.py                    # this OS
-python3 builds/fetch_avrdude.py --platform win32   # the other one
+python3 builds/fetch_avrdude.py                    # this system
+python3 builds/fetch_avrdude.py --platform win32   # Windows
 ```
 
 Each platform folder gets `avrdude` (or `avrdude.exe`), `avrdude.conf`, `LICENSE.txt` and `SOURCE.txt`.
 
 ## Licence
 
-avrdude is GPL-2.0-or-later. `LICENSE.txt` in each folder is the licence text from the package itself, and
-`SOURCE.txt` names the upstream source archive that matches the binary. Both must travel with any copy of the
-app that carries the binary. Finger Rehab starts avrdude as a separate process and links none of its code, which
-is the "mere aggregation" case the licence describes, so the game's own licensing is unaffected.
+avrdude is GPL-2.0-or-later. `LICENSE.txt` is its licence text and `SOURCE.txt` names the matching source archive;
+both travel with any copy of the app. The game runs avrdude as a separate program and uses none of its code, so the
+game's own licence is unaffected.
 
-## macOS note
+## Apple silicon
 
-The published binary is x86_64. On Apple silicon it runs under Rosetta 2, which macOS offers to install the first
-time an Intel-only program runs (or `softwareupdate --install-rosetta` in a terminal). The app says so in plain
-words if the spawn fails for that reason.
-
-<sub>[Back to app](../../README.md)</sub>
+The binary is x86_64, so it runs under Rosetta 2. macOS offers to install Rosetta the first time; the app says so if
+flashing fails for that reason.

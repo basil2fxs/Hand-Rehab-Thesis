@@ -1652,7 +1652,7 @@ class ModeSelectScreen(Screen):
             self.theme, self.layout,
         )
         # Set when the button is pressed on a rig that cannot be
-        # calibrated; drawn under the button instead of silently
+        # calibrated; drawn above the button instead of silently
         # doing nothing.
         self.cal_note = ""
         # SESSION: the lengths the login offers, picked here as well,
@@ -1718,7 +1718,8 @@ class ModeSelectScreen(Screen):
         self.mute_btn = MuteButton(
             engine, pygame.Rect(28, 26, MuteButton.W, MuteButton.H))
 
-    CAL_UNAVAILABLE = "Needs the sensors"
+    # The cards' own badge, word for word, so one reason reads one way.
+    CAL_UNAVAILABLE = "NEEDS SENSOR HARDWARE"
     # The refusals, worded so they read as a fact about the rig rather
     # than a fault of the person clicking.
     NO_HARDWARE_NOTE = ("This game needs the sensor hardware. "
@@ -1868,6 +1869,12 @@ class ModeSelectScreen(Screen):
         show = getattr(self.engine, "show_hand_choice", None)
         if callable(show) and getattr(self.engine, "_session_hand", None):
             show()
+
+    def cal_note_centre(self) -> tuple[int, int]:
+        """Where the calibrate note sits: centred just above the
+        button."""
+        r = self.cal_btn.rect
+        return r.centerx, r.top - 14
 
     def _can_calibrate(self) -> bool:
         try:
@@ -2355,8 +2362,10 @@ class ModeSelectScreen(Screen):
         self.back_btn.draw(surf)
         # Said before the click, the same rule the cards' badges
         # follow: on a keyboard rig there is nothing to calibrate, so
-        # the button reads inactive and the reason sits beside it
-        # rather than waiting for a press that does nothing.
+        # the button reads inactive and the reason sits above it
+        # rather than waiting for a press that does nothing. Above,
+        # not beside: to the right it floated between the button and
+        # the session picker (Basil, 30 September 2026).
         note = self.cal_note
         if not self._can_calibrate():
             note = self.CAL_UNAVAILABLE
@@ -2366,11 +2375,9 @@ class ModeSelectScreen(Screen):
             self.cal_btn.colour = None
         self.cal_btn.draw(surf)
         if note:
-            draw_text(surf, note,
-                      (self.cal_btn.rect.right + 18,
-                       self.cal_btn.rect.centery - 8),
+            draw_text(surf, note, self.cal_note_centre(),
                       self.theme, self.layout, pt=FONT_SMALL,
-                      centre=False, colour=self.theme.muted)
+                      centre=True, colour=self.theme.muted)
         # SESSION picker and Start, or Continue while a session runs.
         # An unavailable length reads inactive with its reason above
         # it, the same rule the calibrate button follows.

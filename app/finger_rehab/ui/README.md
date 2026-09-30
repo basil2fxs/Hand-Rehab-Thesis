@@ -1,6 +1,6 @@
 # ui
 
-One file per screen. [`screens.py`](screens.py) holds the login, the hub, the lane games, the results and Settings; the rest are one screen each. [`theme.py`](theme.py) is the palette, [`widgets.py`](widgets.py) the buttons and lane strips.
+One file per screen. [`screens.py`](screens.py) holds the login, the game menu, the lane games, the results and Settings; the other files hold one screen each. [`theme.py`](theme.py) is the colours, [`widgets.py`](widgets.py) the buttons and controls.
 
 <table>
 <tr>
@@ -30,4 +30,4 @@ One file per screen. [`screens.py`](screens.py) holds the login, the hub, the la
 </tr>
 </table>
 
-Every picture here is rendered by `python3 scripts/make_screenshots.py` from the real screens, headless.
+The pictures come from `python3 scripts/make_screenshots.py`.

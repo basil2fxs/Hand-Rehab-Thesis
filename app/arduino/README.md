@@ -5,7 +5,7 @@
 
 | Folder | What it is |
 | --- | --- |
-| [`firmware_on_device/`](firmware_on_device) | The game firmware: reads the four pads at 200 Hz, drives the four motors |
-| [`singletact_address_change/`](singletact_address_change) | A short-lived sketch that moves one sensor to a new I2C address |
+| [`firmware_on_device/`](firmware_on_device) | The game firmware: reads the four pads at 200 Hz and drives the four motors |
+| [`singletact_address_change/`](singletact_address_change) | A small sketch that moves one sensor to a new I2C address |
 
-Nobody needs the Arduino IDE. The built hexes ship in [`../assets/firmware`](../assets/firmware) and Settings flashes them. `python builds/build_firmware.py` rebuilds both with PlatformIO; CI does it on every push.
+The app flashes both from `../assets/firmware` (Settings, Setup), so the Arduino IDE is not needed. `python builds/build_firmware.py` rebuilds them with PlatformIO.
