@@ -59,7 +59,7 @@ There's no switch under a finger. Each pad keeps a slow baseline, and a press co
 
 - **Pads:** each SingleTact reads 0 to 10 N in 512 steps, about 20 mN a step. The manual quotes up to 120 Hz, but in recorded sessions the pads gave a new value on nearly every 5 ms read: while force changed quickly, under 3% of samples repeated. Slower changes repeat because they are smaller than one step.
 - **Board:** the Nano reads all four pads every 5 ms (199 Hz measured) and sends one line over USB at 115200 baud. A failed read arrives as 0.
-- **USB:** samples reach the computer in bursts, about four every 20 ms, and are timed when they arrive, so a sample's time can be up to about 20 ms after the pad was read.
+- **USB:** samples reach the computer in bursts, about four every 20 ms, and are timed when they arrive: about 10 ms after the pad was read on average, up to about 20 ms. The analysis notebook can re-time presses on the board's own 5 ms clock.
 - **Presses:** a press counts when the smoothed force crosses the trigger, 7 to 11 ms after the raw crossing.
 - **Screen:** the game draws 60 frames a second, so a cue shows on the next frame, up to 17 ms later.
 - **Sound and buzz:** on the study computer a sound was heard 77 to 87 ms after the game played it and a motor moved 74 ms after its command. Every computer needs its own measurement: Settings, Setup, Audio delay.

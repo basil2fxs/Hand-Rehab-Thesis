@@ -1,6 +1,6 @@
 # Seven modes: review of 30 September 2026
 
-Echo, Buzz Hunt, Mirror, Rhythm, Chords, Muscle Memory (`pattern` in the code) and Adaptive, read against their literature and the pilot data before any participant. Force Pilot has its own note, [force-pilot-parkinsons.md](force-pilot-parkinsons.md).
+Echo, Buzz Hunt, Mirror, Rhythm, Chords, Muscle Memory (`pattern` in the code) and Adaptive, read against their literature and the pilot data before any participant. Force Pilot has its own notes: [force-pilot-parkinsons.md](force-pilot-parkinsons.md) and the review of the same day, [force-pilot-pd-review.md](force-pilot-pd-review.md).
 
 What was read: every mode file named above, the controller in `analytics/adaptive.py`, the chart builder in `audio/beatmap.py`, the press path in `hardware/`, the matching blocks of `config/default.yaml`, the study design ([healthy_baseline_study.txt](../healthy_baseline_study.txt)) and the notebook's per-mode functions, literature rows and claim limits.
 

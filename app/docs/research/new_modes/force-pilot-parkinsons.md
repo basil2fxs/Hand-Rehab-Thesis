@@ -792,7 +792,7 @@ A line-by-line review, with every fault reproduced before it was fixed and a tes
 
 ### E7. Parkinson's review of 30 September 2026
 
-A second pass (68 sources: 60 new, 8 re-checked; report kept outside the repository) audited Table B and C1 to C11 against the papers and the pilot runs. What it changed:
+A second pass (68 sources: 60 new, 8 re-checked; the full report is [force-pilot-pd-review.md](force-pilot-pd-review.md)) audited Table B and C1 to C11 against the papers and the pilot runs. What it changed:
 
 - **Sampling.** The pads give a fresh reading on nearly every 5 ms sample: where force changed by 4 or more counts per sample, 0 to 3 percent of samples repeated on all four pilot sessions. The manual's "up to 120 Hz" does not describe these pads; the READMEs and `force_units.txt` said it did, and are corrected. The notebook measures it on every block (`fast_repeat_share`).
 - **Device facts.** Max presses on the pilot runs were 1.4 to 6.1 N, a pad-limited press and not an MVC. One count is 0.4 to 1.4 percent of a finger's max. A finger resting on a pad fluctuates by 0.26 to 1.09 percent of max under 20 Hz, with 79 to 89 percent of that power under 20 Hz, so the floor is not white.
