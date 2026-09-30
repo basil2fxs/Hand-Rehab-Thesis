@@ -42,7 +42,14 @@ reach a newton figure. This is the manual's "tare before measuring",
 done continuously instead of once.
 
 The raw fsr1 to fsr8 columns in raw.csv stay raw counts, offset
-included, so the notebook can re-tare its own way. peak_force_n and
+included, so the notebook can re-tare its own way. It does, on every
+press: the peak in the 1.2 s after the cue minus the mean of the 250 ms
+before it (Rayan's look-back zero), converted with each pad's bench
+slope once scripts/pad_bench.py --characterise has measured it. That is
+the force to quote. peak_force_n in trials.csv is the target force when
+the trial was logged, which for the modes that end a trial on the
+press is the force as the press registered, about half its peak on
+the pilot data (checked 30 September 2026). peak_force_n and
 impulse_n in trials.csv, and peak_force_mean and impulse_mean in the
 block summary, are in newtons (and newton-seconds) whenever the
 constant is configured; block_summary.force_unit says "N". Sessions

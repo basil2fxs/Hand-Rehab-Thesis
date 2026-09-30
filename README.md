@@ -13,7 +13,7 @@ Hand-Rehab-Thesis/
 |-- Installers/               The Windows and macOS installers, from the latest release
 |
 |-- EEG_Lab/                  The folder that goes on the EEG lab computer
-|   `-- developer/            Stays with me: the EEG simulator and lab set-up tools
+|   `-- developer/            Stays off the lab PC: the EEG simulator and set-up tools
 |
 |-- FINAL TRIAL RESULTS/      The study: what to run, and where each result goes
 |
@@ -141,7 +141,7 @@ On Windows there's also USB driver: if a board is plugged in but never shows up,
 
 **Presses register on the wrong finger.** Two pads answer the same I2C address. Settings, Setup, Sensor address, with only that sensor connected: 0x05 index, 0x06 middle, 0x07 ring, 0x08 pinky. Never move a sensor off 0x04 with the others wired in.
 
-**The game does not open when I plug the board in.** Settings, Hand device, Refresh. If the board isn't listed, it's the lead or the driver (Setup, USB driver). If it is, Auto-start should read on; it only fires when a board arrives, so unplug and replug.
+**The game does not open when the board is plugged in.** Settings, Hand device, Refresh. If the board isn't listed, it's the lead or the driver (Setup, USB driver). If it is, Auto-start should read on; it only fires when a board arrives, so unplug and replug.
 
 **The board needs re-flashing.** Settings, Setup, Flash firmware writes `app/assets/firmware/finger_rehab_nano.hex` with the bundled avrdude. A Nano runs one of two bootloaders; the app tries both and remembers which worked.
 
@@ -157,7 +157,7 @@ Sessions land in `sessions/<date>/<name>_<time>_<game>/`: `trials.csv` one row p
 
 ## The lab folder
 
-`EEG_Lab` (the `FingerRehab-EEGLab.zip` of the same build) holds the exe, `eeg_lab.yaml`, `run_in_psychopy.py`, `README.md`, a `source/` copy and `sessions/`, where `sessions/eeg/` takes ActiView's recording under the name the game menu shows. Its `developer/` folder stays on my PC: an EEG simulator for rehearsing, the PsychoPy download and a new-PC check.
+`EEG_Lab` (the `FingerRehab-EEGLab.zip` of the same build) holds the exe, `eeg_lab.yaml`, `run_in_psychopy.py`, `README.md`, a `source/` copy and `sessions/`, where `sessions/eeg/` takes ActiView's recording under the name the game menu shows. Its `developer/` folder stays on the development PC: an EEG simulator for rehearsing, the PsychoPy download and a new-PC check.
 Open `run_in_psychopy.py` in PsychoPy Coder and press Run. The home install carries no EEG anything.
 `python3 app/scripts/check_lab_sync.py` says whether the lab folder is the same game as the app; `--fix` makes it so, and `Local_Runner.command` does that on every start.
 Checklist and code table: [app/docs/eeg_lab_setup.txt](app/docs/eeg_lab_setup.txt).

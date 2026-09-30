@@ -9,3 +9,5 @@
 <p align="center"><img src="../app/docs/images/analysis_norms.png" width="48%" alt="A normal-range figure from the cohort chapter"> <img src="../app/docs/images/analysis_reliability.png" width="48%" alt="A reliability figure from the cohort chapter"><br><sub>Two of the cohort chapter's figures, from a simulated cohort.</sub></p>
 
 It finds `sessions/` beside it or up to four levels above; set `SESSIONS_DIR` in the Setup cell for a copy kept elsewhere. Figures land in the session folder they describe, per-person summaries in `sessions/individual_patient_results/<person>/`, cohort output in `sessions/cohort_results/`.
+
+The export cell also writes `shared/matlab/finger_rehab.mat` for MATLAB and `shared/rayan_format/`, on which Rayan's R scripts run unchanged. Methods and their sources: [`app/docs/research/analysis_methods.md`](../app/docs/research/analysis_methods.md).

@@ -6,13 +6,21 @@ Each session folder has the two files you need:
     sessions/<date>/<name>/trials.csv   one row per trial
 	<name> = <participant>_<HHMMSS>_<mode>
 
-YOUR SCRIPTS RUN ON raw.csv. Same column names as the old files
+The scripts run on raw.csv. Same column names as the old files
 (t_perf, fsr1-4, event, lane, detail), plus fsr5-8 for the left hand
-in two-handed sessions. Two fixes needed:
+in two-handed sessions. Two differences to allow for:
 
-1. My stim rows say "trial_id=7" not "trial=7". Update
-2. My timestamps come in bursts, so median-gap sample rate estimation
-   breaks. Use sample count / time span. Rate is 200 Hz.
+1. The stim rows say "trial_id=7", not "trial=7".
+2. The timestamps come in bursts, so a median-gap sample rate
+   estimate breaks. Use sample count over time span. The rate is
+   200 Hz.
+
+The analysis notebook's export cell writes a copy of the selection in
+the old layout (shared/rayan_format beside the analysis) on which the
+R and Python scripts run unchanged: event rows carry the last sample's
+values, each pad is shifted to rest at 255 counts, the detail reads
+trial=N, and the trial logs carry the old block column. Its
+README.txt says which script reads which folder.
 
 Note:
 - A session played on KEYBOARD (no device plugged in) has no sample
@@ -29,8 +37,7 @@ Note:
   version of this note said 45 N; that was the wrong part number.
 
 trials.csv has the game's own scoring per trial (RT, outcome, points,
-per-finger peak forces). Open it and the headers are self-explanatory;
-ask me if any column is unclear.
+per-finger peak forces). The headers are listed below.
 
 
 
@@ -106,7 +113,8 @@ first_incorrect_lane  wrong finger
 bpm_at_trial          current adaptive BPM
 streak_at_trial       streak before trial
 in_recovery           adaptive recovery state
-peak_force_n          peak force above baseline
+peak_force_n          target force above baseline when the trial
+                      was logged (see FORCE below)
 impulse_n             force-time integral
 phase                 pretest / main / aftertest
 timeout_ms            response window
@@ -145,7 +153,13 @@ Do NOT combine normal RT and rhythm timing error in the same analysis.
 
 FORCE
 peak_force_n:
-peak force above the local baseline.
+the target finger's force above the game's baseline at the moment the
+trial was logged. Modes that end a trial on the press (reaction,
+adaptive, pattern, classic, mirror) log it as the press registers, so
+it is near the trigger force and about half the press's peak on the
+pilot data. Chords log after the hold and carry the peak. For the
+peak of a press, read raw.csv: the maximum in the 1.2 s after the cue
+minus the mean of the 250 ms before it.
 
 force_window_sum:
 sum of all finger peak forces after the stimulus.

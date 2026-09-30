@@ -1070,30 +1070,43 @@ def holm(pvalues) -> np.ndarray:
     return adjusted
 
 
-def block_model(analytic: pd.DataFrame):
+def block_model(analytic: pd.DataFrame, pre_block: int = 0,
+                post_block: int = 6, trend_blocks=(1, 2, 3, 4, 5)):
     """Data_analysis_Final.R: reaction time against block, with contrasts.
 
-    He fitted lmer(RT ~ block + (1 | participant)) and pulled estimated
-    marginal means out with emmeans. There is no mixed-model package in
-    this project's dependencies, so this is the stand-in: ordinary least
-    squares with a dummy per block, plus a dummy per participant when
-    there is more than one. On a balanced design the block means come
-    out identical; the intervals are the within-participant ones, so
-    they are narrower than his, which also carry the between-participant
-    spread. Say so wherever the numbers are quoted.
+    He fitted lmer(RT ~ block + (1 | participant)) and read the block
+    means off it with emmeans. With more than one participant this is
+    that model, fitted by REML (finger_rehab.analytics.mixed_model): the
+    same block means, variance components and fixed-effect covariance
+    as lmer, and the Satterthwaite degrees of freedom lmerTest reports.
+    His emmeans call used Kenward-Roger degrees of freedom (pbkrtest was
+    loaded), which differ from Satterthwaite's only in small unbalanced
+    samples. With one participant it is his lm branch: ordinary least
+    squares on the block dummies.
+
+    pre_block, post_block and trend_blocks default to his layout
+    (pretest 0, aftertest 6, main chunks 1 to 5). Another layout, such
+    as the lab's SRT task with eight learning blocks, passes its own;
+    the trend weights are the centred block positions, which for five
+    blocks are his -2 to 2.
 
     Returns (means, pairs, post_pre, trend, info):
-      means     one row per block with a 95 percent interval
+      means     one row per block: the estimated mean, its standard
+                error, degrees of freedom and 95 percent interval
       pairs     every pairwise contrast, raw and Holm-adjusted p
-      post_pre  aftertest minus pretest, only when both blocks exist
-      trend     linear trend over blocks 1 to 5, weights -2 to 2, only
-                when all five chunks exist
-      info      residual variance, residual df, participant count
+      post_pre  post_block minus pre_block, only when both exist
+      trend     the linear trend over trend_blocks, only when every
+                one of them exists
+      info      the model, the two variances, participant count and
+                df_res, the within-participant residual degrees of
+                freedom
     """
     from scipy import stats
+    from finger_rehab.analytics.mixed_model import (fit_random_intercept,
+                                                    lmm_contrast)
 
-    empty = (pd.DataFrame(columns=["block", "n", "emmean", "SE", "lower",
-                                   "upper"]),
+    empty = (pd.DataFrame(columns=["block", "n", "emmean", "SE", "df",
+                                   "lower", "upper"]),
              pd.DataFrame(), None, None, {})
     if analytic is None or analytic.empty \
             or analytic["block_all"].nunique() < 2:
@@ -1106,45 +1119,53 @@ def block_model(analytic: pd.DataFrame):
         if "participant" in analytic.columns \
         else pd.Series("one", index=analytic.index)
     n_people = int(people.nunique())
-    if n_people > 1:
-        design = np.hstack([design, pd.get_dummies(people, drop_first=True)
-                            .to_numpy(dtype=float)])
-    beta, *_ = np.linalg.lstsq(design, y, rcond=None)
-    resid = y - design @ beta
-    df_res = int(len(y) - np.linalg.matrix_rank(design))
+    nb = len(blocks)
+    df_res = int(len(y) - nb - max(n_people - 1, 0))
     if df_res < 2:
         return empty
-    mse = float(resid @ resid / df_res)
-    cov = mse * np.linalg.pinv(design.T @ design)
-    tcrit = float(stats.t.ppf(0.975, df_res))
-    nb = len(blocks)
-    # Marginal means: the block's own effect plus the average
-    # participant effect, which is what emmeans reports.
-    contrasts = np.zeros((nb, design.shape[1]))
+    if n_people > 1:
+        fit = fit_random_intercept(y, design, people.to_numpy())
+
+        def contrast(weights):
+            return lmm_contrast(fit, weights)
+
+        info = {"model": "lmer: RT ~ block + (1 | participant), REML",
+                "s2_u": fit["s2_u"], "s2_e": fit["s2_e"],
+                "mse": fit["s2_e"], "df_res": df_res,
+                "n_people": n_people, "singular": fit["singular"]}
+    else:
+        beta, *_ = np.linalg.lstsq(design, y, rcond=None)
+        resid = y - design @ beta
+        mse = float(resid @ resid / df_res)
+        cov = mse * np.linalg.inv(design.T @ design)
+        tcrit = float(stats.t.ppf(0.975, df_res))
+
+        def contrast(weights):
+            weights = np.asarray(weights, dtype=float)
+            estimate = float(weights @ beta)
+            se_c = float(np.sqrt(weights @ cov @ weights))
+            tval = estimate / se_c if se_c > 0 else float("nan")
+            p = float(2 * stats.t.sf(abs(tval), df_res)) \
+                if np.isfinite(tval) else float("nan")
+            return {"estimate": estimate, "SE": se_c, "df": float(df_res),
+                    "t": tval, "p": p, "lower": estimate - tcrit * se_c,
+                    "upper": estimate + tcrit * se_c}
+
+        info = {"model": "lm: RT ~ block, one participant",
+                "s2_u": 0.0, "s2_e": mse, "mse": mse, "df_res": df_res,
+                "n_people": 1, "singular": False}
+    rows = []
     for i in range(nb):
-        contrasts[i, i] = 1.0
-        if n_people > 1:
-            contrasts[i, nb:] = 1.0 / n_people
-    emmean = contrasts @ beta
-    se = np.sqrt(np.einsum("ij,jk,ik->i", contrasts, cov, contrasts))
+        weights = np.zeros(nb)
+        weights[i] = 1.0
+        rows.append(contrast(weights))
     means = pd.DataFrame({
         "block": blocks,
         "n": analytic.groupby("block_all").size().reindex(blocks).to_numpy(),
-        "emmean": emmean, "SE": se,
-        "lower": emmean - tcrit * se, "upper": emmean + tcrit * se})
-
-    def contrast(weights):
-        weights = np.asarray(weights, dtype=float)
-        estimate = float(weights @ emmean)
-        row = weights @ contrasts
-        se_c = float(np.sqrt(row @ cov @ row))
-        tval = estimate / se_c if se_c > 0 else float("nan")
-        p = float(2 * stats.t.sf(abs(tval), df_res)) if np.isfinite(tval) \
-            else float("nan")
-        return {"estimate": estimate, "SE": se_c, "t": tval, "df": df_res,
-                "p": p, "lower": estimate - tcrit * se_c,
-                "upper": estimate + tcrit * se_c}
-
+        "emmean": [r["estimate"] for r in rows],
+        "SE": [r["SE"] for r in rows], "df": [r["df"] for r in rows],
+        "lower": [r["lower"] for r in rows],
+        "upper": [r["upper"] for r in rows]})
     pairs = []
     for i in range(nb):
         for j in range(i + 1, nb):
@@ -1157,19 +1178,22 @@ def block_model(analytic: pd.DataFrame):
     if len(pairs):
         pairs["p_holm"] = holm(pairs["p"].to_numpy())
     post_pre = None
-    if 0 in blocks and 6 in blocks:
+    if pre_block in blocks and post_block in blocks:
         weights = np.zeros(nb)
-        weights[blocks.index(0)] = -1.0
-        weights[blocks.index(6)] = 1.0
+        weights[blocks.index(pre_block)] = -1.0
+        weights[blocks.index(post_block)] = 1.0
         post_pre = contrast(weights)
     trend = None
-    if all(b in blocks for b in (1, 2, 3, 4, 5)):
+    trend_blocks = [int(b) for b in trend_blocks]
+    if len(trend_blocks) >= 2 and all(b in blocks for b in trend_blocks):
+        centred = np.arange(len(trend_blocks)) - (len(trend_blocks) - 1) / 2.0
+        if len(trend_blocks) % 2 == 0:
+            centred = centred * 2.0
         weights = np.zeros(nb)
-        for weight, block in zip((-2, -1, 0, 1, 2), (1, 2, 3, 4, 5)):
+        for weight, block in zip(centred, trend_blocks):
             weights[blocks.index(block)] = weight
         trend = contrast(weights)
-    return means, pairs, post_pre, trend, {"mse": mse, "df_res": df_res,
-                                           "n_people": n_people}
+    return means, pairs, post_pre, trend, info
 
 
 # ----------------------------------------------------------------- plotting

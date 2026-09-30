@@ -8176,7 +8176,13 @@ class GameEngine:
         """Live peak force on a lane's target sensor, calibrated to
         newtons if `fsr.force_calibration_n_per_count` is configured.
         Returns None when the sensor isn't currently pressed (a Miss
-        trial, or a fake source that never produced an FSR press)."""
+        trial, or a fake source that never produced an FSR press).
+
+        Live means the peak so far at the moment log_trial runs. A mode
+        that ends its trial on the press logs it as the press registers,
+        so peak_force_n there is near the trigger force, not the press's
+        own peak; the analysis reads the peak off raw.csv instead
+        (true_press_force in the notebook)."""
         mapped = self._resolve_lane_to_detector(lane)
         if mapped is None:
             return None

@@ -1,6 +1,6 @@
 # Developer
 
-Tools for setting up and rehearsing the lab session. This folder stays on my PC and doesn't go to the lab (the release's `FingerRehab-EEGLab.zip` leaves it out).
+Tools for setting up and rehearsing the lab session. This folder stays on the development PC and does not go to the lab (the release's `FingerRehab-EEGLab.zip` leaves it out).
 
 | | |
 | --- | --- |

@@ -29,6 +29,6 @@ A stimulus byte goes out straight after the frame that draws the stimulus; the m
 | `eeg_lab.yaml` | Lab settings: COM10, 9600 baud, 8 ms pulses |
 | `source/` | The game's code, for PsychoPy's own Python |
 | `sessions/` | Everything recorded here |
-| `developer/` | Mine, not the lab's: an EEG simulator for rehearsing, the PsychoPy download and a new-PC check ([README](developer/README.md)) |
+| `developer/` | For setting up, not for the lab: an EEG simulator for rehearsing, the PsychoPy download and a new-PC check ([README](developer/README.md)) |
 
 `eeg_lab.yaml` and `source/` are copies of the app, never edited here: `python3 app/scripts/check_lab_sync.py --fix` rebuilds them. Full checklist: [eeg_lab_setup.txt](../app/docs/eeg_lab_setup.txt).

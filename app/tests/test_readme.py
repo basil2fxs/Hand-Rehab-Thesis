@@ -80,7 +80,7 @@ SYMPTOMS = [
     "Calibration is asked for every time.",
     "A buzzer does not buzz.",
     "Presses register on the wrong finger.",
-    "The game does not open when I plug the board in.",
+    "The game does not open when the board is plugged in.",
     "The board needs re-flashing.",
     "The game runs but no data lands.",
     "The EEG box does not appear.",
@@ -352,6 +352,25 @@ class HouseStyleTests(unittest.TestCase):
                     self.assertIsNone(
                         re.search(rf"\b{word}\b", text, re.I),
                         f"{path.name} uses the banned word {word}")
+
+    def test_readmes_speak_generally(self):
+        """No README talks as a person: no I, me or my. They describe
+        the project, whoever reads them (30 September 2026)."""
+        root = README.parent
+        skip = {"sessions", "archive", "node_modules", ".git"}
+        found = [p for p in root.rglob("README*")
+                 if p.is_file() and not skip & set(p.relative_to(root).parts)
+                 and p.suffix in ("", ".md", ".txt")]
+        self.assertTrue(found)
+        for path in found:
+            text = path.read_text(encoding="utf-8", errors="ignore")
+            with self.subTest(file=str(path.relative_to(root))):
+                self.assertIsNone(
+                    re.search(r"\b(I|I'm|I've|I'd|I'll)\b", text),
+                    f"{path} speaks as I")
+                self.assertIsNone(
+                    re.search(r"\b(me|my|mine|myself)\b", text, re.I),
+                    f"{path} speaks as me")
 
     def test_asset_readmes_are_three_lines(self):
         """They sit under the file list on GitHub. Three lines is what

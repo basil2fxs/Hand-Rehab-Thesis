@@ -168,6 +168,36 @@ class TestCanonicalSignalCopies:
             f"never one side alone.")
 
 
+class TestMixedModelCopies:
+    """The setup cell carries verbatim copies of fit_random_intercept
+    and lmm_contrast from finger_rehab/analytics/mixed_model.py, for
+    the same reason as the signal helpers: the notebook travels alone.
+    Rayan's block model in the notebook and in force_bench.py must fit
+    the same model, so the copies are pinned as AST equality."""
+
+    NAMES = ["fit_random_intercept", "lmm_contrast"]
+
+    def _package_defs(self):
+        import inspect
+        import finger_rehab.analytics.mixed_model as mm
+        src = inspect.getsource(mm)
+        return {node.name: node for node in ast.parse(src).body
+                if isinstance(node, ast.FunctionDef)
+                and node.name in self.NAMES}
+
+    @pytest.mark.parametrize("name", NAMES)
+    def test_notebook_copy_is_verbatim(self, name, source):
+        pkg = self._package_defs()
+        assert name in pkg, f"mixed_model.py no longer defines {name}"
+        nb = {node.name: node for node in ast.parse(source).body
+              if isinstance(node, ast.FunctionDef) and node.name == name}
+        assert name in nb, f"the notebook no longer defines {name}"
+        assert ast.dump(nb[name]) == ast.dump(pkg[name]), (
+            f"{name} differs between the notebook and mixed_model.py. "
+            f"Edit mixed_model.py and re-copy the function into the setup "
+            f"cell, never one side alone.")
+
+
 _LIVE = {}
 
 
