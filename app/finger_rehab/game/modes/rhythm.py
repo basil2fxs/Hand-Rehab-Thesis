@@ -4,11 +4,12 @@ The mode was designed as the RAS (Rhythmic Auditory Stimulation) arm of
 a fixed-cadence versus RAS comparison, with classic.py as the
 fixed-cadence control. The study battery has no fixed-cadence block, so
 there it is a timing measurement, not a RAS arm. RAS entrains movement
-timing to an external auditory beat and is an established gait and
-upper-limb rehab technique after stroke (Thaut, McIntosh and Rice 1997,
-Journal of the Neurological Sciences). Unlike classic's cue-then-react
-loop, the patient can see and hear the note coming, so the task is
-synchronisation, not reaction.
+timing to an external auditory beat and is established for gait after
+stroke (Thaut, McIntosh and Rice 1997, Journal of the Neurological
+Sciences, a gait study); for the upper limb the evidence is for
+music-based training (moderate certainty, Liu et al. 2026; Braun Janzen
+et al. 2022). Unlike classic's cue-then-react loop, the patient can see
+and hear the note coming, so the task is synchronisation, not reaction.
 
 NOT METRONOME TAPPING. The notes follow the song, not an even click: on
 the study track they fall 697 to 2926 ms apart (median 743 ms, 16
@@ -18,16 +19,22 @@ once (the falling note, the lane tone, a buzz on the pressing finger
 and the music). The negative mean asynchrony of the synchronisation
 literature (taps lead an auditory metronome by tens of ms: Repp 2005,
 Psychonomic Bulletin and Review; Repp and Su 2013) comes from one
-finger tapping to even clicks. Tactile pacing removed it (Mueller et al.
-2008), and from about 2.4 s between beats people react instead of
-anticipating (Mates et al. 1994). Two device offsets are also the size
-of the effect: the chart's zero sits a median 26 ms after the music's
-attacks (librosa's 23 ms frames), and on a bursting board each press is
-stamped about 10 ms late. A mean near zero, or above it, is therefore
-neither a device fault nor an abnormal result (review of 30 September
-2026). About one note in ten also plays its tone 35 percent louder
-(audio.loud_trial, on in every mode); each row records whether it was
-loud.
+finger tapping to even clicks, and is generally absent when tapping to
+music (Repp 2005): the same adults led tones by 38 ms but music by only
++4 and -16 ms (Dalla Bella et al. 2024). Tactile pacing removed it in
+Mueller et al. 2008 (another stimulus and site), and from about 2.4 s
+between beats people react instead of anticipating (Mates et al.
+1994). A mean near zero, or above it, is therefore not an abnormal
+result, and the study's Rh1 asks instead that presses anticipate the
+beat (the share later than +150 ms, where a reaction to the buzz lands;
+1 October 2026). The study chart is a frozen file whose notes sit on
+the music's attacks (scripts/build_study_chart.py): a chart built from
+the audio at run time sits 26 to 37 ms after them (librosa's framing),
+which puts the tone and buzz after the song's own hit and makes a
+music-follower's mean MORE negative. On a bursting board each press is
+stamped about 10 ms late. About one note in ten also plays its tone 35
+percent louder (audio.loud_trial, on in every mode); each row records
+whether it was loud.
 
 TIMING WINDOWS. perfect_ms/great_ms/good_ms/miss_ms (default
 50/100/175/300) are a game-feel graded scoring ladder, not a published

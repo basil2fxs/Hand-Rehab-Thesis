@@ -60,7 +60,8 @@ class CheatSheetTests(unittest.TestCase):
                 CODES["feedback_positive"], CODES["feedback_negative"],
                 CODES["feedback_neutral"], CODES["session_start"],
                 CODES["session_end"], CODES["pause"], CODES["resume"],
-                CODES["rest_start"], CODES["rest_end"]]
+                CODES["rest_start"], CODES["rest_end"],
+                CODES["block_abandoned"]]
         for base in ("resp_correct_base", "resp_wrong_base",
                      "resp_anticipation_base"):
             want += [CODES[base] + lane for lane in range(4)]

@@ -784,7 +784,9 @@ reaction:
   # counts, order unpredictable). simple = one designated finger every
   # trial, the cleanest eye-to-hand measure. The two are different
   # measures, not difficulty levels: choice adds picking the right
-  # finger on top of reacting, and runs roughly double the RT.
+  # finger on top of reacting, about 1.6 times simple RT on a visual
+  # four-choice task (Deary et al 2011), likely less with the buzz on
+  # the finger that must press.
   sub_mode: choice
   # Which finger simple mode uses, 1=index .. 4=little. Index by
   # default because it is usually the strongest and least impaired, so
@@ -795,8 +797,9 @@ reaction:
   # starts, wrong fingers in simple mode and catch trials do not use
   # up scorable slots; attempt_cap ends the block anyway so a rough
   # day cannot trap the patient in an endless block. 25 trials runs
-  # about 3 minutes, matching the validated short-form vigilance test
-  # and stopping before time-on-task fatigue sets in.
+  # about 3 minutes, as long as the short-form vigilance test (which
+  # samples about 62 RTs in that time), and stops before time-on-task
+  # fatigue sets in.
   block_trials: 25
   attempt_cap: 35
 
@@ -806,6 +809,8 @@ reaction:
   # detail: it keeps the chance of "go arriving right now" constant
   # however long the patient has waited, so watching the clock does
   # not help and the press stays a reaction. Typical waits run 2-4 s.
+  # With the catch trials below that chance falls a little over the
+  # wait instead, so RT rising slightly with the wait is expected.
   # fp_mode uniform swaps in a flat 2-10 s draw for blocks meant to
   # be compared against published PVT numbers.
   fp_min_s: 1.5
@@ -824,9 +829,10 @@ reaction:
 
   # On this fraction of trials no go signal ever comes. Waiting it out
   # earns a small reward; pressing anyway is a false start. This is
-  # what makes guessing a losing game rather than a free bet. Kept at
-  # 10 percent because more catches inflate everyone's RT and start to
-  # feel like the game is cheating.
+  # what makes guessing a losing game rather than a free bet. Catch
+  # trials come from the foreperiod literature (the PVT has none);
+  # 10 percent matches comparable studies, and more catches inflate
+  # everyone's RT and start to feel like the game is cheating.
   catch_rate: 0.10
   catch_wait_s: 8.0
 
@@ -2031,11 +2037,13 @@ protocol:
           # The buzz sits ON the beat for the study block. Free play
           # leads the beat by 350 ms and adapts to each player, which
           # makes the block a reaction task with a per-person
-          # stimulus. Rh1 and Rh2 come from synchronisation work (taps
-          # lead an even metronome, Repp 2005). This chart follows the
-          # song, with notes 0.7 to 2.9 s apart, so they are read
-          # against a pacing signal that is the same for everybody,
-          # not as a copy of metronome tapping.
+          # stimulus. Rh1 asks that presses anticipate the beat (under
+          # 10 percent later than +150 ms); the mean asynchrony is
+          # reported, not tested, because the lead of metronome
+          # tapping is small or absent with music (Repp 2005). The
+          # study plays the frozen chart (assets/charts), its 107
+          # notes on the music's attacks and 0.7 to 2.9 s apart, a
+          # pacing signal that is the same for everybody.
           tactile_mode: on_beat
         echo:
           games: 2                    # best of two, and their spread

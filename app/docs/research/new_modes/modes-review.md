@@ -47,7 +47,7 @@ After collection only, since each would change the task mid-study:
 | Sound | Tone 77 ms, song 87 ms | Measured on the study laptop, 24 September 2026 |
 | Motor | 74 ms from command to motion | Measured the same day |
 | Stimulus stamp | At the update tick, not the flip: 0 to 16.7 ms early | `pattern.py` DEVIATIONS; the same in Adaptive, Mirror and Chords |
-| Chart zero | A median 26 ms after the music's attacks | The study chart rebuilt from the track |
+| Chart zero | On the music's attacks since 1 October 2026 (frozen study chart); a chart built from the audio sits 26 to 37 ms after them | `scripts/build_study_chart.py`; the Rhythm deep review |
 | Chord spans | Steps of about 20 ms on a bursting board | Pilot block summaries |
 | Two boards | About 7 ms mean absolute difference from their bursts alone | Arithmetic |
 
@@ -83,7 +83,7 @@ The pads: one count is 0.0195 N. Over a chord's 3.2 s window a resting finger's 
 ### Rhythm
 
 - It is not the metronome task Rh1 comes from. The study track's notes fall 697 to 2926 ms apart (median 743 ms), the finger changes on every note, each note is in view about 2.2 s ahead, and four signals pace the press (falling note, tone, buzz, music). Tactile pacing removed the lead [Rh-L4], and from about 2.4 s between beats people react instead [Rh-L7].
-- The chart's zero sits a median 26 ms after the music's attacks and a bursting board stamps presses about 10 ms late. A mean near zero, or above it, is not a device fault.
+- Tapping to music shows little or no lead (Repp 2005: the same adults led tones by 38 ms, music by +4 and -16 ms, Dalla Bella et al. 2024), so since 1 October 2026 Rh1 asks that presses anticipate the beat (under 10 percent later than +150 ms) and the mean is reported as an estimate. The study chart's notes sit on the music's attacks; a chart built from the audio sits 26 to 37 ms after them, which makes a music-follower's mean MORE negative. A bursting board stamps presses about 10 ms late.
 - Rh2 passes any SD from 10 to 100 ms, so it is a feasibility check. Rh-wk's lag-1 is negative by construction (the residual is the first difference of the asynchronies), so it is reported, not tested. A positive lag-1 of the asynchronies fits partial correction and slow drift alike [Rh-L8].
 - About one note in ten plays its tone 35 percent louder (`audio.loud_trial`, on in every mode).
 

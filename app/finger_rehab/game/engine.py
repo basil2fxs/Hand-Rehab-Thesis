@@ -5958,6 +5958,10 @@ class GameEngine:
                 "n_notes": n_notes,
                 "song_path": (str(getattr(bm, "song", "") or "")
                                or None),
+                # Which chart: the frozen study file or one built from
+                # the audio, with a hash of its notes either way, so two
+                # blocks can be shown to have played the same chart.
+                "chart": self._rhythm_chart_record(bm),
             }
             # Where the buzz sat relative to the beat this block, and
             # where the adaptive lead started and ended, so the
@@ -6596,6 +6600,21 @@ class GameEngine:
         board = "board" if len(missing) == 1 else "boards"
         return f"{names} {board} not connected: plug in, or skip (S)"
 
+    def battery_step_note(self) -> str:
+        """A line for the RA on the NEXT UP card before a step that
+        would run on something unmeasured, or ''. Rhythm scores every
+        press against this computer's measured sound delay; on the
+        estimates the whole block shifts by tens of ms (a pygame-class
+        Windows machine plays about 107 ms late, Bridges et al 2020,
+        against the 40 ms default), so the delay is measured first."""
+        step = self.pending_protocol_step()
+        if step is None or str(step.get("mode") or "") != "rhythm":
+            return ""
+        if bool(self.cfg.get("latency.measured", False)):
+            return ""
+        return ("Audio delay not measured on this computer: "
+                "Settings, Setup, Audio delay first")
+
     def _land_between_steps(self) -> None:
         """Somewhere sensible to stand when a step did not start. A
         step started from the calibration flow's callback would
@@ -6714,9 +6733,13 @@ class GameEngine:
                         "the song screen", step.get("track"))
             self.show_rhythm_setup()
             return
-        from ..audio.beatmap import extract_beatmap
-        bm = extract_beatmap(str(track), difficulty=difficulty,
-                             num_lanes=self.total_lanes)
+        from ..audio.beatmap import extract_beatmap, study_chart
+        # The study plays the frozen chart, notes on the music's
+        # attacks (scripts/build_study_chart.py); a track without one
+        # is built from the audio as before.
+        bm = (study_chart(track, difficulty, self.total_lanes)
+              or extract_beatmap(str(track), difficulty=difficulty,
+                                 num_lanes=self.total_lanes))
         self.cfg.data.setdefault("rhythm", {})["difficulty"] = difficulty
         self.begin_rhythm_block(bm)
 
@@ -8491,6 +8514,13 @@ class GameEngine:
             return
         if getattr(self, "current_block", None) in self._QUIET_STREAK_MODES:
             return
+        if (getattr(self, "current_block", None) == "rhythm"
+                and getattr(self, "_protocol_active", False)):
+            # The study's Rhythm block is a timing measurement, and a
+            # banner is an unscheduled event on the screen whose falling
+            # notes pace the presses (Iversen et al 2015). Free play
+            # keeps them.
+            return
         text = self._ENCOURAGEMENT[self.hit_streak]
         sc = self._screens.get(screen_key)
         if sc and hasattr(sc, "add_encouragement"):
@@ -9644,6 +9674,23 @@ class GameEngine:
         row.update(self._trial_context(self.hit_streak))
         self.trial_logger.write(row)
 
+    @staticmethod
+    def _rhythm_chart_record(bm) -> dict | None:
+        """The block summary's chart record: the frozen file's, or a
+        hash of a chart built from the audio."""
+        if bm is None:
+            return None
+        from ..audio.beatmap import chart_sha
+        chart = getattr(bm, "chart", None)
+        rec = (dict(chart) if isinstance(chart, dict)
+               else {"source": "extracted"})
+        if "sha" not in rec:
+            try:
+                rec["sha"] = chart_sha(getattr(bm, "notes", []) or [])
+            except (AttributeError, KeyError, TypeError, ValueError):
+                rec["sha"] = None
+        return rec
+
     def log_rhythm_hit(self, sched_note, offset_ms: float, label: str,
                        points: int, now: float,
                        was_pressed: bool = True,
@@ -9834,6 +9881,11 @@ class GameEngine:
                         song_time = float(st)
                     except (TypeError, ValueError):
                         song_time = None
+            # The note's own time on the track. song_time_s is the
+            # clock when this row is written (a press's drain, or the
+            # note's expiry), so the analysis rebuilds note and press
+            # times from this and the signed offset instead.
+            lead = float(getattr(mode, "_pre_song_lead_s", 0.0) or 0.0)
             row = {
                 "participant": self.session.participant,
                 "age": self.session.age,
@@ -9841,6 +9893,7 @@ class GameEngine:
                 "block": self.current_block,
                 "trial": sched_note.index + 1,
                 "lane": sched_note.note.lane + 1,
+                "stimulus": f"note;t={float(sched_note.note.t) - lead:.3f}",
                 "time_difference_ms": f"{offset_ms:.1f}",
                 "early_late": label,
                 "points": points,

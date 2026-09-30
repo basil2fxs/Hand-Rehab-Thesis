@@ -421,7 +421,7 @@ def draw(theme: str) -> str:
             games.append(g)
     fb_games = [GAME_NAMES.get(m, m) for m in wire["feedback"]
                 if m in games]
-    s = Svg(t, 756, "EEG marker cheat sheet: every number a lab sitting "
+    s = Svg(t, 794, "EEG marker cheat sheet: every number a lab sitting "
                     "sends, by what happened")
     vw = 16 + 8.4 * len(f"map v{CODES_VERSION}")
     s.rect(W - 40 - vw, 12, vw, 26, 13, "none", "line", 1.0)
@@ -501,7 +501,7 @@ def draw(theme: str) -> str:
 
     # 200s: each game's start and end.
     top = 522
-    band(top, top + 110, "200s", "a game", "grey")
+    band(top, top + 148, "200s", "a game", "grey")
     cw = (W - 40 - x0 - 50) / len(games)
     s.text(x0, top + 61, "starts", size=13, fill="muted")
     s.text(x0, top + 99, "ends", size=13, fill="muted")
@@ -516,9 +516,11 @@ def draw(theme: str) -> str:
                size=15, pad=8)
         s.code(gx, top + 94, c["block_end_base"] + MODE_IDS[g], "grey",
                size=15, pad=8)
+    item(x0, top + 132, c["block_abandoned"], "grey",
+         "a game stopped early", "Esc")
 
     # 240s: the session.
-    top = 668
+    top = 706
     band(top, top + 70, "240s", "the session", "grey")
     for i, (code, label) in enumerate((
             (c["session_start"], "first game"),

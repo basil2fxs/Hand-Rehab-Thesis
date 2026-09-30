@@ -7,7 +7,7 @@ All tracks below are by **Kevin MacLeod** (incompetech.com), licensed under **Cr
 | `Bright_Wish.mp3` | ~85 BPM | gentle ambient piano | 1.7 MB |
 | `Carefree.mp3` | ~120 BPM | upbeat acoustic, steady | 6.3 MB |
 | `Cheery_Monday.mp3` | ~120 BPM | bright, light percussion | 2.5 MB |
-| `Easy_Lemon.mp3` | ~120 BPM | jazzy, swing feel | 4.8 MB |
+| `Easy_Lemon.mp3` | 82 BPM (the composer's listing) | jazzy, straight eighths | 4.8 MB |
 | `Faster_Does_It.mp3` | ~140 BPM | quicker country shuffle | 6.9 MB |
 | `Hyperfun.mp3` | ~115 BPM | upbeat electronic | 7.1 MB |
 | `Local_Forecast.mp3` | ~100 BPM | mellow piano + woodwinds | 6.3 MB |

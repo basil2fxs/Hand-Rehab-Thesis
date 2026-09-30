@@ -261,6 +261,26 @@ def check_code(code: str, rows: list[dict]) -> list[tuple[bool, str]]:
                     "computer before the next participant (Settings, "
                     "Audio delay, or python3 app/scripts/audio_latency.py "
                     "--write)"))
+        want = _study_chart_sha()
+        for r in rhythm:
+            bs = r["meta"].get("block_summary") or {}
+            # Recorded from 1 October 2026; an older block has none.
+            chart = (bs.get("song") or {}).get("chart")
+            if chart:
+                ok = (chart.get("source") == "frozen"
+                      and (want is None or chart.get("sha") == want))
+                out.append((ok, f"Rhythm played the study chart "
+                                f"({chart.get('file')}, {chart.get('sha')})"
+                            if ok else
+                            "Rhythm did not play the study chart ("
+                            + str(chart.get("source") or "unknown")
+                            + "): its notes are not the study's, so Retry "
+                              "the block"))
+            pauses = int(bs.get("pauses") or 0)
+            if pauses:
+                out.append((False, f"a Rhythm block was paused {pauses} "
+                                   f"time(s): resuming re-seeks the song, "
+                                   f"so Retry it"))
     starts = [_when(r["meta"].get("started_at")) for r in first]
     ends = [_when(r["meta"].get("finished_at")) for r in first]
     starts = [s for s in starts if s]
@@ -275,6 +295,18 @@ def check_code(code: str, rows: list[dict]) -> list[tuple[bool, str]]:
         out.append((True, f"{len(free)} free-play block(s) as well; they "
                           f"stay out of the analysis"))
     return out
+
+
+def _study_chart_sha() -> str | None:
+    """The hash of the frozen study chart's notes, or None without one."""
+    sys.path.insert(0, str(APP))
+    try:
+        from finger_rehab.audio.beatmap import CHART_DIR, chart_sha
+        raw = json.loads((CHART_DIR / "Easy_Lemon_medium.json")
+                         .read_text(encoding="utf-8"))
+        return chart_sha(raw.get("notes") or [])
+    except (ImportError, OSError, ValueError):
+        return None
 
 
 def main() -> int:

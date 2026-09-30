@@ -1319,8 +1319,9 @@ def test_every_name_the_notebook_cites_is_in_the_reference_list():
                r"(?:,? (?:et al\.?|and [A-Z][a-zA-Z]+))? \(?((?:19|20)\d\d)\)?")
     # Words that start a sentence in front of a year and are not names.
     not_names = {
-        "Section", "Setup", "Every", "Sessions", "September", "August",
-        "January", "The", "This", "That", "Read", "Run", "Cell",
+        "Section", "Setup", "Every", "Sessions", "January", "February",
+        "March", "April", "June", "July", "August", "September", "October",
+        "November", "December", "The", "This", "That", "Read", "Run", "Cell",
         "Basil", "Curtin", "Notebook", "Force", "Buzz", "Echo",
         "Rhythm", "Chords", "Reaction", "Pattern", "Mirror", "Adaptive",
         "Syllables", "Note", "NOTE", "What", "Where", "When", "Since",

@@ -13,8 +13,14 @@ from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Iterable
 
+from ..config import PROJECT_ROOT
+
 
 log = logging.getLogger(__name__)
+
+# The study's frozen charts (scripts/build_study_chart.py): one file per
+# track and difficulty, every note moved onto the music's attack.
+CHART_DIR = PROJECT_ROOT / "assets" / "charts"
 
 
 # Every call that opens an audio file through librosa has to hold this.
@@ -48,6 +54,9 @@ class Beatmap:
     song: str | None = None             # path to audio file, None for click track
     difficulty: str = "medium"          # easy | medium | hard
     notes: list[Note] = field(default_factory=list)
+    # Where a frozen chart came from (study_chart); None for a chart
+    # built from the audio at run time. Not saved with the notes.
+    chart: dict | None = None
 
     def __post_init__(self) -> None:
         if self.notes:
@@ -90,6 +99,51 @@ class Beatmap:
                 "difficulty": self.difficulty,
                 "notes": [n.to_dict() for n in self.notes],
             }, f, indent=2)
+
+
+def chart_sha(notes) -> str:
+    """A short hash of a chart's (time, lane) list to the millisecond,
+    so two blocks can be shown to have played the same chart. Takes
+    Note objects or the dicts a chart file holds."""
+    import hashlib
+    rows = []
+    for n in notes:
+        t = n["t"] if isinstance(n, dict) else n.t
+        lane = n["lane"] if isinstance(n, dict) else n.lane
+        rows.append(f"{float(t):.3f}:{int(lane)}")
+    return hashlib.sha256(";".join(rows).encode("ascii")).hexdigest()[:16]
+
+
+def study_chart(track: str | Path, difficulty: str,
+                num_lanes: int = 4) -> "Beatmap | None":
+    """The frozen chart for this track and difficulty, its song set to
+    `track`, or None when there is none to use: no file, a chart for
+    another number of lanes, or an mp3 that is not the one the chart
+    was built on (its notes would sit on another song's attacks)."""
+    import hashlib
+    p = Path(track)
+    f = CHART_DIR / f"{p.stem}_{difficulty}.json"
+    if num_lanes != 4 or not f.is_file():
+        return None
+    try:
+        raw = json.loads(f.read_text(encoding="utf-8"))
+        want = raw.get("track_sha256")
+        got = hashlib.sha256(p.read_bytes()).hexdigest() if want else None
+    except (OSError, ValueError) as e:
+        log.warning("frozen chart %s unreadable (%s); building from the "
+                    "audio instead", f.name, e)
+        return None
+    if want and got != want:
+        log.warning("frozen chart %s was built on another %s; building "
+                    "from the audio instead", f.name, p.name)
+        return None
+    bm = Beatmap.load(f)
+    bm.song = str(p)
+    bm.chart = {"source": "frozen", "file": f.name,
+                "sha": chart_sha(bm.notes),
+                "aligned_to": raw.get("aligned_to"),
+                "median_lag_ms": raw.get("median_lag_ms")}
+    return bm
 
 
 _DIFFICULTY_STRIDE = {"easy": 4, "medium": 2, "hard": 1}

@@ -4320,6 +4320,10 @@ class RhythmScreen(Screen):
     """Falling notes view for rhythm mode. 4 or 8 strike lanes depending
     on whether the session is bilateral."""
 
+    # Said on the GET READY card before the notes start.
+    GET_READY_LINES = ("Press as each ball reaches the ring.",
+                       "Don't wait for the buzz.")
+
     # How far ahead of the strike line a note is shown. Bumped from
     # the original 1.5 s to 2.2 s after testing showed patients had
     # too little reaction time when the song picked up tempo. The
@@ -4858,12 +4862,20 @@ class RhythmScreen(Screen):
                                   fill_surf.get_rect(), 3, border_radius=22)
                 surf.blit(fill_surf, card_rect.topleft)
                 draw_text(surf, "GET READY",
-                          (card_rect.centerx, card_rect.y + 56),
+                          (card_rect.centerx, card_rect.y + 46),
                           self.theme, self.layout, pt=FONT_H1,
                           centre=True, colour=self.theme.muted)
+                # What to do, once, before the first note: a player
+                # who waits for the buzz scores a reaction, about
+                # +200 ms, not a synchronised press (Bao et al 2019).
+                for i, line in enumerate(self.GET_READY_LINES):
+                    draw_text(surf, line,
+                              (card_rect.centerx, card_rect.y + 84 + 24 * i),
+                              self.theme, self.layout, pt=FONT_BODY,
+                              centre=True, colour=self.theme.foreground)
                 draw_text(surf, f"{countdown:.1f}",
-                          (card_rect.centerx, card_rect.y + 156),
-                          self.theme, self.layout, pt=140,
+                          (card_rect.centerx, card_rect.y + 180),
+                          self.theme, self.layout, pt=112,
                           centre=True, colour=accent)
 
         # Corner Controls note: silent on the real sensor device, drawn
@@ -6741,6 +6753,11 @@ class ResultsScreen(Screen):
         if step is not None:
             fn = getattr(self.engine, "battery_wait_line", None)
             wait = fn() if callable(fn) else ""
+            if not wait:
+                # Nothing to wait for, but something to do first (a
+                # Rhythm step on unmeasured sound delays).
+                fn = getattr(self.engine, "battery_step_note", None)
+                wait = fn() if callable(fn) else ""
         if wait:
             # The step waits for a board rather than starting on a
             # dead hand; the line says which, live, so it clears the

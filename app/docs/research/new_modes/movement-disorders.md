@@ -104,7 +104,7 @@ Hardware fit notes:
 - No thumb: MDS-UPDRS finger tapping is thumb-index opposition. Our analog is table tapping with index or alternating index-middle, which matches the DFT and BRAIN keyboard tests, whose correlations with clinical scores are the ones to quote (moderate, r 0.4-0.6, and excellent separation from controls, AUC up to 0.90-0.95).
 - Force amplitude is a proxy for movement amplitude. The sequence effect on our rig is a decrement in peak tap force and a lengthening of intervals; that is an analog, not the kinematic decrement itself. Honest limitation, still novel: keyboards measure no amplitude at all, we do.
 - Vibration motors: one per hand at a time is enough for a haptic metronome (one cue finger per hand); cross-hand simultaneous supports bilateral cueing.
-- Audio cue timing matters more than screen timing for rhythm work; measure and log the audio output latency once, screen at 60 Hz is only cosmetic for these modes.
+- Audio cue timing sets the score for rhythm work, so measure and log the audio output latency on each computer. The screen does not move a score, but the falling note is a pacing cue in its own right (Iversen et al. 2015), so its lag is measured too.
 - SingleTact pads: confirm model force range (common variants 10 N and 45 N) before designing maximal-effort tasks; prefer "maximum comfortable press" calibration per finger per session, and submaximal targets defined as % of that.
 
 ## 8. Candidate game modes (full designs)

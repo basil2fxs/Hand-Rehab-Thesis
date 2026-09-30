@@ -78,6 +78,32 @@ HOW THE DESIGN GOT HERE (every change made before any participant):
     the review found a source misread or a claim the task cannot
     make. Rh2, B4, A5 and a noise-level C1 cannot fail for a healthy
     hand and are read as feasibility checks.
+  - 1 October 2026: THE DEEP REVIEWS, one mode at a time with the
+    load-bearing sources read in full (docs/research/deep/). Reaction
+    and Rhythm first. R1 is one-sided: it fails only when RT falls
+    as the wait grows. With a tenth of the waits ending in a catch
+    trial the chance the light comes next falls over the wait and RT
+    rises a little with it (Han and Proctor 2022), so the two-sided
+    rule failed 78 percent of simulated cohorts at +10 ms a second.
+    Rh1 is now the share of presses later than +150 ms, where a
+    reaction to the buzz lands (Bao et al. 2019): the cohort median
+    under 10 percent, one-sided, in the Holm family. The mean
+    asynchrony is reported with its interval and not tested, because
+    tapping to music shows little or no lead (Repp 2005; +4 and -16
+    ms against -38 ms to tones in the same adults, Dalla Bella et
+    al. 2024), and the old rule passed 18 to 49 percent of the time
+    at n = 10 for good synchronisers. Only Rhythm blocks scored on
+    measured sound delays, with the buzz on the beat and no pause,
+    feed Rh1 and Rh2. The study's Rhythm chart is a frozen file
+    (assets/charts/Easy_Lemon_medium.json, scripts/build_study_chart.py)
+    whose 107 notes moved onto the music's attacks, a median 36.9 ms
+    earlier: librosa's beats sat late, so the tone and buzz came after
+    the song's own hit. The Rhythm GET READY card says to press as
+    the ball reaches the ring and not to wait for the buzz, and the
+    run sheet gives both blocks a line to say. The Reaction task
+    itself is unchanged (Basil, 1 October 2026). The text below is
+    corrected where the reviews found a claim the evidence
+    contradicts.
 
 What one board costs, and the thesis says it in the same breath as
 the results:
@@ -236,10 +262,10 @@ offline re-score in analysis/session_analysis.ipynb.
 
 Reliability classes use Koo and Li (2016): below 0.5 poor, 0.5 to
 0.75 moderate, 0.75 to 0.9 good, above 0.9 excellent, and are
-predictions to be tested, not promises. This design does not test
-them: nothing in it is measured twice (Section 4.5). Every class
-below is left standing because it says which metrics the
-test-retest study that follows should start with.
+predictions to be tested, not promises. This design tests them
+within one sitting for the three modes played twice (T1 to T5,
+Section 4.5). Every other class is left standing because it says
+which metrics the test-retest study that follows should start with.
 
 1.1 Reaction (choice, one hand per block)
 -----------------------------------------
@@ -247,11 +273,17 @@ Primary: median_rt_ms, lapse_like_rate, n_false_start_total /
 n_attempts, accuracy (block_stats.reaction). Secondary: sd_rt_ms,
 p10_rt_ms, slope_rt_ms_per_trial, spearman_rho_rt_vs_fp.
 Known effects to reproduce:
-  R1 The exponential foreperiod works: cohort median of the
-     Spearman rho between RT and foreperiod near zero (|rho| under
-     0.2) and false starts under 10 percent of attempts. This is the
-     anticipation control the mode was built for (Niemi and Naatanen
-     1981; Naatanen 1971, both cited in reaction.py).
+  R1 The exponential foreperiod works: RT does not fall as the wait
+     grows (cohort median of the Spearman rho between RT and
+     foreperiod above -0.2) and false starts stay under 10 percent of
+     attempts. This is the anticipation control the mode was built
+     for (Niemi and Naatanen 1981; Naatanen 1971, both cited in
+     reaction.py). One-sided from 1 October 2026: with catch trials
+     in the design the chance the light comes next falls over the
+     wait, so RT rising a little with the wait is the healthy result
+     (Han and Proctor 2022; Grabenhorst et al. 2019), and only a
+     falling RT means the wait is being timed. The notebook prints
+     the pooled slope of RT on the wait beside it.
   R2 Dominant hand faster than non-dominant. The dominant advantage
      is well replicated for tapping speed and consistency (Peters
      1980; Hubel et al. 2013) and is small for reaction time.
@@ -261,14 +293,19 @@ Known effects to reproduce:
   R3 No practice effect on median RT from pass 1 to pass 2: the 90
      percent CI of pass 2 minus pass 1 inside +/- 20 ms, by two
      one-sided tests at 5 percent (equivalence, the form F3 uses;
-     Lakens 2017). 20 ms is a little over one 60 Hz frame (16.7 ms),
-     the rig's own timing grain, and about 5 percent of a four-choice
-     RT. The basis: the PVT family the block is modelled on shows no
-     change in median RT or lapses over 16 repeated administrations
-     (Basner et al. 2017, Sleep). The block is four-choice, though,
-     and four-choice RT does fall with repeated testing (Woods et al.
-     2015, visual choice RT), so a fail is read as practice, not as a
-     fault. Restored 24 September 2026, when the second pass made it
+     Lakens 2017). The 20 ms margin comes from the practice the
+     literature reports between two short blocks: 7 ms slower on an
+     immediate four-choice retest (Deary et al. 2011) and 19 ms
+     faster a week later on a two-button visual choice task (Woods
+     et al. 2015). A 60 Hz frame (16.7 ms) is one trial's grain; a
+     20-trial median resolves about 1 to 2 ms of it, so the frame
+     cannot set the margin (corrected 1 October 2026). The PVT family
+     the block is modelled on shows no change in median RT or lapses
+     over 16 repeated administrations (Basner et al. 2017, Sleep). At
+     n = 10 a true shift of zero passes only 55 to 80 percent of the
+     time, so the shift and its interval are the result and the
+     verdict is read beside them; a fail is read as practice, not as
+     a fault. Restored 24 September 2026, when the second pass made it
      computable; it had been dropped under the one-pass design. Read
      on the 90 percent interval from 28 September 2026 (it had also
      required the 95).
@@ -276,11 +313,18 @@ Cue order (27 September 2026, before any participant): the four
 fingers are dealt from one bag of twenty per block, five each, with
 no finger twice running. The old bag of four made the fourth cue of
 every bag the finger not yet seen, so a quarter of the cues could be
-predicted from the three before them; the choice was no longer the
-2-bit one Hick and Hyman describe.
+predicted from the three before them. The block is not a Hick
+measure either way: with no finger twice running a cue carries at
+most 1.58 bits, and a buzz under the finger that must press is the
+compatible case in which the set-size cost flattens (Leonard 1959, in
+Proctor and Schneider 2018; corrected 1 October 2026).
 Reliability class: good to excellent for median RT (the PVT
-tradition; the block is 20 scorable trials, near the validated 3 min
-PVT-B of Basner, Mollicone and Dinges 2011). Tested as T1 (Section
+tradition; the block is 20 scorable trials, as long as the 3 min
+PVT-B of Basner, Mollicone and Dinges 2011, which samples about 62
+RTs in that time). The deep review puts the realistic centre at good:
+0.71 for a 20-trial four-choice mean retested back to back (Deary et
+al. 2011, halved by Spearman-Brown) and 0.72 to 0.77 for two-choice
+RT a week apart (Woods et al. 2015). Tested as T1 (Section
 4.5): the prediction the within-session ICC is read against.
 Claim limits: absolute RTs are device-specific (60 Hz display, force
 threshold clock, unmeasured panel latency; Woods 2015 and Plant and
@@ -537,23 +581,37 @@ Rh1 is read on the right hand over everyone; Rh3 is DROPPED, since
 nobody plays both hands.
 Primary: signed mean asynchrony per hand (time_difference_ms on hit
 rows, notebook sec_rhythm), asynchrony SD, mean absolute offset
-(block_summary.beat_offset_stats.beat_offset_abs_mean_ms), hit rate;
-interval CV and the tempo-tracking r from sec_tap_variability.
+(block_summary.beat_offset_stats.beat_offset_abs_mean_ms), hit rate,
+and the share of presses later than +150 ms (Rh1). Interval CV and
+the tempo-tracking r from sec_tap_variability are descriptive: the
+first is a function of the SD and the lag-1, the second is inflated
+by construction.
+The chart (1 October 2026): the study plays a frozen file of 107
+notes, each moved onto the music's attack (a median 36.9 ms earlier
+than the beat tracker put it), and every trial row records its
+note's time (stimulus note;t=). check_sitting.py flags a Rhythm block
+that played another chart, or was paused. Only blocks on this
+computer's measured sound delays, with the buzz on the beat and no
+pause, feed Rh1 and Rh2.
 Known effects to reproduce:
-  Rh1 Negative mean asynchrony: taps precede the beat by tens of ms
-      (Repp 2005, Psychonomic Bulletin and Review; Repp and Su
-      2013). One-sample test per hand, mean below zero.
-      The effect comes from tapping one finger to an even auditory
-      metronome. This block is not that task: its notes follow the
-      song (697 to 2926 ms apart on the study track), the finger
-      changes on every note, each note is seen coming, and a buzz on
-      the pressing finger paces the press, which removed the lead in
-      Mueller et al. 2008 (tactile pacing, no asynchrony). The
-      chart's zero also sits a median 26 ms after the music's
-      attacks, and on a bursting board each press is stamped about
-      10 ms late. A mean near zero is therefore not a device fault;
-      the notebook prints Rh1 on the board's own clock beside it
-      (review of 30 September 2026).
+  Rh1 Presses anticipate the beat rather than react to the buzz:
+      the cohort median of each person's share of presses later than
+      +150 ms under 10 percent (one-sided, in the Holm family). A
+      reaction to a vibration lands about 200 ms or later (Bao et al.
+      2019), a synchronised press within tens of ms of the beat.
+      Replaced 1 October 2026, before any participant; Rh1 had been a
+      mean asynchrony below zero (Repp 2005; Repp and Su 2013). That
+      lead comes from tapping one finger to an even auditory
+      metronome and is generally absent when tapping to music (Repp
+      2005): the same adults led tones by 38 ms but music by only +4
+      and -16 ms (Dalla Bella et al. 2024), and at those values the
+      old rule passes 18 to 49 percent of the time at n = 10. This
+      block is not that task either: its notes follow the song (697
+      to 2926 ms apart), the finger changes on every note, each note
+      is seen coming, and a buzz on the pressing finger paces the
+      press. The mean asynchrony is reported per hand with its
+      interval as an estimate (row Rh1m), beside the board-clock, the
+      warm-up-free and the on-beat means.
   Rh2 Asynchrony SD in the tens of ms for a comfortable tempo (Repp
       2005). Any SD from 10 to 100 ms passes, so Rh2 is a
       feasibility check, not a precision result.
@@ -1003,7 +1061,9 @@ for all; in healthy young adults the dominant hand's advantage on
 these measures is small, and smaller still in left-handers, whose
 between-hand differences in tapping are smaller than right-handers'
 (Peters and Durding 1979) and whose simple reaction time differs
-little between the hands (Nisiyama and Ribeiro-do-Valle 2014); and
+little between the hands in right-handers (Nisiyama and
+Ribeiro-do-Valle 2014, who tested no left-handers; handedness did not
+predict simple RT in 1,469 adults, Woods et al. 2015); and
 turning left-handers into a separate, tiny, undescribed group would
 waste their data. Two analyses make the most of the mix instead of
 hiding it: the handedness comparison of Section 4.4 (left-handers'
@@ -1669,8 +1729,9 @@ each group resampled on its own; Cliff's delta; and a two-sided
 Mann-Whitney p. All of it is EXPLORATORY: no direction is predicted,
 no multiplicity control covers it, and a group needs three people
 before anything but medians prints. The expected answer is a small
-or no difference (Peters and Durding 1979; Nisiyama and
-Ribeiro-do-Valle 2014), so a large one on a timing measure would be
+or no difference (Peters and Durding 1979; Woods et al. 2015;
+Nisiyama and Ribeiro-do-Valle 2014 for right-handers' two hands), so
+a large one on a timing measure would be
 the thing to discuss, with the caveat that a handful of left-handers
 also differ from the right-handers in every other way those few
 people differ.
@@ -2187,9 +2248,10 @@ healthy cohort cannot give.
     pygame-based Expyriment across operating systems, with a similar
     trial-to-trial spread. The study plays through the laptop's own
     speakers; any other output is re-measured first. The display lag
-    (latency.visual_ms) is not measured and does not need to be for
-    the checks: it moves where the falling note is drawn, never a
-    score.
+    (latency.visual_ms) is not measured. It never moves a score, but
+    the falling note is a pacing cue in its own right (Iversen et al.
+    2015), so scripts/latency_check.py measures it on the lab PC
+    with a 240 fps phone when one is to hand.
   j DONE. scripts/measure_battery.py plays the plan headless through
     the real engine on a simulated clock and a simulated one-board
     rig, counts the rests and the transitions separately, and reports

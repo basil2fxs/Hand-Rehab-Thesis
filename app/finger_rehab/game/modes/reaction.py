@@ -14,16 +14,26 @@ stays flat and the press is a response, not a prediction (Naatanen
 1971, Acta Psychologica). The exponential draw is truncated at fp_max
 for practical block length, which mildly ages the extreme tail; the
 per-trial foreperiod is logged (stimulus column) so the analysis can
-check RT against foreperiod and confirm the control worked.
+check RT against foreperiod and confirm the control worked. The catch
+trials below change the picture: once a tenth of the waits never end
+in a light, the chance the light comes next FALLS over the wait (0.38
+to 0.23 a second between 1.5 and 7.9 s, arithmetic), and RT rises a
+little with the wait (Han and Proctor 2022; Grabenhorst et al 2019).
+So a positive RT-foreperiod slope is the healthy result here, and only
+a falling one means the wait was being timed (R1 is one-sided from 1
+October 2026).
 
 TWO SUB-MODES. Simple RT (one designated finger every trial) measures
 detection plus motor initiation; choice RT over the four fingers adds
 discrimination and response selection, and the two age and impair
 differently (Der and Deary 2006, Psychology and Aging, n=7130). Choice
 RT grows with the log of the number of alternatives (Hick 1952; Hyman
-1953), so four equiprobable fingers is a 2-bit choice. Choice is the
-default here because it exercises all four fingers; `reaction.sub_mode:
-simple` switches to the clean single-finger loop.
+1953), but this is not a clean 2-bit choice: no finger comes twice
+running, so a cue carries at most 1.58 bits, and a buzz under the
+finger that must press is the ideomotor-compatible case where the
+set-size cost flattens (Leonard 1959, in Proctor and Schneider 2018).
+Choice is the default here because it exercises all four fingers;
+`reaction.sub_mode: simple` switches to the clean single-finger loop.
 
 WHAT THE NUMBER MEASURES. The shipped cue defaults play the buzzer
 and the cue tone alongside the screen highlight on every stimulus, so
@@ -43,16 +53,21 @@ starts, never as hits (Luce 1986, Response Times; Basner and Dinges
 foreperiod is likewise a false start; the trial aborts gently (nothing
 on screen, no penalty sound, no score loss: this mode shows no
 messages, only the RT in the corner) and a fresh attempt follows, so
-false starts never consume scorable slots. On a fraction of trials (catch_rate) no stimulus ever
-comes; surviving the wait earns a small
-reward. Catch trials are the standard second anticipation control from
-the PVT tradition (Dinges and Powell 1985), kept at 10 percent because
-higher rates inflate RT and frustrate patients.
+false starts never consume scorable slots. On a fraction of trials
+(catch_rate) no stimulus ever comes; surviving the wait earns a small
+reward. Catch trials come from the foreperiod literature, where the
+share of them is one of the things that sets preparation (Drazin 1961;
+Buckolz and Rodgers 1980), not from the PVT, which has none (Basner
+and Dinges 2011, Table 3). 10 percent matches the 9 to 10 percent of
+comparable studies.
 
 LAPSES AND BLOCK LENGTH. RTs at or over 500 ms are lapses (the PVT
-convention, Basner and Dinges 2011). A block is 25 scorable trials with
-attempts capped at 35 so a bad run still ends; that lands near the
-validated 3-minute PVT-B (Basner, Mollicone and Dinges 2011) and well
+convention, Basner and Dinges 2011, set for visual simple RT; in this
+four-choice task a slower healthy hand passes 500 ms without a lapse of
+attention, so the notebook reads it as a description). A block is 25
+scorable trials with attempts capped at 35 so a bad run still ends;
+that takes about as long as the 3-minute PVT-B (Basner, Mollicone and
+Dinges 2011), which samples about 62 RTs at 1 to 4 s waits, and well
 short of the 10-minute time-on-task decline documented for the full
 PVT. Displayed block score is the median RT because RT distributions
 are right-skewed and means mislead (Ratcliff 1993; Whelan 2008).
@@ -227,8 +242,10 @@ class ReactionMode(WaitSkip):
         # One bag per block rather than per four cues: dealt four at a
         # time, the fourth finger of every bag was the one not yet
         # seen, so a quarter of the cues could be worked out from the
-        # three before and choice RT stopped being a clean 2-bit
-        # choice (Hyman 1953). Five copies of each finger for a
+        # three before (Hyman 1953 counts that as lost information).
+        # With no immediate repeats a cue carries at most 1.58 bits
+        # anyway, so this is not a clean 2-bit choice. Five copies of
+        # each finger for a
         # 20-trial block keep the counts equal with almost nothing to
         # predict; the no-repeat rule is unchanged.
         per_hand_trials = self.total_trials / max(1, len(by_hand))
@@ -1007,9 +1024,11 @@ class ReactionMode(WaitSkip):
     def _spearman_rho(cls, xs: list[float],
                       ys: list[float]) -> float | None:
         """Rank correlation without scipy: Pearson on midranks. Used
-        for the anticipation diagnostic (RT against foreperiod), where
-        near zero is the healthy result under a non-aging foreperiod
-        (Niemi and Naatanen 1981)."""
+        for the anticipation diagnostic (RT against foreperiod). Near
+        zero is the classic result under a non-aging foreperiod (Niemi
+        and Naatanen 1981); with catch trials the go hazard falls over
+        the wait and a small positive rho is expected, so only a
+        negative one reads as timing the wait."""
         n = len(xs)
         if n < 3 or n != len(ys):
             return None

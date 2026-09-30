@@ -42,7 +42,7 @@ class _Clock:
 
     def __init__(self) -> None:
         self._real = time.perf_counter
-        self.t = self._real()
+        self.t = EPOCH
         time.perf_counter = lambda: self.t
 
     def restore(self) -> None:
@@ -53,6 +53,34 @@ def _press(lane: int, t: float, hand: str = "right"):
     from finger_rehab.hardware.fsr_detector import PressEvent
     return PressEvent(lane=lane, t_perf=t, value=600, baseline=50.0,
                       hand=hand)
+
+
+SEED = 20261001
+# One clock epoch for every picture: animations run off perf_counter,
+# and a clock started at the real time caught each at another phase.
+EPOCH = 10_000.0
+
+
+def _seed() -> None:
+    """The same randomness for every picture on every run. The modes'
+    schedulers build random.Random() with no seed, which draws from the
+    operating system, so inside this script an unseeded Random is
+    seeded from a counter instead; without it a rerun lit other fingers
+    and churned every image in the READMEs."""
+    import itertools
+    import random
+    import numpy as np
+    random.seed(SEED)
+    np.random.seed(SEED)
+    base = getattr(random, "_unseeded_random", random.Random)
+    random._unseeded_random = base
+    count = itertools.count()
+
+    class _Seeded(base):
+        def __init__(self, x=None):
+            super().__init__(SEED + next(count) if x is None else x)
+
+    random.Random = _Seeded
 
 
 def _keyboard_engine(root: Path, hand: str = "right"):
@@ -110,6 +138,7 @@ def _login(eng, code: str = "P07") -> None:
 
 
 def menus(out: Path, clock) -> None:
+    _seed()
     with tempfile.TemporaryDirectory() as td:
         eng = _keyboard_engine(Path(td))
         eng.show_title()
@@ -144,6 +173,7 @@ def lane_game(out: Path, clock, key: str, name: str, presses: int = 0,
               hand: str = "right") -> None:
     """A lane game mid-block: `presses` correct answers first, so the
     score and the streak are not zero, then the next cue on screen."""
+    _seed()
     with tempfile.TemporaryDirectory() as td:
         eng = _keyboard_engine(Path(td), hand)
         _login(eng)
@@ -190,6 +220,7 @@ def syllables(out: Path, clock) -> None:
     """Syllables for a nine year old, in the hear and pick section: the
     word's first part already found, the four chunks for the next one
     on screen."""
+    _seed()
     with tempfile.TemporaryDirectory() as td:
         eng = _keyboard_engine(Path(td))
         eng.cfg.data["syllables"]["speech"] = {"backend": "off"}
@@ -224,6 +255,7 @@ def syllables(out: Path, clock) -> None:
 
 
 def results(out: Path, clock) -> None:
+    _seed()
     with tempfile.TemporaryDirectory() as td:
         eng = _keyboard_engine(Path(td))
         _login(eng)
@@ -245,6 +277,7 @@ def results(out: Path, clock) -> None:
 
 
 def reaction(out: Path, clock) -> None:
+    _seed()
     from tests.test_srt_mode import Sim, _engine, _fast_cfg, _use
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
@@ -272,6 +305,7 @@ def rhythm(out: Path, clock) -> None:
     every note so far pressed on its beat so the score and the streak
     are not zero. Without the song in assets/music the chart is a
     90 BPM procedural one."""
+    _seed()
     from finger_rehab.audio.beatmap import extract_beatmap, procedural_beatmap
     from finger_rehab.game.battery import find_track
     with tempfile.TemporaryDirectory() as td:
@@ -300,10 +334,12 @@ def rhythm(out: Path, clock) -> None:
 def force_pilot(out: Path) -> None:
     """Force Pilot on the fake board, six seconds into the first run,
     the index finger following the wave a little off its centre."""
+    _seed()
     import math
     from tests.test_echo_mode import (RESTING, _make_wire_engine,
                                       patched_clock)
     with tempfile.TemporaryDirectory() as td, patched_clock() as clock:
+        clock.t = EPOCH
         eng, rig = _make_wire_engine(td, clock, buzz_after=False)
         # The rig runs the short test ladder; the picture shows the game.
         eng.cfg.data["game"]["test_mode_enabled"] = False
@@ -354,8 +390,10 @@ def force_pilot(out: Path) -> None:
 
 def wire_games(out: Path) -> None:
     """Buzz Hunt and the quick calibration on the fake board."""
+    _seed()
     from tests.test_echo_mode import _Pump, _make_wire_engine, patched_clock
     with tempfile.TemporaryDirectory() as td, patched_clock() as clock:
+        clock.t = EPOCH
         eng, rig = _make_wire_engine(td, clock, buzz_after=False)
         eng._screens = eng._build_screens()
         pump = _Pump(eng, rig, clock)
