@@ -80,7 +80,9 @@ except ImportError:
 # block bytes 213 and 233 now occur. Inside an srt block 30 marks the
 # red flash with its lane tone, exactly as the lab's own script sent
 # it; everywhere else 30 keeps its meaning.
-CODES_VERSION = "1.6"
+# 1.7: stim_choice_speed 53 added for the four words of a syllables
+# speed trial. No existing code changed meaning.
+CODES_VERSION = "1.7"
 
 # 0 is the idle line, written after every pulse and in every shutdown
 # path. It never labels an event, so it lives outside CODES.
@@ -137,6 +139,10 @@ CODES: dict[str, int] = {
     # unanswered. Sent at the STIM command; an answer after it is a
     # prompted answer and is analysed apart from the unprompted ones.
     "stim_choice_prompt": 52,
+    # The four words of a syllables speed trial, after the flashed
+    # word and its mask. The flash began expo ms plus the 150 ms mask
+    # earlier (expo on the row).
+    "stim_choice_speed": 53,
     # Response band (100-131), correctness in the byte, lane added to
     # the bases because hand identity is what the LRP is made of.
     #
@@ -324,6 +330,12 @@ CODE_NOTES: dict[str, tuple[str, str, str, str]] = {
         "Only on a set still unanswered at its prompt delay (the "
         "word's rung of prompt_steps, pstep on the row). A press "
         "after this byte is a prompted answer (pclass on the row)."),
+    "stim_choice_speed": (
+        "flip", "stim_visual",
+        "syllables: four words after a speed trial's flash and mask",
+        "The word itself was flashed expo ms (on the row) plus the "
+        "150 ms mask before this byte; the flash has no byte of its "
+        "own. Never pool with 50 or 51."),
     "resp_correct_base": (
         "press sample", "response", "correct press, + lane pressed (0-7)",
         "Mirror sends one per hand (right 0-3, left 4-7). Chords sends "

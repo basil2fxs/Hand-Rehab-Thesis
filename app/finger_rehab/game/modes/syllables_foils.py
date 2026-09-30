@@ -433,6 +433,16 @@ GENERATORS = {
 _VOWEL_RUN = re.compile(r"[aeiouy]+")
 
 
+# The confusion families the sectioned sitting teaches one at a time,
+# and the foil kind that carries each (syllables-task-design.md,
+# Section 6.3). A family starts among unrelated foils and gains one of
+# its own foils per step, so a new contrast is met easy first
+# (Carnine 1981; Ahissar and Hochstein 1997).
+FAMILY_KIND = {"vowel": "F3", "onset": "F2", "coda": "F7",
+               "reversal": "F4", "position": "F5", "order": "F6",
+               "affix": "F9"}
+REVERSIBLE_LETTERS = frozenset("bdpqnumw")
+
 def is_vowel_swap(cand: str, target: str) -> bool:
     """Whether `cand` is `target` with only its vowels changed: the same
     consonants in the same order with a vowel in the same places,

@@ -55,6 +55,16 @@ There's no switch under a finger. Each pad keeps a slow baseline, and a press co
 
 <p align="center"><img src="app/docs/images/login.png" width="32%" alt="The login screen"> <img src="app/docs/images/hand.png" width="32%" alt="The hand choice screen"> <img src="app/docs/images/calibration.png" width="32%" alt="The quick calibration"><br><sub>Log in (free play, or a timed session of 15 to 60 minutes), pick the hand, calibrate. The game menu has the same session picker.</sub></p>
 
+## Timing and limits
+
+- **Pads:** each SingleTact reads 0 to 10 N in 512 steps, about 20 mN a step. The manual quotes up to 120 Hz, but in recorded sessions the pads gave a new value on nearly every 5 ms read: while force changed quickly, under 3% of samples repeated. Slower changes repeat because they are smaller than one step.
+- **Board:** the Nano reads all four pads every 5 ms (199 Hz measured) and sends one line over USB at 115200 baud. A failed read arrives as 0.
+- **USB:** samples reach the computer in bursts, about four every 20 ms, and are timed when they arrive, so a sample's time can be up to about 20 ms after the pad was read.
+- **Presses:** a press counts when the smoothed force crosses the trigger, 7 to 11 ms after the raw crossing.
+- **Screen:** the game draws 60 frames a second, so a cue shows on the next frame, up to 17 ms later.
+- **Sound and buzz:** on the study computer a sound was heard 77 to 87 ms after the game played it and a motor moved 74 ms after its command. Every computer needs its own measurement: Settings, Setup, Audio delay.
+- **EEG markers:** a stimulus byte goes out on the frame that draws the stimulus; the monitor's own delay before the picture lights up comes on top and was not measured (no light sensor). A press byte leaves up to one frame (17 ms) after its sample, on top of the USB delay above. Each byte is held 8 ms, 16 samples at 2048 Hz. Confirm the lab's recording rate before the first session ([app/docs/eeg_lab_setup.txt](app/docs/eeg_lab_setup.txt)).
+
 ## Install
 
 - **Windows:** run [`FingerRehab-Setup-Windows.exe`](https://github.com/basil2fxs/Hand-Rehab-Thesis/releases/latest/download/FingerRehab-Setup-Windows.exe). No administrator needed. SmartScreen says "Windows protected your PC": More info, Run anyway.
@@ -64,7 +74,7 @@ Both are on the [latest release](https://github.com/basil2fxs/Hand-Rehab-Thesis/
 
 ## When a board is plugged in
 
-The game opens within a second. A watcher installed at first launch checks the ports once a second, so a board that was already in at login needs unplugging and plugging back in.
+The game opens within a second. A watcher installed at first launch checks the ports once a second. If the board was already plugged in when the computer started, unplug it and plug it back in.
 
 ## The ten games
 
@@ -137,7 +147,7 @@ On Windows there's also USB driver: if a board is plugged in but never shows up,
 
 **The game runs but no data lands.** Settings, Data, Open data folder opens the folder in use, which is `~/Finger Rehab Data` when the app can't write beside itself. Check Test Mode is off (`game.test_mode_enabled`): it caps every block at six trials.
 
-**The EEG box does not appear.** Markers are off in the shipped game; `app/config/eeg_lab.yaml` turns them on, loaded from beside the lab exe or with `--config config/eeg_lab.yaml` from source. Set `eeg.port` to the box's port. `eeg.require_port` true refuses to start without a box; false logs the markers only. `eeg.baud` 1200 resets the box off the bus, so the writer refuses it.
+**The EEG box does not appear.** Markers are off in the shipped game; `app/config/eeg_lab.yaml` turns them on, loaded from beside the lab exe or with `--config config/eeg_lab.yaml` from source. Set `eeg.port` to the box's port. `eeg.require_port` true refuses to start without a box; false logs the markers only. `eeg.baud` stays 9600: 1200 would reset the box, so the game refuses it.
 
 **Sessions look empty in the notebook.** It walks for `trials.csv` from the first `sessions` folder beside it or up to four levels above; a notebook copied elsewhere needs `SESSIONS_DIR` set in the Setup cell.
 

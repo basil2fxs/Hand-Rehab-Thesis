@@ -61,12 +61,16 @@ an audio segment with the right written form, adaptation aimed at
 about 80 percent correct, immediate positive feedback. Mehringer et
 al. (2020) add the distractor rule (a target among one to nine
 distractors, some deliberately confusable). Two results bound what may
-be claimed from it: Ahmed, Wilson, Mead, Noble, Richardson, Wolpert
-and Goswami (2020) found only a small nonword-decoding effect in
-English, and McTigue, Solheim, Zimmer and Uppstad (2020) found a
-negligible overall effect across the GraphoGame literature with
-SUPPORTIVE ADULT INTERACTION as the only significant moderator. Hence
-the adult line on the rest screen, and hence the claim limits below.
+be claimed from it: the Education Endowment Foundation's trial of
+GraphoGame Rime in English (Worth, Nelson, Harland, Bernardinelli and
+Styles 2018; 398 Year 2 pupils in 15 schools) found no effect on
+reading or spelling, and Ahmed, Wilson, Mead, Noble, Richardson,
+Wolpert and Goswami (2020) is a later re-analysis of part of that
+sample, not a separate positive result; McTigue, Solheim, Zimmer and
+Uppstad (2020) found a negligible overall effect across the GraphoGame
+literature with SUPPORTIVE ADULT INTERACTION as the only significant
+moderator. Hence the adult line on the rest screen, and hence the
+claim limits below.
 
 WHAT IS DELIBERATELY DIFFERENT FROM GRAPHOGAME. GraphoGame makes the
 child re-pick the right answer before moving on. Here a wrong press
@@ -182,6 +186,55 @@ British), each syllable said as it sounds in its word
 (scripts/syllables_tts.py); a recorded Australian voice can replace
 it (scripts/syllables_recording_kit.py), with each chunk spelt.
 
+SECTIONS (syllables.sections, on by default; every profile except
+classic). The research pass of 30 September 2026
+(docs/research/new_modes/syllables-task-design.md) found the syllable
+programmes that worked mixed recognition with production and ended on
+whole-word reading, so a block is split into parts, each with its own
+card: a short REVIEW (unrelated foils, a warm-up that moves no
+ladder), HEAR AND PICK (the task above, foils from one confusion
+family at a time), BUILD THE WORD (the word heard, not shown, from 10
+up, and built slot by slot; each slot's lanes hold one of the word's
+other syllables as well as family foils, so the last slot is still a
+choice) and, from 10 to 59, a QUICK LOOK speed check. Up to four words
+review, 30 percent of the rest build, the others pick. The changes
+inside a set: the tiles drop into place and stay still with a time bar
+above them; after two wrong presses the answer is shown (its tile
+glows, its syllable is heard and it fills its slot plainly), because
+answering until correct taught no more than being told (Butler,
+Karpicke and Roediger 2007) and a lure is corrected best straight away
+(Marsh, Fazio and Goswick 2012); a set that times out is shown the
+same way. Every word then ends whole: the slots close into one word,
+held silent for read_hold_s (1.5 s, 1.0 for adults) so the reader
+decodes it, then it is heard (Share 1999; Kyte and Johnson 2006). A
+word with a shown slot counts as missed and comes back later.
+FOILS BY FAMILY. Each profile has confusion families (vowel, onset,
+coda, reversal, position, order, affix; syllables_profiles.py) with a
+level each: level 0 puts the target among unrelated chunks, levels 1
+to 3 put one to three of the family's foils in the set. Three unaided
+right first presses on a family's sets raise its level, and at level
+3 mark it mastered; an error lowers it. A family is taught for three
+words at a time, then the next open family takes over (lowest level
+first), which is a new contrast blocked for a few words and then
+mixed. The rung still moves by 3-down-1-up and sets the time allowed.
+Levels start at 0 in every block: carrying them across sittings is
+not built. QUICK LOOK. A real word of up to nine letters is shown for
+the exposure, covered by hash marks for 150 ms, then four words of the
+same syllable count (closest first letter and length first) sit over
+the four fingers for up to 4 s; one press answers. The exposure starts
+at the profile's speed_expo_ms and moves 80 ms at a time between 100
+ms and 1.5 s: down after every right answer until the first error,
+then 3-down-1-up (Levitt 1971). The threshold is the mean exposure at
+the reversals after the first, and a run of 16 or 20 trials gives a
+rough one. It is practice and a fluency measure, as the German syllable app
+ended its lessons with brief-exposure reading (Hess et al 2024) and
+repeated syllable reading sped up only the units trained (Huemer, Aro,
+Landerl and Lyytinen 2010); it is not a claimed cause of better
+reading.
+Exposures are whole display frames (about 17 ms at 60 Hz). The design
+note's counts per section (Section 6.1) are for a shorter block than
+the 30-word default.
+
 HANDS. With both hands connected the hands ALTERNATE PER WORD: all
 four tiles sit over the playing hand, the resting hand shows seat
 dots, and the switch is announced at ATTEND before any tile exists.
@@ -244,7 +297,20 @@ WHAT ONE ROW LOGS. One trials.csv row per option SET, not per word:
             prompted_error|no_response>;
     prof=<classic|6-9|10-12|13-15|16+|60+>;lex=<word|pseudo>;
     print=<0|1, the word printed before the choice>;
-    replay=<0|1, the chunk replayed with R>
+    replay=<0|1, the chunk replayed with R>;
+    and in the sectioned sitting: sec=<review|pick|build>;
+    fam=<the set's confusion family, mix, or blank in review>;
+    flv=<the family's level for this set, 0-3>;
+    fn=<how many of the family's foils made it on screen>;
+    shown=<0|1, the answer shown after two wrong presses>
+    (err=shown on those rows)
+
+A speed trial's row is shorter:
+
+    word;sec=speed;nsyll=<n>;expo=<ms the word was shown>;hand=<L|R>;
+    opts=<lane>:<word>:<t|f>,...;tlane=<lane>;presses=...;
+    first=<ok|wrong|none>;err=<ok|wrong_first|miss|device_drop>;
+    rt=<ms from the four words>;prof=...;lex=word;sup=<0|1>
 
 rt is spawn to correct press. time_difference_ms on the row is that
 rt; error_type carries err on Miss rows; correct_keys is the target
@@ -299,9 +365,12 @@ from ..scoring import ScoreConfig, TrialResult
 from ._keys import keymap_for_hand, resolve_key
 from ...hardware.eeg_trigger import CODES as EEG_CODES, response_code
 from .classic import PendingTrial
-from .syllables_foils import Inventory, build_option_set, kinds_for_rung
+from .syllables_foils import (FAMILY_KIND, REVERSIBLE_LETTERS, Inventory,
+                              build_option_set, draw_target_lane,
+                              kinds_for_rung)
 from .syllables_profiles import Profile, resolve as resolve_profile
-from .syllables_words import (Word, pool_syllable_lists, profile_words,
+from .syllables_words import (Word, all_words, pool_syllable_lists,
+                              profile_words,
                               speech_stem, syllable_lists, words_for)
 
 if TYPE_CHECKING:
@@ -353,6 +422,13 @@ class SetRecord:
     prompt_armed: bool = False
     prompted: bool = False
     pclass: str = ""
+    # The sectioned sitting: which section the set belonged to, the
+    # confusion family it taught and that family's level, and whether
+    # it closed with the answer shown after two wrong presses.
+    section: str = "pick"
+    family: str | None = None
+    family_level: int = 0
+    shown: bool = False
 
 
 @dataclass
@@ -416,6 +492,21 @@ class SyllablesMode(WaitSkip):
     # for reasons that have nothing to do with this game. 2.5 s until
     # 29 September 2026.
     MIN_FALL_S = 4.0
+    # The sectioned sitting (SECTIONS in the docstring). The card
+    # between sections, the speed check's mask, its answer window and
+    # the feedback hold after its answer, and its exposure staircase.
+    SECTION_CARD_S = 3.0
+    SPEED_MASK_S = 0.15
+    SPEED_LIMIT_S = 4.0
+    SPEED_FEEDBACK_S = 1.0
+    EXPO_STEP_S = 0.08
+    EXPO_MIN_S = 0.10
+    EXPO_MAX_S = 1.50
+    # A word's review share, and the build share of what is left.
+    REVIEW_MAX = 4
+    SPEED_MAX_LETTERS = 9
+    FOCUS_WORDS = 3
+    BUILD_SHARE = 0.3
 
     def __init__(self, engine: "GameEngine",
                  lanes: list[int],
@@ -454,6 +545,7 @@ class SyllablesMode(WaitSkip):
                  prompt_return_after: int | None = None,
                  age_band: str = "classic",
                  age=None,
+                 sections: bool = False,
                  ) -> None:
         self.engine = engine
         # The lanes of each playing hand, in the hand's own order
@@ -680,6 +772,263 @@ class SyllablesMode(WaitSkip):
         self._fall_trace: list[float] = [self._fall_now]
         self._fall_reversals: list[float] = []
 
+        # ---- the sectioned sitting (SECTIONS in the docstring) ----
+        # Every age profile plays it when syllables.sections is on;
+        # classic keeps the one-section block the study pre-registered.
+        self.sectioned = bool(sections) and prof.pid != "classic"
+        self.section_plan: list[tuple[str, int]] = (
+            self._plan_sections() if self.sectioned else [])
+        self.section_idx = 0
+        self.section = (self.section_plan[0][0] if self.section_plan
+                        else "pick")
+        self._section_words = 0
+        self._section_announced = False
+        self.still_tiles = self.sectioned
+        self.strip_closed = False
+        self._slots_shown: list[bool] = []
+        self._wrong_presses = 0
+        self.family_levels = {f: 0 for f in prof.families}
+        self._family_runs = {f: 0 for f in prof.families}
+        self.family_mastered: set[str] = set()
+        self._family_trace: list[str] = []
+        self._set_family: str | None = None
+        self._set_family_level = 0
+        self._set_family_n = 0
+        self._focus_family: str | None = None
+        self._focus_words = 0
+        self._focus_n = 0
+        self._focus_last: dict[str, int] = {}
+        # The speed check: the word flashed, the four words offered,
+        # and the exposure staircase.
+        self.speed_word: Word | None = None
+        self.speed_options: list[tuple[int, str, bool]] | None = None
+        self._speed_tlane: int | None = None
+        self._speed_presses: list[Press] = []
+        self._speed_done = 0
+        self._speed_records: list[dict] = []
+        self._speed_seen: set[str] = set()
+        self._expo_s = max(self.EXPO_MIN_S, prof.speed_expo_ms / 1000.0)
+        self._expo_run = 0
+        self._expo_dir = 0
+        self._expo_trace: list[float] = [self._expo_s]
+        self._expo_reversals: list[float] = []
+        self._speed_void = False
+        self._speed_reuse = False
+        self._expo_missed = False
+
+    # ---- the sectioned sitting ---------------------------------------------
+    def _plan_sections(self) -> list[tuple[str, int]]:
+        """The sitting's sections and their sizes, in the order the
+        programs that worked used (syllables-task-design.md, Section
+        6.1): review, hear and pick, build, then the speed check. The
+        words of the block are shared out: up to four to review, 30
+        percent of the rest to build, the others to pick. Speed trials
+        come on top, for the profiles that have them."""
+        total = self.words_total
+        review = min(self.REVIEW_MAX, total // 6)
+        rest = total - review
+        build = int(round(rest * self.BUILD_SHARE)) if rest >= 3 else 0
+        pick = rest - build
+        plan = [("review", review), ("pick", pick), ("build", build)]
+        if self.profile.speed_trials:
+            plan.append(("speed", 2 if self.demo
+                         else int(self.profile.speed_trials)))
+        return [(name, n) for name, n in plan if n > 0]
+
+    def _section_quota(self) -> int:
+        if not self.section_plan:
+            return 0
+        idx = min(self.section_idx, len(self.section_plan) - 1)
+        return int(self.section_plan[idx][1])
+
+    def _advance_section(self, now: float) -> None:
+        """A section is done: a sticker for finishing it, then the next
+        section's card, or nothing when it was the last (the block ends
+        at the next word boundary)."""
+        self._stickers += 1
+        self.sticker_flash_t = now
+        raw = getattr(self.engine, "raw_logger", None)
+        if raw:
+            raw.queue_event("syllables_sticker",
+                            detail=f"section={self.section}",
+                            hand=self.engine.hand_mode)
+        self.section_idx += 1
+        if self.section_idx >= len(self.section_plan):
+            return
+        self.section = self.section_plan[self.section_idx][0]
+        self._section_words = 0
+        self._enter_phase("section", now)
+        if raw:
+            raw.queue_event("syllables_section",
+                            detail=f"section={self.section}",
+                            hand=self.engine.hand_mode)
+
+    def _weak_now(self) -> bool:
+        """Whether the syllable in play is heard with a weak vowel, by
+        the rule _foil_kinds states, kept for the set being built."""
+        weak = (self.heard_weak(self.pos) if self.word is not None
+                else None)
+        if weak is None:
+            weak = (self.profile.guard_unstressed_vowels
+                    and self.word is not None
+                    and self.pos != self.word.stress
+                    and not self.chunks_spelt(
+                        self.word.syllables[self.pos]))
+        self._weak_set = bool(weak)
+        return bool(weak)
+
+    def _pick_family(self, weak: bool) -> str | None:
+        """The confusion family this set teaches: one the syllable can
+        show and the reader has not mastered, at the lowest level
+        reached, ties at random. None once every family that fits is
+        mastered, when the foils mix."""
+        chunk = self.word.syllables[self.pos] if self.word else ""
+        fams = []
+        for fam in self.profile.families:
+            if fam in self.family_mastered:
+                continue
+            if fam == "vowel" and weak:
+                continue
+            if fam == "reversal" and not (set(chunk) & REVERSIBLE_LETTERS):
+                continue
+            # Building already tests order: the word's other syllables
+            # sit in the lanes on every slot.
+            if fam == "order" and (self.n_syll < 2
+                                   or self.section == "build"):
+                continue
+            fams.append(fam)
+        if not fams:
+            return None
+        if self._focus_family in fams:
+            return self._focus_family
+        low = min(self.family_levels[f] for f in fams)
+        return self.rng.choice([f for f in fams
+                                if self.family_levels[f] == low])
+
+    def _advance_focus(self) -> None:
+        """The family the next words teach. Each family gets a short
+        block of FOCUS_WORDS words, then the next open family takes
+        over, lowest level first and the one taught longest ago on a
+        tie: a new contrast blocked for a few words, then mixed
+        (syllables-task-design.md, Sections 6.1 and 6.3). A syllable
+        that cannot show the focus family uses another open one."""
+        fam = self._focus_family
+        if (fam is not None and fam not in self.family_mastered
+                and self._focus_words < self.FOCUS_WORDS):
+            self._focus_words += 1
+            return
+        open_fams = [f for f in self.profile.families
+                     if f not in self.family_mastered]
+        if not open_fams:
+            self._focus_family = None
+            return
+        low = min(self.family_levels[f] for f in open_fams)
+        cands = [f for f in open_fams if self.family_levels[f] == low]
+        if len(cands) > 1 and fam in cands:
+            cands.remove(fam)
+        oldest = min(self._focus_last.get(f, -1) for f in cands)
+        pick = self.rng.choice([f for f in cands
+                                if self._focus_last.get(f, -1) == oldest])
+        self._focus_n += 1
+        self._focus_family = pick
+        self._focus_words = 1
+        self._focus_last[pick] = self._focus_n
+
+    def _mixed_kinds(self) -> tuple[str, ...]:
+        prof = self.profile
+        if prof.foil_weights:
+            names = sorted(prof.foil_weights)
+            return tuple(self.rng.choices(
+                names, weights=[prof.foil_weights[n] for n in names], k=3))
+        return tuple(kinds_for_rung(self.rung_max, self.homophone_foils))
+
+    def _section_kinds(self) -> tuple[str, ...]:
+        """The three foil kinds of a set in the sectioned sitting.
+        Review: unrelated chunks only, a warm-up solved at a glance.
+        Pick: the set's family at its level, one foil of it per level
+        and unrelated chunks for the rest, so a new contrast starts
+        easy. Build: one of the word's own syllables always, then the
+        family's foils. With every family mastered the foils mix."""
+        weak = self._weak_now()
+        if self.section == "review":
+            self._set_family, self._set_family_level = None, 0
+            return ("F1", "F1", "F1")
+        fam = self._pick_family(weak)
+        if fam is None:
+            self._set_family, self._set_family_level = "mix", 0
+            kinds = self._mixed_kinds()
+            if self.section == "build":
+                kinds = ("F6",) + tuple(k for k in kinds
+                                        if k != "F6")[:2]
+                kinds = kinds + ("F1",) * (3 - len(kinds))
+        else:
+            level = self.family_levels[fam]
+            self._set_family, self._set_family_level = fam, level
+            kind = FAMILY_KIND[fam]
+            if self.section == "build":
+                n = min(level, 2)
+                kinds = ("F6",) + (kind,) * n + ("F1",) * (2 - n)
+            else:
+                kinds = (kind,) * level + ("F1",) * (3 - level)
+        if weak:
+            kinds = tuple("F7" if k == "F3" else k for k in kinds)
+        return kinds
+
+    def _move_family(self, first_ok: bool) -> None:
+        """The per-family ladder: three unaided right first presses on
+        a family's sets raise it one level (one more of its foils in a
+        set), and at level 3 mark it mastered; an error takes it back a
+        level. A set whose family foil never made it on screen (the
+        generator had nothing legal) moves nothing."""
+        fam = self._set_family
+        if fam is None or fam == "mix" or fam not in self.family_levels:
+            return
+        level = self.family_levels[fam]
+        if level >= 1 and self._set_family_n == 0:
+            return
+        old = (level, fam in self.family_mastered)
+        if first_ok:
+            self._family_runs[fam] += 1
+            if self._family_runs[fam] >= 3:
+                self._family_runs[fam] = 0
+                if level < 3:
+                    self.family_levels[fam] = level + 1
+                else:
+                    self.family_mastered.add(fam)
+        else:
+            self._family_runs[fam] = 0
+            if level > 0:
+                self.family_levels[fam] = level - 1
+        new = (self.family_levels[fam], fam in self.family_mastered)
+        if new == old:
+            return
+        self._family_trace.append(
+            f"{fam}:{new[0]}{'m' if new[1] else ''}")
+        raw = getattr(self.engine, "raw_logger", None)
+        if raw:
+            raw.queue_event(
+                "family_change",
+                detail=(f"family={fam};level={new[0]};"
+                        f"mastered={1 if new[1] else 0};"
+                        f"set_idx={len(self._sets)}"),
+                hand=self.word_hand)
+
+    def _draw_review_word(self) -> Word:
+        """A review word: the shortest words the block's material
+        has, the warm-up the section is for."""
+        if self._bank_bands:
+            pool = [w for w in words_for("A", bilateral=self.bilateral)
+                    if w.word not in self._retired]
+        else:
+            real, _pseudo = profile_words(self.profile, self.band)
+            pool = [w for w in real if w.word not in self._retired]
+        if not pool:
+            return self._draw_word()
+        short = min(w.n_syll for w in pool)
+        pool = [w for w in pool if w.n_syll == short]
+        fresh = [w for w in pool if w.word not in self._seen_words]
+        return self.rng.choice(fresh or pool)
+
     # ---- geometry the screen and the keyboard note share ------------------
     def desk_row(self) -> list[int]:
         """Every playing lane in physical desk order, left to right.
@@ -752,15 +1101,20 @@ class SyllablesMode(WaitSkip):
     def current_timeout_s(self) -> float:
         """The set's response window, which is the RT censoring limit
         the engine writes into the trial row."""
+        if self.phase == "speed":
+            return self.SPEED_LIMIT_S
         return self.fall_s
 
     def eeg_stim_code(self) -> int | None:
         """The choice band: 50 for a set on a first attempt, 51 for a
-        set on a returned word. None everywhere else, so the model
-        keeps the ordinary 30-band cue-condition code."""
+        set on a returned word, 53 for the four words of a speed
+        trial. None everywhere else, so the model keeps the ordinary
+        30-band cue-condition code."""
+        from ...hardware import eeg_trigger
+        if self.phase == "speed":
+            return eeg_trigger.CODES["stim_choice_speed"]
         if self.phase != "choose":
             return None
-        from ...hardware import eeg_trigger
         return eeg_trigger.CODES[
             "stim_choice_set_return" if self.ret else "stim_choice_set"]
 
@@ -880,6 +1234,21 @@ class SyllablesMode(WaitSkip):
             self.active = None
             self.option_set = None
             self._begin_word(time.perf_counter(), reuse_word=True)
+        elif self.phase in ("flash", "mask") or (
+                self.phase == "speed" and self.active is not None):
+            # A speed trial cut by a pause is flashed again: the
+            # exposure is the measure, and a pause inside it spoils it.
+            raw = getattr(self.engine, "raw_logger", None)
+            if raw and self.phase == "speed":
+                raw.queue_event(
+                    "trial_restart",
+                    detail=(f"old_trial_id={self.trial_counter};"
+                            f"new_trial_id={self.trial_counter + 1};"
+                            f"phase=speed"),
+                    hand=self.engine.hand_mode)
+            self.active = None
+            self.speed_options = None
+            self._begin_speed_trial(time.perf_counter(), reuse=True)
 
     def handle_event(self, e: pygame.event.Event) -> None:
         if (e.type == pygame.KEYDOWN and e.key == pygame.K_r
@@ -911,12 +1280,16 @@ class SyllablesMode(WaitSkip):
     def replay(self) -> bool:
         """Say this set's chunk once more (R on the keyboard, the
         supervisor's key for a child). Once per set, logged, and the
-        set is kept out of the adult threshold."""
+        set is kept out of the adult threshold. While building, the
+        whole word is said instead: the chunk is the answer."""
         if (self.phase != "choose" or self.option_set is None
                 or self._replayed or self._set_close_t is not None):
             return False
         self._replayed = True
-        self._speak_syllable(self.pos)
+        if self.sectioned and self.section == "build":
+            self._speak_word()
+        else:
+            self._speak_syllable(self.pos)
         raw = getattr(self.engine, "raw_logger", None)
         if raw:
             raw.queue_event("replay", t_perf=time.perf_counter(),
@@ -947,9 +1320,12 @@ class SyllablesMode(WaitSkip):
         elif self.phase == "attend":
             if now >= self._phase_until:
                 # Adults hear the word and go straight to the choice:
-                # a modelled, printed chunk is an answer to copy.
-                self._enter_phase("model" if self.profile.model
-                                  else "choose", now)
+                # a modelled, printed chunk is an answer to copy. A
+                # word to build is heard whole and never modelled: the
+                # parts are the answer.
+                model = self.profile.model and not (
+                    self.sectioned and self.section == "build")
+                self._enter_phase("model" if model else "choose", now)
         elif self.phase == "model":
             self._update_model(now)
         elif self.phase == "choose":
@@ -957,6 +1333,17 @@ class SyllablesMode(WaitSkip):
         elif self.phase == "complete":
             if self._phase_until is not None and now >= self._phase_until:
                 self._after_word(now)
+        elif self.phase == "section":
+            if self._phase_until is not None and now >= self._phase_until:
+                self._begin_word(now)
+        elif self.phase == "flash":
+            if now >= self._phase_until:
+                self._enter_phase("mask", now)
+        elif self.phase == "mask":
+            if now >= self._phase_until:
+                self._spawn_speed(now)
+        elif self.phase == "speed":
+            self._update_speed(now)
 
     # ---- word flow ---------------------------------------------------------
     def _due_return(self) -> dict | None:
@@ -968,11 +1355,29 @@ class SyllablesMode(WaitSkip):
         return None
 
     def _begin_word(self, now: float, reuse_word: bool = False) -> None:
+        if self.sectioned and not self._section_announced:
+            # The first section gets its card too, before its first
+            # word.
+            self._section_announced = True
+            self._enter_phase("section", now)
+            raw = getattr(self.engine, "raw_logger", None)
+            if raw:
+                raw.queue_event("syllables_section",
+                                detail=f"section={self.section}",
+                                hand=self.engine.hand_mode)
+            return
+        if self.sectioned and self.section == "speed":
+            self._begin_speed_trial(now)
+            return
         # Returns over the cap are let go BEFORE the completion check,
         # or a block whose every word missed would keep drawing fresh
         # words for ever: the due entry blocked the "block finished"
-        # branch and then fell through to a fresh draw.
-        entry = self._due_return()
+        # branch and then fell through to a fresh draw. In the
+        # sectioned sitting a word returns only to hear and pick or to
+        # build, never to the review.
+        entry = (self._due_return()
+                 if not self.sectioned or self.section in ("pick", "build")
+                 else None)
         while entry is not None and self._returns_started >= self.MAX_RETURNS:
             self._parked.remove(entry)
             self._retire(entry, "return_cap")
@@ -1009,6 +1414,9 @@ class SyllablesMode(WaitSkip):
                     self.word = ease
                     self._ease_word = True
                     self._n_ease_in += 1
+                elif self.sectioned and self.section == "review":
+                    self.word = self._draw_review_word()
+                    self._ease_word = False
                 else:
                     self.word = self._draw_word()
                     self._ease_word = False
@@ -1018,6 +1426,9 @@ class SyllablesMode(WaitSkip):
                     parked["remaining"] -= 1
         if self.word is not None:
             self._seen_words.add(self.word.word)
+        if (self.sectioned and not restart
+                and self.section in ("pick", "build")):
+            self._advance_focus()
         self.band_celebrate = None
         self.filled = [None] * self.n_syll
         self.filled_lanes = [None] * self.n_syll
@@ -1027,7 +1438,16 @@ class SyllablesMode(WaitSkip):
         self._set_presses = []
         self._dead_lanes = set()
         self._last_tap_t = {}
-        self._word_printed = self.show_print
+        self.strip_closed = False
+        self._slots_shown = [False] * self.n_syll
+        # Speech still queued from the word before (a skipped
+        # read-back) must not play over this one.
+        self._speech_queue = []
+        # A word to build is heard, not shown, past a young child's
+        # first rungs: its spelling is the answer.
+        self._word_printed = self.show_print and not (
+            self.sectioned and self.section == "build"
+            and self.profile.pid != "6-9")
         self._enter_phase("attend", now)
         self._speak_word()
 
@@ -1060,6 +1480,14 @@ class SyllablesMode(WaitSkip):
             self._phase_until = now + self.inter_trial_gap_s
             self.arm_wait("gap", self._phase_until,
                           self._skip_to_next_word, started_at=now)
+        elif phase == "section":
+            self._phase_until = now + self.SECTION_CARD_S
+            self.arm_wait("stage", self._phase_until,
+                          self._skip_to_next_word, started_at=now)
+        elif phase == "flash":
+            self._phase_until = now + self._expo_s
+        elif phase == "mask":
+            self._phase_until = now + self.SPEED_MASK_S
 
     def _skip_to_next_word(self, now: float) -> None:
         self._begin_word(now)
@@ -1215,7 +1643,8 @@ class SyllablesMode(WaitSkip):
         of the call so nothing is heard, felt or highlighted. A cue on
         the target lane here would hand the child the answer."""
         lanes = self.active_lanes()
-        kinds = self._foil_kinds()
+        kinds = (self._section_kinds() if self.sectioned
+                 else self._foil_kinds())
         self.option_set = build_option_set(
             self.word, self.pos, self.rung, self.rng, self.inventory,
             lanes, self._lane_targets, self._recent_target_lanes,
@@ -1224,6 +1653,10 @@ class SyllablesMode(WaitSkip):
                    else frozenset()))
         self._replayed = False
         self._set_voided = False
+        self._wrong_presses = 0
+        fkind = FAMILY_KIND.get(self._set_family or "")
+        self._set_family_n = (sum(1 for o in self.option_set.options
+                                  if o.kind == fkind) if fkind else 0)
         tlane = self.option_set.target_lane
         self._lane_targets[tlane] = self._lane_targets.get(tlane, 0) + 1
         self._recent_target_lanes.append(tlane)
@@ -1251,7 +1684,10 @@ class SyllablesMode(WaitSkip):
         self._glow_t = None
         self.lift_t = None
         self._last_tap_t = {}
-        self._respeak = self.rung in self.respeak_rungs
+        # Never while building: the syllable spoken is the answer.
+        self._respeak = (self.rung in self.respeak_rungs
+                         and not (self.sectioned
+                                  and self.section == "build"))
         raw = getattr(self.engine, "raw_logger", None)
         if raw:
             raw.queue_event(
@@ -1306,6 +1742,9 @@ class SyllablesMode(WaitSkip):
         return kinds
 
     def _handle_press(self, ev: PressEvent, now: float) -> None:
+        if self.phase == "speed":
+            self._handle_speed_press(ev, now)
+            return
         if (self.phase != "choose" or self.option_set is None
                 or self._set_close_t is not None):
             # No penalty anywhere in this mode: a child fidgeting
@@ -1343,6 +1782,16 @@ class SyllablesMode(WaitSkip):
             if self.active is not None:
                 self.active.incorrect_presses.append((ev.lane, ev.t_perf))
                 self.engine.eeg_wrong_press(self.active.incorrect_presses)
+            # The sectioned sitting allows one more try, then shows the
+            # answer: a child who guesses through all four learns
+            # nothing a told answer would not teach (Butler, Karpicke
+            # and Roediger 2007), and the right answer seen soon after
+            # an error keeps a lure from sticking (Marsh, Fazio and
+            # Goswick 2012).
+            if self.sectioned:
+                self._wrong_presses += 1
+                if self._wrong_presses >= 2:
+                    self._show_answer(max(now, ev.t_perf), shown=True)
         elif kind == KIND_ANTICIP:
             # Inside the spawn lockout: ignored by the score, but a
             # press all the same, marked as a false start at its own
@@ -1376,8 +1825,30 @@ class SyllablesMode(WaitSkip):
         """The set left the screen unanswered: the target tile glows on
         its way out and the syllable is spoken once. The word stops
         here and comes back later."""
+        if self.sectioned:
+            self._show_answer(now, shown=False)
+            return
         self._glow_t = now
         self._score_set(now, None)
+        self._speak_syllable(self.pos)
+        self._set_close_t = now + self.MISS_GLOW_S
+
+    def _show_answer(self, now: float, shown: bool) -> None:
+        """The sectioned sitting's answer display, after two wrong
+        presses (shown) or a set that ran out of time: the right tile
+        glows, its syllable is heard, and it fills its slot marked as
+        shown, not found, so the word still ends whole. The word comes
+        back later."""
+        if self.option_set is None:
+            return
+        target = self.option_set.target
+        self._glow_t = now
+        self._prompt_due = None
+        self._score_set(now, None, shown=shown)
+        if 0 <= self.pos < len(self._slots_shown) and not self._set_voided:
+            self.filled[self.pos] = target
+            self.filled_lanes[self.pos] = None
+            self._slots_shown[self.pos] = True
         self._speak_syllable(self.pos)
         self._set_close_t = now + self.MISS_GLOW_S
 
@@ -1394,6 +1865,16 @@ class SyllablesMode(WaitSkip):
             self._set_voided = False
             self._next_spawn_t = now + self.set_gap_s
             return
+        if self.sectioned:
+            # The word carries on through a shown answer, so it always
+            # ends whole and is read back.
+            self.pos += 1
+            if self.pos >= self.n_syll:
+                self._enter_phase("complete", now)
+                self._read_whole(now)
+                return
+            self._next_spawn_t = now + self.set_gap_s
+            return
         if missed:
             self._park_word(now)
             self._finish_word(now, completed=False)
@@ -1406,10 +1887,12 @@ class SyllablesMode(WaitSkip):
         self._next_spawn_t = now + self.set_gap_s
 
     # ---- scoring -----------------------------------------------------------
-    def _score_set(self, now: float, correct_t: float | None) -> None:
+    def _score_set(self, now: float, correct_t: float | None,
+                   shown: bool = False) -> None:
         """Close one option set: label it, log its row, move the
-        staircase. Called once per set, either at the correct press or
-        at the exit line."""
+        staircase. Called once per set, either at the correct press, at
+        the exit line, or (sectioned) when two wrong presses show the
+        answer."""
         trial = self.active
         if trial is None or self.word is None or self.option_set is None:
             return
@@ -1417,6 +1900,8 @@ class SyllablesMode(WaitSkip):
         first = self._first_kind or "none"
         if correct_t is not None:
             err = "ok" if first == "ok" else "wrong_first"
+        elif shown:
+            err = "shown"
         else:
             err = "miss"
         # A set that left the screen unanswered while this hand's
@@ -1467,6 +1952,10 @@ class SyllablesMode(WaitSkip):
             prompt_armed=self._prompt_armed,
             prompted=self._prompted_t is not None,
             pclass=pclass,
+            section=self.section if self.sectioned else "pick",
+            family=self._set_family if self.sectioned else None,
+            family_level=self._set_family_level if self.sectioned else 0,
+            shown=(err == "shown"),
         )
         if voided:
             self._voided_sets.append(rec)
@@ -1479,7 +1968,8 @@ class SyllablesMode(WaitSkip):
                 self._set_falls.append(self.fall_s)
             if pclass == "unprompted_correct" and rt_ms is not None:
                 self._answer_rts.append(float(rt_ms) / 1000.0)
-            self._update_prompt_fade(pclass, missed=(err == "miss"))
+            self._update_prompt_fade(pclass,
+                                     missed=(err in ("miss", "shown")))
         # The EEG response marker must lock to the child's own press,
         # so it is the first press that was neither an anticipation nor
         # an off-hand press; outcome.rt_ms is spawn-to-correct-press,
@@ -1512,6 +2002,12 @@ class SyllablesMode(WaitSkip):
         if voided:
             self._set_voided = True
             return
+        if self.sectioned and self.section == "review":
+            # The review is a warm-up at a glance: it moves no ladder.
+            return
+        if (self.sectioned and self._source_alive()
+                and pclass != "prompted_correct"):
+            self._move_family(pclass == "unprompted_correct")
         if self._source_alive() and pclass != "prompted_correct":
             # The staircase reads answers found alone: a set the
             # prompt helped neither makes the foils harder nor easier
@@ -1653,9 +2149,11 @@ class SyllablesMode(WaitSkip):
                 detail=f"word={name};reason={reason}",
                 hand=self.word_hand)
 
-    def _finish_word(self, now: float, completed: bool) -> None:
+    def _finish_word(self, now: float, completed: bool,
+                     advance: bool = True) -> None:
         """Close the word attempt: the record the band gate, the streak
-        and the ease-in draw all work from."""
+        and the ease-in draw all work from. advance False leaves the
+        next phase to the caller (the sectioned sitting's read-back)."""
         if self.word is None:
             return
         # Only the sets of THIS attempt, which is the tail of the list:
@@ -1711,19 +2209,52 @@ class SyllablesMode(WaitSkip):
             self._recent.append(label != "Miss")
             self._since_band_change += 1
             self._maybe_move_band()
-        if not completed:
+        if not completed and advance:
             self._enter_phase("gap", now)
             self._after_word_bookkeeping(now)
 
     def _after_word(self, now: float) -> None:
-        """Leaving the COMPLETE card: close the word, then the gap."""
+        """Leaving the COMPLETE card: close the word, then the gap. In
+        the sectioned sitting a word with a shown slot was not found
+        whole, so it is booked as missed and comes back later."""
+        if self.sectioned:
+            found = not any(self._slots_shown)
+            self._finish_word(now, completed=found, advance=False)
+            if not found and self.section in ("pick", "build"):
+                self._park_word(now)
+            self._enter_phase("gap", now)
+            self._after_word_bookkeeping(now)
+            return
         self._finish_word(now, completed=True)
         self._enter_phase("gap", now)
         self._after_word_bookkeeping(now)
 
+    def _read_whole(self, now: float) -> None:
+        """The last step of every word in the sectioned sitting: the
+        slots close into one word, held silently long enough for the
+        reader to decode it, and only then is it heard. Children store
+        a spelling mainly by decoding it themselves (Share 1999; Kyte
+        and Johnson 2006), so the voice confirms rather than tells."""
+        self.strip_closed = True
+        hold = max(0.0, float(self.profile.read_hold_s))
+        self._speech_queue.append((now + hold, None))
+        said = 0.8
+        if self.word is not None and self.speech_backend not in ("off",
+                                                                 "say"):
+            said = max(said, self.speech_seconds(
+                self.speech_path(self.word.word)))
+        self._phase_until = now + max(self.complete_s, hold + said + 1.0)
+        self.arm_wait("feedback", self._phase_until,
+                      self._skip_complete, started_at=now)
+
     def _after_word_bookkeeping(self, now: float) -> None:
         if self.ret == 0:
             self.words_done += 1
+            if self.sectioned:
+                self._section_words += 1
+                if self._section_words >= self._section_quota():
+                    self._advance_section(now)
+                return
             self._round_rewards(now)
             self._maybe_break(now)
 
@@ -1805,7 +2336,307 @@ class SyllablesMode(WaitSkip):
         parts.append(f"lex={getattr(self.word, 'lex', 'word')}")
         parts.append(f"print={1 if self._word_printed else 0}")
         parts.append(f"replay={1 if self._replayed else 0}")
+        if self.sectioned:
+            parts.append(f"sec={rec.section}")
+            parts.append(f"fam={rec.family or ''}")
+            parts.append(f"flv={rec.family_level}")
+            parts.append(f"fn={self._set_family_n}")
+            parts.append(f"shown={1 if rec.shown else 0}")
         return ";".join(parts)
+
+    # ---- the speed check (sectioned, 10 and over) -------------------------
+    def _begin_speed_trial(self, now: float, reuse: bool = False) -> None:
+        """One speed trial: a whole word flashed, a mask, then four
+        words to pick it from. Practice and a fluency measure at the
+        end of the sitting (SECTIONS in the docstring); not claimed to
+        improve reading."""
+        reuse = reuse or self._speed_reuse
+        self._speed_reuse = False
+        if not reuse or self.speed_word is None:
+            if self._speed_done >= self._section_quota():
+                self._end("completed")
+                return
+            if (self._t0 is not None
+                    and (now - self._t0) > self.session_cap_s):
+                self._end("time_cap")
+                return
+            self.speed_word = self._draw_speed_word()
+            if self.speed_word is None:
+                self._end("completed")
+                return
+            self.word_hand = self._next_hand()
+        self.speed_options = None
+        self._speed_tlane = None
+        self._speed_presses = []
+        self.option_set = None
+        self.active = None
+        self._spawn_t = None
+        self._exit_t = None
+        self._set_close_t = None
+        self._glow_t = None
+        self.lift_t = None
+        self._enter_phase("flash", now)
+
+    def _speed_pool(self) -> list[Word]:
+        """Real words short enough to take in at a glance and to fit
+        four across the screen at a readable size: the profile's own,
+        plus the bank's bands B and C so an adult pool of long words
+        still has enough."""
+        real, _pseudo = profile_words(self.profile, self.band)
+        extra = [w for w in all_words() if w.band in ("B", "C")]
+        seen: set[str] = set()
+        out: list[Word] = []
+        for w in list(real) + extra:
+            if (w.word in seen or w.n_syll < 2
+                    or len(w.word) > self.SPEED_MAX_LETTERS):
+                continue
+            seen.add(w.word)
+            out.append(w)
+        return out or list(real)
+
+    def _draw_speed_word(self) -> Word | None:
+        real = self._speed_pool()
+        pool = [w for w in real if w.word not in self._speed_seen]
+        if not pool:
+            pool = list(real)
+        if not pool:
+            return None
+        word = self.rng.choice(pool)
+        self._speed_seen.add(word.word)
+        return word
+
+    def _speed_choices(self, word: Word) -> list[str]:
+        """Three other words that look like the one flashed: the same
+        number of syllables, the same first letter where possible and a
+        length within two letters, so the pick needs the whole word."""
+        cands = [w for w in self._speed_pool() if w.word != word.word]
+        same = [w for w in cands if w.n_syll == word.n_syll] or cands
+
+        def closeness(w: Word) -> tuple:
+            return (w.word[:1] != word.word[:1],
+                    abs(len(w.word) - len(word.word)))
+        same.sort(key=closeness)
+        near = same[:12] if len(same) > 12 else same
+        picks: list[str] = []
+        for w in self.rng.sample(near, len(near)):
+            if w.word not in picks:
+                picks.append(w.word)
+            if len(picks) == 3:
+                break
+        return picks
+
+    def _spawn_speed(self, now: float) -> None:
+        word = self.speed_word
+        lanes = self.active_lanes()
+        others = self._speed_choices(word)
+        tlane = draw_target_lane(lanes, self._lane_targets,
+                                 self._recent_target_lanes, self.rng)
+        self._lane_targets[tlane] = self._lane_targets.get(tlane, 0) + 1
+        self._recent_target_lanes.append(tlane)
+        rest = [lane for lane in lanes if lane != tlane]
+        self.rng.shuffle(rest)
+        opts = [(tlane, word.word, True)]
+        opts += [(lane, text, False) for lane, text in zip(rest, others)]
+        self.speed_options = sorted(opts)
+        self._speed_tlane = tlane
+        self.trial_counter += 1
+        self.active = PendingTrial(trial_id=self.trial_counter, lane=tlane,
+                                   stim_t_perf=now, keys_pressed=[],
+                                   incorrect_presses=[])
+        self._spawn_t = now
+        self._exit_t = now + self.SPEED_LIMIT_S
+        self._set_close_t = None
+        self._enter_phase("speed", now)
+        raw = getattr(self.engine, "raw_logger", None)
+        if raw:
+            raw.queue_event(
+                "speed_spawn", lane=tlane, t_perf=now,
+                detail=(f"trial_id={self.trial_counter};word={word.word};"
+                        f"expo={self._expo_s * 1000.0:.0f}"),
+                hand=self.word_hand)
+        self.silent_stim = True
+        try:
+            self.engine.on_stim_multi(lanes, self.trial_counter, now,
+                                      buzz=False)
+        finally:
+            self.silent_stim = False
+
+    def _update_speed(self, now: float) -> None:
+        if self._set_close_t is not None:
+            if now >= self._set_close_t:
+                self._close_speed(now)
+            return
+        if self._exit_t is not None and now >= self._exit_t:
+            self._glow_t = now
+            self._score_speed(now, None, wrong=False)
+            self._set_close_t = now + self.SPEED_FEEDBACK_S
+
+    def _handle_speed_press(self, ev: PressEvent, now: float) -> None:
+        """One press answers a speed trial: the four words stay still,
+        and a second look is not the measure."""
+        if self._set_close_t is not None or self.speed_options is None:
+            self._eeg_press_byte(EEG_CODES["resp_idle"], ev)
+            return
+        if ev.lane not in self.active_lanes():
+            return
+        last = self._last_tap_t.get(ev.lane)
+        if last is not None and (ev.t_perf - last) < self.tap_debounce_s:
+            return
+        self._last_tap_t[ev.lane] = ev.t_perf
+        peak = self._peak_for(ev)
+        if (self._spawn_t is not None
+                and ev.t_perf < self._spawn_t + self.spawn_lockout_s):
+            self._speed_presses.append(Press(ev.lane, ev.t_perf,
+                                             KIND_ANTICIP, peak))
+            code = response_code("anticipation", ev.lane)
+            if code is not None:
+                self._eeg_press_byte(code, ev)
+            return
+        correct = ev.lane == self._speed_tlane
+        self._speed_presses.append(Press(
+            ev.lane, ev.t_perf, KIND_CORRECT if correct else KIND_WRONG,
+            peak))
+        if self.active is not None:
+            self.active.keys_pressed.append(ev.lane)
+        if correct:
+            self.lift_t = ev.t_perf
+            self._score_speed(now, ev.t_perf)
+        else:
+            if self.active is not None:
+                self.active.incorrect_presses.append((ev.lane, ev.t_perf))
+                self.engine.eeg_wrong_press(self.active.incorrect_presses)
+            self._glow_t = ev.t_perf
+            self._score_speed(now, None, wrong=True)
+        self._set_close_t = max(now, ev.t_perf) + self.SPEED_FEEDBACK_S
+
+    def _score_speed(self, now: float, correct_t: float | None,
+                     wrong: bool = False) -> None:
+        trial = self.active
+        if trial is None or self.speed_word is None:
+            return
+        self.active = None
+        rt_ms = ((correct_t - self._spawn_t) * 1000.0
+                 if correct_t is not None and self._spawn_t is not None
+                 else None)
+        # A trial nobody answered while this hand's board was away is
+        # the rig's: logged as device_drop, flashed again, and kept
+        # out of the staircase and the threshold.
+        voided = (correct_t is None and not wrong
+                  and not trial.incorrect_presses and self._rig_void(now))
+        if correct_t is not None:
+            first, err, label = "ok", "ok", "Great"
+        elif wrong:
+            first, err, label = "wrong", "wrong_first", "Miss"
+        elif voided:
+            first, err, label = "none", "device_drop", "Miss"
+        else:
+            first, err, label = "none", "miss", "Miss"
+        points = (self.score_cfg.great_points if label == "Great"
+                  else self.score_cfg.miss_points)
+        outcome = TrialResult(label=label, points=points, rt_ms=rt_ms)
+        rec = {"word": self.speed_word.word, "expo_ms":
+               round(self._expo_s * 1000.0), "first": first, "err": err,
+               "rt_ms": rt_ms, "nsyll": self.speed_word.n_syll,
+               "hand": self.word_hand}
+        if voided:
+            self._speed_void = True
+        else:
+            self._speed_records.append(rec)
+        resp_t = next((p.t_perf for p in self._speed_presses
+                       if p.kind in (KIND_CORRECT, KIND_WRONG)), None)
+        if resp_t is None and label == "Miss":
+            resp_t = next((p.t_perf for p in self._speed_presses
+                           if p.kind == KIND_ANTICIP), None)
+        self.engine.log_trial(
+            trial, outcome, now, stimulus=self._pack_speed(rec),
+            correct_lanes=[self._speed_tlane],
+            error_type=("" if label == "Great" else err),
+            response_t_perf=resp_t, hand=self.word_hand)
+        if not voided and self._source_alive():
+            self._move_expo(first == "ok")
+
+    def _move_expo(self, ok: bool) -> None:
+        """The exposure staircase. Until the first wrong answer, each
+        right answer shows the next word 80 ms shorter, so a fluent
+        reader reaches their range in a few trials; after it, three
+        right answers in a row take 80 ms off and a wrong answer or no
+        answer adds 80 ms, inside 100 ms to 1.5 s. 3-down-1-up settles
+        near 79 percent correct (Levitt 1971). The threshold is the
+        mean exposure at the reversals after the first, once there are
+        two; a run this short gives a rough one, so the final exposure
+        and the accuracy are kept beside it. Exposures are whole
+        display frames in practice (about 17 ms at 60 Hz)."""
+        old = self._expo_s
+        if ok:
+            self._expo_run += 1
+            if self._expo_run >= (3 if self._expo_missed else 1):
+                self._expo_run = 0
+                self._expo_s = max(self.EXPO_MIN_S,
+                                   round(old - self.EXPO_STEP_S, 3))
+        else:
+            self._expo_missed = True
+            self._expo_run = 0
+            self._expo_s = min(self.EXPO_MAX_S,
+                               round(old + self.EXPO_STEP_S, 3))
+        if self._expo_s == old:
+            return
+        direction = 1 if self._expo_s > old else -1
+        if self._expo_dir and direction != self._expo_dir:
+            self._expo_reversals.append(old)
+        self._expo_dir = direction
+        self._expo_trace.append(self._expo_s)
+
+    def _close_speed(self, now: float) -> None:
+        self.speed_options = None
+        self._speed_tlane = None
+        self._spawn_t = None
+        self._exit_t = None
+        self._set_close_t = None
+        self._glow_t = None
+        self.lift_t = None
+        if self._speed_void:
+            self._speed_void = False
+            self._speed_reuse = True
+        else:
+            self._speed_done += 1
+        self._enter_phase("gap", now)
+
+    def _pack_speed(self, rec: dict) -> str:
+        opts = ",".join(f"{lane + 1}:{text}:{'t' if tgt else 'f'}"
+                        for lane, text, tgt in (self.speed_options or []))
+        presses = ",".join(
+            f"{p.lane + 1}:"
+            f"{(p.t_perf - (self._spawn_t or p.t_perf)) * 1000.0:.1f}:"
+            + (f"{p.peak:.1f}" if p.peak is not None else "")
+            + f":{p.kind}"
+            for p in self._speed_presses)
+        rt = rec["rt_ms"]
+        return ";".join([
+            rec["word"], "sec=speed", f"nsyll={rec['nsyll']}",
+            f"expo={rec['expo_ms']}",
+            f"hand={'L' if rec['hand'] == 'left' else 'R'}",
+            f"opts={opts}",
+            f"tlane={(self._speed_tlane or 0) + 1}",
+            f"presses={presses}", f"first={rec['first']}",
+            f"err={rec['err']}",
+            f"rt={rt:.1f}" if rt is not None else "rt=",
+            f"prof={self.profile.pid}", "lex=word",
+            f"sup={1 if self.supervised else 0}",
+        ])
+
+    def speed_threshold(self) -> dict:
+        recs = self._speed_records
+        revs = self._expo_reversals[1:]
+        return {
+            "n": len(recs),
+            "acc": (round(sum(1 for r in recs if r["first"] == "ok")
+                          / len(recs), 3) if recs else None),
+            "expo_final_ms": round(self._expo_s * 1000.0),
+            "expo_reversal_mean_ms": (round(sum(revs) / len(revs) * 1000.0)
+                                      if len(revs) >= 2 else None),
+            "n_reversals": len(self._expo_reversals),
+            "expo_trace_ms": [round(v * 1000.0) for v in self._expo_trace],
+        }
 
     # ---- rewards and rounds ------------------------------------------------
     @property
@@ -2281,5 +3112,43 @@ class SyllablesMode(WaitSkip):
                 / n_sets, 3) if n_sets else None),
             **({"fall_threshold": self.fall_threshold()}
                if self.fall_mode else {}),
+            **({"sections": self._section_stats()}
+               if self.sectioned else {}),
             **self.wait_skip_stats(),
+        }
+
+    def _section_stats(self) -> dict:
+        """The sectioned sitting's own numbers: first-press accuracy
+        per section and per confusion family, where each family's
+        ladder ended, how many answers were shown after two wrong
+        presses, and the speed check's threshold."""
+        sets = self._sets
+
+        def _acc(rows: list[SetRecord]) -> dict:
+            n = len(rows)
+            ok = sum(1 for s in rows if s.first == "ok")
+            return {"n": n, "acc": round(ok / n, 3) if n else None}
+
+        by_section = {name: _acc([s for s in sets if s.section == name])
+                      for name, _n in self.section_plan
+                      if name != "speed"}
+        families = {}
+        for fam in self.profile.families:
+            rows = [s for s in sets if s.family == fam]
+            families[fam] = {**_acc(rows),
+                             "level": self.family_levels.get(fam, 0),
+                             "mastered": fam in self.family_mastered}
+        return {
+            "plan": [[name, n] for name, n in self.section_plan],
+            "reached": (self.section_plan[min(
+                self.section_idx, len(self.section_plan) - 1)][0]
+                if self.section_plan else None),
+            "by_section": by_section,
+            "families": families,
+            "mixed_sets": _acc([s for s in sets if s.family == "mix"]),
+            "family_trace": list(self._family_trace),
+            "n_shown": sum(1 for s in sets if s.shown),
+            **({"speed": self.speed_threshold()}
+               if any(name == "speed" for name, _n in self.section_plan)
+               else {}),
         }

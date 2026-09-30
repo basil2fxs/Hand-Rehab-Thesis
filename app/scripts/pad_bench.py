@@ -18,8 +18,11 @@ masses and back down, then pad 1 holds half the rated load for ten
 minutes. It reports each pad's slope in counts per newton against the
 nominal 51.2, its linearity error and hysteresis in percent of full
 scale, and its noise at rest, then the drift at one minute and at the
-end of the hold. The label names the set, so both sets' files sit side
-by side.
+end of the hold. It also keeps the other three pads' readings at
+every step, for the cross-talk: how many counts a pad shows per count
+on the loaded one, the mechanical part of what the enslaving numbers
+measure. The label names the set, so both sets' files sit side by
+side.
 
     python3 app/scripts/pad_bench.py --characterise --label calibrated
     python3 app/scripts/pad_bench.py --characterise --label uncalibrated
@@ -193,6 +196,8 @@ def drift_pct(samples, slope: float, at_s, rated_n: float = RATED_N,
 
 
 def _reading(board, pad: int, prompt: str):
+    """The loaded pad's mean, SD and sample count over READ_S, and the
+    mean of every pad over the same samples (for the cross-talk)."""
     input(prompt)
     time.sleep(0.5)
     got = board.read(READ_S)
@@ -201,8 +206,29 @@ def _reading(board, pad: int, prompt: str):
         print("  no samples: is the board still connected?")
         return None
     mean, sd = statistics.mean(vals), statistics.pstdev(vals)
+    every = [statistics.mean(v[k] for _t, v in got) for k in range(4)]
     print(f"  {mean:7.1f} counts (sd {sd:.1f}, {len(vals)} samples)")
-    return mean, sd, len(vals)
+    return mean, sd, len(vals), every
+
+
+def crosstalk_pct(points, pad: int) -> dict:
+    """Counts each other pad shows per 100 counts on the loaded one,
+    from the loading steps: the least-squares slope of the other pad's
+    mean on the loaded pad's mean. points: (grams, phase, means of the
+    four pads). A pad that bends under its neighbour, or a frame that
+    carries the load across, shows here; a finger that spills force
+    into its neighbours cannot, because no finger is on the rig."""
+    load = [(ph, every) for _g, ph, every in points if ph == "load"]
+    if len(load) < 3:
+        return {}
+    xs = [every[pad] for _ph, every in load]
+    out = {}
+    for k in range(4):
+        if k == pad:
+            continue
+        slope, _icpt, _r2 = _fit(xs, [every[k] for _ph, every in load])
+        out[k] = 100.0 * slope
+    return out
 
 
 def _write(path: Path, rows: list[dict]) -> None:
@@ -225,7 +251,7 @@ def run_check(board, masses) -> int:
                                        f"Press Enter, then hands off...")
             if got is None:
                 continue
-            mean, sd, n = got
+            mean, sd, n, _every = got
             pts.append((grams, mean, sd))
             rows.append({"pad": pad + 1, "finger": name, "grams": grams,
                          "mean_counts": round(mean, 2),
@@ -291,9 +317,11 @@ def run_characterise(board, masses, hold_g: float, hold_min: float,
     rows = []
     summary = []
     figures = {}
+    cross = {}
     for pad in range(4):
         name = FINGERS[pad]
         pts = []
+        every_pts = []
         for phase, grams in load_order(masses):
             what = "nothing on it" if grams == 0 else f"{grams:g} g"
             way = "up" if phase == "load" else "down"
@@ -302,13 +330,17 @@ def run_characterise(board, masses, hold_g: float, hold_min: float,
                                        f"then hands off...")
             if got is None:
                 continue
-            mean, sd, n = got
+            mean, sd, n, every = got
             pts.append((grams, phase, mean, sd))
+            every_pts.append((grams, phase, every))
             rows.append({"label": label, "pad": pad + 1, "finger": name,
                          "grams": grams, "newtons": round(newtons(grams), 4),
                          "phase": phase, "mean_counts": round(mean, 2),
-                         "sd_counts": round(sd, 2), "n": n})
+                         "sd_counts": round(sd, 2), "n": n,
+                         "all_pads_counts": ";".join(f"{v:.2f}"
+                                                     for v in every)})
         figures[pad] = characterise_pad(pts)
+        cross[pad] = crosstalk_pct(every_pts, pad)
     hold_s = hold_min * 60.0
     input(f"\nDrift: stand {hold_g:g} g on pad 1 (index) and press Enter. "
           f"Hands off for {hold_min:g} min...")
@@ -325,7 +357,7 @@ def run_characterise(board, masses, hold_g: float, hold_min: float,
                          "grams": hold_g,
                          "newtons": round(newtons(hold_g), 4),
                          "phase": f"hold_{t:.1f}s", "mean_counts": c,
-                         "sd_counts": "", "n": 1})
+                         "sd_counts": "", "n": 1, "all_pads_counts": ""})
     for pad, fig in sorted(figures.items()):
         if not fig:
             continue
@@ -336,6 +368,12 @@ def run_characterise(board, masses, hold_g: float, hold_min: float,
                                 "finger": FINGERS[pad], "measure": key,
                                 "value": round(fig[key], 3),
                                 "datasheet": SPEC[key]})
+    for pad, other in sorted(cross.items()):
+        for k, pct in sorted(other.items()):
+            summary.append({"label": label, "pad": pad + 1,
+                            "finger": FINGERS[pad],
+                            "measure": f"crosstalk_to_pad{k + 1}_pct",
+                            "value": round(pct, 3), "datasheet": ""})
     for key, at in (("drift_1min_pct_fs", 60.0),
                     ("drift_end_pct_fs", hold_s)):
         if at in drift:
@@ -366,6 +404,16 @@ def run_characterise(board, masses, hold_g: float, hold_min: float,
     for at in sorted(drift):
         print(f"  drift at {at / 60.0:g} min with {hold_g:g} g on pad 1: "
               f"{drift[at]:+.2f} % of full scale")
+    if any(cross.values()):
+        print("\n  cross-talk, counts on each pad per 100 on the loaded one:")
+        print("  loaded   " + "  ".join(f"pad {k + 1:d}" for k in range(4)))
+        for pad in range(4):
+            cells = []
+            for k in range(4):
+                v = cross.get(pad, {}).get(k)
+                cells.append("   -  " if k == pad or v is None
+                             else f"{v:+6.2f}")
+            print(f"  pad {pad + 1}  " + "  ".join(cells))
     return 0
 
 

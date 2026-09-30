@@ -179,6 +179,43 @@ def lane_game(out: Path, clock, key: str, name: str, presses: int = 0,
         eng._close_loggers()
 
 
+def syllables(out: Path, clock) -> None:
+    """Syllables for a nine year old, in the hear and pick section: the
+    word's first part already found, the four chunks for the next one
+    on screen."""
+    with tempfile.TemporaryDirectory() as td:
+        eng = _keyboard_engine(Path(td))
+        eng.cfg.data["syllables"]["speech"] = {"backend": "off"}
+        eng.begin_session("P07", "9", dominant_hand="right", visit="1")
+        eng._uncal_ack = {"left", "right"}
+        if not eng.begin_game("syllables", "right"):
+            raise SystemExit("syllables refused to start")
+        mode = eng.mode
+        answered: set = set()
+
+        def open_set() -> bool:
+            return (mode.phase == "choose" and mode.option_set is not None
+                    and mode._set_close_t is None)
+
+        for _ in range(60 * 60 * 10):
+            _frame(eng, clock)
+            if not open_set() or clock.t < mode._spawn_t + 0.6:
+                continue
+            if mode.section == "pick" and mode.pos == 1:
+                if clock.t >= mode._spawn_t + 1.2:
+                    break
+                continue
+            if mode.trial_counter not in answered:
+                answered.add(mode.trial_counter)
+                mode.queue_press(_press(mode.option_set.target_lane,
+                                        clock.t))
+        else:
+            raise SystemExit("no second set in the pick section")
+        _snap(eng, out, "syllables")
+        eng._abandon_if_in_block()
+        eng._close_loggers()
+
+
 def results(out: Path, clock) -> None:
     with tempfile.TemporaryDirectory() as td:
         eng = _keyboard_engine(Path(td))
@@ -272,6 +309,8 @@ def main(argv=None) -> int:
                                    ("mirror", "mirror", 0)):
             if go(name):
                 lane_game(out, clock, key, name, presses)
+        if go("syllables"):
+            syllables(out, clock)
         if go("results"):
             results(out, clock)
         if go("reaction"):

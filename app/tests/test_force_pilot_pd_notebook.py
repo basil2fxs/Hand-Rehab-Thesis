@@ -300,5 +300,115 @@ class IdleRuns(unittest.TestCase):
         self.assertEqual(kept["level"].tolist(), [1])
 
 
+
+class TheReviewsMeasures(unittest.TestCase):
+    """The measures added by the review of 30 September 2026: each in
+    the unit its paper used, each read back from a run built to give a
+    known answer."""
+
+    def test_rmse_ratio_is_one_for_a_lagged_follower(self):
+        m, _s, _r = _run("hills", _delayed(0.15))
+        self.assertAlmostEqual(m["release_rmse_ratio"], 1.0, delta=0.1)
+
+    def test_a_short_sine_undershoots_its_peaks_and_troughs(self):
+        # 80 percent of the amplitude, no lag: 20 percent of the
+        # amplitude short at each turn, below at a peak, above at a
+        # trough.
+        ra = _ra()
+        secs = _level("swell")
+        amp = next(s for s in secs if s["kind"] == "osc")["amps"][0]
+        m, _s, _r = _run("swell", _delayed(0.0, gain=0.8))
+        self.assertAlmostEqual(m["ce_peak"], -0.2 * amp, delta=0.1 * amp)
+        self.assertAlmostEqual(m["ce_trough"], 0.2 * amp, delta=0.1 * amp)
+
+    def test_a_2_hz_low_pass_takes_the_noise_out_of_rmse(self):
+        m, _s, _r = _run("swell", lambda t, T: T(t), noise=1.0, seed=5)
+        self.assertLess(m["rmse_lp2"], 0.3)
+
+    def test_a_20_hz_low_pass_keeps_a_fifth_of_white_noise(self):
+        # White noise of SD 0.5 at 200 Hz: a 20 Hz low-pass keeps a
+        # fifth of its power, an SD of 0.5 times root 0.2. The pad's
+        # own noise is not white (79 to 89 percent under 20 Hz on the
+        # pilot logs), which is why the resting floor is measured.
+        m, _s, _r = _run("tide", lambda t, T: T(t), noise=0.5, seed=3)
+        self.assertAlmostEqual(m["sd_hold_lp"], 0.5 * 0.2 ** 0.5,
+                               delta=0.05)
+        self.assertGreater(m["hold_mean"], 20.0)
+
+    def test_the_resting_floor_comes_from_quiet_stretches(self):
+        ra = _ra()
+        rng = np.random.default_rng(4)
+        t = np.arange(0.0, 60.0, 1.0 / FS)
+        rest = 100.0 + rng.normal(0.0, 0.8, len(t))
+        press = t > 40.0
+        rest[press] += 50.0 * np.sin(2 * np.pi * 0.2 * t[press])
+        samp = pd.DataFrame({"t_perf": t, "fsr1": rest})
+        ra.FP_FLOOR_CACHE.clear()
+        f, psd, n = ra.fp_quiet_floor(samp, "fsr1", "/nowhere/a")
+        self.assertGreaterEqual(n, 9)
+        # Its power is the resting SD squared, in % of a 200 count max.
+        band = ra.fp_floor_band((f, psd, n), 0.5, 99.0, 200.0)
+        self.assertAlmostEqual(band ** 0.5, 0.8 * 100 / 200, delta=0.08)
+
+    def test_band_power_finds_a_tremor_and_the_floor_matches_noise(self):
+        ra = _ra()
+        rng = np.random.default_rng(2)
+        t = np.arange(0.0, 20.0, 1.0 / FS)
+        noise = rng.normal(0.0, 1.0, len(t))
+        a28, a812 = ra.fp_band_power(noise, FS, (2.0, 8.0), (8.0, 12.0))
+        # White noise of SD 1: the floor the notebook compares with.
+        self.assertAlmostEqual(a28 / ra.fp_white_floor(1.0, FS, 2.0, 8.0),
+                               1.0, delta=0.2)
+        self.assertAlmostEqual(a812 / ra.fp_white_floor(1.0, FS, 8.0, 12.0),
+                               1.0, delta=0.25)
+        tremor = noise + 2.0 * np.sin(2 * np.pi * 5.0 * t)
+        b28, b812 = ra.fp_band_power(tremor, FS, (2.0, 8.0), (8.0, 12.0))
+        # A 5 Hz sine of amplitude 2 carries power 2 (A squared / 2).
+        self.assertAlmostEqual(b28 - a28, 2.0, delta=0.3)
+        self.assertAlmostEqual(b812, a812, delta=0.1)
+
+    def test_runs_needed_by_spearman_brown(self):
+        ra = _ra()
+        self.assertEqual(ra.fp_runs_for_icc(0.5), 4.0)
+        self.assertEqual(ra.fp_runs_for_icc(0.4), 6.0)
+        self.assertEqual(ra.fp_runs_for_icc(0.9), 1.0)
+        self.assertTrue(np.isnan(ra.fp_runs_for_icc(-0.1)))
+
+    def test_the_measurability_verdicts(self):
+        ra = _ra()
+        per = pd.DataFrame({"sd_hold_nc": [0.1, 0.2], "press_mae": [3.0, 4.0],
+                            "fit_lag_ms": [100.0, 150.0],
+                            "trem_abs_8_12_x_floor": [1.0, 1.2]})
+        runs = pd.DataFrame({"noise_pct": [1.0, 1.0],
+                             "step_pct": [0.5, 0.5]})
+        tbl = ra.fp_measurability(runs, per, say=False).set_index("measure")
+        self.assertEqual(tbl.loc["sd_hold_nc", "verdict"], "at the floor")
+        self.assertEqual(tbl.loc["press_mae", "verdict"], "above the floor")
+        self.assertEqual(tbl.loc["fit_lag_ms", "verdict"], "above the floor")
+        self.assertEqual(tbl.loc["trem_abs_8_12_x_floor", "verdict"],
+                         "at the floor")
+
+    def test_parks_index_reads_a_known_spill_over(self):
+        # The index finger ramps up; each neighbour carries 5 percent
+        # of the four-finger total, the others' share of spill-over.
+        ra = _ra()
+        secs = _level("hills")
+        t = np.arange(0.0, secs[-1]["end"], 1.0 / FS)
+        task = 3.0 * ra.fp_target_vec(secs, t)
+        # f_i = k * total with total = task + 3 k total, so the total
+        # is task / (1 - 3k).
+        k = 0.05
+        total = task / (1.0 - 3 * k)
+        samp = pd.DataFrame({"t_perf": 100.0 + t, "fsr1": task,
+                             "fsr2": k * total, "fsr3": k * total,
+                             "fsr4": k * total})
+        # Trial rows carry 1-indexed lanes: lane 1 is the index.
+        row = {"lane": 1, "hand_mode": "right", "finger": "index"}
+        en, neg = ra.fp_enslaving_park(samp, row, 100.0, 100.0 + t[-1],
+                                       secs)
+        self.assertAlmostEqual(en, k, delta=0.005)
+        self.assertEqual(neg, 0.0)
+
+
 if __name__ == "__main__":
     unittest.main()

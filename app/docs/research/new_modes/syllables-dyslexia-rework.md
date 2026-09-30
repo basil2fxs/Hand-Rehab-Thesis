@@ -96,8 +96,11 @@ shift); spaced retrieval beat massed for word learning in children
 with language disorder (Leonard and Deevy 2020); and an unsuccessful
 retrieval attempt followed by the answer still helps later learning
 (Kornell, Hays and Bjork 2009). Positive feedback stays immediate and
-loud, because that is what keeps a child playing (Ronimus, Kujala,
-Tolvanen and Lyytinen 2014).
+loud. (Corrected 30 September 2026: this note said that is what keeps
+a child playing. In Ronimus, Kujala, Tolvanen and Lyytinen 2014, as
+summarised by its authors' group, rewards raised engagement only in
+the first sessions and playing time fell over 8 weeks in every group;
+see syllables-task-design.md, Section 1.)
 
 PROMPT TIMING (24 September 2026). The prompt's delay is progressive
 and per word rather than a constant three quarters of the fall. A new
@@ -220,7 +223,14 @@ Everything the old docstring said still holds, plus:
   Rime with 95 six to seven year olds who had failed the Year 1
   Phonics Check and found a small nonword-decoding effect (partial eta
   squared 0.017), with spelling gains only in children who had
-  education plans. McTigue, Solheim, Zimmer and Uppstad (2020)
+  education plans. Corrected 30 September 2026: that is a later
+  re-analysis of part of the sample of the Education Endowment
+  Foundation trial (Worth et al 2018), which randomised 398 Year 2
+  pupils and found no effect on reading (effect size -0.06, 95% CI
+  -0.23 to 0.12) or spelling, rated very high security; Bishop and
+  Hulme (2024) showed the subset analysis inflates effects. The
+  largest English trial of this game found no benefit over usual
+  teaching (syllables-task-design.md, Section 1). McTigue, Solheim, Zimmer and Uppstad (2020)
   meta-analysed the GraphoGame literature and found a negligible
   overall effect, with SUPPORTIVE ADULT INTERACTION the only
   significant moderator (mean effect 0.48 with high adult support).

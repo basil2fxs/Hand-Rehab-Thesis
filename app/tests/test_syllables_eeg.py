@@ -50,10 +50,12 @@ def _parse_detail(detail: str) -> dict:
     return out
 
 
-def _run_block(words: int = 4, answer: str = "correct") -> dict:
+def _run_block(words: int = 4, answer: str = "correct",
+               sections: bool = False, age: str = "") -> dict:
     """One real syllables block with markers on, driven on a virtual
     clock. Returns the eeg rows, the trial rows and the codes in the
-    order they were written."""
+    order they were written. sections plays the sectioned sitting,
+    whose speed trials are answered right."""
     import pygame
     pygame.init()
     try:
@@ -77,7 +79,10 @@ def _run_block(words: int = 4, answer: str = "correct") -> dict:
             cfg.data["syllables"]["warmup_taps"] = 0
             cfg.data["syllables"]["break_s"] = 0
             cfg.data["syllables"]["seed"] = 21
+            cfg.data["syllables"]["sections"] = sections
             eng = GameEngine(cfg, KeyboardOnlySource())
+            if age:
+                eng.session.age = age
             gp = MagicMock()
             gp.lanes = []
             eng._screens = {"gameplay": gp, "results": MagicMock(),
@@ -106,6 +111,14 @@ def _run_block(words: int = 4, answer: str = "correct") -> dict:
                 # the block-end byte and the order on the wire would
                 # be a harness artefact rather than the mode's.
                 eng.markers.drain(0.5)
+                if (mode.phase == "speed" and mode.speed_options
+                        and mode._set_close_t is None
+                        and vt >= mode._spawn_t + 0.4
+                        and ("s", mode.trial_counter) not in answered):
+                    answered.add(("s", mode.trial_counter))
+                    mode.queue_press(PressEvent(
+                        lane=mode._speed_tlane, t_perf=vt, value=0,
+                        baseline=0.0, hand=mode.word_hand))
                 if (mode.phase == "choose" and mode.option_set is not None
                         and mode._set_close_t is None):
                     key = (mode.word.word, mode.pos, mode.ret,

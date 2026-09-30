@@ -87,6 +87,9 @@ def _run_choice_block(root: Path, words: int = 3) -> Path:
         cfg.data["syllables"]["warmup_taps"] = 0
         cfg.data["syllables"]["break_s"] = 0
         cfg.data["syllables"]["seed"] = 21
+        # The single-section chapter; the sectioned sitting's summary
+        # is tested in test_syllables_sections.py.
+        cfg.data["syllables"]["sections"] = False
         eng = GameEngine(cfg, KeyboardOnlySource())
         gp = MagicMock()
         gp.lanes = []

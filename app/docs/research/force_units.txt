@@ -76,8 +76,11 @@ is pending; do not quote a slope that was not measured.
 Two things the sentence does not cover, said plainly:
 - Resolution. One count is 0.02 N, and resting noise is about 1.1
   counts SD, so a single sample resolves about 0.02 N and a 2 s mean
-  about 0.002 N. The sensor updates at 50 to 120 Hz while the board
-  polls at 200 Hz, so consecutive identical counts are normal.
+  about 0.002 N. Consecutive identical counts are normal: the manual
+  quotes up to 120 Hz, but in the pilot logs a fast-changing force
+  repeated on 0 to 3 percent of 200 Hz samples, so the pads refresh
+  about every poll and a repeat is a change under one count (checked
+  30 September 2026; the notebook's fast_repeat_share rechecks it).
 - Drift during a hold. At 2 percent of full scale per minute, a 5 s
   hold can drift 0.02 N, one count; the games report nothing finer
   than that. Longer holds are re-tared between trials by the force

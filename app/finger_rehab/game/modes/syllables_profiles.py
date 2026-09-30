@@ -67,6 +67,15 @@ TEEN_FOILS = {"F3": 30, "F7": 20, "F9": 20, "F5": 10, "F2": 10,
               "F6": 5, "F4": 5}
 ADULT_FOILS = {"F3": 35, "F9": 25, "F7": 20, "F5": 10, "F2": 10}
 
+# The confusion families each age learns one at a time in the
+# sectioned sitting (syllables_foils.FAMILY_KIND). The same kinds the
+# foil shares above use, for the same reasons: no reversals, same-word
+# syllables or pseudohomophones for adults.
+CHILD_FAMILIES = ("onset", "vowel", "coda", "reversal", "position", "order")
+TEEN_FAMILIES = ("vowel", "coda", "affix", "position", "onset", "order",
+                 "reversal")
+ADULT_FAMILIES = ("vowel", "affix", "coda", "position", "onset")
+
 
 @dataclass(frozen=True)
 class Profile:
@@ -109,12 +118,22 @@ class Profile:
     # Vowel foils on an unstressed syllable only when the chunk audio
     # is spelt: spoken reduced, ter, tar and tur all sound like 'tuh'.
     guard_unstressed_vowels: bool = False
+    # The sectioned sitting (docs/research/new_modes/
+    # syllables-task-design.md, Section 6): the families the
+    # per-family ladder teaches, the whole-word speed trials that end
+    # the sitting (0 for none), how long a finished word shows silently
+    # before it is heard, and the speed check's first exposure.
+    families: tuple[str, ...] = ()
+    speed_trials: int = 0
+    read_hold_s: float = 1.5
+    speed_expo_ms: int = 700
 
 
 PROFILES: dict[str, Profile] = {
     "classic": Profile("classic"),
     "6-9": Profile("6-9", print_rungs=3, sound_lead_ms=175,
-                   guard_unstressed_vowels=True),
+                   guard_unstressed_vowels=True,
+                   families=CHILD_FAMILIES),
     "10-12": Profile(
         "10-12", pools=("child", "teen"), child_bands=("B", "C"),
         pseudo_share=0.2,
@@ -122,7 +141,8 @@ PROFILES: dict[str, Profile] = {
         min_fall_s=3.0, print_rungs=2, respeak_rungs=(1, 2, 3, 4),
         prompt=True, prompt_steps=(0.75, 0.9), sound_lead_ms=100,
         rewards="neutral", foil_weights=TEEN_FOILS,
-        far_foils_rung1_only=True, guard_unstressed_vowels=True),
+        far_foils_rung1_only=True, guard_unstressed_vowels=True,
+        families=TEEN_FAMILIES, speed_trials=16, speed_expo_ms=700),
     "13-15": Profile(
         "13-15", pools=("child", "teen"), child_bands=("B", "C"),
         pseudo_share=0.2,
@@ -130,18 +150,21 @@ PROFILES: dict[str, Profile] = {
         min_fall_s=2.4, print_rungs=2, respeak_rungs=(1, 2, 3, 4),
         prompt=True, prompt_steps=(0.75, 0.9), sound_lead_ms=100,
         rewards="neutral", foil_weights=TEEN_FOILS,
-        far_foils_rung1_only=True, guard_unstressed_vowels=True),
+        far_foils_rung1_only=True, guard_unstressed_vowels=True,
+        families=TEEN_FAMILIES, speed_trials=16, speed_expo_ms=600),
     "16+": Profile(
         "16+", pools=("adult",), min_syll=3, max_syll=5, pseudo_share=0.4,
         min_fall_s=1.0, staircase="fall", print_rungs=0, model=False,
         respeak_rungs=tuple(range(1, 9)), prompt=False, rewards="adult",
-        foil_weights=ADULT_FOILS),
+        foil_weights=ADULT_FOILS, families=ADULT_FAMILIES,
+        speed_trials=20, read_hold_s=1.0, speed_expo_ms=500),
     "60+": Profile(
         "60+", pools=("adult",), min_syll=3, max_syll=4, pseudo_share=0.3,
         fall_table=(4.2, 4.2, 3.6, 3.6, 3.0, 3.0, 2.6, 2.4),
         min_fall_s=2.4, print_rungs=0, model=False,
         respeak_rungs=tuple(range(1, 9)), prompt=False, rewards="adult",
-        foil_weights=ADULT_FOILS, tile_scale=1.3),
+        foil_weights=ADULT_FOILS, tile_scale=1.3,
+        families=ADULT_FAMILIES, read_hold_s=1.0),
 }
 AGE_BANDS = ("6-9", "10-15", "16+", "60+")
 

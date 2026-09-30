@@ -607,6 +607,8 @@ class ModeWaitSkipTests(unittest.TestCase):
         clock = _Clock()
         with patch.object(time, "perf_counter", clock):
             eng = _engine()
+            # The break between rounds is the single-section block's.
+            eng.cfg.data["syllables"]["sections"] = False
             eng.begin_syllables_block()
             d = _Driver(eng, clock)
             m = eng.mode
@@ -615,6 +617,25 @@ class ModeWaitSkipTests(unittest.TestCase):
             self.assertTrue(m.wait_view()["show"])
             self.assertTrue(m.skip_wait())
             self.assertNotEqual(m.phase, "break")
+            self.assertGreaterEqual(
+                m.wait_skip_stats()["skipped_rests"], 1)
+
+    def test_syllables_section_card(self) -> None:
+        # The sectioned sitting has no round breaks: each section's
+        # card is the wait, offered as a stage card is.
+        clock = _Clock()
+        with patch.object(time, "perf_counter", clock):
+            eng = _engine()
+            eng.cfg.data["syllables"]["sections"] = True
+            eng.begin_syllables_block()
+            m = eng.mode
+            self.assertTrue(m.sectioned)
+            d = _Driver(eng, clock)
+            self.assertTrue(d.run_until(lambda x: x.phase == "section",
+                                        limit=10.0))
+            self.assertEqual(m.wait_view()["kind"], "stage")
+            self.assertTrue(m.skip_wait())
+            self.assertNotEqual(m.phase, "section")
             self.assertGreaterEqual(
                 m.wait_skip_stats()["skipped_rests"], 1)
 

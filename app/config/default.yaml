@@ -1152,6 +1152,15 @@ syllables:
   # case for every value is in
   # finger_rehab/game/modes/syllables_profiles.py.
   age_band: auto
+  # The sitting in sections, for every age profile: a short review,
+  # hear and pick, build the word from its syllables, then (10 to 59)
+  # a speed check where a word is flashed and picked from four. The
+  # chunks sit still with a time bar, two wrong presses show the
+  # answer, and each word ends whole, read silently before it is
+  # heard. The case for it is in
+  # docs/research/new_modes/syllables-task-design.md. false plays the
+  # single-section block of 29 September 2026; classic ignores it.
+  sections: true
   # Milliseconds between syllables while the word is modelled, at the
   # least: a syllable's own sound always finishes with half a second
   # of quiet before the next. After the syllables the whole word is

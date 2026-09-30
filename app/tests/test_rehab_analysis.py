@@ -3045,6 +3045,36 @@ class TestCuedModesIncludesReaction:
             "the mode that was actually excluded (audit finding #106)")
 
 
+class TestFastRepeatShareTellsStaleFromSmall:
+    """The pads quote up to 120 Hz but the logs are 200 Hz. A repeat
+    while the force is changing fast can only be a stale reading, so
+    fast_repeat_share is ~0 for a pad that refreshes every poll and at
+    least 0.4 for one refreshing at 120 Hz, whatever the slow parts of
+    the log do."""
+
+    @staticmethod
+    def _frame(values):
+        import pandas as pd
+        return pd.DataFrame({"fsr1": values})
+
+    def test_fresh_every_poll_repeats_almost_never(self, ra):
+        ramp = [10 + 5 * i for i in range(200)]
+        assert ra.fast_repeat_share(self._frame(ramp), ["fsr1"]) < 0.01
+
+    def test_a_120_hz_pad_repeats_on_the_ramp(self, ra):
+        # Sample-and-hold of a 5 counts per poll ramp at 120 Hz read
+        # at 200 Hz: 2 of every 5 polls see the last reading again.
+        held = [10 + 5 * (int(i * 120 / 200) * 200 // 120)
+                for i in range(400)]
+        share = ra.fast_repeat_share(self._frame(held), ["fsr1"])
+        assert share >= 0.35
+
+    def test_slow_changes_do_not_count(self, ra):
+        slow = [10 + i // 4 for i in range(400)]
+        import numpy as np
+        assert np.isnan(ra.fast_repeat_share(self._frame(slow), ["fsr1"]))
+
+
 class TestSamplingNoteChecksAllEightChannels:
     """Finding #108: sec_sampling_note checked fsr1-4 only, so on a
     bilateral block a frame where only the LEFT hand changed still

@@ -57,9 +57,21 @@ this whole family of games found supportive adult interaction to be
 the only moderator that mattered (McTigue, Solheim, Zimmer and Uppstad
 2020), so the rest is where the screen asks for it.
 
+THE SECTIONED SITTING (syllables.sections, every age profile) draws
+the same pieces with the presentation rules of
+docs/research/new_modes/syllables-task-design.md, Section 6.4: a warm
+off-white page on the light theme, tiles that drop into place in 0.2 s
+and then stay still with a shrinking time bar above them, letter
+spacing of 0.35 of the average letter width, a card naming each
+section, a slot filled by a shown answer drawn plain rather than in a
+finger colour, and at the end of every word the slots closing into
+one word with no gaps, held for the reader before it is heard. The
+speed check flashes a whole word, covers it with a row of hash marks,
+then shows four words over the four fingers.
+
 Flash safety: nothing on this screen repeats faster than 2 Hz; the
 lift, the grey drift and the miss glow are one-shot animations (WCAG
-2.3.1).
+2.3.1). The speed check's flash is one word shown once per trial.
 
 Screen conventions match the rest of the app: 1280x800 logical layout,
 theme-aware, Esc and P are handled by the engine's global event path,
@@ -144,6 +156,30 @@ class SyllablesScreen(Screen):
     # How long the newest star's one-shot pop runs.
     STAR_FLASH_S = 0.9
     STAMP_FLASH_S = 1.0
+    # The sectioned sitting (THE SECTIONED SITTING above).
+    CREAM = (250, 246, 236)
+    CARD_ON_CREAM = (255, 254, 250)
+    STILL_Y = 440              # the row still tiles sit on
+    STILL_TILE_W = 224
+    STILL_TILE_H = 104
+    SPEED_TILE_W = 236
+    BAR_Y = 356                # the time bar, above the tiles
+    SLIDE_S = 0.2
+    CLOSE_S = 0.35
+    # Letter spacing as a share of the font's average letter width
+    # (syllables-task-design.md, Section 6.4, rule 2).
+    SPACING_OF_LETTER = 0.35
+    SECTION_COPY = {
+        "review": ("WARM UP", "A few easy ones first."),
+        "pick": ("HEAR AND PICK",
+                 "Listen, then press the finger under the part you hear."),
+        "build": ("BUILD THE WORD",
+                  "Hear the word, then build it one part at a time."),
+        "speed": ("QUICK LOOK",
+                  "A word flashes up. Then pick the word you saw."),
+    }
+    SECTION_NAMES = {"review": "Warm up", "pick": "Hear and pick",
+                     "build": "Build the word", "speed": "Quick look"}
 
     def __init__(self, engine: "GameEngine") -> None:
         super().__init__(engine)
@@ -174,7 +210,24 @@ class SyllablesScreen(Screen):
         """The tile fill: one neutral card colour for all four tiles in
         every theme. Never a finger colour and never per option, so no
         tile can be told from another before it is pressed."""
+        if self._bg() == self.CREAM:
+            return self.CARD_ON_CREAM
         return _mix(self.theme.background, self.theme.foreground, 0.10)
+
+    @staticmethod
+    def _sectioned(mode) -> bool:
+        return bool(getattr(mode, "sectioned", False))
+
+    def _bg(self, mode=None) -> tuple[int, int, int]:
+        """The page colour: warm off-white for the sectioned sitting
+        on a light theme, the theme's own background everywhere
+        else."""
+        if mode is None:
+            mode = self.engine.mode
+        bg = tuple(self.theme.background)
+        if self._sectioned(mode) and sum(bg) / 3 > 180:
+            return self.CREAM
+        return bg
 
     def on_block_start(self) -> None:
         self._last_model_idx = -1
@@ -205,7 +258,11 @@ class SyllablesScreen(Screen):
     @staticmethod
     def _prints(mode) -> bool:
         """Whether the word and its chunks are printed before the
-        choice (the profile's print rung; always in classic)."""
+        choice (the profile's print rung; always in classic). In the
+        sectioned sitting, what the word started with: a word to build
+        is heard, not shown."""
+        if bool(getattr(mode, "sectioned", False)):
+            return bool(getattr(mode, "_word_printed", True))
         return bool(getattr(mode, "show_print", True))
 
     def _stage(self, mode) -> tuple[str, str, str]:
@@ -214,6 +271,26 @@ class SyllablesScreen(Screen):
         unit-tested without a display."""
         phase = mode.phase
         style = self._style(mode)
+        section = (getattr(mode, "section", "")
+                   if self._sectioned(mode) else "")
+        if phase in ("section", "flash", "mask", "speed"):
+            if phase == "section":
+                return ("", "", "muted")
+            return ("QUICK LOOK", "Which word did you see?", "accent")
+        if phase == "attend" and section == "build":
+            return ("LISTEN...", "Hear the word, then build it.", "accent")
+        if phase == "choose" and section == "build":
+            return ("BUILD IT",
+                    "Press the finger under the next part of the word.",
+                    "success")
+        if phase == "complete" and section:
+            t0 = getattr(mode, "_phase_t0", None)
+            hold = float(getattr(getattr(mode, "profile", None),
+                                 "read_hold_s", 1.5) or 0.0)
+            if t0 is not None and time.perf_counter() < t0 + hold:
+                return ("READ IT", "Read the whole word.", "accent")
+            if any(getattr(mode, "_slots_shown", []) or []):
+                return ("THE WHOLE WORD", "", "foreground")
         if phase == "attend":
             return ("LISTEN...", "Here is the word.", "accent")
         if phase == "model":
@@ -271,8 +348,8 @@ class SyllablesScreen(Screen):
 
     # ---- draw --------------------------------------------------------------
     def draw(self, surf: pygame.Surface) -> None:
-        surf.fill(self.theme.background)
         mode = self.engine.mode
+        surf.fill(self._bg(mode))
         if mode is None or getattr(mode, "name", "") != "Syllables":
             draw_text(surf, "Starting...",
                       (self.layout.width // 2, self.layout.height // 2),
@@ -290,6 +367,10 @@ class SyllablesScreen(Screen):
             self._draw_gap(surf, mode, now)
         elif phase == "done":
             pass
+        elif phase == "section":
+            self._draw_section_card(surf, mode, now)
+        elif phase in ("flash", "mask", "speed"):
+            self._draw_speed_trial(surf, mode, now)
         else:
             self._draw_word_trial(surf, mode, now)
         if (phase in ("attend", "model", "choose", "complete", "gap")
@@ -345,6 +426,12 @@ class SyllablesScreen(Screen):
     def _top_label(self, mode) -> str:
         if mode.phase == "break":
             return "Rest"
+        if self._sectioned(mode) and getattr(mode, "section_plan", None):
+            name = self.SECTION_NAMES.get(mode.section, "")
+            quota = mode._section_quota()
+            done = (mode._speed_done if mode.section == "speed"
+                    else mode._section_words)
+            return f"{name}: {min(done + 1, quota)} of {quota}"
         done, total = mode.words_done, mode.words_total
         return f"Word {min(done + 1, total)} of {total}"
 
@@ -367,8 +454,11 @@ class SyllablesScreen(Screen):
                   (pad, 34), self.theme, self.layout, pt=FONT_SMALL,
                   colour=self.theme.muted)
         # The adult staircase moves the fall, not a level, and a
-        # visible number would only invite chasing it.
-        if not getattr(mode, "fall_mode", False):
+        # visible number would only invite chasing it. The speed check
+        # has no level at all.
+        speed = (self._sectioned(mode)
+                 and getattr(mode, "section", "") == "speed")
+        if not getattr(mode, "fall_mode", False) and not speed:
             label = (f"Band {mode.band}   Level {mode.rung} of "
                      f"{mode.rung_max}"
                      if getattr(mode, "_bank_bands", True)
@@ -490,7 +580,10 @@ class SyllablesScreen(Screen):
             self._draw_band_card(surf, mode, band, now)
             return
         nxt = min(mode.words_done + 1, mode.words_total)
-        draw_text(surf, f"Here comes word {nxt}...",
+        line = f"Here comes word {nxt}..."
+        if self._sectioned(mode) and getattr(mode, "section", "") == "speed":
+            line = "Get ready to look..."
+        draw_text(surf, line,
                   (cx, cy - 30), self.theme, self.layout,
                   pt=FONT_H1, centre=True, colour=self.theme.muted)
         r = 12 + int(5 * math.sin(now * math.pi))
@@ -538,6 +631,15 @@ class SyllablesScreen(Screen):
         return (sum(font.size(ch)[0] for ch in text)
                 + track * (len(text) - 1))
 
+    def _track(self, font: pygame.font.Font) -> int:
+        """Letter spacing in pixels for this font: TRACKING of the line
+        height, or in the sectioned sitting SPACING_OF_LETTER of the
+        font's average lower-case letter width."""
+        if self._sectioned(self.engine.mode):
+            avg = font.size("abcdefghijklmnopqrstuvwxyz")[0] / 26.0
+            return max(2, int(round(avg * self.SPACING_OF_LETTER)))
+        return max(2, int(font.get_height() * self.TRACKING))
+
     def _draw_tracked(self, surf: pygame.Surface, text: str,
                       font: pygame.font.Font, colour, centre,
                       alpha: int = 255) -> None:
@@ -545,7 +647,7 @@ class SyllablesScreen(Screen):
         Tracking is the one typographic choice with direct evidence
         behind it for this population (Zorzi et al. 2012), and pygame
         has no tracking control, so the letters are placed by hand."""
-        track = max(2, int(font.get_height() * self.TRACKING))
+        track = self._track(font)
         total = self._tracked_width(font, text, track)
         x = centre[0] - total // 2
         for ch in text:
@@ -563,7 +665,7 @@ class SyllablesScreen(Screen):
         spilling out of its tile."""
         while True:
             font = self._tile_font(pt)
-            track = max(2, int(font.get_height() * self.TRACKING))
+            track = self._track(font)
             if pt <= 18 or self._tracked_width(font, text, track) <= max_w:
                 return font
             pt -= 4
@@ -610,6 +712,12 @@ class SyllablesScreen(Screen):
                 self._model_lit_t = now
         else:
             self._last_model_idx = -1
+        if (phase == "complete" and getattr(mode, "strip_closed", False)):
+            self._draw_closed_strip(surf, mode, now, rects)
+            if getattr(mode, "bilateral", False):
+                self._draw_hand_tag(surf, rects[-1], str(mode.word_hand))
+            return
+        shown = list(getattr(mode, "_slots_shown", []) or [])
         swell = 0.0
         if phase == "complete" and mode._phase_t0 is not None:
             swell = math.sin(min(1.0, (now - mode._phase_t0)
@@ -640,6 +748,11 @@ class SyllablesScreen(Screen):
                 if chunk is not None and i < len(lanes) and lanes[i] is not None:
                     fill = self.theme.lane_active[
                         mode._finger_of_lane(lanes[i])]
+                elif chunk is not None and i < len(shown) and shown[i]:
+                    # Shown after two wrong presses or the time running
+                    # out: no finger won it, so it wears no finger's
+                    # colour.
+                    fill = _mix(self._bg(mode), self.theme.muted, 0.30)
             if chunk is not None:
                 if phase == "complete":
                     grow = int(6 * swell)
@@ -670,6 +783,44 @@ class SyllablesScreen(Screen):
                                  border_radius=18)
         if getattr(mode, "bilateral", False):
             self._draw_hand_tag(surf, rects[-1], str(mode.word_hand))
+
+    def _draw_closed_strip(self, surf: pygame.Surface, mode, now: float,
+                           rects: list[pygame.Rect]) -> None:
+        """The finished word as one unit: the slots slide together over
+        CLOSE_S, then become one tile holding the word, with no gaps,
+        hyphens or dots (syllables-task-design.md, Section 6.4, rule
+        7)."""
+        word = mode.word
+        t0 = mode._phase_t0 if mode._phase_t0 is not None else now
+        p = max(0.0, min(1.0, (now - t0) / self.CLOSE_S))
+        ease = 1.0 - (1.0 - p) ** 2
+        cx = self.layout.width // 2
+        font = self._fitted_tile_font(
+            word.word, self.layout.width - 200,
+            int(FONT_TITLE * 0.8 * self._scale(mode)))
+        fill = self._accent()
+        ink = _text_colour_for(fill, (255, 255, 255), self.theme.foreground)
+        if p < 1.0:
+            total = sum(r.width for r in rects)
+            x = cx - total // 2
+            filled = list(getattr(mode, "filled", []) or [])
+            for i, r in enumerate(rects):
+                moved = r.copy()
+                moved.x = int(r.x + (x - r.x) * ease)
+                x += r.width
+                pygame.draw.rect(surf, fill, moved, border_radius=18)
+                chunk = (filled[i] if i < len(filled) and filled[i]
+                         else word.syllables[i])
+                small = self._fitted_tile_font(
+                    chunk, moved.width - 26,
+                    int(FONT_TITLE * 0.8 * self._scale(mode)))
+                self._draw_tracked(surf, chunk, small, ink, moved.center)
+            return
+        width = self._tracked_width(font, word.word, self._track(font))
+        rect = pygame.Rect(0, 0, max(200, width + 64), self.STRIP_H)
+        rect.center = (cx, self.STRIP_Y)
+        pygame.draw.rect(surf, fill, rect, border_radius=18)
+        self._draw_tracked(surf, word.word, font, ink, rect.center)
 
     def _draw_hand_tag(self, surf: pygame.Surface, rect: pygame.Rect,
                        hand: str) -> None:
@@ -746,7 +897,15 @@ class SyllablesScreen(Screen):
         by_lane = {lane: x for lane, x in zip(lanes, centres)}
         fall = max(0.1, float(mode.fall_s))
         p = max(0.0, min(1.0, (now - spawn) / fall))
-        base_y = self.TOP_Y + p * (self.EXIT_Y - self.TOP_Y)
+        still = bool(getattr(mode, "still_tiles", False))
+        tile_w, tile_h = self.TILE_W, self.TILE_H
+        if still:
+            # Dropped into place, then still while it is read.
+            slide = max(0.0, min(1.0, (now - spawn) / self.SLIDE_S))
+            base_y = self.STILL_Y - 40 * (1.0 - slide) ** 2
+            tile_w, tile_h = self.STILL_TILE_W, self.STILL_TILE_H
+        else:
+            base_y = self.TOP_Y + p * (self.EXIT_Y - self.TOP_Y)
         lockout = max(0.01, float(mode.spawn_lockout_s))
         fade_in = max(0.0, min(1.0, (now - spawn) / lockout))
         dead = set(getattr(mode, "_dead_lanes", set()) or set())
@@ -758,9 +917,9 @@ class SyllablesScreen(Screen):
             x = by_lane.get(opt.lane)
             if x is None:
                 continue
-            rect = pygame.Rect(0, 0, self.TILE_W, self.TILE_H)
+            rect = pygame.Rect(0, 0, tile_w, tile_h)
             rect.center = (x, int(base_y))
-            state = "falling"
+            state = "still" if still else "falling"
             alpha = int(255 * fade_in)
             if correct_t is not None and opt.lane == oset.target_lane:
                 # The winning tile lifts into its slot in the strip.
@@ -775,6 +934,10 @@ class SyllablesScreen(Screen):
             elif correct_t is not None:
                 state = "fading"
                 alpha = int(255 * max(0.0, 1.0 - (now - correct_t) / 0.3))
+            elif opt.lane in dead and still:
+                # Greyed where it stands: the answer may still be here.
+                state = "dead"
+                alpha = 150
             elif opt.lane in dead:
                 state = "dead"
                 # Grey and drifting out to the nearer side, so the tile
@@ -785,7 +948,8 @@ class SyllablesScreen(Screen):
                 alpha = int(255 * max(0.15, 1.0 - gone))
             elif glow_t is not None and opt.lane == oset.target_lane:
                 state = "glow"
-                rect.centery = self.EXIT_Y
+                if not still:
+                    rect.centery = self.EXIT_Y
             elif glow_t is not None:
                 # The set was missed: the foils leave quietly so the
                 # only thing left on screen is the answer.
@@ -796,11 +960,24 @@ class SyllablesScreen(Screen):
                         "alpha": max(0, min(255, alpha))})
         return out
 
+    def _set_font(self, texts, max_w: int, pt: int) -> pygame.font.Font:
+        """One font for every tile of a set: the size the widest text
+        fits at. Four sizes on screen would set one tile apart."""
+        fonts = [self._fitted_tile_font(tx, max_w, pt) for tx in texts]
+        return min(fonts, key=lambda f: f.get_height())
+
     def _draw_tiles(self, surf: pygame.Surface, mode, now: float) -> None:
         card = self._card()
         border = _mix(self.theme.background, self.theme.muted, 0.55)
         glow_t = getattr(mode, "_glow_t", None)
-        for item in self.tile_layout(mode, now):
+        items = self.tile_layout(mode, now)
+        shared = None
+        if items and getattr(mode, "still_tiles", False):
+            shared = self._set_font(
+                [it["option"].text for it in items],
+                items[0]["rect"].width - 30,
+                int(FONT_TITLE * 0.75 * self._scale(mode)))
+        for item in items:
             rect, state, alpha = item["rect"], item["state"], item["alpha"]
             text = item["option"].text
             if state == "dead":
@@ -817,7 +994,7 @@ class SyllablesScreen(Screen):
             if alpha < 255:
                 tile.set_alpha(alpha)
             surf.blit(tile, rect.topleft)
-            font = self._fitted_tile_font(
+            font = shared or self._fitted_tile_font(
                 text, rect.width - 30,
                 int(FONT_TITLE * 0.75 * self._scale(mode)))
             self._draw_tracked(surf, text, font, ink, rect.center,
@@ -868,14 +1045,179 @@ class SyllablesScreen(Screen):
             self._draw_tracked(surf, word.word, font,
                                self.theme.foreground,
                                (cx, (self.TOP_Y + self.EXIT_Y) // 2))
-            if self._style(mode) == "child":
+            title = self._stage(mode)[0]
+            if (self._style(mode) == "child"
+                    and title not in ("READ IT", "THE WHOLE WORD")):
                 draw_text(surf, "You built the whole word!",
                           (cx, (self.TOP_Y + self.EXIT_Y) // 2 + 96),
                           self.theme, self.layout, pt=FONT_H2,
                           centre=True, colour=self.theme.success)
             return
-        self._draw_lane_guides(surf, mode)
+        if getattr(mode, "still_tiles", False):
+            self._draw_still_guides(surf, mode)
+            self._draw_time_bar(surf, mode, now, float(mode.fall_s))
+        else:
+            self._draw_lane_guides(surf, mode)
         self._draw_tiles(surf, mode, now)
+
+    # ---- the sectioned sitting ---------------------------------------------
+    def _draw_still_guides(self, surf: pygame.Surface, mode) -> None:
+        """A short line from each tile's row down to its finger's seat:
+        the tile over the finger is the only link between them."""
+        colour = _mix(self._bg(mode), self.theme.muted, 0.28)
+        top = self.STILL_Y + self.STILL_TILE_H // 2 + 10
+        for x in self.lane_centres(mode):
+            pygame.draw.line(surf, colour, (x, top),
+                             (x, self.SEAT_Y - self.SEAT_R - 8), 2)
+
+    def time_bar_frac(self, mode, now: float, limit_s: float) -> float:
+        """The share of the answer window left, 1 at the spawn and 0
+        at the limit; 0 when nothing is on screen."""
+        spawn = getattr(mode, "_spawn_t", None)
+        if spawn is None or limit_s <= 0:
+            return 0.0
+        return max(0.0, min(1.0, 1.0 - (now - spawn) / limit_s))
+
+    def _draw_time_bar(self, surf: pygame.Surface, mode, now: float,
+                       limit_s: float) -> None:
+        """The time left, as a bar that shrinks from both ends toward
+        the middle. It names no lane: the same bar over all four."""
+        if getattr(mode, "_set_close_t", None) is not None:
+            return
+        frac = self.time_bar_frac(mode, now, limit_s)
+        full = self.layout.width - 2 * self.LANE_PAD
+        h = 8
+        track = pygame.Rect(self.LANE_PAD, self.BAR_Y - h // 2, full, h)
+        pygame.draw.rect(surf, _mix(self._bg(mode), self.theme.muted, 0.22),
+                         track, border_radius=h // 2)
+        w = int(full * frac)
+        if w > 0:
+            bar = pygame.Rect(0, 0, w, h)
+            bar.center = track.center
+            pygame.draw.rect(surf, _mix(self._bg(mode), self.theme.muted,
+                                        0.75),
+                             bar, border_radius=h // 2)
+
+    def _draw_section_card(self, surf: pygame.Surface, mode,
+                           now: float) -> None:
+        """What the next section asks for, in one title and one line.
+        The skip control sits under it."""
+        title, sub = self.SECTION_COPY.get(
+            getattr(mode, "section", ""), ("", ""))
+        cx = self.layout.width // 2
+        cy = (self.TOP_Y + self.EXIT_Y) // 2
+        card = pygame.Rect(0, 0, 820, 230)
+        card.center = (cx, cy - 30)
+        fill = pygame.Surface(card.size, pygame.SRCALPHA)
+        pygame.draw.rect(fill, (*self._card(), 250), fill.get_rect(),
+                         border_radius=24)
+        pygame.draw.rect(fill, (*self._accent(), 200), fill.get_rect(), 4,
+                         border_radius=24)
+        surf.blit(fill, card.topleft)
+        draw_text(surf, title, (cx, card.y + 82), self.theme, self.layout,
+                  pt=FONT_H1 + 8, centre=True, colour=self._accent())
+        draw_text(surf, sub, (cx, card.y + 158), self.theme, self.layout,
+                  pt=FONT_BODY + 2, centre=True, colour=self.theme.muted)
+        if (self._style(mode) == "child"
+                and int(getattr(mode, "section_idx", 0) or 0) > 0):
+            draw_text(surf, "Part done! Sticker earned.",
+                      (cx, card.bottom + 40), self.theme, self.layout,
+                      pt=FONT_BODY + 2, centre=True, colour=self._accent())
+            self._skip_at = (cx, card.bottom + 92)
+        else:
+            self._skip_at = (cx, card.bottom + 50)
+
+    def speed_layout(self, mode, now: float) -> list[dict]:
+        """The four words of a speed trial as plain data: one dict per
+        word, {lane, text, target, rect, state, alpha}, state in still
+        | right | dead | glow | fading. All four are drawn alike until
+        a press."""
+        opts = getattr(mode, "speed_options", None)
+        spawn = getattr(mode, "_spawn_t", None)
+        if not opts or spawn is None:
+            return []
+        by_lane = dict(zip(mode.active_lanes(), self.lane_centres(mode)))
+        slide = max(0.0, min(1.0, (now - spawn) / self.SLIDE_S))
+        y = int(self.STILL_Y - 40 * (1.0 - slide) ** 2)
+        lift_t = getattr(mode, "lift_t", None)
+        glow_t = getattr(mode, "_glow_t", None)
+        wrong = {p.lane for p in (getattr(mode, "_speed_presses", []) or [])
+                 if getattr(p, "kind", "") == "wrong"}
+        out = []
+        for lane, text, target in opts:
+            x = by_lane.get(lane)
+            if x is None:
+                continue
+            rect = pygame.Rect(0, 0, self.SPEED_TILE_W, self.STILL_TILE_H)
+            rect.center = (x, y)
+            state, alpha = "still", 255
+            if lift_t is not None:
+                if target:
+                    state = "right"
+                else:
+                    state = "fading"
+                    alpha = int(255 * max(0.25, 1.0 - (now - lift_t) / 0.3))
+            elif glow_t is not None:
+                if target:
+                    state = "glow"
+                elif lane in wrong:
+                    state, alpha = "dead", 150
+                else:
+                    state = "fading"
+                    alpha = int(255 * max(0.25, 1.0 - (now - glow_t) / 0.3))
+            out.append({"lane": lane, "text": text, "target": target,
+                        "rect": rect, "state": state,
+                        "alpha": max(0, min(255, alpha))})
+        return out
+
+    def _speed_font(self, mode, text: str, max_w: int) -> pygame.font.Font:
+        return self._fitted_tile_font(
+            text, max_w, int(FONT_TITLE * 1.2 * self._scale(mode)))
+
+    def _draw_speed_trial(self, surf: pygame.Surface, mode,
+                          now: float) -> None:
+        """The speed check: the word flashed, a row of hash marks over
+        the same space, then four words over the four fingers."""
+        cx = self.layout.width // 2
+        self._draw_header(surf, mode)
+        self._draw_seats(surf, mode)
+        word = getattr(mode, "speed_word", None)
+        if word is None:
+            return
+        if mode.phase in ("flash", "mask"):
+            text = word.word if mode.phase == "flash" else "#" * len(word.word)
+            font = self._speed_font(mode, word.word, self.layout.width - 240)
+            self._draw_tracked(surf, text, font, self.theme.foreground,
+                               (cx, self.STILL_Y))
+            return
+        self._draw_still_guides(surf, mode)
+        self._draw_time_bar(surf, mode, now, float(mode.SPEED_LIMIT_S))
+        border = _mix(self._bg(mode), self.theme.muted, 0.55)
+        items = self.speed_layout(mode, now)
+        font = (self._set_font([it["text"] for it in items],
+                               self.SPEED_TILE_W - 28,
+                               int(FONT_TITLE * 0.6 * self._scale(mode)))
+                if items else None)
+        for item in items:
+            rect, state, alpha = item["rect"], item["state"], item["alpha"]
+            fill = (_mix(self._bg(mode), self.theme.muted, 0.45)
+                    if state == "dead" else self._card())
+            ink = self.theme.muted if state == "dead" else self.theme.foreground
+            tile = pygame.Surface(rect.size, pygame.SRCALPHA)
+            pygame.draw.rect(tile, (*fill, 255), tile.get_rect(),
+                             border_radius=20)
+            pygame.draw.rect(tile, (*border, 255), tile.get_rect(), 3,
+                             border_radius=20)
+            if alpha < 255:
+                tile.set_alpha(alpha)
+            surf.blit(tile, rect.topleft)
+            self._draw_tracked(surf, item["text"], font, ink, rect.center,
+                               alpha=alpha)
+            if state in ("right", "glow"):
+                colour = (self.theme.success if state == "right"
+                          else self._accent())
+                pygame.draw.rect(surf, colour, rect.inflate(16, 16), 5,
+                                 border_radius=26)
 
     # ---- streak stars ------------------------------------------------------
     def _draw_streak_stars(self, surf: pygame.Surface, mode,
@@ -914,7 +1256,9 @@ class SyllablesScreen(Screen):
         lines = keyboard_controls_lines(self.engine, mode)
         # R replays the chunk. For a child it is the supervisor's key
         # and needs no legend; an adult presses it themselves.
-        if self._style(mode) == "adult":
+        speed = (self._sectioned(mode)
+                 and getattr(mode, "section", "") == "speed")
+        if self._style(mode) == "adult" and not speed:
             lines = list(lines) + ["R: hear it again"]
         return lines
 

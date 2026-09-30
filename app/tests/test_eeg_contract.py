@@ -309,7 +309,7 @@ class WriterConfigTests(unittest.TestCase):
         # above check; this pins that the version travels into
         # metadata so a recording can always be decoded with the map
         # it was made under, and that the map itself rides along.
-        self.assertEqual(st["codes_version"], "1.6")
+        self.assertEqual(st["codes_version"], "1.7")
         from finger_rehab.hardware.eeg_trigger import CODES, MODE_IDS
         self.assertEqual(st["codes"], CODES)
         self.assertEqual(st["mode_ids"], MODE_IDS)
@@ -891,7 +891,7 @@ class RhythmLeadMarkerTests(_EngineHarness):
                 eng.finish_block()
                 meta = json.loads((root / "metadata.json").read_text())
                 eeg = meta["eeg"]
-                self.assertEqual(eeg["codes_version"], "1.6")
+                self.assertEqual(eeg["codes_version"], "1.7")
                 self.assertEqual(eeg["latency"]["buzzer_ms"], 45.0)
                 self.assertEqual(eeg["latency"]["visual_ms"], 20.0)
                 self.assertEqual(eeg["latency"]["tone_ms"], 12.0)

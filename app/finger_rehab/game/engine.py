@@ -4834,6 +4834,7 @@ class GameEngine:
             age_band=str(self.cfg.get("syllables.age_band", "auto")
                          or "auto"),
             age=getattr(self.session, "age", ""),
+            sections=bool(self.cfg.get("syllables.sections", True)),
         )
         self._begin_block("syllables")
         # The seed shaped this block's word order, so it lives next to
@@ -4844,7 +4845,8 @@ class GameEngine:
                 detail=(f"seed={seed} hand={hand} "
                         f"band={self.mode.band} rung={self.mode.rung} "
                         f"supervised={1 if self.mode.supervised else 0} "
-                        f"ioi_ms={self.mode.ioi_s * 1000.0:.0f}"),
+                        f"ioi_ms={self.mode.ioi_s * 1000.0:.0f} "
+                        f"sections={1 if self.mode.sectioned else 0}"),
                 hand=self.hand_mode)
         sc = self._screens.get("syllables")
         if sc is not None and hasattr(sc, "on_block_start"):

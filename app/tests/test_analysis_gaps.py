@@ -705,7 +705,7 @@ class SyllableReturnTests(unittest.TestCase):
             eng = make_engine("right", str(root))
             eng.cfg.data["syllables"].update(
                 {"words_per_block": 8, "round_size": 8, "break_s": 0,
-                 "warmup_taps": 0, "rung": 3})
+                 "warmup_taps": 0, "rung": 3, "sections": False})
             eng.begin_syllables_block()
             seen = {"key": None}
 

@@ -196,5 +196,55 @@ class PadBenchMathTests(unittest.TestCase):
         self.assertIn("counts per N", out.getvalue())
 
 
+    def test_cross_talk_reads_what_leaks_onto_the_other_pads(self):
+        import csv
+        import io
+        import tempfile
+        from contextlib import redirect_stdout
+        from pathlib import Path
+        from unittest import mock
+        import pad_bench as pb
+
+        class LeakyBoard:
+            """The loaded pad reads 51.2 counts per newton; each of the
+            other three picks up 3 counts per 100 of it."""
+            def __init__(self):
+                self.grams, self.pad = 0.0, 0
+
+            def read(self, seconds):
+                load = 51.2 * pb.newtons(self.grams)
+                vals = [280.0 + 0.03 * load] * 4
+                vals[self.pad] = 280.0 + load
+                n = int(min(seconds, 3.0) * 200)
+                return [(i / 200.0, list(vals)) for i in range(n)]
+
+        board = LeakyBoard()
+
+        def answer(prompt):
+            if prompt.strip().startswith("Pad"):
+                board.pad = int(prompt.split()[1]) - 1
+            board.grams = (0.0 if "nothing on it" in prompt
+                           else float(prompt.split(" g")[0].split()[-1]))
+            return ""
+
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(pb, "APP", Path(tmp)), \
+                mock.patch("builtins.input", side_effect=answer), \
+                mock.patch.object(pb.time, "sleep"), \
+                redirect_stdout(io.StringIO()) as out:
+            pb.run_characterise(board, [100.0, 250.0, 500.0, 1000.0],
+                                500.0, 0.05, "calibrated")
+            summary = next(p for p in
+                           (Path(tmp) / "config" / "calibration").iterdir()
+                           if p.name.endswith("_summary.csv"))
+            rows = list(csv.DictReader(summary.open(encoding="utf-8")))
+        leak = [float(r["value"]) for r in rows
+                if r["measure"].startswith("crosstalk_to_pad")]
+        self.assertEqual(len(leak), 12)
+        for v in leak:
+            self.assertAlmostEqual(v, 3.0, places=2)
+        self.assertIn("cross-talk", out.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

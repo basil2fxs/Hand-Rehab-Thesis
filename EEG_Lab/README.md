@@ -18,7 +18,7 @@
 
 Every session also saves `markers_codes.csv`: the full map it was recorded under.
 
-A press byte (100 and up) goes out when the finger's smoothed force first passes its trigger, 30% of the way from resting to the light press at calibration. It leaves 0 to one frame (17 ms) after that 200 Hz sample, and `raw.csv` keeps both times, so response-locked epochs move back to the sample (`t_event`).
+A stimulus byte goes out straight after the frame that draws the stimulus; the monitor's own delay in lighting the picture was not measured (no light sensor), so visual epochs carry a fixed offset per monitor. A press byte (100 and up) goes out when the finger's smoothed force first passes its trigger, 30% of the way from resting to the light press at calibration. It leaves 0 to one frame (17 ms) after that 200 Hz sample, and `raw.csv` keeps both times, so response-locked epochs move back to the sample (`t_event`). That sample is timed when it reaches the computer, in USB bursts about 20 ms apart, so it can itself be up to 20 ms late.
 
 ## In this folder
 

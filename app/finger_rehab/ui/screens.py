@@ -6096,14 +6096,21 @@ class ResultsScreen(Screen):
         first = sy.get("first_press_accuracy")
         if first is None:
             first = sy.get("accuracy")
-        if first is None:
-            return None
-        if first < 0.45:
+        if first is not None and first < 0.45:
             return ("Supervisor: an easier band and a lower level may "
                     "suit next session.")
-        if first > 0.95:
+        if first is not None and first > 0.95:
             return ("Supervisor: try the next band next session; the "
                     "words stopped asking anything.")
+        # The sectioned sitting's speed check, when it ran: what it
+        # measured, in one line.
+        speed = (sy.get("sections") or {}).get("speed") or {}
+        if speed.get("n"):
+            ms = (speed.get("expo_reversal_mean_ms")
+                  or speed.get("expo_final_ms"))
+            right = round(100 * float(speed.get("acc") or 0.0))
+            return (f"Quick look: {speed['n']} words, {right}% right, "
+                    f"each shown for {ms} ms by the end.")
         return None
 
     def _draw_sticker_strip(self, surf: pygame.Surface) -> None:

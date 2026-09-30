@@ -12,7 +12,7 @@
 | [`linear_actuator/`](linear_actuator) | The sketch that moves the finger rests in and out |
 | [`images/`](images) | The CAD render, the cross-section, both halves, and the parts and wiring diagram |
 
-The game board's firmware is in [`app/arduino`](../app/arduino). The app flashes it (Settings, Setup, Flash firmware), so nobody needs the Arduino IDE.
+The game board's firmware is in [`app/arduino`](../app/arduino). The app flashes it from Settings, Setup, Flash firmware; the Arduino IDE is not needed.
 
 ## How it fits together
 
@@ -60,7 +60,7 @@ The game board, an Arduino Nano on the custom PCB:
 | USB | The computer |
 
 - **Pads:** index 0x05, middle 0x06, ring 0x07, little 0x08. A new pad arrives on a factory address; move it with Settings, Setup, Sensor address, with only that pad plugged in.
-- **Readings:** the board reads 6 bytes from each pad 200 times a second and sends `FSR: a,b,c,d` over USB at 115200 baud.
+- **Readings:** the board reads 6 bytes from each pad 200 times a second and sends `FSR: a,b,c,d` over USB at 115200 baud. The manual quotes up to 120 Hz per pad, but recorded sessions show a new value on nearly every read; values repeat when force changes by less than one step.
 - **Buzz:** `STIM:n` from the game drives motor n (1 to 4) for 150 ms at PWM 200 of 255 (240 on the little finger).
 
 The actuator board, a second Arduino running [`linear_actuator.ino`](linear_actuator/linear_actuator.ino):

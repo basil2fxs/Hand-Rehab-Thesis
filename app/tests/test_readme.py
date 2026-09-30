@@ -53,12 +53,13 @@ BANNED_WORDS = ("delve", "leverage", "robust", "seamless", "showcase",
                 "crucial", "pivotal", "intricate", "testament", "foster",
                 "comprehensive", "profound")
 
-# The order a reader meets them: what it is, how to install it, what
-# happens at the USB socket, the games, the repairs, the failures, the
-# data, the lab, the licence.
+# The order a reader meets them: what it is, how its timing is limited,
+# how to install it, what happens at the USB socket, the games, the
+# repairs, the failures, the data, the lab, the licence.
 SECTIONS = [
     "Where things are",
     "How it works",
+    "Timing and limits",
     "Install",
     "When a board is plugged in",
     "The ten games",
