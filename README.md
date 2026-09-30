@@ -160,7 +160,7 @@ Sessions land in `sessions/<date>/<name>_<time>_<game>/`: `trials.csv` one row p
 `EEG_Lab` (the `FingerRehab-EEGLab.zip` of the same build) holds the exe, `eeg_lab.yaml`, `run_in_psychopy.py`, `README.md`, a `source/` copy and `sessions/`, where `sessions/eeg/` takes ActiView's recording under the name the game menu shows. Its `developer/` folder stays on the development PC: an EEG simulator for rehearsing, the PsychoPy download and a new-PC check.
 Open `run_in_psychopy.py` in PsychoPy Coder and press Run. The home install carries no EEG anything.
 `python3 app/scripts/check_lab_sync.py` says whether the lab folder is the same game as the app; `--fix` makes it so, and `Local_Runner.command` does that on every start.
-Checklist and code table: [app/docs/eeg_lab_setup.txt](app/docs/eeg_lab_setup.txt).
+What each number means, with pictures: [EEG_Lab/README.md](EEG_Lab/README.md). Checklist and code table: [app/docs/eeg_lab_setup.txt](app/docs/eeg_lab_setup.txt).
 
 ## Licence
 

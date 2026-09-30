@@ -460,18 +460,20 @@ class BuilderTests(unittest.TestCase):
         self.assertEqual((pkg / "README.md").read_text(), "lab readme\n")
 
     def test_readme_is_short_and_plain(self) -> None:
-        # One screen, ASCII only: the lab reads it once, on GitHub or
-        # in Notepad on the lab PC.
+        # One screen of text, ASCII only: the lab reads it once, on
+        # GitHub or in Notepad on the lab PC. Each picture is one line.
         text = (LAB_FOLDER / "README.md").read_text()
-        self.assertLessEqual(len(text.strip().splitlines()), 35)
+        self.assertLessEqual(len(text.strip().splitlines()), 40)
         self.assertTrue(text.isascii())
-        # The steps, then the cheat sheet in both themes.
+        # The steps, then the three marker pictures in both themes.
         self.assertIn("run_in_psychopy.py", text)
-        for theme in ("dark", "light"):
-            name = f"eeg_cheat_sheet_{theme}.svg"
-            self.assertIn(name, text)
-            self.assertTrue((REPO / "docs" / "images" / name).is_file(),
-                            name)
+        for picture in ("eeg_markers_how", "eeg_markers_where",
+                        "eeg_cheat_sheet"):
+            for theme in ("dark", "light"):
+                name = f"{picture}_{theme}.svg"
+                self.assertIn(name, text)
+                self.assertTrue(
+                    (REPO / "docs" / "images" / name).is_file(), name)
         self.assertFalse((LAB_FOLDER / "README.txt").exists(),
                          "README.md replaced README.txt")
 

@@ -62,7 +62,7 @@ Rebuild these after changing what they come from. Commands run from `app/`.
 | `EEG_Lab/source/`, `EEG_Lab/eeg_lab.yaml` | the app | `python3 scripts/check_lab_sync.py --fix` |
 | `docs/images/*.png` | the game's screens | `python3 scripts/make_screenshots.py` |
 | `docs/images/analysis_*.png` | the notebook's cohort chapter on a simulated cohort | `python3 scripts/simulate_cohort.py --out <folder>`, then the notebook on that folder |
-| `docs/images/eeg_cheat_sheet_*.svg` | the marker map | `python3 scripts/make_eeg_cheat_sheet.py` |
+| `docs/images/eeg_*.svg` | the marker map and the lab sitting | `python3 scripts/make_eeg_cheat_sheet.py` |
 | `assets/firmware/*.hex` | `arduino/` | `python3 builds/build_firmware.py` (needs PlatformIO) |
 
 ## Newer libraries

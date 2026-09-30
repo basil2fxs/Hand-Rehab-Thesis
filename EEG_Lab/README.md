@@ -11,14 +11,20 @@
 
 ## Markers
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="../app/docs/images/eeg_cheat_sheet_dark.svg">
-  <img alt="EEG marker cheat sheet: one trial on the recording, the codes before, at and after each press, around each game, the finger numbers, the lab's Reaction task and the game numbers" src="../app/docs/images/eeg_cheat_sheet_light.svg" width="100%">
-</picture>
+While ActiView records, the game writes a number onto the recording the moment something happens, so the brain signal can be cut around each event afterwards.
 
-Every session also saves `markers_codes.csv`: the full map it was recorded under.
+<picture><source media="(prefers-color-scheme: dark)" srcset="../app/docs/images/eeg_markers_how_dark.svg"><img alt="How a number reaches the recording: the game sends 33 when a finger lights up, the marker box on COM10 puts it on the trigger cable, and 33 marks that moment on the EEG" src="../app/docs/images/eeg_markers_how_light.svg" width="100%"></picture>
+
+<picture><source media="(prefers-color-scheme: dark)" srcset="../app/docs/images/eeg_markers_where_dark.svg"><img alt="Where the numbers land: 240 and 241 around a lab sitting, 20, 206 and 226 around one game, and 33, 102 and 140 for the cue, the press and the result of one trial" src="../app/docs/images/eeg_markers_where_light.svg" width="100%"></picture>
+
+<picture><source media="(prefers-color-scheme: dark)" srcset="../app/docs/images/eeg_cheat_sheet_dark.svg"><img alt="What each number means: 20s set-up and timing, 30s a cue, 100s a press by finger, 140s the result, 200s each game's start and end, 240s the session" src="../app/docs/images/eeg_cheat_sheet_light.svg" width="100%"></picture>
+
+Every session also saves `markers_codes.csv`: the full map it was recorded under, with the codes other sittings send.
+
+<details><summary>Timing, for the analysis</summary>
 
 A stimulus byte goes out straight after the frame that draws the stimulus; the monitor's own delay in lighting the picture was not measured (no light sensor), so visual epochs carry a fixed offset per monitor. A press byte (100 and up) goes out when the finger's smoothed force first passes its trigger, 30% of the way from resting to the light press at calibration. It leaves 0 to one frame (17 ms) after that 200 Hz sample, and `raw.csv` keeps both times, so response-locked epochs move back to the sample (`t_event`). That sample is timed when it reaches the computer, in USB bursts about 20 ms apart, so it can itself be up to 20 ms late.
+</details>
 
 ## In this folder
 
