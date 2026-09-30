@@ -321,13 +321,19 @@ jobs:
           exit 0
 
   # Publish the build as the release for its version. Only a push to
-  # main whose tests and builds all passed gets here. The tag v<version>
-  # is moved to this commit, so a release's files and its tag always
-  # come from the same build. A newer push cancels an older one still
-  # waiting, so the newest build wins.
+  # main (or a manual run on main) whose tests and builds all passed
+  # gets here. The tag v<version> is moved to this commit, so a
+  # release's files and its tag always come from the same build. A
+  # newer push cancels an older one still waiting, so the newest build
+  # wins. Every GitHub call is retried, because one HTTP 500 during an
+  # upload once left the previous build's files in place, and the last
+  # step fails the run unless the release now carries this commit's
+  # three files and is the one marked latest.
   release:
     needs: [test, build]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -358,16 +364,42 @@ jobs:
             test -f "$DIST/$f" || { echo "missing $f"; exit 1; }
           done
           python3 builds/release_notes.py "$APP_VERSION" "$GITHUB_SHA" > notes.md
+          # Up to five tries, 30, 60, 90 and 120 s apart, for the
+          # transient errors GitHub's API returns under load.
+          retry() {
+            for i in 1 2 3 4 5; do
+              "$@" && return 0
+              echo "attempt $i failed: $*"
+              sleep $((i * 30))
+            done
+            return 1
+          }
           if gh release view "$TAG" > /dev/null 2>&1; then
-            gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/$TAG" \
-              -f sha="$GITHUB_SHA" -F force=true > /dev/null \
-            || gh api "repos/$GITHUB_REPOSITORY/git/refs" \
-              -f ref="refs/tags/$TAG" -f sha="$GITHUB_SHA" > /dev/null
-            gh release upload "$TAG" "$DIST"/FingerRehab-* --clobber
-            gh release edit "$TAG" --title "Finger Rehab $APP_VERSION" \
+            retry sh -c 'gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/$0" -f sha="$GITHUB_SHA" -F force=true > /dev/null || gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$0" -f sha="$GITHUB_SHA" > /dev/null' "$TAG"
+            retry gh release upload "$TAG" "$DIST"/FingerRehab-* --clobber
+            retry gh release edit "$TAG" --title "Finger Rehab $APP_VERSION" \
               --notes-file notes.md --latest
           else
-            gh release create "$TAG" "$DIST"/FingerRehab-* \
+            retry gh release create "$TAG" "$DIST"/FingerRehab-* \
               --target "$GITHUB_SHA" --title "Finger Rehab $APP_VERSION" \
               --notes-file notes.md --latest
           fi
+
+      - name: Check the release is this build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v$APP_VERSION"
+          DIST="$GITHUB_WORKSPACE/dist"
+          sha=$(gh api "repos/$GITHUB_REPOSITORY/git/refs/tags/$TAG" --jq .object.sha)
+          test "$sha" = "$GITHUB_SHA" || { echo "tag $TAG is $sha, not $GITHUB_SHA"; exit 1; }
+          latest=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)
+          test "$latest" = "$TAG" || { echo "latest release is $latest, not $TAG"; exit 1; }
+          gh release view "$TAG" --json body --jq .body | grep -q "${GITHUB_SHA:0:7}" \
+            || { echo "release notes do not name ${GITHUB_SHA:0:7}"; exit 1; }
+          for f in FingerRehab-Setup-Windows.exe FingerRehab-macOS.dmg FingerRehab-EEGLab.zip; do
+            want=$(stat -c %s "$DIST/$f")
+            got=$(gh release view "$TAG" --json assets --jq ".assets[] | select(.name == \"$f\") | .size")
+            test "$want" = "$got" || { echo "$f is $got bytes on the release, $want built"; exit 1; }
+          done
+          echo "Release $TAG is commit ${GITHUB_SHA:0:7}, marked latest, all three files this build's."
