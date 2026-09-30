@@ -6,9 +6,10 @@ unfamiliar material.
 
 WHY THIS DESIGN. Nissen and Bullemer (1987, Cognitive Psychology) had
 people respond to a cue in one of four positions with one finger per
-position while a 10-item sequence repeated underneath; mean RT fell
-from 327 ms to 163 ms, and swapping in a random block bounced RT back
-up. That rebound, sequence-block RT subtracted from probe-block RT, is
+position while a 10-item sequence repeated underneath; RT fell across
+training and swapping in a random block bounced it back up (the 327 to
+163 ms often quoted could not be read in the primary text). That
+rebound, sequence-block RT subtracted from probe-block RT, is
 the learning index used here and one of the most replicated measures
 in cognitive psychology (Robertson 2007, J Neurosci, for review). The
 pattern_trial column in trials.csv carries the trained/untrained label
@@ -115,7 +116,8 @@ three trained, probe, trained, probe, trained, keeping both probes
 flanked because the flanker subtraction IS the measurement. Takes are
 48 trials, the length of the 50-trial blocks current SRTT work runs
 with a 12-item SOC (Oliveira et al. 2024), about 380 sequence trials a
-session; Nissen and Bullemer found learning within 4 blocks of 100.
+session; Nissen and Bullemer are quoted as finding learning within 4
+blocks of 100.
 They were 60, and players found them long. Shorter takes cost a
 little precision per take, which is why the learning score is always
 read across a group and across sessions: the SRTT effect is reliable
@@ -197,8 +199,8 @@ mentions that a pattern exists, probe takes render identically to
 trained takes, and between-take stars reward accuracy only (3 stars at
 95 percent, 2 at 85, 1 at 70). Echo mode (echo.py) is the deliberate
 opposite: explicit memorising is the task there. Keeping the two as
-separate modes is what protects this one's implicit measure; neither
-folds into the other. RT numbers are never shown. Within
+separate modes keeps explicit memorising out of this one's measure;
+neither folds into the other. RT numbers are never shown. Within
 that constraint the feedback is deliberately reward-flavoured: take
 progress, a running 3-star streak across takes, and an end-of-session
 recap of stars and takes. Reward tied to performance improves
@@ -220,12 +222,18 @@ next trial close. Presses are the calibrated light-press threshold
 only.
 
 WHAT THIS MODE CANNOT CLAIM. Implicit sequence learning after stroke
-is demonstrated for the less-affected hand (Kal et al 2016, PLoS ONE
+is demonstrated for the unaffected hand (Kal et al 2016, PLoS ONE
 meta-analysis: 69 ms mean probe rebound) but NOT for the affected
 hand (pooled effect null), so affected-side use is measurement, not
 proven therapy. A single-session rebound can be temporary adaptation
 that fades in minutes (Trofimova et al 2020, Neurobiol Learn Mem);
-only multi-session and retention data support memory claims. There is
+only multi-session and retention data support memory claims. Nothing
+in the study checks awareness, and the study cue plays a lane tone with
+every key, so the trained sequence is also a melody (DEVIATIONS below),
+which helps serial learning (Hoffmann, Sebald and Stoecker 2001, JEP:LMC
+27:470-482) and may make it explicit: a healthy result is
+sequence-specific learning within the sitting, not implicit learning.
+There is
 no evidence this training transfers to untrained hand tasks. And with
 a 60 Hz display the stimulus onset is quantised to 16.7 ms, so
 single-trial differences are noise; block means are the unit of
@@ -239,7 +247,8 @@ DEVIATIONS FROM THE RESEARCH BRIEF, where the plumbing wins:
   sequence into an audible melody, which invites explicit discovery.
   The brief's uniform-click option does not exist in the shared audio
   path; run research blocks with sound_before off, or accept the
-  melody and note the cue_flags value. Either way it is logged.
+  melody and note the cue_flags value. Either way it is logged. The
+  study runs with sound_before on, so its blocks carry the melody.
 - engine.log_trial flashes the outcome tier (Perfect/Great/Good/Late)
   like every other mode. That is a speed hint but not an RT number;
   accepted for consistency across the suite. The Perfect tier's point

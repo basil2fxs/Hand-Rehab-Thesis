@@ -58,7 +58,9 @@ students over four games with 30 s rests, found no habituation,
 practice or interference across the games, and reported spans around
 seven on four buttons (quoted via Mathy, Fartoukh, Gauvrit and Guida
 2016, Frontiers in Psychology 7:201, the primary PDF being unobtainable)
-against the Corsi mean of 6.2 on nine blocks.
+against the Corsi mean of 6.2 on nine blocks. The toy lets a colour
+repeat straight away and Echo does not (SEQUENCE MATERIAL), which on
+its own may put Echo's spans a little under seven.
 
 MATERIAL PER GAME. The sequence is drawn from
 sha256(participant name normalised | "echo_simon_v1" | game_index),
@@ -131,20 +133,26 @@ PMC8366059) is allowed but lands in block_stats so the analysis can
 split those blocks out.
 
 BIMODAL PRESENTATION. Each playback item lights the lane tile AND
-buzzes that finger with simultaneous onset: spatially and temporally
-congruent multisensory stimulation aids encoding and learning relative
+buzzes that finger with simultaneous onset. With cue.sound_before on,
+as in the study, it also plays that lane's tone, so a study sequence
+is a light, a buzz and a four-note melody at once, as on the retail
+toy, and pitch is one more code the player can rehearse. Spatially and
+temporally congruent multisensory stimulation aids encoding and
+learning relative
 to unisensory input (Shams and Seitz 2008, Trends in Cognitive Sciences
 12:411-417), and multisensory protocols are an active strand of
 post-stroke cognitive rehab (Cheng 2022, J Clin Med 11:6324; Johansson
 2012). Two honest limits: no study directly compares light-plus-buzz
 against light-only in a span game, so the bimodal choice rests on the
 general multisensory-learning literature, not a task-level trial; and
-the ERM motors' mechanical rise time on this rig is a datasheet class
-value, not a bench measurement (latency.measured), so onset
-simultaneity is nominal. The buzz REINFORCES the light here;
+the motors' lag was measured only once, on the study laptop with its
+microphone (74 ms from command to motion, 24 September 2026), while
+their rise time is a datasheet class value, so onset simultaneity is
+nominal. The buzz REINFORCES the light here;
 buzz_hunt's SEQUENCE SPAN stage is where the tactile channel is tested
-ALONE (tactile-only span caps out around 4 items in healthy adults,
-far under the visual 6.2), and the two modes must not be collapsed:
+ALONE (ordered tactile recall caps out around 4 items in healthy
+adults, Yeganeh et al. 2026, Sensors 26:2361, far under the visual
+6.2), and the two modes must not be collapsed:
 that stage measures whether the hand can READ the buzzes, Echo
 measures how much explicit sequence the player can HOLD. Both
 docstrings say so.
@@ -175,7 +183,8 @@ bounce-detected double press, and Corsi sequences never repeat a block
 consecutively). Lane REVISITS within a sequence are allowed and
 necessary above length 4: the stock SIMON toy has four lanes and
 usable spans around 7 (Gendle and Ransom 2006, J Behav Neurosci Res
-4:1-7), so revisiting material works as span material. This is a named
+4:1-7, via Mathy et al. 2016), so revisiting material works as span
+material. This is a named
 deviation from Corsi's nine distinct blocks, one more reason these
 spans are within-person numbers only. Under the Simon rule the game's
 sequence is drawn once and truncated per trial, so it is prefix-stable

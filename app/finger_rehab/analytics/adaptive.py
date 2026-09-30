@@ -3,9 +3,10 @@
 Motivated by Guadagnoli & Lee's (2004) challenge-point framework, which
 argues an optimal (nominal) difficulty exists for learning but does not
 itself name a success-rate number. The 65-80% target band here is a
-design choice, informed by success-rate-controlled rehab games in the
-literature (e.g. Wilson et al. 2019; the FINGER robot line), not a
-number reported by Guadagnoli & Lee. Two control inputs:
+design choice, not a number reported by Guadagnoli & Lee. Wilson et al.
+(2019) derive about 85% for a class of learning algorithms, and the
+FINGER robot line held success rate through robot assistance; neither
+sets this band. Two control inputs:
 
   - Lane weights: weak fingers get picked more often (per-lane hit-rate EMA).
   - BPM: speed up when overall hit rate is too high, slow down when too low.
@@ -67,8 +68,9 @@ class AdaptiveConfig:
     construction and never mutates them. Defaults hold a 65-80 percent
     hit-rate band, a design choice built on Guadagnoli & Lee's (2004)
     challenge-point framework (which motivates having a target band at
-    all, not this specific number) plus success-rate-controlled rehab
-    games in the literature (Wilson et al. 2019 and similar).
+    all, not this specific number). Wilson et al. (2019) derive about
+    85 percent for a class of learning algorithms; the notebook draws
+    that line beside the band.
     """
     # Target hit-rate band. Below `target_low` the engine slows down;
     # above `target_high` it speeds up. Inside the band it holds steady.

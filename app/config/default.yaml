@@ -681,6 +681,9 @@ adaptive:
   # hold. Measured on a headless 280 ms simulated player: at 140 the
   # trailing hit rate never re-entered the band in 300 trials; at 180
   # it settled back inside it around trial 53 (about half a minute).
+  # Real hands are slower: five pilot blocks peaked at 90 to 144 BPM,
+  # none at the cap, and four entered the band by trials 21 to 33
+  # (review of 30 September 2026).
   bpm_max: 180
   bpm_step: 10                # base step. Scaled up when hit rate is far off.
   target_low: 0.65            # aim for the 65-80% band around the 70% target
@@ -2028,9 +2031,11 @@ protocol:
           # The buzz sits ON the beat for the study block. Free play
           # leads the beat by 350 ms and adapts to each player, which
           # makes the block a reaction task with a per-person
-          # stimulus. Rh1 and Rh2 are synchronisation effects (taps
-          # lead a regular beat, Repp 2005), measured against a pacing
-          # signal that is the same for everybody.
+          # stimulus. Rh1 and Rh2 come from synchronisation work (taps
+          # lead an even metronome, Repp 2005). This chart follows the
+          # song, with notes 0.7 to 2.9 s apart, so they are read
+          # against a pacing signal that is the same for everybody,
+          # not as a copy of metronome tapping.
           tactile_mode: on_beat
         echo:
           games: 2                    # best of two, and their spread

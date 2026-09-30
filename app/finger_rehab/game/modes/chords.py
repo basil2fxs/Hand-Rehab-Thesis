@@ -8,7 +8,11 @@ enslaving, showed it is largest between neighbouring fingers, and
 formalised the interfinger connection matrix this mode's
 chord-conditioned matrices estimate. Healthy hands leak roughly 5-15 percent of the instructed
 force at light effort (Abolins, Stremoukhov, Walter and Latash 2020, J Neurophysiol, read via
-PMC7814910: 8-10 percent at about 25 percent MVC). Stroke raises the
+PMC7814910: 8-10 percent at about 25 percent MVC). The study's presses
+are lighter than that (about 0.8 to 1.7 N on the pilot), and a resting
+finger's own noise over a chord's window gives an ER near 0.05 against
+them, so on this rig the healthy band is a feasibility check, not a
+measured enslaving level (review of 30 September 2026). Stroke raises the
 leak and lowers individuation (Lang and Schieber 2003/2004,
 J Neurophysiol), and Xu et al. (2017, J Neurophysiol 118, n=54) showed
 individuation recovers partly separately from strength, so control
@@ -104,9 +108,13 @@ SYNCHRONY WINDOW. Skilled pianists land chord tones within about 30 ms
 1979/1988). No stroke value exists in the literature, so W is a
 defended design choice: it starts at 250 ms (about 8x expert) and
 tightens through 200 and 150 to a floor of 100 ms (about 3x expert),
-which demands genuine co-articulation rather than fast sequencing. At
-the device's 200 Hz sample rate onsets resolve to 5 ms, twenty times
-finer than the floor, so every window here is honestly checkable.
+which demands genuine co-articulation rather than fast sequencing. The
+pads are sampled every 5 ms, but a press is stamped when its sample's
+USB burst reaches the laptop, and on a bursting adapter the pilot's
+chord spans came in steps of about 20 ms (0, 21.8, 40.5, 60.6 ms and
+so on). That is still five times finer than the 100 ms floor, so every
+window here is checkable, but spans under about 20 ms are not
+resolved; the analysis re-times onsets on the board's own clock.
 
 CROSS-TALK SCORE. Per-trial leak comes from the per-finger peaks the
 engine's force window already records (baseline-subtracted, all eight
@@ -175,8 +183,10 @@ from. Second, the matrix. The per-finger light-press captures from the
 quick calibration (CalibrationProfile.gap) are still the normaliser
 under every force number in this mode (_reference_counts). A matrix
 built from chords is CHORD-CONDITIONED: the leak on quiet finger j
-while i was active in company, an upper bound on the one-finger cell
-under the additive connection-matrix model (Zatsiorsky 2000). A
+while i was active in company. It is not a bound on the one-finger
+cell: enslaving is not additive, and with two or three fingers
+instructed the leak was often smaller than from one of them alone
+(Zatsiorsky 2000). A
 single is that one-finger condition itself, so the singles give the
 classical matrix (singles.enslaving_matrix in the block summary)
 beside the chord-conditioned start and end matrices, which still come

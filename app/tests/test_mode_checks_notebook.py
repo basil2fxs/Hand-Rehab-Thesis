@@ -303,6 +303,10 @@ class ModeChecksTests(unittest.TestCase):
         row = res["checks"].set_index("id")
         self.assertIn("A3", row.index)
         self.assertIn("cap", str(row.loc["A3", "value"]))
+        # A band entry on the way up is not the controller holding it,
+        # so A3 reads the controller's record after the climb.
+        self.assertIn("after the climb", str(row.loc["A3", "value"]))
+        self.assertIn("recovery entries", str(row.loc["A3", "value"]))
         self.assertTrue(res["lane_rates"], "no per-lane hit rates")
 
     def test_rhythm_splits_the_two_hands(self) -> None:

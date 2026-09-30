@@ -1,16 +1,33 @@
 """Rhythm mode (Thread 2). Falling notes synced to music or a metronome.
 
-This is the RAS (Rhythmic Auditory Stimulation) arm of the fixed-cadence
-versus RAS comparative study the progress report commits to (classic.py
-is the fixed-cadence control). RAS entrains movement timing to an
-external auditory beat and is a well-established gait and upper-limb
-rehab technique after stroke (Thaut, McIntosh and Rice 1997, Journal of
-the Neurological Sciences). Unlike classic's cue-then-react loop, the
-patient can see and hear the beat coming, so the task is synchronisation,
-not reaction: presses land close to the beat in either direction, and a
-small negative mean asynchrony (anticipating the beat by tens of ms) is
-the norm in the sensorimotor-synchronisation literature, not an error
-(Repp 2005, Psychonomic Bulletin and Review; Repp and Su 2013).
+The mode was designed as the RAS (Rhythmic Auditory Stimulation) arm of
+a fixed-cadence versus RAS comparison, with classic.py as the
+fixed-cadence control. The study battery has no fixed-cadence block, so
+there it is a timing measurement, not a RAS arm. RAS entrains movement
+timing to an external auditory beat and is an established gait and
+upper-limb rehab technique after stroke (Thaut, McIntosh and Rice 1997,
+Journal of the Neurological Sciences). Unlike classic's cue-then-react
+loop, the patient can see and hear the note coming, so the task is
+synchronisation, not reaction.
+
+NOT METRONOME TAPPING. The notes follow the song, not an even click: on
+the study track they fall 697 to 2926 ms apart (median 743 ms, 16
+percent over 1.8 s), the finger changes on every note, each note is in
+view about 2.2 s before it lands, and four signals pace the press at
+once (the falling note, the lane tone, a buzz on the pressing finger
+and the music). The negative mean asynchrony of the synchronisation
+literature (taps lead an auditory metronome by tens of ms: Repp 2005,
+Psychonomic Bulletin and Review; Repp and Su 2013) comes from one
+finger tapping to even clicks. Tactile pacing removed it (Mueller et al.
+2008), and from about 2.4 s between beats people react instead of
+anticipating (Mates et al. 1994). Two device offsets are also the size
+of the effect: the chart's zero sits a median 26 ms after the music's
+attacks (librosa's 23 ms frames), and on a bursting board each press is
+stamped about 10 ms late. A mean near zero, or above it, is therefore
+neither a device fault nor an abnormal result (review of 30 September
+2026). About one note in ten also plays its tone 35 percent louder
+(audio.loud_trial, on in every mode); each row records whether it was
+loud.
 
 TIMING WINDOWS. perfect_ms/great_ms/good_ms/miss_ms (default
 50/100/175/300) are a game-feel graded scoring ladder, not a published
