@@ -113,8 +113,24 @@ HOW THE DESIGN GOT HERE (every change made before any participant):
     headline, with the best of two beside it; E1 is unchanged and
     read as a feasibility check. The GET READY card says each round
     adds one more to the end, that speed does not count and to guess
-    when unsure. The text below is corrected where the reviews found
-    a claim the evidence contradicts.
+    when unsure. Force Pilot after it. The error was measured from the
+    band's centre, but no centre was drawn and the card said only to
+    keep the line inside the band; the centre line is now drawn and
+    the card says to follow it (published tracking tasks all ask for
+    a visible line). F1 no longer reads error against level number,
+    because the ladder narrows the corridor more than it speeds the
+    target (error fell with level in all three pilot blocks): it is
+    the force-target correlation, lower on the irregular waves than on
+    the repeating ones. F2 no longer asks for 100 to 300 ms, which
+    belongs to targets without preview; with 8 s shown ahead it asks
+    that the irregular waves lag the repeating ones, the median read
+    against a device range of -150 to +300 ms. F3 and F4 cannot fail
+    for a healthy hand (a finger held still keeps 0.54 to 1.00 of a
+    run in the corridor) and are feasibility checks. The probe asks
+    for a press as hard as is comfortable, on screen and on the run
+    sheet (Basil, all four recommendations, 1 October 2026). The text
+    below is corrected where the reviews found a claim the evidence
+    contradicts.
 
 What one board costs, and the thesis says it in the same breath as
 the results:
@@ -708,6 +724,24 @@ not claimed (mirror.py).
 One-board note (24 September 2026): the block plays the right hand,
 twelve runs, in both passes; its hand-level MAE and time in corridor
 are T2 and T3 in Section 4.5.
+Deep review note (1 October 2026, before any participant;
+docs/research/deep/force_pilot.md). The centre line is drawn through
+the scrolling band and the card between runs says "Keep your line on
+the centre line; the band is how far you can drift." MAE is measured
+from that line, and every published healthy tracking task asks people
+to follow a visible line (Davidson et al. 2024 and 2026; Teremetz et
+al. 2015; Carment et al. 2018); before this, a player could stay
+inside the easy corridors while shrinking the wave (pilot sine gains
+0.48 to 0.90). The probe screen and the run sheet both ask for a
+press as hard as is comfortable: the pilot's probes read 1.4 to 6.1
+N against a young index pressing MVC near 37 N (Keenan and Massey
+2012), the pad is damaged past 30 N, and percent of max is a
+within-person, within-pad ratio. Every probed finger's three peaks go
+in the raw log (max_press_peaks), with max_press_near_full_scale when
+a peak comes within a tenth of the pad's 511-count range, and the
+notebook prints them per finger with their spread, the max in
+newtons and the pad's noise as a share of it. The background track
+each block drew is named (block_music).
 Primary (notebook sec_force_tracking, offline from raw.csv): RMSE
 and MAE in percent of max, time in corridor, cross-correlation lag
 per wave class, press versus release MAE on the symmetric shapes,
@@ -750,9 +784,10 @@ Scoring notes (25 September 2026, from the first real ladder runs):
     written on the exit frame either way. A quiet background track
     plays under the block (force_pilot.music_enabled, a random draw
     from the menu playlist). It is presentation only: the mode never
-    reads the stream and the track is not logged per block, so music
-    is a fixed condition of the study rather than a variable.
-    config/eeg_lab.yaml turns it off.
+    reads the stream. Each block draws its own track, so since 1
+    October 2026 the raw log names it (block_music) rather than
+    calling music a fixed condition. config/eeg_lab.yaml turns it
+    off.
   - The lag. The cross-correlation now scores each lag as a Pearson
     r over the overlapping samples. The old sum put a cusp at zero
     lag and read 0 ms on every ramp wave whatever the true lag (on a
@@ -764,33 +799,56 @@ Scoring notes (25 September 2026, from the first real ladder runs):
     at one rate: Tide, Hills and both halves of every sine. Dunes is
     reported apart.
 Known effects to reproduce:
-  F1 Error grows with target bandwidth and unpredictability. Read
-     in the battery as the wave ladder's own ordering: the twelve
-     waves in force_pilot.py are laid out slowest to fastest, Slow
-     breath through Storm, so a level number is a bandwidth, and the
-     check is a per-participant Spearman rho of level MAE against
-     level number, tested above zero across the cohort. The original
-     wording was MAE assess_sos > sine > holds ordered within
-     participant; the battery overrides force_pilot to passes: 1,
-     one climb of the ladder, and the assessment and sine segments
-     belong to a standalone run that this design does not play, so
-     that form has no data on a study day and would have stayed
-     undecided however many students turned up. The notebook still
-     computes the old form when a selection happens to hold those
-     segments. Same literature either way (Kurillo 2005 varied
-     target shape for exactly this reason; Lodha 2013 puts the
-     healthy variability structure below 1 Hz).
-  F2 Visuomotor lag positive, of order 100 to 300 ms (a sanity
-     check on the corridor timing, not a literature norm). Read on
-     the non-periodic waves (Open ocean, Storm, Uncharted), runs
-     whose r at the lag is 0.35 or more (Brewer 2009's floor).
-     Periodic waves can be flown ahead of time (lag under 20 ms on
-     repeated patterns, Day 1984) and ramp and step waves are a few
-     edges, so pooling all twelve read prediction as a short lag.
-     With 8 s of corridor visible, even the non-periodic lag may sit
-     under 100 ms; that is anticipation, not a timing fault, when r
-     is high.
-  F3 Release error approximately equal to press error in young
+  F1 Tracking is worse on the irregular waves than on the repeating
+     ones (amended 1 October 2026, before any participant). Per
+     participant, the force-target correlation (r_target) on the
+     periodic waves (Slow breath, Swell, Beach waves, Heartbeat,
+     Chop) against the non-periodic ones (Open ocean, Storm,
+     Uncharted), one-sided Wilcoxon, the p in the Holm family.
+     Predictability is the axis the literature supports: harmonic
+     targets are tracked better and with near-zero feedforward delay
+     (Drop et al. 2016), and error rises with frequency at a fixed
+     amplitude (Park et al. 2019). The correlation ignores the
+     corridor width. The first wording read MAE against level number
+     as if the ladder ran slowest to fastest, but the ladder mostly
+     narrows the corridor (rank correlation with level -0.97) while
+     the target's speed barely rises (+0.20), and the 1/f multisines
+     move slower than five of the lower levels; error fell with level
+     in all three pilot blocks (rho -0.20 to -0.31) and the rule
+     passed in 0 to 8 percent of simulated cohorts. That rho is kept
+     as a descriptive row (F1lvl). Under the old band instruction
+     even the new form passed in only 2 to 18 percent of simulated
+     cohorts, and with the centre line followed in 84 to 95 percent,
+     which is why the two changes go together. The cited "Kurillo
+     2005, Clinical Biomechanics 20(10):1071-1080" does not exist
+     (Crossref); the Kurillo papers of 2004 and 2005 do not test
+     bandwidth. A standalone run still reads MAE assess_sos > sine >
+     holds when a selection holds those segments.
+  F2 The irregular waves are followed with a longer lag than the
+     repeating ones (amended 1 October 2026, before any
+     participant). Per participant, the mean lag on the non-periodic
+     waves against the periodic ones, runs whose r at the lag is
+     0.35 or more (Brewer 2009's floor), one-sided Wilcoxon, in the
+     Holm family; the median non-periodic lag is reported against a
+     device range of -150 to +300 ms. The first wording asked for
+     100 to 300 ms, the delay for targets shown without preview
+     (Brewer et al. 2009's pseudorandom target; McRuer and Jex via
+     Drop et al. 2016). Force Pilot shows 8.2 s ahead and the benefit
+     of preview saturates by 0.6 to 1.15 s (van der El et al. 2018),
+     so healthy lags sit near zero or below it, which is
+     anticipation (young adults with 4 s of preview: phase -0.50
+     percent, Davidson et al. 2026); the band failed 99 to 100
+     percent of simulated cohorts. The display runs about 19 ms
+     behind the raw force (the detector's smoothing and the sample
+     age), so a perfect on-screen tracker reads about -19 ms.
+  F3 A feasibility check since 1 October 2026: at plus or minus 2
+     percent of max it declares equivalence even with a true release
+     excess of 1 percent of max (simulation), so a healthy hand
+     cannot fail it. The release to press MAE ratio and the signed
+     error print beside it: a standing undershoot adds to the press
+     error and cancels part of the release error, so release can read
+     better with no release skill at all. Release error approximately
+     equal to press error in young
      adults. Release-specific impairment is the Parkinson's marker
      (Davidson 2025; Davidson 2026; Chung 2023) and an ageing one
      (Davidson 2024), so a young cohort should show a small
@@ -801,8 +859,11 @@ Known effects to reproduce:
      releases about three times faster than it climbs, so a normal
      150 ms lag alone would put its release error above its press
      error with no release deficit at all.
-  F4 Time in corridor at or above 0.8 on most runs, reported PER
-     LEVEL across the climb. 0.8 is force_pilot.py's GREAT_TIC, the
+  F4 A feasibility check since 1 October 2026: a finger held still
+     at the best single force keeps 0.54 to 1.00 of a run inside the
+     corridor, so each level's time in corridor prints beside that
+     still-finger figure. Time in corridor at or above 0.8 on most
+     runs, reported PER LEVEL across the climb. 0.8 is force_pilot.py's GREAT_TIC, the
      game's own Great feedback tier, not a promotion criterion:
      force_pilot.py has no staircase, the ladder is fixed, and
      nothing promotes or demotes. The corridor also narrows from a
@@ -812,15 +873,14 @@ Known effects to reproduce:
      one to read. This row says the corridor is flyable at each
      level for a healthy hand, which is what the ladder needs to be
      usable.
-Error versus level IS produced by this battery, through F1 above:
-the twelve waves are climbed in a fixed order and a level number is
-a bandwidth. What the battery cannot give is a level effect
-separated from time on task, because level 12 is always last and
-always after 23 runs, and it cannot give a repeated climb. For
-either, run a separate level pilot: six participants, one extra sitting,
-runs_per_finger 3 with the ladder free, so each finger reaches level
-2 or 3 and MAE by level can be plotted. Cheap, and it belongs in the
-instrumentation section.
+Error against level is printed (F1lvl), but a level number is not a
+bandwidth: level, corridor width, target amplitude, finger and time
+on task all move together up the fixed ladder, and level 12 is
+always last, after 23 runs. A frequency effect needs a separate
+level pilot at matched amplitude, finger and width, and a repeated
+climb needs force_pilot.passes: 2 (the old recipe's
+runs_per_finger key no longer exists). Both belong after
+collection.
 Parkinson's-linked measures (EXPLORATORY, notebook
 sec_force_pilot_pd; no hypothesis, descriptive norms for this
 device): release against press as a ratio and in time within 5
@@ -838,11 +898,16 @@ table and an exploratory block of the reliability chapter, never in
 the paired tests. Formulas and sources:
 docs/research/new_modes/force-pilot-parkinsons.md, Table B.
 Reliability class: moderate to good for hand-level MAE and time in
-corridor (twelve runs per hand per pass); per-finger numbers rest on
-two to four runs of different waves, 13 to 16 s each, and are
-reported but not given an MDC.
-Claim limits: the probe is a maximal flat-finger press on a pad, not
-grip or pinch MVC; nothing is reported in newtons (targets and
+corridor (twelve runs per hand per pass), as registered; good is the
+likely centre for MAE within one sitting (within-day force pursuit
+ICCs of 0.87 and 0.95, Nagasawa et al. 2003; simulation 0.83 to
+0.87), and time in corridor sits near its ceiling, so r_target and
+RMSE over the target's SD print beside T2 and T3 as exploratory
+rows. Per-finger numbers rest on two to four runs of different
+waves, 13 to 16 s each, and are reported but not given an MDC.
+Claim limits: the probe is a press as hard as is comfortable on an
+8 mm pad (1.4 to 6.1 N on the pilot), not a grip, pinch or pressing
+MVC; nothing is reported in newtons (targets and
 errors are percent of the finger's own max on the same pad, so the
 gain cancels), and the pads' noise and drift are measured and inside
 specification (Section 4.8 h); research numbers come from the offline
@@ -2069,7 +2134,10 @@ finds them in Section 1 finds out here what happened to them:
 
 F1 is in the table under its ladder wording, not its assess-sine-
 holds wording: Section 1.8 says why the battery cannot produce the
-second one.
+second one. Since 1 October 2026 that ladder wording is the
+periodic against non-periodic contrast on r_target, and F2 is the
+lag class contrast; both carry a p and sit in the Holm family, and
+the level rho prints as an exploratory row (F1lvl).
 
 Feasibility checks (30 September 2026, before any participant). Rh2,
 B4 and A5 cannot fail for a healthy hand on this task: Rh2's band
@@ -2077,7 +2145,9 @@ takes any SD from 10 to 100 ms, B4's four trials cap the span at 5,
 and A5 fails only when early misses send the pace down first. C1
 passes on the pads' own noise at the study's light presses (Section
 1.3). E1 joined them on 1 October 2026: a healthy cohort cannot fail
-it from below (Section 1.11). They stay in Table 1 as registered, and the thesis reports them
+it from below (Section 1.11). So did F3 and F4 (Section 1.8): F3's
+margin passes a true release excess of 1 percent of max, and a
+finger held still keeps 0.54 to 1.00 of a run inside the corridor. They stay in Table 1 as registered, and the thesis reports them
 as checks that the device and the task ran as designed, not as
 findings about the hand.
 
@@ -2277,7 +2347,9 @@ healthy cohort cannot give.
     cancels. The rest is characterised by the SingleTact 10 N
     specification (resolution under 0.2 percent of full scale,
     repeatability under 1 percent, linearity under 2 percent, drift 2
-    percent a minute at half load) and by measurement on this rig:
+    percent in the first minute and 4 percent in 10 minutes at half
+    load, a slowing creep rather than a rate) and by measurement on
+    this rig:
     1.2 to 1.5 counts of noise and at most 1.5 counts of drift over
     60 s at rest on every pad, under 0.3 percent of full scale, and
     every 5 ms sample a fresh reading during a real press (none of

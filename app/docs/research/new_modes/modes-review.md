@@ -115,7 +115,7 @@ The pads: one count is 0.0195 N. Over a chord's 3.2 s window a resting finger's 
 
 - Every ICC here is within one sitting, so it is an upper bound on day-to-day reliability. At n = 10 the lower end of the interval for a true ICC of 0.75 is about 0.28 (design_check.md).
 - Runs needed for 0.8 (arithmetic): Echo span 2.9 and partial credit 1.9 [E-L1]; a force individuation index 4.3 at 0.48 to 1.0 at 0.80 [C-L7]; the SRTT 10.3 at 0.28 [MM-L1].
-- The family Holm corrects is P1, P3, C2, C6, W4, Rh1, B2 and F1, plus P2 for 60 minute sitters. With eight tests Holm's first threshold is 0.00625, which a one-sided exact signed-rank test reaches at n = 8 only when all eight go the same way (arithmetic).
+- The family Holm corrects is P1, P3, C2, C6, W4, Rh1, B2 and F1, plus P2 for 60 minute sitters. With eight tests Holm's first threshold is 0.00625, which a one-sided exact signed-rank test reaches at n = 8 only when all eight go the same way (arithmetic). Since 1 October 2026 F2 carries a test too (the lag class contrast, [../deep/force_pilot.md](../deep/force_pilot.md)), so the family is nine and the first threshold 0.0056.
 - Rh2, B4, A5 and C1 are decided on an interval and cannot fail for a healthy hand here. They are reported as feasibility checks, and E1 with them since 1 October 2026 ([deep/echo.md](../deep/echo.md)).
 
 ## Sources

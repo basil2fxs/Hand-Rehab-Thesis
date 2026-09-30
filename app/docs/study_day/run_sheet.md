@@ -63,8 +63,8 @@ notes box on the intake sheet.
       k/12 on the 45 and the minutes: amber past the length, red past its hard
       stop (18, 35, 50 or 65 minutes). The 60 plays every game twice;
       the 15 and 30 play shortened games (docs/research/trial_mode.md).
-- [ ] The first time Reaction, Rhythm and Echo come up, say that
-      game's line once before it starts. Order A starts Reaction as soon as the
+- [ ] The first time Reaction, Rhythm, Echo and Force Pilot come up,
+      say that game's line once before it starts. Order A starts Reaction as soon as the
       calibration ends, so say its line as the calibration finishes.
       Reaction: "When a finger lights up and buzzes, press that finger
       as fast as you can. Sometimes nothing comes: keep still."
@@ -74,6 +74,11 @@ notes box on the intake sheet.
       Echo: "Watch the lights, then press the same fingers in the same
       order. Each round adds one more to the end of the same pattern.
       Speed doesn't count. If you're not sure, make your best guess."
+      Force Pilot: "First, three presses with each finger, as hard as
+      is comfortable. Then keep your line on the centre line as the
+      wave scrolls past; the band is how far you can drift." Order B
+      starts the sitting with Force Pilot, so say it as the
+      calibration finishes.
 - [ ] Don't coach during a game. Let them skip a game's own rest
       (Space) only when they say they're ready.
 - [ ] Don't pause a Rhythm game. If one pauses, Retry it from the
@@ -127,7 +132,7 @@ the hub.
 - Force Pilot goes straight back to the menu after MAX PRESS CHECK,
   with a note under the header: no press came in 25 seconds, so
   nothing was measured and the step is still waiting. Show a firm
-  press ("as hard as is comfortable when it says PRESS"), then
+  press ("as hard as is comfortable"), then
   Continue on the hub.
 - Test Mode left on in Settings does not matter for a study code:
   the session switches it off for the sitting and back on afterwards.

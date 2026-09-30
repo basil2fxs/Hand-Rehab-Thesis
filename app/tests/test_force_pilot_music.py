@@ -324,19 +324,27 @@ class EngineBlockMusicTests(unittest.TestCase):
         self._tick(MenuMusicPlayer.FADE_OUT_S + 0.1, n=3)
         self.assertIsNone(self.eng.audio.block_path)
 
-    def test_the_track_never_reaches_the_raw_or_trial_logs(self) -> None:
-        # The track is presentation only: nothing about it is logged
-        # as an event, so a block's data reads the same with it on.
+    def test_the_raw_log_names_the_track_and_nothing_else(self) -> None:
+        # The track is presentation only, so nothing about it changes
+        # the data; since 1 October 2026 the raw log names which track
+        # played (one block_music event per start), because the design
+        # calls the music a fixed condition and each block draws its
+        # own. That event is the only music line.
         from finger_rehab.audio.menu_music import MenuMusicPlayer
         self._hub()
         self.assertTrue(self.eng.begin_game("force_pilot", "right"))
         self.eng.block_music._clock = self.clock
         self._tick(MenuMusicPlayer.FADE_OUT_S + 0.1, n=3)
         self.assertTrue(self.eng.block_music.is_playing)
+        track = Path(str(self.eng.block_music.current_track)).name
         root = Path(self.eng.session_paths.root)
         self.eng.finish_block()
-        raw = (root / "raw.csv").read_text(encoding="utf-8").lower()
-        self.assertNotIn("music", raw)
+        lines = (root / "raw.csv").read_text(encoding="utf-8").lower() \
+            .splitlines()
+        music = [ln for ln in lines if "music" in ln]
+        self.assertEqual(len(music), 1, music)
+        self.assertIn(",block_music,", music[0])
+        self.assertIn(f"track={track.lower()}", music[0])
 
 
 # ---------------------------------------------------------------------

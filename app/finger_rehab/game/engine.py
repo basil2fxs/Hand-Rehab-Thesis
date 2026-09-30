@@ -1609,6 +1609,17 @@ class GameEngine:
             str(self.current_block or "") if self.block_is_running() else None,
             paused=bool(self.paused),
             menu_state=(menu.state if menu is not None else "idle"))
+        # Name the track in the block's raw log each time one starts,
+        # so a block's music is a recorded condition, not a guess.
+        starts = getattr(self.block_music, "starts", 0)
+        if starts != getattr(self, "_block_music_logged", 0):
+            self._block_music_logged = starts
+            track = getattr(self.block_music, "current_track", None)
+            raw = getattr(self, "raw_logger", None)
+            if raw is not None and track is not None:
+                raw.queue_event("block_music",
+                                detail=f"track={Path(str(track)).name}",
+                                hand=getattr(self, "hand_mode", "right"))
 
     # Supersample factor for the on-screen window. The whole UI is drawn
     # to a fixed 1280x800 logical surface, then scaled up to the window

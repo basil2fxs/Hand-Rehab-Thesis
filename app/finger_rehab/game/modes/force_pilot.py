@@ -30,10 +30,11 @@ measurable from exactly the trace this rig already streams:
 
 Supporting, verified by the research cluster: Kurillo 2005 (Technology
 and Health Care) is the build template (force sensor plus screen
-tracking as assessment and training); Archer 2017 (NeuroImage:
-Clinical) showed visual feedback gain moves stroke tracking error by
-an order of magnitude, which is why gain is a config lever here and
-defaults to 1.0; Naik 2011 (Exp Brain Res 211:1-15) scored ramp
+tracking as assessment and training); Archer et al. (2018,
+NeuroImage: Clinical 17:505-517) found that raising the visual angle
+of the error from 0.039 to 2.39 degrees narrowed the stroke against
+control force-error gap about sevenfold, from about 21 to 3 percent
+MVC, which is why gain is a config lever here and defaults to 1.0; Naik 2011 (Exp Brain Res 211:1-15) scored ramp
 generation and release at 5 to 20 percent MVC per second, the rates
 this mode's ramps use; Davidson 2026 (Exp Brain Res 244(4):46) found
 Parkinson's disease disproportionately impairs force RELEASE during
@@ -59,8 +60,10 @@ PARAMETER DEFENCES, in config order:
 - component frequencies 0.08 to 0.5 Hz: the Lodha analysis bands plus
   Davidson's 0.2 Hz tracking sine, and inside the tracking bandwidth
   argued in THE LADDER below. The multisine levels are non-harmonic
-  so they cannot be predicted from one cycle, and every frequency,
-  amplitude and phase is logged for exact offline reconstruction.
+  so they cannot be predicted from one cycle, but every wave is shown
+  8 s ahead, so non-periodic here means previewed, not unseen. Every
+  frequency, amplitude and phase is logged for exact offline
+  reconstruction.
 - corridor half-widths 8 / 6 / 5 / 4 percent across the ladder: the
   corridor is one of the four difficulty axes (Section THE LADDER
   below). A narrower corridor mechanically lowers time in corridor
@@ -82,11 +85,19 @@ storm. Basil's brief: familiar shapes from the world at the start,
 harder as they go, and the same levels in the same order every time
 so repeated play measures learning of THESE waves.
 
-- Difficulty rises on four axes, and the table below names which axis
-  each step turns: predictability (one sine, then ramps and steps,
-  then a harmonic pair, then non-harmonic sums), top frequency (0.15
-  up to 0.5 Hz), corridor width (8, 6, 5, 4 percent) and amplitude
-  range (up to 31 percent of max).
+- The ladder changes four things at once, and they do not all make
+  it harder: predictability falls (one sine, then ramps and steps,
+  then a harmonic pair, then non-harmonic sums), the top frequency
+  rises (0.15 up to 0.5 Hz) and the corridor narrows (8, 6, 5, 4
+  percent; rank correlation with level -0.97), but the target's speed
+  barely rises (+0.20), because the 1/f amplitudes give every
+  multisine component the same speed and the storms move slower
+  overall than five of the lower levels. So a level number is not a
+  bandwidth, and error need not rise with it: it fell with level in
+  all three pilot blocks (Force Pilot review, 1 October 2026). F1
+  contrasts the non-periodic waves with the periodic ones on the
+  force-target correlation instead, which the band's width does not
+  touch.
 - The top frequency is 0.5 Hz because that is where tracking of an
   UNPREDICTABLE target falls apart: visually guided force corrections
   are issued about once a second (Slifkin AB, Vaillancourt DE, Newell
@@ -99,7 +110,12 @@ so repeated play measures learning of THESE waves.
   synchronises to it (Cathers I, O'Dwyer N, Neilson P 1996,
   Experimental Brain Research 111(3):437-446), which is why the
   early, periodic levels are the easy ones and the multisines are the
-  hard ones.
+  hard ones. Those delays are for targets shown without preview. The
+  benefit of seeing ahead saturates by about 0.6 to 1.15 s (van der
+  El K et al 2018) and Force Pilot shows 8.2 s, so a healthy hand's
+  lag here sits near zero or below it, which is anticipation; F2
+  expects the non-periodic lag to exceed the periodic one, not a
+  100 to 300 ms band.
 - The multisine levels are the standard way to build a target that
   cannot be memorised: non-harmonic components with fixed phases and
   amplitudes falling as 1/f, the coloured-noise force targets of
@@ -111,12 +127,15 @@ so repeated play measures learning of THESE waves.
   waveform-specific learning shows as improvement on the repeated
   target beyond the improvement on a novel target of matched
   difficulty (Yang L, Wan F, Nan W, Zhu F, Hu Y 2017, Scientific
-  Reports 7:12333, which detected exactly that in a continuous
-  tracking task; the variability-of-practice line behind it is Wulf G
-  and Schmidt RA 1997, Journal of Experimental Psychology: Learning,
-  Memory, and Cognition 23(4):987-1006). It is the one place the
-  "identical every time" brief is deliberately broken, and the
-  analysis says so.
+  Reports 7:12333, who detected it with the cursor-target correlation
+  after three days of stylus tracking, not with RMSE; the
+  repeated-segment line behind it is Wulf G and Schmidt RA 1997,
+  Journal of Experimental Psychology: Learning, Memory, and Cognition
+  23(4):987-1006, and a repeated segment can also win by being easier
+  to track, Chambaron S et al 2006). Two plays with 8 s of preview is
+  far less practice, so the pair is read descriptively on the
+  correlation. It is the one place the "identical every time" brief
+  is deliberately broken, and the analysis says so.
 - One run = one level = one finger, from a fixed finger table (index
   plays 4 levels including both storms, middle 3, ring 3, little 2).
   A per-finger result is therefore a (level, finger) result and is
@@ -136,18 +155,22 @@ level 12, one run each, and in a both-hands block each level is flown
 by the first hand then the second so the hand comparison is within a
 level and the resting hand recovers while the other flies. Leaving
 the corridor stalls the craft; the working finger also buzzes when
-cue.buzz_after is on, which the study leaves off. Rings on the
-centreline reward time-in-corridor.
+cue.buzz_after is on, which the study leaves off. The centre line is
+drawn through the band and the card says to follow it (1 October
+2026): the error is measured from it, and published tracking tasks
+ask people to follow a visible line (Davidson 2024 and 2026). Rings on
+the centre line reward staying on it.
 
 Gaps are deliberately short (Basil's brief: not much time between
 runs). One card of announce_s carries the last run's numbers and the
 next wave's name, and the only other wait is one rest of mid_rest_s
-after level 6. Massed practice with short rests is what the motor
-learning literature uses for a task of this length (Lee TD and
-Genovese ED 1988, Research Quarterly for Exercise and Sport
-59(4):277-287, on massed versus distributed practice), and the
-notebook's fatigue check (levels 7 to 9 against 4 to 6) is the
-evidence that the dose held.
+after level 6. That is a massed schedule, chosen for time: massed
+practice depresses performance against distributed practice, most on
+continuous tasks (Lee TD and Genovese ED 1988, Research Quarterly for
+Exercise and Sport 59(4):277-287), so the mid rest and the rest
+before pass 2 recover part of it, and the notebook's fatigue check
+(levels 7 to 9 against 4 to 6) is confounded with the narrower band
+and the other waves.
 
 CUES AND CHANNELS. This mode never calls on_stim: there is no hidden
 target to cue, because a visuomotor tracking task must show the
@@ -185,7 +208,8 @@ newton figure is ever reported. What is left is characterised. The
 SingleTact 10 N sensor's specification (SingleTact spec sheet V8.0):
 resolution under 0.2 percent of full scale, repeatability under 1
 percent, linearity under 2 percent, hysteresis under 4 percent, drift
-2 percent a minute at half load. Measured on this rig on 24 September
+2 percent in the first minute and 4 percent in 10 minutes at half
+load (a slowing creep, not a rate). Measured on this rig on 24 September
 2026: 1.2 to 1.5 counts of noise and at most 1.5 counts of drift over
 60 s at rest on all four pads (under 0.3 percent of full scale), and
 every 5 ms sample a fresh reading during a real press, so a run of 13
@@ -1261,6 +1285,11 @@ class ForcePilotMode(WaitSkip):
     # would be unplayable and read as severe impairment. Warned and
     # logged so the researcher can reposition the pad.
     LOW_MAX_FLOOR_MULT = 5.0
+    # The pad's calibrated range: the SingleTact 10 N part reads 511
+    # counts above rest at full scale and saturates past it (SingleTact
+    # manual, Table 1). A probe peak within a tenth of that is logged.
+    PAD_FULL_SCALE_COUNTS = 511
+    NEAR_FULL_SCALE = 0.9
 
     def _enter_probe(self, now: float) -> None:
         self.clear_wait()
@@ -1295,6 +1324,34 @@ class ForcePilotMode(WaitSkip):
                 self._end("probe_timeout")
             return
         result = self.probe.result() or 0.0
+        peaks = [float(v) for v in (getattr(self.probe, "peaks", ()) or ())]
+        packed = "-".join(f"{v:.1f}" for v in peaks)
+        raw = getattr(self.engine, "raw_logger", None)
+        # Every finger's presses go in the raw log, not only a low one
+        # (Force Pilot review, 1 October 2026): the spread of the peaks
+        # is the probe's own reproducibility, and a peak near the pad's
+        # calibrated full scale means the percent scale may be clipped.
+        if raw:
+            raw.queue_event(
+                "max_press_peaks", lane=lane,
+                detail=(f"hand={self.probe_hand};"
+                        f"finger={self.probe_finger};peaks={packed};"
+                        f"max_counts={result:.1f}"),
+                hand=self.probe_hand)
+            if peaks and max(peaks) >= (self.NEAR_FULL_SCALE
+                                        * self.PAD_FULL_SCALE_COUNTS):
+                log.warning(
+                    "max-press peak on %s finger %d reached %.0f counts, "
+                    "near the pad's %d-count full scale",
+                    self.probe_hand, self.probe_finger, max(peaks),
+                    self.PAD_FULL_SCALE_COUNTS)
+                raw.queue_event(
+                    "max_press_near_full_scale", lane=lane,
+                    detail=(f"hand={self.probe_hand};"
+                            f"finger={self.probe_finger};"
+                            f"peak_counts={max(peaks):.1f};"
+                            f"full_scale={self.PAD_FULL_SCALE_COUNTS}"),
+                    hand=self.probe_hand)
         if result < self.LOW_MAX_FLOOR_MULT * self.probe_floor_counts:
             log.warning(
                 "probed max for %s finger %d is only %.0f counts "
@@ -1302,14 +1359,14 @@ class ForcePilotMode(WaitSkip):
                 "sit inside sensor noise; check the pad placement",
                 self.probe_hand, self.probe_finger, result,
                 self.LOW_MAX_FLOOR_MULT, self.probe_floor_counts)
-            raw = getattr(self.engine, "raw_logger", None)
             if raw:
                 raw.queue_event(
                     "max_press_low", lane=lane,
                     detail=(f"hand={self.probe_hand};"
                             f"finger={self.probe_finger};"
                             f"max_counts={result:.1f};"
-                            f"floor_counts={self.probe_floor_counts:.1f}"),
+                            f"floor_counts={self.probe_floor_counts:.1f};"
+                            f"peaks={packed}"),
                     hand=self.probe_hand)
         self._probe_maxes[self.probe_hand][self.probe_finger] = result
         self._probe_queue.pop(0)

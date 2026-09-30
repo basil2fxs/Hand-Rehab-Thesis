@@ -1260,7 +1260,8 @@ class ScreenTests(unittest.TestCase):
             x = int((t_mid + lead_s) * sc.PX_PER_S)
             y = sc._y(target_pct(m.sections, t_mid), m.span_pct) \
                 - sc.PLOT_TOP
-            got = corridor.get_at((x, y))[:3]
+            # A few pixels off the centre: the centre line sits on it.
+            got = corridor.get_at((x, y + 12))[:3]
             self.assertEqual(got, tuple(want), name)
 
     def test_a_step_edge_grace_window_draws_paler(self):
@@ -1280,8 +1281,32 @@ class ScreenTests(unittest.TestCase):
             x = int((t_probe + lead_s) * sc.PX_PER_S)
             y = sc._y(target_pct(m.sections, t_probe), m.span_pct) \
                 - sc.PLOT_TOP
-            self.assertEqual(corridor.get_at((x, y))[:3], tuple(want),
-                             t_probe)
+            self.assertEqual(corridor.get_at((x, y + 12))[:3],
+                             tuple(want), t_probe)
+
+    def test_the_centre_line_runs_through_the_band(self):
+        """The error is measured from the band's centre, so the centre
+        is drawn and the card says to follow it (1 October 2026): every
+        sampled target point carries the centre colour, on a sine and
+        on a ramp."""
+        from finger_rehab.game.modes.force_pilot import target_pct
+        from finger_rehab.ui.force_pilot_screen import ForcePilotScreen
+        sc, m, surf, _t = self._screen_and_mode()
+        for idx in (0, 1):                  # Slow breath, Tide
+            m._next_idx = idx
+            m._prepare_run()
+            corridor = sc._build_corridor(m)
+            want = tuple(sc._corridor_colours()["centre"])
+            lead_s = sc.MARKER_X / sc.PX_PER_S
+            for frac in (0.2, 0.5, 0.8):
+                t = m.duration_s * frac
+                x = int((t + lead_s) * sc.PX_PER_S) // sc.COL_STEP \
+                    * sc.COL_STEP
+                y = sc._y(target_pct(m.sections, x / sc.PX_PER_S
+                                     - lead_s), m.span_pct) - sc.PLOT_TOP
+                self.assertEqual(corridor.get_at((x, y))[:3], want,
+                                 (idx, frac))
+        self.assertIn("centre line", ForcePilotScreen.FOLLOW_LINE)
 
 
 # ---- audit fixes: error_type and dropout ring gating ---------------------
@@ -1436,6 +1461,42 @@ class ProbeGuardRailTests(unittest.TestCase):
                   if ev["event"] == "max_press_low"]
         self.assertGreaterEqual(len(events), 1)
         self.assertIn("max_counts=35.0", events[0]["detail"])
+        self.assertIn("peaks=35.0-35.0-35.0", events[0]["detail"])
+
+    def _probe_one_finger(self, peak):
+        e, m, t = self._probe_mode()
+        end = t + 60.0
+        pressing = True
+        while m.phase == "probe" and t < end:
+            t += 0.5
+            m.view.counts = peak if pressing else 0.0
+            m.view.pct = 1.0
+            pressing = not pressing
+            m._tick(t)
+        return e, m
+
+    def test_every_finger_logs_its_peaks(self):
+        # Every probed finger, not only a low one, leaves its presses
+        # in the raw log (1 October 2026), so the probe's own spread is
+        # recoverable; an ordinary press is not flagged as full scale.
+        e, m = self._probe_one_finger(220.0)
+        peaks = [ev for ev in e.raw_logger.events
+                 if ev["event"] == "max_press_peaks"]
+        self.assertGreaterEqual(len(peaks), 1)
+        self.assertIn("finger=0", peaks[0]["detail"])
+        self.assertIn("peaks=220.0-220.0-220.0", peaks[0]["detail"])
+        self.assertIn("max_counts=220.0", peaks[0]["detail"])
+        self.assertFalse([ev for ev in e.raw_logger.events
+                          if ev["event"] == "max_press_near_full_scale"])
+
+    def test_a_peak_near_the_pads_full_scale_is_flagged(self):
+        e, m = self._probe_one_finger(480.0)
+        near = [ev for ev in e.raw_logger.events
+                if ev["event"] == "max_press_near_full_scale"]
+        self.assertGreaterEqual(len(near), 1)
+        self.assertIn("peak_counts=480.0", near[0]["detail"])
+        self.assertIn(f"full_scale={m.PAD_FULL_SCALE_COUNTS}",
+                      near[0]["detail"])
 
 
 class NoSignalRunTests(unittest.TestCase):

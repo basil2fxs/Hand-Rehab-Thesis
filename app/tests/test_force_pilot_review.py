@@ -571,7 +571,10 @@ class NotebookTests(unittest.TestCase):
                 out = ra.sec_force_pilot_checks(folders, trials, metas)
             f6 = out["checks"].set_index("id").loc["F6"]
             self.assertIn("latest play", f6["value"])
-            self.assertEqual(f6["verdict"], ra.lit_verdict(True))
+            # Descriptive since 1 October 2026: read on the correlation,
+            # never a pass or a fail after two plays.
+            self.assertIn("force-target r", f6["value"])
+            self.assertEqual(f6["verdict"], ra.lit_verdict("reported"))
 
     def test_f6_waits_for_a_second_play(self):
         ra = self.ra

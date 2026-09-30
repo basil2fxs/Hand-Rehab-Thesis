@@ -116,6 +116,12 @@ class ForcePilotScreen(Screen):
     # a target sample every ~17 ms, well inside the smoothness the
     # sub-1 Hz waveforms need.
     COL_STEP = 2
+    # The centre line through the band and the words that point at
+    # it (1 October 2026). Thin, so the band still reads as the room
+    # the line may drift in.
+    CENTRE_LINE_PX = 2
+    FOLLOW_LINE = ("Keep your line on the centre line; the band is how "
+                   "far you can drift.")
 
     # The results band under the plot: the hero percentage in the
     # middle, the two side counts, then the label row.
@@ -342,8 +348,13 @@ class ForcePilotScreen(Screen):
         draw_text(surf, "MAX PRESS CHECK", (cx, 150), self.theme,
                   self.layout, pt=FONT_H1 + 8, centre=True,
                   colour=self._accent())
+        # "As hard as is comfortable" (1 October 2026, before any
+        # participant): the probe reads a brief comfortable press on an
+        # 8 mm pad, 1.4 to 6.1 N on the pilot against a young index
+        # pressing maximum near 37 N (Keenan and Massey 2012), and the
+        # pad is damaged past 30 N. The run sheet says the same words.
         draw_text(surf,
-                  "Press as hard as you can, then let go and rest.",
+                  "Press as hard as is comfortable, then let go and rest.",
                   (cx, 212), self.theme, self.layout, pt=FONT_BODY + 2,
                   centre=True, colour=self.theme.muted)
         draw_text(surf,
@@ -366,8 +377,8 @@ class ForcePilotScreen(Screen):
             pygame.draw.circle(surf, colour, (x0 + i * dot_gap, 390),
                                12, 0 if filled else 3)
         # The dots are a count of presses, which nothing said. A row of
-        # circles under a "press as hard as you can" heading could as
-        # easily have been a loading spinner.
+        # circles under a "press as hard as is comfortable" line could
+        # as easily have been a loading spinner.
         draw_text(surf, f"{max(0, remaining)} OF {total} PRESSES TO GO",
                   (cx, 418), self.theme, self.layout, pt=FONT_SMALL,
                   centre=True, colour=self.theme.muted)
@@ -439,7 +450,12 @@ class ForcePilotScreen(Screen):
         self._draw_wave_preview(
             surf, pygame.Rect(cx - 340, 330, 680, 190), mode)
         self._draw_finger_chip(surf, mode.hand, mode.finger, cx, 574)
-        draw_text(surf, "Keep your line inside the band.",
+        # Follow the line (1 October 2026, before any participant): the
+        # error is measured from the band's centre, and published
+        # tracking tasks all ask people to follow a visible line
+        # (Davidson et al. 2024, 2026). The band only said how far the
+        # line may drift, so it used to be the target by default.
+        draw_text(surf, self.FOLLOW_LINE,
                   (cx, 626), self.theme, self.layout, pt=FONT_BODY,
                   centre=True, colour=self.theme.muted)
 
@@ -571,6 +587,10 @@ class ForcePilotScreen(Screen):
             "edge_release": self._mix(self.theme.muted, bg, 0.25),
             "band_grace": self._mix(accent, bg, 0.92),
             "boundary": self._mix(self.theme.muted, bg, 0.55),
+            # The centre line the player follows: the ring colour, a
+            # touch lighter, so the rings still read as checkpoints on
+            # it.
+            "centre": self._mix(accent, self.theme.foreground, 0.25),
         }
 
     def _build_corridor(self, mode) -> pygame.Surface:
@@ -622,6 +642,14 @@ class ForcePilotScreen(Screen):
             if len(pts_u) > 1:
                 pygame.draw.lines(cs, edge, False, pts_u, 3)
                 pygame.draw.lines(cs, edge, False, pts_l, 3)
+        # The centre line, the target the error is measured from, drawn
+        # thin over the band (1 October 2026). A step draws as a step.
+        centre = [(x, self._y(target_pct(sections, x / self.PX_PER_S
+                                          - lead_s), span) - self.PLOT_TOP)
+                  for x in range(0, width, self.COL_STEP)]
+        if len(centre) > 1:
+            pygame.draw.lines(cs, cols["centre"], False, centre,
+                              self.CENTRE_LINE_PX)
         # Section boundaries and their names, baked so the words
         # scroll in with the band they describe. The release label
         # carries a down arrow: that stretch asks for the opposite

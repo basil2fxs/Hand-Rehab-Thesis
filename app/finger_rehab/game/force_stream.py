@@ -22,10 +22,14 @@ demand on another. Hence two pieces here:
 Claim limits. The probe measures a maximal PRESS on a flat pad with
 the hand resting, not a grip or pinch MVC from the cited protocols;
 percent-of-max here therefore matches those studies in construct, not
-in absolute newtons. The median of two or three attempts follows
-standard MVC practice of repeated attempts, but with fewer repeats
-than a formal strength assessment, a deliberate trade against patient
-fatigue. The pads' noise and drift were characterised on 24 September
+in absolute newtons. Formal MVC practice keeps the highest (Davidson
+2026; Keenan and Massey 2012) or the mean (Lee and Kang 2020) of
+repeated maximal efforts; the median of two or three is a local
+choice that rejects a spike, with fewer repeats than a strength
+assessment, a deliberate trade against patient fatigue. The screen
+asks for a press as hard as is comfortable (1 October 2026): the
+pilot's probes read 1.4 to 6.1 N against a young index pressing MVC
+near 37 N (Keenan and Massey 2012), and the pad is damaged past 30 N. The pads' noise and drift were characterised on 24 September
 2026 (1.2 to 1.5 counts of noise, at most 1.5 counts of drift in 60 s
 at rest, inside the SingleTact 10 N specification; see force_pilot.py
 WHAT THIS MODE CANNOT CLAIM); the view still rebaselines between

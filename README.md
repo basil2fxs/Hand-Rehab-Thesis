@@ -110,7 +110,7 @@ The game opens within a second. A watcher installed at first launch checks the p
 | **Rhythm** | Press on the beat of a song. Timing error against the beat. |
 | **Syllables** | Catch the right part of a spoken word. Reading by sound. |
 | **Mirror** | Press the same finger on both hands at once. How well the hands stay together. |
-| **Force Pilot** | Hold a press inside a moving corridor. Steady control of force. |
+| **Force Pilot** | Keep a press on a moving line. Steady control of force. |
 | **Buzz Hunt** | Feel which finger buzzed, then press it. The sense of touch. |
 | **Echo** | Watch a sequence light up, then repeat it back. Memory span. |
 

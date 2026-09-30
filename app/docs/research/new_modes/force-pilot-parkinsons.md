@@ -624,7 +624,7 @@ Light-force coverage: PD deficits have been shown at 5 to 50% MVC holds [Vaillan
 
 **C9. Lag read per level class.**
 - What: row 11 with the r floor and the class split.
-- Why: PD and controls both use prediction on periodic targets [Day 1984; Bloxham 1984], PD lag is longer on mixed targets [Pradhan 2010], and the corridor shows about 8 s ahead, so periodic levels can be flown with little lag. F2's 100 to 300 ms band fits non-periodic levels; periodic levels may fall below it for good reasons.
+- Why: PD and controls both use prediction on periodic targets [Day 1984; Bloxham 1984], PD lag is longer on mixed targets [Pradhan 2010], and the corridor shows about 8 s ahead, so periodic levels can be flown with little lag. Correction (1 October 2026, [../deep/force_pilot.md](../deep/force_pilot.md)): the 100 to 300 ms band belongs to targets shown without preview, and with 8 s shown ahead even the non-periodic lag sits near zero, so F2 now asks that the non-periodic lag exceed the periodic one.
 - Healthy reference: lag under 20 ms on repeated patterns [Day 1984]; near-zero phase error at 0.2 Hz [Davidson 2026]; visual integration about 150 ms [Slifkin 2000]; tracking refractory delay about 170 ms [Miall 1993].
 
 **C10. Tremor-band power and regularity (exploratory).**

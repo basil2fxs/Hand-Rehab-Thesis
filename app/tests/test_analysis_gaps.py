@@ -479,22 +479,26 @@ def _long_rows(rho_sign: float, n=6, levels=8, seed=3):
 class LadderBandwidthTests(unittest.TestCase):
     """F1 could never be decided: it asked for assessment and sine
     segments the battery does not play, and its refusal named the
-    wrong missing file into the bargain."""
+    wrong missing file into the bargain. Since 1 October 2026 the level
+    rho is a description (F1lvl), because the ladder narrows the
+    corridor more than it speeds the target; F1 itself is the
+    periodic against non-periodic contrast
+    (tests/test_force_pilot_research.py)."""
 
     @classmethod
     def setUpClass(cls) -> None:
         cls.ra = _load_notebook("f1")
 
-    def test_error_rising_with_level_passes(self) -> None:
+    def test_error_rising_with_level_is_reported_not_passed(self) -> None:
         row = self.ra._ladder_bandwidth_row(_long_rows(+1.0), 3, 0)
-        self.assertEqual(row["id"], "F1")
-        self.assertEqual(row["verdict"], "pass")
+        self.assertEqual(row["id"], "F1lvl")
+        self.assertEqual(row["verdict"], "reported")
         self.assertGreater(row["value"], 0.8)
         self.assertEqual(row["n"], 6)
 
-    def test_error_falling_with_level_fails(self) -> None:
+    def test_error_falling_with_level_is_reported_not_failed(self) -> None:
         row = self.ra._ladder_bandwidth_row(_long_rows(-1.0), 3, 0)
-        self.assertEqual(row["verdict"], "fail")
+        self.assertEqual(row["verdict"], "reported")
         self.assertLess(row["value"], 0.0)
 
     def test_the_refusal_names_the_metric_that_is_missing(self) -> None:

@@ -11,10 +11,16 @@ on purpose:
   - The track starts only once the menu playlist has finished its
     fade, so the two never overlap, and it never starts while a game
     song or the metronome holds the stream.
-  - The mode never reads the stream. Scoring, the trial rows and the
-    raw log are the same with the track on or off; a test pins that.
+  - The mode never reads the stream. Scoring and the trial rows are
+    the same with the track on or off, and the raw log only names the
+    track; tests pin both.
   - config/eeg_lab.yaml turns it off, so a lab block is recorded in
     silence.
+  - Which track played is logged: every start bumps `starts` and sets
+    `current_track`, and the engine writes a block_music event into the
+    block's raw log (Force Pilot review, 1 October 2026: the design
+    calls the music a fixed condition while each block drew a random
+    track, and nothing recorded which).
 
 Same shape as audio/menu_music.py: update() once per frame from the
 engine's loop, config read live, a swappable clock for tests.
@@ -49,6 +55,8 @@ class BlockMusicPlayer:
         self._started_at = 0.0
         self._retry_after = 0.0
         self._clock = time.perf_counter
+        self.current_track: Path | None = None
+        self.starts = 0
         self._tracks = self._resolve_tracks()
         self._reshuffle()
 
@@ -130,6 +138,8 @@ class BlockMusicPlayer:
         if self.audio.block_music_play(track, 0.0):
             self._retry_after = 0.0
             self.state = "playing"
+            self.current_track = track
+            self.starts += 1
         else:
             self._retry_after = now + self.RETRY_S
             self.state = "idle"
