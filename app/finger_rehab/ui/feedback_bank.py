@@ -257,6 +257,14 @@ MODE_LINES: dict[str, dict[str, tuple[str, ...]]] = {
                      "{n} of {of}. Next echo coming.",
                      "{n} of {of} that time. Watch the next one."),
     },
+    "mirror": {
+        # A pair the synchrony gate failed: name the hand that came in
+        # behind and what to do next (R2, R3). Only the encouraging
+        # style shows it (MirrorMode._late_hand_line).
+        "late_hand": ("{target} hand came in behind. Together next.",
+                      "{target} hand landed a beat after. Both at once.",
+                      "{target} hand was a touch behind. Together next."),
+    },
     "syllables": {
         "extra_tap": ("One tap over. See the grey block.",
                       "One extra tap. Match the blocks.",

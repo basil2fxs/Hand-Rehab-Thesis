@@ -88,6 +88,10 @@ Hold a button to move the rests. Let go, or press both, and it stops.
 - Fingertips meet the pads with about 2 mm of clearance, and the forearm rests at about 30 degrees of pronation ([cross-section](images/chassis_section.png), [both halves](images/chassis_left_right.png)).
 - **Safety:** the actuator can pinch. Set the finger rests before the hand goes on and never move them with a hand in place; no stall shut-off is fitted yet.
 
+## Two boards: the timing bench
+
+Before any Mirror gap or lead is reported, measure the rig with nobody's hands in it: press each finger pair's two pads together with one rigid bar about 100 times, with the boards swapped between ports and between hands, and note the mean and SD of the logged gap (the rig's own floor and offset). Measure each board's motor lag the way `latency.buzzer_ms` was measured. Each board's samples carry their own stamp since 1 October 2026, and raw.csv names the board of every sample row.
+
 ## Not part of this build
 
 The EEG lab's marker box is the lab's own Arduino on COM10: it puts each byte the game sends onto the EEG trigger lines. See [`EEG_Lab`](../EEG_Lab).

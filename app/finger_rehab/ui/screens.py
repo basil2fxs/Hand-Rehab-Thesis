@@ -3764,6 +3764,13 @@ class GameplayScreen(Screen):
                      "before its bar runs out.",
                      "Keep up and it speeds up; it eases off when you "
                      "need it."),
+        # Mirror (1 October 2026): the only instruction was the PRESS
+        # TOGETHER label while the score pays speed, and instructions
+        # move the gap between the hands (Gutnik, Hudson and Nicholson
+        # 2009).
+        "mirror": ("Press the lit finger on both hands",
+                   "at the same moment.",
+                   "A pair counts when both land together."),
     }
 
     def _draw_target_indicator(self, surf: pygame.Surface,

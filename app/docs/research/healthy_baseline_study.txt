@@ -203,8 +203,17 @@ HOW THE DESIGN GOT HERE (every change made before any participant):
     time to a first press found alone, since the median of the answers
     that beat the buzz undercut slow readers; 6 to 9 plays 20 words,
     every quick look 20 trials, and the adult fall moves on
-    hear-and-pick sets only. The text below is corrected where the
-    reviews found a claim the evidence contradicts.
+    hear-and-pick sets only. Mirror after it, for the two-board rig
+    only (Section 1.7): it is simultaneous bilateral training, not
+    mirror therapy; M1 is a rig check on the median gap, M2 is
+    reported two-sided outside the Holm family and W2 is described;
+    the two-board merger keeps every sample on its own board's stamp,
+    since one stamp for both hands could put a 9 ms bias between them;
+    a hand's press under 100 ms is not a response, a late press after
+    the window is not charged, a pair a board drop cut short never
+    reaches the pace, and the GET READY card says to press both at the
+    same moment. The text below is corrected where the reviews found a
+    claim the evidence contradicts.
 
 What one board costs, and the thesis says it in the same breath as
 the results:
@@ -910,31 +919,72 @@ that control). A study that wants it adds the control block and the
 sitting grows.
 
 1.7 Mirror (both hands; NOT PLAYED on the one-board rig)
--------------------------------------------------------
-One-board note (24 September 2026): Mirror needs a board on each
-hand, so the battery does not play it and M1, M2 and W2 are DROPPED.
-The section stays because a two-board rig still runs the mode.
-Primary: mirror.mean_gap_ms (absolute right-left onset difference on
-clean pairs), n_clean_pairs, hit rate, right_hand_mean_rt_ms and
-left_hand_mean_rt_ms (a within-trial asymmetry).
-Known effects to reproduce:
-  M1 Homologous in-phase pressing is the stable coordination mode:
-     mean gap well under the 350 ms gate, expected under about 60 ms.
-     Descriptive with CI. The discrete anchor is that two-handed
-     movements start and peak together (Kelso, Southard and Goodman
-     1979); Kelso 1984 is continuous oscillation.
-  M2 Dominant-hand press leads the non-dominant one: paired RT
-     within the same trial, dominant faster (same basis as R2). No
-     source read in the review of 30 September 2026 predicts which
-     hand leads inside one simultaneous press, so M2 has no verified
-     direction. Two boards also stamp their presses independently,
-     about 7 ms of mean absolute difference from their bursts alone,
-     so gaps under about 10 ms are not resolved without re-timing.
-Reliability class: unknown for this device; predicted moderate.
-Claim limits: the adaptive cadence engine underneath moves the BPM,
-so the gap is measured across a changing pace; report bpm_min and
-bpm_max alongside. Efficacy of bilateral training is contested and
-not claimed (mirror.py).
+--------------------------------------------------------
+One-board note (24 September 2026): Mirror needs a board on each hand,
+so the battery does not play it and M1, M2 and W2 are DROPPED. The
+section stays because a two-board rig still runs the mode, and it was
+re-specified on 1 October 2026, before any Mirror data exist (the
+Mirror deep review, docs/research/deep/mirror.md).
+
+What the mode is: simultaneous bilateral training of homologous
+fingers (the Cochrane definition, Coupar et al. 2010), not mirror
+therapy, which needs the mirror (Ramachandran and Rogers-Ramachandran
+1996; against the same movements with both limbs visible, mirror
+therapy's effect was not significant, Thieme et al. 2018). Bilateral
+arm training was no better than usual care or one-arm training (Coupar
+et al. 2010; Pollock et al. 2014), and BATRAC was not superior to
+dose-matched exercise (Whitall et al. 2011); no training effect is
+claimed.
+
+Primary: the median absolute right-left gap on clean pairs (both
+hands' presses, no wrong finger, neither hand under 100 ms), with a 10
+percent trimmed mean, the share within 50 ms, the signed median and
+its IQR beside it; mirror.mean_gap_ms stays for continuity, labelled
+as including gated pairs, since one ungrouped pair moves a 30-pair
+mean by about 14 ms (block-to-block ICC 0.59 for the mean against 0.74
+for the median and 0.82 for the trimmed mean, simulation). Each hand's
+own latency per trial, the press window at every cue (0.9 of 60/BPM;
+the pace sets the window more than the cue rate, since the rest is
+capped at 1 s), the one-sided trials and a sensitivity gap that takes
+their late press back from raw.csv. A second sensitivity gap re-times
+each hand's onset at 10 percent of its own rise in raw.csv, because
+each pad's calibrated trigger can put 5 to 27 ms between two pads.
+
+Checks, re-specified on 1 October 2026:
+  M1 A rig check: the cohort median of each person's median absolute
+     gap under 60 ms, with the order-statistic interval and no p
+     value. Healthy hands press about 19 to 24 ms apart on a 1 kHz
+     glove (Bonzano et al. 2008, 2013), so it passed in 98.5 to 100
+     percent of simulated cohorts on every rig model: it says the
+     boards work, not how the hands coordinate.
+  M2 Which hand leads, reported two-sided with no direction predicted,
+     outside the Holm family, beside the bench offset between the two
+     boards and the board-to-hand assignment. No hand is known to lead
+     in discrete presses (a group lead of -0.7 ms in bimanual tapping,
+     Helmuth and Ivry 1996; individual leads both ways, Shen and Franz
+     2005), and a 9 ms board offset erased a 10 ms lead or made one
+     from nothing in simulation.
+  W2 The gap across the block, described, not tested: nothing predicts
+     a narrowing in 32 trials of a stable in-phase task, and a 5 ms
+     narrowing is found 28 percent of the time at n = 10 (simulation).
+
+Timing: until 1 October 2026 the two-board merger stamped both hands
+of a pair with the later board's time and kept only each board's
+latest sample, so a board sending in packets lost up to 43 percent of
+its samples and a bursting board beside a smooth one put a 9 ms bias
+between the hands (simulation). Each board's samples now go on with
+their own stamps (multi_serial.py) and raw.csv names the board of
+every sample. Before any Mirror number is reported, the bench measures
+the inter-board offset (each finger pair's two pads pressed together
+with one rigid bar about 100 times, boards swapped between ports and
+hands) and both boards' motor lags.
+Reliability class: moderate to good for the median gap at 32 trials
+(simulation), against an ICC of 0.75 one month apart in the literature
+(Bonzano et al. 2013); 64 trials would make it a good individual
+measure. Claim limits: a narrower gap at a faster pace can be
+censoring, not coordination (25.0 against 30.5 ms, simulation), and a
+smaller gap in a patient can mean the faster hand waited (Rose and
+Winstein 2005).
 
 1.8 Force Pilot (one hand, short form, one climb of the
      twelve-wave ladder, both passes)
@@ -2089,8 +2139,9 @@ screen and the number in the thesis cannot drift apart.
 -----------------------------------------
   reaction    median_rt_ms, sd_rt_ms, p10_rt_ms, lapse_like_rate,
               false_start_rate, accuracy, rho_rt_vs_fp
-  mirror      mean_gap_ms, hit_rate, rt_dominant_ms,
-              rt_nondominant_ms
+  mirror      median_abs_gap_ms, trimmed_gap_ms, share_within_50,
+              signed_median_ms, mean_gap_ms, hit_rate,
+              rt_median_ms per hand, the window range, one-sided count
   rhythm      asyn_mean_ms, asyn_sd_ms, asyn_abs_mean_ms, hit_rate,
               interval_cv (per hand where a lane maps to a hand)
   echo        span_mean (the headline), span, n_omissions,
@@ -2184,7 +2235,8 @@ bootstrap from ten points is a coarse instrument: the resampled
 median can only land on the values actually observed, so the
 interval is lumpy and its ends are not trustworthy to the decimal.
 
-Directional hypotheses from Section 1 (R2, M2) are one-sided;
+Directional hypotheses from Section 1 (R2) are one-sided; M2 has
+been two-sided and reported since 1 October 2026 (Section 1.7);
 everything else two-sided with no claim beyond the interval.
 
 Wilcoxon is primary at every n, not only at this one. Letting the
@@ -2199,8 +2251,8 @@ Multiplicity. A cohort run produces dozens of p values, and until
 2026-09 none of them was adjusted. The controlled family is the
 known-effect and within-block table; nothing else carries a p that
 may be quoted as a finding (on a two-board tree the
-dominant-versus-non-dominant table adds R2 and M2 as a second planned
-family):
+dominant-versus-non-dominant table adds R2 as a second planned
+family; M2 is reported, outside it):
 
   - The known-effect and within-block table (Section 4.6). Holm's
     step-down correction (Holm, S. 1979, Scandinavian Journal of
@@ -2295,11 +2347,12 @@ question in every case is whether a later trial is a harder trial.
 
   Clean, because the task is frozen for the whole block:
     reaction (window fixed, foreperiods drawn at random),
-    mirror (two-board rig only),
     pattern (this IS P1: the probe rebound is a within-block
       learning score and the mode already computes it),
     syllables (accuracy per round, descriptive only).
   Usable with the structure named:
+    mirror (two-board rig only; the window shrinks as the pace
+      climbs and the widest pairs fall out as one-sided trials),
     chords, sub-block 1 against sub-block 2, both within-hand and
       both 20 trials,
     rhythm, asynchrony SD per 30 s window of a fixed track: window k
@@ -2497,8 +2550,9 @@ Table 2, within-block improvement, pre-specified with a direction
                  interval rather than as a test. A large negative
                  trend here means every other mode's within-block
                  trend is partly warm-up, and the chapter says so.
-  W2 mirror      the right-minus-left onset gap narrows. DROPPED on
-                 the one-board rig: Mirror is not played.
+  W2 mirror      the absolute gap across the block, described since
+                 1 October 2026 (Section 1.7). DROPPED on the
+                 one-board rig: Mirror is not played.
   W3 pattern     P1 itself: probe minus flanking trained takes above
                  zero at the cohort level. It takes P1's verdict and
                  counts once in the Holm family (30 September 2026).
@@ -2584,7 +2638,7 @@ healthy cohort cannot give.
     fine series, defined once and used by the notebook, the per-code
     summary and the app's own strip:
       reaction     RT of scorable trials in order, rolling median 5
-      mirror       right-minus-left onset gap per clean pair
+      mirror       absolute right-left onset gap per clean pair
                    (two-board rig only)
       rhythm       asynchrony SD per 30 s window of the track
       echo         longest correct length so far, starting again at
@@ -3041,6 +3095,10 @@ verified when the mode was written (see the file named):
     1971.
   echo.py: Corsi 1972; Berch 1998; Brunetti 2014; Hebb 1961;
     Couture and Tremblay 2006; Farrell Pagulayan 2006.
+  modes/mirror.py and docs/research/deep/mirror.md: Coupar 2010;
+    Pollock 2014; Thieme 2018; Whitall 2011; Bonzano 2008, 2013;
+    Helmuth and Ivry 1996; Shen and Franz 2005; McCombe Waller and
+    Whitall 2008; Ramachandran 1996 (mirror therapy, not this mode).
   analytics/adaptive.py, modes/adaptive.py and
     docs/research/deep/adaptive.md: Guadagnoli and Lee 2004; Hodges
     and Lohse 2022; Wilson 2019; Al-Fawakhiri 2023; Cameirao 2010;

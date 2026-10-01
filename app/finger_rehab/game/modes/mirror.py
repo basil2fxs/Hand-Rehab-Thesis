@@ -1,34 +1,61 @@
-"""Mirror mode. Same-finger bilateral training.
+"""Mirror mode. Same-finger bilateral synchronous pressing.
 
 Both hands' copies of the same finger fire at once and the trial
 only counts when both presses arrive inside the timing window AND
 within max_async_ms of each other. The RT used for scoring is the
-LATER of the two presses, because the clinical signal we want is
-"did the patient produce the bilateral movement together" rather
-than "how fast was the strong side".
+LATER of the two presses, because the signal wanted is "did the
+player produce the bilateral movement together" rather than "how
+fast was the strong side".
 
-Research case: this is mirror-FREE bilateral synchronous training,
-in the Whitall 2000 (BATRAC) / Cauraugh and Summers lineage, not the
-mirror-visual-illusion protocol Ramachandran and Rogers-Ramachandran
-1996 and Altschuler 1999 describe (that literature hinges on the
-patient watching a mirror reflection of the unaffected hand, which
-this mode does not present). Those two are cited only as the
-origin-of-idea for "the unaffected hand can drag the affected one
-along via shared motor representations"; the bilateral-training
-efficacy literature itself is contested (the Cauraugh 2009/2010
-meta-analysis is not settled), so treat this mode as measurement of
-bimanual synchrony plus an evidence-informed, not proven, training
-mechanism -- not a guaranteed therapeutic effect.
+WHAT IT IS. Simultaneous bilateral training of homologous fingers:
+both hands do the same thing at the same time, independently, which
+is the Cochrane definition (Coupar et al. 2010). It is NOT mirror
+therapy. Mirror therapy needs the mirror: in Ramachandran and
+Rogers-Ramachandran (1996) a patient making mirror-symmetric
+movements with his eyes shut felt the phantom stay frozen, and it
+moved only when he looked in the mirror, so that paper is the origin
+of mirror therapy and not a source for "the unaffected hand drags
+the affected one along". That idea is the bilateral-training
+rationale (McCombe Waller and Whitall 2008). Mirror is in fact the
+comparison condition in mirror-therapy trials: against the same
+movements with both limbs in view, mirror therapy's effect was not
+significant (Thieme et al. 2018). Bilateral arm training itself was
+no better than usual care or one-arm training in the Cochrane review
+and overview (Coupar et al. 2010; Pollock et al. 2014), and BATRAC
+was not superior to dose-matched exercise in a 111-person trial
+(Whitall et al. 2011). So the mode measures bimanual synchrony and
+delivers bilateral practice; no therapeutic effect is claimed (the
+Mirror deep review of 1 October 2026, docs/research/deep/mirror.md).
+
+HEALTHY TIMING. Healthy hands press about 19 to 24 ms apart on a
+1 kHz glove (Bonzano et al. 2008, 2013), and no hand is known to
+lead in discrete presses (a group mean of -0.7 ms in bimanual
+tapping, Helmuth and Ivry 1996; individual leads both ways, Shen and
+Franz 2005), so the 350 ms gate below is nearly inert for a healthy
+pair (0.4 percent of simulated trials) and catches only a pair that
+landed nowhere near together.
 
 Internally this mode runs the same challenge-point adaptive engine
-that AdaptiveMode uses, just in 4-finger space (the same finger
-fires on both hands so there's no need to address the 8-lane
-bilateral space). That means the cadence speeds up when the patient
-is acing the bimanual coordination, slows down when they struggle,
-and biases the next finger pick toward the weaker side so weak
-fingers get more reps. Order of which finger fires next is random
-(weakness-weighted), not the old deterministic index, middle, ring,
-little sweep.
+that AdaptiveMode uses, in 4-finger space: the same finger fires on
+both hands every trial, so the hands are equal by construction and
+only the finger split needs managing. The pace speeds up when the
+pair keeps landing and slows when it does not, and the next finger
+is a weakness-weighted pick over finger PAIRS (a pair failing
+because one hand is weak is cued more, but nothing targets a hand).
+Because the rest after a trial is capped at 1 s from its close, the
+pace here mainly sets the press WINDOW (0.9 of 60/BPM), not the cue
+rate: at the 24 BPM start the window is 2.25 s and cues come about
+1.5 s apart. A faster pace drops the widest pairs as one-sided
+misses, so the gap shrinks without the hands changing (simulation),
+which is why the window and the one-sided count travel with every
+gap.
+
+Rules shared with Adaptive since 1 October 2026: a press under
+ANTICIPATION_MS after the cue is not a response to it on either
+hand; a press on the finished trial's finger before the next cue is
+that trial's late answer, logged and not charged as an idle press; a
+pair cut short because a board dropped is the rig's (device_drop)
+and never reaches the pace controller.
 """
 from __future__ import annotations
 
@@ -95,6 +122,9 @@ class MirrorMode:
     """
 
     name = "Mirror"
+    # Under 100 ms after the cue nothing has been perceived, so a press
+    # there is not a response to it (Reaction's and Adaptive's rule).
+    ANTICIPATION_MS = 100.0
 
     def __init__(self, engine: "GameEngine",
                  pattern: list[int], repeat_count: int,
@@ -171,6 +201,22 @@ class MirrorMode:
         self._last_finish_t: float | None = None
         self.trial_counter = 0
         self._presses: deque[PressEvent] = deque()
+        # What the block did, for block_stats and the analysis.
+        self.start_bpm = float(self.adapter.bpm)
+        self._prev_finger: int | None = None
+        self._bpm_trace: list[float] = []
+        self._window_trace_ms: list[float] = []
+        self._cues = [0, 0, 0, 0]
+        self._hits = [0, 0, 0, 0]
+        self._one_sided = 0
+        self._gated = 0
+        self._late_presses = 0
+        self._anticipations = 0
+        self._dropped = 0
+        self._recoveries = 0
+        self._last_recovery = bool(getattr(self.adapter, "in_recovery",
+                                           False))
+        self._peaks = {"right": [], "left": []}
 
     @property
     def total_trials(self) -> int:
@@ -304,6 +350,10 @@ class MirrorMode:
 
     def _fire(self, now: float) -> None:
         finger = self._pick_finger()
+        self._bpm_trace.append(float(self.adapter.bpm))
+        self._window_trace_ms.append(float(self.current_timeout_s) * 1000.0)
+        if 0 <= finger < len(self._cues):
+            self._cues[finger] += 1
         self.trial_counter += 1
         self.active = PendingMirrorTrial(
             trial_id=self.trial_counter,
@@ -321,16 +371,43 @@ class MirrorMode:
             now,
         )
 
+    def _raw(self, event: str, lane: int | None, t_perf: float,
+             detail: str) -> None:
+        raw = getattr(self.engine, "raw_logger", None)
+        if raw:
+            raw.queue_event(event, lane=lane, t_perf=t_perf, detail=detail,
+                            hand=self.engine.hand_mode)
+
     def _handle_press(self, ev: PressEvent, now: float) -> None:
         if self.active is None:
+            prev = self._prev_finger
+            if prev is not None and ev.lane in (prev, prev + 4):
+                # The finished trial's finger before the next cue: that
+                # trial's late answer (its window had closed), logged
+                # and not charged (Mirror review, 1 October 2026: 5.8
+                # idle-press charges a simulated healthy block).
+                self._late_presses += 1
+                self._raw("late_press", ev.lane, ev.t_perf,
+                          f"trial_id={self.trial_counter}")
+                return
             # Between-trial spam costs the idle press penalty, same
             # rule as classic / adaptive.
             self.engine.apply_idle_press_penalty()
             return
-        self.active.keys_pressed.append(ev.lane)
         finger = self.active.finger
         right_target = finger
         left_target = finger + 4
+        since_ms = (ev.t_perf - self.active.stim_t_perf) * 1000.0
+        if (ev.lane in (right_target, left_target)
+                and 0.0 <= since_ms < self.ANTICIPATION_MS):
+            # Not a response to this cue: logged, and that hand's slot
+            # stays open for its real press.
+            self._anticipations += 1
+            self._raw("anticipation_press", ev.lane, ev.t_perf,
+                      f"trial_id={self.active.trial_id};"
+                      f"after_cue_ms={since_ms:.1f}")
+            return
+        self.active.keys_pressed.append(ev.lane)
         # Correct side handling: record the press timestamp on the
         # right or left slot. If a side already had a press, ignore
         # the duplicate so a patient who taps twice doesn't trigger
@@ -377,8 +454,40 @@ class MirrorMode:
         "Miss":  0.0,
     }
 
+    def _hands_dropped(self, hands: list[str]) -> bool:
+        """Whether any of these hands' boards is down right now, or the
+        whole source is: a pair cut short by the rig, not the player.
+        Keyboard sessions never drop."""
+        src = getattr(self.engine, "source", None)
+        if src is None or getattr(src, "provides_samples", False) is not True:
+            return False
+        if getattr(src, "is_connected", True) is False:
+            return True
+        down = getattr(self.engine, "_hands_down", None)
+        return isinstance(down, set) and any(h in down for h in hands)
+
+    def _peak(self, lane: int) -> float | None:
+        fn = getattr(self.engine, "_peak_force_for_lane", None)
+        if not callable(fn):
+            return None
+        try:
+            v = fn(lane)
+        except Exception:
+            return None
+        return float(v) if isinstance(v, (int, float)) else None
+
     def _finish(self, now: float) -> None:
         if self.active is None:
+            return
+        missing = [h for h, t in (("right", self.active.right_press_t),
+                                  ("left", self.active.left_press_t))
+                   if t is None]
+        if (missing and not self.active.incorrect_presses
+                and self._hands_dropped(missing)):
+            # A board dropped under the pair: the rig's, so the pace
+            # controller never sees it (Adaptive's guard; without it a
+            # dropped board drove the pace to the floor).
+            self._finish_dropped(now)
             return
         # Both sides in -> RT = later press minus stim. One side
         # missing -> rt_ms = None -> classify returns Miss.
@@ -451,6 +560,20 @@ class MirrorMode:
             finger, outcome.label != "Miss", rt_ms, quality=quality,
         )
         self.adapter.next_bpm()
+        one_sided = (len(missing) == 1
+                     and not self.active.incorrect_presses)
+        if one_sided:
+            self._one_sided += 1
+        if asynchronous and not self.active.incorrect_presses:
+            self._gated += 1
+            self._late_hand_line(right_rt_ms, left_rt_ms)
+        if outcome.label != "Miss" and 0 <= finger < len(self._hits):
+            self._hits[finger] += 1
+        peak_r = self._peak(finger) if right_rt_ms is not None else None
+        peak_l = self._peak(finger + 4) if left_rt_ms is not None else None
+        if peak_r is not None and peak_l is not None:
+            self._peaks["right"].append(peak_r)
+            self._peaks["left"].append(peak_l)
         # log_trial expects an object with .lane, .stim_t_perf,
         # .keys_pressed, .incorrect_presses. Build a lightweight
         # adapter so the existing logging path works without
@@ -480,16 +603,121 @@ class MirrorMode:
         # known times) and not a wrong finger; without the override the
         # row claimed error_type=timeout, breaking the row schema's
         # promise that only a no-press Miss is a timeout.
+        # error_type "one_sided": one hand pressed and the window closed
+        # on the other, which is neither a no-press timeout nor a wrong
+        # finger (Mirror review, 1 October 2026).
+        if self.active.incorrect_presses:
+            error_type = None
+        elif asynchronous:
+            error_type = "async"
+        elif one_sided:
+            error_type = "one_sided"
+        else:
+            error_type = None
         self.engine.log_trial(log_obj, outcome, now,
                                cue_lanes=[finger, finger + 4],
                                correct_lanes=[finger, finger + 4],
                                mirror_hand_rts=(right_rt_ms, left_rt_ms),
-                               error_type=("async" if asynchronous
-                                           and not
-                                           self.active.incorrect_presses
-                                           else None))
+                               error_type=error_type)
+        self._state_event(now, finger, peak_r, peak_l)
         self.active = None
         self.completed += 1
+        self._prev_finger = finger
         # Stamp the finish time so the inter-trial rest in update() is
         # measured from here (trial completion) rather than stim onset.
         self._last_finish_t = now
+
+    def _finish_dropped(self, now: float) -> None:
+        from ..scoring import TrialResult
+        from .classic import PendingTrial as _LogTrial
+        trial = self.active
+        self._dropped += 1
+        outcome = TrialResult(label="Miss",
+                              points=self.score_cfg.miss_points,
+                              rt_ms=None)
+        right_rt = (None if trial.right_press_t is None
+                    else (trial.right_press_t - trial.stim_t_perf) * 1000.0)
+        left_rt = (None if trial.left_press_t is None
+                   else (trial.left_press_t - trial.stim_t_perf) * 1000.0)
+        self.engine.log_trial(
+            _LogTrial(trial_id=trial.trial_id, lane=trial.lane(),
+                      stim_t_perf=trial.stim_t_perf,
+                      keys_pressed=list(trial.keys_pressed),
+                      incorrect_presses=list(trial.incorrect_presses)),
+            outcome, now, cue_lanes=[trial.finger, trial.finger + 4],
+            correct_lanes=[trial.finger, trial.finger + 4],
+            mirror_hand_rts=(right_rt, left_rt), error_type="device_drop")
+        self.active = None
+        self.completed += 1
+        self._prev_finger = trial.finger
+        self._last_finish_t = now
+
+    def _late_hand_line(self, right_rt_ms, left_rt_ms) -> None:
+        """A gated pair names the hand that came in behind, the bank's
+        rule for direction and next action. Words only in the
+        encouraging style: the lab's neutral style shows rings."""
+        if right_rt_ms is None or left_rt_ms is None:
+            return
+        if getattr(self.engine, "feedback_style", "encouraging") == "neutral":
+            return
+        from ...ui import feedback_bank
+        hand = "Left" if left_rt_ms > right_rt_ms else "Right"
+        text = feedback_bank.phrase_via(self.engine, "late_hand",
+                                        mode="mirror", target=hand)
+        gp = (getattr(self.engine, "_screens", {}) or {}).get("gameplay")
+        if text and gp is not None and hasattr(gp, "set_message"):
+            try:
+                gp.set_message(text, 1.4)
+            except Exception:
+                pass
+
+    def _state_event(self, now: float, finger: int, peak_r, peak_l) -> None:
+        """The controller's state after this trial, and each hand's
+        peak force (the row's force columns read the right hand only),
+        for the analysis."""
+        in_rec = bool(getattr(self.adapter, "in_recovery", False))
+        if in_rec and not self._last_recovery:
+            self._recoveries += 1
+        self._last_recovery = in_rec
+        d = dict(getattr(self.adapter, "last_decision", None) or {})
+        d.update(bpm=round(float(self.adapter.bpm), 1),
+                 window_ms=round(float(self.current_timeout_s) * 1000.0),
+                 recovery=int(in_rec))
+        if peak_r is not None:
+            d["peak_r"] = round(peak_r, 3)
+        if peak_l is not None:
+            d["peak_l"] = round(peak_l, 3)
+        self._raw("mirror_state", finger, now,
+                  f"trial_id={self.trial_counter};"
+                  + ";".join(f"{k}={v}" for k, v in d.items()))
+
+    def block_stats(self) -> dict:
+        """What the block did, for metadata.json (Mirror review, 1
+        October 2026): the pace and the window at every cue, recovery
+        entries, one-sided and gated pairs, late presses after a window
+        closed, presses under 100 ms, pairs a board drop cut short, cues
+        and hits per finger, and each hand's mean peak force on pairs
+        where both registered."""
+        def _mean(xs):
+            return round(sum(xs) / len(xs), 3) if xs else None
+        return {
+            "seed": self.seed,
+            "start_bpm": self.start_bpm,
+            "max_async_ms": self.max_async_ms,
+            "bpm_trace": [round(b, 1) for b in self._bpm_trace],
+            "window_trace_ms": [round(w) for w in self._window_trace_ms],
+            "window_min_ms": (round(min(self._window_trace_ms))
+                              if self._window_trace_ms else None),
+            "window_max_ms": (round(max(self._window_trace_ms))
+                              if self._window_trace_ms else None),
+            "recovery_entries": self._recoveries,
+            "n_one_sided": self._one_sided,
+            "n_gated": self._gated,
+            "late_presses": self._late_presses,
+            "anticipations": self._anticipations,
+            "device_drops": self._dropped,
+            "cues_per_finger": list(self._cues),
+            "hits_per_finger": list(self._hits),
+            "peak_force_right_mean": _mean(self._peaks["right"]),
+            "peak_force_left_mean": _mean(self._peaks["left"]),
+        }

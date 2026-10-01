@@ -286,15 +286,19 @@ class ModeChecksTests(unittest.TestCase):
         self.assertIn("60 ms", text)
         self.assertIn("350 ms", text)
         self.assertIn("clean pair", text)
-        # The claim limits the mode's own docstring insists on.
+        # The claim limits the mode's own docstring insists on (since
+        # 1 October 2026: not mirror therapy, and no training effect).
         self.assertIn("Whitall", text)
-        self.assertIn("contested", text)
+        self.assertIn("not mirror therapy", text)
+        self.assertIn("Coupar", text)
         self.assertFalse(res["per_finger"].empty)
 
     def test_mirror_reports_the_pace_the_gap_was_measured_at(self) -> None:
         row = self.out["mirror"]["result"]["checks"].set_index("id")
         self.assertIn("M3", row.index)
-        self.assertIn("BPM", str(row.loc["M3", "value"]))
+        # The pace as the window it sets, with the trials it censors.
+        self.assertIn("press window", str(row.loc["M3", "value"]))
+        self.assertIn("one-sided", str(row.loc["M3", "value"]))
 
     def test_adaptive_reports_the_cap_not_just_the_band(self) -> None:
         res = self.out["adaptive"]["result"]

@@ -214,7 +214,9 @@ Existing modes not to duplicate: reaction (simple + choice RT), pattern
   function through differing neuroplastic mechanisms: a single-blinded
   randomized controlled trial. Neurorehabilitation and Neural Repair, 2011.
   n = 111 chronic, 6 weeks 3x/week BATRAC vs DMTE; BATRAC increased
-  hemispheric activation during paretic arm movement.
+  hemispheric activation during paretic arm movement, but its functional
+  gains were not superior to dose-matched exercise (Fugl-Meyer change 1.1
+  against 1.9 points; the Mirror deep review, 1 October 2026).
   https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3548606/
   https://pubmed.ncbi.nlm.nih.gov/20930212/
 

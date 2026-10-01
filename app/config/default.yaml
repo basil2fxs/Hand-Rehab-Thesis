@@ -759,18 +759,24 @@ metrics:
   miss_force_window_ms: 1000
 
 mirror:
-  # Bilateral coordination is harder than unimanual cued press so
-  # mirror opens slower than adaptive (which starts at 30). Patient
-  # needs to land both same-finger presses inside the timing window
-  # before the system speeds up. The same adaptive.* knobs (target
-  # band, bpm_min, bpm_max, bpm_step, weakness_bias) drive how the
-  # pace evolves from here.
+  # Bilateral synchronous pressing (not mirror therapy; mirror.py says
+  # why). It opens slower than Adaptive (30): at 24 BPM the press
+  # window is 2.25 s (0.9 of 60/BPM). The rest after a trial is capped
+  # at 1 s from its close, so cues come about 1.5 s apart whatever the
+  # pace, which here sets the window more than the cue rate. The
+  # adaptive.* keys (band, bpm_min, bpm_max, bpm_step, weakness_bias,
+  # timeout_factor) drive the pace from here.
   start_bpm: 24
   # Fixed-ms bound on |right press - left press|. The press window
   # above is BPM-derived and widens with a struggling patient, so it
   # cannot by itself enforce synchronous movement; this fixed gate is
   # what actually does. A pair further apart than this downgrades to
-  # a Miss even if both landed inside the window.
+  # a Miss even if both landed inside the window. Healthy hands press
+  # about 19 to 24 ms apart (Bonzano et al. 2008, 2013), so for them
+  # the gate is nearly inert (0.4 percent of simulated trials); a
+  # paretic hand 400 ms behind fails it on most trials, and a gate
+  # that adapts per person belongs to a patient study (Mirror review,
+  # 1 October 2026).
   max_async_ms: 350
   # Seed for the finger order (weakness-weighted random). Empty draws
   # a fresh seed per block and records it in raw.csv (mirror_config)

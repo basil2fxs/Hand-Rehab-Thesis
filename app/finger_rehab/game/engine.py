@@ -588,7 +588,14 @@ class GameEngine:
             self.raw_logger.queue_event("release", lane=ev.lane,
                                          t_perf=ev.t_perf, hand=ev.hand)
 
-    def _feed_detectors(self, t_perf: float, vals: tuple[int, ...]) -> None:
+    def _feed_detectors(self, t_perf: float, vals: tuple[int, ...],
+                        t_hands=None) -> None:
+        """Feed the detectors one sample. `t_hands` comes with two
+        boards: each hand's own board stamp, or None for a hand whose
+        values are only held from its last sample, which that hand's
+        detector then does not see again (Mirror review, 1 October
+        2026: one stamp for both hands put up to 9 ms of bias between
+        them)."""
         n = int(self.cfg.get("fsr.num_sensors_per_hand", 4))
         # An 8-value sample is right hand then left hand, always. A
         # 4-value sample is ONE board's values, and which hand that is
@@ -616,10 +623,15 @@ class GameEngine:
         # phantom presses that latch permanently. Parking the detector
         # freezes its baseline at the last honest level instead.
         down = getattr(self, "_hands_down", None) or set()
-        if right_det is not None and "right" not in down:
-            right_det.feed(t_perf, right_vals)
-        if left_det is not None and "left" not in down:
-            left_det.feed(t_perf, left_vals)
+        t_right = t_left = t_perf
+        feed_right = feed_left = True
+        if t_hands is not None:
+            t_right, t_left = t_hands
+            feed_right, feed_left = t_right is not None, t_left is not None
+        if right_det is not None and "right" not in down and feed_right:
+            right_det.feed(t_right, right_vals)
+        if left_det is not None and "left" not in down and feed_left:
+            left_det.feed(t_left, left_vals)
         # Old single-hand fallback: if a hand_mode is set that isn't
         # right or left (e.g. "both") the right/left covers it. The
         # legacy unilateral path only built one detector under the
@@ -2511,11 +2523,21 @@ class GameEngine:
             s = self.source.get_sample(timeout=0)
             if s is None:
                 break
-            self._feed_detectors(s.t_perf, s.values)
+            t_hands = getattr(s, "t_hands", None)
+            self._feed_detectors(s.t_perf, s.values, t_hands)
             if self.raw_logger:
                 # In "both" mode the first 4 values are right, next 4 are left.
                 # We log them all in the raw row, the hand column is "both".
-                self.raw_logger.queue_sample(s.t_perf, s.values, hand=self.hand_mode)
+                # With two boards each row is one board's own sample at
+                # its own stamp, the other hand's values held, and the
+                # detail names the board (multi_serial.py).
+                board = ""
+                if t_hands is not None:
+                    board = ("board=right" if t_hands[0] is not None
+                             else "board=left")
+                self.raw_logger.queue_sample(s.t_perf, s.values,
+                                             hand=self.hand_mode,
+                                             detail=board)
             # Push to lane strips for live readout.
             # "diagnostics" is included so the Settings screen shows a
             # live readout when the hardware is plugged in. This pump
@@ -5265,10 +5287,12 @@ class GameEngine:
         self.screen_obj = self._screens["gameplay"]
 
     def begin_mirror_block(self) -> None:
-        """Mirror therapy mode. Both hands' same finger fire at once;
-        the patient has to land both presses in the timing window
-        for the trial to count. Forces hand_mode="both" because
-        single-hand mirror training doesn't exist.
+        """Mirror, bilateral synchronous pressing (not mirror therapy:
+        no mirror is involved; mirror.py says why). Both hands' same
+        finger fire at once; the player has to land both presses in
+        the timing window, and within mirror.max_async_ms of each
+        other, for the trial to count. Forces hand_mode="both" because
+        a one-hand Mirror block does not exist.
 
         Cadence + finger order are driven by the challenge-point
         adaptive engine just like AdaptiveMode: weakness-weighted
@@ -5309,10 +5333,11 @@ class GameEngine:
         if cap is not None and finger_pattern:
             from math import ceil
             repeat_count = max(1, ceil(cap / len(finger_pattern)))
-        # Mirror gets its own adaptive config so a therapist can tune
-        # the bilateral-coordination pace independently of the unimanual
-        # adaptive mode. Falls back to the regular adaptive.* keys, so
-        # a config that doesn't set mirror.* still works.
+        # Mirror reads the adaptive.* keys for the controller, the
+        # same values Adaptive plays, and its own mirror.start_bpm,
+        # mirror.max_async_ms and mirror.seed. (A comment here once
+        # promised separate mirror.* controller keys; the code never
+        # read any.)
         ac = AdaptiveConfig(
             target_low=float(self.cfg.get("adaptive.target_low", 0.65)),
             target_high=float(self.cfg.get("adaptive.target_high", 0.80)),
@@ -5321,11 +5346,15 @@ class GameEngine:
             bpm_step=float(self.cfg.get("adaptive.bpm_step", 10.0)),
             weakness_bias=float(self.cfg.get("adaptive.weakness_bias", 2.5)),
             min_trials=int(self.cfg.get("adaptive.min_trials", 2)),
+            timeout_factor=float(self.cfg.get("adaptive.timeout_factor",
+                                              0.90)),
         )
-        # Mirror starts slower than adaptive (24 BPM = 2.5 s gap
-        # vs adaptive's 30 BPM = 2 s) because the patient has to
-        # coordinate both hands on every trial. Adapter speeds up
-        # once the patient is landing the bimanual pair reliably.
+        # Mirror starts slower than Adaptive: 24 BPM gives a 2.25 s
+        # window against Adaptive's 1.8 s at 30 BPM, since both hands
+        # must land. Cues come about 1.5 s apart all the same, because
+        # the rest after a trial is capped at 1 s from its close
+        # (MirrorMode.MAX_REST_S): here the pace sets the window more
+        # than the cue rate.
         start_bpm = float(self.cfg.get("mirror.start_bpm", 24.0))
         # Fallback timing knobs for the rare case where the adapter
         # path can't be used (math safety net only - the live mode
@@ -6035,10 +6064,20 @@ class GameEngine:
             gaps = getattr(self, "_mirror_gaps_ms", [])
             r_rts = getattr(self, "_mirror_right_rts_ms", [])
             l_rts = getattr(self, "_mirror_left_rts_ms", [])
+            srt = sorted(gaps)
+            mid = len(srt) // 2
+            median = (None if not srt else srt[mid] if len(srt) % 2
+                      else (srt[mid - 1] + srt[mid]) / 2.0)
             summary["mirror"] = {
                 "seed": getattr(self.mode, "seed", None),
+                # The mean includes gated pairs and is moved by one
+                # ungrouped pair; the median is the steadier summary
+                # (Mirror review, 1 October 2026: block-to-block ICC
+                # 0.74 against 0.59 in simulation).
                 "mean_gap_ms": (round(sum(gaps) / len(gaps), 1)
                                  if gaps else None),
+                "median_gap_ms": (round(median, 1)
+                                  if median is not None else None),
                 "n_clean_pairs": len(gaps),
                 # Legacy alias kept so anything reading the old key
                 # from fresh metadata keeps working; same number.
@@ -6048,6 +6087,12 @@ class GameEngine:
                 "left_hand_mean_rt_ms": (
                     round(sum(l_rts) / len(l_rts), 1) if l_rts else None),
             }
+            stats_fn = getattr(self.mode, "block_stats", None)
+            if callable(stats_fn):
+                try:
+                    summary["mirror"].update(stats_fn())
+                except Exception as e:
+                    log.warning("mirror block stats failed: %s", e)
         # Patterns-only context: the sequences actually used, per-take
         # aggregates and the probe learning scores. These cannot be
         # rebuilt from hits / misses because the trained/probe split
@@ -6385,6 +6430,17 @@ class GameEngine:
                               if right_rts else None)
             left_rt_mean = (sum(left_rts) / len(left_rts)
                               if left_rts else None)
+            if self.current_block == "mirror":
+                # Mirror's rows are keyed on the right-hand lane, so
+                # the per-lane lists above hold no left hand: each
+                # hand's own RT and peak come from the mode instead.
+                r_rts = getattr(self, "_mirror_right_rts_ms", []) or []
+                l_rts = getattr(self, "_mirror_left_rts_ms", []) or []
+                right_rt_mean = sum(r_rts) / len(r_rts) if r_rts else None
+                left_rt_mean = sum(l_rts) / len(l_rts) if l_rts else None
+                stats = (summary.get("mirror") or {})
+                right_mean = stats.get("peak_force_right_mean")
+                left_mean = stats.get("peak_force_left_mean")
             asym = {
                 "peak_force": metrics.asymmetry_index(
                     left_mean, right_mean),

@@ -148,9 +148,18 @@ class DualArduinoTests(unittest.TestCase):
             fakes[0].push(t, (10, 20, 30, 40))         # right
             fakes[1].push(t + 0.005, (50, 60, 70, 80))  # left, 5 ms later
             time.sleep(0.03)
+            # Since 1 October 2026 each board's sample goes on by
+            # itself, in time order, on its own stamp: first the right
+            # (the left not heard yet, so zeros), then the left with
+            # the right's values held beside it.
+            s = multi.get_sample(timeout=0.5)
+            self.assertIsNotNone(s)
+            self.assertEqual(s.values, (10, 20, 30, 40, 0, 0, 0, 0))
+            self.assertEqual(s.t_hands, (t, None))
             s = multi.get_sample(timeout=0.5)
             self.assertIsNotNone(s)
             self.assertEqual(s.values, (10, 20, 30, 40, 50, 60, 70, 80))
+            self.assertEqual(s.t_hands, (None, t + 0.005))
         finally:
             multi.stop()
 

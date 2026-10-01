@@ -466,7 +466,7 @@ class RawLogger:
         return True
 
     def queue_sample(self, t_perf: float, vals: tuple[int, ...],
-                     hand: str = "right") -> None:
+                     hand: str = "right", detail: str = "") -> None:
         padded = _pad_vals(vals, 8)
         with self._lock:
             if self._cap_reached():
@@ -478,7 +478,7 @@ class RawLogger:
                 f"{t_perf:.6f}",
                 str(self._idx),
                 *(str(v) for v in padded),
-                hand, "", "", "",
+                hand, "", "", detail,
             ))
 
     def queue_event(self, event: str, lane: int | None = None,

@@ -49,7 +49,7 @@ After collection only, since each would change the task mid-study:
 | Stimulus stamp | At the update tick, not the flip: 0 to 16.7 ms early | `pattern.py` DEVIATIONS; the same in Adaptive, Mirror and Chords |
 | Chart zero | On the music's attacks since 1 October 2026 (frozen study chart); a chart built from the audio sits 26 to 37 ms after them | `scripts/build_study_chart.py`; the Rhythm deep review |
 | Chord spans | Steps of about 20 ms on a bursting board | Pilot block summaries |
-| Two boards | About 7 ms mean absolute difference from their bursts alone | Arithmetic |
+| Two boards | About 7 ms was each board on its own stamps; the merger then stamped both hands with one time and kept only each board's latest sample (a 9 ms bias between a bursting and a smooth board). Since 1 October 2026 each board keeps its own stamp; the bench offset is the number to quote | Arithmetic; the Mirror deep review |
 
 The pads: one count is 0.0195 N. Over a chord's 3.2 s window a resting finger's peak reaches a median of 2 counts (169 rest windows). Light chord presses were 42 to 86 counts (0.8 to 1.7 N), so noise alone gives an ER near 0.05. The motors leave no trace on the pads (six blocks).
 

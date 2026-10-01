@@ -154,10 +154,15 @@ class BothPressesNeededTests(unittest.TestCase):
 
         mode.adapter.record = _spy_record
         mode._fire(now=0.0)
-        # Well under score_cfg's perfect_ms (default 100ms) for both
-        # sides.
+        # Under 100 ms nothing is a response to the cue (1 October
+        # 2026): these two are logged and leave both slots open.
         mode._handle_press(_press(0, 0.03), now=0.03)
         mode._handle_press(_press(4, 0.04), now=0.04)
+        self.assertIsNone(spy.log_trial.call_args)
+        # At 100 ms exactly classify() still says Perfect, which the
+        # mode caps at Great and scores as full quality.
+        mode._handle_press(_press(0, 0.10), now=0.10)
+        mode._handle_press(_press(4, 0.10), now=0.10)
         outcome = spy.log_trial.call_args[0][1]
         self.assertEqual(outcome.label, "Great")
         self.assertEqual(outcome.points, mode.score_cfg.great_points)
@@ -643,11 +648,11 @@ class BlockRtDoubleCountTests(unittest.TestCase):
                 mode._fire(now=0.0)
                 finger = mode.active.finger
                 mode._handle_press(
-                    PressEvent(lane=finger, t_perf=0.05, value=0,
-                               baseline=0.0, hand="both"), now=0.05)
+                    PressEvent(lane=finger, t_perf=0.25, value=0,
+                               baseline=0.0, hand="both"), now=0.25)
                 mode._handle_press(
-                    PressEvent(lane=finger + 4, t_perf=0.06, value=0,
-                               baseline=0.0, hand="both"), now=0.06)
+                    PressEvent(lane=finger + 4, t_perf=0.26, value=0,
+                               baseline=0.0, hand="both"), now=0.26)
             # 1 wrong-finger-then-correct Miss that still carries an
             # rt_ms on the row (mirror.py keeps rt_ms=rt_ms on the
             # downgrade).
@@ -655,14 +660,14 @@ class BlockRtDoubleCountTests(unittest.TestCase):
             finger = mode.active.finger
             other = (finger + 1) % 4
             mode._handle_press(
-                PressEvent(lane=other, t_perf=0.03, value=0,
-                           baseline=0.0, hand="both"), now=0.03)
+                PressEvent(lane=other, t_perf=0.23, value=0,
+                           baseline=0.0, hand="both"), now=0.23)
             mode._handle_press(
-                PressEvent(lane=finger, t_perf=0.05, value=0,
-                           baseline=0.0, hand="both"), now=0.05)
+                PressEvent(lane=finger, t_perf=0.25, value=0,
+                           baseline=0.0, hand="both"), now=0.25)
             mode._handle_press(
-                PressEvent(lane=finger + 4, t_perf=0.06, value=0,
-                           baseline=0.0, hand="both"), now=0.06)
+                PressEvent(lane=finger + 4, t_perf=0.26, value=0,
+                           baseline=0.0, hand="both"), now=0.26)
             self.assertEqual(eng.hits, 3)
             self.assertEqual(eng.misses, 1)
             # The bug: _block_rt_count used to include the Miss row
@@ -716,13 +721,13 @@ class MirrorBlockSummarySectionTests(unittest.TestCase):
                 mode._fire(now=0.0)
                 finger = mode.active.finger
                 mode._handle_press(
-                    PressEvent(lane=finger, t_perf=0.05, value=0,
-                               baseline=0.0, hand="both"), now=0.05)
+                    PressEvent(lane=finger, t_perf=0.25, value=0,
+                               baseline=0.0, hand="both"), now=0.25)
                 mode._handle_press(
                     PressEvent(lane=finger + 4,
-                               t_perf=0.08 + i * 0.01, value=0,
+                               t_perf=0.28 + i * 0.01, value=0,
                                baseline=0.0, hand="both"),
-                    now=0.08 + i * 0.01)
+                    now=0.28 + i * 0.01)
             summary = eng._build_block_summary("completed")
             mir = summary.get("mirror")
             self.assertIsNotNone(mir)

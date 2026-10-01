@@ -655,15 +655,16 @@ class CheckVerdictTests(unittest.TestCase):
     def test_the_prespecified_set_matches_the_design(self) -> None:
         pre = set(self.ra.COHORT_PRESPECIFIED)
         for cid in ("R1", "R2", "P1", "P3", "C1", "C2", "C4", "C6",
-                    "Rh1", "Rh2", "M1", "M2", "F1", "F2", "F3", "F4",
+                    "Rh1", "Rh2", "M1", "F1", "F2", "F3", "F4",
                     "B1", "B3", "B4", "E1", "E3",
                     "W1", "W2", "W3", "W4", "W5"):
             self.assertIn(cid, pre, cid)
         # C3 and B2 left the family on 1 October 2026, before any
         # participant: at the study's light presses ER does not measure
-        # enslaving, so the ring column is reported, not tested; and a
-        # healthy cohort makes too few wrong-finger errors to decide B2.
-        for cid in ("C3", "B2", "C5", "Rh3", "B5", "E2p"):
+        # enslaving, so the ring column is reported, not tested; a
+        # healthy cohort makes too few wrong-finger errors to decide B2;
+        # and no hand is known to lead, so M2 is reported two-sided.
+        for cid in ("C3", "B2", "M2", "C5", "Rh3", "B5", "E2p"):
             self.assertNotIn(cid, pre, f"{cid} is not in design 4.6")
 
     def test_a_row_carries_its_p_and_its_family(self) -> None:

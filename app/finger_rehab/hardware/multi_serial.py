@@ -13,6 +13,21 @@ including ignoring a saved port that no longer exists.
 The engine sees this as a normal Source: start / stop / get_sample /
 send_command / is_connected. No engine-side changes needed beyond
 swapping which Source class main.py constructs.
+
+TWO BOARDS, EACH ON ITS OWN CLOCK (the Mirror review of 1 October
+2026). Until then the merger kept only each board's LATEST sample,
+paired the two when they fell within 50 ms and stamped the pair with
+the later board's time. A board that sends in packets lost all but
+the last sample of each packet (43 percent of samples when both did,
+in simulation), and one stamp for both hands put a bias of up to
+9 ms between a bursting and a smooth board, enough to decide which
+hand "leads" in Mirror. Now every sample of either board is queued
+per board and sent on once, in time order, with that board's own
+stamp (Sample.t_hands names whose sample it is); the other hand's
+last values ride along held, so the 8-value shape is unchanged, and
+the engine feeds a hand's detector only that hand's own samples. A
+board silent for SAMPLE_PAIR_WINDOW_S still reads as zeros, as
+before. The one-board path forwards samples exactly as it did.
 """
 from __future__ import annotations
 
@@ -20,6 +35,7 @@ import logging
 import queue
 import threading
 import time
+from collections import deque
 from dataclasses import dataclass
 
 from .serial_source import SerialSource
@@ -54,9 +70,10 @@ class MultiSerialSource(Source):
     """
 
     SAMPLE_PAIR_WINDOW_S = 0.05
-    """How long to wait for the OTHER hand's sample to pair with the
-    current one in bilateral mode. If the second sample doesn't arrive
-    in this window we fall back to the last-known values or zeros."""
+    """With two boards: how long a sample waits for the OTHER board,
+    which may still send one stamped earlier, before it goes on alone;
+    and how long a board may be silent before its hand reads as
+    zeros."""
 
     def __init__(self, ports: list[str], *,
                  baud: int = 115200, num_sensors_per_hand: int = 4,
@@ -96,10 +113,13 @@ class MultiSerialSource(Source):
         self._q: queue.Queue[Sample] = queue.Queue(maxsize=4096)
         self._stop = threading.Event()
         self._merger_thread: threading.Thread | None = None
-        # Last sample seen per hand, used to pair up bilateral samples
-        # that arrive at slightly different times.
+        # Two boards: the last sample RECEIVED per board (its stamp
+        # says whether the board is alive), each board's queue of
+        # samples not yet sent on, and the last values SENT per hand,
+        # which ride along held while the other board's samples go.
         self._last_right: tuple[float, tuple[int, ...]] | None = None
         self._last_left:  tuple[float, tuple[int, ...]] | None = None
+        self._reset_pairing()
         # perf_counter timestamp of the last sample we actually pushed
         # onto the queue. Used to distinguish "port open + data flowing"
         # from "port open but the device on the other end is silent"
@@ -159,6 +179,7 @@ class MultiSerialSource(Source):
         self._last_right = None
         self._last_left = None
         self._last_sample_t = None
+        self._reset_pairing()
         for h in self.hands:
             try:
                 h.source.start()
@@ -202,6 +223,13 @@ class MultiSerialSource(Source):
         self._last_right = None
         self._last_left = None
         self._last_sample_t = None
+        self._reset_pairing()
+
+    def _reset_pairing(self) -> None:
+        self._q_right: deque = deque(maxlen=2048)
+        self._q_left: deque = deque(maxlen=2048)
+        self._held_right: tuple[float, tuple[int, ...]] | None = None
+        self._held_left: tuple[float, tuple[int, ...]] | None = None
 
     def get_sample(self, timeout: float = 0.0):
         try:
@@ -293,6 +321,8 @@ class MultiSerialSource(Source):
         keep spinning."""
         n = self.num_sensors_per_hand
         only_one = len(self.hands) == 1
+        if not hasattr(self, "_q_right"):
+            self._reset_pairing()
         while not self._stop.is_set():
             try:
                 any_consumed = False
@@ -316,13 +346,15 @@ class MultiSerialSource(Source):
                             except queue.Empty:
                                 pass
                     else:
-                        # Two boards: cache for pairing.
+                        # Two boards: queue every sample on its board's
+                        # own stamp; nothing is overwritten.
+                        item = (s.t_perf, tuple(s.values[:n]))
                         if h.hand == "right":
-                            self._last_right = (
-                                s.t_perf, tuple(s.values[:n]))
+                            self._last_right = item
+                            self._q_right.append(item)
                         else:
-                            self._last_left = (
-                                s.t_perf, tuple(s.values[:n]))
+                            self._last_left = item
+                            self._q_left.append(item)
                 # Run the pair-emit check EVERY iteration in bilateral
                 # mode, not just when a new sample arrived. Without
                 # this, a solo hand that goes silent never triggers
@@ -342,52 +374,51 @@ class MultiSerialSource(Source):
                 time.sleep(0.01)
 
     def _emit_paired_if_ready(self) -> None:
-        """For the two-Arduino case: emit one combined 8-value sample
-        whenever we have a recent reading from BOTH hands. If one hand
-        hasn't reported in SAMPLE_PAIR_WINDOW_S, fill its slots with
-        zeros so the patient still sees the active hand's data."""
+        """Two boards: send on every queued sample, oldest first, each
+        on its own board's stamp (t_hands names it) with the other
+        hand's last sent values held beside it. A sample waits while
+        the other board's queue is empty, up to SAMPLE_PAIR_WINDOW_S,
+        because that board may still send one stamped earlier. A hand
+        whose board has been silent longer than the window reads as
+        zeros, so the live hand still plays."""
         n = self.num_sensors_per_hand
-        zeros = (0,) * n
         now = time.perf_counter()
-        right = self._last_right
-        left = self._last_left
-        # Decide the timestamp + values for the combined sample.
-        if right is not None and left is not None:
-            # Pair them if their timestamps are within the window.
-            tr, vr = right
-            tl, vl = left
-            if abs(tr - tl) <= self.SAMPLE_PAIR_WINDOW_S:
-                t = max(tr, tl)
-                values = tuple(vr) + tuple(vl)
-                # Consume both so we don't re-emit the same pair.
-                self._last_right = None
-                self._last_left = None
-                self._push_combined(t, values)
+        while True:
+            r = self._q_right[0] if self._q_right else None
+            left = self._q_left[0] if self._q_left else None
+            if r is None and left is None:
                 return
-        # No pair available yet. If the freshest single sample is
-        # already past the pair window, emit it solo and zero the
-        # other hand so the engine still sees activity.
-        freshest = None
-        if right is not None and (left is None
-                                    or right[0] >= left[0]):
-            freshest = ("right", right)
-        elif left is not None:
-            freshest = ("left", left)
-        if freshest is None:
-            return
-        hand, (t, v) = freshest
-        if now - t < self.SAMPLE_PAIR_WINDOW_S:
-            # Still within the pair window; wait for the other hand.
-            return
-        if hand == "right":
-            self._push_combined(t, tuple(v) + zeros)
-            self._last_right = None
-        else:
-            self._push_combined(t, zeros + tuple(v))
-            self._last_left = None
+            if r is not None and (left is None or r[0] <= left[0]):
+                hand, (t, v), other_waiting = "right", r, left is None
+            else:
+                hand, (t, v), other_waiting = "left", left, r is None
+            if other_waiting and now - t < self.SAMPLE_PAIR_WINDOW_S:
+                return
+            if hand == "right":
+                self._q_right.popleft()
+                self._held_right = (t, tuple(v))
+                t_hands = (t, None)
+            else:
+                self._q_left.popleft()
+                self._held_left = (t, tuple(v))
+                t_hands = (None, t)
+            values = (self._side(self._held_right, self._last_right, t, n)
+                      + self._side(self._held_left, self._last_left, t, n))
+            self._push_combined(t, values, t_hands)
 
-    def _push_combined(self, t_perf: float, values: tuple[int, ...]) -> None:
-        s = Sample(t_perf=t_perf, values=values)
+    def _side(self, held, last, t: float, n: int) -> tuple[int, ...]:
+        """One hand's values for a sample at time t: its last sent
+        values, or zeros when its board has sent nothing yet or has
+        been silent longer than the window."""
+        if held is None or last is None:
+            return (0,) * n
+        if t - last[0] > self.SAMPLE_PAIR_WINDOW_S:
+            return (0,) * n
+        return tuple(held[1])
+
+    def _push_combined(self, t_perf: float, values: tuple[int, ...],
+                       t_hands: tuple | None = None) -> None:
+        s = Sample(t_perf=t_perf, values=values, t_hands=t_hands)
         try:
             self._q.put_nowait(s)
             self._last_sample_t = time.perf_counter()

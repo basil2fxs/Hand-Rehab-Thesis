@@ -12,6 +12,10 @@ from dataclasses import dataclass
 class Sample:
     t_perf: float            # time.perf_counter() at receive
     values: tuple[int, ...]  # 4 FSR values for one hand, 8 if both
+    # Two boards only: (right stamp, left stamp), each hand's own
+    # board time for values that are new in this sample, None for a
+    # hand whose values are held from its last sample.
+    t_hands: tuple | None = None
 
 
 class Source(abc.ABC):
