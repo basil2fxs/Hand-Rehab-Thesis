@@ -465,10 +465,9 @@ class BuilderTests(unittest.TestCase):
         text = (LAB_FOLDER / "README.md").read_text()
         self.assertLessEqual(len(text.strip().splitlines()), 40)
         self.assertTrue(text.isascii())
-        # The steps, then the three marker pictures in both themes.
+        # The steps, then the one marker picture in both themes.
         self.assertIn("run_in_psychopy.py", text)
-        for picture in ("eeg_markers_how", "eeg_markers_where",
-                        "eeg_cheat_sheet"):
+        for picture in ("eeg_cheat_sheet",):
             for theme in ("dark", "light"):
                 name = f"{picture}_{theme}.svg"
                 self.assertIn(name, text)

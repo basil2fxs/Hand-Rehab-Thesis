@@ -13,13 +13,9 @@
 
 While ActiView records, the game writes a number onto the recording the moment something happens, so the brain signal can be cut around each event afterwards.
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="../app/docs/images/eeg_markers_how_dark.svg"><img alt="How a number reaches the recording: the game sends 33 when a finger lights up, the marker box on COM10 puts it on the trigger cable, and 33 marks that moment on the EEG" src="../app/docs/images/eeg_markers_how_light.svg" width="100%"></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="../app/docs/images/eeg_cheat_sheet_dark.svg"><img alt="EEG markers: 33 when a finger lights up, 100 plus the finger for a right press, 110 plus for a wrong one, 120 plus for too early, 130 for too slow, 140 to 142 for the result ring, and 20, 200 plus and 220 plus around each game" src="../app/docs/images/eeg_cheat_sheet_light.svg" width="100%"></picture>
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="../app/docs/images/eeg_markers_where_dark.svg"><img alt="Where the numbers land: 240 and 241 around a lab sitting, 20, 206 and 226 around one game, and 33, 102 and 140 for the cue, the press and the result of one trial" src="../app/docs/images/eeg_markers_where_light.svg" width="100%"></picture>
-
-<picture><source media="(prefers-color-scheme: dark)" srcset="../app/docs/images/eeg_cheat_sheet_dark.svg"><img alt="What each number means: 20s set-up and timing, 30s a cue, 100s a press by finger, 140s the result, 200s each game's start and end, 240s the session" src="../app/docs/images/eeg_cheat_sheet_light.svg" width="100%"></picture>
-
-Every session also saves `markers_codes.csv`: the full map it was recorded under, with the codes other sittings send.
+Reaction, the lab's own task, marks each flash with 30, the number the lab's script used. Every session also saves `markers_codes.csv`: the full map it was recorded under, with the numbers single games add.
 
 <details><summary>Timing, for the analysis</summary>
 
