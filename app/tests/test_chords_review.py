@@ -276,7 +276,10 @@ class NotebookTests(unittest.TestCase):
         self.assertTrue(math.isnan(cf.iloc[2]["er"]))
         self.assertEqual(cf["clean"].tolist(), [True, False, False, False])
 
-    def test_c2_is_decided_on_the_half_that_varies(self):
+    def test_c2_is_decided_on_the_hit_half(self):
+        # Since 1 October 2026 the hit half decides and the ER half is
+        # printed as exploratory: at the study's light presses ER does
+        # not measure enslaving.
         import pandas as pd
         ra = self.ra
         d = [2.0, 3.0, 2.5, 3.0, 3.0, 3.5, 5.0, 5.5, 6.0, 7.0, 7.5]
@@ -287,12 +290,16 @@ class NotebookTests(unittest.TestCase):
         verdict, detail, r_hit, r_er, p = ra.chord_c2_halves(table)
         self.assertTrue(math.isnan(r_hit))
         self.assertGreater(r_er, 0.9)
-        self.assertIs(verdict, True)
-        self.assertIn("no variation", detail)
+        self.assertEqual(verdict, "no variation")
+        self.assertIn("EXPLORATORY", detail)
         self.assertIn("over 10 chord types", detail)
-        flat = pd.DataFrame({"d": d, "hit_rate": [1.0] * 11,
-                             "median_er": [0.03] * 11})
-        self.assertEqual(ra.chord_c2_halves(flat)[0], "no variation")
+        hits = [1.0, 0.95, 1.0, 0.9, 0.95, 0.9, 0.8, 0.75, 0.7, 0.6, 0.55]
+        falling = pd.DataFrame({"d": d, "hit_rate": hits,
+                                "median_er": er})
+        verdict, _detail, r_hit, _r_er, p = ra.chord_c2_halves(falling)
+        self.assertLess(r_hit, -0.9)
+        self.assertIs(verdict, True)
+        self.assertLess(p, 0.05)
 
     def _recs(self, n_people=4):
         """Records as block_summary.chords.trials carries them: the
@@ -334,7 +341,10 @@ class NotebookTests(unittest.TestCase):
         self.assertAlmostEqual(m[0, 2], 0.05, places=6)
         c3 = ra._chords_c3_row(self._frames(people), 3)
         self.assertEqual(c3["n"], 4)
-        self.assertEqual(c3["verdict"], ra._verdict(True))
+        # Reported, not tested, since 1 October 2026.
+        self.assertEqual(c3["verdict"], ra._verdict("reported"))
+        self.assertEqual(c3["family"], "exploratory")
+        self.assertIn("largest on Ring", c3["detail"])
         self.assertAlmostEqual(c3["value"], 0.05, places=6)
         self.assertIsNone(ra._chords_c3_row({}, 3))
 
@@ -345,15 +355,18 @@ class NotebookTests(unittest.TestCase):
         w4 = ra._chords_w4_row(self._frames(self._recs()), 3)
         self.assertEqual(w4["id"], "W4")
         self.assertEqual(w4["n"], 4)
-        self.assertAlmostEqual(w4["value"], -0.02, places=6)
+        # The clean hit rate decides since 1 October 2026; the median
+        # ER half is reported beside it.
+        self.assertAlmostEqual(w4["value"], 1.0 / 11.0, places=6)
         self.assertEqual(w4["verdict"], ra._verdict(True))
         self.assertIn("clean hit rate +0.09091", w4["detail"])
-        # Every chord clean in both sub-blocks: the clean half has no
-        # variation and the row rests on the ER half.
+        self.assertIn("median ER (reported) -0.02", w4["detail"])
+        # Every chord clean in both sub-blocks: the deciding half has
+        # no variation, and the ER half does not stand in for it.
         clean = {who: [t for t in recs if not t["wrong"]]
                  for who, recs in self._recs().items()}
         w4 = ra._chords_w4_row(self._frames(clean), 3)
-        self.assertEqual(w4["verdict"], ra._verdict(True))
+        self.assertEqual(w4["verdict"], ra._verdict("no variation"))
         self.assertIn("clean hit rate: no variation", w4["detail"])
 
     def test_the_cohort_rows_carry_both_rates(self):

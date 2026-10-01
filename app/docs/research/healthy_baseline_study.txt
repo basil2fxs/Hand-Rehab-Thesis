@@ -128,8 +128,22 @@ HOW THE DESIGN GOT HERE (every change made before any participant):
     for a healthy hand (a finger held still keeps 0.54 to 1.00 of a
     run in the corridor) and are feasibility checks. The probe asks
     for a press as hard as is comfortable, on screen and on the run
-    sheet (Basil, all four recommendations, 1 October 2026). The text
-    below is corrected where the reviews found a claim the evidence
+    sheet (Basil, all four recommendations, 1 October 2026). Chords
+    after it. At the study's light presses the enslaving ratio is not
+    a measure of enslaving: on the pilot 82 percent of its
+    quiet-finger peaks came before the first target press, and during
+    the hold the quiet fingers sat 2 to 4 counts below their
+    pre-stimulus level rather than being pulled down. C2 is now
+    decided on its hit-rate half, W4 on the clean hit rate, and C3
+    and the ER halves are reported beside a press-locked quiet-finger
+    measure zeroed before the stimulus. C6 reads each chord's mean
+    onset, the measure Verwey 2023 reports, since the first press
+    barely moves with chord size (about 20 ms per finger on the
+    pilot). The GET READY card and the run sheet say to keep the
+    other fingers resting still on their pads, and the intake sheet
+    asks the years spent playing a keyboard or string instrument
+    (Basil, all four recommendations, 1 October 2026). The text below
+    is corrected where the reviews found a claim the evidence
     contradicts.
 
 What one board costs, and the thesis says it in the same breath as
@@ -457,26 +471,67 @@ Code review, 27 September 2026, before any participant:
     not enslaving), and every median is a true median.
   - C3 reads the cohort-mean chord-conditioned matrix, each person
     counting once, from the trial records.
+Deep review note (1 October 2026, before any participant;
+docs/research/deep/chords.md). Re-running the press detector over the
+pilot's raw samples reproduced every logged force peak, which showed
+where ER's numbers come from: 82 percent of the positive quiet-finger
+peaks came before the first target press (a median 0.31 s before
+it), and over the 200 ms hold a quiet finger sat a median 2.0 counts
+below its pre-stimulus level, 3.1 in pairs, 4.4 in triples and 7.1
+when enclosed between two pressing fingers. Published enslaving is
+measured at 10 to 100 percent of MVC, several times the study's 1.6
+to 2.3 N presses, with forces zeroed at rest on each trial. So the
+notebook now reads every quiet finger locked to the press: zeroed on
+the 250 ms before the stimulus, a signed mean over the hold, the
+positive part over the target hold (er_hold), and the shares that
+unloaded or leaked by more than 2 counts. The trial record carries
+each finger's level at the stimulus, its signed change by the close
+and the chord's mean onset. The GET READY card says "Press the lit
+fingers together and hold until the ring fills. Keep the other
+fingers resting still on their pads.", and the run sheet says it
+once: individuation tasks tell people to keep the other fingers
+still (Xu et al. 2017) and enslaving tasks never to lift them off
+(Abolins et al. 2020). The pad bench (scripts/pad_bench.py
+--characterise) is to measure cross-talk between pads before
+collection, so a quiet-finger change can be read as the hand's.
 Known effects to reproduce:
-  C1 Cohort median ER under 0.15. Healthy hands leak roughly 5 to 15
-     percent of instructed force at light effort (Abolins et al.
-     2020, cited in chords.py: 8 to 10 percent at about 25 percent
-     MVC; that figure could not be re-read). The study's presses are
-     lighter (about 0.8 to 1.7 N on the pilot), and a quiet finger
-     resting on its pad reaches about 2 counts over a chord's 3.2 s
-     window, which alone gives an ER near 0.05 against those presses
-     (review of 30 September 2026). C1 can therefore pass with no
-     enslaving at all: it is read as a feasibility check, and the
-     notebook reports ER with each pad's rest floor taken off beside
-     it.
+  C1 Cohort median ER under 0.15. While a finger pair held 25
+     percent of the pair's MVC, the other pair carried 8 to 10
+     percent of the total force (Abolins et al. 2020, J Neurophysiol
+     124(6), read in full on 1 October 2026), and a 4 to 8 N index
+     press moved the middle finger 6.5 to 9.5 percent of it
+     (Mirakhorlo, Maas and Veeger 2017). The study's presses are far
+     lighter (1.6 to 2.3 N on the pilot), and a quiet finger resting
+     on its pad reaches about 2 counts over a landed chord's window
+     (about 1 s, from the stimulus to the end of the hold), which
+     alone gives an ER near 0.05 against those presses. C1 can
+     therefore pass with no enslaving at all: it is read as a
+     feasibility check, and the notebook reports ER with each pad's
+     rest floor taken off, and the press-locked er_hold, beside it.
   C2 The computed difficulty rank D predicts outcome: negative
      Spearman correlation between D and per-chord hit rate, positive
      between D and per-chord median ER, on the cohort-pooled
      per-chord table. This tests the adjacency rule (enslaving
      largest between neighbours, Zatsiorsky, Li and Latash 2000).
+     Amended 1 October 2026, before any participant: the hit-rate
+     half decides and carries the p; the ER half is printed as
+     exploratory, because ER does not measure enslaving at the
+     study's forces. D tracks Verwey's chord complexity index (rank
+     correlation 0.75 over the eleven chords), which slowed equal-size
+     chords in naive players (Verwey 2023). With two to four trials
+     per chord type per person the hit half passes in 22 percent
+     (n = 10) to 38 percent (n = 20) of simulated cohorts when the
+     hit rate falls 0.11 across the D range, and in 64 to 89 percent
+     when it falls 0.22.
   C3 Ring finger the most enslaved: in the cohort-mean
      chord-conditioned matrix the ring column carries the largest
-     leak (Hager-Ross and Schieber 2000; Chiang 2004, in chords.py).
+     leak (Hager-Ross and Schieber 2000, the stationarity index;
+     Chiang 2004's "most enslaved" ring is the ring as the INSTRUCTED
+     finger, the other sense). Reported, not tested, since 1 October
+     2026, before any participant: at the study's forces the columns
+     follow noise, the pre-stimulus offset and 1 over each finger's
+     calibration gap, so the press-locked column levels print beside
+     it and C3 left the Holm family.
   C4 Cross-hand mirror chords hit more often and land tighter than
      non-mirror chords (the symmetry advantage: Kelso 1984; Haken,
      Kelso and Bunz 1985; Mechsner 2001, in chords.py).
@@ -487,23 +542,41 @@ Known effects to reproduce:
      during grasping tasks"), so report the paired result with its
      CI and treat a null as expected.
   (C4 and C5 are DROPPED on the one-board rig: see the note above.)
-  C6 The chord cost: the first press comes later the more fingers
-     the chord asks for. Per participant, the least-squares slope of
-     median RT on chord size over one, two and three fingers (the
-     quad left out: once per twenty, and a different buzz); the
-     cohort median slope above zero, one-sample Wilcoxon, one-sided.
-     Healthy students pressed one, two and three keys in 510, 632 and
-     762 ms, about 126 ms per extra finger (Verwey 2023; the chord
-     effect first shown by Seibel 1962). Added 24 September 2026
-     with the singles, before any participant, and in the Holm
-     family.
+  C6 The chord cost: chords take longer the more fingers they ask
+     for. Per participant, the least-squares slope of the median MEAN
+     ONSET (the mean of the target onsets from the stimulus) on chord
+     size over one, two and three fingers, wrong presses and partial
+     chords out (the quad left out: once per twenty, and a different
+     buzz); the cohort median slope above zero, one-sample Wilcoxon,
+     one-sided. Healthy students pressed one, two and three keys in
+     510, 632 and 762 ms of mean key time, about 126 ms per extra
+     finger, for chords whose keys landed within 50 ms after 240
+     practice trials per chord (Verwey 2023; the chord effect first
+     shown by Seibel 1962). Added 24 September 2026 with the singles,
+     before any participant, and in the Holm family. Amended 1
+     October 2026, before any participant: it read the FIRST press,
+     which rose only about 20 ms per finger on the pilot (completion
+     about 136), so it would have passed in only 19 to 51 percent of
+     simulated cohorts at n = 10; the first press is the sensitivity
+     row.
   Described beside them: the size table (RT, completion, span, ER
-     and clean hits per size) and the one-finger enslaving matrix,
-     the classical single-finger condition (Zatsiorsky, Li and Latash
-     2000) that the chord-conditioned matrices upper-bound.
+     and clean hits per size), the one-finger enslaving matrix, the
+     classical single-finger condition (Zatsiorsky, Li and Latash
+     2000; enslaving is not additive, so the chord-conditioned
+     matrices do not bound it), a timing-only clean rate (two- and
+     three-finger chords inside their window, wrong presses out,
+     since over-force outranks timing in the class order) and the
+     span without the quad, whose buzz is an arpeggio.
 Reliability class: moderate for ER (a ratio of two noisy peaks
 normalised by that day's calibration), good for span_ms. Tested as
-T4 and T5 (Section 4.5).
+T4 and T5 (Section 4.5), as registered. In simulation of this design
+T4's ICC(2,1) has a median of 0.19, 0.49 or 0.79 at n = 10 as the
+between-person spread of median ER runs 0.005, 0.01 or 0.02, so a
+high value would mostly show that pads, resting behaviour and one
+calibration are stable within a sitting; T5's median is 0.57 to 0.88
+as students differ by 25 to 60 ms in median span. Anchors: MVC-based
+enslaving retested at ICC 0.92 on the dominant hand and 0.55 on the
+non-dominant over two months (Wilhelm et al. 2014).
 Claim limits: ER and the matrices are device- and posture-specific,
 and the chord matrices are chord-conditioned, not bounds on the
 single-finger cell: enslaving is not additive across fingers
@@ -1132,8 +1205,11 @@ the closest this rig gets to Corsi's nine.
 1.12 Cross-mode summary
 -----------------------
 Strong for a healthy cohort (known effect, expected good
-reliability): reaction, rhythm, force pilot, chords (C1 to C3),
-echo. Reaction, force pilot and chords come round again in the
+reliability): reaction, rhythm, force pilot, chords on timing (C2's
+hit half, C6, the span), echo. Not strong at the study's light
+presses: the enslaving ratio behind C1, C3 and the ER halves, which
+the deep review of 1 October 2026 found mostly built before the
+press (Section 1.3). Reaction, force pilot and chords come round again in the
 second pass and carry the reliability result; rhythm comes round
 again too, read as exploratory. Group-level only: pattern (P1
 reliable at the group level, individual score unreliable by
@@ -1624,7 +1700,14 @@ the consent log) and typed into the login screen, which writes them
 into every block's metadata.json. Three more go on the sheet only,
 as cheap covariates for the reaction anchor and not analysed
 inferentially: session start time, caffeine in the last two hours,
-hours of sleep last night. The two 0 to 10 tiredness questions
+hours of sleep last night. Since 1 October 2026, before any
+participant, the sheet also asks the years spent playing a keyboard
+or string instrument (music_years in intake_sheet.csv): musicians
+show less enslaving and pianists' middle and ring fingers move as
+independently as other people's index (Slobounov et al. 2002; Xu,
+Mawase and Schieber 2024), and musical training moves tapping
+asynchrony, so it is a descriptive split for Chords and Rhythm and
+never a test. The two 0 to 10 tiredness questions
 (head, hands) are asked three times and written on the sheet as
 well (Section 5.2):
 
@@ -2091,7 +2174,8 @@ number for the six modes played once.
 Two tables, both decided before the data comes in.
 
 Table 1, known effects, one row per check, from Section 1, read on
-each participant's first-pass block: R1 R2 R3, P1 P3, C1 C2 C3 C4 C6,
+each participant's first-pass block (C3 reported, not tested, since
+1 October 2026): R1 R2 R3, P1 P3, C1 C2 C3 C4 C6,
 Rh1 Rh2, M1 M2, F1 F2 F3 F4, B1 B2 B3 B4, E1 E3, A5 A6, S6 S7. S6
 and S7 print as DROPPED since 28 September 2026: Syllables left the
 healthy sitting (Section 1.4). A5,

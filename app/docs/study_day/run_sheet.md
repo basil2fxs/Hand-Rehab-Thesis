@@ -63,8 +63,8 @@ notes box on the intake sheet.
       k/12 on the 45 and the minutes: amber past the length, red past its hard
       stop (18, 35, 50 or 65 minutes). The 60 plays every game twice;
       the 15 and 30 play shortened games (docs/research/trial_mode.md).
-- [ ] The first time Reaction, Rhythm, Echo and Force Pilot come up,
-      say that game's line once before it starts. Order A starts Reaction as soon as the
+- [ ] The first time Reaction, Rhythm, Echo, Force Pilot and Chords
+      come up, say that game's line once before it starts. Order A starts Reaction as soon as the
       calibration ends, so say its line as the calibration finishes.
       Reaction: "When a finger lights up and buzzes, press that finger
       as fast as you can. Sometimes nothing comes: keep still."
@@ -79,6 +79,8 @@ notes box on the intake sheet.
       wave scrolls past; the band is how far you can drift." Order B
       starts the sitting with Force Pilot, so say it as the
       calibration finishes.
+      Chords: "Press the lit fingers together and hold until the ring
+      fills. Keep the other fingers resting still on their pads."
 - [ ] Don't coach during a game. Let them skip a game's own rest
       (Space) only when they say they're ready.
 - [ ] Don't pause a Rhythm game. If one pauses, Retry it from the

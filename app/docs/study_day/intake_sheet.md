@@ -10,6 +10,9 @@ Age: ______   Sex: female / male / prefer not to say / other ______
 
 Caffeine in the last 2 hours: yes / no   Hours of sleep last night: ______
 
+Years playing a keyboard or string instrument (piano, guitar, violin
+and the like), all added up: ______ (0 if none)
+
 Any hand, wrist or forearm pain or injury today? yes / no
 *(If yes: thank them, do not continue.)*
 

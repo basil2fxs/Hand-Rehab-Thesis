@@ -40,6 +40,19 @@ CHECK gets reseated flat and the script run again. Keep the printout
 (and the CSV it writes in `app/config/calibration/`) for the thesis
 appendix.
 
+Worth the longer run once before collection (about 25 minutes, most
+of it a 10 minute hold):
+
+```
+python3 app/scripts/pad_bench.py --characterise --label calibrated
+```
+
+Besides each pad's slope, linearity and hysteresis, it records how
+many counts each pad shows when another one is loaded. Chords' quiet
+fingers move by only 2 to 4 counts during a chord (pilot, 1 October
+2026), so that cross-talk figure is what says whether such a change
+is the hand or the frame.
+
 ## 3. Audio latency of the study computer (item i)
 
 Rhythm scores each tap against the beat the app schedules. The sound

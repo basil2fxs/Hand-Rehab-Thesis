@@ -18,7 +18,8 @@ you'd be helping with.
 
 - One visit of about an hour. Nothing after that.
 - Four questions about which hand you use for everyday things, your
-  age and sex, and a ruler measurement of your right hand.
+  age and sex, how many years you've played a keyboard or string
+  instrument, and a ruler measurement of your right hand.
 - About 45 minutes of short games on a computer, all with your right
   hand resting on the frame, whether you're right- or left-handed.
   You press the pads lightly, like typing.

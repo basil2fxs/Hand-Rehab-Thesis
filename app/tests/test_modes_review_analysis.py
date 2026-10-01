@@ -126,8 +126,9 @@ class ChordFloor(unittest.TestCase):
             floor = ra.chord_rest_peaks(folder)
         self.assertEqual(set(floor), {0, 1, 2, 3, 4, 5, 6, 7} & set(floor))
         for lane in range(4):
-            # The largest of about 640 draws above a median baseline:
-            # near three SDs of the noise.
+            # The largest of about 200 draws (a landed chord's 1 s
+            # window) above a median baseline: near three SDs of the
+            # noise.
             self.assertGreater(floor[lane], 2.0)
             self.assertLess(floor[lane], 4.5)
 
