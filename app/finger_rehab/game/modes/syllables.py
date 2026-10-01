@@ -33,12 +33,18 @@ by having them analyse the graphosyllabic units of multisyllabic
 words, where whole-word practice did nothing; Mueller, Richter,
 Karageorgos, Krawietz and Ennemoser (2017) improved German poor
 readers' word-reading fluency with syllable-based training. Both used
-WRITTEN syllables, which is what the falling tiles are. Segmentation
-develops from large units to small (Liberman, Shankweiler, Fischer and
-Carter 1974: 46 percent of four year olds could tap syllables and none
-could tap phonemes; Ziegler and Goswami's 2005 grain size theory
-explains why English readers need the big units as well as the small
-ones), so the syllable is the right grain to start at.
+written syllables, as the tiles are, though neither asked for a choice
+among four: this is print-linked syllable work, not a replication.
+Segmentation develops from large units to small (Liberman,
+Shankweiler, Fischer and Carter 1974: 46 percent of four year olds
+could tap syllables and none could tap phonemes; Ziegler and Goswami's
+2005 grain size theory explains why English readers need the big units
+as well as the small ones). That argument is about children of 4 to 6.
+For a reader of 7 and over the foils test grapheme-phoneme contrasts
+inside the syllable (an onset, a vowel, a coda, a letter order), so
+the task is phonics with letters at the syllable grain, in the terms
+of the meta-analyses above (the deep review of 1 October 2026,
+docs/research/deep/syllables.md).
 
 WHY EACH SYLLABLE SOUNDS AS IT DOES IN ITS WORD. Bhattacharya and
 Ehri's graphosyllabic method says the word, splits it into spoken
@@ -69,8 +75,10 @@ Wolpert and Goswami (2020) is a later re-analysis of part of that
 sample, not a separate positive result; McTigue, Solheim, Zimmer and
 Uppstad (2020) found a negligible overall effect across the GraphoGame
 literature with SUPPORTIVE ADULT INTERACTION as the only significant
-moderator. Hence the adult line on the rest screen, and hence the
-claim limits below.
+moderator. Hence an adult seated beside the reader in the case
+procedure (FINAL TRIAL RESULTS/4 Syllables case/README.md; the rest
+screen's adult line never shows in the sectioned sitting), and hence
+the claim limits below.
 
 WHAT IS DELIBERATELY DIFFERENT FROM GRAPHOGAME. GraphoGame makes the
 child re-pick the right answer before moving on. Here a wrong press
@@ -87,7 +95,9 @@ immediate feedback in Grade 6 children (Metcalfe, Kornell and Finn
 but normally from delayed feedback (Gabay 2021, following Foerde and
 Shohamy 2011 on the striatal-to-hippocampal shift). So positive
 feedback is immediate and loud (the tile lifts, the chime plays) and
-negative feedback is quiet, informational and late.
+negative feedback is quiet, informational and late. That describes the
+one-section block: in the sectioned sitting the answer is shown
+straight after a second wrong press (SECTIONS), which is not late.
 
 NO HINT BEFORE THE CHILD HAS HAD TIME. Fitts and Seeger (1953) showed
 response selection is fastest when the stimulus and the response
@@ -120,9 +130,15 @@ performance up and learning down (Salmoni, Schmidt and Walter 1984;
 Winstein and Schmidt 1990, 50 percent feedback beat 100 percent at
 retention; Sigrist, Rauter, Riener and Wolf 2013 for haptic
 guidance). The delay also never undercuts the child: once three sets
-have been answered right unaided, the buzz waits at least their
-median answer time plus prompt_floor_margin_ms (300), which is how
-the method sets the delay from the learner's own latency. It never
+have been answered before any buzz, the buzz waits at least the
+child's median time to a first press plus prompt_floor_margin_ms
+(300). The median is a Kaplan-Meier estimate over the last 12 sets
+(Kaplan and Meier 1958), each set the buzz or the end of the fall cut
+off counted as censored there. The plain median of the answers that
+beat the buzz, used until 1 October 2026, read 2.54 s for a simulated
+slow child whose true median was 3.71 s (the deep review), so it
+undercut the readers it was there for. When fewer than half the sets
+were answered alone, the longest time seen stands in. The buzz never
 comes after 0.9 of the fall, so it always lands while the tiles are
 there to press. Letting the child try first fits the retrieval
 literature (Kornell, Hays and Bjork 2009; Metcalfe 2017: errors then
@@ -133,20 +149,29 @@ information here and read as noise.
 What the buzz is not: it carries no letter or sound, so it is a prompt
 to respond, not a reading aid, and there is no evidence a vibration
 prompt helps reading (Stevens et al. 2021 found no effect of the
-multisensory element in Orton-Gillingham). THE LEARNING MEASURE is the
-UNPROMPTED CORRECT rate: sets answered right before any buzz, by
-exposure and by word. The share of correct answers that needed the
-buzz should fall as a word is learnt. A prompted answer scores Good,
-not Great, and does not move the foil staircase.
+multisensory element in Orton-Gillingham). The UNPROMPTED CORRECT
+rate (sets answered right before any buzz) mixes reading speed with
+accuracy: at fixed knowledge it fell from 0.84 to 0.29 as a simulated
+reader slowed from 1.5 to 4.5 s, while the accuracy of the answers
+given before any buzz stayed at 0.93 to 0.97 (the deep review). So
+the analysis reports it beside those two parts, the time to an
+unaided first press and the accuracy before the buzz, and the case's
+repeated measure is the fixed probe (PROBE below), which never
+adapts. A prompted answer scores Good, not Great, and does not move
+the foil staircase.
 
 DIFFICULTY MOVES ON TWO CLOCKS.
 - The FOIL RUNG (1 to 8) controls how similar the wrong options are,
   how long the tiles take to fall, and whether the syllable is spoken
   again at spawn. It moves by a 3-down-1-up staircase on first-press
-  correctness, which converges on the 79.4 percent point of the
-  psychometric function (Levitt 1971), the same region GraphoGame
-  targets. A rung can move every three sets, so it tracks the child
-  inside a round.
+  correctness. Levitt (1971) puts that rule at 79.4 percent, but with
+  equal steps up and down the transformed rules miss their nominal
+  points (Garcia-Perez 1998), and simulated classic blocks ran at 0.80
+  to 0.84 on the sets that move it, near the 80 percent GraphoGame
+  targets. That holds for the classic design only: in the sectioned
+  sitting the rung sets just time, print and respeak and climbs
+  towards its ceiling, so it is never a threshold there. A rung can
+  move every three sets, so it tracks the child inside a round.
 - The WORD BAND (A everyday two-syllable words, B two and three, C
   the four-syllable ones) keeps the brief's 8-of-the-last-10 /
   under-5-of-10 rule on WORD outcomes, evaluated at round boundaries,
@@ -213,7 +238,10 @@ coda, reversal, position, order, affix; syllables_profiles.py) with a
 level each: level 0 puts the target among unrelated chunks, levels 1
 to 3 put one to three of the family's foils in the set. Three unaided
 right first presses on a family's sets raise its level, and at level
-3 mark it mastered; an error lowers it. A family is taught for three
+3 a further run of three passes it (the code's family_mastered; the
+analysis says "passed level 3", since a run of three is far below the
+80 to 100 percent over two sessions that skill-acquisition studies
+use, McDougale et al. 2020); an error lowers it. A family is taught for three
 words at a time, then the next open family takes over (lowest level
 first), which is a new contrast blocked for a few words and then
 mixed. The rung still moves by 3-down-1-up and sets the time allowed.
@@ -224,16 +252,40 @@ same syllable count (closest first letter and length first) sit over
 the four fingers for up to 4 s; one press answers. The exposure starts
 at the profile's speed_expo_ms and moves 80 ms at a time between 100
 ms and 1.5 s: down after every right answer until the first error,
-then 3-down-1-up (Levitt 1971). The threshold is the mean exposure at
-the reversals after the first, and a run of 16 or 20 trials gives a
-rough one. It is practice and a fluency measure, as the German syllable app
+then 3-down-1-up. The threshold is the mean exposure at the reversals
+after the first, and 20 trials give a rough one: two simulated blocks
+of one reader differed with an SD of about 0.05 to 0.07 s, and 16
+trials gave no threshold in 11 to 33 percent of blocks for 10 to 15,
+so every profile with a quick look plays 20 (the deep review). It is
+practice and a fluency measure, as the German syllable app
 ended its lessons with brief-exposure reading (Hess et al 2024) and
 repeated syllable reading sped up only the units trained (Huemer, Aro,
 Landerl and Lyytinen 2010); it is not a claimed cause of better
 reading.
 Exposures are whole display frames (about 17 ms at 60 Hz). The design
 note's counts per section (Section 6.1) are for a shorter block than
-the 30-word default.
+the 30-word default; 6 to 9 plays 20 words (syllables_profiles.py).
+
+PROBE (syllables.probe, on by default; every profile but classic). The
+sitting opens with fixed sets, the same sets in the same order for
+every session of an age group (assets/words/syllables_probe.json,
+built by scripts/build_syllables_probe.py). Each holds the target, one
+near foil from one family and two far foils, every family equally
+often; half the targets are heard with a weak vowel where the family
+allows it, and half the words are held out of training for that age,
+so the probe holds practised and unpractised words. The word is
+heard, then after attend_s the four tiles appear as the target
+syllable is heard once; one press answers, right or wrong, and the
+tiles go at once either way, with no prompt, no replay, no return, no
+points and no after-press cue, in a fixed time per set (the profile's
+entry fall). The in-game numbers adapt to the reader and cannot show
+change across sessions; a fixed list can (GraphoGame keeps static
+assessment levels apart from training, Richardson and Lyytinen 2014;
+fixed lists reach an ICC of 0.91, Yeatman et al. 2021). Probe rows are
+sec=probe and move no ladder, and the session cap times the training
+from the probe's end. syllables.probe_only plays the probe alone; in
+the lab, two presses of Esc after the probe end a baseline session
+with every answer on disk.
 
 HANDS. With both hands connected the hands ALTERNATE PER WORD: all
 four tiles sit over the playing hand, the resting hand shows seat
@@ -295,6 +347,8 @@ WHAT ONE ROW LOGS. One trials.csv row per option SET, not per word:
     pat=<ms from spawn to the prompt, blank if none>;
     pclass=<unprompted_correct|unprompted_error|prompted_correct|
             prompted_error|no_response>;
+    weak=<0|1, the target heard with a weak vowel>;
+    pdue=<ms from spawn to the planned buzz, blank when it is off>;
     prof=<classic|6-9|10-12|13-15|16+|60+>;lex=<word|pseudo>;
     print=<0|1, the word printed before the choice>;
     replay=<0|1, the chunk replayed with R>;
@@ -311,6 +365,16 @@ A speed trial's row is shorter:
     opts=<lane>:<word>:<t|f>,...;tlane=<lane>;presses=...;
     first=<ok|wrong|none>;err=<ok|wrong_first|miss|device_drop>;
     rt=<ms from the four words>;prof=...;lex=word;sup=<0|1>
+
+A probe set's row:
+
+    word;sec=probe;item=<1-based place in the list>;pos=<k>;nsyll=<n>;
+    syl=<chunk>;weak=<0|1>;held=<0|1, held out of training>;
+    fam=<family>;near=<the near foil's kind>;hand=<L|R>;
+    fall=<ms allowed>;opts=...;tlane=...;presses=...;
+    first=<ok|wrong|none>;err=<ok|wrong_first|miss|device_drop>;
+    rt=<ms, right answers>;at=<ms to the answer, right or wrong>;
+    prof=...;lex=<word|pseudo>;sup=<0|1>;pv=<probe file version>
 
 rt is spawn to correct press. time_difference_ms on the row is that
 rt; error_type carries err on Miss rows; correct_keys is the target
@@ -332,9 +396,12 @@ letter position dyslexia or anything else (Kohnen, Nickels, Castles,
 Friedmann and McArthur 2012 needed purpose-built tests for that). The
 tactile channel is engagement and cueing, not a claimed active
 ingredient (Stevens et al. 2021, meta-analytic null on the
-multisensory element); the prompt buzz is a response prompt, and a
-rise in unprompted accuracy shows the child learnt the match, not
-that the buzz taught reading. GraphoGame's effects depend on adult
+multisensory element); the prompt buzz is a response prompt, a rise
+in unprompted accuracy can come from speed alone (PROMPT), and nothing
+here shows the buzz taught reading. One reader's change across
+sessions cannot be put down to the game either: untrained dyslexic
+children improved as much as two game-trained groups (Luniewska et al.
+2018), so a case reports what the reader did, not why. GraphoGame's effects depend on adult
 support (McTigue 2020), so a session played alone is a different
 condition and the `supervised` flag records which one it was. The hardware was built
 and ethically scoped for adult stroke rehabilitation; use with
@@ -369,8 +436,8 @@ from .syllables_foils import (FAMILY_KIND, REVERSIBLE_LETTERS, Inventory,
                               build_option_set, draw_target_lane,
                               kinds_for_rung)
 from .syllables_profiles import Profile, resolve as resolve_profile
-from .syllables_words import (Word, all_words, pool_syllable_lists,
-                              profile_words,
+from .syllables_words import (Word, all_words, load_pools, load_probe,
+                              pool_syllable_lists, profile_words,
                               speech_stem, syllable_lists, words_for)
 
 if TYPE_CHECKING:
@@ -378,6 +445,30 @@ if TYPE_CHECKING:
 
 
 log = logging.getLogger(__name__)
+
+
+def km_median(obs) -> float | None:
+    """The Kaplan-Meier median of (seconds, answered) pairs: the first
+    time the estimated share of sets still unanswered falls to one
+    half, or None when it never does (Kaplan and Meier 1958). A set cut
+    off by the buzz or the end of its fall is censored there: it says
+    the answer would have come later, not when."""
+    pts = sorted((float(s), bool(e)) for s, e in obs)
+    n = len(pts)
+    surv = 1.0
+    i = 0
+    while i < n:
+        at = pts[i][0]
+        j, died = i, 0
+        while j < n and pts[j][0] == at:
+            died += 1 if pts[j][1] else 0
+            j += 1
+        if died:
+            surv *= 1.0 - died / (n - i)
+            if surv <= 0.5:
+                return at
+        i = j
+    return None
 
 
 BANDS = ("A", "B", "C")
@@ -476,8 +567,10 @@ class SyllablesMode(WaitSkip):
     # The latest the prompt may come, as a share of the fall, so it
     # always lands while the tiles are still there to press.
     PROMPT_CAP = 0.9
-    # Answer times needed before the child's own speed sets the floor.
+    # First presses found alone needed before the child's own speed
+    # sets the floor, and how many recent sets the floor reads.
     PROMPT_FLOOR_MIN_N = 3
+    PROMPT_FLOOR_WINDOW = 12
 
     # The prompt's outcome classes, in the order the analysis reads
     # them. "Unprompted correct" is the learning measure.
@@ -546,6 +639,8 @@ class SyllablesMode(WaitSkip):
                  age_band: str = "classic",
                  age=None,
                  sections: bool = False,
+                 probe: bool = False,
+                 probe_only: bool = False,
                  ) -> None:
         self.engine = engine
         # The lanes of each playing hand, in the hand's own order
@@ -634,6 +729,7 @@ class SyllablesMode(WaitSkip):
         else:
             self.words_total = max(1, int(words_total))
 
+        self.seed = int(seed)
         self.rng = random.Random(int(seed))
         self.inventory = Inventory(syllable_lists())
         self._bag: list[Word] = []
@@ -690,9 +786,12 @@ class SyllablesMode(WaitSkip):
         # Per word: the rung of the delay ladder it is on; one past
         # the last rung is off.
         self._prompt_state: dict[str, dict] = {}
-        # The child's own recent answer times (seconds, unprompted
-        # correct sets only), for the floor under the delay.
-        self._answer_rts: deque = deque(maxlen=8)
+        # The child's recent sets as (seconds, answered alone): the
+        # time of a first press made before any buzz, or the time the
+        # set was cut off by the buzz or the end of its fall. The floor
+        # under the delay is their Kaplan-Meier median (PROMPT).
+        self._floor_obs: deque = deque(maxlen=self.PROMPT_FLOOR_WINDOW)
+        self._prompt_plan_s: float | None = None
 
         # ---- difficulty ----
         self._run = 0                           # consecutive first-press ok
@@ -772,6 +871,32 @@ class SyllablesMode(WaitSkip):
         self._fall_trace: list[float] = [self._fall_now]
         self._fall_reversals: list[float] = []
 
+        # The age's own block length where it is shorter than the
+        # config's (6 to 9 plays 20 words; syllables_profiles.py).
+        if prof.words_per_block and not self.demo:
+            self.words_total = max(1, min(self.words_total,
+                                          int(prof.words_per_block)))
+        # ---- the fixed probe (PROBE in the docstring) ----
+        # Its sets for this age, and the words it holds out of
+        # training, which no draw below may hand the reader whether or
+        # not this block plays the probe.
+        self.probe_time_s, probe_items = load_probe(prof.pid)
+        self._held_out: set[str] = {str(it["word"]) for it in probe_items
+                                    if it.get("held_out")}
+        on = bool(probe) and bool(sections) and prof.pid != "classic"
+        self._probe_items: list[dict] = (list(probe_items) if on
+                                         and self.probe_time_s > 0 else [])
+        self.probe_only = bool(probe_only) and bool(self._probe_items)
+        self.probe_item: dict | None = None
+        self.probe_options: list[tuple[int, str, bool]] | None = None
+        self._probe_kinds: dict[int, str] = {}
+        self._probe_tlane: int | None = None
+        self._probe_presses: list[Press] = []
+        self._probe_done = 0
+        self._probe_records: list[dict] = []
+        self._probe_void = False
+        self._probe_reuse = False
+
         # ---- the sectioned sitting (SECTIONS in the docstring) ----
         # Every age profile plays it when syllables.sections is on;
         # classic keeps the one-section block the study pre-registered.
@@ -823,7 +948,13 @@ class SyllablesMode(WaitSkip):
         6.1): review, hear and pick, build, then the speed check. The
         words of the block are shared out: up to four to review, 30
         percent of the rest to build, the others to pick. Speed trials
-        come on top, for the profiles that have them."""
+        come on top, for the profiles that have them, and the fixed
+        probe, when it plays, comes first and on top of the words; with
+        probe_only it is the whole sitting."""
+        probe = ([("probe", 2 if self.demo else len(self._probe_items))]
+                 if self._probe_items else [])
+        if self.probe_only:
+            return probe
         total = self.words_total
         review = min(self.REVIEW_MAX, total // 6)
         rest = total - review
@@ -833,7 +964,7 @@ class SyllablesMode(WaitSkip):
         if self.profile.speed_trials:
             plan.append(("speed", 2 if self.demo
                          else int(self.profile.speed_trials)))
-        return [(name, n) for name, n in plan if n > 0]
+        return [(name, n) for name, n in probe + plan if n > 0]
 
     def _section_quota(self) -> int:
         if not self.section_plan:
@@ -1018,10 +1149,12 @@ class SyllablesMode(WaitSkip):
         has, the warm-up the section is for."""
         if self._bank_bands:
             pool = [w for w in words_for("A", bilateral=self.bilateral)
-                    if w.word not in self._retired]
+                    if w.word not in self._retired
+                    and w.word not in self._held_out]
         else:
             real, _pseudo = profile_words(self.profile, self.band)
-            pool = [w for w in real if w.word not in self._retired]
+            pool = [w for w in real if w.word not in self._retired
+                    and w.word not in self._held_out]
         if not pool:
             return self._draw_word()
         short = min(w.n_syll for w in pool)
@@ -1103,6 +1236,8 @@ class SyllablesMode(WaitSkip):
         the engine writes into the trial row."""
         if self.phase == "speed":
             return self.SPEED_LIMIT_S
+        if self.phase == "probe":
+            return self.probe_time_s
         return self.fall_s
 
     def eeg_stim_code(self) -> int | None:
@@ -1113,6 +1248,9 @@ class SyllablesMode(WaitSkip):
         from ...hardware import eeg_trigger
         if self.phase == "speed":
             return eeg_trigger.CODES["stim_choice_speed"]
+        if self.phase == "probe":
+            # A probe set is a choice set on a first attempt.
+            return eeg_trigger.CODES["stim_choice_set"]
         if self.phase != "choose":
             return None
         return eeg_trigger.CODES[
@@ -1130,12 +1268,17 @@ class SyllablesMode(WaitSkip):
         if not self._bag:
             self._bag = [w for w in words_for(self.band,
                                               bilateral=self.bilateral)
-                         if w.word not in self._retired]
+                         if w.word not in self._retired
+                         and w.word not in self._held_out]
             if not self._bag:
                 # A band small enough to retire whole: better to
-                # repeat than to stall the block.
-                self._bag = list(words_for(self.band,
-                                           bilateral=self.bilateral))
+                # repeat than to stall the block. The probe's held-out
+                # words stay out even then.
+                self._bag = ([w for w in words_for(
+                    self.band, bilateral=self.bilateral)
+                    if w.word not in self._held_out]
+                    or list(words_for(self.band,
+                                      bilateral=self.bilateral)))
             self.rng.shuffle(self._bag)
         return self._bag.pop()
 
@@ -1146,7 +1289,11 @@ class SyllablesMode(WaitSkip):
         bag, source = ((self._pseudo_bag, pseudo) if use_pseudo
                        else (self._bag, real))
         if not bag:
-            bag.extend(w for w in source if w.word not in self._retired)
+            bag.extend(w for w in source if w.word not in self._retired
+                       and w.word not in self._held_out)
+            if not bag:
+                bag.extend(w for w in source
+                           if w.word not in self._held_out)
             if not bag:
                 bag.extend(source)
             self.rng.shuffle(bag)
@@ -1173,7 +1320,8 @@ class SyllablesMode(WaitSkip):
         if best is None:
             return None
         pool = [w for w in words_for(self.band, bilateral=self.bilateral)
-                if w.n_syll == best and w.word not in self._retired]
+                if w.n_syll == best and w.word not in self._retired
+                and w.word not in self._held_out]
         if not pool:
             return None
         # A word already played this block is a poor rescue: the child
@@ -1249,6 +1397,22 @@ class SyllablesMode(WaitSkip):
             self.active = None
             self.speed_options = None
             self._begin_speed_trial(time.perf_counter(), reuse=True)
+        elif self.phase == "probe_listen" or (
+                self.phase == "probe" and self.active is not None):
+            # A probe set cut by a pause is played again from its word:
+            # the probe is the same for every session only if every
+            # set is heard and answered the same way.
+            raw = getattr(self.engine, "raw_logger", None)
+            if raw and self.phase == "probe":
+                raw.queue_event(
+                    "trial_restart",
+                    detail=(f"old_trial_id={self.trial_counter};"
+                            f"new_trial_id={self.trial_counter + 1};"
+                            f"phase=probe"),
+                    hand=self.engine.hand_mode)
+            self.active = None
+            self.probe_options = None
+            self._begin_probe_trial(time.perf_counter(), reuse=True)
 
     def handle_event(self, e: pygame.event.Event) -> None:
         if (e.type == pygame.KEYDOWN and e.key == pygame.K_r
@@ -1344,6 +1508,11 @@ class SyllablesMode(WaitSkip):
                 self._spawn_speed(now)
         elif self.phase == "speed":
             self._update_speed(now)
+        elif self.phase == "probe_listen":
+            if self._phase_until is not None and now >= self._phase_until:
+                self._spawn_probe(now)
+        elif self.phase == "probe":
+            self._update_probe(now)
 
     # ---- word flow ---------------------------------------------------------
     def _due_return(self) -> dict | None:
@@ -1368,6 +1537,9 @@ class SyllablesMode(WaitSkip):
             return
         if self.sectioned and self.section == "speed":
             self._begin_speed_trial(now)
+            return
+        if self.sectioned and self.section == "probe":
+            self._begin_probe_trial(now)
             return
         # Returns over the cap are let go BEFORE the completion check,
         # or a block whose every word missed would keep drawing fresh
@@ -1587,17 +1759,41 @@ class SyllablesMode(WaitSkip):
     def _prompt_delay_s(self) -> float:
         """Seconds from spawn to the buzz for the set in play: the
         word's rung of the ladder, never earlier than this child's own
-        usual answer time plus a margin, never later than PROMPT_CAP
-        of the fall."""
+        median time to a first press plus a margin, never later than
+        PROMPT_CAP of the fall. The median is a Kaplan-Meier estimate
+        over the recent sets (PROMPT in the docstring); when fewer than
+        half were answered alone it never reaches one half, and the
+        longest time seen, a lower bound on it, stands in."""
         step = min(self._word_prompt_step(), len(self.prompt_steps) - 1)
         delay = self.prompt_steps[step] * self.fall_s
-        if len(self._answer_rts) >= self.PROMPT_FLOOR_MIN_N:
-            rts = sorted(self._answer_rts)
-            mid = len(rts) // 2
-            median = (rts[mid] if len(rts) % 2
-                      else (rts[mid - 1] + rts[mid]) / 2.0)
-            delay = max(delay, median + self.prompt_floor_margin_s)
+        floor = self.prompt_floor_s()
+        if floor is not None:
+            delay = max(delay, floor + self.prompt_floor_margin_s)
         return min(delay, self.PROMPT_CAP * self.fall_s)
+
+    def prompt_floor_s(self) -> float | None:
+        """The child's median time to a first press found alone, from
+        the recent sets, or None before PROMPT_FLOOR_MIN_N of them."""
+        obs = list(self._floor_obs)
+        if sum(1 for _s, e in obs if e) < self.PROMPT_FLOOR_MIN_N:
+            return None
+        median = km_median(obs)
+        return median if median is not None else max(s for s, _e in obs)
+
+    def _latency_obs(self) -> tuple[float, bool] | None:
+        """(seconds, answered alone) for the set in play: the time of
+        its first press when that came before any buzz, else the time
+        the buzz or the end of the fall cut it off."""
+        if self._spawn_t is None:
+            return None
+        first = next((p for p in self._set_presses
+                      if p.kind not in (KIND_ANTICIP, KIND_OFF_HAND)), None)
+        pt = self._prompted_t
+        if first is not None and (pt is None or first.t_perf < pt):
+            return (max(0.0, first.t_perf - self._spawn_t), True)
+        if pt is not None:
+            return (max(0.0, pt - self._spawn_t), False)
+        return (self.fall_s, False)
 
     def _classify_prompt(self) -> tuple[str, bool]:
         """(outcome class, prompted) for the set in play. Prompted
@@ -1673,8 +1869,10 @@ class SyllablesMode(WaitSkip):
         self._prompted_t = None
         self._prompt_armed = self._word_prompt_on()
         self._prompt_step = self._word_prompt_step()
-        self._prompt_due = (now + self._prompt_delay_s()
-                            if self._prompt_armed else None)
+        self._prompt_plan_s = (self._prompt_delay_s()
+                               if self._prompt_armed else None)
+        self._prompt_due = (now + self._prompt_plan_s
+                            if self._prompt_plan_s is not None else None)
         self._next_spawn_t = None
         self._set_close_t = None
         self._set_presses = []
@@ -1744,6 +1942,9 @@ class SyllablesMode(WaitSkip):
     def _handle_press(self, ev: PressEvent, now: float) -> None:
         if self.phase == "speed":
             self._handle_speed_press(ev, now)
+            return
+        if self.phase == "probe":
+            self._handle_probe_press(ev, now)
             return
         if (self.phase != "choose" or self.option_set is None
                 or self._set_close_t is not None):
@@ -1963,11 +2164,15 @@ class SyllablesMode(WaitSkip):
             self._sets.append(rec)
             # The adult threshold reads the fall of every set the
             # reader answered on one hearing: a replayed set stays
-            # out, as replay() promises.
-            if not self._replayed:
+            # out, as replay() promises. In the sectioned sitting it
+            # reads hear-and-pick sets only, the sets the fall moves
+            # on (_move_rung).
+            if not self._replayed and (not self.sectioned
+                                       or self.section == "pick"):
                 self._set_falls.append(self.fall_s)
-            if pclass == "unprompted_correct" and rt_ms is not None:
-                self._answer_rts.append(float(rt_ms) / 1000.0)
+            obs = self._latency_obs()
+            if obs is not None:
+                self._floor_obs.append(obs)
             self._update_prompt_fade(pclass,
                                      missed=(err in ("miss", "shown")))
         # The EEG response marker must lock to the child's own press,
@@ -2032,6 +2237,12 @@ class SyllablesMode(WaitSkip):
         counter resets on every move, so a rung cannot move twice off
         one run."""
         if self.fall_mode:
+            # Hear and pick only in the sectioned sitting: otherwise
+            # the build sets that end the sitting set the threshold
+            # (the deep review of 1 October 2026: the last 12 sets of
+            # every simulated block were build sets).
+            if self.sectioned and self.section != "pick":
+                return
             self._move_fall(first_ok, err)
             return
         old = self.rung
@@ -2061,12 +2272,14 @@ class SyllablesMode(WaitSkip):
     def _move_fall(self, first_ok: bool, err: str) -> None:
         """The adult staircase: four unaided right answers in a row
         shorten the fall by step_down, any error or miss lengthens it
-        by step_up, inside the profile's bounds. 4-down-1-up settles
-        at 84.1 percent correct (Levitt 1971), and step_down over
-        step_up (0.85) is near the ratio Garcia-Perez (1998) gives for
-        that rule. A replayed set leaves the fall where it is. A
-        change of direction is a reversal, and the mean of the last
-        six is the threshold."""
+        by step_up, inside the profile's bounds. With step_down over
+        step_up at 0.85, 4-down-1-up settles near 85.8 percent correct
+        (Garcia-Perez 1998: a ratio of 0.8415 gives 85.84; the 84.1
+        once quoted was Levitt's 1971 figure for equal steps). The
+        threshold is speed and foil discrimination together, under
+        adaptive foils (the deep review). A replayed set leaves the
+        fall where it is. A change of direction is a reversal, and the
+        mean of the last six is the threshold."""
         prof = self.profile
         if self._replayed:
             return
@@ -2099,7 +2312,8 @@ class SyllablesMode(WaitSkip):
 
     def fall_threshold(self) -> dict:
         """The adult outcome: the mean fall over the last 12 sets, and
-        the mean of the last six reversals when there are six."""
+        the mean of the last six reversals when there are six. In the
+        sectioned sitting both read hear-and-pick sets only."""
         falls = self._set_falls[-12:]
         revs = self._fall_reversals[-6:]
         return {
@@ -2332,6 +2546,10 @@ class SyllablesMode(WaitSkip):
         parts.append(f"prompt={1 if rec.prompted else 0}")
         parts.append(f"pat={pat}")
         parts.append(f"pclass={rec.pclass}")
+        parts.append(f"weak={1 if self._weak_set else 0}")
+        parts.append("pdue=" + (f"{self._prompt_plan_s * 1000.0:.0f}"
+                                if self._prompt_plan_s is not None
+                                else ""))
         parts.append(f"prof={self.profile.pid}")
         parts.append(f"lex={getattr(self.word, 'lex', 'word')}")
         parts.append(f"print={1 if self._word_printed else 0}")
@@ -2388,6 +2606,7 @@ class SyllablesMode(WaitSkip):
         out: list[Word] = []
         for w in list(real) + extra:
             if (w.word in seen or w.n_syll < 2
+                    or w.word in self._held_out
                     or len(w.word) > self.SPEED_MAX_LETTERS):
                 continue
             seen.add(w.word)
@@ -2560,11 +2779,13 @@ class SyllablesMode(WaitSkip):
         right answer shows the next word 80 ms shorter, so a fluent
         reader reaches their range in a few trials; after it, three
         right answers in a row take 80 ms off and a wrong answer or no
-        answer adds 80 ms, inside 100 ms to 1.5 s. 3-down-1-up settles
-        near 79 percent correct (Levitt 1971). The threshold is the
-        mean exposure at the reversals after the first, once there are
-        two; a run this short gives a rough one, so the final exposure
-        and the accuracy are kept beside it. Exposures are whole
+        answer adds 80 ms, inside 100 ms to 1.5 s. With equal steps
+        3-down-1-up only loosely targets Levitt's 79.4 percent
+        (Garcia-Perez 1998). The threshold is the mean exposure at the
+        reversals after the first, once there are two; a run this
+        short gives a rough one (two simulated blocks of one reader
+        differed with an SD of about 0.05 to 0.07 s), so the final
+        exposure and the accuracy are kept beside it. Exposures are whole
         display frames in practice (about 17 ms at 60 Hz)."""
         old = self._expo_s
         if ok:
@@ -2637,6 +2858,284 @@ class SyllablesMode(WaitSkip):
             "n_reversals": len(self._expo_reversals),
             "expo_trace_ms": [round(v * 1000.0) for v in self._expo_trace],
         }
+
+    # ---- the fixed probe (PROBE in the docstring) -------------------------
+    def _probe_word(self, item: dict) -> Word:
+        """The Word a probe set belongs to, from the bank and the pools,
+        so its in-word syllable files are found; one rebuilt from the
+        set's own syllables when neither holds it."""
+        name = str(item.get("word", ""))
+        for w in all_words():
+            if w.word == name:
+                return w
+        for pool in load_pools().values():
+            for w in pool:
+                if w.word == name:
+                    return w
+        syls = tuple(str(s) for s in item.get("syllables") or [name])
+        return Word(word=name, band="probe", syllables=syls, stress=0,
+                    lex=str(item.get("lex", "word")))
+
+    def _begin_probe_trial(self, now: float, reuse: bool = False) -> None:
+        """One probe set: the word heard, then after attend_s the four
+        tiles and the target syllable once. With the list done, the
+        section ends; a sitting of the probe alone ends with it."""
+        reuse = reuse or self._probe_reuse
+        self._probe_reuse = False
+        if not reuse or self.probe_item is None:
+            if self._probe_done >= self._section_quota():
+                # The session cap times the training from here: the
+                # probe has its own fixed length (3 to 4 minutes), and
+                # counting it would cut the end of a slower reader's
+                # sitting, where the build and the quick look are.
+                self._t0 = now
+                self._advance_section(now)
+                if self.section_idx >= len(self.section_plan):
+                    self._end("completed")
+                return
+            self.probe_item = self._probe_items[self._probe_done]
+            self.word_hand = self._next_hand()
+        item = self.probe_item
+        self.word = self._probe_word(item)
+        self.pos = int(item.get("pos", 0))
+        self.ret = 0
+        self.probe_options = None
+        self._probe_kinds = {}
+        self._probe_tlane = None
+        self._probe_presses = []
+        self.option_set = None
+        self.active = None
+        self._spawn_t = None
+        self._exit_t = None
+        self._set_close_t = None
+        self._glow_t = None
+        self.lift_t = None
+        self._last_tap_t = {}
+        self._speech_queue = []
+        self._enter_phase("probe_listen", now)
+        self._phase_until = now + self.attend_s
+        self._speak_word()
+
+    def _spawn_probe(self, now: float) -> None:
+        item = self.probe_item
+        lanes = self.active_lanes()
+        tl = int(item.get("tlane", 0))
+        opts: list[tuple[int, str, bool]] = []
+        kinds: dict[int, str] = {}
+        for o in item.get("options") or []:
+            k = int(o.get("lane", -1))
+            if 0 <= k < len(lanes):
+                opts.append((lanes[k], str(o.get("text", "")), k == tl))
+                kinds[lanes[k]] = str(o.get("kind", ""))
+        self.probe_options = sorted(opts)
+        self._probe_kinds = kinds
+        self._probe_tlane = lanes[tl] if 0 <= tl < len(lanes) else lanes[0]
+        self.trial_counter += 1
+        self.active = PendingTrial(trial_id=self.trial_counter,
+                                   lane=self._probe_tlane, stim_t_perf=now,
+                                   keys_pressed=[], incorrect_presses=[])
+        self._spawn_t = now
+        self._exit_t = now + self.probe_time_s
+        self._set_close_t = None
+        self._enter_phase("probe", now)
+        raw = getattr(self.engine, "raw_logger", None)
+        if raw:
+            raw.queue_event(
+                "probe_spawn", lane=self._probe_tlane, t_perf=now,
+                detail=(f"trial_id={self.trial_counter};"
+                        f"item={self._probe_done + 1};"
+                        f"word={self.word.word};pos={self.pos}"),
+                hand=self.word_hand)
+        self.silent_stim = True
+        try:
+            self.engine.on_stim_multi(lanes, self.trial_counter, now,
+                                      buzz=False)
+        finally:
+            self.silent_stim = False
+        self._speak_syllable_after(self.pos, now)
+
+    def _update_probe(self, now: float) -> None:
+        if self._set_close_t is not None:
+            if now >= self._set_close_t:
+                self._close_probe(now)
+            return
+        if self._exit_t is not None and now >= self._exit_t:
+            self._score_probe(now, None)
+            self._set_close_t = now
+
+    def _handle_probe_press(self, ev: PressEvent, now: float) -> None:
+        """One press answers a probe set, right or wrong, and the tiles
+        go at once whichever it was: nothing tells the reader how the
+        answer went, so the set measures without teaching."""
+        if self._set_close_t is not None or self.probe_options is None:
+            self._eeg_press_byte(EEG_CODES["resp_idle"], ev)
+            return
+        if ev.lane not in self.active_lanes():
+            return
+        last = self._last_tap_t.get(ev.lane)
+        if last is not None and (ev.t_perf - last) < self.tap_debounce_s:
+            return
+        self._last_tap_t[ev.lane] = ev.t_perf
+        peak = self._peak_for(ev)
+        if (self._spawn_t is not None
+                and ev.t_perf < self._spawn_t + self.spawn_lockout_s):
+            self._probe_presses.append(Press(ev.lane, ev.t_perf,
+                                             KIND_ANTICIP, peak))
+            code = response_code("anticipation", ev.lane)
+            if code is not None:
+                self._eeg_press_byte(code, ev)
+            return
+        correct = ev.lane == self._probe_tlane
+        press = Press(ev.lane, ev.t_perf,
+                      KIND_CORRECT if correct else KIND_WRONG, peak)
+        self._probe_presses.append(press)
+        if self.active is not None:
+            self.active.keys_pressed.append(ev.lane)
+            if not correct:
+                self.active.incorrect_presses.append((ev.lane, ev.t_perf))
+                self.engine.eeg_wrong_press(self.active.incorrect_presses)
+        self._score_probe(now, press)
+        self._set_close_t = max(now, ev.t_perf)
+
+    def _score_probe(self, now: float, press: Press | None) -> None:
+        """Log one probe set. No points, no streak, no chime and no
+        after-press buzz: the label only sorts the row (Good right,
+        Miss otherwise), and the engine chimes on Great alone here."""
+        trial, item = self.active, self.probe_item
+        if trial is None or item is None:
+            return
+        self.active = None
+        at_ms = ((press.t_perf - self._spawn_t) * 1000.0
+                 if press is not None and self._spawn_t is not None
+                 else None)
+        correct = press is not None and press.kind == KIND_CORRECT
+        voided = press is None and self._rig_void(now)
+        if correct:
+            first, err, label = "ok", "ok", "Good"
+        elif press is not None:
+            first, err, label = "wrong", "wrong_first", "Miss"
+        elif voided:
+            first, err, label = "none", "device_drop", "Miss"
+        else:
+            first, err, label = "none", "miss", "Miss"
+        rt_ms = at_ms if correct else None
+        outcome = TrialResult(label=label, points=0, rt_ms=rt_ms)
+        rec = {"item": self._probe_done + 1, "word": self.word.word,
+               "pos": self.pos, "syl": str(item.get("syl", "")),
+               "family": str(item.get("family", "")),
+               "near": str(item.get("near", "")),
+               "weak": int(item.get("weak", 0) or 0),
+               "held_out": bool(item.get("held_out")),
+               "lex": str(item.get("lex", "word")),
+               "first": first, "err": err, "rt_ms": rt_ms,
+               "at_ms": at_ms, "hand": self.word_hand,
+               "chosen_kind": (self._probe_kinds.get(press.lane)
+                               if press is not None else None)}
+        if voided:
+            self._probe_void = True
+        else:
+            self._probe_records.append(rec)
+        resp_t = (press.t_perf if press is not None
+                  else next((p.t_perf for p in self._probe_presses
+                             if p.kind == KIND_ANTICIP), None))
+        self.engine.log_trial(
+            trial, outcome, now, stimulus=self._pack_probe(rec),
+            correct_lanes=[self._probe_tlane],
+            error_type=("" if correct else err),
+            response_t_perf=resp_t, hand=self.word_hand,
+            after_press_cue=False)
+
+    def _close_probe(self, now: float) -> None:
+        self.probe_options = None
+        self._probe_tlane = None
+        self._spawn_t = None
+        self._exit_t = None
+        self._set_close_t = None
+        if self._probe_void:
+            # The rig ate the set: the same set again, so the list
+            # stays whole.
+            self._probe_void = False
+            self._probe_reuse = True
+        else:
+            self._probe_done += 1
+        self._enter_phase("gap", now)
+
+    def _pack_probe(self, rec: dict) -> str:
+        opts = ",".join(
+            f"{lane + 1}:{text}:"
+            + ("target" if tgt else self._probe_kinds.get(lane, ""))
+            for lane, text, tgt in (self.probe_options or []))
+        presses = ",".join(
+            f"{p.lane + 1}:"
+            f"{(p.t_perf - (self._spawn_t or p.t_perf)) * 1000.0:.1f}:"
+            + (f"{p.peak:.1f}" if p.peak is not None else "")
+            + f":{p.kind}"
+            for p in self._probe_presses)
+        rt, at = rec["rt_ms"], rec["at_ms"]
+        item = self.probe_item or {}
+        return ";".join([
+            rec["word"], "sec=probe", f"item={rec['item']}",
+            f"pos={rec['pos']}", f"nsyll={self.n_syll}",
+            f"syl={rec['syl']}", f"weak={rec['weak']}",
+            f"held={1 if rec['held_out'] else 0}",
+            f"fam={rec['family']}", f"near={rec['near']}",
+            f"hand={'L' if rec['hand'] == 'left' else 'R'}",
+            f"fall={self.probe_time_s * 1000.0:.0f}",
+            f"opts={opts}",
+            f"tlane={(self._probe_tlane or 0) + 1}",
+            f"presses={presses}", f"first={rec['first']}",
+            f"err={rec['err']}",
+            f"rt={rt:.1f}" if rt is not None else "rt=",
+            f"at={at:.1f}" if at is not None else "at=",
+            f"prof={self.profile.pid}", f"lex={rec['lex']}",
+            f"sup={1 if self.supervised else 0}",
+            f"pv={int(item.get('version', 0) or 0)}",
+        ])
+
+    def probe_stats(self) -> dict:
+        """The probe's numbers for metadata.json: accuracy over the
+        sets answered, on held-out and practised words apart, and by
+        family. The notebook reads the rows; this is the summary."""
+        recs = self._probe_records
+
+        def _acc(rows: list[dict]) -> dict:
+            n = len(rows)
+            ok = sum(1 for r in rows if r["first"] == "ok")
+            return {"n": n, "acc": round(ok / n, 3) if n else None}
+
+        fams = sorted({r["family"] for r in recs})
+        return {
+            "version": int((self._probe_items[0].get("version", 0)
+                            if self._probe_items else 0) or 0),
+            "n_items": len(self._probe_items),
+            "time_s": self.probe_time_s,
+            "complete": len(recs) >= self._section_quota_of("probe"),
+            **_acc(recs),
+            "held_out": _acc([r for r in recs if r["held_out"]]),
+            "practised": _acc([r for r in recs if not r["held_out"]]),
+            "by_family": {f: _acc([r for r in recs if r["family"] == f])
+                          for f in fams},
+            "no_answer": sum(1 for r in recs if r["first"] == "none"),
+        }
+
+    def _section_quota_of(self, name: str) -> int:
+        for sec, n in self.section_plan:
+            if sec == name:
+                return int(n)
+        return 0
+
+    def _speech_meta(self) -> dict:
+        """The voice every heard item came from (the speech manifest),
+        for the methods: model, voice, accent, render dates."""
+        self._speech_manifest()
+        meta = dict(self._manifest_meta or {})
+        return {"backend": self.speech_backend,
+                "model": meta.get("model"), "voice": meta.get("voice"),
+                "accent": meta.get("accent"),
+                "rendered_on": meta.get("rendered_on"),
+                "syllables_rendered_on": meta.get("syllables_rendered_on"),
+                "chunk_form": meta.get("chunk_form"),
+                "latency_ms": meta.get("latency_ms")}
 
     # ---- rewards and rounds ------------------------------------------------
     @property
@@ -2984,10 +3483,11 @@ class SyllablesMode(WaitSkip):
 
     # ---- block summary -----------------------------------------------------
     def _prompt_stats(self) -> dict:
-        """The prompt's numbers. The learning measure is the
-        unprompted correct rate: answers found before any buzz. The
-        share of correct answers that needed the buzz should fall as
-        a word is learnt."""
+        """The prompt's numbers: the five outcome classes, the share
+        of correct answers that needed the buzz, and the floor. The
+        unprompted correct rate mixes speed with accuracy (PROMPT in
+        the docstring), so the notebook sets it beside the time to an
+        unaided first press and the accuracy before any buzz."""
         sets = self._sets
         counts = {c: sum(1 for r in sets if r.pclass == c)
                   for c in self.PCLASSES}
@@ -3007,6 +3507,15 @@ class SyllablesMode(WaitSkip):
                 if correct else None),
             "words_faded": sum(1 for st in self._prompt_state.values()
                                if st["step"] >= len(self.prompt_steps)),
+            # The floor under the delay at block end: a Kaplan-Meier
+            # median over the recent sets (PROMPT in the docstring).
+            "floor": {"rule": "kaplan_meier",
+                      "n_sets": len(self._floor_obs),
+                      "n_answered": sum(1 for _s, e in self._floor_obs
+                                        if e),
+                      "median_s": (round(self.prompt_floor_s(), 3)
+                                   if self.prompt_floor_s() is not None
+                                   else None)},
         }
 
     def block_stats(self) -> dict:
@@ -3107,6 +3616,13 @@ class SyllablesMode(WaitSkip):
             "demo": self.demo,
             "end_reason": self.end_reason,
             "profile": self.profile.pid,
+            # What the methods must report (the deep review of 1
+            # October 2026): the seed, the voice and the block size.
+            "seed": self.seed,
+            "speech": self._speech_meta(),
+            "words_per_block": self.words_total,
+            "held_out_words": len(self._held_out),
+            **({"probe": self.probe_stats()} if self._probe_items else {}),
             "unaided_accuracy": (round(sum(
                 1 for s in sets if s.pclass == "unprompted_correct")
                 / n_sets, 3) if n_sets else None),
@@ -3131,13 +3647,17 @@ class SyllablesMode(WaitSkip):
 
         by_section = {name: _acc([s for s in sets if s.section == name])
                       for name, _n in self.section_plan
-                      if name != "speed"}
+                      if name not in ("speed", "probe")}
         families = {}
         for fam in self.profile.families:
             rows = [s for s in sets if s.family == fam]
+            # "mastered" is the code's name for a further run of three
+            # at level 3; the analysis says passed level 3, which is
+            # what it is (SECTIONS in the docstring).
             families[fam] = {**_acc(rows),
                              "level": self.family_levels.get(fam, 0),
-                             "mastered": fam in self.family_mastered}
+                             "mastered": fam in self.family_mastered,
+                             "passed_level_3": fam in self.family_mastered}
         return {
             "plan": [[name, n] for name, n in self.section_plan],
             "reached": (self.section_plan[min(

@@ -96,7 +96,7 @@ class PlanTests(unittest.TestCase):
     def test_the_words_are_shared_out(self):
         _e, m = _sectioned("10-12", words_total=30)
         self.assertEqual(m.section_plan, [("review", 4), ("pick", 18),
-                                          ("build", 8), ("speed", 16)])
+                                          ("build", 8), ("speed", 20)])
         _e, m = _sectioned("16+", words_total=30)
         self.assertEqual(m.section_plan[-1], ("speed", 20))
 
@@ -426,7 +426,7 @@ class RealEngineMarkerTests(unittest.TestCase):
     def test_each_speed_trial_is_marked_53_with_one_response(self):
         codes = self.result["codes"]
         idx = [i for i, c in enumerate(codes) if c == 53]
-        self.assertEqual(len(idx), 16)
+        self.assertEqual(len(idx), 20)
         stims = {30, 31, 32, 33, 34, 35, 36, 37, 38, 50, 51, 53}
         for i, start in enumerate(idx):
             end = next((j for j in range(start + 1, len(codes))
@@ -439,7 +439,7 @@ class RealEngineMarkerTests(unittest.TestCase):
     def test_speed_rows_name_the_target_lane(self):
         rows = [r for r in self.result["trials"]
                 if ";sec=speed;" in r.get("stimulus", "")]
-        self.assertEqual(len(rows), 16)
+        self.assertEqual(len(rows), 20)
         for r in rows:
             row = _parse_stimulus(r["stimulus"])
             tl = [ln for ln, _w, k in row["opts"] if k == "t"][0]
@@ -457,7 +457,7 @@ class StatsTests(unittest.TestCase):
                          ["review", "pick", "build", "speed"])
         self.assertEqual(set(st["by_section"]), {"review", "pick", "build"})
         self.assertEqual(st["reached"], "speed")
-        self.assertEqual(st["speed"]["n"], 16)
+        self.assertEqual(st["speed"]["n"], 20)
         self.assertEqual(st["speed"]["acc"], 1.0)
         # Right every time: the exposure only went down.
         self.assertLess(st["speed"]["expo_final_ms"], 600)
@@ -500,7 +500,7 @@ class NotebookTests(unittest.TestCase):
         self.assertTrue(sy["section"].isin(["review", "pick",
                                             "build"]).all())
         sp = self.ra.syllable_speed_frame(trials)
-        self.assertEqual(len(sp), 16)
+        self.assertEqual(len(sp), 20)
         self.assertTrue(sp["first_ok"].all())
         self.assertTrue((sp["expo_ms"] > 0).all())
 
@@ -510,8 +510,9 @@ class NotebookTests(unittest.TestCase):
         with contextlib.redirect_stdout(buf):
             out = self.ra.sec_syllables(trials)
         text = buf.getvalue()
-        self.assertIn("THE SECTIONED SITTING", text)
-        self.assertIn("speed check", text)
+        self.assertIn("THE CASE SITTING", text)
+        # The on-screen name, QUICK LOOK, since 1 October 2026.
+        self.assertIn("quick look", text)
         self.assertIn("sections", out)
         self.assertNotIn("sets", out)
 

@@ -6163,22 +6163,38 @@ class ResultsScreen(Screen):
 
     @staticmethod
     def _syllables_advice(sy: dict) -> str | None:
-        """One supervisor-facing line off the block's first-press
-        accuracy, which is what the mode's own staircase steers: it
-        aims near 80 percent (the GraphoGame target and the
-        convergence point of a 3-down-1-up rule) against a 25 percent
-        chance floor. A block that lands well below chance-plus-a-bit
-        means the child was guessing and the band or the foil rung
-        wants a look; one that lands near perfect means the material
-        stopped asking anything. Advice only, and never a claim about
+        """One supervisor-facing line off the block's UNAIDED accuracy,
+        the sets answered right before any buzz. First-press accuracy
+        counts answers given after the buzz as right and sat at 0.92 to
+        0.95 for every reader speed in simulation (the deep review of 1
+        October 2026), so it never moved the advice. A low unaided rate
+        with most answers right after the buzz says the reader needed
+        more time, not easier words, and the line says so. Band advice
+        only where the block draws the bank's bands (6 to 9 and
+        classic): the older profiles draw fixed pools. Against a 25
+        percent chance floor. Advice only, never a claim about
         reading."""
         first = sy.get("first_press_accuracy")
         if first is None:
             first = sy.get("accuracy")
-        if first is not None and first < 0.45:
-            return ("Supervisor: an easier band and a lower level may "
-                    "suit next session.")
-        if first is not None and first > 0.95:
+        unaided = sy.get("unaided_accuracy")
+        if unaided is None:
+            unaided = first
+        prompt = sy.get("prompt") or {}
+        n_sets = prompt.get("n_sets") or sy.get("n_sets") or 0
+        prompted = (prompt.get("n_prompted") or 0) / n_sets if n_sets else 0
+        banded = str(sy.get("profile") or "classic") in ("classic", "6-9")
+        if unaided is not None and unaided < 0.45:
+            if prompted >= 0.5 and first is not None and first >= 0.8:
+                return ("Supervisor: most answers came right after the "
+                        "buzz; more time may suit better than easier "
+                        "words.")
+            if banded:
+                return ("Supervisor: an easier band and a lower level "
+                        "may suit next session.")
+            return ("Supervisor: this set of words was hard going; "
+                    "note it for next session.")
+        if unaided is not None and unaided > 0.95 and banded:
             return ("Supervisor: try the next band next session; the "
                     "words stopped asking anything.")
         # The sectioned sitting's speed check, when it ran: what it

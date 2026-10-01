@@ -535,9 +535,10 @@ class ModeHandMatrixTests(unittest.TestCase):
         meta = Path(eng.last_session_root) / "metadata.json"
         self.assertTrue(meta.exists(), f"no metadata at {meta}")
 
-    def _cadence_responder(self, eng, hand_mode: str):
-        """Press whatever was cued, one step after the stim, with the
-        press event shaped the way the detector path shapes it."""
+    def _cadence_responder(self, eng, hand_mode: str, delay: float = 0.0):
+        """Press whatever was cued, one step after the stim (stamped
+        `delay` seconds later), with the press event shaped the way the
+        detector path shapes it."""
         seen = {"n": 0}
 
         def respond(clock) -> None:
@@ -551,12 +552,13 @@ class ModeHandMatrixTests(unittest.TestCase):
                             else "right")
                     if eng.mode is not None:
                         eng.mode.queue_press(
-                            _press(lane, clock.t, hand=hand))
+                            _press(lane, clock.t + delay, hand=hand))
         return respond
 
-    def _run_cadence(self, eng, clock, want_stims: int) -> None:
+    def _run_cadence(self, eng, clock, want_stims: int,
+                     delay: float = 0.0) -> None:
         drive(eng, clock,
-              responder=self._cadence_responder(eng, eng.hand_mode),
+              responder=self._cadence_responder(eng, eng.hand_mode, delay),
               stop=lambda: (len(eng._stim_record) >= want_stims
                             or eng.trial_logger is None))
 
@@ -612,7 +614,10 @@ class ModeHandMatrixTests(unittest.TestCase):
                     patched_clock() as clock:
                 eng = self._matrix_engine(hand_mode, td, 8)
                 eng.begin_adaptive_block()
-                self._run_cadence(eng, clock, want_stims=8)
+                # Adaptive takes a press under 100 ms as no response to
+                # the cue (1 October 2026), so this hand answers at
+                # 200 ms, as a hand does.
+                self._run_cadence(eng, clock, want_stims=8, delay=0.2)
                 cued = [l for lanes in eng._stim_record for l in lanes]
                 self.assertTrue(cued)
                 self.assertTrue(

@@ -1176,6 +1176,17 @@ syllables:
   # docs/research/new_modes/syllables-task-design.md. false plays the
   # single-section block of 29 September 2026; classic ignores it.
   sections: true
+  # The fixed probe that opens the sitting: the same sets in the same
+  # order for every session of an age group, with no prompt, replay,
+  # return, points or feedback (assets/words/syllables_probe.json,
+  # scripts/build_syllables_probe.py). It is the case's repeated
+  # measure; the in-game numbers adapt and cannot show change across
+  # sessions (the deep review of 1 October 2026). Half its words are
+  # held out of training whatever this says. probe_only plays the
+  # probe alone, for baseline sessions; in the lab, two presses of Esc
+  # after the probe do the same with every answer kept.
+  probe: true
+  probe_only: false
   # Milliseconds between syllables while the word is modelled, at the
   # least: a syllable's own sound always finishes with half a second
   # of quiet before the next. After the syllables the whole word is
@@ -1189,9 +1200,11 @@ syllables:
   # first time light up to three corner stars (3, 5 and 8 in a row),
   # and moving up a word band shows a one-shot Bigger words card. All
   # of it is fixed and earned, never random, and nothing is ever taken
-  # away. 30 words is about 11 minutes at the slower pace; 40 (the
-  # count until 29 September 2026) would be about 16. The count is
-  # Basil's call.
+  # away. 30 sectioned words take about 13 to 18 minutes by age and
+  # reading speed (simulation, the deep review of 1 October 2026), not
+  # the 11 once given here; 6 to 9 plays 20 (syllables_profiles.py),
+  # inside the 8 to 12 minutes GraphoGame's developers advise for
+  # children. The probe comes on top.
   words_per_block: 30
   round_size: 10
   break_s: 30
@@ -1202,11 +1215,14 @@ syllables:
   # any buzz moves it to the next, and past the last the word plays
   # with no prompt. A wrong first press before the buzz, or a set
   # that leaves the screen, moves it one step back. The buzz never
-  # comes before this child's own median answer time (the last eight
-  # sets answered right unaided, once there are three) plus
-  # prompt_floor_margin_ms, and never after 0.9 of the fall. The
-  # learning measure is the share of sets answered right BEFORE the
-  # buzz. prompt false turns it off for the whole block.
+  # comes before this child's own median time to a first press found
+  # alone (a Kaplan-Meier median over the last 12 sets, with sets the
+  # buzz or the fall cut off counted as censored, once three were
+  # answered alone) plus prompt_floor_margin_ms, and never after 0.9 of
+  # the fall. The share of sets answered right before the buzz mixes
+  # speed with accuracy, so the notebook reports it beside the time to
+  # a first press and the accuracy before the buzz. prompt false turns
+  # it off for the whole block.
   prompt: true
   prompt_steps: [0.6, 0.75, 0.9]
   prompt_floor_margin_ms: 300

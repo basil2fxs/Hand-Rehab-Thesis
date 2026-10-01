@@ -170,6 +170,11 @@ class SyllablesScreen(Screen):
     # (syllables-task-design.md, Section 6.4, rule 2).
     SPACING_OF_LETTER = 0.35
     SECTION_COPY = {
+        # The probe has no hints and shows nothing about the answer, so
+        # its card says so before the first set (the deep review of 1
+        # October 2026).
+        "probe": ("LISTEN AND PICK",
+                  "Pick the part you hear. No hints in this part."),
         "review": ("WARM UP", "A few easy ones first."),
         "pick": ("HEAR AND PICK",
                  "Listen, then press the finger under the part you hear."),
@@ -178,7 +183,8 @@ class SyllablesScreen(Screen):
         "speed": ("QUICK LOOK",
                   "A word flashes up. Then pick the word you saw."),
     }
-    SECTION_NAMES = {"review": "Warm up", "pick": "Hear and pick",
+    SECTION_NAMES = {"probe": "Listen and pick", "review": "Warm up",
+                     "pick": "Hear and pick",
                      "build": "Build the word", "speed": "Quick look"}
 
     def __init__(self, engine: "GameEngine") -> None:
@@ -277,6 +283,12 @@ class SyllablesScreen(Screen):
             if phase == "section":
                 return ("", "", "muted")
             return ("QUICK LOOK", "Which word did you see?", "accent")
+        if phase == "probe_listen":
+            return ("LISTEN...", "Here is the word.", "accent")
+        if phase == "probe":
+            return ("WHICH ONE?",
+                    "Press the finger under the part you heard.",
+                    "success")
         if phase == "attend" and section == "build":
             return ("LISTEN...", "Hear the word, then build it.", "accent")
         if phase == "choose" and section == "build":
@@ -371,6 +383,8 @@ class SyllablesScreen(Screen):
             self._draw_section_card(surf, mode, now)
         elif phase in ("flash", "mask", "speed"):
             self._draw_speed_trial(surf, mode, now)
+        elif phase in ("probe_listen", "probe"):
+            self._draw_probe_trial(surf, mode, now)
         else:
             self._draw_word_trial(surf, mode, now)
         if (phase in ("attend", "model", "choose", "complete", "gap")
@@ -430,6 +444,8 @@ class SyllablesScreen(Screen):
             name = self.SECTION_NAMES.get(mode.section, "")
             quota = mode._section_quota()
             done = (mode._speed_done if mode.section == "speed"
+                    else getattr(mode, "_probe_done", 0)
+                    if mode.section == "probe"
                     else mode._section_words)
             return f"{name}: {min(done + 1, quota)} of {quota}"
         done, total = mode.words_done, mode.words_total
@@ -1170,30 +1186,48 @@ class SyllablesScreen(Screen):
                         "alpha": max(0, min(255, alpha))})
         return out
 
-    def _speed_font(self, mode, text: str, max_w: int) -> pygame.font.Font:
-        return self._fitted_tile_font(
-            text, max_w, int(FONT_TITLE * 1.2 * self._scale(mode)))
+    def probe_layout(self, mode, now: float) -> list[dict]:
+        """The four tiles of a probe set as plain data, in the same
+        shape as speed_layout. Every tile stays still and alike until
+        the set closes, and then they all go together: no tile lifts or
+        glows, so nothing says how the answer went."""
+        opts = getattr(mode, "probe_options", None)
+        spawn = getattr(mode, "_spawn_t", None)
+        if not opts or spawn is None:
+            return []
+        by_lane = dict(zip(mode.active_lanes(), self.lane_centres(mode)))
+        slide = max(0.0, min(1.0, (now - spawn) / self.SLIDE_S))
+        y = int(self.STILL_Y - 40 * (1.0 - slide) ** 2)
+        out = []
+        for lane, text, target in opts:
+            x = by_lane.get(lane)
+            if x is None:
+                continue
+            rect = pygame.Rect(0, 0, self.SPEED_TILE_W, self.STILL_TILE_H)
+            rect.center = (x, y)
+            out.append({"lane": lane, "text": text, "target": target,
+                        "rect": rect, "state": "still", "alpha": 255})
+        return out
 
-    def _draw_speed_trial(self, surf: pygame.Surface, mode,
+    def _draw_probe_trial(self, surf: pygame.Surface, mode,
                           now: float) -> None:
-        """The speed check: the word flashed, a row of hash marks over
-        the same space, then four words over the four fingers."""
-        cx = self.layout.width // 2
+        """A probe set: the word heard, then four chunks over the four
+        fingers with a time bar, drawn like the quick look's words."""
         self._draw_header(surf, mode)
         self._draw_seats(surf, mode)
-        word = getattr(mode, "speed_word", None)
-        if word is None:
-            return
-        if mode.phase in ("flash", "mask"):
-            text = word.word if mode.phase == "flash" else "#" * len(word.word)
-            font = self._speed_font(mode, word.word, self.layout.width - 240)
-            self._draw_tracked(surf, text, font, self.theme.foreground,
-                               (cx, self.STILL_Y))
+        if mode.phase != "probe":
             return
         self._draw_still_guides(surf, mode)
-        self._draw_time_bar(surf, mode, now, float(mode.SPEED_LIMIT_S))
+        self._draw_time_bar(surf, mode, now,
+                            float(getattr(mode, "probe_time_s", 0.0)
+                                  or 4.0))
+        self._draw_word_row(surf, mode, self.probe_layout(mode, now))
+
+    def _draw_word_row(self, surf: pygame.Surface, mode,
+                       items: list[dict]) -> None:
+        """Four plain tiles with their text, in the states the layout
+        gives them."""
         border = _mix(self._bg(mode), self.theme.muted, 0.55)
-        items = self.speed_layout(mode, now)
         font = (self._set_font([it["text"] for it in items],
                                self.SPEED_TILE_W - 28,
                                int(FONT_TITLE * 0.6 * self._scale(mode)))
@@ -1218,6 +1252,30 @@ class SyllablesScreen(Screen):
                           else self._accent())
                 pygame.draw.rect(surf, colour, rect.inflate(16, 16), 5,
                                  border_radius=26)
+
+    def _speed_font(self, mode, text: str, max_w: int) -> pygame.font.Font:
+        return self._fitted_tile_font(
+            text, max_w, int(FONT_TITLE * 1.2 * self._scale(mode)))
+
+    def _draw_speed_trial(self, surf: pygame.Surface, mode,
+                          now: float) -> None:
+        """The speed check: the word flashed, a row of hash marks over
+        the same space, then four words over the four fingers."""
+        cx = self.layout.width // 2
+        self._draw_header(surf, mode)
+        self._draw_seats(surf, mode)
+        word = getattr(mode, "speed_word", None)
+        if word is None:
+            return
+        if mode.phase in ("flash", "mask"):
+            text = word.word if mode.phase == "flash" else "#" * len(word.word)
+            font = self._speed_font(mode, word.word, self.layout.width - 240)
+            self._draw_tracked(surf, text, font, self.theme.foreground,
+                               (cx, self.STILL_Y))
+            return
+        self._draw_still_guides(surf, mode)
+        self._draw_time_bar(surf, mode, now, float(mode.SPEED_LIMIT_S))
+        self._draw_word_row(surf, mode, self.speed_layout(mode, now))
 
     # ---- streak stars ------------------------------------------------------
     def _draw_streak_stars(self, surf: pygame.Surface, mode,
@@ -1257,7 +1315,7 @@ class SyllablesScreen(Screen):
         # R replays the chunk. For a child it is the supervisor's key
         # and needs no legend; an adult presses it themselves.
         speed = (self._sectioned(mode)
-                 and getattr(mode, "section", "") == "speed")
+                 and getattr(mode, "section", "") in ("speed", "probe"))
         if self._style(mode) == "adult" and not speed:
             lines = list(lines) + ["R: hear it again"]
         return lines

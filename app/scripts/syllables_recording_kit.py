@@ -7,6 +7,9 @@
         recordings/recording_plan.json --audio-dir recordings \\
         --speaker BT --microphone "USB mic"
     python3 scripts/syllables_recording_kit.py check
+    python3 scripts/syllables_recording_kit.py listen --listener L1 \
+        --device "closed headphones, model" --level "laptop at 60 percent"
+    python3 scripts/syllables_recording_kit.py listen --report
 
 WHY A RECORDED VOICE. Speech is the stimulus in this mode: the child
 hears a syllable and finds it in print. A system voice reading a lone
@@ -61,6 +64,20 @@ level. The game stretches its model beat to a chunk's length from
 that manifest.
 
 `check` lists every chunk and word in the bank that still has no file.
+
+WHAT `listen` DOES. Before a heard syllable becomes part of a measure,
+two adult listeners of Australian English check it (the deep review of
+1 October 2026: no study has validated synthetic speech for lone
+syllables or made-up words, children follow an unfamiliar accent less
+well, and readers with dyslexia lose most in noise). Every probe set's
+syllable is played as the game plays it, sound only, with its own four
+options on screen; the listener types the number of the one heard (r
+hears it once more). Answers go to assets/speech/listener_check.json
+with the listener's code, the date, the playback device and the level.
+`listen --report` prints each listener's score and every set fewer
+than 90 percent of answers got right: re-render or drop those before
+the probe is used, and report the check, the voice, the device and the
+level in the methods.
 """
 from __future__ import annotations
 
@@ -499,6 +516,130 @@ def cmd_check(args) -> int:
     return 0 if not (miss_c or miss_w) else 1
 
 
+LISTEN_SEED = 1001
+LISTEN_PASS = 0.9
+
+
+def probe_listen_items(speech_dir: Path,
+                       probe_file: Path | None = None) -> list[dict]:
+    """Every probe set's heard syllable, its four options in lane order
+    and its file, in one fixed shuffled order (the same for every
+    listener)."""
+    probe_file = probe_file or (APP / "assets" / "words"
+                                / "syllables_probe.json")
+    data = json.loads(probe_file.read_text(encoding="utf-8"))
+    smap = {}
+    try:
+        smap = json.loads((speech_dir / "manifest.json").read_text(
+            encoding="utf-8")).get("syllable_map") or {}
+    except FileNotFoundError:
+        pass
+    items = []
+    for group, sets in (data.get("item_sets") or {}).items():
+        for it in sets:
+            pos = int(it.get("pos", 0))
+            files = (smap.get(it["word"]) or {}).get("files") or []
+            path = None
+            if pos < len(files):
+                for ext in (".wav", ".ogg"):
+                    cand = speech_dir / f"{files[pos]}{ext}"
+                    if cand.exists():
+                        path = cand
+                        break
+            items.append({
+                "key": f"{group}:{it['word']}:{pos}",
+                "syl": str(it.get("syl", "")),
+                "options": [str(o.get("text", "")) for o in sorted(
+                    it.get("options") or [], key=lambda o: o["lane"])],
+                "file": str(path) if path else None,
+            })
+    random.Random(LISTEN_SEED).shuffle(items)
+    return items
+
+
+def _play_file(path: str) -> None:
+    """Play one file through pygame's mixer and wait for it to end."""
+    import pygame
+    if not pygame.mixer.get_init():
+        pygame.mixer.init()
+    channel = pygame.mixer.Sound(path).play()
+    while channel is not None and channel.get_busy():
+        pygame.time.wait(20)
+
+
+def run_listen(items: list[dict], ask=input, play=_play_file) -> dict:
+    """One listener's answers, {item key: the option text chosen}, or
+    None for a set with no file. One more hearing on request."""
+    answers: dict = {}
+    for k, it in enumerate(items, 1):
+        if it["file"] is None:
+            answers[it["key"]] = None
+            continue
+        play(it["file"])
+        again = 0
+        line = "  ".join(f"{i}: {text}"
+                         for i, text in enumerate(it["options"], 1))
+        while True:
+            got = str(ask(f"[{k}/{len(items)}] {line}  (1 to 4, r to "
+                          f"hear it again) ")).strip().lower()
+            if got == "r" and again < 1:
+                again += 1
+                play(it["file"])
+                continue
+            if got in ("1", "2", "3", "4") and int(got) <= len(
+                    it["options"]):
+                answers[it["key"]] = it["options"][int(got) - 1]
+                break
+    return answers
+
+
+def listen_summary(record: dict, items: list[dict]) -> dict:
+    """Each listener's share right, and every set fewer than
+    LISTEN_PASS of the answers got right."""
+    target = {it["key"]: it["syl"] for it in items}
+    per_listener = {}
+    for code, entry in (record.get("listeners") or {}).items():
+        got = {k: v for k, v in (entry.get("answers") or {}).items()
+               if v is not None and k in target}
+        per_listener[code] = (round(sum(1 for k, v in got.items()
+                                        if v == target[k]) / len(got), 3)
+                              if got else None)
+    flagged = []
+    for key, syl in target.items():
+        picks = [entry.get("answers", {}).get(key)
+                 for entry in (record.get("listeners") or {}).values()]
+        picks = [p for p in picks if p is not None]
+        if picks and sum(1 for p in picks if p == syl) / len(picks) \
+                < LISTEN_PASS:
+            flagged.append({"key": key, "syl": syl, "heard_as": picks})
+    return {"listeners": per_listener, "flagged": flagged}
+
+
+def cmd_listen(args) -> int:
+    root = Path(args.speech_dir)
+    items = probe_listen_items(root)
+    out = Path(args.out) if args.out else root / "listener_check.json"
+    record = (json.loads(out.read_text(encoding="utf-8"))
+              if out.exists() else {"listeners": {}})
+    if not args.report:
+        if not args.listener:
+            print("listen needs --listener, a code such as L1")
+            return 2
+        answers = run_listen(items)
+        record.setdefault("listeners", {})[args.listener] = {
+            "date": date.today().isoformat(), "device": args.device,
+            "level": args.level, "answers": answers}
+        out.write_text(json.dumps(record, indent=1) + "\n",
+                       encoding="utf-8")
+    summary = listen_summary(record, items)
+    for code, share in summary["listeners"].items():
+        print(f"listener {code}: {share} right")
+    for f in summary["flagged"]:
+        print(f"under {LISTEN_PASS:.0%}: {f['key']} ({f['syl']}) heard "
+              f"as {', '.join(f['heard_as'])}")
+    return 0 if not summary["flagged"] else 1
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -525,6 +666,19 @@ def main(argv=None) -> int:
     k = sub.add_parser("check", help="what is still missing")
     k.add_argument("--speech-dir", default=str(SPEECH_DIR))
     k.set_defaults(fn=cmd_check)
+    s = sub.add_parser("listen", help="listeners check the probe's "
+                                      "syllables by ear")
+    s.add_argument("--listener", default="",
+                   help="a code, not a name, e.g. L1")
+    s.add_argument("--device", default="",
+                   help="the headphones or speakers used")
+    s.add_argument("--level", default="",
+                   help="the playback level, as set")
+    s.add_argument("--report", action="store_true",
+                   help="print the results so far, play nothing")
+    s.add_argument("--out", default="")
+    s.add_argument("--speech-dir", default=str(SPEECH_DIR))
+    s.set_defaults(fn=cmd_listen)
     args = ap.parse_args(argv)
     return args.fn(args)
 

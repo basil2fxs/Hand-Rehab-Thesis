@@ -194,7 +194,16 @@ HOW THE DESIGN GOT HERE (every change made before any participant):
     and the hit rate over the same trials are read beside it. The GET
     READY card and the run sheet say what the game asks (Basil, 1
     October 2026; the band, the 30 BPM start, the 180 BPM cap and the
-    40 trials stay as they are). The text below is corrected where the
+    40 trials stay as they are). Syllables after it, outside this
+    study and for the case only (Section 1.4): every case sitting now
+    opens with a fixed probe, the same sets in the same order every
+    session, with no prompt or feedback and half its words never
+    trained, so a reader can give an A-B series of probe-only sessions
+    then training; the buzz's floor is a Kaplan-Meier median of the
+    time to a first press found alone, since the median of the answers
+    that beat the buzz undercut slow readers; 6 to 9 plays 20 words,
+    every quick look 20 trials, and the adult fall moves on
+    hear-and-pick sets only. The text below is corrected where the
     reviews found a claim the evidence contradicts.
 
 What one board costs, and the thesis says it in the same breath as
@@ -676,6 +685,17 @@ the P series (D01). A hub game is in no cohort table, and the
 notebook names a code with hub games only and leaves it out of n
 (cohort_sitting_people). What follows is kept as the case for the
 mode and for that participant.
+1 October 2026, the deep review (docs/research/deep/syllables.md), for
+the case: the sitting opens with a fixed probe that never adapts
+(SyllablesMode, PROBE), the case is an A-B series with 3 to 5
+probe-only sessions first, and the procedure is in FINAL TRIAL
+RESULTS/4 Syllables case/README.md. The unprompted correct rate mixes
+speed with accuracy (0.84 to 0.29 at fixed knowledge as a simulated
+reader slowed), so S7's reading of it as the learning measure no
+longer holds: the case reports it beside the time to a first press
+found alone and the accuracy of those presses. The prompt's floor is
+now a Kaplan-Meier median with sets the buzz cut off censored; the
+classic block below shares it, and no sitting plays that block.
 A paediatric reading game: a word is heard and seen, then its
 syllables fall one set at a time as four written options over four
 fingers, and the child presses the finger under the right chunk. If a

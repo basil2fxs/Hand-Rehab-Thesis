@@ -437,6 +437,46 @@ def profile_words(profile, band: str) -> tuple[tuple[Word, ...],
     return tuple(fit or real or all_words()), pseudo
 
 
+PROBE_PATH = ("assets", "words", "syllables_probe.json")
+_PROBE_CACHE: dict | None = None
+
+
+def load_probe(pid: str, path: Path | None = None
+               ) -> tuple[float, list[dict]]:
+    """(seconds per set, the sets in playing order) of the fixed probe
+    for an age profile (scripts/build_syllables_probe.py), or (0.0, [])
+    when the file or the profile is not there, so a block without a
+    probe plays as before. A set whose four options do not hold its
+    target once is dropped: the probe must never offer a set with no
+    answer."""
+    global _PROBE_CACHE
+    data = None
+    if path is None and _PROBE_CACHE is not None:
+        data = _PROBE_CACHE
+    else:
+        target = path or _bank_file().with_name(PROBE_PATH[-1])
+        try:
+            data = json.loads(target.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            data = {}
+        except Exception as e:
+            log.warning("Syllables probe at %s could not be read (%s)",
+                        target, e)
+            data = {}
+        if path is None:
+            _PROBE_CACHE = data
+    spec = (data.get("profiles") or {}).get(str(pid)) or {}
+    items = (data.get("item_sets") or {}).get(spec.get("items")) or []
+    keep = []
+    for it in items:
+        opts = it.get("options") or []
+        texts = [str(o.get("text", "")) for o in opts]
+        if (len(opts) == 4 and texts.count(str(it.get("syl"))) == 1
+                and 0 <= int(it.get("tlane", -1)) < 4):
+            keep.append(dict(it, version=int(data.get("version", 0))))
+    return float(spec.get("time_s") or 0.0), keep
+
+
 def pool_syllable_lists() -> tuple[tuple[str, ...], ...]:
     """The bank's chunks plus every pool's, for an inventory that has
     to judge foils for adult and made-up words too."""

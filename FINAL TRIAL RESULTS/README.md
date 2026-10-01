@@ -26,7 +26,7 @@ Copy [`EEG_Lab`](../EEG_Lab) to the lab PC and follow its README. Run the marker
 
 ## Syllables
 
-Your own sessions: code D01 upward, the reader's real age, SESSION Free play, then the Syllables card. Each reader is one described case.
+Code D01 upward, the reader's real age, SESSION Free play, then the Syllables card. Every sitting opens with the same fixed probe: 3 to 5 sessions of the probe alone, then sessions of the whole game, each reader a case of their own. The procedure, from consent to the stop rule, is in [`4 Syllables case`](4%20Syllables%20case).
 
 ## Results
 

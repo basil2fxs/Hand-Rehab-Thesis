@@ -1,0 +1,2971 @@
+{
+ "version": 1,
+ "seed": 20261001,
+ "built_on": "2026-10-01",
+ "generated_by": "scripts/build_syllables_probe.py",
+ "note": "Fixed probe sets, played in this order with no prompt, replay, returns or feedback. Lanes are 0 to 3, index to little in the playing hand's desk order. held_out words are never drawn in training.",
+ "profiles": {
+  "6-9": {
+   "items": "child",
+   "time_s": 6.0
+  },
+  "10-12": {
+   "items": "teen",
+   "time_s": 4.8
+  },
+  "13-15": {
+   "items": "teen",
+   "time_s": 4.2
+  },
+  "16+": {
+   "items": "adult",
+   "time_s": 3.6
+  },
+  "60+": {
+   "items": "adult",
+   "time_s": 4.2
+  }
+ },
+ "item_sets": {
+  "child": [
+   {
+    "word": "pineapple",
+    "syllables": [
+     "pine",
+     "ap",
+     "ple"
+    ],
+    "pos": 0,
+    "syl": "pine",
+    "weak": 0,
+    "lex": "word",
+    "family": "order",
+    "near": "F6",
+    "held_out": false,
+    "tlane": 0,
+    "options": [
+     {
+      "lane": 0,
+      "text": "pine",
+      "kind": "target"
+     },
+     {
+      "lane": 1,
+      "text": "shoul",
+      "kind": "F1"
+     },
+     {
+      "lane": 2,
+      "text": "ple",
+      "kind": "F6"
+     },
+     {
+      "lane": 3,
+      "text": "ond",
+      "kind": "F1"
+     }
+    ]
+   },
+   {
+    "word": "dinosaur",
+    "syllables": [
+     "di",
+     "no",
+     "saur"
+    ],
+    "pos": 1,
+    "syl": "no",
+    "weak": 1,
+    "lex": "word",
+    "family": "reversal",
+    "near": "F4",
+    "held_out": false,
+    "tlane": 2,
+    "options": [
+     {
+      "lane": 0,
+      "text": "bed",
+      "kind": "F1"
+     },
+     {
+      "lane": 1,
+      "text": "uo",
+      "kind": "F4"
+     },
+     {
+      "lane": 2,
+      "text": "no",
+      "kind": "target"
+     },
+     {
+      "lane": 3,
+      "text": "but",
+      "kind": "F1"
+     }
+    ]
+   },
+   {
+    "word": "nephew",
+    "syllables": [
+     "neph",
+     "ew"
+    ],
+    "pos": 1,
+    "syl": "ew",
+    "weak": 0,
+    "lex": "word",
+    "family": "position",
+    "near": "F5",
+    "held_out": true,
+    "tlane": 1,
+    "options": [
+     {
+      "lane": 0,
+      "text": "cur",
+      "kind": "F1"
+     },
+     {
+      "lane": 1,
+      "text": "ew",
+      "kind": "target"
+     },
+     {
+      "lane": 2,
+      "text": "ho",
+      "kind": "F1"
+     },
+     {
+      "lane": 3,
+      "text": "we",
+      "kind": "F5"
+     }
+    ]
+   },
+   {
+    "word": "microphone",
+    "syllables": [
+     "mi",
+     "cro",
+     "phone"
+    ],
+    "pos": 0,
+    "syl": "mi",
+    "weak": 0,
+    "lex": "word",
+    "family": "coda",
+    "near": "F7",
+    "held_out": true,
+    "tlane": 3,
+    "options": [
+     {
+      "lane": 0,
+      "text": "nel",
+      "kind": "F1"
+     },
+     {
+      "lane": 1,
+      "text": "nut",
+      "kind": "F1"
+     },
+     {
+      "lane": 2,
+      "text": "mib",
+      "kind": "F7"
+     },
+     {
+      "lane": 3,
+      "text": "mi",
+      "kind": "target"
+     }
+    ]
+   },
+   {
+    "word": "rectangle",
+    "syllables": [
+     "rec",
+     "tan",
+     "gle"
+    ],
+    "pos": 2,
+    "syl": "gle",
+    "weak": 1,
+    "lex": "word",
+    "family": "position",
+    "near": "F5",
+    "held_out": false,
+    "tlane": 3,
+    "options": [
+     {
+      "lane": 0,
+      "text": "path",
+      "kind": "F1"
+     },
+     {
+      "lane": 1,
+      "text": "gel",
+      "kind": "F5"
+     },
+     {
+      "lane": 2,
+      "text": "doc",
+      "kind": "F1"
+     },
+     {
+      "lane": 3,
+      "text": "gle",
+      "kind": "target"
+     }
+    ]
+   },
+   {
+    "word": "lantern",
+    "syllables": [
+     "lan",
+     "tern"
+    ],
+    "pos": 0,
+    "syl": "lan",
+    "weak": 0,
+    "lex": "word",
+    "family": "onset",
+    "near": "F2",
+    "held_out": true,
+    "tlane": 2,
+    "options": [
+     {
+      "lane": 0,
+      "text": "pers",
+      "kind": "F1"
+     },
+     {
+      "lane": 1,
+      "text": "skan",
+      "kind": "F2"
+     },
+     {
+      "lane": 2,
+      "text": "lan",
+      "kind": "target"
+     },
+     {
+      "lane": 3,
+      "text": "ven",
+      "kind": "F1"
+     }
+    ]
+   },
+   {
+    "word": "morning",
+    "syllables": [
+     "mor",
+     "ning"
+    ],
+    "pos": 0,
+    "syl": "mor",
+    "weak": 0,
+    "lex": "word",
+    "family": "coda",
+    "near": "F7",
+    "held_out": false,
+    "tlane": 1,
+    "options": [
+     {
+      "lane": 0,
+      "text": "mof",
+      "kind": "F7"
+     },
+     {
+      "lane": 1,
+      "text": "mor",
+      "kind": "target"
+     },
+     {
+      "lane": 2,
+      "text": "sev",
+      "kind": "F1"
+     },
+     {
+      "lane": 3,
+      "text": "im",
+      "kind": "F1"
+     }
+    ]
+   },
+   {
+    "word": "motor",
+    "syllables": [
+     "mo",
+     "tor"
+    ],
+    "pos": 0,
+    "syl": "mo",
+    "weak": 0,
+    "lex": "word",
+    "family": "vowel",
+    "near": "F3",
+    "held_out": false,
+    "tlane": 0,
+    "options": [
+     {
+      "lane": 0,
+      "text": "mo",
+      "kind": "target"
+     },
+     {
+      "lane": 1,
+      "text": "lus",
+      "kind": "F1"
+     },
+     {
+      "lane": 2,
+      "text": "mu",
+      "kind": "F3"
+     },
+     {
+      "lane": 3,
+      "text": "sub",
+      "kind": "F1"
+     }
+    ]
+   },
+   {
+    "word": "beautiful",
+    "syllables": [
+     "beau",
+     "ti",
+     "ful"
+    ],
+    "pos": 0,
+    "syl": "beau",
+    "weak": 0,
+    "lex": "word",
+    "family": "reversal",
+    "near": "F4",
+    "held_out": true,
+    "tlane": 2,
+    "options": [
+     {
+      "lane": 0,
+      "text": "deau",
+      "kind": "F4"
+     },
+     {
+      "lane": 1,
+      "text": "mir",
+      "kind": "F1"
+     },
+     {
+      "lane": 2,
+      "text": "beau",
+      "kind": "target"
+     },
+     {
+      "lane": 3,
+      "text": "hind",
+      "kind": "F1"
+     }
+    ]
+   },
+   {
+    "word": "shelter",
+    "syllables": [
+     "shel",
+     "ter"
+    ],
+    "pos": 1,
+    "syl": "ter",
+    "weak": 1,
+    "lex": "word",
+    "family": "position",
+    "near": "F5",
+    "held_out": true,
+    "tlane": 0,
+    "options": [
+     {
+      "lane": 0,
+      "text": "ter",
+      "kind": "target"
+     },
+     {
+      "lane": 1,
+      "text": "run",
+      "kind": "F1"
+     },
+     {
+      "lane": 2,
+      "text": "nut",
+      "kind": "F1"
+     },
+     {
+      "lane": 3,
+      "text": "etr",
+      "kind": "F5"
+     }
+    ]
+   },
+   {
+    "word": "lonely",
+    "syllables": [
+     "lone",
+     "ly"
+    ],
+    "pos": 1,
+    "syl": "ly",
+    "weak": 1,
+    "lex": "word",
+    "family": "coda",
+    "near": "F7",
+    "held_out": true,
+    "tlane": 3,
+    "options": [
+     {
+      "lane": 0,
+      "text": "lysh",
+      "kind": "F7"
+     },
+     {
+      "lane": 1,
+      "text": "vol",
+      "kind": "F1"
+     },
+     {
+      "lane": 2,
+      "text": "tau",
+      "kind": "F1"
+     },
+     {
+      "lane": 3,
+      "text": "ly",
+      "kind": "target"
+     }
+    ]
+   },
+   {
+    "word": "running",
+    "syllables": [
+     "run",
+     "ning"
+    ],
+    "pos": 1,
+    "syl": "ning",
+    "weak": 1,
+    "lex": "word",
+    "family": "reversal",
+    "near": "F4",
+    "held_out": false,
+    "tlane": 1,
+    "options": [
+     {
+      "lane": 0,
+      "text": "band",
+      "kind": "F1"
+     },
+     {
+      "lane": 1,
+      "text": "ning",
+      "kind": "target"
+     },
+     {
+      "lane": 2,
+      "text": "for",
+      "kind": "F1"
+     },
+     {
+      "lane": 3,
+      "text": "uing",
+      "kind": "F4"
+     }
+    ]
+   },
+   {
+    "word": "dreaming",
+    "syllables": [
+     "dream",
+     "ing"
+    ],
+    "pos": 1,
+    "syl": "ing",
+    "weak": 1,
+    "lex": "word",
+    "family": "coda",
+    "near": "F7",
+    "held_out": false,
+    "tlane": 1,
+    "options": [
+     {
+      "lane": 0,
+      "text": "ip",
+      "kind": "F7"
+     },
+     {
+      "lane": 1,
+      "text": "ing",
+      "kind": "target"
+     },
+     {
+      "lane": 2,
+      "text": "kook",
+      "kind": "F1"
+     },
+     {
+      "lane": 3,
+      "text": "dol",
+      "kind": "F1"
+     }
+    ]
+   },
+   {
+    "word": "monster",
+    "syllables": [
+     "mon",
+     "ster"
+    ],
+    "pos": 0,
+    "syl": "mon",
+    "weak": 0,
+    "lex": "word",
+    "family": "reversal",
+    "near": "F4",
+    "held_out": true,
+    "tlane": 3,
+    "options": [
+     {
+      "lane": 0,
+      "text": "ba",
+      "kind": "F1"
+     },
+     {
+      "lane": 1,
+      "text": "won",
+      "kind": "F4"
+     },
+     {
+      "lane": 2,
+      "text": "pea",
+      "kind": "F1"
+     },
+     {
+      "lane": 3,
+      "text": "mon",
+      "kind": "target"
+     }
+    ]
+   },
+   {
+    "word": "galah",
+    "syllables": [
+     "ga",
+     "lah"
+    ],
+    "pos": 0,
+    "syl": "ga",
+    "weak": 1,
+    "lex": "word",
+    "family": "onset",
+    "near": "F2",
+    "held_out": false,
+    "tlane": 2,
+    "options": [
+     {
+      "lane": 0,
+      "text": "ed",
+      "kind": "F1"
+     },
+     {
+      "lane": 1,
+      "text": "sha",
+      "kind": "F2"
+     },
+     {
+      "lane": 2,
+      "text": "ga",
+      "kind": "target"
+     },
+     {
+      "lane": 3,
+      "text": "e",
+      "kind": "F1"
+     }
+    ]
+   },
+   {
+    "word": "gentle",
+    "syllables": [
+     "gen",
+     "tle"
+    ],
+    "pos": 0,
+    "syl": "gen",
+    "weak": 0,
+    "lex": "word",
+    "family": "vowel",
+    "near": "F3",
+    "held_out": true,
+    "tlane": 0,
+    "options": [
+     {
+      "lane": 0,
+      "text": "gen",
+      "kind": "target"
+     },
+     {
+      "lane": 1,
+      "text": "gan",
+      "kind": "F3"
+     },
+     {
+      "lane": 2,
+      "text": "dals",
+      "kind": "F1"
+     },
+     {
+      "lane": 3,
+      "text": "fan",
+      "kind": "F1"
+     }
+    ]
+   },
+   {
+    "word": "turtle",
+    "syllables": [
+     "tur",
+     "tle"
+    ],
+    "pos": 0,
+    "syl": "tur",
+    "weak": 0,
+    "lex": "word",
+    "family": "order",
+    "near": "F6",
+    "held_out": true,
+    "tlane": 0,
+    "options": [
+     {
+      "lane": 0,
+      "text": "tur",
+      "kind": "target"
+     },
+     {
+      "lane": 1,
+      "text": "case",
+      "kind": "F1"
+     },
+     {
+      "lane": 2,
+      "text": "bly",
+      "kind": "F1"
+     },
+     {
+      "lane": 3,
+      "text": "tle",
+      "kind": "F6"
+     }
+    ]
+   },
+   {
+    "word": "orange",
+    "syllables": [
+     "or",
+     "ange"
+    ],
+    "pos": 0,
+    "syl": "or",
+    "weak": 0,
+    "lex": "word",
+    "family": "vowel",
+    "near": "F3",
+    "held_out": false,
+    "tlane": 3,
+    "options": [
+     {
+      "lane": 0,
+      "text": "ur",
+      "kind": "F3"
+     },
+     {
+      "lane": 1,
+      "text": "set",
+      "kind": "F1"
+     },
+     {
+      "lane": 2,
+      "text": "emp",
+      "kind": "F1"
+     },
+     {
+      "lane": 3,
+      "text": "or",
+      "kind": "target"
+     }
+    ]
+   },
+   {
+    "word": "bedroom",
+    "syllables": [
+     "bed",
+     "room"
+    ],
+    "pos": 0,
+    "syl": "bed",
+    "weak": 0,
+    "lex": "word",
+    "family": "onset",
+    "near": "F2",
+    "held_out": true,
+    "tlane": 2,
+    "options": [
+     {
+      "lane": 0,
+      "text": "win",
+      "kind": "F1"
+     },
+     {
+      "lane": 1,
+      "text": "ned",
+      "kind": "F2"
+     },
+     {
+      "lane": 2,
+      "text": "bed",
+      "kind": "target"
+     },
+     {
+      "lane": 3,
+      "text": "jun",
+      "kind": "F1"
+     }
+    ]
+   },
+   {
+    "word": "sleeping",
+    "syllables": [
+     "sleep",
+     "ing"
+    ],
+    "pos": 0,
+    "syl": "sleep",
+    "weak": 0,
+    "lex": "word",
+    "family": "position",
+    "near": "F5",
+    "held_out": false,
+    "tlane": 1,
+    "options": [
+     {
+      "lane": 0,
+      "text": "char",
+      "kind": "F1"
+     },
+     {
+      "lane": 1,
+      "text": "sleep",
+      "kind": "target"
+     },
+     {
+      "lane": 2,
+      "text": "lseep",
+      "kind": "F5"
+     },
+     {
+      "lane": 3,
+      "text": "night",
+      "kind": "F1"
+     }
+    ]
+   },
+   {
+    "word": "favourite",
+    "syllables": [
+     "fa",
+     "vour",
+     "ite"
+    ],
+    "pos": 0,
+    "syl": "fa",
+    "weak": 0,
+    "lex": "word",
+    "family": "vowel",
+    "near": "F3",
+    "held_out": true,
+    "tlane": 0,
+    "options": [
+     {
+      "lane": 0,
+      "text": "fa",
+      "kind": "target"
+     },
+     {
+      "lane": 1,
+      "text": "sum",
+      "kind": "F1"
+     },
+     {
+      "lane": 2,
+      "text": "cus",
+      "kind": "F1"
+     },
+     {
+      "lane": 3,
+      "text": "fe",
+      "kind": "F3"
+     }
+    ]
+   },
+   {
+    "word": "pony",
+    "syllables": [
+     "po",
+     "ny"
+    ],
+    "pos": 1,
+    "syl": "ny",
+    "weak": 1,
+    "lex": "word",
+    "family": "order",
+    "near": "F6",
+    "held_out": false,
+    "tlane": 1,
+    "options": [
+     {
+      "lane": 0,
+      "text": "hon",
+      "kind": "F1"
+     },
+     {
+      "lane": 1,
+      "text": "ny",
+      "kind": "target"
+     },
+     {
+      "lane": 2,
+      "text": "he",
+      "kind": "F1"
+     },
+     {
+      "lane": 3,
+      "text": "po",
+      "kind": "F6"
+     }
+    ]
+   },
+   {
+    "word": "trainer",
+    "syllables": [
+     "train",
+     "er"
+    ],
+    "pos": 1,
+    "syl": "er",
+    "weak": 1,
+    "lex": "word",
+    "family": "onset",
+    "near": "F2",
+    "held_out": false,
+    "tlane": 3,
+    "options": [
+     {
+      "lane": 0,
+      "text": "fo",
+      "kind": "F1"
+     },
+     {
+      "lane": 1,
+      "text": "vol",
+      "kind": "F1"
+     },
+     {
+      "lane": 2,
+      "text": "cer",
+      "kind": "F2"
+     },
+     {
+      "lane": 3,
+      "text": "er",
+      "kind": "target"
+     }
+    ]
+   },
+   {
+    "word": "broccoli",
+    "syllables": [
+     "broc",
+     "co",
+     "li"
+    ],
+    "pos": 2,
+    "syl": "li",
+    "weak": 1,
+    "lex": "word",
+    "family": "order",
+    "near": "F6",
+    "held_out": true,
+    "tlane": 2,
+    "options": [
+     {
+      "lane": 0,
+      "text": "te",
+      "kind": "F1"
+     },
+     {
+      "lane": 1,
+      "text": "co",
+      "kind": "F6"
+     },
+     {
+      "lane": 2,
+      "text": "li",
+      "kind": "target"
+     },
+     {
+      "lane": 3,
+      "text": "ze",
+      "kind": "F1"
+     }
+    ]
+   }
+  ],
+  "teen": [
+   {
+    "word": "continent",
+    "syllables": [
+     "con",
+     "ti",
+     "nent"
+    ],
+    "pos": 0,
+    "syl": "con",
+    "weak": 0,
+    "lex": "word",
+    "family": "vowel",
+    "near": "F3",
+    "held_out": true,
+    "tlane": 1,
+    "options": [
+     {
+      "lane": 0,
+      "text": "ze",
+      "kind": "F1"
+     },
+     {
+      "lane": 1,
+      "text": "con",
+      "kind": "target"
+     },
+     {
+      "lane": 2,
+      "text": "tern",
+      "kind": "F1"
+     },
+     {
+      "lane": 3,
+      "text": "can",
+      "kind": "F3"
+     }
+    ]
+   },
+   {
+    "word": "champion",
+    "syllables": [
+     "cham",
+     "pi",
+     "on"
+    ],
+    "pos": 2,
+    "syl": "on",
+    "weak": 1,
+    "lex": "word",
+    "family": "order",
+    "near": "F6",
+    "held_out": false,
+    "tlane": 3,
+    "options": [
+     {
+      "lane": 0,
+      "text": "kin",
+      "kind": "F1"
+     },
+     {
+      "lane": 1,
+      "text": "cham",
+      "kind": "F6"
+     },
+     {
+      "lane": 2,
+      "text": "sci",
+      "kind": "F1"
+     },
+     {
+      "lane": 3,
+      "text": "on",
+      "kind": "target"
+     }
+    ]
+   },
+   {
+    "word": "leadership",
+    "syllables": [
+     "lead",
+     "er",
+     "ship"
+    ],
+    "pos": 2,
+    "syl": "ship",
+    "weak": 0,
+    "lex": "word",
+    "family": "affix",
+    "near": "F9",
+    "held_out": true,
+    "tlane": 0,
+    "options": [
+     {
+      "lane": 0,
+      "text": "ship",
+      "kind": "target"
+     },
+     {
+      "lane": 1,
+      "text": "hood",
+      "kind": "F9"
+     },
+     {
+      "lane": 2,
+      "text": "ven",
+      "kind": "F1"
+     },
+     {
+      "lane": 3,
+      "text": "rat",
+      "kind": "F1"
+     }
+    ]
+   },
+   {
+    "word": "internet",
+    "syllables": [
+     "in",
+     "ter",
+     "net"
+    ],
+    "pos": 0,
+    "syl": "in",
+    "weak": 0,
+    "lex": "word",
+    "family": "vowel",
+    "near": "F3",
+    "held_out": false,
+    "tlane": 2,
+    "options": [
+     {
+      "lane": 0,
+      "text": "an",
+      "kind": "F3"
+     },
+     {
+      "lane": 1,
+      "text": "te",
+      "kind": "F1"
+     },
+     {
+      "lane": 2,
+      "text": "in",
+      "kind": "target"
+     },
+     {
+      "lane": 3,
+      "text": "pud",
+      "kind": "F1"
+     }
+    ]
+   },
+   {
+    "word": "decoration",
+    "syllables": [
+     "dec",
+     "o",
+     "ra",
+     "tion"
+    ],
+    "pos": 3,
+    "syl": "tion",
+    "weak": 1,
+    "lex": "word",
+    "family": "order",
+    "near": "F6",
+    "held_out": true,
+    "tlane": 0,
+    "options": [
+     {
+      "lane": 0,
+      "text": "tion",
+      "kind": "target"
+     },
+     {
+      "lane": 1,
+      "text": "han",
+      "kind": "F1"
+     },
+     {
+      "lane": 2,
+      "text": "ra",
+      "kind": "F6"
+     },
+     {
+      "lane": 3,
+      "text": "ade",
+      "kind": "F1"
+     }
+    ]
+   },
+   {
+    "word": "expensive",
+    "syllables": [
+     "ex",
+     "pen",
+     "sive"
+    ],
+    "pos": 2,
+    "syl": "sive",
+    "weak": 1,
+    "lex": "word",
+    "family": "coda",
+    "near": "F7",
+    "held_out": false,
+    "tlane": 2,
+    "options": [
+     {
+      "lane": 0,
+      "text": "rasp",
+      "kind": "F1"
+     },
+     {
+      "lane": 1,
+      "text": "bon",
+      "kind": "F1"
+     },
+     {
+      "lane": 2,
+      "text": "sive",
+      "kind": "target"
+     },
+     {
+      "lane": 3,
+      "text": "siveg",
+      "kind": "F7"
+     }
+    ]
+   },
+   {
+    "word": "discovery",
+    "syllables": [
+     "dis",
+     "cov",
+     "er",
+     "y"
+    ],
+    "pos": 2,
+    "syl": "er",
+    "weak": 1,
+    "lex": "word",
+    "family": "position",
+    "near": "F5",
+    "held_out": false,
+    "tlane": 1,
+    "options": [
+     {
+      "lane": 0,
+      "text": "re",
+      "kind": "F5"
+     },
+     {
+      "lane": 1,
+      "text": "er",
+      "kind": "target"
+     },
+     {
+      "lane": 2,
+      "text": "mar",
+      "kind": "F1"
+     },
+     {
+      "lane": 3,
+      "text": "rib",
+      "kind": "F1"
+     }
+    ]
+   },
+   {
+    "word": "invitation",
+    "syllables": [
+     "in",
+     "vi",
+     "ta",
+     "tion"
+    ],
+    "pos": 0,
+    "syl": "in",
+    "weak": 1,
+    "lex": "word",
+    "family": "affix",
+    "near": "F9",
+    "held_out": false,
+    "tlane": 3,
+    "options": [
+     {
+      "lane": 0,
+      "text": "ar",
+      "kind": "F1"
+     },
+     {
+      "lane": 1,
+      "text": "av",
+      "kind": "F1"
+     },
+     {
+      "lane": 2,
+      "text": "dis",
+      "kind": "F9"
+     },
+     {
+      "lane": 3,
+      "text": "in",
+      "kind": "target"
+     }
+    ]
+   },
+   {
+    "word": "tunnel",
+    "syllables": [
+     "tun",
+     "nel"
+    ],
+    "pos": 1,
+    "syl": "nel",
+    "weak": 1,
+    "lex": "word",
+    "family": "onset",
+    "near": "F2",
+    "held_out": true,
+    "tlane": 2,
+    "options": [
+     {
+      "lane": 0,
+      "text": "lar",
+      "kind": "F1"
+     },
+     {
+      "lane": 1,
+      "text": "fi",
+      "kind": "F1"
+     },
+     {
+      "lane": 2,
+      "text": "nel",
+      "kind": "target"
+     },
+     {
+      "lane": 3,
+      "text": "chel",
+      "kind": "F2"
+     }
+    ]
+   },
+   {
+    "word": "patberpen",
+    "syllables": [
+     "pat",
+     "ber",
+     "pen"
+    ],
+    "pos": 0,
+    "syl": "pat",
+    "weak": 0,
+    "lex": "pseudo",
+    "family": "position",
+    "near": "F5",
+    "held_out": true,
+    "tlane": 0,
+    "options": [
+     {
+      "lane": 0,
+      "text": "pat",
+      "kind": "target"
+     },
+     {
+      "lane": 1,
+      "text": "apt",
+      "kind": "F5"
+     },
+     {
+      "lane": 2,
+      "text": "en",
+      "kind": "F1"
+     },
+     {
+      "lane": 3,
+      "text": "trou",
+      "kind": "F1"
+     }
+    ]
+   },
+   {
+    "word": "oxygen",
+    "syllables": [
+     "ox",
+     "y",
+     "gen"
+    ],
+    "pos": 1,
+    "syl": "y",
+    "weak": 1,
+    "lex": "word",
+    "family": "coda",
+    "near": "F7",
+    "held_out": true,
+    "tlane": 1,
+    "options": [
+     {
+      "lane": 0,
+      "text": "lo",
+      "kind": "F1"
+     },
+     {
+      "lane": 1,
+      "text": "y",
+      "kind": "target"
+     },
+     {
+      "lane": 2,
+      "text": "ys",
+      "kind": "F7"
+     },
+     {
+      "lane": 3,
+      "text": "os",
+      "kind": "F1"
+     }
+    ]
+   },
+   {
+    "word": "unkindness",
+    "syllables": [
+     "un",
+     "kind",
+     "ness"
+    ],
+    "pos": 2,
+    "syl": "ness",
+    "weak": 1,
+    "lex": "word",
+    "family": "onset",
+    "near": "F2",
+    "held_out": false,
+    "tlane": 3,
+    "options": [
+     {
+      "lane": 0,
+      "text": "less",
+      "kind": "F2"
+     },
+     {
+      "lane": 1,
+      "text": "vail",
+      "kind": "F1"
+     },
+     {
+      "lane": 2,
+      "text": "camp",
+      "kind": "F1"
+     },
+     {
+      "lane": 3,
+      "text": "ness",
+      "kind": "target"
+     }
+    ]
+   },
+   {
+    "word": "waterfall",
+    "syllables": [
+     "wa",
+     "ter",
+     "fall"
+    ],
+    "pos": 0,
+    "syl": "wa",
+    "weak": 0,
+    "lex": "word",
+    "family": "reversal",
+    "near": "F4",
+    "held_out": true,
+    "tlane": 3,
+    "options": [
+     {
+      "lane": 0,
+      "text": "ma",
+      "kind": "F4"
+     },
+     {
+      "lane": 1,
+      "text": "bit",
+      "kind": "F1"
+     },
+     {
+      "lane": 2,
+      "text": "por",
+      "kind": "F1"
+     },
+     {
+      "lane": 3,
+      "text": "wa",
+      "kind": "target"
+     }
+    ]
+   },
+   {
+    "word": "remarkable",
+    "syllables": [
+     "re",
+     "mark",
+     "a",
+     "ble"
+    ],
+    "pos": 1,
+    "syl": "mark",
+    "weak": 0,
+    "lex": "word",
+    "family": "onset",
+    "near": "F2",
+    "held_out": true,
+    "tlane": 1,
+    "options": [
+     {
+      "lane": 0,
+      "text": "ished",
+      "kind": "F1"
+     },
+     {
+      "lane": 1,
+      "text": "mark",
+      "kind": "target"
+     },
+     {
+      "lane": 2,
+      "text": "con",
+      "kind": "F1"
+     },
+     {
+      "lane": 3,
+      "text": "sark",
+      "kind": "F2"
+     }
+    ]
+   },
+   {
+    "word": "kemberdolmid",
+    "syllables": [
+     "kem",
+     "ber",
+     "dol",
+     "mid"
+    ],
+    "pos": 0,
+    "syl": "kem",
+    "weak": 0,
+    "lex": "pseudo",
+    "family": "vowel",
+    "near": "F3",
+    "held_out": true,
+    "tlane": 2,
+    "options": [
+     {
+      "lane": 0,
+      "text": "ap",
+      "kind": "F1"
+     },
+     {
+      "lane": 1,
+      "text": "zon",
+      "kind": "F1"
+     },
+     {
+      "lane": 2,
+      "text": "kem",
+      "kind": "target"
+     },
+     {
+      "lane": 3,
+      "text": "kam",
+      "kind": "F3"
+     }
+    ]
+   },
+   {
+    "word": "unlucky",
+    "syllables": [
+     "un",
+     "luck",
+     "y"
+    ],
+    "pos": 0,
+    "syl": "un",
+    "weak": 0,
+    "lex": "word",
+    "family": "affix",
+    "near": "F9",
+    "held_out": true,
+    "tlane": 0,
+    "options": [
+     {
+      "lane": 0,
+      "text": "un",
+      "kind": "target"
+     },
+     {
+      "lane": 1,
+      "text": "mis",
+      "kind": "F9"
+     },
+     {
+      "lane": 2,
+      "text": "ra",
+      "kind": "F1"
+     },
+     {
+      "lane": 3,
+      "text": "dy",
+      "kind": "F1"
+     }
+    ]
+   },
+   {
+    "word": "dangerous",
+    "syllables": [
+     "dan",
+     "ger",
+     "ous"
+    ],
+    "pos": 2,
+    "syl": "ous",
+    "weak": 1,
+    "lex": "word",
+    "family": "reversal",
+    "near": "F4",
+    "held_out": false,
+    "tlane": 3,
+    "options": [
+     {
+      "lane": 0,
+      "text": "ons",
+      "kind": "F4"
+     },
+     {
+      "lane": 1,
+      "text": "tain",
+      "kind": "F1"
+     },
+     {
+      "lane": 2,
+      "text": "teen",
+      "kind": "F1"
+     },
+     {
+      "lane": 3,
+      "text": "ous",
+      "kind": "target"
+     }
+    ]
+   },
+   {
+    "word": "electronic",
+    "syllables": [
+     "e",
+     "lec",
+     "tron",
+     "ic"
+    ],
+    "pos": 1,
+    "syl": "lec",
+    "weak": 0,
+    "lex": "word",
+    "family": "order",
+    "near": "F6",
+    "held_out": false,
+    "tlane": 2,
+    "options": [
+     {
+      "lane": 0,
+      "text": "duc",
+      "kind": "F1"
+     },
+     {
+      "lane": 1,
+      "text": "pit",
+      "kind": "F1"
+     },
+     {
+      "lane": 2,
+      "text": "lec",
+      "kind": "target"
+     },
+     {
+      "lane": 3,
+      "text": "tron",
+      "kind": "F6"
+     }
+    ]
+   },
+   {
+    "word": "curiously",
+    "syllables": [
+     "cu",
+     "ri",
+     "ous",
+     "ly"
+    ],
+    "pos": 0,
+    "syl": "cu",
+    "weak": 0,
+    "lex": "word",
+    "family": "coda",
+    "near": "F7",
+    "held_out": false,
+    "tlane": 0,
+    "options": [
+     {
+      "lane": 0,
+      "text": "cu",
+      "kind": "target"
+     },
+     {
+      "lane": 1,
+      "text": "ner",
+      "kind": "F1"
+     },
+     {
+      "lane": 2,
+      "text": "ard",
+      "kind": "F1"
+     },
+     {
+      "lane": 3,
+      "text": "cuch",
+      "kind": "F7"
+     }
+    ]
+   },
+   {
+    "word": "happiness",
+    "syllables": [
+     "hap",
+     "pi",
+     "ness"
+    ],
+    "pos": 2,
+    "syl": "ness",
+    "weak": 1,
+    "lex": "word",
+    "family": "affix",
+    "near": "F9",
+    "held_out": false,
+    "tlane": 1,
+    "options": [
+     {
+      "lane": 0,
+      "text": "rub",
+      "kind": "F1"
+     },
+     {
+      "lane": 1,
+      "text": "ness",
+      "kind": "target"
+     },
+     {
+      "lane": 2,
+      "text": "less",
+      "kind": "F9"
+     },
+     {
+      "lane": 3,
+      "text": "our",
+      "kind": "F1"
+     }
+    ]
+   },
+   {
+    "word": "battery",
+    "syllables": [
+     "bat",
+     "ter",
+     "y"
+    ],
+    "pos": 0,
+    "syl": "bat",
+    "weak": 0,
+    "lex": "word",
+    "family": "reversal",
+    "near": "F4",
+    "held_out": true,
+    "tlane": 1,
+    "options": [
+     {
+      "lane": 0,
+      "text": "dat",
+      "kind": "F4"
+     },
+     {
+      "lane": 1,
+      "text": "bat",
+      "kind": "target"
+     },
+     {
+      "lane": 2,
+      "text": "gus",
+      "kind": "F1"
+     },
+     {
+      "lane": 3,
+      "text": "dol",
+      "kind": "F1"
+     }
+    ]
+   },
+   {
+    "word": "quantity",
+    "syllables": [
+     "quan",
+     "ti",
+     "ty"
+    ],
+    "pos": 0,
+    "syl": "quan",
+    "weak": 0,
+    "lex": "word",
+    "family": "onset",
+    "near": "F2",
+    "held_out": false,
+    "tlane": 3,
+    "options": [
+     {
+      "lane": 0,
+      "text": "sic",
+      "kind": "F1"
+     },
+     {
+      "lane": 1,
+      "text": "guan",
+      "kind": "F2"
+     },
+     {
+      "lane": 2,
+      "text": "tow",
+      "kind": "F1"
+     },
+     {
+      "lane": 3,
+      "text": "quan",
+      "kind": "target"
+     }
+    ]
+   },
+   {
+    "word": "kindergarten",
+    "syllables": [
+     "kin",
+     "der",
+     "gar",
+     "ten"
+    ],
+    "pos": 1,
+    "syl": "der",
+    "weak": 1,
+    "lex": "word",
+    "family": "reversal",
+    "near": "F4",
+    "held_out": false,
+    "tlane": 2,
+    "options": [
+     {
+      "lane": 0,
+      "text": "nach",
+      "kind": "F1"
+     },
+     {
+      "lane": 1,
+      "text": "in",
+      "kind": "F1"
+     },
+     {
+      "lane": 2,
+      "text": "der",
+      "kind": "target"
+     },
+     {
+      "lane": 3,
+      "text": "ber",
+      "kind": "F4"
+     }
+    ]
+   },
+   {
+    "word": "television",
+    "syllables": [
+     "tel",
+     "e",
+     "vi",
+     "sion"
+    ],
+    "pos": 0,
+    "syl": "tel",
+    "weak": 0,
+    "lex": "word",
+    "family": "order",
+    "near": "F6",
+    "held_out": true,
+    "tlane": 0,
+    "options": [
+     {
+      "lane": 0,
+      "text": "tel",
+      "kind": "target"
+     },
+     {
+      "lane": 1,
+      "text": "vour",
+      "kind": "F1"
+     },
+     {
+      "lane": 2,
+      "text": "cat",
+      "kind": "F1"
+     },
+     {
+      "lane": 3,
+      "text": "sion",
+      "kind": "F6"
+     }
+    ]
+   },
+   {
+    "word": "doltoblub",
+    "syllables": [
+     "dol",
+     "tob",
+     "lub"
+    ],
+    "pos": 2,
+    "syl": "lub",
+    "weak": 0,
+    "lex": "pseudo",
+    "family": "vowel",
+    "near": "F3",
+    "held_out": false,
+    "tlane": 2,
+    "options": [
+     {
+      "lane": 0,
+      "text": "bro",
+      "kind": "F1"
+     },
+     {
+      "lane": 1,
+      "text": "bee",
+      "kind": "F1"
+     },
+     {
+      "lane": 2,
+      "text": "lub",
+      "kind": "target"
+     },
+     {
+      "lane": 3,
+      "text": "lob",
+      "kind": "F3"
+     }
+    ]
+   },
+   {
+    "word": "microphone",
+    "syllables": [
+     "mi",
+     "cro",
+     "phone"
+    ],
+    "pos": 1,
+    "syl": "cro",
+    "weak": 1,
+    "lex": "word",
+    "family": "position",
+    "near": "F5",
+    "held_out": false,
+    "tlane": 1,
+    "options": [
+     {
+      "lane": 0,
+      "text": "mar",
+      "kind": "F1"
+     },
+     {
+      "lane": 1,
+      "text": "cro",
+      "kind": "target"
+     },
+     {
+      "lane": 2,
+      "text": "cor",
+      "kind": "F5"
+     },
+     {
+      "lane": 3,
+      "text": "bin",
+      "kind": "F1"
+     }
+    ]
+   },
+   {
+    "word": "paddock",
+    "syllables": [
+     "pad",
+     "dock"
+    ],
+    "pos": 0,
+    "syl": "pad",
+    "weak": 0,
+    "lex": "word",
+    "family": "coda",
+    "near": "F7",
+    "held_out": true,
+    "tlane": 0,
+    "options": [
+     {
+      "lane": 0,
+      "text": "pad",
+      "kind": "target"
+     },
+     {
+      "lane": 1,
+      "text": "lish",
+      "kind": "F1"
+     },
+     {
+      "lane": 2,
+      "text": "tens",
+      "kind": "F1"
+     },
+     {
+      "lane": 3,
+      "text": "pap",
+      "kind": "F7"
+     }
+    ]
+   },
+   {
+    "word": "refrigerate",
+    "syllables": [
+     "re",
+     "frig",
+     "er",
+     "ate"
+    ],
+    "pos": 1,
+    "syl": "frig",
+    "weak": 0,
+    "lex": "word",
+    "family": "position",
+    "near": "F5",
+    "held_out": true,
+    "tlane": 3,
+    "options": [
+     {
+      "lane": 0,
+      "text": "rfig",
+      "kind": "F5"
+     },
+     {
+      "lane": 1,
+      "text": "ted",
+      "kind": "F1"
+     },
+     {
+      "lane": 2,
+      "text": "ves",
+      "kind": "F1"
+     },
+     {
+      "lane": 3,
+      "text": "frig",
+      "kind": "target"
+     }
+    ]
+   }
+  ],
+  "adult": [
+   {
+    "word": "predominant",
+    "syllables": [
+     "pre",
+     "dom",
+     "i",
+     "nant"
+    ],
+    "pos": 1,
+    "syl": "dom",
+    "weak": 0,
+    "lex": "word",
+    "family": "vowel",
+    "near": "F3",
+    "held_out": true,
+    "tlane": 2,
+    "options": [
+     {
+      "lane": 0,
+      "text": "dum",
+      "kind": "F3"
+     },
+     {
+      "lane": 1,
+      "text": "buf",
+      "kind": "F1"
+     },
+     {
+      "lane": 2,
+      "text": "dom",
+      "kind": "target"
+     },
+     {
+      "lane": 3,
+      "text": "na",
+      "kind": "F1"
+     }
+    ]
+   },
+   {
+    "word": "relationship",
+    "syllables": [
+     "re",
+     "la",
+     "tion",
+     "ship"
+    ],
+    "pos": 3,
+    "syl": "ship",
+    "weak": 0,
+    "lex": "word",
+    "family": "affix",
+    "near": "F9",
+    "held_out": false,
+    "tlane": 1,
+    "options": [
+     {
+      "lane": 0,
+      "text": "kle",
+      "kind": "F1"
+     },
+     {
+      "lane": 1,
+      "text": "ship",
+      "kind": "target"
+     },
+     {
+      "lane": 2,
+      "text": "ment",
+      "kind": "F9"
+     },
+     {
+      "lane": 3,
+      "text": "lah",
+      "kind": "F1"
+     }
+    ]
+   },
+   {
+    "word": "lubpentenmid",
+    "syllables": [
+     "lub",
+     "pen",
+     "ten",
+     "mid"
+    ],
+    "pos": 2,
+    "syl": "ten",
+    "weak": 0,
+    "lex": "pseudo",
+    "family": "coda",
+    "near": "F7",
+    "held_out": true,
+    "tlane": 3,
+    "options": [
+     {
+      "lane": 0,
+      "text": "li",
+      "kind": "F1"
+     },
+     {
+      "lane": 1,
+      "text": "tel",
+      "kind": "F7"
+     },
+     {
+      "lane": 2,
+      "text": "dom",
+      "kind": "F1"
+     },
+     {
+      "lane": 3,
+      "text": "ten",
+      "kind": "target"
+     }
+    ]
+   },
+   {
+    "word": "analysis",
+    "syllables": [
+     "a",
+     "nal",
+     "y",
+     "sis"
+    ],
+    "pos": 3,
+    "syl": "sis",
+    "weak": 0,
+    "lex": "word",
+    "family": "position",
+    "near": "F5",
+    "held_out": false,
+    "tlane": 0,
+    "options": [
+     {
+      "lane": 0,
+      "text": "sis",
+      "kind": "target"
+     },
+     {
+      "lane": 1,
+      "text": "bot",
+      "kind": "F1"
+     },
+     {
+      "lane": 2,
+      "text": "ber",
+      "kind": "F1"
+     },
+     {
+      "lane": 3,
+      "text": "iss",
+      "kind": "F5"
+     }
+    ]
+   },
+   {
+    "word": "insurance",
+    "syllables": [
+     "in",
+     "sur",
+     "ance"
+    ],
+    "pos": 1,
+    "syl": "sur",
+    "weak": 0,
+    "lex": "word",
+    "family": "onset",
+    "near": "F2",
+    "held_out": true,
+    "tlane": 1,
+    "options": [
+     {
+      "lane": 0,
+      "text": "mid",
+      "kind": "F1"
+     },
+     {
+      "lane": 1,
+      "text": "sur",
+      "kind": "target"
+     },
+     {
+      "lane": 2,
+      "text": "nur",
+      "kind": "F2"
+     },
+     {
+      "lane": 3,
+      "text": "ite",
+      "kind": "F1"
+     }
+    ]
+   },
+   {
+    "word": "cumrobvit",
+    "syllables": [
+     "cum",
+     "rob",
+     "vit"
+    ],
+    "pos": 2,
+    "syl": "vit",
+    "weak": 0,
+    "lex": "pseudo",
+    "family": "vowel",
+    "near": "F3",
+    "held_out": false,
+    "tlane": 3,
+    "options": [
+     {
+      "lane": 0,
+      "text": "ant",
+      "kind": "F1"
+     },
+     {
+      "lane": 1,
+      "text": "cen",
+      "kind": "F1"
+     },
+     {
+      "lane": 2,
+      "text": "vet",
+      "kind": "F3"
+     },
+     {
+      "lane": 3,
+      "text": "vit",
+      "kind": "target"
+     }
+    ]
+   },
+   {
+    "word": "parliament",
+    "syllables": [
+     "par",
+     "lia",
+     "ment"
+    ],
+    "pos": 1,
+    "syl": "lia",
+    "weak": 1,
+    "lex": "word",
+    "family": "onset",
+    "near": "F2",
+    "held_out": false,
+    "tlane": 0,
+    "options": [
+     {
+      "lane": 0,
+      "text": "lia",
+      "kind": "target"
+     },
+     {
+      "lane": 1,
+      "text": "snia",
+      "kind": "F2"
+     },
+     {
+      "lane": 2,
+      "text": "sur",
+      "kind": "F1"
+     },
+     {
+      "lane": 3,
+      "text": "pron",
+      "kind": "F1"
+     }
+    ]
+   },
+   {
+    "word": "disconnected",
+    "syllables": [
+     "dis",
+     "con",
+     "nect",
+     "ed"
+    ],
+    "pos": 0,
+    "syl": "dis",
+    "weak": 1,
+    "lex": "word",
+    "family": "affix",
+    "near": "F9",
+    "held_out": true,
+    "tlane": 2,
+    "options": [
+     {
+      "lane": 0,
+      "text": "un",
+      "kind": "F9"
+     },
+     {
+      "lane": 1,
+      "text": "ven",
+      "kind": "F1"
+     },
+     {
+      "lane": 2,
+      "text": "dis",
+      "kind": "target"
+     },
+     {
+      "lane": 3,
+      "text": "ware",
+      "kind": "F1"
+     }
+    ]
+   },
+   {
+    "word": "murtobcumnus",
+    "syllables": [
+     "mur",
+     "tob",
+     "cum",
+     "nus"
+    ],
+    "pos": 3,
+    "syl": "nus",
+    "weak": 0,
+    "lex": "pseudo",
+    "family": "position",
+    "near": "F5",
+    "held_out": true,
+    "tlane": 3,
+    "options": [
+     {
+      "lane": 0,
+      "text": "uns",
+      "kind": "F5"
+     },
+     {
+      "lane": 1,
+      "text": "phy",
+      "kind": "F1"
+     },
+     {
+      "lane": 2,
+      "text": "wel",
+      "kind": "F1"
+     },
+     {
+      "lane": 3,
+      "text": "nus",
+      "kind": "target"
+     }
+    ]
+   },
+   {
+    "word": "disappointment",
+    "syllables": [
+     "dis",
+     "ap",
+     "point",
+     "ment"
+    ],
+    "pos": 0,
+    "syl": "dis",
+    "weak": 0,
+    "lex": "word",
+    "family": "affix",
+    "near": "F9",
+    "held_out": false,
+    "tlane": 2,
+    "options": [
+     {
+      "lane": 0,
+      "text": "mis",
+      "kind": "F9"
+     },
+     {
+      "lane": 1,
+      "text": "bath",
+      "kind": "F1"
+     },
+     {
+      "lane": 2,
+      "text": "dis",
+      "kind": "target"
+     },
+     {
+      "lane": 3,
+      "text": "cean",
+      "kind": "F1"
+     }
+    ]
+   },
+   {
+    "word": "resistance",
+    "syllables": [
+     "re",
+     "sist",
+     "ance"
+    ],
+    "pos": 1,
+    "syl": "sist",
+    "weak": 0,
+    "lex": "word",
+    "family": "coda",
+    "near": "F7",
+    "held_out": false,
+    "tlane": 1,
+    "options": [
+     {
+      "lane": 0,
+      "text": "six",
+      "kind": "F7"
+     },
+     {
+      "lane": 1,
+      "text": "sist",
+      "kind": "target"
+     },
+     {
+      "lane": 2,
+      "text": "ture",
+      "kind": "F1"
+     },
+     {
+      "lane": 3,
+      "text": "bas",
+      "kind": "F1"
+     }
+    ]
+   },
+   {
+    "word": "melpenlan",
+    "syllables": [
+     "mel",
+     "pen",
+     "lan"
+    ],
+    "pos": 2,
+    "syl": "lan",
+    "weak": 0,
+    "lex": "pseudo",
+    "family": "onset",
+    "near": "F2",
+    "held_out": true,
+    "tlane": 0,
+    "options": [
+     {
+      "lane": 0,
+      "text": "lan",
+      "kind": "target"
+     },
+     {
+      "lane": 1,
+      "text": "bey",
+      "kind": "F1"
+     },
+     {
+      "lane": 2,
+      "text": "poo",
+      "kind": "F1"
+     },
+     {
+      "lane": 3,
+      "text": "han",
+      "kind": "F2"
+     }
+    ]
+   },
+   {
+    "word": "embarrassment",
+    "syllables": [
+     "em",
+     "bar",
+     "rass",
+     "ment"
+    ],
+    "pos": 3,
+    "syl": "ment",
+    "weak": 1,
+    "lex": "word",
+    "family": "coda",
+    "near": "F7",
+    "held_out": true,
+    "tlane": 0,
+    "options": [
+     {
+      "lane": 0,
+      "text": "ment",
+      "kind": "target"
+     },
+     {
+      "lane": 1,
+      "text": "mert",
+      "kind": "F7"
+     },
+     {
+      "lane": 2,
+      "text": "sil",
+      "kind": "F1"
+     },
+     {
+      "lane": 3,
+      "text": "proof",
+      "kind": "F1"
+     }
+    ]
+   },
+   {
+    "word": "category",
+    "syllables": [
+     "cat",
+     "e",
+     "go",
+     "ry"
+    ],
+    "pos": 3,
+    "syl": "ry",
+    "weak": 1,
+    "lex": "word",
+    "family": "onset",
+    "near": "F2",
+    "held_out": false,
+    "tlane": 3,
+    "options": [
+     {
+      "lane": 0,
+      "text": "son",
+      "kind": "F1"
+     },
+     {
+      "lane": 1,
+      "text": "dry",
+      "kind": "F2"
+     },
+     {
+      "lane": 2,
+      "text": "tak",
+      "kind": "F1"
+     },
+     {
+      "lane": 3,
+      "text": "ry",
+      "kind": "target"
+     }
+    ]
+   },
+   {
+    "word": "landapvitrum",
+    "syllables": [
+     "lan",
+     "dap",
+     "vit",
+     "rum"
+    ],
+    "pos": 3,
+    "syl": "rum",
+    "weak": 0,
+    "lex": "pseudo",
+    "family": "position",
+    "near": "F5",
+    "held_out": false,
+    "tlane": 1,
+    "options": [
+     {
+      "lane": 0,
+      "text": "urm",
+      "kind": "F5"
+     },
+     {
+      "lane": 1,
+      "text": "rum",
+      "kind": "target"
+     },
+     {
+      "lane": 2,
+      "text": "hood",
+      "kind": "F1"
+     },
+     {
+      "lane": 3,
+      "text": "pot",
+      "kind": "F1"
+     }
+    ]
+   },
+   {
+    "word": "disadvantage",
+    "syllables": [
+     "dis",
+     "ad",
+     "van",
+     "tage"
+    ],
+    "pos": 0,
+    "syl": "dis",
+    "weak": 0,
+    "lex": "word",
+    "family": "affix",
+    "near": "F9",
+    "held_out": true,
+    "tlane": 2,
+    "options": [
+     {
+      "lane": 0,
+      "text": "tab",
+      "kind": "F1"
+     },
+     {
+      "lane": 1,
+      "text": "un",
+      "kind": "F9"
+     },
+     {
+      "lane": 2,
+      "text": "dis",
+      "kind": "target"
+     },
+     {
+      "lane": 3,
+      "text": "boo",
+      "kind": "F1"
+     }
+    ]
+   },
+   {
+    "word": "psychology",
+    "syllables": [
+     "psy",
+     "chol",
+     "o",
+     "gy"
+    ],
+    "pos": 0,
+    "syl": "psy",
+    "weak": 0,
+    "lex": "word",
+    "family": "vowel",
+    "near": "F3",
+    "held_out": true,
+    "tlane": 3,
+    "options": [
+     {
+      "lane": 0,
+      "text": "ware",
+      "kind": "F1"
+     },
+     {
+      "lane": 1,
+      "text": "scis",
+      "kind": "F1"
+     },
+     {
+      "lane": 2,
+      "text": "psi",
+      "kind": "F3"
+     },
+     {
+      "lane": 3,
+      "text": "psy",
+      "kind": "target"
+     }
+    ]
+   },
+   {
+    "word": "inconsistent",
+    "syllables": [
+     "in",
+     "con",
+     "sis",
+     "tent"
+    ],
+    "pos": 0,
+    "syl": "in",
+    "weak": 1,
+    "lex": "word",
+    "family": "position",
+    "near": "F5",
+    "held_out": true,
+    "tlane": 2,
+    "options": [
+     {
+      "lane": 0,
+      "text": "er",
+      "kind": "F1"
+     },
+     {
+      "lane": 1,
+      "text": "ni",
+      "kind": "F5"
+     },
+     {
+      "lane": 2,
+      "text": "in",
+      "kind": "target"
+     },
+     {
+      "lane": 3,
+      "text": "ny",
+      "kind": "F1"
+     }
+    ]
+   },
+   {
+    "word": "literature",
+    "syllables": [
+     "lit",
+     "er",
+     "a",
+     "ture"
+    ],
+    "pos": 0,
+    "syl": "lit",
+    "weak": 0,
+    "lex": "word",
+    "family": "vowel",
+    "near": "F3",
+    "held_out": false,
+    "tlane": 1,
+    "options": [
+     {
+      "lane": 0,
+      "text": "thu",
+      "kind": "F1"
+     },
+     {
+      "lane": 1,
+      "text": "lit",
+      "kind": "target"
+     },
+     {
+      "lane": 2,
+      "text": "lot",
+      "kind": "F3"
+     },
+     {
+      "lane": 3,
+      "text": "tom",
+      "kind": "F1"
+     }
+    ]
+   },
+   {
+    "word": "significant",
+    "syllables": [
+     "sig",
+     "nif",
+     "i",
+     "cant"
+    ],
+    "pos": 1,
+    "syl": "nif",
+    "weak": 0,
+    "lex": "word",
+    "family": "onset",
+    "near": "F2",
+    "held_out": true,
+    "tlane": 0,
+    "options": [
+     {
+      "lane": 0,
+      "text": "nif",
+      "kind": "target"
+     },
+     {
+      "lane": 1,
+      "text": "cif",
+      "kind": "F2"
+     },
+     {
+      "lane": 2,
+      "text": "rar",
+      "kind": "F1"
+     },
+     {
+      "lane": 3,
+      "text": "doo",
+      "kind": "F1"
+     }
+    ]
+   },
+   {
+    "word": "dolkemdapbit",
+    "syllables": [
+     "dol",
+     "kem",
+     "dap",
+     "bit"
+    ],
+    "pos": 1,
+    "syl": "kem",
+    "weak": 0,
+    "lex": "pseudo",
+    "family": "coda",
+    "near": "F7",
+    "held_out": false,
+    "tlane": 3,
+    "options": [
+     {
+      "lane": 0,
+      "text": "tant",
+      "kind": "F1"
+     },
+     {
+      "lane": 1,
+      "text": "kent",
+      "kind": "F7"
+     },
+     {
+      "lane": 2,
+      "text": "doo",
+      "kind": "F1"
+     },
+     {
+      "lane": 3,
+      "text": "kem",
+      "kind": "target"
+     }
+    ]
+   },
+   {
+    "word": "awareness",
+    "syllables": [
+     "a",
+     "ware",
+     "ness"
+    ],
+    "pos": 2,
+    "syl": "ness",
+    "weak": 1,
+    "lex": "word",
+    "family": "affix",
+    "near": "F9",
+    "held_out": false,
+    "tlane": 1,
+    "options": [
+     {
+      "lane": 0,
+      "text": "buck",
+      "kind": "F1"
+     },
+     {
+      "lane": 1,
+      "text": "ness",
+      "kind": "target"
+     },
+     {
+      "lane": 2,
+      "text": "six",
+      "kind": "F1"
+     },
+     {
+      "lane": 3,
+      "text": "ment",
+      "kind": "F9"
+     }
+    ]
+   },
+   {
+    "word": "security",
+    "syllables": [
+     "se",
+     "cu",
+     "ri",
+     "ty"
+    ],
+    "pos": 3,
+    "syl": "ty",
+    "weak": 1,
+    "lex": "word",
+    "family": "coda",
+    "near": "F7",
+    "held_out": true,
+    "tlane": 0,
+    "options": [
+     {
+      "lane": 0,
+      "text": "ty",
+      "kind": "target"
+     },
+     {
+      "lane": 1,
+      "text": "jor",
+      "kind": "F1"
+     },
+     {
+      "lane": 2,
+      "text": "tynt",
+      "kind": "F7"
+     },
+     {
+      "lane": 3,
+      "text": "cal",
+      "kind": "F1"
+     }
+    ]
+   },
+   {
+    "word": "defensive",
+    "syllables": [
+     "de",
+     "fen",
+     "sive"
+    ],
+    "pos": 0,
+    "syl": "de",
+    "weak": 1,
+    "lex": "word",
+    "family": "position",
+    "near": "F5",
+    "held_out": false,
+    "tlane": 2,
+    "options": [
+     {
+      "lane": 0,
+      "text": "vil",
+      "kind": "F1"
+     },
+     {
+      "lane": 1,
+      "text": "ed",
+      "kind": "F5"
+     },
+     {
+      "lane": 2,
+      "text": "de",
+      "kind": "target"
+     },
+     {
+      "lane": 3,
+      "text": "mom",
+      "kind": "F1"
+     }
+    ]
+   },
+   {
+    "word": "existence",
+    "syllables": [
+     "ex",
+     "is",
+     "tence"
+    ],
+    "pos": 0,
+    "syl": "ex",
+    "weak": 0,
+    "lex": "word",
+    "family": "vowel",
+    "near": "F3",
+    "held_out": true,
+    "tlane": 2,
+    "options": [
+     {
+      "lane": 0,
+      "text": "duc",
+      "kind": "F1"
+     },
+     {
+      "lane": 1,
+      "text": "pos",
+      "kind": "F1"
+     },
+     {
+      "lane": 2,
+      "text": "ex",
+      "kind": "target"
+     },
+     {
+      "lane": 3,
+      "text": "ox",
+      "kind": "F3"
+     }
+    ]
+   }
+  ]
+ }
+}

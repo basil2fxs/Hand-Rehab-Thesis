@@ -291,6 +291,9 @@ class TheBlend(unittest.TestCase):
             cfg.data["audio"]["enabled"] = False
             cfg.data["syllables"]["age_band"] = "6-9"
             cfg.data["syllables"]["speech"]["backend"] = "off"
+            # The blend belongs to the training words, not the probe
+            # that opens the sitting.
+            cfg.data["syllables"]["probe"] = False
             clock = [100.0]
             with patch.object(time, "perf_counter", lambda: clock[0]):
                 eng = GameEngine(cfg, KeyboardOnlySource())

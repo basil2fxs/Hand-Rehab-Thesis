@@ -238,6 +238,9 @@ class DropVoidTests(unittest.TestCase):
                 cfg.data["report"] = {"enabled": False}
                 cfg.data["syllables"]["speech"] = {"backend": "off"}
                 cfg.data["syllables"]["words_per_block"] = 2
+                # The fixed probe that opens the sitting is not what
+                # this test is about.
+                cfg.data["syllables"]["probe"] = False
                 cfg.data["syllables"]["break_s"] = 0
                 cfg.data["syllables"]["seed"] = 21
                 eng = GameEngine(cfg, KeyboardOnlySource())

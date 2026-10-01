@@ -4851,6 +4851,10 @@ class GameEngine:
                          or "auto"),
             age=getattr(self.session, "age", ""),
             sections=bool(self.cfg.get("syllables.sections", True)),
+            # The fixed probe that opens the case sitting
+            # (syllables.py, PROBE).
+            probe=bool(self.cfg.get("syllables.probe", True)),
+            probe_only=bool(self.cfg.get("syllables.probe_only", False)),
         )
         self._begin_block("syllables")
         # The seed shaped this block's word order, so it lives next to

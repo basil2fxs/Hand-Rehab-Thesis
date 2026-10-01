@@ -1067,29 +1067,37 @@ class PromptTests(unittest.TestCase):
                          [0.6, 0.75, 0.9])
 
     def test_the_buzz_never_undercuts_the_childs_own_speed(self) -> None:
-        # Three sets answered right unaided at about 2.4 s: the buzz
-        # waits their median plus the 300 ms margin even on the first
-        # rung, and never past 0.9 of the fall.
+        # Three sets answered alone at about 2.4 s: the buzz waits
+        # their Kaplan-Meier median plus the 300 ms margin even on the
+        # first rung, and never past 0.9 of the fall.
         engine, mode = _build_mode()
         _run_to_choose(mode)
         fall = mode.fall_s
         self.assertAlmostEqual(mode._prompt_delay_s(), 0.6 * fall)
-        mode._answer_rts.extend([2.3, 2.4, 2.5])
+        mode._floor_obs.extend([(2.3, True), (2.4, True), (2.5, True)])
         self.assertAlmostEqual(mode._prompt_delay_s(),
                                min(max(0.6 * fall, 2.7), 0.9 * fall))
-        mode._answer_rts.extend([9.0, 9.0, 9.0])
+        mode._floor_obs.extend([(9.0, True)] * 5)
         self.assertAlmostEqual(mode._prompt_delay_s(), 0.9 * fall)
 
-    def test_only_unaided_right_answers_set_the_floor(self) -> None:
+    def test_every_set_feeds_the_floor_censored_at_the_buzz(self) -> None:
+        # A set answered after the buzz says only that the answer would
+        # have come later: it enters the floor censored at the buzz,
+        # where the old rule left it out and read the fast answers only.
         engine, mode = _build_mode()
         t = _run_to_choose(mode)
         t0, fall = mode._spawn_t, mode.fall_s
         mode._tick(t0 + 0.7 * fall)                 # prompted
         t = _answer_set(mode, t0 + 0.75 * fall, delay=0.75 * fall)
-        self.assertEqual(len(mode._answer_rts), 0)
+        self.assertEqual(len(mode._floor_obs), 1)
+        secs, answered = mode._floor_obs[-1]
+        self.assertFalse(answered)
+        self.assertAlmostEqual(secs, 0.7 * fall, delta=0.06)
         t = _wait_for_next_set(mode, t)
         _answer_set(mode, t, delay=0.4)
-        self.assertEqual(len(mode._answer_rts), 1)
+        self.assertEqual(len(mode._floor_obs), 2)
+        self.assertTrue(mode._floor_obs[-1][1])
+        self.assertAlmostEqual(mode._floor_obs[-1][0], 0.4, delta=0.06)
 
     def test_a_buzz_that_did_not_go_out_prompted_nobody(self) -> None:
         # Keyboard rig, buzzer channel off or a failed STIM: the engine

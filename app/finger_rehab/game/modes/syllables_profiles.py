@@ -57,6 +57,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+# The quick look runs 20 trials from 10 years up: with 16, 11 to 33
+# percent of simulated blocks for 10 to 15 gave no threshold (the deep
+# review of 1 October 2026).
 # Foil shares, as weights over the three foil slots of a set. F9 is the
 # morphological swap (un for dis, ment for ness), for readers old
 # enough to meet derived words. Adults get no far foils (almost nobody
@@ -92,8 +95,13 @@ class Profile:
     min_fall_s: float = 4.0
     # "rung": 3-down-1-up on first-press correctness moves the rung.
     # "fall": the rung and the foil mix stay put and only the fall time
-    # moves, 4-down-1-up (84.1 percent, Levitt 1971), +step_up after
-    # an error or a miss, -step_down after four unaided right.
+    # moves, 4-down-1-up, +step_up after an error or a miss,
+    # -step_down after four unaided right. With a down to up step ratio
+    # of 0.85 it settles near 85.8 percent correct (Garcia-Perez 1998:
+    # 0.8415 gives 85.84), not the 84.1 once quoted from Levitt 1971.
+    # In the sectioned sitting it moves on hear-and-pick sets only, so
+    # the threshold is not set by the build sets that end the sitting
+    # (the deep review of 1 October 2026).
     staircase: str = "rung"
     fall_start_s: float = 3.6
     fall_lo_s: float = 1.0
@@ -127,13 +135,19 @@ class Profile:
     speed_trials: int = 0
     read_hold_s: float = 1.5
     speed_expo_ms: int = 700
+    # The block's words when the age wants fewer than the config's
+    # (None keeps the config's). 6 to 9 plays 20: GraphoGame's
+    # developers advise 8 to 12 minute sessions for children
+    # (Richardson and Lyytinen 2014), and 30 sectioned words took 13
+    # to 14 minutes in simulation (the deep review, 1 October 2026).
+    words_per_block: int | None = None
 
 
 PROFILES: dict[str, Profile] = {
     "classic": Profile("classic"),
     "6-9": Profile("6-9", print_rungs=3, sound_lead_ms=175,
                    guard_unstressed_vowels=True,
-                   families=CHILD_FAMILIES),
+                   families=CHILD_FAMILIES, words_per_block=20),
     "10-12": Profile(
         "10-12", pools=("child", "teen"), child_bands=("B", "C"),
         pseudo_share=0.2,
@@ -142,7 +156,7 @@ PROFILES: dict[str, Profile] = {
         prompt=True, prompt_steps=(0.75, 0.9), sound_lead_ms=100,
         rewards="neutral", foil_weights=TEEN_FOILS,
         far_foils_rung1_only=True, guard_unstressed_vowels=True,
-        families=TEEN_FAMILIES, speed_trials=16, speed_expo_ms=700),
+        families=TEEN_FAMILIES, speed_trials=20, speed_expo_ms=700),
     "13-15": Profile(
         "13-15", pools=("child", "teen"), child_bands=("B", "C"),
         pseudo_share=0.2,
@@ -151,7 +165,7 @@ PROFILES: dict[str, Profile] = {
         prompt=True, prompt_steps=(0.75, 0.9), sound_lead_ms=100,
         rewards="neutral", foil_weights=TEEN_FOILS,
         far_foils_rung1_only=True, guard_unstressed_vowels=True,
-        families=TEEN_FAMILIES, speed_trials=16, speed_expo_ms=600),
+        families=TEEN_FAMILIES, speed_trials=20, speed_expo_ms=600),
     "16+": Profile(
         "16+", pools=("adult",), min_syll=3, max_syll=5, pseudo_share=0.4,
         min_fall_s=1.0, staircase="fall", print_rungs=0, model=False,
