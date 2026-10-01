@@ -63,8 +63,9 @@ notes box on the intake sheet.
       k/12 on the 45 and the minutes: amber past the length, red past its hard
       stop (18, 35, 50 or 65 minutes). The 60 plays every game twice;
       the 15 and 30 play shortened games (docs/research/trial_mode.md).
-- [ ] The first time Reaction, Rhythm, Echo, Force Pilot, Chords and
-      Buzz Hunt come up, say that game's line once before it starts.
+- [ ] The first time Reaction, Rhythm, Echo, Force Pilot, Chords, Buzz
+      Hunt and Muscle Memory come up, say that game's line once before
+      it starts.
       Order A starts Reaction as soon as the calibration ends, so say
       its line as the calibration finishes.
       Reaction: "When a finger lights up and buzzes, press that finger
@@ -86,6 +87,8 @@ notes box on the intake sheet.
       you can. Sometimes nothing buzzes: keep still. At the end the
       pads play a short pattern: when it stops, press the same fingers
       in the same order."
+      Muscle Memory: "Press each finger as it lights up, as quickly and
+      accurately as you can." Say nothing about a pattern or a riff.
 - [ ] Don't coach during a game. Let them skip a game's own rest
       (Space) only when they say they're ready.
 - [ ] Don't pause a Rhythm game. If one pauses, Retry it from the
@@ -105,8 +108,8 @@ The order comes from the code, and every game is the right hand:
 | 4 | (60 s stretch) Force Pilot | Adaptive |
 | 5 | Chords | Reaction |
 | 6 | Buzz Hunt | Rhythm |
-| 7 | Pattern | Echo |
-| 8 | Adaptive | Pattern |
+| 7 | Adaptive | Pattern |
+| 8 | Pattern | Echo |
 | rest | 3 minutes | 3 minutes |
 | 9 | Reaction | Force Pilot |
 | 10 | Rhythm | Chords |
@@ -163,6 +166,14 @@ the hub.
 - [ ] Ask the two ratings and write them down:
       "How comfortable were the pads?" 0 to 10.
       "How clear was what each game asked of you?" 0 to 10.
+- [ ] Muscle Memory check, BEFORE the debrief, for any sitting that
+      played Muscle Memory (about 2 minutes). Ask: "In Muscle Memory,
+      the game played in takes, did you notice anything about the
+      order of the lights? If so, what?" Write the answer on the
+      intake sheet. Then give them the intake sheet's 24 boxes: "Write
+      24 finger numbers, 1 for index to 4 for little, in the order you
+      think the lights came in that game. Guess where you're not
+      sure." Don't say whether there was a pattern; the debrief does.
 - [ ] End the session from the hub and confirm.
 - [ ] Check the data before they leave. On the lab PC: the strip
       shows every step done; the READY check below runs later on the

@@ -37,10 +37,13 @@ os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 # with a dyslexic participant); pass 2 is the reliability core plus
 # Rhythm, in the order pass 1 played them. Order A starts with the
 # timing work, order B with the force and vibration work.
+# Muscle Memory never follows a game that ends in sequence recall on the
+# same fingers (1 October 2026): Adaptive sits between it and Buzz Hunt
+# in order A, and it plays before Echo in order B.
 PASS1_A = ["reaction", "rhythm", "echo", "force_pilot", "chords",
-           "buzz_hunt", "pattern", "adaptive"]
+           "buzz_hunt", "adaptive", "pattern"]
 PASS1_B = ["force_pilot", "chords", "buzz_hunt", "adaptive",
-           "reaction", "rhythm", "echo", "pattern"]
+           "reaction", "rhythm", "pattern", "echo"]
 ORDER_A = PASS1_A + ["reaction", "rhythm", "force_pilot", "chords"]
 ORDER_B = PASS1_B + ["force_pilot", "chords", "reaction", "rhythm"]
 PASS2_MODES = {"reaction", "rhythm", "force_pilot", "chords"}

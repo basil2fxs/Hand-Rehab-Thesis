@@ -56,6 +56,16 @@ Rest cut short? no / yes, after ______ s
 
 Calibration redone on a finger? no / yes, which: ______
 
+## Muscle Memory check (at the end, before the debrief)
+
+Noticed anything about the order of the lights? no / yes: ______________
+
+The 24 finger numbers they wrote (1 index, 2 middle, 3 ring, 4 little):
+
+1 to 12: ___ ___ ___ ___ ___ ___ ___ ___ ___ ___ ___ ___
+
+13 to 24: ___ ___ ___ ___ ___ ___ ___ ___ ___ ___ ___ ___
+
 End time: ____ : ____
 
 Notes (board drops, skipped games and why, anything unusual):

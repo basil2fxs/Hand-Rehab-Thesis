@@ -10,8 +10,14 @@ position while a 10-item sequence repeated underneath; RT fell across
 training and swapping in a random block bounced it back up (the 327 to
 163 ms often quoted could not be read in the primary text). That
 rebound, sequence-block RT subtracted from probe-block RT, is
-the learning index used here and one of the most replicated measures
-in cognitive psychology (Robertson 2007, J Neurosci, for review). The
+the learning index used here and the standard within-subject measure
+of sequence learning (Schwarb and Schumacher 2012; Robertson 2007, J
+Neurosci, for review). Its size grows with exposure: 51 to 111 ms
+after 756 to 1,152 trials with SOC material (Abrahamse et al. 2012;
+Destrebecqz et al. 2005), 11 ms after about 420 (Stark-Inbar et al.
+2017), so the short session's probes, after 108 and 144 trained
+trials, can expect roughly 10 to 30 ms (Muscle Memory review, 1
+October 2026). The
 pattern_trial column in trials.csv carries the trained/untrained label
 for every trial, so the index falls straight out of a groupby.
 
@@ -114,15 +120,16 @@ take starts the sequence at cycle position 0 so takes align too. The
 short-session variant (pattern.short_session) is 8 takes: random,
 three trained, probe, trained, probe, trained, keeping both probes
 flanked because the flanker subtraction IS the measurement. Takes are
-48 trials, the length of the 50-trial blocks current SRTT work runs
-with a 12-item SOC (Oliveira et al. 2024), about 380 sequence trials a
-session; Nissen and Bullemer are quoted as finding learning within 4
-blocks of 100.
+48 trials in free play, near the 50-trial blocks of Oliveira et al.
+(2024), whose task was probabilistic and ran 1,000 trials a session;
+the study's short session plays 36. Nissen and Bullemer are quoted as
+finding learning within 4 blocks of 100.
 They were 60, and players found them long. Shorter takes cost a
 little precision per take, which is why the learning score is always
 read across a group and across sessions: the SRTT effect is reliable
 for a group but not for one person (split-half about .66, test-retest
-under .40; Oliveira et al. 2023).
+under .40, in studies of 380 to 3,825 trials a session; Oliveira et
+al. 2023). This block keeps about 23 RTs a take.
 
 ONE TRAINED SEQUENCE, TWO DIFFERENT PROBES. Each session's two probe
 takes play two different unfamiliar sequences from the pool, so the
@@ -194,8 +201,11 @@ trials.csv.
 WHAT THE PATIENT SEES. Takes and stars, never the word sequence:
 Boyd and Winstein (2003 Physical Therapy; 2004 Learning and Memory)
 found explicit knowledge of the sequence IMPAIRS implicit motor
-learning after stroke, so nothing on screen or in this mode's messages
-mentions that a pattern exists, probe takes render identically to
+learning after stroke (it helped their healthy controls), and the
+healthy study's construct is sequence learning with as little
+explicit help as possible, so nothing on screen or in this mode's
+messages mentions that a pattern exists, probe takes render
+identically to
 trained takes, and between-take stars reward accuracy only (3 stars at
 95 percent, 2 at 85, 1 at 70). Echo mode (echo.py) is the deliberate
 opposite: explicit memorising is the task there. Keeping the two as
@@ -203,9 +213,12 @@ separate modes keeps explicit memorising out of this one's measure;
 neither folds into the other. RT numbers are never shown. Within
 that constraint the feedback is deliberately reward-flavoured: take
 progress, a running 3-star streak across takes, and an end-of-session
-recap of stars and takes. Reward tied to performance improves
-overnight and 30-day retention of motor memories (Abe et al 2011,
-Curr Biol), and enhanced expectancies are one of the OPTIMAL theory's
+recap of stars and takes. On reward and retention the sources
+disagree: money earned for time on target kept pinch-force tracking
+gains at 6 h, 24 h and 30 days (Abe et al 2011, Curr Biol), while
+neither reward nor punishment changed retention in an SRTT or a
+force-tracking task (Steel et al 2016). Enhanced expectancies are one
+of the OPTIMAL theory's
 two levers (Wulf and Lewthwaite 2016, Psychon Bull Rev). The guard
 rail: reward accuracy and completion only, never speed, or the
 speed-accuracy trade-off contaminates the RT outcome. The engine
@@ -225,14 +238,22 @@ WHAT THIS MODE CANNOT CLAIM. Implicit sequence learning after stroke
 is demonstrated for the unaffected hand (Kal et al 2016, PLoS ONE
 meta-analysis: 69 ms mean probe rebound) but NOT for the affected
 hand (pooled effect null), so affected-side use is measurement, not
-proven therapy. A single-session rebound can be temporary adaptation
-that fades in minutes (Trofimova et al 2020, Neurobiol Learn Mem);
-only multi-session and retention data support memory claims. Nothing
-in the study checks awareness, and the study cue plays a lane tone with
-every key, so the trained sequence is also a melody (DEVIATIONS below),
-which helps serial learning (Hoffmann, Sebald and Stoecker 2001, JEP:LMC
-27:470-482) and may make it explicit: a healthy result is
-sequence-specific learning within the sitting, not implicit learning.
+proven therapy. In one session the extra gain from a long training
+block was gone at a post-test minutes later, while the sequence
+advantage itself stayed above zero, at the level reached after 60 to
+180 sequence trials, and showed no offline gain over 8 h (Trofimova
+et al 2020, Neurobiol Learn Mem); only multi-session and retention
+data support memory claims. The study cue plays a lane tone with
+every key, so the trained sequence is also a melody (DEVIATIONS
+below). Tones after the press helped serial learning (Hoffmann,
+Sebald and Stoecker 2001, JEP:LMC 27:470-482), but tones at the cue
+gave only a small late advantage under explicit instructions (Leow
+et al. 2025) and redundant cues add nothing (Abrahamse et al. 2009,
+2012), so the melody may change how learning is expressed and may make
+it explicit. Awareness is checked on paper at the end of the sitting
+(the run sheet's Muscle Memory check, 1 October 2026), and a healthy
+result is sequence-specific learning within the sitting, not implicit
+learning.
 There is
 no evidence this training transfers to untrained hand tasks. And with
 a 60 Hz display the stimulus onset is quantised to 16.7 ms, so
@@ -249,9 +270,10 @@ DEVIATIONS FROM THE RESEARCH BRIEF, where the plumbing wins:
   path; run research blocks with sound_before off, or accept the
   melody and note the cue_flags value. Either way it is logged. The
   study runs with sound_before on, so its blocks carry the melody.
-- engine.log_trial flashes the outcome tier (Perfect/Great/Good/Late)
-  like every other mode. That is a speed hint but not an RT number;
-  accepted for consistency across the suite. The Perfect tier's point
+- The shipped feedback shows no tier word per press: the lane flashes
+  green on a hit, grey on a miss and gold when the correct press lands
+  at or under 100 ms, the one speed-contingent signal left, accepted
+  for consistency across the suite. The Perfect tier's point
   value is capped down to the Good tier's (engine.begin_pattern_block
   builds a mode-specific ScoreConfig for this) because Perfect's
   sub-100 ms window is exactly ANTICIPATION_CUT_MS, the region the RT
@@ -262,12 +284,15 @@ DEVIATIONS FROM THE RESEARCH BRIEF, where the plumbing wins:
 - RT is logged for the CORRECT press (time_difference_ms), with the
   first wrong press in first_incorrect_ms, rather than first-press RT
   in one column; both are recoverable from the row.
-- Probe rotation across sessions uses a fresh per-block seed instead
-  of a persisted profile file: no cross-session state exists in this
-  app, and a random rotation cannot drift or be lost.
-- The awareness check (free generation after the final session) and
-  the retention-session schedule are protocol, run by the researcher,
-  not modes of this software.
+- Probe rotation in free play uses a fresh per-block seed instead of
+  a persisted profile file: no cross-session state exists in this
+  app, and a random rotation cannot drift or be lost. A battery block
+  takes its probes from the participant seed instead, pass 2 playing
+  the pool members pass 1 did not (1 October 2026).
+- The awareness check (an open question and a 24-press free
+  generation on paper, before the debrief) and the retention-session
+  schedule are protocol, run by the researcher, not modes of this
+  software.
 - The shipped cue defaults buzz the target finger and play the cue
   tone on every stimulus, so the RTs here are responses to an
   audio-tactile-visual cue, not a visual one. The probe-minus-flanker
@@ -313,6 +338,20 @@ log = logging.getLogger(__name__)
 
 
 # ---- sequence generation ---------------------------------------------------
+def trained_successor(cycle: list[int], a: int, b: int) -> int | None:
+    """The finger that follows the pair (a, b) in a repeating cycle, or
+    None when the pair is not in it. In a second-order conditional
+    cycle every ordered pair of different fingers occurs once, so a
+    probe trial's last two cues name exactly one trained next finger,
+    and it is never the probe's own next finger (the pool shares no
+    triplet with the trained cycle)."""
+    n = len(cycle)
+    for j in range(n):
+        if cycle[j] == a and cycle[(j + 1) % n] == b:
+            return cycle[(j + 2) % n]
+    return None
+
+
 def participant_seed(name: str) -> int:
     """Deterministic sequence seed from the participant name. Trimmed
     and case-folded so "Basil " and "basil" get the same trained
@@ -634,8 +673,12 @@ class PatternMode(WaitSkip):
                  fatigue_rest_s: float | None = None,
                  plan=None,
                  sequence_file_error: str | None = None,
-                 battery_overrides_ignored: bool = False) -> None:
+                 battery_overrides_ignored: bool = False,
+                 battery_phase: str = "") -> None:
         self.engine = engine
+        # The battery pass this block plays in ("pass1", "pass2"), or
+        # "" outside the battery; it picks the probe riffs (below).
+        self.battery_phase = str(battery_phase or "").strip().lower()
         # The lanes in play, indexed by sequence position: one hand's
         # four fingers, or with both boards connected all eight (right
         # 0..3 then left 4..7, the engine's global numbering).
@@ -704,7 +747,23 @@ class PatternMode(WaitSkip):
             self.trained, self.probes = build_sequences(
                 self.p_seed, probe_pool_size, n_lanes=self.n_fingers)
             self.cycle_len = len(self.trained)
-            self.probe_offset = self.block_rng.randrange(len(self.probes))
+            drawn = self.block_rng.randrange(len(self.probes))
+            if self.battery_phase in ("pass1", "pass2"):
+                # A battery block takes its probe riffs from the
+                # participant seed, so the 60 minute sitting's second
+                # block can play the ones the first did not: pass 1
+                # plays pool members o and o + 1, pass 2 plays o + 2 and
+                # o + 3 (with a pool of 3, the unused member first). A
+                # repeated probe is partly learnt, and the random offset
+                # repeated at least one in 3 of 4 sittings (Muscle
+                # Memory review, 1 October 2026). The block draw above
+                # is still taken so the random takes keep their stream.
+                base = random.Random(self.p_seed ^ 0x50B3).randrange(
+                    len(self.probes))
+                step = 2 if self.battery_phase == "pass2" else 0
+                self.probe_offset = (base + step) % len(self.probes)
+            else:
+                self.probe_offset = drawn
             # Bimanual cycles are twice as long, so a take runs about
             # half as many of them to keep take length inside the
             # standard 50 to 100 trial envelope (5 x 12 unilateral,
@@ -810,6 +869,12 @@ class PatternMode(WaitSkip):
         # block_stats so it is at least recoverable from metadata.json
         # even though no trial row exists for it (audit finding #12).
         self._rsi_presses: dict[int, int] = {}
+        # What those presses pressed (1 October 2026): the coming cue's
+        # finger, and on a probe take the trained riff's next finger.
+        # Pressing ahead is how sequence knowledge shows (Haider and
+        # Frensch 2009), so the analysis reads it; the task is the same.
+        self._rsi_match_next: dict[int, int] = {}
+        self._rsi_trained_next: dict[int, int] = {}
 
     # ---- layout ------------------------------------------------------------
     def _plan_random_fingers(self, n: int) -> list[int]:
@@ -1108,6 +1173,38 @@ class PatternMode(WaitSkip):
                 else EEG_CODES["stim_pattern_random"])
 
     # ---- presses -----------------------------------------------------------
+    def _note_rsi_press(self, ev: PressEvent) -> None:
+        """What a press between cues pressed: the coming cue's finger,
+        and on a probe take whether it was the trained riff's next
+        finger after the last two cues (the old sequence intruding).
+        Counted per take and written to the raw log; nothing about
+        the trial changes."""
+        seg = self.segments[self._seg_idx]
+        i = self._trial_in_seg
+        if i >= len(seg.fingers):
+            return
+        coming = self.lanes[seg.fingers[i]]
+        if ev.lane == coming:
+            self._rsi_match_next[self._seg_idx] = (
+                self._rsi_match_next.get(self._seg_idx, 0) + 1)
+        trained_next = None
+        if seg.kind == "probe" and i >= 2 and self.trained:
+            succ = trained_successor(self.trained, seg.fingers[i - 2],
+                                     seg.fingers[i - 1])
+            if succ is not None and 0 <= succ < len(self.lanes):
+                trained_next = self.lanes[succ]
+                if ev.lane == trained_next:
+                    self._rsi_trained_next[self._seg_idx] = (
+                        self._rsi_trained_next.get(self._seg_idx, 0) + 1)
+        raw = getattr(self.engine, "raw_logger", None)
+        if raw:
+            raw.queue_event(
+                "pattern_rsi_press", lane=ev.lane, t_perf=ev.t_perf,
+                detail=(f"take={seg.label};kind={seg.kind};"
+                        f"coming={coming};trained_next="
+                        f"{'' if trained_next is None else trained_next}"),
+                hand=self.engine.hand_mode)
+
     def _handle_press(self, ev: PressEvent, now: float) -> None:
         if self.phase == "rest":
             # Rests are self-paced past the floor: any finger advances.
@@ -1129,6 +1226,7 @@ class PatternMode(WaitSkip):
             # least see how often it happened.
             self._rsi_presses[self._seg_idx] = (
                 self._rsi_presses.get(self._seg_idx, 0) + 1)
+            self._note_rsi_press(ev)
             return
         self.active.keys_pressed.append(ev.lane)
         self._timeout_run = 0
@@ -1455,6 +1553,8 @@ class PatternMode(WaitSkip):
                 "kind": seg.kind,
                 "soc": seg.soc_id or None,
                 "n_rsi_presses": self._rsi_presses.get(i, 0),
+                "n_rsi_match_next": self._rsi_match_next.get(i, 0),
+                "n_rsi_trained_next": self._rsi_trained_next.get(i, 0),
                 "n_items": (self.cycle_len if seg.kind in ("seq", "probe")
                             else len(seg.fingers)),
                 "gap_ms_mean": round(sum(gaps_ms) / len(gaps_ms), 1),
@@ -1526,6 +1626,7 @@ class PatternMode(WaitSkip):
             "trained_soc": seq_str(self.trained),
             "probe_pool": [seq_str(p) for p in self.probes],
             "probe_offset": self.probe_offset,
+            "battery_phase": self.battery_phase,
             "layout": ",".join(s.kind for s in self.segments),
             "short_session": self.short_session,
             "demo": self.demo_trials is not None,

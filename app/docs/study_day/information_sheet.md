@@ -55,8 +55,9 @@ without giving a reason.
 
 ## Things to know
 
-- Some games have a hidden rule you aren't told about beforehand. I'll
-  explain them at the end.
+- Some games have a hidden rule you aren't told about beforehand. At
+  the end I'll ask a couple of quick questions about one game, then
+  explain them.
 - This is a research prototype, not a medical device, and nothing in
   the session is a health assessment.
 

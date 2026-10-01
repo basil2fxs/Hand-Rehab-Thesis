@@ -3751,6 +3751,12 @@ class GameplayScreen(Screen):
         "chords": ("Press the lit fingers together",
                    "and hold until the ring fills.",
                    "Keep the other fingers resting still on their pads."),
+        # Muscle Memory (1 October 2026): with no instruction each
+        # player picks their own speed and accuracy, which moves the
+        # learning score and P3 (Trofimova et al. 2020, Table 2). The
+        # usual SRTT line, and nothing about a pattern.
+        "pattern": ("Press each finger as it lights up,",
+                    "as quickly and accurately as you can."),
     }
 
     def _draw_target_indicator(self, surf: pygame.Surface,

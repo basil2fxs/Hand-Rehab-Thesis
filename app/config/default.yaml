@@ -943,9 +943,10 @@ pattern:
 
   # A take is 4 loops of the 12-note sequence = 48 presses, under a
   # minute. Ten takes plus the warm-up run about 10 to 18 minutes
-  # depending on the patient's pace. 48 matches the 50-trial blocks
-  # current serial reaction time studies use with a 12-item sequence
-  # (Oliveira et al. 2024), and the first loop of every take still
+  # depending on the patient's pace. 48 is near the 50-trial blocks of
+  # Oliveira et al. (2024), whose probabilistic task ran 1,000 trials a
+  # session (the study battery plays 3 loops, 36), and the first loop
+  # of every take still
   # leaves 36 presses for the take's RT mean. It was 5 loops (60),
   # which players found long. With Both hands the loops are twice as
   # long, so the mode halves this (4 -> 2 loops of 24 = 48 presses).
@@ -1965,7 +1966,10 @@ protocol:
       # Order A starts with the timing work, order B with the force
       # and vibration work. Pass 2 keeps its modes in the order pass 1
       # played them, so each mode's gap between its two blocks is as
-      # even as the order allows.
+      # even as the order allows. Muscle Memory never follows a game
+      # that ends in sequence recall on the same fingers (Buzz Hunt's
+      # span stage, Echo): Adaptive sits between them in order A and
+      # Muscle Memory plays before Echo in order B (1 October 2026).
       orders:
         A:
           - {mode: reaction, hand: right, phase: pass1}
@@ -1976,8 +1980,8 @@ protocol:
              stretch_before: true}
           - {mode: chords, hand: right, phase: pass1}
           - {mode: buzz_hunt, hand: right, phase: pass1}
-          - {mode: pattern, hand: right, phase: pass1}
           - {mode: adaptive, hand: right, phase: pass1}
+          - {mode: pattern, hand: right, phase: pass1}
           - {mode: reaction, hand: right, phase: pass2,
              rest_before: true}
           - {mode: rhythm, hand: right, phase: pass2,
@@ -1993,8 +1997,8 @@ protocol:
           - {mode: reaction, hand: right, phase: pass1}
           - {mode: rhythm, hand: right, phase: pass1,
              track: Easy_Lemon.mp3, difficulty: medium}
-          - {mode: echo, hand: right, phase: pass1}
           - {mode: pattern, hand: right, phase: pass1}
+          - {mode: echo, hand: right, phase: pass1}
           - {mode: force_pilot, hand: right, phase: pass2,
              rest_before: true}
           - {mode: chords, hand: right, phase: pass2}
@@ -2163,8 +2167,8 @@ protocol:
           - {mode: force_pilot, hand: right, phase: pass1}
           - {mode: chords, hand: right, phase: pass1}
           - {mode: buzz_hunt, hand: right, phase: pass1}
-          - {mode: pattern, hand: right, phase: pass1}
           - {mode: adaptive, hand: right, phase: pass1}
+          - {mode: pattern, hand: right, phase: pass1}
           - {mode: reaction, hand: right, phase: pass2,
              rest_before: true}
           - {mode: force_pilot, hand: right, phase: pass2}
@@ -2178,8 +2182,8 @@ protocol:
           - {mode: reaction, hand: right, phase: pass1}
           - {mode: rhythm, hand: right, phase: pass1,
              track: Easy_Lemon.mp3, difficulty: medium}
-          - {mode: echo, hand: right, phase: pass1}
           - {mode: pattern, hand: right, phase: pass1}
+          - {mode: echo, hand: right, phase: pass1}
           - {mode: force_pilot, hand: right, phase: pass2,
              rest_before: true}
           - {mode: chords, hand: right, phase: pass2}
@@ -2218,8 +2222,8 @@ protocol:
              stretch_before: true}
           - {mode: chords, hand: right, phase: pass1}
           - {mode: buzz_hunt, hand: right, phase: pass1}
-          - {mode: pattern, hand: right, phase: pass1}
           - {mode: adaptive, hand: right, phase: pass1}
+          - {mode: pattern, hand: right, phase: pass1}
           - {mode: reaction, hand: right, phase: pass2,
              rest_before: true}
           - {mode: rhythm, hand: right, phase: pass2,
@@ -2229,8 +2233,8 @@ protocol:
           - {mode: echo, hand: right, phase: pass2,
              stretch_before: true}
           - {mode: buzz_hunt, hand: right, phase: pass2}
-          - {mode: pattern, hand: right, phase: pass2}
           - {mode: adaptive, hand: right, phase: pass2}
+          - {mode: pattern, hand: right, phase: pass2}
         B:
           - {mode: force_pilot, hand: right, phase: pass1}
           - {mode: chords, hand: right, phase: pass1,
@@ -2240,8 +2244,8 @@ protocol:
           - {mode: reaction, hand: right, phase: pass1}
           - {mode: rhythm, hand: right, phase: pass1,
              track: Easy_Lemon.mp3, difficulty: medium}
-          - {mode: echo, hand: right, phase: pass1}
           - {mode: pattern, hand: right, phase: pass1}
+          - {mode: echo, hand: right, phase: pass1}
           - {mode: force_pilot, hand: right, phase: pass2,
              rest_before: true}
           - {mode: chords, hand: right, phase: pass2}
@@ -2251,8 +2255,8 @@ protocol:
           - {mode: buzz_hunt, hand: right, phase: pass2,
              stretch_before: true}
           - {mode: adaptive, hand: right, phase: pass2}
-          - {mode: echo, hand: right, phase: pass2}
           - {mode: pattern, hand: right, phase: pass2}
+          - {mode: echo, hand: right, phase: pass2}
       cells:
         1: {order: A}
         2: {order: B}

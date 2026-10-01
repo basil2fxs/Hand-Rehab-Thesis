@@ -4675,6 +4675,10 @@ class GameEngine:
                                  else None),
             battery_overrides_ignored=(plan is not None
                                        and self._battery is not None),
+            # The pass picks the probe riffs, so the 60 minute
+            # sitting's second block plays the ones the first did not.
+            battery_phase=(getattr(self, "_current_phase", "") or ""
+                           if self._battery is not None else ""),
         )
         self._begin_block("pattern")
         # Both seeds shaped this block's material, so they live next to

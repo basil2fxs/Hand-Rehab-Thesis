@@ -18,16 +18,16 @@ Minutes are measured through the real engine with a model participant.
 |---|---|---|---|
 | Reaction | 20 trials, 2.4 min | 12 trials, 1.3 min | Not expected: it is the control, so its change is warm-up |
 | Rhythm | the song, 2.1 min | the same | A second go |
-| Echo | best of 2 games, 3.1 min | 1 game, 1.5 min | A second go; inside a block the span grows by design |
+| Echo | 2 games read by their mean, 3.1 min | 1 game, 1.5 min | A second go; inside a block the span grows by design |
 | Force Pilot | 12 waves, 3.5 min | 6 waves, 1.9 min | A second go; Storm against Uncharted separates learning these waves from getting used to the pad |
 | Chords | 40 chords, 2.7 min | 20 chords, 1.1 min | Inside the block (full only), and a second go |
-| Buzz Hunt | 16 + 4 trials, 2.6 min | 8 + 2 trials, 1.4 min | Inside the block, and a second go |
+| Buzz Hunt | 16 + 3 catch + 4 trials, 2.8 min | 8 + 2 catch + 2 trials, 1.5 min | Inside the block, and a second go |
 | Muscle Memory | 296 presses, 6.3 min | 204 presses, 4.9 min | Inside the block (P1), and a second go (P2) |
 | Adaptive | 40 trials, 0.5 min | the same | A second go: the pace reached |
 
 The short Force Pilot flies six waves the mode file names: Tide, Stairs, Hills, Dunes, Storm and Uncharted. They keep a ramp and hold, the steps, the fast release, and the learned-against-novel pair. The config can switch between the two ladders but cannot list levels.
 
-What shortening costs: fewer trials make each block noisier, Chords needs its full two halves for its inside-the-block reading, and Echo loses its best-of-two.
+What shortening costs: fewer trials make each block noisier, Chords needs its full two halves for its inside-the-block reading, and Echo loses its second game.
 
 Fixed costs: 5 minutes for login, seating and calibration, 10 seconds between games, and a 2 or 3 minute rest before the second goes.
 
@@ -54,11 +54,11 @@ The shipped config, eight sittings on each of six codes, both orders, two left-h
 | Length | Medians, min | Range, min | Past the length | Hard stop |
 |---|---|---|---|---|
 | 15 | 14.4 to 14.8 | 14.0 to 15.3 | 4 of 48, by 17 s at most | 18 |
-| 30 | 28.0 to 28.5 | 27.7 to 29.3 | 0 | 35 |
+| 30 | 28.4 to 28.7 | 28.0 to 29.4 | 0 | 35 |
 | 45 | 44.4 to 44.9 | 43.8 to 45.6 | 10 of 48, by 33 s at most | 50 |
-| 60 | 58.3 to 58.7 | 57.8 to 59.5 | 0 | 65 |
+| 60 | 58.5 to 58.9 | 57.5 to 59.7 | 0 | 65 |
 
-The 45 was re-timed on 1 October 2026 after Buzz Hunt took a third catch trial, about 6 s a block. The games draw fresh material every block, so no two sittings take the same time. A second batch of the same settings moved a code's median by up to half a minute (the 45 came out at 44.2 to 44.4, one sitting past by 11 s; the 15 at 14.4 to 14.8, eight past by 15 s at most), so plan on the ranges.
+The 30, 45 and 60 were re-timed on 1 October 2026 after Buzz Hunt took a third catch trial, about 6 s a block. The games draw fresh material every block, so no two sittings take the same time. A second batch of the same settings moved a code's median by up to half a minute (the 45 came out at 44.2 to 44.4, one sitting past by 11 s; the 15 at 14.4 to 14.8, eight past by 15 s at most), so plan on the ranges.
 
 A real sitting adds questions and slower changeovers, about 3 minutes on the 45. The EEG lab's sitting, the same order with the lab's Reaction task in place of both Reaction blocks and no Muscle Memory, times at a median of 48.1 minutes over 12 sittings.
 

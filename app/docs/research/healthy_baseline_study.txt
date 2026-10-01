@@ -160,8 +160,24 @@ HOW THE DESIGN GOT HERE (every change made before any participant):
     in Reaction. The stage card and the run sheet ask for speed and
     say to keep still when nothing buzzes (Basil, 1 October 2026; the
     span start, the points and the unmasked motor sound stay as they
-    are). The text below is corrected where the reviews found a claim
-    the evidence contradicts.
+    are). Muscle Memory after it. The short session's probes come
+    after 108 and 144 trained trials, a fifth to a tenth of the
+    designs that report 51 to 111 ms, so roughly 10 to 30 ms is the
+    expectation, and at n = 10 P1 passes 24 to 44 percent of the time
+    at a true 10 ms. Nothing measured awareness, while the 500 ms
+    gaps, the probes, the melody and the sequence-recall game played
+    straight before it in both orders all favour it. Now a paper
+    check runs before the debrief: an open question and 24 finger
+    numbers written down, scored against chance as three-finger
+    groups (Section 5). Muscle Memory no longer follows Buzz Hunt or
+    Echo: Adaptive sits between them in order A, and Muscle Memory
+    plays before Echo in order B. The 60 minute sitting's second block
+    plays the probe riffs the first did not. The GET READY card and
+    the run sheet give the usual line: press each finger as it lights
+    up, as quickly and accurately as you can (Basil, 1 October 2026;
+    the gold flash at or under 100 ms stays). The text below is
+    corrected where the reviews found a claim the evidence
+    contradicts.
 
 What one board costs, and the thesis says it in the same breath as
 the results:
@@ -408,38 +424,66 @@ dropped.
 Known effects to reproduce:
   P1 Positive learning score in the block (cohort mean above
      zero).
-     The probe rebound is one of the most replicated effects in
-     cognitive psychology (Nissen and Bullemer 1987; their 327 to
-     163 ms could not be read in the primary text). Kal et al. 2016's
-     69 ms is the unaffected hand after stroke, not a healthy
-     figure (corrected 30 September 2026). With the short form's
-     smaller exposure expect tens of ms. The study cue plays a lane
-     tone with every key, so the trained sequence is also a melody,
-     which helps serial learning (Hoffmann 2001) and may make it
-     explicit; nothing checks awareness, so the result is called
-     sequence-specific learning within the sitting, not implicit
-     learning.
-  P2 DROPPED. It needed the pattern block played a second time, a
-     larger learning score on the second go and a trained-take RT
-     below the first block's. One pass means one pattern block, so
-     this study has no retention probe of any kind. Even when it
-     was in, the claim was modest: end-of-practice performance and
-     learning that survives a night are different things (Kantak
-     and Winstein 2012).
-  P3 Accuracy drops on probe takes (rebound above zero).
+     The probe rebound is the standard within-subject measure of
+     sequence learning (Schwarb and Schumacher 2012; Robertson 2007;
+     Nissen and Bullemer 1987, whose 327 to 163 ms could not be read
+     in the primary text). Kal et al. 2016's 69 ms is the unaffected
+     hand after stroke, not a healthy figure (corrected 30 September
+     2026). Healthy SOC designs report 51 to 111 ms after 756 to
+     1,152 trials (Abrahamse et al. 2012; Destrebecqz et al. 2005)
+     and 11 ms after about 420 (Stark-Inbar et al. 2017); the short
+     form's probes follow 108 and 144 trained trials, so expect
+     roughly 10 to 30 ms. At n = 10, P1 passes 24 to 44 percent of
+     the time at a true 10 ms and 69 to 96 percent at 20 ms
+     (simulation, 1 October 2026). The study cue plays a lane tone
+     with every key, so the trained sequence is also a melody; tones
+     at the cue gave only a small late advantage under explicit
+     instructions (Leow et al. 2025) and redundant cues add nothing
+     (Abrahamse et al. 2009, 2012), so the melody may change how
+     learning is expressed and may make it explicit. A paper
+     awareness check runs before the debrief (Section 5), and the
+     result is called sequence-specific learning within the
+     sitting, not implicit learning.
+  P2 A larger learning score on the second go, in the 60 minute
+     sitting only (Section 4.6): the 45 plays the block once. The
+     second block plays the probe riffs the first did not (1 October
+     2026), since a repeated probe is partly learnt. No offline gain
+     is expected about 22 minutes on (Robertson et al. 2004), so a
+     similar or slightly larger score is the likely result, and a
+     lower one fits interference from the sequence games between
+     the blocks as well as temporary adaptation. Even then the claim
+     is modest: end-of-practice performance and learning that
+     survives a night are different things (Kantak and Winstein
+     2012).
+  P3 Accuracy drops on probe takes (rebound above zero). At n = 10
+     it passes 36 percent of the time for a 2-point drop
+     (simulation), so the notebook sets an RT-free reading beside it
+     (P3i, exploratory): wrong presses on probes that land on the
+     trained riff's next finger after the last two cues, against the
+     1/3 a random wrong finger gives and the random take's own share.
 Reliability class: POOR for the individual learning score, and this
 must be said in the thesis before the data comes in. The 2023
 meta-analysis of SRTT test-retest correlations pooled r = 0.28 (95
 percent CI 0.16 to 0.40; Oliveira, Hayiou-Thomas and Henderson
 2023, Royal Society Open Science), with no moderator rescuing it.
 The group-level effect is reliable; the individual score is not a
-trait. Neither number is computed here (Section 4.5); the
+trait. The pooled studies ran 380 to 3,825 trials a session, and
+this block keeps about 23 RTs a take, so its within-block
+consistency sits lower (a true value near 0.25 to 0.72 in
+simulation); a split-half stratified by take and cycle position
+prints in the internal-consistency chapter (Pronk et al. 2022). The
 prediction stands for whoever runs the test-retest study, and it
 says to expect a low ICC and to give the learning score no MDC.
-Claim limits: dominant hand only, so no asymmetry. Single-session
-rebounds can be temporary adaptation (Trofimova 2020 in
-pattern.py); P2 is the memory claim. Never tell participants a
-sequence exists (Boyd and Winstein, in pattern.py).
+Claim limits: dominant hand only, so no asymmetry. In one session
+the extra gain from a long training block faded minutes later while
+the sequence advantage held, at the level reached after 60 to 180
+sequence trials and without offline gain over 8 h (Trofimova et al.
+2020); a memory claim needs days. Never tell participants a
+sequence exists: explicit information hurt stroke groups and helped
+healthy controls (Boyd and Winstein 2004), and the construct here is
+sequence learning with as little explicit help as possible. Neither
+order puts Muscle Memory straight after a game that ends in
+sequence recall on the same fingers (1 October 2026).
 Riff files: a sequence file loaded on the study laptop
 (config/pattern_sequence.yaml, Settings > Data > Riff file) REPLACES the
 built-in ten-take layout and the name-seeded riff for every pattern
@@ -1384,16 +1428,20 @@ to 12 participants four to six sit in each order; order is not a
 factor anything is tested on and is reported as a description.
 
   Order A, pass 1: reaction, rhythm, echo, force pilot, chords, buzz
-  hunt, pattern, adaptive.
+  hunt, adaptive, pattern.
   Order B, pass 1: force pilot, chords, buzz hunt, adaptive,
-  reaction, rhythm, echo, pattern.
+  reaction, rhythm, pattern, echo.
+  Since 1 October 2026 pattern never follows a game that ends in
+  sequence recall on the same fingers (buzz hunt's span stage, echo),
+  which can prompt a search for the hidden riff and interfere with it
+  (Esser and Haider 2017; Leow et al. 2026).
   Pass 2, both orders: reaction, rhythm, force pilot and chords, in
   the order pass 1 played them (A: reaction, rhythm, force pilot,
   chords; B: force pilot, chords, reaction, rhythm), so each mode's
   gap between its two blocks is as even as the order allows.
 
-Pattern is the last block of pass 1 in order B and the seventh in
-order A. It is the longest single block and the one whose individual
+Pattern is the last block of pass 1 in order A and the seventh in
+order B. It is the longest single block and the one whose individual
 score is least reliable (Section 1.2). If a session runs over, pattern
 is the block to drop and log as missed.
 
@@ -2283,10 +2331,13 @@ finds them in Section 1 finds out here what happened to them:
       Pattern still has checks. The 60 minute Trial Mode sitting
       plays Muscle Memory twice, and the notebook tests P2 on
       whoever sat it (Section 2.5). Read it against Trofimova et al.
-      2020: in 53 healthy adults the sequence gain was gone minutes
-      after training, so a smaller second-go score fits temporary
-      adaptation and a larger one further gain within the sitting,
-      not consolidation.
+      2020: in 53 healthy adults the extra gain from a long training
+      block was gone minutes later, while the sequence advantage
+      held without offline gain. A lower second-go score fits
+      interference as well as temporary adaptation, and a higher one
+      is further gain within the sitting, not consolidation. Under
+      the design minimum each person's change prints as a
+      description.
   E2  echo, hidden-sequence trials more accurate than novel ones at
       matched length. DROPPED: the hidden repeat only exists under
       echo's ladder rule and the battery plays the Simon rule, so
@@ -2754,8 +2805,8 @@ CLOCK STARTS (target 45 min, hard stop 50)
      Force Pilot                    4 Adaptive
    5 Chords                         5 Reaction
    6 Buzz Hunt                      6 Rhythm, Easy_Lemon, Medium
-   7 Pattern                        7 Echo
-   8 Adaptive                       8 Pattern
+   7 Adaptive                       7 Pattern
+   8 Pattern                        8 Echo
   (REST, 3 min)                    (REST, 3 min)
   Pass 2                           Pass 2
    9 Reaction                       9 Force Pilot
@@ -2808,6 +2859,19 @@ END
       warning). Check sessions/<today>/ holds one folder per block
       played, each with trials.csv, raw.csv and metadata.json, and
       that battery.position runs 1 to 12.
+  [ ] Muscle Memory check, before the debrief, in any sitting that
+      played it (1 October 2026): ask whether they noticed anything
+      about the order of the lights, and have them write 24 finger
+      numbers (1 index to 4 little) in the order they think the
+      lights came, guessing where unsure; both go on the intake
+      sheet. The notebook scores the share of three-finger groups
+      that occur in the trained riff against each person's chance
+      (about 0.33, 95th percentile about 0.50) and the longest run
+      that follows it, never the five-in-a-row rule, which random
+      guessing meets 43 percent of the time with this material. It
+      is description: P1 is reported for everyone and again without
+      those above chance, and no awareness-learning correlation is
+      read at this n (Vadillo, Konstantinidis and Shanks 2016).
   [ ] Debrief: hidden sequences explained, questions answered,
       thanks. Say that the session shows what a
       normal hand does on the device and how performance moves

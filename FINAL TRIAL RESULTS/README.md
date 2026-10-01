@@ -12,7 +12,7 @@
 
 1. Lab PC: install `FingerRehab-Setup-Windows.exe` from the [latest release](https://github.com/basil2fxs/Hand-Rehab-Thesis/releases/latest) (EEG off), then once, board plugged in: Settings, Setup, Audio delay. Print the [study-day kit](../app/docs/study_day/README.md).
 2. Each student, with you or your teammate: consent and intake, then log in with the next code (P01 upward) and the longest SESSION their slot allows. The session then plays its games in order; follow the [run sheet](../app/docs/study_day/run_sheet.md).
-3. After each day: copy `%LOCALAPPDATA%\Programs\Finger Rehab\sessions` into `1 Healthy study/sessions`, add each code's Edinburgh LQ to its `intake_sheet.csv`, then check it: `python3 app/scripts/check_sitting.py --all --data "FINAL TRIAL RESULTS/1 Healthy study/sessions" --day <date>`.
+3. After each day: copy `%LOCALAPPDATA%\Programs\Finger Rehab\sessions` into `1 Healthy study/sessions`, add each code's intake sheet answers to `intake_sheet.csv` (the columns in `app/docs/study_day/intake_sheet_template.csv`: Edinburgh LQ, music years and the Muscle Memory check), then check it: `python3 app/scripts/check_sitting.py --all --data "FINAL TRIAL RESULTS/1 Healthy study/sessions" --day <date>`.
 
 Under 8 at 45 or 60, results are described but not tested.
 
