@@ -248,6 +248,9 @@ class OverrideTests(unittest.TestCase):
             # One frozen rung, like Reaction's and Chords' (1 October
             # 2026): the window never moves in the battery.
             "buzz_hunt.window_levels_s",
+            # A ladder bound, never a scoring rule: the battery block
+            # cannot sink below its 30 BPM start (1 October 2026).
+            "adaptive.bpm_min",
             "pattern.short_session", "pattern.soc_cycles_per_block",
             "pattern.random_block_trials",
             "rhythm.difficulty",

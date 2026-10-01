@@ -5247,6 +5247,7 @@ class GameEngine:
             start_bpm=float(self.cfg.get("adaptive.start_bpm", 30)),
             adaptive_cfg=ac,
             seed=seed,
+            carry_ms=float(self.cfg.get("adaptive.carry_ms", 150.0)),
         )
         self._begin_block("adaptive")
         # The seed shaped the whole cue stream, so it lives next to
@@ -6135,7 +6136,22 @@ class GameEngine:
                                     if bpm_max is not None else None)
             adapter = getattr(self.mode, "adapter", None) if self.mode else None
             if adapter is not None:
-                summary["bpm_final"] = round(float(adapter.bpm), 1)
+                # bpm_final is the pace of the last trial, as the
+                # notebook reads it; bpm_next is the controller's value
+                # after its last update, the pace a next trial would
+                # have had (one name used to carry both).
+                summary["bpm_next"] = round(float(adapter.bpm), 1)
+                summary["bpm_final"] = summary["bpm_next"]
+        if self.current_block == "adaptive" and self.mode is not None:
+            stats_fn = getattr(self.mode, "block_stats", None)
+            if callable(stats_fn):
+                try:
+                    summary["adaptive"] = stats_fn()
+                    last = summary["adaptive"].get("bpm_last_cue")
+                    if last is not None:
+                        summary["bpm_final"] = last
+                except Exception as e:
+                    log.warning("adaptive block stats failed: %s", e)
         # Research aggregates (per-lane stats, peak force, fatigue,
         # beat offset, asymmetry, drift, startup latency). Build them
         # defensively so a None from an early-abandoned block or a

@@ -33,9 +33,25 @@ class AdaptiveMode:
                  min_finger_share: float = 0.15,
                  start_bpm: float = 80.0,
                  adaptive_cfg: AdaptiveConfig | None = None,
-                 seed: int = 0) -> None:
+                 seed: int = 0,
+                 carry_ms: float = 150.0) -> None:
         self.engine = engine
         self.score_cfg = score_cfg
+        self.seed = seed
+        self.start_bpm = float(start_bpm)
+        # A press on the finger of the trial just closed, landing this
+        # soon after the new cue, is that trial's late answer and not a
+        # wrong finger on the new one (Adaptive review, 1 October 2026:
+        # every such press on the pilot was followed by a recovery
+        # drop, one slow response scored as two misses).
+        self.carry_ms = float(carry_ms)
+        self._prev_lane: int | None = None
+        self._late_presses = 0
+        self._anticipations = 0
+        self._recoveries = 0
+        self._bpm_trace: list[float] = []
+        self._cues = [0] * int(num_lanes)
+        self._hits = [0] * int(num_lanes)
         self.timeout = timeout_s
         # Stored for constructor-signature parity with the other cadence
         # modes (engine.begin_adaptive_block passes game.early_window_s
@@ -181,6 +197,9 @@ class AdaptiveMode:
         )
         self.seq_idx += 1
         self.last_trigger_t = now
+        self._bpm_trace.append(float(self.adapter.bpm))
+        if 0 <= lane < len(self._cues):
+            self._cues[lane] += 1
         self.engine.on_stim(lane, self.trial_counter, now)
 
     def _handle_press(self, ev: PressEvent, now: float) -> None:
@@ -200,6 +219,32 @@ class AdaptiveMode:
                 raw.queue_event(
                     "idle_press", lane=ev.lane, t_perf=ev.t_perf,
                     detail=f"trial_id={self.trial_counter}",
+                    hand=ev.hand)
+            return
+        since_ms = (ev.t_perf - self.active.stim_t_perf) * 1000.0
+        raw = getattr(self.engine, "raw_logger", None)
+        if (ev.lane != self.active.lane and ev.lane == self._prev_lane
+                and 0.0 <= since_ms < self.carry_ms):
+            # The trial just closed, answered late: logged against it,
+            # and not a wrong finger here.
+            self._late_presses += 1
+            if raw:
+                raw.queue_event(
+                    "late_press", lane=ev.lane, t_perf=ev.t_perf,
+                    detail=(f"trial_id={self.trial_counter - 1};"
+                            f"after_cue_ms={since_ms:.1f}"),
+                    hand=ev.hand)
+            return
+        if 0.0 <= since_ms < self.ANTICIPATION_MS:
+            # Under 100 ms nothing has been perceived, so the press is
+            # not a response to this cue, on any finger, as in
+            # Reaction. Logged; the trial stays open.
+            self._anticipations += 1
+            if raw:
+                raw.queue_event(
+                    "anticipation_press", lane=ev.lane, t_perf=ev.t_perf,
+                    detail=(f"trial_id={self.trial_counter};"
+                            f"after_cue_ms={since_ms:.1f}"),
                     hand=ev.hand)
             return
         self.active.keys_pressed.append(ev.lane)
@@ -308,9 +353,12 @@ class AdaptiveMode:
         # already reflects whether this was a hit or a miss. Without this
         # the system only reacted once per block (every 4 trials) which
         # felt sluggish.
-        self.adapter.record(self.active.lane, outcome.label != "Miss",
-                             rt_ms, quality=quality)
+        hit = outcome.label != "Miss"
+        lane = self.active.lane
+        self.adapter.record(lane, hit, rt_ms, quality=quality)
         self.adapter.next_bpm()
+        if hit and 0 <= lane < len(self._hits):
+            self._hits[lane] += 1
         # engine.log_trial runs _update_streak, which is what actually
         # calls adapter.enter_recovery()/exit_recovery() (3 consecutive
         # misses in, 1 hit out). Check for the transition straight
@@ -318,7 +366,21 @@ class AdaptiveMode:
         self.engine.log_trial(self.active, outcome, now)
         self.active = None
         self.completed += 1
+        self._prev_lane = lane
         now_recovery = self.adapter.in_recovery
+        if now_recovery and not self._last_recovery:
+            self._recoveries += 1
+        # The controller's state after this trial, for the analysis.
+        raw = getattr(self.engine, "raw_logger", None)
+        if raw:
+            d = dict(self.adapter.last_decision or {})
+            d.update(bpm=round(float(self.adapter.bpm), 1),
+                     recovery=int(bool(now_recovery)))
+            raw.queue_event(
+                "adaptive_state", lane=lane, t_perf=now,
+                detail=(f"trial_id={self.trial_counter};"
+                        + ";".join(f"{k}={v}" for k, v in d.items())),
+                hand=self.engine.hand_mode)
         if now_recovery != self._last_recovery:
             # enter_recovery's own docstring promises biasing "the next
             # lane pick" toward the strongest finger, and exit_recovery
@@ -329,3 +391,35 @@ class AdaptiveMode:
             # trial closing.
             self.seq_idx = len(self.sequence)
             self._last_recovery = now_recovery
+
+    def block_stats(self) -> dict:
+        """What the controller did, for metadata.json (Adaptive review,
+        1 October 2026): the pace at every cue, the peak, the steady pace
+        (the median over trials 21 to 40, where the climb is over), the
+        recoveries, the presses the scoring set aside (late answers to
+        the previous cue and presses under 100 ms), and cues and hits per
+        finger. bpm_last_cue is the pace of the last trial; bpm_next is
+        the controller's value after its last update."""
+        trace = [round(b, 1) for b in self._bpm_trace]
+        tail = sorted(trace[20:40])
+        steady = None
+        if tail:
+            mid = len(tail) // 2
+            steady = (tail[mid] if len(tail) % 2
+                      else round((tail[mid - 1] + tail[mid]) / 2.0, 1))
+        return {
+            "seed": self.seed,
+            "start_bpm": self.start_bpm,
+            "bpm_floor": float(self.adapter.cfg.bpm_min),
+            "carry_ms": self.carry_ms,
+            "bpm_trace": trace,
+            "bpm_peak": max(trace) if trace else None,
+            "steady_pace_bpm": steady,
+            "bpm_last_cue": trace[-1] if trace else None,
+            "bpm_next": round(float(self.adapter.bpm), 1),
+            "recovery_entries": self._recoveries,
+            "late_presses": self._late_presses,
+            "anticipations": self._anticipations,
+            "cues_per_finger": list(self._cues),
+            "hits_per_finger": list(self._hits),
+        }

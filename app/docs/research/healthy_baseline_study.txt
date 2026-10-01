@@ -175,9 +175,27 @@ HOW THE DESIGN GOT HERE (every change made before any participant):
     plays the probe riffs the first did not. The GET READY card and
     the run sheet give the usual line: press each finger as it lights
     up, as quickly and accurately as you can (Basil, 1 October 2026;
-    the gold flash at or under 100 ms stays). The text below is
-    corrected where the reviews found a claim the evidence
-    contradicts.
+    the gold flash at or under 100 ms stays). Adaptive after it. A
+    slow answer pressed just after the next cue landed on the new
+    trial as a wrong finger, so one late response cost two trials:
+    four of the pilot's 25 wrong presses were the previous trial's
+    finger 14 to 107 ms after a new cue, each at the top of a climb
+    and each followed by a recovery drop within four trials. Now a
+    press on the previous trial's finger in the first 150 ms after a
+    cue is logged as that trial's late answer and is not a wrong
+    finger, and no press in the first 100 ms counts as a response to
+    the cue, as in Reaction. The battery's floor is the 30 BPM start,
+    so early wrong presses cannot sink a healthy block to the 10 BPM
+    crawl one pilot block reached by trial 4. A6 cannot fail: about 15
+    climb trials of near-certain hits hold the block's hit rate above
+    0.65 unless the other 25 run under 44 percent, so it joins A5 as a
+    feasibility check. The peak overshoots the pace the hand holds by
+    about 10 BPM (simulation), so the steady pace over trials 21 to 40
+    and the hit rate over the same trials are read beside it. The GET
+    READY card and the run sheet say what the game asks (Basil, 1
+    October 2026; the band, the 30 BPM start, the 180 BPM cap and the
+    40 trials stay as they are). The text below is corrected where the
+    reviews found a claim the evidence contradicts.
 
 What one board costs, and the thesis says it in the same breath as
 the results:
@@ -711,29 +729,75 @@ value can be identical, which a test reads as "no variation" when it
 is the expected answer. Syllables stays out of the reliability and
 within-block tables.
 
-1.5 Adaptive (played once, two direction checks)
-------------------------------------------------
-The config's headless measurement had a simulated hand pressing in
-280 ms climb to bpm_max (180) and re-enter the 65 to 80 band only
-near trial 53. Real hands are slower: in five pilot blocks the pace
-peaked at 90 to 144 BPM, never at the cap, and the rolling hit rate
-entered the band at trials 21 to 33 in four of them (review of 30
-September 2026). So a healthy 40-trial block tests how the controller
-holds the band as well as how fast a hand goes; the notebook adds
-time in band, recovery entries, the first band entry after the climb
-and the window at the peak, all descriptive. No source sets the 65 to
-80 percent band: Guadagnoli and Lee (2004) give no number, and Wilson
-et al. (2019) derive about 85 percent for a class of learners. Adaptive is played once, late in
-the sitting on the dominant hand. What a healthy block can check is
-the direction of the closed loop on a real hand:
+1.5 Adaptive (played once, two feasibility checks)
+--------------------------------------------------
+The config's headless measurement had a simulated hand pressing in 280
+ms climb to bpm_max (180) and re-enter the 65 to 80 band only near
+trial 53. Real hands are slower: in five pilot blocks the pace peaked
+at 90 to 144 BPM, never at the cap, and the rolling hit rate entered
+the band after the climb at trials 22 to 34 in four of them (the
+notebook's adaptive_controller_rows on the pilot blocks; the 30
+September review gave 21 to 33). Healthy four-finger choice RT is 343
+to 388 ms (Stark-Inbar et al. 2017; Deary et al. 2011), slower than
+that player, so the cap is a guard healthy hands do not reach: 0.2
+percent of simulated healthy blocks touch it (Adaptive deep review, 1
+October 2026). A healthy 40-trial block is about 14 trials of climb
+from the 30 BPM start and 20 to 25 near the hand's limit, so it tests
+how the controller holds the band as well as how fast a hand goes. The
+notebook adds time in band (which cannot pass about 0.47 with a
+12-trial window), recovery entries, the first band entry after the
+climb and the window at the peak, all descriptive. The peak overshoots
+the pace the hand holds by about 10 BPM (simulation), so the steady
+pace (the median over trials 21 to 40), the hit rate over the same
+trials and the pace at 72.5 percent from a fixed-slope fit (Wichmann
+and Hill 2001) are read beside it.
+
+No source sets the 65 to 80 percent band. Guadagnoli and Lee (2004)
+give no number, and Hodges and Lohse (2022) argue no single percentage
+exists. Wilson et al. (2019) derive about 85 percent for binary
+classification learnt by gradient descent; one direct test with
+continuous motor error puts the optimum near 68 percent (Al-Fawakhiri
+et al. 2023, a preprint); rehabilitation controllers run at 50 to 75
+percent (Cameirao et al. 2010; Metzger et al. 2014; Taheri et al.
+2014). The band is a design choice, and a healthy block does not test
+it.
+
+Adaptive is played once, on the right hand like every block: order A
+step 7, after Buzz Hunt and before Muscle Memory, and order B step 4,
+after Buzz Hunt. The 30 and 60 minute sittings play it again in pass
+2. Three rules came with the deep review (1 October 2026, before any
+participant). The battery's floor is 30 BPM, the start pace
+(adaptive.bpm_min), so early wrong presses cannot sink a block: 8.5
+percent of simulated healthy blocks went below 30 BPM and one pilot
+block reached the 10 BPM floor by trial 4. A press on the previous
+trial's finger in the first 150 ms after a cue (adaptive.carry_ms) is
+that trial's late answer, logged as late_press and not a wrong finger:
+the shorter the gap between two choice cues, the slower the second
+response (Fischer and Plessow 2015), and in simulation recovery
+entries fall from 0.81 to 0.47 a block. A press on any finger in the
+first 100 ms is not a response to the cue; it is logged as
+anticipation_press and the trial stays open, as in Reaction. The GET
+READY card and the run sheet say: "Press the finger that lights up,
+before its bar runs out. Keep up and it speeds up; it eases off when
+you need it." Each block's metadata.json records the pace at every
+cue, the steady pace, the late presses and cues and hits per finger,
+and raw.csv carries the controller's state after every trial
+(adaptive_state).
+
+What a healthy block can check is that the closed loop runs on a real
+hand. Both checks are feasibility checks: neither can fail for a
+healthy hand.
   A5 The pace rises for a healthy hand: cohort median of bpm_rise
      (the block's top pace minus its starting pace) above zero.
   A6 While it rises, the hand stays at or above the band floor:
-     cohort median hit rate above 0.65. The controller's steps do not
-     push a healthy hand into failure inside 40 trials.
-Both are decided on the interval, like S6 and S7. bpm_max_reached,
-bpm_final and the share of the block at the cap stay descriptive, and
-adaptive stays out of the reliability and within-block tables.
+     cohort median hit rate above 0.65. About 15 climb trials of
+     near-certain hits hold the block's rate above 0.65 unless the
+     other 25 run under 44 percent (arithmetic), so A6 shows the
+     game ran, not that its steps suit the hand.
+Both are decided on the interval and carry no p value.
+bpm_max_reached, bpm_final (the last cue's pace), the steady pace, the
+share of the block at the cap and the late presses stay descriptive,
+and adaptive stays out of the reliability and within-block tables.
 
 1.6 Rhythm (one hand, one fixed track)
 --------------------------------------
@@ -1751,9 +1815,11 @@ Statistical cost of each short form:
   a within-block trend has only 20 points to sit on. If the pilot
   clock has room, this is the first rung to give back (Section 2.3).
 
-  Adaptive, one block, in pass 1: two ceiling checks (A5, A6) and no
-  within-block check, in the session so that every one-hand mode is
-  played and so the sitting changes pace. Syllables and its keys left
+  Adaptive, one block, in pass 1: two feasibility checks (A5, A6)
+  and no within-block check, in the session so that every one-hand
+  mode is played and so the sitting changes pace. The battery sets
+  adaptive.bpm_min to 30, the start pace (1 October 2026, Section
+  1.5). Syllables and its keys left
   the preset on 28 September 2026 (Section 1.4).
 
 2.5 Trial Mode: shorter and longer sittings (28 September 2026)
@@ -2368,11 +2434,13 @@ passes on the pads' own noise at the study's light presses (Section
 1.3). E1 joined them on 1 October 2026: a healthy cohort cannot fail
 it from below (Section 1.11). So did B3 (Section 1.10): no false
 alarm bounds the rate rather than measuring it. So did F3 and F4
-(Section 1.8): F3's
-margin passes a true release excess of 1 percent of max, and a
-finger held still keeps 0.54 to 1.00 of a run inside the corridor. They stay in Table 1 as registered, and the thesis reports them
-as checks that the device and the task ran as designed, not as
-findings about the hand.
+(Section 1.8): F3's margin passes a true release excess of 1 percent
+of max, and a finger held still keeps 0.54 to 1.00 of a run inside the
+corridor. So did A6 (Section 1.5): about 15 climb trials of
+near-certain hits hold the block's hit rate above 0.65 unless the
+other 25 run under 44 percent. They stay in Table 1 as registered, and
+the thesis reports them as checks that the device and the task ran as
+designed, not as findings about the hand.
 
 Five further rows are computed and printed under their own
 EXPLORATORY heading, below Table 1 and outside its family-wise
@@ -2953,7 +3021,12 @@ verified when the mode was written (see the file named):
     1971.
   echo.py: Corsi 1972; Berch 1998; Brunetti 2014; Hebb 1961;
     Couture and Tremblay 2006; Farrell Pagulayan 2006.
-  analytics/adaptive.py: Guadagnoli and Lee 2004.
+  analytics/adaptive.py, modes/adaptive.py and
+    docs/research/deep/adaptive.md: Guadagnoli and Lee 2004; Hodges
+    and Lohse 2022; Wilson 2019; Al-Fawakhiri 2023; Cameirao 2010;
+    Metzger 2014; Taheri 2014; Stark-Inbar 2017; Deary 2011;
+    Fischer and Plessow 2015; Basner and Dinges 2011; Wichmann and
+    Hill 2001.
 
 Standard statistical references not re-verified this session:
   Shrout PE, Fleiss JL (1979). Intraclass correlations: uses in

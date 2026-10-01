@@ -3757,6 +3757,13 @@ class GameplayScreen(Screen):
         # usual SRTT line, and nothing about a pattern.
         "pattern": ("Press each finger as it lights up,",
                     "as quickly and accurately as you can."),
+        # Adaptive (1 October 2026): the bar is the deadline and the
+        # pace follows the player, and nothing said so (Heitz 2014:
+        # instructions and deadlines set the speed-accuracy balance).
+        "adaptive": ("Press the finger that lights up,",
+                     "before its bar runs out.",
+                     "Keep up and it speeds up; it eases off when you "
+                     "need it."),
     }
 
     def _draw_target_indicator(self, surf: pygame.Surface,
@@ -6004,13 +6011,15 @@ class ResultsScreen(Screen):
                 or summary.get("bpm_max") is not None):
             return summary
         # Live fallback for a results view drawn before finish_block
-        # persisted the summary.
-        adapter = getattr(getattr(self.engine, "mode", None),
-                          "adapter", None)
+        # persisted the summary. bpm_final is the last cue's pace, as in
+        # the summary; the controller's own value is the next pace.
+        mode = getattr(self.engine, "mode", None)
+        adapter = getattr(mode, "adapter", None)
         if adapter is not None:
             try:
+                trace = getattr(mode, "_bpm_trace", None) or [adapter.bpm]
                 return {
-                    "bpm_final": round(float(adapter.bpm), 1),
+                    "bpm_final": round(float(trace[-1]), 1),
                     "bpm_max": getattr(self.engine, "_block_bpm_max",
                                        None),
                     "bpm_min": getattr(self.engine, "_block_bpm_min",

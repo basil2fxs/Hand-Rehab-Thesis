@@ -63,9 +63,8 @@ notes box on the intake sheet.
       k/12 on the 45 and the minutes: amber past the length, red past its hard
       stop (18, 35, 50 or 65 minutes). The 60 plays every game twice;
       the 15 and 30 play shortened games (docs/research/trial_mode.md).
-- [ ] The first time Reaction, Rhythm, Echo, Force Pilot, Chords, Buzz
-      Hunt and Muscle Memory come up, say that game's line once before
-      it starts.
+- [ ] The first time each game comes up, say its line once before it
+      starts.
       Order A starts Reaction as soon as the calibration ends, so say
       its line as the calibration finishes.
       Reaction: "When a finger lights up and buzzes, press that finger
@@ -89,6 +88,8 @@ notes box on the intake sheet.
       in the same order."
       Muscle Memory: "Press each finger as it lights up, as quickly and
       accurately as you can." Say nothing about a pattern or a riff.
+      Adaptive: "Press the finger that lights up, before its bar runs
+      out. Keep up and it speeds up; it eases off when you need it."
 - [ ] Don't coach during a game. Let them skip a game's own rest
       (Space) only when they say they're ready.
 - [ ] Don't pause a Rhythm game. If one pauses, Retry it from the

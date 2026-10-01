@@ -672,28 +672,33 @@ adaptive:
   # sees a sustained hit rate above target_high.
   start_bpm: 30
   bpm_min: 10                 # crawl mode for severe weakness (6s gap)
-  # Raised from 140 with the band-keeping fix. The cap is set by the
-  # band, not by taste: for a hand with a fast 280 ms press the hit
-  # rate only falls back into the 65-80% band once the press window
-  # shrinks near 300 ms, which is 180 BPM (window = cadence * 0.90).
-  # At 140 (window 386 ms) that hand sat at 100% hits for whole
-  # sessions, measurably outside the band the controller exists to
-  # hold. Measured on a headless 280 ms simulated player: at 140 the
-  # trailing hit rate never re-entered the band in 300 trials; at 180
-  # it settled back inside it around trial 53 (about half a minute).
-  # Real hands are slower: five pilot blocks peaked at 90 to 144 BPM,
-  # none at the cap, and four entered the band by trials 21 to 33
-  # (review of 30 September 2026).
+  # Raised from 140 with the band-keeping fix, for a headless 280 ms
+  # player: its hit rate only fell back into the 65-80% band once the
+  # window shrank near 300 ms, which is 180 BPM (window = cadence *
+  # 0.90). No healthy four-finger hand is that fast (choice RT 343 to
+  # 388 ms, Stark-Inbar et al. 2017; Deary et al. 2011): a healthy
+  # hand's 72.5 percent pace falls at about 117 to 145 BPM and 0.2
+  # percent of simulated healthy blocks touch the cap, so it is a
+  # guard healthy hands do not reach (Adaptive review, 1 October
+  # 2026). Five pilot blocks peaked at 90 to 144 BPM, none at the cap,
+  # and four entered the band after the climb at trials 22 to 34.
   bpm_max: 180
   bpm_step: 10                # base step. Scaled up when hit rate is far off.
-  target_low: 0.65            # aim for the 65-80% band around the 70% target
+  target_low: 0.65            # the 65-80% band; its centre is 72.5%
   target_high: 0.80
   weakness_bias: 2.5
-  min_trials: 2               # react after just two trials, not eight
+  min_trials: 2               # two trials in total, across fingers
   block_size: 4               # regenerate the sequence + reweight every 4 trials
   # Timeout scales with cadence so a slow pace gives more time to press.
   # timeout_s = cadence * timeout_factor.
   timeout_factor: 0.90
+  # A press on the previous trial's finger within this many ms of the
+  # next cue is that trial's late answer, logged as late_press, not a
+  # wrong finger on the new trial. Scored as a wrong finger it made one
+  # slow response two misses; every such press on the pilot preceded a
+  # recovery drop (Adaptive review, 1 October 2026). Presses under 100
+  # ms after a cue are not responses to it, as in Reaction.
+  carry_ms: 150
 
 scoring:
   # Reaction-time bands for classic + adaptive trials. The patient's
@@ -1797,8 +1802,9 @@ audio:
   # per-sound factor. All three are set from the Settings screen and
   # persist to user_settings.yaml.
   master_volume: 0.8
-  # Pre-press cue level: the metronome click in classic / adaptive (the
-  # "go" tick the patient hears before they press).
+  # Pre-press cue level: the go sound before a press. In classic and
+  # adaptive that is the cued finger's lane tone; only Rhythm's
+  # metronome plays the 2 kHz click.
   cue_volume: 1.0
   # Post-press feedback level: the hit chime + miss thunk after a press.
   feedback_volume: 1.0
@@ -2078,6 +2084,12 @@ protocol:
           fatigue_rest_s: 2.0
         game:
           total_trials: 40            # pins the adaptive block length
+        adaptive:
+          # The start pace is the floor (1 October 2026): early wrong
+          # presses dragged 8.5 percent of simulated healthy blocks
+          # below their 30 BPM start, and one pilot block reached the
+          # 10 BPM floor (a 6 s gap) by trial 4. Free play keeps 10.
+          bpm_min: 30
 
     # Trial Mode: the login's SESSION picker (protocol.trials, below).
     # Every length plays these games and only these, the study

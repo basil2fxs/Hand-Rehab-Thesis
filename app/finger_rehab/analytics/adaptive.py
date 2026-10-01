@@ -2,11 +2,17 @@
 
 Motivated by Guadagnoli & Lee's (2004) challenge-point framework, which
 argues an optimal (nominal) difficulty exists for learning but does not
-itself name a success-rate number. The 65-80% target band here is a
-design choice, not a number reported by Guadagnoli & Lee. Wilson et al.
-(2019) derive about 85% for a class of learning algorithms, and the
-FINGER robot line held success rate through robot assistance; neither
-sets this band. Two control inputs:
+itself name a success-rate number; there is no simple percentage
+(Hodges and Lohse 2022). The 65-80% target band here is a design
+choice, consistent with, not derived from, the values in use:
+rehabilitation systems run at 50 to 70 percent (Cameirao et al. 2010),
+70 percent (Metzger et al. 2014) and 75 percent (Taheri et al. 2014,
+the FINGER robot), and a continuous-motor-error extension of Wilson et
+al. puts the optimum near 68 percent (Al-Fawakhiri et al. 2023,
+preprint). Wilson et al. (2019) derive about 85 percent for binary
+classification learnt by gradient descent. Its centre is 72.5 percent,
+and over a long block the controller settles near 75 percent
+(Adaptive review, 1 October 2026). Two control inputs:
 
   - Lane weights: weak fingers get picked more often (per-lane hit-rate EMA).
   - BPM: speed up when overall hit rate is too high, slow down when too low.
@@ -78,13 +84,14 @@ class AdaptiveConfig:
     target_high: float = 0.80
     # BPM bounds and step size for the speed-up / slow-down decisions.
     # `bpm_min` 10 prevents the cadence collapsing during long recovery
-    # spirals. `bpm_max` 180 (333 ms between stimuli, press window
-    # about 300 ms) is set by the band, not by taste: the controller's
-    # one job for a high performer is to shrink the window until their
-    # hit rate falls back into 65-80 percent, and a hand with a fast
-    # 280 ms press needs the window down near 300 ms before that
-    # happens. The old cap of 140 (window 386 ms) parked such a hand
-    # at 100 percent hits forever, measurably outside the band.
+    # spirals (the study battery raises it to its 30 BPM start). `bpm_max`
+    # 180 (333 ms between stimuli, press window about 300 ms) is a guard
+    # that healthy hands do not reach: healthy four-finger choice RT is
+    # 343 to 388 ms (Stark-Inbar et al. 2017; Deary et al. 2011), the
+    # hand's 72.5 percent pace falls at about 117 to 145 BPM, and 0.2
+    # percent of simulated healthy blocks touch the cap (Adaptive review).
+    # It was raised from 140 for a headless 280 ms player, faster than
+    # any healthy four-finger hand.
     bpm_min: float = 10.0
     bpm_max: float = 180.0
     bpm_step: float = 10.0
@@ -95,12 +102,15 @@ class AdaptiveConfig:
     # everything (weight 0.1006). The floor (min_finger_share) then
     # guarantees every finger its share of the block.
     weakness_bias: float = 2.5
-    # Minimum trials per lane before its EMA influences BPM decisions.
-    # Stops single-trial noise driving an early speed-up / slow-down.
+    # Minimum trials in total, across all fingers, before the EMAs
+    # drive BPM decisions. Stops single-trial noise driving an early
+    # speed-up / slow-down.
     min_trials: int = 2
     # EMA smoothing coefficients. Higher = more reactive to recent
-    # trials; lower = more inertia. Tuned so a 4-trial run of one
-    # outcome roughly halves the gap between current EMA and target.
+    # trials; lower = more inertia. A 4-trial run of one outcome closes
+    # about a third of the gap between the current EMA and target
+    # (each finger gets about 1.3 of the 4 updates, and 0.75 to that
+    # power is 0.68).
     alpha_hit: float = 0.25
     alpha_rt: float = 0.2
     # Timeout window = (60/bpm) * timeout_factor. At 60 BPM the cadence
@@ -135,6 +145,10 @@ class AdaptiveEngine:
     # past the min_trials data-gate). Used to soften the negative rate
     # limit for the first few decisions -- see next_bpm().
     bpm_decisions: int = 0
+    # What the last next_bpm() call read and decided: the hit and
+    # quality rates, RT utilisation, the combined pressure and the BPM
+    # change, so the mode can log the controller's state per trial.
+    last_decision: dict = field(default_factory=dict)
 
     # Smallest speed-up signal next_bpm() will send while the hit rate
     # is above target_high and quality is holding up. Deliberately not
@@ -288,6 +302,7 @@ class AdaptiveEngine:
         """
         # Don't react before we have enough data to be confident.
         if sum(s.n_trials for s in self.state) < self.cfg.min_trials:
+            self.last_decision = {"gated": 1}
             return self.bpm
         self.bpm_decisions += 1
         hr = self.session_hit_rate
@@ -429,8 +444,13 @@ class AdaptiveEngine:
         if self.bpm_decisions <= 3:
             neg_clamp = step * (0.5 + 0.5 * self.bpm_decisions)
         delta = max(-neg_clamp, min(step * 1.5, delta))
+        before = self.bpm
         self.bpm = max(self.cfg.bpm_min,
                         min(self.cfg.bpm_max, self.bpm + delta))
+        self.last_decision = {"hr": round(hr, 3), "qr": round(qr, 3),
+                              "util": round(util, 3),
+                              "pressure": round(combined, 3),
+                              "delta_bpm": round(self.bpm - before, 2)}
         return self.bpm
 
     @property

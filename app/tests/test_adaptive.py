@@ -1050,7 +1050,7 @@ class RecoverySequenceRegenTests(unittest.TestCase):
         self.assertEqual(mode.seq_idx, 1,
             "only 1 of 4 pre-drawn trials should be consumed so far")
         target = mode.active.lane
-        mode._handle_press(_press(target, 0.05), now=0.05)
+        mode._handle_press(_press(target, 0.3), now=0.3)
         self.assertGreaterEqual(mode.seq_idx, len(mode.sequence),
             "entering recovery must discard whatever is left of the "
             "pre-recovery sequence so the next _fire() regenerates "
@@ -1064,7 +1064,7 @@ class RecoverySequenceRegenTests(unittest.TestCase):
         mode.seq_idx = 0
         mode._fire(now=0.0)
         target = mode.active.lane
-        mode._handle_press(_press(target, 0.05), now=0.05)
+        mode._handle_press(_press(target, 0.3), now=0.3)
         self.assertGreaterEqual(mode.seq_idx, len(mode.sequence),
             "exiting recovery must also discard the recovery-shaped "
             "sequence rather than letting it keep playing out")
@@ -1075,7 +1075,7 @@ class RecoverySequenceRegenTests(unittest.TestCase):
         mode.seq_idx = 0
         mode._fire(now=0.0)
         target = mode.active.lane
-        mode._handle_press(_press(target, 0.05), now=0.05)
+        mode._handle_press(_press(target, 0.3), now=0.3)
         self.assertEqual(mode.seq_idx, 1,
             "no recovery transition happened, so the sequence should "
             "advance normally, not get discarded")
@@ -1102,7 +1102,7 @@ class SingleNextBpmPerTrialTests(unittest.TestCase):
         for _ in range(5):  # crosses the block_size=4 regen boundary
             mode._fire(now=t)
             target = mode.active.lane
-            t += 0.05
+            t += 0.3
             mode._handle_press(_press(target, t), now=t)
             t += 0.1
         self.assertEqual(len(calls), 5,
@@ -1166,17 +1166,25 @@ class AnticipationQualityTests(unittest.TestCase):
             return orig(lane, was_hit, rt_ms, quality=quality)
         mode.adapter.record = _spy
 
+        from unittest.mock import MagicMock
+        engine.raw_logger = MagicMock()
         mode._fire(now=0.0)
         target = mode.active.lane
         mode._handle_press(_press(target, 0.060), now=0.060)  # 60ms
 
-        outcome = engine.log_trial.call_args[0][1]
-        self.assertIn(outcome.label, ("Perfect", "Great"),
-            "the classified label/score/rt_ms must stay as classify() "
-            "said -- the notebook filters sub-100ms rows itself")
-        self.assertEqual(records[0][3], 0.0,
+        # Since 1 October 2026 a press under 100 ms is not a response
+        # at all, as in Reaction: the adapter hears nothing, the trial
+        # stays open and the press is logged as an anticipation.
+        self.assertEqual(records, [],
             "a 60ms press is too fast to be a real reaction; the "
-            "adapter must not be told quality=1.0 off it")
+            "adapter must not be told anything off it")
+        self.assertIsNotNone(mode.active)
+        names = [c.args[0] for c in engine.raw_logger.queue_event.call_args_list]
+        self.assertIn("anticipation_press", names)
+        # A real answer at 150 ms then closes it at full quality.
+        mode._handle_press(_press(target, 0.15), now=0.15)
+        self.assertIsNone(mode.active)
+        self.assertEqual(records[0][3], 1.0)
 
     def test_normal_speed_press_still_feeds_full_quality(self) -> None:
         engine, mode = _mode()
