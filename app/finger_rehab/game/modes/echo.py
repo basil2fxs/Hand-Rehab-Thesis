@@ -128,9 +128,10 @@ Second, every trial row carries the ioi it actually ran at (params
 ioi_ms) and block_stats carries the whole schedule, so blocks under
 different schedules are separable and are never pooled. The floor is
 the motor's, not a psychological number: a 10 mm coin ERM of the
-class on this rig reaches full amplitude about 130 ms after current
-on and spins down for about 115 ms after current off (Precision
-Microdrives 310-103 datasheet values; latency.* in the config), so
+class on this rig reaches half amplitude about 87 ms after current
+on (100 to 140 ms on this rig by the design notes) and spins down
+for about 115 ms after current off (Precision Microdrives 310-103
+datasheet values; latency.* in the config), so
 the item must stay on long enough to reach amplitude and the next
 item must not start until the previous finger has stopped, which is
 MOTOR_CLEAR_S after the light goes off. No verified source supports

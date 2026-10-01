@@ -36,9 +36,14 @@ How it measures, with nobody at the rig:
   4. The motor, when the board is plugged in: every motor pulsed ten
      times, the buzz's sound envelope averaged over the pulses and its
      onset read where it first clears 5 SD of the averaged noise,
-     which sits at a few percent of the full buzz, the same point the
-     motor datasheets call the lag (0.08 G). Less the microphone's
-     delay it is the STIM command to motion: latency.buzzer_ms.
+     which sits at a few percent of the full buzz, near the point the
+     motor datasheets call the lag (0.08 G), though a sound threshold
+     need not match an acceleration one. Less the microphone's delay
+     it is the STIM command to the audible onset: latency.buzzer_ms.
+     When the pad is first felt is not measured here. The same pulses
+     give each motor's strongest sound frequency and its level above
+     the room, saved beside the onsets, so the four motors can be
+     compared with one another.
 
 The result is saved to config/latency_profile.yaml (per machine, never
 committed), which the game lays over default.yaml at every start and
@@ -258,6 +263,45 @@ def averaged_onset_ms(data, t0: float, cmd_times: list[float],
     return (lo + int(hit[0])) / SR * 1000.0
 
 
+def pulse_spectrum(data, t0: float, cmd_times: list[float],
+                   start_ms: float = 80.0, end_ms: float = 220.0,
+                   band_hz: tuple[float, float] = (60.0, 1000.0)
+                   ) -> dict | None:
+    """A repeated buzz's sound, over its pulses: the strongest frequency
+    inside band_hz and the level above the room just before each
+    command, in dB. The window runs from about the audible onset into
+    the coast (the firmware drives 150 ms and the motor then spins
+    down). The strongest frequency of the sound is usually the rotation
+    rate or its double, and a laptop microphone loses the low end, so
+    the numbers compare the motors with one another; they do not
+    measure the vibration a fingertip receives."""
+    import numpy as np
+    a, b = int(start_ms / 1000.0 * SR), int(end_ms / 1000.0 * SR)
+    gap = int(0.01 * SR)
+    pulses, noise = [], []
+    for tc in cmd_times:
+        i = int(round((tc - t0) * SR))
+        if i - (b - a) - gap >= 0 and i + b <= len(data):
+            pulses.append(np.asarray(data[i + a:i + b], dtype=float))
+            noise.append(np.asarray(data[i - (b - a) - gap:i - gap],
+                                    dtype=float))
+    if len(pulses) < 3:
+        return None
+    win = np.hanning(b - a)
+    nfft = 1 << int(np.ceil(np.log2(8 * (b - a))))
+    power = np.mean([np.abs(np.fft.rfft(x * win, nfft)) ** 2
+                     for x in pulses], axis=0)
+    freqs = np.fft.rfftfreq(nfft, 1.0 / SR)
+    sel = (freqs >= band_hz[0]) & (freqs <= band_hz[1])
+    if not sel.any():
+        return None
+    peak = float(freqs[sel][int(np.argmax(power[sel]))])
+    rms = float(np.sqrt(np.mean(np.square(pulses))))
+    room = float(np.sqrt(np.mean(np.square(noise)))) + 1e-12
+    return {"peak_hz": round(peak, 1),
+            "above_room_db": round(20.0 * float(np.log10(rms / room)), 1)}
+
+
 # ---- the board --------------------------------------------------------------
 class Board:
     """The hand board on its serial port, every FSR line stamped with
@@ -355,8 +399,10 @@ def run_tap(port: str | None, seconds: float, say=print) -> float | None:
     return statistics.median(diffs)
 
 
-def run_motors(port: str | None, pulses: int) -> dict[int, float]:
-    """Command-to-audible-onset per motor, to the microphone."""
+def run_motors(port: str | None, pulses: int,
+               spectra: dict | None = None) -> dict[int, float]:
+    """Command-to-audible-onset per motor, to the microphone. A dict
+    passed as spectra is filled with each motor's pulse_spectrum."""
     board = Board(port)
     board.boot()
     rec = Recorder()
@@ -374,6 +420,10 @@ def run_motors(port: str | None, pulses: int) -> dict[int, float]:
         on = averaged_onset_ms(data, anchor, times) if anchor else None
         if on is not None:
             out[ch] = on
+        if spectra is not None and anchor:
+            sp = pulse_spectrum(data, anchor, times)
+            if sp is not None:
+                spectra[ch] = sp
     return out
 
 
@@ -499,13 +549,19 @@ def measure(track: Path, port: str | None, say=print, *, takes: int = 5,
     say("Sound: the song, then a click, five times each.")
     rows = run_sound(track, takes, seconds, volume, say)
     motors: dict[int, float] = {}
+    spectra: dict[int, dict] = {}
     if use_board:
         say(f"Buzz: each finger {pulses} times.")
         try:
-            motors = run_motors(port, pulses)
+            motors = run_motors(port, pulses, spectra)
         except Exception as e:
             say(f"Buzz skipped: {e}")
     values, detail = result_values(rows, mic_ms, motors)
+    if spectra:
+        detail["motor_sound_peak_hz"] = {
+            k: v["peak_hz"] for k, v in sorted(spectra.items())}
+        detail["motor_sound_above_room_db"] = {
+            k: v["above_room_db"] for k, v in sorted(spectra.items())}
     detail["microphone_method"] = method
     detail["visual_ms"] = ("not measured here (needs a photodiode); it "
                            "moves only where the falling note is drawn, "

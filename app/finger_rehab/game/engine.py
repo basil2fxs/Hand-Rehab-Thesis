@@ -214,8 +214,9 @@ class GameEngine:
         self._across_blocks_mean_peak: list[float] = []
         # Same history split by mode. rt_ms is not one clock across the
         # battery: reaction's is a cue-to-press latency, pattern's,
-        # chords', syllables' and buzz_hunt's is spawn-to-press on a
-        # visible target. Pooling them makes the mode order look like
+        # chords' and syllables' is spawn-to-press on a visible
+        # target, and buzz_hunt's is command-to-press on a buzz with
+        # nothing visible. Pooling them makes the mode order look like
         # fatigue (a patient whose latency never moved still reported
         # +125 ms per block on pattern). The pooled list stays for the
         # Results screen; the per-mode one is what the summary's
@@ -7557,7 +7558,7 @@ class GameEngine:
     # recorded as levels the hardware never produced. On real
     # hardware the USB serial write adds a few ms each way, and the
     # ERM motor itself takes about 40 ms to start moving, 87 ms to
-    # reach full amplitude and 115 ms to stop after current off (10 mm
+    # reach half amplitude and 115 ms to stop after current off (10 mm
     # coin ERM datasheet class, Precision Microdrives 310-103; see the
     # latency block in default.yaml), which the host cannot see at
     # all. Buzz Hunt's duration staircases must

@@ -48,7 +48,9 @@ notebook analysis. No thumb.
   measurement tool." Journal of Neurophysiology 130(5):1126-1141. After median or ulnar repair,
   localisation error rises sharply in the injured territory, t(17) = 4.5, p < 0.001, including
   misreferrals where touch on one digit is felt on another digit. A per-finger confusion matrix
-  is a direct digital analogue of their measure.
+  mirrors their misreferral count; in controls misreferrals were rare and did not separate
+  patients from controls at group level, while the error in millimetres did (deep review,
+  1 October 2026).
 - STI test (Shape Texture Identification), Rosen and Lundborg's tactile gnosis instrument:
   inter-tester reliability (Rosen B 2003, British Journal of Hand Therapy, SAGE
   10.1177/175899830300800304), responsiveness vs 2PD (Rosen B, Jerosch-Herold C 2000, British

@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import logging
 import math
+import re
 import time
 from typing import TYPE_CHECKING
 
@@ -51,9 +52,9 @@ log = logging.getLogger(__name__)
 
 
 STAGE_LINES = {
-    "loc": ("One finger will buzz. Press that finger.",
-            "Hands flat on the pads. Eyes on the dot. "
-            "Sometimes nothing buzzes: then the right move is to wait."),
+    "loc": ("One finger will buzz. Press that finger as fast as you can.",
+            "Rest your fingertips on the pads and your eyes on the dot. "
+            "Sometimes nothing buzzes: then keep still."),
     "distractor": ("Two buzzes: a decoy, then the real one.",
                    "The decoy lands on the other hand first. "
                    "Press where the LAST buzz was."),
@@ -66,7 +67,38 @@ STAGE_LINES = {
 }
 
 
+def _pack(font: pygame.font.Font, pieces: list[str], max_w: int) -> list[str]:
+    """Pieces joined by spaces into lines no wider than max_w pixels
+    (a single piece wider than that keeps a line of its own)."""
+    lines: list[str] = []
+    line = ""
+    for piece in pieces:
+        trial = f"{line} {piece}" if line else piece
+        if line and font.size(trial)[0] > max_w:
+            lines.append(line)
+            line = piece
+        else:
+            line = trial
+    if line:
+        lines.append(line)
+    return lines
+
+
+def _wrap(font: pygame.font.Font, text: str, max_w: int) -> list[str]:
+    """Text into lines no wider than max_w pixels, broken at sentence
+    ends first so a line never strands a word or two, then at words
+    inside a sentence that is still too wide."""
+    sentences = re.split(r"(?<=\.) ", text)
+    out: list[str] = []
+    for line in _pack(font, sentences, max_w):
+        out += _pack(font, line.split(" "), max_w)
+    return out
+
+
 class BuzzHuntScreen(Screen):
+
+    # Side margin of the stage card's text, logical pixels.
+    CARD_MARGIN = 60
 
     # Focus point geometry, logical pixels on the 1280x800 surface.
     DOT_CX = 640
@@ -263,10 +295,22 @@ class BuzzHuntScreen(Screen):
         font = make_font(int(FONT_TITLE * 1.2), bold=True)
         t = font.render(title, True, self._accent())
         surf.blit(t, t.get_rect(center=(cx, 250)))
-        draw_text(surf, head, (cx, 350), self.theme, self.layout,
-                  pt=FONT_H2, centre=True, colour=self.theme.foreground)
-        draw_text(surf, body, (cx, 400), self.theme, self.layout,
-                  pt=FONT_BODY, centre=True, colour=self.theme.muted)
+        # A line wider than the screen wraps, so the card still reads
+        # whole at a larger font_scale.
+        max_w = self.layout.width - 2 * self.CARD_MARGIN
+        y = 350
+        step = int(FONT_H2 * 1.4 * self.layout.font_scale)
+        for line in _wrap(self.layout.font(FONT_H2), head, max_w):
+            draw_text(surf, line, (cx, y), self.theme, self.layout,
+                      pt=FONT_H2, centre=True,
+                      colour=self.theme.foreground)
+            y += step
+        y += 50 - step
+        step = int(FONT_BODY * 1.4 * self.layout.font_scale)
+        for line in _wrap(self.layout.font(FONT_BODY), body, max_w):
+            draw_text(surf, line, (cx, y), self.theme, self.layout,
+                      pt=FONT_BODY, centre=True, colour=self.theme.muted)
+            y += step
 
     # ---- announce ----------------------------------------------------------
     def _draw_status_line(self, surf: pygame.Surface, mode) -> None:

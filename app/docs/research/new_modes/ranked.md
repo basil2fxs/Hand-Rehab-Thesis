@@ -157,7 +157,9 @@ Verified anchors:
   Pure sensory training moved a motor outcome.
 
 Supporting: Weber 2023 Journal of Neurophysiology misreferral mapping
-(the confusion matrix is its digital analogue); Antonopoulos 2019
+(the confusion matrix mirrors its misreferral count, which was rare in
+healthy controls and did not separate patients from controls; deep
+review, 1 October 2026); Antonopoulos 2019
 locognosia home-training gains at 1.5 and 3 years; Auld 2014 child CP
 evidence gap; Jerosch-Herold 2016 negative RCT for post-release CTS
 sensory relearning, so for CTS this mode is measurement, not claimed

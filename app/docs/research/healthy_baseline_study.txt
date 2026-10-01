@@ -142,9 +142,26 @@ HOW THE DESIGN GOT HERE (every change made before any participant):
     pilot). The GET READY card and the run sheet say to keep the
     other fingers resting still on their pads, and the intake sheet
     asks the years spent playing a keyboard or string instrument
-    (Basil, all four recommendations, 1 October 2026). The text below
-    is corrected where the reviews found a claim the evidence
-    contradicts.
+    (Basil, all four recommendations, 1 October 2026). Buzz Hunt
+    after it. Every response window was three to nine times a
+    healthy press, so for a healthy hand the window ladder's level
+    only counted trials (a perfect responder reaches level 2 at trial
+    13 of 16 and never level 3), B5 could not fail and W5 could not
+    separate practice from window: the battery now plays one 2.0 s
+    window, as Reaction does, and B5 is DROPPED. A healthy cohort
+    expects two or three wrong-finger errors in all, and B2's 0.5 is
+    chance only when errors follow every finger equally; they follow
+    the middle and ring fingers, where a random wrong finger is a
+    neighbour two times in three. B2 is now exploratory, read against
+    the chance its stimulated fingers give, not estimable under five
+    errors and out of the Holm family. Three catch trials a person,
+    so no false alarm in 30 can bound the rate under 10 percent (20
+    gave 13.9). A same-sample tie goes to the finger that buzzed, as
+    in Reaction. The stage card and the run sheet ask for speed and
+    say to keep still when nothing buzzes (Basil, 1 October 2026; the
+    span start, the points and the unmasked motor sound stay as they
+    are). The text below is corrected where the reviews found a claim
+    the evidence contradicts.
 
 What one board costs, and the thesis says it in the same breath as
 the results:
@@ -1008,50 +1025,92 @@ localisation stage is 18 trials and every participant has a
 false-alarm rate; localisation RT runs from the frame the STIM
 command leaves the laptop (it ran from the frame before, 16.7 ms
 early at 60 Hz, against the EEG byte written at the command), and
-it is command-to-press: the motor's measured 74 ms rise is a
-constant on top, reported beside the medians and never subtracted; a
+it is command-to-press: the motors' measured command-to-sound
+delay (71 to 80 ms across the four, median 74 ms; not a rise time,
+and the felt onset is unmeasured) is a constant on top, reported
+beside the medians and never subtracted; a
 no-press trial a board drop overlapped is voided (device_drop) like
 a failed buzz; the gap threshold is reported only when the gap stage
 ran; the window level carries to a later block only after a
 completed one.
+Deep review, 1 October 2026, before any participant
+(docs/research/deep/buzz_hunt.md): the battery plays one 2.0 s
+response window (window_levels_s: [2.0], the form Reaction and
+Chords use) and three catch trials beside the 16 real ones
+(catch_rate 0.2); B2 is exploratory against the chance its
+stimulated fingers give; B5 is DROPPED; a same-sample tie goes to
+the finger that buzzed, with the other logged as a co-press; the
+stage card reads "One finger will buzz. Press that finger as fast as
+you can." over "Rest your fingertips on the pads and your eyes on
+the dot. Sometimes nothing buzzes: then keep still.", and the run
+sheet gives the block a line to say. Pressing the finger that
+buzzed is the most compatible response there is, so localisation
+here is close to a tactile reaction and not a finger gnosis test.
 Primary: loc.accuracy per hand and per lane at the fixed 150 ms
 pulse, the confusion matrix (adjacent-finger error share), catch
-false alarms (as counts: two catch trials give a rate of 0, 0.5 or 1,
-and a person's d-prime is set by that count and its correction, so
-d-prime is pooled over the cohort only), median localisation RT, the top
-response-window level reached per hand (window.<hand>.top_level,
-levels 3.0, 2.0, 1.5, 1.2 s), span max_correct and novel versus
-Hebb accuracy.
+false alarms (as counts pooled over the cohort with an exact bound;
+a person's d-prime from two or three catch trials is the count
+relabelled and is not reported), median localisation RT (from the
+rows, with the correct presses under 200 ms, before the buzz can
+have been felt, counted beside it), span max_correct and novel
+versus Hebb accuracy. In free play, the top response-window level
+reached per hand (window.<hand>.top_level, levels 3.0, 2.0, 1.5,
+1.2 s).
 2026-09 change, and why the threshold is gone: the localisation
 pulse used to run a duration staircase and every correct answer
 shortened the buzz until it could not be felt; the 40 ms floor was
 the host's, not a perceptual one, and a coin ERM has barely started
-moving when a 40 ms command ends (lag about 40 ms, rise about 87 ms,
-Precision Microdrives 310-103 class values in config latency.*). The
-pulse is now fixed at 150 ms (one firmware hold, inside the 50 to
-200 ms band Kaaresoja and Linjama 2005 found usable on a phone
-motor) and difficulty moves the response window instead: up a level
+moving when a 40 ms command ends (lag about 40 ms, rise to half
+amplitude about 87 ms, Precision Microdrives 310-103 class values in
+config latency.*). The pulse is now fixed at 150 ms (one firmware
+hold, inside the 50 to 200 ms band Kaaresoja and Linjama 2005 rated
+best on a phone motor); it does not reach full amplitude, since on
+this rig half strength comes 100 to 140 ms after the command. In
+free play difficulty moves the response window instead: up a level
 after 6 correct of the last 8 trials, down after 2 misses in the
 last 4, level stamped on every row. threshold.* in block_summary is
 empty unless buzz_hunt.duration_staircase was on for that block.
 Known effects to reproduce:
   B1 Localisation near ceiling: accuracy above 90 percent per hand
      at the 150 ms pulse.
-  B2 Errors cluster on neighbouring fingers: adjacent share of
-     errors above 0.5 (mislocalisations fall on nearer fingers,
-     Schweizer, Maier, Braun and Birbaumer 2000, Somatosensory and
-     Motor Research 17:309-316; Weber 2023 in buzz_hunt.py for the
-     misreferral map). 0.5 is exactly chance for a wrong finger
-     drawn at random on four fingers ((1/3 + 2/3 + 2/3 + 1/3) / 4),
-     so the pooled adjacent count is tested against Binomial(n, 0.5),
-     one-sided, and the row passes only above chance (27 September
-     2026; the mean share on its own passed pure guessing half the
-     time).
-  B3 Guessing priced: catch false alarms under 10 percent.
-  B4 Tactile-only span around 4 items, well below visual span
-     (ordered tactile recall of about 4 items and unordered about 5,
-     Yeganeh et al. 2026, verified 30 September 2026; buzz_hunt.py
-     and echo.py state the same ceiling). The Hebb
+  B2 Errors cluster on neighbouring fingers, EXPLORATORY since 1
+     October 2026: the pooled count of wrong-finger errors on a
+     neighbour against the chance a random wrong finger gives for
+     the finger that buzzed (1/3 after an index or little target,
+     2/3 after a middle or ring one), by an exact one-sided
+     Poisson-binomial tail, out of the Holm family; not estimable
+     under five errors, the fewest that can reach p under 0.05, and
+     everyone who played counts towards the minimum (it counted only
+     the people who made an error, which at healthy rates kept the
+     row from ever running). Mislocalisations fall on nearer fingers
+     near threshold (Schweizer, Maier, Braun and Birbaumer 2000,
+     Somatosensory and Motor Research 17:309-316); at the study's
+     suprathreshold buzz healthy misreferrals are rare, most controls
+     none to two in 90 touches and three quarters of them between the
+     middle and ring fingers (Weber et al. 2023). The registered form
+     tested the pooled share against a flat 0.5, the mean of the four
+     targets' chances (27 September 2026; the mean share on its own
+     passed pure guessing half the time); its p prints beside the
+     row. Errors with another finger on the same sample or within 50
+     ms are counted beside it.
+  B3 Guessing priced: catch false alarms under 10 percent, read on
+     the cohort mean as registered, with the pooled count and its
+     exact one-sided bound beside it (Clopper and Pearson 1934). No
+     false alarm in 20 catch trials bounds the rate only under 13.9
+     percent, in 30 under 9.5, so the battery plays three catch
+     trials a person since 1 October 2026; a pass says no false
+     alarm was seen, not that the rate was measured. Presses during
+     the wait, which restart it, are counted per trial beside it.
+  B4 Tactile-only span in a plausible band, 3 to 5 items (a
+     feasibility check). The finger task nearest it, the Tactual
+     Span, gives 5.30 items forward (SD 1.26) at 20 to 29 years over
+     eight fingers at one touch a second (Levi and Heled 2024), and
+     ordered forearm recall is 3.84 items at the 79 percent point
+     (Yeganeh et al. 2026); four fingers at 2.5 buzzes a second are
+     neither task, and finger span sits somewhat below visual and
+     digit span (5.97 and 6.13 in the same young adults), not far
+     below. The cohort reads a pooled logistic fit of a correct
+     replay on length beside it. The Hebb
      half (Hebb trials at least as accurate as novel trials) is
      DROPPED for the battery (27 September 2026): with four span
      trials the hidden sequence plays once, and a first exposure is
@@ -1059,20 +1118,27 @@ Known effects to reproduce:
      a length difference. It stands for a block with two or more
      Hebb trials. Note that four trials from length 2 cap the span
      at 5, so the band 3 to 5 cannot fail from above in the battery.
-  B5 The window ladder climbs: a healthy hand plays at level 1 (the
-     2.0 s window) or higher inside its 16 real trials per hand in
-     the battery (32 in free play). A 92 percent responder reaches
+  B5 The window ladder climbs: DROPPED from the battery on 1
+     October 2026, which plays the 2.0 s window only. Under the
+     ladder a healthy hand's level counted its trials, so the row
+     could not fail. It prints for a free-play block as a task check:
+     a healthy hand plays at level 1 (the 2.0 s window) or higher
+     inside its 16 real trials per hand (32 in free play). A 92
+     percent responder reaches
      the top in about 22 trials on the headless simulation, so 16
      trials allow one promotion and usually a second (the simulated
      cohort reached level 1 or 2); top_level counts the highest level
      a trial was played at, final_level where the ladder ended.
 Reliability class: poor for accuracy (ceiling restricts range),
-moderate for span; the top window level is an ordinal with four
-values and 16 trials per hand in the short form, so it is reported
-as a distribution and a proportion at each level, never as a mean.
-Median RT at the fixed pulse is the continuous localisation number
-and is the one an ICC would be computed on, in the study that can
-compute one.
+poor to moderate for span (max_correct from four trials, simulated
+retest ICC 0.17 to 0.50); in free play the top window level is an
+ordinal with four values, reported as a distribution and a
+proportion at each level, never as a mean. Median RT at the fixed
+pulse is the continuous localisation number and the one expected to
+be good: vibrotactile simple and choice RT retested at ICC 0.90
+(Mikkelsen et al. 2020), and a 16-trial median splits at 0.86 to
+0.94 in simulation. It is the one an ICC would be computed on, in
+the study that can compute one.
 Claim limits: ERM lag, rise and stop time are datasheet class
 values until scripts/latency_check.py has been run on this rig, so
 the gap threshold (not in the battery) is within-device only; the
@@ -1089,7 +1155,14 @@ finger of the same hand raises detection thresholds more, Tame,
 Moles and Holmes 2014), so B2 cannot show somatotopic misreferral on
 its own; the notebook grades errors by finger distance beside it.
 The motors are audible and unmasked, which can tell a listener that
-a buzz fired.
+a buzz fired, and hearing a vibration shortens finger RT a little
+(Bao et al. 2019). The little finger's motor runs at PWM duty 240 of
+255 against 200 on the other three, so its buzz is stronger and
+pitched higher, and the four motors' delays differ by up to 9 ms: a
+per-finger difference carries the motors as well as the fingers. RT
+runs from the command, about 90 to 100 ms of rig delay above a felt
+reaction, so it is not compared with a published tactile RT without
+that allowance.
 
 1.11 Echo (one 4-lane block on the right hand)
 ----------------------------------------------
@@ -1423,8 +1496,17 @@ sitting closest to the median (44.4): reaction 2.16 and 2.40, rhythm
 buzz hunt 2.66, pattern 6.27, adaptive 0.46, with the same login,
 rest, transitions and stretch as above.
 
-Read the headroom honestly: about a minute against the budget. The
-model hand is a healthy adult on a good day, so a slower participant
+Re-measured 1 October 2026, after Buzz Hunt took a third catch trial
+(about 6 s a block): 48 sittings, medians 44.4 to 44.9 minutes, range
+43.8 to 45.6; 10 of 48 ran past the 45 minute budget, by 33 s at most,
+and none came near the hard stop, so the trim ladder below is still
+untouched. Code P05, order A, the sitting closest to the median
+(44.6): reaction 2.30 and 2.38, rhythm 2.05 twice, echo 3.06, force
+pilot 3.54 twice, chords 2.64 and 2.67, buzz hunt 2.78, pattern 6.27,
+adaptive 0.46.
+
+Read the headroom honestly: about half a minute against the budget
+at the median. The model hand is a healthy adult on a good day, so a slower participant
 turns the strip amber, and amber means "into the booking's buffer"
 rather than "something has gone wrong". The hard stop at 50 is where
 the 15 minutes of consent, handedness form, hand measurements and rig
@@ -1517,7 +1599,8 @@ window or detection key can never creep in through the preset):
     distractor_trials_per_hand: 0
     span_trials: 4                # 8 in the two-visit design
     gap_trials_per_hand: 0
-    catch_rate: 0.1
+    catch_rate: 0.2               # three catch trials beside the 16
+    window_levels_s: [2.0]        # one rung: the window never moves
   pattern:
     short_session: true
     soc_cycles_per_block: 3
@@ -1566,22 +1649,21 @@ code prefix and by battery.id in every battery block's metadata, and
 "healthy control" is written on the intake sheet, not into
 metadata.json.
 
-Two ladders still move inside their own block, both deliberately and
-both reported. Buzz Hunt's response-window ladder promotes on six
-correct of the last eight, so a block that starts at the 3.0 s
-window can end below it. Echo's sequence lengthens as the
-participant succeeds. Neither is a defect: they are how those two
-modes measure. They are the reason both need special handling in the
-within-block measure (Section 4.5b), because in those two blocks a
-later trial is a harder trial. Buzz Hunt's Hebb span is seeded from
+One ladder still moves inside its own block, deliberately and
+reported: Echo's sequence lengthens as the participant succeeds.
+That is how the mode measures, and the reason it needs special
+handling in the within-block measure (Section 4.5b), because there a
+later trial is a harder trial. Buzz Hunt's response-window ladder
+moved too until 1 October 2026; the battery now plays its 2.0 s
+window only (Section 1.10). Buzz Hunt's Hebb span is seeded from
 the participant code, which with one block means every participant
 meets their repeating sequence the same number of times. Echo plays
 the Simon rule, which has no Hebb trials.
 
 Ladder freezes were checked against the code: force_pilot climbs its
-fixed 12-level wave ladder once; chords and reaction take the window
-ladder as a list and clamp the level to its length, so a one-entry
-list is a fixed window. Each is covered by a regression test through
+fixed 12-level wave ladder once; chords, reaction and buzz_hunt take
+the window ladder as a list and clamp the level to its length, so a
+one-entry list is a fixed window. Each is covered by a regression test through
 the real engine (tests/test_study_battery.py, ShortFormTests).
 
 Statistical cost of each short form:
@@ -1597,12 +1679,11 @@ Statistical cost of each short form:
   which is what makes the start-to-end comparison in Section 4.5b
   possible.
 
-  Buzz Hunt, 16 localisation trials and 4 span trials, no gap or
-  distractor stage. The window ladder allows at most one or two
-  promotions in 16 trials and the top level is censored, so the
-  notebook reports the level distribution rather than a mean. Four
+  Buzz Hunt, 16 localisation trials, 3 catch trials and 4 span
+  trials, no gap or distractor stage, one 2.0 s window. Four
   localisation trials per finger, so the confusion matrix is
-  cohort-pooled.
+  cohort-pooled, and four span trials a person, so the span is read
+  from a fit pooled over the cohort.
 
   Pattern, 36-press takes and a 32-trial random take, once. The
   first cycle of every take is trimmed by the mode's RT hygiene,
@@ -1890,10 +1971,14 @@ screen and the number in the thesis cannot drift apart.
   chords      median_er, median_span_ms, clean_hit_rate,
               over_force_rate (per hand); cross: hit_rate_mirror,
               hit_rate_nonmirror, median_lag_ms, bilateral_deficit
-  buzz_hunt   loc_accuracy, adjacent_error_share, errors_d1 to d3,
-              catch_fa_rate, catch_fa_count, d_prime (pooled reading
-              only), loc_median_rt_ms, window_top_level (0 to 3),
-              span_max_correct, hebb_minus_novel_acc;
+  buzz_hunt   loc_accuracy, wrong_finger_errors, adjacent_errors,
+              adjacent_error_share, errors_d1 to d3, loc_omissions,
+              catch_fa_rate, catch_fa_count (pooled with an exact
+              bound), early_press_rate, loc_median_rt_ms (from the
+              rows) with loc_fast_hits and the median without them,
+              window_top_level (0 to 3, free-play ladders only),
+              span_max_correct, span_item_accuracy,
+              hebb_minus_novel_acc;
               threshold_final_ms and at_floor (0/1) only for a block
               that ran the legacy duration staircase
   pattern     learning_score_ms, accuracy_rebound_pct, random_take_
@@ -2175,8 +2260,9 @@ Two tables, both decided before the data comes in.
 
 Table 1, known effects, one row per check, from Section 1, read on
 each participant's first-pass block (C3 reported, not tested, since
-1 October 2026): R1 R2 R3, P1 P3, C1 C2 C3 C4 C6,
-Rh1 Rh2, M1 M2, F1 F2 F3 F4, B1 B2 B3 B4, E1 E3, A5 A6, S6 S7. S6
+1 October 2026, and B2 moved to the exploratory rows the same day):
+R1 R2 R3, P1 P3, C1 C2 C3 C4 C6,
+Rh1 Rh2, M1 M2, F1 F2 F3 F4, B1 B3 B4, E1 E3, A5 A6, S6 S7. S6
 and S7 print as DROPPED since 28 September 2026: Syllables left the
 healthy sitting (Section 1.4). A5,
 A6, S6 and S7 were added on 23 September 2026, before any
@@ -2229,13 +2315,15 @@ takes any SD from 10 to 100 ms, B4's four trials cap the span at 5,
 and A5 fails only when early misses send the pace down first. C1
 passes on the pads' own noise at the study's light presses (Section
 1.3). E1 joined them on 1 October 2026: a healthy cohort cannot fail
-it from below (Section 1.11). So did F3 and F4 (Section 1.8): F3's
+it from below (Section 1.11). So did B3 (Section 1.10): no false
+alarm bounds the rate rather than measuring it. So did F3 and F4
+(Section 1.8): F3's
 margin passes a true release excess of 1 percent of max, and a
 finger held still keeps 0.54 to 1.00 of a run inside the corridor. They stay in Table 1 as registered, and the thesis reports them
 as checks that the device and the task ran as designed, not as
 findings about the hand.
 
-Four further rows are computed and printed under their own
+Five further rows are computed and printed under their own
 EXPLORATORY heading, below Table 1 and outside its family-wise
 control. They are not pre-specified and must not be quoted as
 confirmations:
@@ -2247,8 +2335,15 @@ confirmations:
   Rh3 rhythm, dominance on absolute asynchrony. No direction is
       predicted, so it is reported paired, not tested. DROPPED on
       the one-board rig.
+  B2  buzz hunt, wrong-finger errors on a neighbour beyond the
+      chance their stimulated fingers give (Section 1.10). Moved
+      here on 1 October 2026: a healthy cohort expects two or three
+      such errors, so the row is usually not estimable, and its p
+      stays out of the Holm family.
   B5  buzz hunt, whether the response-window ladder climbs at all.
       A description of the task, not a claim about the hand.
+      DROPPED from the battery on 1 October 2026, which plays one
+      2.0 s window.
   E2p echo, whether misses fall late in the sequence rather than on
       the first item. Added while reading echo's error structure.
       Read as the share of misses on the newest item against the
@@ -2273,11 +2368,13 @@ Table 2, within-block improvement, pre-specified with a direction
                  person from the trial records the mode scored,
                  chords only (singles and sensor drops out), each
                  half decided on its own (Section 4.4).
-  W5 buzz hunt   localisation RT falls, with the window level
-                 carried as a covariate (RT centred within level;
-                 the fixed-level form leaves too few trials, since
-                 the ladder promotes on the sixth correct trial).
-                 The fixed-level series is reported beside it.
+  W5 buzz hunt   localisation RT falls across the block. The
+                 battery plays one 2.0 s window since 1 October
+                 2026, so this is the raw RT series, as W1 reads
+                 Reaction's. A block recorded under the ladder has
+                 its RT centred within level, where level and trial
+                 number move together, so neither series separates
+                 practice from window there.
   W6 force pilot DROPPED. It asked for MAE against run order once
                  the corridor level was regressed out. The battery
                  plays force pilot with passes: 1, so the ladder is
@@ -2355,7 +2452,8 @@ healthy cohort cannot give.
                    each game
       force_pilot  MAE percent per run, per hand, with the level
       chords       median ER and clean rate per sub-block
-      buzz_hunt    localisation RT per trial, with the window level
+      buzz_hunt    localisation RT per trial (one window in the
+                   battery)
       pattern      mean RT per take, probes marked, warm-up excluded
       adaptive     BPM per trial
       syllables    accuracy per round
@@ -2454,9 +2552,11 @@ healthy cohort cannot give.
     five takes each: the song path 87 ms from the play call to the
     speaker (rhythm.audio_offset_ms, was an estimated 40); a short
     sound 77 ms (latency.tone_ms and rhythm.metronome_offset_ms, was
-    12); the motors 74 ms from STIM to motion, read on the averaged
-    envelope of ten pulses per motor at the point the datasheets call
-    the lag (latency.buzzer_ms, was 45). The short-sound figure sits
+    12); the motors 74 ms from STIM to sound, the median of the four
+    (71 to 80 ms), read on the averaged envelope of ten pulses per
+    motor at 5 SD above the room noise (latency.buzzer_ms, was 45).
+    It is not a rise time, and when the pad is first felt is not
+    measured. The short-sound figure sits
     inside the 43 to 119 ms that Bridges et al. (2020) measured for
     pygame-based Expyriment across operating systems, with a similar
     trial-to-trial spread. The study plays through the laptop's own

@@ -55,10 +55,10 @@ The shipped config, eight sittings on each of six codes, both orders, two left-h
 |---|---|---|---|---|
 | 15 | 14.4 to 14.8 | 14.0 to 15.3 | 4 of 48, by 17 s at most | 18 |
 | 30 | 28.0 to 28.5 | 27.7 to 29.3 | 0 | 35 |
-| 45 | 44.1 to 44.9 | 43.9 to 45.1 | 2 of 48, by 5 s at most | 50 |
+| 45 | 44.4 to 44.9 | 43.8 to 45.6 | 10 of 48, by 33 s at most | 50 |
 | 60 | 58.3 to 58.7 | 57.8 to 59.5 | 0 | 65 |
 
-The games draw fresh material every block, so no two sittings take the same time. A second batch of the same settings moved a code's median by up to half a minute (the 45 came out at 44.2 to 44.4, one sitting past by 11 s; the 15 at 14.4 to 14.8, eight past by 15 s at most), so plan on the ranges.
+The 45 was re-timed on 1 October 2026 after Buzz Hunt took a third catch trial, about 6 s a block. The games draw fresh material every block, so no two sittings take the same time. A second batch of the same settings moved a code's median by up to half a minute (the 45 came out at 44.2 to 44.4, one sitting past by 11 s; the 15 at 14.4 to 14.8, eight past by 15 s at most), so plan on the ranges.
 
 A real sitting adds questions and slower changeovers, about 3 minutes on the 45. The EEG lab's sitting, the same order with the lab's Reaction task in place of both Reaction blocks and no Muscle Memory, times at a median of 48.1 minutes over 12 sittings.
 

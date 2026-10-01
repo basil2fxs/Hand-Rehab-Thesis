@@ -4,10 +4,14 @@ on one finger and the player presses the finger that buzzed, then the
 suite tightens the screws with a shrinking response window, cross-hand
 distractors, buzz sequences to replay, and one-buzz-or-two gap trials.
 
-WHY THIS DESIGN. Roughly half of stroke survivors carry a
-somatosensory deficit, and the one intervention with RCT support is
-graded discrimination training just above threshold, with attention,
-feedback and progression:
+WHY THIS DESIGN. Somatosensory loss after stroke is common, though
+how common depends on the modality and the body area: after a first
+stroke 7 to 53 percent have impaired tactile sensation, 31 to 89
+percent impaired stereognosis and 34 to 64 percent impaired
+proprioception (Connell, Lincoln and Radford 2008, Clinical
+Rehabilitation 22(8):758-767). The one intervention with RCT support
+is graded discrimination training just above threshold, with
+attention, feedback and progression:
 
 - Carey L, Macdonell R, Matyas TA (2011). SENSe: Study of the
   Effectiveness of Neurorehabilitation on Sensation: A Randomized
@@ -28,9 +32,13 @@ feedback and progression:
 
 Supporting, verified by the research cluster: Weber 2023 (Journal of
 Neurophysiology 130(5):1126-1141) measured touch localisation after
-nerve repair and found misreferrals where touch on one digit is felt
-on another; this mode's per-finger confusion matrix is the digital
-analogue of their measure and is the core log output. Antonopoulos
+nerve repair and counted misreferrals, touch on one digit felt on
+another; this mode's per-finger confusion matrix mirrors that count.
+In their 33 controls misreferrals were rare (most made none to two
+in 90 touches, three quarters of them between the middle and ring
+fingers) and did not separate patients from controls at group level;
+the measure that did, the error of localisation in millimetres, has
+no analogue on four pads. Antonopoulos
 et al. 2019 (Journal of Hand Therapy 32(3):305-312) found locognosia
 is the modality that responded to home training at 1.5 and 3 years
 after nerve repair.
@@ -49,23 +57,32 @@ until eventually I can't feel the buzz". The staircase was doing what
 it was built to do, walking the request into a region the hardware
 cannot honestly deliver. A 10 mm coin ERM of the class on this rig
 (Precision Microdrives 310-103 datasheet: lag about 40 ms, rise to
-full amplitude about 87 ms, stop about 115 ms after current off) has
+half amplitude about 87 ms, stop about 115 ms after current off; the
+rise is defined to 50 percent in their AB-029 note) has
 barely started moving when a 40 ms command ends, so the levels under
 about 100 ms are not shorter buzzes, they are fainter twitches of
 falling amplitude, and the 40 ms floor was the host's floor (the 20 ms
 command clamp plus one frame), not a perceptual one. Two verified
 numbers set the pulse instead: Kaaresoja and Linjama (2005, World
-Haptics, pp. 471-472) found phone-ERM control signals of 50 to 200 ms
-the usable band, shorter ones missed and longer ones irritating; and
+Haptics, pp. 471-472) rated phone-motor control signals of 50 to 200
+ms best and longer ones irritating (the abstract says nothing about
+shorter ones); and
 Remache-Vinueza, Trujillo-Leon and Vidal-Verdu (2025, Scientific
 Reports) put the minimum duration for a fingertip stimulus to read as
 vibration at 25 to 30 ms on a clean voice-coil actuator, which is the
 floor for an actuator with no rise time and so a lower bound here.
 The shipped pulse is buzz_hunt.loc_pulse_ms, 150 ms: one firmware
-hold, so it is delivered with no host-side STOP quantisation, it
-reaches full amplitude, and it sits inside the Kaaresoja band. It is
-the same length as the span stage's pulses and shorter than the
-motor.cue_ms cue, so it reads as a stimulus, not a cue.
+hold, so it is delivered with no host-side STOP quantisation, and it
+sits inside the Kaaresoja band. It does not reach full amplitude: on
+this rig the motors are first heard 71 to 80 ms after the command
+(latency_profile.yaml, 24 September 2026) and reach half strength
+about 100 to 140 ms after it (design notes), so the drive ends near
+half strength and the motor coasts to a stop. The firmware drives
+the index, middle and ring motors at PWM duty 200 of 255 and the
+little finger's at 240, so the little finger's buzz is stronger and
+pitched higher. It is the same length as the span stage's pulses and
+shorter than the motor.cue_ms cue, so it reads as a stimulus, not a
+cue.
 
 Localisation is a reaction: the player feels a buzz and presses the
 finger it was on, and a healthy hand does that at ceiling whatever
@@ -73,7 +90,13 @@ the pulse length. So difficulty now moves the RESPONSE WINDOW
 (buzz_hunt.window_levels_s, 3.0, 2.0, 1.5 and 1.2 s): promote after
 6 correct of the last 8 trials at a level, demote after 2 misses in
 the last 4, start at the longest window, level logged on every trial
-row, one ladder per hand as the staircase was. Distractor trials run
+row, one ladder per hand as the staircase was. The study battery
+freezes the window at one 2.0 s rung (1 October 2026): every window
+is several times a healthy press, so for a healthy hand the level
+only counts trials (a perfect responder reaches level 2 at trial 13
+of 16 and can never reach level 3), and a moving window mixes
+practice with window in the within-block RT trend. Free play keeps
+the ladder. Distractor trials run
 at the held level and never move it. The summary metrics are what the
 threshold used to be: localisation accuracy at the fixed pulse,
 d-prime against the catch trials, median RT, and the top window level
@@ -129,10 +152,14 @@ counts come from buzz_hunt.* in the config.
 
   LOCALISATION   hands flat, eyes on the focus point. One pulse of
                  loc_pulse_ms on one finger; press the finger that
-                 buzzed inside the response window. About one trial
-                 in ten is a catch trial: no buzz fires, and the
-                 right response is to wait, which prices guessing
-                 (the false-alarm rate for d-prime lives here). The
+                 buzzed inside the response window. catch_rate of
+                 the real count is added as catch trials (one in ten
+                 in free play, one in five in the study battery, so
+                 3 beside 16): no buzz fires, and the right response
+                 is to wait, which prices guessing. With two or
+                 three of them a person's d-prime takes three or
+                 four values, so the study reads false alarms as a
+                 pooled count with an exact bound. The
                  window runs the ladder in WHY THE PULSE IS FIXED
                  (promote on 6 of the last 8, demote on 2 of the
                  last 4, a timeout is a miss), one ladder per HAND,
@@ -171,8 +198,14 @@ counts come from buzz_hunt.* in the config.
                  which is why playback is buzz-only and nothing on
                  screen names the finger); echo.py is the explicit
                  span GAME, light plus buzz on the Kessels ladder.
-                 The two must never be pooled: tactile-only span
-                 caps far below visual span in healthy adults.
+                 The two must never be pooled: they differ in
+                 modality, rate and ladder. Finger tactile span sits
+                 somewhat below visual and digit span in healthy
+                 adults (Tactual Span forward 5.30 against 5.97
+                 visuospatial and 6.13 digit at 20 to 29 years, not
+                 significantly different in that group; Levi and
+                 Heled 2024), and lower in another sample (Heled and
+                 Levi 2024).
   GAP DETECTION  one long buzz, or two short buzzes separated by a
                  silent gap, on one finger; tap that finger once for
                  one, twice for two. The long buzz lasts exactly two
@@ -263,8 +296,8 @@ log = logging.getLogger(__name__)
 
 # The shortest command this mode will ever send, whatever the config
 # or the legacy staircase asks for. Kaaresoja and Linjama (2005, World
-# Haptics Conference, pp. 471-472) put the usable band for a phone
-# motor at 50 to 200 ms, but the 310-103 class ERM on this rig takes
+# Haptics Conference, pp. 471-472) rated 50 to 200 ms best for a phone
+# motor, but the 310-103 class ERM on this rig takes
 # about 40 ms to start and 87 ms to reach half amplitude (Precision
 # Microdrives datasheet), so a 50 ms command ends before the motor is
 # at half strength. On this rig anything under 100 ms felt like a
@@ -503,8 +536,10 @@ class WindowLadder:
     demotes after `demote` = (misses, of the last M). A move clears
     the history so one lucky run cannot promote twice. The level is
     recorded per trial (trace) because the analysis reads accuracy
-    and RT by level, and the top level reached is the block's
-    difficulty summary in place of the old duration threshold.
+    and RT by level, and in free play the top level reached is the
+    block's difficulty summary in place of the old duration
+    threshold. The study battery passes one rung, so the level stays
+    0 and the top is reached from the first trial.
 
     Why a mastery rule rather than a staircase: the window is a time
     limit on a response the player either knows or does not (the
@@ -906,6 +941,9 @@ class BuzzHuntMode(WaitSkip):
         self._respond_t0: float | None = None
         self._target_on: float | None = None
         self._resp_presses: list[tuple[int, float]] = []
+        # Other fingers that crossed on the same sample as the press
+        # that answered a buzz trial (see _prefer_target).
+        self._co_press: list[int] = []
         self._last_result: dict | None = None
         self.stage_msg = ""
 
@@ -1209,6 +1247,7 @@ class BuzzHuntMode(WaitSkip):
         self._respond_t0 = None
         self._target_on = None
         self._resp_presses = []
+        self._co_press = []
         self._presses.clear()
 
     def _start_trial(self, now: float) -> None:
@@ -1841,6 +1880,8 @@ class BuzzHuntMode(WaitSkip):
                 self._close_stim_marker(stim_end)
         while self._presses:
             ev = self._presses.popleft()
+            if self.waveform == "buzz" and not self.catch:
+                ev = self._prefer_target(ev)
             self._resp_presses.append((ev.lane, ev.t_perf))
             if self.waveform == "buzz":
                 self._close_buzz(now, responded=True)
@@ -1856,6 +1897,34 @@ class BuzzHuntMode(WaitSkip):
                 self._close_span(now)
             else:
                 self._close_gap(now)
+
+    def _prefer_target(self, ev):
+        """Take the buzzed finger first when several fingers crossed
+        on the same sample, the rule reaction mode's _prefer_cued
+        applies. The detector reports one sample's presses in lane
+        order, so without this a neighbour below the target always won
+        a tie and the trial scored as a wrong finger. The other
+        fingers on that sample are kept as co-presses for the row."""
+        same = []
+        for other in self._presses:
+            if abs(other.t_perf - ev.t_perf) > 1e-9:
+                break
+            same.append(other)
+        if not same:
+            return ev
+        chosen = ev
+        if ev.lane != self.lane:
+            # same is the head of the queue, in queue order.
+            for i, other in enumerate(same):
+                if other.lane == self.lane:
+                    del self._presses[i]
+                    self._presses.appendleft(ev)
+                    chosen = other
+                    break
+        self._co_press = sorted({int(p.lane) for p in [ev, *same]
+                                 if p is not chosen
+                                 and int(p.lane) != int(chosen.lane)})
+        return chosen
 
     # ---- the board across trials -------------------------------------------
     def _note_stim_result(self, stim_failed: bool) -> None:
@@ -2032,7 +2101,8 @@ class BuzzHuntMode(WaitSkip):
                 f"window_ms={float(self.params['window_ms']):.0f};"
                 f"{level_txt}"
                 f"lured={lured};stim_failed={stim_failed};"
-                f"wall_forced={self._wall_forced}")
+                f"wall_forced={self._wall_forced};"
+                f"co_press={pack_lanes(self._co_press) or 'none'}")
             info = ContinuousTrialLog(waveform="buzz", params=self.params,
                                       seed=self.trial_seed,
                                       segments=self._segments(now))

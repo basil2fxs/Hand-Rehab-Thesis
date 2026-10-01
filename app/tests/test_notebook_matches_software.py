@@ -954,14 +954,19 @@ class TestCohortChapterContract:
         """
         (dropped,) = _notebook_names(source, ["COHORT_DROPPED_CHECKS"])
         # S6 and S7 joined on 28 September 2026: Syllables left the
-        # healthy sitting and runs with a dyslexic participant.
-        assert set(dropped) == {"R3", "P2", "E2", "W6", "S6", "S7"}
+        # healthy sitting and runs with a dyslexic participant. B5
+        # joined on 1 October 2026: the battery plays one 2.0 s window,
+        # so there is no ladder to climb.
+        assert set(dropped) == {"R3", "P2", "E2", "W6", "S6", "S7", "B5"}
         for cid, (mode, _check, reason, criterion) in dropped.items():
             assert mode in ("reaction", "pattern", "echo",
-                            "force_pilot", "syllables"), cid
+                            "force_pilot", "syllables", "buzz_hunt"), cid
             assert criterion.startswith("DROPPED:"), cid
             if cid == "E2":
                 assert "ladder" in reason and "simon" in reason, cid
+            elif cid == "B5":
+                assert "2.0 s rung" in reason, cid
+                assert "counted trials" in reason, cid
             elif cid == "W6":
                 assert "fixed order" in reason, cid
                 assert "construction" in reason, cid
@@ -973,15 +978,17 @@ class TestCohortChapterContract:
     def test_every_mode_says_how_its_within_block_trend_reads(
             self, source):
         """A mode missing from the table would have its trend read as
-        improvement by default, and for four of them a later trial is a
-        harder trial."""
+        improvement by default, and for three of them a later trial is a
+        harder trial. Buzz Hunt left that set on 1 October 2026, when
+        the battery froze its response window at one rung."""
         reading, modes = _notebook_names(
             source, ["COHORT_WITHIN_BLOCK_READING", "COHORT_MODES"])
         assert set(reading) == set(modes)
         assert reading["reaction"][0] == "anchor"
         harder = {m for m, (kind, _why) in reading.items()
                   if kind == "harder"}
-        assert harder == {"echo", "force_pilot", "buzz_hunt", "adaptive"}
+        assert harder == {"echo", "force_pilot", "adaptive"}
+        assert reading["buzz_hunt"][0] == "clean"
         for mode, (_kind, why) in reading.items():
             assert why, f"{mode} says nothing about why"
 

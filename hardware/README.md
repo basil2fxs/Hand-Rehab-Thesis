@@ -37,7 +37,7 @@ flowchart LR
 | Arduino Nano | 2 | 15 to 48 | One reads the pads and drives the motors, one drives the actuator. Clones work |
 | USB A to micro B cable | 1 | 17 | Jaycar |
 | Custom PCB for the Nano | 1 | | From the 2025 project; its design files are not in this repo |
-| Vibration motor on a motor PCB, with connector | 4 | | Supplied by the Curtin electronics team, 2026 |
+| Vibration motor on a motor PCB, with connector | 4 | | Supplied by the Curtin electronics team, 2026. A 10 mm coin motor; the part number is not recorded. On the study laptop each is heard 71 to 80 ms after its command |
 | Force sensor connector | 4 | | One per pad |
 | Threaded screw | 4 | | Fine adjustment of each finger rest |
 | Linear actuator with motor driver | 1 | 45 | Two were bought, one for each hand |

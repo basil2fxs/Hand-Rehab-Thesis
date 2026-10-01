@@ -356,8 +356,9 @@ separately (Patel and Lodha 2019), feedback-on vs feedback-off drift
 
 ### 2. Vibration Detective: vibrotactile discrimination for sensory re-education
 
-Deficit: somatosensory impairment (about half of stroke survivors; SENSe
-trial population). Motors currently used only as reaction cues. Sensory
+Deficit: somatosensory impairment (7 to 53 percent of first strokes for
+tactile sensation, more for stereognosis and proprioception, depending
+on body area, Connell et al. 2008; SENSe trial population). Motors currently used only as reaction cues. Sensory
 discrimination training has RCT support (Carey 2011) and a thin active
 training evidence base (Serrada 2019), which is exactly where a rigorously
 instrumented device study lands well.

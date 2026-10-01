@@ -1401,11 +1401,14 @@ buzz_hunt:
   # It used to: a duration staircase walked the pulse down with every
   # correct answer until the player could not feel it, which is what
   # a coin ERM does with a command shorter than its own start-up (lag
-  # about 40 ms, rise about 87 ms, Precision Microdrives 310-103
-  # class; latency.* in this file). 150 is one firmware hold, so it
-  # is delivered with no host-side quantisation, it reaches full
-  # amplitude, and it sits inside the 50 to 200 ms band Kaaresoja and
-  # Linjama (2005) found usable on a phone motor. The mode clamps
+  # about 40 ms, rise to half amplitude about 87 ms, Precision
+  # Microdrives 310-103 class; latency.* in this file). 150 is one
+  # firmware hold, so it is delivered with no host-side quantisation,
+  # and it sits inside the 50 to 200 ms band Kaaresoja and Linjama
+  # (2005) rated best on a phone motor. It does not reach full
+  # amplitude: on this rig half strength comes 100 to 140 ms after
+  # the command, so the drive ends near half strength and the motor
+  # coasts to a stop. The mode clamps
   # anything under 100. Same length as the span stage's pulses, and
   # under motor.cue_ms so it reads as a stimulus, not a cue.
   loc_pulse_ms: 150
@@ -1567,8 +1570,9 @@ echo:
   # records the interval it ran at, which is what keeps blocks
   # comparable (Berch 1998 in the mode file). ioi_step_ms 0 is the
   # fixed-rate protocol. The floor is the motors': a coin ERM of the
-  # class on this rig needs about 130 ms to reach full amplitude and
-  # spins down for about 115 ms after current off (latency.*), so
+  # class on this rig reaches half amplitude about 87 ms after current
+  # on (100 to 140 ms on this rig by the design notes) and spins down
+  # for about 115 ms after current off (latency.*), so
   # the mode never lets the interval under item_on_ms plus 150 ms
   # whatever is written here. Changing these is a protocol deviation
   # the analysis names, so leave them unless it is deliberate.
@@ -1756,8 +1760,8 @@ latency:
   #   one firmware loop (200 Hz sample block)      0 to 5 ms, mean 2.5
   #   10 mm coin ERM lag to first motion           about 40 ms
   # (Precision Microdrives 310-103 class values: lag 40 ms, rise to
-  # full amplitude 87 ms, stop 115 ms after current off). So about 45
-  # ms to the first felt motion and about 95 ms to full amplitude;
+  # half amplitude 87 ms, stop 115 ms after current off). So about 45
+  # ms to the first felt motion and about 95 ms to half amplitude;
   # the first number is the one a reaction is timed from. PMD's 8 mm
   # parts span lag 20 to 29 ms and rise 54 to 92 ms at 3 V (308-107,
   # 308-100 datasheets); lag is to 0.08 G and rise to 50 percent
@@ -2031,7 +2035,12 @@ protocol:
           distractor_trials_per_hand: 0   # trials in the block
           span_trials: 4
           gap_trials_per_hand: 0
-          catch_rate: 0.1
+          # 3 catch trials beside the 16 (2 at 0.1): with no false
+          # alarm in 30 or more catch trials across the cohort the
+          # exact one-sided bound falls under 10 percent, which 20
+          # cannot do (13.9 percent).
+          catch_rate: 0.2
+          window_levels_s: [2.0]      # one rung: the window never moves
         pattern:
           short_session: true
           soc_cycles_per_block: 3

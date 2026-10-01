@@ -6284,7 +6284,10 @@ class ResultsScreen(Screen):
                 out.append((tag, "n/a", self.theme.foreground))
                 continue
             text = f"{float(top):.1f} s"
-            if lvl is not None and levels:
+            if len(levels) == 1:
+                # The study battery's one rung: nothing to climb.
+                text += " (fixed)"
+            elif lvl is not None and levels:
                 text += f" (L{int(lvl) + 1}/{len(levels)})"
             out.append((tag, text, self.theme.foreground))
         return out

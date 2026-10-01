@@ -242,6 +242,9 @@ class OverrideTests(unittest.TestCase):
             "buzz_hunt.distractor_trials_per_hand",
             "buzz_hunt.span_trials", "buzz_hunt.gap_trials_per_hand",
             "buzz_hunt.catch_rate",
+            # One frozen rung, like Reaction's and Chords' (1 October
+            # 2026): the window never moves in the battery.
+            "buzz_hunt.window_levels_s",
             "pattern.short_session", "pattern.soc_cycles_per_block",
             "pattern.random_block_trials",
             "rhythm.difficulty",
@@ -573,11 +576,16 @@ class ShortFormTests(_BatteryHarness):
         self.assertFalse(ch.bilateral)
         bh = self._step_to(eng, "buzz_hunt")
         plan = list(bh._stage_plan)
-        # 16 real localisation trials plus the two catch trials dealt on
-        # top of them (27 September 2026).
-        self.assertEqual(plan.count("loc"), 18)    # one hand
+        # 16 real localisation trials plus the catch trials dealt on top
+        # of them (27 September 2026): three from 1 October 2026, so no
+        # false alarm across the cohort can bound the rate under 10
+        # percent.
+        self.assertEqual(plan.count("loc"), 19)    # one hand
         self.assertEqual(bh.n_loc_real, 16)
-        self.assertEqual(bh.n_catch_planned, 2)
+        self.assertEqual(bh.n_catch_planned, 3)
+        # One 2.0 s window: the ladder cannot move.
+        self.assertEqual(bh._window["right"].levels, [2.0])
+        self.assertTrue(bh._window["right"].top)
         self.assertEqual(plan.count("span"), 4)
         self.assertEqual(plan.count("dis"), 0)
         self.assertEqual(plan.count("gap"), 0)
