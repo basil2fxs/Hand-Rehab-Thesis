@@ -3685,10 +3685,15 @@ class GameplayScreen(Screen):
         )
         lines = self.GET_READY_LINES.get(
             str(getattr(self.engine, "current_block", "") or ""), ())
-        # A third line of text buys the card a little room: wider for
-        # the longest line, taller so the number clears the text.
+        # A third line of text buys the card a little room: wide enough
+        # for the longest line, taller so the number clears the text.
         extra = max(0, len(lines) - 2)
-        card_w = 460 if lines else 420
+        card_w = 420
+        if lines:
+            font = self.layout.font(FONT_BODY)
+            widest = max(font.size(line)[0] for line in lines)
+            card_w = max(460, min(self.layout.width - 80,
+                                  int(widest) + 64))
         # Tall enough for the skip control under the number.
         card_h = 300 + 20 * extra
         card_rect = pygame.Rect(0, 0, card_w, card_h)
@@ -3739,6 +3744,13 @@ class GameplayScreen(Screen):
         "echo": ("Each round adds one more to the end.",
                  "Speed doesn't count.",
                  "If you're not sure, make your best guess."),
+        # Chords (1 October 2026): nothing said to keep the other
+        # fingers still, which individuation tasks always say (Xu et
+        # al. 2017), or to stay on the pads, which enslaving tasks say
+        # (Abolins et al. 2020).
+        "chords": ("Press the lit fingers together",
+                   "and hold until the ring fills.",
+                   "Keep the other fingers resting still on their pads."),
     }
 
     def _draw_target_indicator(self, surf: pygame.Surface,

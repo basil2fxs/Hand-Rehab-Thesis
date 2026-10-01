@@ -1067,8 +1067,8 @@ chords:
   # chord", in milliseconds, from easiest to hardest. The game starts
   # at the first value and only tightens when the patient is landing
   # 8 of their last 10 cleanly; it loosens again the same way. The
-  # last value is the floor. Concert pianists land chords within about
-  # 30 ms, so even the floor here stays three times softer than that.
+  # last value is the floor. A chord study's own criterion is 50 ms
+  # (Verwey 2023), so even the floor here stays twice as soft as that.
   sync_windows_ms: [250, 200, 150, 100]
   # Once the chord is together, all its fingers stay down this long.
   # A ring fills on the held tiles while it runs, so the patient

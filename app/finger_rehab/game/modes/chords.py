@@ -6,13 +6,20 @@ WHY TRAIN CHORDS. When one finger presses, force leaks onto the others.
 Zatsiorsky, Li and Latash (2000, Exp Brain Res 131) named this
 enslaving, showed it is largest between neighbouring fingers, and
 formalised the interfinger connection matrix this mode's
-chord-conditioned matrices estimate. Healthy hands leak roughly 5-15 percent of the instructed
-force at light effort (Abolins, Stremoukhov, Walter and Latash 2020, J Neurophysiol, read via
-PMC7814910: 8-10 percent at about 25 percent MVC). The study's presses
-are lighter than that (about 0.8 to 1.7 N on the pilot), and a resting
-finger's own noise over a chord's window gives an ER near 0.05 against
-them, so on this rig the healthy band is a feasibility check, not a
-measured enslaving level (review of 30 September 2026). Stroke raises the
+chord-conditioned matrices estimate. While a finger pair held 25
+percent of the pair's MVC, the other pair carried 8 to 10 percent of
+the total force, 12 to 17 percent by 19 s (Abolins, Stremoukhov,
+Walter and Latash 2020, J Neurophysiol 124(6):1625-1636), and an index
+press of 4 to 8 N moved the middle finger by 6.5 to 9.5 percent of
+it (Mirakhorlo, Maas and Veeger 2017). The study's presses are far
+lighter, 1.6 to 2.3 N on the pilot, about 4 to 14 percent of a
+single-finger MVC, and there the quiet fingers unloaded slightly
+during the hold rather than being pulled down, while 82 percent of
+their positive peaks came before the first target press (Chords
+review, 1 October 2026). So ER is not a measure of enslaving at these
+forces: C1 is a feasibility check, the checks that lean on ER are
+exploratory, and the analysis reads a press-locked quiet-finger level
+zeroed at the stimulus beside it. Stroke raises the
 leak and lowers individuation (Lang and Schieber 2003/2004,
 J Neurophysiol), and Xu et al. (2017, J Neurophysiol 118, n=54) showed
 individuation recovers partly separately from strength, so control
@@ -30,12 +37,15 @@ DIFFICULTY ORDER. Chord hardness is computed, not guessed, from two
 replicated facts: enslaving is strongest between adjacent fingers
 (Zatsiorsky 2000) and fingers differ in how enslavable they are, ring
 worst, then middle and pinky, index best of the four (Hager-Ross and
-Schieber 2000, J Neurosci 20; Chiang 2004 call the ring the most
-enslaved). With enslavability weights index 1, middle 2, ring 3,
+Schieber 2000, J Neurosci 20, the stationarity index; Chiang 2004's
+"most enslaved" ring is the ring as the INSTRUCTED finger, the other
+sense). With enslavability weights index 1, middle 2, ring 3,
 pinky 2, a chord's difficulty D is the sum over QUIET fingers of
 weight times the number of ACTIVE neighbours, plus 1.5 per finger
-above two because per-finger force and timing degrade as chord size
-grows (Li, Latash and Zatsiorsky 1998, Exp Brain Res 119). The ladder
+above two because per-finger force falls as chord size grows (Li,
+Latash and Zatsiorsky 1998, Exp Brain Res 119) and chords take longer
+with every finger (Verwey 2023). D tracks Verwey's chord complexity
+index across the eleven chords (rank correlation 0.75). The ladder
 that falls out (I=index, M=middle, R=ring, P=pinky):
 
     Tier 1  RP (D=2),  IM (3)
@@ -103,10 +113,13 @@ no_hold. No words follow a chord: the tile flash says whether it
 landed, and the fingers that lifted are recorded (hold_released) for
 the analysis rather than named on screen.
 
-SYNCHRONY WINDOW. Skilled pianists land chord tones within about 30 ms
-(Goebl 2001, JASA 110); perceptual simultaneity is 20-50 ms (Rasch
-1979/1988). No stroke value exists in the literature, so W is a
-defended design choice: it starts at 250 ms (about 8x expert) and
+SYNCHRONY WINDOW. A pianist's melody note leads the chord by about
+30 ms at the hammer and by close to nothing at the finger-key level
+(Goebl 2001, JASA 110); Verwey 2023 counted a chord as timed only
+when its keys fell within 50 ms, and untrained four-finger chords
+still spread about 121 ms after five days of practice (Ghavampour et
+al. 2025). No stroke value exists in the literature, so W is a
+defended design choice (the battery holds it at 150 ms): it starts at 250 ms (about 8x expert) and
 tightens through 200 and 150 to a floor of 100 ms (about 3x expert),
 which demands genuine co-articulation rather than fast sequencing. The
 pads are sampled every 5 ms, but a press is stamped when its sample's
@@ -121,7 +134,9 @@ engine's force window already records (baseline-subtracted, all eight
 sensors). Each finger's peak is normalised by its own calibrated
 light-press gap, and the trial enslaving ratio ER is the mean
 normalised quiet-finger leak divided by the mean normalised target
-press, the same shape as the individuation slope of Xu 2017. Scoring
+press, closest in shape to a per-pair peak ratio (Sadnicka et al.
+2024), but at one light force against a slow baseline, so it is the
+device's own index and is quoted that way. Scoring
 pays the two things separately: completion 6 points (scaled by targets
 hit), togetherness 2 points (linear in span against W, only on a full
 chord), quiet hand 2 points (full at ER 0, zero at ER 0.5; healthy
@@ -139,11 +154,13 @@ measured leak past the threshold above) > over_force > late_chord
 (completed outside the window) > no_hold (broken before hold_ms) >
 hit.
 
-LIGHT PRESSES ONLY. Enslaving scales with instructed force and fatigue
-inflates both enslaving and the force deficit (Danion, Latash, Li and
-Zatsiorsky 2000/2001: four-finger MVC dropped about 43 percent after
-fatiguing exercise), so nothing in this mode ever asks for a hard
-press. The press threshold is the calibrated light-press trigger, a
+LIGHT PRESSES ONLY. Enslaving scales with instructed force, so the
+presses are held at one light level and nothing in this mode ever
+asks for a hard press. Fatigue cut four-finger MVC by about 43 percent
+but left enslaving unchanged at the fatigued site (Danion, Latash, Li
+and Zatsiorsky 2000), and a fatigued index was enslaved less (Danion
+et al. 2001), so the rule is about one force level, not about fatigue
+inflating the leak. The press threshold is the calibrated light-press trigger, a
 peak past 2.5x the calibrated light press is classed over_force (never
 a reward; the class is recorded, and no prompt is shown), and holds
 are capped at 200 ms. Peaks inside 0.5-1.5x the calibrated press earn a no-points
@@ -177,9 +194,12 @@ back on 24 September 2026 as a few trials dealt among the chords
 chord cost: reaction time rises with the number of keys pressed at
 once, from about 510 ms for one key to 632 for two and 762 for three
 in healthy adults (Verwey 2023, Exp Brain Res 241, the chord effect
-first shown by Seibel 1962), and without a one-finger trial on the
-same rig in the same block there is no baseline to read the rise
-from. Second, the matrix. The per-finger light-press captures from the
+first shown by Seibel 1962). Those are the MEAN of the key times, for
+chords whose keys landed within 50 ms, after 240 practice trials per
+chord, so C6 reads each chord's mean onset since 1 October 2026; the
+first press rose only about 20 ms per finger on the pilot. Without a
+one-finger trial on the same rig in the same block there is no
+baseline to read the rise from. Second, the matrix. The per-finger light-press captures from the
 quick calibration (CalibrationProfile.gap) are still the normaliser
 under every force number in this mode (_reference_counts). A matrix
 built from chords is CHORD-CONDITIONED: the leak on quiet finger j
@@ -190,16 +210,17 @@ instructed the leak was often smaller than from one of them alone
 single is that one-finger condition itself, so the singles give the
 classical matrix (singles.enslaving_matrix in the block summary)
 beside the chord-conditioned start and end matrices, which still come
-from the first and last chord sub-blocks and keep the Danion-style
-start-to-end fatigue read. Singles are kept apart everywhere a number
+from the first and last chord sub-blocks: a start-to-end description,
+20 trials apart in the battery, not a fatigue read. Singles are kept apart everywhere a number
 says chord: they have kind "single", they are not on the difficulty
 ladder, they do not move the staircase (a single has no span to
 tighten) and they are not in n_chords, median_er, median_span_ms,
 per_chord or the chord-conditioned matrices. by_size carries all four
 sizes side by side.
 
-FATIGUE GUARD. Fatigue corrupts exactly what this mode trains (Danion
-2000/2001), so after each sub-block: a clean-hit rate 30 or more
+FATIGUE GUARD. A tired hand slows and loosens the presses this mode
+times (fatigue cut maximal force in Danion 2000/2001; it did not
+inflate the leak), so after each sub-block: a clean-hit rate 30 or more
 percentage points below the session's first sub-block, or a median RT
 30 percent above it, forces a 2 minute rest and drops one level; a
 second trigger ends the session gracefully with the data kept.
@@ -241,17 +262,18 @@ DEVIATIONS FROM THE RESEARCH BRIEF, where the plumbing wins:
   (CalibrationProfile.gap), not percent MVC: no per-finger maximum
   exists in this app, and demanding maximal presses to measure one
   would fight the fatigue rules above. ER stays a dimensionless ratio.
-- The leak window is the engine's force window, stretched to cover the
-  mode's own timeout plus hold (about 3.2 s), not the brief's
-  first-onset to hold-end plus 100 ms. Every in-time trial keeps its
+- The leak window is the engine's force window, open from the
+  stimulus to the trial's close: about 1 s for a landed chord (it
+  closes at the end of the hold), 3.2 s only on a timeout, not the
+  brief's first-onset to hold-end plus 100 ms. Every in-time trial keeps its
   ER: the window is open from stimulus onset to trial close, so it
   also catches any activity before the first target lands, which the
   brief's onset-anchored window would exclude.
 - The per-trial baseline is the detector's primed baseline EMA rather
   than a fresh 500 ms mean; the 500 ms quiet requirement is enforced
   on the detectors' live press state instead.
-- Press onset is the calibrated per-finger press trigger (about 40
-  percent of the demonstrated light press), not 10 percent MVC, and
+- Press onset is the calibrated per-finger press trigger (30 percent
+  of the demonstrated light press), not 10 percent MVC, and
   the hold check reads live sensor state, so in the keyboard fallback
   the hold is skipped and leak is only visible as wrong presses.
 - Trial points are on the suite's 0-10 scale (6 completion, 2
@@ -707,6 +729,10 @@ class PendingChordTrial:
     # rest of the block. Never silently dropped: it rides the per-trial
     # record into block_stats.
     settle_skipped: bool = False
+    # Each of the hand's fingers' level above its baseline (counts) at
+    # the stimulus, so the record can carry what every finger did by
+    # the trial's close (Chords review, 1 October 2026).
+    pre_levels: dict[int, float] = field(default_factory=dict)
 
 
 class ChordsMode(WaitSkip):
@@ -1065,6 +1091,20 @@ class ChordsMode(WaitSkip):
             except TypeError:
                 continue
         return True
+
+    def _lane_level(self, lane: int) -> float | None:
+        """The lane's smoothed reading above its baseline, in counts,
+        signed: a finger lifting or unloading reads below zero. None
+        without a live detector (the keyboard fallback)."""
+        det = self._hand_detector(self._hand_of_lane(lane))
+        i = self._finger_of_lane(lane)
+        try:
+            v, b = det.val_ema[i], det.baseline[i]
+        except (AttributeError, TypeError, IndexError):
+            return None
+        if v is None or b is None:
+            return None
+        return float(v) - float(b)
 
     def _lane_pressed(self, lane: int) -> bool:
         det = self._hand_detector(self._hand_of_lane(lane))
@@ -1524,6 +1564,11 @@ class ChordsMode(WaitSkip):
             settle_ms=settle_ms,
             settle_skipped=(self.take_skip_flag() == "settle"),
         )
+        if scope != "cross":
+            for lane in self.hands[hand]:
+                level = self._lane_level(lane)
+                if level is not None:
+                    self.active.pre_levels[lane] = level
         self.phase = "stim"
         self._quiet_since = None
         self._settle_t0 = None
@@ -1931,6 +1976,29 @@ class ChordsMode(WaitSkip):
             "subblock": (self._sub_idx + 1
                          if trial.kind in ("chord", "single")
                          else None),
+            # The mean of the target onsets from the stimulus: the
+            # chord RT Verwey 2023 reports, which C6 reads since 1
+            # October 2026 (rt_ms stays the first press).
+            "mean_onset_ms": (round(sum(t - trial.stim_t_perf
+                                        for t in trial.onsets.values())
+                                    / len(trial.onsets) * 1000.0, 1)
+                              if full and trial.onsets else None),
+            "first_finger": (self._finger_of_lane(
+                min(trial.onsets, key=trial.onsets.get))
+                if full and trial.onsets and not cross else None),
+            # Every finger's level above baseline at the stimulus and
+            # its signed change by the close, in counts (Chords review,
+            # 1 October 2026): on the pilot the quiet fingers unloaded
+            # during the hold, which the clamped peak behind ER cannot
+            # show.
+            "pre_levels": ({str(self._finger_of_lane(l)): round(v, 1)
+                            for l, v in trial.pre_levels.items()}
+                           if not cross and trial.pre_levels else None),
+            "end_deltas": ({str(self._finger_of_lane(l)):
+                            round(self._lane_level(l) - v, 1)
+                            for l, v in trial.pre_levels.items()
+                            if self._lane_level(l) is not None}
+                           if not cross and trial.pre_levels else None),
         }
         if cross:
             rec.update({
@@ -2202,8 +2270,9 @@ class ChordsMode(WaitSkip):
         was active and j quiet. The single-press reference under both
         numbers is the quick-cal light-press capture (see SINGLE
         FINGERS in the docstring). From chords (the default) i is
-        active IN COMPANY, so a cell upper-bounds the single-finger
-        cell under the additive connection-matrix model (Zatsiorsky
+        active IN COMPANY, which is not a bound on the single-finger
+        cell: enslaving is not additive, and the leak from two or three
+        instructed fingers was often smaller than from one (Zatsiorsky
         2000); from singles (kind "single") it IS that cell, the
         classical one-finger matrix. Diagonal and unmeasured cells are
         None. Context, never validation.
@@ -2329,6 +2398,9 @@ class ChordsMode(WaitSkip):
                 "median_complete_ms": _median(
                     [r["complete_ms"] for r in rows
                      if r.get("complete_ms") is not None]),
+                "median_mean_onset_ms": _median(
+                    [r["mean_onset_ms"] for r in rows
+                     if r.get("mean_onset_ms") is not None]),
                 "median_span_ms": _median([r["span_ms"] for r in rows
                                            if r["span_ms"] is not None]),
                 "median_er": _median([r["er"] for r in rows
