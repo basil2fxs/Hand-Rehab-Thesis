@@ -130,11 +130,13 @@ def test_the_launchers_wait_is_bounded_and_finds_the_simulator():
            / "EEG simulator.cmd").read_text(encoding="utf-8")
     probe = next(line for line in cmd.splitlines()
                  if line.startswith("powershell "))
-    # Nothing listening: it gives up by the clock.
+    # Nothing listening: it gives up by the clock, 20 s of its own
+    # stopwatch. PowerShell's start-up comes on top and has taken about
+    # 20 s on a cold CI runner, so the bound only proves the wait ends.
     t0 = time.perf_counter()
     done = subprocess.run(probe, shell=True, timeout=90)
     took = time.perf_counter() - t0
-    assert done.returncode == 1 and 18 < took < 35, took
+    assert done.returncode == 1 and 18 < took < 60, took
     rx = sim.ByteReceiver(listen_port=sim.LISTEN_PORT)
     rx.start()
     try:
