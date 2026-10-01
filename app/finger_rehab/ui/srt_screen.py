@@ -18,6 +18,25 @@ Between blocks the script's SPACE screens are a card with the same
 words. The recall step shows the cards in a shorter row with the
 entered sequence under them; each entry lights its card for the
 script's 150 ms, and a click on a card enters it.
+
+THE LAB LOOK (srt.look: lab, the lab build's setting since 1 October
+2026). For EEG recordings the screen draws the script's own display
+instead: a black page, four grey squares 0.13 of the half-width and
+half-height across, centred 0.075 and 0.225 of the half-width either
+side of the middle, the key or finger names under them, the target
+turning red for the flash, and the script's white text. The script
+set its squares close together to limit eye movements during EEG
+(its lines 18-19), and its flash is a grey-to-red change of about the
+same luminance at every location, where the app's outer cards sit
+about three times further out and each lights a different brightness
+(the SRT deep review, docs/research/deep/srt.md). Timing is the same
+in both looks.
+
+srt.photodiode_patch (off by default) draws a small patch in the
+bottom-left corner on flash frames only, for a light sensor timing the
+flash against the 30 on the amplifier: in the lab look the red square
+is about as bright as the grey one, so a sensor on the square itself
+would see little.
 """
 from __future__ import annotations
 
@@ -49,6 +68,25 @@ INSTRUCTION_Y = 132
 # would vanish on the light page.
 FEEDBACK_TONE = {"Correct": "success", "Incorrect": "error",
                  "Miss!": "warning"}
+
+# The lab script's display (SRT_Sequence_learning_Final_v2.py 139-175),
+# in PsychoPy's norm units: the page runs from -1 to 1 each way, so a
+# size is a fraction of the half-width or the half-height, and y is up.
+LAB_SQUARE = 0.13
+LAB_X = (-0.225, -0.075, 0.075, 0.225)
+LAB_LABEL_Y = -0.10
+LAB_INSTRUCTION_Y = 0.85
+LAB_FEEDBACK_Y = -0.25
+LAB_RECALL_TEXT_Y = 0.6
+LAB_PROGRESS_Y = -0.35
+LAB_HINT_Y = -0.60
+LAB_PAGE = (0, 0, 0)
+LAB_GREY = (128, 128, 128)
+LAB_RED = (255, 0, 0)
+LAB_YELLOW = (255, 255, 0)
+LAB_WHITE = (255, 255, 255)
+# The light sensor's patch, in logical pixels.
+PATCH = 44
 
 
 class SRTScreen(Screen):
@@ -109,10 +147,36 @@ class SRTScreen(Screen):
             out.append((hand, lane % 4))
         return out
 
+    def look(self) -> str:
+        """'lab' for the script's own display (srt.look), else 'app'."""
+        v = self.engine.cfg.get("srt.look", "app")
+        return ("lab" if isinstance(v, str) and v.strip().lower() == "lab"
+                else "app")
+
+    def _norm(self, x: float, y: float) -> tuple[int, int]:
+        """A point in the script's norm units on this page."""
+        w, h = self.layout.width, self.layout.height
+        return (int(round(w / 2 + x * w / 2)),
+                int(round(h / 2 - y * h / 2)))
+
+    def _lab_rects(self) -> list[pygame.Rect]:
+        w, h = self.layout.width, self.layout.height
+        size = (int(round(LAB_SQUARE * w / 2)),
+                int(round(LAB_SQUARE * h / 2)))
+        rects = []
+        for x in LAB_X:
+            r = pygame.Rect((0, 0), size)
+            r.center = self._norm(x, 0.0)
+            rects.append(r)
+        return rects
+
     def lane_rects(self, mode, recall: bool = False) -> list[pygame.Rect]:
         """Squares 1 to 4 as the lane games' card rects. The lab's two
         hands get the gap the lane games put between hands, so the left
-        pair and the right pair read as two hands."""
+        pair and the right pair read as two hands. In the lab look, the
+        script's four squares, recall included."""
+        if self.look() == "lab":
+            return self._lab_rects()
         w, h = self.layout.width, self.layout.height
         two = bool(getattr(mode, "two_hands", False))
         mid = GameplayScreen.HAND_BLOCK_GAP if two else GUTTER
@@ -266,10 +330,84 @@ class SRTScreen(Screen):
             self._lines(surf, hint, y + 32, hint_font, self.theme.accent,
                         inner)
 
+    # ---- the lab look ----------------------------------------------------------
+    def _text_at(self, surf: pygame.Surface, text: str, y_norm: float,
+                 font: pygame.font.Font, colour) -> None:
+        """Centred text whose block is centred on y_norm, as a PsychoPy
+        TextStim is placed."""
+        lines = self._wrap(font, text, int(self.layout.width * 0.8))
+        height = sum(10 if not ln else font.get_linesize() for ln in lines)
+        top = self._norm(0.0, y_norm)[1] - height // 2
+        self._lines(surf, text, top, font, colour,
+                    int(self.layout.width * 0.8))
+
+    def _draw_lab_squares(self, surf: pygame.Surface, mode, lit,
+                          lit_colour) -> None:
+        font = self.layout.font(FONT_BODY + 4)
+        labels = mode.labels()
+        for i, rect in enumerate(self._lab_rects()):
+            colour = lit_colour if lit == i + 1 else LAB_GREY
+            pygame.draw.rect(surf, colour, rect)
+            if i < len(labels):
+                img = font.render(str(labels[i]), True, LAB_WHITE)
+                surf.blit(img, img.get_rect(
+                    center=self._norm(LAB_X[i], LAB_LABEL_Y)))
+
+    def _draw_lab(self, surf: pygame.Surface, mode) -> None:
+        """The script's own display: black page, grey squares, red
+        flash, white words (srt.look: lab)."""
+        surf.fill(LAB_PAGE)
+        step = mode.step
+        kind = step.kind if step is not None else ""
+        body = self.layout.font(FONT_BODY + 4)
+        if kind == "message":
+            self._text_at(surf, mode.message_text(step), 0.0,
+                          self.layout.font(FONT_BODY + 8), LAB_WHITE)
+        elif kind == "block":
+            self._text_at(surf, mode.instruction(), LAB_INSTRUCTION_Y,
+                          body, LAB_WHITE)
+            self._draw_lab_squares(surf, mode, mode.flash_square, LAB_RED)
+            fb = mode.feedback_now
+            if fb:
+                font = self.layout.font(FONT_H2, bold=True)
+                img = font.render(fb[0], True, fb[1])
+                surf.blit(img, img.get_rect(
+                    center=self._norm(0.0, LAB_FEEDBACK_Y)))
+        elif kind == "recall":
+            self._text_at(surf, mode.recall_text(), LAB_RECALL_TEXT_Y,
+                          body, LAB_WHITE)
+            self._draw_lab_squares(surf, mode, mode.select_square,
+                                   LAB_YELLOW)
+            self._text_at(surf, mode.recall_progress(), LAB_PROGRESS_Y,
+                          body, LAB_WHITE)
+            hint = mode.recall_hint()
+            if hint:
+                self._text_at(surf, hint[0], LAB_HINT_Y,
+                              self.layout.font(FONT_BODY), hint[1])
+        elif kind == "saved":
+            self._text_at(surf, "Sequence recorded.\n\nSaving your data...",
+                          0.0, self.layout.font(FONT_BODY + 8), LAB_WHITE)
+
+    def _draw_patch(self, surf: pygame.Surface, mode, colour) -> None:
+        """The light sensor's patch, bottom left, on flash frames only
+        (srt.photodiode_patch, off by default)."""
+        if self.engine.cfg.get("srt.photodiode_patch", False) is not True:
+            return
+        if mode.flash_square is None:
+            return
+        h = self.layout.height
+        pygame.draw.rect(surf, colour, pygame.Rect(0, h - PATCH, PATCH, PATCH))
+
     # ---- draw ----------------------------------------------------------------
     def draw(self, surf: pygame.Surface) -> None:
-        surf.fill(self.theme.background)
         mode = self._mode()
+        if mode is not None and self.look() == "lab":
+            self._draw_lab(surf, mode)
+            self._draw_patch(surf, mode, LAB_WHITE)
+            if self.engine.paused and not self.engine.exit_overlay_active:
+                self._draw_paused_overlay(surf)
+            return
+        surf.fill(self.theme.background)
         if mode is None:
             draw_text(surf, "Starting...",
                       (self.layout.width // 2, self.layout.height // 2),
@@ -314,5 +452,6 @@ class SRTScreen(Screen):
         elif kind == "saved":
             self._draw_message(surf,
                                "Sequence recorded.\n\nSaving your data...")
+        self._draw_patch(surf, mode, (0, 0, 0))
         if self.engine.paused and not self.engine.exit_overlay_active:
             self._draw_paused_overlay(surf)

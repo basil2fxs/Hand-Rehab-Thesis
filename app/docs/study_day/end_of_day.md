@@ -23,7 +23,9 @@ P02,-75
 ```
 
 The notebook reads it for the handedness chapter (the LQ correlation)
-and the participants table. The login already recorded the main hand,
+and the participants table. After a lab session, also type the SRT
+check: srt_noticed (yes or no) and srt_report (the answer word for
+word), which the notebook prints beside the recall scores. The login already recorded the main hand,
 age, sex and hand size, so nothing else needs typing.
 
 ## Back up (5 min)

@@ -12,6 +12,8 @@ Caffeine in the last 2 hours: yes / no   Hours of sleep last night: ______
 
 Years playing a keyboard or string instrument (piano, guitar, violin
 and the like), all added up: ______ (0 if none)
+*(Lab session: skip it here and ask it at the end, in the SRT check: a
+question about music before the SRT points at its tones.)*
 
 Any hand, wrist or forearm pain or injury today? yes / no
 *(If yes: thank them, do not continue.)*
@@ -55,6 +57,15 @@ At the end: comfort of the pads (0 to 10) ______   clarity of the games (0 to 10
 Rest cut short? no / yes, after ______ s
 
 Calibration redone on a finger? no / yes, which: ______
+
+## SRT check (lab session only, after the recall, before the debrief)
+
+Ask: "Did you notice anything about the order of the lit cards? If so,
+what?" Write the answer word for word.
+
+no / yes: ________________________________________________
+
+Years playing a keyboard or string instrument, all added up: ______
 
 ## Muscle Memory check (at the end, before the debrief)
 

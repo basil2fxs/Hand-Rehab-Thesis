@@ -229,6 +229,9 @@ def build_plan(cfg, participant: str, dominant_hand: str,
         steps = leave_out(steps, {str(m).strip().lower() for m in dropped})
         if not steps:
             raise BatteryError(f"Preset '{preset}' leaves out every step")
+    first = raw.get("move_first")
+    if isinstance(first, (list, tuple)) and first:
+        steps = move_first(steps, [str(m).strip().lower() for m in first])
     overrides = resolved_overrides(cfg, preset)
     return BatteryPlan(
         family=preset_family(cfg, preset),
@@ -371,6 +374,33 @@ def leave_out(steps: list[BatteryStep],
             carry = None
         out.append(st)
     return [replace(st, position=i + 1) for i, st in enumerate(out)]
+
+
+def move_first(steps: list[BatteryStep],
+               modes: list[str]) -> list[BatteryStep]:
+    """The first step of each of these modes, in the order given, opens
+    the sitting. The EEG lab's build plays the lab's SRT first in both
+    orders: the script ran as a task of its own, and in order B it
+    would otherwise follow about nine minutes of play, Buzz Hunt's
+    replay of buzz sequences on the same fingers among them (the SRT
+    deep review of 1 October 2026). A break that stood before a moved
+    step stays where it was, on the step that now takes its place; the
+    moved step starts with none, as a sitting's first step does."""
+    rest = list(steps)
+    front: list[BatteryStep] = []
+    for mode in modes:
+        idx = next((i for i, st in enumerate(rest) if st.mode == mode),
+                   None)
+        if idx is None:
+            continue
+        st = rest.pop(idx)
+        if idx < len(rest) and (st.rest_before_s > 0
+                                or st.stretch_before_s > 0):
+            rest[idx] = _take_break(rest[idx], st)
+        front.append(replace(st, rest_before_s=0.0, rest_min_s=0.0,
+                             stretch_before_s=0.0))
+    return [replace(st, position=i + 1)
+            for i, st in enumerate(front + rest)]
 
 
 def _keep_break(carry: BatteryStep | None,

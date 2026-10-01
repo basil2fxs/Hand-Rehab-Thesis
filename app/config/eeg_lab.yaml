@@ -82,11 +82,18 @@ protocol:
       # No Muscle Memory in the lab (Basil, 29 September 2026). The SRT
       # plays before it in both orders and ends by asking whether the
       # participant noticed a repeating sequence, so by Muscle Memory
-      # they know to look for one, and its score is only implicit for
-      # a player who does not know. The SRT is the lab's sequence
-      # learning measure. A rest before a left-out block moves on.
+      # they know sequences exist, and its score would not pool with
+      # the study's. The SRT is the lab's sequence learning measure. A
+      # rest before a left-out block moves on.
       leave_out:
         - pattern
+      # The SRT opens the sitting in both orders (1 October 2026, the
+      # SRT deep review): the script ran as a task of its own, and in
+      # order B it would otherwise follow about nine minutes of play,
+      # Buzz Hunt's replay of buzz sequences on the same fingers among
+      # them. The sitting's length does not change.
+      move_first:
+        - srt
       # A lab sitting is not the healthy study's sitting, so it keeps
       # its own id. Its clock allows for the SRT's 15 minutes in place
       # of two short Reaction blocks. v2 (28 September 2026) follows
@@ -106,6 +113,24 @@ force_pilot:
   # No background track in the lab: an EEG block is recorded in
   # silence so the only sounds in the record are the cues themselves.
   music_enabled: false
+
+srt:
+  # The script's own display in EEG recordings (1 October 2026, the SRT
+  # deep review): a black page and four grey squares near the centre,
+  # the target turning red. The script set its squares close together
+  # to limit eye movements; the app's outer cards sit about three
+  # times further out and each lights a different brightness. Timing,
+  # tones, markers and files are the same in both looks.
+  look: lab
+  # Response bytes as well as the 30: 100 plus the lane for a correct
+  # press, 110 plus the lane for a wrong one, 120 plus the lane for an
+  # anticipation and 130 for a miss. Written at the trial's end, each
+  # with the press time as t_event in the marker log, so response
+  # epochs are re-aligned to t_event, not to the byte's onset. The
+  # lab's own EEG SRT coded responses (Lum et al. 2025), and the
+  # error-related negativity and response-locked activity need them.
+  # The 30 stays the flash, so an epoch on 30 is unchanged.
+  response_markers: true
 
 ui:
   # Minimal feedback for the lab. No words after a trial: one ring

@@ -1670,11 +1670,15 @@ class GameEngine:
         flags = pygame.SCALED
         if fullscreen:
             flags |= pygame.FULLSCREEN
+        # Whether flips wait for the refresh; the SRT records it (a
+        # 60 Hz panel without vsync reads about 120 Hz, the loop's cap).
+        self.vsync = True
         try:
             window = pygame.display.set_mode((lw, lh), flags, vsync=1)
         except pygame.error as e:
             log.warning("set_mode %s failed (%s); retrying without vsync",
                          "fullscreen" if fullscreen else "windowed", e)
+            self.vsync = False
             try:
                 window = pygame.display.set_mode((lw, lh), flags)
             except pygame.error as e2:

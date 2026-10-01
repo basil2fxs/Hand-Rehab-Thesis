@@ -12,14 +12,19 @@ it, so a change is never invisible.
 The timing group picked is written to the setups file straight away,
 so the next participant in the same group needs one click.
 
-The sequence is never shown. The participant is often sitting in front
-of this screen, and knowing the order is exactly what the task must not
-hand them before it starts (explicit knowledge changes what an SRT
-measures).
+The sequence is never shown, and since 1 October 2026 nothing on the
+screen names a sequence, learning blocks or a recall (the SRT deep
+review, docs/research/deep/srt.md): the participant is often sitting
+in front of this screen, and knowing that an order exists is what the
+task must not hand them before it starts (explicit knowledge changes
+what an SRT measures). The run sheet keeps the screen turned away.
 
 Musical experience belongs to the person logged in, not to the setup,
 so it is kept for this login only and written into the performance
-file with every trial.
+file with every trial. The lab's 2026 study asked about musical
+training at the end, and a question about music before the task
+points at the tones, so the field can stay blank and the question go
+on the session sheet after the task (Leow et al. 2026).
 """
 from __future__ import annotations
 
@@ -59,8 +64,8 @@ def group_line(group: str, isi_ms: int) -> str:
     if group == "constant":
         return f"Every gap before a flash is {isi_ms} ms."
     if group == "cyclical":
-        return (f"Gaps of {short}, {isi_ms} and {long_} ms, in a set "
-                f"order that follows the sequence.")
+        return (f"Gaps of {short}, {isi_ms} and {long_} ms in a fixed "
+                f"repeating order.")
     return f"Gaps of {short}, {isi_ms} and {long_} ms, shuffled."
 
 
@@ -203,7 +208,7 @@ class SRTSetupScreen(Screen):
         self.music_seg.draw(surf)
         me = self.music_seg.value
         caption = (MUSICAL_EXPERIENCE[int(me)][4:] if me is not None
-                   else "ask: none, or years of lessons")
+                   else "optional: leave blank and ask after the task")
         draw_text(surf, caption, (mx + 500, my + 252), self.theme,
                   self.layout, pt=FONT_BODY, colour=muted)
         draw_text(surf, HANDS_LINE[self._hand_mode()], (mx, my + 322),
@@ -211,9 +216,9 @@ class SRTSetupScreen(Screen):
         counts = protocol_counts(self.engine.cfg)
         mins = estimate_minutes(self._values(), counts)
         draw_text(surf,
-                  f"About {mins:.0f} min: practice, "
-                  f"{counts['learning_blocks']} learning blocks, a final "
-                  f"test, then recall.",
+                  f"About {mins:.0f} min: a practice block, "
+                  f"{counts['learning_blocks']} main blocks, a final "
+                  f"block and one question.",
                   (mx, my + 354), self.theme, self.layout,
                   pt=FONT_BODY, colour=muted)
         if self.custom:

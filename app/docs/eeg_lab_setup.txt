@@ -6,10 +6,12 @@ top: markers on, trigger box required, no music in Force Pilot,
 neutral feedback (one ring glyph 800 ms after the press, no words, no
 chime), FRN bytes in chords and Force Pilot. The Reaction card is the
 lab's own SRT task (Welber's PsychoPy script, replicated trial for
-trial), and the Lab session runs it once in place of the study's two
-Reaction blocks. It leaves out Muscle Memory: the SRT's recall
-question comes first and tells the participant a sequence was there,
-and Muscle Memory's score only holds for a player who does not know.
+trial), and the Lab session runs it once, first in both orders, in
+place of the study's two Reaction blocks, with the old script's
+display and a response byte per trial (eeg_lab.yaml srt block). It
+leaves out Muscle Memory: the SRT's recall question tells the
+participant a sequence was there, so a Muscle Memory score taken after
+it would not pool with the study's.
 About 48 minutes from login, the SRT about 15 of them. The folder that
 goes to the lab is EEG_Lab at the top of the project
 (FingerRehab-EEGLab.zip on CI): Finger Rehab.exe, eeg_lab.yaml,
@@ -66,15 +68,27 @@ At the lab PC
 8. Never set 1200 baud anywhere: it resets the box off the bus. The
    game refuses eeg.baud 1200. Leave the port's settings alone.
 9. Keep vsync on for the game window, or visual markers lead the
-   screen by an unknown amount.
-10. Reaction opens on its setup screen: pick the participant's timing
-   group (or a saved setup), one hand or two (two hands, as the lab's
-   own studies ran it, needs both boards) and their musical
-   experience, then START.
-   The setup is kept for the next participant. The task itself is the
-   old script's: black screen, four grey squares, one 30 per red
-   flash, SPACE between blocks, the recall at the end, and the
-   script's three CSVs in the game's folder beside trials.csv.
+   screen by an unknown amount. Write the panel's refresh rate on the
+   session sheet: every SRT block records monitor_hz and vsync in
+   metadata.json, and about 120 Hz on a 60 Hz panel means the window
+   ran without vsync.
+10. Reaction opens on its setup screen; keep it turned away from the
+   participant. Pick the timing group (or a saved setup) and START,
+   saying the group aloud and checking it against the session sheet:
+   the group last picked carries to the next participant. The hands
+   come from login (two hands, as the lab's own studies ran it, need
+   both boards or the keyboard). Leave musical experience blank and
+   ask about formal musical training after the task, on the session
+   sheet: a question about music before the task points at the tones.
+   The task is the old script's, with its display (srt.look: lab): a
+   black page, four grey squares near the centre turning red, one 30
+   per flash and one response byte per trial, SPACE between blocks,
+   the recall at the end, and the script's three CSVs in the game's
+   folder beside trials.csv. After the recall, ask "Did you notice
+   anything about the order of the lit cards? If so, what?" and write
+   the answer word for word on the session sheet (srt_noticed and
+   srt_report on the intake sheet). The answer on screen to the
+   recall question is not recorded.
 11. Everything lands in sessions/ beside run_in_psychopy.py, whichever
    way the game started: a dated folder per game with trials.csv,
    raw.csv (an eeg row per marker, with the intended and the actual
@@ -120,9 +134,14 @@ What the Status channel shows
 - Each stimulus a 30 to 38 (40 or 41 in pattern blocks, 50 or 51 for
   a syllables option set, 52 for its late prompt buzz, 53 for the
   four words of a speed trial), each press
-  100 to 131. Every code is held
-  8 ms (16 samples at 2048 Hz) then 0. The box's LED flashes on odd
-  codes only.
+  100 to 131. In the lab build's SRT blocks every trial ends with 100
+  plus the lane for a correct press, 110 plus the lane for a wrong
+  one, 120 plus the lane for an anticipation or 130 for a miss, sent
+  at the trial's end with the press time as t_event in raw.csv, so
+  response epochs are re-aligned to t_event. Every code is held until
+  the first frame at least 8 ms later (8 to 17 ms at 60 Hz, 16 to 35
+  samples at 2048 Hz), then 0. The box's LED flashes on odd codes
+  only.
 - Pauses are 242 and 243.
 - If the box dies mid-session the game keeps going: three failed
   writes, one reopen, then the HUD says "EEG markers lost" and
@@ -232,13 +251,15 @@ For the analysis
   mne.find_events(raw, mask=255, mask_type="and"). EEGLAB: File,
   Import event info, from ASCII file, fields latency type duration.
 - Against Welber's old SRT script: it wrote one 30 per flash and
-  nothing else, and the Reaction card (srt blocks, 213 to 233) does
-  exactly that. The other games put the cue condition in the byte, so
-  epoch them on the 30 band, not the literal 30. The old script wrote
-  bytes(chr(code), 'UTF-8'), two bytes for anything above 127, and
-  held the line 1 to 4 ms; this game writes bytes([code]) and holds
-  8 ms on the wall clock. Recordings made under the old prototype map
-  (30 = miss, 11 to 18 stimulus) must not be pooled with these.
+  nothing else, and the Reaction card (srt blocks, 213 to 233) sends
+  the same 30; the lab build adds the response bytes above, which an
+  epoch on 30 never sees. The other games put the cue condition in
+  the byte, so epoch them on the 30 band, not the literal 30. The old
+  script wrote bytes(chr(code), 'UTF-8'), two bytes for anything above
+  127, and held the line 1 to 4 ms; this game writes bytes([code]) and
+  holds it to the first frame at least 8 ms later. Recordings made
+  under the old prototype map (30 = miss, 11 to 18 stimulus) must not
+  be pooled with these.
 
 Validate once before the first real recording. In a Python shell on
 the lab PC, `import serial; s = serial.Serial("COM10", 9600);
@@ -247,3 +268,21 @@ block: the intervals between stimulus bytes in the Status channel must
 match the t_wire intervals in raw.csv to within one sample plus 1 ms.
 Confirm the ActiView sampling rate with Welber and put it in
 eeg.amplifier_rate_hz.
+
+That checks the wire, not the screen or the speaker, and only a light
+sensor and a microphone show those delays (Bridges et al. 2020, PeerJ
+8:e9414). Time them once, on the lab PC with its own monitor: set
+srt.photodiode_patch: true in eeg_lab.yaml for this run only (a patch
+in the bottom-left corner on flash frames; in the lab look the red
+square is about as bright as the grey one, so a sensor on the square
+sees little), put the light sensor on that corner and a microphone
+(or a split of the audio output) on two of the amplifier's auxiliary
+inputs, and play the SRT's practice block with markers on (Esc after
+it). For each 30, the delay to the light change and to the tone's
+onset is the visual and the tone delay: report the mean, SD and
+range, write them into the lab PC's latency profile (latency.visual_ms
+and latency.tone_ms, so metadata.json carries them), check monitor_hz
+against the panel, and set srt.photodiode_patch back to false. Leave
+srt.tone_lead_ms at 0, the script's behaviour, unless the lab wants
+the tone with the flash; then it is the measured tone delay minus the
+visual delay.

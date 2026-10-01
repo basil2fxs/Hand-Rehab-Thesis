@@ -928,9 +928,20 @@ srt:
   # miss); every RT is in the exported CSV either way.
   stim_code: 30
   response_markers: false
-  # Words under the squares. Empty: V B N M on a keyboard, the finger
-  # names on the pads.
+  # Words under the squares. Empty: the hand's own keys on a keyboard,
+  # the finger names on the pads.
   labels: null
+  # app: the finger cards on the light page. lab: the script's own
+  # display, a black page and four grey squares near the centre
+  # turning red, which eeg_lab.yaml sets for EEG recordings (the SRT
+  # deep review of 1 October 2026). Timing is the same in both.
+  look: app
+  # A small patch in the bottom-left corner on flash frames only, for
+  # a light sensor timing the flash against the 30 on the amplifier
+  # (docs/eeg_lab_setup.txt, the timing check). In the lab look the
+  # red square is about as bright as the grey one, so a sensor on the
+  # square itself would see little. Off for every participant.
+  photodiode_patch: false
   # Where the setups live. Empty means config/srt_setups.json under
   # the data root. Tests point it at a temporary folder.
   setups_file: null

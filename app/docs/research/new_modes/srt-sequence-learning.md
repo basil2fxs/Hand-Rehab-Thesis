@@ -4,6 +4,15 @@ Prepared 25 September 2026 for the thesis replication of Dr Welber Marinovic's P
 
 ## Status in the software (25 September 2026)
 
+**Corrected by the deep review of 1 October 2026** (`docs/research/deep/srt.md`, which supersedes this file where they differ):
+
+- B7 (Leow et al. 2025) told participants to learn the sequences, measured learning as the drop in normalised RT with no random block, and found the 500 ms advantage at block 2, reversed at block 4 and gone by block 5; the informative-tone benefit holds under explicit instructions in a related task, not as shown on this one. The lab's 2026 study (G1) used a different sequence (1-3-1-4-3-2-4-2-3-1) and counted anticipations as responses faster than about 182 ms, not presses before the flash.
+- The timing groups and the musical experience question are in the lab's script, not additions. Dropping each block's first trial is this project's rule, not the lab's; the lab drops errors and RTs over 1000 ms.
+- The "500 ms RSI" is nominal: from the key to the flash it is about 530 to 550 ms at 60 Hz in both programs, about 560 ms on the pads; `press_to_flash_ms` now logs it.
+- Hands come from login, not the setup; the Lab session plays the SRT first in both orders, with the script's own display (`srt.look: lab`) and response bytes on (`eeg_lab.yaml`).
+- Random blocks hold more reversals (32 against 18 percent) and fewer runs of three neighbours (11 against 20 percent) than the lab sequence, and squares 1 and 3 are 30 percent of sequence trials each; reversals are slower, so the notebook now reads a reversal-free and a reweighted effect beside the plain one.
+
+
 **Built.** The Reaction card on the hub runs the script as the `srt` mode (`finger_rehab/game/modes/srt.py`), trial for trial:
 
 - Practice 48 random trials with Correct, Incorrect and Miss! feedback, 8 learning blocks of the 10-item sequence 10 times over, a 48-trial random post-test, then the recall. SPACE screens between phases and blocks; a 1000 ms wait opens every block.

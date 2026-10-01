@@ -10,15 +10,23 @@ Cognitive Psychology).
 
 WHERE IT COMES FROM. Dr Welber Marinovic's PsychoPy script,
 archive/Webler EEG past program/SRT_Sequence_learning_Final_v2.py.
-Its structure is Nissen and Bullemer's (1987) Experiment 1: four
-locations, a ten-item sequence, eight blocks of 100 and a 500 ms wait
-after each response (Schwarb and Schumacher 2012). That wait starts
-at the response, so it is a response-to-stimulus interval (RSI); the
-script and the files call it ISI and so does this code. The lane
-tones are the lab's own addition: location tones improve learning on
-this task (Leow et al. 2025, European Journal of Neuroscience). The
-research file is docs/research/new_modes/srt-sequence-learning.md.
-This mode replicates the script:
+Its learning phase follows Nissen and Bullemer's (1987) Experiment
+1: four locations, a ten-item sequence, eight blocks of 100 and a 500
+ms wait after each response (Schwarb and Schumacher 2012). Nissen and
+Bullemer compared a sequence group with a separate random group; the
+script puts random blocks before and after the sequence for every
+participant. The wait starts at the response, so it is a
+response-to-stimulus interval (RSI); the script and the files call it
+ISI and so does this code. It is nominal: the flash lands one frame
+after it, counted from the frame that ended the trial, so from the
+key to the flash it is about 530 to 550 ms at 60 Hz in both programs
+(press_to_flash_ms logs it; the SRT deep review of 1 October 2026,
+docs/research/deep/srt.md). The lane tones are the lab's own
+addition; tones that predict the location sped learning under
+explicit instructions, in a related task with no random block (Leow
+et al. 2025, European Journal of Neuroscience). The research file is
+docs/research/new_modes/srt-sequence-learning.md. This mode
+replicates the script:
 
 - Order: welcome, practice (48 random trials with Correct / Incorrect
   / Miss! feedback), MAIN TASK, eight learning blocks of the sequence
@@ -47,7 +55,8 @@ This mode replicates the script:
   runs out, the flash covers whole frames and the feedback word
   follows the miss pause. Everything is scheduled on the flip clock
   (engine.last_flip_t) rather than by counting frames, so a dropped
-  frame shifts one onset instead of every onset after it.
+  frame does not lengthen the interval or the flash, where the
+  script's frame counting would add a refresh.
 - Recall: the participant enters the sequence they think they saw,
   one card at a time (the finger, the hand's own keys on a keyboard,
   or a click on the card), with BACKSPACE to undo and ENTER or SPACE to submit
@@ -56,8 +65,9 @@ This mode replicates the script:
 - Exports: the script's three CSVs, same names and columns, in the
   session folder (export_files), beside the app's own trials.csv.
 
-WHAT IS NEW. The learning interval, the timing group and the sequence
-come from a setup chosen on the setup screen and kept between
+WHAT IS NEW. The timing groups and the musical experience question
+are the script's own. The learning interval, the timing group and the
+sequence come from a setup chosen on the setup screen and kept between
 sessions (game/srt_setup.py). The recall line names the finger on
 the pads and the key on a keyboard. The performance CSV gains columns
 after the script's own (hand, setup, onset time, the interval the
@@ -74,7 +84,13 @@ WHAT DIFFERS AND WHY.
   finger cards every lane game draws, on the light page, with the
   target lit in its finger's stronger colour where the script turned
   a grey square red (ui/srt_screen.py). Timing, order, counts, tones,
-  markers and files are the script's; only the drawing changed.
+  markers and files are the script's; only the drawing changed. For
+  EEG recordings srt.look: lab draws the script's own display, four
+  grey squares near the centre of a black page turning red, the lab
+  build's setting since 1 October 2026: the app's outer cards sit
+  about three times further out and each lights a different
+  brightness, which brings eye movements and location-specific
+  visual responses into the EEG.
 - The tone plays when the flash is drawn, before the flip, as the
   script's sound.play() did. Its delay to the speaker belongs to the
   machine; tone_lead_ms can move it earlier once measured.
@@ -132,8 +148,12 @@ PERF_COLUMNS = ["participant", "age", "gender", "musical_experience",
 # between the flash and the answer, so the RT is not a lab RT; the
 # row stays in the accuracy counts) or "device_drop" (the board was
 # away on a silent trial: the rig's miss, out of every count).
+# press_to_flash_ms: the previous press to this flash, the interval the
+# participant actually got (rsi_ms runs from the frame that ended the
+# previous trial); blank after a miss and on a block's first trial.
 PERF_EXTRA = ["hand", "setup", "learning_isi_ms", "sequence", "input",
-              "response_finger", "onset_s", "rsi_ms", "flag"]
+              "response_finger", "onset_s", "rsi_ms", "flag",
+              "press_to_flash_ms"]
 
 
 @dataclass
@@ -169,6 +189,8 @@ class Trial:
     # the row, and the row says it was paused.
     onset_flash: float | None = None
     paused: bool = False
+    # The previous trial's press, for press_to_flash_ms.
+    prev_press_t: float | None = None
 
 
 class SRTMode:
@@ -432,6 +454,10 @@ class SRTMode:
                 if tr.onset_flash is None:
                     tr.onset_flash = tr.onset
                 tr.paused = True
+            if tr.state == "wait" and tr.prev_press_t is not None:
+                # The flash is still to come, so the interval it ends
+                # leaves the pause out, as rsi_ms does.
+                tr.prev_press_t += pause_dur
             for attr in ("flash_due", "prev_end", "armed_at", "armed_flip",
                          "onset"):
                 v = getattr(tr, attr)
@@ -680,6 +706,8 @@ class SRTMode:
         nxt = tr.index + 1
         if nxt < len(step.targets):
             self.trial = self._make_trial(step, nxt, end, post)
+            if tr.press is not None:
+                self.trial.prev_press_t = float(tr.press.t_perf)
         else:
             self.trial = None
             self._block_done_at = end + post
@@ -765,6 +793,9 @@ class SRTMode:
             "rsi_ms": ("" if onset is None
                        else round((onset - tr.prev_end) * 1000.0, 1)),
             "flag": flag,
+            "press_to_flash_ms": (
+                "" if flash is None or tr.prev_press_t is None
+                else round((flash - tr.prev_press_t) * 1000.0, 1)),
         })
         self.perf_rows.append(row)
         hit = acc in ("correct", "anticipatory_correct")
@@ -1091,6 +1122,13 @@ class SRTMode:
             pass
         start = self.t_start if self.t_start is not None else self._clock()
         duration = (self.t_end or self._clock()) - start
+        p2f = self._median([float(r["press_to_flash_ms"])
+                            for r in self.perf_rows
+                            if r["phase"] == "learning"
+                            and r.get("press_to_flash_ms") not in ("", None)
+                            and not r.get("flag")])
+        vsync = getattr(self.engine, "vsync", None)
+        look = self.engine.cfg.get("srt.look", "app")
         return {
             "setup": self.setup.to_dict(),
             "group": self.setup.group,
@@ -1107,6 +1145,15 @@ class SRTMode:
             "stim_code": self.stim_code,
             "response_markers": self.response_markers,
             "monitor_hz": self.monitor_hz(),
+            # Whether the window flips on the refresh: without vsync a
+            # 60 Hz panel reads about 120 Hz here (the loop's cap).
+            "vsync": vsync if isinstance(vsync, bool) else None,
+            "look": look if isinstance(look, str) else "app",
+            # Learning blocks: the previous press to the flash, the
+            # interval the participant got (nominal plus a frame plus
+            # the time from the press to the frame that ended it).
+            "press_to_flash_median_ms": (None if p2f is None
+                                         else round(p2f, 1)),
             "tone_latency_ms_config": audio_latency,
             "tone_lead_ms": round(self.tone_lead_s * 1000.0, 1),
             "musical_experience": self.musical_experience,

@@ -212,8 +212,23 @@ HOW THE DESIGN GOT HERE (every change made before any participant):
     a hand's press under 100 ms is not a response, a late press after
     the window is not charged, a pair a board drop cut short never
     reaches the pace, and the GET READY card says to press both at the
-    same moment. The text below is corrected where the reviews found a
-    claim the evidence contradicts.
+    same moment. The laboratory's SRT last, for the EEG lab's Lab
+    session only (docs/research/deep/srt.md): the copy matches the
+    lab's script frame for frame, and the changes are around it. The
+    Lab session plays the SRT first in both orders, with the script's
+    own display (four grey squares near the centre of a black page,
+    turning red) and a response byte per trial; the flash and the tone
+    are timed once against the markers with a light sensor and a
+    microphone; the true press-to-flash interval is logged (about 530
+    to 550 ms from a key at 60 Hz, the 500 ms being nominal); the
+    setup screen no longer names a sequence or a recall; the spoken
+    answer to "did you notice anything about the order" goes on the
+    intake sheet, and musical training is asked after the task. The
+    notebook reads a reversal-free and a reweighted sequence effect
+    beside the plain one, since random blocks hold more reversals,
+    which are slower, and a per-person interval. The text below is
+    corrected where the reviews found a claim the evidence
+    contradicts.
 
 What one board costs, and the thesis says it in the same breath as
 the results:
@@ -1929,7 +1944,9 @@ at LOG IN, before the RA has started the EEG recording, so the hub's
 picker offers Lab session instead: the lab's SRT in place of both
 Reaction blocks, and no Muscle Memory, since the SRT's recall
 question comes first and would tell the participant a sequence
-exists (config/eeg_lab.yaml, eeg_lab_srt_v3).
+exists (config/eeg_lab.yaml, eeg_lab_srt_v3). Since 1 October 2026
+the SRT opens the Lab session in both orders, the script having run
+as a task of its own, and draws the script's own display.
 
 
 3. PARTICIPANT INTAKE, ANONYMITY AND KEYING

@@ -28,7 +28,12 @@ SRT_Sequence_learning_Final_v2.py):
 The three groups are the random, constant and response-locked RSI
 conditions of Shin (2008, Psychological Research), who found the order
 learnt equally under all three and the predictable timing only making
-responses faster; others disagree (research file, Section 6).
+responses faster. The evidence conflicts: timing tied to the order
+raised spatial learning to 52 ms against 14 ms (Shin and Ivry 2002),
+and irregular pauses disrupted learning (Stadler 1995), so no group
+difference is claimed at the lab's sample sizes (the SRT deep review
+of 1 October 2026, docs/research/deep/srt.md). The groups are in the
+lab's script; they are not this platform's addition.
 
 What is new here is that the learning interval can move. Cyclical and
 random then scale with it (half, equal and one and a half times the
@@ -222,9 +227,10 @@ def recall_scores(recalled, seq) -> dict:
     sequence from any point in it.
 
     Chance, from 100,000 random 10-item recalls of the lab sequence
-    (research file Section 4): positional 2.5 (95th percentile 5);
-    triplet 0.28 with no key repeated (95th percentile about 0.63);
-    longest run 3 to 3.5 items (95th percentile 4 to 5)."""
+    (research file Section 4, checked in the SRT deep review):
+    positional 2.5 (95th percentile 5); triplet 0.278 with no key
+    repeated (95th percentile 0.625); longest run 3.46 items with no
+    key repeated (95th percentile 5), 2.93 (4) with repeats."""
     rec = [int(x) for x in recalled]
     seq = [int(x) for x in seq]
     n = len(seq)
