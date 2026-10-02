@@ -169,21 +169,27 @@ class SyllablesScreen(Screen):
     # Letter spacing as a share of the font's average letter width
     # (syllables-task-design.md, Section 6.4, rule 2).
     SPACING_OF_LETTER = 0.35
+    # One title and one line per part (Basil, 2 October 2026: say what
+    # each part asks in plain words). The warm-up words are the first
+    # words of hear and pick, under its card and counter.
     SECTION_COPY = {
-        # The probe has no hints and shows nothing about the answer, so
-        # its card says so before the first set (the deep review of 1
-        # October 2026).
-        "probe": ("LISTEN AND PICK",
-                  "Pick the part you hear. No hints in this part."),
-        "review": ("WARM UP", "A few easy ones first."),
+        # The reading check (the probe) runs for a case reader only. It
+        # has no hints and shows nothing about the answer, so its card
+        # says so before the first set (the deep review of 1 October
+        # 2026).
+        "probe": ("READING CHECK",
+                  "The same words each time. No hints, no score: "
+                  "pick the part you hear."),
+        "review": ("HEAR AND PICK",
+                   "Hear the word, then pick its parts in order."),
         "pick": ("HEAR AND PICK",
-                 "Listen, then press the finger under the part you hear."),
+                 "Hear the word, then pick its parts in order."),
         "build": ("BUILD THE WORD",
-                  "Hear the word, then build it one part at a time."),
+                  "Hear the whole word, then build it part by part."),
         "speed": ("QUICK LOOK",
                   "A word flashes up. Then pick the word you saw."),
     }
-    SECTION_NAMES = {"probe": "Listen and pick", "review": "Warm up",
+    SECTION_NAMES = {"probe": "Reading check", "review": "Hear and pick",
                      "pick": "Hear and pick",
                      "build": "Build the word", "speed": "Quick look"}
 
@@ -291,8 +297,11 @@ class SyllablesScreen(Screen):
                     "success")
         if phase == "attend" and section == "build":
             return ("LISTEN...", "Hear the word, then build it.", "accent")
+        first = int(getattr(mode, "pos", 0) or 0) == 0
         if phase == "choose" and section == "build":
             return ("BUILD IT",
+                    "Press the finger under the first part of the word."
+                    if first else
                     "Press the finger under the next part of the word.",
                     "success")
         if phase == "complete" and section:
@@ -311,11 +320,15 @@ class SyllablesScreen(Screen):
             return ("WATCH", "Hands off. See and hear each part.",
                     "accent")
         if phase == "choose":
-            return ("WHICH ONE?",
-                    "Press the finger under the part that comes next."
-                    if style == "child" else
-                    "Press the finger under the part you heard.",
-                    "success")
+            # A child has just watched the parts and now picks them in
+            # order; an adult hears each part and picks it.
+            if style == "child":
+                line = ("Press the finger under the first part."
+                        if first else
+                        "Press the finger under the next part.")
+            else:
+                line = "Press the finger under the part you heard."
+            return ("WHICH ONE?", line, "success")
         if phase == "complete":
             return ({"child": "WONDERFUL!", "neutral": "NICE WORK"}
                     .get(style, "DONE"), "", "success")
@@ -447,6 +460,13 @@ class SyllablesScreen(Screen):
                     else getattr(mode, "_probe_done", 0)
                     if mode.section == "probe"
                     else mode._section_words)
+            if mode.section in ("review", "pick"):
+                # One counter for the warm-up words and hear and pick.
+                plan = dict(mode.section_plan)
+                review = int(plan.get("review", 0))
+                quota = review + int(plan.get("pick", 0))
+                if mode.section == "pick":
+                    done += review
             return f"{name}: {min(done + 1, quota)} of {quota}"
         done, total = mode.words_done, mode.words_total
         return f"Word {min(done + 1, total)} of {total}"
@@ -469,20 +489,9 @@ class SyllablesScreen(Screen):
         draw_text(surf, self._top_label(mode),
                   (pad, 34), self.theme, self.layout, pt=FONT_SMALL,
                   colour=self.theme.muted)
-        # The adult staircase moves the fall, not a level, and a
-        # visible number would only invite chasing it. The speed check
-        # has no level at all.
-        speed = (self._sectioned(mode)
-                 and getattr(mode, "section", "") == "speed")
-        if not getattr(mode, "fall_mode", False) and not speed:
-            label = (f"Band {mode.band}   Level {mode.rung} of "
-                     f"{mode.rung_max}"
-                     if getattr(mode, "_bank_bands", True)
-                     else f"Level {mode.rung} of {mode.rung_max}")
-            draw_text(surf, label,
-                      (self.layout.width // 2, 40), self.theme,
-                      self.layout, pt=FONT_SMALL, centre=True,
-                      colour=self.theme.muted)
+        # No band or level on the play screen (Basil, 2 October 2026:
+        # they read as jargon and moved mid-sitting); both stay in the
+        # data and on the results screen's details.
         accent = self._accent()
         pf = self.layout.font(FONT_SMALL + 2)
         pill_label = pf.render("SYLLABLES", True, (255, 255, 255))

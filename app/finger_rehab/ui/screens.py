@@ -5927,6 +5927,19 @@ class ResultsScreen(Screen):
             return "D", "Big effort. Rest, then again"
         return "E", "Every press was practice. Rest up"
 
+    def _grade_rate(self) -> float:
+        """The share the grade ring is drawn from: hits over hits and
+        misses, except in Syllables, which grades the words, the number
+        its WORDS CORRECT card shows. Its reading check gives no
+        feedback and is not part of the game, so its answers stay out
+        (Basil, 2 October 2026: 100 percent of words right showed a
+        C)."""
+        sy = self._syllables_summary()
+        if sy is not None and sy.get("accuracy") is not None:
+            return float(sy["accuracy"])
+        total = self.engine.hits + self.engine.misses
+        return 0.0 if total == 0 else self.engine.hits / total
+
     def _best_streak(self) -> int | None:
         """The longest run of hits in a row this block: the block
         summary's peak_streak, or the engine's live counts when the
@@ -6193,17 +6206,17 @@ class ResultsScreen(Screen):
         banded = str(sy.get("profile") or "classic") in ("classic", "6-9")
         if unaided is not None and unaided < 0.45:
             if prompted >= 0.5 and first is not None and first >= 0.8:
-                return ("Supervisor: most answers came right after the "
-                        "buzz; more time may suit better than easier "
-                        "words.")
+                return ("Supervisor: most answers came just after the "
+                        "helper buzz; more time may help more than "
+                        "easier words.")
             if banded:
-                return ("Supervisor: an easier band and a lower level "
-                        "may suit next session.")
-            return ("Supervisor: this set of words was hard going; "
-                    "note it for next session.")
+                return ("Supervisor: easier words may suit next session "
+                        "(an easier word list).")
+            return ("Supervisor: these words were hard going; note it "
+                    "for next session.")
         if unaided is not None and unaided > 0.95 and banded:
-            return ("Supervisor: try the next band next session; the "
-                    "words stopped asking anything.")
+            return ("Supervisor: these words were easy for this reader; "
+                    "try a harder word list next session.")
         # The sectioned sitting's speed check, when it ran: what it
         # measured, in one line.
         speed = (sy.get("sections") or {}).get("speed") or {}
@@ -6940,9 +6953,7 @@ class ResultsScreen(Screen):
     def draw(self, surf: pygame.Surface) -> None:
         surf.fill(self.theme.background)
         cx = self.layout.width // 2
-        total = self.engine.hits + self.engine.misses
-        rate = 0.0 if total == 0 else self.engine.hits / total
-        grade, blurb = self._grade_for(rate)
+        grade, blurb = self._grade_for(self._grade_rate())
         grade_colour = self._grade_colour(grade)
         # Entry animation progress: 1.0 when settled (or in a bare
         # test draw with no on_show notification).
@@ -7009,7 +7020,7 @@ class ResultsScreen(Screen):
         "reaction": (2, 4, 0),        # median RT | accuracy or p10
         "srt": (0, 1, 2),             # learning effect | accuracy | recall
         "chords": (1, 2, 0),          # clean hit rate | median ER
-        "syllables": (1, 2, 0),       # words correct | band | score
+        "syllables": (1, 2, 0),       # words correct | check or words | score
         "mirror": (2, 0, 1),          # sync gap | score | hits
         "adaptive": (2, 4, 0),        # top pace | final pace | score
     }
@@ -7427,14 +7438,27 @@ class ResultsScreen(Screen):
             else:
                 fifth = ("AVG RT", avg_str, self.theme.foreground)
                 sixth = ("BEST RT", best_str, self.theme.success)
+            # The third card: a case reader's reading check, right of
+            # answered, or the words played. The word list (the bank's
+            # band) moves to the details (Basil, 2 October 2026).
+            probe = sy.get("probe") or {}
+            n_probe = int(probe.get("n") or 0)
+            if n_probe:
+                right = int(round(float(probe.get("acc") or 0.0) * n_probe))
+                third = ("READING CHECK", f"{right}/{n_probe}",
+                         self.theme.foreground)
+            else:
+                played = sy.get("n_words")
+                third = ("WORDS", str(played) if played is not None
+                         else "n/a", self.theme.foreground)
             cards = [
                 ("SCORE", f"{int(round(self.engine.score * entry))}",
                  self.theme.accent),
                 ("WORDS CORRECT", acc_str, self.theme.success),
-                ("BAND", str(band), self.theme.foreground),
-                self._hit_rate_card(),
+                third,
                 fifth,
                 sixth,
+                ("WORD LIST", str(band), self.theme.foreground),
             ]
         elif mir is not None:
             # Mirror's whole training goal is bimanual SYNCHRONY, not

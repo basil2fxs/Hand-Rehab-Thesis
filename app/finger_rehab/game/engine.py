@@ -8,6 +8,7 @@ import json
 import logging
 import random
 import os
+import re
 import subprocess
 import sys
 import time
@@ -4878,9 +4879,9 @@ class GameEngine:
                          or "auto"),
             age=getattr(self.session, "age", ""),
             sections=bool(self.cfg.get("syllables.sections", True)),
-            # The fixed probe that opens the case sitting
-            # (syllables.py, PROBE).
-            probe=bool(self.cfg.get("syllables.probe", True)),
+            # The fixed probe (the reading check) opens a case reader's
+            # sitting only (syllables.py, PROBE; syllables_probe_on).
+            probe=self.syllables_probe_on(),
             probe_only=bool(self.cfg.get("syllables.probe_only", False)),
         )
         self._begin_block("syllables")
@@ -4899,6 +4900,25 @@ class GameEngine:
         if sc is not None and hasattr(sc, "on_block_start"):
             sc.on_block_start()
         self.screen_obj = self._screens["syllables"]
+
+    def syllables_probe_on(self) -> bool:
+        """Whether this Syllables sitting opens with the reading check
+        (the fixed probe). syllables.probe: case runs it for the
+        dyslexia case readers only, whose codes are D01 upward (FINAL
+        TRIAL RESULTS/4 Syllables case), so anyone else goes straight to
+        the game instead of meeting an unexplained check with no
+        feedback (Basil, 2 October 2026). true or false force it either
+        way; probe_only always plays it."""
+        if bool(self.cfg.get("syllables.probe_only", False)):
+            return True
+        setting = self.cfg.get("syllables.probe", "case")
+        if isinstance(setting, str):
+            word = setting.strip().lower()
+            if word == "case":
+                code = str(getattr(self.session, "participant", "") or "")
+                return re.match(r"^[dD]\d+", code.strip()) is not None
+            return word in ("true", "yes", "on", "always")
+        return bool(setting)
 
     def begin_force_pilot_block(self) -> None:
         """Force Pilot block: visuomotor force tracking, one finger's

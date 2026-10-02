@@ -11,10 +11,10 @@ The readers with dyslexia, codes D01 upward, each a case of their own and report
 
 ## The sessions
 
-Log in with the code, the reader's real age and SESSION Free play, then the Syllables card. Every sitting opens with the probe, the same sets in the same order every time, with no hints and no feedback.
+Log in with the code, the reader's real age and SESSION Free play, then the Syllables card. A D code opens every sitting with the probe, the READING CHECK card: the same sets in the same order every time, with no hints and no feedback. Any other code skips it.
 
-- Baseline: 3 to 5 sessions on separate days with the probe alone. After its last set, at the WARM UP card, press Esc twice; every answer is kept.
-- Training: then sessions with the whole sitting (the probe, then the game). 6 to 9 year olds play 20 words, older readers 30; about 12 to 20 minutes with the probe.
+- Baseline: 3 to 5 sessions on separate days with the probe alone. After its last set the HEAR AND PICK card waits; press Esc twice there and every answer is kept.
+- Training: then sessions with the whole sitting (the probe, then Start on that card for the game). 6 to 9 year olds play 20 words, older readers 30; about 12 to 20 minutes with the probe.
 - With three readers, start their training at different times.
 
 One session alone is a case description: it shows the game ran and how the reader played, and nothing about change.

@@ -465,9 +465,14 @@ class StatsTests(unittest.TestCase):
         self.assertEqual(set(st["families"]), set(m.profile.families))
 
     def test_a_sticker_per_section(self):
+        # The warm-up words and hear and pick are one part to the
+        # player, so the review earns no sticker of its own (2 October
+        # 2026).
         _e, m = _sectioned("6-9", words_total=8)
         _play_through(m)
-        self.assertEqual(m.stickers, len(m.section_plan))
+        names = [n for n, _q in m.section_plan]
+        joined = 1 if names[:2] == ["review", "pick"] else 0
+        self.assertEqual(m.stickers, len(m.section_plan) - joined)
 
 
 class NotebookTests(unittest.TestCase):
@@ -594,7 +599,7 @@ class ScreenTests(unittest.TestCase):
                          "for 420 ms by the end.")
         # Advice about the level still comes first.
         sy["first_press_accuracy"] = 0.3
-        self.assertIn("easier band", ResultsScreen._syllables_advice(sy))
+        self.assertIn("easier words", ResultsScreen._syllables_advice(sy))
         self.assertIsNone(ResultsScreen._syllables_advice(
             {"first_press_accuracy": 0.8}))
 

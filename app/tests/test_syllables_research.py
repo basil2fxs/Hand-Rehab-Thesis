@@ -276,7 +276,7 @@ class ProfileTests(unittest.TestCase):
         self.assertIn("85.8 percent", prof_src)
         self.assertNotIn("(84.1 percent, Levitt 1971)", prof_src)
         self.assertNotIn("30 words is about 11 minutes", cfg)
-        self.assertIn("probe: true", cfg)
+        self.assertIn("probe: case", cfg)
 
 
 class ScreenAndAdviceTests(unittest.TestCase):
@@ -287,8 +287,9 @@ class ScreenAndAdviceTests(unittest.TestCase):
         title, line = SyllablesScreen.SECTION_COPY["probe"]
         self.assertEqual(offending(title + " " + line), [])
         self.assertIn("No hints", line)
+        self.assertEqual(title, "READING CHECK")
         self.assertEqual(SyllablesScreen.SECTION_NAMES["probe"],
-                         "Listen and pick")
+                         "Reading check")
 
     def test_the_results_line_reads_the_unaided_rate(self):
         from finger_rehab.ui.screens import ResultsScreen
@@ -380,6 +381,10 @@ def _run_case_block(root: Path, answer_probe=lambda k: k % 2 == 0):
                 break
             vt += 1.0 / 60.0
             mode._tick(vt)
+            if mode.phase == "section" and mode._phase_until is None:
+                # The card after the reading check waits for Start; the
+                # supervisor presses it to go on to the game.
+                mode.skip_wait(vt)
             if (mode.phase == "probe" and mode.probe_options
                     and mode._set_close_t is None
                     and vt >= mode._spawn_t + 0.4

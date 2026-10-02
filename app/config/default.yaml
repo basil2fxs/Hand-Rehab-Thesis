@@ -1197,16 +1197,19 @@ syllables:
   # docs/research/new_modes/syllables-task-design.md. false plays the
   # single-section block of 29 September 2026; classic ignores it.
   sections: true
-  # The fixed probe that opens the sitting: the same sets in the same
+  # The reading check (the fixed probe): the same sets in the same
   # order for every session of an age group, with no prompt, replay,
   # return, points or feedback (assets/words/syllables_probe.json,
-  # scripts/build_syllables_probe.py). It is the case's repeated
-  # measure; the in-game numbers adapt and cannot show change across
-  # sessions (the deep review of 1 October 2026). Half its words are
-  # held out of training whatever this says. probe_only plays the
-  # probe alone, for baseline sessions; in the lab, two presses of Esc
-  # after the probe do the same with every answer kept.
-  probe: true
+  # scripts/build_syllables_probe.py). It is the dyslexia case's
+  # repeated measure; the in-game numbers adapt and cannot show change
+  # across sessions (the deep review of 1 October 2026). Half its
+  # words are held out of training whatever this says. case opens a
+  # sitting with it only for a case reader, a code from D01 up, so
+  # anyone else goes straight to the game (2 October 2026); true or
+  # false force it either way. probe_only plays the check alone, for
+  # baseline sessions; the card after the check waits for Start, and
+  # two presses of Esc there do the same with every answer kept.
+  probe: case
   probe_only: false
   # Milliseconds between syllables while the word is modelled, at the
   # least: a syllable's own sound always finishes with half a second

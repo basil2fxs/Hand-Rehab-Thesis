@@ -216,12 +216,14 @@ classic). The research pass of 30 September 2026
 (docs/research/new_modes/syllables-task-design.md) found the syllable
 programmes that worked mixed recognition with production and ended on
 whole-word reading, so a block is split into parts, each with its own
-card: a short REVIEW (unrelated foils, a warm-up that moves no
-ladder), HEAR AND PICK (the task above, foils from one confusion
-family at a time), BUILD THE WORD (the word heard, not shown, from 10
-up, and built slot by slot; each slot's lanes hold one of the word's
-other syllables as well as family foils, so the last slot is still a
-choice) and, from 10 to 59, a QUICK LOOK speed check. Up to four words
+card: HEAR AND PICK, whose first words (up to four, the REVIEW) take
+unrelated foils and move no ladder before the task above takes foils
+from one confusion family at a time, with one card and one counter
+for both (2 October 2026), BUILD THE WORD (the word heard, not
+shown, from 10 up, and built slot by slot; each slot's lanes hold one
+of the word's other syllables as well as family foils, so the last
+slot is still a choice) and, from 10 to 59, a QUICK LOOK speed
+check. Up to four words
 review, 30 percent of the rest build, the others pick. The changes
 inside a set: the tiles drop into place and stay still with a time bar
 above them; after two wrong presses the answer is shown (its tile
@@ -266,7 +268,8 @@ Exposures are whole display frames (about 17 ms at 60 Hz). The design
 note's counts per section (Section 6.1) are for a shorter block than
 the 30-word default; 6 to 9 plays 20 words (syllables_profiles.py).
 
-PROBE (syllables.probe, on by default; every profile but classic). The
+PROBE, the READING CHECK card (syllables.probe: case, so it plays for
+a case reader, a code from D01 up, in every profile but classic). The
 sitting opens with fixed sets, the same sets in the same order for
 every session of an age group (assets/words/syllables_probe.json,
 built by scripts/build_syllables_probe.py). Each holds the target, one
@@ -283,9 +286,10 @@ change across sessions; a fixed list can (GraphoGame keeps static
 assessment levels apart from training, Richardson and Lyytinen 2014;
 fixed lists reach an ICC of 0.91, Yeatman et al. 2021). Probe rows are
 sec=probe and move no ladder, and the session cap times the training
-from the probe's end. syllables.probe_only plays the probe alone; in
-the lab, two presses of Esc after the probe end a baseline session
-with every answer on disk.
+from the probe's end. syllables.probe_only plays the probe alone; or
+two presses of Esc at the card after the probe end a baseline session
+with every answer on disk. That card waits for Start (_card_holds), so
+no training word starts by itself in a baseline session.
 
 HANDS. With both hands connected the hands ALTERNATE PER WORD: all
 four tiles sit over the playing hand, the resting hand shows seat
@@ -975,20 +979,29 @@ class SyllablesMode(WaitSkip):
     def _advance_section(self, now: float) -> None:
         """A section is done: a sticker for finishing it, then the next
         section's card, or nothing when it was the last (the block ends
-        at the next word boundary)."""
-        self._stickers += 1
-        self.sticker_flash_t = now
+        at the next word boundary). The review's warm-up words and hear
+        and pick are one task to the player, so the review moves into
+        hear and pick with no sticker and no card (Basil, 2 October
+        2026: the two looked like one part shown twice); the rows still
+        say which words were the review's."""
         raw = getattr(self.engine, "raw_logger", None)
-        if raw:
-            raw.queue_event("syllables_sticker",
-                            detail=f"section={self.section}",
-                            hand=self.engine.hand_mode)
+        nxt = (self.section_plan[self.section_idx + 1][0]
+               if self.section_idx + 1 < len(self.section_plan) else None)
+        joined = self.section == "review" and nxt == "pick"
+        if not joined:
+            self._stickers += 1
+            self.sticker_flash_t = now
+            if raw:
+                raw.queue_event("syllables_sticker",
+                                detail=f"section={self.section}",
+                                hand=self.engine.hand_mode)
         self.section_idx += 1
         if self.section_idx >= len(self.section_plan):
             return
         self.section = self.section_plan[self.section_idx][0]
         self._section_words = 0
-        self._enter_phase("section", now)
+        if not joined:
+            self._enter_phase("section", now)
         if raw:
             raw.queue_event("syllables_section",
                             detail=f"section={self.section}",
@@ -1653,13 +1666,25 @@ class SyllablesMode(WaitSkip):
             self.arm_wait("gap", self._phase_until,
                           self._skip_to_next_word, started_at=now)
         elif phase == "section":
-            self._phase_until = now + self.SECTION_CARD_S
-            self.arm_wait("stage", self._phase_until,
-                          self._skip_to_next_word, started_at=now)
+            held = self._card_holds()
+            self._phase_until = None if held else now + self.SECTION_CARD_S
+            self.arm_wait("stage", now + self.SECTION_CARD_S,
+                          self._skip_to_next_word, started_at=now,
+                          label="Start", hold_when_due=held)
         elif phase == "flash":
             self._phase_until = now + self._expo_s
         elif phase == "mask":
             self._phase_until = now + self.SPEED_MASK_S
+
+    def _card_holds(self) -> bool:
+        """The card after the probe waits for Start instead of leaving
+        after SECTION_CARD_S. Only a case reader plays the probe, with
+        a supervisor beside them, and a baseline session ends at this
+        card with two presses of Esc: a card that left after 3 s could
+        start training words in a baseline session."""
+        i = self.section_idx
+        return (0 < i < len(self.section_plan)
+                and self.section_plan[i - 1][0] == "probe")
 
     def _skip_to_next_word(self, now: float) -> None:
         self._begin_word(now)
