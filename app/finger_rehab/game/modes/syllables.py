@@ -559,8 +559,14 @@ class SyllablesMode(WaitSkip):
     # this long before the first set. Kept short between syllables on
     # purpose: pauses between the parts of a word make children forget
     # the first part when they blend (Gonzalez-Frey and Ehri 2021).
-    MODEL_GAP_S = 0.5
-    BLEND_HOLD_S = 1.2
+    # MODEL_LEAD_S is the wait from the end of ATTEND to the first
+    # syllable, and READ_BACK_TAIL_S the quiet after a word is read
+    # back. 0.5, 1.2, a whole beat and 1.0 until 2 October 2026, when
+    # the breaks between voice prompts felt a little long (Basil).
+    MODEL_GAP_S = 0.4
+    BLEND_HOLD_S = 1.0
+    MODEL_LEAD_S = 0.5
+    READ_BACK_TAIL_S = 0.8
     # A greyed tile drifts off over this long. Screen-side only.
     GREY_DRIFT_S = 0.5
     # Fixed streak milestones, in WORDS answered with every first
@@ -1647,7 +1653,7 @@ class SyllablesMode(WaitSkip):
             self._phase_until = now + self.attend_s
         elif phase == "model":
             self._model_idx = -1
-            self._model_next_t = now + self.ioi_s
+            self._model_next_t = now + min(self.ioi_s, self.MODEL_LEAD_S)
         elif phase == "choose":
             self._next_spawn_t = now
             self._set_close_t = None
@@ -1735,9 +1741,13 @@ class SyllablesMode(WaitSkip):
         # Still goes through the stimulus path, buzz off, so the
         # 30-band model byte and the slot light keep their timing. The
         # trial id is the word's next set id (the counter moves at the
-        # spawn), which ties the byte to the word it belongs to.
+        # spawn), which ties the byte to the word it belongs to. No cue
+        # tone either: the syllable's own voice is the sound here, and
+        # a beep 0.18 s before every syllable made the voice sound
+        # glitchy (Basil, 2 October 2026).
         self.engine.on_stim_multi(self.active_lanes(),
-                                  self.trial_counter + 1, now, buzz=False)
+                                  self.trial_counter + 1, now, buzz=False,
+                                  tone=False)
 
     # ---- the choice phase --------------------------------------------------
     def _update_choose(self, now: float) -> None:
@@ -2482,7 +2492,8 @@ class SyllablesMode(WaitSkip):
                                                                  "say"):
             said = max(said, self.speech_seconds(
                 self.speech_path(self.word.word)))
-        self._phase_until = now + max(self.complete_s, hold + said + 1.0)
+        self._phase_until = now + max(self.complete_s,
+                                      hold + said + self.READ_BACK_TAIL_S)
         self.arm_wait("feedback", self._phase_until,
                       self._skip_complete, started_at=now)
 

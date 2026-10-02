@@ -30,4 +30,4 @@ Code D01 upward, the reader's real age, SESSION Free play, then the Syllables ca
 
 ## Results
 
-Open `analysis/session_analysis.ipynb`, set `SESSIONS_DIR` to a folder's `sessions`, and Run All (`COHORT_FAMILY = "short"` for the 15s and 30s). Copy what the thesis uses into [`5 Thesis results`](5%20Thesis%20results).
+Open `analysis/session_analysis.ipynb`, set `SESSIONS_DIR` to a folder's `sessions`, and Run All; every length pools. Copy what the thesis uses into [`5 Thesis results`](5%20Thesis%20results).

@@ -3,11 +3,12 @@
 Free play is the hub as it always was. A length starts its preset at
 LOG IN. No length plays Syllables: it is built for readers with
 dyslexia and runs on its own with a dyslexic participant (28 September
-2026). Every length plays games twice wherever the minutes allow,
-because a second go is what shows improvement. The 45 and the 60 play
-the study sitting's full-length games (family full); the 15 and the 30
-play shortened games (family short) so that more of them fit twice.
-Blocks pool within a family and never across
+2026). Every length plays the study sitting's own full-length games
+with its settings, so a block from any length pools with the same
+block from every other (2 October 2026): with about ten students, each
+sitting one length once, every student counts toward every check their
+games feed. The 15 plays the core games once, the 30 every game once,
+the 45 and the 60 every game once and then some twice
 (docs/research/trial_mode.md).
 """
 from __future__ import annotations
@@ -29,10 +30,7 @@ TRIALS = ("trial_15", "trial_30", "trial_60")
 EIGHT = {"reaction", "rhythm", "echo", "force_pilot", "chords",
          "buzz_hunt", "pattern", "adaptive"}
 CORE = {"reaction", "force_pilot", "chords"}
-FAMILY = {"study_battery": "full", "trial_60": "full",
-          "trial_15": "short", "trial_30": "short"}
-REST_S = {"trial_15": 0.0, "trial_30": 120.0, "study_battery": 180.0,
-          "trial_60": 180.0}
+REST_S = {"study_battery": 180.0, "trial_60": 180.0}
 
 
 def _cfg(overlay: str | None = None):
@@ -77,63 +75,46 @@ class PresetShapeTests(unittest.TestCase):
                 self.assertEqual(len(pass1), len(set(pass1)), name)
                 self.assertEqual(len(pass2), len(set(pass2)), name)
                 self.assertLessEqual(set(pass2), set(pass1), name)
-                first2 = next(s for s in steps if s.phase == "pass2")
-                self.assertEqual(first2.rest_before_s, REST_S[name], name)
+                if pass2:
+                    first2 = next(s for s in steps if s.phase == "pass2")
+                    self.assertEqual(first2.rest_before_s, REST_S[name],
+                                     name)
                 # A second go comes after every first go.
                 self.assertTrue(all(s.phase == "pass2"
                                     for s in steps[len(pass1):]), name)
 
-    def test_each_family_plays_its_own_settings(self) -> None:
+    def test_every_length_plays_the_study_settings(self) -> None:
+        """One family: a block from any length is the study's block,
+        so ten students sitting different lengths still pool."""
         from finger_rehab.game.battery import resolved_overrides
         full = resolved_overrides(self.cfg, "study_battery")
-        short = resolved_overrides(self.cfg, "trial_short")
         for _m, name in LENGTHS:
             for plan in _plans(self.cfg, name):
-                self.assertEqual(plan.family, FAMILY[name], name)
-                self.assertEqual(plan.overrides,
-                                 full if FAMILY[name] == "full" else short,
-                                 name)
+                self.assertEqual(plan.family, "full", name)
+                self.assertEqual(plan.overrides, full, name)
+        self.assertNotIn("trial_short",
+                         self.cfg.get("protocol.presets", {}))
 
-    def test_the_short_set_shortens_counts_and_nothing_else(self) -> None:
-        from finger_rehab.game.battery import (_flatten, load_preset,
-                                               resolved_overrides)
-        own = set(_flatten(load_preset(self.cfg, "trial_short")
-                           ["overrides"]))
-        self.assertEqual(own, {
-            "reaction.block_trials", "chords.subblocks",
-            "chords.trials_per_subblock", "force_pilot.short_ladder",
-            "buzz_hunt.loc_trials_per_hand", "buzz_hunt.span_trials",
-            "echo.games", "pattern.soc_cycles_per_block",
-            "pattern.random_block_trials"})
-        full = resolved_overrides(self.cfg, "study_battery")
-        short = resolved_overrides(self.cfg, "trial_short")
-        self.assertLess(short["reaction"]["block_trials"],
-                        full["reaction"]["block_trials"])
-        # Everything the short set does not name comes from the study
-        # sitting: the frozen windows, the rhythm cue, the echo ceiling.
-        self.assertEqual(short["chords"]["sync_windows_ms"],
-                         full["chords"]["sync_windows_ms"])
-        self.assertEqual(short["reaction"]["response_windows_s"],
-                         full["reaction"]["response_windows_s"])
-        self.assertEqual(short["rhythm"], full["rhythm"])
-        self.assertEqual(short["echo"]["max_len"], full["echo"]["max_len"])
-        self.assertTrue(short["force_pilot"]["short_ladder"])
+    def _pass1_of_45(self, code):
+        from finger_rehab.game.battery import build_plan
+        plan = build_plan(self.cfg, code, "right", "study_battery")
+        return [s.mode for s in plan.steps if s.phase == "pass1"]
 
-    def test_the_15_is_three_games_twice(self) -> None:
-        for plan in _plans(self.cfg, "trial_15"):
-            pass1 = [s.mode for s in plan.steps if s.phase == "pass1"]
-            pass2 = [s.mode for s in plan.steps if s.phase == "pass2"]
-            self.assertEqual(set(pass1), CORE)
-            self.assertEqual(pass2, pass1)
+    def test_the_15_is_the_core_games_once(self) -> None:
+        for code, plan in zip(("P01", "P02"), _plans(self.cfg, "trial_15")):
+            modes = [s.mode for s in plan.steps]
+            self.assertEqual({s.phase for s in plan.steps}, {"pass1"})
+            self.assertEqual(set(modes), CORE | {"adaptive"})
+            # In the order the 45 plays them.
+            self.assertEqual(modes, [m for m in self._pass1_of_45(code)
+                                     if m in set(modes)])
             self.assertEqual(plan.budget_min, 15.0)
 
-    def test_the_30_plays_all_eight_then_four_again(self) -> None:
-        for plan in _plans(self.cfg, "trial_30"):
-            pass1 = [s.mode for s in plan.steps if s.phase == "pass1"]
-            pass2 = [s.mode for s in plan.steps if s.phase == "pass2"]
-            self.assertEqual(set(pass1), EIGHT)
-            self.assertEqual(pass2, [m for m in pass1
-                                     if m in CORE | {"adaptive"}])
+    def test_the_30_is_the_45s_first_pass(self) -> None:
+        for code, plan in zip(("P01", "P02"), _plans(self.cfg, "trial_30")):
+            modes = [s.mode for s in plan.steps]
+            self.assertEqual({s.phase for s in plan.steps}, {"pass1"})
+            self.assertEqual(modes, self._pass1_of_45(code))
             self.assertEqual(plan.budget_min, 30.0)
 
     def test_the_45_is_eight_then_four_again(self) -> None:
@@ -166,8 +147,8 @@ class PresetShapeTests(unittest.TestCase):
         from finger_rehab.game.battery import build_plan
         ids = {name: build_plan(self.cfg, "P01", "right", name).id
                for _m, name in LENGTHS}
-        self.assertEqual(ids, {"trial_15": "trial_15_v2",
-                               "trial_30": "trial_30_v2",
+        self.assertEqual(ids, {"trial_15": "trial_15_v3",
+                               "trial_30": "trial_30_v3",
                                "study_battery": "healthy_one_hand_v3",
                                "trial_60": "trial_60_v2"})
 
@@ -183,12 +164,12 @@ class PresetShapeTests(unittest.TestCase):
     def test_settings_from_a_missing_or_circular_preset_are_refused(self):
         from finger_rehab.game.battery import BatteryError, build_plan
         cfg = _cfg()
-        cfg.data["protocol"]["presets"]["trial_short"]["overrides_from"] = \
+        cfg.data["protocol"]["presets"]["trial_15"]["overrides_from"] = \
             "no_such_preset"
         with self.assertRaises(BatteryError):
             build_plan(cfg, "P01", "right", "trial_15")
         cfg = _cfg()
-        cfg.data["protocol"]["presets"]["trial_short"]["overrides_from"] = \
+        cfg.data["protocol"]["presets"]["study_battery"]["overrides_from"] = \
             "trial_15"
         with self.assertRaises(BatteryError):
             build_plan(cfg, "P01", "right", "trial_15")
@@ -283,7 +264,9 @@ class NotebookFamilyTests(unittest.TestCase):
         for _minutes, name in LENGTHS:
             for plan in _plans(cfg, name):
                 again = {s.mode for s in plan.steps if s.phase == "pass2"}
-                self.assertTrue(again, name)
+                # The 15 and the 30 play every game once, at full length.
+                self.assertEqual(bool(again),
+                                 name in ("study_battery", "trial_60"), name)
                 self.assertLessEqual(again, core | second,
                                      (name, sorted(again - core - second)))
 
@@ -449,18 +432,20 @@ class LoginTests(_LoginHarness):
         self.assertEqual(self.eng.battery_preset, "trial_30")
         self.assertIsNotNone(self.eng._battery)
         self.assertEqual(self.eng._battery["preset"], "trial_30")
-        self.assertEqual(self.eng._battery["id"], "trial_30_v2")
-        self.assertEqual(self.eng._battery["family"], "short")
+        self.assertEqual(self.eng._battery["id"], "trial_30_v3")
+        self.assertEqual(self.eng._battery["family"], "full")
         self.assertIsNot(self.eng.screen_obj,
                          self.eng._screens["hand_choice"])
         # P07 is order A: Reaction opens the sitting.
         self.assertTrue(self.eng.block_is_running())
         self.assertEqual(self.eng.current_block, "reaction")
 
-    def test_a_length_needs_the_main_hand(self) -> None:
+    def test_a_length_starts_with_the_main_hand_on_right(self) -> None:
+        # MAIN HAND starts on Right, so a timed session is never held
+        # up by it (Basil, 2 October 2026).
         self._log_in(name="Mara", hand=None, trial="trial_15")
-        self.assertFalse(self.eng._session_active)
-        self.assertIn("main hand", self.title.begin_note)
+        self.assertTrue(self.eng._session_active)
+        self.assertEqual(self.eng.session.dominant_hand, "right")
 
     def test_the_next_person_starts_on_free_play(self) -> None:
         self._log_in(trial="trial_15")

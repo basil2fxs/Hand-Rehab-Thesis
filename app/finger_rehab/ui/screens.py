@@ -755,6 +755,7 @@ class TitleScreen(Screen):
     SEX_HOTKEYS = {"n": "", "f": "female", "m": "male", "o": "other"}
     HAND_OPTIONS = [("left", "Left"), ("right", "Right")]
     HAND_HOTKEYS = {"l": "left", "r": "right"}
+    DEFAULT_HAND = "right"
 
     def __init__(self, engine: "GameEngine") -> None:
         super().__init__(engine)
@@ -802,12 +803,16 @@ class TitleScreen(Screen):
             initial="", hotkeys=self.SEX_HOTKEYS,
         )
         # `hand_seg` keeps its name and the metadata key stays
-        # dominant_hand, so old sessions and the analysis read on.
+        # dominant_hand, so old sessions and the analysis read on. It
+        # starts on Right, the hand most people write with, so LOG IN
+        # is never held up by an empty field (Basil, 2 October 2026);
+        # a returning code's own record replaces it, and a click or L
+        # changes it.
         self.hand_seg = Segmented(
             pygame.Rect(x0, r2, 200, fh),
             self.theme, self.layout,
             options=self.HAND_OPTIONS, label="MAIN HAND",
-            initial=None, hotkeys=self.HAND_HOTKEYS,
+            hotkeys=self.HAND_HOTKEYS, default=self.DEFAULT_HAND,
         )
         # Hand length stays: it is the only evidence for objective A3
         # (the chassis fits the 5th to 95th percentile hand). Hand
@@ -989,10 +994,12 @@ class TitleScreen(Screen):
         for name, field in self._carry_targets().items():
             carried = bool(getattr(field, "prefilled", False))
             if isinstance(field, Segmented):
-                # Sex's "not said" is the empty key; the hand has no
-                # pick at all until one is made.
+                # Sex's "not said" is the empty key; the main hand
+                # starts on its default, which a record replaces just
+                # as it would fill an empty field.
                 blank = "" if name == "sex" else None
-                empty = field.value in (None, "")
+                empty = (field.value in (None, "")
+                         or getattr(field, "defaulted", False))
             else:
                 blank = ""
                 empty = not field.text
@@ -1060,8 +1067,10 @@ class TitleScreen(Screen):
         self._refresh_prefill()
         # A study code needs the main hand: the play-all hand order
         # and the analysis's hand contrast both hang off it, and it
-        # cannot be recovered after the visit. A name (the clinic
-        # path) is not held to this.
+        # cannot be recovered after the visit. The field starts on
+        # Right and cannot be emptied, so this only guards a screen
+        # built without that default. A name (the clinic path) is not
+        # held to this.
         trial = self.trial_seg.value or None
         if ((is_study_code(name) or trial)
                 and self.hand_seg.value is None):

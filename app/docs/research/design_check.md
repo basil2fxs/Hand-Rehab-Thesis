@@ -77,7 +77,7 @@ Reference intervals need about 120 people [20]. A veterinary guideline that mirr
 
 ## 6. The sittings
 
-Each student plays the longest length their slot allows: the 60 if they can stay about 75 minutes, the 45 in an hour, then the 30, then the 15. The 45 holds: counterbalanced orders, the rest as the retest interval, pass 2 in pass 1's order, and every table filling in the dry run. The 60 holds the 45 block for block, so the two pool as the full family, and it adds P2 and a second go at every game. The 15 and 30 play shortened games, so they are read on their own as the short family (`COHORT_FAMILY = "short"`). Every student in the short family is one fewer in the full family's n, which carries the checks and the reliability table: book hour-long slots wherever the students can give them, and the 30 before the 15.
+Each student plays the longest length their slot allows: the 60 if they can stay about 75 minutes, the 45 in an hour, then the 30, then the 15. The 45 holds: counterbalanced orders, the rest as the retest interval, pass 2 in pass 1's order, and every table filling in the dry run. The 60 holds the 45 block for block, and it adds P2 and a second go at every game. Since 2 October 2026 every length plays the study's full-length games, so all four pool: the 15 plays Reaction, Force Pilot, Chords and Adaptive once and the 30 all eight once, so with about ten students every student counts toward every check their games feed. R3 and the reliability table read the second pass, which only the 45 and the 60 play: book hour-long slots wherever the students can give them, the 30 before the 15, and no more than two students on the 15 or the 30, so every check keeps its 8 (docs/research/trial_mode.md).
 
 ## 7. The EEG lab
 

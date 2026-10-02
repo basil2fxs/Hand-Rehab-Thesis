@@ -47,9 +47,10 @@ notes box on the intake sheet.
 - [ ] Login screen: type the code in NAME, then age, sex and hand
       length. SESSION: the longest length the slot allows, 60 (a 75
       minute slot), 45 (an hour), then 30, then 15.
-- [ ] MAIN HAND: ask "Which hand do you write with?" and pick that one,
-      Left or Right. This is their real handedness, recorded for the
-      analysis. It does not change the device.
+- [ ] MAIN HAND: ask "Which hand do you write with?". Right is picked
+      to start with; click Left (or press L) for a left-hander. This is
+      their real handedness, recorded for the analysis. It does not
+      change the device.
 - [ ] LOG IN. The app puts the board on the right hand, the device
       hand for everyone, left-handers included.
 - [ ] Quick calibration opens by itself: hand off, hand resting, then
@@ -61,8 +62,9 @@ notes box on the intake sheet.
 - [ ] The first game starts after the calibration. After each game
       press Start on the NEXT UP card (or N). The strip shows SESSION
       k/12 on the 45 and the minutes: amber past the length, red past its hard
-      stop (18, 35, 50 or 65 minutes). The 60 plays every game twice;
-      the 15 and 30 play shortened games (docs/research/trial_mode.md).
+      stop (18, 35, 50 or 65 minutes). Every length plays the same
+      full-length games: the 15 four of them once, the 30 all eight
+      once, the 60 every game twice (docs/research/trial_mode.md).
 - [ ] The first time each game comes up, say its line once before it
       starts.
       Order A starts Reaction as soon as the calibration ends, so say

@@ -118,14 +118,14 @@ class TheCutter(unittest.TestCase):
                 self.assertTrue((td / "speech" / f"{stem}.wav").exists())
                 self.assertLessEqual(rec["peak_dbfs"],
                                      K.PEAK_CEILING_DBFS + 0.05)
-            for stem in ("chunks/ter", "chunks/ban"):
-                r = recs[stem]
+            # Chunks and words share one loudness.
+            for r in recs.values():
                 if not r["limited"]:
-                    self.assertAlmostEqual(r["rms_dbfs"], K.CHUNK_RMS_DBFS,
+                    self.assertAlmostEqual(r["loudness"], K.SPEECH_LOUDNESS,
                                            delta=0.3)
-            # Trimmed to the burst plus 10 ms lead and 50 ms tail.
+            # Trimmed to the burst plus 10 ms lead and 30 ms tail.
             self.assertAlmostEqual(recs["chunks/ban"]["duration_ms"],
-                                   300 + 60, delta=25)
+                                   300 + 40, delta=25)
             from scipy.io import wavfile
             rate, y = wavfile.read(str(td / "speech" / "tiger.wav"))
             self.assertEqual(rate, RATE)
@@ -167,6 +167,125 @@ class TheCutter(unittest.TestCase):
                 {"provider": "google", "entries": {}}))
             with self.assertRaises(SystemExit):
                 K.write_manifest(out, {}, "BT", "USB")
+
+
+def _voice(dur=0.3, amp=0.3, decay=0.03):
+    """A vowel-like tone that dies away over `decay` seconds."""
+    t = np.arange(int(dur * RATE)) / RATE
+    env = np.minimum(1.0, (dur - t) / decay)
+    return amp * env * np.sin(2 * np.pi * 220.0 * t)
+
+
+def _after(x, *parts):
+    return np.concatenate([x] + [np.asarray(p, dtype=float) for p in parts])
+
+
+def _quiet(s, seed=1):
+    return np.random.default_rng(seed).normal(0, 10 ** (-80 / 20),
+                                              int(s * RATE))
+
+
+def _tick(ms=5, amp=0.02, fall_ms=2.0):
+    """A click: a broad burst that dies within a few ms."""
+    t = np.arange(int(ms / 1000 * RATE)) / RATE
+    return amp * np.exp(-t / (fall_ms / 1000)) * np.sin(2 * np.pi * 3000 * t)
+
+
+def _release(ms=30, amp=0.03, seed=2, tau=0.009):
+    """A stop's release: noise that takes about 20 ms to fall 20 dB."""
+    t = np.arange(int(ms / 1000 * RATE)) / RATE
+    rng = np.random.default_rng(seed)
+    return amp * np.exp(-t / tau) * rng.normal(0, 1, len(t))
+
+
+class TheFinish(unittest.TestCase):
+    """The click, tail and loudness steps of 2 October 2026: a tick the
+    synthetic voice leaves after a word goes, a stop's release stays."""
+
+    def test_a_tick_after_a_vowel_is_silenced(self):
+        x = _after(_voice(), _quiet(0.03), _tick(), _quiet(0.05))
+        for ends in ("vowel", "other", "stop"):
+            y, hit = K.drop_end_click(x, ends)
+            self.assertTrue(hit, ends)
+            self.assertLess(np.abs(y[-int(0.06 * RATE):]).max(), 1e-3)
+            self.assertTrue(np.array_equal(y[:len(_voice())],
+                                           x[:len(_voice())]))
+
+    def test_a_stops_own_release_is_kept(self):
+        x = _after(_voice(), _quiet(0.04), _release(), _quiet(0.05))
+        y, hit = K.drop_end_click(x, "stop")
+        self.assertFalse(hit)
+        self.assertTrue(np.array_equal(y, x))
+
+    def test_after_a_release_the_tick_still_goes(self):
+        x = _after(_voice(), _quiet(0.04), _release(), _quiet(0.03),
+                   _tick(), _quiet(0.04))
+        y, hit = K.drop_end_click(x, "stop")
+        self.assertTrue(hit)
+        n = len(_voice()) + int(0.04 * RATE) + len(_release())
+        self.assertTrue(np.array_equal(y[:n], x[:n]))
+
+    def test_a_pop_with_a_tail_goes_only_after_a_long_vowel(self):
+        # A pop whose tail stays within 20 dB of it for over 25 ms: only
+        # the long-vowel window takes it. After a short vowel the same
+        # shape could be a brief uh, so it stays.
+        pop = _after(_tick(ms=3, amp=0.08),
+                     _release(ms=60, amp=0.02, tau=0.012))
+        x = _after(_voice(), _quiet(0.03), pop, _quiet(0.02))
+        y, hit = K.clean(x, "vowel")
+        self.assertTrue(hit)
+        self.assertLess(np.abs(y[len(_voice()):]).max(), 1e-3)
+        _y2, hit2 = K.clean(x, "other")
+        self.assertFalse(hit2)
+
+    def test_the_end_kind_comes_from_the_last_sound(self):
+        self.assertEqual(K.end_kind("ˈaksɪdənt"), "stop")
+        self.assertEqual(K.end_kind("tˈɪst"), "stop")
+        self.assertEqual(K.end_kind("ˈanʤ"), "stop")
+        self.assertEqual(K.end_kind("bˈiː"), "vowel")
+        self.assertEqual(K.end_kind("ɡQ"), "vowel")
+        self.assertEqual(K.end_kind("lˈadə"), "other")
+        self.assertEqual(K.end_kind("mˈɪs"), "other")
+        self.assertEqual(K.end_kind(None), "stop")
+
+    def test_the_tail_ends_30_ms_after_the_sound_and_fades(self):
+        x = _after(_voice(), _quiet(0.3))
+        y = K.trim_tail(x)
+        self.assertAlmostEqual(len(y) / RATE, len(_voice()) / RATE + 0.03,
+                               delta=0.004)
+        self.assertLess(abs(y[-1]), 1e-4)
+
+    def test_tidy_runs_once_and_levels_every_file(self):
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td)
+            (out / "chunks").mkdir()
+            _write(out / "tiger.wav", _after(_voice(0.5, 0.1), _quiet(0.03),
+                                             _tick(), _quiet(0.05)))
+            _write(out / "chunks" / "ti.wav", _after(_voice(0.3, 0.4),
+                                                     _quiet(0.06)))
+            (out / "manifest.json").write_text(json.dumps({
+                "provider": "kokoro", "chunk_rms_dbfs": -20.0,
+                "word_loudness": -23.0, "entries": {
+                    "tiger": {"phonemes": "tˈIɡə", "duration_ms": 1},
+                    "chunks/ti": {"phonemes": "tˈI", "duration_ms": 1}}}))
+            args = SimpleNamespace(speech_dir=str(out))
+            K.cmd_tidy(args)
+            first = {p.name: p.read_bytes() for p in out.rglob("*.wav")}
+            m = json.loads((out / "manifest.json").read_text())
+            self.assertNotIn("chunk_rms_dbfs", m)
+            self.assertEqual(m["finish"], K.FINISH_VERSION)
+            for stem, rec in m["entries"].items():
+                self.assertAlmostEqual(rec["loudness"], K.SPEECH_LOUDNESS,
+                                       delta=0.3)
+                self.assertEqual(rec["finish"], K.FINISH_VERSION)
+                with self.subTest(stem=stem):
+                    ms = len(K.read_wav(out / f"{stem}.wav")) / RATE * 1000
+                    self.assertAlmostEqual(ms, rec["duration_ms"], delta=1.0)
+            self.assertTrue(m["entries"]["tiger"]["click_removed"])
+            K.cmd_tidy(args)
+            self.assertEqual(first, {p.name: p.read_bytes()
+                                     for p in out.rglob("*.wav")})
 
 
 class TheGameSide(unittest.TestCase):

@@ -7,6 +7,7 @@
         recordings/recording_plan.json --audio-dir recordings \\
         --speaker BT --microphone "USB mic"
     python3 scripts/syllables_recording_kit.py check
+    python3 scripts/syllables_recording_kit.py tidy
     python3 scripts/syllables_recording_kit.py listen --listener L1 \
         --device "closed headphones, model" --level "laptop at 60 percent"
     python3 scripts/syllables_recording_kit.py listen --report
@@ -50,20 +51,26 @@ near -6 dBFS, the microphone 15 to 20 cm away and a little off-axis.
 
 WHAT `cut` DOES. Finds the utterances in each page by their energy,
 pairs them with the page's items in order, keeps the better take (not
-clipped, then the cleaner one), trims to 10 ms before the onset and
-50 ms after the offset with 5 ms fades, and levels it: chunks to one
-RMS (-20 dBFS), words to one K-weighted loudness (-23, the BS.1770
-filter without gating, since a word is shorter than the 400 ms gating
-block), never above -1 dBFS peak. A page whose utterance count is not
-two per item is reported with every utterance's time and nothing is
-written for it, so a skipped or doubled take can never shift every
-file after it by one. Output is 44.1 kHz 16-bit mono WAV, the mixer's
-own rate, and manifest.json records the speaker, the accent, the date,
-the microphone, chunk_form = spelling, and each file's length and
-level. The game stretches its model beat to a chunk's length from
-that manifest.
+clipped, then the cleaner one), trims to 10 ms before the onset (5 ms
+fade in) and 30 ms after the last audible sound (25 ms fade out),
+silences a click left after the speech (drop_end_click), and levels
+every file, chunk or word, to one K-weighted loudness (-22, the
+BS.1770 filter without gating, since a clip is shorter than the
+400 ms gating block), never above -1 dBFS peak. A page whose
+utterance count is not two per item is reported with every
+utterance's time and nothing is written for it, so a skipped or
+doubled take can never shift every file after it by one. Output is
+44.1 kHz 16-bit mono WAV, the mixer's own rate, and manifest.json
+records the speaker, the accent, the date, the microphone,
+chunk_form = spelling, and each file's length and level. The game
+stretches its model beat to a chunk's length from that manifest.
 
 `check` lists every chunk and word in the bank that still has no file.
+
+`tidy` puts the files already in assets/speech through the same click,
+tail and loudness steps without recording or rendering anything again,
+updating each manifest entry; a file already at FINISH_VERSION is left
+alone. The synthetic voice went through it on 2 October 2026.
 
 WHAT `listen` DOES. Before a heard syllable becomes part of a measure,
 two adult listeners of Australian English check it (the deep review of
@@ -94,10 +101,33 @@ APP = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(APP))
 
 RATE = 44100
-CHUNK_RMS_DBFS = -20.0
-WORD_LOUDNESS = -23.0
+# One loudness for every file, words and chunks alike: the K-weighted
+# BS.1770 filter without gating, since a clip is shorter than the
+# 400 ms gating block. Until 2 October 2026 chunks were set to an RMS
+# of -20 dBFS and words to -23, which left every syllable about 3 dB
+# louder than the word it came from.
+SPEECH_LOUDNESS = -22.0
 PEAK_CEILING_DBFS = -1.0
-LEAD_S, TAIL_S, FADE_S = 0.010, 0.050, 0.005
+# 10 ms kept before the onset with a 5 ms fade in; 30 ms kept after the
+# last audible frame, under a 25 ms raised-cosine fade out.
+LEAD_S, TAIL_S, FADE_S, FADE_OUT_S = 0.010, 0.030, 0.005, 0.025
+# An end click (drop_end_click): at most CLICK_MAX_S long, falling
+# 20 dB within CLICK_DECAY_S; up to POP_MAX_S long when the item cannot
+# end in a release (its last sound is not a stop), and up to
+# VOWEL_POP_MAX_S, a pop and its tail, when it ends in a vowel.
+CLICK_MAX_S, CLICK_DECAY_S = 0.012, 0.010
+POP_MAX_S, VOWEL_POP_MAX_S = 0.025, 0.060
+# Sounds in the phoneme symbols the voice was made from: an item ending
+# in a stop or an affricate may end in a real release, and one ending
+# in a long vowel or a diphthong (the length mark, or the letters the
+# voice uses for the vowels of day, eye, boy, go, cow and near) cannot
+# end in a short burst of speech. A short vowel can: the uh of ladder
+# follows a closure and may be brief.
+STOP_PHONES = frozenset("ptkbdgɡʔ") | {"ʧ", "ʤ"}
+LONG_VOWEL_PHONES = frozenset("ːAIOQWY")
+# Which finish a file went through, kept on its manifest entry: 2 is
+# the click, tail and loudness pass of 2 October 2026 (tidy).
+FINISH_VERSION = 2
 FRAME_S = 0.010
 MERGE_GAP_S = 0.18     # a stop closure inside a word, not a new take
 MIN_UTTER_S = 0.06
@@ -366,20 +396,175 @@ def k_weighted_db(y: np.ndarray) -> float:
     return -0.691 + 10 * np.log10(np.mean(z ** 2) + 1e-20)
 
 
-def finish(x: np.ndarray, span: tuple[int, int], kind: str) -> tuple:
-    """The trimmed, faded, levelled clip and its record."""
-    a = max(0, span[0] - int(LEAD_S * RATE))
-    b = min(len(x), span[1] + int(TAIL_S * RATE))
-    y = x[a:b].copy()
-    f = max(1, int(FADE_S * RATE))
-    ramp = np.linspace(0.0, 1.0, f)
-    y[:f] *= ramp
-    y[-f:] *= ramp[::-1]
-    if kind == "chunk":
-        now = 20 * np.log10(np.sqrt(np.mean(y ** 2)) + 1e-12)
-        gain_db = CHUNK_RMS_DBFS - now
-    else:
-        gain_db = WORD_LOUDNESS - k_weighted_db(y)
+def _frames_db(y: np.ndarray) -> np.ndarray:
+    """Level of each 1 ms frame, dBFS."""
+    hop = max(1, int(0.001 * RATE))
+    n = len(y) // hop
+    if n == 0:
+        return np.zeros(0)
+    frames = y[:n * hop].reshape(n, hop)
+    return 20 * np.log10(np.sqrt((frames ** 2).mean(axis=1)) + 1e-12)
+
+
+def end_kind(phonemes: str | None) -> str:
+    """How an item's clip may end: 'stop' when its last sound is a stop
+    or an affricate (a real release can follow), 'vowel' when it is a
+    long vowel or a diphthong, else 'other'. 'stop' when the phonemes
+    are not known, which keeps the careful rule."""
+    sounds = [c for c in (phonemes or "") if c.isalpha()]
+    if not sounds or sounds[-1] in STOP_PHONES:
+        return "stop"
+    return "vowel" if sounds[-1] in LONG_VOWEL_PHONES else "other"
+
+
+def drop_end_click(y: np.ndarray,
+                   ends: str = "stop") -> tuple[np.ndarray, bool]:
+    """Silence a click left after the speech has ended, and say whether
+    there was one. The synthetic voice often ends a clip with a tick or
+    a pop just after the last sound (2 October 2026: 945 of the 2201
+    shipped files, the loudest 3 dB under the voice, some with a second
+    pop before the tick): an event after at least 12 ms of quiet 15 dB
+    under it, in the last 120 ms of the clip, at least 10 dB under the
+    loudest frame, or, for an item not ending in a stop, a pop on the
+    dying tail of its last sound (_tail_pop). `ends` is the item's
+    end_kind. For 'stop' (or nothing known) the event must also be at
+    most CLICK_MAX_S long and fall 20 dB within CLICK_DECAY_S, and only
+    the last event is looked at: a stop's own release takes 13 to 39 ms
+    to fall that far in these files, so a final t or d stays. Otherwise
+    anything up to POP_MAX_S goes, and after a long vowel a pop and its
+    tail up to VOWEL_POP_MAX_S (peaking within 8 ms of its onset and
+    6 dB down 10 ms later, which a vowel never is), up to three times
+    over, since nothing after a vowel, a nasal or a fricative has died
+    away is speech."""
+    found = False
+    for k in range(1 if ends == "stop" else 3):
+        # The pop on a tail is looked for once only: after it goes, the
+        # end of the speech itself is what a second look would see.
+        y, hit = _drop_once(y, ends, tail_pop=(k == 0))
+        if not hit:
+            break
+        found = True
+    return y, found
+
+
+def _drop_once(y: np.ndarray, ends: str,
+               tail_pop: bool = True) -> tuple[np.ndarray, bool]:
+    db = _frames_db(y)
+    n = len(db)
+    if n == 0:
+        return y, False
+    loud = np.flatnonzero(db > db.max() - 45.0)
+    if not len(loud) or loud[-1] < n - 120:
+        return y, False
+    end = int(loud[-1])
+    # (window, keep a release, need a pop's shape): the click rule
+    # first, then a pop with its tail after a vowel.
+    tries = {"stop": ((CLICK_MAX_S, True, False),),
+             "vowel": ((POP_MAX_S, False, False),
+                       (VOWEL_POP_MAX_S, False, True))
+             }.get(ends, ((POP_MAX_S, False, False),))
+    cuts = (_end_event(db, end, int(round(w * 1000)), keep_release, pop)
+            for w, keep_release, pop in tries)
+    if ends != "stop" and tail_pop:
+        cuts = (*cuts, _tail_pop(db, end))
+    for cut in cuts:
+        if cut is not None:
+            # Silence from the quietest point before the event, after a
+            # 5 ms fade, so no sliver of its rise is left standing.
+            hop = int(0.001 * RATE)
+            a = cut * hop
+            f = min(a, 5 * hop)
+            out = y.copy()
+            out[a - f:a] *= 0.5 * (1.0 + np.cos(np.linspace(0.0, np.pi, f)))
+            out[a:] = 0.0
+            return out, True
+    return y, False
+
+
+def _tail_pop(db: np.ndarray, end: int) -> int | None:
+    """A pop riding on a sound's dying tail, where no quiet comes first:
+    peaking in the last 25 ms of sound (to `end`, the last audible
+    frame), a rise of 12 dB or more within 6 ms to a peak at least 6 dB
+    under the loudest frame, down 10 dB again within 10 ms, out of
+    20 ms that sat 8 dB under it. Vowels, nasals and fricatives fade;
+    they never jump and fall like this. The frame to cut at, or None."""
+    n = len(db)
+    for i in range(end, max(end - 25, 26), -1):
+        if db[i] > db.max() - 6.0 or (i + 1 < n and db[i + 1] > db[i]):
+            continue
+        if db[i] - db[i - 6:i].min() < 12.0:
+            continue
+        if db[i + 1:i + 11].min(initial=db[i]) > db[i] - 10.0:
+            continue
+        # The 20 ms before the jump must sit 8 dB under it: a voice's own
+        # flicker at the end of a vowel stays near its level.
+        lead_in = db[max(0, i - 26):i - 6]
+        if len(lead_in) and np.median(lead_in) > db[i] - 8.0:
+            continue
+        return i - 10 + int(np.argmin(db[i - 10:i]))
+    return None
+
+
+def _end_event(db: np.ndarray, end: int, width: int, keep_release: bool,
+               pop: bool = False) -> int | None:
+    """Where to cut, a frame in the middle of the quiet before the
+    event ending at `end`, when it is one drop_end_click silences, else
+    None."""
+    lo = max(0, end - width)
+    top = lo + int(np.argmax(db[lo:end + 1]))
+    ev_db = db[top]
+    if ev_db > db.max() - 10.0:
+        return None
+    start = top
+    while start > 0 and db[start - 1] >= ev_db - 20.0:
+        start -= 1
+    if end - start + 1 > width:
+        return None
+    quiet, k = 0, start - 1
+    while k >= 0 and db[k] < ev_db - 15.0:
+        quiet += 1
+        k -= 1
+    if quiet < 12:
+        return None
+    fall = top
+    while fall + 1 < len(db) and db[fall + 1] > ev_db - 20.0:
+        fall += 1
+    if keep_release and fall - top + 1 > int(round(CLICK_DECAY_S * 1000)):
+        return None
+    if pop and (top - start > 8 or (top + 10 < len(db)
+                                    and db[top + 10] > ev_db - 6.0)):
+        return None
+    return start - quiet // 2
+
+
+def trim_tail(y: np.ndarray) -> np.ndarray:
+    """End the clip TAIL_S after its last audible frame (45 dB under the
+    loudest) under a FADE_OUT_S raised-cosine fade, so it closes
+    smoothly and the next sound is not kept waiting on silence."""
+    db = _frames_db(y)
+    loud = np.flatnonzero(db > db.max() - 45.0) if len(db) else []
+    if not len(loud):
+        return y
+    stop = min(len(y), (int(loud[-1]) + 1) * int(0.001 * RATE)
+               + int(TAIL_S * RATE))
+    out = y[:stop].copy()
+    f = min(len(out), max(1, int(FADE_OUT_S * RATE)))
+    out[-f:] *= 0.5 * (1.0 + np.cos(np.linspace(0.0, np.pi, f)))
+    return out
+
+
+def clean(y: np.ndarray, ends: str = "stop") -> tuple[np.ndarray, bool]:
+    """The tail trimmed, any end click silenced, and the tail trimmed
+    again. Trimming first matters: a pop's faint tail can run to the
+    end of an untrimmed clip and hide the pop from drop_end_click."""
+    y, clicked = drop_end_click(trim_tail(y), ends)
+    return (trim_tail(y) if clicked else y), clicked
+
+
+def level(y: np.ndarray) -> tuple[np.ndarray, dict]:
+    """The clip at SPEECH_LOUDNESS, never above PEAK_CEILING_DBFS, and
+    its record."""
+    gain_db = SPEECH_LOUDNESS - k_weighted_db(y)
     peak = np.max(np.abs(y)) + 1e-12
     ceiling = 10 ** (PEAK_CEILING_DBFS / 20.0)
     limited = peak * 10 ** (gain_db / 20.0) > ceiling
@@ -390,9 +575,24 @@ def finish(x: np.ndarray, span: tuple[int, int], kind: str) -> tuple:
            "rms_dbfs": round(20 * np.log10(np.sqrt(np.mean(y ** 2))
                                            + 1e-12), 2),
            "peak_dbfs": round(20 * np.log10(np.max(np.abs(y)) + 1e-12), 2),
-           "limited": bool(limited)}
-    if kind == "word":
-        rec["loudness"] = round(k_weighted_db(y), 2)
+           "loudness": round(k_weighted_db(y), 2),
+           "limited": bool(limited), "finish": FINISH_VERSION}
+    return y, rec
+
+
+def finish(x: np.ndarray, span: tuple[int, int], kind: str,
+           phonemes: str | None = None) -> tuple:
+    """The trimmed, faded, levelled clip and its record. Chunks and
+    words are finished alike; `kind` is kept for the callers, and the
+    phonemes, when known, say whether the clip may end in a release."""
+    a = max(0, span[0] - int(LEAD_S * RATE))
+    b = min(len(x), span[1] + int(TAIL_S * RATE))
+    y = x[a:b].copy()
+    f = max(1, int(FADE_S * RATE))
+    y[:f] *= np.linspace(0.0, 1.0, f)
+    y, clicked = clean(y, end_kind(phonemes))
+    y, rec = level(y)
+    rec["click_removed"] = clicked
     return y, rec
 
 
@@ -443,8 +643,8 @@ def write_manifest(out: Path, records: dict, speaker: str,
                 "speaker": speaker, "accent": "en-AU",
                 "chunk_form": "spelling", "microphone": microphone,
                 "recorded_on": date.today().isoformat(),
-                "rate_hz": RATE, "chunk_rms_dbfs": CHUNK_RMS_DBFS,
-                "word_loudness": WORD_LOUDNESS, "latency_ms": None,
+                "rate_hz": RATE, "loudness": SPEECH_LOUDNESS,
+                "finish": FINISH_VERSION, "latency_ms": None,
                 "entries": {}}
     if path.exists():
         old = json.loads(path.read_text(encoding="utf-8"))
@@ -499,6 +699,39 @@ def cmd_cut(args) -> int:
     for p in problems:
         print("NOT CUT: " + p)
     return 1 if problems else 0
+
+
+def cmd_tidy(args) -> int:
+    """The shipped files through drop_end_click, trim_tail and level,
+    in place, with their manifest entries brought up to date."""
+    from scipy.io import wavfile
+    out = Path(args.speech_dir)
+    path = out / "manifest.json"
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    entries = manifest.get("entries") or {}
+    done = clicks = 0
+    for stem, rec in sorted(entries.items()):
+        wav = out / f"{stem}.wav"
+        if not wav.exists() or int(rec.get("finish", 1)) >= FINISH_VERSION:
+            continue
+        y, clicked = clean(read_wav(wav), end_kind(rec.get("phonemes")))
+        y, new = level(y)
+        wavfile.write(str(wav), RATE,
+                      np.clip(y * 32767.0, -32768, 32767).astype(np.int16))
+        rec.update(new)
+        rec["click_removed"] = clicked
+        done += 1
+        clicks += int(clicked)
+    for key in ("chunk_rms_dbfs", "word_loudness"):
+        manifest.pop(key, None)
+    manifest["loudness"] = SPEECH_LOUDNESS
+    manifest["finish"] = FINISH_VERSION
+    if done:
+        manifest["finished_on"] = date.today().isoformat()
+    path.write_text(json.dumps(manifest, indent=1, sort_keys=True),
+                    encoding="utf-8")
+    print(f"{done} files finished again, {clicks} end clicks silenced")
+    return 0
 
 
 def cmd_check(args) -> int:
@@ -663,6 +896,10 @@ def main(argv=None) -> int:
     c.add_argument("--speech-dir", default=str(SPEECH_DIR))
     c.add_argument("--force", action="store_true")
     c.set_defaults(fn=cmd_cut)
+    t = sub.add_parser("tidy", help="the shipped files through the "
+                                    "click, tail and loudness steps")
+    t.add_argument("--speech-dir", default=str(SPEECH_DIR))
+    t.set_defaults(fn=cmd_tidy)
     k = sub.add_parser("check", help="what is still missing")
     k.add_argument("--speech-dir", default=str(SPEECH_DIR))
     k.set_defaults(fn=cmd_check)

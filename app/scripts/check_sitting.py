@@ -43,9 +43,10 @@ N_STEPS = 12
 REST_PLANNED_S = 180.0
 HARD_STOP_MIN = 50.0
 # The exact counts a block of these modes plays, per family: the study
-# sitting's full-length games, and Trial Mode's shortened ones
-# (protocol.presets.trial_short). The rest vary with the player and
-# only need to be above zero.
+# sitting's full-length games, which every length plays since 2 October
+# 2026, and the shortened ones the 15 and the 30 played before that
+# (family short). The rest vary with the player and only need to be
+# above zero.
 EXACT_TRIALS = {"full": {"reaction": 20, "chords": 40, "pattern": 296},
                 "short": {"reaction": 12, "chords": 20, "pattern": 204}}
 FORCE_PILOT_RUNS = {"full": 12, "short": 6}

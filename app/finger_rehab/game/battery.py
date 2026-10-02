@@ -91,8 +91,9 @@ class BatteryPlan:
     # which is what a preset without the key gets.
     hard_stop_min: float = 0.0
     # Which set of game lengths the sitting plays: "full" (the study
-    # sitting's counts) or "short" (Trial Mode's shortened games).
-    # Blocks pool within a family and never across.
+    # sitting's counts, every length since 2 October 2026) or "short"
+    # (the shortened games the 15 and the 30 played from 28 September
+    # to 1 October). Blocks pool within a family and never across.
     family: str = "full"
 
 
@@ -267,10 +268,10 @@ def preset_family(cfg, preset: str) -> str:
 def resolved_overrides(cfg, preset: str) -> dict:
     """A preset's per-game settings with its overrides_from chain laid
     underneath: a Trial Mode length plays the study battery's own blocks
-    (overrides_from: study_battery), and a short length takes the short
-    set, which itself sits on the study battery's (overrides_from:
-    trial_short). Each preset's own overrides win over what it
-    inherits."""
+    (overrides_from: study_battery), and a preset can sit on another
+    that sits on the study battery's, as the 15 and the 30 did on the
+    short set until 2 October 2026. Each preset's own overrides win
+    over what it inherits."""
     chain: list[dict] = []
     seen: set[str] = set()
     name = preset

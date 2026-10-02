@@ -47,14 +47,16 @@ HOW THE DESIGN GOT HERE (every change made before any participant):
     healthy_one_hand_v3). The login's SESSION picker runs this
     sitting as its 45 minute length, or a 15, 30 or 60 minute length
     that plays games twice wherever the minutes allow, the 15 and 30
-    with shortened games (Section 2.5, docs/research/trial_mode.md).
+    with shortened games (until 2 October; Section 2.5,
+    docs/research/trial_mode.md).
     Hand breadth is no longer measured: no check or table read it.
   - 28 September 2026, later the same day: FOUR LENGTHS, THE SENSOR
     BENCH, THE 90 PERCENT INTERVAL. Each student plays the longest
     SESSION length their slot allows (60, 45, 30, then 15), on the
     one device with the calibrated sensor set. The 45 and the 60 are
     read together (the 60 holds the 45 block for block); the 15 and
-    the 30 play shortened games and are read on their own. With one
+    the 30 played shortened games read on their own until 2 October,
+    when every length moved to the full games. With one
     board and one visit per person nobody plays both sensor sets, so
     the calibrated against uncalibrated comparison is the bench:
     scripts/pad_bench.py --characterise on each set (slope, linearity,
@@ -229,6 +231,15 @@ HOW THE DESIGN GOT HERE (every change made before any participant):
     which are slower, and a per-person interval. The text below is
     corrected where the reviews found a claim the evidence
     contradicts.
+  - 2 October 2026: ONE FAMILY. About ten students are expected, each
+    sitting one length once, and a check prints from 8 people. The
+    shortened games of the 15 and the 30 could not pool with the 45
+    and the 60, so any mix of lengths split the ten and left every
+    check short. Every length now plays this sitting's full-length
+    games: the 15 Reaction, Force Pilot, Chords and Adaptive once,
+    the 30 all eight once (this sitting's first pass); the 45 and the
+    60 are unchanged. A block from any length pools with every other
+    (Section 2.5).
 
 What one board costs, and the thesis says it in the same breath as
 the results:
@@ -1907,38 +1918,40 @@ Statistical cost of each short form:
   1.5). Syllables and its keys left
   the preset on 28 September 2026 (Section 1.4).
 
-2.5 Trial Mode: shorter and longer sittings (28 September 2026)
---------------------------------------------------------------
+2.5 Trial Mode: shorter and longer sittings (2 October 2026)
+-----------------------------------------------------------
 The login's SESSION picker offers Free play or a timed length, and a
 length starts its games at LOG IN. No length plays Syllables. Every
-length plays games twice wherever the minutes allow, because a second
-go is what shows improvement and what gives test-retest. The 45 and
-the 60 play this sitting's full-length games (family full). The 15
-and the 30 play shortened games (family short: protocol.presets
-trial_short, half the trials, Force Pilot's six-wave short ladder) so
-that more games fit twice. Blocks pool within a family and never
-across; the notebook reads one family at a time (COHORT_FAMILY). The
-reasoning, the full and short games and the rejected candidates are
-in docs/research/trial_mode.md; in brief, timed over 48 sittings
-each:
+length plays this sitting's full-length games, with its counts and
+settings, so a block from any length is the same measure as the same
+block from every other and the notebook pools them all: with about
+ten students, each sitting one length once, every student counts
+toward every check their games feed. A length plays fewer games, not
+shorter ones. From 28 September to 1 October the 15 and the 30
+played shortened games of their own family so that more fitted
+twice; those blocks could never pool with the 45 and the 60, and the
+change was made before any participant. The reasoning and what ten
+students give are in docs/research/trial_mode.md; in brief, timed
+over 48 sittings each:
 
-  Length  Family  Plays                         Median     Range
-  15      short   Reaction, Chords, Force       14.4-14.8  14.0-15.3
-                  Pilot, then all three again
-  30      short   all eight, 2 min rest, then   28.0-28.5  27.7-29.3
-                  Reaction, Force Pilot,
-                  Chords, Adaptive again
-  45      full    this sitting                  44.1-44.9  43.9-45.1
-  60      full    this sitting, then Echo,      58.3-58.7  57.8-59.5
-                  Buzz Hunt, Muscle Memory,
-                  Adaptive again
+  Length  Plays                              Median     Range
+  15      Reaction, Force Pilot, Chords,     14.2-14.5  13.9-15.2
+          Adaptive, once
+  30      all eight once (this sitting's     29.2-29.5  28.7-30.1
+          first pass)
+  45      this sitting                       44.4-44.9  43.8-45.6
+  60      this sitting, then Echo, Buzz      58.5-58.9  57.5-59.7
+          Hunt, Muscle Memory, Adaptive
+          again
 
 The 45 stays the sitting for the collection day. The 60 is the 45
 block for block with the other four games again after it, so every
 game is played twice: a participant who sits it gives every number
 the 45 gives, plus P2 (Section 4.6) and an exploratory second-go
-table for every game. The 30 plays every game and four of them twice;
-the 15 plays three games twice. The lab's own
+table for every game. The 30 plays every game once and the 15 the
+four core games once; neither feeds R3 or the reliability rows, which
+need the second pass. With ten students, every check keeps its 8
+while no more than two sit the 15 or the 30. The lab's own
 build has no lengths at login (config/eeg_lab.yaml): a length starts
 at LOG IN, before the RA has started the EEG recording, so the hub's
 picker offers Lab session instead: the lab's SRT in place of both

@@ -5,7 +5,9 @@ codes from D01 up; the warm-up words and hear and pick are one part
 with one card and one counter; the instructions say what each part
 asks; the play screen shows no band or level; the card's key says
 Start; and the results grade the words, with the reading check shown
-on its own card.
+on its own card. The card after the reading check waits for Start.
+The voice plays without a cue tone before each modelled syllable, and
+the gaps between voice prompts are a little shorter.
 """
 from __future__ import annotations
 
@@ -126,6 +128,53 @@ class HeldCardTests(unittest.TestCase):
         self.assertEqual(m.phase, "section")
         m._tick(m.SECTION_CARD_S + 0.1)
         self.assertNotEqual(m.phase, "section")
+
+
+class VoicePacingTests(unittest.TestCase):
+    """2 October 2026: no beep before each modelled syllable, and the
+    breaks between voice prompts a little shorter."""
+
+    def _to_model(self):
+        _e, m = _build_mode(age_band="6-9", sections=True, words_total=12,
+                            attend_s=3.0, ioi_ms=800)
+        t = 0.0
+        while m.phase != "model":
+            m._tick(t)
+            if m.phase == "section":
+                m.skip_wait(t)
+            t += 0.01
+        return _e, m, t
+
+    def test_the_model_plays_no_cue_tone(self):
+        e, m, t = self._to_model()
+        e.on_stim_multi.reset_mock()
+        while m.phase == "model":
+            m._tick(t)
+            t += 0.01
+        calls = e.on_stim_multi.call_args_list
+        self.assertEqual(len(calls), m.n_syll)
+        for c in calls:
+            self.assertIs(c.kwargs.get("tone"), False)
+            self.assertIs(c.kwargs.get("buzz"), False)
+
+    def test_the_first_syllable_comes_soon_after_attend(self):
+        _e, m, t = self._to_model()
+        self.assertAlmostEqual(m._model_next_t - t,
+                               m.MODEL_LEAD_S, delta=0.02)
+        self.assertLess(m.MODEL_LEAD_S, m.ioi_s)
+
+    def test_the_gaps_are_a_little_shorter(self):
+        from finger_rehab.config import Config
+        from finger_rehab.game.modes.syllables import SyllablesMode as M
+        cfg = Config.load()
+        self.assertEqual(cfg.get("syllables.beat_ioi_ms"), 800)
+        self.assertEqual(cfg.get("syllables.set_gap_s"), 0.8)
+        self.assertEqual(cfg.get("syllables.inter_trial_gap_ms"), 1300)
+        self.assertEqual(cfg.get("syllables.complete_s"), 2.8)
+        self.assertEqual((M.MODEL_GAP_S, M.BLEND_HOLD_S, M.READ_BACK_TAIL_S),
+                         (0.4, 1.0, 0.8))
+        # The word still stays on screen 3 s, as the thesis says.
+        self.assertEqual(cfg.get("syllables.attend_s"), 3.0)
 
 
 class WordsOnScreenTests(unittest.TestCase):

@@ -1181,8 +1181,9 @@ class TimingTests(unittest.TestCase):
         # The shipped pace (config/default.yaml), not the shrunk test
         # knobs _build_mode uses elsewhere.
         engine, mode = _build_mode(words_total=words, round_size=10,
-                                   break_s=30.0, inter_trial_gap_ms=1500,
-                                   attend_s=3.0, ioi_ms=900)
+                                   break_s=30.0, inter_trial_gap_ms=1300,
+                                   attend_s=3.0, ioi_ms=800, set_gap_s=0.8,
+                                   complete_s=2.8)
         t = 0.0
         start = t
         guard = 0

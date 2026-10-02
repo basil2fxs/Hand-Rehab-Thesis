@@ -8,8 +8,8 @@ Three layers:
      counterbalancing cell.
   2. The login screen through the real engine: the name field says
      NAME and opens empty, every field lands in the Session and in
-     metadata.json, the visit is worked out without a field, a code
-     needs its main hand, a name does not,
+     metadata.json, the visit is worked out without a field, the main
+     hand starts on Right and is never empty,
      hand size and the pickers fill from the identity's last game,
      and the whole screen is keyboard-only drivable.
   3. The sessions tree and the notebook: a code keys the folders and
@@ -261,26 +261,40 @@ class LoginCommitTests(_LoginHarness):
         self.assertEqual([c for _k, c in t.hand_seg.options],
                          ["Left", "Right"])
 
-    def test_a_code_needs_its_main_hand(self) -> None:
+    def test_the_main_hand_is_always_picked(self) -> None:
+        """MAIN HAND starts on Right (Basil, 2 October 2026), so a code
+        logs in without a stop; Left is one click or L away, and the
+        field cannot be emptied."""
         t = self.title
+        self.assertEqual(t.hand_seg.value, "right")
+        self.assertTrue(t.hand_seg.defaulted)
+        t.hand_seg.set(None)
+        self.assertEqual(t.hand_seg.value, "right")
         t.name_input.text = "P07"
-        t._begin()
-        self.assertFalse(self.eng._session_active)
-        self.assertIn("main hand", t.begin_note)
-        self.assertNotIn("dominant", t.begin_note)
-        t.hand_seg.set("right")
         t._begin()
         self.assertTrue(self.eng._session_active)
         self.assertEqual(self.eng.session.dominant_hand, "right")
         self.assertEqual(t.begin_note, "")
 
-    def test_a_name_logs_in_without_a_hand(self) -> None:
+    def test_a_left_hander_is_one_key_away(self) -> None:
+        import pygame
+        t = self.title
+        t.hand_seg.focused = True
+        t.handle_event(_key_event(pygame.K_l, "l"))
+        self.assertEqual(t.hand_seg.value, "left")
+        self.assertFalse(t.hand_seg.defaulted)
+        t.hand_seg.focused = False
+        t.name_input.text = "P08"
+        t._begin()
+        self.assertEqual(self.eng.session.dominant_hand, "left")
+
+    def test_a_name_logs_in_on_the_default_hand(self) -> None:
         t = self.title
         t.name_input.text = "Mara"
         t._begin()
         self.assertTrue(self.eng._session_active)
         self.assertEqual(self.eng.session.participant, "Mara")
-        self.assertEqual(self.eng.session.dominant_hand, "")
+        self.assertEqual(self.eng.session.dominant_hand, "right")
         self.assertEqual(self.eng.session.sex, "")
         self.assertEqual(self.eng.session.visit, "1")
 
@@ -304,8 +318,9 @@ class LoginCommitTests(_LoginHarness):
         self.assertEqual((s.participant, s.dominant_hand, s.sex, s.visit),
                          ("NA", "", "", ""))
         self.assertIsNone(self.eng.cfg.get("session.dominant_hand"))
-        # And the screen came back clean.
-        self.assertIsNone(self.title.hand_seg.value)
+        # And the screen came back clean, the main hand on its default.
+        self.assertEqual(self.title.hand_seg.value, "right")
+        self.assertTrue(self.title.hand_seg.defaulted)
         self.assertEqual(self.title.sex_seg.value, "")
         self.assertEqual(self.title.name_input.text, "")
 
@@ -565,7 +580,8 @@ class AutofillOnScreenTests(_LoginHarness):
         t.name_input.text = "P04"
         t.update(0.016)
         self.assertEqual(t.length_input.text, "")
-        self.assertIsNone(t.hand_seg.value)
+        self.assertEqual(t.hand_seg.value, "right")
+        self.assertTrue(t.hand_seg.defaulted)
         self.assertEqual(t.sex_seg.value, "")
         self.assertEqual(t._prefill_note(), "")
 

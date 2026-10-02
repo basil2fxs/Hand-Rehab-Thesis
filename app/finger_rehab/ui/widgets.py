@@ -1619,7 +1619,9 @@ class Segmented:
     Esc hand focus back, the same contract TextInput keeps so the
     login screen can walk one focus order across both kinds of field.
     `value` is the picked option's key, or None while nothing is
-    picked, which is what a required field starts as.
+    picked. A `default` starts the control on that option and is what
+    it goes back to, so it is never empty; `defaulted` says the pick is
+    still the default and not a choice anyone made.
     """
 
     BORDER_RADIUS = 10
@@ -1629,15 +1631,19 @@ class Segmented:
                  label: str = "",
                  initial: str | None = None,
                  hotkeys: dict[str, str] | None = None,
-                 font_pt: int = FONT_BODY) -> None:
+                 font_pt: int = FONT_BODY,
+                 default: str | None = None) -> None:
         self.rect = rect
         self.theme = theme
         self.layout = layout
         self.options = list(options)          # (key, caption)
         self.label = label
+        self.default = (default if any(k == default for k, _c
+                                       in self.options) else None)
         self.value: str | None = (initial if any(k == initial for k, _c
                                                  in self.options)
-                                  else None)
+                                  else self.default)
+        self.defaulted = self.value is not None and self.value == self.default
         # hotkey character -> option key
         self.hotkeys = dict(hotkeys or {})
         self.font_pt = font_pt
@@ -1651,6 +1657,13 @@ class Segmented:
     def set_prefilled(self, key: str | None) -> None:
         self.set(key)
         self.prefilled = self.value is not None
+
+    def reset(self) -> None:
+        """Back to the default (None when there is none), as a pick
+        nobody has made yet."""
+        self.value = self.default
+        self.defaulted = self.default is not None
+        self.prefilled = False
 
     def _index(self) -> int:
         for i, (k, _c) in enumerate(self.options):
@@ -1668,7 +1681,13 @@ class Segmented:
                 for i in range(n)]
 
     def set(self, key: str | None) -> None:
-        self.value = key if any(k == key for k, _c in self.options) else None
+        """Pick `key`. Anything that is not an option falls back to the
+        default, so a control with a default is never left empty."""
+        if any(k == key for k, _c in self.options):
+            self.value = key
+            self.defaulted = False
+        else:
+            self.reset()
 
     def handle_event(self, e: pygame.event.Event) -> None:
         if e.type == pygame.MOUSEMOTION:
@@ -1680,6 +1699,7 @@ class Segmented:
                     if r.collidepoint(e.pos):
                         self.value = k
                         self.prefilled = False
+                        self.defaulted = False
                         break
         elif e.type == pygame.KEYDOWN and self.focused:
             if e.key in (pygame.K_RETURN, pygame.K_TAB, pygame.K_ESCAPE):
@@ -1693,6 +1713,7 @@ class Segmented:
                     i = (i + step) % len(self.options)
                 self.value = self.options[i][0]
                 self.prefilled = False
+                self.defaulted = False
             else:
                 ch = (e.unicode or "").lower()
                 if ch and ch in self.hotkeys:

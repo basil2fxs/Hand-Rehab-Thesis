@@ -19,10 +19,14 @@ ORDER_A = ["reaction", "rhythm", "echo", "force_pilot", "chords",
            "reaction", "rhythm", "force_pilot", "chords"]
 COUNTS = {"reaction": 20, "chords": 40, "pattern": 296, "rhythm": 107,
           "echo": 20, "buzz_hunt": 20, "adaptive": 40}
-# The 15 minute Trial Mode length: three shortened games, twice.
+# The 15 minute length of 28 September to 1 October 2026: three
+# shortened games, twice (family short). Kept so a sitting from then
+# still checks against itself.
 ORDER_15 = ["reaction", "chords", "force_pilot",
             "reaction", "chords", "force_pilot"]
 COUNTS_SHORT = {"reaction": 12, "chords": 20}
+# The 15 since 2 October 2026: the core games once, full length.
+ORDER_15_FULL = ["reaction", "force_pilot", "chords", "adaptive"]
 
 
 def write_sitting(root: Path, code: str = "P01", skip=(), test_mode=(),
@@ -111,8 +115,21 @@ class CheckSittingTests(unittest.TestCase):
         self.assertIn("steps 1 to 8 pass 1, 9 to 12 pass 2", good)
         self.assertIn("all 12 steps finished", good)
 
+    def test_the_15_is_checked_against_itself(self):
+        # Four full-length blocks, one pass, no rest, an 18 minute stop.
+        result = self._check(order=ORDER_15_FULL, preset="trial_15",
+                             pass2_from=99, rest_s=None,
+                             preset_cfg={"hard_stop_min": 18})
+        bad = self._bad(result)
+        self.assertEqual(len(bad), 1, bad)
+        self.assertIn("18 min stop", bad[0])
+        good = " ".join(line for ok, line in result if ok)
+        self.assertIn("all 4 steps finished", good)
+        self.assertIn("full counts in every block", good)
+        self.assertNotIn("rest", good)
+
     def test_a_short_trial_length_is_checked_against_itself(self):
-        # The 15: six shortened blocks, no rest, an 18 minute stop.
+        # The old 15: six shortened blocks, no rest, an 18 minute stop.
         # Its short counts are its full counts, not short blocks.
         result = self._check(order=ORDER_15, counts=COUNTS_SHORT,
                              family="short", preset="trial_15",

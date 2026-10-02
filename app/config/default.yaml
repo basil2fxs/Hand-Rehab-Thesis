@@ -1215,8 +1215,9 @@ syllables:
   # least: a syllable's own sound always finishes with half a second
   # of quiet before the next. After the syllables the whole word is
   # said again (the blend). 500 until 29 September 2026, when play
-  # felt rushed.
-  beat_ioi_ms: 900
+  # felt rushed; 900 until 2 October 2026, when the breaks between
+  # voice prompts felt a little long.
+  beat_ioi_ms: 800
   # Session shape: rounds of words with a proper rest between rounds,
   # and a whole-session ceiling so an engaged child still stops in
   # time. Each finished round stamps a sticker onto the session's
@@ -1224,9 +1225,10 @@ syllables:
   # first time light up to three corner stars (3, 5 and 8 in a row),
   # and moving up a word band shows a one-shot Bigger words card. All
   # of it is fixed and earned, never random, and nothing is ever taken
-  # away. 30 sectioned words take about 13 to 18 minutes by age and
-  # reading speed (simulation, the deep review of 1 October 2026), not
-  # the 11 once given here; 6 to 9 plays 20 (syllables_profiles.py),
+  # away. 30 sectioned words take about 12 to 17 minutes by age and
+  # reading speed (the deep review's simulation of 1 October 2026, less
+  # the 4 to 7 percent the shorter gaps of 2 October save), not the 11
+  # once given here; 6 to 9 plays 20 (syllables_profiles.py),
   # inside the 8 to 12 minutes GraphoGame's developers advise for
   # children. The probe comes on top.
   words_per_block: 30
@@ -1258,8 +1260,9 @@ syllables:
   # up phantom presses.
   tap_debounce_ms: 150
   # Quiet gap between words, and the session ceiling. The block ends
-  # politely at the next word boundary after the cap.
-  inter_trial_gap_ms: 1500
+  # politely at the next word boundary after the cap. 1500 until
+  # 2 October 2026.
+  inter_trial_gap_ms: 1300
   session_cap_min: 20
 
   # How hard the wrong chunks are. Rung 1 is far-off foils, a slow
@@ -1279,8 +1282,9 @@ syllables:
   # child of this age most of a second before any deciding starts.
   # Half as long again as the first table (4.0 down to 2.5).
   fall_s: [6.0, 6.0, 5.5, 5.5, 5.0, 5.0, 4.5, 4.5]
-  # Quiet gap after one set clears before the next falls.
-  set_gap_s: 1.0
+  # Quiet gap after one set clears before the next falls. 1.0 until
+  # 2 October 2026.
+  set_gap_s: 0.8
   # Presses in this window after the chunks appear are recorded as
   # anticipations and ignored: the tiles are still fading in, so a
   # press that early answered a set nobody could have read. 0.2 is the
@@ -1296,8 +1300,9 @@ syllables:
   # the block. Coming back spaced out is what makes a missed word
   # worth meeting again.
   return_after: [2, 4]
-  # Seconds the finished word is shown and spoken before the next one.
-  complete_s: 3.0
+  # Seconds the finished word is shown and spoken before the next one,
+  # at the least. 3.0 until 2 October 2026.
+  complete_s: 2.8
   # Allow the same-sound-different-spelling foil (ka for ca) at rungs
   # 7 and 8. Off by default: it can only be answered by knowing how
   # the word is spelt, which is past what this mode trains.
@@ -1353,10 +1358,10 @@ force_pilot:
   # a within-block learning curve at the cost of another 6.7 minutes.
   passes: 1
   # Fly the six-wave short ladder the mode file defines (Tide, Stairs,
-  # Hills, Dunes, Storm, Uncharted) instead of all twelve. Off ships;
-  # only a Trial Mode short block turns it on (protocol.presets
-  # trial_short). The config can switch between the two ladders but
-  # cannot name levels, for the reason above.
+  # Hills, Dunes, Storm, Uncharted) instead of all twelve. Off ships,
+  # and no sitting turns it on since 2 October 2026 (the 15 and the 30
+  # flew it before then). The config can switch between the two ladders
+  # but cannot name levels, for the reason above.
   short_ladder: false
   # Force-to-altitude mapping: 0 to span_pct of the finger's max fills
   # the screen height. Low force is where the cited deficits live, and
@@ -2132,84 +2137,53 @@ protocol:
           bpm_min: 30
 
     # Trial Mode: the login's SESSION picker (protocol.trials, below).
-    # Every length plays these games and only these, the study
-    # sitting's eight, and plays games TWICE wherever the minutes
-    # allow, because a second go is what shows improvement (the pass 2
-    # minus pass 1 change) and what gives test-retest. The 45 and the
-    # 60 play full-length games (family full: the study sitting's own
-    # counts); the 15 and the 30 play shortened games (family short,
-    # trial_short below) so that more games fit twice. Blocks pool
-    # within a family and never across, because a shortened game is
-    # not the same measure. Measured minutes and the reasoning:
+    # Every length plays the study sitting's own full-length games,
+    # with the study's counts and settings, and only those, so a block
+    # from any length pools with the same block from every other: with
+    # about ten students, each sitting one length once, every student
+    # counts toward every check their games feed (2 October 2026; the
+    # 15 and the 30 played shortened games of their own family from
+    # 28 September, which no other length could pool with). A length
+    # plays fewer games, not shorter ones: the 15 the device's core
+    # games once, the 30 every game once, the 45 and the 60 every game
+    # once and then some twice. Measured minutes and the reasoning:
     # docs/research/trial_mode.md.
     #
-    # The short set: half-length games, same tasks, same scoring.
-    # Only a preset's overrides_from points here; it has no order of
-    # its own and is not offered on the picker.
-    trial_short:
-      family: short
-      overrides_from: study_battery
-      overrides:
-        reaction:
-          block_trials: 12            # 20 in the full set
-        chords:
-          subblocks: 1                # one size mix of 20, not two
-          trials_per_subblock: 20
-        force_pilot:
-          short_ladder: true          # the mode file's six waves
-        buzz_hunt:
-          loc_trials_per_hand: 8      # 16 in the full set
-          span_trials: 2              # 4 in the full set
-        echo:
-          games: 1                    # 2 in the full set
-        pattern:
-          soc_cycles_per_block: 2     # 3 in the full set
-          random_block_trials: 24     # 32 in the full set
-    # 15 min: three games, twice. Reaction is the control (no practice
-    # effect expected, so any change it shows is warm-up), Chords and
-    # Force Pilot are the two measures the device is built around,
-    # and Force Pilot's Storm and Uncharted pair separates learning
-    # those waves from getting used to the pad. The second go follows
-    # straight on: a rest would not fit, and a quarter hour leaves
-    # little fatigue to rest from.
+    # 15 min: the core games once. Reaction is the anchor every other
+    # timing is read against, Chords and Force Pilot are the two
+    # measures the device is built around, and Adaptive, the shortest
+    # game, fits beside them. In the order the 45 plays them.
     trial_15:
-      id: trial_15_v2
-      family: short
-      overrides_from: trial_short
+      id: trial_15_v3
+      family: full
+      overrides_from: study_battery
       budget_min: 15
       hard_stop_min: 18
       orders:
         A:
           - {mode: reaction, hand: right, phase: pass1}
-          - {mode: chords, hand: right, phase: pass1}
           - {mode: force_pilot, hand: right, phase: pass1}
-          - {mode: reaction, hand: right, phase: pass2}
-          - {mode: chords, hand: right, phase: pass2}
-          - {mode: force_pilot, hand: right, phase: pass2}
+          - {mode: chords, hand: right, phase: pass1}
+          - {mode: adaptive, hand: right, phase: pass1}
         B:
           - {mode: force_pilot, hand: right, phase: pass1}
           - {mode: chords, hand: right, phase: pass1}
+          - {mode: adaptive, hand: right, phase: pass1}
           - {mode: reaction, hand: right, phase: pass1}
-          - {mode: force_pilot, hand: right, phase: pass2}
-          - {mode: chords, hand: right, phase: pass2}
-          - {mode: reaction, hand: right, phase: pass2}
       cells:
         1: {order: A}
         2: {order: B}
         3: {order: A}
         0: {order: B}
-    # 30 min: all eight games once, shortened, then after a 2 minute
-    # rest the three of the 15 and Adaptive again. Every game is in,
-    # Muscle Memory's learning score (P1) included, and four games
-    # show their second-go change.
+    # 30 min: every game once, the 45's first pass exactly, so every
+    # check that reads pass 1 gets this student. No second go fits at
+    # full length, and no stretch.
     trial_30:
-      id: trial_30_v2
-      family: short
-      overrides_from: trial_short
+      id: trial_30_v3
+      family: full
+      overrides_from: study_battery
       budget_min: 30
       hard_stop_min: 35
-      rest_s: 120
-      rest_min_s: 60
       orders:
         A:
           - {mode: reaction, hand: right, phase: pass1}
@@ -2221,11 +2195,6 @@ protocol:
           - {mode: buzz_hunt, hand: right, phase: pass1}
           - {mode: adaptive, hand: right, phase: pass1}
           - {mode: pattern, hand: right, phase: pass1}
-          - {mode: reaction, hand: right, phase: pass2,
-             rest_before: true}
-          - {mode: force_pilot, hand: right, phase: pass2}
-          - {mode: chords, hand: right, phase: pass2}
-          - {mode: adaptive, hand: right, phase: pass2}
         B:
           - {mode: force_pilot, hand: right, phase: pass1}
           - {mode: chords, hand: right, phase: pass1}
@@ -2236,11 +2205,6 @@ protocol:
              track: Easy_Lemon.mp3, difficulty: medium}
           - {mode: pattern, hand: right, phase: pass1}
           - {mode: echo, hand: right, phase: pass1}
-          - {mode: force_pilot, hand: right, phase: pass2,
-             rest_before: true}
-          - {mode: chords, hand: right, phase: pass2}
-          - {mode: adaptive, hand: right, phase: pass2}
-          - {mode: reaction, hand: right, phase: pass2}
       cells:
         1: {order: A}
         2: {order: B}

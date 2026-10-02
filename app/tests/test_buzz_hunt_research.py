@@ -78,8 +78,8 @@ class BatteryTests(unittest.TestCase):
         from finger_rehab.config import Config
         from finger_rehab.game.battery import resolved_overrides
         cfg = Config.load()
-        for preset in ("study_battery", "trial_60", "trial_short",
-                       "trial_30", "trial_15"):
+        for preset in ("study_battery", "trial_60", "trial_30",
+                       "trial_15"):
             bh = resolved_overrides(cfg, preset)["buzz_hunt"]
             self.assertEqual(bh["window_levels_s"], [2.0], preset)
             self.assertEqual(bh["catch_rate"], 0.2, preset)

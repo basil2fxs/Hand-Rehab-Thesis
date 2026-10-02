@@ -668,7 +668,7 @@ def say_to_file(voice: Voice, stem: str, ps: str, out: Path,
     spans = kit.utterances(x)
     if not spans:
         raise ValueError(f"{stem}: Kokoro returned silence for {ps!r}")
-    y, rec = kit.finish(x, (spans[0][0], spans[-1][1]), kind)
+    y, rec = kit.finish(x, (spans[0][0], spans[-1][1]), kind, ps)
     rec["phonemes"] = ps
     path = out / f"{stem}.wav"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -803,8 +803,8 @@ def main(argv=None) -> int:
             "licence": "Apache-2.0 (model weights)", "accent": "en-GB",
             "chunk_form": "spelling", "rendered_on": date.today().isoformat(),
             "pools": list(pools), "rate_hz": kit.RATE,
-            "chunk_rms_dbfs": kit.CHUNK_RMS_DBFS,
-            "word_loudness": kit.WORD_LOUDNESS, "latency_ms": None}
+            "loudness": kit.SPEECH_LOUDNESS, "finish": kit.FINISH_VERSION,
+            "latency_ms": None}
     voice = Voice(model, voices, args.voice)
     records = render(items, voice, out, meta)
     longest = max((r["duration_ms"] for s, r in records.items()

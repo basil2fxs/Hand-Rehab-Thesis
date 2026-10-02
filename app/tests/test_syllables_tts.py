@@ -16,6 +16,8 @@ import unittest
 import wave
 from pathlib import Path
 
+import numpy as np
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -155,13 +157,41 @@ class ShippedVoice(unittest.TestCase):
                 with self.subTest(stem=stem):
                     self.assertEqual(entries[stem]["phonemes"], ps)
 
-    def test_chunks_share_one_level_and_nothing_clips(self):
+    def test_every_file_shares_one_loudness_and_nothing_clips(self):
+        """Words and syllables at one loudness since 2 October 2026:
+        the syllables had been about 3 dB louder than their word."""
+        self.assertEqual(self.manifest["loudness"], K.SPEECH_LOUDNESS)
+        self.assertEqual(self.manifest["finish"], K.FINISH_VERSION)
         for stem, rec in self.manifest["entries"].items():
             with self.subTest(stem=stem):
                 self.assertLess(rec["peak_dbfs"], -1.0)
-                if stem.startswith("chunks/"):
-                    self.assertAlmostEqual(rec["rms_dbfs"],
-                                           K.CHUNK_RMS_DBFS, delta=0.5)
+                self.assertEqual(rec["finish"], K.FINISH_VERSION)
+                if not rec["limited"]:
+                    self.assertAlmostEqual(rec["loudness"],
+                                           K.SPEECH_LOUDNESS, delta=0.5)
+
+    def test_the_end_clicks_are_gone(self):
+        """Files that ended in the synthetic voice's tick or pop before
+        the tidy of 2 October 2026 now end in quiet: nothing in their
+        last 40 ms rises 15 dB out of the 12 ms before it (levels
+        floored 60 dB under the peak, so digital silence is not a
+        rise). A stop's own release stays loud near the end."""
+        for stem in ("chunks/mis", "chunks/cash", "chunks/nif",
+                     "chunks/bee", "chunks/ar", "chunks/ze", "rabbit",
+                     "chunks/fast", "chunks/kind", "syllables/tissue_1"):
+            with self.subTest(stem=stem):
+                db = K._frames_db(K.read_wav(SPEECH / f"{stem}.wav"))
+                peak = db.max()
+                db = np.maximum(db, peak - 60.0)
+                rises = [db[i] - db[i - 12:i].min()
+                         for i in range(len(db) - 40, len(db))]
+                self.assertLess(max(rises), 15.0)
+                self.assertTrue(self.manifest["entries"][stem]
+                                ["click_removed"])
+        for stem in ("chunks/fast", "chunks/kind"):
+            with self.subTest(release=stem):
+                db = K._frames_db(K.read_wav(SPEECH / f"{stem}.wav"))
+                self.assertGreater(db[-100:].max() - db.max(), -20.0)
 
     def test_a_windows_device_name_ships_under_its_underscore(self):
         """con.wav cannot be checked out on Windows, which broke the
