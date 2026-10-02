@@ -12,6 +12,7 @@ from __future__ import annotations
 import csv
 import os
 import re
+import statistics
 import sys
 import tempfile
 import time
@@ -1619,22 +1620,33 @@ class WireProtocolTests(_WireHarness):
     def test_stimulus_marker_lands_within_one_frame_of_the_flip(self) -> None:
         # The marker is armed at stimulus dispatch and wired straight
         # after the flip that shows it. t_event is the flip return,
-        # t_wire the serial write; more than a frame between them
-        # would mean the marker lost its anchor to the photons.
+        # t_wire the serial write; a marker wired a frame late would
+        # have lost its anchor to the photons. Wired in the same frame,
+        # the gap is well under a millisecond, but both stamps are wall
+        # clock, and a busy CI machine once stalled one marker 34.9 ms
+        # between them (2 October 2026). A late-frame bug delays every
+        # marker, so the typical marker must land within a frame, a
+        # stall may hold up one in ten, and none may go past 0.25 s.
+        frame = 1.0 / 60.0
         for scn in self._each():
             lo, hi = self._stim_band(scn)
-            checked = 0
+            lags = []
             for row in scn["eeg_rows"]:
                 detail = _parse_detail(row["detail"])
                 if not lo <= int(detail["code"]) <= hi:
                     continue
                 lag = float(detail["t_wire"]) - float(detail["t_event"])
                 self.assertGreaterEqual(lag, 0.0)
-                self.assertLessEqual(lag, 1.0 / 60.0,
-                                     f"stim marker {lag * 1000:.1f} ms "
-                                     "after its flip")
-                checked += 1
-            self.assertEqual(checked, len(scn["trial_rows"]))
+                self.assertLess(lag, 0.25, f"stim marker {lag * 1000:.1f} "
+                                           "ms after its flip")
+                lags.append(lag)
+            self.assertEqual(len(lags), len(scn["trial_rows"]))
+            if lags:
+                self.assertLessEqual(statistics.median(lags), frame)
+                late = sum(1 for lag in lags if lag > frame)
+                self.assertLessEqual(late, max(1, len(lags) // 10),
+                                     f"{late} of {len(lags)} stim markers "
+                                     "more than a frame after the flip")
 
     def test_wire_stamps_agree_with_logged_wire_times(self) -> None:
         # The spec's software cross-check, run on the fake wire: the

@@ -963,8 +963,14 @@ class SittingSpreadTests(unittest.TestCase):
         with contextlib.redirect_stdout(buf):
             a = mb.one_sitting(args, 1, quiet=True)
             b = mb.one_sitting(args, 101, quiet=True)
-        self.assertNotAlmostEqual(a["total_min"], b["total_min"],
-                                  places=2)
+        # Block by block: two totals can land within a second of each
+        # other by chance (they did on CI, 2 October 2026), twelve
+        # blocks cannot.
+        moved = [k for k in a["by_block_min"]
+                 if abs(a["by_block_min"][k] - b["by_block_min"].get(k, 0.0))
+                 > 0.005]
+        self.assertTrue(moved, "every block took the same time on both "
+                               "seeds")
 
     def test_the_perfect_reader_leaves_the_syllable_timing_alone(self):
         """The cohort simulator's erring reader must not reach this
