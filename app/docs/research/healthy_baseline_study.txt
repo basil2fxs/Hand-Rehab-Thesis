@@ -2760,8 +2760,10 @@ healthy cohort cannot give.
     every 5 ms sample a fresh reading during a real press (none of
     the moving samples of the 24 September sessions repeats its
     neighbour, so the stream is a true 200 Hz). scripts/pad_bench.py
-    adds a counts-per-gram line with coins for a thesis figure; the
-    data do not depend on it.
+    adds a counts-per-gram line from known loads for a thesis figure
+    (at home, a ruler from the pad to a kitchen scale: the pad takes
+    the total less the scale's reading, --scale-total-g); the data do
+    not depend on it.
   i DONE, 24 September 2026, scripts/audio_latency.py --write on
     the study MacBook, saved as app/config/latency_profile.yaml (per
     machine; the game lays it over default.yaml at every start and

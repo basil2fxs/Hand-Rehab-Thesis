@@ -196,6 +196,55 @@ class PadBenchMathTests(unittest.TestCase):
         self.assertIn("counts per N", out.getvalue())
 
 
+    def test_the_lever_at_home_says_what_the_scale_should_read(self):
+        """--scale-total-g: one end of a ruler on the pad, the other on
+        a kitchen scale, so the pad carries the total minus the scale's
+        reading. Each step names the load first, then the reading."""
+        import io
+        import tempfile
+        from contextlib import redirect_stdout
+        from pathlib import Path
+        from unittest import mock
+        import pad_bench as pb
+        self.assertEqual(pb._load_words(0.0, None), "nothing on it")
+        self.assertEqual(pb._load_words(250.0, None), "250 g")
+        self.assertIn("lift the ruler off", pb._load_words(0.0, 1250.0))
+        self.assertEqual(pb._load_words(250.0, 1250.0),
+                         "250 g (slide the weight until the scale reads "
+                         "1000 g)")
+
+        class FakeBoard:
+            def __init__(self):
+                self.grams = 0.0
+
+            def read(self, seconds):
+                c = 280.0 + 51.2 * pb.newtons(self.grams)
+                n = int(min(seconds, 3.0) * 200)
+                step = seconds / max(n, 1)
+                return [(i * step, [c] * 4) for i in range(n)]
+
+        board = FakeBoard()
+        prompts = []
+
+        def answer(prompt):
+            prompts.append(prompt)
+            board.grams = (0.0 if "nothing on it" in prompt else
+                           float(prompt.split(" g")[0].split()[-1]))
+            return ""
+
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(pb, "APP", Path(tmp)), \
+                mock.patch("builtins.input", side_effect=answer), \
+                mock.patch.object(pb.time, "sleep"), \
+                redirect_stdout(io.StringIO()):
+            code = pb.run_characterise(board, [100.0, 250.0, 500.0, 1000.0],
+                                       500.0, 10.0, "calibrated",
+                                       scale_total_g=1250.0)
+        self.assertEqual(code, 0)
+        self.assertIn("scale reads 1150 g", prompts[1])
+        self.assertTrue(any("scale reads 250 g" in q for q in prompts))
+        self.assertIn("scale reads 750 g", prompts[-1])
+
     def test_cross_talk_reads_what_leaks_onto_the_other_pads(self):
         import csv
         import io

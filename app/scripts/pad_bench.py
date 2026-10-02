@@ -27,14 +27,26 @@ side.
     python3 app/scripts/pad_bench.py --characterise --label calibrated
     python3 app/scripts/pad_bench.py --characterise --label uncalibrated
 
-Anything of known weight works. Australian coins are exact: a 50c
-piece is 15.55 g, a $1 coin 9.00 g, a $2 coin 6.60 g, so ten 50c
-pieces stacked in a small cup are 155.5 g. The characterisation goes
-to 1 kg: stand each mass on a coin centred on the pad, so the load
-lands on the sensing area the same way every time, and weigh mass and
-coin together on a kitchen scale. Keep hands off the frame while it
-reads. The results land in config/calibration/ as CSV. Nothing else
-runs while this does: close the game first.
+THE LOAD has to reach the pad through its 8 mm sensing circle and
+nothing else: anything wider rests partly on the frame and the pad
+reads short. A weight balanced on an 8 mm post falls over, so at home
+use a lever and a kitchen scale (--scale-total-g). Lay a ruler on two
+feet, short stubs of a round pencil sanded flat (7 mm, about the
+sensing circle): one foot centred on the pad, the other on the
+scale, the scale raised on books until the ruler sits level. Hang
+the weight (a water bottle, a bag of rice) from the ruler on a loop
+of string. Weigh ruler, feet, string and weight together first: that
+is the total. The pad then carries the total minus what the scale
+reads, whatever the lengths, and sliding the weight sets the load.
+With --scale-total-g each step says what the scale should read; lift
+the ruler off for the empty steps. Weights of known mass work too,
+and Australian coins are exact: a 50c piece is 15.55 g, a $1 coin
+9.00 g, a $2 coin 6.60 g. Keep hands off the table while it reads.
+The results land in config/calibration/ as CSV. Nothing else runs
+while this does: close the game first.
+
+    python3 app/scripts/pad_bench.py --characterise --label calibrated \
+        --scale-total-g 1250
 """
 from __future__ import annotations
 
@@ -195,6 +207,18 @@ def drift_pct(samples, slope: float, at_s, rated_n: float = RATED_N,
     return out
 
 
+def _load_words(grams: float, scale_total_g: float | None) -> str:
+    """What one step asks for: the load on the pad, and with the lever
+    and kitchen scale of the docstring, what the scale should read."""
+    if grams == 0:
+        return ("nothing on it" if scale_total_g is None
+                else "nothing on it (lift the ruler off)")
+    if scale_total_g is None:
+        return f"{grams:g} g"
+    return (f"{grams:g} g (slide the weight until the scale reads "
+            f"{scale_total_g - grams:g} g)")
+
+
 def _reading(board, pad: int, prompt: str):
     """The loaded pad's mean, SD and sample count over READ_S, and the
     mean of every pad over the same samples (for the cross-talk)."""
@@ -239,14 +263,14 @@ def _write(path: Path, rows: list[dict]) -> None:
         w.writerows(rows)
 
 
-def run_check(board, masses) -> int:
+def run_check(board, masses, scale_total_g: float | None = None) -> int:
     rows = []
     per_pad = {}
     for pad in range(4):
         name = FINGERS[pad]
         pts = []
         for grams in [0.0] + masses:
-            what = "nothing on it" if grams == 0 else f"{grams:g} g"
+            what = _load_words(grams, scale_total_g)
             got = _reading(board, pad, f"\nPad {pad + 1} ({name}): {what}. "
                                        f"Press Enter, then hands off...")
             if got is None:
@@ -262,8 +286,8 @@ def run_check(board, masses) -> int:
             per_pad[pad] = {"slope": slope, "r2": r2, "rest": pts[0][1],
                             "rest_sd": pts[0][2]}
     heavy = masses[-1]
-    input(f"\nDrift: put {heavy:g} g on pad 1 (index) and press Enter. "
-          f"Hands off for {DRIFT_S:.0f} s...")
+    input(f"\nDrift: put {_load_words(heavy, scale_total_g)} on pad 1 "
+          f"(index) and press Enter. Hands off for {DRIFT_S:.0f} s...")
     time.sleep(0.5)
     got = board.read(DRIFT_S)
     drift = None
@@ -313,7 +337,7 @@ def run_check(board, masses) -> int:
 
 
 def run_characterise(board, masses, hold_g: float, hold_min: float,
-                     label: str) -> int:
+                     label: str, scale_total_g: float | None = None) -> int:
     rows = []
     summary = []
     figures = {}
@@ -323,7 +347,7 @@ def run_characterise(board, masses, hold_g: float, hold_min: float,
         pts = []
         every_pts = []
         for phase, grams in load_order(masses):
-            what = "nothing on it" if grams == 0 else f"{grams:g} g"
+            what = _load_words(grams, scale_total_g)
             way = "up" if phase == "load" else "down"
             got = _reading(board, pad, f"\nPad {pad + 1} ({name}), on the "
                                        f"way {way}: {what}. Press Enter, "
@@ -342,8 +366,8 @@ def run_characterise(board, masses, hold_g: float, hold_min: float,
         figures[pad] = characterise_pad(pts)
         cross[pad] = crosstalk_pct(every_pts, pad)
     hold_s = hold_min * 60.0
-    input(f"\nDrift: stand {hold_g:g} g on pad 1 (index) and press Enter. "
-          f"Hands off for {hold_min:g} min...")
+    input(f"\nDrift: stand {_load_words(hold_g, scale_total_g)} on pad 1 "
+          f"(index) and press Enter. Hands off for {hold_min:g} min...")
     time.sleep(0.5)
     got = board.read(hold_s)
     drift = {}
@@ -429,9 +453,18 @@ def main() -> int:
                     help="the set, for example calibrated or uncalibrated")
     ap.add_argument("--hold-g", type=float, default=HOLD_G)
     ap.add_argument("--hold-min", type=float, default=HOLD_MIN)
+    ap.add_argument("--scale-total-g", type=float, default=None,
+                    help="the lever at home: ruler, feet, string and "
+                         "weight together, in grams; each step then says "
+                         "what the kitchen scale should read")
     args = ap.parse_args()
     default = CHAR_MASSES_G if args.characterise else (50.0, 100.0, 200.0)
     masses = sorted(args.masses or default)
+    top = max(masses + ([args.hold_g] if args.characterise else []))
+    if args.scale_total_g is not None and args.scale_total_g <= top:
+        print(f"--scale-total-g {args.scale_total_g:g} must be more than "
+              f"the heaviest load, {top:g} g: use a heavier weight.")
+        return 2
     print("Starting the board (it buzzes each finger as it boots)...")
     board = Board(args.port)
     time.sleep(1.0)
@@ -442,8 +475,9 @@ def main() -> int:
     try:
         if args.characterise:
             return run_characterise(board, masses, args.hold_g,
-                                    args.hold_min, args.label)
-        return run_check(board, masses)
+                                    args.hold_min, args.label,
+                                    args.scale_total_g)
+        return run_check(board, masses, args.scale_total_g)
     finally:
         board.close()
 
