@@ -7,11 +7,14 @@ the 100 ms flash, the 2.5 s deadline) is the lab's protocol and lives
 in the srt block of config/default.yaml.
 
 The setups file keeps the current setup and any the researcher saved,
-so a group's timing survives between participants and between
-launches. It lives beside the sessions (config/srt_setups.json under
-the data root) rather than in user_settings.yaml, because the lab
-build loads eeg_lab.yaml over the defaults and never reads
-user_settings.yaml.
+so the timing group last picked is the one the next participant gets,
+whoever logs in and however many sessions pass, until someone picks
+another (Basil, 2 October 2026). There is one file per computer,
+outside every app folder (shared_store_path): the code run, the
+installed app and the lab folder's exe all read and write the same
+choice, every account on the computer shares it, and a refreshed lab
+folder keeps it. It is not user_settings.yaml, because the lab build
+loads eeg_lab.yaml over the defaults and never reads that file.
 
 Rules copied from the lab's script (archive/Webler EEG past program/
 SRT_Sequence_learning_Final_v2.py):
@@ -49,6 +52,9 @@ import logging
 import os
 import random
 import re
+import shutil
+import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -319,14 +325,72 @@ BUILT_INS = (
 DEFAULT_SETUP = BUILT_INS[0]
 
 
+# Points the setups file somewhere else for a whole run (the test suite
+# sets it, so a test can never change the computer's own choice).
+SETUPS_ENV = "FINGER_REHAB_SRT_SETUPS"
+
+
+def shared_store_path() -> Path:
+    """The computer's own setups file, outside every app folder."""
+    if os.name == "nt":
+        base = Path(os.environ.get("PROGRAMDATA") or r"C:\ProgramData")
+    elif sys.platform == "darwin":
+        base = Path("/Users/Shared")
+    else:
+        base = Path.home() / ".config"
+    return base / "Finger Rehab" / "srt_setups.json"
+
+
+def _shared_folder_ready(folder: Path) -> bool:
+    """Make the shared folder if it is missing and say whether it can be
+    written. A folder made here is opened to every account on the
+    computer, best effort, so whoever logs in next can save the group
+    too."""
+    made = False
+    try:
+        if not folder.is_dir():
+            folder.mkdir(parents=True, exist_ok=True)
+            made = True
+    except OSError:
+        return False
+    if made:
+        try:
+            if os.name == "nt":
+                # The Users group may modify, in this folder and below.
+                subprocess.run(["icacls", str(folder), "/grant",
+                                "*S-1-5-32-545:(OI)(CI)M"],
+                               capture_output=True, timeout=10, check=False)
+            else:
+                folder.chmod(0o777)
+        except (OSError, subprocess.SubprocessError):
+            pass
+    return os.access(folder, os.W_OK)
+
+
 def store_path(cfg) -> Path:
-    """srt.setups_file when set (tests point it at a temp folder),
-    else config/srt_setups.json under the data root."""
+    """srt.setups_file when set (tests point it at a temp folder), then
+    FINGER_REHAB_SRT_SETUPS, then the computer's own file
+    (shared_store_path). When the shared folder cannot be written it is
+    config/srt_setups.json under the data root, as before 2 October
+    2026. The first time the shared file is used, a setups file kept
+    beside the app is copied in, so nothing set before is lost."""
     custom = cfg.get("srt.setups_file", None) if cfg is not None else None
     if custom:
         return Path(str(custom)).expanduser()
+    forced = os.environ.get(SETUPS_ENV, "").strip()
+    if forced:
+        return Path(forced).expanduser()
     from ..config import USER_ROOT
-    return USER_ROOT / "config" / "srt_setups.json"
+    local = USER_ROOT / "config" / "srt_setups.json"
+    shared = shared_store_path()
+    if not _shared_folder_ready(shared.parent):
+        return local
+    if not shared.exists() and local.is_file():
+        try:
+            shutil.copy2(local, shared)
+        except OSError as e:
+            log.warning("Could not copy %s to %s: %s", local, shared, e)
+    return shared
 
 
 class SetupStore:

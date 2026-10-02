@@ -75,7 +75,9 @@ At the lab PC
 10. Reaction opens on its setup screen; keep it turned away from the
    participant. Pick the timing group (or a saved setup) and START,
    saying the group aloud and checking it against the session sheet:
-   the group last picked carries to the next participant. The hands
+   the screen opens on the group last picked on this computer, by any
+   login, and keeps it until someone picks another, even after a new
+   lab folder is copied in. The hands
    come from login (two hands, as the lab's own studies ran it, need
    both boards or the keyboard). Leave musical experience blank and
    ask about formal musical training after the task, on the session

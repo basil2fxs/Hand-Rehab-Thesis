@@ -4523,9 +4523,10 @@ class GameEngine:
         research case and every timing rule live in modes/srt.py.
 
         The setup (timing group, learning interval, sequence) is the
-        current one in the setups file the setup screen writes
-        (game/srt_setup.py), so a group's timing carries from one
-        participant to the next. The hands are not the setup's: they
+        current one in the setups file the setup screen writes, kept
+        once per computer (game/srt_setup.py), so the group last picked
+        carries to every later participant and session until someone
+        picks another. The hands are not the setup's: they
         are the session's, picked at login (both hands runs the lab's
         two-hand layout, one hand that hand's four fingers), so the task
         never asks again. The protocol counts come from the srt block

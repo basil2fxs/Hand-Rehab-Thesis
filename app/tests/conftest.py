@@ -80,6 +80,39 @@ def _real_user_settings_is_untouched():
 
 
 @pytest.fixture(autouse=True, scope="session")
+def _tests_never_change_the_computers_timing_group(tmp_path_factory):
+    """Point the SRT setups file at a temp file for the whole run.
+
+    The timing group last picked is kept once per computer
+    (game/srt_setup.py, shared_store_path), and the next participant
+    gets it. A test that saved a group there would quietly change the
+    group the next real participant plays, so the run uses its own
+    file and the real one is checked untouched at the end. Subprocesses
+    inherit the redirect.
+    """
+    from finger_rehab.game import srt_setup
+
+    real = srt_setup.shared_store_path()
+    before = real.read_bytes() if real.is_file() else None
+    fake = tmp_path_factory.mktemp("srt-setups") / "srt_setups.json"
+    old = os.environ.get(srt_setup.SETUPS_ENV)
+    os.environ[srt_setup.SETUPS_ENV] = str(fake)
+    yield
+    if old is None:
+        os.environ.pop(srt_setup.SETUPS_ENV, None)
+    else:
+        os.environ[srt_setup.SETUPS_ENV] = old
+    after = real.read_bytes() if real.is_file() else None
+    if after != before:
+        if before is None:
+            real.unlink(missing_ok=True)
+        else:
+            real.write_bytes(before)
+        pytest.fail("a test changed this computer's SRT timing group in "
+                    f"{real}; it has been put back")
+
+
+@pytest.fixture(autouse=True, scope="session")
 def _tests_never_write_the_real_sessions_tree(tmp_path_factory):
     """Point the DEFAULT session data_dir at a temp dir for the run.
 

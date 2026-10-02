@@ -897,8 +897,11 @@ srt:
   #
   # The part the lab varies between groups (timing group, learning
   # interval, sequence) is the SETUP, chosen on the setup screen the
-  # card opens and kept in config/srt_setups.json beside the sessions,
-  # where every build finds it. Everything below is the lab's
+  # card opens and kept once per computer (srt_setups.json in
+  # ProgramData\Finger Rehab on Windows, /Users/Shared/Finger Rehab
+  # on a Mac), so the group last picked is the next participant's,
+  # whichever build runs, until someone picks another. Everything
+  # below is the lab's
   # protocol, as the script has it: change a number here and the task
   # is no longer the lab's.
   random_trials: 48        # practice and post-test, 12 per square
@@ -942,8 +945,9 @@ srt:
   # red square is about as bright as the grey one, so a sensor on the
   # square itself would see little. Off for every participant.
   photodiode_patch: false
-  # Where the setups live. Empty means config/srt_setups.json under
-  # the data root. Tests point it at a temporary folder.
+  # Where the setups live. Empty means the computer's own file above,
+  # or config/srt_setups.json under the data root when that folder
+  # cannot be written. Tests point it at a temporary folder.
   setups_file: null
   # Set an integer to redraw a session's random blocks and random
   # intervals exactly. Empty draws a fresh seed and records it.

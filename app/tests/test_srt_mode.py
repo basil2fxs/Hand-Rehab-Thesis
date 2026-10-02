@@ -1281,7 +1281,7 @@ class TheCardAndTheSetupScreen(unittest.TestCase):
         self.eng.show_srt_setup()
         sc = self.eng.screen_obj
         blob = " | ".join(self._drawn(sc))
-        self.assertIn("Custom setup from config/srt_setups.json", blob)
+        self.assertIn("Custom setup from srt_setups.json", blob)
         self.assertIn("400", blob)
         sc._start()
         self.assertEqual(self.eng.mode.setup.isi_ms, 400)

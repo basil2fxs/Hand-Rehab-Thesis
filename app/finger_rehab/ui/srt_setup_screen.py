@@ -6,11 +6,13 @@ here: they are the session's, picked at login, and the screen says
 which will play (both hands runs the lab's two-hand layout). The rest
 runs as the lab ran it, 500 ms and the lab's sequence. A different
 interval or sequence can be written into the setups file by hand
-(config/srt_setups.json, game/srt_setup.py), and the screen then names
+(srt_setups.json, game/srt_setup.py shared_store_path), and the screen then names
 it, so a change is never invisible.
 
 The timing group picked is written to the setups file straight away,
-so the next participant in the same group needs one click.
+and the screen opens on it next time: the computer keeps one choice
+for every login, session and build until someone picks another
+(Basil, 2 October 2026).
 
 The sequence is never shown, and since 1 October 2026 nothing on the
 screen names a sequence, learning blocks or a recall (the SRT deep
@@ -225,7 +227,7 @@ class SRTSetupScreen(Screen):
             # Set away from the lab's own run in the setups file: said
             # here, so the change is never invisible.
             lab_hands = dataclasses.replace(self._values(), hands="one")
-            draw_text(surf, "Custom setup from config/srt_setups.json: "
+            draw_text(surf, "Custom setup from srt_setups.json: "
                       + lab_hands.summary() + ".",
                       (mx, my + 392), self.theme, self.layout,
                       pt=FONT_SMALL + 2, colour=self.theme.warning)
