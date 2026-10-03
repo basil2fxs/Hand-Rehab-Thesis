@@ -5,6 +5,7 @@
 | --- | --- | --- | --- |
 | Student sittings, 15 to 60 min | 5 to 20; 10 or more at 45 or 60 | 4.1, 4.4 to 4.7 | [`1 Healthy study`](1%20Healthy%20study) |
 | Sensor bench, no people | moved to future work | 4.3 | [`2 Sensor comparison`](2%20Sensor%20comparison) |
+| Left-hand device, uncalibrated pads | a few, if it is ready | 4.3 | [`2 Sensor comparison`](2%20Sensor%20comparison) |
 | EEG session | 1 | 4.8 | [`3 EEG lab`](3%20EEG%20lab) |
 | Syllables, readers with dyslexia | a couple | 3.5 | [`4 Syllables case`](4%20Syllables%20case) |
 
@@ -19,6 +20,10 @@ Under 8 at 45 or 60, results are described but not tested.
 ## Sensor bench
 
 Moved to future work on 3 October 2026: nothing to run for this collection. When both sets are in devices, `python3 app/scripts/pad_bench.py --characterise --label calibrated`, then `--label uncalibrated` on the left-hand device. Masses of 100, 250, 500 and 1000 g, each on a coin centred on the pad; about 20 minutes a set.
+
+## Left-hand device
+
+A few sittings at most, kept out of the study. Log in with a code from U01 upward, pick SESSION Free play, then Left hand for each game. Never a SESSION length: every length plays the right hand, and a board plugged in on its own counts as the right hand, so the sitting would be saved as right-hand study data. The study tables never read hub games, so these sittings stay out of every check. Copy the U folders into `2 Sensor comparison/sessions` as well, to read them on their own.
 
 ## EEG session
 
