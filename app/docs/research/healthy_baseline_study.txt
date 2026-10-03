@@ -240,6 +240,13 @@ HOW THE DESIGN GOT HERE (every change made before any participant):
     the 30 all eight once (this sitting's first pass); the 45 and the
     60 are unchanged. A block from any length pools with every other
     (Section 2.5).
+  - 3 October 2026: THE SENSOR BENCH TO FUTURE WORK. The bench was
+    not run before the collection: the uncalibrated set is not yet in
+    a device, and the calibrated set's run was dropped with it. V4
+    and SQ3 move to future work. The thesis keeps the prediction (the
+    sets differ in slope, which percent-of-maximum measures absorb)
+    and the resting noise and drift measured on 24 September 2026.
+    scripts/pad_bench.py --characterise stays ready for both sets.
 
 What one board costs, and the thesis says it in the same breath as
 the results:
@@ -615,8 +622,10 @@ fingers resting still on their pads.", and the run sheet says it
 once: individuation tasks tell people to keep the other fingers
 still (Xu et al. 2017) and enslaving tasks never to lift them off
 (Abolins et al. 2020). The pad bench (scripts/pad_bench.py
---characterise) is to measure cross-talk between pads before
-collection, so a quiet-finger change can be read as the hand's.
+--characterise) measures cross-talk between pads, which says whether
+a quiet-finger change is the hand's or the frame's. It moved to
+future work on 3 October 2026, so this collection's quiet-finger
+measures carry that caveat.
 Known effects to reproduce:
   C1 Cohort median ER under 0.15. While a finger pair held 25
      percent of the pair's MVC, the other pair carried 8 to 10

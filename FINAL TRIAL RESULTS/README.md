@@ -4,7 +4,7 @@
 | Run | How many | Thesis | Folder |
 | --- | --- | --- | --- |
 | Student sittings, 15 to 60 min | 5 to 20; 10 or more at 45 or 60 | 4.1, 4.4 to 4.7 | [`1 Healthy study`](1%20Healthy%20study) |
-| Sensor bench, no people | each pad set once | 4.3 | [`2 Sensor comparison`](2%20Sensor%20comparison) |
+| Sensor bench, no people | moved to future work | 4.3 | [`2 Sensor comparison`](2%20Sensor%20comparison) |
 | EEG session | 1 | 4.8 | [`3 EEG lab`](3%20EEG%20lab) |
 | Syllables, readers with dyslexia | a couple | 3.5 | [`4 Syllables case`](4%20Syllables%20case) |
 
@@ -18,7 +18,7 @@ Under 8 at 45 or 60, results are described but not tested.
 
 ## Sensor bench
 
-`python3 app/scripts/pad_bench.py --characterise --label calibrated`, then `--label uncalibrated` on the left-hand device once it reads. Masses of 100, 250, 500 and 1000 g, each on a coin centred on the pad; about 20 minutes a set.
+Moved to future work on 3 October 2026: nothing to run for this collection. When both sets are in devices, `python3 app/scripts/pad_bench.py --characterise --label calibrated`, then `--label uncalibrated` on the left-hand device. Masses of 100, 250, 500 and 1000 g, each on a coin centred on the pad; about 20 minutes a set.
 
 ## EEG session
 

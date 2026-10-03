@@ -40,8 +40,9 @@ CHECK gets reseated flat and the script run again. Keep the printout
 (and the CSV it writes in `app/config/calibration/`) for the thesis
 appendix.
 
-Worth the longer run once before collection (about 25 minutes, most
-of it a 10 minute hold):
+The longer run moved to future work on 3 October 2026, so it is not
+part of this collection. When it runs (about 25 minutes, most of it a
+10 minute hold):
 
 ```
 python3 app/scripts/pad_bench.py --characterise --label calibrated

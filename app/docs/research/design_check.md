@@ -4,14 +4,14 @@
 
 ## The answer
 
-Every aim is covered, the sensor comparison (V4, SQ3, thesis Section 4.3) as a bench test only: nobody plays both pad sets, so there is no paired part. R3 and F3, the two equivalence checks, now read the standard 90 percent interval (Section 3).
+Every aim is covered except the sensor comparison (V4, SQ3, thesis Section 4.3). It was cut to a bench test on 28 September, since nobody plays both pad sets, and on 3 October 2026 the bench itself moved to future work (Section 4). R3 and F3, the two equivalence checks, now read the standard 90 percent interval (Section 3).
 
 | Aim | What it needs | What the setup gives | Verdict |
 | --- | --- | --- | --- |
 | V1 Normal ranges (4.4) | pass 1 from everyone | every block finished in all 12 simulated sittings | Covered, as descriptive ranges |
 | V2 Known effects (4.5) | pass 1 | every pre-specified check computes; 13 dropped by design, each with its reason | Covered; R3 decided (Section 3) |
 | V3 Reliability (4.6) | pass 1 against pass 2 | T1 to T5 compute; Rhythm's second go is an exploratory row | Covered within one session, with wide intervals |
-| V4 Sensors (4.3) | bench figures for both sensor sets | `pad_bench.py --characterise` on each set; one set in play, so no paired part | **Bench only** (Section 4) |
+| V4 Sensors (4.3) | bench figures for both sensor sets | not run; `pad_bench.py --characterise` is ready for each set | **Future work** (Section 4) |
 | V5 Feasibility (4.1) | minutes, blocks, rests | the feasibility chapter | Covered |
 | V6 EEG markers (4.8) | the marker log against the amplifier record | the notebook audits the game's side; the amplifier side is checked by hand ([eeg_lab_setup.txt](../eeg_lab_setup.txt), "Validate once") | Covered by one lab visit |
 | Handedness (4.7) | left-handers | pooled numbers and a rerun without them | Descriptive: about 1 in 10 people |
@@ -63,13 +63,15 @@ What the maker says: the calibrated and standard 10 N pads list the same resolut
 
 | Way | How | What it can claim | With one device |
 | --- | --- | --- | --- |
-| **Bench only** | `pad_bench.py --characterise` on each pad set, no people, about 20 minutes a set: 100 g to 1 kg up and back down on every pad, then half load held for ten minutes | Counts per newton, linearity, hysteresis, noise and drift for each set: where calibration matters in newtons. Nothing about the game measures | **Fits.** This is the study's comparison |
+| **Bench only** | `pad_bench.py --characterise` on each pad set, no people, about 20 minutes a set: 100 g to 1 kg up and back down on every pad, then half load held for ten minutes | Counts per newton, linearity, hysteresis, noise and drift for each set: where calibration matters in newtons. Nothing about the game measures | **Fits.** Chosen on 28 September; moved to future work on 3 October |
 | Split the day | the first half of the participants on one set, the rest on the other | Unpaired, about 5 a side: only large differences show | Needs a pad swap mid-day; not planned |
 | A sensor pass | each person plays four blocks again on the second set, about 15 minutes more | Paired, the only way to test the thesis margins | Needs both sets in one sitting; not possible |
 
 These three are not the thesis's options A, B and C in Section 3.7, which allocate hands. The study is that table's C, one right-hand board for everyone, except that it keeps one pad set rather than swapping sets between participants. The calibrated set is fitted for everyone. The uncalibrated set is going into a left-hand device, which may not be ready for the lab; it is benched there once that device reads. A working second device would also allow allocation A of the thesis table later: both hands, the sets swapped between sides for half the participants, the paired comparison this study cannot make.
 
 For the thesis, SQ3 and Section 4.3 become the bench question: where calibration matters in newtons and where it does not, with the maker's figures as the prediction for the game measures. The paired analysis and its margins table go. Little is lost: at n = 10 each limit of agreement would be known only to about plus or minus 1.1 SD of the differences [18]; Bland recommends about 100 people [18], and a formal agreement claim can need hundreds [19].
+
+3 October 2026: the bench moved to future work too, since the uncalibrated set was not in a device in time. Thesis Section 4.3 keeps the prediction and the resting noise and drift measured on 24 September 2026.
 
 ## 5. Normal ranges
 
@@ -91,7 +93,7 @@ One session per reader with no baseline is a case description, outside the singl
 
 1. Done, 28 September: R3 and F3 on the 90 percent interval (Section 3); the thesis moved to the bench-only sensor comparison and the four lengths (Sections 4 and 6).
 2. Book hour-long slots for as many students as the lab allows: 10 or more in the full family is the aim, and under 8 no check is tested.
-3. Bench each pad set with `pad_bench.py --characterise`: the calibrated set now, the uncalibrated one on the left-hand device once it is built.
+3. Moved to future work, 3 October: bench each pad set with `pad_bench.py --characterise` once both are in devices (Section 4).
 4. Optional: a script for the EEG Status channel check (Section 7).
 
 ## Sources

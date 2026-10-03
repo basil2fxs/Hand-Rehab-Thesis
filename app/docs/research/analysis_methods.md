@@ -74,7 +74,7 @@ Figures fixed on 30 September because they broke with many blocks selected: the 
 |---|---|---|
 | 4.1 Feasibility | Minutes per sitting against the plan; completion table | `sec_cohort_feasibility` |
 | 4.2 Engineering verification | Timing chain; the logged peak against the true peak (Bland-Altman) | `fig:timing`; `true_force_report` |
-| 4.3 Sensor comparison | Each pad's slope against 51.2, linearity, hysteresis and drift, both sets side by side | `pad_bench.py --characterise`; the bench files |
+| 4.3 Sensor comparison | Not run: moved to future work on 3 October 2026. The section gives the resting noise and drift of 24 September | `pad_bench.py --characterise` once it runs |
 | 4.4 Normal ranges | Every participant's point with median and IQR per measure; the table of median (IQR) and range | `sec_cohort_describe` |
 | 4.5 Validity checks | The checks table with intervals; C6 chord cost, P1 takes, Rh1 distribution as figures | `sec_cohort_validity` |
 | 4.6 Reliability | ICC forest against the predicted classes; Bland-Altman panels | `sec_cohort_reliability` |
