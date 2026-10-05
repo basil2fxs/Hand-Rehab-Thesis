@@ -180,3 +180,28 @@ def test_the_tools_check_passes_wherever_the_tools_are(tmp_path):
     if data["ready"]:
         assert data["avrdude"]["runs"]
         assert data["game"]["flash_bytes"] > 0
+
+
+def test_the_tools_check_needs_the_socket_port_handler(monkeypatch):
+    """EEG simulator.cmd starts the game with --eeg-port
+    socket://127.0.0.1:50410, and pyserial serves socket:// from a
+    module it imports by name when the port opens. The Windows build of
+    3 October 2026 left that module out ("protocol 'socket' not known",
+    found on a Windows VM on 5 October). The check runs on every built
+    app in CI, so a build without it fails there."""
+    from finger_rehab.config import Config
+    from finger_rehab.hardware import flasher
+    cfg = Config.load()
+    report = flasher.self_check(cfg)
+    assert report["pyserial_socket"] is True
+    assert "no socket:// port support" not in report["problems"]
+    monkeypatch.setattr(flasher, "_socket_ports_supported", lambda: False)
+    report = flasher.self_check(cfg)
+    assert report["pyserial_socket"] is False
+    assert "no socket:// port support" in report["problems"]
+    assert report["ready"] is False
+
+
+def test_the_build_bundles_pyserials_url_handlers():
+    spec = (ROOT / "finger_rehab.spec").read_text(encoding="utf-8")
+    assert 'collect_submodules("serial.urlhandler")' in spec

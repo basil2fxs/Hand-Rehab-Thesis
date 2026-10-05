@@ -631,12 +631,24 @@ def _on_windows() -> bool:
     return sys.platform == "win32"
 
 
+def _socket_ports_supported() -> bool:
+    """Whether pyserial can open a socket:// port. It imports the
+    handler by name when the port opens, so a frozen build can leave it
+    out without failing anything until then."""
+    try:
+        import importlib
+        importlib.import_module("serial.urlhandler.protocol_socket")
+    except ImportError:
+        return False
+    return True
+
+
 def self_check(cfg, runner=subprocess.run) -> dict:
     """Whether this install can flash the board and change a pad's
     address with nothing else installed: both firmware images present
     and matching the build's manifest, the bundled avrdude found and
-    actually starting, pyserial importable, and on Windows the board's
-    USB driver. `Finger Rehab --check-tools report.json` writes this,
+    actually starting, pyserial importable with its socket:// handler,
+    and on Windows the board's USB driver. `Finger Rehab --check-tools report.json` writes this,
     and CI runs it on the installed Windows copy and the built macOS
     app, so a release that could not flash on a new PC fails before
     anyone downloads it."""
@@ -690,6 +702,9 @@ def self_check(cfg, runner=subprocess.run) -> dict:
     except ImportError:
         report["pyserial"] = False
         problems.append("no pyserial")
+    report["pyserial_socket"] = _socket_ports_supported()
+    if not report["pyserial_socket"]:
+        problems.append("no socket:// port support")
     from . import usb_driver
     if _on_windows():
         boards = usb_driver.find_boards()

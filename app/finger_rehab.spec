@@ -75,6 +75,10 @@ hidden += ["pkg_resources.extern", "sklearn.utils._cython_blas"]
 # Settings, Audio delay records the microphone through SDL's capture
 # device (audio/latency_measure.py), which nothing else imports.
 hidden += ["pygame._sdl2", "pygame._sdl2.audio"]
+# pyserial imports its URL handlers by name when a port opens, so
+# socket://, which the simulator rehearsal uses, is invisible to the
+# analysis (missing from the Windows build of 3 October 2026).
+hidden += collect_submodules("serial.urlhandler")
 
 # Platform icon: .icns on macOS, .ico on Windows (each format is what
 # that OS expects; PyInstaller ignores an icon it cannot use).
