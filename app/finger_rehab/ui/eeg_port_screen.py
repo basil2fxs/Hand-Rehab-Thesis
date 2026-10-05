@@ -47,6 +47,8 @@ class EegPortScreen(Screen):
         self.scan = eeg_port.candidates
         self.opener = eeg_port.open_port
         self.saver = eeg_port.save_port
+        from ..hardware.eeg_trigger import simulator_backend
+        self.simulator = simulator_backend
         self._back = None
         self._choices = []
         self.hand_ports: list[str] = []
@@ -107,8 +109,33 @@ class EegPortScreen(Screen):
             log.warning("EEG port scan failed: %s", e)
             self._choices = []
             self._say(f"Port scan failed: {e}", "error")
+        self._take_simulator()
         self._layout_rows()
         self._build_buttons()
+
+    def _take_simulator(self) -> None:
+        """A simulator started after the game is found by Scan again,
+        as a box plugged in late is. It is never saved as the box's
+        port, so the lab file keeps COM10."""
+        markers = self.engine.markers
+        if not markers.needs_port or self.engine.cfg is None:
+            return
+        baud = int(self.engine.cfg.get("eeg.baud", 115200))
+        try:
+            sim = self.simulator(self.engine.cfg.get, baud)
+        except Exception as e:
+            log.debug("EEG simulator check failed: %s", e)
+            sim = None
+        if sim is None:
+            return
+        markers.use_backend(sim)
+        self._connected = True
+        self._say("The EEG simulator stands in for the trigger box.",
+                  "success")
+        try:
+            self.engine.eeg_port_ready()
+        except Exception as e:
+            log.warning("After the EEG simulator connected: %s", e)
 
     # ---- actions ----------------------------------------------------------
     def pick(self, device: str) -> None:

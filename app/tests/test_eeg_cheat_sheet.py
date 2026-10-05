@@ -2,7 +2,7 @@
 
 scripts/make_eeg_cheat_sheet.py draws one cheat sheet, dark and light,
 kept to what most games send: a finger lights up, the press, the
-result ring and the numbers around each game (Basil, 1 October 2026:
+result and the numbers around each game (Basil, 1 October 2026:
 the earlier single sheet, minimal, nothing single games add). It reads
 every number from finger_rehab/hardware/eeg_trigger.py and
 config/eeg_lab.yaml, so the committed pictures must be exactly what the
@@ -54,9 +54,11 @@ class CheatSheetTests(unittest.TestCase):
         for code in (CODES["stim_visual_buzz_tone"],
                      CODES["resp_correct_base"] + self.mod.RING,
                      CODES["resp_timeout"], CODES["feedback_positive"],
-                     CODES["feedback_negative"], CODES["feedback_neutral"],
-                     CODES["prep_countdown"]):
+                     CODES["feedback_negative"], CODES["prep_countdown"]):
             self.assertIn(f">{code}<", text)
+        # 142 belongs to the delayed ring the lab build no longer draws
+        # (5 October 2026), so the sheet leaves it out.
+        self.assertNotIn(f">{CODES['feedback_neutral']}<", text)
         for base in ("resp_correct_base", "resp_wrong_base",
                      "resp_anticipation_base", "block_start_base",
                      "block_end_base"):
@@ -77,8 +79,8 @@ class CheatSheetTests(unittest.TestCase):
                 self.assertNotIn(f">{CODES[key]}<", text, (theme, key))
 
     def test_the_trial_is_one_the_lab_sends(self) -> None:
-        """The result ring drawn is sent in the lab, by the games the
-        note names."""
+        """The result drawn is sent in the lab, by the games the note
+        names."""
         feedback = self.mod.lab_feedback()
         text = self.mod.draw("light")
         names = [self.mod.GAME_NAMES[m] for m in feedback

@@ -183,7 +183,7 @@ def test_the_tools_check_passes_wherever_the_tools_are(tmp_path):
 
 
 def test_the_tools_check_needs_the_socket_port_handler(monkeypatch):
-    """EEG simulator.cmd starts the game with --eeg-port
+    """The EEG simulator takes the game's markers over
     socket://127.0.0.1:50410, and pyserial serves socket:// from a
     module it imports by name when the port opens. The Windows build of
     3 October 2026 left that module out ("protocol 'socket' not known",

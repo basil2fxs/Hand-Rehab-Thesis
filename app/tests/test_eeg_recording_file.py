@@ -171,6 +171,19 @@ class TheMenuSaysWhatToDo(unittest.TestCase):
         engine.eeg_recording_status = lambda: (None, False)
         self.assertEqual(ModeSelectScreen.eeg_recording_line(screen), "")
 
+    def test_a_rehearsal_on_the_simulator_says_so(self):
+        # A rehearsal must never pass for a recording (5 October 2026).
+        from finger_rehab.ui.screens import ModeSelectScreen
+        engine = SimpleNamespace(
+            eeg_recording_status=lambda: ("P07_2026-09-24.bdf", False),
+            eeg_recording_dir=lambda: Path("/lab/EEG_Lab/sessions/eeg"),
+            markers=SimpleNamespace(backend=SimpleNamespace(
+                port="socket://127.0.0.1:50410")))
+        line = ModeSelectScreen.eeg_recording_line(
+            SimpleNamespace(engine=engine))
+        self.assertIn("EEG simulator", line)
+        self.assertNotIn("record ActiView", line)
+
 
 class TheLabFolderShipsTheRecordingFolder(unittest.TestCase):
 

@@ -101,10 +101,12 @@ class LabSessionTests(unittest.TestCase):
         again = move_first(lab.steps, ["srt"])
         self.assertEqual([s.mode for s in again[1:]], before)
 
-    def test_the_lab_build_draws_the_scripts_display_and_marks_responses(self):
+    def test_the_lab_build_draws_the_apps_look_and_marks_responses(self):
+        # Basil, 5 October 2026: the lab's Reaction looks as it does on
+        # every other build; look: lab is still there for a recording.
         from finger_rehab.config import Config
         lab = Config.load(APP / "config" / "eeg_lab.yaml")
-        self.assertEqual(lab.get("srt.look"), "lab")
+        self.assertEqual(lab.get("srt.look"), "app")
         self.assertIs(lab.get("srt.response_markers"), True)
         home = Config.load()
         self.assertEqual(home.get("srt.look"), "app")

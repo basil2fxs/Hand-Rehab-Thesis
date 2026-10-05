@@ -1767,10 +1767,13 @@ class DeveloperFolderTests(unittest.TestCase):
         self.assertLess(check, text.index('start ""'))
         self.assertIn('del "downloads\\%FILE%"', text[check:])
 
-    def test_the_simulator_script_feeds_the_simulator(self) -> None:
+    def test_the_simulator_script_starts_the_box_and_nothing_else(self) -> None:
+        # Basil, 5 October 2026: one command that plays the trigger box.
+        # The game is started as at the lab and finds it by itself.
         text = (self.DEV / "EEG simulator.cmd").read_text()
         self.assertIn("--eeg-simulator", text)
-        self.assertIn("--eeg-port socket://127.0.0.1:50410", text)
+        self.assertNotIn("--eeg-port", text)
+        self.assertNotIn("--windowed", text)
         import main as entry
         old = sys.argv
         try:
@@ -1779,13 +1782,14 @@ class DeveloperFolderTests(unittest.TestCase):
         finally:
             sys.argv = old
 
-    def test_the_wait_for_the_simulator_is_bounded_by_the_clock(self) -> None:
-        # Counting tries was not a time limit: a refused connect can
-        # take about two seconds on Windows, so "40 tries" ran near 100 s.
-        text = (self.DEV / "EEG simulator.cmd").read_text()
-        self.assertIn("Stopwatch", text)
-        self.assertIn("TotalSeconds -lt 20", text)
-        self.assertIn("ConnectAsync('127.0.0.1',50410).Wait(500)", text)
+    def test_the_lab_file_lets_the_simulator_stand_in(self) -> None:
+        from finger_rehab.config import Config
+        from finger_rehab.utils import eeg_simulator as sim
+        lab = Config.load(REPO / "config" / "eeg_lab.yaml")
+        self.assertIs(lab.get("eeg.simulator_stands_in"), True)
+        self.assertEqual(lab.get("eeg.simulator_port"), sim.LISTEN_PORT)
+        self.assertEqual(lab.get("eeg.port"), "COM10")
+        self.assertIs(Config.load().get("eeg.simulator_stands_in"), False)
 
     def test_it_never_ships(self) -> None:
         sys.path.insert(0, str(REPO / "scripts"))

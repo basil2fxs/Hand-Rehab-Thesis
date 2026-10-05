@@ -2,16 +2,17 @@ EEG lab setup
 =============
 
 The lab task is the shipping game with config/eeg_lab.yaml loaded on
-top: markers on, trigger box required, no music in Force Pilot,
-neutral feedback (one ring glyph 800 ms after the press, no words, no
-chime), FRN bytes in chords and Force Pilot. The Reaction card is the
-lab's own SRT task (Welber's PsychoPy script, replicated trial for
-trial), and the Lab session runs it once, first in both orders, in
-place of the study's two Reaction blocks, with the old script's
-display and a response byte per trial (eeg_lab.yaml srt block). It
-leaves out Muscle Memory: the SRT's recall question tells the
-participant a sequence was there, so a Muscle Memory score taken after
-it would not pool with the study's.
+top: markers on, trigger box required, FRN bytes in chords and Force
+Pilot. The games look, sound and give feedback as on every other build
+(5 October 2026). The Reaction card is the lab's own SRT task
+(Welber's PsychoPy script, replicated trial for trial), and the Lab
+session runs it once, first in both orders, in place of the study's
+two Reaction blocks, with a response byte per trial (eeg_lab.yaml srt
+block). It leaves out Muscle Memory: the SRT's recall question tells
+the participant a sequence was there, so a Muscle Memory score taken
+after it would not pool with the study's. To rehearse on any PC, run
+developer\EEG simulator.cmd first: it plays the trigger box on COM10
+and the amplifier, and the game runs as if the box were plugged in.
 About 48 minutes from login, the SRT about 15 of them. The folder that
 goes to the lab is EEG_Lab at the top of the project
 (FingerRehab-EEGLab.zip on CI): Finger Rehab.exe, eeg_lab.yaml,
@@ -82,9 +83,9 @@ At the lab PC
    both boards or the keyboard). Leave musical experience blank and
    ask about formal musical training after the task, on the session
    sheet: a question about music before the task points at the tones.
-   The task is the old script's, with its display (srt.look: lab): a
-   black page, four grey squares near the centre turning red, one 30
-   per flash and one response byte per trial, SPACE between blocks,
+   The task is the old script's, drawn in the app's own look (the
+   script's grey squares are srt.look: lab, if a recording needs them):
+   one 30 per flash and one response byte per trial, SPACE between blocks,
    the recall at the end, and the script's three CSVs in the game's
    folder beside trials.csv. After the recall, ask "Did you notice
    anything about the order of the lit cards? If so, what?" and write
@@ -191,17 +192,15 @@ Codes (finger_rehab/hardware/eeg_trigger.py, CODES, version 1.7)
                                           one of a trial is its response
 120+lane  false start                 130  timeout (never epoch on it)
 131  press with no trial active
-140  full ring (hit)  141  open ring (miss)  142  half ring (Late,
-     Early, near). Written on the flip that draws the glyph, 800 ms
-     after the press, in the modes eeg_lab.yaml names (reaction,
-     chords, force_pilot). A glyph the block end cuts short sends no
-     byte. Force Pilot has no presses: its 141 is written on the
+140  hit  141  miss. Written with the outcome flash, in the modes
+     eeg_lab.yaml names (reaction, chords, force_pilot). 142 (near)
+     only comes with the delayed ring display (ui.feedback_style:
+     neutral, ui.feedback_delay_ms: 800), which the lab no longer
+     uses. Force Pilot has no presses: its 141 is written on the
      frame the craft leaves the corridor and stalls, at most once a
-     second, with or without the exit buzz. In Chords the ring
-     follows the chord's outcome class, not the first finger's
-     speed: full for a clean hit, half for a chord that landed but
-     was not clean (fingers apart, hold broken, a leak, too hard),
-     open for a miss or a chord with a finger missing. Echo, if it
+     second, with or without the exit buzz. In Chords the byte
+     follows the chord's outcome, not the first finger's speed: 141
+     for a miss or a chord with a finger missing, 140 otherwise. Echo, if it
      is ever named, writes its own byte at the trial close and only
      in the immediate style (feedback_delay_ms 0): under a delay
      nothing is drawn for an echo trial, so no byte leaves.
@@ -245,7 +244,8 @@ For the analysis
   measured (latency.measured false); scripts/latency_check.py has the
   bench procedure. Put the medians in the config and in the methods.
 - For FRN work drop rows with error_type timeout, device_drop or
-  no_signal; 142 (half ring) is neither a win nor a loss. Recordings
+  no_signal; 142 (half ring, ring display only) is neither a win
+  nor a loss. Recordings
   made before 24 September 2026 could carry a 140/141 within one frame of
   the block-end byte: leave that one out. Do not switch
   ui.feedback_style mid-study: it moves the feedback epoch.
@@ -275,9 +275,8 @@ That checks the wire, not the screen or the speaker, and only a light
 sensor and a microphone show those delays (Bridges et al. 2020, PeerJ
 8:e9414). Time them once, on the lab PC with its own monitor: set
 srt.photodiode_patch: true in eeg_lab.yaml for this run only (a patch
-in the bottom-left corner on flash frames; in the lab look the red
-square is about as bright as the grey one, so a sensor on the square
-sees little), put the light sensor on that corner and a microphone
+in the bottom-left corner on flash frames; a sensor on a card would
+read that card's own brightness), put the light sensor on that corner and a microphone
 (or a split of the audio output) on two of the amplifier's auxiliary
 inputs, and play the SRT's practice block with markers on (Esc after
 it). For each 30, the delay to the light change and to the tone's

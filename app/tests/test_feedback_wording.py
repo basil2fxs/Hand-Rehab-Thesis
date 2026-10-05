@@ -459,6 +459,28 @@ class RealEngineWordingTests(unittest.TestCase):
                 self.assertEqual(fb.offending(text), [],
                                   f"rhythm put {text!r} on the screen")
 
+    def test_rhythm_flashes_green_for_any_press_on_the_right_finger(self) -> None:
+        # Basil, 5 October 2026: a press past miss_ms on the right
+        # finger is scored Miss but flashes as a hit; only a note nobody
+        # pressed shows grey.
+        with tempfile.TemporaryDirectory() as td:
+            eng, _gp, rs = _make_engine(td)
+            seen = []
+            rs.flash_lane = (lambda lane, colour, d, now, **k:
+                             seen.append(tuple(colour)))
+            eng._begin_block("rhythm")
+            for i, (label, offset, pressed) in enumerate((
+                    ("Perfect", 10.0, True), ("Late", 250.0, True),
+                    ("Miss", 450.0, True), ("Miss", 0.0, False))):
+                eng.log_rhythm_hit(_FakeNote(lane=1, index=i), offset,
+                                   label, 0, 5.0, was_pressed=pressed)
+            self.assertEqual(seen, [tuple(eng._GOLD),
+                                    tuple(eng.theme.lane_hit),
+                                    tuple(eng.theme.lane_hit),
+                                    tuple(eng.theme.muted)])
+            # The scoring still says what happened.
+            self.assertEqual(eng.misses, 2)
+
     def test_streak_banners_name_the_count_not_the_person(self) -> None:
         # Only a big streak gets a banner: the first is at ten.
         with tempfile.TemporaryDirectory() as td:
@@ -919,15 +941,17 @@ class StyleConfigTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             fb.check_style_config(cfg)
 
-    def test_the_lab_preset_is_the_neutral_set(self) -> None:
+    def test_the_lab_preset_keeps_the_games_own_feedback(self) -> None:
+        # Basil, 5 October 2026: the lab build plays the games as every
+        # other build does, so no delayed ring floats over the fingers.
         import yaml
+        from finger_rehab.config import Config
         with (REPO / "config" / "eeg_lab.yaml").open() as f:
             lab = yaml.safe_load(f)
-        self.assertEqual(lab["ui"]["feedback_style"], "neutral")
-        self.assertGreaterEqual(lab["ui"]["feedback_delay_ms"], 500)
-        self.assertLessEqual(lab["ui"]["feedback_delay_ms"], 5000)
-        # No chime and no thunk: both are auditory events inside the
-        # feedback window, and the thunk only ever fires on a miss.
+        self.assertNotIn("ui", lab)
+        merged = Config.load(REPO / "config" / "eeg_lab.yaml")
+        self.assertEqual(fb.style(merged), "encouraging")
+        self.assertEqual(fb.delay_ms(merged), 0)
         self.assertIs(lab["cue"]["sound_after"], False)
 
     def test_the_default_config_ships_the_encouraging_style(self) -> None:

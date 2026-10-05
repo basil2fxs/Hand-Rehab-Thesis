@@ -18,8 +18,8 @@
 <line x1="750" y1="174" x2="750" y2="238" stroke="#6d28d9" stroke-width="2.5"/>
 <rect x="726.6" y="146.0" width="46.8" height="28.0" rx="8" fill="#6d28d9"/>
 <text x="750.0" y="165.5" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="16" font-weight="700" fill="#ffffff" text-anchor="middle">140</text>
-<text x="750.0" y="260.0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" font-weight="400" fill="#1f2328" text-anchor="middle">full ring shown</text>
-<text x="750.0" y="278.0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="middle">a hit, 0.8 s later</text>
+<text x="750.0" y="260.0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" font-weight="400" fill="#1f2328" text-anchor="middle">result shown</text>
+<text x="750.0" y="278.0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="middle">a hit, with the green flash</text>
 <rect x="24.0" y="310.0" width="221.0" height="216.0" rx="14" fill="#f6f8fa" stroke="#d1d9e0" stroke-width="1"/>
 <text x="44.0" y="342.0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="700" fill="#59636e" text-anchor="start" letter-spacing="1.2">THE CUE</text>
 <rect x="44.0" y="362.0" width="37.2" height="28.0" rx="8" fill="#1d4ed8"/>
@@ -48,17 +48,10 @@
 <text x="518.0" y="342.0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="700" fill="#59636e" text-anchor="start" letter-spacing="1.2">AFTER THE PRESS</text>
 <rect x="518.0" y="362.0" width="46.8" height="28.0" rx="8" fill="#6d28d9"/>
 <text x="541.4" y="381.5" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="16" font-weight="700" fill="#ffffff" text-anchor="middle">140</text>
-<circle cx="579.8" cy="376.0" r="7" fill="#6d28d9" stroke="#6d28d9" stroke-width="2.4"/>
-<text x="594.8" y="381.5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2328" text-anchor="start">full ring: hit</text>
+<text x="576.8" y="381.5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2328" text-anchor="start">result: hit</text>
 <rect x="518.0" y="400.0" width="46.8" height="28.0" rx="8" fill="#6d28d9"/>
 <text x="541.4" y="419.5" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="16" font-weight="700" fill="#ffffff" text-anchor="middle">141</text>
-<circle cx="579.8" cy="414.0" r="7" fill="none" stroke="#6d28d9" stroke-width="2.4"/>
-<text x="594.8" y="419.5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2328" text-anchor="start">open ring: miss</text>
-<rect x="518.0" y="438.0" width="46.8" height="28.0" rx="8" fill="#6d28d9"/>
-<text x="541.4" y="457.5" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="16" font-weight="700" fill="#ffffff" text-anchor="middle">142</text>
-<circle cx="579.8" cy="452.0" r="7" fill="none" stroke="#6d28d9" stroke-width="2.4"/>
-<path d="M 579.8 445.0 A 7 7 0 0 0 579.8 459.0 Z" fill="#6d28d9"/>
-<text x="594.8" y="457.5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2328" text-anchor="start">half ring: close</text>
+<text x="576.8" y="419.5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2328" text-anchor="start">result: miss</text>
 <text x="518.0" y="490.0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="start">Lab setup only, in</text>
 <text x="518.0" y="508.0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="start">Chords and Force Pilot.</text>
 <rect x="735.0" y="310.0" width="221.0" height="216.0" rx="14" fill="#f6f8fa" stroke="#d1d9e0" stroke-width="1"/>

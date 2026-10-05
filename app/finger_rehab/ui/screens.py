@@ -2454,6 +2454,12 @@ class ModeSelectScreen(Screen):
         status = getattr(self.engine, "eeg_recording_status", None)
         if not callable(status):
             return ""
+        from ..hardware.eeg_trigger import is_simulator
+        markers = getattr(self.engine, "markers", None)
+        if is_simulator(getattr(markers, "backend", None)):
+            # A rehearsal must never pass for a recording.
+            return ("Rehearsal: the EEG simulator stands in for the "
+                    "trigger box")
         name, found = status()
         if not name:
             return ""

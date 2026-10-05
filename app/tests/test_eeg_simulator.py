@@ -122,31 +122,41 @@ def test_a_restart_gets_the_port_back_while_the_game_holds_on():
             again.stop()
 
 
-@pytest.mark.skipif(os.name != "nt", reason="the launcher is a Windows script")
-def test_the_launchers_wait_is_bounded_and_finds_the_simulator():
-    # The exact line from EEG simulator.cmd, run as cmd.exe runs it.
-    import subprocess
-    cmd = (ROOT.parent / "EEG_Lab" / "developer"
-           / "EEG simulator.cmd").read_text(encoding="utf-8")
-    probe = next(line for line in cmd.splitlines()
-                 if line.startswith("powershell "))
-    # Nothing listening: it gives up by the clock, 20 s of its own
-    # stopwatch. PowerShell's start-up comes on top and has taken about
-    # 20 s on a cold CI runner, so the bound only proves the wait ends.
-    t0 = time.perf_counter()
-    done = subprocess.run(probe, shell=True, timeout=90)
-    took = time.perf_counter() - t0
-    assert done.returncode == 1 and 18 < took < 60, took
-    rx = sim.ByteReceiver(listen_port=sim.LISTEN_PORT)
+def test_a_running_simulator_stands_in_for_a_missing_box():
+    # Basil, 5 October 2026: start the simulator, then the game as at
+    # the lab. No box on COM10, so the lab file's writer takes the
+    # simulator and every byte reaches it as it would reach the box.
+    import socket
+    from finger_rehab.hardware.eeg_trigger import writer_from_config
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    rx = sim.ByteReceiver(listen_port=port)
     rx.start()
+    values = {"eeg.enabled": True, "eeg.require_port": True,
+              "eeg.port": "COM_NOT_HERE_99", "eeg.baud": 9600,
+              "eeg.pulse_ms": 2, "eeg.gap_ms": 2,
+              "eeg.simulator_stands_in": True, "eeg.simulator_port": port}
     try:
         assert _wait_for(rx, lambda s: s == "waiting") == "waiting"
-        t0 = time.perf_counter()
-        done = subprocess.run(probe, shell=True, timeout=90)
-        assert done.returncode == 0, done.returncode
-        assert time.perf_counter() - t0 < 15
+        w = writer_from_config(lambda k, d=None: values.get(k, d),
+                               defer_missing=True)
+        assert not w.needs_port
+        assert w.backend.port == f"socket://127.0.0.1:{port}"
+        w.send(33)
+        w.drain(timeout_s=1.0)
+        deadline = time.perf_counter() + 3.0
+        while time.perf_counter() < deadline and not rx.snapshot():
+            time.sleep(0.02)
+        assert [m.code for m in rx.snapshot()] == [33]
+        w.close()
     finally:
         rx.stop()
+    # Off, or nothing running: the lab's port list, as before.
+    w = writer_from_config(lambda k, d=None: {
+        **values, "eeg.simulator_stands_in": False}.get(k, d),
+        defer_missing=True)
+    assert w.needs_port
 
 
 def test_a_pulse_is_the_time_to_the_zero_after_it():
@@ -269,4 +279,5 @@ def test_the_game_starts_it_from_the_command_line():
     assert args.windowed and args.eeg_port.startswith("socket://")
     cmd = (ROOT.parent / "EEG_Lab" / "developer"
            / "EEG simulator.cmd").read_text(encoding="utf-8")
-    assert "--windowed --eeg-port socket://127.0.0.1:50410" in cmd
+    # The launcher only plays the box now; the game finds it itself.
+    assert "--eeg-simulator" in cmd and "--eeg-port" not in cmd

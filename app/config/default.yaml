@@ -161,6 +161,10 @@ eeg:
   # back to the dummy backend and say so at startup, which is right
   # for development and demos.
   require_port: false
+  # Let a running EEG simulator (utils/eeg_simulator.py) stand in for
+  # a box that will not open. Off here; the lab file turns it on.
+  simulator_stands_in: false
+  simulator_port: 50410
   # Marker pulse width and the enforced low time between markers, in
   # milliseconds, held on the wall clock, never by frame counting (the
   # old lab script counted frames and delivered 1-4 ms pulses). An

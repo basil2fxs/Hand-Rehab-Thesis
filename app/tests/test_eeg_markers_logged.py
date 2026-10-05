@@ -521,8 +521,7 @@ def _lab_engine(td: str, participant: str, source=None,
                 overrides: dict | None = None, real_screens: bool = False):
     """The real engine under config/eeg_lab.yaml over default.yaml,
     with the fake box in place of COM10. Everything else the overlay
-    sets stays: the fixed foreperiod, the neutral feedback with its
-    800 ms delay, no after-press sounds, no Force Pilot music."""
+    sets stays: the fixed foreperiod and no after-press sounds."""
     from finger_rehab.config import Config
     from finger_rehab.game.engine import GameEngine
     from finger_rehab.hardware.keyboard_source import KeyboardOnlySource
@@ -1189,13 +1188,11 @@ class LabSessionTests(unittest.TestCase):
         starts = [d for d in fp["eeg_rows"] if d["code"] == "23"]
         self.assertTrue(all(d["lane"] != "" for d in starts))
 
-    def test_every_feedback_byte_is_a_full_delay_one(self) -> None:
-        # Under the overlay's 800 ms delay a glyph the block end cuts
-        # short still shows but sends no byte: it lands early, under the
-        # results screen, and a lab reading the BDF alone could not tell
-        # it from a good one. Every byte that is sent sits the full
-        # delay after the response it follows, one per trial at most.
-        delay = 0.8
+    def test_every_feedback_byte_rides_its_outcome_flash(self) -> None:
+        # The lab build gives feedback as every other build does (Basil,
+        # 5 October 2026): the byte goes out with the outcome flash, just
+        # after the response it follows, one per trial at most, and the
+        # near byte (142) belongs to the ring the lab no longer draws.
         for name in ("reaction", "classic", "adaptive", "pattern"):
             scn = _lab()[name]
             with self.subTest(mode=name):
@@ -1203,22 +1200,18 @@ class LabSessionTests(unittest.TestCase):
                 fb = [d for d in rows if 140 <= int(d["code"]) <= 142]
                 self.assertTrue(fb)
                 self.assertLessEqual(len(fb), len(scn["trials"]))
+                self.assertFalse([d for d in fb if d["code"] == "142"])
                 if name != "reaction":
-                    # In the fast modes the next trial's press can land
-                    # before this trial's glyph, so a byte cannot be
-                    # paired with the press before it. That overlap is
-                    # why the lab sends FRN bytes in reaction, chords
-                    # and force_pilot only.
                     continue
                 last_response = None
                 for d in rows:
                     code = int(d["code"])
                     if 100 <= code <= 131:
                         last_response = float(d["t_event"])
-                    elif 140 <= code <= 142 and last_response is not None:
-                        self.assertGreaterEqual(
-                            float(d["t_event"]) - last_response,
-                            delay - 0.02, (name, d))
+                    elif 140 <= code <= 141 and last_response is not None:
+                        gap = float(d["t_event"]) - last_response
+                        self.assertGreaterEqual(gap, 0.0, (name, d))
+                        self.assertLess(gap, 0.25, (name, d))
 
 if __name__ == "__main__":
     unittest.main()

@@ -50,7 +50,7 @@ THEMES = {
     },
 }
 
-# Game names as the hub shows them, for the note on the result rings.
+# Game names as the hub shows them, for the note on the results.
 GAME_NAMES = {
     "reaction": "Reaction", "rhythm": "Rhythm", "echo": "Echo",
     "force_pilot": "Force Pilot", "chords": "Chords",
@@ -68,15 +68,9 @@ def lab_config() -> dict:
 
 
 def lab_feedback() -> list[str]:
-    """The games whose result rings send a number in the lab build."""
+    """The games whose results send a number in the lab build."""
     return list((lab_config().get("eeg") or {}).get("feedback_markers")
                 or [])
-
-
-def ring_delay_s() -> float:
-    """How long after the press the lab build shows the result ring."""
-    return float((lab_config().get("ui") or {}).get("feedback_delay_ms",
-                                                    800)) / 1000.0
 
 
 class Svg:
@@ -172,17 +166,6 @@ def tiles(s: Svg, x, y, lit: int) -> None:
                   f'stroke="{s.t["slow"]}" stroke-width="1.6"/>')
 
 
-def ring(s: Svg, cx, cy, kind: str, r=8) -> None:
-    """The result ring as the lab screen draws it: full, open or half."""
-    colour = s.t["fb"]
-    s.add(f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="{r}" '
-          f'fill="{colour if kind == "full" else "none"}" '
-          f'stroke="{colour}" stroke-width="2.4"/>')
-    if kind == "half":
-        s.add(f'<path d="M {cx:.1f} {cy - r:.1f} A {r} {r} 0 0 0 '
-              f'{cx:.1f} {cy + r:.1f} Z" fill="{colour}"/>')
-
-
 def draw(theme: str) -> str:
     t = THEMES[theme]
     s = Svg(t)
@@ -203,8 +186,8 @@ def draw(theme: str) -> str:
              "with a beep and a buzz"),
             (490, c["resp_correct_base"] + RING, "good", "ring pressed",
              f"right finger: {c['resp_correct_base']} + {RING}"),
-            (750, c["feedback_positive"], "fb", "full ring shown",
-             f"a hit, {ring_delay_s():g} s later")):
+            (750, c["feedback_positive"], "fb", "result shown",
+             "a hit, with the green flash")):
         flag(s, x, 146, 238, str(code), colour, cap, cap2)
 
     # The four families.
@@ -225,14 +208,10 @@ def draw(theme: str) -> str:
         (str(c["resp_timeout"]), "slow", "too slow"),
     ])
     card(s, xs[2], y0, cw, ch, "After the press")
-    for k, (code, kind, label) in enumerate((
-            (c["feedback_positive"], "full", "full ring: hit"),
-            (c["feedback_negative"], "open", "open ring: miss"),
-            (c["feedback_neutral"], "half", "half ring: close"))):
-        y = y0 + 52 + k * 38
-        w = s.pill(xs[2] + 20, y, str(code), "fb")
-        ring(s, xs[2] + 20 + w + 15, y + 14, kind, r=7)
-        s.text(xs[2] + 20 + w + 30, y + 19.5, label, size=15)
+    rows(s, xs[2] + 20, y0 + 52, [
+        (str(c["feedback_positive"]), "fb", "result: hit"),
+        (str(c["feedback_negative"]), "fb", "result: miss"),
+    ])
     games = [GAME_NAMES[m] for m in lab_feedback()
              if m in GAME_NAMES and m != "reaction"]
     s.text(xs[2] + 20, y0 + ch - 36, "Lab setup only, in", size=13,

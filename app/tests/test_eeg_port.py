@@ -344,6 +344,29 @@ class PickerScreenTests(unittest.TestCase):
         engine.show_title.assert_called_once()
         self.assertTrue(engine.running)
 
+    def test_a_running_simulator_is_taken_on_scan_and_never_saved(self):
+        # A simulator started after the game is found as a box plugged
+        # in late is, and COM10 stays in the lab file (5 October 2026).
+        markers = self._waiting()
+        s, engine = self._screen(markers)
+        sim = _OpenPort("socket://127.0.0.1:50410")
+        s.simulator = MagicMock(return_value=sim)
+        s.enter(None)
+        self.assertIs(markers.backend, sim)
+        self.assertIn("simulator", s.status)
+        s.saver.assert_not_called()
+        engine.eeg_port_ready.assert_called_once()
+        s.on_escape()
+        engine.show_title.assert_called_once()
+
+    def test_with_no_simulator_the_list_waits(self):
+        markers = self._waiting()
+        s, engine = self._screen(markers)
+        s.simulator = MagicMock(return_value=None)
+        s.enter(None)
+        self.assertTrue(markers.needs_port)
+        engine.eeg_port_ready.assert_not_called()
+
     def test_a_port_that_will_not_open_changes_nothing(self):
         markers = self._waiting()
         s, engine = self._screen(markers)

@@ -13,7 +13,7 @@
 
 While ActiView records, the game writes a number onto the recording the moment something happens, so the brain signal can be cut around each event afterwards.
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="../app/docs/images/eeg_cheat_sheet_dark.svg"><img alt="EEG markers: 33 when a finger lights up, 100 plus the finger for a right press, 110 plus for a wrong one, 120 plus for too early, 130 for too slow, 140 to 142 for the result ring, and 20, 200 plus and 220 plus around each game" src="../app/docs/images/eeg_cheat_sheet_light.svg" width="100%"></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="../app/docs/images/eeg_cheat_sheet_dark.svg"><img alt="EEG markers: 33 when a finger lights up, 100 plus the finger for a right press, 110 plus for a wrong one, 120 plus for too early, 130 for too slow, 140 and 141 for the result, and 20, 200 plus and 220 plus around each game" src="../app/docs/images/eeg_cheat_sheet_light.svg" width="100%"></picture>
 
 Reaction, the lab's own task, marks each flash with 30, the number the lab's script used. Every session also saves `markers_codes.csv`: the full map it was recorded under, with the numbers single games add.
 
@@ -28,7 +28,7 @@ A stimulus byte goes out straight after the frame that draws the stimulus; the m
 | --- | --- |
 | `run_in_psychopy.py` | Starts the game: the exe on Windows, `source/` anywhere else |
 | `Finger Rehab.exe` | The game, from the latest [release](https://github.com/basil2fxs/Hand-Rehab-Thesis/releases/latest) |
-| `eeg_lab.yaml` | Lab settings: COM10, 9600 baud, 8 ms pulses, the SRT's own display and response bytes |
+| `eeg_lab.yaml` | Lab settings: COM10, 9600 baud, 8 ms pulses and the SRT's response bytes. The games are the same as in every build |
 | `source/` | The game's code, for PsychoPy's own Python |
 | `sessions/` | Everything recorded here |
 | `developer/` | For setting up, not for the lab: an EEG simulator for rehearsing, the PsychoPy download and a new-PC check ([README](developer/README.md)) |

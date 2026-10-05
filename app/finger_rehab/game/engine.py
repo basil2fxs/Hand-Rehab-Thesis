@@ -9862,7 +9862,17 @@ class GameEngine:
             self._update_streak(label != "Miss", "rhythm")
         rs = self._screens.get("rhythm")
         if rs and hasattr(rs, "flash_lane") and not voided:
-            colour = self._outcome_colour(label)
+            # Any press on the note's own finger flashes as a hit,
+            # gold for a Perfect, whatever its timing tier: a press
+            # scored Miss for landing past miss_ms read as "you missed"
+            # to players who had pressed the right finger on what felt
+            # like the beat (Basil, 5 October 2026). Only a note nobody
+            # pressed shows grey. Label, points and offset are unchanged.
+            if was_pressed:
+                colour = (self._GOLD if label == "Perfect"
+                          else self.theme.lane_hit)
+            else:
+                colour = self._outcome_colour(label)
             # Same rule as the cadence modes: the label is data, the
             # patient reads the bank's wording. RhythmScreen floats
             # whatever is in self.message above the strike ring, so the

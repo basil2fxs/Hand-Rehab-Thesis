@@ -142,12 +142,14 @@ class BlockMusicPlayerTests(unittest.TestCase):
                      "syllables"):
             self.assertNotIn("music_enabled", default.get(mode, {}), mode)
         lab = yaml.safe_load((repo / "config" / "eeg_lab.yaml").read_text())
-        self.assertFalse(lab["force_pilot"]["music_enabled"])
+        # The lab build plays Force Pilot as every other build does
+        # (Basil, 5 October 2026), music included.
+        self.assertNotIn("force_pilot", lab)
         # The lab file lays over the default, so the merged view is
         # what the engine reads.
         from finger_rehab.config import Config
         cfg = Config.load(repo / "config" / "eeg_lab.yaml")
-        self.assertFalse(cfg.get("force_pilot.music_enabled"))
+        self.assertTrue(cfg.get("force_pilot.music_enabled"))
         self.assertTrue(cfg.get("eeg.enabled"))
 
 

@@ -30,6 +30,13 @@ eeg:
   # Refuse to start without the box: a lab block recorded with no
   # markers is worthless, so failing loudly at launch is the feature.
   require_port: true
+  # The EEG simulator stands in for the box when COM10 is not there
+  # and a simulator is running on this computer (developer\EEG
+  # simulator.cmd): the game connects to it and runs as if the box
+  # were plugged in, and the hub says it is a rehearsal. At the lab no
+  # simulator runs, so a missing box still stops on the port list.
+  simulator_stands_in: true
+  simulator_port: 50410
   # The game sends its own 0 byte on the first frame at least this long
   # after a code, so a marker that holds each byte until the next one
   # gives pulses of 8 to 17 ms at 60 Hz: 2 or more samples at 256 Hz
@@ -46,16 +53,14 @@ eeg:
   # n/a and the onset column in seconds is all a pipeline needs.
   # Confirm the ActiView rate on the lab desktop before setting it.
   amplifier_rate_hz: null
-  # FRN bytes (140 full ring, 141 open ring, 142 half ring) in the
-  # modes where the feedback stands on its own. Every byte holds the
-  # line 20 ms, and in the fast modes a feedback byte 800 ms after a
-  # press lands among the next trial's stimulus and press bytes and
-  # pushes them late in the recording (syllables' 800 ms trial gap
-  # puts it on the next stimulus exactly). Reaction and chords leave
-  # 1.5 s or more before the next stimulus; force_pilot's 141 marks
-  # the frame the craft leaves the corridor and stalls (with or
-  # without the exit buzz, which cue.buzz_after gates), with no press
-  # bytes to collide with.
+  # FRN bytes (140 for a hit, 141 for a miss) on the outcome flash, in
+  # the modes where the feedback stands on its own. Every byte holds
+  # the line 20 ms, so in the fast modes a feedback byte would push
+  # the next trial's stimulus and press bytes late in the recording.
+  # Reaction and chords leave 1.5 s or more before the next stimulus;
+  # force_pilot's 141 marks the frame the craft leaves the corridor
+  # and stalls (with or without the exit buzz, which cue.buzz_after
+  # gates), with no press bytes to collide with.
   feedback_markers: [reaction, chords, force_pilot]
 
 reaction:
@@ -109,19 +114,11 @@ protocol:
       budget_min: 51
       hard_stop_min: 56
 
-force_pilot:
-  # No background track in the lab: an EEG block is recorded in
-  # silence so the only sounds in the record are the cues themselves.
-  music_enabled: false
-
 srt:
-  # The script's own display in EEG recordings (1 October 2026, the SRT
-  # deep review): a black page and four grey squares near the centre,
-  # the target turning red. The script set its squares close together
-  # to limit eye movements; the app's outer cards sit about three
-  # times further out and each lights a different brightness. Timing,
-  # tones, markers and files are the same in both looks.
-  look: lab
+  # The task is drawn in the app's own look, as on every other build
+  # (Basil, 5 October 2026). look: lab gives the script's grey squares
+  # on a black page, which keep eye movements smaller, if a recording
+  # needs them.
   # Response bytes as well as the 30: 100 plus the lane for a correct
   # press, 110 plus the lane for a wrong one, 120 plus the lane for an
   # anticipation and 130 for a miss. Written at the trial's end, each
@@ -132,22 +129,11 @@ srt:
   # The 30 stays the flash, so an epoch on 30 is unchanged.
   response_markers: true
 
-ui:
-  # Minimal feedback for the lab. No words after a trial: one ring
-  # glyph per outcome (filled for a hit, half for Late or Early, open
-  # for a Miss), identical size, position, colour and lifetime, so the
-  # only thing that differs between outcomes in the visual record is
-  # the fill. Words carry emotion, and emotional words produce an ERP
-  # of their own at 200 to 300 ms (the early posterior negativity),
-  # right on top of the feedback-related negativity at 230 to 350 ms.
-  # No streak banners and no NEW BEST chip either: both are
-  # unscheduled visual events in the middle of a trial sequence.
-  feedback_style: neutral
-  # Fixed gap between the press and the glyph so the feedback ERP is
-  # not smeared into the response-locked activity. The 140 / 141
-  # marker is written on the flip that draws the glyph, not at log
-  # time. Do not change this mid-study: it moves the feedback epoch.
-  feedback_delay_ms: 800
+# The games look, sound and give feedback as on every other build
+# (Basil, 5 October 2026): no lab-only display, feedback rings or
+# silence. ui.feedback_style: neutral with ui.feedback_delay_ms: 800
+# brings back the delayed ring and its 142, should an FRN study want
+# them.
 
 cue:
   # No chime and no thunk after a press. Both are auditory events at

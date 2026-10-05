@@ -1064,6 +1064,48 @@ class TriggerPortError(RuntimeError):
     """Lab mode refusing to start without its trigger box."""
 
 
+SIMULATOR_PORT = 50410
+
+
+def simulator_listening(port: int = SIMULATOR_PORT,
+                        host: str = "127.0.0.1",
+                        timeout_s: float = 0.5) -> bool:
+    """Whether the EEG simulator (utils/eeg_simulator.py) is taking
+    connections on this computer. It accepts one connection after
+    another, so this knock costs it nothing."""
+    import socket
+    try:
+        with socket.create_connection((host, int(port)),
+                                      timeout=timeout_s):
+            return True
+    except OSError:
+        return False
+
+
+def simulator_backend(get, baud: int) -> "SerialBackend | None":
+    """The simulator in the box's place, or None.
+
+    Only when eeg.simulator_stands_in is set (the lab file sets it) and
+    a simulator is running here. The game then writes to it exactly as
+    to the box, so a rehearsal runs the lab's own path with nothing
+    pointed at it. At the lab no simulator runs, so a missing box still
+    stops the game on the port list.
+    """
+    if not bool(get("eeg.simulator_stands_in", False)):
+        return None
+    port = int(get("eeg.simulator_port", SIMULATOR_PORT)
+               or SIMULATOR_PORT)
+    if not simulator_listening(port):
+        return None
+    candidate = SerialBackend(f"socket://127.0.0.1:{port}", baud)
+    return candidate if candidate.open() else None
+
+
+def is_simulator(backend) -> bool:
+    """Whether markers go to the simulator rather than a box."""
+    return str(getattr(backend, "port", "") or "").startswith("socket://")
+
+
 def writer_from_config(get, on_emit=None,
                        defer_missing: bool = False) -> MarkerWriter:
     """Build the writer the way the config asks.
@@ -1111,6 +1153,12 @@ def writer_from_config(get, on_emit=None,
             if candidate.last_error:
                 reason += f" ({candidate.last_error})"
     if backend is None:
+        sim = simulator_backend(get, baud)
+        if sim is not None:
+            backend = sim
+            log.warning("EEG simulator stands in for the trigger box "
+                        "(%s)", reason)
+    if backend is None:
         if require and defer_missing:
             # The game opens its window on the port picker instead of
             # exiting. The writer stays enabled with no backend, so it
@@ -1138,7 +1186,7 @@ def writer_from_config(get, on_emit=None,
         log.warning("EEG markers live on the DummyBackend (%s); codes "
                     "are logged, nothing reaches an amplifier", reason)
     else:
-        log.info("EEG markers live on %s", port)
+        log.info("EEG markers live on %s", backend.port)
     return MarkerWriter(backend=backend, enabled=True,
                         pulse_ms=pulse_ms, gap_ms=gap_ms,
                         on_emit=on_emit, box=box, box_mode=box_mode)
