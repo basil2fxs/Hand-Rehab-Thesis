@@ -31,6 +31,8 @@ app/builds/Mac/*.dmg
 app/builds/Windows/*.exe
 app/builds/Windows/Finger Rehab/
 app/builds/Windows/*.zip
+# The flashing tool an app copies out beside itself when it runs.
+app/builds/Mac/tools/
 
 # The two things people are handed. Both are build products of the same
 # commit, both are hundreds of MB, and both are past the nightly
