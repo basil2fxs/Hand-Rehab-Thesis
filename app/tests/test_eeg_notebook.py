@@ -272,6 +272,13 @@ class EegChapterTests(unittest.TestCase):
                     self.assertEqual((twin / name).read_text(),
                                      (folder / name).read_text(), (mode, name))
 
+    def test_the_chapter_reads_the_press_offsets_back(self) -> None:
+        # Both blocks ran on the keyboard: no press sample to time.
+        self.assertIn("Press bytes, back to the press", self.text)
+        self.assertIn("no press byte matched to a force sample", self.text)
+        self.assertIn("Lock the ERN, LRP and readiness potentials to the "
+                      "onset", self.text)
+
     def test_the_notebook_writes_the_same_offsets(self) -> None:
         # The engine blocks above ran on the keyboard, so every offset
         # in them is n/a. A two-board block with a force stream checks
