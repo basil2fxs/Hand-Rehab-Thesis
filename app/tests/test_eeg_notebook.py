@@ -272,6 +272,29 @@ class EegChapterTests(unittest.TestCase):
                     self.assertEqual((twin / name).read_text(),
                                      (folder / name).read_text(), (mode, name))
 
+    def test_the_notebook_writes_the_same_offsets(self) -> None:
+        # The engine blocks above ran on the keyboard, so every offset
+        # in them is n/a. A two-board block with a force stream checks
+        # that the copies write the same numbers.
+        from finger_rehab.hardware.eeg_trigger import export_events
+        from tests.test_eeg_markers_logged import _force_block
+        with tempfile.TemporaryDirectory() as td:
+            pkg, nb = Path(td) / "pkg", Path(td) / "nb"
+            pkg.mkdir()
+            _force_block(pkg, [(1, 500, 4.0, 100.0), (6, 800, 2.0, 40.0)],
+                         boards=("right", "left"), hand="both")
+            shutil.copytree(pkg, nb)
+            export_events(pkg)
+            self.ra.eeg_export_events(nb)
+            for name in ("events.tsv", "events.json"):
+                self.assertEqual((nb / name).read_text(),
+                                 (pkg / name).read_text(), name)
+            with (pkg / "events.tsv").open(newline="") as f:
+                rows = list(csv.DictReader(f, delimiter="\t"))
+            self.assertEqual(len(rows), 2)
+            for r in rows:
+                self.assertNotEqual(r["onset_offset_ms"], "n/a", r)
+
     def test_codes_csv_lists_every_code_the_map_can_produce(self) -> None:
         from finger_rehab.hardware.eeg_trigger import CODES, codes_table
         for folder in self.folders.values():

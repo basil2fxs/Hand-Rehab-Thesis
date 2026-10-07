@@ -228,15 +228,27 @@ For the analysis
 ----------------
 - Every eeg row in raw.csv carries code, t_event (the crossing sample,
   or the flip), t_wire (when the byte left), delayed, failed, dropped
-  and name. Response bytes trail the press by 0 to one frame, so
-  re-align response-locked epochs to t_event.
+  and name. A response byte trails its press: the press sample reached
+  the laptop up to about 20 ms late in a USB burst, and the byte waited
+  up to one frame after that.
 - events.tsv (BIDS columns onset, duration, trial_type, value, sample,
-  lane, hand, t_event, t_wire, delayed, failed, dropped) is on the
-  game's clock, onset from the block's first force sample. Align by
-  matching inter-marker intervals to the Status channel, then shift.
+  lane, hand, t_event, t_wire, delayed, failed, dropped,
+  press_offset_ms, onset_offset_ms) is on the game's clock, onset from
+  the block's first force sample. Align by matching inter-marker
+  intervals to the Status channel, then shift.
   eeg.amplifier_rate_hz in eeg_lab.yaml fills the sample column.
   finger_rehab.hardware.eeg_trigger.export_events(folder) rebuilds the
   three files for any session folder.
+- Response-locked epochs: press_offset_ms is how far the press sample
+  sits from its byte on the board's own 5 ms clock, the USB bursts
+  and the frame wait taken out; onset_offset_ms is the same for where
+  the push began, found on the force trace by the notebook's onset
+  detector. Both are negative. Lock at the byte's Status sample plus
+  the offset, less the box's fixed delay. The 30 percent press point
+  sits a median 50 ms after the onset (pilot presses, 7 October 2026),
+  and further on slow or light presses, so lock motor potentials
+  (ERN, LRP, readiness) to the onset and keep the press lock as the
+  check.
 - Shift stimulus-locked epochs by eeg.marker_offsets_ms from
   metadata.json: the screen follows the byte by latency.visual_ms
   (20), the tone by latency.tone_ms (12), a felt buzz by

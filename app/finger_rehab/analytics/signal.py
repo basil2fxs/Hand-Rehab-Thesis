@@ -200,3 +200,112 @@ def lookback_baseline(values, idx, window=50):
     if seg.size == 0:
         return float("nan")
     return float(seg.mean())
+
+
+# ---- Board clock and press onsets ------------------------------------------
+# The board samples every 5 ms, but its serial adapter hands samples
+# over in bursts and the logger stamps each one when its burst arrives.
+# sample_grid_lateness puts every sample back on the board's own grid;
+# it is the notebook's timing-floor function, copied here for the EEG
+# export, and tests pin the two copies to each other.
+TIMING_RUN_GAP_S = 0.5
+TIMING_MIN_RUN = 400
+
+
+def sample_grid_lateness(t):
+    """How late each sample was stamped, in ms: its arrival time less
+    its time on the board's grid, the lower envelope of arrival time
+    against sample count, fitted per continuous run (a run breaks at
+    a gap over TIMING_RUN_GAP_S). The envelope is the line through the
+    five earliest arrivals of the first and of the last quarter, and
+    the 0.5th percentile is set to zero. NaN on runs under
+    TIMING_MIN_RUN samples."""
+    t = np.asarray(t, dtype=float)
+    late = np.full(len(t), np.nan)
+    if len(t) < TIMING_MIN_RUN:
+        return late
+    breaks = np.flatnonzero(np.diff(t) > TIMING_RUN_GAP_S) + 1
+    for idx in np.split(np.arange(len(t)), breaks):
+        n = len(idx)
+        if n < TIMING_MIN_RUN:
+            continue
+        k = np.arange(n, dtype=float)
+        tt = t[idx] - t[idx][0]
+        r = tt - (tt[-1] / (n - 1)) * k
+        q = max(20, n // 4)
+        i1 = np.argsort(r[:q])[:5]
+        i2 = n - q + np.argsort(r[-q:])[:5]
+        x1, y1 = k[i1].mean(), r[i1].mean()
+        x2, y2 = k[i2].mean(), r[i2].mean()
+        b = (y2 - y1) / (x2 - x1) if x2 != x1 else 0.0
+        res = r - (y1 + b * (k - x1))
+        res -= np.percentile(res, 0.5)
+        late[idx] = res * 1000.0
+    return late
+
+
+# press_onset's window: 400 ms before the press sample, room for the
+# push and for an earlier press of the same finger, and 300 ms after
+# it, so the zero-phase filters see the rest of the rise.
+PRESS_ONSET_BEFORE_S = 0.4
+PRESS_ONSET_AFTER_S = 0.3
+
+
+def press_onset(force, press_idx, fs):
+    """Force onset of one press the game registered, as an index into
+    `force`, or None.
+
+    The game registers a press where its smoothed force crosses 30
+    percent of the finger's rest-to-light-press gap, part way up the
+    rise. This walks back to where the push began with teasdale_onset,
+    the one onset detector, on the stretch from PRESS_ONSET_BEFORE_S
+    before the press sample to PRESS_ONSET_AFTER_S after it. Two
+    settings differ from the cue-locked use, because here the press is
+    already known. The search starts where the last rise up to the
+    press sample starts, so an earlier press of the same finger, or a
+    pre-load step held before the push, cannot be taken for this one.
+    And the minimum-rise gate is off: it asks whether the segment holds
+    a press at all, which the game has already answered, and on a
+    window that opens on an earlier press it would read that press as
+    the rest level. The detector's own step check (12 counts within
+    50 ms) still has to pass. On the pilot presses (1,334 from 55
+    sessions, 7 October 2026) this found an onset for 94 percent, a
+    median 50 ms before the press sample (interquartile 45 to 65).
+
+    `force` is one board's stream for the finger, one value per sample
+    in logged order, inside one continuous run. None when the window
+    runs off either end, holds a non-finite value, or the detector
+    finds nothing at or before the press sample.
+    """
+    from scipy.signal import butter, filtfilt
+    x = np.asarray(force, dtype=float)
+    c = int(round(PRESS_ONSET_BEFORE_S * fs))
+    lo = int(press_idx) - c
+    hi = int(press_idx) + int(round(PRESS_ONSET_AFTER_S * fs)) + 1
+    if lo < 0 or hi > len(x):
+        return None
+    seg = x[lo:hi]
+    if not np.isfinite(seg).all():
+        return None
+    # The same 20 Hz low-pass teasdale_onset applies first.
+    wn = min(max(20.0 / (fs / 2.0), 1e-6), 0.999999)
+    b, a = butter(2, wn, btype="low")
+    # The push that registered the press is the last rise up to the
+    # press sample (a short tap can peak before the game's smoothed
+    # force gets there). It starts after the last sample where the
+    # filtered force was not rising, so neither an earlier press nor a
+    # pre-load step held before the push is taken for it.
+    step = np.diff(filtfilt(b, a, seg)[:c + 1])
+    rising = np.flatnonzero(step > 0)
+    if not len(rising):
+        return None
+    still = np.flatnonzero(step[:rising[-1]] <= 0)
+    start = int(still[-1]) + 1 if len(still) else 0
+    # search_to lets the first pass, whose 50 ms step check must fit
+    # inside the search, test every sample up to the press sample.
+    onset, _force_lp, _dforce = teasdale_onset(
+        seg, fs, min_rise=-np.inf, search_from=start,
+        search_to=c + int(0.05 * fs) + 2)
+    if onset is None or onset > c:
+        return None
+    return lo + int(onset)

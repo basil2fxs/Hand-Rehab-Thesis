@@ -47,6 +47,11 @@ import logging
 import time
 from dataclasses import dataclass
 
+import numpy as np
+
+from ..analytics.signal import (TIMING_RUN_GAP_S, press_onset,
+                                sample_grid_lateness)
+
 
 log = logging.getLogger(__name__)
 
@@ -1205,10 +1210,11 @@ EVENTS_JSON = "events.json"
 CODES_CSV = "markers_codes.csv"
 # onset and duration first, as BIDS requires; value is the byte, so
 # mne_bids reads it as the event id; the rest are ours and the
-# sidecar describes them.
+# sidecar describes them. The two offsets move a response byte back to
+# its press and to the start of the push (response_offsets).
 EVENT_COLUMNS = ["onset", "duration", "trial_type", "value", "sample",
                  "lane", "hand", "t_event", "t_wire", "delayed", "failed",
-                 "dropped"]
+                 "dropped", "press_offset_ms", "onset_offset_ms"]
 CODES_COLUMNS = ["code", "name", "band", "locks_to", "offset_key",
                  "meaning", "notes", "codes_version"]
 NA = "n/a"
@@ -1293,6 +1299,107 @@ def read_marker_rows(raw_csv) -> tuple[list[dict], float | None]:
     return rows, t0
 
 
+# ---- response bytes, back to the press and the push ------------------------
+# A response byte goes out after the press it reports: the press sample
+# reached the laptop in a USB burst (0 to about 20 ms late), the byte
+# waited for the next frame (0 to one frame), and the game registered
+# the press part way up the rise anyway, at 30 percent of the finger's
+# rest-to-light-press gap. The two functions below are copied verbatim
+# into the notebook's EEG section, so the folder it rebuilds is the
+# folder the game wrote; tests pin the copies to each other.
+
+PRESS_STAMP_TOL_S = 5e-6
+
+
+def read_force_streams(raw_csv):
+    """Each board's force samples out of a raw.csv, for timing presses:
+    {board: {"t": arrival stamps, "late": sample_grid_lateness(t),
+    "fsr": n x 8 values}}, in logged order. board is "right" or "left"
+    when the rows name their board (two boards, detail board=...),
+    else "one". Empty when the block has no force samples."""
+    import csv
+    from pathlib import Path
+    cols = [f"fsr{i}" for i in range(1, 9)]
+    acc = {}
+    with Path(raw_csv).open(newline="", encoding="utf-8") as f:
+        for r in csv.DictReader(f):
+            if (r.get("event") or "") != "":
+                continue
+            try:
+                t = float(r.get("t_perf") or "")
+            except ValueError:
+                continue
+            detail = r.get("detail") or ""
+            board = detail[6:] if detail.startswith("board=") else "one"
+            vals = []
+            for c in cols:
+                try:
+                    vals.append(float(r.get(c) or ""))
+                except ValueError:
+                    vals.append(float("nan"))
+            ts, vs = acc.setdefault(board, ([], []))
+            ts.append(t)
+            vs.append(vals)
+    out = {}
+    for board, (ts, vs) in acc.items():
+        t = np.asarray(ts, dtype=float)
+        out[board] = {"t": t, "late": sample_grid_lateness(t),
+                      "fsr": np.asarray(vs, dtype=float).reshape(-1, 8)}
+    return out
+
+
+def response_offsets(streams, code, lane, hand, t_event, t_wire):
+    """Where a response byte's press and the push behind it sit
+    relative to the byte, in ms: (press_offset_ms, onset_offset_ms),
+    each None when it cannot be had. Positive means the event follows
+    the byte, the sign of metadata.json's marker_offsets_ms, so both
+    come out negative: the press is over before its byte goes out.
+
+    Only bytes that lock to a press sample get them: 100 to 129 and
+    131 (130 is the timeout, with no press). The press is the sample
+    whose stamp the byte's t_event carries, on the board that holds
+    the finger; the onset is press_onset on that finger's force.
+    Both move from arrival time onto the board's own sample grid
+    (sample_grid_lateness), so the USB bursts and the frame the byte
+    waited for drop out, and are measured from t_wire, the moment the
+    byte was written. Lanes 0 to 3 are the right board and 4 to 7 the
+    left; a one-handed left session puts its lanes 0 to 3 on the left
+    board when two boards are plugged in."""
+    if not (100 <= code <= 129 or code == 131):
+        return None, None
+    if lane is None or t_wire is None:
+        return None, None
+    if "one" in streams:
+        board, col = "one", int(lane)
+    else:
+        board = "left" if int(lane) >= 4 or hand == "left" else "right"
+        col = int(lane) % 4 + (4 if board == "left" else 0)
+    s = streams.get(board)
+    if s is None or not 0 <= col < 8 or not len(s["t"]):
+        return None, None
+    t, late = s["t"], s["late"]
+    j = int(np.searchsorted(t, t_event))
+    near = [k for k in (j - 1, j) if 0 <= k < len(t)]
+    k = min(near, key=lambda q: abs(t[q] - t_event))
+    if abs(t[k] - t_event) >= PRESS_STAMP_TOL_S or not np.isfinite(late[k]):
+        return None, None
+    press = (t[k] - late[k] / 1000.0 - t_wire) * 1000.0
+    # The continuous run around the press: the onset window must not
+    # cross a gap, and the run's count over span is the rate the
+    # detector filters at, as the notebook's onset chapter estimates it.
+    breaks = np.flatnonzero(np.diff(t) > TIMING_RUN_GAP_S) + 1
+    start = int(breaks[breaks <= k].max()) if (breaks <= k).any() else 0
+    stop = int(breaks[breaks > k].min()) if (breaks > k).any() else len(t)
+    if t[stop - 1] <= t[start]:
+        return press, None
+    fs = (stop - 1 - start) / (t[stop - 1] - t[start])
+    on = press_onset(s["fsr"][start:stop, col], k - start, fs)
+    if on is None or not np.isfinite(late[start + on]):
+        return press, None
+    onset = (t[start + on] - late[start + on] / 1000.0 - t_wire) * 1000.0
+    return press, onset
+
+
 def _sidecar(eeg_meta: dict, t0_note: str, rate) -> dict:
     return {
         "onset": {
@@ -1329,6 +1436,28 @@ def _sidecar(eeg_meta: dict, t0_note: str, rate) -> dict:
                                   "the amplifier."},
         "dropped": {"Description": "1 when the queue shed the marker; "
                                    "never on the wire."},
+        "press_offset_ms": {
+            "Description": "Response bytes that lock to a press (100-129, "
+                           "131): the press sample's time on the board's "
+                           "own 5 ms grid less t_wire. Negative: the press "
+                           "comes before its byte. The byte reaches the "
+                           "amplifier a fixed box delay after t_wire, so "
+                           "the press sits at the byte's EEG sample plus "
+                           "this value less that delay. The press is where "
+                           "the game registered it: smoothed force past 30 "
+                           "percent of the finger's rest-to-light-press "
+                           "gap. n/a for other bytes, a byte never "
+                           "written, or a press not matched to its sample.",
+            "Units": "ms"},
+        "onset_offset_ms": {
+            "Description": "As press_offset_ms, for the force onset: where "
+                           "the push began, found offline on the finger's "
+                           "force by the onset detector the thesis uses "
+                           "(Teasdale et al. 1993), searched back from the "
+                           "press sample (signal.press_onset). The lock for "
+                           "motor potentials. n/a when no onset was found "
+                           "in the 400 ms before the press.",
+            "Units": "ms"},
         "CodesVersion": eeg_meta.get("codes_version", CODES_VERSION),
         "PulseMs": eeg_meta.get("pulse_ms"),
         "GapMs": eeg_meta.get("gap_ms"),
@@ -1374,12 +1503,20 @@ def export_events(root, sample_rate_hz=None) -> dict:
     else:
         t0_note = f"Reference t_perf {t0:.6f}."
     rows.sort(key=lambda r: float(r["t_event"]))
+    streams = read_force_streams(raw)
     tsv = root / EVENTS_TSV
     with tsv.open("w", newline="", encoding="utf-8") as f:
         w = csv.writer(f, delimiter="\t", lineterminator="\n")
         w.writerow(EVENT_COLUMNS)
         for r in rows:
             onset = float(r["t_event"]) - t0
+            try:
+                lane = int(float(r["lane"]))
+            except ValueError:
+                lane = None
+            press_ms, onset_ms = response_offsets(
+                streams, r["code"], lane, r["hand"], float(r["t_event"]),
+                float(r["t_wire"]) if r["t_wire"] else None)
             w.writerow([
                 f"{onset:.6f}",
                 f"{pulse_ms / 1000.0:.3f}",
@@ -1391,6 +1528,8 @@ def export_events(root, sample_rate_hz=None) -> dict:
                 r["t_event"],
                 r["t_wire"] or NA,
                 r["delayed"], r["failed"], r["dropped"],
+                NA if press_ms is None else f"{press_ms:.1f}",
+                NA if onset_ms is None else f"{onset_ms:.1f}",
             ])
     sidecar = root / EVENTS_JSON
     sidecar.write_text(json.dumps(_sidecar(eeg_meta, t0_note, rate),

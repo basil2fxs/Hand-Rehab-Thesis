@@ -220,6 +220,10 @@ class ExportFileTests(unittest.TestCase):
         # The failed write stays in, flagged, with no wire time.
         self.assertEqual(rows[3]["failed"], "1")
         self.assertEqual(rows[3]["t_wire"], "n/a")
+        # One force sample is no stream to time a press on.
+        for r in rows:
+            self.assertEqual(r["press_offset_ms"], "n/a")
+            self.assertEqual(r["onset_offset_ms"], "n/a")
 
     def test_sample_column_follows_the_amplifier_rate(self) -> None:
         from finger_rehab.hardware.eeg_trigger import export_events
@@ -260,6 +264,155 @@ class ExportFileTests(unittest.TestCase):
             + _eeg_line(51.0, 201))
         rows = _tsv_rows(export_events(self.root)["events"])
         self.assertAlmostEqual(float(rows[0]["onset"]), 1.0, places=6)
+
+
+def _force_block(root: Path, presses, boards=("one",), hand="right",
+                 extra: str = "", n: int = 1200, t0: float = 100.0,
+                 transit_s: float = 0.001, wire_s: float = 0.004) -> list:
+    """A block's raw.csv with a real force stream and a correct-press
+    byte per press. Each board samples every 5 ms (the left board 2.5 ms
+    out of step with the right) and its adapter hands the samples over
+    in bursts of four, transit_s after the last of them, stamped 10 us
+    apart. A press is (lane, onset sample, rise per sample, plateau)
+    in counts over a 300-count rest; its byte's t_event is the stamp of
+    the first sample at 30 percent of the plateau and t_wire is wire_s
+    later. `extra` is more raw lines. Returns per press the offsets the
+    export should find, in ms: (press_offset_ms, onset_offset_ms), on
+    the board grid less the transit and the burst's 30 us of stamping,
+    which the grid fit cannot see."""
+    import numpy as np
+    rng = np.random.default_rng(3)
+    k = np.arange(n)
+    streams = {}
+    for i, board in enumerate(boards):
+        grid = t0 + 0.0025 * i + k * 0.005
+        stamps = grid[4 * (k // 4) + 3] + transit_s + 10e-6 * (k % 4)
+        streams[board] = {"grid": grid, "stamps": stamps,
+                          "vals": np.round(300.0 + rng.normal(0, 0.7, (n, 4)))}
+    expected, eeg = [], ""
+    for lane, onset, rise, plateau in presses:
+        if "one" in streams:
+            board, col = "one", lane
+        else:
+            board = "left" if lane >= 4 or hand == "left" else "right"
+            col = lane % 4
+        st = streams[board]
+        ramp = np.minimum(np.maximum(0.0, k - onset) * rise, plateau)
+        st["vals"][:, col] = np.round(st["vals"][:, col] + ramp)
+        kp = int(np.argmax(st["vals"][:, col] >= 300.0 + 0.3 * plateau))
+        t_event = float(f"{st['stamps'][kp]:.6f}")
+        t_wire = t_event + wire_s
+        base = transit_s + 30e-6 - t_wire
+        expected.append(((st["grid"][kp] + base) * 1000.0,
+                         (st["grid"][onset] + base) * 1000.0))
+        # The engine writes the block's hand on its eeg rows.
+        eeg += _eeg_line(t_event, 100 + lane, lane=str(lane),
+                         t_wire=f"{t_wire:.6f}").replace(
+                             ",right,eeg,", f",{hand},eeg,")
+    rows = []
+    held = {b: [300] * 4 for b in ("right", "left")}
+    for board, st in streams.items():
+        for i in range(n):
+            vals = [int(v) for v in st["vals"][i]]
+            if board == "one":
+                eight, detail = vals + [0] * 4, ""
+            else:
+                held[board] = vals
+                eight = held["right"] + held["left"]
+                detail = f"board={board}"
+            rows.append((st["stamps"][i], eight, detail))
+    if len(streams) > 1:
+        # Merged in arrival order, each row holding the other board's
+        # last values as the logger does; rebuilt in that order.
+        rows.sort(key=lambda r: r[0])
+        held = {"right": [300] * 4, "left": [300] * 4}
+        merged = []
+        for t, eight, detail in rows:
+            side = detail[6:]
+            held[side] = eight[:4] if side == "right" else eight[4:]
+            merged.append((t, held["right"] + held["left"], detail))
+        rows = merged
+    lines = [_raw_line(t0 - 0.5, "block_start", "", "reaction")]
+    for idx, (t, eight, detail) in enumerate(rows, start=2):
+        lines.append(f"x,{t:.6f},{idx},{','.join(map(str, eight))},"
+                     f"{hand},,,{detail}\n")
+    (root / "raw.csv").write_text(RAW_HEADER + "".join(lines) + eeg + extra)
+    (root / "metadata.json").write_text(json.dumps({
+        "hand": hand, "eeg": {"pulse_ms": 8, "gap_ms": 12}}))
+    return expected
+
+
+class ResponseOffsetTests(unittest.TestCase):
+    """press_offset_ms and onset_offset_ms: a response byte moved back
+    to the press it reports and to the start of the push, on the
+    board's own clock."""
+
+    def setUp(self) -> None:
+        td = tempfile.TemporaryDirectory()
+        self.addCleanup(td.cleanup)
+        self.root = Path(td.name)
+
+    def _rows(self) -> list[dict]:
+        from finger_rehab.hardware.eeg_trigger import export_events
+        return _tsv_rows(export_events(self.root)["events"])
+
+    def _check(self, row: dict, want: tuple) -> None:
+        press, onset = float(row["press_offset_ms"]), float(
+            row["onset_offset_ms"])
+        # The press comes out to the grid's own precision; the onset
+        # to the detector's, whose zero-phase filters pull an edge a
+        # few samples early.
+        self.assertAlmostEqual(press, want[0], delta=0.1)
+        self.assertAlmostEqual(onset, want[1], delta=25.0)
+        self.assertLess(onset, press)
+
+    def test_a_response_byte_gets_its_press_and_onset(self) -> None:
+        want = _force_block(self.root, [(2, 600, 4.0, 100.0)])
+        rows = [r for r in self._rows() if r["value"] == "102"]
+        self.assertEqual(len(rows), 1)
+        self._check(rows[0], want[0])
+        # The press sample was first of its burst: 15 ms of waiting
+        # plus the 4 ms to the write, all ahead of the byte.
+        self.assertAlmostEqual(float(rows[0]["press_offset_ms"]), -19.0,
+                               delta=0.1)
+
+    def test_a_light_press_gets_an_onset_too(self) -> None:
+        want = _force_block(self.root, [(0, 500, 2.0, 40.0)])
+        self._check(self._rows()[0], want[0])
+
+    def test_bytes_without_a_press_get_none(self) -> None:
+        extra = (_eeg_line(102.0, 30, lane="1")
+                 + _eeg_line(102.5, 130, lane="1")
+                 + _eeg_line(103.0, 101, lane="1", t_wire="", failed=1)
+                 # A keyboard press: its time is no sample's stamp.
+                 + _eeg_line(103.2, 101, lane="1"))
+        _force_block(self.root, [(2, 600, 4.0, 100.0)], extra=extra)
+        rows = {r["t_event"]: r for r in self._rows()}
+        for t in ("102.000000", "102.500000", "103.000000", "103.200000"):
+            self.assertEqual(rows[t]["press_offset_ms"], "n/a", t)
+            self.assertEqual(rows[t]["onset_offset_ms"], "n/a", t)
+
+    def test_two_boards_each_finger_reads_its_own(self) -> None:
+        want = _force_block(self.root, [(1, 500, 4.0, 100.0),
+                                        (6, 800, 4.0, 100.0)],
+                            boards=("right", "left"), hand="both")
+        rows = {r["value"]: r for r in self._rows()}
+        self._check(rows["101"], want[0])
+        self._check(rows["106"], want[1])
+
+    def test_a_left_hand_block_on_two_boards_reads_the_left_one(self):
+        want = _force_block(self.root, [(1, 600, 4.0, 100.0)],
+                            boards=("right", "left"), hand="left")
+        self._check(self._rows()[0], want[0])
+
+    def test_the_sidecar_says_what_the_offsets_are(self) -> None:
+        from finger_rehab.hardware.eeg_trigger import export_events
+        _force_block(self.root, [(2, 600, 4.0, 100.0)])
+        side = json.loads(export_events(self.root)["sidecar"].read_text())
+        for col in ("press_offset_ms", "onset_offset_ms"):
+            self.assertEqual(side[col]["Units"], "ms")
+        self.assertIn("t_wire", side["press_offset_ms"]["Description"])
+        self.assertIn("Teasdale", side["onset_offset_ms"]["Description"])
 
 
 # ---------------------------------------------------------------------------

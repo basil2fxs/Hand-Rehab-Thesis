@@ -200,12 +200,16 @@ strongest argument for adding response markers to the trigger layer.
 This is the pleasant surprise: continuous force responses are not a
 deviation from ERN methodology, they are its founding method.
 
-- Gehring et al. (1993) had participants respond by squeezing
-  dynamometers, recording continuous squeeze force and EMG, in a flanker
-  task (H/S letter arrays). Response-related measures were defined on
-  squeeze and EMG activity, not on key switches. So defining response
-  onset by a force threshold crossing has precedent in the original ERN
-  paper itself.
+- The Coles and Donchin lab, where the ERN paper came from, registered
+  responses as squeezes on dynamometers: online at 25 percent of each
+  person's maximum force, with squeeze and EMG onsets scored offline
+  (De Jong, Coles, Logan and Gratton 1990, full text read). Gehring et
+  al. (1993) measured response force too: errors were weaker, and
+  weaker errors carried larger ERNs (Gehring's 1992 thesis abstract).
+  An earlier version of this note said Gehring et al. (1993) recorded
+  EMG; that was not verified and is withdrawn. Defining the response by
+  a force threshold crossing has precedent in the lab that found the
+  ERN.
 - Vidal et al. (2000) time-locked the Ne to EMG onset and found it peaks
   about 100 ms after EMG onset. EMG onset precedes any mechanical switch
   closure by a variable electromechanical delay, so aligning to an
@@ -225,10 +229,10 @@ deviation from ERN methodology, they are its founding method.
   established for the lateralised readiness potential too: Masaki et al.
   (2004), "The functional locus of the lateralized readiness potential",
   Psychophysiology 41; methods overview in Eimer (1998), Behavior
-  Research Methods, Instruments and Computers 30, 146-156. (A paper
-  titled "Rate of force development and the lateralized readiness
-  potential" also exists but its author list was not verifiable in my
-  searches, so it is flagged rather than cited.)
+  Research Methods, Instruments and Computers 30, 146-156. Ray,
+  Slobounov, Mordkoff, Johnston and Simon (2000), Psychophysiology
+  37(6), 757-765, found that preparing a faster rate of force
+  development enlarged the LRP in self-paced finger tasks.
 
 Requirements this imposes on Basil's software:
 1. Fix the online response threshold, report it in newtons or % of max
@@ -236,12 +240,33 @@ Requirements this imposes on Basil's software:
    (Keil et al. 2014 reporting standards).
 2. Write the response marker byte at the sample where force crosses the
    threshold, in the 200 Hz sensor loop, not in the 60 Hz render loop.
+   (As built, the byte goes out on the next frame, 0 to one frame after
+   the crossing sample; raw.csv keeps both times and the export below
+   takes the wait out.)
 3. Log raw force traces per trial so response onset can be re-defined
    offline (for example back-extrapolation to a lower threshold), the
-   same way EMG onset re-scoring is done.
+   same way EMG onset re-scoring is done. (As built, see below.)
 4. In keyboard-fallback sessions, mark the modality in the data file;
    keyboard and force sessions should not be pooled for response-locked
    analyses without checking alignment.
+
+What the export does (7 October 2026). The online rule stays: a press
+registers, and its byte goes out, when the smoothed force passes 30
+percent of the finger's rest-to-light-press gap. That suits the game
+and the codes but is a late, rate-dependent time-lock: force onset came
+52 ms before a 25 percent criterion in De Jong et al. (1990), and fixed
+thresholds land tens of ms after the true onset, later still on slow
+rises (Maffiuletti et al. 2016). So events.tsv carries two offsets per
+press byte, both measured from the byte's write time: press_offset_ms
+to the press sample on the board's own 5 ms clock, and onset_offset_ms
+to where the push began, found on the force trace by the Teasdale et
+al. (1993) detector the thesis uses for onset RTs. On 1,334 pilot
+presses the onset came a median 50 ms before the 30 percent sample
+(interquartile 45 to 65 ms), and the USB bursts had stamped the press
+sample a median 9 ms late. Lock the ERN, LRP and readiness potentials
+to the onset and keep the press lock as a check. EMG on the BioSemi's
+EXG channels would be the cleanest lock of all: the Ne locks to the EMG
+of the erroneous hand (Burle et al. 2008).
 
 ## 6. FRN, only if the game shows discrete feedback
 
@@ -350,7 +375,8 @@ Defensible claims:
 5. Averaged preparation differences (CNV-like, pre-stimulus LRP) between
    conditions, with the overlap caveat.
 6. Force-defined response onsets as a methodological strength, citing
-   Gehring et al. (1993) squeeze responses and Vidal et al. (2000)
+   the Coles and Donchin lab's squeeze responses (De Jong et al. 1990;
+   Gehring et al. 1993) and Vidal et al. (2000)
    EMG-locking precedent, plus a partial-error analysis nobody else in
    the rehab-game space is doing.
 
@@ -407,6 +433,17 @@ scripts if wanted.
 - Falkenstein, et al. (2000). Biological Psychology 51, 87-107.
 - Vidal, Hasbroucq, Grapperon, Bonnet (2000). Biological Psychology 51,
   109-128.
+- De Jong, Coles, Logan, Gratton (1990). JEP: Human Perception and
+  Performance 16(1), 164-182 (added 7 Oct 2026).
+- Teasdale, Bard, Fleury, Young, Proteau (1993). Journal of Motor
+  Behavior 25(2), 97-106 (added 7 Oct 2026).
+- Ray, Slobounov, Mordkoff, Johnston, Simon (2000). Psychophysiology
+  37(6), 757-765 (added 7 Oct 2026).
+- Burle, Roger, Allain, Vidal, Hasbroucq (2008). Journal of Cognitive
+  Neuroscience 20(9), 1637-1655 (added 7 Oct 2026).
+- Maffiuletti, Aagaard, Blazevich, Folland, Tillin, Duchateau (2016).
+  European Journal of Applied Physiology 116(6), 1091-1116 (added 7 Oct
+  2026).
 - Rüsseler, Rösler (2000). Acta Psychologica (motor vs perceptual
   deviant coding).
 - Schlaghecken, Stürmer, Eimer (2000). Memory and Cognition 28(5),
@@ -426,7 +463,5 @@ scripts if wanted.
 - Boudewyn, Luck, Farrens, Kappenman (2018). Psychophysiology 55, e13049.
 
 Flagged, not cited: Pontifex et al. (2010) on ERN reliability (not
-verified in searches); "Rate of force development and the lateralized
-readiness potential" (title seen, authors unverified); Gehring and
-Willoughby (2002) FRN gambling study (not searched, use Miltner 1997 and
-Proudfit 2015 instead).
+verified in searches); Gehring and Willoughby (2002) FRN gambling study
+(not searched, use Miltner 1997 and Proudfit 2015 instead).

@@ -110,6 +110,16 @@ the code rides the same byte, no second pass.
 Lane IS in the byte here because hand identity (right 0-3 vs left 4-7) is
 what the LRP is made of, and per-finger response codes cost nothing.
 
+The byte marks where the game registered the press: the smoothed force
+past 30 percent of the finger's rest-to-light-press gap, part way up
+the rise, then a USB burst and up to one frame before the write. The
+events.tsv export (7 October 2026) carries two offsets per press byte,
+from its write time: press_offset_ms to the press sample on the
+board's own clock, and onset_offset_ms to where the push began, found
+offline by the Teasdale detector (signal.press_onset). Lock motor
+potentials to the onset; erp.md Section 5 has the reasons and the
+pilot numbers.
+
 Continuous-trial rows (force_pilot runs) emit NO
 response-band marker at all: a run close has no press onset to lock
 100 + lane to, and a low-tracking miss is not an expired deadline, so

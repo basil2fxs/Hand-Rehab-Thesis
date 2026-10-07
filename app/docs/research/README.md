@@ -10,6 +10,6 @@ What each game rests on, and the study that tests it. Every file names its sourc
 | [`trial_mode.md`](trial_mode.md) | The 15, 30, 45 and 60 minute sessions: what each plays and why |
 | [`new_modes/`](new_modes) | The research behind each game and each condition, and what was built from it |
 | [`deep/`](deep) | One full-text review per game (October 2026): its parameters against the evidence, what changed and what is left |
-| [`eeg/`](eeg) | The EEG side: marker specification, which responses to measure, set-up, the trigger box |
+| [`eeg/`](eeg) | The EEG side: marker specification, which responses to measure, set-up, the trigger box, and how a press is timed for response-locked epochs (`response_timing.md`) |
 | [`force_units.txt`](force_units.txt) | Force units and the pads' rating |
 | [`rayan/`](rayan) | Rayan's sensor bench work and scripts |

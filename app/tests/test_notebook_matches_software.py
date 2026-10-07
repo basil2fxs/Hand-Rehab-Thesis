@@ -138,14 +138,16 @@ class TestCueFlagsRoundTrip:
 
 
 class TestCanonicalSignalCopies:
-    """The setup cell carries verbatim copies of teasdale_onset and
-    lookback_baseline from finger_rehab/analytics/signal.py, because
-    the notebook travels alone and cannot import them. Verbatim is
-    checked as AST equality, so an edit that reaches one copy and
-    misses the other fails here before the two detectors can quietly
-    hand out different onsets for the same press."""
+    """The setup cell carries verbatim copies of teasdale_onset,
+    lookback_baseline, sample_grid_lateness and press_onset from
+    finger_rehab/analytics/signal.py, because the notebook travels
+    alone and cannot import them. Verbatim is checked as AST equality,
+    so an edit that reaches one copy and misses the other fails here
+    before the two detectors can quietly hand out different onsets for
+    the same press."""
 
-    NAMES = ["teasdale_onset", "lookback_baseline"]
+    NAMES = ["teasdale_onset", "lookback_baseline", "sample_grid_lateness",
+             "press_onset"]
 
     def _package_defs(self):
         import inspect
@@ -166,6 +168,43 @@ class TestCanonicalSignalCopies:
             f"{name} differs between the notebook and signal.py. Edit "
             f"signal.py and re-copy the function into the setup cell, "
             f"never one side alone.")
+
+
+class TestEegOffsetCopies:
+    """The EEG section carries verbatim copies of read_force_streams
+    and response_offsets from finger_rehab/hardware/eeg_trigger.py, so
+    an events.tsv the notebook rebuilds has the offsets the game
+    wrote. The constants they read must match too."""
+
+    NAMES = ["read_force_streams", "response_offsets"]
+    CONSTANTS = {"TIMING_RUN_GAP_S": "signal", "TIMING_MIN_RUN": "signal",
+                 "PRESS_ONSET_BEFORE_S": "signal",
+                 "PRESS_ONSET_AFTER_S": "signal",
+                 "PRESS_STAMP_TOL_S": "eeg_trigger"}
+
+    @pytest.mark.parametrize("name", NAMES)
+    def test_notebook_copy_is_verbatim(self, name, source):
+        import inspect
+        import finger_rehab.hardware.eeg_trigger as et
+        pkg = {node.name: node for node in ast.parse(inspect.getsource(et)).body
+               if isinstance(node, ast.FunctionDef) and node.name == name}
+        assert name in pkg, f"eeg_trigger.py no longer defines {name}"
+        nb = {node.name: node for node in ast.parse(source).body
+              if isinstance(node, ast.FunctionDef) and node.name == name}
+        assert name in nb, f"the notebook no longer defines {name}"
+        assert ast.dump(nb[name]) == ast.dump(pkg[name]), (
+            f"{name} differs between the notebook and eeg_trigger.py. "
+            f"Edit eeg_trigger.py and re-copy the function into the EEG "
+            f"section, never one side alone.")
+
+    def test_the_constants_they_read_match(self, source):
+        import finger_rehab.analytics.signal as sig
+        import finger_rehab.hardware.eeg_trigger as et
+        names = list(self.CONSTANTS)
+        values = dict(zip(names, _notebook_names(source, names)))
+        for name, module in self.CONSTANTS.items():
+            pkg = getattr(sig if module == "signal" else et, name)
+            assert values[name] == pkg, name
 
 
 class TestMixedModelCopies:

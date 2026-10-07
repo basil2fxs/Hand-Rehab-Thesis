@@ -333,5 +333,147 @@ class LookbackBaselineTests(unittest.TestCase):
             lookback_baseline(values, 100, window=10), 0.0)
 
 
+def _bursty_stamps(n: int = 2000, t0: float = 100.0,
+                   transit_s: float = 0.001) -> tuple:
+    """A 200 Hz board grid and the stamps the logger gives it: the
+    adapter hands samples over in bursts of four, each burst arriving
+    transit_s after its last sample, the four stamped 10 us apart."""
+    k = np.arange(n)
+    grid = t0 + k * 0.005
+    stamps = grid[4 * (k // 4) + 3] + transit_s + 10e-6 * (k % 4)
+    return grid, stamps
+
+
+class SampleGridLatenessTests(unittest.TestCase):
+    """The notebook's timing-floor function, copied for the EEG
+    export: each sample's stamp put back on the board's own grid."""
+
+    def test_burst_lateness_is_recovered(self) -> None:
+        from finger_rehab.analytics.signal import sample_grid_lateness
+        grid, stamps = _bursty_stamps()
+        late = sample_grid_lateness(stamps)
+        truth = (stamps - grid) * 1000.0
+        truth -= truth.min()
+        # First of a burst waited 15 ms for the other three, last 0.
+        np.testing.assert_allclose(late, truth, atol=0.05)
+        self.assertAlmostEqual(late[0], 15.0, delta=0.1)
+        self.assertAlmostEqual(late[3], 0.0, delta=0.1)
+
+    def test_each_run_gets_its_own_line(self) -> None:
+        # A pause over half a second starts a new run with its own fit,
+        # so the gap is not read as 600 ms of lateness.
+        from finger_rehab.analytics.signal import sample_grid_lateness
+        _g1, a = _bursty_stamps(800, t0=100.0)
+        _g2, b = _bursty_stamps(800, t0=a[-1] + 0.6)
+        late = sample_grid_lateness(np.concatenate([a, b]))
+        self.assertLess(np.nanmax(late), 15.5)
+
+    def test_short_runs_come_back_nan(self) -> None:
+        from finger_rehab.analytics.signal import (TIMING_MIN_RUN,
+                                                   sample_grid_lateness)
+        _g, stamps = _bursty_stamps(TIMING_MIN_RUN - 4)
+        self.assertTrue(np.isnan(sample_grid_lateness(stamps)).all())
+
+
+def _rest(n: int = 600, seed: int = 5) -> np.ndarray:
+    """A finger at rest on its pad: 300 counts with a little noise."""
+    return 300.0 + np.random.default_rng(seed).normal(0.0, 0.7, n)
+
+
+def _crossing(x: np.ndarray, level: float) -> int:
+    """The first sample at or above `level`, standing in for the
+    game's press sample."""
+    return int(np.argmax(x >= level))
+
+
+class PressOnsetTests(unittest.TestCase):
+    """press_onset: the onset detector run back from a press the game
+    has already registered."""
+
+    FS = 200.0
+
+    def _ramp(self, onset: int = 300, rise: float = 4.0,
+              plateau: float = 100.0) -> np.ndarray:
+        x = _rest()
+        x += np.minimum(np.maximum(0.0, np.arange(len(x)) - onset) * rise,
+                        plateau)
+        return np.round(x)
+
+    def test_finds_the_push_before_the_press_sample(self) -> None:
+        from finger_rehab.analytics.signal import press_onset
+        x = self._ramp()
+        press = _crossing(x, 330.0)
+        onset = press_onset(x, press, self.FS)
+        self.assertIsNotNone(onset)
+        self.assertLessEqual(onset, press)
+        # Zero-phase filtering pulls the edge a few samples early.
+        self.assertLessEqual(abs(onset - 300), 5)
+
+    def test_a_light_press_still_gets_an_onset(self) -> None:
+        # 40 counts is under the cue-locked detector's 80-count gate.
+        from finger_rehab.analytics.signal import (press_onset,
+                                                   teasdale_onset)
+        x = self._ramp(rise=2.0, plateau=40.0)
+        press = _crossing(x, 312.0)
+        self.assertIsNone(teasdale_onset(x[press - 80:press + 61],
+                                         self.FS)[0])
+        onset = press_onset(x, press, self.FS)
+        self.assertIsNotNone(onset)
+        self.assertLessEqual(abs(onset - 300), 5)
+
+    def test_an_earlier_press_in_the_window_is_not_taken(self) -> None:
+        # The same finger pressed and let go just before: its rise is
+        # inside the 400 ms window, and the window opens on it.
+        from finger_rehab.analytics.signal import press_onset
+        x = _rest()
+        x[250:270] += np.linspace(0.0, 100.0, 20)
+        x[270:290] += 100.0
+        x[290:310] += np.linspace(100.0, 0.0, 20)
+        x[310:] += np.minimum(np.arange(290) * 4.0, 100.0)
+        x = np.round(x)
+        onset = press_onset(x, 318, self.FS)
+        self.assertIsNotNone(onset)
+        self.assertLessEqual(abs(onset - 310), 5)
+
+    def test_a_pre_load_step_is_not_the_push(self) -> None:
+        # The finger settles 20 counts onto the pad, holds, then pushes.
+        from finger_rehab.analytics.signal import press_onset
+        x = _rest()
+        x[240:250] += np.linspace(0.0, 20.0, 10)
+        x[250:] += 20.0
+        x[320:] += np.minimum(np.arange(280) * 4.0, 100.0)
+        x = np.round(x)
+        onset = press_onset(x, 328, self.FS)
+        self.assertIsNotNone(onset)
+        self.assertLessEqual(abs(onset - 320), 5)
+
+    def test_a_tap_registered_at_its_peak(self) -> None:
+        # The game's smoothed force can reach the press level only as
+        # a short tap tops out; the rise before it is still the push.
+        from finger_rehab.analytics.signal import press_onset
+        x = _rest()
+        x[300:310] += np.linspace(0.0, 30.0, 10)
+        x[310:320] += np.linspace(30.0, 0.0, 10)
+        onset = press_onset(np.round(x), 311, self.FS)
+        self.assertIsNotNone(onset)
+        self.assertLessEqual(abs(onset - 300), 5)
+
+    def test_rest_alone_has_no_onset(self) -> None:
+        from finger_rehab.analytics.signal import press_onset
+        self.assertIsNone(press_onset(np.round(_rest()), 300, self.FS))
+
+    def test_the_window_must_fit(self) -> None:
+        from finger_rehab.analytics.signal import press_onset
+        x = self._ramp(onset=60)
+        self.assertIsNone(press_onset(x, 68, self.FS))
+        self.assertIsNone(press_onset(x, len(x) - 10, self.FS))
+
+    def test_a_gap_in_the_window_gives_none(self) -> None:
+        from finger_rehab.analytics.signal import press_onset
+        x = self._ramp()
+        x[250] = np.nan
+        self.assertIsNone(press_onset(x, _crossing(x, 330.0), self.FS))
+
+
 if __name__ == "__main__":
     unittest.main()
