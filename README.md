@@ -51,7 +51,7 @@ flowchart LR
   F --> N["analysis/session_analysis.ipynb"]
 ```
 
-There's no switch under a finger. Each pad keeps a slow baseline, and a press counts when the force crosses a trigger set between that person's resting level and their light press, both measured at login.
+There's no switch under a finger. Each pad keeps a slow baseline, and a press counts when the force crosses a trigger 30% of the way from that person's resting level to their light press, both measured at login.
 
 <p align="center"><img src="app/docs/images/login.png" width="32%" alt="The login screen"> <img src="app/docs/images/hand.png" width="32%" alt="The hand choice screen"> <img src="app/docs/images/calibration.png" width="32%" alt="The quick calibration"><br><sub>Log in (free play, or a timed session of 15 to 60 minutes), pick the hand, calibrate. The game menu has the same session picker.</sub></p>
 
@@ -63,7 +63,7 @@ There's no switch under a finger. Each pad keeps a slow baseline, and a press co
 - **Presses:** a press counts when the smoothed force crosses the trigger, 7 to 11 ms after the raw crossing.
 - **Screen:** the game draws 60 frames a second, so a cue shows on the next frame, up to 17 ms later.
 - **Sound and buzz:** on the study computer a sound was heard 77 to 87 ms after the game played it and a motor moved 74 ms after its command. Every computer needs its own measurement: Settings, Setup, Audio delay.
-- **EEG markers:** a stimulus byte goes out on the frame that draws the stimulus; the monitor's and the speaker's own delays come on top and are timed once per lab PC with a light sensor and a microphone. A press byte leaves up to one frame (17 ms) after its sample, on top of the USB delay above. Each byte is held until the first frame at least 8 ms later, 8 to 17 ms at 60 Hz. Confirm the lab's recording rate before the first session ([app/docs/eeg_lab_setup.txt](app/docs/eeg_lab_setup.txt)).
+- **EEG markers:** a stimulus byte goes out on the frame that draws the stimulus; the monitor's and the speaker's own delays come on top and are timed once per lab PC with a light sensor and a microphone. A press byte leaves up to one frame (17 ms) after its sample, on top of the USB delay above; `events.tsv` moves each one back to its sample on the board's clock and to where the push began, a median 50 ms before the trigger. Each byte is held until the first frame at least 8 ms later, 8 to 17 ms at 60 Hz. Confirm the lab's recording rate before the first session ([app/docs/eeg_lab_setup.txt](app/docs/eeg_lab_setup.txt)).
 
 ## Install
 
@@ -157,7 +157,7 @@ Sessions land in `sessions/<date>/<name>_<time>_<game>/`: `trials.csv` one row p
 
 ## The lab folder
 
-`EEG_Lab` (the `FingerRehab-EEGLab.zip` of the same build) holds the exe, `eeg_lab.yaml`, `run_in_psychopy.py`, `README.md`, a `source/` copy and `sessions/`, where `sessions/eeg/` takes ActiView's recording under the name the game menu shows. Its `developer/` folder stays on the development PC: an EEG simulator for rehearsing, the PsychoPy download and a new-PC check.
+`EEG_Lab` (the `FingerRehab-EEGLab.zip` of the same build) holds the exe, `eeg_lab.yaml`, `run_in_psychopy.py`, `README.md`, a `source/` copy and `sessions/`, where `sessions/eeg/` takes ActiView's recording under the name the game menu shows, copied in from the EEG PC when ActiView runs there. Its `developer/` folder stays on the development PC: an EEG simulator for rehearsing, the PsychoPy download and a new-PC check.
 Open `run_in_psychopy.py` in PsychoPy Coder and press Run. The home install carries no EEG anything.
 `python3 app/scripts/check_lab_sync.py` says whether the lab folder is the same game as the app; `--fix` makes it so, and `Local_Runner.command` does that on every start.
 What each number means, in one picture: [EEG_Lab/README.md](EEG_Lab/README.md). Checklist and code table: [app/docs/eeg_lab_setup.txt](app/docs/eeg_lab_setup.txt).

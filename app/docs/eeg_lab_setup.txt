@@ -56,9 +56,12 @@ At the lab PC
    Python 3.10 or newer.
 5. Log the participant in. The game menu then shows the recording's
    name, for example "EEG: record ActiView as P07_2026-09-24.bdf in
-   EEG_Lab/sessions/eeg". Start ActiView's recording with that name in
-   that folder, then pick the first game. The line turns to "EEG
-   recording ... is in ..." once the file is there. A second login the
+   EEG_Lab/sessions/eeg". Start ActiView's recording with exactly that
+   name, then pick the first game. With ActiView on the game PC, save
+   it in that folder and the line turns to "EEG recording ... is in
+   ..." once the file is there. With ActiView on its own EEG PC, save
+   it there under that name: the trigger box still writes every marker
+   into it, and the line stays up all session. A second login the
    same day gets _2, _3 and so on, so nothing is overwritten.
 6. Play the games. Keep Test Mode off (Settings, Data) for real data. P
    pauses; Esc twice ends one game. A red "EEG markers lost" means the
@@ -100,8 +103,10 @@ At the lab PC
    counts, degraded flag, and which recording in sessions/eeg the game
    belongs to), events.tsv with events.json, and markers_codes.csv;
    plus rehab.log, the game's own log. Take the whole sessions/ folder
-   home and merge it into the project's sessions/: the notebook reads
-   the games and lists each game's recording as present or missing.
+   home, with the .bdf from the EEG PC when ActiView ran there, put the
+   .bdf in sessions/eeg beside the games, and merge the folder into the
+   project's sessions/: the notebook reads the games and lists each
+   game's recording as present or missing.
 12. Settings changes made at the lab last until the game closes; every
    launch starts from eeg_lab.yaml again. The trigger box port is the
    one exception, since the port list saves it.
