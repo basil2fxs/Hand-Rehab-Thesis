@@ -160,6 +160,11 @@ class FindingsTests(unittest.TestCase):
         self.assertIn("291 vs 491 ms (p = .030)", line)
         self.assertEqual(comparison_lines(BASE), [])
 
+    def test_the_report_names_the_subject_by_code(self):
+        from eeg.report import _subject
+        self.assertEqual(_subject(_with(subject="EEG Subject 1")), "EEG Subject 1")
+        self.assertNotIn("P07", _subject(BASE))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -39,8 +39,9 @@ def _clear(test: dict | None) -> bool:
     return bool(test) and test.get("p") is not None and test["p"] < FD.ALPHA
 
 
-def _who(s: dict) -> str:
-    return s.get("participant") or "The participant"
+def _subject(s: dict) -> str:
+    """The subject's code; the report never prints a name."""
+    return s.get("subject") or "EEG Subject"
 
 
 def _date(s: dict) -> str:
@@ -196,7 +197,6 @@ def _lines(ax, t, series, shade=None, tag="", legend=True) -> None:
 def _compare(pg: Page, s: dict, c: dict, count) -> None:
     import matplotlib as mpl
     import mne
-    who = _who(s)
     m, t = c["modes"], c["tests"]
     r, b = m["reaction"], m["buzz"]
     rt_ok, size_ok, time_ok = _clear(t.get(RT_TEST)), _clear(t.get(SIZE_TEST)), _clear(t.get(TIME_TEST))
@@ -204,55 +204,50 @@ def _compare(pg: Page, s: dict, c: dict, count) -> None:
     for key, label, what in (("reaction", "Reaction game:", "a square flashes and beeps"),
                              ("buzz", "Buzz Hunt:", "a finger buzzes")):
         gap = m[key].get("spacing_s")
-        pg.write(what + (f", one every {gap[0]:.1f} to {gap[1]:.1f} s." if gap else "."),
+        pg.write(what + (f", every {gap[0]:.1f} to {gap[1]:.1f} s." if gap else "."),
                  lead=(label, GAME[key]), after=0.001)
     pg.y -= 0.008
 
     panels = []
     if rt_ok:
-        panels.append(("rt", "Time to press (s)", [r["rt_ms"] / 1000, b["rt_ms"] / 1000], "{:.2f}",
-                       "the typical time to press"))
+        panels.append(("Time to press (s)", [r["rt_ms"] / 1000, b["rt_ms"] / 1000], "{:.2f}"))
     if size_ok:
-        panels.append(("size", "Attention signal size (µV)", [r["p3_uV"], b["p3_uV"]], "{:.1f}",
-                       "the size of the attention signal at the top back of the head"))
+        panels.append(("Attention signal size (µV)", [r["p3_uV"], b["p3_uV"]], "{:.1f}"))
     if time_ok:
-        panels.append(("time", "Attention signal timing (s)", [r["p3_latency_ms"] / 1000,
-                                                               b["p3_latency_ms"] / 1000], "{:.2f}",
-                       "when the middle of that signal came"))
+        panels.append(("Attention signal timing (s)", [r["p3_latency_ms"] / 1000,
+                                                       b["p3_latency_ms"] / 1000], "{:.2f}"))
     n1 = next(count) if panels else None
     n2 = next(count) if size_ok or time_ok else None
     n3 = next(count) if size_ok else None
-    fig1 = {p[0]: f"{n1}{'abc'[k]}" for k, p in enumerate(panels)}
     cue = {"reaction": "flash", "buzz": "buzz"}
     if rt_ok:
         fast, slow = sorted(GAME, key=lambda k: m[k]["rt_ms"])
-        pg.bullet(f"{who} pressed faster after the {cue[fast]} ({m[fast]['rt_ms'] / 1000:.2f} s) than "
-                  f"after the {cue[slow]} ({m[slow]['rt_ms'] / 1000:.2f} s) (Figure {fig1['rt']}).")
+        pg.bullet(f"Time to press: slower after the {cue[slow]} "
+                  f"({m[slow]['rt_ms'] / 1000:.2f} vs {m[fast]['rt_ms'] / 1000:.2f} s).")
     if size_ok:
         lo, hi = sorted(GAME, key=lambda k: m[k]["p3_uV"])
         ratio = m[hi]["p3_uV"] / m[lo]["p3_uV"] if m[lo]["p3_uV"] > 0 else 0
-        pg.bullet(f"The brain's attention signal (P3) was "
-                  f"{f'about {ratio:.0f} times ' if ratio >= 1.5 else ''}bigger after the {cue[hi]}: "
-                  f"{m[hi]['p3_uV']:.1f} vs {m[lo]['p3_uV']:.1f} µV, millionths of a volt "
-                  f"(Figures {fig1['size']} and {n3}).")
+        pg.bullet(f"Attention signal (P3) size: {f'about {ratio:.0f} times ' if ratio >= 1.5 else ''}"
+                  f"bigger after the {cue[hi]} ({m[hi]['p3_uV']:.1f} vs {m[lo]['p3_uV']:.1f} µV, "
+                  "millionths of a volt).")
     if time_ok:
         soon, late = sorted(GAME, key=lambda k: m[k]["p3_latency_ms"])
-        pg.bullet(f"{'It also' if size_ok else 'The attention signal (P3)'} came later after the "
-                  f"{cue[late]}: {m[late]['p3_latency_ms'] / 1000:.2f} vs "
-                  f"{m[soon]['p3_latency_ms'] / 1000:.2f} s (Figures {fig1['time']} and {n2}).")
+        pg.bullet(f"Attention signal timing: later after the {cue[late]} "
+                  f"({m[late]['p3_latency_ms'] / 1000:.2f} vs {m[soon]['p3_latency_ms'] / 1000:.2f} s).")
     pg.y -= 0.01
 
     # Figure: the numbers as bars
     if panels:
         h = 0.15
         y0 = pg.take(h)
-        for k, (_, title, vals, fmt, _) in enumerate(panels):
+        for k, (title, vals, fmt) in enumerate(panels):
             x = X0 + 0.045 + k * 0.29
             ax = pg.axes(x, y0 + 0.022, 0.2, h - 0.055)
             _bars(ax, [NAME["reaction"], NAME["buzz"]], vals, [GAME["reaction"], GAME["buzz"]], fmt)
             pg.text(x - 0.045, y0 + h - 0.004, f"({'abc'[k]}) {title}", 9.5, True, va="top")
-        pg.caption(n1, " ".join(f"({'abc'[k]}) {p[4][0].upper()}{p[4][1:]}." for k, p in enumerate(panels))
-                   + " Orange: Reaction game. Purple: Buzz Hunt.")
+        pg.caption(n1, " ".join([f"Size: the average in Figure {n2}'s grey band."] * size_ok
+                                + ["Timing: when the middle of the signal came."] * time_ok)
+                   or "The typical time to press.")
 
     if not (size_ok or time_ok):
         return
@@ -279,10 +274,8 @@ def _compare(pg: Page, s: dict, c: dict, count) -> None:
             ax.text(lt, top, f"{lt:.2f} s", ha="center", va="bottom", fontsize=8.5,
                     fontweight="bold", color=GAME[k])
     ax.set_xlabel("Time after the flash or buzz (s)", fontsize=8.5, color=SOFT)
-    pg.caption(n2, "The attention signal over time at the top back of the head (black dots on the "
-                   "small head), averaged over all the tries. 0 s is the flash or buzz."
-               + (" Grey band: where we measured its size." if size_ok else "")
-               + (" Dots: when the middle of each signal came." if time_ok else ""))
+    pg.caption(n2, "Attention signal at the top back of the head (small head), averaged over all "
+                   "tries." + (" Dots: its timing." if time_ok else ""))
 
     if not size_ok:
         return
@@ -313,17 +306,13 @@ def _compare(pg: Page, s: dict, c: dict, count) -> None:
     bar.ax.tick_params(labelsize=8, colors=SOFT, length=2)
     bar.outline.set_visible(False)
     cax.set_title("µV", fontsize=8, color=SOFT)
-    tops = {k: data[k].ch_names[int(np.argmax(at[k]))] for k in GAME}
-    back = all(ch.startswith(("P", "CP")) for ch in tops.values())
-    pg.caption(n3, "The head seen from above, nose at the top, when each attention signal was at its "
-                   "middle. Red: signal up. Blue: signal down. Black dots: where Figure "
-                   f"{n2} was measured."
-               + (" Both signals were strongest at the top back of the head." if back else ""))
+    pg.caption(n3, "Head from above, nose up, at each signal's timing. Red: up. Blue: down. Black "
+                   f"dots: the spots in Figure {n2}.")
 
 
 # ---- section 2: learning the pattern -------------------------------------------
 def _learning(pg: Page, s: dict, r, count) -> None:
-    srt, who = s["srt"], _who(s)
+    srt = s["srt"]
     lr, rc = srt.get("learning", {}), srt.get("recall", {})
     st, bt = srt.get("stim_tests", {}), srt.get("band_tests", {})
     n2, p3 = st.get(FD.N2_TEST, {}), st.get(FD.P3_TEST, {})
@@ -336,42 +325,40 @@ def _learning(pg: Page, s: dict, r, count) -> None:
     p3_ok = adj[1] is not None and adj[1] < FD.ALPHA
     beta = bt.get("beta C3")
     n = next(count)
+    bh = r.behaviour
+    seg = list(bh.segment)
+    rt = bh.rt_median_ms.to_numpy(float) / 1000
+    blocks = sum(x.startswith("Sequence") for x in seg)
 
     pg.heading(2, "Learning a pattern (Reaction game)")
     pattern = f"a repeating pattern of {rc['items']}" if rc else "a repeating pattern"
-    pg.write(f"The squares lit up at random, then in {pattern}, then at random again.", after=0.008)
+    pg.write(f"Random order, then {pattern} (blocks 1 to {blocks}), then random again.", after=0.008)
     if learned:
-        pg.bullet((f"{who} got faster with the pattern ({b1:.2f} to {b8:.2f} s) and was"
-                   if b8 < b1 else f"{who} was")
-                  + f" {cost:.2f} s slower when it was taken away, so the pattern was learned "
-                    f"(Figure {n}a).")
+        pg.bullet(f"Time to press: faster with the pattern ({b1:.2f} to {b8:.2f} s), then {cost:.2f} s "
+                  "slower when it was taken away, so it was learned." if b8 < b1 else
+                  f"Time to press: {cost:.2f} s slower when the pattern was taken away, so it was "
+                  "learned.")
     if rc and _clear({"p": rc.get("chance_p")}):
         if rc["cyclic_correct"] == rc["items"]:
-            pg.bullet(f"{who} typed the whole pattern back in the right order"
+            pg.bullet(f"Recall: all {rc['items']} typed back in order"
                       + ("." if rc["correct"] == rc["items"] else
-                         ", just starting at a different point in the loop."))
+                         ", starting at a different point in the loop."))
         else:
-            pg.bullet(f"{who} typed back {rc['cyclic_correct']} of {rc['items']} in the right order, "
-                      "more than guessing would give.")
+            pg.bullet(f"Recall: {rc['cyclic_correct']} of {rc['items']} in order, more than guessing.")
     if n2_ok:
-        pg.bullet(f"Random flashes made the surprise signal (N2) dip "
-                  f"{'lower' if n2.get('diff', 0) < 0 else 'less'} than the learned pattern did "
-                  f"(Figure {n}b).")
+        pg.bullet(f"Surprise signal (N2): dipped {'lower' if n2.get('diff', 0) < 0 else 'less'} for "
+                  "random flashes.")
     once = []
     if p3_ok:
-        once.append(f"the attention signal (P3) was {'smaller' if p3.get('diff', 0) > 0 else 'bigger'}")
+        once.append(f"{'smaller' if p3.get('diff', 0) > 0 else 'bigger'} attention signal (P3)")
     if _clear(beta):
-        once.append("the movement hum (beta) over the left side was "
-                    + ("quieter" if beta["diff"] > 0 else "louder"))
+        once.append(f"{'quieter' if beta['diff'] > 0 else 'louder'} movement hum (beta) on the left side")
     if once:
-        pg.bullet("Once the pattern was learned, " + " and ".join(once) + ".")
+        pg.bullet("Once learned: " + " and ".join(once) + ".")
     pg.y -= 0.01
 
     h = 0.19
     y0 = pg.take(h)
-    bh = r.behaviour
-    seg = list(bh.segment)
-    rt = bh.rt_median_ms.to_numpy(float) / 1000
     ax = pg.axes(X0 + 0.045, y0 + 0.035, 0.31, h - 0.07)
     ax.bar(range(len(seg)), rt, width=0.7,
            color=[GREY if x == "Practice" else RED if x == "Post-test" else BLUE for x in seg])
@@ -387,8 +374,8 @@ def _learning(pg: Page, s: dict, r, count) -> None:
         ax.text((i + j) / 2, max(rt[i], rt[j]) + 0.035, f"+{cost:.2f} s", ha="center", fontsize=8.5,
                 fontweight="bold", color=INK)
     pg.text(X0, y0 + h - 0.004, "(a) Time to press in each block (s)", 9.5, True, va="top")
-    words = ("(a) The typical time to press in each block. Blue: the pattern. Grey and red: random "
-             "order." + (" The arrow is the slow-down when the pattern was taken away." if learned else ""))
+    words = ("(a) Blue: the pattern. Grey and red: random."
+             + (" Arrow: the slow-down when the pattern was taken away." if learned else ""))
     if n2_ok:
         pg.head(X0 + 0.42, y0 + 0.065, N2_SITES, w=0.06)
         ax = pg.axes(X0 + 0.54, y0 + 0.035, W - 0.54, h - 0.07)
@@ -400,15 +387,13 @@ def _learning(pg: Page, s: dict, r, count) -> None:
                     fontsize=8.5, fontweight="bold", color=colour)
         ax.set_xlabel("Time after the flash (s)", fontsize=8.5, color=SOFT)
         pg.text(X0 + 0.42, y0 + h - 0.004, "(b) Surprise signal (N2)", 9.5, True, va="top")
-        words += (" (b) The brain signal at the top of the head (small head) after each flash. Blue: the "
-                  "learned pattern (blocks 7 and 8). Red: random flashes at the end. Grey band: where "
-                  "we measured the surprise signal.")
+        words += " (b) Learned pattern: blocks 7 and 8."
     pg.caption(n, words)
 
 
 # ---- section 3: feeling the buzz -------------------------------------------------
 def _buzz(pg: Page, s: dict, count) -> None:
-    bz, who = s["buzz"], _who(s)
+    bz = s["buzz"]
     mu = (bz.get("tests") or {}).get(FD.MU_TEST)
     lanes = list((bz.get("per_lane") or {}).values())
     n_try, hit = sum(x["n"] for x in lanes), sum(x["correct"] for x in lanes)
@@ -416,23 +401,21 @@ def _buzz(pg: Page, s: dict, count) -> None:
     n = next(count)
 
     pg.heading(3, "Feeling the buzz (Buzz Hunt)")
-    pg.write(f"One finger buzzed and {who} pressed that finger.", after=0.008)
-    pg.bullet(f"{who} found the right finger in {hit} of {n_try} tries ({acc:.0f}%), about "
-              f"{bz.get('loc_rt_ms', 0) / 1000:.2f} s after the buzz. Guessing would get {chance:.0f}% "
-              f"(Figure {n}a).")
+    pg.write("A finger buzzed and the subject pressed it.", after=0.008)
+    pg.bullet(f"Right finger found: {hit} of {n_try} tries ({acc:.0f}%; guessing gives {chance:.0f}%), "
+              f"in {bz.get('loc_rt_ms', 0) / 1000:.2f} s.")
     if _clear(mu):
-        pg.bullet(f"The movement hum (mu) over the left side, which feels the right hand, "
-                  f"{'dropped' if mu['diff'] < 0 else 'rose'} {abs(mu['diff']):.0f}% after the buzz "
-                  f"(Figure {n}b).")
+        pg.bullet(f"Movement hum (mu), left side: {abs(mu['diff']):.0f}% "
+                  f"{'lower' if mu['diff'] < 0 else 'higher'} after the buzz.")
     pg.y -= 0.01
 
     h = 0.16
     y0 = pg.take(h)
     ax = pg.axes(X0 + 0.045, y0 + 0.022, 0.24, h - 0.055)
-    _bars(ax, [who, "Guessing"], [acc, chance], [GAME["buzz"], GREY], "{:.0f}%", top=118)
+    _bars(ax, [_subject(s), "Guessing"], [acc, chance], [GAME["buzz"], GREY], "{:.0f}%", top=118)
     ax.set_yticks([0, 50, 100], ["0", "50", "100%"])
     pg.text(X0, y0 + h - 0.004, "(a) Right finger found", 9.5, True, va="top")
-    words = f"(a) How often {who} pressed the finger that buzzed, against guessing."
+    words = f"(a) Guessing would pick 1 of {len(lanes)} fingers." if lanes else "(a) Against guessing."
     if _clear(mu):
         pg.head(X0 + 0.47, y0 + 0.05, ["C3"], GAME["buzz"])
         ax = pg.axes(X0 + 0.6, y0 + 0.022, 0.24, h - 0.055)
@@ -440,8 +423,7 @@ def _buzz(pg: Page, s: dict, count) -> None:
               top=125)
         ax.set_yticks([0, 50, 100], ["0", "50", "100%"])
         pg.text(X0 + 0.47, y0 + h - 0.004, "(b) Movement hum, left side", 9.5, True, va="top")
-        words += (" (b) How strong the movement hum was over the left side (small head) before and "
-                  "after the buzz, with before set to 100%.")
+        words += " (b) Before the buzz is set to 100%."
     pg.caption(n, words)
 
 
@@ -454,9 +436,8 @@ def build(s: dict, out: Path, results: dict | None = None, cmp: dict | None = No
     with plt.rc_context({"font.family": FONTS, "pdf.fonttype": 42, "axes.unicode_minus": False}):
         pages = []
         first = Page(1)
-        first.write(f"{_who(s)}, {_date(s)}", 20, True, after=0.002)
-        first.write("Only clear results are shown: each one passed its test, so it is very unlikely "
-                    "to be luck.", 9, colour=MUTED, after=0.006)
+        first.write(f"{_subject(s)}, {_date(s)}", 20, True, after=0.002)
+        first.write("Only results that passed their tests are shown.", 9, colour=MUTED, after=0.006)
         first.ov.plot([X0, X0 + W], [first.y, first.y], color=LINE, lw=0.8)
         if cmp and "epochs" in cmp:
             _compare(first, s, cmp, count)
@@ -470,7 +451,7 @@ def build(s: dict, out: Path, results: dict | None = None, cmp: dict | None = No
                 _buzz(second, s, count)
             pages.append(second)
         path = out / "EEG_report.pdf"
-        with PdfPages(path, metadata={"Title": f"{_who(s)}, {_date(s)}"}) as pdf:
+        with PdfPages(path, metadata={"Title": f"{_subject(s)}, {_date(s)}"}) as pdf:
             for page in pages:
                 pdf.savefig(page.fig)
                 plt.close(page.fig)

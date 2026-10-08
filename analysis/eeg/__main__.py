@@ -71,6 +71,9 @@ def main(argv=None) -> int:
                     help="reuse the cached computation and redraw only")
     ap.add_argument("--no-reports", action="store_true",
                     help="skip the MNE reports, the slow part of a redraw")
+    ap.add_argument("--subject", default=None,
+                    help='the code the report uses instead of a name, e.g. "EEG Subject 2" '
+                         "(default: numbered by the session's place in results/)")
     args = ap.parse_args(argv)
     warnings.filterwarnings("ignore")
     mne.set_log_level("ERROR")
@@ -84,6 +87,8 @@ def main(argv=None) -> int:
     detail = out / "detail"
     (detail / "figures").mkdir(parents=True, exist_ok=True)
     (detail / "tables").mkdir(parents=True, exist_ok=True)
+    done = sorted(p.name for p in out.parent.iterdir() if p.is_dir())
+    subject = args.subject or f"EEG Subject {done.index(out.name) + 1}"
     # The cache holds the recordings themselves (over a gigabyte), so it
     # lives in the system's temporary folder, never beside the results.
     import hashlib
@@ -128,6 +133,7 @@ def main(argv=None) -> int:
     names["compare_topo"] = CMP.figure_topo(cmp, figs / "31_compare_scalp_maps.png")
     summ = S.build(blocks, cleaned, results, sessions)
     summ["compare"] = CMP.summary(cmp)
+    summ["subject"] = subject
     S.write(summ, detail / "summary.json")
     limits = C.limitations(summ, FD.build(summ)["notes"])
     html_text = Dash.page(summ, names, figs, Dash.explorer(results), C.METHODS,
