@@ -1,8 +1,6 @@
-"""The report to send: mostly pictures, one line above each in Basil's
-own words and the numbers under it in grey. Word and PDF (PDF through
-LibreOffice when it is installed). Every line follows its test, so a
-result that does not pass is said not to. The full analysis stays in
-detail/."""
+"""The internal report: the figures and the numbers, nothing else.
+Word and PDF (PDF through LibreOffice when it is installed). The full
+analysis stays in detail/."""
 from __future__ import annotations
 
 import shutil
@@ -162,110 +160,112 @@ def fig_buzz(r, path: Path) -> str | None:
     return path.name
 
 
-# ---- the words ---------------------------------------------------------------
-def _lines(s: dict) -> dict:
-    """One takeaway and one line of numbers per section, written the way
-    Basil writes, and only as strong as the tests allow."""
-    who = s.get("participant") or "The participant"
-    out = {}
+# ---- the numbers -------------------------------------------------------------
+def _pv(v) -> str:
+    """A p value on its own: < .001 or .020."""
+    return FD.p_text(v).replace("= ", "") if v is not None else ""
+
+
+def _date(s: dict) -> str:
+    import datetime as _dt
+    try:
+        d = _dt.date.fromisoformat(s.get("date") or "")
+    except ValueError:
+        return s.get("date_long", "")
+    return f"{d.day} {d.strftime('%B')}"
+
+
+def _compare_rows(s: dict) -> list[tuple]:
     c = s.get("compare") or {}
     m, t = c.get("modes") or {}, c.get("tests") or {}
     r, b = m.get("reaction"), m.get("buzz")
-    if r and b:
-        p3 = t.get("P3 300-650 ms, buzz minus reaction", {})
-        lat = t.get("P3 latency, buzz minus reaction", {})
-        rt = t.get("RT, buzz minus reaction", {})
-        big = p3.get("p") is not None and p3["p"] < FD.ALPHA and p3["diff"] > 0
-        late = lat.get("p") is not None and lat["p"] < FD.ALPHA and lat["diff"] > 0
-        head = ("The buzz drives a much bigger, later P3 than the flash" if big and late else
-                "The buzz drives a much bigger P3 than the flash" if big else
-                "The P3 doesn't differ much between the two cues")
-        out["compare"] = (
-            head + f", and answers come about {rt.get('diff', 0):.0f} ms later.",
-            f"P3 at Pz/CPz {b['p3_uV']:+.1f} vs {r['p3_uV']:+.1f} µV over 300-650 ms ({_p(p3.get('p'))}), "
-            f"{b['p3_own_uV']:+.1f} vs {r['p3_own_uV']:+.1f} µV in each game's own window. Half its area by "
-            f"{b['p3_latency_ms']:.0f} vs {r['p3_latency_ms']:.0f} ms (jackknife, {_p(lat.get('p'))}). "
-            f"Median RT {b['rt_ms']:.0f} vs {r['rt_ms']:.0f} ms. Reaction is random flashes only, so "
-            f"learning isn't mixed in. The longer gap between cues (about "
-            f"{np.mean(b['spacing_s']):.0f} s vs {np.mean(r['spacing_s']):.1f} s) and the harder call "
-            f"(which finger buzzed) both fit a bigger, later P3, so it's the games, not just the sense.")
+    if not r or not b:
+        return []
+
+    def gap(x):
+        return f"{x['spacing_s'][0]:.1f} to {x['spacing_s'][1]:.1f} s"
+    return [
+        ("", "Reaction", "Buzz Hunt", "p"),
+        ("Trials", str(r["n"]), str(b["n"]), ""),
+        ("Time between cues", gap(r), gap(b), ""),
+        ("RT, median", f"{r['rt_ms']:.0f} ms", f"{b['rt_ms']:.0f} ms",
+         _pv(t.get("RT, buzz minus reaction", {}).get("p"))),
+        ("Correct", f"{r['accuracy'] * 100:.0f}%", f"{b['accuracy'] * 100:.0f}%", ""),
+        ("First peak", f"P1 {r['early']['latency_ms']:.0f} ms, O1/Oz/O2",
+         f"N1 {b['early']['latency_ms']:.0f} ms, C3/CP3/CP5", ""),
+        ("P3, Pz/CPz 300-650 ms", f"{r['p3_uV']:+.1f} µV", f"{b['p3_uV']:+.1f} µV",
+         _pv(t.get("P3 300-650 ms, buzz minus reaction", {}).get("p"))),
+        ("P3, own window", f"{r['p3_own_uV']:+.1f} µV", f"{b['p3_own_uV']:+.1f} µV", ""),
+        ("P3, half-area latency", f"{r['p3_latency_ms']:.0f} ms", f"{b['p3_latency_ms']:.0f} ms",
+         _pv(t.get("P3 latency, buzz minus reaction", {}).get("p"))),
+    ]
+
+
+def _srt_rows(s: dict) -> list[tuple]:
     srt = s.get("srt") or {}
-    if srt:
-        lr, rc = srt.get("learning", {}), srt.get("recall", {})
-        ci = lr.get("post_minus_block8_ci") or [0, 0]
-        learned = ci[0] > 0
-        whole = rc.get("items") and rc.get("cyclic_correct") == rc.get("items")
-        st, bt = srt.get("stim_tests", {}), srt.get("band_tests", {})
-        n2, p3 = st.get(FD.N2_TEST, {}), st.get(FD.P3_TEST, {})
-        adj = FD.holm([n2.get("p"), p3.get("p")])
-        beta = bt.get("beta C3", {})
-        ern = (srt.get("resp_tests") or {}).get(FD.ERN_TEST, {})
-        n_err = (srt.get("resp_n") or {}).get("error", 0)
-        if learned:
-            head = (f"{who} learned the sequence and knew it: "
-                    f"{lr.get('post_minus_block8_ms', 0):.0f} ms slower when it went random"
-                    + (f", and the typed recall was the whole loop from item {rc.get('cyclic_start')}."
-                       if whole else "."))
-        else:
-            head = "No clear learning in the RTs this time."
-        brain = []
-        if n2:
-            brain.append(f"N2 at FCz/Cz {n2['diff']:+.1f} µV random vs learned ({_p(n2['p'])}, Holm "
-                         f"{FD.p_text(adj[0]).replace('= ', '')})")
-        if p3:
-            brain.append(f"P3 at Pz/CPz {p3['diff']:+.1f} µV practice vs learned (Holm "
-                         f"{FD.p_text(adj[1]).replace('= ', '')})")
-        if beta:
-            brain.append(f"beta at C3 {beta['diff']:+.1f} dB random vs learned ({_p(beta['p'])}), same "
-                         f"direction as Lum et al. 2024")
-        ern_ok = ern.get("p") is not None and ern["p"] < FD.ALPHA and ern.get("diff", 0) < 0
-        tail = (f" ERN {ern.get('diff', 0):+.1f} µV ({_p(ern.get('p'))}, {n_err} errors)"
-                + ("." if ern_ok else ", so not there yet.")) if ern else ""
-        out["srt"] = (head, "; ".join(brain) + "." + tail)
+    if not srt:
+        return []
+    lr, rc = srt.get("learning", {}), srt.get("recall", {})
+    ci = lr.get("post_minus_block8_ci") or [0, 0]
+    st, bt = srt.get("stim_tests", {}), srt.get("band_tests", {})
+    n2, p3 = st.get(FD.N2_TEST, {}), st.get(FD.P3_TEST, {})
+    adj = FD.holm([n2.get("p"), p3.get("p")])
+    rows = [("", "Result", "p"),
+            ("RT, random after block 8", f"+{lr.get('post_minus_block8_ms', 0):.0f} ms "
+             f"(95% CI {ci[0]:.0f} to {ci[1]:.0f})", "")]
+    if rc:
+        rows.append(("Recall", f"{rc['correct']}/{rc['items']} by position, "
+                               f"{rc['cyclic_correct']}/{rc['items']} as a loop", _pv(rc.get("chance_p"))))
+    if n2:
+        rows.append(("N2, FCz/Cz, random vs learned", f"{n2['diff']:+.1f} µV",
+                     f"{_pv(n2['p'])} (Holm {_pv(adj[0])})"))
+    if p3:
+        rows.append(("P3, Pz/CPz, practice vs learned", f"{p3['diff']:+.1f} µV",
+                     f"{_pv(p3['p'])} (Holm {_pv(adj[1])})"))
+    for label, key in (("Beta, C3, random vs learned", "beta C3"),
+                       ("Theta, FCz/Cz, random vs learned", "theta FCz/Cz")):
+        x = bt.get(key)
+        if x:
+            rows.append((label, f"{x['diff']:+.1f} dB", _pv(x["p"])))
+    ern = (srt.get("resp_tests") or {}).get(FD.ERN_TEST)
+    if ern:
+        rows.append(("ERN, FCz/Cz, wrong vs correct",
+                     f"{ern['diff']:+.1f} µV, {(srt.get('resp_n') or {}).get('error', 0)} errors",
+                     _pv(ern["p"])))
+    return rows
+
+
+def _buzz_rows(s: dict) -> list[tuple]:
     bz = s.get("buzz") or {}
-    if bz:
-        bm = {x["measure"]: x for x in bz.get("measures", [])}
-        tests = bz.get("tests", {})
-        lat = tests.get(FD.TOUCH_TEST, {})
-        mu = tests.get(FD.MU_TEST, {})
-        reb = tests.get(FD.REBOUND_TEST, {})
-        mu_ok = mu.get("p") is not None and mu["p"] < FD.ALPHA and mu.get("diff", 0) < 0
-        lat_ok = lat.get("p") is not None and lat["p"] < FD.ALPHA and lat.get("diff", 0) < 0
-        bits = ["Clear P3"]
-        if mu_ok:
-            bits.append("a mu drop at C3 after the buzz")
-        head = " and ".join(bits) + "."
-        head += (" The touch response is bigger on the left, opposite the hand." if lat_ok else
-                 f" Left vs right needs more than {int(lat.get('n', 0))} buzzes to show." if lat else "")
-        out["buzz"] = (
-            head,
-            f"Localisation {bz.get('loc_accuracy', 0) * 100:.0f}% (d' {bz.get('d_prime')}), median RT "
-            f"{bz.get('loc_rt_ms', 0):.0f} ms. P3 {bm.get('P3', {}).get('mean_uV', 0):+.1f} µV; mu at C3 "
-            f"{mu.get('diff', 0):+.0f}% ({_p(mu.get('p'))}); left minus right {lat.get('diff', 0):+.1f} µV "
-            f"({_p(lat.get('p'))}); beta after the press {reb.get('diff', 0):+.0f}% ({_p(reb.get('p'))}).")
+    if not bz:
+        return []
+    bm = {x["measure"]: x for x in bz.get("measures", [])}
+    tests = bz.get("tests", {})
+    rows = [("", "Result", "p"),
+            ("Localisation", f"{bz.get('loc_accuracy', 0) * 100:.0f}% correct, d' {bz.get('d_prime')}, "
+                             f"RT {bz.get('loc_rt_ms', 0):.0f} ms", "")]
+    if "P3" in bm:
+        rows.append(("P3, Pz/CPz 400-650 ms", f"{bm['P3']['mean_uV']:+.1f} µV", ""))
+    lat = tests.get(FD.TOUCH_TEST)
+    if lat and "N1 contra" in bm and "N1 ipsi" in bm:
+        rows.append(("Touch N1, left vs right", f"{bm['N1 contra']['mean_uV']:+.1f} vs "
+                                                f"{bm['N1 ipsi']['mean_uV']:+.1f} µV", _pv(lat["p"])))
+    for label, key in (("Mu, C3, after the buzz", FD.MU_TEST),
+                       ("Beta, C3, after the press", FD.REBOUND_TEST)):
+        x = tests.get(key)
+        if x:
+            rows.append((label, f"{x['diff']:+.0f}%", _pv(x["p"])))
+    return rows
+
+
+def _markers(s: dict) -> str:
     recs = s.get("recordings", [])
-    if recs:
-        total, matched = s.get("markers_total", 0), s.get("markers_matched", 0)
-        mx = max((x["residual_max_ms"] or 0) for x in recs)
-        sd = max((x["residual_sd_ms"] or 0) for x in recs)
-        widths = [x["pulse_ms"] for x in recs if x.get("pulse_ms")]
-        ok = matched == total and all(x["codes_agree"] for x in recs)
-        out["markers"] = (
-            f"All {total:,} markers landed, within one sample of the game's clock." if ok else
-            f"Only {matched:,} of {total:,} markers paired up, so check the trigger box.",
-            f"{sd} ms SD, at most {mx} ms, after a straight-line fit of EEG time on the game's clock; the two "
-            f"PCs drifted {recs[0].get('drift_ppm')} ppm"
-            + (f"; pulses {min(w[0] for w in widths):.0f} to {max(w[2] for w in widths):.0f} ms." if widths
-               else "."))
-    keep = ["One participant, so this shows the setup works, not a result."]
-    if s.get("srt_look") == "app":
-        keep.append("This session ran the game's own Reaction cards, not your script's grey squares. "
-                    "The script's look is the default now.")
-    keep.append("Average reference, no mastoids. I worked out EXG1 (under the right eye) and EXG2 (left "
-                "canthus) from the signals, so worth checking against the cap sheet.")
-    keep.append("Screen, tone and buzz delays on the lab PC aren't timed yet.")
-    out["keep"] = keep
-    return out
+    if not recs:
+        return ""
+    mx = max((x["residual_max_ms"] or 0) for x in recs)
+    sd = max((x["residual_sd_ms"] or 0) for x in recs)
+    return (f"Markers: {s.get('markers_matched', 0):,} of {s.get('markers_total', 0):,}, "
+            f"{sd} ms SD about the fitted clock (max {mx} ms).")
 
 
 # ---- the document ------------------------------------------------------------
@@ -279,52 +279,54 @@ def build(s: dict, figs: Path, out: Path, results: dict | None = None,
         "srt": fig_srt(results.get("srt"), figs / "41_report_reaction.png"),
         "buzz": fig_buzz(results.get("buzz_hunt"), figs / "42_report_buzz_hunt.png"),
     }
-    words = _lines(s)
     doc = Document()
     st = doc.styles["Normal"]
     st.font.name = "Calibri"
-    st.font.size = Pt(10)
+    st.font.size = Pt(9.5)
     for sec in doc.sections:
         sec.left_margin = sec.right_margin = Cm(1.6)
         sec.top_margin = sec.bottom_margin = Cm(1.4)
-    width = Cm(17.8)
+    doc.add_heading(f"{s.get('participant') or 'Participant'}, {_date(s)}", 0)
+
+    def picture(name, cm):
+        f = figs / name if name else None
+        if f is not None and f.is_file():
+            doc.add_picture(str(f), width=Cm(cm))
+
+    def table(rows):
+        if not rows:
+            return
+        tb = doc.add_table(rows=0, cols=len(rows[0]))
+        tb.style = "Light List Accent 1"
+        for k, row in enumerate(rows):
+            cells = tb.add_row().cells
+            for cell, text in zip(cells, row):
+                cell.text = text
+                for para in cell.paragraphs:
+                    para.paragraph_format.space_after = Pt(0)
+                    for run in para.runs:
+                        run.font.size = Pt(9)
+                        run.bold = k == 0
+        doc.add_paragraph().paragraph_format.space_after = Pt(0)
+
+    doc.add_heading("Reaction vs Buzz Hunt", 1)
+    picture(names["summary"], 16.0)
+    picture("30_compare_cue_response.png", 17.8)
+    picture("31_compare_scalp_maps.png", 13.5)
+    table(_compare_rows(s))
+
     srt, bz = s.get("srt", {}), s.get("buzz", {})
-    who = s.get("participant") or "Participant"
-    doc.add_heading(f"EEG pilot: {who}, {s.get('date_long', '')}", 0)
-    doc.add_paragraph(
-        f"{who} ({s.get('age')}, {s.get('dominant_hand')}-handed) did Reaction, the lab's SRT "
-        f"({srt.get('n_trials')} trials), and Buzz Hunt ({bz.get('trials')} trials) on the finger device. "
-        f"BioSemi, 64 channels at 512 Hz, with the game on its own PC sending markers through the trigger "
-        f"box. Analysed in MNE-Python {s['software']['mne']}.")
-
-    def section(title, key, pictures, cm=None, new_page=False):
-        heading = doc.add_heading(title, 1)
-        heading.paragraph_format.page_break_before = new_page
-        if key in words:
-            head, numbers = words[key]
-            para = doc.add_paragraph()
-            para.add_run(head).bold = True
-            small = doc.add_paragraph(numbers)
-            small.runs[0].font.size = Pt(8.5)
-            small.runs[0].font.color.rgb = RGBColor(0x5F, 0x66, 0x73)
-        for k, name in enumerate(pictures):
-            f = figs / name if name else None
-            if f is not None and f.is_file():
-                size = cm[k] if isinstance(cm, (list, tuple)) else cm
-                doc.add_picture(str(f), width=Cm(size) if size else width)
-
-    # Page 1 is the comparison; page 2 is each game and the markers.
-    section("Reaction vs Buzz Hunt", "compare",
-            [names["summary"], "30_compare_cue_response.png", "31_compare_scalp_maps.png"],
-            cm=(16.5, 17.8, 14.5))
-    section("Reaction: learning the sequence", "srt", [names["srt"]], cm=15.0, new_page=True)
-    section("Buzz Hunt: touch", "buzz", [names["buzz"]], cm=15.0)
-    section("Markers", "markers", ["01_markers.png"], cm=11.5)
-    para = doc.add_paragraph()
-    para.add_run("Keep in mind. ").bold = True
-    note = para.add_run(" ".join(words.get("keep", []))
-                        + " The rest (MNE reports, every figure and table) is in the detail folder.")
-    note.font.size = Pt(9)
+    h = doc.add_heading(f"Reaction ({srt.get('n_trials', 0)} trials)", 1)
+    h.paragraph_format.page_break_before = True
+    picture(names["srt"], 15.5)
+    table(_srt_rows(s))
+    doc.add_heading(f"Buzz Hunt ({bz.get('trials', 0)} trials)", 1)
+    picture(names["buzz"], 15.5)
+    table(_buzz_rows(s))
+    line = _markers(s)
+    if line:
+        para = doc.add_paragraph(line)
+        para.runs[0].font.color.rgb = RGBColor(0x5F, 0x66, 0x73)
 
     path = out / "EEG_report.docx"
     doc.save(path)
@@ -340,9 +342,14 @@ def build(s: dict, figs: Path, out: Path, results: dict | None = None,
 
 
 def comparison_lines(s: dict) -> list[str]:
-    """The comparison in two lines, for the results page."""
-    words = _lines(s)
-    if "compare" not in words:
+    """The comparison as one line of numbers, for the results page."""
+    rows = _compare_rows(s)
+    if not rows:
         return []
-    head, numbers = words["compare"]
-    return [head, numbers]
+    keep = {r[0]: r for r in rows}
+    parts = []
+    for name in ("P3, Pz/CPz 300-650 ms", "P3, half-area latency", "RT, median"):
+        x = keep.get(name)
+        if x:
+            parts.append(f"{name}: {x[1]} vs {x[2]} (p {x[3]})")
+    return ["Reaction vs Buzz Hunt. " + "; ".join(parts) + "."]
