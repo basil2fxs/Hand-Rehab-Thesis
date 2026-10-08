@@ -86,8 +86,10 @@ At the lab PC
    both boards or the keyboard). Leave musical experience blank and
    ask about formal musical training after the task, on the session
    sheet: a question about music before the task points at the tones.
-   The task is the old script's, drawn in the app's own look (the
-   script's grey squares are srt.look: lab, if a recording needs them):
+   The task is the old script's, drawn as the script drew it: grey
+   squares on a black page at the script's sizes, colours and words
+   (srt.look: lab, every build since 8 October 2026; srt.look: app
+   gives the game's finger cards):
    one 30 per flash and one response byte per trial, SPACE between blocks,
    the recall at the end, and the script's three CSVs in the game's
    folder beside trials.csv. After the recall, ask "Did you notice

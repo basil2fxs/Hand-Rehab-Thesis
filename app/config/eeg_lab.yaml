@@ -115,10 +115,9 @@ protocol:
       hard_stop_min: 56
 
 srt:
-  # The task is drawn in the app's own look, as on every other build
-  # (Basil, 5 October 2026). look: lab gives the script's grey squares
-  # on a black page, which keep eye movements smaller, if a recording
-  # needs them.
+  # The task looks as on every other build: since 8 October 2026 that
+  # is the lab script's own display, grey squares on a black page at
+  # the script's sizes and colours (srt.look in default.yaml).
   # Response bytes as well as the 30: 100 plus the lane for a correct
   # press, 110 plus the lane for a wrong one, 120 plus the lane for an
   # anticipation and 130 for a miss. Written at the trial's end, each

@@ -80,17 +80,15 @@ WHAT DIFFERS AND WHY.
   sample time; key presses are timed when the frame loop reads them,
   up to one frame late, where the script's PsychoPy keyboard stamped
   each key to the millisecond. Pad RTs are the ones to report.
-- The look is the app's, not PsychoPy's (28 September 2026): the
-  finger cards every lane game draws, on the light page, with the
-  target lit in its finger's stronger colour where the script turned
-  a grey square red (ui/srt_screen.py). Timing, order, counts, tones,
-  markers and files are the script's; only the drawing changed. For
-  EEG recordings srt.look: lab draws the script's own display, four
-  grey squares near the centre of a black page turning red, the lab
-  build's setting since 1 October 2026: the app's outer cards sit
+- The look is the script's (8 October 2026, every build): four grey
+  squares near the centre of a black page turning red, at the
+  script's sizes, positions, colours and text sizes (ui/srt_screen.py).
+  srt.look: app draws the finger cards every lane game draws instead,
+  the look from 28 September to 8 October 2026: its outer cards sit
   about three times further out and each lights a different
   brightness, which brings eye movements and location-specific
-  visual responses into the EEG.
+  visual responses into the EEG. Timing, order, counts, tones,
+  markers and files are the script's in both.
 - The tone plays when the flash is drawn, before the flip, as the
   script's sound.play() did. Its delay to the speaker belongs to the
   machine; tone_lead_ms can move it earlier once measured.
@@ -891,8 +889,17 @@ class SRTMode:
         return self._select[0] if self._clock() < self._select[1] else None
 
     # ---- words ----------------------------------------------------------------------
+    def lab_look(self) -> bool:
+        """True when the screen draws the script's own squares (srt.look,
+        every build's setting since 8 October 2026), so the words are the
+        script's too."""
+        v = self.engine.cfg.get("srt.look", "lab")
+        return not (isinstance(v, str) and v.strip().lower() == "app")
+
     def instruction(self) -> str:
         what = "finger" if self.on_pads else "key"
+        if self.lab_look():
+            return f"Press the {what} that matches the flashing square as fast as you can"
         if what == "finger":
             return "Press the finger that lights up, as fast as you can"
         return "Press the key for the card that lights up, as fast as you can"
@@ -907,19 +914,27 @@ class SRTMode:
                  else f"key\n({a}, {b}, {c}, or {d}) as quickly as you "
                       f"can.")
         what = "finger" if pads else "key"
+        # The script's words with its squares, the app's with its cards.
+        lab = self.lab_look()
+        shown = ("Four grey squares will appear on screen.\n"
+                 f"When a square flashes RED, press the matching {which}"
+                 if lab else
+                 "Four finger cards will appear on screen.\n"
+                 f"When a card lights up, press the matching {which}")
+        target = "red square" if lab else "lit card"
+        keep = "flashing square" if lab else "lit card"
         texts = {
             "welcome": ("Welcome to the experiment.\n\n"
-                        "Four finger cards will appear on screen.\n"
-                        f"When a card lights up, press the matching {which}"
+                        f"{shown}"
                         "\n\nPress SPACE to begin."),
             "practice": ("PRACTICE\n\n"
                          "Get familiar with the task.\n"
-                         f"Press the {what} that matches the lit card "
+                         f"Press the {what} that matches the {target} "
                          "as fast as you can.\n\n"
                          "Press SPACE to start."),
             "main": ("MAIN TASK\n\n"
                      "You will now complete several blocks.\n"
-                     "Keep responding to the lit card as fast "
+                     f"Keep responding to the {keep} as fast "
                      "as you can.\n\n"
                      "Press SPACE to start."),
             "block": (f"Block {step.block} of {self.n_blocks}\n\n"
@@ -1128,7 +1143,7 @@ class SRTMode:
                             and r.get("press_to_flash_ms") not in ("", None)
                             and not r.get("flag")])
         vsync = getattr(self.engine, "vsync", None)
-        look = self.engine.cfg.get("srt.look", "app")
+        look = self.engine.cfg.get("srt.look", "lab")
         return {
             "setup": self.setup.to_dict(),
             "group": self.setup.group,
@@ -1148,7 +1163,7 @@ class SRTMode:
             # Whether the window flips on the refresh: without vsync a
             # 60 Hz panel reads about 120 Hz here (the loop's cap).
             "vsync": vsync if isinstance(vsync, bool) else None,
-            "look": look if isinstance(look, str) else "app",
+            "look": look if isinstance(look, str) else "lab",
             # Learning blocks: the previous press to the flash, the
             # interval the participant got (nominal plus a frame plus
             # the time from the press to the frame that ended it).

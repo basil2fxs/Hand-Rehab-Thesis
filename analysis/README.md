@@ -11,3 +11,11 @@
 It finds `sessions/` beside it or up to four levels above; set `SESSIONS_DIR` in the Setup cell for a copy kept elsewhere. Figures land in the session folder they describe, per-person summaries in `sessions/individual_patient_results/<person>/`, cohort output in `sessions/cohort_results/`.
 
 The export cell also writes `shared/matlab/finger_rehab.mat` for MATLAB and `shared/rayan_format/`, on which Rayan's R scripts run unchanged. Methods and their sources: [`app/docs/research/analysis_methods.md`](../app/docs/research/analysis_methods.md).
+
+## EEG recordings
+
+[`eeg/`](eeg) analyses a lab session's BioSemi recordings with MNE-Python: it pairs each `.bdf` with its game block by the marker bytes, cleans the data (average reference, 0.1-40 Hz, ICA for the eyes), and measures the ERPs, the error signal and the brain rhythms for the SRT and Buzz Hunt. `pip install mne python-picard`, then from this folder:
+
+    python3 -m eeg "../FINAL TRIAL RESULTS/3 EEG lab/sessions"
+
+The output goes beside the sessions, in `results/`, where git never sees it.

@@ -938,11 +938,13 @@ srt:
   # Words under the squares. Empty: the hand's own keys on a keyboard,
   # the finger names on the pads.
   labels: null
-  # app: the finger cards on the light page. lab: the script's own
-  # display, a black page and four grey squares near the centre
-  # turning red, which eeg_lab.yaml sets for EEG recordings (the SRT
-  # deep review of 1 October 2026). Timing is the same in both.
-  look: app
+  # lab: the script's own display, a black page and four grey squares
+  # near the centre turning red, at the script's sizes and colours, on
+  # every build (Basil, 8 October 2026: the Reaction card looks as the
+  # lab's PsychoPy program did). app: the finger cards on the light
+  # page, the look from 28 September to 8 October 2026. Timing is the
+  # same in both.
+  look: lab
   # A small patch in the bottom-left corner on flash frames only, for
   # a light sensor timing the flash against the 30 on the amplifier
   # (docs/eeg_lab_setup.txt, the timing check). In the lab look the

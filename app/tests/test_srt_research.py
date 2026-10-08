@@ -14,6 +14,7 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 import numpy as np
@@ -101,15 +102,16 @@ class LabSessionTests(unittest.TestCase):
         again = move_first(lab.steps, ["srt"])
         self.assertEqual([s.mode for s in again[1:]], before)
 
-    def test_the_lab_build_draws_the_apps_look_and_marks_responses(self):
-        # Basil, 5 October 2026: the lab's Reaction looks as it does on
-        # every other build; look: lab is still there for a recording.
+    def test_every_build_draws_the_scripts_look_and_the_lab_marks_responses(self):
+        # Basil, 8 October 2026: the Reaction card looks as the lab's
+        # PsychoPy program did, on every build alike (the lab build
+        # still matches the Mac's); look: app is the option.
         from finger_rehab.config import Config
         lab = Config.load(APP / "config" / "eeg_lab.yaml")
-        self.assertEqual(lab.get("srt.look"), "app")
+        self.assertEqual(lab.get("srt.look"), "lab")
         self.assertIs(lab.get("srt.response_markers"), True)
         home = Config.load()
-        self.assertEqual(home.get("srt.look"), "app")
+        self.assertEqual(home.get("srt.look"), "lab")
         self.assertIs(home.get("srt.photodiode_patch"), False)
         self.assertIs(home.get("srt.response_markers"), False)
 
@@ -169,6 +171,36 @@ class LabLookTests(unittest.TestCase):
         sc.draw(surf)
         self.assertEqual(tuple(surf.get_at((10, 790)))[:3], (0, 0, 0))
 
+    def test_the_words_are_the_scripts_sizes(self):
+        # PsychoPy letter heights in norm units, a fraction of the
+        # half-height: 0.05 for the instruction and the finger names,
+        # 0.055 for the feedback word, on an 800-pixel page.
+        from finger_rehab.ui.srt_screen import LAB_FEEDBACK_H, LAB_TEXT_H
+        eng, sc, _sim = self._run(look="lab")
+        sc.draw(pygame.Surface((1280, 800)))
+        self.assertIn(round(LAB_TEXT_H * 400), sc._lab_fonts)
+        self.assertEqual(sc._lab_font(LAB_FEEDBACK_H),
+                         sc._lab_fonts[round(LAB_FEEDBACK_H * 400)])
+
+    def test_a_wide_monitor_spaces_the_squares_as_psychopy_does(self):
+        # PsychoPy's units span the monitor; the page is 16:10, so on a
+        # 16:9 monitor the squares sit as far out as the script's did.
+        eng, sc, _sim = self._run(look="lab")
+        with patch("pygame.display.get_window_size", return_value=(1920, 1080)):
+            rects = sc.lane_rects(eng.mode)
+        half = 1920 / 1080 * 400
+        want = [round(640 + x * half) for x in (-0.225, -0.075, 0.075, 0.225)]
+        for r, w in zip(rects, want):
+            self.assertLessEqual(abs(r.centerx - w), 1)
+        self.assertEqual({(r.w, r.h) for r in rects}, {(round(0.13 * half), 52)})
+
+    def test_the_default_look_is_the_scripts(self):
+        eng, sc, _sim = self._run()
+        self.assertEqual(sc.look(), "lab")
+        surf = pygame.Surface((1280, 800))
+        sc.draw(surf)
+        self.assertEqual(tuple(surf.get_at((4, 4)))[:3], (0, 0, 0))
+
     def test_a_click_on_a_lab_square_enters_it(self):
         eng, sc, _sim = self._run(look="lab")
         m = eng.mode
@@ -212,7 +244,7 @@ class PressToFlashTests(unittest.TestCase):
     def test_the_summary_carries_it_and_the_display(self):
         st = self.eng.mode.block_stats()
         self.assertGreater(st["press_to_flash_median_ms"], 500)
-        self.assertEqual(st["look"], "app")
+        self.assertEqual(st["look"], "lab")
         self.assertIn(st["vsync"], (None, True, False))
 
 

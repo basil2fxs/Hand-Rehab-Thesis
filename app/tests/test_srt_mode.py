@@ -938,7 +938,8 @@ class AppLook(unittest.TestCase):
         pygame.quit()
 
     def _run(self, hand="right", **srt):
-        eng = _engine(Path(self.td.name), **{**_fast_cfg(), **srt})
+        # The app look is an option since 8 October 2026; ask for it.
+        eng = _engine(Path(self.td.name), **{**_fast_cfg(), "look": "app", **srt})
         eng.set_hand_mode(hand)
         eng.begin_srt_block()
         self.addCleanup(eng._abandon_if_in_block)
@@ -1075,7 +1076,7 @@ class EveryHand(unittest.TestCase):
         store = ss.SetupStore(root / "srt_setups.json")
         assert not store.set_current(ss.SRTSetup(
             "test", "constant", 500, ss.LAB_SEQUENCE, hands))
-        eng = _engine(root, **_fast_cfg())
+        eng = _engine(root, **{**_fast_cfg(), "look": "app"})
         eng.set_hand_mode(hand)
         eng.begin_srt_block()
         self.addCleanup(eng._abandon_if_in_block)

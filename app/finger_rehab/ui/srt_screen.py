@@ -1,4 +1,8 @@
-"""The SRT's screen: the lab's task in the app's own look.
+"""The SRT's screen: the lab's task, drawn as the lab's script drew it.
+
+Since 8 October 2026 every build draws the script's own display (THE
+LAB LOOK below) unless srt.look is app; the app look this docstring
+describes next is that option.
 
 The task is the lab script's, trial for trial (game/modes/srt.py): the
 same order, counts, timing, tones and markers. The screen is the one
@@ -19,12 +23,16 @@ words. The recall step shows the cards in a shorter row with the
 entered sequence under them; each entry lights its card for the
 script's 150 ms, and a click on a card enters it.
 
-THE LAB LOOK (srt.look: lab, the lab build's setting since 1 October
-2026). For EEG recordings the screen draws the script's own display
-instead: a black page, four grey squares 0.13 of the half-width and
-half-height across, centred 0.075 and 0.225 of the half-width either
-side of the middle, the key or finger names under them, the target
-turning red for the flash, and the script's white text. The script
+THE LAB LOOK (srt.look: lab, every build's setting since 8 October
+2026). The screen draws the script's own display: a black page, four
+grey squares 0.13 of the half-width and half-height across, centred
+0.075 and 0.225 of the half-width either side of the middle, the key or
+finger names under them, the target turning red for the flash, and the
+script's white text at the script's sizes in Arial, PsychoPy's own
+typeface. PsychoPy's units span the whole monitor while the game draws
+on a 1280x800 page, so on a monitor wider than the page the script's
+horizontal unit is taken from the window's shape, and the squares are
+the size and distance apart the script's were. The script
 set its squares close together to limit eye movements during EEG
 (its lines 18-19), and its flash is a grey-to-red change of about the
 same luminance at every location, where the app's outer cards sit
@@ -80,6 +88,18 @@ LAB_FEEDBACK_Y = -0.25
 LAB_RECALL_TEXT_Y = 0.6
 LAB_PROGRESS_Y = -0.35
 LAB_HINT_Y = -0.60
+# The script's words as PsychoPy TextStims: a height is the letter
+# height as a fraction of the half-height, a wrap width a fraction of
+# the half-width (1 is PsychoPy's default in norm units).
+LAB_TEXT_H = 0.05        # instruction, finger names, recall words
+LAB_FEEDBACK_H = 0.055   # Correct, Incorrect, Miss!
+LAB_MESSAGE_H = 0.07     # the SPACE screens between blocks
+LAB_SAVED_H = 0.06       # Sequence recorded
+LAB_HINT_H = 0.045       # the recall's submit and undo hints
+LAB_WRAP = 1.8           # instruction, feedback and recall question
+LAB_MESSAGE_WRAP = 1.6
+LAB_DEFAULT_WRAP = 1.0
+LAB_FONT = "Arial,Helvetica,Liberation Sans,DejaVu Sans"
 LAB_PAGE = (0, 0, 0)
 LAB_GREY = (128, 128, 128)
 LAB_RED = (255, 0, 0)
@@ -148,21 +168,48 @@ class SRTScreen(Screen):
         return out
 
     def look(self) -> str:
-        """'lab' for the script's own display (srt.look), else 'app'."""
-        v = self.engine.cfg.get("srt.look", "app")
-        return ("lab" if isinstance(v, str) and v.strip().lower() == "lab"
-                else "app")
+        """'app' for the finger cards (srt.look), else 'lab', the
+        script's own display."""
+        v = self.engine.cfg.get("srt.look", "lab")
+        return ("app" if isinstance(v, str) and v.strip().lower() == "app"
+                else "lab")
+
+    def _half(self) -> tuple[float, float]:
+        """Half the monitor in page pixels, as the script's norm units
+        see it. SDL fits the page to the window without stretching: on a
+        wider window, a 16:9 lab monitor, the page fills the height and
+        the window reaches past its sides, so the script's horizontal
+        unit is wider than the page's half-width. A taller window keeps
+        the page's own units, so the top line stays on the page."""
+        w, h = self.layout.width, self.layout.height
+        try:
+            ww, wh = pygame.display.get_window_size()
+        except pygame.error:
+            return w / 2, h / 2
+        if ww <= 0 or wh <= 0:
+            return w / 2, h / 2
+        return max(w / 2, (ww / wh) * h / 2), h / 2
 
     def _norm(self, x: float, y: float) -> tuple[int, int]:
         """A point in the script's norm units on this page."""
-        w, h = self.layout.width, self.layout.height
-        return (int(round(w / 2 + x * w / 2)),
-                int(round(h / 2 - y * h / 2)))
+        hw, hh = self._half()
+        return (int(round(self.layout.width / 2 + x * hw)),
+                int(round(self.layout.height / 2 - y * hh)))
+
+    def _lab_font(self, height_norm: float) -> pygame.font.Font:
+        """The script's text size, a letter height in norm units, in
+        PsychoPy's typeface."""
+        size = max(8, int(round(height_norm * self._half()[1])))
+        fonts = self.__dict__.setdefault("_lab_fonts", {})
+        font = fonts.get(size)
+        if font is None:
+            font = fonts[size] = pygame.font.SysFont(LAB_FONT, size)
+        return font
 
     def _lab_rects(self) -> list[pygame.Rect]:
-        w, h = self.layout.width, self.layout.height
-        size = (int(round(LAB_SQUARE * w / 2)),
-                int(round(LAB_SQUARE * h / 2)))
+        hw, hh = self._half()
+        size = (int(round(LAB_SQUARE * hw)),
+                int(round(LAB_SQUARE * hh)))
         rects = []
         for x in LAB_X:
             r = pygame.Rect((0, 0), size)
@@ -332,18 +379,21 @@ class SRTScreen(Screen):
 
     # ---- the lab look ----------------------------------------------------------
     def _text_at(self, surf: pygame.Surface, text: str, y_norm: float,
-                 font: pygame.font.Font, colour) -> None:
+                 height_norm: float, colour,
+                 wrap_norm: float = LAB_DEFAULT_WRAP) -> None:
         """Centred text whose block is centred on y_norm, as a PsychoPy
-        TextStim is placed."""
-        lines = self._wrap(font, text, int(self.layout.width * 0.8))
-        height = sum(10 if not ln else font.get_linesize() for ln in lines)
-        top = self._norm(0.0, y_norm)[1] - height // 2
-        self._lines(surf, text, top, font, colour,
-                    int(self.layout.width * 0.8))
+        TextStim is placed: the script's letter height and wrap width,
+        and a blank line a whole line high."""
+        font = self._lab_font(height_norm)
+        width = min(self.layout.width, int(round(wrap_norm * self._half()[0])))
+        lines = self._wrap(font, text, width)
+        step = font.get_linesize()
+        top = self._norm(0.0, y_norm)[1] - (len(lines) * step) // 2
+        self._lines(surf, text, top, font, colour, width, gap=step)
 
     def _draw_lab_squares(self, surf: pygame.Surface, mode, lit,
                           lit_colour) -> None:
-        font = self.layout.font(FONT_BODY + 4)
+        font = self._lab_font(LAB_TEXT_H)
         labels = mode.labels()
         for i, rect in enumerate(self._lab_rects()):
             colour = lit_colour if lit == i + 1 else LAB_GREY
@@ -359,34 +409,30 @@ class SRTScreen(Screen):
         surf.fill(LAB_PAGE)
         step = mode.step
         kind = step.kind if step is not None else ""
-        body = self.layout.font(FONT_BODY + 4)
         if kind == "message":
-            self._text_at(surf, mode.message_text(step), 0.0,
-                          self.layout.font(FONT_BODY + 8), LAB_WHITE)
+            self._text_at(surf, mode.message_text(step), 0.0, LAB_MESSAGE_H,
+                          LAB_WHITE, LAB_MESSAGE_WRAP)
         elif kind == "block":
             self._text_at(surf, mode.instruction(), LAB_INSTRUCTION_Y,
-                          body, LAB_WHITE)
+                          LAB_TEXT_H, LAB_WHITE, LAB_WRAP)
             self._draw_lab_squares(surf, mode, mode.flash_square, LAB_RED)
             fb = mode.feedback_now
             if fb:
-                font = self.layout.font(FONT_H2, bold=True)
-                img = font.render(fb[0], True, fb[1])
-                surf.blit(img, img.get_rect(
-                    center=self._norm(0.0, LAB_FEEDBACK_Y)))
+                self._text_at(surf, fb[0], LAB_FEEDBACK_Y, LAB_FEEDBACK_H,
+                              fb[1], LAB_WRAP)
         elif kind == "recall":
             self._text_at(surf, mode.recall_text(), LAB_RECALL_TEXT_Y,
-                          body, LAB_WHITE)
+                          LAB_TEXT_H, LAB_WHITE, LAB_WRAP)
             self._draw_lab_squares(surf, mode, mode.select_square,
                                    LAB_YELLOW)
             self._text_at(surf, mode.recall_progress(), LAB_PROGRESS_Y,
-                          body, LAB_WHITE)
+                          LAB_TEXT_H, LAB_WHITE)
             hint = mode.recall_hint()
             if hint:
-                self._text_at(surf, hint[0], LAB_HINT_Y,
-                              self.layout.font(FONT_BODY), hint[1])
+                self._text_at(surf, hint[0], LAB_HINT_Y, LAB_HINT_H, hint[1])
         elif kind == "saved":
             self._text_at(surf, "Sequence recorded.\n\nSaving your data...",
-                          0.0, self.layout.font(FONT_BODY + 8), LAB_WHITE)
+                          0.0, LAB_SAVED_H, LAB_WHITE)
 
     def _draw_patch(self, surf: pygame.Surface, mode, colour) -> None:
         """The light sensor's patch, bottom left, on flash frames only
