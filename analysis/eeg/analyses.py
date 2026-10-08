@@ -33,6 +33,7 @@ SRT_WINDOWS = {
     "N2": ((0.200, 0.300), ["FCz", "Cz"]),
     "P3": ((0.300, 0.450), ["Pz", "CPz"]),
 }
+RESP_BASELINE = (-0.4, -0.2)
 RESP_WINDOWS = {
     "ERN": ((0.000, 0.100), ["FCz", "Cz"]),
     "Pe": ((0.200, 0.400), ["CPz", "Pz"]),
@@ -116,9 +117,12 @@ def sign_flip(d: np.ndarray, n: int = N_PERM) -> float:
     return (hits + 1) / (n + 1)
 
 
-def db_change(ep: mne.Epochs, ch: str, fmin: float, fmax: float, rest, window) -> np.ndarray:
-    """Each trial's power in a window against the same trial's rest, in
-    dB, at one channel (Morlet wavelets, cycles half the frequency)."""
+def pct_change(ep: mne.Epochs, ch: str, fmin: float, fmax: float, rest, window) -> np.ndarray:
+    """Each trial's power change from its own rest to a window, as a
+    percent of the mean rest power, at one channel (Morlet wavelets,
+    cycles half the frequency): the ERD/ERS percent of Pfurtscheller and
+    Lopes da Silva (1999), kept linear because a trial-by-trial log
+    ratio is biased downwards (Kinley et al. 2026, via MNE's notes)."""
     freqs = np.arange(fmin, fmax + 1, 1.0)
     p = ep.compute_tfr("morlet", freqs=freqs, n_cycles=freqs / 2.0,
                        return_itc=False, average=False, decim=4, picks=[ch],
@@ -126,7 +130,7 @@ def db_change(ep: mne.Epochs, ch: str, fmin: float, fmax: float, rest, window) -
     d, t = p.get_data()[:, 0], p.times
     base = d[:, :, (t >= rest[0]) & (t < rest[1])].mean((1, 2))
     act = d[:, :, (t >= window[0]) & (t < window[1])].mean((1, 2))
-    return 10 * np.log10(act / base)
+    return (act - base) / base.mean() * 100.0
 
 
 def measure_table(groups: dict[str, mne.Epochs], windows: dict) -> pd.DataFrame:
@@ -314,12 +318,14 @@ def srt(block: P.Block, cleaned: P.Cleaned) -> SrtResult:
                      "N2_uV": float(window_means(e, *SRT_WINDOWS["N2"]).mean())})
     per_block = pd.DataFrame(rows)
 
-    # response-locked, at the force onset and at the press
+    # response-locked, at the force onset and at the press. ERP CORE's
+    # ERN baseline (Kappenman et al. 2021): -400 to -200 ms, clear of
+    # the movement's own build-up just before the response.
     codes = t.resp_code.to_numpy()
     resp_on = P.make_epochs(raw, t.onset_sample, codes, t, -0.6, 0.6,
-                            (-0.2, 0.0))
+                            RESP_BASELINE)
     resp_pr = P.make_epochs(raw, t.press_sample, codes, t, -0.6, 0.6,
-                            (-0.2, 0.0))
+                            RESP_BASELINE)
     reject["response_onset"] = {"kept": len(resp_on),
                                 "of": int(np.isfinite(t.onset_sample).sum())}
     rg = _epochs_by(resp_on, "outcome", ["correct", "error", "anticipation"])
@@ -335,6 +341,15 @@ def srt(block: P.Block, cleaned: P.Cleaned) -> SrtResult:
             resp_tests[f"{comp}: error vs correct"] = perm_diff(
                 window_means(rg["error"], win, chans),
                 window_means(rg["correct"], win, chans))
+    # The same ERN against the -200 to 0 ms baseline the first pass used,
+    # reported beside it so the choice is visible.
+    if "error" in rg and "correct" in rg:
+        win, chans = RESP_WINDOWS["ERN"]
+        alt = {k: rg[k].copy().apply_baseline((-0.2, 0.0), verbose="ERROR")
+               for k in ("error", "correct")}
+        resp_tests["ERN, baseline -200 to 0 ms: error vs correct"] = perm_diff(
+            window_means(alt["error"], win, chans),
+            window_means(alt["correct"], win, chans))
     ern_cluster = (cluster_test(rg["error"], rg["correct"], -0.1, 0.5)
                    if "error" in rg and "correct" in rg else {})
     # does locking to the force onset sharpen the ERN?
@@ -550,10 +565,10 @@ def buzz(block: P.Block, cleaned: P.Cleaned) -> BuzzResult:
         tfr = {"tfr": p, "n": len(tf)}
         # mu over the hand's motor area while the touch is felt and the
         # finger answers, trial by trial against that trial's rest
-        mu = db_change(tf, "C3", 8, 12, (-0.7, -0.2), (0.2, 0.8))
+        mu = pct_change(tf, "C3", 8, 12, (-0.7, -0.2), (0.2, 0.8))
         tests["mu C3 after the buzz, 0.2-0.8 s"] = {
             "diff": float(mu.mean()), "p": sign_flip(mu), "sme": sme(mu),
-            "n": int(len(mu)), "unit": "dB"}
+            "n": int(len(mu)), "unit": "%"}
     # the wait before the buzz: a slow negativity as the buzz nears
     pre_ep = P.make_epochs(raw, real.buzz_sample, np.full(len(real), 38),
                            real.reset_index(drop=True), -1.2, 0.3, (-1.2, -1.0))
@@ -563,7 +578,7 @@ def buzz(block: P.Block, cleaned: P.Cleaned) -> BuzzResult:
         reb = press["rebound_db"]
         tests["beta C3 after the press, 0.5-1.5 s"] = {
             "diff": float(reb.mean()), "p": sign_flip(reb), "sme": sme(reb),
-            "n": int(len(reb)), "unit": "dB"}
+            "n": int(len(reb)), "unit": "%"}
     return BuzzResult(trials=t, summary=summary, erp=erp, erp_n=erp_n,
                       measures=measures, tests=tests, tfr=tfr, pre=pre,
                       reject=reject, press=press)
@@ -624,6 +639,6 @@ def buzz_presses(block: P.Block, cleaned: P.Cleaned, t: pd.DataFrame) -> dict:
     p.apply_baseline((-1.2, -0.8), mode="percent", verbose="ERROR")
     # the post-movement beta rebound (Pfurtscheller and Lopes da Silva
     # 1999), 0.5 to 1.5 s after the force onset, trial by trial
-    rebound = db_change(tf, "C3", 13, 30, (-1.2, -0.8), (0.5, 1.5))
+    rebound = pct_change(tf, "C3", 13, 30, (-1.2, -0.8), (0.5, 1.5))
     return {"erp": erp.average(), "n": len(erp), "tfr": p,
             "rise_ms": float(meta.rise_ms.median()), "rebound_db": rebound}

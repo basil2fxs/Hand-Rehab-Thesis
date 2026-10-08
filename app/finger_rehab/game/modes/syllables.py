@@ -76,7 +76,7 @@ sample, not a separate positive result; McTigue, Solheim, Zimmer and
 Uppstad (2020) found a negligible overall effect across the GraphoGame
 literature with SUPPORTIVE ADULT INTERACTION as the only significant
 moderator. Hence an adult seated beside the reader in the case
-procedure (FINAL TRIAL RESULTS/4 Syllables case/README.md; the rest
+procedure (FINAL TRIAL RESULTS/README.md, Syllables; the rest
 screen's adult line never shows in the sectioned sitting), and hence
 the claim limits below.
 

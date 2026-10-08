@@ -17,8 +17,8 @@ FILES = (
      "Windows 10 or 11. Run it; no administrator needed. First run: "
      '"Windows protected your PC", More info, Run anyway.'),
     ("FingerRehab-macOS.dmg",
-     "macOS. Open it and drag Finger Rehab to Applications. First open: "
-     "System Settings, Privacy & Security, Open Anyway."),
+     "macOS. Drag Finger Rehab to Applications. First open: System "
+     "Settings, Privacy & Security, Open Anyway."),
     ("FingerRehab-EEGLab.zip",
      "The EEG lab PC. Unzip, open run_in_psychopy.py in PsychoPy Coder, "
      "press Run."),
@@ -31,11 +31,11 @@ def notes(version: str, commit: str, when: str | None = None) -> str:
     rows = "\n".join(f"| `{name}` | {what} |" for name, what in FILES)
     return (
         f"Finger Rehab {version}, built from [{short}]({REPO}/commit/"
-        f"{commit}) on {when}. The test suite passed on this commit.\n\n"
+        f"{commit}) on {when}; the tests passed.\n\n"
         f"| File | For |\n| --- | --- |\n{rows}\n\n"
-        f"A later push of version {version} replaces these files with its "
-        f"newer build. What changed: the [commit history]({REPO}/commits/"
-        f"main). How to use it: the [README]({REPO}#install).\n")
+        f"A later push of {version} replaces these files. Changes: the "
+        f"[commit history]({REPO}/commits/main). Setup: the "
+        f"[README]({REPO}#install).\n")
 
 
 def main(argv: list[str]) -> int:

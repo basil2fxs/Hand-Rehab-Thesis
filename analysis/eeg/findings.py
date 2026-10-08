@@ -5,7 +5,7 @@ this one's conclusions.
 
 Each question has one primary test, the contrast the literature
 predicts: the N2 and P3 for sequence learning (Eimer et al. 1996;
-Jongsma et al. 2006), beta over the motor cortex (Lum et al. 2023),
+Jongsma et al. 2006), beta over the motor cortex (Lum et al. 2024),
 the ERN (Gehring et al. 1993) and the touch response opposite the
 buzzed hand. Sequence learning has two (N2 and P3), so Holm's
 correction runs across that pair. Every other comparison on the page
@@ -80,8 +80,10 @@ def _side(ch: str) -> str:
     return "right" if int(m.group(1)) % 2 == 0 else "left"
 
 
-def _item(head: str, text: str) -> dict:
-    return {"head": head, "text": text}
+def _item(head: str, text: str, short: str = "") -> dict:
+    """A finding: its headline, the evidence in full for the results
+    page, and one line of numbers for the short report."""
+    return {"head": head, "text": text, "short": short or text}
 
 
 def build(s: dict) -> dict:
@@ -108,7 +110,8 @@ def build(s: dict) -> dict:
             "The marker system works end to end.",
             f"All {total:,} bytes the game wrote reached the amplifier in order, with the same codes. "
             f"Fitting the game's clock to the recording leaves {sd} ms of scatter (at most {mx} ms){why}. "
-            f"The two computers' clocks drift {drift} parts per million."))
+            f"The two computers' clocks drift {drift} parts per million.",
+            f"{total:,} of {total:,} bytes in order with the same codes, {sd} ms timing scatter."))
         plain.append("The markers line up with the recording to within one sample, so every response "
                      "below is timed to the event that caused it.")
     else:
@@ -154,7 +157,9 @@ def build(s: dict) -> dict:
             f"{lr['post_minus_block8_ms']:.0f} ms slower than the last sequence block "
             f"(95% CI {ci[0]:.0f} to {ci[1]:.0f} ms)."
             + (f" Presses before the flash reached {ant * 100:.0f}% of the last sequence block." if ant else "")
-            + recall))
+            + recall,
+            f"{lr['post_minus_block8_ms']:.0f} ms slower when random order returned (95% CI {ci[0]:.0f} to "
+            f"{ci[1]:.0f} ms)" + (f"; recall {cyc} of {n_items} as a loop" if rc else "") + "."))
         notes["recall"] = (
             f"Asked to type the sequence, {who} entered {rc.get('recalled', '')}. The sequence was "
             f"{rc.get('actual', '')}. Scored position by position, as the lab's script scores it, that is "
@@ -209,7 +214,12 @@ def build(s: dict) -> dict:
                 "Random flashes drew a larger N2 after learning." if n2_ok else
                 "The P3 shrank as the flashes became predictable." if p3_ok else
                 "The flash response did not reliably separate learned from random order.")
-        items.append(_item(head, n2_txt + p3_txt))
+        short = []
+        if n2:
+            short.append(f"N2 {n2['diff']:+.1f} µV random against learned (corrected p {p_text(adj[0])})")
+        if p3:
+            short.append(f"P3 {p3['diff']:+.1f} µV practice against learned (corrected p {p_text(adj[1])})")
+        items.append(_item(head, n2_txt + p3_txt, "; ".join(short) + "."))
         notes["erp"] = ("Both moved the way learning predicts." if n2_ok and p3_ok else
                         "The N2 moved the way learning predicts; the P3 change is not reliable here." if n2_ok else
                         "The P3 moved the way learning predicts; the N2 change is not reliable here." if p3_ok else
@@ -268,8 +278,9 @@ def build(s: dict) -> dict:
                 "Motor-cortex beta did not reliably separate random from learned trials.",
                 traj + f"After each flash it was {beta['diff']:+.1f} dB on random against learned trials "
                 f"(p {p_text(beta['p'])})" + ("; " + "; ".join(side) if side else "") + "."
-                + (" The lab's own SRT studies report beta lower in learned sequences than on random trials "
-                   "(Lum et al. 2023, 2024)." if beta_ok else "")))
+                + (" The lab's own SRT study found alpha and beta at C3 higher on the random block than on the "
+                   "last sequence block (Lum et al. 2024)." if beta_ok else ""),
+                f"Beta at C3 {beta['diff']:+.1f} dB on random against learned trials (p {p_text(beta['p'])})."))
             cards.append({"k": "Motor beta, C3", "v": f"{beta['diff']:+.1f} dB", "state": "good" if beta_ok else "",
                           "s": f"random against learned after the flash, p {p_text(beta['p'])}"})
             notes["rhythm"] = (f"{who} shows the same at C3, the motor area for the right hand." if beta_ok
@@ -304,7 +315,9 @@ def build(s: dict) -> dict:
             items.append(_item(
                 "Wrong presses carried an error signal." if ern_ok else
                 "The error signal points the right way but is not yet reliable." if ern.get("diff", 0) < 0 else
-                "No error signal yet.", txt))
+                "No error signal yet.", txt,
+                f"{ern['diff']:+.1f} µV wrong against correct at FCz/Cz, 0-100 ms (p {p_text(ern['p'])}, "
+                f"{n_err} errors)."))
             cards.append({"k": "Error signal (ERN)", "v": f"{ern['diff']:+.1f} µV", "state": "good" if ern_ok else "",
                           "s": f"wrong minus correct at FCz/Cz, 0-100 ms after the force onset, p {p_text(ern['p'])}"})
             plain.append("A wrong press produced the brain's error signal." if ern_ok else
@@ -335,16 +348,21 @@ def build(s: dict) -> dict:
         mu, reb = tests.get(MU_TEST), tests.get(REBOUND_TEST)
         rhythm = []
         if mu:
-            rhythm.append(f"mu (8-12 Hz) at C3 changed {mu['diff']:+.1f} dB after the buzz (p {p_text(mu['p'])})")
+            rhythm.append(f"mu (8-12 Hz) at C3 changed {mu['diff']:+.0f}{mu.get('unit', '%')} after the "
+                          f"buzz (p {p_text(mu['p'])})")
         if reb:
-            rhythm.append(f"beta at C3 changed {reb['diff']:+.1f} dB 0.5 to 1.5 s after the answering press "
-                          f"(p {p_text(reb['p'])})")
+            rhythm.append(f"beta at C3 changed {reb['diff']:+.0f}{reb.get('unit', '%')} 0.5 to 1.5 s after "
+                          f"the answering press (p {p_text(reb['p'])})")
         if rhythm:
             txt += " Against the rest before each buzz, " + "; ".join(rhythm) + "."
         items.append(_item(
             "The buzz drew a touch response opposite the buzzed hand." if lat_ok else
             "The buzz drew a clear P3; the left-right touch response is not yet reliable." if p3_clear else
-            "No clear brain response to the buzz yet.", txt))
+            "No clear brain response to the buzz yet.", txt,
+            "; ".join(x for x in (
+                f"P3 {p3b['mean_uV']:+.1f} µV" if p3b else "",
+                f"left minus right {lat['diff']:+.1f} µV (p {p_text(lat['p'])})" if lat else "",
+                f"mu at C3 {mu['diff']:+.0f}% (p {p_text(mu['p'])})" if mu else "") if x) + "."))
         if p3b:
             cards.append({"k": "Touch P3", "v": f"{p3b['mean_uV']:+.1f} µV", "state": "good" if p3_clear else "",
                           "s": f"Pz/CPz 400-650 ms after a localisation buzz; left-right p {p_text(lat.get('p'))}"})

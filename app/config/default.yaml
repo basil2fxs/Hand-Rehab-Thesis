@@ -229,6 +229,10 @@ fsr:
   # constant is about 10 s: drift is still absorbed, presses are not.
   baseline_alpha: 0.0005
   value_alpha: 0.35
+  # Press point: the share of the resting-to-light-press gap a finger
+  # must cover to count as a press, and where the EEG response byte goes
+  # out. Settings, Setup, Press point changes it (10 to 60 percent).
+  press_fraction: 0.30
   # PRESS THRESHOLDS, measured per finger on the real device.
   #
   # Detection is relative to each sensor's own live baseline, so these
@@ -1414,6 +1418,9 @@ force_pilot:
   # rest halfway up the ladder, which is long enough to draw the skip
   # chip; the cards are not, and keyboard skip still works on them.
   announce_s: 1.8
+  # A new finger or hand fills the screen for this long instead, and so
+  # does each max-press finger.
+  finger_card_s: 3.0
   mid_rest_s: 15.0
   # Set an integer to replay a block's exact run plans (testing, or a
   # deliberately repeated protocol). Empty draws fresh each block and

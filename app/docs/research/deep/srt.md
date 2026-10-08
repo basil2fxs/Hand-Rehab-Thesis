@@ -91,7 +91,7 @@ Tags: [FT] full text read, with the section or table named; [FT, PMC page] full 
 | Every code is held 8 ms | `eeg_lab_setup.txt` 123-124; thesis Appendix D | `eeg_lab.yaml` | 8 to 17 ms at 60 Hz with the Arduino box (`eeg_lab.yaml` 33-37; writer `tick`) |
 | Anticipations, the correct finger up to 100 ms before the flash | `sec_srt` docstring | Leow et al. 2026 | Misapplied: Leow's anticipatory responses are responses faster than about 182 ms after onset, set by a mixture fit [FT]; the pre-onset window is the script's own rule |
 | Expect a sequence effect of about 35 to 110 ms | `sec_srt` docstring; research file 2E | research file | The range comes from SOC and 12-element designs at 0 to 250 ms; no published value exists for this 10-item, 500 ms design, and none on force pads (Q4) |
-| Tones E5 to A5, about 200 ms | `assets/srt/README.md`; `srt.py` 29 | own measurement | Pitches verified; audible for about 115 to 130 ms; levels differ by 10 to 12 dB (arithmetic) |
+| Tones E5 to A5, about 200 ms | `assets/README.md`; `srt.py` 29 | own measurement | Pitches verified; audible for about 115 to 130 ms; levels differ by 10 to 12 dB (arithmetic) |
 | The platform reproduces the lab's SRT study trial for trial | thesis 01_intro line 49 | Leow et al. 2025, 2026 | It reproduces the lab's PsychoPy script. The published studies used Inquisit, a different sequence, five blocks, a trial that waited for the correct key and no random post-test (Leow 2026, Methods [FT]) |
 
 Also cited for this mode and checked here: Willingham and Dumas 1997 and Romano et al. 2010 on one-year retention (thesis 02_lit line 81; Romano verified [ABS]; Willingham and Dumas [META]); Trofimova et al. 2020 (covered in `deep/pattern.md`).
@@ -301,7 +301,7 @@ Two items change what the participant sees or does in the EEG session (item 3, t
    - `sec_srt` docstring (20984-20993): anticipations are "presses up to 100 ms before the flash, the script's rule (Leow et al. 2026 used responses faster than about 182 ms)"; expected effect "no published value exists for this design; SOC and 12-element designs gave 11 to 111 ms".
    - `docs/eeg_lab_setup.txt` step 10 and line 75: the setup screen asks for the timing group and musical experience; hands come from login; the cards are drawn on the app's page. Line 124: pulses of 8 to 17 ms.
    - `docs/research/new_modes/srt-sequence-learning.md` B7 and the Status section: Leow et al. 2025 as above (explicit instructions, no random block, transient 500 ms advantage); hands and sequence display as the code now has them; C1 now read in full.
-   - `assets/srt/README.md`: add "audible for about 115 to 130 ms; N and M are about 10 to 12 dB quieter than V and B".
+   - `assets/README.md`: add "audible for about 115 to 130 ms; N and M are about 10 to 12 dB quieter than V and B".
    Evidence: Q1, Q2, Q3, Q5, Q6, Q7 and Section 1.7.
 
 3. **Draw the lab's display in EEG recordings.** DESIGN-CHANGE (restores the script's stimulus; agree with the lab and log it in the design document).

@@ -1,1 +1,0 @@
-The firmware's three parts, which PlatformIO builds and links in: Config (pins, addresses and the I2C read), Motor (the buzz and the STIM commands) and Sensor (reading each pad).

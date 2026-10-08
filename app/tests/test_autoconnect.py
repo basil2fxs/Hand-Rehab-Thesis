@@ -203,7 +203,7 @@ class TestABoardArrivingJoinsOnItsOwn:
             from finger_rehab.ui.screens import TitleScreen
             title = TitleScreen(eng)
             assert not eng.source.provides_samples, "expected keyboard mode"
-            assert "No Arduino" in title._hardware_status()[0]
+            assert "No board" in title._hardware_status()[0]
 
             _watch(eng)
             rig.plugged = [A]

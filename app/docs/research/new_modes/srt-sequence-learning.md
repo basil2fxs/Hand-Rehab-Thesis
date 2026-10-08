@@ -44,7 +44,7 @@ Short glossary (terms used throughout):
 
 **Folder mapped first.** I read the script in `archive/Webler EEG past program/` and searched every `.md` note in `Thesis Project A` for SRT, sequence learning, Marinovic or Welber. There are no existing literature notes on the SRT. Two files are relevant:
 
-- `Software - Basil Toufexis/app/assets/srt/README.md`: the four tones measure about 660, 700, 790 and 890 Hz (E5, F5, G5, A5) and each lasts about 200 ms. The red flash lasts 100 ms, so the tone outlasts the flash.
+- `Software - Basil Toufexis/app/assets/README.md`: the four tones measure about 660, 700, 790 and 890 Hz (E5, F5, G5, A5) and each lasts about 200 ms. The red flash lasts 100 ms, so the tone outlasts the flash.
 - `NOTES FOR FINAL THESIS.md` (Section 4.4): the EEG headset was unavailable, and the plan is marker timing validation plus a small pilot in the Marinovic lab.
 
 **What I confirmed in the script** (these points feed the design table and analysis):

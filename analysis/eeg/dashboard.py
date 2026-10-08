@@ -16,8 +16,10 @@ import numpy as np
 
 import mne
 
+from . import compare as CMP
 from . import findings as FD
 from . import pipeline as P
+from .report import comparison_lines
 from .analyses import COLOURS, SRT_LABELS
 
 DECIM = 4   # 512 Hz evoked to 128 Hz for the explorer (data are low-passed at 40 Hz)
@@ -316,6 +318,7 @@ def page(s: dict, names: dict, figs: Path, data: dict, methods: list[str],
     nav = [("overview", "Overview"), ("markers", "Recording and markers"), ("quality", "Data quality"),
            ("srt-beh", "SRT behaviour"), ("srt-erp", "SRT: the flash"), ("srt-err", "SRT: errors"),
            ("srt-osc", "SRT: rhythms"), ("bh-beh", "Buzz Hunt behaviour"), ("bh-eeg", "Buzz Hunt: the brain"),
+           ("compare", "Reaction vs Buzz Hunt"),
            ("explorer", "Electrode explorer"), ("methods", "Methods"), ("limits", "Limits and next steps"),
            ("refs", "References"), ("files", "Files")]
     navh = "".join(f'<a href="#{i}">{t}</a>' for i, t in nav)
@@ -381,7 +384,7 @@ def page(s: dict, names: dict, figs: Path, data: dict, methods: list[str],
 {_fig(figs, names.get('srt_tfr'), 'Time-frequency power at C3 and FCz on random post-test and learned trials, and their difference in dB.')}
 {_fig(figs, names.get('srt_power'), 'Band power block by block. Random blocks shaded.')}
 <h3>Tests, random post-test against learned blocks 7-8, 0-500 ms</h3>{_table(band_rows, cols_t, fmt_t)}
-<div class="plain"><b>What it means:</b> beta and alpha over the motor cortex drop when a movement is prepared and made. The lab's own SRT work finds them lower in learned sequences and higher on random trials (Lum et al. 2023, 2024, 2025). {esc(notes.get('rhythm', ''))}</div>
+<div class="plain"><b>What it means:</b> beta and alpha over the motor cortex drop when a movement is prepared and made. The lab's own SRT work found alpha and beta at C3 higher on the random block than on the last sequence block (Lum et al. 2024), and beta over the motor cortex tracking learning (Lum et al. 2025). {esc(notes.get('rhythm', ''))}</div>
 <div class="caveat">Faster responding and more early presses also lower beta, and blocks follow one another in time, so learning, speed and time on task move together here.</div>
 </section>
 
@@ -403,6 +406,15 @@ def page(s: dict, names: dict, figs: Path, data: dict, methods: list[str],
 {_table([{"test": k, "diff": (f"{v['diff']:+.2f} {v.get('unit') or 'µV'}" if v.get("diff") is not None else None), "p": v.get("p"), "n": v.get("n")} for k, v in bz.get('tests', {}).items()], [("test", "comparison"), ("diff", "difference"), ("p", "p (sign flip)"), ("n", "trials")], {"p": lambda v: _p(v).lstrip("= "), "n": lambda v: f"{v:.0f}"})}
 <div class="plain"><b>What it means:</b> touch on the right hand is processed first in the left hemisphere's somatosensory cortex, then becomes a P3 when it matters for the task. The 8-12 Hz mu rhythm over the motor cortex drops while the touch is felt and the finger is moved, and beta overshoots after the movement (the post-movement beta rebound). {esc(notes.get('touch', ''))}</div>
 <div class="caveat">{esc(notes.get('touch_caveat', ''))}</div>
+</section>
+
+<section id="compare"><h2>Reaction against Buzz Hunt</h2>
+<p class="lead">The response to each game's cue in the same cap and sitting: Reaction's random-order flashes (a flash with a tone, so no learned sequence) against Buzz Hunt's localisation buzzes (a buzz alone). P3 as the mean of 300-650 ms at Pz/CPz, a window holding both games' own P3; its timing as the 50 percent area latency, compared by jackknife (Miller et al. 1998).</p>
+{_table([{"row": a, "r": b, "b": c} for a, b, c in CMP.table_rows(s)], [("row", ""), ("r", "Reaction"), ("b", "Buzz Hunt")])}
+<ul class="find">{"".join(f"<li>{esc(x)}</li>" for x in comparison_lines(s))}</ul>
+{_fig(figs, names.get('compare_erp'), 'The response to each cue at four sites, mean and one standard error. Grey: the P3 window.')}
+{_fig(figs, names.get('compare_topo'), 'Scalp maps at the same four times for both games, one colour scale.')}
+<div class="caveat">The two games differ in more than the sense cued: Reaction is a fast learning task, Buzz Hunt a slow localisation task, so part of any difference is pace and task. The buzz reaches the skin about 71-80 ms after its byte (bench, study laptop).</div>
 </section>
 
 <section id="explorer"><h2>Electrode explorer</h2>

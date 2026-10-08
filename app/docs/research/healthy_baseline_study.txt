@@ -733,7 +733,7 @@ mode and for that participant.
 the case: the sitting opens with a fixed probe that never adapts
 (SyllablesMode, PROBE), the case is an A-B series with 3 to 5
 probe-only sessions first, and the procedure is in FINAL TRIAL
-RESULTS/4 Syllables case/README.md. The unprompted correct rate mixes
+RESULTS/README.md. The unprompted correct rate mixes
 speed with accuracy (0.84 to 0.29 at fixed knowledge as a simulated
 reader slowed), so S7's reading of it as the learning measure no
 longer holds: the case reports it beside the time to a first press

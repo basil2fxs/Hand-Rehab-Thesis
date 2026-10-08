@@ -946,6 +946,15 @@ class ForcePilotMode(WaitSkip):
         self.probe_floor_counts = float(probe_floor_counts)
         self.probe_max_age_s = float(probe_max_age_s)
         self.announce_s = max(0.5, float(announce_s))
+        # A new finger or hand gets the whole screen for long enough to
+        # move the hand (Basil, 8 October 2026: the finger used to sit
+        # in a small pill on the 1.8 s card and the changes were easy
+        # to miss). Runs on the same finger keep the short card.
+        get = getattr(getattr(engine, "cfg", None), "get", None)
+        card = get("force_pilot.finger_card_s", 3.0) if callable(get) else 3.0
+        self.finger_card_s = max(self.announce_s, float(card))
+        self._flown: tuple[str, int] | None = None
+        self.finger_change = False
         self.mid_rest_s = max(0.0, float(mid_rest_s))
         self.step_grace_s = max(0.0, float(step_grace_s))
         self.passes = max(1, int(passes))
@@ -1262,7 +1271,9 @@ class ForcePilotMode(WaitSkip):
     def _enter_probe_gap(self, now: float) -> None:
         self.phase = "probe_gap"
         self.probe_hand, self.probe_finger = self._probe_queue[0]
-        self._phase_until = now + 1.2
+        # The gap is the finger card for the probe: every probe is a
+        # new finger.
+        self._phase_until = now + max(1.2, self.finger_card_s)
         # Pure pacing between max-press probes; the tare below is what
         # the gap is for, and it lands the moment the gap opens.
         self.arm_wait("gap", self._phase_until, self._enter_probe,
@@ -1453,7 +1464,9 @@ class ForcePilotMode(WaitSkip):
         if not reuse_run:
             pass  # the run was prepared by the caller
         self.phase = "announce"
-        self._phase_until = now + self.announce_s
+        self.finger_change = (self.hand, self.finger) != self._flown
+        self._phase_until = now + (self.finger_card_s if self.finger_change
+                                   else self.announce_s)
         # Skippable: the tare runs on entry, not over the card's
         # lifetime, so shortening the card takes nothing from the run.
         self.arm_wait("announce", self._phase_until, self._start_run,
@@ -1528,6 +1541,7 @@ class ForcePilotMode(WaitSkip):
     def _start_run(self, now: float) -> None:
         self.clear_wait()
         self.phase = "run"
+        self._flown = (self.hand, self.finger)
         self._phase_until = None
         self.run_t0 = now
         self.active = PendingTrial(
@@ -1930,9 +1944,8 @@ class ForcePilotMode(WaitSkip):
     # What the hub says when the max-press check ended the block before
     # a single run: the participant never pressed, so nothing was
     # measured and Continue offers the step again.
-    PROBE_RETRY_NOTE = ("Force Pilot stopped at the max press check: no "
-                        "press came. Show a firm press, then press "
-                        "Continue.")
+    PROBE_RETRY_NOTE = ("Force Pilot: no press at the max press check. "
+                        "Continue tries again.")
 
     def _end(self, reason: str) -> None:
         self.phase = "done"

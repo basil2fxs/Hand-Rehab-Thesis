@@ -46,21 +46,16 @@ if TYPE_CHECKING:
 CUE_ROWS: tuple[tuple[str | None, str, str], ...] = (
         (None, "Before the press", ""),
         ("cue.buzz_before", "Cue Buzzer before press",
-         "The motor under the target finger buzzes when the trial "
-         "starts, so the finger to press can be felt."),
+         "Buzzes the finger to press as the trial starts."),
         ("cue.sound_before", "Cue Sound before press",
-         "A tone plays when the trial starts, in every mode including "
-         "rhythm, so the go signal can be heard."),
+         "A tone plays as the trial starts."),
         ("cue.show_target", "Show on screen before press",
-         "Off leaves the tile neutral so the finger has to be found "
-         "from the buzzer alone. This is the tactile-only condition."),
+         "Off leaves the tile neutral: the buzz alone shows the finger."),
         (None, "After a correct press", ""),
         ("cue.buzz_after", "Cue Buzzer after press",
-         "The finger that was just pressed correctly buzzes back. "
-         "Nothing when no press lands, or when another finger goes."),
+         "A correct press buzzes that finger back."),
         ("cue.sound_after", "Cue Sound after press",
-         "A chime confirms a correct press. Off also silences the "
-         "thunk when a streak ends, so nothing sounds after a press."),
+         "A chime after a correct press. Off: no sound after any press."),
         # Note row, not a switch: in Buzz Hunt the buzz IS the
         # stimulus, so its pulses ignore the before-press switches by
         # design (the after-press switches still apply there). "note"
@@ -704,19 +699,16 @@ class TitleScreen(Screen):
     # runs, which is what the previous four-mode wording did.
     INFO_TITLE = "Session protocol"
     INFO_STEPS = [
-        "1. Enter the name, age and main hand, pick the SESSION,",
-        "      then press LOG IN.",
-        "2. A timed SESSION runs its games in order. 45 min is the",
-        "      study's sitting: twelve blocks on the right hand, in the",
-        "      order set at login: Reaction, Rhythm, Echo, Force Pilot,",
-        "      Chords, Buzz Hunt, Muscle Memory, Adaptive, then after",
-        "      a rest Reaction, Rhythm, Force Pilot and Chords again.",
-        "3. Free play: pick modes from the hub as prescribed.",
+        "1. Enter name, age and main hand, pick the SESSION, LOG IN.",
+        "2. 45 min is the study's sitting: twelve blocks on the right",
+        "      hand in the order set at login: Reaction, Rhythm, Echo,",
+        "      Force Pilot, Chords, Buzz Hunt, Muscle Memory, Adaptive,",
+        "      then after a rest Reaction, Rhythm, Force Pilot, Chords.",
+        "3. Free play: pick games from the hub.",
         "      Mirror is 32 trials and needs two boards; Adaptive is 40.",
         "4. Finish every block. Quitting early leaves gaps in the data.",
     ]
-    INFO_FOOTER = ("About 45 minutes on the rig for the 45 minute "
-                   "session, rest and stretch included.")
+    INFO_FOOTER = "About 45 minutes, rest and stretch included."
 
     # Vertical rhythm, in logical pixels against the 1280x800 render
     # surface. Held as constants because the card, the inputs and the
@@ -928,7 +920,7 @@ class TitleScreen(Screen):
         src = self.engine.source
         hands = getattr(src, "hands", None)
         if not getattr(src, "provides_samples", False) or not hands:
-            return ("No Arduino detected: keyboard mode "
+            return ("No board: keyboard mode "
                     "(right J K L ;  left F D S A)", self.theme.muted)
         from ..hardware.discovery import short_port
         bits = "   ".join(f"{h.hand.upper()} = {short_port(h.port)}"
@@ -1029,8 +1021,8 @@ class TitleScreen(Screen):
         if not carried:
             return ""
         return (", ".join(carried).capitalize()
-                + f" filled from {src.get('who', '')}'s last visit "
-                + f"({src.get('day', '')}). Type over to change.")
+                + f" from {src.get('who', '')}'s last visit "
+                + f"({src.get('day', '')}).")
 
     def _derived_visit(self, name: str) -> str:
         """The visit this login is: a pre-fill from a yaml passed as
@@ -1056,10 +1048,8 @@ class TitleScreen(Screen):
         # most common data-entry slip in a hurried clinic.
         if name == "NA" and not self._na_warned:
             self._na_warned = True
-            self.begin_note = ("No name entered: sessions will pool "
-                               "under NA and cannot be tracked per "
-                               "patient. Begin again to continue "
-                               "anonymously.")
+            self.begin_note = ("No name: sessions pool under NA. "
+                               "LOG IN again to go on.")
             return
         # The RA may type the code and press Enter inside one frame;
         # the carry-over (main hand included) has to land before the
@@ -1074,9 +1064,7 @@ class TitleScreen(Screen):
         trial = self.trial_seg.value or None
         if ((is_study_code(name) or trial)
                 and self.hand_seg.value is None):
-            self.begin_note = ("Pick the main hand (click Left or "
-                               "Right, or Tab to the field and press "
-                               "L or R).")
+            self.begin_note = "Pick the main hand."
             return
         self._na_warned = False
         self.begin_note = ""
@@ -1452,7 +1440,7 @@ class TitleScreen(Screen):
                  else str(n))
         body = textwrap.wrap(f"{count} blocks on the right hand, in the "
                              f"order set at login: {order}.", 56)
-        steps = ["1. Enter the name, age and main hand, then LOG IN.",
+        steps = ["1. Enter name, age and main hand, then LOG IN.",
                  "2. Start the EEG recording under the name on the menu.",
                  "3. On the hub pick Lab session, then Start. It plays"]
         steps += ["      " + line.replace("_", " ") for line in body]
@@ -1499,7 +1487,7 @@ class TitleScreen(Screen):
         draw_text(surf, footer, (x, y),
                   self.theme, self.layout, pt=FONT_SMALL,
                   colour=self.theme.muted)
-        draw_text(surf, "Click anywhere or press Esc to close",
+        draw_text(surf, "Click or Esc to close",
                   (card.centerx, card.bottom - 26),
                   self.theme, self.layout, pt=FONT_SMALL, centre=True,
                   colour=self.theme.muted)
@@ -1731,11 +1719,10 @@ class ModeSelectScreen(Screen):
     CAL_UNAVAILABLE = "NEEDS SENSOR HARDWARE"
     # The refusals, worded so they read as a fact about the rig rather
     # than a fault of the person clicking.
-    NO_HARDWARE_NOTE = ("This game needs the sensor hardware. "
-                        "Plug the device in, or pick another game.")
-    NO_SECOND_BOARD_NOTE = ("Mirror trains both hands, so it needs the "
-                            "second board. Plug it in, or pick another "
-                            "game.")
+    NO_HARDWARE_NOTE = ("Plug in the sensor hardware, or pick "
+                        "another game.")
+    NO_SECOND_BOARD_NOTE = ("Mirror needs the second board. Plug it in, "
+                            "or pick another game.")
 
     def _battery_pending(self) -> bool:
         try:
@@ -2487,9 +2474,9 @@ class SetupScreen(Screen):
     screen has nothing to type, just three big buttons."""
 
     HANDS = [
-        ("left",  "Left hand",  "4 fingers, index to little"),
-        ("right", "Right hand", "4 fingers, index to little"),
-        ("both",  "Both hands", "8 fingers, bilateral training"),
+        ("left",  "Left hand",  "4 fingers"),
+        ("right", "Right hand", "4 fingers"),
+        ("both",  "Both hands", "8 fingers"),
     ]
 
     def __init__(self, engine: "GameEngine") -> None:
@@ -2671,7 +2658,7 @@ class SetupScreen(Screen):
         # hands. Saying session here implied the pick was locked in.
         _draw_header(surf, "Choose your hand",
                      (self.pick_note or
-                      f"{greeting}  Which hand will you train this game?"),
+                      f"{greeting}  Which hand this game?"),
                      self.theme, self.layout)
         # Classic mode gets a pace slider above the hand buttons so the
         # therapist can tune trigger_interval_s without editing YAML.
@@ -5358,11 +5345,9 @@ class RhythmSetupScreen(Screen):
         # otherwise a muted participant reads a promise of a preview
         # that never comes and thinks the audio is broken.
         if self.mute_btn.muted():
-            sub = ("Music is off, so press Play preview to hear a track. "
-                   "Choose a difficulty, then press START.")
+            sub = "Music is off: press Play preview to hear a song."
         else:
-            sub = ("The picked song plays a 4 second preview. Choose "
-                   "a difficulty, then press START.")
+            sub = "The picked song plays a 4 second preview."
         _draw_header(surf, "Pick a song", sub, self.theme, self.layout)
         self._draw_track_list(surf)
         self._draw_detail_panel(surf)
@@ -5517,7 +5502,7 @@ class RhythmSetupScreen(Screen):
         elif self._selected_track:
             subtitle = "Loading length..."
         else:
-            subtitle = "Drop an .mp3 into the music folder and rescan"
+            subtitle = "Add an .mp3 to the music folder, then Rescan"
         draw_text(surf, subtitle,
                   (dx + dw // 2, dy + 124),
                   self.theme, self.layout, pt=FONT_BODY - 2,
@@ -5537,9 +5522,9 @@ class RhythmSetupScreen(Screen):
             b.draw(surf)
         # Brief one-liner explaining what each difficulty does.
         diff_text = {
-            "easy":   "Every 4th beat. Gentle pace for beginners.",
-            "medium": "Every 2nd beat. Standard rehab pacing.",
-            "hard":   "Every beat. Full tempo, more presses per minute.",
+            "easy":   "Every 4th beat",
+            "medium": "Every 2nd beat",
+            "hard":   "Every beat",
         }[self._selected_difficulty]
         draw_text(surf, diff_text,
                   (dx + dw // 2, self.easy_btn.rect.bottom + 22),
@@ -7714,13 +7699,8 @@ class ResultsScreen(Screen):
             pygame.draw.rect(surf, body, note_rect, border_radius=14)
             outline = tuple(max(0, c - 30) for c in self.theme.background)
             pygame.draw.rect(surf, outline, note_rect, 1, border_radius=14)
-            note_lines = [
-                "Per-finger timing charts don't apply to chords: each",
-                "row is keyed to one lane per chord, not one per",
-                "finger. See the cards above, or the chords chapter in",
-                "the session analysis notebook, for the per-chord and",
-                "per-hand numbers.",
-            ]
+            note_lines = ["No per-finger chart for chords: see the "
+                          "cards above."]
             line_h = FONT_SMALL + 6
             start_y = note_rect.centery - (len(note_lines) - 1) * line_h // 2
             for i, line in enumerate(note_lines):
@@ -7745,13 +7725,8 @@ class ResultsScreen(Screen):
             pygame.draw.rect(surf, body, note_rect, border_radius=14)
             outline = tuple(max(0, c - 30) for c in self.theme.background)
             pygame.draw.rect(surf, outline, note_rect, 1, border_radius=14)
-            note_lines = [
-                "Per-finger timing charts don't apply to syllables: each",
-                "row is keyed to the word's first required position, not",
-                "one lane per finger. See the cards above, or the",
-                "syllables chapter in the session analysis notebook, for",
-                "accuracy by syllable count and beat-synchronisation SD.",
-            ]
+            note_lines = ["No per-finger chart for Syllables: see the "
+                          "cards above."]
             line_h = FONT_SMALL + 6
             start_y = note_rect.centery - (len(note_lines) - 1) * line_h // 2
             for i, line in enumerate(note_lines):
@@ -7778,13 +7753,8 @@ class ResultsScreen(Screen):
             pygame.draw.rect(surf, body, note_rect, border_radius=14)
             outline = tuple(max(0, c - 30) for c in self.theme.background)
             pygame.draw.rect(surf, outline, note_rect, 1, border_radius=14)
-            note_lines = [
-                "Muscle Memory trains finger skill the way a musician",
-                "practises: lay down clean takes, session after session,",
-                "and the riff settles into the hand without you thinking",
-                "about it. Stars reward accuracy, never speed, so play",
-                "cleanly and let quickness arrive on its own.",
-            ]
+            note_lines = ["Play clean takes. Stars reward accuracy, "
+                          "never speed."]
             line_h = FONT_SMALL + 6
             start_y = note_rect.centery - (len(note_lines) - 1) * line_h // 2
             for i, line in enumerate(note_lines):
@@ -7873,8 +7843,7 @@ class ResultsScreen(Screen):
         mf_count = getattr(self.engine, "_miss_force_count", 0)
         mf_window = int(getattr(self.engine, "_force_window_ms", 1000))
         if not has_force:
-            mf_text = ("Force on uncaught cues: needs the force "
-                       "sensors (not available in keyboard mode)")
+            mf_text = "Force on uncaught cues: needs the force pads"
         elif mf_count > 0:
             mf_text = (
                 f"Force on uncaught cues: {mf_total:.0f} sensor units "
@@ -8074,6 +8043,7 @@ class DiagnosticsScreen(Screen):
     SETUP_ROW_H = 92
     SETUP_BTN_W = 270
     SETUP_BTN_H = 44
+    STEP_W = 64                # the press point's - and + buttons
     DATA_ROW_H = 156
     RIFF_BTN_H = 44
 
@@ -8117,10 +8087,10 @@ class DiagnosticsScreen(Screen):
         return self._body_rect()
 
     def _setup_row_count(self) -> int:
-        """Four rows everywhere, the USB driver on Windows and the EEG
-        box in the lab build: six on the lab PC."""
+        """Five rows everywhere, the USB driver on Windows and the EEG
+        box in the lab build: seven on the lab PC."""
         markers = getattr(self.engine, "markers", None)
-        return (4 + bool(getattr(self, "_show_usb_row", False))
+        return (5 + bool(getattr(self, "_show_usb_row", False))
                 + bool(getattr(markers, "enabled", False)))
 
     def _setup_row_h(self) -> int:
@@ -8139,7 +8109,8 @@ class DiagnosticsScreen(Screen):
 
     def _firmware_row_y(self, i: int) -> int:
         """Top of Setup row i (0 flash, 1 address, 2 audio delay,
-        3 auto-start, then the rows only some builds have)."""
+        3 auto-start, 4 press point, then the rows only some builds
+        have)."""
         return (self._firmware_rect().y + self.SETUP_ROW_TOP
                 + i * self._setup_row_h())
 
@@ -8459,10 +8430,10 @@ class DiagnosticsScreen(Screen):
             return
         n = int(self.engine.cfg.get("game.test_mode_trials", 6))
         self._port_status = (
-            f"Test Mode ON. Next block runs {n} trials so you can "
-            f"demo the full pipeline in under a minute."
+            f"Test Mode on: {n} trials a block. Keep it off for real "
+            f"sessions."
             if new_value else
-            "Test Mode OFF. Blocks run their normal full length."
+            "Test Mode off: full-length blocks."
         )
         self.rebuild_panel()
 
@@ -8485,10 +8456,8 @@ class DiagnosticsScreen(Screen):
         player = getattr(self.engine, "menu_music", None)
         if not new_value and player is not None:
             player.stop_now()
-        self._port_status = (
-            "Menu music on. It plays quietly on the menus, never in a "
-            "game." if new_value else "Menu music off."
-        )
+        self._port_status = ("Menu music on." if new_value
+                             else "Menu music off.")
         self.rebuild_panel()
 
     def _lanes_bottom_y(self) -> int:
@@ -8583,10 +8552,7 @@ class DiagnosticsScreen(Screen):
         new_value = value if value else None
         self._pending_ports[hand] = new_value
         self._has_unsaved = True
-        self._port_status = (
-            "Unsaved changes. Hit Save to remember them, or click "
-            "another dropdown option to undo."
-        )
+        self._port_status = "Not saved yet: press Save."
 
     def _save_ports(self) -> None:
         """Write pending dropdown selections to user_settings.yaml so
@@ -8607,9 +8573,8 @@ class DiagnosticsScreen(Screen):
             except Exception as e:
                 log.warning("Live reconnect failed: %s", e)
                 self._port_status = (
-                    f"Saved, but could not connect now ({e}). "
-                    f"It will be used next time the app starts."
-                )
+                    f"Saved. Not connected now ({e}); it applies at "
+                    f"the next start.")
         except Exception as e:
             self._port_status = f"Save failed: {e}"
 
@@ -8627,10 +8592,7 @@ class DiagnosticsScreen(Screen):
         for i in range(n_per_hand):
             due = now + (i * self.STIM_TEST_INTERVAL_S)
             self._stim_queue.append((prefix, i + 1, due))
-        self._port_status = (
-            f"Testing {hand} hand: firing STIM:1..{n_per_hand} "
-            f"with {int(self.STIM_TEST_INTERVAL_S * 1000)} ms gaps."
-        )
+        self._port_status = f"Buzzing each {hand} finger in turn."
 
     def _buzz_finger(self, ls: LaneStrip) -> None:
         """Fire a single STIM pulse on ONE finger so the therapist can
@@ -8669,11 +8631,10 @@ class DiagnosticsScreen(Screen):
         if ok:
             self._port_status = (
                 f"Buzzing {ls.hand} {finger_name}. No buzz? Check that "
-                f"hand's Arduino is assigned and plugged in.")
+                f"hand's board.")
         else:
             self._port_status = (
-                f"{cmd} not delivered. Assign the {ls.hand} Arduino "
-                f"(buzzers need the hardware; keyboard mode has none).")
+                f"Buzz not delivered: no {ls.hand} board.")
 
     def _single_board(self) -> bool:
         """True when exactly one Arduino is connected. Used to decide
@@ -8793,7 +8754,17 @@ class DiagnosticsScreen(Screen):
                             else "Auto-start: off",
                             self._toggle_autostart, self.theme,
                             self.layout, font_pt=fpt))
-        row = 4
+        # The press point: a step down and a step up either side of the
+        # value, which _draw_setup_tab writes between them.
+        r = self._setup_btn_rect(4)
+        add("setup", Button(pygame.Rect(r.x, r.y, self.STEP_W, r.h), "-",
+                            lambda: self._step_press_point(-1), self.theme,
+                            self.layout, font_pt=FONT_H2))
+        add("setup", Button(pygame.Rect(r.right - self.STEP_W, r.y,
+                                        self.STEP_W, r.h), "+",
+                            lambda: self._step_press_point(+1), self.theme,
+                            self.layout, font_pt=FONT_H2))
+        row = 5
         if self._show_usb_row:
             label = ("Working..." if self._usb_job is not None
                      else "Get the driver" if (self._usb_missing
@@ -9212,8 +9183,7 @@ class DiagnosticsScreen(Screen):
         self._port_status = (
             f"Ports changed. {n} Arduino-family port(s) detected."
             if n > 0 else
-            "Arduino unplugged. Plug it back in and it reconnects "
-            "on its own."
+            "Board unplugged. Plug it back in to reconnect."
         )
 
     def _rescan_ports(self) -> None:
@@ -9222,8 +9192,7 @@ class DiagnosticsScreen(Screen):
         self._port_status = (
             f"Re-scanned. Found {n} Arduino-family port(s)."
             if n > 0 else
-            "Re-scanned. No Arduino detected: keyboard fallback "
-            "will run when you start a session."
+            "Re-scanned. No board found: keyboard mode."
         )
         self.rebuild_panel()
 
@@ -9356,9 +9325,8 @@ class DiagnosticsScreen(Screen):
                             # the result so the therapist knows the test
                             # didn't actually fire.
                             self._port_status = (
-                                f"{cmd} not delivered. Check the Arduino "
-                                "is plugged in and assigned."
-                            )
+                                f"Buzz not delivered: no {prefix.lower()} "
+                                "board.")
                     except (OSError, AttributeError, RuntimeError) as e:
                         # OSError covers serial port faults (USB
                         # unplug mid-test). AttributeError covers
@@ -9530,9 +9498,9 @@ class DiagnosticsScreen(Screen):
         if not self.engine.source.provides_samples:
             hint = "Keyboard mode: press F D S A and J K L ; to test each finger"
         elif state_text == "DISCONNECTED":
-            hint = "Plug the board in and it reconnects on its own"
+            hint = "Plug the board in to reconnect"
         elif state_text == "NO DATA":
-            hint = "The port is open but no pad readings are arriving"
+            hint = "Port open, but no pad readings arriving"
         else:
             hint = "Press a finger to test its pad, click a tile to buzz it"
         self._draw_band(surf, fingers, "FINGER TEST", hint)
@@ -9588,34 +9556,36 @@ class DiagnosticsScreen(Screen):
         self._cue_menu.draw_overlay(surf)
 
     def _setup_rows(self) -> list[tuple[str, list[tuple[str, tuple]]]]:
-        """(title, lines) for each Setup row, in button order."""
+        """(title, line) for each Setup row, in button order: one short
+        line each, a state in place of the line when there is one to
+        show, in the warning colour when something is missing."""
         muted, ok = self.theme.muted, self.theme.foreground
         fw_caption, fw_colour = self._firmware_caption()
+        fw = ([("For a new or wiped board.", muted)] if fw_colour == muted
+              else [(fw_caption[:1].upper() + fw_caption[1:] + ".", fw_colour)])
+        audio = ([(self._audio_now_line()[:1].upper()
+                   + self._audio_now_line()[1:], ok)]
+                 if self._audio_measured()
+                 else [("Once per computer, with its microphone.", muted)])
         rows = [
-            ("Firmware", [
-                ("Writes the game's code to the hand device's Arduino. "
-                 "For a new or wiped board.", muted),
-                (f"In this build: {fw_caption}", fw_colour)]),
-            ("Sensor address", [
-                ("Gives a new force pad its finger's address. Plug in "
-                 "only that pad.", muted)]),
-            ("Audio delay", [
-                ("Times this computer's sound and buzz with its "
-                 "microphone. Once per computer.", muted),
-                (self._audio_now_line(), ok)]),
-            ("Auto-start", [
-                ("Opens Finger Rehab when the hand device is plugged "
-                 "in.", muted)]),
+            ("Firmware", fw),
+            ("Sensor address", [("For a new force pad. Plug in only that "
+                                 "pad.", muted)]),
+            ("Audio delay", audio),
+            ("Auto-start", [("Opens the game when the hand device is "
+                             "plugged in.", muted)]),
+            ("Press point", [("Where a press counts and the EEG marker goes "
+                              "out. Default 30%.", muted)]),
         ]
         if self._show_usb_row:
+            checked = self._usb_line != "Not checked yet."
             rows.append(("USB driver", [
-                ("The hand device's USB chip needs a Windows driver. "
-                 "Windows usually adds it when online.", muted),
                 (self._usb_line, self.theme.warning if self._usb_missing
-                 else ok)]))
+                 else ok) if checked else
+                ("Windows usually adds it when online.", muted)]))
         if self.eeg_btn is not None:
-            rows.append(("EEG trigger box", [
-                ("The port the lab's marker box is on.", muted)]))
+            rows.append(("EEG trigger box", [("The port the marker box is "
+                                              "on.", muted)]))
         return rows
 
     def _draw_setup_tab(self, surf: pygame.Surface) -> None:
@@ -9632,6 +9602,27 @@ class DiagnosticsScreen(Screen):
                 pygame.draw.line(surf, edge, (x, top),
                                  (card.right - self.BAND_PAD, top), 1)
             self._draw_row_text(surf, x, top + inset, title, lines, width)
+        from ..hardware.calibration_profile import press_fraction
+        r = self._setup_btn_rect(4)
+        draw_text(surf, f"{round(press_fraction() * 100)}%", r.center,
+                  self.theme, self.layout, pt=FONT_H2, centre=True)
+
+    def _step_press_point(self, step: int) -> None:
+        """Move the press point 5 percent, put it into use on every
+        calibrated hand at once, and save it until it is changed again."""
+        from ..hardware.calibration_profile import (press_fraction,
+                                                    set_press_fraction)
+        v = set_press_fraction(round(press_fraction() + 0.05 * step, 2))
+        self.engine.cfg.data.setdefault("fsr", {})["press_fraction"] = v
+        try:
+            self.engine.reapply_calibrations()
+        except Exception as e:
+            log.warning("Could not apply the press point: %s", e)
+        try:
+            self.engine.cfg.save_user_overrides({"fsr.press_fraction": v})
+            self._port_status = f"Press point {round(v * 100)}%, saved."
+        except Exception as e:
+            self._port_status = f"Press point {round(v * 100)}%, not saved: {e}"
 
     def _draw_data_tab(self, surf: pygame.Surface) -> None:
         card = self._data_rect()
@@ -9654,14 +9645,12 @@ class DiagnosticsScreen(Screen):
             shown = "..." + shown
         n = int(self.engine.cfg.get("game.test_mode_trials", 6))
         rows = [
-            ("Session data", [("Every session is saved in this folder:",
+            ("Session data", [("Every session is saved here:",
                                muted), (shown, fg)]),
             ("Muscle Memory riff", [
-                ("The riff Muscle Memory plays. Built in, unless a "
-                 "researcher loads a file.", muted)]),
+                ("Built in, unless a file is loaded.", muted)]),
             ("Test Mode", [
-                (f"Short blocks for demos: every game runs {n} trials.",
-                 muted),
+                (f"For demos: {n} trials a block.", muted),
                 ("Keep it off for real sessions.", muted)]),
         ]
         edge = tuple(max(0, c - 12) for c in self.theme.background)

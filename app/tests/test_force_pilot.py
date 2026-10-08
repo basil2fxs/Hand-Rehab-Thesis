@@ -64,6 +64,9 @@ def _engine(hand_mode="right", cfg_extra=None):
         "cue.sound_after": False,
         "cue.show_target": True,
         "game.timeout_s": 1.0,
+        # The finger card is tested on its own (FingerCardTests); the
+        # timing tests keep every card at announce_s.
+        "force_pilot.finger_card_s": 0.0,
     }
     values.update(cfg_extra or {})
     e = GameEngine.__new__(GameEngine)
@@ -1081,6 +1084,78 @@ class PauseAndStatsTests(unittest.TestCase):
 # ---- the screen --------------------------------------------------------
 
 
+class FingerCardTests(unittest.TestCase):
+    """A new finger or hand takes the whole screen for finger_card_s
+    (Basil, 8 October 2026); a run on the same finger keeps the short
+    card."""
+
+    def _mode(self, **over):
+        e = _engine(cfg_extra={"force_pilot.finger_card_s": 3.0})
+        e.finish_block = lambda: None
+        e.calibration_profiles["right"] = _fresh_profile()
+        return _mode(e, announce_s=1.8, **over)
+
+    def test_a_new_finger_gets_the_long_card(self):
+        m = self._mode()
+        t = 1000.0
+        m._tick(t)
+        self.assertEqual(m.phase, "announce")
+        self.assertTrue(m.finger_change)         # the first run
+        self.assertAlmostEqual(m._phase_until - t, 3.0)
+
+    def test_cards_follow_the_finger_through_the_ladder(self):
+        from finger_rehab.game.modes.force_pilot import target_pct
+        m = self._mode()
+        t = 1000.0
+        m._tick(t)
+        seen, last = [], None
+        guard = 0
+        while m.phase != "done" and guard < 5000:
+            guard += 1
+            if m.phase == "announce":
+                change = (m.hand, m.finger) != last
+                self.assertEqual(m.finger_change, change)
+                self.assertAlmostEqual(m._phase_until - t,
+                                       3.0 if change else 1.8)
+                seen.append(change)
+                last = (m.hand, m.finger)
+                t = m._phase_until + 0.001
+                m._tick(t)
+            elif m.phase == "rest":
+                t = m._phase_until + 0.001
+                m._tick(t)
+            elif m.phase == "run":
+                while m.phase == "run":
+                    t += 1.0 / 60.0
+                    m.view.pct = target_pct(m.sections, t - m.run_t0)
+                    m._tick(t)
+            else:
+                break
+        self.assertIn(True, seen)
+        self.assertIn(False, seen)
+
+    def test_the_card_fills_the_screen_in_the_finger_colour(self):
+        import pygame
+        pygame.init()
+        from finger_rehab.ui.force_pilot_screen import ForcePilotScreen
+        from finger_rehab.ui.theme import get as get_theme
+        from finger_rehab.ui.widgets import Layout
+        m = self._mode()
+        e = m.engine
+        e.theme = get_theme("clinical")
+        e.layout = Layout(1280, 800, 1.0)
+        e.paused = False
+        e.mode = m
+        sc = ForcePilotScreen(e)
+        sc._countdown_until = 0.0
+        m._tick(1000.0)
+        surf = pygame.Surface((1280, 800))
+        sc.draw(surf)
+        colour = sc._finger_colour(m.finger)
+        for corner in ((2, 2), (1277, 2), (2, 797), (1277, 797)):
+            self.assertEqual(tuple(surf.get_at(corner))[:3], tuple(colour))
+
+
 class ScreenTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -1195,6 +1270,7 @@ class ScreenTests(unittest.TestCase):
                           "hand": "right", "finger": 0,
                           "level": 1, "wave": "Slow breath"}
         m._prepare_run()
+        m.finger_change = False      # the short card, same finger
         seen = []
         original = fps.draw_text
 

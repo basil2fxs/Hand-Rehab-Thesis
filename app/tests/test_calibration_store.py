@@ -154,7 +154,8 @@ class ProbeTests(unittest.TestCase):
             m._tick(t)
             self.assertEqual(m.phase, "probe_gap")
             for _ in range(4):
-                t += 1.3
+                # Each finger's gap is its full-screen card (finger_card_s).
+                t = m._phase_until + 0.01
                 m._tick(t)
                 self.assertEqual(m.phase, "probe")
                 for peak in (390.0, 400.0, 410.0):

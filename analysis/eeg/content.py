@@ -11,13 +11,13 @@ METHODS = [
     f"<b>Re-reference and filters.</b> BioSemi data carry no reference (CMS/DRL), so channels were re-referenced to the average of the 64 scalp channels. Mains at {P.LINE_HZ:g} and {2*P.LINE_HZ:g} Hz were notch-filtered; ERP data were band-passed {P.HP_ERP:g}-{P.LP_ERP:g} Hz with MNE's zero-phase FIR filters. A high-pass above 0.1 Hz would distort slow ERP components (Tanner et al. 2015).",
     f"<b>Bad channels.</b> A channel was rebuilt by spherical-spline interpolation (Perrin et al. 1989) when it was flat (under {P.FLAT_UV:g} µV, 1-40 Hz), noisy above 55 Hz (a z score over {P.NOISE_Z:g} against the cap's median and median absolute deviation) or correlated under {P.NEIGHBOUR_R:g} with its four nearest neighbours.",
     f"<b>Eye artefacts.</b> Independent component analysis (Picard, extended, components explaining {P.ICA_VARIANCE*100:g} percent of variance; Ablin et al. 2018) was fitted on a {P.ICA_HP:g}-{P.ICA_LP:g} Hz copy, as high-passing before ICA improves the decomposition (Winkler et al. 2015), and the components correlating with a bipolar vertical (Fp2 to below the right eye) or horizontal (left canthus to F8) eye channel at |z| over {P.EOG_Z:g} were removed from the 0.1-40 Hz data.",
-    f"<b>Epochs.</b> Flash-locked SRT epochs ran -200 to 600 ms with a -200 to 0 ms baseline; response epochs were locked to each press's force onset (the game's offline onset, events.tsv onset_offset_ms) with a -200 to 0 ms baseline; Buzz Hunt epochs ran -200 to 800 ms from the buzz command. Epochs over {P.REJECT_UV:g} µV peak to peak after ICA were dropped.",
+    f"<b>Epochs.</b> Flash-locked SRT epochs ran -200 to 600 ms with a -200 to 0 ms baseline; response epochs were locked to each press's force onset (the game's offline onset, events.tsv onset_offset_ms) with ERP CORE's -400 to -200 ms baseline (Kappenman et al. 2021), and the ERN is also reported against the -200 to 0 ms baseline of the first pass; Buzz Hunt epochs ran -200 to 800 ms from the buzz command. Epochs over {P.REJECT_UV:g} µV peak to peak after ICA were dropped.",
     "<b>Measures.</b> Mean amplitude in fixed windows at fixed sites chosen before looking: visual P1 80-130 ms (O1/Oz/O2), N1 140-200 ms (PO7/PO8/O1/O2), N2 200-300 ms (FCz/Cz), P3 300-450 ms (Pz/CPz), ERN 0-100 ms (FCz/Cz), Pe 200-400 ms (CPz/Pz); touch N1 180-260 ms at C3/CP3/CP5 against C4/CP4/CP6 and P3 400-650 ms at Pz/CPz. Each carries its standardised measurement error, the standard error of the single-trial values (Luck et al. 2021), and an odd/even split-half reliability of the waveform.",
     "<b>Statistics within one person.</b> Conditions were compared trial against trial: a permutation test of the difference in means (5000 shuffles) with a bootstrap 95 percent interval and Cohen's d; the left-right touch difference and the rhythm changes against each trial's own rest by sign flipping; and error against correct across all channels and times by a cluster-based permutation test (1000 permutations; Maris and Oostenveld 2007), which says the two differ somewhere but not where or when (Sassenhagen and Draschkow 2019).",
     "<b>Primary and exploratory tests.</b> Each question has the test the literature predicts: the N2 (random post-test against learned blocks 7-8) and the P3 (practice against learned) for sequence learning, beta at C3 for the motor rhythm, the ERN for errors and the left-right difference for touch. The N2 and P3 are two looks at one question, so Holm's correction runs across that pair. A headline on this page claims an effect only when its primary test passes at .05; the other rows of the tables are exploratory and uncorrected.",
     "<b>Learning and recall.</b> Learning is the slowing of correct responses when random order returns after block 8, with a bootstrap 95 percent interval of the difference in medians. The typed recall is scored by position, as the lab's script does, and as a loop at its best rotation; the chance of a random answer scoring as well at its own best rotation comes from 20,000 simulated answers.",
     "<b>Overlap correction.</b> In the SRT a flash comes about 0.7 s after the last, so responses overlap. Regression ERPs (mne.stats.linear_regression_raw; Smith and Kutas 2015) estimated every flash type and press type together.",
-    "<b>Time-frequency.</b> Morlet wavelets, 4-30 Hz in 1 Hz steps, cycles half the frequency. SRT random against learned trials as single-trial dB power 0-500 ms after the flash; block power by Welch's method over each block; Buzz Hunt as percent change from 0.7-0.2 s before the buzz (and 1.2-0.8 s before the press). The Buzz Hunt tests take each trial's own change in dB: mu (8-12 Hz) at C3 0.2-0.8 s after the buzz, and beta (13-30 Hz) at C3 0.5-1.5 s after the answering press, the post-movement rebound (Pfurtscheller and Lopes da Silva 1999).",
+    "<b>Time-frequency.</b> Morlet wavelets, 4-30 Hz in 1 Hz steps, cycles half the frequency. SRT random against learned trials as single-trial dB power 0-500 ms after the flash; block power by Welch's method over each block; Buzz Hunt as percent change from 0.7-0.2 s before the buzz (and 1.2-0.8 s before the press). The Buzz Hunt tests take each trial's change from its own rest as a percent of the mean rest power (ERD/ERS percent, Pfurtscheller and Lopes da Silva 1999), linear because a trial-by-trial log ratio is biased downwards: mu (8-12 Hz) at C3 0.2-0.8 s after the buzz, and beta (13-30 Hz) at C3 0.5-1.5 s after the answering press, the post-movement rebound.",
     "<b>Presses with no marker.</b> Buzz Hunt sends no byte for a press, so each answering press was placed in the recording through the clock map at its force onset, found on the force trace with the same detector the thesis uses for reaction times (Teasdale et al. 1993).",
 ]
 
@@ -54,11 +54,14 @@ REFERENCES = [
     "Gehring WJ, Goss B, Coles MGH, Meyer DE, Donchin E (1993). A neural system for error detection and compensation. Psychological Science 4(6):385-390. doi:10.1111/j.1467-9280.1993.tb00586.x",
     "Gramfort A, Luessi M, Larson E, et al. (2013). MEG and EEG data analysis with MNE-Python. Frontiers in Neuroscience 7:267. doi:10.3389/fnins.2013.00267",
     "Jongsma MLA, Eichele T, Van Rijn CM, et al. (2006). Tracking pattern learning with single-trial event-related potentials. Clinical Neurophysiology 117(9):1957-1973. doi:10.1016/j.clinph.2006.05.012",
+    "Kappenman ES, Farrens JL, Zhang W, Stewart AX, Luck SJ (2021). ERP CORE: an open resource for human event-related potential research. NeuroImage 225:117465. doi:10.1016/j.neuroimage.2020.117465",
+    "Kiesel A, Miller J, Jolicoeur P, Brisson B (2008). Measurement of ERP latency differences: a comparison of single-participant and jackknife-based scoring methods. Psychophysiology 45(2):250-274. doi:10.1111/j.1469-8986.2007.00618.x",
     "Luck SJ, Stewart AX, Simmons AM, Rhemtulla M (2021). Standardized measurement error: a universal metric of data quality for averaged event-related potentials. Psychophysiology 58(6):e13793. doi:10.1111/psyp.13793",
-    "Lum JAG, Clark GM, Barhoun P, et al. (2023). Neural basis of implicit motor sequence learning: modulation of cortical power. Psychophysiology 60(2):e14179. doi:10.1111/psyp.14179",
     "Lum JAG, Barham MP, Hyde C, et al. (2024). Top-down and bottom-up oscillatory dynamics regulate implicit visuomotor sequence learning. Cerebral Cortex 34(7):bhae266. doi:10.1093/cercor/bhae266",
+    "Lum JAG, Clark GM, Barhoun P, et al. (2023). Neural basis of implicit motor sequence learning: modulation of cortical power. Psychophysiology 60(2):e14179. doi:10.1111/psyp.14179",
     "Lum JAG, Hamilton KM, Leow L-A, Marinovic W, et al. (2025). Atypical beta oscillatory dynamics are related to poor procedural learning in children with developmental coordination disorder. Developmental Science 28(4):e70031. doi:10.1111/desc.70031",
     "Maris E, Oostenveld R (2007). Nonparametric statistical testing of EEG- and MEG-data. Journal of Neuroscience Methods 164(1):177-190. doi:10.1016/j.jneumeth.2007.03.024",
+    "Miller J, Patterson T, Ulrich R (1998). Jackknife-based method for measuring LRP onset latency differences. Psychophysiology 35(1):99-115. doi:10.1111/1469-8986.3510099",
     "Olvet DM, Hajcak G (2009). The stability of error-related brain activity with increasing trials. Psychophysiology 46(5):957-961. doi:10.1111/j.1469-8986.2009.00848.x",
     "Perrin F, Pernier J, Bertrand O, Echallier JF (1989). Spherical splines for scalp potential and current density mapping. Electroencephalography and Clinical Neurophysiology 72(2):184-187. doi:10.1016/0013-4694(89)90180-6",
     "Pfurtscheller G, Lopes da Silva FH (1999). Event-related EEG/MEG synchronization and desynchronization: basic principles. Clinical Neurophysiology 110(11):1842-1857. doi:10.1016/S1388-2457(99)00141-8",
@@ -70,23 +73,10 @@ REFERENCES = [
 ]
 
 FILES = [
+    ("../EEG_report.pdf / .docx", "the short report to send"),
     ("EEG_results.html", "this page: findings, figures, tables and the electrode explorer"),
-    ("EEG_results_summary.pdf / .docx", "the short version to send"),
     ("mne_report_srt.html, mne_report_buzz_hunt.html", "MNE's own reports: raw data, ICA, epochs and evoked responses with scalp-map sliders"),
     ("figures/", "every figure as PNG"),
     ("tables/", "behaviour, ERP measures, band power and the marker pairing as CSV"),
     ("summary.json", "every number on this page"),
-]
-
-
-METHODS_SHORT = [
-    "Recording paired with the game's marker log byte by byte; a straight-line clock map places every game event in the EEG.",
-    "Average reference over 64 channels (BioSemi records reference-free); 50 and 100 Hz notch; 0.1-40 Hz zero-phase FIR band-pass.",
-    "Bad channels (flat, noisy above 55 Hz, or unlike their neighbours) rebuilt by spherical splines.",
-    "Eye movements and blinks removed by ICA (Picard), fitted on a 1-40 Hz copy, components picked by correlation with bipolar eye channels.",
-    "Flash epochs -200 to 600 ms; presses locked to the force onset the game finds on the force trace; epochs over 150 µV peak to peak dropped.",
-    "Mean amplitudes in fixed windows at fixed sites, with standardised measurement error and split-half reliability.",
-    "Within-person statistics: trial-level permutation tests with bootstrap intervals; cluster-based permutation test across channels and times.",
-    "One primary test per question (N2 and P3 for learning, Holm-corrected as a pair; beta at C3; ERN; left-right touch response); a finding is claimed only when its primary test passes, the rest is exploratory.",
-    "Overlap correction by regression ERPs; time-frequency by Morlet wavelets (4-30 Hz).",
 ]

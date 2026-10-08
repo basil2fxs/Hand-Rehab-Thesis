@@ -64,20 +64,18 @@ class AudioDelayDialog:
     def intro_lines(self) -> list[tuple[str, bool]]:
         """(text, is_a_warning) lines for the idle card."""
         lines = [
-            ("Times this computer's sound and buzz with its microphone, "
-             "so Rhythm and the buzzes land on the beat.", False),
-            ("Once on a new computer, or after changing speakers. About "
-             "two minutes, in a quiet room, with the volume where a "
-             "participant would have it.", False),
+            ("Times this computer's sound and buzz with its "
+             "microphone.", False),
+            ("Once per computer or speaker. About two minutes, quiet "
+             "room, normal volume.", False),
         ]
         if needs_taps():
             if self.has_board:
                 lines.append(("When asked, tap the index pad with a "
                               "fingernail, about once a second.", False))
             else:
-                lines.append(("Plug the board in first: this computer's "
-                              "microphone is timed from taps on the index "
-                              "pad.", True))
+                lines.append(("Plug the board in first: the timing "
+                              "needs taps on the index pad.", True))
         elif self.has_board:
             lines.append(("The board buzzes each finger ten times at the "
                           "end.", False))
@@ -202,8 +200,8 @@ class AudioDelayDialog:
                           centre=False, colour=colour)
                 y += 28
             y += 8
-        foot = ("The game is silent while it listens. Keep the room "
-                "quiet." if self.busy else "In use now: " + self.now_line)
+        foot = ("Listening. Keep the room quiet." if self.busy
+                else "In use now: " + self.now_line)
         for i, chunk in enumerate(_wrap(foot, ly.font(FONT_SMALL + 2),
                                         room)[:2]):
             draw_text(surf, chunk, (x, card.bottom - 128 + i * 22), th, ly,

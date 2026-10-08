@@ -1,1 +1,0 @@
-PlatformIO's folder for shared headers. Empty: each header sits beside its own code in lib/ or src/.

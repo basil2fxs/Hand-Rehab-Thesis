@@ -5,16 +5,16 @@
 
 1. On the game PC, plug the trigger box (COM10) and the hand device in first. On a new lab PC, time the screen and the tone against the markers once, with a light sensor and a microphone on the amplifier's spare inputs ([eeg_lab_setup.txt](../app/docs/eeg_lab_setup.txt), Validate).
 2. Open `run_in_psychopy.py` in PsychoPy Coder and press **Run**. ActiView's trigger byte goes 255 to 0 when the port opens. If a port list shows instead, pick the EEG marker's port (COM10), then **Continue**.
-3. Log in. The menu shows the recording's name, for example `P07_2026-09-24.bdf`. Start ActiView recording under exactly that name before the first game. ActiView can run on the game PC or on the EEG PC: the trigger box writes every marker into the recording either way. On the EEG PC the file stays there, and the menu keeps asking for it in `sessions/eeg`; carry on.
-4. On the hub, pick **Lab session**, then **Start**. It runs the lab sitting in the code's order: the lab's Reaction task first, in place of both Reaction blocks, and no Muscle Memory. Reaction opens on its setup screen, turned away from the participant: pick the timing group, say it aloud, then **START**. After the recall, ask what they noticed about the order of the lit cards and write the answer down word for word.
+3. Log in. The menu shows the recording's name, for example `P07_2026-09-24.bdf`: start ActiView recording under exactly that name before the first game. ActiView can run on the game PC or the EEG PC; the trigger box writes every marker into the recording either way. On the EEG PC the menu keeps asking for the file in `sessions/eeg`: carry on.
+4. On the hub pick **Lab session**, then **Start**: the lab's Reaction task first, in place of both Reaction blocks, and no Muscle Memory. Reaction opens on its setup screen, turned away from the participant: pick the timing group, say it aloud, then **START**. After the recall, ask what they noticed about the order of the lit cards and write the answer down word for word.
 5. End the session on the game PC (Esc, **End session**), then stop the recording.
-6. Take the game PC's `sessions` folder home with the `.bdf`, and put the `.bdf` in `sessions/eeg` beside the games: the notebook pairs each game with its recording by that name.
+6. Take the game PC's `sessions` folder home with the `.bdf`, put the `.bdf` in `sessions/eeg`, and the notebook pairs each game with its recording by name.
 
 ## Markers
 
 While ActiView records, the game writes a number onto the recording the moment something happens, so the brain signal can be cut around each event afterwards.
 
-**Trigger point.** A press marker (100 and up) goes out when the finger's smoothed force first passes 30% of the way from resting to the light press at calibration, and never under 12 sensor counts (about 0.23 N) above rest. It leaves 0 to one frame (17 ms) after that 200 Hz sample. A stimulus marker goes out on the frame that shows the stimulus. Reaction, the lab's own task, sends each press marker at the end of its trial, with the press time as `t_event`.
+**Trigger point.** A press marker (100 and up) goes out when the finger's smoothed force first passes 30% of the way from resting to the light press at calibration (the press point: Settings, Setup changes it), and never under 12 sensor counts (about 0.23 N) above rest. It leaves 0 to one frame (17 ms) after that 200 Hz sample. A stimulus marker goes out on the frame that shows the stimulus. Reaction, the lab's own task, sends each press marker at the end of its trial, with the press time as `t_event`.
 
 <picture><source media="(prefers-color-scheme: dark)" srcset="../app/docs/images/eeg_cheat_sheet_dark.svg"><img alt="EEG markers: 33 when a finger lights up, 100 plus the finger for a right press, 110 plus for a wrong one, 120 plus for too early, 130 for too slow, 140 and 141 for the result, and 20, 200 plus and 220 plus around each game" src="../app/docs/images/eeg_cheat_sheet_light.svg" width="100%"></picture>
 

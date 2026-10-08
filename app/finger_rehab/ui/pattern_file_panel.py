@@ -179,9 +179,9 @@ class PatternFilePanel:
         self._reveal(folder)
         if self.path_input is not None:
             self.path_input.focused = True
-        self.status = (f"Drag the file onto the game window, save it in "
-                       f"the folder just opened as {pattern_file.DROP_NAME}, "
-                       f"or type its path below.")
+        self.status = (f"Drag the file here, save it as "
+                       f"{pattern_file.DROP_NAME} in the folder just "
+                       f"opened, or type its path below.")
         self.status_is_error = False
 
     def _native_pick(self) -> str:
@@ -215,8 +215,7 @@ class PatternFilePanel:
     def _clear_clicked(self) -> None:
         pattern_file.clear_active(self._cfg())
         self.errors = []
-        self.status = ("Built-in riff in use. The files you loaded are "
-                       "still in the history folder.")
+        self.status = "Built-in riff in use."
         self.status_is_error = False
 
     def load_path(self, raw: str) -> None:
@@ -289,9 +288,8 @@ class PatternFilePanel:
         draw_text(surf, "MUSCLE MEMORY RIFF FILE", (x, r.y + 20),
                   self.theme, self.layout, pt=FONT_BODY,
                   centre=False, colour=self.theme.foreground)
-        blurb = ("A file sets the finger order, the pause after every "
-                 "press and the rests. Once loaded it runs for every "
-                 "Muscle Memory game until you change it.")
+        blurb = ("Sets the finger order, the pauses and the rests. "
+                 "Stays in use until changed.")
         self._wrapped(surf, blurb, x, r.y + 52, r.w - self.PAD * 2,
                       FONT_SMALL, self.theme.muted, max_lines=3)
         for b in self.buttons:

@@ -637,7 +637,7 @@ class SyllablesScreen(Screen):
         draw_text(surf, "BIGGER WORDS!", (cx, card.y + int(h * 0.42)),
                   self.theme, self.layout, pt=FONT_H1 + 8, centre=True,
                   colour=colour)
-        draw_text(surf, f"You reached band {band}. Wonderful reading!",
+        draw_text(surf, "Wonderful reading!",
                   (cx, card.y + int(h * 0.72)), self.theme, self.layout,
                   pt=FONT_BODY + 2, centre=True, colour=self.theme.muted)
 

@@ -270,8 +270,8 @@ class CalibrationScreen:
 
     def _finish_collection(self) -> None:
         if not self._buffer:
-            self._status = ("No samples arrived. Check the device is "
-                            "connected, then try this step again.")
+            self._status = ("No samples. Check the device is connected, "
+                            "then try again.")
             self._status_colour = self.theme.error
             return
         cols = list(zip(*self._buffer))
@@ -351,8 +351,7 @@ class CalibrationScreen:
                             f"Which finger did you feel?")
             self._status_colour = self.theme.foreground
         else:
-            self._status = ("Nothing was sent. Check the device is "
-                            "connected on the Settings screen.")
+            self._status = "Nothing sent. Check the device in Settings."
             self._status_colour = self.theme.error
 
     def _record_felt(self, finger: int | None) -> None:
@@ -724,53 +723,45 @@ class CalibrationScreen:
         nobody avoids a quick buzzer check for fear of losing the sensor
         calibration."""
         if self.job == JOB_SENSORS:
-            return "The buzzer channel map stays exactly as it is."
+            return "The buzzer map stays as it is."
         if self.job == JOB_BUZZERS:
             saved = self._saved_profile()
             if saved is None:
-                return (f"No sensor calibration is saved for the "
-                        f"{self.hand} hand yet. Run the sensors when you can.")
-            return (f"Sensor thresholds measured on "
-                    f"{saved.created_at[:10]} stay exactly as they are.")
-        return "Takes about a minute. The patient stays seated throughout."
+                return (f"No sensor calibration for the {self.hand} "
+                        f"hand yet: run the sensors when you can.")
+            return (f"Sensor thresholds from {saved.created_at[:10]} "
+                    f"stay as they are.")
+        return "About a minute. The patient stays seated."
 
     def _instruction(self) -> tuple[str, str]:
         """Heading and body for the current step."""
         if self.step == STEP_INTRO:
             return ("Set up the calibration",
-                    "Pick the hand on the device and what needs measuring. "
-                    "Each hand is measured separately, because the pads sit "
-                    "differently on each.")
+                    "Pick the hand and what to measure. Each hand is "
+                    "measured on its own.")
         if self.step == STEP_EMPTY:
             return (f"{self._step_label(STEP_EMPTY)}   Hand off the device",
-                    "Take the hand right off, nothing touching any pad. "
-                    "This reads the true zero and the noise level.")
+                    "Take the hand off. Nothing touching any pad.")
         if self.step == STEP_RESTING:
             return (f"{self._step_label(STEP_RESTING)}   "
                     f"Hand resting, no press",
-                    "Rest the hand in its normal position on the pads. "
-                    "Do not press. This is the point every threshold "
-                    "is measured from.")
+                    "Rest the hand on the pads. Do not press.")
         if self.step == STEP_PRESS:
             f = FINGER_NAMES[self.finger_idx].title()
             return (f"{self._step_label(STEP_PRESS)}   {f} finger, "
                     f"light press",
-                    f"Press with the {f.lower()} finger only, as lightly as "
-                    f"the patient can manage and still mean it. Hold until "
-                    f"the timer runs out. Other fingers may move, that is "
-                    f"fine and is measured separately.")
+                    f"Press the {f.lower()} finger only, as lightly as the "
+                    f"patient can and still mean it. Hold until the timer "
+                    f"ends.")
         if self.step == STEP_ALL:
             return (f"{self._step_label(STEP_ALL)}   "
                     f"All four fingers together",
-                    "Press all four lightly at the same time and hold. "
-                    "Comparing this against the single presses gives the "
-                    "multi-finger deficit.")
+                    "Press all four lightly together and hold.")
         if self.step == STEP_BUZZ:
             return (f"{self._step_label(STEP_BUZZ)}   "
                     f"Buzzer channel {self.buzz_channel}",
-                    "Press Buzz, then say which finger felt it. This learns "
-                    "the wiring without changing the Arduino.")
-        return ("Review", "Check these look sensible, then save.")
+                    "Press Buzz, then pick the finger that felt it.")
+        return ("Review", "Check the numbers, then save.")
 
     def draw(self, surf: pygame.Surface) -> None:
         from .screens import _draw_header
@@ -904,9 +895,9 @@ class CalibrationScreen:
                 ly.width // 2, y, ly.width - 300, colour=th.foreground)
             self._draw_wrapped(
                 surf,
-                f"No sensor calibration is saved for the {self.hand} hand, "
-                f"so presses will run on the config defaults. Run the "
-                f"sensor calibration before recording a session.",
+                f"No sensor calibration for the {self.hand} hand: presses "
+                f"use the defaults. Calibrate the sensors before a real "
+                f"session.",
                 ly.width // 2, y + 60, ly.width - 300, colour=th.warning,
                 pt=FONT_SMALL + 2)
             return

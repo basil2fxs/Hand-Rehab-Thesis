@@ -222,8 +222,18 @@ class ForcePilotScreen(Screen):
                       colour=self.theme.muted)
             return
         now = time.perf_counter()
-        self._draw_top(surf, mode)
         phase = mode.phase
+        # A new finger takes the whole screen: the probe's gap before
+        # each finger, and the card before a run on a new finger or hand.
+        if phase == "probe_gap" or (phase == "announce"
+                                    and getattr(mode, "finger_change", False)):
+            self._draw_finger_card(surf, mode, now)
+            self._skip_at = None
+            self.engine._skip_chip_rect = None
+            if self.engine.paused and not self.engine.exit_overlay_active:
+                self._draw_paused_overlay(surf)
+            return
+        self._draw_top(surf, mode)
         if phase == "no_input":
             self._draw_no_input(surf)
         elif phase in ("probe_gap", "probe"):
@@ -309,13 +319,82 @@ class ForcePilotScreen(Screen):
         surf.blit(score_label, score_label.get_rect(
             midright=(score_rect.left - 10, score_rect.centery)))
 
+    def _draw_finger_card(self, surf: pygame.Surface, mode,
+                          now: float) -> None:
+        """The whole screen in the finger's colour: its name, the hand,
+        a hand with that finger lit, and a bar running down to the
+        start."""
+        probe = mode.phase == "probe_gap"
+        hand = mode.probe_hand if probe else mode.hand
+        finger = mode.probe_finger if probe else mode.finger
+        colour = self._finger_colour(finger)
+        ink = _text_colour_for(colour)
+        surf.fill(colour)
+        w, h = self.layout.width, self.layout.height
+        cx = w // 2
+        draw_text(surf, "MAX PRESS CHECK" if probe else "NOW", (cx, 96),
+                  self.theme, self.layout, pt=FONT_H2, centre=True,
+                  colour=ink)
+        big = make_font(int(FONT_TITLE * 2.4 * self.layout.font_scale),
+                        bold=True)
+        word = big.render(FINGER_WORDS[finger % 4], True, ink)
+        surf.blit(word, word.get_rect(center=(cx, 210)))
+        draw_text(surf, f"{str(hand).upper()} HAND", (cx, 300), self.theme,
+                  self.layout, pt=FONT_H1, centre=True, colour=ink)
+        self._draw_hand_bars(surf, pygame.Rect(cx - 180, 360, 360, 230),
+                             str(hand), finger, colour, ink)
+        if probe:
+            foot = "Press as hard as is comfortable."
+        else:
+            name = str(getattr(getattr(mode, "wave", None), "name", "") or "")
+            foot = f"Next: {mode.level}. {name}" if name else ""
+        if foot:
+            draw_text(surf, foot, (cx, 650), self.theme, self.layout,
+                      pt=FONT_H2, centre=True, colour=ink)
+        until = getattr(mode, "_phase_until", None)
+        total = max(0.5, float(getattr(mode, "finger_card_s", 3.0)))
+        if until is not None:
+            frac = max(0.0, min(1.0, (until - now) / total))
+            track = pygame.Rect(120, h - 70, w - 240, 10)
+            pygame.draw.rect(surf, self._mix(colour, ink, 0.25), track,
+                             border_radius=5)
+            if frac > 0:
+                pygame.draw.rect(surf, ink, pygame.Rect(
+                    track.x, track.y, int(track.w * frac), track.h),
+                    border_radius=5)
+
+    def _draw_hand_bars(self, surf: pygame.Surface, rect: pygame.Rect,
+                        hand: str, finger: int, colour, ink) -> None:
+        """Four fingers and a palm, palm down: a right hand reads index
+        to little left to right, a left hand the other way. The finger
+        to use is solid; the others are outlines."""
+        order = [0, 1, 2, 3] if hand != "left" else [3, 2, 1, 0]
+        gap = 18
+        fw = (rect.w - gap * 3) // 4
+        reach = {0: 0.86, 1: 1.0, 2: 0.9, 3: 0.68}
+        palm_h = 64
+        span = rect.h - palm_h - 8
+        base_y = rect.y + span
+        faint = self._mix(colour, ink, 0.35)
+        for slot, i in enumerate(order):
+            fh = int(span * reach[i])
+            r = pygame.Rect(rect.x + slot * (fw + gap), base_y - fh, fw,
+                            fh + 20)
+            if i == finger:
+                pygame.draw.rect(surf, ink, r, border_radius=fw // 2)
+            else:
+                pygame.draw.rect(surf, faint, r, 4, border_radius=fw // 2)
+        palm = pygame.Rect(rect.x - 10, base_y + 8, rect.w + 20, palm_h)
+        pygame.draw.rect(surf, faint, palm, 4, border_radius=26)
+
     def _draw_finger_chip(self, surf: pygame.Surface, hand: str,
-                          finger: int, cx: int, cy: int) -> None:
+                          finger: int, cx: int, cy: int,
+                          pt: int = FONT_BODY) -> None:
         """The active hand and finger as one coloured pill. This chip
         is the unmistakable-finger promise: it wears the finger's own
         lane colour and says the hand in words."""
         colour = self._finger_colour(finger)
-        pf = self.layout.font(FONT_BODY, bold=True)
+        pf = self.layout.font(pt, bold=True)
         text = pf.render(self._hand_finger_words(hand, finger), True,
                          _text_colour_for(colour))
         pill = pygame.Rect(0, 0, text.get_width() + 34,
@@ -332,14 +411,8 @@ class ForcePilotScreen(Screen):
                   (cx, 300), self.theme, self.layout, pt=FONT_H1,
                   centre=True, colour=self.theme.warning)
         draw_text(surf,
-                  "This mode flies on the continuous force signal, "
-                  "which the keyboard cannot produce.",
+                  "Connect the hand device, then start again. Esc leaves.",
                   (cx, 370), self.theme, self.layout, pt=FONT_BODY,
-                  centre=True, colour=self.theme.muted)
-        draw_text(surf,
-                  "Connect the sensor device, then start the block "
-                  "again. Esc leaves.",
-                  (cx, 404), self.theme, self.layout, pt=FONT_BODY,
                   centre=True, colour=self.theme.muted)
 
     # ---- max press probe ---------------------------------------------------
@@ -363,7 +436,7 @@ class ForcePilotScreen(Screen):
                   (cx, 244), self.theme, self.layout, pt=FONT_BODY,
                   centre=True, colour=self.theme.muted)
         self._draw_finger_chip(surf, mode.probe_hand, mode.probe_finger,
-                               cx, 320)
+                               cx, 320, pt=FONT_H1)
         probe = mode.probe
         remaining = (probe.presses_remaining if probe is not None
                      else mode.probe_presses)
@@ -553,7 +626,7 @@ class ForcePilotScreen(Screen):
         draw_text(surf, "REST", (cx, 250), self.theme, self.layout,
                   pt=FONT_H1 + 10, centre=True,
                   colour=self.theme.foreground)
-        draw_text(surf, "Hands off the pads. Shake them out.",
+        draw_text(surf, "Hands off. Shake them out.",
                   (cx, 316), self.theme, self.layout, pt=FONT_H2,
                   centre=True, colour=self.theme.muted)
         wave = getattr(mode, "wave", None)

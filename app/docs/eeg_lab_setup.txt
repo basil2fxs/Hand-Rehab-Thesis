@@ -1,139 +1,116 @@
 EEG lab setup
 =============
 
-The lab task is the shipping game with config/eeg_lab.yaml loaded on
-top: markers on, trigger box required, FRN bytes in chords and Force
-Pilot. The games look, sound and give feedback as on every other build
-(5 October 2026). The Reaction card is the lab's own SRT task
-(Welber's PsychoPy script, replicated trial for trial), and the Lab
-session runs it once, first in both orders, in place of the study's
-two Reaction blocks, with a response byte per trial (eeg_lab.yaml srt
-block). It leaves out Muscle Memory: the SRT's recall question tells
-the participant a sequence was there, so a Muscle Memory score taken
-after it would not pool with the study's. To rehearse on any PC, run
-developer\EEG simulator.cmd first: it plays the trigger box on COM10
-and the amplifier, and the game runs as if the box were plugged in.
-About 48 minutes from login, the SRT about 15 of them. The folder that
-goes to the lab is EEG_Lab at the top of the project
-(FingerRehab-EEGLab.zip on CI): Finger Rehab.exe, eeg_lab.yaml,
-run_in_psychopy.py, README.md, a source/ copy, and sessions/ with an
-empty eeg/ folder for ActiView's recordings. The exe loads the yaml
-beside it on its own, so a game update is a lab update.
+The lab build is the shipping game with config/eeg_lab.yaml on top:
+markers on, trigger box required, FRN bytes in Chords and Force Pilot.
+The games look, sound and give feedback as on every other build. The
+Reaction card is the lab's own SRT task (Welber's PsychoPy script,
+replicated trial for trial). The Lab session plays it once, first in
+both orders, in place of the study's two Reaction blocks, with a
+response byte per trial, and leaves out Muscle Memory: the SRT's recall
+question tells the participant a sequence was there, so a later Muscle
+Memory score would not pool with the study's. About 48 minutes from
+login, the SRT about 15 of them. The folder that goes to the lab is
+EEG_Lab (FingerRehab-EEGLab.zip on CI); the exe loads the yaml beside
+it, so a game update is a lab update. To rehearse on any PC, run
+developer\EEG simulator.cmd first.
 
 The chain: game -> USB -> the lab's marker, an Arduino on COM10 at
 9600 baud (box: arduino in eeg_lab.yaml; a NeuroSpec MMBT-S trigger box
 works the same way) -> the trigger cable -> BioSemi ActiveTwo USB
 receiver -> ActiView. One byte per write sets the marker's eight lines,
-which land on trigger inputs 1 to 8, the low byte of the Status
-channel. Nothing comes back: the game only sends.
+trigger inputs 1 to 8, the low byte of the Status channel. Nothing
+comes back: the game only sends.
 
 At the lab PC
 -------------
-1. Plug the marker in, and the hand boards if they are used, before
-   pressing Run. With a NeuroSpec MMBT-S box instead, the switch beside
-   its USB socket should read P (Pulse Mode: the box holds each code
-   8 ms and resets itself); if it reads S, set pulse_ms: 10 and
-   box_mode: simple in eeg_lab.yaml.
+1. Plug the marker in, and the hand boards if used, before pressing
+   Run. With a NeuroSpec MMBT-S box the switch beside its USB socket
+   should read P (Pulse Mode: the box holds each code 8 ms); if it
+   reads S, set pulse_ms: 10 and box_mode: simple in eeg_lab.yaml.
 2. Start ActiView. The trigger low byte reads 255.
 3. Open run_in_psychopy.py in PsychoPy Coder and press Run (or
-   double-click Finger Rehab.exe). PsychoPy's first start shows a tip
-   and a list of changes: close both. The low byte drops to 0 the
-   moment the game opens the port. If the box is not on COM10, the
-   game opens on a list of ports instead of the login: click the EEG
-   marker's port (unplug it and press Scan again to see which entry
-   goes), then Continue. The choice is saved in eeg_lab.yaml. The lab's
-   marker is an Arduino, so it looks like a hand board: if the game
-   ever takes it for one, Settings, EEG box lists it as "hand board
-   now", and clicking it moves it to the markers and saves it. Settings, EEG box, changes it later or
-   reconnects a box that dropped out.
-4. If Windows refuses the exe (it is unsigned; Smart App Control on
-   Windows 11 blocks unsigned programs), the launcher runs the same
-   game from source/ under PsychoPy's own Python. The first time it
-   installs what PsychoPy lacks into python_packages/ beside it, which
-   needs the internet once. Each computer gets its own subfolder there
-   (darwin-arm64-py310, win32-amd64-py310), so a folder tested on the
-   Mac first still starts clean on the lab PC. Needs PsychoPy with
-   Python 3.10 or newer.
-5. Log the participant in. The game menu then shows the recording's
-   name, for example "EEG: record ActiView as P07_2026-09-24.bdf in
+   double-click Finger Rehab.exe); close PsychoPy's first-start tips.
+   The low byte drops to 0 the moment the game opens the port. If the
+   box is not on COM10 the game opens on a port list: click the
+   marker's port (unplug it and Scan again to see which entry goes),
+   then Continue; the choice is saved in eeg_lab.yaml. The marker is an
+   Arduino, so the game can take it for a hand board: Settings, EEG box
+   lists it as "hand board now", and clicking it moves it to the
+   markers. Settings, EEG box also reconnects a box that dropped out.
+4. If Windows refuses the unsigned exe (Smart App Control on Windows
+   11), the launcher runs the same game from source/ under PsychoPy's
+   own Python (3.10 or newer). The first time it installs what
+   PsychoPy lacks into python_packages/, which needs the internet once;
+   each computer gets its own subfolder there.
+5. Log the participant in. The menu shows the recording's name, for
+   example "EEG: record ActiView as P07_2026-09-24.bdf in
    EEG_Lab/sessions/eeg". Start ActiView's recording with exactly that
    name, then pick the first game. With ActiView on the game PC, save
    it in that folder and the line turns to "EEG recording ... is in
-   ..." once the file is there. With ActiView on its own EEG PC, save
-   it there under that name: the trigger box still writes every marker
-   into it, and the line stays up all session. A second login the
-   same day gets _2, _3 and so on, so nothing is overwritten.
-6. Play the games. Keep Test Mode off (Settings, Data) for real data. P
-   pauses; Esc twice ends one game. A red "EEG markers lost" means the
-   box dropped out: finish that game, then Settings, EEG box, and pick
-   it again.
+   ..."; with ActiView on its own EEG PC, save it there under that name
+   and the line stays up all session. A second login the same day gets
+   _2, _3 and so on.
+6. Play. Keep Test Mode off (Settings, Data). P pauses; Esc twice ends
+   one game. A red "EEG markers lost" means the box dropped out: finish
+   that game, then Settings, EEG box, and pick it again.
 7. End the session with Esc on the game menu, End session. Then stop
    ActiView's recording.
-8. Never set 1200 baud anywhere: it resets the box off the bus. The
-   game refuses eeg.baud 1200. Leave the port's settings alone.
-9. Keep vsync on for the game window, or visual markers lead the
-   screen by an unknown amount. Write the panel's refresh rate on the
-   session sheet: every SRT block records monitor_hz and vsync in
-   metadata.json, and about 120 Hz on a 60 Hz panel means the window
-   ran without vsync.
+8. Never set 1200 baud: it resets the box off the bus, and the game
+   refuses eeg.baud 1200. Leave the port's settings alone.
+9. Keep vsync on, or visual markers lead the screen by an unknown
+   amount. Write the panel's refresh rate on the session sheet: every
+   SRT block records monitor_hz and vsync in metadata.json, and about
+   120 Hz on a 60 Hz panel means the window ran without vsync.
 10. Reaction opens on its setup screen; keep it turned away from the
    participant. Pick the timing group (or a saved setup) and START,
    saying the group aloud and checking it against the session sheet:
-   the screen opens on the group last picked on this computer, by any
-   login, and keeps it until someone picks another, even after a new
-   lab folder is copied in. The hands
-   come from login (two hands, as the lab's own studies ran it, need
-   both boards or the keyboard). Leave musical experience blank and
-   ask about formal musical training after the task, on the session
-   sheet: a question about music before the task points at the tones.
-   The task is the old script's, drawn as the script drew it: grey
-   squares on a black page at the script's sizes, colours and words
-   (srt.look: lab, every build since 8 October 2026; srt.look: app
-   gives the game's finger cards):
-   one 30 per flash and one response byte per trial, SPACE between blocks,
-   the recall at the end, and the script's three CSVs in the game's
-   folder beside trials.csv. After the recall, ask "Did you notice
-   anything about the order of the lit cards? If so, what?" and write
-   the answer word for word on the session sheet (srt_noticed and
-   srt_report on the intake sheet). The answer on screen to the
-   recall question is not recorded.
-11. Everything lands in sessions/ beside run_in_psychopy.py, whichever
-   way the game started: a dated folder per game with trials.csv,
-   raw.csv (an eeg row per marker, with the intended and the actual
-   send time), metadata.json (eeg section: port, pulse and gap widths,
-   box, the code map, latency constants, marker offsets, failure
-   counts, degraded flag, and which recording in sessions/eeg the game
-   belongs to), events.tsv with events.json, and markers_codes.csv;
-   plus rehab.log, the game's own log. Take the whole sessions/ folder
-   home, with the .bdf from the EEG PC when ActiView ran there, put the
-   .bdf in sessions/eeg beside the games, and merge the folder into the
-   project's sessions/: the notebook reads the games and lists each
-   game's recording as present or missing.
-12. Settings changes made at the lab last until the game closes; every
-   launch starts from eeg_lab.yaml again. The trigger box port is the
-   one exception, since the port list saves it.
-13. Flashing firmware and changing a sensor address are done from the
-   exe's Settings screen. The source/ copy carries no avrdude.
+   the screen opens on the group last picked on this computer, even
+   after a new lab folder is copied in. The hands come from login (two
+   hands, as the lab's own studies ran it, need both boards or the
+   keyboard). Leave musical experience blank and ask about formal
+   musical training after the task, on the session sheet: a question
+   about music before the task points at the tones. The task is the
+   old script's, drawn as the script drew it: grey squares on a black
+   page at the script's sizes, colours and words (srt.look: lab;
+   srt.look: app gives the game's finger cards), one 30 per flash and
+   one response byte per trial, SPACE between blocks, the recall at the
+   end, and the script's three CSVs beside trials.csv. After the
+   recall, ask "Did you notice anything about the order of the lit
+   cards? If so, what?" and write the answer word for word on the
+   session sheet (srt_noticed and srt_report on the intake sheet). The
+   answer on screen to the recall question is not recorded.
+11. Everything lands in sessions/ beside run_in_psychopy.py: a dated
+   folder per game with trials.csv, raw.csv (an eeg row per marker,
+   intended and actual send time), metadata.json (its eeg section has
+   the port, pulse widths, code map, latencies, failures and which
+   recording the game belongs to), events.tsv with events.json and
+   markers_codes.csv, plus rehab.log. Take the whole sessions/ folder
+   home with the .bdf from the EEG PC, put the .bdf in sessions/eeg
+   beside the games, and merge the folder into the project's
+   sessions/: the notebook lists each game's recording as present or
+   missing.
+12. Settings changes at the lab last until the game closes; every
+   launch starts from eeg_lab.yaml again, except the trigger box port.
+13. Flash firmware and change sensor addresses from the exe's Settings:
+   the source/ copy carries no avrdude.
 
 Testing the lab build on a Mac, no box
 --------------------------------------
-scripts/virtual_trigger_box.py stands in for the MMBT-S: a
-pseudo-terminal the game opens like any serial port, which records
-every byte. It starts the lab folder's source/ under PsychoPy's own
-Python with eeg_lab.yaml, the way run_in_psychopy.py does, with
---eeg-port pointed at itself; the hand board is found the normal way.
-Play as a participant would, then close the game. The script lists
-the bytes it received against the markers each block logged in
-raw.csv, in order, and writes the byte log to
+scripts/virtual_trigger_box.py stands in for the box: a pseudo-terminal
+the game opens like any serial port, which records every byte. It
+starts the lab folder's source/ under PsychoPy's own Python with
+eeg_lab.yaml, the way run_in_psychopy.py does. Play, then close the
+game: the script lists the bytes it received against the markers each
+block logged in raw.csv and writes the byte log to
 EEG_Lab/sessions/eeg/virtual_box_<time>.csv.
 
     python3 scripts/virtual_trigger_box.py
     python3 scripts/virtual_trigger_box.py --box-only   just the box
 
 The first time, run run_in_psychopy.py once from PsychoPy Coder so it
-installs the packages the game needs into EEG_Lab/python_packages.
-Delete the test sessions from EEG_Lab/sessions before the folder goes
-to the lab.
+installs the packages the game needs. Delete the test sessions from
+EEG_Lab/sessions before the folder goes to the lab.
 
 What the Status channel shows
 -----------------------------

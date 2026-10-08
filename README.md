@@ -2,7 +2,7 @@
 <h1 align="center">Finger Rehab</h1>
 <p align="center">A hand device and a game for Windows and macOS that measure and train finger movement.<br>Four force pads, four vibration motors and an Arduino Nano. Ten games. Every press is logged with its time and force.</p>
 <p align="center"><a href="https://github.com/basil2fxs/Hand-Rehab-Thesis/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/basil2fxs/Hand-Rehab-Thesis?label=release&color=16a34a"></a> <a href="https://github.com/basil2fxs/Hand-Rehab-Thesis/actions/workflows/build-apps.yml"><img alt="build-apps" src="https://github.com/basil2fxs/Hand-Rehab-Thesis/actions/workflows/build-apps.yml/badge.svg"></a></p>
-<p align="center"><a href="#install">Install</a> &middot; <a href="#the-ten-games">Games</a> &middot; <a href="#troubleshooting">Troubleshooting</a> &middot; <a href="#data">Data</a> &middot; <a href="#the-lab-folder">Lab folder</a> &middot; <a href="CONTRIBUTING.md">Working on the code</a></p>
+<p align="center"><a href="#install">Install</a> &middot; <a href="#the-ten-games">Games</a> &middot; <a href="#troubleshooting">Troubleshooting</a> &middot; <a href="#data">Data</a> &middot; <a href="#the-lab-folder">Lab folder</a> &middot; <a href="app/README.md">Working on the code</a></p>
 <p align="center"><img src="app/docs/images/hub.png" width="88%" alt="The hub, where each game is picked"></p>
 
 ## Where things are
@@ -51,30 +51,27 @@ flowchart LR
   F --> N["analysis/session_analysis.ipynb"]
 ```
 
-There's no switch under a finger. Each pad keeps a slow baseline, and a press counts when the force crosses a trigger 30% of the way from that person's resting level to their light press, both measured at login.
+There's no switch under a finger. Each pad keeps a slow baseline, and a press counts when the force crosses a trigger 30% of the way from that person's resting level to their light press, both measured at login. Settings, Setup, Press point moves the 30%.
 
 <p align="center"><img src="app/docs/images/login.png" width="32%" alt="The login screen"> <img src="app/docs/images/hand.png" width="32%" alt="The hand choice screen"> <img src="app/docs/images/calibration.png" width="32%" alt="The quick calibration"><br><sub>Log in (free play, or a timed session of 15 to 60 minutes), pick the hand, calibrate. The game menu has the same session picker.</sub></p>
 
 ## Timing and limits
 
-- **Pads:** each SingleTact reads 0 to 10 N in 512 steps, about 20 mN a step. The manual quotes up to 120 Hz, but in recorded sessions the pads gave a new value on nearly every 5 ms read: while force changed quickly, under 3% of samples repeated. Slower changes repeat because they are smaller than one step.
-- **Board:** the Nano reads all four pads every 5 ms (199 Hz measured) and sends one line over USB at 115200 baud. A failed read arrives as 0.
-- **USB:** samples reach the computer in bursts, about four every 20 ms, and are timed when they arrive: about 10 ms after the pad was read on average, up to about 20 ms. The analysis notebook can re-time presses on the board's own 5 ms clock.
+- **Sensing:** each pad reads 0 to 10 N in 512 steps, about 20 mN a step. The Nano reads all four every 5 ms (199 Hz measured) and sends them over USB in bursts, so a sample arrives about 10 ms late, up to 20 ms; the notebook can re-time presses on the board's own clock.
 - **Presses:** a press counts when the smoothed force crosses the trigger, 7 to 11 ms after the raw crossing.
-- **Screen:** the game draws 60 frames a second, so a cue shows on the next frame, up to 17 ms later.
-- **Sound and buzz:** on the study computer a sound was heard 77 to 87 ms after the game played it and a motor moved 74 ms after its command. Every computer needs its own measurement: Settings, Setup, Audio delay.
-- **EEG markers:** a stimulus byte goes out on the frame that draws the stimulus; the monitor's and the speaker's own delays come on top and are timed once per lab PC with a light sensor and a microphone. A press byte leaves up to one frame (17 ms) after its sample, on top of the USB delay above; `events.tsv` moves each one back to its sample on the board's clock and to where the push began, a median 50 ms before the trigger. Each byte is held until the first frame at least 8 ms later, 8 to 17 ms at 60 Hz. Confirm the lab's recording rate before the first session ([app/docs/eeg_lab_setup.txt](app/docs/eeg_lab_setup.txt)).
+- **Screen and sound:** a cue shows on the next 60 Hz frame, up to 17 ms later. On the study computer a sound was heard 77 to 87 ms after the game played it and a buzz felt 74 ms after its command; measure each computer with Settings, Setup, Audio delay.
+- **EEG markers:** a stimulus byte goes out on the frame that draws the stimulus, a press byte up to one frame after its sample, and `events.tsv` moves each press back to its sample and to where the push began. Checklist: [app/docs/eeg_lab_setup.txt](app/docs/eeg_lab_setup.txt).
 
 ## Install
 
 - **Windows:** run [`FingerRehab-Setup-Windows.exe`](https://github.com/basil2fxs/Hand-Rehab-Thesis/releases/latest/download/FingerRehab-Setup-Windows.exe). No administrator needed. SmartScreen says "Windows protected your PC": More info, Run anyway.
 - **macOS:** open [`FingerRehab-macOS.dmg`](https://github.com/basil2fxs/Hand-Rehab-Thesis/releases/latest/download/FingerRehab-macOS.dmg), drag Finger Rehab to Applications. First open: System Settings, Privacy & Security, Open Anyway.
 
-Both are on the [latest release](https://github.com/basil2fxs/Hand-Rehab-Thesis/releases/latest), built and tested from the same commit. From source: `pip install -r app/requirements.txt`, then `python app/main.py`. No board? The keyboard stands in: `J K L ;` right hand, `F D S A` left.
+Both are on the [latest release](https://github.com/basil2fxs/Hand-Rehab-Thesis/releases/latest), built and tested from the same commit. From source: [app/README.md](app/README.md). No board? The keyboard stands in: `J K L ;` right hand, `F D S A` left.
 
 ## When a board is plugged in
 
-The game opens within a second. A watcher installed at first launch checks the ports once a second. If the board was already plugged in when the computer started, unplug it and plug it back in.
+The game opens within a second: a watcher installed at first launch checks the ports once a second. A board already plugged in when the computer started needs unplugging and plugging back in.
 
 ## The ten games
 
@@ -118,14 +115,14 @@ The game opens within a second. A watcher installed at first launch checks the p
 
 <p align="center"><img src="app/docs/images/settings.png" width="72%" alt="The Settings screen"></p>
 
-The cog on the login screen. Four tabs: Hand device (the finger test, which board is which hand, a test buzz), Sound and cues (the levels and the cue switches), Setup, and Data (the data folder, the Muscle Memory riff, Test Mode). The Setup jobs ([app/docs/flashing.txt](app/docs/flashing.txt)):
+The cog on the login screen. Four tabs: Hand device (the finger test, which board is which hand, a test buzz), Sound and cues (levels and cue switches), Setup, and Data (the data folder, the Muscle Memory riff, Test Mode). The Setup jobs (flashing notes: [app/arduino](app/arduino)):
 
 - **Auto-start:** opens the game when the board is plugged in. The switch reads on or off, and off stays off.
 - **Flash firmware:** writes the game firmware to the board with the avrdude bundled in the app, about ten seconds.
 - **Sensor address:** moves one SingleTact to a new I2C address, with only that sensor connected.
-- **Audio delay:** once on a new computer, times its sound and buzz with the microphone so Rhythm lands on the beat. About two minutes in a quiet room with the board plugged in; on Windows it asks for taps on the index pad.
+- **Audio delay:** once per computer, times its sound and buzz with the microphone so Rhythm lands on the beat. About two minutes in a quiet room, board plugged in; on Windows it asks for taps on the index pad.
 
-On Windows there's also USB driver: if a board is plugged in but never shows up, it gets the board's driver from Windows Update.
+On Windows, Setup also has USB driver: it gets a board's missing driver from Windows Update.
 
 ## Troubleshooting
 

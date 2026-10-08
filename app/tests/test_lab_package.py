@@ -632,7 +632,7 @@ class OneAppTests(unittest.TestCase):
 
     BUILD_FILES = ("builds/build_app.sh", "builds/build_app.bat",
                    ".github/workflows/build-apps.yml", "finger_rehab.spec",
-                   ".gitignore", "README.md", "builds/README.txt",
+                   ".gitignore", "README.md", "builds/README.md",
                    "config/default.yaml", "main.py",
                    "finger_rehab/hardware/autostart.py")
 

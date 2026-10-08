@@ -467,8 +467,8 @@ class QuickCalibrationScreen(Screen):
         for hand in self.hands:
             rows = self._rest_buffers.get(hand) or []
             if not rows:
-                self._status = ("No samples arrived. Check the device on "
-                                "the Settings screen, then try again.")
+                self._status = ("No samples. Check the device in "
+                                "Settings, then try again.")
                 return
             cols = list(zip(*rows))
             cap = self._captures[hand]
@@ -532,7 +532,7 @@ class QuickCalibrationScreen(Screen):
             # The band floor makes this nearly unreachable, but a noisy
             # buffer can still land short. Ask again rather than saving
             # a threshold that cannot both trigger and release.
-            self._status = "Almost. A touch firmer this time."
+            self._status = "A touch firmer this time."
             self._hold = 0.0
             self._zone_buffer = []
             return
@@ -1209,17 +1209,17 @@ class QuickCalibrationScreen(Screen):
         elif over:
             msg, colour = "Ease off a bit", th.warning
         elif not under:
-            msg, colour = "Perfect. Hold it there...", th.success
+            msg, colour = "Hold it there", th.success
         elif me < lo * 0.25:
-            msg = f"Press your {FINGER_NAMES[i]} finger gently onto the pad"
+            msg = f"Press your {FINGER_NAMES[i]} finger gently"
             colour = self._too_light_colour()
         else:
             msg, colour = "Press a little harder", self._too_light_colour()
         self._bold(surf, msg, (cx, y), FONT_H2 + 8, colour)
         if (not self._landed
                 and time.perf_counter() - self._started_finger_at > 12.0):
-            draw_text(surf, "Nothing happening? Skip for now keeps the "
-                      "saved settings.", (cx, y + 32), th, ly,
+            draw_text(surf, "Stuck? Skip for now keeps the saved "
+                      "settings.", (cx, y + 32), th, ly,
                       pt=FONT_SMALL + 2, centre=True, colour=th.muted)
 
     def _draw_tick_row(self, surf: pygame.Surface) -> None:
@@ -1276,12 +1276,12 @@ class QuickCalibrationScreen(Screen):
         pinky is not told off for a press its pad demanded."""
         lo, hi = band
         if gap < lo:
-            return "very light, we can work with it"
+            return "very light"
         if gap <= lo + (hi - lo) * 0.45:
-            return "a lovely light touch"
+            return "light"
         if gap <= hi:
-            return "a nice steady press"
-        return "a firm press, lighter is fine too"
+            return "steady"
+        return "firm"
 
     def _draw_summary(self, surf: pygame.Surface) -> None:
         th, ly = self.theme, self.layout
@@ -1292,7 +1292,7 @@ class QuickCalibrationScreen(Screen):
                 else "All set!" if ok else "Nearly there")
         self._bold(surf, head, (cx, 234), FONT_H1, th.foreground)
         draw_text(surf,
-                  "That light touch is all the game ever needs."
+                  "A light touch is all the game needs."
                   if ok else "One finger needs another go.",
                   (cx, 276), th, ly, pt=FONT_BODY, centre=True,
                   colour=th.muted)
@@ -1353,8 +1353,7 @@ class QuickCalibrationScreen(Screen):
                           th, ly, pt=FONT_SMALL + 2, colour=th.muted)
                 y += row_h
             legend = panel.bottom + 18
-        draw_text(surf, "The dot is where your press landed. The green "
-                  "stretch is what that finger was aiming for.",
+        draw_text(surf, "Dot: your press. Green: the target.",
                   (cx, legend), th, ly, pt=FONT_SMALL + 2, centre=True,
                   colour=th.muted)
         if self._problems:

@@ -85,8 +85,7 @@ class EegPortScreen(Screen):
                 line = (f"Markers stopped reaching {port}. Pick the box "
                         "again to reconnect it.")
             return line
-        return ("No trigger box: markers are only written to the log. "
-                "Pick the box's port to send them.")
+        return "No trigger box: markers go to the log only. Pick its port."
 
     def _current_port(self) -> str | None:
         if self.engine.markers.needs_port:
@@ -304,13 +303,12 @@ class EegPortScreen(Screen):
                       pt=FONT_SMALL + 2, centre=True, colour=theme.muted)
         hint_y = layout.height - self.BTN_Y_FROM_BOTTOM - 70
         for k, line in enumerate((
-                "Not sure which one? Unplug the box, press Scan again, "
-                "and see which entry goes.",
-                ("The hand boards are in this list too until the game "
-                 "starts. The choice is saved in eeg_lab.yaml."
+                "Not sure? Unplug the box, Scan again, see which one goes.",
+                ("Hand boards show here until the game starts. Saved in "
+                 "eeg_lab.yaml."
                  if self.at_launch else
-                 "Picking a hand board's port moves it to the markers. "
-                 "The choice is saved in eeg_lab.yaml."))):
+                 "A hand board's port picked here moves to the markers. "
+                 "Saved in eeg_lab.yaml."))):
             draw_text(surf, line, (layout.width // 2, hint_y + k * 24),
                       theme, layout, pt=FONT_SMALL + 2, centre=True,
                       colour=theme.muted)

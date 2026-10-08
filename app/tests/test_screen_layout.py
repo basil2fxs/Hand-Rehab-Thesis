@@ -439,19 +439,22 @@ class TestSettingsGroups:
 
     def test_the_setup_rows_fit_on_the_lab_pc(self, settings_screen):
         # Windows adds the USB driver row and the lab build the EEG box:
-        # six rows, and every one stays inside the card.
+        # seven rows with the press point, and every one stays inside
+        # the card with room for its title and one line.
         screen, eng = settings_screen
         screen._show_usb_row = True
 
         class _Markers:
             enabled = True
         eng.markers = _Markers()
-        assert screen._setup_row_count() == 6
+        assert screen._setup_row_count() == 7
         card = screen._firmware_rect()
-        for i in range(6):
+        for i in range(7):
             assert card.contains(screen._setup_btn_rect(i)), i
-        last_top = screen._firmware_row_y(5)
+        last_top = screen._firmware_row_y(6)
         assert last_top + screen._setup_row_h() <= card.bottom
+        assert screen._setup_row_h() >= 56
+        assert all(len(lines) == 1 for _t, lines in screen._setup_rows())
 
     def test_every_cue_switch_has_a_row(self, settings_screen):
         """Grouped by when the patient meets them, so the screen switch

@@ -316,9 +316,9 @@ class TestRunPlan:
             tmp_path / "config/calibration/current_right.json")
         screen, _, _ = make_screen(tmp_path)
         screen._pick_job(cs.JOB_SENSORS)
-        assert "buzzer channel map stays" in screen._keep_note()
+        assert "buzzer map stays" in screen._keep_note()
         screen._pick_job(cs.JOB_BUZZERS)
-        assert "stay exactly as they are" in screen._keep_note()
+        assert "stay as they are" in screen._keep_note()
 
     def test_the_effective_map_is_the_saved_one_when_not_measured(
             self, tmp_path: Path):

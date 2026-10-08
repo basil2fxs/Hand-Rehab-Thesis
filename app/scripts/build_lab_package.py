@@ -87,17 +87,12 @@ def make_source(repo: Path, pkg: Path) -> Path:
 # is there before the first recording starts. Beside the game's own
 # session folders, so taking sessions/ home takes a whole lab day.
 EEG_FOLDER = Path("sessions") / "eeg"
-EEG_NOTE = """EEG recordings go in this folder.
+EEG_NOTE = """ActiView recordings go here.
 
-After the participant logs in, the game menu shows the name to use,
-for example P07_2026-09-24.bdf. In ActiView, start the recording with
-that name, saved here, before picking the first game. The game notes
-in each game's metadata.json which recording it belongs to.
-
-Taking the data home: copy the whole sessions folder beside
-run_in_psychopy.py. On the Mac, put what is inside it into the
-project's own sessions folder: the dated game folders and this eeg
-folder merge in, and the notebook finds both.
+After login the game menu shows the name to use, for example
+P07_2026-09-24.bdf. Start the recording under that name, saved here,
+before the first game. Take the whole sessions folder home; on the Mac
+it merges into the project's own sessions folder.
 """
 
 

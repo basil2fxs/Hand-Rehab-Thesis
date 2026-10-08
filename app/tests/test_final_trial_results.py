@@ -2,9 +2,8 @@
 
 The folder sits in a public repository and will hold participant data,
 so the rule that matters most is that git never picks the data up:
-only the folder's README and one README per subfolder may be shared.
-The rest pins the layout the README walks through, and the house rules
-every README here follows.
+only the folder's one README may be shared. The rest pins the layout
+the README walks through, and the house rules it follows.
 """
 from __future__ import annotations
 
@@ -26,15 +25,18 @@ BANNED_WORDS = ("delve", "leverage", "robust", "seamless", "showcase",
 
 
 def _readmes() -> list[Path]:
-    return [FOLDER / "README.md"] + [FOLDER / s / "README.md"
-                                     for s in SUBFOLDERS]
+    return [FOLDER / "README.md"]
 
 
 class LayoutTests(unittest.TestCase):
-    def test_every_subfolder_has_its_readme(self) -> None:
+    def test_one_readme_covers_the_folder(self) -> None:
+        # One page for the whole study (8 October 2026): the subfolders
+        # hold data only, so none carries a README of its own.
         for path in _readmes():
             self.assertTrue(path.is_file(), path)
             self.assertTrue(path.read_text(encoding="utf-8").strip(), path)
+        for sub in SUBFOLDERS:
+            self.assertFalse((FOLDER / sub / "README.md").exists(), sub)
 
     def test_the_readme_walks_every_subfolder(self) -> None:
         text = (FOLDER / "README.md").read_text(encoding="utf-8")

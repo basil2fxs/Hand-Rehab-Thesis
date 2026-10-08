@@ -1,8 +1,5 @@
 # Recorded data and results stay on this machine and its backups, never
-# on GitHub. Only this folder's README and one README per subfolder are
-# shared, so the layout shows on GitHub and nothing else does.
+# on GitHub. Only this file and the README are shared.
 *
 !/.gitignore
 !/README.md
-!/*/
-!/*/README.md

@@ -207,7 +207,7 @@ class EncouragementStreakTests(unittest.TestCase):
         self.assertEqual(len(calls), 2)
         # Process praise with the count in it, not a trait.
         self.assertEqual(calls[0].args[0], "10 in a row")
-        self.assertEqual(calls[1].args[0], "20 in a row, steady hands")
+        self.assertEqual(calls[1].args[0], "20 in a row")
 
     def test_miss_resets_streak(self) -> None:
         eng = self._make_engine_with_stub_screens()

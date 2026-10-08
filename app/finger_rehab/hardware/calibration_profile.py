@@ -50,6 +50,31 @@ FINGER_NAMES = ("index", "middle", "ring", "pinky")
 PRESS_FRACTION = 0.30
 RELEASE_FRACTION = 0.20
 
+# The press point in use. PRESS_FRACTION is the default; Settings, Setup,
+# Press point moves it in 5 percent steps (fsr.press_fraction in
+# user_settings.yaml), and the EEG response byte goes out at the same
+# point. The release point stays under it whatever is chosen (off_delta).
+PRESS_FRACTION_RANGE = (0.10, 0.60)
+_press_fraction = PRESS_FRACTION
+
+
+def press_fraction() -> float:
+    """The press point every threshold is built from now."""
+    return _press_fraction
+
+
+def set_press_fraction(value) -> float:
+    """Put a press point into use, kept inside PRESS_FRACTION_RANGE and
+    rounded to whole percent. Returns the value used."""
+    global _press_fraction
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        v = PRESS_FRACTION
+    lo, hi = PRESS_FRACTION_RANGE
+    _press_fraction = round(min(hi, max(lo, v)), 2)
+    return _press_fraction
+
 # The most a calibration press can raise a finger's trigger: the gap the
 # threshold is taken from is capped at this many times the light-press
 # target's floor. A press far harder than asked for (a nervous first
@@ -250,7 +275,7 @@ class CalibrationProfile:
             # like a rise. Neither normally binds.
             floor = press_floor_counts(self.preload()[i],
                                        self.empty_noise[i])
-            out.append(int(round(max(floor, gaps[i] * PRESS_FRACTION))))
+            out.append(int(round(max(floor, gaps[i] * press_fraction()))))
         return out
 
     def off_delta(self) -> list[int]:

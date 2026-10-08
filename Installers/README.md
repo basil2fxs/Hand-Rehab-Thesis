@@ -1,10 +1,12 @@
 # Installers
 
-| Folder | File | To install |
+The two installers go here, from the [latest release](https://github.com/basil2fxs/Hand-Rehab-Thesis/releases/latest) or a local build. Neither is kept in git: each is hundreds of MB.
+
+| File | Goes in | To install |
 | --- | --- | --- |
-| [`Windows/`](Windows) | `FingerRehab-Setup-Windows.exe` | Run it. No administrator needed; auto-start is on |
-| [`macOS/`](macOS) | `FingerRehab-macOS.dmg` | Open it and drag Finger Rehab into Applications |
+| `FingerRehab-Setup-Windows.exe` | `Windows/` | Run it. No administrator needed; auto-start is on. Built by `app\builds\build_app.bat` |
+| `FingerRehab-macOS.dmg` | `macOS/` | Open it and drag Finger Rehab into Applications. Built by `app/builds/build_app.sh` |
 
 Neither is signed, so the first open needs one click through. Windows: More info, Run anyway. macOS: System Settings, Privacy & Security, Open Anyway.
 
-Take both, with `FingerRehab-EEGLab.zip`, from the same [latest release](https://github.com/basil2fxs/Hand-Rehab-Thesis/releases/latest), so all three are one build.
+Take both from the same release as `FingerRehab-EEGLab.zip`, so all three are one build.

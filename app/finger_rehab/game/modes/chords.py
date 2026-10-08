@@ -1285,7 +1285,7 @@ class ChordsMode(WaitSkip):
         if (self.phase in ("settle", "rest")
                 and self._t0 is not None
                 and (now - self._t0) > self.session_cap_s):
-            self._set_message("Session complete", 2.0)
+            self._set_message("Game done", 2.0)
             self._end("time_cap")
             return
         if self.phase == "rest":
@@ -2096,7 +2096,7 @@ class ChordsMode(WaitSkip):
         # trial in half.
         if (self._t0 is not None
                 and (now - self._t0) > self.session_cap_s):
-            self._set_message("Session complete", 2.0)
+            self._set_message("Game done", 2.0)
             self._end("time_cap")
             return
         self._sub_done += 1
@@ -2133,7 +2133,7 @@ class ChordsMode(WaitSkip):
         self._sub_rts = []
         fatigued = self._fatigue_check(stats)
         if fatigued and self._fatigue_triggers >= 2:
-            self._set_message("Great effort. Session done", 2.0)
+            self._set_message("Great effort. Game done", 2.0)
             self._end("fatigue")
             return
         if not self._in_training():

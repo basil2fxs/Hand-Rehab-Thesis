@@ -56,14 +56,11 @@ STAGE_LINES = {
             "Rest your fingertips on the pads and your eyes on the dot. "
             "Sometimes nothing buzzes: then keep still."),
     "distractor": ("Two buzzes: a decoy, then the real one.",
-                   "The decoy lands on the other hand first. "
                    "Press where the LAST buzz was."),
     "span": ("Feel the pattern, then replay it.",
-             "The pads play a sequence of buzzes. When it ends, "
-             "press the same fingers in the same order."),
+             "Press the same fingers in the same order."),
     "gap": ("One buzz or two?",
-            "Tap the finger that buzzed: once for one buzz, "
-            "twice if you felt two."),
+            "Tap that finger once for one buzz, twice for two."),
 }
 
 
@@ -276,14 +273,8 @@ class BuzzHuntScreen(Screen):
                   (cx, 300), self.theme, self.layout, pt=FONT_H1,
                   centre=True, colour=self.theme.warning)
         draw_text(surf,
-                  "The buzz IS the game, and a keyboard cannot buzz "
-                  "a finger.",
+                  "Connect the hand device, then start again. Esc leaves.",
                   (cx, 370), self.theme, self.layout, pt=FONT_BODY,
-                  centre=True, colour=self.theme.muted)
-        draw_text(surf,
-                  "Connect the sensor device, then start the block "
-                  "again. Esc leaves.",
-                  (cx, 404), self.theme, self.layout, pt=FONT_BODY,
                   centre=True, colour=self.theme.muted)
 
     # ---- stage card --------------------------------------------------------

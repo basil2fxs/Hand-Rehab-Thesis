@@ -492,7 +492,7 @@ class RealEngineWordingTests(unittest.TestCase):
             for _ in range(11):
                 eng._update_streak(was_hit=True, screen_key="gameplay")
             self.assertEqual(gp.banners, ["10 in a row",
-                                          "20 in a row, steady hands"])
+                                          "20 in a row"])
             for text in gp.banners:
                 self.assertEqual(fb.offending(text), [])
 

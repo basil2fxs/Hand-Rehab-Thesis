@@ -488,8 +488,8 @@ class FirmwareDialog:
         draw_text(surf, "Firmware: " + self.firmware_label,
                   (x, card.y + 170), th, ly, pt=FONT_BODY, centre=False,
                   colour=th.foreground)
-        draw_text(surf, "Takes about ten seconds. The buzzers self test "
-                        "when the board restarts.",
+        draw_text(surf, "About ten seconds. The board buzzes when it "
+                        "restarts.",
                   (x, card.y + 200), th, ly, pt=FONT_SMALL + 2,
                   centre=False, colour=th.muted)
         if self.result_text:

@@ -10,7 +10,7 @@ entries (the only place the hardware's failure modes are written down)
 and the buttons and config keys those entries tell somebody to press
 or edit. The rest is cheap rot cover: the screenshots, links to files
 that were moved, the length, and the plain ASCII house rule, which the
-short READMEs beside the assets and the builds share.
+READMEs of the assets, the builds and the firmware share.
 """
 from __future__ import annotations
 
@@ -26,11 +26,15 @@ REPO = Path(__file__).resolve().parents[1]
 # for whoever changes the code, so the top level is looked at first.
 README = (REPO.parent / "README.md" if (REPO.parent / "README.md").is_file()
           else REPO / "README.md")
-ASSET_READMES = sorted((REPO / "assets").glob("*/README.md"))
+# One README for every asset folder (8 October 2026): the per-folder
+# ones were three lines each and repeated the table.
+ASSETS_README = REPO / "assets" / "README.md"
 # The short instruction files this README points at or sits beside.
 SIDE_DOCS = [
-    REPO / "builds" / "README.txt",
-    REPO / "docs" / "flashing.txt",
+    ASSETS_README,
+    REPO / "builds" / "README.md",
+    # The flashing notes, once docs/flashing.txt.
+    REPO / "arduino" / "README.md",
     REPO / "docs" / "eeg_lab_setup.txt",
     # The lab folder sits at the top level, beside app/, because it is
     # the thing that gets copied to a USB stick.
@@ -335,7 +339,7 @@ class LinksAndImagesResolveTests(unittest.TestCase):
 class HouseStyleTests(unittest.TestCase):
 
     def _files(self) -> list[Path]:
-        return [README, *ASSET_READMES, *SIDE_DOCS]
+        return [README, *SIDE_DOCS]
 
     def test_plain_ascii(self):
         for path in self._files():
@@ -372,28 +376,32 @@ class HouseStyleTests(unittest.TestCase):
                     re.search(r"\b(me|my|mine|myself)\b", text, re.I),
                     f"{path} speaks as me")
 
-    def test_asset_readmes_are_three_lines(self):
-        """They sit under the file list on GitHub. Three lines is what
-        somebody reads there; a page is not."""
-        self.assertTrue(ASSET_READMES, "no assets/*/README.md found")
-        for path in ASSET_READMES:
-            lines = [ln for ln in path.read_text(encoding="utf-8").splitlines()
-                     if ln.strip()]
-            with self.subTest(file=path.parent.name):
-                self.assertEqual(len(lines), 3,
-                                 f"{path.parent.name}/README.md is "
-                                 f"{len(lines)} lines")
+    def test_assets_has_one_readme(self):
+        """One table row per asset folder, and no README inside one."""
+        text = ASSETS_README.read_text(encoding="utf-8")
+        stray = sorted(str(p.relative_to(REPO))
+                       for p in (REPO / "assets").glob("*/README*"))
+        self.assertEqual(stray, [])
+        for folder in ("firmware", "icons", "music", "speech", "words",
+                       "srt"):
+            with self.subTest(folder=folder):
+                self.assertIn(f"`{folder}/`", text)
 
     def test_flashing_notes_fit_on_one_screen(self):
-        lines = [ln for ln in (REPO / "docs" / "flashing.txt")
-                 .read_text(encoding="utf-8").splitlines() if ln.strip()]
-        self.assertLessEqual(len(lines), 10, len(lines))
+        text = (REPO / "arduino" / "README.md").read_text(encoding="utf-8")
+        m = re.search(r"^## Flashing$(.*?)(?=^## |\Z)", text, re.M | re.S)
+        self.assertIsNotNone(m, "arduino/README.md has no Flashing section")
+        lines = [ln for ln in m.group(1).splitlines() if ln.strip()]
+        self.assertLessEqual(len(lines), 12, len(lines))
+        self.assertFalse((REPO / "docs" / "flashing.txt").exists(),
+                         "flashing.txt came back; arduino/README.md has it")
 
     def test_builds_has_one_instruction_file(self):
-        # builds/README.txt covers both installers. The per-platform
+        # builds/README.md covers both installers. The per-platform
         # HOW TO files it replaced described the bare exe and app,
         # which are not what anyone installs now.
-        self.assertTrue((REPO / "builds" / "README.txt").is_file())
+        self.assertTrue((REPO / "builds" / "README.md").is_file())
+        self.assertFalse((REPO / "builds" / "README.txt").exists())
         stray = [p for p in (REPO / "builds").rglob("HOW TO*")]
         self.assertEqual(stray, [])
 

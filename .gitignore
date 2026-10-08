@@ -56,8 +56,7 @@ EEG_Lab/developer/downloads/
 # Firmware images and the bundled avrdude. Build products of
 # app/builds/build_firmware.py and app/builds/fetch_avrdude.py, rebuilt
 # by CI on every push.
-app/assets/firmware/*
-!app/assets/firmware/README.md
+app/assets/firmware/
 app/tools/avrdude/*/
 archive/dl/
 

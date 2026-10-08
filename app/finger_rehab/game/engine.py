@@ -111,6 +111,11 @@ class GameEngine:
         w, h = cfg.get("ui.resolution", [1280, 800])
         self.layout = Layout(w, h, float(cfg.get("ui.font_scale", 1.0)))
 
+        # The press point (Settings, Setup): every calibrated threshold
+        # and the EEG response byte use it.
+        from ..hardware.calibration_profile import PRESS_FRACTION, set_press_fraction
+        set_press_fraction(cfg.get("fsr.press_fraction", PRESS_FRACTION))
+
         # Bilateral: one detector per hand. Number of sensors per hand is fixed
         # at 4, so for "both" we have 8 total sensors split into two detectors.
         self.hand_mode = str(cfg.get("bilateral.hand", "right"))
@@ -3008,9 +3013,8 @@ class GameEngine:
         games = int(getattr(self, "_session_games", 0))
         played = ("No games finished yet" if games == 0
                   else f"{games} game{'s' if games != 1 else ''} played")
-        detail = (f"{played}, {self.session_minutes():.0f} min this "
-                  "session.\nAll game data is saved; the next player "
-                  "logs in fresh.")
+        detail = (f"{played}, {self.session_minutes():.0f} min. "
+                  "All data is saved.")
         # Nothing is paused under this dialog: no block is live on
         # game select, so dismissing it never walks the resume path.
         self._exit_confirm = ConfirmDialog(
@@ -4310,13 +4314,9 @@ class GameEngine:
 
         self._exit_confirm = ConfirmDialog(
             question=f"{names} {subject} no calibration",
-            # Hard-wrapped, not one long sentence: ConfirmDialog splits
-            # on newlines only and a 640-wide card holds about 65
-            # body-font characters, so an unbroken line runs out over
-            # the dimmed screen behind the card.
-            detail=("Nothing has been measured, so presses would be "
-                    "scored\nagainst defaults. Measure it now, or "
-                    "play on them."),
+            # One short line: ConfirmDialog splits on newlines only and
+            # a 640-wide card holds about 65 body-font characters.
+            detail="Presses would be scored on defaults.",
             safe_label="Calibrate now",
             danger_label="Play anyway",
             on_safe=calibrate_now,
@@ -6921,8 +6921,7 @@ class GameEngine:
 
         self._exit_confirm = ConfirmDialog(
             question=f"Skip {mode_title(str(step['mode']))}, {where}?",
-            detail=("It will not be played in this sitting.\n"
-                    "The skip is recorded."),
+            detail="The skip is recorded.",
             safe_label="Keep it",
             danger_label="Skip it",
             on_safe=self._dismiss_session_end_confirm,
@@ -8594,9 +8593,9 @@ class GameEngine:
     # get none at all.
     _ENCOURAGEMENT = {
         10:  "10 in a row",
-        20:  "20 in a row, steady hands",
+        20:  "20 in a row",
         30:  "30 in a row",
-        50:  "50 in a row, in the groove",
+        50:  "50 in a row",
         75:  "75 in a row",
         100: "100 in a row",
     }

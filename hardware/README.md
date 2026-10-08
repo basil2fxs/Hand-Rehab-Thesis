@@ -31,13 +31,13 @@ flowchart LR
 
 | Part | Qty | AUD each | Notes |
 | --- | --- | --- | --- |
-| SingleTact 8 mm 10 N pad, calibrated, with its electronics | 4 | 192 | From the 2025 project. A failed pad costs 192 to replace |
-| *or* SingleTact 8 mm 10 N pad, uncalibrated | 4 | 53 | Bought for the sensor comparison. Needs the board below; a failed pad costs 53 and its board is kept |
+| SingleTact 8 mm 10 N pad, calibrated, with its electronics | 4 | 192 | From the 2025 project |
+| *or* SingleTact 8 mm 10 N pad, uncalibrated | 4 | 53 | Bought for the sensor comparison. Needs the board below, which outlives a failed pad |
 | SingleTact standard electronics (board and jumper wires) | 4 | 62 | Only with the uncalibrated pads |
 | Arduino Nano | 2 | 15 to 48 | One reads the pads and drives the motors, one drives the actuator. Clones work |
 | USB A to micro B cable | 1 | 17 | Jaycar |
 | Custom PCB for the Nano | 1 | | From the 2025 project; its design files are not in this repo |
-| Vibration motor on a motor PCB, with connector | 4 | | Supplied by the Curtin electronics team, 2026. A 10 mm coin motor; the part number is not recorded. On the study computer each is heard 71 to 80 ms after its command |
+| Vibration motor on a motor PCB, with connector | 4 | | A 10 mm coin motor from the Curtin electronics team, 2026; part number not recorded |
 | Force sensor connector | 4 | | One per pad |
 | Threaded screw | 4 | | Fine adjustment of each finger rest |
 | Linear actuator with motor driver | 1 | 45 | Two were bought, one for each hand |
@@ -90,7 +90,7 @@ Hold a button to move the rests. Let go, or press both, and it stops.
 
 ## Two boards: the timing bench
 
-Before any Mirror gap or lead is reported, measure the rig with nobody's hands in it: press each finger pair's two pads together with one rigid bar about 100 times, with the boards swapped between ports and between hands, and note the mean and SD of the logged gap (the rig's own floor and offset). Measure each board's motor lag the way `latency.buzzer_ms` was measured. Each board's samples carry their own stamp since 1 October 2026, and raw.csv names the board of every sample row.
+Before any Mirror gap or lead is reported, measure the rig with no hands in it: press each finger pair's two pads together with one rigid bar about 100 times, boards swapped between ports and between hands, and note the mean and SD of the logged gap. Measure each board's motor lag the way `latency.buzzer_ms` was measured. Each board's samples carry their own stamp, and raw.csv names the board of every sample row.
 
 ## Not part of this build
 

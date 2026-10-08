@@ -1307,7 +1307,7 @@ class EchoMode(WaitSkip):
         at a trial close."""
         if (self._t0 is not None
                 and (now - self._t0) > self.session_cap_s):
-            self._set_message("Great effort. Session done", 2.0)
+            self._set_message("Great effort. Game done", 2.0)
             if self.rule == "simon":
                 self._finish_game(now, "time_cap")
             else:
@@ -1353,7 +1353,7 @@ class EchoMode(WaitSkip):
         if self._timeout_run >= self.fatigue_run:
             self._fatigue_triggers += 1
             if self._fatigue_triggers >= 2:
-                self._set_message("Great effort. Session done", 2.0)
+                self._set_message("Great effort. Game done", 2.0)
                 self._end("fatigue")
                 return
             self._enter_rest(now, self.fatigue_rest_s, "forced",
@@ -1362,7 +1362,7 @@ class EchoMode(WaitSkip):
         # Session cap, at a trial close only.
         if (self._t0 is not None
                 and (now - self._t0) > self.session_cap_s):
-            self._set_message("Session complete", 2.0)
+            self._set_message("Game done", 2.0)
             self._end("time_cap")
             return
         # Demo miniature: fixed plan, no ladder rules.
@@ -1406,7 +1406,7 @@ class EchoMode(WaitSkip):
         # and the game record still lands so the trials are scored.
         if (self._t0 is not None
                 and (now - self._t0) > self.session_cap_s):
-            self._set_message("Great effort. Session done", 2.0)
+            self._set_message("Great effort. Game done", 2.0)
             self._finish_game(now, "time_cap")
             return
         if correct:

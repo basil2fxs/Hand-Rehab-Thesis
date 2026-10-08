@@ -1,7 +1,8 @@
-"""CONTRIBUTING.md is the whole loop for someone new: clone, run, test,
-build, release. Every path and command it names must still exist, or
-the first thing a newcomer meets is a step that fails. The release it
-describes is the one the workflow really does.
+"""app/README.md is the whole loop for someone new: clone, run, test,
+build, release (CONTRIBUTING.md folded into it on 8 October 2026). Every
+path and command it names must still exist, or the first thing a
+newcomer meets is a step that fails. The release it describes is the
+one the workflow really does.
 """
 from __future__ import annotations
 
@@ -14,7 +15,7 @@ from urllib.parse import unquote
 
 REPO = Path(__file__).resolve().parents[2]
 APP = REPO / "app"
-GUIDE = REPO / "CONTRIBUTING.md"
+GUIDE = APP / "README.md"
 WORKFLOW = REPO / ".github" / "workflows" / "build-apps.yml"
 
 
@@ -38,7 +39,8 @@ class ContributingTests(unittest.TestCase):
     def test_links_resolve(self) -> None:
         for target in re.findall(r"\]\((?!https?://|#)([^)#]+)", self.text):
             with self.subTest(link=target):
-                self.assertTrue((REPO / unquote(target)).exists(), target)
+                self.assertTrue((GUIDE.parent / unquote(target)).exists(),
+                                target)
 
     def test_named_files_exist(self) -> None:
         # A whole path in backticks, at least one folder deep: from the

@@ -3,10 +3,11 @@
     cd analysis
     python3 -m eeg "../FINAL TRIAL RESULTS/3 EEG lab/sessions"
 
-Writes into <sessions>/../results/<date>_<participant>/: figures/,
-tables/, summary.json, the MNE reports and the results page. The
-recordings, the results and the cache never leave that folder, which
-git ignores.
+Writes into <sessions>/../results/<date>_<participant>/: the short
+report to send (EEG_report.pdf and .docx) and detail/ with the results
+page, MNE's reports, figures/, tables/ and summary.json. The
+recordings and the results never leave that folder, which git ignores;
+the cache sits in the system's temporary folder.
 """
 from __future__ import annotations
 
@@ -80,8 +81,9 @@ def main(argv=None) -> int:
     day = sessions.glob("20*")
     date = next((p.name for p in sorted(day)), "session")
     out = (args.out or sessions.parent / "results" / f"{date}_{who}").resolve()
-    (out / "figures").mkdir(parents=True, exist_ok=True)
-    (out / "tables").mkdir(parents=True, exist_ok=True)
+    detail = out / "detail"
+    (detail / "figures").mkdir(parents=True, exist_ok=True)
+    (detail / "tables").mkdir(parents=True, exist_ok=True)
     # The cache holds the recordings themselves (over a gigabyte), so it
     # lives in the system's temporary folder, never beside the results.
     import hashlib
@@ -93,7 +95,7 @@ def main(argv=None) -> int:
     else:
         blocks, cleaned, results = compute(sessions)
         cache.write_bytes(pickle.dumps((blocks, cleaned, results)))
-    figs = out / "figures"
+    figs = detail / "figures"
     names = {"markers": F.markers(blocks, figs)}
     names["quality"] = F.quality(cleaned, figs)
     if "srt" in results:
@@ -103,36 +105,39 @@ def main(argv=None) -> int:
                      srt_curve=F.srt_learning_curve(r, figs), srt_ern=F.srt_ern(r, figs),
                      srt_lock=F.srt_lock(r, figs), srt_tfr=F.srt_tfr(r, figs),
                      srt_power=F.srt_block_power(r, figs), srt_rerp=F.srt_rerp(r, figs))
-        r.behaviour.to_csv(out / "tables" / "srt_behaviour.csv", index=False)
-        r.stim_measures.to_csv(out / "tables" / "srt_stimulus_erp_measures.csv", index=False)
-        r.resp_measures.to_csv(out / "tables" / "srt_response_erp_measures.csv", index=False)
-        r.per_block.to_csv(out / "tables" / "srt_erp_by_block.csv", index=False)
-        r.block_power.to_csv(out / "tables" / "srt_band_power_by_block.csv", index=False)
+        r.behaviour.to_csv(detail / "tables" / "srt_behaviour.csv", index=False)
+        r.stim_measures.to_csv(detail / "tables" / "srt_stimulus_erp_measures.csv", index=False)
+        r.resp_measures.to_csv(detail / "tables" / "srt_response_erp_measures.csv", index=False)
+        r.per_block.to_csv(detail / "tables" / "srt_erp_by_block.csv", index=False)
+        r.block_power.to_csv(detail / "tables" / "srt_band_power_by_block.csv", index=False)
     if "buzz_hunt" in results:
         r = results["buzz_hunt"]
         names.update(buzz_behaviour=F.buzz_behaviour(r, figs), buzz_erp=F.buzz_erp(r, figs),
                      buzz_tfr=F.buzz_tfr(r, figs), buzz_press=F.buzz_press(r, figs))
-        r.measures.to_csv(out / "tables" / "buzz_erp_measures.csv", index=False)
+        r.measures.to_csv(detail / "tables" / "buzz_erp_measures.csv", index=False)
     for b in blocks:
-        b.alignment.pairs.to_csv(out / "tables" / f"markers_{b.mode}.csv", index=False)
+        b.alignment.pairs.to_csv(detail / "tables" / f"markers_{b.mode}.csv", index=False)
+    from . import compare as CMP
     from . import content as C
     from . import dashboard as Dash
     from . import findings as FD
+    from . import report as R
     from . import summary as S
+    cmp = CMP.compare(results, cleaned, blocks)
+    names["compare_erp"] = CMP.figure_erp(cmp, figs / "30_compare_cue_response.png")
+    names["compare_topo"] = CMP.figure_topo(cmp, figs / "31_compare_scalp_maps.png")
     summ = S.build(blocks, cleaned, results, sessions)
-    S.write(summ, out / "summary.json")
+    summ["compare"] = CMP.summary(cmp)
+    S.write(summ, detail / "summary.json")
     limits = C.limitations(summ, FD.build(summ)["notes"])
     html_text = Dash.page(summ, names, figs, Dash.explorer(results), C.METHODS,
                           C.REFERENCES, limits, C.FILES)
-    (out / "EEG_results.html").write_text(html_text, encoding="utf-8")
-    print("page", round((out / "EEG_results.html").stat().st_size / 1e6, 1), "MB")
+    (detail / "EEG_results.html").write_text(html_text, encoding="utf-8")
+    print("page", round((detail / "EEG_results.html").stat().st_size / 1e6, 1), "MB")
     from . import deliver
     if not args.no_reports:
-        print("reports", deliver.mne_reports(blocks, cleaned, results, out))
-    print("summary", deliver.summary_doc(summ, figs, out, C.METHODS_SHORT,
-                                         [x.replace("<b>", "").replace("</b>", "") for x in limits],
-                                         C.REFERENCES))
-    print("zip", deliver.zip_folder(out, out.name))
+        print("reports", deliver.mne_reports(blocks, cleaned, results, detail))
+    print("report", R.build(summ, figs, out))
     print(json.dumps(_jsonable(names), indent=1))
     print("results in", out)
     return 0

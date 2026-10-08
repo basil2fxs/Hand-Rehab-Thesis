@@ -1306,7 +1306,7 @@ class PatternMode(WaitSkip):
         # Hard session cap: end at a trial close, never mid-trial.
         if (self._t0 is not None
                 and (now - self._t0) > self.session_cap_s):
-            self._set_message("Session complete", 2.0)
+            self._set_message("Game done", 2.0)
             self._end("time_cap")
             return
         # Fatigue guard, non-probe takes only: probe slowing is the
@@ -1318,7 +1318,7 @@ class PatternMode(WaitSkip):
                 self._timeout_run = 0
                 self._fatigue_triggers += 1
                 if self._fatigue_triggers >= 2:
-                    self._set_message("Great effort. Session done", 2.0)
+                    self._set_message("Great effort. Game done", 2.0)
                     self._end("fatigue")
                 else:
                     self._enter_rest(now, self.fatigue_rest, "forced",
