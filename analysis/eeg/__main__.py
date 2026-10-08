@@ -4,7 +4,7 @@
     python3 -m eeg "../FINAL TRIAL RESULTS/3 EEG lab/sessions"
 
 Writes into <sessions>/../results/<date>_<participant>/: the short
-report to send (EEG_report.pdf and .docx) and detail/ with the results
+report to send (EEG_report.pdf) and detail/ with the results
 page, MNE's reports, figures/, tables/ and summary.json. The
 recordings and the results never leave that folder, which git ignores;
 the cache sits in the system's temporary folder.
@@ -137,7 +137,7 @@ def main(argv=None) -> int:
     from . import deliver
     if not args.no_reports:
         print("reports", deliver.mne_reports(blocks, cleaned, results, detail))
-    print("report", R.build(summ, figs, out, results=results, cmp=cmp))
+    print("report", R.build(summ, out, results=results, cmp=cmp))
     print(json.dumps(_jsonable(names), indent=1))
     print("results in", out)
     return 0

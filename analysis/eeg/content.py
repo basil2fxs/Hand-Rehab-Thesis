@@ -73,7 +73,7 @@ REFERENCES = [
 ]
 
 FILES = [
-    ("../EEG_report.pdf / .docx", "the short report to send"),
+    ("../EEG_report.pdf", "the short report to send"),
     ("EEG_results.html", "this page: findings, figures, tables and the electrode explorer"),
     ("mne_report_srt.html, mne_report_buzz_hunt.html", "MNE's own reports: raw data, ICA, epochs and evoked responses with scalp-map sliders"),
     ("figures/", "every figure as PNG"),

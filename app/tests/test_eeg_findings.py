@@ -145,6 +145,21 @@ class FindingsTests(unittest.TestCase):
         s = _with(srt_look="app")
         self.assertIn("game's own Reaction look", build(s)["notes"]["display"])
 
+    def test_the_results_page_quotes_the_game_comparison(self):
+        # it once printed "Reaction vs Buzz Hunt. ." after a relabel
+        from eeg.report import comparison_lines
+        s = _with(compare={
+            "modes": {"reaction": {"p3_uV": 1.6, "p3_latency_ms": 385.0, "rt_ms": 291.0},
+                      "buzz": {"p3_uV": 6.4, "p3_latency_ms": 533.0, "rt_ms": 491.0}},
+            "tests": {"P3 300-650 ms, buzz minus reaction": {"p": 0.0002},
+                      "P3 latency, buzz minus reaction": {"p": 1e-12},
+                      "RT, buzz minus reaction": {"p": 0.03}}})
+        line = comparison_lines(s)[0]
+        self.assertIn("+1.6 vs +6.4 µV (p < .001)", line)
+        self.assertIn("385 vs 533 ms", line)
+        self.assertIn("291 vs 491 ms (p = .030)", line)
+        self.assertEqual(comparison_lines(BASE), [])
+
 
 if __name__ == "__main__":
     unittest.main()
