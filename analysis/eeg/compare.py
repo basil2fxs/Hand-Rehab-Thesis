@@ -32,6 +32,9 @@ P3_LATENCY_WINDOW = (0.25, 0.75)
 EARLY = {"reaction": ("visual P1", (0.06, 0.16), ["O1", "Oz", "O2"], +1),
          "buzz": ("touch N1", (0.12, 0.30), ["C3", "CP3", "CP5"], -1)}
 SITES = ["Oz", "Cz", "C3", "Pz"]
+# Where each site sits, in a few plain words, for the figure titles.
+SITE_WORDS = {"Oz": "back of head", "Cz": "top of head", "C3": "left motor area",
+              "Pz": "top back of head"}
 TOPO_TIMES = (0.10, 0.20, 0.35, 0.50)
 LABELS = {"reaction": "Reaction: flash and tone", "buzz": "Buzz Hunt: buzz only"}
 COLOURS = {"reaction": "#ea580c", "buzz": "#7c3aed"}
@@ -184,10 +187,10 @@ def figure_erp(c: dict, path) -> str | None:
         ax.axhline(0, color="#6b7280", lw=0.8)
         if ch in P3_COMMON[1]:
             ax.axvspan(300, 650, color="#9ca3af", alpha=0.15, lw=0)
-        ax.set_title(ch, fontsize=11)
+        ax.set_title(f"{ch} ({SITE_WORDS.get(ch, '')})" if ch in SITE_WORDS else ch, fontsize=11)
         ax.set_xlabel("ms after the cue")
         ax.set_xlim(-200, 800)
-    axes[0].set_ylabel("µV (positive up)")
+    axes[0].set_ylabel("µV (microvolts), positive up")
     axes[0].legend(fontsize=8, loc="lower left", frameon=False)
     fig.tight_layout()
     fig.savefig(path, dpi=150)

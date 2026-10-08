@@ -38,16 +38,17 @@ def fig_summary(c: dict, path: Path) -> str | None:
     v = [m[k]["p3_uV"] for k in keys]
     e = [m[k]["p3_sme_uV"] for k in keys]
     ax[0].bar(names, v, yerr=e, color=cols, width=0.6, capsize=4)
-    ax[0].set_ylabel("µV at Pz/CPz, 300-650 ms")
-    ax[0].set_title(f"P3 size  ({_p(t['P3 300-650 ms, buzz minus reaction']['p'])})", fontsize=11)
+    ax[0].set_ylabel("µV (microvolts), top back of head")
+    ax[0].set_title(f"P3 (attention response) size, {_p(t['P3 300-650 ms, buzz minus reaction']['p'])}",
+                    fontsize=10)
     v = [m[k]["p3_latency_ms"] for k in keys]
     e = [m[k]["p3_latency_se_ms"] for k in keys]
     ax[1].errorbar([0, 1], v, yerr=e, fmt="none", ecolor="#374151", capsize=4)
     ax[1].scatter([0, 1], v, color=cols, s=110, zorder=3)
     ax[1].set_xticks([0, 1], names)
     ax[1].set_xlim(-0.6, 1.6)
-    ax[1].set_ylabel("ms to half the P3's area")
-    ax[1].set_title(f"P3 timing  ({_p(t['P3 latency, buzz minus reaction']['p'])})", fontsize=11)
+    ax[1].set_ylabel("ms until half the P3 is done")
+    ax[1].set_title(f"P3 timing, {_p(t['P3 latency, buzz minus reaction']['p'])}", fontsize=10)
     bp = ax[2].boxplot([c["rt"][k] for k in keys], widths=0.55, patch_artist=True,
                        showfliers=False)
     for box, col in zip(bp["boxes"], cols):
@@ -58,7 +59,7 @@ def fig_summary(c: dict, path: Path) -> str | None:
         med.set_linewidth(2)
     ax[2].set_xticks([1, 2], names)
     ax[2].set_ylabel("ms, correct answers")
-    ax[2].set_title(f"Answer time  ({_p(t['RT, buzz minus reaction']['p'])})", fontsize=11)
+    ax[2].set_title(f"Reaction time, {_p(t['RT, buzz minus reaction']['p'])}", fontsize=10)
     for a in ax:
         _plain(a)
     fig.tight_layout()
@@ -80,8 +81,8 @@ def fig_srt(r, path: Path) -> str | None:
               for s in b.segment]
     ax[0].bar(labels, b.rt_median_ms, color=cols)
     ax[0].set_ylim(0, max(b.rt_median_ms) * 1.15)
-    ax[0].set_ylabel("median RT, ms")
-    ax[0].set_title("RT by block (random in grey and red)", fontsize=11)
+    ax[0].set_ylabel("median reaction time, ms")
+    ax[0].set_title("Reaction time by block (random: grey, red)", fontsize=10)
     for key, col, lab in (("sequence_late", BLUE, "learned, blocks 7-8"),
                           ("random_posttest", RED, "random, post-test")):
         ev = r.stim.get(key)
@@ -93,8 +94,8 @@ def fig_srt(r, path: Path) -> str | None:
     ax[1].axhline(0, color=GREY, lw=0.6)
     ax[1].axvline(0, color=GREY, lw=0.6)
     ax[1].set_xlabel("ms after the flash")
-    ax[1].set_ylabel("µV at FCz/Cz")
-    ax[1].set_title("N2 (shaded)", fontsize=11)
+    ax[1].set_ylabel("µV (microvolts), top centre")
+    ax[1].set_title("N2 (surprise response), shaded", fontsize=10)
     ax[1].legend(fontsize=8, frameon=False, loc="lower left")
     bp = r.block_power
     x = np.arange(len(bp))
@@ -104,8 +105,8 @@ def fig_srt(r, path: Path) -> str | None:
                   color=[RED if s in ("Practice", "Post-test") else BLUE for s in seg])
     ax[2].set_xticks(x, ["Prac" if s == "Practice" else "Post" if s == "Post-test"
                          else s.replace("Sequence ", "S") for s in seg])
-    ax[2].set_ylabel("beta 13-30 Hz at C3, dB")
-    ax[2].set_title("Motor beta by block", fontsize=11)
+    ax[2].set_ylabel("dB (power)")
+    ax[2].set_title("Beta (13-30 Hz motor rhythm) at C3", fontsize=10)
     for a in ax:
         _plain(a)
     fig.tight_layout()
@@ -128,17 +129,17 @@ def fig_buzz(r, path: Path) -> str | None:
     ax[0].plot(t, left, color=PURPLE, lw=2, label="left, opposite the hand")
     ax[0].plot(t, right, color=LIGHT, lw=2, label="right")
     ax[0].axvspan(180, 260, color=LIGHT, alpha=0.25, lw=0)
-    ax[0].set_title("Touch response (shaded)", fontsize=11)
+    ax[0].set_title("Touch response, left vs right (shaded)", fontsize=10)
     ax[0].legend(fontsize=8, frameon=False, loc="upper left")
     p3 = ev.copy().pick(["Pz", "CPz"]).data.mean(0) * 1e6
     ax[1].plot(t, p3, color=PURPLE, lw=2)
     ax[1].axvspan(400, 650, color=LIGHT, alpha=0.25, lw=0)
-    ax[1].set_title("P3 at Pz/CPz (shaded)", fontsize=11)
+    ax[1].set_title("P3 (attention response), shaded", fontsize=10)
     for a in ax[:2]:
         a.axhline(0, color=GREY, lw=0.6)
         a.axvline(0, color=GREY, lw=0.6)
         a.set_xlabel("ms after the buzz")
-        a.set_ylabel("µV")
+        a.set_ylabel("µV (microvolts)")
     tfr = (r.tfr or {}).get("tfr")
     if tfr is not None and "C3" in tfr.ch_names:
         ci = tfr.ch_names.index("C3")
@@ -150,7 +151,7 @@ def fig_buzz(r, path: Path) -> str | None:
         ax[2].axvline(0, color="black", lw=0.8)
         ax[2].set_xlabel("ms after the buzz")
         ax[2].set_ylabel("Hz")
-        ax[2].set_title("Rhythm change at C3 (blue: drop)", fontsize=11)
+        ax[2].set_title("Rhythm at C3, left motor area (blue: drop)", fontsize=10)
         fig.colorbar(im, ax=ax[2], label="% change from rest")
     for a in ax[:2]:
         _plain(a)
@@ -185,18 +186,21 @@ def _compare_rows(s: dict) -> list[tuple]:
     def gap(x):
         return f"{x['spacing_s'][0]:.1f} to {x['spacing_s'][1]:.1f} s"
     return [
-        ("", "Reaction", "Buzz Hunt", "p"),
+        ("", "Reaction", "Buzz Hunt", "p (under .05 = probably real)"),
         ("Trials", str(r["n"]), str(b["n"]), ""),
         ("Time between cues", gap(r), gap(b), ""),
-        ("RT, median", f"{r['rt_ms']:.0f} ms", f"{b['rt_ms']:.0f} ms",
+        ("Reaction time, median", f"{r['rt_ms']:.0f} ms", f"{b['rt_ms']:.0f} ms",
          _pv(t.get("RT, buzz minus reaction", {}).get("p"))),
         ("Correct", f"{r['accuracy'] * 100:.0f}%", f"{b['accuracy'] * 100:.0f}%", ""),
-        ("First peak", f"P1 {r['early']['latency_ms']:.0f} ms, O1/Oz/O2",
-         f"N1 {b['early']['latency_ms']:.0f} ms, C3/CP3/CP5", ""),
-        ("P3, Pz/CPz 300-650 ms", f"{r['p3_uV']:+.1f} µV", f"{b['p3_uV']:+.1f} µV",
+        ("First brain response", f"P1 (first visual response) {r['early']['latency_ms']:.0f} ms, "
+                                 f"O1/Oz/O2 (back of head)",
+         f"N1 (first touch response) {b['early']['latency_ms']:.0f} ms, C3/CP3/CP5 (left side)", ""),
+        ("P3 (attention response), Pz/CPz (top back of head), 300-650 ms",
+         f"{r['p3_uV']:+.1f} µV (microvolts)", f"{b['p3_uV']:+.1f} µV",
          _pv(t.get("P3 300-650 ms, buzz minus reaction", {}).get("p"))),
-        ("P3, own window", f"{r['p3_own_uV']:+.1f} µV", f"{b['p3_own_uV']:+.1f} µV", ""),
-        ("P3, half-area latency", f"{r['p3_latency_ms']:.0f} ms", f"{b['p3_latency_ms']:.0f} ms",
+        ("P3, each game's usual window", f"{r['p3_own_uV']:+.1f} µV", f"{b['p3_own_uV']:+.1f} µV", ""),
+        ("P3 timing (when half of it is done)", f"{r['p3_latency_ms']:.0f} ms",
+         f"{b['p3_latency_ms']:.0f} ms",
          _pv(t.get("P3 latency, buzz minus reaction", {}).get("p"))),
     ]
 
@@ -211,25 +215,28 @@ def _srt_rows(s: dict) -> list[tuple]:
     n2, p3 = st.get(FD.N2_TEST, {}), st.get(FD.P3_TEST, {})
     adj = FD.holm([n2.get("p"), p3.get("p")])
     rows = [("", "Result", "p"),
-            ("RT, random after block 8", f"+{lr.get('post_minus_block8_ms', 0):.0f} ms "
-             f"(95% CI {ci[0]:.0f} to {ci[1]:.0f})", "")]
+            ("Reaction time, random after block 8", f"+{lr.get('post_minus_block8_ms', 0):.0f} ms "
+             f"(likely range {ci[0]:.0f} to {ci[1]:.0f})", "")]
     if rc:
         rows.append(("Recall", f"{rc['correct']}/{rc['items']} by position, "
                                f"{rc['cyclic_correct']}/{rc['items']} as a loop", _pv(rc.get("chance_p"))))
     if n2:
-        rows.append(("N2, FCz/Cz, random vs learned", f"{n2['diff']:+.1f} µV",
-                     f"{_pv(n2['p'])} (Holm {_pv(adj[0])})"))
+        rows.append(("N2 (surprise response), FCz/Cz (top centre), random vs learned",
+                     f"{n2['diff']:+.1f} µV (microvolts)",
+                     f"{_pv(n2['p'])} ({_pv(adj[0])} corrected for 2 tests)"))
     if p3:
-        rows.append(("P3, Pz/CPz, practice vs learned", f"{p3['diff']:+.1f} µV",
-                     f"{_pv(p3['p'])} (Holm {_pv(adj[1])})"))
-    for label, key in (("Beta, C3, random vs learned", "beta C3"),
-                       ("Theta, FCz/Cz, random vs learned", "theta FCz/Cz")):
+        rows.append(("P3 (attention response), Pz/CPz (top back), practice vs learned",
+                     f"{p3['diff']:+.1f} µV", f"{_pv(p3['p'])} ({_pv(adj[1])} corrected)"))
+    for label, key, unit in (
+            ("Beta (13-30 Hz motor rhythm), C3 (left motor area), random vs learned", "beta C3",
+             " dB (power)"),
+            ("Theta (4-7 Hz rhythm), FCz/Cz (top centre), random vs learned", "theta FCz/Cz", " dB")):
         x = bt.get(key)
         if x:
-            rows.append((label, f"{x['diff']:+.1f} dB", _pv(x["p"])))
+            rows.append((label, f"{x['diff']:+.1f}{unit}", _pv(x["p"])))
     ern = (srt.get("resp_tests") or {}).get(FD.ERN_TEST)
     if ern:
-        rows.append(("ERN, FCz/Cz, wrong vs correct",
+        rows.append(("ERN (error signal), FCz/Cz (top centre), wrong vs correct",
                      f"{ern['diff']:+.1f} µV, {(srt.get('resp_n') or {}).get('error', 0)} errors",
                      _pv(ern["p"])))
     return rows
@@ -242,16 +249,18 @@ def _buzz_rows(s: dict) -> list[tuple]:
     bm = {x["measure"]: x for x in bz.get("measures", [])}
     tests = bz.get("tests", {})
     rows = [("", "Result", "p"),
-            ("Localisation", f"{bz.get('loc_accuracy', 0) * 100:.0f}% correct, d' {bz.get('d_prime')}, "
-                             f"RT {bz.get('loc_rt_ms', 0):.0f} ms", "")]
+            ("Which finger buzzed", f"{bz.get('loc_accuracy', 0) * 100:.0f}% correct, d' {bz.get('d_prime')} "
+                                    f"(how well fingers were told apart), reaction time "
+                                    f"{bz.get('loc_rt_ms', 0):.0f} ms", "")]
     if "P3" in bm:
-        rows.append(("P3, Pz/CPz 400-650 ms", f"{bm['P3']['mean_uV']:+.1f} µV", ""))
+        rows.append(("P3 (attention response), Pz/CPz (top back), 400-650 ms",
+                     f"{bm['P3']['mean_uV']:+.1f} µV (microvolts)", ""))
     lat = tests.get(FD.TOUCH_TEST)
     if lat and "N1 contra" in bm and "N1 ipsi" in bm:
-        rows.append(("Touch N1, left vs right", f"{bm['N1 contra']['mean_uV']:+.1f} vs "
+        rows.append(("N1 (first touch response), left vs right side", f"{bm['N1 contra']['mean_uV']:+.1f} vs "
                                                 f"{bm['N1 ipsi']['mean_uV']:+.1f} µV", _pv(lat["p"])))
-    for label, key in (("Mu, C3, after the buzz", FD.MU_TEST),
-                       ("Beta, C3, after the press", FD.REBOUND_TEST)):
+    for label, key in (("Mu (8-12 Hz motor rhythm), C3 (left motor area), after the buzz", FD.MU_TEST),
+                       ("Beta (13-30 Hz motor rhythm), C3, after the press", FD.REBOUND_TEST)):
         x = tests.get(key)
         if x:
             rows.append((label, f"{x['diff']:+.0f}%", _pv(x["p"])))
@@ -264,8 +273,8 @@ def _markers(s: dict) -> str:
         return ""
     mx = max((x["residual_max_ms"] or 0) for x in recs)
     sd = max((x["residual_sd_ms"] or 0) for x in recs)
-    return (f"Markers: {s.get('markers_matched', 0):,} of {s.get('markers_total', 0):,}, "
-            f"{sd} ms SD about the fitted clock (max {mx} ms).")
+    return (f"Markers (event codes sent to the EEG): {s.get('markers_matched', 0):,} of "
+            f"{s.get('markers_total', 0):,} arrived, timing spread {sd} ms SD (max {mx} ms).")
 
 
 # ---- the document ------------------------------------------------------------
