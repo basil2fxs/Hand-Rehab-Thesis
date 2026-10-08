@@ -199,7 +199,7 @@ def _compare_rows(s: dict) -> list[tuple]:
          f"{r['p3_uV']:+.1f} µV (microvolts)", f"{b['p3_uV']:+.1f} µV",
          _pv(t.get("P3 300-650 ms, buzz minus reaction", {}).get("p"))),
         ("P3, each game's usual window", f"{r['p3_own_uV']:+.1f} µV", f"{b['p3_own_uV']:+.1f} µV", ""),
-        ("P3 timing (when half of it is done)", f"{r['p3_latency_ms']:.0f} ms",
+        ("P3 timing (half-way point)", f"{r['p3_latency_ms']:.0f} ms",
          f"{b['p3_latency_ms']:.0f} ms",
          _pv(t.get("P3 latency, buzz minus reaction", {}).get("p"))),
     ]
@@ -297,10 +297,15 @@ def build(s: dict, figs: Path, out: Path, results: dict | None = None,
         sec.top_margin = sec.bottom_margin = Cm(1.4)
     doc.add_heading(f"{s.get('participant') or 'Participant'}, {_date(s)}", 0)
 
-    def picture(name, cm):
+    def picture(name, cm, how=""):
         f = figs / name if name else None
         if f is not None and f.is_file():
             doc.add_picture(str(f), width=Cm(cm))
+            if how:
+                cap = doc.add_paragraph(how)
+                cap.paragraph_format.space_after = Pt(4)
+                cap.runs[0].font.size = Pt(8.5)
+                cap.runs[0].font.color.rgb = RGBColor(0x5F, 0x66, 0x73)
 
     def table(rows):
         if not rows:
@@ -319,18 +324,28 @@ def build(s: dict, figs: Path, out: Path, results: dict | None = None,
         doc.add_paragraph().paragraph_format.space_after = Pt(0)
 
     doc.add_heading("Reaction vs Buzz Hunt", 1)
-    picture(names["summary"], 16.0)
-    picture("30_compare_cue_response.png", 17.8)
-    picture("31_compare_scalp_maps.png", 13.5)
+    picture(names["summary"], 14.0,
+            "Bars: average. Thin lines: how sure. Boxes: the middle half of answers, white line the median.")
+    picture("30_compare_cue_response.png", 17.0,
+            "Brain voltage over time at four spots on the head; 0 ms is the cue. Orange: Reaction. Purple: Buzz "
+            "Hunt. Shading: how sure. Grey: the P3 window.")
+    picture("31_compare_scalp_maps.png", 12.0,
+            "The head seen from above, nose at the top, left ear on the left. Red: positive voltage. Blue: "
+            "negative. Dots: electrodes. Top row Reaction, bottom row Buzz Hunt, at four times after the cue, "
+            "same colour scale.")
     table(_compare_rows(s))
 
     srt, bz = s.get("srt", {}), s.get("buzz", {})
     h = doc.add_heading(f"Reaction ({srt.get('n_trials', 0)} trials)", 1)
     h.paragraph_format.page_break_before = True
-    picture(names["srt"], 15.5)
+    picture(names["srt"], 15.5,
+            "Left: reaction time per block. Middle: voltage after the flash, random (red) vs learned (blue). "
+            "Right: motor rhythm strength per block.")
     table(_srt_rows(s))
     doc.add_heading(f"Buzz Hunt ({bz.get('trials', 0)} trials)", 1)
-    picture(names["buzz"], 15.5)
+    picture(names["buzz"], 15.5,
+            "Left and middle: voltage after the buzz. Right: rhythm strength by frequency (up) and time "
+            "(across); blue means it dropped.")
     table(_buzz_rows(s))
     line = _markers(s)
     if line:
