@@ -137,7 +137,7 @@ def main(argv=None) -> int:
     from . import deliver
     if not args.no_reports:
         print("reports", deliver.mne_reports(blocks, cleaned, results, detail))
-    print("report", R.build(summ, figs, out))
+    print("report", R.build(summ, figs, out, results=results, cmp=cmp))
     print(json.dumps(_jsonable(names), indent=1))
     print("results in", out)
     return 0

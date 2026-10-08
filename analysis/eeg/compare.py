@@ -135,6 +135,7 @@ def compare(results: dict, cleaned: dict, blocks) -> dict:
         rt_ms=float(np.median(rt_b)), accuracy=float(loc.correct.mean()),
         trials_logged=int(len(loc)), spacing_s=[float(np.percentile(gaps_b, 10)),
                                                 float(np.percentile(gaps_b, 90))])
+    out["rt"] = {"reaction": rt_r, "buzz": rt_b}
     # the tests
     t_p3 = perm_diff(p3["buzz"], p3["reaction"])
     d_lat = (lat["buzz"][0] - lat["reaction"][0]) * 1000
