@@ -14,7 +14,8 @@ import pandas as pd
 ANALYSIS = Path(__file__).resolve().parents[2] / "analysis"
 sys.path.insert(0, str(ANALYSIS))
 
-from eeg.checks import counts, gaps, order, rt_match  # noqa: E402
+from eeg.checks import (by_condition, counts, gaps, order, queue, read_status,  # noqa: E402
+                        rt_match, status_bits)
 
 SF = 512.0
 
@@ -27,6 +28,7 @@ def _trials() -> pd.DataFrame:
     keys = ["v", "b", "n", "m", "v", "b"]
     return pd.DataFrame({
         "phase": ["practice"] * 3 + ["learning"] * 3, "block": [1, 1, 1, 1, 1, 1],
+        "condition": ["random_practice"] * 3 + ["sequence_late"] * 3,
         "flash_sample": np.round(flash_s * SF), "press_sample": np.round((flash_s + 0.28) * SF),
         "onset_s": flash_s, "rt_ms": rt_ms,
         "outcome": ["correct", "error", "correct", "correct", "anticipation", "miss"],
@@ -68,6 +70,12 @@ class GapTests(unittest.TestCase):
         np.testing.assert_allclose(g["buzz_buzz"], 6.0)
         np.testing.assert_allclose(g["flash_vs_log_ms"], 0.0, atol=2.0)
 
+    def test_random_and_pattern_gaps_apart(self):
+        t = _trials()
+        g = gaps(t, SF, pd.DataFrame({"stage": [], "buzz_sample": []}))
+        self.assertEqual(len(g["flash_flash_random"]), 2)
+        self.assertEqual(len(g["flash_flash_pattern"]), 2)
+
     def test_no_press_to_flash_gap_after_a_miss(self):
         t = _trials()
         t.loc[3, "outcome"] = "miss"
@@ -103,6 +111,75 @@ class OrderTests(unittest.TestCase):
         o = order(t, np.zeros(5))
         self.assertLess(o["lanes"][0], o["lanes"][1])
         self.assertLess(o["bands"][0], o["bands"][1])
+
+
+class ConditionTests(unittest.TestCase):
+
+    def test_counts_per_condition_match_the_log(self):
+        t = _trials()
+        rows, same = by_condition(t)
+        self.assertTrue(same)
+        table = {r[0]: r[1:] for r in rows}
+        self.assertEqual(table["Random, practice"], [3, 2, 1, 0, 0])
+        self.assertEqual(table["Pattern, blocks 7-8"], [3, 1, 0, 1, 1])
+        self.assertEqual(table["All"], [6, 3, 1, 1, 1])
+
+    def test_a_byte_that_disagrees_with_the_log_shows(self):
+        t = _trials()
+        t.loc[0, "resp_code"] = 110          # the log says correct
+        self.assertFalse(by_condition(t)[1])
+
+
+class QueueTests(unittest.TestCase):
+
+    def test_stimulus_waits_and_delays(self):
+        ev = pd.DataFrame({"value": [213, 30, 103, 30, 111],
+                           "t_event": [0.0, 1.0, 1.3, 2.0, 2.3],
+                           "t_wire": [0.0, 1.0002, 1.307, 2.0001, 2.31],
+                           "delayed": [0, 0, 1, 0, 0], "failed": [0, 0, 0, 0, 0],
+                           "dropped": [0, 0, 0, 0, 0]})
+        q = queue(ev)
+        self.assertAlmostEqual(q["stim_wait_max_ms"], 0.2, places=3)
+        self.assertEqual((q["delayed"], q["delayed_stim"], q["failed"], q["dropped"]), (1, 0, 0, 0))
+
+
+class StatusTests(unittest.TestCase):
+
+    def test_cms_and_battery_bits(self):
+        cms, low = 1 << 20, 1 << 22
+        bits = status_bits([cms | 30, cms, cms | low, 0])
+        self.assertEqual(bits["cms_in_range"], 0.75)
+        self.assertEqual(bits["battery_low"], 0.25)
+
+    def test_the_status_channel_is_read_from_the_bytes(self):
+        import tempfile
+        words = [(1 << 20) | 30, 1 << 20, (1 << 20) | (1 << 22), 0, 5, 6, 7, 8]
+        path = Path(tempfile.mkdtemp()) / "tiny.bdf"
+        path.write_bytes(_bdf({"Fp1": [100] * 8, "Status": words}, per_record=4))
+        np.testing.assert_array_equal(read_status(path), words)
+
+
+def _bdf(channels: dict, per_record: int) -> bytes:
+    """A minimal BioSemi BDF file: the header fields read_status uses, then
+    24-bit little-endian samples record by record."""
+    ns = len(channels)
+    n = len(next(iter(channels.values())))
+    nrec = n // per_record
+
+    def field(text, width):
+        return str(text).ljust(width).encode()
+    head = (b"\xffBIOSEMI" + field("", 80) + field("", 80) + field("08.10.26", 8)
+            + field("11.23.33", 8) + field(256 * (ns + 1), 8) + field("24BIT", 44)
+            + field(nrec, 8) + field(1, 8) + field(ns, 4))
+    for width, value in ((16, None), (80, ""), (8, ""), (8, -1), (8, 1), (8, -8388608),
+                         (8, 8388607), (80, ""), (8, per_record), (32, "")):
+        head += b"".join(field(name if value is None else value, width) for name in channels)
+    body = b""
+    for r in range(nrec):
+        for samples in channels.values():
+            for v in samples[r * per_record: (r + 1) * per_record]:
+                body += int(v).to_bytes(3, "little", signed=False)
+    return head + body
 
 
 if __name__ == "__main__":

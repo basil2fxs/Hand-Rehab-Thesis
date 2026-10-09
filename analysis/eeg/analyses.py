@@ -73,18 +73,20 @@ def sme(values: np.ndarray) -> float:
     return float(v.std(ddof=1) / np.sqrt(len(v))) if len(v) > 1 else np.nan
 
 
-def perm_diff(a: np.ndarray, b: np.ndarray, n: int = N_PERM) -> dict:
+def perm_diff(a: np.ndarray, b: np.ndarray, n: int = N_PERM, rng=None) -> dict:
     """Trial-level permutation test of a difference in means, with a
-    bootstrap 95 percent interval and Cohen's d (pooled SD)."""
+    bootstrap 95 percent interval and Cohen's d (pooled SD). rng gives a
+    test its own random stream; by default it draws on the module's."""
+    rng = RNG if rng is None else rng
     a = np.asarray(a, float); b = np.asarray(b, float)
     obs = a.mean() - b.mean()
     both = np.concatenate([a, b])
     hits = 0
     for _ in range(n):
-        RNG.shuffle(both)
+        rng.shuffle(both)
         if abs(both[:len(a)].mean() - both[len(a):].mean()) >= abs(obs):
             hits += 1
-    boots = [RNG.choice(a, len(a)).mean() - RNG.choice(b, len(b)).mean()
+    boots = [rng.choice(a, len(a)).mean() - rng.choice(b, len(b)).mean()
              for _ in range(2000)]
     sd = np.sqrt(((len(a) - 1) * a.var(ddof=1) + (len(b) - 1) * b.var(ddof=1))
                  / (len(a) + len(b) - 2))
