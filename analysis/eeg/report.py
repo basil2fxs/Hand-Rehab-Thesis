@@ -1,8 +1,9 @@
 """The internal report: two A4 pages laid out like a short student
 report. Numbered sections, the results in plain words, and numbered
-figures whose captions say how to read them. Only clear results are
-shown (each passed its test). Drawn straight to PDF; the full analysis
-stays in detail/."""
+figures whose captions say how to read them. Only EEG results that
+passed their tests are shown; press times, accuracy and recall come from
+any game session, so they stay out. Drawn straight to PDF; the full
+analysis stays in detail/."""
 from __future__ import annotations
 
 import itertools
@@ -194,13 +195,15 @@ def _lines(ax, t, series, shade=None, tag="", legend=True) -> None:
 
 
 # ---- section 1: the two games side by side ------------------------------------
-def _compare(pg: Page, s: dict, c: dict, count) -> None:
+def _compare(pg: Page, s: dict, c: dict, figs, secs) -> None:
     import matplotlib as mpl
     import mne
     m, t = c["modes"], c["tests"]
     r, b = m["reaction"], m["buzz"]
-    rt_ok, size_ok, time_ok = _clear(t.get(RT_TEST)), _clear(t.get(SIZE_TEST)), _clear(t.get(TIME_TEST))
-    pg.heading(1, "Reaction game vs Buzz Hunt")
+    size_ok, time_ok = _clear(t.get(SIZE_TEST)), _clear(t.get(TIME_TEST))
+    if not (size_ok or time_ok):
+        return
+    pg.heading(next(secs), "Reaction game vs Buzz Hunt")
     for key, label, what in (("reaction", "Reaction game:", "a square flashes and beeps"),
                              ("buzz", "Buzz Hunt:", "a finger buzzes")):
         gap = m[key].get("spacing_s")
@@ -209,21 +212,14 @@ def _compare(pg: Page, s: dict, c: dict, count) -> None:
     pg.y -= 0.008
 
     panels = []
-    if rt_ok:
-        panels.append(("Time to press (s)", [r["rt_ms"] / 1000, b["rt_ms"] / 1000], "{:.2f}"))
     if size_ok:
         panels.append(("Attention signal size (µV)", [r["p3_uV"], b["p3_uV"]], "{:.1f}"))
     if time_ok:
         panels.append(("Attention signal timing (s)", [r["p3_latency_ms"] / 1000,
                                                        b["p3_latency_ms"] / 1000], "{:.2f}"))
-    n1 = next(count) if panels else None
-    n2 = next(count) if size_ok or time_ok else None
-    n3 = next(count) if size_ok else None
+    n1, n2 = next(figs), next(figs)
+    n3 = next(figs) if size_ok else None
     cue = {"reaction": "flash", "buzz": "buzz"}
-    if rt_ok:
-        fast, slow = sorted(GAME, key=lambda k: m[k]["rt_ms"])
-        pg.bullet(f"Time to press: slower after the {cue[slow]} "
-                  f"({m[slow]['rt_ms'] / 1000:.2f} vs {m[fast]['rt_ms'] / 1000:.2f} s).")
     if size_ok:
         lo, hi = sorted(GAME, key=lambda k: m[k]["p3_uV"])
         ratio = m[hi]["p3_uV"] / m[lo]["p3_uV"] if m[lo]["p3_uV"] > 0 else 0
@@ -237,20 +233,16 @@ def _compare(pg: Page, s: dict, c: dict, count) -> None:
     pg.y -= 0.01
 
     # Figure: the numbers as bars
-    if panels:
-        h = 0.15
-        y0 = pg.take(h)
-        for k, (title, vals, fmt) in enumerate(panels):
-            x = X0 + 0.045 + k * 0.29
-            ax = pg.axes(x, y0 + 0.022, 0.2, h - 0.055)
-            _bars(ax, [NAME["reaction"], NAME["buzz"]], vals, [GAME["reaction"], GAME["buzz"]], fmt)
-            pg.text(x - 0.045, y0 + h - 0.004, f"({'abc'[k]}) {title}", 9.5, True, va="top")
-        pg.caption(n1, " ".join([f"Size: the average in Figure {n2}'s grey band."] * size_ok
-                                + ["Timing: when the middle of the signal came."] * time_ok)
-                   or "The typical time to press.")
+    h = 0.15
+    y0 = pg.take(h)
+    for k, (title, vals, fmt) in enumerate(panels):
+        x = X0 + 0.045 + k * 0.29
+        ax = pg.axes(x, y0 + 0.022, 0.2, h - 0.055)
+        _bars(ax, [NAME["reaction"], NAME["buzz"]], vals, [GAME["reaction"], GAME["buzz"]], fmt)
+        pg.text(x - 0.045, y0 + h - 0.004, f"({'ab'[k]}) {title}", 9.5, True, va="top")
+    pg.caption(n1, " ".join([f"Size: the average in Figure {n2}'s grey band."] * size_ok
+                            + ["Timing: when the middle of the signal came."] * time_ok))
 
-    if not (size_ok or time_ok):
-        return
     # Figure: the attention signal over time
     ev = {k: e.average() for k, e in c["epochs"].items()}
     ys = {k: _site(ev[k], P3_SITES) for k in GAME}
@@ -311,40 +303,23 @@ def _compare(pg: Page, s: dict, c: dict, count) -> None:
 
 
 # ---- section 2: learning the pattern -------------------------------------------
-def _learning(pg: Page, s: dict, r, count) -> None:
+def _learning(pg: Page, s: dict, r, figs, secs) -> None:
     srt = s["srt"]
-    lr, rc = srt.get("learning", {}), srt.get("recall", {})
+    rc = srt.get("recall", {})
     st, bt = srt.get("stim_tests", {}), srt.get("band_tests", {})
     n2, p3 = st.get(FD.N2_TEST, {}), st.get(FD.P3_TEST, {})
     adj = FD.holm([n2.get("p"), p3.get("p")])
-    ci = lr.get("post_minus_block8_ci") or [0, 0]
-    cost, b1, b8 = (lr.get(k, 0) / 1000 for k in ("post_minus_block8_ms", "block1_ms", "block8_ms"))
     ev_l, ev_r = r.stim.get("sequence_late"), r.stim.get("random_posttest")
-    learned = ci[0] > 0
     n2_ok = adj[0] is not None and adj[0] < FD.ALPHA and ev_l is not None and ev_r is not None
     p3_ok = adj[1] is not None and adj[1] < FD.ALPHA
     beta = bt.get("beta C3")
-    n = next(count)
-    bh = r.behaviour
-    seg = list(bh.segment)
-    rt = bh.rt_median_ms.to_numpy(float) / 1000
-    blocks = sum(x.startswith("Sequence") for x in seg)
+    if not (n2_ok or p3_ok or _clear(beta)):
+        return
+    blocks = sum(str(x).startswith("Sequence") for x in r.behaviour.segment)
 
-    pg.heading(2, "Learning a pattern (Reaction game)")
+    pg.heading(next(secs), "Learning a pattern (Reaction game)")
     pattern = f"a repeating pattern of {rc['items']}" if rc else "a repeating pattern"
     pg.write(f"Random order, then {pattern} (blocks 1 to {blocks}), then random again.", after=0.008)
-    if learned:
-        pg.bullet(f"Time to press: faster with the pattern ({b1:.2f} to {b8:.2f} s), then {cost:.2f} s "
-                  "slower when it was taken away, so it was learned." if b8 < b1 else
-                  f"Time to press: {cost:.2f} s slower when the pattern was taken away, so it was "
-                  "learned.")
-    if rc and _clear({"p": rc.get("chance_p")}):
-        if rc["cyclic_correct"] == rc["items"]:
-            pg.bullet(f"Recall: all {rc['items']} typed back in order"
-                      + ("." if rc["correct"] == rc["items"] else
-                         ", starting at a different point in the loop."))
-        else:
-            pg.bullet(f"Recall: {rc['cyclic_correct']} of {rc['items']} in order, more than guessing.")
     if n2_ok:
         pg.bullet(f"Surprise signal (N2): dipped {'lower' if n2.get('diff', 0) < 0 else 'less'} for "
                   "random flashes.")
@@ -356,75 +331,46 @@ def _learning(pg: Page, s: dict, r, count) -> None:
     if once:
         pg.bullet("Once learned: " + " and ".join(once) + ".")
     pg.y -= 0.01
+    if not n2_ok:
+        return
 
-    h = 0.19
+    n = next(figs)
+    h = 0.17
     y0 = pg.take(h)
-    ax = pg.axes(X0 + 0.045, y0 + 0.035, 0.31, h - 0.07)
-    ax.bar(range(len(seg)), rt, width=0.7,
-           color=[GREY if x == "Practice" else RED if x == "Post-test" else BLUE for x in seg])
-    ax.set_xticks(range(len(seg)), ["Start" if x == "Practice" else "End" if x == "Post-test"
-                                    else x.replace("Sequence ", "") for x in seg])
-    ax.set_ylim(0, rt.max() * 1.3)
-    ax.set_xlabel("Block", fontsize=8.5, color=SOFT)
-    if learned and "Sequence 8" in seg and "Post-test" in seg:
-        i, j = seg.index("Sequence 8"), seg.index("Post-test")
-        ax.annotate("", xy=(j, rt[j] + 0.01), xytext=(i, rt[i] + 0.01),
-                    arrowprops=dict(arrowstyle="->", color=INK, lw=1.2,
-                                    connectionstyle="arc3,rad=-0.45"))
-        ax.text((i + j) / 2, max(rt[i], rt[j]) + 0.035, f"+{cost:.2f} s", ha="center", fontsize=8.5,
-                fontweight="bold", color=INK)
-    pg.text(X0, y0 + h - 0.004, "(a) Time to press in each block (s)", 9.5, True, va="top")
-    words = ("(a) Blue: the pattern. Grey and red: random."
-             + (" Arrow: the slow-down when the pattern was taken away." if learned else ""))
-    if n2_ok:
-        pg.head(X0 + 0.42, y0 + 0.065, N2_SITES, w=0.06)
-        ax = pg.axes(X0 + 0.54, y0 + 0.035, W - 0.54, h - 0.07)
-        tn, yl, yr = ev_l.times, _site(ev_l, N2_SITES), _site(ev_r, N2_SITES)
-        _lines(ax, tn, [(yl, BLUE, "learned pattern"), (yr, RED, "random")], (0.2, 0.3),
-               "measured here", legend=False)
-        for k, (colour, label) in enumerate(((BLUE, "learned pattern"), (RED, "random"))):
-            ax.text(0.99, 0.97 - k * 0.11, label, transform=ax.transAxes, ha="right", va="top",
-                    fontsize=8.5, fontweight="bold", color=colour)
-        ax.set_xlabel("Time after the flash (s)", fontsize=8.5, color=SOFT)
-        pg.text(X0 + 0.42, y0 + h - 0.004, "(b) Surprise signal (N2)", 9.5, True, va="top")
-        words += " (b) Learned pattern: blocks 7 and 8."
-    pg.caption(n, words)
+    pg.head(X0, y0 + 0.06, N2_SITES)
+    ax = pg.axes(X0 + 0.15, y0 + 0.035, W - 0.15, h - 0.045)
+    tn, yl, yr = ev_l.times, _site(ev_l, N2_SITES), _site(ev_r, N2_SITES)
+    _lines(ax, tn, [(yl, BLUE, "learned pattern"), (yr, RED, "random")], (0.2, 0.3), "measured here",
+           legend=False)
+    for k, (colour, label) in enumerate(((BLUE, "learned pattern"), (RED, "random"))):
+        ax.text(0.99, 0.97 - k * 0.11, label, transform=ax.transAxes, ha="right", va="top",
+                fontsize=8.5, fontweight="bold", color=colour)
+    ax.set_xlabel("Time after the flash (s)", fontsize=8.5, color=SOFT)
+    pg.caption(n, "Surprise signal at the top of the head (small head), averaged over all tries. "
+                  "Learned pattern: blocks 7 and 8.")
 
 
 # ---- section 3: feeling the buzz -------------------------------------------------
-def _buzz(pg: Page, s: dict, count) -> None:
-    bz = s["buzz"]
-    mu = (bz.get("tests") or {}).get(FD.MU_TEST)
-    lanes = list((bz.get("per_lane") or {}).values())
-    n_try, hit = sum(x["n"] for x in lanes), sum(x["correct"] for x in lanes)
-    acc, chance = bz.get("loc_accuracy", 0) * 100, 100 / len(lanes) if lanes else 0
-    n = next(count)
-
-    pg.heading(3, "Feeling the buzz (Buzz Hunt)")
+def _buzz(pg: Page, s: dict, figs, secs) -> None:
+    mu = (s["buzz"].get("tests") or {}).get(FD.MU_TEST)
+    if not _clear(mu):
+        return
+    pg.heading(next(secs), "Feeling the buzz (Buzz Hunt)")
     pg.write("A finger buzzed and the subject pressed it.", after=0.008)
-    pg.bullet(f"Right finger found: {hit} of {n_try} tries ({acc:.0f}%; guessing gives {chance:.0f}%), "
-              f"in {bz.get('loc_rt_ms', 0) / 1000:.2f} s.")
-    if _clear(mu):
-        pg.bullet(f"Movement hum (mu), left side: {abs(mu['diff']):.0f}% "
-                  f"{'lower' if mu['diff'] < 0 else 'higher'} after the buzz.")
+    pg.bullet(f"Movement hum (mu), left side: {abs(mu['diff']):.0f}% "
+              f"{'lower' if mu['diff'] < 0 else 'higher'} after the buzz.")
     pg.y -= 0.01
 
+    n = next(figs)
     h = 0.16
     y0 = pg.take(h)
-    ax = pg.axes(X0 + 0.045, y0 + 0.022, 0.24, h - 0.055)
-    _bars(ax, [_subject(s), "Guessing"], [acc, chance], [GAME["buzz"], GREY], "{:.0f}%", top=118)
+    pg.head(X0, y0 + 0.05, ["C3"], GAME["buzz"])
+    ax = pg.axes(X0 + 0.15, y0 + 0.022, 0.24, h - 0.055)
+    _bars(ax, ["Before", "After"], [100.0, 100.0 + mu["diff"]], [GREY, GAME["buzz"]], "{:.0f}%",
+          top=125)
     ax.set_yticks([0, 50, 100], ["0", "50", "100%"])
-    pg.text(X0, y0 + h - 0.004, "(a) Right finger found", 9.5, True, va="top")
-    words = f"(a) Guessing would pick 1 of {len(lanes)} fingers." if lanes else "(a) Against guessing."
-    if _clear(mu):
-        pg.head(X0 + 0.47, y0 + 0.05, ["C3"], GAME["buzz"])
-        ax = pg.axes(X0 + 0.6, y0 + 0.022, 0.24, h - 0.055)
-        _bars(ax, ["Before", "After"], [100.0, 100.0 + mu["diff"]], [GREY, GAME["buzz"]], "{:.0f}%",
-              top=125)
-        ax.set_yticks([0, 50, 100], ["0", "50", "100%"])
-        pg.text(X0 + 0.47, y0 + h - 0.004, "(b) Movement hum, left side", 9.5, True, va="top")
-        words += " (b) Before the buzz is set to 100%."
-    pg.caption(n, words)
+    pg.caption(n, "Movement hum on the left side (small head), before and after the buzz, with "
+                  "before set to 100%.")
 
 
 # ---- the document ------------------------------------------------------------
@@ -432,24 +378,26 @@ def build(s: dict, out: Path, results: dict | None = None, cmp: dict | None = No
     import matplotlib.pyplot as plt
     from matplotlib.backends.backend_pdf import PdfPages
     results = results or {}
-    count = itertools.count(1)
+    figs, secs = itertools.count(1), itertools.count(1)
     with plt.rc_context({"font.family": FONTS, "pdf.fonttype": 42, "axes.unicode_minus": False}):
         pages = []
         first = Page(1)
         first.write(f"{_subject(s)}, {_date(s)}", 20, True, after=0.002)
-        first.write("Only results that passed their tests are shown.", 9, colour=MUTED, after=0.006)
+        first.write("Only EEG results that passed their tests are shown.", 9, colour=MUTED, after=0.006)
         first.ov.plot([X0, X0 + W], [first.y, first.y], color=LINE, lw=0.8)
         if cmp and "epochs" in cmp:
-            _compare(first, s, cmp, count)
+            _compare(first, s, cmp, figs, secs)
         pages.append(first)
-        srt_ok = bool(s.get("srt")) and results.get("srt") is not None
-        if srt_ok or s.get("buzz"):
-            second = Page(2)
-            if srt_ok:
-                _learning(second, s, results["srt"], count)
-            if s.get("buzz"):
-                _buzz(second, s, count)
+        second = Page(2)
+        top = second.y
+        if s.get("srt") and results.get("srt") is not None:
+            _learning(second, s, results["srt"], figs, secs)
+        if s.get("buzz"):
+            _buzz(second, s, figs, secs)
+        if second.y < top:
             pages.append(second)
+        else:
+            plt.close(second.fig)
         path = out / "EEG_report.pdf"
         with PdfPages(path, metadata={"Title": f"{_subject(s)}, {_date(s)}"}) as pdf:
             for page in pages:
