@@ -1,9 +1,9 @@
 """The internal report: two A4 pages laid out like a short student
 report. Numbered sections, the results in plain words, and numbered
-figures whose captions say how to read them. Only EEG results that
-passed their tests are shown; press times, accuracy and recall come from
-any game session, so they stay out. Drawn straight to PDF; the full
-analysis stays in detail/."""
+figures whose captions say how to read them. EEG results whose test
+passed, nothing else: press times, accuracy and recall come from any
+game session. Drawn straight to PDF; the full analysis stays in
+detail/."""
 from __future__ import annotations
 
 import itertools
@@ -178,7 +178,7 @@ def _bars(ax, labels, vals, colours, fmt, top=None) -> None:
 
 def _lines(ax, t, series, shade=None, tag="", legend=True) -> None:
     """Signal over time: 0 s (dashed) is the flash or buzz."""
-    from matplotlib.ticker import MaxNLocator
+    from matplotlib.ticker import MaxNLocator, MultipleLocator
     if shade:
         ax.axvspan(*shade, color=GREY, alpha=0.2, lw=0)
         ax.text(sum(shade) / 2, 1.0, tag, transform=ax.get_xaxis_transform(), ha="center",
@@ -187,7 +187,9 @@ def _lines(ax, t, series, shade=None, tag="", legend=True) -> None:
     ax.axvline(0, color=INK, lw=1.0, ls=(0, (3, 3)))
     for y, colour, label in series:
         ax.plot(t, y, color=colour, lw=2.0, label=label)
-    ax.set_xlim(t[0], t[-1])
+    # snap the ends to the nearest 0.2 s so the first and last ticks show
+    ax.set_xlim(*[round(v * 5) / 5 if abs(v * 5 - round(v * 5)) < 0.025 else v for v in (t[0], t[-1])])
+    ax.xaxis.set_major_locator(MultipleLocator(0.2))
     ax.yaxis.set_major_locator(MaxNLocator(4, integer=True))
     ax.set_ylabel("Signal (µV)", fontsize=8.5, color=SOFT)
     if legend:
@@ -236,8 +238,8 @@ def _compare(pg: Page, s: dict, c: dict, figs, secs) -> None:
     h = 0.15
     y0 = pg.take(h)
     for k, (title, vals, fmt) in enumerate(panels):
-        x = X0 + 0.045 + k * 0.29
-        ax = pg.axes(x, y0 + 0.022, 0.2, h - 0.055)
+        x = X0 + 0.045 + k * 0.45
+        ax = pg.axes(x, y0 + 0.022, 0.26, h - 0.055)
         _bars(ax, [NAME["reaction"], NAME["buzz"]], vals, [GAME["reaction"], GAME["buzz"]], fmt)
         pg.text(x - 0.045, y0 + h - 0.004, f"({'ab'[k]}) {title}", 9.5, True, va="top")
     pg.caption(n1, " ".join([f"Size: the average in Figure {n2}'s grey band."] * size_ok
@@ -266,8 +268,8 @@ def _compare(pg: Page, s: dict, c: dict, figs, secs) -> None:
             ax.text(lt, top, f"{lt:.2f} s", ha="center", va="bottom", fontsize=8.5,
                     fontweight="bold", color=GAME[k])
     ax.set_xlabel("Time after the flash or buzz (s)", fontsize=8.5, color=SOFT)
-    pg.caption(n2, "Attention signal at the top back of the head (small head), averaged over all "
-                   "tries." + (" Dots: its timing." if time_ok else ""))
+    pg.caption(n2, "Attention signal at the top back of the head, average of all tries."
+               + (" Dots: its timing." if time_ok else ""))
 
     if not size_ok:
         return
@@ -346,8 +348,8 @@ def _learning(pg: Page, s: dict, r, figs, secs) -> None:
         ax.text(0.99, 0.97 - k * 0.11, label, transform=ax.transAxes, ha="right", va="top",
                 fontsize=8.5, fontweight="bold", color=colour)
     ax.set_xlabel("Time after the flash (s)", fontsize=8.5, color=SOFT)
-    pg.caption(n, "Surprise signal at the top of the head (small head), averaged over all tries. "
-                  "Learned pattern: blocks 7 and 8.")
+    pg.caption(n, "Surprise signal at the top of the head, average of all tries. Learned pattern: "
+                  "blocks 7 and 8.")
 
 
 # ---- section 3: feeling the buzz -------------------------------------------------
@@ -356,7 +358,6 @@ def _buzz(pg: Page, s: dict, figs, secs) -> None:
     if not _clear(mu):
         return
     pg.heading(next(secs), "Feeling the buzz (Buzz Hunt)")
-    pg.write("A finger buzzed and the subject pressed it.", after=0.008)
     pg.bullet(f"Movement hum (mu), left side: {abs(mu['diff']):.0f}% "
               f"{'lower' if mu['diff'] < 0 else 'higher'} after the buzz.")
     pg.y -= 0.01
@@ -369,8 +370,7 @@ def _buzz(pg: Page, s: dict, figs, secs) -> None:
     _bars(ax, ["Before", "After"], [100.0, 100.0 + mu["diff"]], [GREY, GAME["buzz"]], "{:.0f}%",
           top=125)
     ax.set_yticks([0, 50, 100], ["0", "50", "100%"])
-    pg.caption(n, "Movement hum on the left side (small head), before and after the buzz, with "
-                  "before set to 100%.")
+    pg.caption(n, "Movement hum on the left side before and after the buzz, with before as 100%.")
 
 
 # ---- the document ------------------------------------------------------------
@@ -382,8 +382,7 @@ def build(s: dict, out: Path, results: dict | None = None, cmp: dict | None = No
     with plt.rc_context({"font.family": FONTS, "pdf.fonttype": 42, "axes.unicode_minus": False}):
         pages = []
         first = Page(1)
-        first.write(f"{_subject(s)}, {_date(s)}", 20, True, after=0.002)
-        first.write("Only EEG results that passed their tests are shown.", 9, colour=MUTED, after=0.006)
+        first.write(f"{_subject(s)}, {_date(s)}", 20, True, after=0.008)
         first.ov.plot([X0, X0 + W], [first.y, first.y], color=LINE, lw=0.8)
         if cmp and "epochs" in cmp:
             _compare(first, s, cmp, figs, secs)
