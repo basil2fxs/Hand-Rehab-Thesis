@@ -119,9 +119,10 @@ class Page:
             self.y -= step
         self.y -= after
 
-    def bullet(self, s):
+    def bullet(self, label, s):
+        """A result line: what it is in bold, then what happened."""
         self.text(X0 + 0.006, self.y, "•", 10, va="top")
-        self.write(s, x=X0 + 0.026, width=W - 0.026, after=0.004)
+        self.write(s, x=X0 + 0.026, width=W - 0.026, lead=(label, INK), after=0.004)
 
     def heading(self, number, title):
         self.y -= 0.014
@@ -145,8 +146,9 @@ class Page:
         ax.tick_params(labelsize=8, colors=SOFT, length=3, color=LINE)
         return ax
 
-    def head(self, x, y, chans, colour=INK, w=0.07):
-        """A small head from above, the electrodes marked and named."""
+    def head(self, x, y, chans, place, colour=INK, w=0.07):
+        """A small head from above, the electrodes marked, the place in
+        words and the electrode codes underneath."""
         from matplotlib.patches import Circle, Ellipse
         ax = self.fig.add_axes([x, y, w, w * A4[0] / A4[1]])
         ax.add_patch(Circle((0, 0), 1, fill=False, ec=INK, lw=1.1))
@@ -159,15 +161,16 @@ class Page:
         ax.set_ylim(-1.25, 1.25)
         ax.set_aspect("equal")
         ax.axis("off")
-        self.text(x + w / 2, y - 0.004, ", ".join(chans), 7.5, colour=MUTED, ha="center", va="top")
+        self.text(x + w / 2, y - 0.004, place, 8, colour=SOFT, ha="center", va="top")
+        self.text(x + w / 2, y - 0.018, ", ".join(chans), 7.5, colour=MUTED, ha="center", va="top")
 
 
-def _bars(ax, labels, vals, colours, fmt, top=None) -> None:
+def _bars(ax, labels, vals, colours, fmt="", top=None) -> None:
     from matplotlib.ticker import MaxNLocator
     xs = np.arange(len(vals))
     top = top or max(max(vals), 1e-9) * 1.3
     ax.bar(xs, [max(v, 0) for v in vals], color=colours, width=0.6)
-    for x, v in zip(xs, vals):
+    for x, v in zip(xs, vals if fmt else []):
         ax.text(x, max(v, 0) + top * 0.02, fmt.format(v), ha="center", va="bottom", fontsize=9,
                 fontweight="bold", color=INK)
     ax.set_ylim(0, top)
@@ -225,13 +228,14 @@ def _compare(pg: Page, s: dict, c: dict, figs, secs) -> None:
     if size_ok:
         lo, hi = sorted(GAME, key=lambda k: m[k]["p3_uV"])
         ratio = m[hi]["p3_uV"] / m[lo]["p3_uV"] if m[lo]["p3_uV"] > 0 else 0
-        pg.bullet(f"Attention signal (P3) size: {f'about {ratio:.0f} times ' if ratio >= 1.5 else ''}"
-                  f"bigger after the {cue[hi]} ({m[hi]['p3_uV']:.1f} vs {m[lo]['p3_uV']:.1f} µV, "
-                  "millionths of a volt).")
+        pg.bullet("Attention signal (P3):",
+                  f"{f'about {ratio:.0f} times ' if ratio >= 1.5 else ''}bigger after the {cue[hi]} "
+                  f"({m[hi]['p3_uV']:.1f} vs {m[lo]['p3_uV']:.1f} µV, millionths of a volt).")
     if time_ok:
         soon, late = sorted(GAME, key=lambda k: m[k]["p3_latency_ms"])
-        pg.bullet(f"Attention signal timing: later after the {cue[late]} "
-                  f"({m[late]['p3_latency_ms'] / 1000:.2f} vs {m[soon]['p3_latency_ms'] / 1000:.2f} s).")
+        pg.bullet("Timing:", f"later after the {cue[late]} "
+                             f"({m[late]['p3_latency_ms'] / 1000:.2f} vs "
+                             f"{m[soon]['p3_latency_ms'] / 1000:.2f} s).")
     pg.y -= 0.01
 
     # Figure: the numbers as bars
@@ -252,7 +256,7 @@ def _compare(pg: Page, s: dict, c: dict, figs, secs) -> None:
     win = [v / 1000 for v in (s.get("compare") or {}).get("p3_window_ms", [300, 650])]
     h = 0.17
     y0 = pg.take(h)
-    pg.head(X0, y0 + 0.06, P3_SITES)
+    pg.head(X0, y0 + 0.07, P3_SITES, "top back")
     ax = pg.axes(X0 + 0.15, y0 + 0.035, W - 0.15, h - 0.045)
     _lines(ax, tt, [(ys[k], GAME[k], NAME[k]) for k in GAME], win if size_ok else None,
            "size measured here")
@@ -323,15 +327,15 @@ def _learning(pg: Page, s: dict, r, figs, secs) -> None:
     pattern = f"a repeating pattern of {rc['items']}" if rc else "a repeating pattern"
     pg.write(f"Random order, then {pattern} (blocks 1 to {blocks}), then random again.", after=0.008)
     if n2_ok:
-        pg.bullet(f"Surprise signal (N2): dipped {'lower' if n2.get('diff', 0) < 0 else 'less'} for "
-                  "random flashes.")
-    once = []
+        pg.bullet("Surprise signal (N2):",
+                  f"dipped {'lower' if n2.get('diff', 0) < 0 else 'less'} for random flashes.")
     if p3_ok:
-        once.append(f"{'smaller' if p3.get('diff', 0) > 0 else 'bigger'} attention signal (P3)")
+        pg.bullet("Attention signal (P3):",
+                  f"{'smaller' if p3.get('diff', 0) > 0 else 'bigger'} once the pattern was learned.")
     if _clear(beta):
-        once.append(f"{'quieter' if beta['diff'] > 0 else 'louder'} movement hum (beta) on the left side")
-    if once:
-        pg.bullet("Once learned: " + " and ".join(once) + ".")
+        pg.bullet("Resting rhythm (beta), left side:",
+                  "lower once learned, so that area was busier." if beta["diff"] > 0 else
+                  "higher once learned.")
     pg.y -= 0.01
     if not n2_ok:
         return
@@ -339,7 +343,7 @@ def _learning(pg: Page, s: dict, r, figs, secs) -> None:
     n = next(figs)
     h = 0.17
     y0 = pg.take(h)
-    pg.head(X0, y0 + 0.06, N2_SITES)
+    pg.head(X0, y0 + 0.07, N2_SITES, "top")
     ax = pg.axes(X0 + 0.15, y0 + 0.035, W - 0.15, h - 0.045)
     tn, yl, yr = ev_l.times, _site(ev_l, N2_SITES), _site(ev_r, N2_SITES)
     _lines(ax, tn, [(yl, BLUE, "learned pattern"), (yr, RED, "random")], (0.2, 0.3), "measured here",
@@ -358,19 +362,28 @@ def _buzz(pg: Page, s: dict, figs, secs) -> None:
     if not _clear(mu):
         return
     pg.heading(next(secs), "Feeling the buzz (Buzz Hunt)")
-    pg.bullet(f"Movement hum (mu), left side: {abs(mu['diff']):.0f}% "
-              f"{'lower' if mu['diff'] < 0 else 'higher'} after the buzz.")
+    drop = mu["diff"] < 0
+    pg.bullet("Resting rhythm (mu), left side:",
+              f"{abs(mu['diff']):.0f}% {'lower' if drop else 'higher'} after the buzz"
+              + (", so that area got busy." if drop else "."))
     pg.y -= 0.01
 
     n = next(figs)
-    h = 0.16
+    h = 0.17
     y0 = pg.take(h)
-    pg.head(X0, y0 + 0.05, ["C3"], GAME["buzz"])
-    ax = pg.axes(X0 + 0.15, y0 + 0.022, 0.24, h - 0.055)
-    _bars(ax, ["Before", "After"], [100.0, 100.0 + mu["diff"]], [GREY, GAME["buzz"]], "{:.0f}%",
-          top=125)
+    pg.head(X0, y0 + 0.06, ["C3"], "left side", GAME["buzz"])
+    ax = pg.axes(X0 + 0.15, y0 + 0.022, 0.3, h - 0.045)
+    after = 100.0 + mu["diff"]
+    _bars(ax, ["Before the buzz", "After the buzz"], [100.0, after], [GREY, GAME["buzz"]], top=135)
     ax.set_yticks([0, 50, 100], ["0", "50", "100%"])
-    pg.caption(n, "Movement hum on the left side before and after the buzz, with before as 100%.")
+    ax.set_ylabel("Rhythm strength", fontsize=8.5, color=SOFT)
+    ax.annotate("", xy=(1, after + 4), xytext=(0, 104),
+                arrowprops=dict(arrowstyle="->", color=INK, lw=1.3, shrinkA=0, shrinkB=0,
+                                connectionstyle="arc3,rad=-0.3"))
+    ax.text(0.5, max(100.0, after) + 16, f"{mu['diff']:+.0f}%", ha="center", fontsize=10,
+            fontweight="bold", color=INK)
+    pg.caption(n, "The resting rhythm drops when a brain area gets busy. The left side feels the "
+                  "right hand.")
 
 
 # ---- the document ------------------------------------------------------------
@@ -382,7 +395,8 @@ def build(s: dict, out: Path, results: dict | None = None, cmp: dict | None = No
     with plt.rc_context({"font.family": FONTS, "pdf.fonttype": 42, "axes.unicode_minus": False}):
         pages = []
         first = Page(1)
-        first.write(f"{_subject(s)}, {_date(s)}", 20, True, after=0.008)
+        first.write(_subject(s), 22, True, after=0.0)
+        first.write(_date(s), 10, colour=MUTED, after=0.01)
         first.ov.plot([X0, X0 + W], [first.y, first.y], color=LINE, lw=0.8)
         if cmp and "epochs" in cmp:
             _compare(first, s, cmp, figs, secs)
