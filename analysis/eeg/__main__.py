@@ -122,6 +122,7 @@ def main(argv=None) -> int:
         r.measures.to_csv(detail / "tables" / "buzz_erp_measures.csv", index=False)
     for b in blocks:
         b.alignment.pairs.to_csv(detail / "tables" / f"markers_{b.mode}.csv", index=False)
+    from . import checks as K
     from . import compare as CMP
     from . import content as C
     from . import dashboard as Dash
@@ -134,6 +135,8 @@ def main(argv=None) -> int:
     summ = S.build(blocks, cleaned, results, sessions)
     summ["compare"] = CMP.summary(cmp)
     summ["subject"] = subject
+    chk = K.compute(blocks, cleaned, results)
+    summ["checks"] = K.summary(chk)
     S.write(summ, detail / "summary.json")
     limits = C.limitations(summ, FD.build(summ)["notes"])
     html_text = Dash.page(summ, names, figs, Dash.explorer(results), C.METHODS,
@@ -143,7 +146,7 @@ def main(argv=None) -> int:
     from . import deliver
     if not args.no_reports:
         print("reports", deliver.mne_reports(blocks, cleaned, results, detail))
-    print("report", R.build(summ, out, results=results, cmp=cmp))
+    print("report", R.build(summ, out, results=results, cmp=cmp, checks=chk))
     print(json.dumps(_jsonable(names), indent=1))
     print("results in", out)
     return 0

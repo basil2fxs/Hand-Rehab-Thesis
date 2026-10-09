@@ -1,9 +1,8 @@
-"""The internal report: two A4 pages laid out like a short student
-report. Numbered sections, the results in plain words, and numbered
-figures whose captions say how to read them. EEG results whose test
-passed, nothing else: press times, accuracy and recall come from any
-game session. Drawn straight to PDF; the full analysis stays in
-detail/."""
+"""The internal report: the marker checks Welber Marinovic asked for
+(9 October 2026) before any effect is read, laid out like a short
+student report. Numbered sections, the results in plain words, numbered
+figures and tables, and the processing steps the thesis needs. Drawn
+straight to PDF; the full analysis stays in detail/."""
 from __future__ import annotations
 
 import itertools
@@ -16,9 +15,8 @@ from . import findings as FD
 
 # the games' colours, as on the results page
 GAME = {"reaction": "#ea580c", "buzz": "#7c3aed"}
-NAME = {"reaction": "Reaction", "buzz": "Buzz Hunt"}
 INK, SOFT, MUTED, LINE = "#111827", "#374151", "#6b7280", "#9ca3af"
-BLUE, RED, GREY = "#2563eb", "#dc2626", "#9ca3af"
+RED, GREY, LILAC = "#dc2626", "#9ca3af", "#c4b5fd"
 # Arial ships its regular and bold as separate files, which matplotlib
 # needs to tell the two weights apart (it reads only one face of a .ttc)
 FONTS = ["Arial", "DejaVu Sans"]
@@ -28,16 +26,10 @@ X0, W = 0.08, 0.84          # the text column, in page units
 # A flat sketch of the cap from above (nose up, left ear on the left),
 # close enough to show where each electrode sits.
 SPOT = {"FCz": (0.0, 0.21), "Cz": (0.0, 0.0), "CPz": (0.0, -0.21), "Pz": (0.0, -0.42),
-        "Oz": (0.0, -0.85), "C3": (-0.42, 0.0), "C4": (0.42, 0.0)}
-P3_SITES, N2_SITES = ["Pz", "CPz"], ["FCz", "Cz"]
+        "O1": (-0.3, -0.8), "O2": (0.3, -0.8), "C3": (-0.42, 0.0), "CP3": (-0.42, -0.21)}
 RT_TEST = "RT, buzz minus reaction"
 SIZE_TEST = "P3 300-650 ms, buzz minus reaction"
 TIME_TEST = "P3 latency, buzz minus reaction"
-
-
-def _clear(test: dict | None) -> bool:
-    """A clear result: its test passed at .05."""
-    return bool(test) and test.get("p") is not None and test["p"] < FD.ALPHA
 
 
 def _subject(s: dict) -> str:
@@ -54,8 +46,8 @@ def _date(s: dict) -> str:
     return f"{d.day} {d.strftime('%B')}"
 
 
-def _site(ev, chans) -> np.ndarray:
-    return ev.copy().pick(chans).data.mean(0) * 1e6
+def _p(v) -> str:
+    return "p " + FD.p_text(v)
 
 
 @lru_cache(maxsize=None)
@@ -72,7 +64,7 @@ def _width(s: str, size: float, bold: bool) -> float:
 def _wrap(text: str, size: float, bold: bool, first: float, rest: float) -> list[str]:
     words = []
     for word in text.split():
-        if words and words[-1].endswith(("Figure", "Figures")):
+        if words and words[-1].endswith(("Figure", "Figures", "Table")):
             words[-1] += " " + word
         else:
             words.append(word)
@@ -138,6 +130,30 @@ class Page:
         self.y -= 0.008
         self.write(s, 9, colour=SOFT, lead=(f"Figure {n}.", INK), after=0.02)
 
+    def table(self, n, caption, rows, widths, header, right=()):
+        """A table under its caption: a bold header, cells wrapped to their
+        column widths (page units), a light rule under each row; columns
+        in right are right-aligned."""
+        self.write(caption, 9, colour=SOFT, lead=(f"Table {n}.", INK), after=0.006)
+        step, pad = 9 * 1.35 / 72 / A4[1], 0.012
+
+        def rule():
+            self.ov.plot([X0, X0 + sum(widths)], [self.y, self.y], color=LINE, lw=0.6)
+        rule()
+        for k, row in enumerate([header] + rows):
+            bold = k == 0
+            cells = [_wrap(str(c), 9, bold, w - pad, w - pad) or [""] for c, w in zip(row, widths)]
+            x = X0
+            for j, (lines, w) in enumerate(zip(cells, widths)):
+                for i, line in enumerate(lines):
+                    at = (x + w - pad, "right") if j in right else (x, "left")
+                    self.text(at[0], self.y - 0.005 - i * step, line, 9, bold, INK if bold else SOFT,
+                              va="top", ha=at[1])
+                x += w
+            self.y -= max(len(c) for c in cells) * step + 0.01
+            rule()
+        self.y -= 0.02
+
     def axes(self, x, y, w, h):
         ax = self.fig.add_axes([x, y, w, h])
         ax.set_facecolor("none")
@@ -146,7 +162,7 @@ class Page:
         ax.tick_params(labelsize=8, colors=SOFT, length=3, color=LINE)
         return ax
 
-    def head(self, x, y, chans, place, colour=INK, w=0.07):
+    def head(self, x, y, chans, place, colour=INK, w=0.06):
         """A small head from above, the electrodes marked, the place in
         words and the electrode codes underneath."""
         from matplotlib.patches import Circle, Ellipse
@@ -156,7 +172,7 @@ class Page:
         for side in (-1, 1):
             ax.add_patch(Ellipse((side * 1.05, 0), 0.12, 0.36, fill=False, ec=INK, lw=1.1))
         for ch in chans:
-            ax.scatter(*SPOT[ch], s=40, color=colour, zorder=3, lw=0)
+            ax.scatter(*SPOT[ch], s=34, color=colour, zorder=3, lw=0)
         ax.set_xlim(-1.25, 1.25)
         ax.set_ylim(-1.25, 1.25)
         ax.set_aspect("equal")
@@ -165,252 +181,245 @@ class Page:
         self.text(x + w / 2, y - 0.018, ", ".join(chans), 7.5, colour=MUTED, ha="center", va="top")
 
 
-def _bars(ax, labels, vals, colours, fmt="", top=None) -> None:
-    from matplotlib.ticker import MaxNLocator
-    xs = np.arange(len(vals))
-    top = top or max(max(vals), 1e-9) * 1.3
-    ax.bar(xs, [max(v, 0) for v in vals], color=colours, width=0.6)
-    for x, v in zip(xs, vals if fmt else []):
-        ax.text(x, max(v, 0) + top * 0.02, fmt.format(v), ha="center", va="bottom", fontsize=9,
-                fontweight="bold", color=INK)
-    ax.set_ylim(0, top)
-    ax.set_xlim(-0.6, len(vals) - 0.4)
-    ax.set_xticks(xs, labels)
-    ax.yaxis.set_major_locator(MaxNLocator(3))
-
-
-def _lines(ax, t, series, shade=None, tag="", legend=True) -> None:
-    """Signal over time: 0 s (dashed) is the flash or buzz."""
+def _wave(ax, ms, series, shade=None, tag="", xlabel="") -> None:
+    """Signal over time in seconds: 0 (dashed) is the marker."""
     from matplotlib.ticker import MaxNLocator, MultipleLocator
+    t = np.asarray(ms) / 1000
     if shade:
         ax.axvspan(*shade, color=GREY, alpha=0.2, lw=0)
         ax.text(sum(shade) / 2, 1.0, tag, transform=ax.get_xaxis_transform(), ha="center",
                 va="bottom", fontsize=7.5, color=MUTED)
     ax.axhline(0, color=LINE, lw=0.8)
     ax.axvline(0, color=INK, lw=1.0, ls=(0, (3, 3)))
-    for y, colour, label in series:
-        ax.plot(t, y, color=colour, lw=2.0, label=label)
-    # snap the ends to the nearest 0.2 s so the first and last ticks show
-    ax.set_xlim(*[round(v * 5) / 5 if abs(v * 5 - round(v * 5)) < 0.025 else v for v in (t[0], t[-1])])
-    ax.xaxis.set_major_locator(MultipleLocator(0.2))
+    for y, colour, label, style in series:
+        ax.plot(t, y, color=colour, lw=2.0 if style == "-" else 1.6, ls=style, label=label)
+    lo = min(float(np.min(y)) for y, *_ in series)
+    hi = max(float(np.max(y)) for y, *_ in series)
+    ax.set_ylim(lo - 0.35 * (hi - lo), hi + 0.35 * (hi - lo))
+    # snap the ends to the nearest 0.1 s so the first and last ticks show
+    ax.set_xlim(*[round(v * 10) / 10 if abs(v * 10 - round(v * 10)) < 0.05 else v for v in (t[0], t[-1])])
+    ax.xaxis.set_major_locator(MultipleLocator(0.1))
     ax.yaxis.set_major_locator(MaxNLocator(4, integer=True))
-    ax.set_ylabel("Signal (µV)", fontsize=8.5, color=SOFT)
-    if legend:
-        ax.legend(frameon=False, fontsize=8.5, loc="upper left")
+    ax.set_ylabel("µV", fontsize=8.5, color=SOFT)
+    if xlabel:
+        ax.set_xlabel(xlabel, fontsize=8.5, color=SOFT)
+    ax.legend(frameon=False, fontsize=8, loc="lower right", bbox_to_anchor=(1.0, 1.0),
+              ncols=len(series), borderaxespad=0.2, handlelength=1.6)
 
 
-# ---- section 1: the two games side by side ------------------------------------
-def _compare(pg: Page, s: dict, c: dict, figs, secs) -> None:
-    import matplotlib as mpl
-    import mne
-    m, t = c["modes"], c["tests"]
-    r, b = m["reaction"], m["buzz"]
-    size_ok, time_ok = _clear(t.get(SIZE_TEST)), _clear(t.get(TIME_TEST))
-    if not (size_ok or time_ok):
-        return
-    pg.heading(next(secs), "Reaction game vs Buzz Hunt")
-    for key, label, what in (("reaction", "Reaction game:", "a square flashes and beeps"),
-                             ("buzz", "Buzz Hunt:", "a finger buzzes")):
-        gap = m[key].get("spacing_s")
-        pg.write(what + (f", every {gap[0]:.1f} to {gap[1]:.1f} s." if gap else "."),
-                 lead=(label, GAME[key]), after=0.001)
-    pg.y -= 0.008
+def _mark(ax, peak, label, colour, dy=6) -> None:
+    """A dot on a peak and its name and latency beside it."""
+    ms, uv = peak
+    ax.scatter([ms / 1000], [uv], s=26, color=colour, edgecolor="white", lw=1.2, zorder=5)
+    ax.annotate(f"{label} {ms:.0f} ms".strip(), (ms / 1000, uv), xytext=(5, dy if uv >= 0 else -dy),
+                textcoords="offset points", fontsize=8, fontweight="bold", color=colour,
+                va="bottom" if uv >= 0 else "top")
 
-    panels = []
-    if size_ok:
-        panels.append(("Attention signal size (µV)", [r["p3_uV"], b["p3_uV"]], "{:.1f}"))
-    if time_ok:
-        panels.append(("Attention signal timing (s)", [r["p3_latency_ms"] / 1000,
-                                                       b["p3_latency_ms"] / 1000], "{:.2f}"))
+
+# ---- 1: the markers against the log ---------------------------------------------
+def _markers(pg: Page, c: dict, figs, tabs, secs) -> None:
+    from matplotlib.ticker import MaxNLocator
+    g, rt, od = c["gaps"], c["rt"], c["order"]
+    pg.heading(next(secs), "Markers against the log")
+    rows = [[name, f"{eeg:,}", f"{log:,}"] for name, eeg, log in c["counts"]]
+    pg.table(next(tabs), "Markers in the EEG against trials in the game's log. Buzz Hunt's 3 "
+             "catch trials have no buzz.", rows, [0.3, 0.13, 0.13], ["Marker", "EEG", "Log"],
+             right=(1, 2))
     n1, n2 = next(figs), next(figs)
-    n3 = next(figs) if size_ok else None
-    cue = {"reaction": "flash", "buzz": "buzz"}
-    if size_ok:
-        lo, hi = sorted(GAME, key=lambda k: m[k]["p3_uV"])
-        ratio = m[hi]["p3_uV"] / m[lo]["p3_uV"] if m[lo]["p3_uV"] > 0 else 0
-        pg.bullet("Attention signal (P3):",
-                  f"{f'about {ratio:.0f} times ' if ratio >= 1.5 else ''}bigger after the {cue[hi]} "
-                  f"({m[hi]['p3_uV']:.1f} vs {m[lo]['p3_uV']:.1f} µV, millionths of a volt).")
-    if time_ok:
-        soon, late = sorted(GAME, key=lambda k: m[k]["p3_latency_ms"])
-        pg.bullet("Timing:", f"later after the {cue[late]} "
-                             f"({m[late]['p3_latency_ms'] / 1000:.2f} vs "
-                             f"{m[soon]['p3_latency_ms'] / 1000:.2f} s).")
-    pg.y -= 0.01
+    ff = g["flash_flash"]
+    inside = np.mean((ff >= 0.6) & (ff <= 0.9)) * 100
+    bb = g["buzz_buzz"]
+    usual = int(((bb >= 5.3) & (bb <= 6.8)).sum())
+    pg.bullet("Timing:", f"every marker sits within {c['timing_max_ms']:.1f} ms of the time the game "
+                         f"logged (SD {c['timing_sd_ms']:.2f} ms).")
+    pg.bullet("Gaps:", f"flash to flash {inside:.0f}% within 0.6 to 0.9 s, as it includes the "
+                       f"reaction time. Press to next flash is constant at "
+                       f"{np.median(g['press_next']):.2f} s ({np.median(g['press_next_practice']):.2f} s "
+                       f"in practice, which adds 0.2 s of feedback). Localisation buzzes: {usual} of "
+                       f"{len(bb)} gaps within 5.3 to 6.8 s; two longer ones span a catch trial, one "
+                       f"follows a miss (Figure {n1}).")
+    pg.bullet("Reaction times:", f"EEG and log agree (r = {rt['r']:.5f}; EEG {abs(rt['offset_ms']):.1f} ms "
+                                 f"{'shorter' if rt['offset_ms'] < 0 else 'longer'}, SD "
+                                 f"{rt['offset_sd_ms']:.1f} ms), using the press time each response "
+                                 f"byte carries. The byte itself goes out when the trial closes, "
+                                 f"{rt['byte_late_ms'][0]:.0f} to {rt['byte_late_ms'][2]:.0f} ms after "
+                                 f"the press (Figure {n2}).")
+    pg.bullet("Block and condition labels:", "the Reaction game sends no block or condition codes, as "
+              "in the lab script; random vs pattern and blocks 1 to 8 come from the log. They sit on "
+              f"the right trials: {od['lanes'][0]} of {od['lanes'][1]} response bytes name the "
+              f"finger the log names, and every flash gap matches the log within "
+              f"{od['gap_max_ms']:.0f} ms.")
+    pg.y -= 0.03
 
-    # Figure: the numbers as bars
-    h = 0.15
+    h = 0.13
     y0 = pg.take(h)
-    for k, (title, vals, fmt) in enumerate(panels):
-        x = X0 + 0.045 + k * 0.45
-        ax = pg.axes(x, y0 + 0.022, 0.26, h - 0.055)
-        _bars(ax, [NAME["reaction"], NAME["buzz"]], vals, [GAME["reaction"], GAME["buzz"]], fmt)
-        pg.text(x - 0.045, y0 + h - 0.004, f"({'ab'[k]}) {title}", 9.5, True, va="top")
-    pg.caption(n1, " ".join([f"Size: the average in Figure {n2}'s grey band."] * size_ok
-                            + ["Timing: when the middle of the signal came."] * time_ok))
+    ax = pg.axes(X0 + 0.05, y0 + 0.035, 0.36, h - 0.045)
+    ax.axvspan(0.6, 0.9, color=GREY, alpha=0.2, lw=0)
+    top = ax.hist(np.clip(ff, 0.4, 1.2), np.arange(0.4, 1.21, 0.02), color=GAME["reaction"],
+                  label="flash to flash")[0].max()
+    ax.set_ylim(0, top * 1.7)
+    ax.yaxis.set_major_locator(MaxNLocator(4, integer=True))
+    wait = float(np.median(g["press_next"]))
+    ax.axvline(wait, color=INK, lw=1.4, label=f"press to next flash, {wait:.2f} s every time")
+    ax.set_xlim(0.4, 1.2)
+    ax.set_xlabel("Seconds", fontsize=8.5, color=SOFT)
+    ax.set_ylabel("Count", fontsize=8.5, color=SOFT)
+    ax.legend(frameon=False, fontsize=8, loc="upper right")
+    pg.text(X0, y0 + h + 0.012, "(a) Reaction game", 9.5, True, va="top")
+    ax = pg.axes(X0 + 0.52, y0 + 0.035, 0.32, h - 0.045)
+    ax.axvspan(5.5, 6.7, color=GREY, alpha=0.2, lw=0)
+    top = ax.hist(np.clip(bb, 4, 10), np.arange(4, 10.01, 0.2), color=GAME["buzz"],
+                  label="buzz to buzz")[0].max()
+    ax.set_ylim(0, top * 1.7)
+    ax.yaxis.set_major_locator(MaxNLocator(4, integer=True))
+    ax.set_xlim(4, 10)
+    ax.set_xlabel("Seconds", fontsize=8.5, color=SOFT)
+    ax.legend(frameon=False, fontsize=8, loc="upper right")
+    pg.text(X0 + 0.47, y0 + h + 0.012, "(b) Buzz Hunt, localisation", 9.5, True, va="top")
+    pg.caption(n1, "Grey band: the expected range. Gaps past the right edge are stacked on it. "
+                   "The press-to-flash line leaves out practice.")
 
-    # Figure: the attention signal over time
-    ev = {k: e.average() for k, e in c["epochs"].items()}
-    ys = {k: _site(ev[k], P3_SITES) for k in GAME}
-    tt = ev["reaction"].times
-    win = [v / 1000 for v in (s.get("compare") or {}).get("p3_window_ms", [300, 650])]
-    h = 0.17
+    h = 0.13
     y0 = pg.take(h)
-    pg.head(X0, y0 + 0.07, P3_SITES, "top back")
-    ax = pg.axes(X0 + 0.15, y0 + 0.035, W - 0.15, h - 0.045)
-    _lines(ax, tt, [(ys[k], GAME[k], NAME[k]) for k in GAME], win if size_ok else None,
-           "size measured here")
-    lo, hi = min(y.min() for y in ys.values()), max(y.max() for y in ys.values())
-    ax.set_ylim(lo - 0.1 * (hi - lo), hi + 0.3 * (hi - lo))
-    if time_ok:
-        top = hi + 0.12 * (hi - lo)
-        for k in GAME:
-            lt = m[k]["p3_latency_ms"] / 1000
-            yv = float(np.interp(lt, tt, ys[k]))
-            ax.plot([lt, lt], [yv, top], color=GAME[k], lw=1.0, ls=(0, (1, 2)))
-            ax.scatter([lt], [yv], s=55, color=GAME[k], edgecolor="white", lw=1.5, zorder=5)
-            ax.text(lt, top, f"{lt:.2f} s", ha="center", va="bottom", fontsize=8.5,
-                    fontweight="bold", color=GAME[k])
-    ax.set_xlabel("Time after the flash or buzz (s)", fontsize=8.5, color=SOFT)
-    pg.caption(n2, "Attention signal at the top back of the head, average of all tries."
-               + (" Dots: its timing." if time_ok else ""))
-
-    if not size_ok:
-        return
-    # Figure: where on the head
-    data = {k: e.copy().pick("eeg") for k, e in ev.items()}
-    at = {k: data[k].data[:, int(np.argmin(np.abs(data[k].times - m[k]["p3_latency_ms"] / 1000)))]
-          * 1e6 for k in GAME}
-    lim = max(np.abs(x).max() for x in at.values()) * 0.85
-    h, w = 0.205, 0.26
-    y0 = pg.take(h)
-    for k, key in enumerate(GAME):
-        x0 = X0 + 0.04 + k * 0.5
-        ax = pg.fig.add_axes([x0, y0, w, w * A4[0] / A4[1]])
-        mne.viz.plot_topomap(at[key], data[key].info, axes=ax, show=False, cmap="RdBu_r",
-                             vlim=(-lim, lim), contours=0, sensors=False,
-                             mask=np.isin(data[key].ch_names, P3_SITES),
-                             mask_params=dict(marker="o", markerfacecolor=INK, markeredgecolor="white",
-                                              markersize=7))
-        name = "Reaction game" if key == "reaction" else NAME[key]
-        pg.text(x0 + w / 2, y0 + h - 0.002, f"{name}, {m[key]['p3_latency_ms'] / 1000:.2f} s", 9.5,
-                True, GAME[key], ha="center", va="top")
-        pg.text(x0 - 0.004, y0 + 0.092, "left", 8, colour=MUTED, ha="right", va="center")
-        pg.text(x0 + w + 0.004, y0 + 0.092, "right", 8, colour=MUTED, va="center")
-    cax = pg.fig.add_axes([X0 + 0.415, y0 + 0.035, 0.012, 0.12])
-    bar = pg.fig.colorbar(mpl.cm.ScalarMappable(norm=mpl.colors.Normalize(-lim, lim), cmap="RdBu_r"),
-                          cax=cax, ticks=[-lim, 0, lim])
-    bar.ax.set_yticklabels([f"{-lim:.0f}", "0", f"+{lim:.0f}"])
-    bar.ax.tick_params(labelsize=8, colors=SOFT, length=2)
-    bar.outline.set_visible(False)
-    cax.set_title("µV", fontsize=8, color=SOFT)
-    pg.caption(n3, "Head from above, nose up, at each signal's timing. Red: up. Blue: down. Black "
-                   f"dots: the spots in Figure {n2}.")
+    ax = pg.axes(X0 + 0.05, y0 + 0.035, 0.5, h - 0.045)
+    bins = np.arange(-10, 40.01, 1.0)
+    ax.hist(np.clip(rt["byte_minus_log"], -10, 40), bins, color=GREY, label="the byte itself")
+    ax.hist(np.clip(rt["press_minus_log"], -10, 40), bins, color=GAME["reaction"],
+            label="the press time it carries")
+    ax.set_xlim(-10, 40)
+    ax.set_xlabel("EEG minus log reaction time (ms)", fontsize=8.5, color=SOFT)
+    ax.set_ylabel("Presses", fontsize=8.5, color=SOFT)
+    ax.legend(frameon=False, fontsize=8, loc="upper right")
+    pg.caption(n2, f"All {rt['n']} presses; differences past 40 ms are stacked on the right edge.")
 
 
-# ---- section 2: learning the pattern -------------------------------------------
-def _learning(pg: Page, s: dict, r, figs, secs) -> None:
-    srt = s["srt"]
-    rc = srt.get("recall", {})
-    st, bt = srt.get("stim_tests", {}), srt.get("band_tests", {})
-    n2, p3 = st.get(FD.N2_TEST, {}), st.get(FD.P3_TEST, {})
-    adj = FD.holm([n2.get("p"), p3.get("p")])
-    ev_l, ev_r = r.stim.get("sequence_late"), r.stim.get("random_posttest")
-    n2_ok = adj[0] is not None and adj[0] < FD.ALPHA and ev_l is not None and ev_r is not None
-    p3_ok = adj[1] is not None and adj[1] < FD.ALPHA
-    beta = bt.get("beta C3")
-    if not (n2_ok or p3_ok or _clear(beta)):
-        return
-    blocks = sum(str(x).startswith("Sequence") for x in r.behaviour.segment)
-
-    pg.heading(next(secs), "Learning a pattern (Reaction game)")
-    pattern = f"a repeating pattern of {rc['items']}" if rc else "a repeating pattern"
-    pg.write(f"Random order, then {pattern} (blocks 1 to {blocks}), then random again.", after=0.008)
-    if n2_ok:
-        pg.bullet("Surprise signal (N2):",
-                  f"dipped {'lower' if n2.get('diff', 0) < 0 else 'less'} for random flashes.")
-    if p3_ok:
-        pg.bullet("Attention signal (P3):",
-                  f"{'smaller' if p3.get('diff', 0) > 0 else 'bigger'} once the pattern was learned.")
-    if _clear(beta):
-        pg.bullet("Resting rhythm (beta), left side:",
-                  "lower once learned, so that area was busier." if beta["diff"] > 0 else
-                  "higher once learned.")
-    pg.y -= 0.01
-    if not n2_ok:
-        return
-
+# ---- 2: the early sensory responses ----------------------------------------------
+def _sensory(pg: Page, c: dict, figs, secs) -> None:
+    f, b = c["sensory"]["flash"], c["sensory"]["buzz"]
     n = next(figs)
-    h = 0.17
-    y0 = pg.take(h)
-    pg.head(X0, y0 + 0.07, N2_SITES, "top")
-    ax = pg.axes(X0 + 0.15, y0 + 0.035, W - 0.15, h - 0.045)
-    tn, yl, yr = ev_l.times, _site(ev_l, N2_SITES), _site(ev_r, N2_SITES)
-    _lines(ax, tn, [(yl, BLUE, "learned pattern"), (yr, RED, "random")], (0.2, 0.3), "measured here",
-           legend=False)
-    for k, (colour, label) in enumerate(((BLUE, "learned pattern"), (RED, "random"))):
-        ax.text(0.99, 0.97 - k * 0.11, label, transform=ax.transAxes, ha="right", va="top",
-                fontsize=8.5, fontweight="bold", color=colour)
-    ax.set_xlabel("Time after the flash (s)", fontsize=8.5, color=SOFT)
-    pg.caption(n, "Surprise signal at the top of the head, average of all tries. Learned pattern: "
-                  "blocks 7 and 8.")
-
-
-# ---- section 3: feeling the buzz -------------------------------------------------
-def _buzz(pg: Page, s: dict, figs, secs) -> None:
-    mu = (s["buzz"].get("tests") or {}).get(FD.MU_TEST)
-    if not _clear(mu):
-        return
-    pg.heading(next(secs), "Feeling the buzz (Buzz Hunt)")
-    drop = mu["diff"] < 0
-    pg.bullet("Resting rhythm (mu), left side:",
-              f"{abs(mu['diff']):.0f}% {'lower' if drop else 'higher'} after the buzz"
-              + (", so that area got busy." if drop else "."))
+    pg.heading(next(secs), "Early sensory responses")
+    pg.bullet("Flash (O1, O2):", f"P1 at {f['P1'][0]:.0f} ms and N1 at {f['N1'][0]:.0f} ms, both sharp "
+                                 "(usual P1: about 100 ms).")
+    pg.bullet("Tone (Cz):", f"N1 at {f['Cz N1'][0]:.0f} ms and P2 at {f['Cz P2'][0]:.0f} ms (usual N1: "
+                            "about 100 ms). The tone plays with the flash, so the two responses overlap "
+                            "at Cz.")
+    pg.bullet("Buzz (C3, CP3):", f"first peak at {b['first'][0]:.0f} ms and main negativity at "
+                                 f"{b['neg'][0]:.0f} ms ({b['neg'][1]:.1f} µV), larger than over the "
+                                 f"right side ({b['neg_right'][1]:.1f} µV). The marker is the motor "
+                                 "command; the vibration starts 71 to 80 ms later (bench test).")
+    pg.bullet("Random times:", "flat at every site.")
     pg.y -= 0.01
 
+    from .checks import MOTOR_MS
+    rows = [("(a) Flash", ["O1", "O2"], "back", f["ms"],
+             [(f["O1/O2"], GAME["reaction"], "flash", "-"), (f["random O1/O2"], GREY, "random", "-")],
+             [(f["P1"], "P1"), (f["N1"], "N1")], None, ""),
+            ("(b) Tone", ["Cz"], "top", f["ms"],
+             [(f["Cz"], GAME["reaction"], "flash and tone", "-"), (f["random Cz"], GREY, "random", "-")],
+             [(f["Cz N1"], "N1"), (f["Cz P2"], "P2")], None, ""),
+            ("(c) Buzz", ["C3", "CP3"], "left side", b["ms"],
+             [(b["C3/CP3"], GAME["buzz"], "left", "-"), (b["C4/CP4"], LILAC, "right", "--"),
+              (b["random C3/CP3"], GREY, "random", "-")],
+             [(b["first"], ""), (b["neg"], "")], [m / 1000 for m in MOTOR_MS], "vibration starts")]
+    for k, (title, chans, place, ms, series, peaks, shade, tag) in enumerate(rows):
+        last = k == len(rows) - 1
+        h = 0.18 if last else 0.16
+        y0 = pg.take(h)
+        bottom = y0 + (0.05 if last else 0.03)
+        pg.head(X0, bottom + 0.02, chans, place, series[0][1])
+        ax = pg.axes(X0 + 0.13, bottom, W - 0.13, 0.09)
+        _wave(ax, ms, series, shade, tag, "Time after the marker (s)" if last else "")
+        for peak, label in peaks:
+            _mark(ax, peak, label or "peak", series[0][1])
+        pg.text(X0, bottom + 0.118, title, 9.5, True, va="top")
+    pg.caption(n, f"Averages over {f['n']} of {f['of']} flashes and {b['n']} of {b['of']} buzzes. "
+                  "Grey: the same average at random times.")
+
+
+# ---- 3: the error signal -------------------------------------------------------------
+def _errors(pg: Page, c: dict, figs, secs) -> None:
+    e = c["errors"]
     n = next(figs)
+    pg.heading(next(secs), "Error signal (ERN), Reaction game")
+    pg.bullet("Errors:", f"{e['of_error']} wrong-finger presses, {e['n_error']} kept after rejection "
+                         "(an ERN needs 6 to 8).")
+    pg.bullet("FCz:", f"errors dip to {e['ERN'][1]:.1f} µV {e['ERN'][0]:.0f} ms after the press, correct "
+                      f"presses (CRN) to {e['CRN'][1]:.1f} µV at {e['CRN'][0]:.0f} ms; not yet a "
+                      f"reliable difference ({_p(e['ern_test']['p'])}).")
+    pg.bullet("Pz, CPz (Pe):", f"errors {e['pe_test']['diff']:+.1f} µV against correct presses 0.2 to "
+                               f"0.4 s after the press ({_p(e['pe_test']['p'])}).")
+    pg.y -= 0.01
+
+    keep = e["ms"] >= -200
+    ms = e["ms"][keep]
+    pg.y -= 0.015
     h = 0.17
     y0 = pg.take(h)
-    pg.head(X0, y0 + 0.06, ["C3"], "left side", GAME["buzz"])
-    ax = pg.axes(X0 + 0.15, y0 + 0.022, 0.3, h - 0.045)
-    after = 100.0 + mu["diff"]
-    _bars(ax, ["Before the buzz", "After the buzz"], [100.0, after], [GREY, GAME["buzz"]], top=135)
-    ax.set_yticks([0, 50, 100], ["0", "50", "100%"])
-    ax.set_ylabel("Rhythm strength", fontsize=8.5, color=SOFT)
-    ax.annotate("", xy=(1, after + 4), xytext=(0, 104),
-                arrowprops=dict(arrowstyle="->", color=INK, lw=1.3, shrinkA=0, shrinkB=0,
-                                connectionstyle="arc3,rad=-0.3"))
-    ax.text(0.5, max(100.0, after) + 16, f"{mu['diff']:+.0f}%", ha="center", fontsize=10,
-            fontweight="bold", color=INK)
-    pg.caption(n, "The resting rhythm drops when a brain area gets busy. The left side feels the "
-                  "right hand.")
+    for k, (title, chans, place, key) in enumerate((("(a) ERN and CRN", ["FCz"], "top front", "FCz"),
+                                                     ("(b) Pe", ["Pz", "CPz"], "top back", "Pz/CPz"))):
+        x = X0 + k * 0.43
+        pg.head(x, y0 + 0.06, chans, place, RED)
+        ax = pg.axes(x + 0.1, y0 + 0.035, 0.3, h - 0.06)
+        _wave(ax, ms, [(e[f"{key} error"][keep], RED, "error", "-"),
+                       (e[f"{key} correct"][keep], INK, "correct", "-")],
+              xlabel="Time after the press (s)")
+        pg.text(x, y0 + h + 0.012, title, 9.5, True, va="top")
+    pg.caption(n, "Locked to the press each response byte carries; the next flash comes "
+                  f"{np.median(c['gaps']['press_next']):.2f} s after it. Baseline -0.4 to -0.2 s.")
+
+
+# ---- 4: processing ---------------------------------------------------------------------
+def _processing(pg: Page, c: dict, tabs, secs) -> None:
+    f, b, e = c["sensory"]["flash"], c["sensory"]["buzz"], c["errors"]
+    k = f["kept"]
+    pattern = sum(v for name, v in k.items() if name.startswith("sequence"))
+    bads = c["bads"]
+    ica = c["ica"]
+    pg.heading(next(secs), "Processing")
+    rows = [
+        ["Filters", "0.1 to 40 Hz band-pass (zero-phase FIR) and a 50 and 100 Hz notch. ICA fitted "
+                    "on a 1 to 40 Hz copy."],
+        ["Reference", "Common average."],
+        ["Bad channels", f"Reaction: {', '.join(bads.get('srt', [])) or 'none'}. Buzz Hunt: "
+                         f"{', '.join(bads.get('buzz_hunt', [])) or 'none'}. Flagged as flat, noisy or "
+                         "unlike their neighbours (r under 0.4); rebuilt by spherical-spline "
+                         "interpolation."],
+        ["ICA", f"Picard, components to 99% of the variance ({ica['srt'][0]} and "
+                f"{ica['buzz_hunt'][0]}). {ica['srt'][1]} and {ica['buzz_hunt'][1]} removed: those "
+                "correlating with the eye channels (VEOG, HEOG) at |z| over 3."],
+        ["Rejection", f"Epochs over 150 µV peak to peak after ICA dropped. Kept: flashes {f['n']} of "
+                      f"{f['of']} (random practice {k.get('random_practice', 0)} of 48, pattern "
+                      f"{pattern} of 800, random post-test {k.get('random_posttest', 0)} of 48); "
+                      f"presses {e['n_correct']} of {e['of_correct']} correct, {e['n_error']} of "
+                      f"{e['of_error']} wrong; buzzes {b['n']} of {b['of']}."],
+        ["Baseline", "-0.2 to 0 s before the flash or buzz; -0.4 to -0.2 s before the press for the "
+                     "error signal."],
+        ["Conditions", "Random and pattern trials kept apart in every analysis."],
+    ]
+    pg.table(next(tabs), "Processing, both recordings (BioSemi, 64 channels, 512 Hz).", rows,
+             [0.17, W - 0.17], ["Step", "What was done"])
 
 
 # ---- the document ------------------------------------------------------------
-def build(s: dict, out: Path, results: dict | None = None, cmp: dict | None = None) -> list[str]:
+def build(s: dict, out: Path, results: dict | None = None, cmp: dict | None = None,
+          checks: dict | None = None) -> list[str]:
     import matplotlib.pyplot as plt
     from matplotlib.backends.backend_pdf import PdfPages
-    results = results or {}
-    figs, secs = itertools.count(1), itertools.count(1)
+    if not checks:
+        return []
+    figs, tabs, secs = itertools.count(1), itertools.count(1), itertools.count(1)
     with plt.rc_context({"font.family": FONTS, "pdf.fonttype": 42, "axes.unicode_minus": False}):
-        pages = []
         first = Page(1)
         first.write(_subject(s), 22, True, after=0.0)
         first.write(_date(s), 10, colour=MUTED, after=0.01)
         first.ov.plot([X0, X0 + W], [first.y, first.y], color=LINE, lw=0.8)
-        if cmp and "epochs" in cmp:
-            _compare(first, s, cmp, figs, secs)
-        pages.append(first)
+        _markers(first, checks, figs, tabs, secs)
         second = Page(2)
-        top = second.y
-        if s.get("srt") and results.get("srt") is not None:
-            _learning(second, s, results["srt"], figs, secs)
-        if s.get("buzz"):
-            _buzz(second, s, figs, secs)
-        if second.y < top:
-            pages.append(second)
-        else:
-            plt.close(second.fig)
+        _sensory(second, checks, figs, secs)
+        third = Page(3)
+        _errors(third, checks, figs, secs)
+        _processing(third, checks, tabs, secs)
+        pages = [first, second, third]
         path = out / "EEG_report.pdf"
         with PdfPages(path, metadata={"Title": f"{_subject(s)}, {_date(s)}"}) as pdf:
             for page in pages:
