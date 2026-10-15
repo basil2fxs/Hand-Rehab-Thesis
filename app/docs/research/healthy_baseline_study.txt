@@ -448,7 +448,10 @@ Known effects to reproduce:
      n = 10 a true shift of zero passes only 55 to 80 percent of the
      time, so the shift and its interval are the result and the
      verdict is read beside them; a fail is read as practice, not as
-     a fault. Restored 24 September 2026, when the second pass made it
+     a fault. Clarified 15 October 2026, before any sitting's data were
+     read: a fail is named by its direction, practice when pass 2 is
+     faster, fatigue when it is slower, and inconclusive when only the
+     interval reaches past the margin. No verdict depends on it. Restored 24 September 2026, when the second pass made it
      computable; it had been dropped under the one-pass design. Read
      on the 90 percent interval from 28 September 2026 (it had also
      required the 95).
