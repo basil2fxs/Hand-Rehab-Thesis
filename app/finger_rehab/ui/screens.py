@@ -3743,6 +3743,12 @@ class GameplayScreen(Screen):
     # a player who waits when unsure times out; a guess keeps the
     # attempt a memory answer.
     GET_READY_LINES = {
+        # Reaction (15 October 2026): the run sheet's spoken line, put
+        # on the card once the study sittings ran without anyone in the
+        # room to say it. "Keep still" is for the catch trials, where no
+        # finger is cued at all.
+        "reaction": ("Press the finger that lights up, as fast as you can.",
+                     "Sometimes nothing lights up: then keep still."),
         "echo": ("Each round adds one more to the end.",
                  "Speed doesn't count.",
                  "If you're not sure, make your best guess."),

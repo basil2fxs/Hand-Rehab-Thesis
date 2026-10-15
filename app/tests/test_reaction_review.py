@@ -296,3 +296,19 @@ class NotebookReactionTests(unittest.TestCase):
         mode._valid_idx = list(range(1, len(rts) + 1))
         self.assertEqual(mode.block_stats()["p10_rt_ms"],
                          round(self.ra.reaction_p10(rts), 1))
+
+
+class SelfRunCardTests(unittest.TestCase):
+    """The study sittings of October 2026 ran with no one in the room,
+    so the card says what the run sheet used to say aloud."""
+
+    def test_the_get_ready_card_says_what_to_do_and_to_keep_still(self):
+        from finger_rehab.ui.screens import GameplayScreen
+        text = " ".join(GameplayScreen.GET_READY_LINES["reaction"])
+        self.assertEqual(text, "Press the finger that lights up, as fast "
+                               "as you can. Sometimes nothing lights up: "
+                               "then keep still.")
+
+    def test_the_laboratory_task_keeps_its_own_card(self):
+        from finger_rehab.ui.screens import GameplayScreen
+        self.assertNotIn("srt", GameplayScreen.GET_READY_LINES)
