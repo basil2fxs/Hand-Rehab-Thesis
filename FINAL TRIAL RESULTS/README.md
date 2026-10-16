@@ -6,7 +6,7 @@
 | Student sittings, 15 to 60 min, run by the students | about 10 | 4.1, 4.3 to 4.6 | `1 Healthy study` |
 | EEG session | 1 | 4.7 | `3 EEG lab` |
 | Tables and figures for Chapter 4 | | 4.1 to 4.6 | `5 Thesis results` |
-| The author's own checks: 15-minute sittings on five days, one slow-press block | by 22 October | 4.8, limitations 2 and 6 | `6 Self tests` |
+| The author's own checks: 15-minute sittings on five days, two slow-press blocks | 23 to 27 October | 4.8, limitations 2 and 6 | `6 Self tests` |
 | Sensor bench, left-hand device | moved to future work | | `2 Sensor comparison` |
 | Syllables with readers with dyslexia | moved to future work | | `4 Syllables case` |
 
@@ -22,6 +22,8 @@ After the last sitting:
        python3 app/scripts/deidentify_sessions.py "FINAL TRIAL RESULTS/1 Healthy study/raw" "FINAL TRIAL RESULTS/1 Healthy study/sessions"
 
    A volunteer who sits a second time on another day (same name, any length) keeps one code. The thesis build's `results.py` uses each person's first day for the study and the second day for reliability between days.
+
+   Sittings played at home on the Mac (family and friends, from 23 October) go into `raw` too, beside the lab's, before the names are coded.
 
 3. Check each coded sitting:
 
