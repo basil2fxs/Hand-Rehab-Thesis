@@ -1,6 +1,6 @@
-"""Rayan's sensor bench analyses, ported from R and Python.
+"""Rayyan's sensor bench analyses, ported from R and Python.
 
-Rayan Ahmed characterised the SingleTact pads with a set of R scripts
+Rayyan Raiz characterised the SingleTact pads with a set of R scripts
 and one Python script, left in archive/old_rayyan_stuff/data. They are the
 only written record of how these sensors behave, and Welber's earlier
 sessions were processed with the same detector, so the numbers have to
