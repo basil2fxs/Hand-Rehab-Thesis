@@ -75,7 +75,12 @@ bench check with 100 g to 1 kg masses (scripts/force_check.py, date
 to be filled in) found a slope of <x> counts per newton, <y> percent
 from the nominal value.
 
-Fill in <x>, <y> and the date from the JSON the script writes to
+16 October 2026: no bench check is needed for the calibrated set. Each pad
+is matched to a board that stores the maker's calibration, which holds
+full scale within 2 percent (about 10 for a standard pad), and the thesis
+rests its newtons on that calibration and the per-session tare. The script
+below stays for the uncalibrated set. If it is ever run, fill in <x>, <y>
+and the date from the JSON the script writes to
 config/calibration/force_check_<date>.json. Until the check has been
 run the sentence stops at "about +/- 0.2 N" and says the bench check
 is pending; do not quote a slope that was not measured.
