@@ -23,7 +23,7 @@ After the last sitting:
 
    A volunteer who sits a second time on another day (same name, any length) keeps one code. The thesis build's `results.py` uses each person's first day for the study and the second day for reliability between days.
 
-   Sittings played at home on the Mac (the author's parents and grandparents, 24 and 25 October) go into `raw` too, beside the lab's, before the names are coded. Anyone aged 50 or over is kept apart from the study by `results.py` and compared with it.
+   Sittings played at home on the Mac (the author's parents and grandparents, 24 and 25 October) go into `raw` too, beside the lab's, before the names are coded. Anyone aged 50 or over is kept apart from the study by `results.py` and compared with it. Each is handed `1 Healthy study/Family note.pdf` with the sheet before playing; its source is `Sitting sheet source/family_note.html`.
 
 3. Check each coded sitting:
 
