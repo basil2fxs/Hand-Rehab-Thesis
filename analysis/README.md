@@ -19,3 +19,12 @@ The export cell also writes `shared/matlab/finger_rehab.mat` for MATLAB and `sha
     python3 -m eeg "../FINAL TRIAL RESULTS/3 EEG lab/sessions"
 
 The output goes beside the sessions, in `results/`, where git never sees it.
+
+Two recordings or more are read together with `python3 -m eeg.group SESSIONS_1 SESSIONS_2 --out DIR`: each person's own difference between conditions is averaged, the trial labels are shuffled within each person only, and Holm's correction runs across the N2 and P3.
+
+## The laboratory's sequence task
+
+`sequence_task.py` scores the laboratory's serial reaction time task across players the way the laboratory does (correct presses under 1000 ms, each block's first trial dropped), reads the learning score again without reversals, without presses made before the flash and against the faster of the two random blocks, fits the laboratory's mixed model (reaction time on block, a random intercept per player), sets the two random blocks against each other as a repeated measure, and scores recall against simulated guessing. `press_check.py` sets every counted press against the start of its push on the board's force stream, block by block. `review_report.py` draws all of it, with the EEG, on a few pages for the people checking the results. Each takes its session folders on the command line, so no folder name is written into the code:
+
+    python3 sequence_task.py --out DIR LABEL=BLOCK_FOLDER [LABEL=BLOCK_FOLDER ...]
+    python3 press_check.py --out DIR LABEL=BLOCK_FOLDER [LABEL=BLOCK_FOLDER ...]

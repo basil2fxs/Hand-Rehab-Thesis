@@ -408,7 +408,9 @@ def srt(block: P.Block, cleaned: P.Cleaned) -> SrtResult:
     tt["seg"] = np.where(tt.phase == "learning", "Sequence " + tt.block.astype(str),
                          np.where(tt.phase == "practice", "Practice", "Post-test"))
     for seg in ["Practice"] + [f"Sequence {i}" for i in range(1, 9)] + ["Post-test"]:
-        s = tt[tt.seg == seg]
+        # A segment the recording missed (an amplifier started late) has
+        # no flash samples and no band power.
+        s = tt[(tt.seg == seg) & np.isfinite(tt.flash_sample)]
         if s.empty:
             continue
         a = int(s.flash_sample.min()); b = int(s.flash_sample.max() + 0.8 * sf)
@@ -462,7 +464,7 @@ def srt_rerp(raw: mne.io.BaseRaw, t: pd.DataFrame) -> dict:
     ev = []
     for _, r in t.iterrows():
         c = RERP_FLASH.get(RERP_FLASH_OF.get(r.condition, ""))
-        if c:
+        if c and np.isfinite(r.flash_sample):
             ev.append([int(r.flash_sample), 0, c])
         o = RERP_RESP.get(r.outcome)
         if o and np.isfinite(r.onset_sample):

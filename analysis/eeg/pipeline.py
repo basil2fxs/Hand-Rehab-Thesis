@@ -9,6 +9,7 @@ high-passed copy, and only then are trials cut and averaged.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -17,7 +18,7 @@ import pandas as pd
 
 import mne
 
-from .align import Alignment, align, shifted_samples, wire_rows
+from .align import Alignment, align, shifted_samples, trial_of, wire_rows
 
 # ---- parameters ----------------------------------------------------------
 LINE_HZ = 50.0          # Australian mains, and its harmonic below Nyquist

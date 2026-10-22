@@ -30,16 +30,19 @@ def response_bytes(pairs: pd.DataFrame) -> pd.DataFrame:
     return pairs[(pairs.code_eeg >= 100) & (pairs.code_eeg <= 131)].reset_index(drop=True)
 
 
-def counts(t: pd.DataFrame, srt_codes, buzz: pd.DataFrame, buzz_codes) -> list[tuple]:
-    """Each marker type in the recording against the log's trials."""
+def counts(t: pd.DataFrame, srt_codes, buzz: pd.DataFrame | None = None, buzz_codes=()) -> list[tuple]:
+    """Each marker type in the recording against the log's trials. A
+    session that recorded the Reaction game alone has no buzz row."""
     s, b = pd.Series(np.asarray(srt_codes)), pd.Series(np.asarray(buzz_codes))
     out = t.outcome
-    return [("Flashes", int((s == 30).sum()), len(t)),
+    rows = [("Flashes", int((s == 30).sum()), len(t)),
             ("Correct presses", _band(s, 100), int((out == "correct").sum())),
             ("Wrong finger", _band(s, 110), int((out == "error").sum())),
             ("Early presses", _band(s, 120), int((out == "anticipation").sum())),
-            ("Misses", int((s == 130).sum()), int((out == "miss").sum())),
-            ("Buzzes", int((b == 38).sum()), int((~buzz["catch"].astype(bool)).sum()))]
+            ("Misses", int((s == 130).sum()), int((out == "miss").sum()))]
+    if buzz is not None:
+        rows.append(("Buzzes", int((b == 38).sum()), int((~buzz["catch"].astype(bool)).sum())))
+    return rows
 
 
 def by_condition(t: pd.DataFrame) -> tuple[list[list], bool]:
@@ -213,6 +216,8 @@ def sensory(cleaned: dict, t: pd.DataFrame, buzz: pd.DataFrame) -> dict:
                     "random": _flash_peaks(fl[kind == "random"], ms), "pattern": _flash_peaks(pat, ms),
                     "halves": halves, "kinds": kind,
                     "image": uniform_filter1d(single, size=30, axis=0, mode="nearest")}
+    if "buzz_hunt" not in cleaned or not len(buzz):
+        return out
     raw = cleaned["buzz_hunt"].raw
     sf = raw.info["sfreq"]
     real = buzz[buzz.buzz_sample.notna()].reset_index(drop=True)
@@ -267,12 +272,16 @@ def errors(cleaned: dict, t: pd.DataFrame) -> dict:
 
 def compute(blocks, cleaned: dict, results: dict) -> dict:
     """Every check, from the pipeline's blocks, cleaned recordings and
-    results. Empty without both games."""
+    results. Empty without the Reaction game; the buzz checks are left out
+    when the session recorded no Buzz Hunt."""
     by = {b.mode: b for b in blocks}
-    if "srt" not in by or "buzz_hunt" not in by or "srt" not in results:
+    if "srt" not in by or "srt" not in results:
         return {}
-    t, buzz = results["srt"].trials, results["buzz_hunt"].trials
-    srt, bh = by["srt"], by["buzz_hunt"]
+    t = results["srt"].trials
+    srt, bh = by["srt"], by.get("buzz_hunt")
+    has_buzz = bh is not None and "buzz_hunt" in results
+    buzz = (results["buzz_hunt"].trials if has_buzz
+            else pd.DataFrame({"stage": [], "catch": [], "buzz_sample": []}))
     sf = srt.raw.info["sfreq"]
     resp = response_bytes(srt.alignment.pairs)
     n = min(len(t), len(resp))
@@ -291,7 +300,8 @@ def compute(blocks, cleaned: dict, results: dict) -> dict:
                        else "horizontal" for i in c.ica.exclude]
     rows, same = by_condition(t)
     real = buzz[~buzz["catch"].astype(bool)]
-    return {"counts": counts(t, srt.alignment.pairs.code_eeg, buzz, bh.alignment.pairs.code_eeg),
+    return {"counts": (counts(t, srt.alignment.pairs.code_eeg, buzz, bh.alignment.pairs.code_eeg)
+                       if has_buzz else counts(t, srt.alignment.pairs.code_eeg)),
             "by_condition": rows, "by_condition_match": same,
             "buzz_stages": {k: int(v) for k, v in real.stage.value_counts().items()},
             "catch": int(buzz["catch"].astype(bool).sum()),
@@ -345,8 +355,9 @@ def summary(c: dict) -> dict:
                    if k not in ("press_minus_log", "byte_minus_log")},
             "order": {k: list(v) if isinstance(v, tuple) else v for k, v in c["order"].items()},
             "sensory": {"flash": flash, "flash_pattern_halves_ms": [pair(h) for h in se["flash"]["halves"]],
-                        "buzz": {k: pair(se["buzz"][k]) for k in ("first", "neg", "neg_right")},
+                        "buzz": ({k: pair(se["buzz"][k]) for k in ("first", "neg", "neg_right")}
+                                 if "buzz" in se else {}),
                         "kept": {"flash": [se["flash"]["n"], se["flash"]["of"]],
-                                 "buzz": [se["buzz"]["n"], se["buzz"]["of"]]}},
+                                 **({"buzz": [se["buzz"]["n"], se["buzz"]["of"]]} if "buzz" in se else {})}},
             "errors": errs,
             "bads": c["bads"], "ica": c["ica"], "ica_kind": c["ica_kind"]}

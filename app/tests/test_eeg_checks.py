@@ -51,6 +51,13 @@ class CountTests(unittest.TestCase):
         self.assertEqual(rows["Misses"], (1, 1))
         self.assertEqual(rows["Buzzes"], (2, 2))     # the catch trial has no buzz
 
+    def test_a_session_without_buzz_hunt_counts_the_reaction_game_only(self):
+        t = _trials()
+        codes = [213, 30, 100, 30, 111, 30, 102, 30, 103, 30, 120, 30, 130, 233]
+        rows = {name: (eeg, log) for name, eeg, log in counts(t, codes)}
+        self.assertNotIn("Buzzes", rows)
+        self.assertEqual(rows["Flashes"], (6, 6))
+
     def test_a_lost_flash_shows(self):
         t = _trials()
         rows = {name: (eeg, log) for name, eeg, log in
