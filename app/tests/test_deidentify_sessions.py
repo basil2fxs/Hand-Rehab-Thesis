@@ -104,6 +104,19 @@ class DeidentifyTests(unittest.TestCase):
         self.assertEqual((block / "raw.csv").read_text(),
                          "t,f0,f1,f2,f3\n0.000,10,3,4,30\n")
 
+    def test_a_flattened_participant_column_is_swapped(self):
+        # summary.csv flattens block_summary, so a Chords block's reference
+        # basis arrives as chords.reference_basis.right.participant.
+        block = self.t.raw / "2026-10-16" / "Sarah_101500_reaction"
+        with (block / "summary.csv").open("w", newline="") as fh:
+            csv.writer(fh).writerows([
+                ["participant", "mode", "reaction.reference_basis.right.participant"],
+                ["Sarah", "reaction", "Sarah"]])
+        self.t.run(exclude=["Basil"])
+        rows = list(csv.reader(
+            (self.t.out / "2026-10-16" / "P01_101500_reaction" / "summary.csv").open()))
+        self.assertEqual(rows[1], ["P01", "reaction", "P01"])
+
     def test_name_bearing_extras_are_not_copied(self):
         self.t.run(exclude=["Basil"])
         block = self.t.out / "2026-10-16" / "P01_101500_reaction"

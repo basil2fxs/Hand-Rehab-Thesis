@@ -31,6 +31,14 @@ class Alignment:
     intercept: float               # recording time at game time zero
     residual_ms: np.ndarray        # recording minus fitted time, per pair
     pairs: pd.DataFrame = field(repr=False)
+    eeg_offset: int = 0            # recording markers before the block's first paired byte
+    game_offset: int = 0           # game bytes sent before the recording started
+
+    @property
+    def overlap_agrees(self) -> bool:
+        """Every byte the recording and the log share agrees, whether or
+        not the recording spans the whole block."""
+        return bool(len(self.pairs)) and bool(self.pairs["agree"].all())
 
     @property
     def drift_ppm(self) -> float:
@@ -67,17 +75,20 @@ def align(eeg_samples, eeg_codes, sfreq: float,
     events.tsv. The pairing is by order: the trigger line carries one
     byte at a time and the box resets to zero between bytes, so the
     k-th rising edge is the k-th byte written. A code mismatch anywhere
-    is reported, not repaired. The clock map is a least-squares line of
+    is reported, not repaired. A recording that starts after the block or
+    holds an earlier block's bytes first is paired from where the two
+    overlap (best_offsets). The clock map is a least-squares line of
     recording time on game wire time over the agreeing pairs."""
     s = np.asarray(eeg_samples, dtype=float)
     c = np.asarray(eeg_codes, dtype=int)
     g = game.reset_index(drop=True)
-    n = min(len(c), len(g))
-    agree = c[:n] == g["value"].to_numpy()[:n]
+    j, k = best_offsets(c, g["value"].to_numpy())
+    n = max(0, min(len(c) - j, len(g) - k))
+    agree = c[j:j + n] == g["value"].to_numpy()[k:k + n]
     matched = int(agree.sum())
-    codes_agree = bool(agree.all()) and len(c) == len(g)
-    t_eeg = s[:n] / float(sfreq)
-    t_game = g["t_wire"].to_numpy()[:n]
+    codes_agree = bool(agree.all()) and j == 0 and k == 0 and len(c) == len(g)
+    t_eeg = s[j:j + n] / float(sfreq)
+    t_game = g["t_wire"].to_numpy()[k:k + n]
     use = agree if agree.any() else np.ones(n, dtype=bool)
     if use.sum() >= 2:
         slope, intercept = np.polyfit(t_game[use], t_eeg[use], 1)
@@ -86,18 +97,55 @@ def align(eeg_samples, eeg_codes, sfreq: float,
     fitted = intercept + slope * t_game
     resid = (t_eeg - fitted) * 1000.0
     pairs = pd.DataFrame({
-        "k": np.arange(n), "code_eeg": c[:n], "code_game": g["value"][:n],
+        "k": np.arange(n), "code_eeg": c[j:j + n], "code_game": g["value"].to_numpy()[k:k + n],
         "agree": agree, "eeg_s": t_eeg, "t_wire": t_game,
-        "resid_ms": resid,
+        "resid_ms": resid, "eeg_row": np.arange(j, j + n), "game_row": np.arange(k, k + n),
     })
     for col in ("trial_type", "lane", "t_event", "press_offset_ms",
                 "onset_offset_ms"):
         if col in g.columns:
-            pairs[col] = g[col].to_numpy()[:n]
+            pairs[col] = g[col].to_numpy()[k:k + n]
     return Alignment(n_eeg=len(c), n_game=len(g), matched=matched,
                      codes_agree=codes_agree, slope=float(slope),
                      intercept=float(intercept),
-                     residual_ms=resid[use], pairs=pairs)
+                     residual_ms=resid[use], pairs=pairs,
+                     eeg_offset=int(j), game_offset=int(k))
+
+
+def best_offsets(eeg_codes, game_codes) -> tuple[int, int]:
+    """Where the recording and the game's log start to overlap, as
+    (recording markers skipped, game bytes skipped). A recording started
+    after the block began holds only the game's later bytes, and one that
+    began during an earlier block holds that block's bytes first, so each
+    start is tried in turn and the one where the most codes agree, in
+    order, is kept; a tie keeps the earlier start, so a recording that
+    spans the block pairs from its first byte as before."""
+    c = np.asarray(eeg_codes, dtype=int)
+    v = np.asarray(game_codes, dtype=int)
+
+    def agree(a, b):
+        n = min(len(a), len(b))
+        return int((a[:n] == b[:n]).sum()) if n else 0
+
+    best, at = agree(c, v), (0, 0)
+    for k in range(1, len(v)):
+        m = agree(c, v[k:])
+        if m > best:
+            best, at = m, (0, k)
+    for j in range(1, len(c)):
+        m = agree(c[j:], v)
+        if m > best:
+            best, at = m, (j, 0)
+    return at
+
+
+def trial_of(game_codes, flash_code: int = 30) -> np.ndarray:
+    """For each game byte, the trial it belongs to: the number of flashes
+    sent before it, counting from 0 at the first flash. A byte before any
+    flash (the block start) is -1, and a response belongs to the flash
+    before it."""
+    v = np.asarray(game_codes, dtype=int)
+    return np.cumsum(v == flash_code) - 1
 
 
 def shifted_samples(pairs: pd.DataFrame, sfreq: float, column: str) -> np.ndarray:

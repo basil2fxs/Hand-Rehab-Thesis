@@ -15,7 +15,7 @@ import pandas as pd
 ANALYSIS = Path(__file__).resolve().parents[2] / "analysis"
 sys.path.insert(0, str(ANALYSIS))
 
-from eeg.align import align, shifted_samples, wire_rows  # noqa: E402
+from eeg.align import align, shifted_samples, trial_of, wire_rows  # noqa: E402
 
 SF = 512.0
 
@@ -78,6 +78,47 @@ class AlignTests(unittest.TestCase):
         t = g.t_wire.iloc[100] + 0.25
         want = 12.0 + (1 - 40e-6) * (t - g.t_wire.iloc[0])
         self.assertAlmostEqual(float(a.to_eeg_seconds(t)), want, delta=0.002)
+
+    def test_a_recording_started_after_the_block_pairs_the_rest(self):
+        # The amplifier was started 120 bytes into the block, so the
+        # recording's first marker is the game's 121st byte.
+        g = wire_rows(_game())
+        s, c = _eeg(g.iloc[120:].reset_index(drop=True))
+        a = align(s, c, SF, g)
+        self.assertEqual(a.game_offset, 120)
+        self.assertEqual(a.eeg_offset, 0)
+        self.assertEqual(a.matched, len(g) - 120)
+        self.assertTrue(a.pairs.agree.all())
+        self.assertEqual(int(a.pairs.game_row.iloc[0]), 120)
+        self.assertFalse(a.codes_agree)          # bytes before the recording went unpaired
+        self.assertTrue(a.overlap_agrees)
+        self.assertAlmostEqual(a.drift_ppm, -40.0, delta=3.0)
+        self.assertLessEqual(np.abs(a.residual_ms).max(), 1000 / SF)
+
+    def test_markers_from_an_earlier_block_are_stepped_over(self):
+        g = wire_rows(_game())
+        s, c = _eeg(g)
+        early = np.array([213, 30, 101, 30, 102, 233])
+        s2 = np.concatenate([s[0] - 2000 + 100 * np.arange(len(early)), s])
+        c2 = np.concatenate([early, c])
+        a = align(s2, c2, SF, g)
+        self.assertEqual(a.eeg_offset, len(early))
+        self.assertEqual(a.game_offset, 0)
+        self.assertEqual(a.matched, len(g))
+        self.assertTrue(a.overlap_agrees)
+
+    def test_a_complete_recording_keeps_both_offsets_at_zero(self):
+        g = wire_rows(_game())
+        s, c = _eeg(g)
+        a = align(s, c, SF, g)
+        self.assertEqual((a.eeg_offset, a.game_offset), (0, 0))
+        self.assertTrue(a.codes_agree and a.overlap_agrees)
+
+    def test_each_byte_belongs_to_the_trial_of_the_last_flash(self):
+        # The block start comes before any trial; a response belongs to the
+        # flash before it.
+        self.assertEqual(trial_of(np.array([213, 30, 101, 30, 102, 30, 233])).tolist(),
+                         [-1, 0, 0, 1, 1, 2, 2])
 
     def test_offsets_move_a_response_byte_back(self):
         g = wire_rows(_game())

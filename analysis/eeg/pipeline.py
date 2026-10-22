@@ -233,8 +233,14 @@ def pair(sessions: Path) -> list[Block]:
         if best is None or best[1].matched == 0:
             continue
         f, a = best
-        mode = next((BLOCK_CODES[c] for c in ev[:, 2] if c in BLOCK_CODES),
-                    f.name.split("_", 2)[-1])
+        # The paired folder names the game. A block's start code can lie
+        # outside the recording (an amplifier started late) while a later
+        # block's start code lies inside it, so the codes only stand in
+        # when the folder name does not parse.
+        named = re.match(r"^.+_\d{6}_(?P<mode>[a-z_]+)$", f.name)
+        mode = named.group("mode") if named else next(
+            (BLOCK_CODES[c] for c in ev[:, 2] if c in BLOCK_CODES), f.name)
+        a.pairs["trial"] = trial_of(logs[f]["value"].to_numpy())[a.pairs.game_row.to_numpy()]
         trials = pd.read_csv(f / "trials.csv")
         blocks.append(Block(name=f.name, mode=mode, folder=f, bdf=bdf,
                             raw=raw, eeg_events=ev, alignment=a,
@@ -252,17 +258,22 @@ def srt_trials(block: Block) -> pd.DataFrame:
     t = pd.read_csv(script[0])
     pairs = block.alignment.pairs
     sf = block.raw.info["sfreq"]
-    flash = pairs[pairs.code_eeg == 30].reset_index(drop=True)
-    resp = pairs[(pairs.code_eeg >= 100) & (pairs.code_eeg <= 131)
-                 ].reset_index(drop=True)
-    n = min(len(t), len(flash), len(resp))
-    t = t.iloc[:n].copy()
-    t["flash_sample"] = np.round(flash.eeg_s[:n].to_numpy() * sf).astype(int)
-    t["resp_code"] = resp.code_eeg[:n].to_numpy()
-    t["press_sample"] = shifted_samples(resp.iloc[:n], sf, "press_offset_ms")
-    t["onset_sample"] = shifted_samples(resp.iloc[:n], sf, "onset_offset_ms")
-    t["rise_ms"] = (pd.to_numeric(resp.press_offset_ms[:n], errors="coerce")
-                    - pd.to_numeric(resp.onset_offset_ms[:n], errors="coerce")
+    # Each flash and response goes to its own trial (its count of flashes
+    # in the log), so a recording that starts or ends inside the block
+    # leaves the trials it missed without samples instead of shifting
+    # every later trial onto the wrong row.
+    ok = pairs[pairs.agree & (pairs.trial >= 0) & (pairs.trial < len(t))]
+    flash = ok[ok.code_eeg == 30].drop_duplicates("trial").set_index("trial")
+    resp = ok[(ok.code_eeg >= 100) & (ok.code_eeg <= 131)].drop_duplicates("trial").set_index("trial")
+    t = t.copy()
+    rows = np.arange(len(t))
+    t["flash_sample"] = np.round(flash.eeg_s.reindex(rows).to_numpy() * sf)
+    resp = resp.reindex(rows)
+    t["resp_code"] = resp.code_eeg.to_numpy()
+    t["press_sample"] = shifted_samples(resp, sf, "press_offset_ms")
+    t["onset_sample"] = shifted_samples(resp, sf, "onset_offset_ms")
+    t["rise_ms"] = (pd.to_numeric(resp.press_offset_ms, errors="coerce")
+                    - pd.to_numeric(resp.onset_offset_ms, errors="coerce")
                     ).to_numpy()
     t["condition"] = "other"
     t.loc[t.phase == "practice", "condition"] = "random_practice"

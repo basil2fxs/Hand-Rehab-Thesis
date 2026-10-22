@@ -6,9 +6,9 @@ resumes under the same identity. The analysis keeps study codes only
 (the notebook drops a named block as not anonymised), so the sittings
 are copied here first. Each person with at least one sitting block
 becomes P01, P02 and so on, in the order of their first sitting block.
-The name is replaced in the folder name, in the participant column of
-trials.csv and summary.csv, and in every metadata field called
-participant; report.html and charts/ are not copied, since they repeat
+The name is replaced in the folder name, in every participant column of
+trials.csv and summary.csv (flattened nested ones included), and in
+every metadata field called participant; report.html and charts/ are not copied, since they repeat
 the name and nothing reads them. The copy is then searched, and any
 field still equal to a name stops the run.
 
@@ -101,9 +101,11 @@ def _swap_json(obj, names: set[str], code: str):
 def _swap_csv(src: Path, dst: Path, names: set[str], code: str) -> None:
     with src.open(newline="", encoding="utf-8") as fh:
         rows = list(csv.reader(fh))
-    if rows and ID_KEY in rows[0]:
-        col = rows[0].index(ID_KEY)
-        for row in rows[1:]:
+    # summary.csv flattens nested fields, so a reference basis arrives as
+    # chords.reference_basis.right.participant beside the participant column.
+    cols = [i for i, h in enumerate(rows[0]) if h == ID_KEY or h.endswith("." + ID_KEY)] if rows else []
+    for row in rows[1:]:
+        for col in cols:
             if col < len(row) and _key(row[col]) in names:
                 row[col] = code
     with dst.open("w", newline="", encoding="utf-8") as fh:
