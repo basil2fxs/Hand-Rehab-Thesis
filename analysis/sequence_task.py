@@ -20,6 +20,14 @@ is also given with presses under 100 and 150 ms left out (FLOORS_MS).
 The EEG analysis's own score, on every correct press, is kept beside it
 (learning_all_correct) so the two can be compared.
 
+Two readings use the presses the learning score leaves out. A press
+under 100 ms, or in the script's anticipation window before the flash,
+was chosen before the flash could be seen, so the share of them on the
+right finger is how well the player predicted the next target; neither
+order repeats a finger, so a guess is right one time in three. Error
+rates in random practice, block 8 and the random post-test show whether
+the slowing in the post-test was bought with accuracy.
+
     cd analysis
     python3 sequence_task.py --out DIR LABEL=BLOCK_FOLDER [LABEL=BLOCK_FOLDER ...]
 
@@ -134,32 +142,47 @@ def recall(folder: Path) -> dict:
 
 
 def mixed(tables) -> dict:
-    """Rayyan Raiz's model for this task, lmer(RT ~ block + (1 | player))
-    with the block means read as emmeans reads them, refitted on every
-    kept trial of every player (finger_rehab.analytics.mixed_model). The
-    contrasts are the learning score (post-test minus block 8), the
-    speed-up per sequence block (the linear trend over blocks 1 to 8)
-    and his planned post-test minus practice. One random intercept, as he
-    fitted it: the intervals carry the trial noise and each player's own
-    speed, not differences between players in the effect itself."""
+    """The learning model, lmer(RT ~ block + (1 + post-test | player)) by
+    REML on every kept trial of every player
+    (finger_rehab.analytics.mixed_model). Each player has their own speed
+    and their own size of the post-test slowing, so the learning score's
+    interval carries how much the effect varies between players, on the
+    players less one degrees of freedom. A random intercept alone
+    (intercept_only) treats the players as sharing one effect and gives an
+    interval of the trial noise only. The contrasts are the learning score
+    (post-test minus block 8), the speed-up per sequence block (the linear
+    trend over blocks 1 to 8, read within players) and the post-test minus
+    practice; the block means are read as emmeans reads them."""
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
-    from finger_rehab.analytics.mixed_model import fit_random_intercept, lmm_contrast
+    from finger_rehab.analytics.mixed_model import (fit_random_intercept, fit_random_slopes,
+                                                     lmm_contrast, slopes_contrast)
     d = pd.concat([pd.DataFrame({"rt": t.rt_ms.to_numpy(float), "seg": _segment(t).to_numpy(), "who": i})
                    for i, t in enumerate(tables)], ignore_index=True)
     d = d[d.seg.isin(SEGMENTS)]
     X = np.column_stack([(d.seg == s).to_numpy(float) for s in SEGMENTS])
-    fit = fit_random_intercept(d.rt.to_numpy(float), X, d.who.to_numpy())
+    post_col = (d.seg == "Post-test").to_numpy(float)
+    Z = np.column_stack([np.ones(len(d)), post_col])
+    fit = fit_random_slopes(d.rt.to_numpy(float), X, Z, d.who.to_numpy())
+    between = fit["n_groups"] - 1
     post, b8, prac = (SEGMENTS.index(s) for s in ("Post-test", "Sequence 8", "Practice"))
     w = np.zeros((3, len(SEGMENTS)))
     w[0, post], w[0, b8] = 1, -1
     x = np.arange(1, 9) - 4.5
     w[1, 1:9] = x / (x ** 2).sum()
     w[2, post], w[2, prac] = 1, -1
-    names = ("post_minus_block8", "slope_per_block", "post_minus_practice")
+    contrasts = {"post_minus_block8": slopes_contrast(fit, w[0], df=between),
+                 "slope_per_block": slopes_contrast(fit, w[1]),
+                 "post_minus_practice": slopes_contrast(fit, w[2], df=between)}
+    emm = {}
+    for i, seg in enumerate(SEGMENTS):
+        c = slopes_contrast(fit, np.eye(len(SEGMENTS))[i], df=between)
+        emm[seg] = {"estimate": c["estimate"], "lower": c["lower"], "upper": c["upper"]}
+    simple = lmm_contrast(fit_random_intercept(d.rt.to_numpy(float), X, d.who.to_numpy()), w[0])
     return {"trials": int(len(d)), "players": int(len(tables)),
-            "means": {s: float(m) for s, m in zip(SEGMENTS, fit["beta"])},
-            "player_sd_ms": float(np.sqrt(fit["s2_u"])), "trial_sd_ms": float(np.sqrt(fit["s2_e"])),
-            **{name: lmm_contrast(fit, w[i]) for i, name in enumerate(names)}}
+            "means": {s: float(m) for s, m in zip(SEGMENTS, fit["beta"])}, "emmeans": emm,
+            "player_sd_ms": float(np.sqrt(fit["G"][0, 0])), "effect_sd_ms": float(np.sqrt(fit["G"][1, 1])),
+            "trial_sd_ms": float(np.sqrt(fit["s2_e"])), **contrasts,
+            "intercept_only": {k: simple[k] for k in ("estimate", "lower", "upper", "p")}}
 
 
 def floored(t: pd.DataFrame, keep: pd.Series, floor_ms: float) -> float:
@@ -167,6 +190,40 @@ def floored(t: pd.DataFrame, keep: pd.Series, floor_ms: float) -> float:
     c = t[keep & (t.rt_ms >= floor_ms)]
     seg = _segment(c)
     return float(c.rt_ms[seg == "Post-test"].median() - c.rt_ms[seg == "Sequence 8"].median())
+
+
+RIGHT = ("correct", "anticipatory_correct")
+WRONG = ("incorrect", "anticipatory_incorrect")
+CHANCE = 1 / 3          # neither order repeats a finger, so a guess has three to pick from
+
+
+def _answered(t: pd.DataFrame) -> pd.Series:
+    first = t.groupby(["phase", "block"]).trial.transform("min") == t.trial
+    return ~first & t.accuracy.isin(RIGHT + WRONG)
+
+
+def prediction(t: pd.DataFrame) -> dict:
+    """Presses too early to answer the flash, under FLOORS_MS[0] after it
+    or in the anticipation window before it, and how many chose the right
+    finger, in the sequence blocks and in the random ones."""
+    answered = _answered(t)
+    early = answered & (t.rt_ms < FLOORS_MS[0])
+    out = {}
+    for kind, sel in (("sequence", t.phase == "learning"), ("random", t.phase != "learning")):
+        e = early & sel
+        n, right = int(e.sum()), int((e & t.accuracy.isin(RIGHT)).sum())
+        out[kind] = {"answered": int((answered & sel).sum()), "early": n, "right": right,
+                     "p_vs_chance": (float(stats.binomtest(right, n, CHANCE, alternative="greater").pvalue)
+                                     if n else None)}
+    return out
+
+
+def errors(t: pd.DataFrame) -> dict:
+    """Share of answered trials on the wrong finger in random practice,
+    block 8 and the random post-test, each block's first trial left out."""
+    answered, seg = _answered(t), _segment(t)
+    return {name: float(t.accuracy[answered & (seg == name)].isin(WRONG).mean())
+            for name in ("Practice", "Sequence 8", "Post-test")}
 
 
 def person(folder: Path) -> dict:
@@ -189,7 +246,8 @@ def person(folder: Path) -> dict:
             "fast_correct": int(len(fast)),
             "fast_by_block": {int(b): int(n) for b, n in
                               fast[fast.phase == "learning"].block.value_counts().sort_index().items()},
-            "floored_ms": {str(f): floored(t, keep, f) for f in FLOORS_MS}}
+            "floored_ms": {str(f): floored(t, keep, f) for f in FLOORS_MS},
+            "prediction": prediction(t), "errors": errors(t)}
 
 
 def scores(x) -> dict:
@@ -226,6 +284,7 @@ def group(people: dict) -> dict:
     t, p = stats.ttest_1samp(x, 0.0)
     half = stats.t.ppf(0.975, len(x) - 1) * x.std(ddof=1) / np.sqrt(len(x))
     k = int((x > 0).sum())
+    er = [q["errors"] for q in people.values()]
     return {"n": int(len(x)), "mean_ms": float(x.mean()), "sd_ms": float(x.std(ddof=1)),
             "ci_ms": [float(x.mean() - half), float(x.mean() + half)], "t": float(t), "p": float(p),
             "dz": float(x.mean() / x.std(ddof=1)), "positive": k,
@@ -234,7 +293,11 @@ def group(people: dict) -> dict:
                         for f in FLOORS_MS},
             "lower_bound": lower_bound(people),
             "random_blocks": random_blocks(people),
-            "no_reversals": scores([q["learning_no_reversals"]["post_minus_block8_ms"] for q in people.values()])}
+            "no_reversals": scores([q["learning_no_reversals"]["post_minus_block8_ms"] for q in people.values()]),
+            "prediction": {kind: {c: sum(q["prediction"][kind][c] for q in people.values())
+                                  for c in ("answered", "early", "right")} for kind in ("sequence", "random")},
+            "errors_rose": {"vs_practice": int(sum(e["Post-test"] > e["Practice"] for e in er)),
+                            "vs_block8": int(sum(e["Post-test"] > e["Sequence 8"] for e in er))}}
 
 
 def figure(people: dict, path: Path) -> None:

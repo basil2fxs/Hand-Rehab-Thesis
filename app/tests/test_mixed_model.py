@@ -31,7 +31,7 @@ sys.path.insert(0, str(ROOT))
 
 from finger_rehab.analytics import force_bench as fb  # noqa: E402
 from finger_rehab.analytics.mixed_model import (  # noqa: E402
-    fit_random_intercept, lmm_contrast)
+    fit_random_intercept, fit_random_slopes, lmm_contrast, slopes_contrast)
 
 FIXTURES = ROOT / "tests" / "fixtures" / "rayan"
 
@@ -170,3 +170,49 @@ class TestRayansData:
                                    atol=1e-6)
         np.testing.assert_allclose(mine[1]["p_holm"], model[1]["p_holm"],
                                    atol=1e-9)
+
+
+def _two_blocks(effect_sd, n=8, m=30, seed=11):
+    """Each participant at their own speed, slower in the second block by
+    their own amount: a mean of 90 ms spread by effect_sd."""
+    rng = np.random.default_rng(seed)
+    subj = np.repeat(np.arange(n), 2 * m)
+    post = np.tile(np.repeat([0.0, 1.0], m), n)
+    eff = 90.0 + effect_sd * rng.standard_normal(n)
+    y = (rng.normal(300.0, 40.0, n)[subj] + eff[subj] * post
+         + rng.normal(0.0, 50.0, len(subj)))
+    return y, np.column_stack([1.0 - post, post]), np.column_stack([np.ones_like(post), post]), subj, post
+
+
+class TestRandomSlopes:
+    def test_one_random_term_is_the_random_intercept_fit(self):
+        y, X, subj, _blk = _balanced()
+        keep = np.random.default_rng(5).random(len(y)) > 0.2
+        a = fit_random_intercept(y[keep], X[keep], subj[keep])
+        b = fit_random_slopes(y[keep], X[keep], np.ones((keep.sum(), 1)), subj[keep])
+        np.testing.assert_allclose(b["beta"], a["beta"], atol=1e-6)
+        assert b["s2_e"] == pytest.approx(a["s2_e"], rel=1e-5)
+        assert b["G"][0, 0] == pytest.approx(a["s2_u"], rel=1e-4)
+
+    @pytest.mark.parametrize("seed", [11, 12, 13])
+    def test_two_balanced_blocks_give_the_paired_t_test(self, seed):
+        """With two blocks, a random intercept and a random slope, the
+        model of each participant's two block means is saturated, so the
+        effect is the mean of their differences and its standard error
+        and p value are the paired t-test's on n - 1 degrees of freedom."""
+        from scipy import stats
+        y, X, Z, subj, post = _two_blocks(35.0, seed=seed)
+        n = subj.max() + 1
+        r = slopes_contrast(fit_random_slopes(y, X, Z, subj), [-1.0, 1.0], df=n - 1)
+        d = np.array([y[(subj == i) & (post == 1)].mean() - y[(subj == i) & (post == 0)].mean()
+                      for i in range(n)])
+        assert r["estimate"] == pytest.approx(d.mean(), abs=1e-6)
+        assert r["SE"] == pytest.approx(d.std(ddof=1) / np.sqrt(n), rel=1e-4)
+        assert r["p"] == pytest.approx(stats.ttest_1samp(d, 0.0).pvalue, rel=1e-3)
+
+    def test_the_interval_widens_when_the_effect_varies(self):
+        same, spread = (slopes_contrast(fit_random_slopes(*_two_blocks(sd)[:4]), [-1.0, 1.0], df=7)
+                        for sd in (0.0, 60.0))
+        assert spread["SE"] > 2.0 * same["SE"]
+        fixed = fit_random_intercept(*_two_blocks(60.0)[0:2], _two_blocks(60.0)[3])
+        assert lmm_contrast(fixed, [-1.0, 1.0])["SE"] < spread["SE"] / 2.0

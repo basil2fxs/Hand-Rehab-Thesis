@@ -12,8 +12,8 @@ pbkrtest is installed, as it was on his machine; for this model the two
 differ only in small unbalanced samples.
 
 The model: y = X b + u[group] + e, with u ~ N(0, s2_u) for each group
-and e ~ N(0, s2_e). Written for this one structure only; a random slope
-needs a general package.
+and e ~ N(0, s2_e). fit_random_slopes extends it to random slopes, so
+that each group can also have its own size of an effect.
 
 The notebook carries verbatim copies of fit_random_intercept and
 lmm_contrast because it travels without this package, and a test pins
@@ -194,3 +194,103 @@ def lmm_contrast(fit, weights, level=0.95):
     return {"estimate": estimate, "SE": se, "df": df, "t": t_val,
             "p": p_val, "lower": estimate - crit * se,
             "upper": estimate + crit * se}
+
+
+def fit_random_slopes(y, X, Z, groups):
+    """REML fit of y = X b + Z u[group] + e, as lmer(y ~ X + (Z | group)).
+
+    Z holds the random terms, an intercept column and the slopes, and
+    each group's u is N(0, G) with G an unstructured covariance; e is
+    N(0, s2_e). With a slope on an effect, each group gets its own size
+    of that effect, so the effect's interval carries how much it varies
+    between groups rather than only the noise of the trials.
+
+    For one group, V = s2_e I + Z G Z'. The Woodbury identity gives
+    X'V^-1 X, X'V^-1 y and y'V^-1 y from q by q pieces (q the columns of
+    Z) and the per-group sums X'X, X'Z, Z'Z, X'y, Z'y and y'y, and the
+    matrix determinant lemma gives log|V| = n log s2_e + log|G| +
+    log|s2_e G^-1 + Z'Z| - q log s2_e. The restricted -2 log-likelihood
+    log|V| + log|X'V^-1 X| + r'V^-1 r is minimised over log s2_e and the
+    Cholesky factor of G (log diagonal), from Nelder-Mead then BFGS.
+
+    Returns a dict: beta, cov (the fixed-effect covariance), G, s2_e,
+    n, p, n_groups and reml_m2ll.
+    """
+    from scipy.optimize import minimize
+
+    y = np.asarray(y, dtype=float)
+    X = np.asarray(X, dtype=float)
+    Z = np.asarray(Z, dtype=float)
+    groups = np.asarray(groups)
+    n, p = X.shape
+    q = Z.shape[1]
+    pieces = []
+    for g in dict.fromkeys(groups.tolist()):
+        m = groups == g
+        Xi, Zi, yi = X[m], Z[m], y[m]
+        pieces.append((int(m.sum()), Xi.T @ Xi, Xi.T @ Zi, Zi.T @ Zi, Xi.T @ yi, Zi.T @ yi,
+                       float(yi @ yi)))
+    tril = np.tril_indices(q)
+    diag = [k for k, (i, j) in enumerate(zip(*tril)) if i == j]
+
+    def unpack(theta):
+        vals = np.array(theta[1:], dtype=float)
+        vals[diag] = np.exp(vals[diag])
+        L = np.zeros((q, q))
+        L[tril] = vals
+        return float(np.exp(theta[0])), L @ L.T
+
+    def parts(theta):
+        s2, G = unpack(theta)
+        Ginv = np.linalg.inv(G)
+        logdet_g = np.linalg.slogdet(G)[1]
+        sxx, sxy, syy, logdet_v = np.zeros((p, p)), np.zeros(p), 0.0, 0.0
+        for ni, A, B, C, xy, zy, yy in pieces:
+            M = s2 * Ginv + C
+            Minv = np.linalg.inv(M)
+            sxx += (A - B @ Minv @ B.T) / s2
+            sxy += (xy - B @ Minv @ zy) / s2
+            syy += (yy - zy @ Minv @ zy) / s2
+            logdet_v += (ni - q) * np.log(s2) + logdet_g + np.linalg.slogdet(M)[1]
+        beta = np.linalg.solve(sxx, sxy)
+        return s2, G, sxx, beta, syy - sxy @ beta, logdet_v
+
+    def m2ll(theta):
+        try:
+            _, _, sxx, _, rss, logdet_v = parts(theta)
+            return float(logdet_v + np.linalg.slogdet(sxx)[1] + rss)
+        except np.linalg.LinAlgError:
+            return np.inf
+
+    b_ols = np.linalg.lstsq(X, y, rcond=None)[0]
+    s2_0 = float(np.var(y - X @ b_ols))
+    theta0 = np.zeros(1 + len(tril[0]))
+    theta0[0] = np.log(s2_0)
+    for k in diag:
+        theta0[1 + k] = np.log(np.sqrt(s2_0) / 4.0)
+    res = minimize(m2ll, theta0, method="Nelder-Mead",
+                   options={"maxiter": 20000, "maxfev": 20000, "xatol": 1e-7, "fatol": 1e-9})
+    with np.errstate(all="ignore"):     # a variance at zero sends BFGS's steps to inf
+        res2 = minimize(m2ll, res.x, method="BFGS")
+    best = res2 if np.isfinite(res2.fun) and res2.fun <= res.fun else res
+    s2, G, sxx, beta, _, _ = parts(best.x)
+    return {"beta": beta, "cov": np.linalg.inv(sxx), "G": G, "s2_e": s2, "n": n, "p": p,
+            "n_groups": len(pieces), "reml_m2ll": float(best.fun)}
+
+
+def slopes_contrast(fit, weights, df=None, level=0.95):
+    """One linear combination w'b of a fit_random_slopes fit, with a t
+    interval on df degrees of freedom: the groups less one for an effect
+    that has its own random slope, which is the honest count when there
+    are few groups, or n - p for one inside the groups by default."""
+    from scipy import stats
+
+    w = np.asarray(weights, dtype=float)
+    estimate = float(w @ fit["beta"])
+    se = float(np.sqrt(w @ fit["cov"] @ w))
+    df = float(fit["n"] - fit["p"]) if df is None else float(df)
+    t_val = estimate / se if se > 0 else float("nan")
+    crit = float(stats.t.ppf(0.5 + level / 2.0, df))
+    return {"estimate": estimate, "SE": se, "df": df, "t": t_val,
+            "p": float(2.0 * stats.t.sf(abs(t_val), df)) if np.isfinite(t_val) else float("nan"),
+            "lower": estimate - crit * se, "upper": estimate + crit * se}

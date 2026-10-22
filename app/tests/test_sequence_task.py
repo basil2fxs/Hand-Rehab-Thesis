@@ -13,7 +13,8 @@ import pandas as pd
 ANALYSIS = Path(__file__).resolve().parents[2] / "analysis"
 sys.path.insert(0, str(ANALYSIS))
 
-from sequence_task import lab_kept, learning, lower_bound, mixed, random_blocks, reversal  # noqa: E402
+from sequence_task import (errors, lab_kept, learning, lower_bound, mixed,  # noqa: E402
+                           prediction, random_blocks, reversal)
 
 
 def block(phase, number, lanes, rts, accuracy=None):
@@ -71,6 +72,31 @@ class BoundTests(unittest.TestCase):
         self.assertEqual(out["ci_halfwidths_ms"], [30.0, 60.0])
 
 
+class EarlyPressTests(unittest.TestCase):
+
+    def test_early_presses_are_scored_by_the_finger_they_chose(self):
+        # Two sequence presses come too early to answer the flash, one on
+        # the right finger and one before the flash on the wrong one.
+        seq = block("learning", 1, "vbnm", [0, 40, -50, 300],
+                    ["correct", "correct", "anticipatory_incorrect", "correct"])
+        rnd = block("posttest", 1, "vbnm", [0, 300, 310, 320])
+        out = prediction(pd.concat([seq, rnd], ignore_index=True))
+        self.assertEqual((out["sequence"]["early"], out["sequence"]["right"]), (2, 1))
+        self.assertEqual(out["random"]["early"], 0)
+        self.assertIsNone(out["random"]["p_vs_chance"])
+
+    def test_errors_are_read_on_answered_trials(self):
+        t = pd.concat([block("practice", 1, "vbnmv", [0, 300, 300, 300, 300],
+                             ["correct", "correct", "incorrect", "correct", "miss"]),
+                       block("learning", 8, "vbnm", [0, 200, 200, 200]),
+                       block("posttest", 1, "vbnm", [0, 300, 300, 300],
+                             ["correct", "incorrect", "anticipatory_incorrect", "correct"])], ignore_index=True)
+        out = errors(t)
+        self.assertAlmostEqual(out["Practice"], 1 / 3)
+        self.assertEqual(out["Sequence 8"], 0.0)
+        self.assertAlmostEqual(out["Post-test"], 2 / 3)
+
+
 class MixedModelTests(unittest.TestCase):
 
     def test_the_model_finds_a_shared_slowing_and_speed_up(self):
@@ -89,6 +115,10 @@ class MixedModelTests(unittest.TestCase):
         self.assertAlmostEqual(out["post_minus_block8"]["estimate"], 60, delta=8)
         self.assertLess(out["post_minus_block8"]["p"], 0.001)
         self.assertAlmostEqual(out["slope_per_block"]["estimate"], -2, delta=1.5)
+        m = out["emmeans"]["Post-test"]
+        self.assertLess(m["lower"], m["estimate"])
+        self.assertLess(m["estimate"], m["upper"])
+        self.assertAlmostEqual(m["estimate"], out["means"]["Post-test"])
 
 
 if __name__ == "__main__":
