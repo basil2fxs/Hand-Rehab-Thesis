@@ -259,15 +259,16 @@ def _press(doc: RP.Doc, press, figs, tabs, secs) -> None:
     n = next(figs)
     cap = ("Median RT per block at the counted press (solid) and the push start (dotted). Person 4's gap varies "
            "more because it is a difference of two medians.")
-    h = 0.3
+    h = 0.265
+    f = h / 0.3
     pg, y0 = _figure(doc, n, cap, h)
     xs = np.arange(len(SEGMENTS))
     for i, k in enumerate(ORDER):
         p = press[k]
         col, row = i % 2, i // 2
         x = X0 + 0.07 + col * 0.42
-        y = y0 + 0.04 + (1 - row) * 0.135
-        ax = pg.axes(x, y, 0.33, 0.085)
+        y = y0 + f * (0.04 + (1 - row) * 0.135)
+        ax = pg.axes(x, y, 0.33, f * 0.085)
         s = seg[k].reindex(SEGMENTS)
         for x0 in (0, len(SEGMENTS) - 1):
             ax.axvspan(x0 - 0.4, x0 + 0.4, color=GREY, alpha=0.2, lw=0)
@@ -280,7 +281,7 @@ def _press(doc: RP.Doc, press, figs, tabs, secs) -> None:
         ax.yaxis.set_major_locator(MaxNLocator(4, integer=True))
         _tidy(ax, "Block" if row else "", "RT (ms)" if col == 0 else "")
         lo, mid, hi = p["lag_ms"]
-        pg.text(x, y + 0.085 + 0.022, f"{NAMES[k]}: lag {mid:.0f} ms ({lo:.0f} to {hi:.0f}), "
+        pg.text(x, y + f * (0.085 + 0.022), f"{NAMES[k]}: lag {mid:.0f} ms ({lo:.0f} to {hi:.0f}), "
                                       f"r = {p['r_press_onset']:.3f}", 9, True, va="top")
         if i == 0:
             pg.fig.legend(*ax.get_legend_handles_labels(), loc="lower left", bbox_to_anchor=(x, y0 + h),
@@ -352,13 +353,14 @@ def _sensory(doc: RP.Doc, waves, buzz, details, figs, tabs, secs) -> None:
                 rows, [0.42, 0.2, 0.2], ["", "EEG person 1", "EEG person 2"])
     n = next(figs)
     cap = "Average at O1 and O2 around each flash: sequence (blue), random (orange), random times (grey)."
-    h = 0.3
+    h = 0.265
+    sc = h / 0.3
     pg, y0 = _figure(doc, n, cap, h)
     for k, (title, w) in enumerate(zip(("(a) EEG person 1", "(b) EEG person 2"), waves)):
         f = w["flash"]
-        bottom = y0 + (1 - k) * 0.15 + 0.035
-        pg.head(X0, bottom + 0.02, ["O1", "O2"], "back", PATTERN)
-        ax = pg.axes(X0 + 0.13, bottom, W - 0.13, 0.085)
+        bottom = y0 + sc * ((1 - k) * 0.15 + 0.035)
+        pg.head(X0, bottom + sc * 0.02, ["O1", "O2"], "back", PATTERN)
+        ax = pg.axes(X0 + 0.13, bottom, W - 0.13, sc * 0.085)
         p, rr = f["pattern"], f["random"]
         RP._wave(ax, f["ms"], [(p["O1/O2"], PATTERN, f"sequence ({p['n']})", "-"),
                                (rr["O1/O2"], RANDOM, f"random ({rr['n']})", "-"),
@@ -366,11 +368,11 @@ def _sensory(doc: RP.Doc, waves, buzz, details, figs, tabs, secs) -> None:
                  xlabel="Time after the flash (s)" if k else "")
         RP._mark(ax, p["P1"], "P1", PATTERN)
         RP._mark(ax, p["N1"], "N1", PATTERN)
-        _label(pg, X0, bottom + 0.118, title)
+        _label(pg, X0, bottom + sc * 0.118, title)
     pg.caption(n, cap)
     _image(doc, next(figs), "The whole head through the response to the flash: every channel (lines) and the "
                             "scalp at four moments (maps), all correct trials.",
-           [d / "figures" / "11_srt_erp_joint.png" for d in details], ["EEG person 1", "EEG person 2"], width=0.62)
+           [d / "figures" / "11_srt_erp_joint.png" for d in details], ["EEG person 1", "EEG person 2"], width=0.58)
     _image(doc, next(figs), "EEG person 1, the whole head after a flash (Reaction) and after a buzz (Buzz Hunt).",
            [details[0] / "figures" / "31_compare_scalp_maps.png"], [""])
 
@@ -409,8 +411,10 @@ def _learning(doc: RP.Doc, grp, s1, s2, waves, details, figs, tabs, secs) -> Non
     doc.need(0.014 + 0.045 + doc.pg.table_height(tn, tcap, rows, widths, header))
     pg = _head(doc, secs, "Learning in the brain signal")
     pg.table(tn, tcap, rows, widths, header)
+    _image(doc, next(figs), "The whole head in the N2 and P3 windows through the task; right: random minus learned.",
+           [d / "figures" / "13_srt_erp_topomaps.png" for d in details], ["EEG person 1", "EEG person 2"], width=0.74)
     n = next(figs)
-    cap = "Random (orange) against learned (blue), trials in the legend. Grey: test window."
+    cap = "Random (orange) against learned (blue) at the planned sites, trials in the legend. Grey: test window."
     from eeg.analyses import SRT_WINDOWS
     h = 0.29
     pg, y0 = _figure(doc, n, cap, h)
@@ -429,8 +433,6 @@ def _learning(doc: RP.Doc, grp, s1, s2, waves, details, figs, tabs, secs) -> Non
                      shade=SRT_WINDOWS[comp][0], xlabel="Time after the flash (s)" if row else "")
             _label(pg, xx, yb + 0.137, f"{comp}, {name}")
     pg.caption(n, cap)
-    _image(doc, next(figs), "The whole head in the N2 and P3 windows through the task; right: random minus learned.",
-           [d / "figures" / "13_srt_erp_topomaps.png" for d in details], ["EEG person 1", "EEG person 2"])
 
 
 # ---- 6: the error signal -------------------------------------------------------------------------
@@ -448,22 +450,23 @@ def _errors(doc: RP.Doc, waves, figs, tabs, secs) -> None:
     n = next(figs)
     keep = e1["ms"] >= -200
     cap = "Around each press in sequence trials: wrong (red), correct (black)."
-    h = 0.285
+    h = 0.255
+    sc = h / 0.285
     pg, y0 = _figure(doc, n, cap, h)
     for row, (name, e) in enumerate((("EEG person 1", e1), ("EEG person 2", e2))):
         x = e["pattern"]
         ms = e["ms"][keep]
-        yb = y0 + (1 - row) * 0.143
+        yb = y0 + sc * (1 - row) * 0.143
         for col, (title, chans, place, key) in enumerate(((f"ERN, {name}", ["FCz"], "top front", "FCz"),
                                                          (f"Pe, {name}", ["Pz", "CPz"], "top back",
                                                           "Pz/CPz"))):
             xx = X0 + col * 0.43
-            pg.head(xx, yb + 0.055, chans, place, RP.RED)
-            ax = pg.axes(xx + 0.1, yb + 0.035, 0.3, 0.09)
+            pg.head(xx, yb + sc * 0.055, chans, place, RP.RED)
+            ax = pg.axes(xx + 0.1, yb + sc * 0.035, 0.3, sc * 0.09)
             RP._wave(ax, ms, [(x[f"{key} error"][keep], RP.RED, f"wrong ({x['n_error']})", "-"),
                               (x[f"{key} correct"][keep], INK, f"correct ({x['n_correct']})", "-")],
                      xlabel="Time after the press (s)" if row else "")
-            _label(pg, xx, yb + 0.147, title)
+            _label(pg, xx, yb + sc * 0.147, title)
     pg.caption(n, cap)
 
 
