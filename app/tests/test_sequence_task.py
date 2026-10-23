@@ -123,3 +123,17 @@ class MixedModelTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ChanceRecallTests(unittest.TestCase):
+    def test_random_recalls_never_repeat_a_key_and_use_all_four(self):
+        import numpy as np
+        import sequence_task as st
+        d = st.chance_recalls(np.random.default_rng(1), 2000, 10)
+        self.assertEqual(d.shape, (2000, 10))
+        self.assertFalse((d[:, 1:] == d[:, :-1]).any())
+        self.assertEqual(set(np.unique(d)), {1, 2, 3, 4})
+        # each of the three other keys follows a key about equally often
+        after = [d[:, 1:][d[:, :-1] == 1].tolist().count(k) for k in (2, 3, 4)]
+        self.assertLess(max(after) - min(after), 0.1 * sum(after))
+

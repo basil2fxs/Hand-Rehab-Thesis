@@ -110,6 +110,18 @@ def segments(t: pd.DataFrame, keep: pd.Series) -> list[dict]:
     return rows
 
 
+def chance_recalls(rng, count: int, n: int) -> np.ndarray:
+    """Random recalls of n keys from the four, never the same key twice in a
+    row, as the sequence never repeats one and the early-press test of
+    prediction() likewise leaves out the finger just pressed."""
+    draws = np.empty((count, n), dtype=int)
+    draws[:, 0] = rng.integers(1, 5, count)
+    for j in range(1, n):
+        step = rng.integers(1, 4, count)
+        draws[:, j] = np.where(step < draws[:, j - 1], step, step + 1)
+    return draws
+
+
 def recall(folder: Path) -> dict:
     """The recall by position, at its best starting point, by correct
     triplets and by the longest correct run, each with the chance of a
@@ -128,7 +140,7 @@ def recall(folder: Path) -> dict:
         return max(sum(a == b for a, b in zip(x, act[k:] + act[:k])) for k in range(n))
     got = recall_scores(rec, act)
     got["best_start"] = best(rec)
-    draws = np.random.default_rng(SEED).integers(1, 5, (N_CHANCE, n))
+    draws = chance_recalls(np.random.default_rng(SEED), N_CHANCE, n)
     chance = {"positional": [], "best_start": [], "triplet": [], "longest_run": []}
     for d in draws:
         s = recall_scores(list(d), act)
