@@ -39,8 +39,9 @@ eeg:
   simulator_port: 50410
   # The game sends its own 0 byte on the first frame at least this long
   # after a code, so a marker that holds each byte until the next one
-  # gives pulses of 8 to 17 ms at 60 Hz: 2 or more samples at 256 Hz
-  # and up. Raise it for an amplifier that needs longer pulses.
+  # gives pulses of 8 to 25 ms at 60 Hz, by where in the frame the code
+  # was sent: 2 or more samples at 256 Hz and up. Raise it for an
+  # amplifier that needs longer pulses.
   pulse_ms: 8
   # Quiet time after the 0 byte, so two codes never run together.
   gap_ms: 12
