@@ -91,6 +91,19 @@ class Calibration:
     # same sensor. Stops a noisy threshold crossing producing two
     # back-to-back events at the same edge.
     debounce_ms: int = 100
+    # A finger that rests on its pad above the release margin never
+    # releases, so its next presses go uncounted (Person 3's middle
+    # finger in the sequence task, 15 October 2026). Three rules end
+    # such a hold: once the smoothed value has sat below release_frac
+    # of the press's peak above baseline for rest_release_s, or once
+    # the press has lasted hold_max_s, the finger is released and its
+    # baseline re-anchored to the level it rests at. A baseline left
+    # above the signal then follows it down at baseline_down_alpha
+    # rather than at the slow baseline_alpha. 0 disables a rule.
+    release_frac: float = 0.5
+    rest_release_s: float = 1.5
+    hold_max_s: float = 2.0
+    baseline_down_alpha: float = 0.05
     # Free-form text the researcher can stash alongside the
     # calibration (date, patient ID, sensor batch). Round-trips
     # through save / load.
@@ -182,6 +195,10 @@ class ReleaseEvent:
     # normalising impulse to a force average if a researcher wants
     # impulse / duration rather than the raw impulse.
     duration_s: float | None = None
+    # Why the finger was released: "lift" at the release margin, "rest"
+    # after sitting below release_frac of its peak for rest_release_s,
+    # "hold" at hold_max_s.
+    reason: str = "lift"
 
 
 class FSRDetector:
@@ -226,6 +243,11 @@ class FSRDetector:
         self._press_start_t: list[float | None] = [None] * n
         self._last_sample_t: list[float | None] = [None] * n
         self._prev_sm: list[float | None] = [None] * n
+        # When the value first sat below release_frac of the peak.
+        self._below_frac_since: list[float | None] = [None] * n
+        # The baseline before a press whose end re-anchored the baseline higher:
+        # the fast downward tracking runs until the baseline is back at it.
+        self._anchor_floor: list[float | None] = [None] * n
         # t_perf of the most recent feed() call, None before the first.
         # The continuous force view polls the detector rather than
         # seeing samples itself, so this is how it can tell a live
@@ -248,6 +270,8 @@ class FSRDetector:
         self._press_start_t = [None] * n
         self._last_sample_t = [None] * n
         self._prev_sm = [None] * n
+        self._below_frac_since = [None] * n
+        self._anchor_floor = [None] * n
         self.last_feed_t = None
 
     def baseline_value(self, sensor_idx: int) -> float | None:
@@ -296,6 +320,70 @@ class FSRDetector:
             return None
         return (float(raw), float(minus))
 
+    def _release(self, i: int, t_perf: float, v: int, sm: float, base: float,
+                 reason: str = "lift") -> None:
+        """End the press on sensor i and report it. `reason` says what
+        ended it: the release margin, a rest below release_frac of the
+        peak, or the hold limit."""
+        self.pressed[i] = False
+        self.last_event_t[i] = t_perf
+        # Finalise the peak. _peak_raw was last updated on the
+        # most recent in-press sample (see below). Compute
+        # peak-minus-baseline from the snapshot taken at the
+        # rising edge so a slow baseline drift mid-press
+        # doesn't change the answer.
+        peak_raw = self._peak_raw[i]
+        peak_base = self._peak_baseline[i]
+        peak_minus = None
+        if peak_raw is not None and peak_base is not None:
+            peak_minus = peak_raw - peak_base
+        # Finalise the impulse. The falling-edge sample
+        # contributes one last trapezoid using the previous
+        # in-press sample and the current one as the two
+        # endpoints. Baseline reference is the rising-edge
+        # snapshot so slow baseline drift mid-press doesn't
+        # change the answer.
+        prev_sm = self._prev_sm[i]
+        baseline_ref = float(peak_base
+                               if peak_base is not None else base)
+        if (self._impulse_raw[i] is not None
+                and self._last_sample_t[i] is not None
+                and prev_sm is not None):
+            dt = float(t_perf) - float(self._last_sample_t[i])
+            if dt > 0:
+                avg = (float(prev_sm) + float(sm)) * 0.5
+                self._impulse_raw[i] += avg * dt
+                self._impulse_minus[i] += (
+                    avg - baseline_ref) * dt
+        impulse_raw = self._impulse_raw[i]
+        impulse_minus = self._impulse_minus[i]
+        duration_s = None
+        if self._press_start_t[i] is not None:
+            duration_s = float(t_perf) - float(self._press_start_t[i])
+        # Clear so the next press starts fresh.
+        self._peak_raw[i] = None
+        self._peak_baseline[i] = None
+        self._impulse_raw[i] = None
+        self._impulse_minus[i] = None
+        self._press_start_t[i] = None
+        self._last_sample_t[i] = None
+        self._prev_sm[i] = None
+        self._below_frac_since[i] = None
+        if self.on_release:
+            try:
+                self.on_release(ReleaseEvent(
+                    lane=i, t_perf=t_perf, value=v, hand=self.hand,
+                    peak_raw=peak_raw,
+                    peak_minus_baseline=peak_minus,
+                    impulse_raw=impulse_raw,
+                    impulse_minus_baseline=impulse_minus,
+                    duration_s=duration_s,
+                    reason=reason,
+                ))
+            except Exception as e:
+                log.warning("on_release(lane=%d, hand=%s) raised: %s",
+                             i, self.hand, e)
+
     def feed(self, t_perf: float, vals: tuple[int, ...]) -> None:
         self.last_feed_t = t_perf
         n = self.cal.num_sensors
@@ -310,10 +398,22 @@ class FSRDetector:
             self.val_ema[i] = sm
             # Baseline only drifts when not pressed
             if not self.pressed[i]:
-                self.baseline[i] = sm if self.baseline[i] is None else (
-                    cal.baseline_alpha * sm
-                    + (1 - cal.baseline_alpha) * self.baseline[i]
-                )
+                if self.baseline[i] is None:
+                    self.baseline[i] = sm
+                else:
+                    # After a re-anchor to a raised rest the baseline sits
+                    # above the level the finger started from; until it is
+                    # back there it follows the signal down at the faster
+                    # rate, so a finger that lifts fully is not left with a
+                    # raised threshold for seconds.
+                    floor = self._anchor_floor[i]
+                    if floor is not None and self.baseline[i] <= floor:
+                        self._anchor_floor[i] = floor = None
+                    a = (cal.baseline_down_alpha
+                         if floor is not None and sm < self.baseline[i]
+                         and cal.baseline_down_alpha > cal.baseline_alpha
+                         else cal.baseline_alpha)
+                    self.baseline[i] = a * sm + (1 - a) * self.baseline[i]
             base = self.baseline[i] if self.baseline[i] is not None else 0.0
             on_thr = max(base + cal.on_delta[i], cal.abs_on_min[i])
             off_thr_raw = min(base + cal.off_delta[i], cal.abs_off_max[i])
@@ -342,6 +442,7 @@ class FSRDetector:
                 self._press_start_t[i] = float(t_perf)
                 self._last_sample_t[i] = float(t_perf)
                 self._prev_sm[i] = float(sm)
+                self._below_frac_since[i] = None
                 # Callbacks are wrapped: an exception in the engine's
                 # press handler (CSV lock, missing screen, mode swap mid-
                 # frame) must not skip subsequent sensors in this batch.
@@ -355,62 +456,7 @@ class FSRDetector:
                         log.warning("on_press(lane=%d, hand=%s) raised: %s",
                                      i, self.hand, e)
             elif self.pressed[i] and sm <= off_thr and dt_ms >= cal.debounce_ms:
-                self.pressed[i] = False
-                self.last_event_t[i] = t_perf
-                # Finalise the peak. _peak_raw was last updated on the
-                # most recent in-press sample (see below). Compute
-                # peak-minus-baseline from the snapshot taken at the
-                # rising edge so a slow baseline drift mid-press
-                # doesn't change the answer.
-                peak_raw = self._peak_raw[i]
-                peak_base = self._peak_baseline[i]
-                peak_minus = None
-                if peak_raw is not None and peak_base is not None:
-                    peak_minus = peak_raw - peak_base
-                # Finalise the impulse. The falling-edge sample
-                # contributes one last trapezoid using the previous
-                # in-press sample and the current one as the two
-                # endpoints. Baseline reference is the rising-edge
-                # snapshot so slow baseline drift mid-press doesn't
-                # change the answer.
-                prev_sm = self._prev_sm[i]
-                baseline_ref = float(peak_base
-                                       if peak_base is not None else base)
-                if (self._impulse_raw[i] is not None
-                        and self._last_sample_t[i] is not None
-                        and prev_sm is not None):
-                    dt = float(t_perf) - float(self._last_sample_t[i])
-                    if dt > 0:
-                        avg = (float(prev_sm) + float(sm)) * 0.5
-                        self._impulse_raw[i] += avg * dt
-                        self._impulse_minus[i] += (
-                            avg - baseline_ref) * dt
-                impulse_raw = self._impulse_raw[i]
-                impulse_minus = self._impulse_minus[i]
-                duration_s = None
-                if self._press_start_t[i] is not None:
-                    duration_s = float(t_perf) - float(self._press_start_t[i])
-                # Clear so the next press starts fresh.
-                self._peak_raw[i] = None
-                self._peak_baseline[i] = None
-                self._impulse_raw[i] = None
-                self._impulse_minus[i] = None
-                self._press_start_t[i] = None
-                self._last_sample_t[i] = None
-                self._prev_sm[i] = None
-                if self.on_release:
-                    try:
-                        self.on_release(ReleaseEvent(
-                            lane=i, t_perf=t_perf, value=v, hand=self.hand,
-                            peak_raw=peak_raw,
-                            peak_minus_baseline=peak_minus,
-                            impulse_raw=impulse_raw,
-                            impulse_minus_baseline=impulse_minus,
-                            duration_s=duration_s,
-                        ))
-                    except Exception as e:
-                        log.warning("on_release(lane=%d, hand=%s) raised: %s",
-                                     i, self.hand, e)
+                self._release(i, t_perf, v, sm, base, "lift")
             elif self.pressed[i]:
                 # In-press sample. Update the rolling peak so the
                 # ReleaseEvent at the falling edge reflects the
@@ -441,3 +487,31 @@ class FSRDetector:
                             avg - baseline_ref) * dt
                 self._last_sample_t[i] = float(t_perf)
                 self._prev_sm[i] = float(sm)
+                # A finger resting on its pad above the release margin would
+                # never release: end the hold once the value has sat below
+                # release_frac of the press's peak for rest_release_s, or
+                # after hold_max_s, and take the level it rests at as the
+                # new baseline.
+                start = self._press_start_t[i]
+                reason = None
+                if (cal.hold_max_s > 0 and start is not None
+                        and t_perf - start >= cal.hold_max_s):
+                    reason = "hold"
+                elif (cal.release_frac > 0 and cal.rest_release_s > 0
+                        and self._peak_raw[i] is not None
+                        and self._peak_baseline[i] is not None):
+                    frac_thr = (self._peak_baseline[i] + cal.release_frac
+                                * (self._peak_raw[i] - self._peak_baseline[i]))
+                    if sm <= frac_thr:
+                        since = self._below_frac_since[i]
+                        if since is None:
+                            self._below_frac_since[i] = float(t_perf)
+                        elif t_perf - since >= cal.rest_release_s:
+                            reason = "rest"
+                    else:
+                        self._below_frac_since[i] = None
+                if reason is not None:
+                    floor = self._peak_baseline[i]
+                    self._release(i, t_perf, v, sm, base, reason)
+                    self._anchor_floor[i] = float(floor) if floor is not None else None
+                    self.baseline[i] = float(sm)

@@ -262,6 +262,18 @@ class SerialSource(BaseQueueSource):
     def name(self) -> str:
         return f"SerialSource({self.port}@{self.baud})"
 
+    def _stamp_port_open(self) -> None:
+        """Start the startup-latency clock for this connection.
+
+        Every open resets the board, so each connection has its own
+        first sample. The old first-sample stamp has to go here: when
+        the board reconnected mid-session the stamp from the first
+        connection was kept, and every later block summary stored a
+        negative latency (15 of the 76 logged sessions, 24 Oct 2026).
+        """
+        self._port_open_ts = time.perf_counter()
+        self._first_sample_ts = None
+
     def _open(self) -> "serial.Serial":
         for attempt in range(1, self.open_retries + 1):
             try:
@@ -273,12 +285,12 @@ class SerialSource(BaseQueueSource):
                     timeout=self.read_timeout_s,
                     write_timeout=0.5,
                 )
-                # Stamp the open timestamp here, not before the 1.8 s
+                # Stamp the open timestamp here, not before the
                 # Arduino-reset sleep. The latency we want to measure
                 # is "open -> first valid FSR sample", which includes
                 # the firmware's own boot delay - that's part of the
                 # patient's perceived wait.
-                self._port_open_ts = time.perf_counter()
+                self._stamp_port_open()
                 # Opening the port resets the board, so nothing useful
                 # arrives until its boot finishes. The firmware on the
                 # device runs a motor self-test first:

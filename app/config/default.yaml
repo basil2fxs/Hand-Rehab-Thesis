@@ -322,6 +322,17 @@ fsr:
   abs_on_min: [150, 150, 150, 150]
   abs_off_max: [1000, 1000, 1000, 1000]
   debounce_ms: 100
+  # A finger resting on its pad above the release margin never
+  # released, so its next presses went uncounted (Person 3,
+  # sequence task, 15 Oct 2026). The detector now releases a
+  # finger once it has sat below release_frac of its press peak
+  # for rest_release_s, or after hold_max_s, and takes the level
+  # it rests at as the new baseline; a baseline left above the
+  # signal follows it down at baseline_down_alpha. 0 disables.
+  release_frac: 0.5
+  rest_release_s: 1.5
+  hold_max_s: 2.0
+  baseline_down_alpha: 0.05
 
 quick_cal:
   # The gamified calibration that runs when a session starts, over

@@ -382,6 +382,20 @@ class SerialSourceLatencyAccessorTests(unittest.TestCase):
         self.assertAlmostEqual(s.get_startup_latency_ms(), 1234.0,
                                 places=3)
 
+    def test_reopen_drops_the_old_first_sample_stamp(self) -> None:
+        # A reconnect opens the port again. Keeping the first
+        # connection's sample stamp made the next summaries store a
+        # negative latency (seen in 15 logged sessions), so the clock
+        # restarts and reads None until this connection's first frame.
+        s = self._bare_source()
+        s._port_open_ts = 100.0
+        s._first_sample_ts = 104.24
+        s._stamp_port_open()
+        self.assertIsNone(s._first_sample_ts)
+        self.assertIsNone(s.get_startup_latency_ms())
+        s._first_sample_ts = s._port_open_ts + 4.24
+        self.assertGreater(s.get_startup_latency_ms(), 0.0)
+
 
 
 class ShutdownLifecycleTests(unittest.TestCase):

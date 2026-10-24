@@ -13,7 +13,8 @@ taken from the touch. For every flash this takes the counted press (the
 first press before the next flash), finds where its push began on the
 board's own force stream with the software's onset detector (the one
 self_tests.py uses), and records how long the press was held and whether
-the same finger pressed again straight after it.
+the same finger pressed again straight after it. It also records how late
+the computer stamped the force samples, the USB part of a reaction time.
 
     cd analysis
     python3 press_check.py --out DIR LABEL=BLOCK_FOLDER [LABEL=BLOCK_FOLDER ...]
@@ -90,7 +91,21 @@ def presses(folder: Path) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def stamp_lateness(late) -> dict:
+    """How late the force samples were stamped by the computer that ran
+    the block, in ms against the board's own 5 ms grid
+    (sample_grid_lateness): mean, SD, 99th percentile and maximum. A
+    serial adapter that hands samples over in bursts stamps them up to a
+    burst late; one that passes each sample on at once stamps them within
+    a millisecond or two."""
+    late = np.asarray(late, dtype=float)
+    late = late[np.isfinite(late)]
+    return {"samples": int(len(late)), "mean": float(late.mean()), "sd": float(late.std()),
+            "p99": float(np.percentile(late, 99)), "max": float(late.max())}
+
+
 def person(folder: Path) -> dict:
+    from finger_rehab.hardware.eeg_trigger import read_force_streams
     s = script_table(folder).reset_index(drop=True)
     p = presses(folder)
     t = s.join(p.drop(columns=["trial"]), how="left")
@@ -118,6 +133,8 @@ def person(folder: Path) -> dict:
             "held_under_60ms": int((t.held_ms < 60).sum()),
             "repress": int(t.repress.sum()), "weak_first_then_real": int(weak_first.sum()),
             "genuine_share": float(1 - weak_first.sum() / max(1, pressed.sum())),
+            "stamp_late_ms": stamp_lateness(np.concatenate(
+                [st["late"] for st in read_force_streams(folder / "raw.csv").values()])),
             "segments": seg.to_dict(orient="records")}
 
 

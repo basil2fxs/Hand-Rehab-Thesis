@@ -468,3 +468,76 @@ class BaselineAccessorTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StuckPadTests(unittest.TestCase):
+    """A finger that rests on its pad above the release margin (Person 3's
+    middle finger in the sequence task, 15 October 2026) must still have
+    its next presses counted: the detector releases it after it has sat
+    below half its press peak, or after a long hold, and re-anchors its
+    baseline to the level it rests at."""
+
+    OLD = dict(release_frac=0.0, rest_release_s=0.0, hold_max_s=0.0,
+               baseline_down_alpha=0.0005)
+
+    def _det(self, **rules):
+        from finger_rehab.hardware.fsr_detector import Calibration, FSRDetector
+        cal = Calibration(num_sensors=1, baseline_alpha=0.0005, value_alpha=1.0,
+                          on_delta=[15], off_delta=[5], abs_on_min=[0],
+                          abs_off_max=[10000], debounce_ms=100, **rules)
+        det = FSRDetector(cal)
+        presses, releases = [], []
+        det.on_press = presses.append
+        det.on_release = releases.append
+        return det, presses, releases
+
+    @staticmethod
+    def _run(det, trace, dt=0.005, t0=100.0):
+        for k, val in enumerate(trace):
+            det.feed(t0 + k * dt, (val,))
+        return t0 + len(trace) * dt
+
+    # rest at 260, press to 300, relax to 270 (above the +5 release margin
+    # but below half the peak), press again to 310, relax to 270
+    RESTING_HIGH = [260] * 200 + [300] * 40 + [270] * 400 + [310] * 40 + [270] * 100
+
+    def test_old_rules_miss_the_press_from_a_raised_rest(self) -> None:
+        det, presses, releases = self._det(**self.OLD)
+        self._run(det, self.RESTING_HIGH)
+        self.assertEqual(len(presses), 1)
+        self.assertEqual(len(releases), 0)
+
+    def test_rest_below_half_peak_releases_and_the_next_press_counts(self) -> None:
+        det, presses, releases = self._det()
+        self._run(det, self.RESTING_HIGH)
+        self.assertEqual(len(presses), 2)
+        self.assertEqual(releases[0].reason, "rest")
+        # released 1.5 s after the relax began (sample 240 at t0 + 1.2 s)
+        self.assertAlmostEqual(releases[0].t_perf, 100.0 + 1.2 + 1.5, delta=0.02)
+        self.assertAlmostEqual(det.baseline[0], 270.0, delta=1.0)
+
+    def test_long_hold_is_released_and_rearmed(self) -> None:
+        trace = [260] * 200 + [300] * 500 + [320] * 40 + [300] * 100
+        det, presses, releases = self._det()
+        self._run(det, trace)
+        self.assertEqual(len(presses), 2)
+        self.assertEqual(releases[0].reason, "hold")
+        self.assertAlmostEqual(releases[0].t_perf, 100.0 + 1.0 + 2.0, delta=0.02)
+        old, old_presses, _ = self._det(**self.OLD)
+        self._run(old, trace)
+        self.assertEqual(len(old_presses), 1)
+
+    def test_normal_press_is_unchanged(self) -> None:
+        trace = [260] * 200 + [300] * 40 + [260] * 200
+        new, p_new, r_new = self._det()
+        old, p_old, r_old = self._det(**self.OLD)
+        self._run(new, trace)
+        self._run(old, trace)
+        self.assertEqual([(e.t_perf, e.lane) for e in p_new], [(e.t_perf, e.lane) for e in p_old])
+        self.assertEqual([e.t_perf for e in r_new], [e.t_perf for e in r_old])
+        self.assertEqual(r_new[0].reason, "lift")
+
+    def test_baseline_follows_the_finger_back_down(self) -> None:
+        det, presses, releases = self._det()
+        self._run(det, self.RESTING_HIGH + [260] * 200)
+        self.assertLess(det.baseline[0], 261.0)

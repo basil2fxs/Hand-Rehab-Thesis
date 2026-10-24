@@ -529,6 +529,10 @@ class GameEngine:
             abs_on_min=list(self.cfg.get("fsr.abs_on_min", [320, 400, 320, 320])),
             abs_off_max=list(self.cfg.get("fsr.abs_off_max", [350, 450, 350, 350])),
             debounce_ms=int(self.cfg.get("fsr.debounce_ms", 100)),
+            release_frac=float(self.cfg.get("fsr.release_frac", 0.5)),
+            rest_release_s=float(self.cfg.get("fsr.rest_release_s", 0.3)),
+            hold_max_s=float(self.cfg.get("fsr.hold_max_s", 2.0)),
+            baseline_down_alpha=float(self.cfg.get("fsr.baseline_down_alpha", 0.05)),
         )
         if self.hand_mode == "both":
             self.detectors["right"] = FSRDetector(Calibration(**cal_kwargs), hand="right")
@@ -592,7 +596,8 @@ class GameEngine:
             return
         if self.raw_logger:
             self.raw_logger.queue_event("release", lane=ev.lane,
-                                         t_perf=ev.t_perf, hand=ev.hand)
+                                         t_perf=ev.t_perf, hand=ev.hand,
+                                         detail="" if ev.reason == "lift" else ev.reason)
 
     def _feed_detectors(self, t_perf: float, vals: tuple[int, ...],
                         t_hands=None) -> None:
@@ -3984,6 +3989,10 @@ class GameEngine:
             abs_off_max=list(self.cfg.get("fsr.abs_off_max",
                                              [350, 450, 350, 350])),
             debounce_ms=int(self.cfg.get("fsr.debounce_ms", 100)),
+            release_frac=float(self.cfg.get("fsr.release_frac", 0.5)),
+            rest_release_s=float(self.cfg.get("fsr.rest_release_s", 0.3)),
+            hold_max_s=float(self.cfg.get("fsr.hold_max_s", 2.0)),
+            baseline_down_alpha=float(self.cfg.get("fsr.baseline_down_alpha", 0.05)),
         )
         for hand in ("right", "left"):
             if hand in self.detectors:
