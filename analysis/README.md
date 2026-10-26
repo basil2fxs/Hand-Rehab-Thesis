@@ -28,3 +28,9 @@ Two recordings or more are read together with `python3 -m eeg.group SESSIONS_1 S
 
     python3 sequence_task.py --out DIR LABEL=BLOCK_FOLDER [LABEL=BLOCK_FOLDER ...]
     python3 press_check.py --out DIR LABEL=BLOCK_FOLDER [LABEL=BLOCK_FOLDER ...]
+
+## The detector and its fixes
+
+`stuck_pad_replay.py` replays a logged force stream through the press detector under the rules that ran and under the rest and hold rules added on 24 October 2026, and reports which counted presses change; `stuck_pad_figure.py` draws one player's pad through the blocks where it rested above its release margin. `onset_sensitivity.py` reruns the press check with the onset rule's velocity threshold at 10 and 30 percent of the peak instead of 18, to show how far the lags and the push-start scores move. `detector_lag_vs_rise.py` feeds the detector linear ramps at 200 Hz, rises of 10 to 400 ms at three peaks with the trigger at 30 percent of the gap, and reports how long after the raw crossing each press is counted; `--out` draws it. `adaptive_band.py` plays the adaptive controller with a headless hand of a given reaction time under the two pace ceilings.
+
+    python3 analysis/detector_lag_vs_rise.py --out lag.png
