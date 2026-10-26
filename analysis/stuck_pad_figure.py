@@ -101,11 +101,11 @@ def main(argv=None) -> int:
           f"longest {max((b - a) for a, b in spans):.1f} s; new-rule releases in the window: "
           f"{sum(1 for r, _ in rel_new if t0 <= r <= t1)} ({ {k: sum(1 for r, why in rel_new if t0 <= r <= t1 and why == k) for k in ('lift', 'rest', 'hold')} })")
 
-    fs = 8.5 if args.small else 11.5
+    # canvas = print width (13.8 cm thesis at 10 pt; 8.0 cm paper at 8 pt), every text element at that size
+    fs = 8.0 if args.small else 10.0
     plt.rcParams.update({"font.family": "Times New Roman", "font.size": fs, "axes.labelsize": fs,
-                         "xtick.labelsize": fs, "ytick.labelsize": fs, "legend.fontsize": fs - 0.5})
-    # the paper prints it 8.0 cm wide, so a 3.25 in canvas keeps its 8.5 pt text near 8 pt
-    fig, ax = plt.subplots(figsize=((3.25, 1.6) if args.nolegend else (3.4, 1.95)) if args.small else (6.6, 2.9))
+                         "xtick.labelsize": fs, "ytick.labelsize": fs, "legend.fontsize": fs})
+    fig, ax = plt.subplots(figsize=((3.15, 1.65) if args.nolegend else (3.4, 1.95)) if args.small else (5.43, 2.55))
     resting = float(cal["resting"][LANE])
     ax.plot(x, raw[sel], color="0.55", lw=0.6, label="raw counts")
     ax.plot(x, base_old[sel] + off, color="#1f4e8c", lw=1.0, ls="--", label="release margin (old rules)")
@@ -119,7 +119,7 @@ def main(argv=None) -> int:
     for tag, (a, b) in bounds.items():
         if tag.startswith("learning") and args.blocks[0] <= int(tag.split()[1]) <= args.blocks[1]:
             ax.annotate(f"block {tag.split()[1]}", xy=(((a + b) / 2 - t0) / 60.0, 1.0), xycoords=("data", "axes fraction"),
-                        ha="center", va="bottom", fontsize=fs - 1)
+                        ha="center", va="bottom", fontsize=fs)
             ax.axvline((a - t0) / 60.0, color="0.85", lw=0.6)
     ax.set_xlim(0, (t1 - t0) / 60.0)
     ax.set_ylim(resting - 25, max(resting + 60, np.percentile(raw[sel], 99.5) + 10))
@@ -130,10 +130,10 @@ def main(argv=None) -> int:
     if not args.nolegend:
         # a legend row wider than the canvas widens the saved image and shrinks the print
         h, l = ax.get_legend_handles_labels()
-        fig.legend(h, l, loc="lower center", ncol=2 if args.small else 3, frameon=False, fontsize=fs - 1.5,
-                   handlelength=1.6, columnspacing=1.2, bbox_to_anchor=(0.5, -0.12))
-    fig.tight_layout()
-    fig.savefig(args.out, dpi=500, bbox_inches="tight")
+        fig.legend(h, l, loc="lower center", ncol=2, frameon=False, fontsize=fs,
+                   handlelength=1.6, columnspacing=1.2, bbox_to_anchor=(0.5, 0.0))
+    fig.tight_layout(rect=(0, 0.0 if args.nolegend else 0.26, 1, 1))
+    fig.savefig(args.out, dpi=500)
     w_in = plt.imread(args.out).shape[1] / 250
     print(f"saved width {w_in:.2f} in (canvas {fig.get_figwidth():.2f})")
     print("wrote", args.out)

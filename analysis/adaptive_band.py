@@ -92,11 +92,12 @@ def main(argv=None) -> int:
         print(f"{mean_rt} ms: settles at trials {s}; last-100 hit rate {np.mean([r[1] for r in rows]):.2f} "
               f"({min(r[1] for r in rows):.2f} to {max(r[1] for r in rows):.2f}); pace at the end {np.mean([r[2] for r in rows]):.0f} BPM")
 
-    fs = 8.5 if args.small else 11.5
+    # canvas = print width (13.8 cm thesis), every text element at 10 pt (8 pt small)
+    fs = 8.0 if args.small else 10.0
     plt.rcParams.update({"font.family": "Times New Roman", "font.size": fs, "axes.labelsize": fs,
-                         "xtick.labelsize": fs, "ytick.labelsize": fs, "legend.fontsize": fs - 0.5})
-    fig, axes = plt.subplots(1, 3, figsize=(3.4, 1.7) if args.small else (6.8, 2.5),
-                             gridspec_kw={"width_ratios": [1.35, 1.35, 1.0]})
+                         "xtick.labelsize": fs, "ytick.labelsize": fs, "legend.fontsize": fs})
+    fig, axes = plt.subplots(1, 3, figsize=(3.4, 1.7) if args.small else (5.43, 2.4),
+                             gridspec_kw={"width_ratios": [1.2, 1.2, 1.15]})
     a, b, c = axes
     colours = {140.0: "0.5", 180.0: "#1f4e8c"}
     for cap, (hits, bpm) in runs.items():
@@ -124,9 +125,9 @@ def main(argv=None) -> int:
     c.plot(xs, ys, marker="o", ls="none", color="#1f4e8c", ms=3.5, alpha=0.8)
     med = [np.median([r[0] for r in sweep[s] if r[0] is not None]) if any(r[0] is not None for r in sweep[s]) else np.nan for s in speeds]
     c.plot(speeds, med, color="k", lw=1.2)
-    c.set_xlabel("Hand's reaction time (ms)")
+    c.set_xlabel("Hand's RT (ms)")
     c.set_ylabel("Trials to settle in band")
-    c.set_title("(c) Ceiling 180, five seeds", loc="left", fontsize=fs)
+    c.set_title("(c) Settling, cap 180", loc="left", fontsize=fs)
     c.set_ylim(0, max(ys) * 1.15 if ys else 100)
     for ax in axes:
         for s in ("top", "right"):
@@ -134,10 +135,10 @@ def main(argv=None) -> int:
     h, l = a.get_legend_handles_labels()
     # the legend row must stay inside the canvas width, or the tight bounding box widens the
     # saved image and the print shrinks everything with it
-    fig.legend(h, l, loc="lower center", ncol=2 if args.small else 4, frameon=False, fontsize=fs - 1.5,
-               columnspacing=1.2, handlelength=1.6, bbox_to_anchor=(0.5, -0.04))
-    fig.tight_layout()
-    fig.savefig(args.out, dpi=500, bbox_inches="tight")
+    fig.legend(h, l, loc="lower center", ncol=2, frameon=False, fontsize=fs,
+               columnspacing=1.2, handlelength=1.6, bbox_to_anchor=(0.5, 0.0))
+    fig.tight_layout(rect=(0, 0.17, 1, 1), w_pad=0.8)
+    fig.savefig(args.out, dpi=500)
     w_in = plt.imread(args.out).shape[1] / 250
     print(f"saved width {w_in:.2f} in (canvas {fig.get_figwidth():.2f})")
     print("wrote", args.out)

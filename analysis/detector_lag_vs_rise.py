@@ -74,22 +74,23 @@ def draw(out: dict[int, dict[int, float]], path: Path, small: bool = False) -> N
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     plt.rcParams.update({"font.family": "serif", "font.serif": ["Times New Roman", "DejaVu Serif"],
-                         "font.size": 8.5 if small else 9})
-    fig, ax = plt.subplots(figsize=(3.45, 2.0) if small else (3.35, 1.9))
+                         "font.size": 8 if small else 10})
+    # canvas = print width: 13.8 cm in the thesis (10 pt), 8.8 cm in the paper (8 pt)
+    fig, ax = plt.subplots(figsize=(3.45, 2.0) if small else (5.43, 1.55))
     colours = {40: "#94a3b8", 70: "#2563eb", 150: "#0f172a"}
     for peak in PEAKS:
         xs = RISES
         ys = [out[peak][r] for r in xs]
         ax.plot(xs, ys, "-o", ms=3, lw=1.1, color=colours[peak], label=f"peak {peak} counts")
     ax.axvspan(0, 100, color="#dcfce7", lw=0, zorder=0)
-    ax.text(50, ax.get_ylim()[1] * 0.93, "healthy rises", ha="center", va="top", fontsize=8 if small else 8.5, color="#166534")
+    ax.text(50, ax.get_ylim()[1] * 0.93, "healthy rises", ha="center", va="top", fontsize=8 if small else 10, color="#166534")
     ax.set_xlabel("rise time, rest to peak (ms)")
     ax.set_ylabel("count lag (ms)")
     ax.set_xlim(0, 410)
     ax.set_ylim(0, None)
     for side in ("top", "right"):
         ax.spines[side].set_visible(False)
-    ax.legend(frameon=False, fontsize=7.5 if small else 8, loc="upper left", bbox_to_anchor=(0.0, 0.88))
+    ax.legend(frameon=False, fontsize=8 if small else 10, loc="upper left", bbox_to_anchor=(0.27, 0.98))
     fig.tight_layout(pad=0.3)
     fig.savefig(path, dpi=500)
     plt.close(fig)
