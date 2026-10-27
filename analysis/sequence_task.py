@@ -247,7 +247,8 @@ def person(folder: Path) -> dict:
     _beh, all_correct = A.srt_behaviour(t)
     c = t[keep]
     fast = c[c.rt_ms < FLOORS_MS[0]]
-    return {"folder": folder.name, "trials": int(len(t)), "kept": int(keep.sum()),
+    # the session by its time and task only: the folder name starts with the login
+    return {"session": "_".join(folder.name.split("_")[1:]), "trials": int(len(t)), "kept": int(keep.sum()),
             "segments": segments(t, keep), "learning": learning(t, keep, rng),
             "learning_no_reversals": learning(t, keep & ~reversal(t), rng),
             "learning_all_correct": all_correct,

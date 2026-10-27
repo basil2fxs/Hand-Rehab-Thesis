@@ -14,7 +14,9 @@ first press before the next flash), finds where its push began on the
 board's own force stream with the software's onset detector (the one
 self_tests.py uses), and records how long the press was held and whether
 the same finger pressed again straight after it. It also records how late
-the computer stamped the force samples, the USB part of a reaction time.
+the computer stamped the force samples, the USB part of a reaction time,
+and how fast each push rose (its peak over the time from onset to peak),
+since a threshold on a steeper rise is crossed sooner.
 
     cd analysis
     python3 press_check.py --out DIR LABEL=BLOCK_FOLDER [LABEL=BLOCK_FOLDER ...]
@@ -61,7 +63,7 @@ def presses(folder: Path) -> pd.DataFrame:
         win = ev[(ev.t_perf > s.t_perf) & (ev.t_perf < t_end)]
         pr = win[win.event == "press"]
         row = {"trial": i, "lane": np.nan, "lag_ms": np.nan, "held_ms": np.nan, "peak": np.nan,
-               "repress": False, "repress_peak": np.nan}
+               "rise_ms": np.nan, "repress": False, "repress_peak": np.nan}
         if len(pr):
             p = pr.iloc[0]
             lane = int(p.lane)
@@ -75,13 +77,18 @@ def presses(folder: Path) -> pd.DataFrame:
             if abs(t[k] - p.t_perf) < PRESS_STAMP_TOL_S:
                 a = int(breaks[breaks <= k].max()) if (breaks <= k).any() else 0
                 b = int(breaks[breaks > k].min()) if (breaks > k).any() else len(t)
+                on = None
                 if t[b - 1] > t[a]:
                     fs = (b - 1 - a) / (t[b - 1] - t[a])
                     on = press_onset(x[a:b], k - a, fs)
                     if on is not None:
                         row["lag_ms"] = float((grid[k] - grid[a + on]) * 1000.0)
                 e = int(np.searchsorted(t, t_rel)) if np.isfinite(t_rel) else k + 40
-                row["peak"] = float(np.nanmax(x[k:max(e, k + 1)]))
+                held = x[k:max(e, k + 1)]
+                row["peak"] = float(np.nanmax(held))
+                if on is not None and np.isfinite(held).any():
+                    top = k + int(np.nanargmax(held))
+                    row["rise_ms"] = float((grid[top] - grid[a + on]) * 1000.0)
                 again = ev[(ev.event == "press") & (ev.lane == lane) & (ev.t_perf > p.t_perf)]
                 if np.isfinite(t_rel) and len(again) and again.t_perf.iloc[0] - t_rel < REPRESS_S:
                     row["repress"] = True
@@ -119,8 +126,11 @@ def person(folder: Path) -> dict:
     seg = []
     for name in SEGMENTS:
         g = t[ok & (t.seg == name)]
+        # counts per ms from the onset to the peak
+        rate = g.peak / g.rise_ms.where(g.rise_ms > 0)
         seg.append({"segment": name, "n": int(len(g)), "rt_press_ms": float(g.rt_ms.median()),
-                    "rt_onset_ms": float(g.rt_onset_ms.median()), "lag_ms": float(g.lag_ms.median())})
+                    "rt_onset_ms": float(g.rt_onset_ms.median()), "lag_ms": float(g.lag_ms.median()),
+                    "rise_rate": float(rate.median())})
     seg = pd.DataFrame(seg)
     pressed = t.held_ms.notna()
     return {"trials": int(len(t)), "counted_presses": int(pressed.sum()),

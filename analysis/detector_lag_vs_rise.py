@@ -6,8 +6,8 @@ ramps from a resting level to a peak, sampled at 200 Hz, with the trigger
 at 30 percent of the gap as the study ran it. The raw crossing is the
 first sample at or above rest plus the trigger; the count is the
 detector's press event. Their difference is the lag the thesis quotes
-(7 to 11 ms on a healthy rise, more on a slow one), and this script draws
-it for Section 3.3.2.
+(12 ms at a 100 ms rise, 20 ms at 200 ms and 57 ms at 400 ms, against
+10 to 15 ms on real presses), and this script draws it for Section 3.3.2.
 
 Run from the repository root:
     python3 analysis/detector_lag_vs_rise.py [--out figure.png] [--small]
@@ -82,15 +82,14 @@ def draw(out: dict[int, dict[int, float]], path: Path, small: bool = False) -> N
         xs = RISES
         ys = [out[peak][r] for r in xs]
         ax.plot(xs, ys, "-o", ms=3, lw=1.1, color=colours[peak], label=f"peak {peak} counts")
-    ax.axvspan(0, 100, color="#dcfce7", lw=0, zorder=0)
-    ax.text(50, ax.get_ylim()[1] * 0.93, "healthy rises", ha="center", va="top", fontsize=8 if small else 10, color="#166534")
     ax.set_xlabel("rise time, rest to peak (ms)")
     ax.set_ylabel("count lag (ms)")
     ax.set_xlim(0, 410)
     ax.set_ylim(0, None)
     for side in ("top", "right"):
         ax.spines[side].set_visible(False)
-    ax.legend(frameon=False, fontsize=8 if small else 10, loc="upper left", bbox_to_anchor=(0.27, 0.98))
+    # top left, where every curve is still under 15 ms
+    ax.legend(frameon=False, fontsize=8 if small else 10, loc="upper left", bbox_to_anchor=(0.01, 1.02))
     fig.tight_layout(pad=0.3)
     fig.savefig(path, dpi=500)
     plt.close(fig)

@@ -1,29 +1,35 @@
 <h1 align="center">FINAL TRIAL RESULTS</h1>
-<p align="center">What to run for the thesis, and where each result goes.<br>The data stays off GitHub: only this README is shared.</p>
+<p align="center">Where the thesis's data and results live, and how to make each result again.<br>The data stays off GitHub: git ignores everything here except this README and the .gitignore beside it.</p>
 
-| Run | How many | Thesis | Folder |
-| --- | --- | --- | --- |
-| Student sittings, 15 to 60 min, run by the students | about 10 | 4.1, 4.3 to 4.6 | `1 Healthy study` |
-| EEG session | 1 | 4.7 | `3 EEG lab` |
-| Tables and figures for Chapter 4 | | 4.1 to 4.6 | `5 Thesis results` |
-| The author's own checks: 15-minute sittings on five days, two slow-press blocks | 23 to 27 October | 4.8, limitations 2 and 6 | `6 Self tests` |
-| Sensor bench, left-hand device | moved to future work | | `2 Sensor comparison` |
-| Syllables with readers with dyslexia | moved to future work | | `4 Syllables case` |
+| Folder | What it holds |
+| --- | --- |
+| `1 Healthy study` | The student sittings: `raw/` as copied off the lab computer, with names, and `sessions/` with every name replaced by a code. Also the one-page sitting sheet the students followed, and its source |
+| `3 EEG lab` | The EEG sittings' session folders with their `.bdf` recordings, and `results/` from the EEG analysis |
+| `5 Thesis results` | `run_all.sh` and everything it writes: the sequence task, the press check, the count lag and the review PDF |
+| `2 Sensor comparison`, `4 Syllables case` | Empty. The pad bench and the Syllables case moved to future work (below) |
+| `6 Self tests` | Empty. The author's own between-day checks were planned for 23 to 27 October and not run |
+
+The data were final on 22 October 2026: the laboratory's sequence task played four times (two of them with EEG, and one of those two also played Buzz Hunt), one 30-minute sitting and one Force Pilot block. The thesis calls the six people Person 1 to 6, the two EEG sittings first; the codes inside the data are the software's own (`P01` and up).
+
+## Rerunning the thesis results
+
+`5 Thesis results/run_all.sh` reruns every analysis of the final data from the session folders here. It lives in this ignored folder because its paths hold the session folder names, and those carry names. It works from any folder:
+
+    bash "FINAL TRIAL RESULTS/5 Thesis results/run_all.sh"
+    bash "FINAL TRIAL RESULTS/5 Thesis results/run_all.sh" --eeg
+
+From `analysis/` it runs `sequence_task.py`, `press_check.py` and `count_lag.py` on the four sequence-task blocks, labelled `E1` and `E2` for the EEG sittings and `L1` and `L2` for the other two, writing `sequence_task/`, `press_check/` and `count_lag/`. With `--eeg` it then reruns the two-recording EEG statistics (`python3 -m eeg.group`, MNE needed) into `3 EEG lab/results/`. Last, `review_report.py` draws everything into `review/Results_for_review.pdf`. The review reads each EEG sitting's own results, so on a fresh copy run `python3 -m eeg` on each EEG sessions folder first (below). For new data, copy the script and point its folder lines at the new sessions; what each script measures is in [the analysis README](../analysis/README.md).
 
 ## Student sittings
 
-Each student runs their own sitting on the EEG lab's computer from the one-page sheet, `1 Healthy study/Sitting sheet.pdf`: PsychoPy, Coder, `run_in_psychopy.py` from the `Finger Rehab study` folder on the desktop, then a login with their own name and the session length they have time for. The name lets an interrupted sitting resume.
+Each student ran their own sitting on the EEG lab's computer from the one-page sheet, `1 Healthy study/Sitting sheet.pdf`: PsychoPy, Coder, `run_in_psychopy.py` from the `Finger Rehab study` folder on the desktop, then a login with their own name and the session length they had time for. The name lets an interrupted sitting resume.
 
 After the last sitting:
 
 1. Copy the lab computer's `Finger Rehab study/sessions` into `1 Healthy study/raw`. These folders carry names, so they stay on this machine.
-2. Replace every name with a code, P01 upwards in the order of each person's first sitting. Add `--exclude NAME` for a test login. The key prints once; keep it out of every shared folder.
+2. Replace every name with a code, P01 upwards in the order of each person's first sitting. Test logins (Test Mode blocks, names starting with test or demo) are left out, and `--exclude NAME` leaves out any other. The key prints once; keep it out of every shared folder. The output folder must not exist yet.
 
        python3 app/scripts/deidentify_sessions.py "FINAL TRIAL RESULTS/1 Healthy study/raw" "FINAL TRIAL RESULTS/1 Healthy study/sessions"
-
-   A volunteer who sits a second time on another day (same name, any length) keeps one code. The thesis build's `results.py` uses each person's first day for the study and the second day for reliability between days.
-
-   Sittings played at home on the Mac (the author's parents and grandparents, 24 and 25 October) go into `raw` too, beside the lab's, before the names are coded. Anyone aged 50 or over is kept apart from the study by `results.py` and compared with it. Each is handed `1 Healthy study/Family note.pdf` with the sheet before playing; its source is `Sitting sheet source/family_note.html`.
 
 3. Check each coded sitting:
 
@@ -33,26 +39,13 @@ After the last sitting:
 
 A check with fewer than 8 participants is described, not tested.
 
-## The author's own checks
-
-Two checks the study cannot make, both played by the author under the login `testbasil`, which the deidentify step leaves out because it starts with `test`. Test Mode stays off, since the analysis skips Test Mode blocks.
-
-- Between days: the 15-minute sitting on five different days. The spread of the five core measures from day to day sits beside the study's within-session error.
-- Slow presses: two Free play Reaction blocks, about 40 presses, each built at a different speed from a quick tap to about half a second. Their detector lag against rise time sits beside the simulated one of Section 3.3.2.
-
-Copy the lab computer's sessions folder, then, from the thesis build folder:
-
-    python3 self_tests.py "<copied sessions>" --login testbasil
-
-It writes `6 Self tests/self_tests.json`, the author's numbers only, which `results.py` and the paper's `paper_results.py` read when they fill Chapter 4.
-
-## EEG session
+## EEG sittings
 
 Copy [`EEG_Lab`](../EEG_Lab) to the lab PC and follow its README; run the marker check in [eeg_lab_setup.txt](../app/docs/eeg_lab_setup.txt) before the recording. Afterwards copy the lab folder's whole `sessions/`, `eeg/` and its `.bdf` included, into `3 EEG lab/sessions`, then from `analysis/` (MNE installed, see [its README](../analysis/README.md)):
 
     python3 -m eeg "../FINAL TRIAL RESULTS/3 EEG lab/sessions"
 
-Results land in `3 EEG lab/results/`.
+Results land in `3 EEG lab/results/`, one folder per sitting.
 
 ## Future work
 

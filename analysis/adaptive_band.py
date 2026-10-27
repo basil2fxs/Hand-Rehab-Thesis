@@ -105,7 +105,7 @@ def main(argv=None) -> int:
         b.plot(np.arange(1, 301), bpm, color=colours[cap], lw=1.3)
     if args.real:
         rh, rb = real_block(Path(args.real))
-        a.plot(np.arange(1, len(rh) + 1), trailing(rh), color="#c0392b", lw=1.5, label="Person 5, 40 trials")
+        a.plot(np.arange(1, len(rh) + 1), trailing(rh), color="#c0392b", lw=1.5, label=f"Person 5, {len(rh)} trials, {rh.mean():.2f} overall")
         b.plot(np.arange(1, len(rb) + 1), rb, color="#c0392b", lw=1.5)
     a.axhspan(0.65, 0.80, color="#d9ead3", lw=0, label="65 to 80 percent band")
     a.set_ylim(0.3, 1.02)

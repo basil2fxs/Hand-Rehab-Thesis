@@ -126,7 +126,8 @@ def rescore(session: Path, stims: list, presses: list, window_s: float) -> dict:
     t["accuracy"] = acc
     keep = st.lab_kept(t)
     out = st.learning(t, keep, np.random.default_rng(st.SEED))
-    return {"score": out["post_minus_block8_ms"], "post": out["post_ms"], "block8": out["block8_ms"],
+    return {"score": out["post_minus_block8_ms"], "ci": out["post_minus_block8_ci"],
+            "post": out["post_ms"], "block8": out["block8_ms"],
             "rt_match_ms": gap, "kept": int(keep.sum())}
 
 
@@ -150,7 +151,7 @@ def main(argv=None) -> int:
         for name, ev in (("old", old_events), ("new", new_events)):
             sc = rescore(Path(path), stims, ev, window_s)
             print(f"  {name} learning score (post-test minus block 8): {sc['score']:+.0f} ms "
-                  f"(medians {sc['post']:.0f} and {sc['block8']:.0f}, {sc['kept']} kept trials; "
+                  f"(95 percent bootstrap interval {sc['ci'][0]:.0f} to {sc['ci'][1]:.0f}; medians {sc['post']:.0f} and {sc['block8']:.0f}, {sc['kept']} kept trials; "
                   f"replay RT against the script's rt_ms, median gap {sc['rt_match_ms']:.1f} ms)")
             s = score(stims, ev, window_s)
             for lane in range(4):
