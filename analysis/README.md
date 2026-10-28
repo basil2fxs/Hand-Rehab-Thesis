@@ -43,7 +43,9 @@ Run from this folder. `LABEL=BLOCK_FOLDER` pairs name a short label for each ses
 | `onset_sensitivity.py` | `KEY=session` pairs | `DIR/onset_sensitivity.json` | How far the press check moves with the onset rule's velocity threshold at 10 and 30% of the peak instead of 18 |
 | `stuck_pad_replay.py` | `KEY=session` pairs | the terminal | Which counted presses change under the resting-finger rules added on 24 October 2026; the old rules must reproduce every logged press first, which proves the replay is faithful. `--rest` and `--hold` sweep the two times |
 | `stuck_pad_figure.py` | one `KEY=session` | a figure | One player's pad through the blocks where it rested above its release margin |
-| `detector_lag_vs_rise.py` | nothing: linear ramps at 200 Hz | a figure with `--out` | How long after the raw crossing a press is counted, for rises of 10 to 400 ms at three peaks |
+| `detector_lag_vs_rise.py` | nothing: linear ramps at 200 Hz | a figure with `--out` | How long after the raw crossing a press is counted, for rises of 10 to 1000 ms at three peaks; from about 0.8 s no ramp is counted |
+| `onset_accuracy.py` | nothing: smooth pushes with the pads' noise | the terminal | How close the press check's onset rule comes to a push's known start, for rises of 100 to 400 ms |
+| `hold_replay.py` | `KEY=session` pairs, or `--ramps-only` | the terminal | What the resting-level hold (`Calibration.baseline_hold`, shipped off) would change: the presses each hold adds or loses, each learning score, and the slowest ramp each hold counts |
 | `adaptive_band.py` | optionally a real Adaptive block | a figure | The adaptive controller against its 65 to 80% band, played by a headless hand under the two pace ceilings |
 | `review_report.py` | the results folder and the two EEG sessions with their results | a PDF | All of the above with the EEG, on a few pages for the people checking the results |
 

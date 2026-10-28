@@ -533,6 +533,8 @@ class GameEngine:
             rest_release_s=float(self.cfg.get("fsr.rest_release_s", 0.3)),
             hold_max_s=float(self.cfg.get("fsr.hold_max_s", 2.0)),
             baseline_down_alpha=float(self.cfg.get("fsr.baseline_down_alpha", 0.05)),
+            baseline_hold=float(self.cfg.get("fsr.baseline_hold", 0.0)),
+            baseline_hold_s=float(self.cfg.get("fsr.baseline_hold_s", 3.0)),
         )
         if self.hand_mode == "both":
             self.detectors["right"] = FSRDetector(Calibration(**cal_kwargs), hand="right")
@@ -3993,6 +3995,8 @@ class GameEngine:
             rest_release_s=float(self.cfg.get("fsr.rest_release_s", 0.3)),
             hold_max_s=float(self.cfg.get("fsr.hold_max_s", 2.0)),
             baseline_down_alpha=float(self.cfg.get("fsr.baseline_down_alpha", 0.05)),
+            baseline_hold=float(self.cfg.get("fsr.baseline_hold", 0.0)),
+            baseline_hold_s=float(self.cfg.get("fsr.baseline_hold_s", 3.0)),
         )
         for hand in ("right", "left"):
             if hand in self.detectors:
@@ -8177,6 +8181,11 @@ class GameEngine:
     #   gold  = Perfect
     _GOLD = (255, 196, 0)
 
+    def _hit_mark(self, colour) -> str | None:
+        """The mark a press's tile flash carries: a tick on every hit,
+        none on the grey of a miss or an early press."""
+        return None if tuple(colour) == tuple(self.theme.muted) else "tick"
+
     def _outcome_colour(self, label: str,
                         mode_hint: str | None = None) -> tuple[int, int, int]:
         """Colour for the lane / ring flash on a trial outcome."""
@@ -9181,9 +9190,9 @@ class GameEngine:
         self._ensure_metric_state()
         gp = self._screens.get("gameplay")
         if gp and hasattr(gp, "set_message"):
-            # Flash colour matches the outcome tier so the screen tells the
-            # patient at a glance how well they did. Green = Great, yellow
-            # = Good, orange = Late/Early, red = Miss.
+            # Flash colour matches the outcome: green for a hit (gold for
+            # a Perfect), grey for a miss or a press before the cue. A
+            # hit's flash also carries a tick, so it reads without colour.
             colour = self._outcome_colour(outcome.label)
             # The outcome label rides on the lane popup, not the
             # centred message line. Passing it straight to flash_lane
@@ -9216,7 +9225,8 @@ class GameEngine:
                                      colour, outcome.label,
                                      marker=continuous is None)
             else:
-                gp.flash_lane(trial.lane, colour, 0.4, now, **popup)
+                gp.flash_lane(trial.lane, colour, 0.4, now, **popup,
+                              mark=self._hit_mark(colour))
             # Clear the timing bar + deactivate every strip now that the
             # trial is done. The next stim will re-arm the right lane.
             for ls in gp.lanes:
@@ -9902,7 +9912,8 @@ class GameEngine:
                 rs.flash_lane(lane, colour, 0.6, now_perf)
                 self._park_feedback("rhythm", lane, popup, colour, label)
             else:
-                rs.flash_lane(lane, colour, 0.6, now_perf, **popup)
+                rs.flash_lane(lane, colour, 0.6, now_perf, **popup,
+                              mark=self._hit_mark(colour))
         # After-press cues, same rule as the cadence modes. A note the
         # patient actually pressed and landed inside the window is a
         # correct press; a note that scrolled past unpressed arrives

@@ -104,6 +104,16 @@ class Calibration:
     rest_release_s: float = 1.5
     hold_max_s: float = 2.0
     baseline_down_alpha: float = 0.05
+    # The baseline follows the signal while the finger is up, which
+    # includes a push still rising towards the trigger, so a slow push
+    # was taken into the resting level before it could be counted: a
+    # linear rise to the light press over 0.8 s or more never was (28
+    # October 2026). Once the smoothed value sits more than baseline_hold
+    # counts above the baseline, the baseline holds for up to
+    # baseline_hold_s, so a slow push is counted, and then follows again,
+    # so a finger that settles heavier is still tracked. 0 disables.
+    baseline_hold: float = 0.0
+    baseline_hold_s: float = 3.0
     # Free-form text the researcher can stash alongside the
     # calibration (date, patient ID, sensor batch). Round-trips
     # through save / load.
@@ -248,6 +258,8 @@ class FSRDetector:
         # The baseline before a press whose end re-anchored the baseline higher:
         # the fast downward tracking runs until the baseline is back at it.
         self._anchor_floor: list[float | None] = [None] * n
+        # When the value first sat more than baseline_hold above the baseline.
+        self._hold_since: list[float | None] = [None] * n
         # t_perf of the most recent feed() call, None before the first.
         # The continuous force view polls the detector rather than
         # seeing samples itself, so this is how it can tell a live
@@ -272,6 +284,7 @@ class FSRDetector:
         self._prev_sm = [None] * n
         self._below_frac_since = [None] * n
         self._anchor_floor = [None] * n
+        self._hold_since = [None] * n
         self.last_feed_t = None
 
     def baseline_value(self, sensor_idx: int) -> float | None:
@@ -384,6 +397,16 @@ class FSRDetector:
                 log.warning("on_release(lane=%d, hand=%s) raised: %s",
                              i, self.hand, e)
 
+    def _holding(self, i: int, sm: float, t_perf: float) -> bool:
+        """True while a rise above the baseline holds it (baseline_hold)."""
+        cal = self.cal
+        if cal.baseline_hold <= 0 or sm - self.baseline[i] <= cal.baseline_hold:
+            self._hold_since[i] = None
+            return False
+        if self._hold_since[i] is None:
+            self._hold_since[i] = t_perf
+        return t_perf - self._hold_since[i] < cal.baseline_hold_s
+
     def feed(self, t_perf: float, vals: tuple[int, ...]) -> None:
         self.last_feed_t = t_perf
         n = self.cal.num_sensors
@@ -400,6 +423,8 @@ class FSRDetector:
             if not self.pressed[i]:
                 if self.baseline[i] is None:
                     self.baseline[i] = sm
+                elif self._holding(i, sm, t_perf):
+                    pass
                 else:
                     # After a re-anchor to a raised rest the baseline sits
                     # above the level the finger started from; until it is

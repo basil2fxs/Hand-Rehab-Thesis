@@ -2957,14 +2957,14 @@ class GameplayScreen(Screen):
                    duration_s: float, now: float,
                    popup_text: str | None = None,
                    popup_glyph: str | None = None,
-                   flash: bool = True) -> None:
+                   flash: bool = True, mark: str | None = None) -> None:
         """Flash a tile in the outcome colour and float its popup.
         flash False shows the popup alone: the lab's delayed ring, whose
         tile already flashed at the press."""
         for ls in self.lanes:
             if ls.lane == lane:
                 if flash:
-                    ls.flash(colour, duration_s, now)
+                    ls.flash(colour, duration_s, now, mark=mark)
                 # Lab style: one ring glyph per outcome instead of
                 # words. Handled before the text path so the neutral
                 # popup can never pick up a stale message. Always the
@@ -4558,13 +4558,13 @@ class RhythmScreen(Screen):
     def flash_lane(self, lane: int, colour, duration_s: float, now: float,
                    popup_text: str | None = None,
                    popup_glyph: str | None = None,
-                   flash: bool = True) -> None:
+                   flash: bool = True, mark: str | None = None) -> None:
         """As GameplayScreen.flash_lane: flash False is the popup alone,
         with no second tile flash and no second burst."""
         for ls in self.lanes:
             if ls.lane == lane:
                 if flash:
-                    ls.flash(colour, duration_s, now)
+                    ls.flash(colour, duration_s, now, mark=mark)
                 # Above the strike ring, not on it: at the lane top
                 # the feedback sat right across the ring the patient
                 # is aiming the next note at.

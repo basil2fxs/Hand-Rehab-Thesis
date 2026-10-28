@@ -333,6 +333,17 @@ fsr:
   rest_release_s: 1.5
   hold_max_s: 2.0
   baseline_down_alpha: 0.05
+  # The baseline follows the signal while the finger is up, so a push
+  # still rising towards the trigger is taken into it: in simulation a
+  # linear rise to the light press over 0.8 s or more is never counted
+  # (28 Oct 2026). Holding the baseline once the push sits baseline_hold
+  # counts above it, for up to baseline_hold_s, counts slow pushes, but
+  # replayed over the four sequence-task streams 5 counts added 6 to 25
+  # presses a session and moved one learning score 11 ms, while 15
+  # counts left every score alone and counted ramps only to 0.7 to 2 s.
+  # It stays off until the pilot tunes it on patients' pushes.
+  baseline_hold: 0
+  baseline_hold_s: 3.0
 
 quick_cal:
   # The gamified calibration that runs when a session starts, over

@@ -990,6 +990,10 @@ class LaneStrip:
         self.pressed_until_min = 0.0
         self.flash_until = 0.0
         self.flash_colour: tuple[int, int, int] | None = None
+        # "tick" on a hit's flash, so a hit reads without its colour: a
+        # player who cannot tell the hit green from the miss grey still
+        # sees the mark. None draws the flash alone.
+        self.flash_mark: str | None = None
         # `glow_until` drives a brief halo effect when this lane gets a press.
         # Separate from flash so we can tune them independently.
         self.glow_until = 0.0
@@ -1056,8 +1060,10 @@ class LaneStrip:
         """Drop the timing bar (trial complete, hit or miss)."""
         self._timing_stim_t = None
 
-    def flash(self, colour: tuple[int, int, int], duration_s: float, now: float) -> None:
+    def flash(self, colour: tuple[int, int, int], duration_s: float, now: float,
+              mark: str | None = None) -> None:
         self.flash_colour = colour
+        self.flash_mark = mark
         self.flash_until = now + duration_s
         # Add a halo at the same time so the lane really pops when scored.
         self.glow_until = now + duration_s
@@ -1267,6 +1273,19 @@ class LaneStrip:
                 surf.blit(hl, hl.get_rect(midbottom=(
                     self.rect.centerx, self.rect.bottom - 16,
                 )))
+
+        # A hit's tick, drawn in the label's ink over the middle of the
+        # tile for as long as the flash shows.
+        if flashing and self.flash_mark == "tick":
+            s = min(self.rect.w, self.rect.h) * 0.22
+            cx, cy = self.rect.centerx, self.rect.centery - self.rect.h * 0.12
+            ink, w = self._label_colour(fill), max(6, int(s * 0.2))
+            pts = [(cx - 0.50 * s, cy), (cx - 0.12 * s, cy + 0.38 * s),
+                   (cx + 0.55 * s, cy - 0.42 * s)]
+            pygame.draw.lines(surf, ink, False, pts, w)
+            # round caps and joint, so the stroke reads as one mark
+            for x, y in pts:
+                pygame.draw.circle(surf, ink, (int(x), int(y)), w // 2)
 
         # FSR live readout top-right corner. Useful on the Diagnostics
         # screen for confirming the sensor is delivering data; pure

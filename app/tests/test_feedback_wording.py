@@ -339,7 +339,7 @@ class _RecordingScreen:
         self.banners.append(str(text))
 
     def flash_lane(self, lane, colour, duration_s, now,
-                   popup_text=None, popup_glyph=None) -> None:
+                   popup_text=None, popup_glyph=None, mark=None) -> None:
         import time as _t
         if popup_glyph:
             self.glyphs.append((popup_glyph, _t.perf_counter()))
