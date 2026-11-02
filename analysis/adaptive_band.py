@@ -113,6 +113,7 @@ def main(argv=None) -> int:
     a.set_title("(a) Hit rate", loc="left", fontsize=fs)
     b.set_ylabel("Pace (BPM)")
     b.set_title("(b) Pace", loc="left", fontsize=fs)
+    b.set_yticks([50, 100, 140, 180])
     for ax in (a, b):
         ax.set_xlabel("Trial")
         ax.set_xlim(0, 300)
