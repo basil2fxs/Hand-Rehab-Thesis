@@ -27,7 +27,7 @@ The game as a Python package. `main.py` loads the config, finds the boards (or f
 
 ## Boards and plug order
 
-Each board is one hand: four pads on an Arduino Nano sending `FSR: a,b,c,d` 200 times a second over USB at 115200 baud. A reader thread per board turns each line into a sample stamped with the computer's clock when it arrived. Opening the port resets a Nano, and the firmware buzzes all four motors as a self-test before it streams, so a board takes about three seconds to come up.
+Each board is one hand: four pads on an Arduino Nano sending `FSR: a,b,c,d` 200 times a second over USB at 115200 baud. A reader thread per board turns each line into a sample stamped with the computer's clock when it arrived. Opening the port resets a Nano; the firmware streams 0.1 s after its bootloader and buzzes the four motors as a self-test while it streams, so a board comes up in under 2 s (`analysis/startup_sim.py`).
 
 `hardware/discovery.py` decides which board is which hand, and the same rules run at start-up and whenever Settings reconnects:
 

@@ -28,32 +28,57 @@ uint8_t sampleIntervalMs = 1000 / sampleRate;
 uint32_t currentSample = 0; uint32_t lastSample = 0;
 char serialTXToPython[32];
 
+#ifdef MOTOR_TESTING
+// The motor self-test buzzes each motor for 200 ms in turn, 200 ms apart.
+// It ran in setup() before the stream, which held the first sample back
+// 2.6 s after every reset (opening the port resets the Nano), so the game
+// waited 4.2 s for its first sample against a 2 s target. It now runs
+// beside the stream: the first sample goes out 0.1 s after the bootloader
+// hands over and the four buzzes follow over the next 1.6 s (3 Nov 2026).
+const unsigned long SELF_TEST_ON_MS = 200;
+const unsigned long SELF_TEST_GAP_MS = 200;
+unsigned long selfTestStart = 0;
+int selfTestMotor = 0;        // the motor buzzing or next to buzz; 4 when done
+bool selfTestOn = false;
+
+void runSelfTest()
+{
+  if (selfTestMotor > 3) return;
+  unsigned long t = millis() - selfTestStart;
+  unsigned long slot = (unsigned long)selfTestMotor * (SELF_TEST_ON_MS + SELF_TEST_GAP_MS);
+  if (!selfTestOn && t >= slot) {
+    individualMotorOn(selfTestMotor);
+    selfTestOn = true;
+  } else if (selfTestOn && t >= slot + SELF_TEST_ON_MS) {
+    individualMotorOff(selfTestMotor);
+    selfTestOn = false;
+    selfTestMotor++;
+  }
+}
+#endif
+
 void setup()
 {
   // Function Calls for setup // 
   Wire.begin();
   Serial.begin(115200);  // ← Match with the Python side
   motorInit();
-  
-  delay(500);
 
-  #ifdef MOTOR_TESTING
-  for (int i = 0; i < 4; i++){
-    individualMotorOn(i);
-    delay(200);
-    individualMotorOff(i);
-    delay(200);
-  }
-  #endif
+  delay(100);   // the pads' boards settle before the first read
 
   Serial.println("### Setup Complete ###");
 
-  delay(500);
+  #ifdef MOTOR_TESTING
+  selfTestStart = millis();   // runSelfTest() buzzes the motors from loop()
+  #endif
 }
 
 void loop(){ 
   handleSerial();   
   updateStimMotors();  
+  #ifdef MOTOR_TESTING
+  runSelfTest();
+  #endif
   
   // Periodic sampling of Force Sensors //
   currentSample = millis();

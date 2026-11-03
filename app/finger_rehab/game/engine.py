@@ -515,7 +515,7 @@ class GameEngine:
         n = int(self.cfg.get("fsr.num_sensors_per_hand", 4))
         cal_kwargs = dict(
             num_sensors=n,
-            baseline_alpha=float(self.cfg.get("fsr.baseline_alpha", 0.02)),
+            baseline_alpha=float(self.cfg.get("fsr.baseline_alpha", 0.0005)),
             value_alpha=float(self.cfg.get("fsr.value_alpha", 0.35)),
             # delta thresholds (counts above baseline) to trigger a
             # press (on) and confirm a release (off). Hysteresis: on
@@ -530,11 +530,13 @@ class GameEngine:
             abs_off_max=list(self.cfg.get("fsr.abs_off_max", [350, 450, 350, 350])),
             debounce_ms=int(self.cfg.get("fsr.debounce_ms", 100)),
             release_frac=float(self.cfg.get("fsr.release_frac", 0.5)),
-            rest_release_s=float(self.cfg.get("fsr.rest_release_s", 0.3)),
+            rest_release_s=float(self.cfg.get("fsr.rest_release_s", 1.5)),
             hold_max_s=float(self.cfg.get("fsr.hold_max_s", 2.0)),
             baseline_down_alpha=float(self.cfg.get("fsr.baseline_down_alpha", 0.05)),
             baseline_hold=float(self.cfg.get("fsr.baseline_hold", 0.0)),
             baseline_hold_s=float(self.cfg.get("fsr.baseline_hold_s", 3.0)),
+            count_on=str(self.cfg.get("fsr.count_on", "raw")),
+            count_samples=int(self.cfg.get("fsr.count_samples", 2)),
         )
         if self.hand_mode == "both":
             self.detectors["right"] = FSRDetector(Calibration(**cal_kwargs), hand="right")
@@ -600,6 +602,14 @@ class GameEngine:
             self.raw_logger.queue_event("release", lane=ev.lane,
                                          t_perf=ev.t_perf, hand=ev.hand,
                                          detail="" if ev.reason == "lift" else ev.reason)
+        # A mode that reads a press's whole peak (Mirror's hand
+        # comparison) takes it from the release, which carries it.
+        cb = getattr(getattr(self, "mode", None), "on_release", None)
+        if callable(cb):
+            try:
+                cb(ev)
+            except Exception as e:
+                log.warning("mode on_release raised: %s", e)
 
     def _feed_detectors(self, t_perf: float, vals: tuple[int, ...],
                         t_hands=None) -> None:
@@ -3980,7 +3990,7 @@ class GameEngine:
         n = int(self.cfg.get("fsr.num_sensors_per_hand", 4))
         cal_kwargs = dict(
             num_sensors=n,
-            baseline_alpha=float(self.cfg.get("fsr.baseline_alpha", 0.02)),
+            baseline_alpha=float(self.cfg.get("fsr.baseline_alpha", 0.0005)),
             value_alpha=float(self.cfg.get("fsr.value_alpha", 0.35)),
             on_delta=list(self.cfg.get("fsr.on_delta",
                                           [45, 90, 45, 45])),
@@ -3992,11 +4002,13 @@ class GameEngine:
                                              [350, 450, 350, 350])),
             debounce_ms=int(self.cfg.get("fsr.debounce_ms", 100)),
             release_frac=float(self.cfg.get("fsr.release_frac", 0.5)),
-            rest_release_s=float(self.cfg.get("fsr.rest_release_s", 0.3)),
+            rest_release_s=float(self.cfg.get("fsr.rest_release_s", 1.5)),
             hold_max_s=float(self.cfg.get("fsr.hold_max_s", 2.0)),
             baseline_down_alpha=float(self.cfg.get("fsr.baseline_down_alpha", 0.05)),
             baseline_hold=float(self.cfg.get("fsr.baseline_hold", 0.0)),
             baseline_hold_s=float(self.cfg.get("fsr.baseline_hold_s", 3.0)),
+            count_on=str(self.cfg.get("fsr.count_on", "raw")),
+            count_samples=int(self.cfg.get("fsr.count_samples", 2)),
         )
         for hand in ("right", "left"):
             if hand in self.detectors:
@@ -5264,12 +5276,14 @@ class GameEngine:
             target_low=float(self.cfg.get("adaptive.target_low", 0.65)),
             target_high=float(self.cfg.get("adaptive.target_high", 0.80)),
             bpm_min=float(self.cfg.get("adaptive.bpm_min", 10.0)),
-            bpm_max=float(self.cfg.get("adaptive.bpm_max", 180.0)),
+            bpm_max=float(self.cfg.get("adaptive.bpm_max", 240.0)),
             bpm_step=float(self.cfg.get("adaptive.bpm_step", 10.0)),
             weakness_bias=float(self.cfg.get("adaptive.weakness_bias", 2.5)),
             min_trials=int(self.cfg.get("adaptive.min_trials", 2)),
             timeout_factor=float(
                 self.cfg.get("adaptive.timeout_factor", 0.90)),
+            fast_start_gain=float(
+                self.cfg.get("adaptive.fast_start_gain", 1.2)),
         )
         # Test Mode overrides total_trials to the demo cap. block_size
         # is left alone (4 trials per adapter re-tune is fine even in a
@@ -5380,12 +5394,14 @@ class GameEngine:
             target_low=float(self.cfg.get("adaptive.target_low", 0.65)),
             target_high=float(self.cfg.get("adaptive.target_high", 0.80)),
             bpm_min=float(self.cfg.get("adaptive.bpm_min", 10.0)),
-            bpm_max=float(self.cfg.get("adaptive.bpm_max", 180.0)),
+            bpm_max=float(self.cfg.get("adaptive.bpm_max", 240.0)),
             bpm_step=float(self.cfg.get("adaptive.bpm_step", 10.0)),
             weakness_bias=float(self.cfg.get("adaptive.weakness_bias", 2.5)),
             min_trials=int(self.cfg.get("adaptive.min_trials", 2)),
             timeout_factor=float(self.cfg.get("adaptive.timeout_factor",
                                               0.90)),
+            fast_start_gain=float(
+                self.cfg.get("adaptive.fast_start_gain", 1.2)),
         )
         # Mirror starts slower than Adaptive: 24 BPM gives a 2.25 s
         # window against Adaptive's 1.8 s at 30 BPM, since both hands
@@ -5624,6 +5640,19 @@ class GameEngine:
                     "pattern", "chords", "syllables", "force_pilot",
                     "buzz_hunt", "echo"):
             secs = float(self.cfg.get("game.start_countdown_s", 3.0))
+            # The sitting's first game waits longer before its first
+            # trial: the one player who ran a sitting alone asked for a
+            # pause there (3 November 2026).
+            if int(getattr(self, "_session_games", 0)) == 0:
+                secs = max(secs, float(self.cfg.get("game.first_countdown_s", 8.0)))
+            # The instruction said aloud as the card opens, with the card
+            # held until it has been said (instructions.spoken).
+            spoken_text = None
+            if self.cfg.get("instructions.spoken", False):
+                from ..audio import spoken
+                spoken_text = spoken.lines_for(name)
+                if spoken_text:
+                    secs = max(secs, spoken.seconds_for(spoken_text) + 1.5)
             if self._test_mode_trials() is not None:
                 secs = min(secs, 1.5)
             key = {"syllables": "syllables",
@@ -5632,6 +5661,11 @@ class GameEngine:
             sc = self._screens.get(key)
             if sc is not None and hasattr(sc, "start_countdown"):
                 sc.start_countdown(secs)
+                if spoken_text:
+                    from ..audio import spoken
+                    if getattr(self, "_speaker", None) is None:
+                        self._speaker = spoken.Speaker()
+                    self._speaker.speak(spoken_text)
                 # Captured for the GET READY marker below: the loggers
                 # are not open yet, so the marker itself has to wait,
                 # but its t_event must be the real countdown onset.

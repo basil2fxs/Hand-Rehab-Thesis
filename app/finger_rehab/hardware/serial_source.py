@@ -33,12 +33,18 @@ except ImportError:          # Windows
 log = logging.getLogger(__name__)
 
 
-# How long the board takes from reset to streaming. Set from the boot
-# sequence of the firmware that is on the device (arduino/
-# firmware_on_device): half a second, then a self-test that buzzes each
-# of the four motors in turn, then a banner and another half second.
-# The buzzing at connect is the firmware checking itself, not a fault.
-BOOT_SETTLE_S = 3.0
+# A fixed wait after the open, then a flush. The 2026-09 firmware buzzed
+# its four motors before it streamed (2.6 s after the reset that opening
+# the port causes, plus a 1.64 s bootloader on these Nanos), and the
+# software slept 3 s and threw away what had arrived: every logged
+# start-up took 4.24 s, or 3.01 s on a board with a quick bootloader,
+# against the 2 s target. The firmware now streams 0.1 s after the
+# bootloader and buzzes the motors while it streams, and the reader
+# starts at once: the boot banner is not an FSR line, so it is skipped,
+# and the first FSR line is the start (3 November 2026; on a simulated
+# board fitted to the logs, analysis/startup_sim.py, 1.75 s). Kept, at
+# 0, so the simulation can put the old wait back.
+BOOT_SETTLE_S = 0.0
 
 
 # Old firmware sent FSR:v1,v2,v3,v4. New firmware can extend to 8 for bilateral.
@@ -257,6 +263,7 @@ class SerialSource(BaseQueueSource):
         # session.json's `startup_latency_ms` field.
         self._port_open_ts: float | None = None
         self._first_sample_ts: float | None = None
+        self.boot_settle_s = BOOT_SETTLE_S
 
     @property
     def name(self) -> str:
@@ -292,20 +299,14 @@ class SerialSource(BaseQueueSource):
                 # patient's perceived wait.
                 self._stamp_port_open()
                 # Opening the port resets the board, so nothing useful
-                # arrives until its boot finishes. The firmware on the
-                # device runs a motor self-test first:
-                #
-                #   delay(500)                        0.5 s
-                #   4 motors x (200 ms on, 200 ms off) 1.6 s
-                #   prints "### Setup Complete ###"
-                #   delay(500)                        0.5 s
-                #
-                # so the first FSR line lands about 2.6 s in. Waiting
-                # 1.8 s flushed the buffer part way through the self
-                # test and then read nothing for most of a second. The
-                # extra margin covers the whole boot.
-                time.sleep(BOOT_SETTLE_S)
-                s.reset_input_buffer()
+                # arrives until its boot finishes; whatever does arrive
+                # before the first FSR line (the banner, boot noise) is
+                # skipped by the line parser. The old fixed wait and
+                # flush run only when boot_settle_s asks for them.
+                settle = float(getattr(self, "boot_settle_s", 0.0) or 0.0)
+                if settle > 0:
+                    time.sleep(settle)
+                    s.reset_input_buffer()
                 log.info("Opened %s @ %d", self.port, self.baud)
                 return s
             except (serial.SerialException, *_OPEN_ERRORS) as e:
@@ -465,6 +466,12 @@ class SerialSource(BaseQueueSource):
 
     def send_command(self, cmd: str) -> bool:
         if not self._serial or not self._serial.is_open:
+            return False
+        # Nothing goes to the board until it streams: bytes sent while its
+        # bootloader runs are read as upload commands. The old 3 s wait
+        # kept the port closed to writes until then; now the first FSR
+        # line of the connection does.
+        if getattr(self, "_first_sample_ts", None) is None:
             return False
         try:
             data = cmd.encode("ascii", errors="ignore")

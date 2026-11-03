@@ -38,7 +38,7 @@ def replay(fsr: dict, cal: dict, samples: list, hold: float, hold_s: float) -> l
                     on_delta=list(cal["on_delta"]), off_delta=list(cal["off_delta"]),
                     abs_on_min=list(fsr["abs_on_min"]), abs_off_max=list(fsr["abs_off_max"]),
                     debounce_ms=int(fsr["debounce_ms"]), rest_release_s=1.5, hold_max_s=2.0,
-                    baseline_hold=hold, baseline_hold_s=hold_s)
+                    baseline_hold=hold, baseline_hold_s=hold_s, **sp.count_rule(fsr))
     det = FSRDetector(c)
     det.baseline = [float(x) for x in cal["resting"]]   # primed as the engine primes it
     events: list = []

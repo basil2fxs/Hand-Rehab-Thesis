@@ -10,6 +10,7 @@ Tools run by hand from `app/`, for example `python3 scripts/check_sitting.py`. N
 | [`force_check.py`](force_check.py) | Check the newton scale with known masses |
 | [`buzz_soak.py`](buzz_soak.py) | Run the motors on a timer for as long as it is left going and log failures |
 | [`latency_check.py`](latency_check.py) | Drive the buzz and the screen on a fixed schedule so a phone camera or a piezo disc can time what the game cannot see |
+| [`clip_delay.py`](clip_delay.py) | Read the screen's delay off a 240 fps phone clip of `latency_check.py --display`: each LED flash against the tile's next change, to a fraction of a frame (needs ffmpeg) |
 | [`audio_latency.py`](audio_latency.py) | This computer's sound and buzz delays, saved for the game with `--write`: Settings, Setup, Audio delay from a terminal |
 | **A study day** | |
 | [`check_sitting.py`](check_sitting.py) | READY, or what to fix while the participant is still there |

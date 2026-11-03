@@ -1,15 +1,17 @@
 """A slow push and the baseline that follows it.
 
 The baseline follows the smoothed signal while the finger is up, and a
-push still rising towards the trigger counts as up, so a slow push is
-taken into the resting level before it reaches the trigger. In
-simulation a linear rise to the light press over 0.8 s or more is never
-counted (28 October 2026). Calibration.baseline_hold holds the baseline
-once the push sits that many counts above it, for up to baseline_hold_s.
-Replayed over the study's sequence-task streams, a hold small enough to
-count every slow ramp also counted extra presses, so it ships off and the
-pilot tunes it on patients' pushes. These tests pin both: the limit with
-the hold off, and what the hold does when it is on.
+push still rising towards the trigger counts as up. At the old code
+default of 0.02 for baseline_alpha (a 0.25 s time constant) a slow push
+was taken into the resting level before it reached the trigger, and in
+the simulation of 28 October 2026 no linear rise to the light press over
+0.8 s was counted. The device ships 0.0005 (about 10 s), at which every
+ramp to 3 s is counted (3 November 2026), so Calibration.baseline_hold,
+which holds the baseline once the push sits that many counts above it
+for up to baseline_hold_s, is not needed and ships off. These tests pin
+the limit at the old rate, its absence at the shipped one, and what the
+hold does when it is on. The old rate's runs count on the smoothed
+value, as the detector did then.
 """
 from __future__ import annotations
 
@@ -25,11 +27,13 @@ FS = 200.0
 REST = 255
 GAP = 70                      # a light press, 70 counts above rest
 ON = int(round(0.3 * GAP))    # the study's trigger, 30 percent of the gap
+OLD_ALPHA = 0.02              # the code default before 3 November 2026
 
 
 def _count_lag(rise_s: float, **rules) -> float | None:
     """ms from the raw crossing of the trigger to the count, None if the
     push was never counted."""
+    rules = {"baseline_alpha": OLD_ALPHA, "count_on": "smoothed", **rules}
     cal = Calibration(on_delta=[ON] * 4, off_delta=[ON - 10] * 4,
                       abs_on_min=[0] * 4, abs_off_max=[4095] * 4, **rules)
     det = FSRDetector(cal)
@@ -50,10 +54,16 @@ def test_off_by_default_so_the_study_detector_is_unchanged():
     assert Calibration().baseline_hold == 0.0
 
 
-def test_with_the_hold_off_a_slow_push_is_never_counted():
+def test_at_the_old_rate_with_the_hold_off_a_slow_push_is_never_counted():
     assert _count_lag(0.4) is not None
     assert _count_lag(1.0) is None
     assert _count_lag(2.0) is None
+
+
+def test_at_the_shipped_rate_a_slow_push_is_counted_without_the_hold():
+    for rise in (1.0, 2.0, 3.0):
+        assert _count_lag(rise, baseline_alpha=0.0005) is not None, rise
+        assert _count_lag(rise, baseline_alpha=0.0005, count_on="raw") is not None, rise
 
 
 def test_a_held_baseline_counts_a_slow_push():
@@ -74,7 +84,8 @@ def test_the_hold_lets_go_after_baseline_hold_s():
     tracked again once the hold runs out, and is never counted."""
     cal = Calibration(on_delta=[ON] * 4, off_delta=[ON - 10] * 4,
                       abs_on_min=[0] * 4, abs_off_max=[4095] * 4,
-                      baseline_hold=10.0, baseline_hold_s=0.5)
+                      baseline_hold=10.0, baseline_hold_s=0.5,
+                      baseline_alpha=OLD_ALPHA, count_on="smoothed")
     det = FSRDetector(cal)
     counted: list[float] = []
     det.on_press = lambda e: counted.append(e.t_perf)

@@ -87,6 +87,21 @@ THRESHOLD_GAP_CAP_MULTIPLE = 3.0
 # with a threshold inside the noise.
 MIN_NOISE_MULTIPLE = 8.0
 
+# A resting finger that shakes (a parkinsonian rest tremor, 4 to 6 Hz)
+# moves the pad by more than the empty pad's noise, and a trigger inside
+# that movement counts presses nobody made. On the shipped detector a
+# 12-count trigger stayed silent through ten minutes of a tremor of 8
+# counts peak and counted 189 presses at 10 (analysis/patient_hand_sim.py,
+# 3 November 2026), so the trigger is kept at 2.5 times the tremor's
+# peak, a sine's peak being root 2 times its SD. The release sits 3 SD
+# under the trigger (off_delta), more than the tremor's full swing of 2.8
+# SD, so the shake on a press cannot release it, and 2.5 is the smallest
+# round multiple that keeps that release above the resting level, so a
+# finger that stops shaking still lets go. A healthy resting finger's
+# spread, 1 to 3 counts, puts this under the 12-count floor, so it binds
+# only on a shake.
+REST_SPREAD_MULTIPLE = 2.5
+
 # FSRDetector clamps the release point to (on_thr - DETECTOR_HYSTERESIS) so
 # release can never sit at or above press. That clamp is not optional and it
 # is applied after our off_delta, so any threshold computed here has to be
@@ -142,9 +157,11 @@ LIGHT_PRESS_CEILING_MULTIPLE = 4.0
 BAND_MARGIN_COUNTS = 2.0
 
 
-def press_floor_counts(preload: float, noise: float) -> float:
+def press_floor_counts(preload: float, noise: float,
+                       rest_spread: float = 0.0) -> float:
     """Lowest press threshold a finger can be given, in counts above the
-    tracked baseline.
+    tracked baseline. rest_spread is the resting finger's SD, which a
+    tremor raises.
 
     Pulled out of on_delta so the calibration UI can draw the target it
     is asking for from the same expression the threshold ends up using.
@@ -153,10 +170,12 @@ def press_floor_counts(preload: float, noise: float) -> float:
     """
     return max(float(MIN_DELTA_COUNTS),
                float(noise) * MIN_NOISE_MULTIPLE,
-               float(preload) + 3.0 * float(noise))
+               float(preload) + 3.0 * float(noise),
+               float(rest_spread) * REST_SPREAD_MULTIPLE * 2.0 ** 0.5)
 
 
-def target_gap_band(preload: float, noise: float) -> tuple[float, float]:
+def target_gap_band(preload: float, noise: float,
+                    rest_spread: float = 0.0) -> tuple[float, float]:
     """The resting-to-press gap a calibration press should land in, for
     one finger, given how loaded that finger's pad is at rest and how
     noisy its sensor is.
@@ -172,7 +191,7 @@ def target_gap_band(preload: float, noise: float) -> tuple[float, float]:
     for a firmer press than a clean index, because that is exactly what
     its threshold will need.
     """
-    floor = press_floor_counts(preload, noise)
+    floor = press_floor_counts(preload, noise, rest_spread)
     lo = max(float(MIN_USABLE_GAP) + BAND_MARGIN_COUNTS,
              (floor + BAND_MARGIN_COUNTS) / MAX_TRIGGER_FRACTION)
     return lo, lo * LIGHT_PRESS_CEILING_MULTIPLE
@@ -191,6 +210,10 @@ class CalibrationProfile:
     empty: list[float] = field(default_factory=lambda: [0.0] * N_FINGERS)
     empty_noise: list[float] = field(default_factory=lambda: [0.0] * N_FINGERS)
     resting: list[float] = field(default_factory=lambda: [0.0] * N_FINGERS)
+    # SD of each pad with the hand resting on it: noise, and any tremor.
+    # Zero on profiles saved before 3 November 2026, which leaves their
+    # triggers as they were.
+    resting_noise: list[float] = field(default_factory=lambda: [0.0] * N_FINGERS)
     press: list[float] = field(default_factory=lambda: [0.0] * N_FINGERS)
     # Peak on each sensor when all four pressed together. Compared with
     # `press` this gives the multi-finger deficit.
@@ -243,8 +266,13 @@ class CalibrationProfile:
         in. Derived from this profile's own empty and resting captures,
         so the summary can say whether a press came in light, on target
         or firm using the same numbers the capture coached against."""
-        return [target_gap_band(self.preload()[i], self.empty_noise[i])
+        return [target_gap_band(self.preload()[i], self.empty_noise[i],
+                                self._rest_spread(i))
                 for i in range(N_FINGERS)]
+
+    def _rest_spread(self, i: int) -> float:
+        vals = self.resting_noise or []
+        return float(vals[i]) if i < len(vals) else 0.0
 
     def threshold_gap(self) -> list[float]:
         """The gap the thresholds are taken from: the measured gap,
@@ -253,7 +281,8 @@ class CalibrationProfile:
         game hard to play."""
         out = []
         for i in range(N_FINGERS):
-            lo, _ = target_gap_band(self.preload()[i], self.empty_noise[i])
+            lo, _ = target_gap_band(self.preload()[i], self.empty_noise[i],
+                                    self._rest_spread(i))
             out.append(min(self.gap()[i], lo * THRESHOLD_GAP_CAP_MULTIPLE))
         return out
 
@@ -274,7 +303,8 @@ class CalibrationProfile:
             # with the hand off the device, so the hand landing looks
             # like a rise. Neither normally binds.
             floor = press_floor_counts(self.preload()[i],
-                                       self.empty_noise[i])
+                                       self.empty_noise[i],
+                                       self._rest_spread(i))
             out.append(int(round(max(floor, gaps[i] * press_fraction()))))
         return out
 
@@ -291,7 +321,14 @@ class CalibrationProfile:
         gaps = self.threshold_gap()
         for i, on in enumerate(self.on_delta()):
             rel = gaps[i] * RELEASE_FRACTION
-            capped = min(rel, on - DETECTOR_HYSTERESIS, on * 0.6)
+            # A tremor riding on a slow press swings it back under a release
+            # point inside its range, and the press is counted again on the
+            # next rise. The smoothed tremor swings about 2.5 SD of the
+            # resting spread from trough to crest, so the release sits 3 SD
+            # under the trigger, which a healthy hand's spread (1 to 3
+            # counts) never makes bind against the 10-count hysteresis.
+            swing = 3.0 * self._rest_spread(i)
+            capped = min(rel, on - DETECTOR_HYSTERESIS, on * 0.6, on - swing)
             out.append(int(round(max(1.0, capped))))
         return out
 
@@ -396,6 +433,7 @@ class CalibrationProfile:
             "hand": self.hand,
             "empty": [round(v, 1) for v in self.empty],
             "resting": [round(v, 1) for v in self.resting],
+            "resting_noise": [round(v, 2) for v in (self.resting_noise or [])],
             "press": [round(v, 1) for v in self.press],
             "press_all": [round(v, 1) for v in self.press_all],
             "preload": [round(v, 1) for v in self.preload()],

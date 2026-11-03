@@ -957,6 +957,9 @@ class PrepCountdownTests(unittest.TestCase):
                     tempfile.TemporaryDirectory() as td, \
                     patched_clock() as clock:
                 eng = make_engine("right", td)
+                # past the sitting's first game, which waits longer
+                # (game.first_countdown_s, test_spoken_instructions.py)
+                eng._session_games = 1
                 begin(eng)
                 gp = eng._screens["gameplay"]
                 self.assertAlmostEqual(
@@ -968,6 +971,7 @@ class PrepCountdownTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td, \
                 patched_clock() as clock:
             eng = make_engine("right", td)
+            eng._session_games = 1        # past the sitting's first game
             eng.cfg.data["syllables"]["speech"] = {"backend": "off"}
             eng.begin_syllables_block()
             sc = eng._screens["syllables"]

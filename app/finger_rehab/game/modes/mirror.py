@@ -217,6 +217,39 @@ class MirrorMode:
         self._last_recovery = bool(getattr(self.adapter, "in_recovery",
                                            False))
         self._peaks = {"right": [], "left": []}
+        # Each hand's peak is taken from its own release, which carries
+        # the press's whole peak. Read live when the pair completed, the
+        # hand that pressed second had barely passed its trigger, so the
+        # summary's peak-force asymmetry followed which hand led: a left
+        # hand at 60 percent force, 0.50 by the index, read 0.90 when the
+        # right hand led and 0.08 when the left did (analysis/mirror_sim.py,
+        # 3 November 2026).
+        self._await_peak: dict[tuple[str, int], int] = {}
+        self._last_release: dict[tuple[str, int], tuple[float, float | None]] = {}
+        self._pair_peaks: dict[int, dict[str, float | None]] = {}
+
+    def on_release(self, ev) -> None:
+        """A finger let go: its press's peak, for the pair that press
+        answered (the engine passes every release on)."""
+        key = (str(ev.hand), int(ev.lane))
+        raw = getattr(ev, "peak_minus_baseline", None)
+        to_unit = getattr(self.engine, "_to_force_unit", None)
+        peak = (float(to_unit(raw)) if callable(to_unit) and raw is not None
+                else (float(raw) if raw is not None else None))
+        tid = self._await_peak.pop(key, None)
+        if tid is None:
+            self._last_release[key] = (float(ev.t_perf), peak)
+            return
+        self._pair_peaks.setdefault(tid, {})[key[0]] = peak
+        self._store_pair(tid)
+
+    def _store_pair(self, tid: int) -> None:
+        got = self._pair_peaks.get(tid, {})
+        if "right" in got and "left" in got:
+            self._pair_peaks.pop(tid, None)
+            if got["right"] is not None and got["left"] is not None:
+                self._peaks["right"].append(got["right"])
+                self._peaks["left"].append(got["left"])
 
     @property
     def total_trials(self) -> int:
@@ -569,11 +602,21 @@ class MirrorMode:
             self._late_hand_line(right_rt_ms, left_rt_ms)
         if outcome.label != "Miss" and 0 <= finger < len(self._hits):
             self._hits[finger] += 1
+        # the live peaks, for the per-trial state row only
         peak_r = self._peak(finger) if right_rt_ms is not None else None
         peak_l = self._peak(finger + 4) if left_rt_ms is not None else None
-        if peak_r is not None and peak_l is not None:
-            self._peaks["right"].append(peak_r)
-            self._peaks["left"].append(peak_l)
+        if right_rt_ms is not None and left_rt_ms is not None:
+            # a hand that has already let go has its peak; one still down
+            # gives it at its release
+            tid = self.active.trial_id
+            for hand, press_t in (("right", self.active.right_press_t),
+                                  ("left", self.active.left_press_t)):
+                rel = self._last_release.get((hand, finger))
+                if rel is not None and press_t is not None and rel[0] >= press_t:
+                    self._pair_peaks.setdefault(tid, {})[hand] = rel[1]
+                else:
+                    self._await_peak[(hand, finger)] = tid
+            self._store_pair(tid)
         # log_trial expects an object with .lane, .stim_t_perf,
         # .keys_pressed, .incorrect_presses. Build a lightweight
         # adapter so the existing logging path works without

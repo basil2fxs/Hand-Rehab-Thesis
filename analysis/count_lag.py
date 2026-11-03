@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from finger_rehab.hardware.fsr_detector import Calibration, FSRDetector  # noqa: E402
 from sequence_task import SEGMENTS, script_table  # noqa: E402
-from stuck_pad_replay import load  # noqa: E402
+from stuck_pad_replay import count_rule, load  # noqa: E402
 
 
 def replay_lags(fsr: dict, cal: dict, samples: list) -> list:
@@ -35,7 +35,8 @@ def replay_lags(fsr: dict, cal: dict, samples: list) -> list:
                     on_delta=list(cal["on_delta"]), off_delta=list(cal["off_delta"]),
                     abs_on_min=list(fsr["abs_on_min"]), abs_off_max=list(fsr["abs_off_max"]),
                     debounce_ms=int(fsr["debounce_ms"]), release_frac=0.0, rest_release_s=0.0,
-                    hold_max_s=0.0, baseline_down_alpha=float(fsr["baseline_alpha"]))
+                    hold_max_s=0.0, baseline_down_alpha=float(fsr["baseline_alpha"]),
+                    **count_rule(fsr))
     det = FSRDetector(c)
     det.baseline = [float(x) for x in cal["resting"]]   # primed as the engine primes it
     fired = []

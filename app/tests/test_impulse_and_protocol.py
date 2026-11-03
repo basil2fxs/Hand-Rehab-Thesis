@@ -31,6 +31,9 @@ class ImpulseDetectorTests(unittest.TestCase):
             on_delta=[40] * 4, off_delta=[20] * 4,
             abs_on_min=[300] * 4, abs_off_max=[300] * 4,
             debounce_ms=0,
+            # These presses are built a sample at a time, so one raw
+            # sample over the trigger counts (the device needs two).
+            count_samples=1,
         )
 
     def test_release_event_carries_impulse_fields(self) -> None:
@@ -77,6 +80,7 @@ class ImpulseDetectorTests(unittest.TestCase):
             abs_on_min=[300], abs_off_max=[300],
             baseline_alpha=0.0,   # freeze baseline so it stays at 0
             debounce_ms=0,
+            count_samples=1,      # the rising edge is one sample here
         )
         det = FSRDetector(cal, hand="right")
         releases: list[ReleaseEvent] = []
@@ -110,6 +114,7 @@ class ImpulseDetectorTests(unittest.TestCase):
             abs_on_min=[150], abs_off_max=[150],
             baseline_alpha=0.0,
             debounce_ms=0,
+            count_samples=1,      # the rising edge is one sample here
         )
         det = FSRDetector(cal, hand="right")
         releases: list[ReleaseEvent] = []

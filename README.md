@@ -62,7 +62,7 @@ There's no switch under a finger. Each pad keeps a slow baseline, and a press co
 ## Timing and limits
 
 - **Sensing:** each pad reads 0 to 10 N in 512 steps, about 20 mN a step. The Nano reads all four every 5 ms (199 Hz measured) and sends them over USB in bursts, so a sample arrives about 10 ms late, up to 20 ms; the notebook can re-time presses on the board's own clock.
-- **Presses:** a press counts when the smoothed force crosses the trigger. On the four sequence-task sessions of October 2026 the median press was counted one or two samples (5 to 10 ms) after the raw force crossed it, and a slow push is counted later (`analysis/count_lag.py`, `analysis/detector_lag_vs_rise.py`).
+- **Presses:** a press counts on the second raw sample in a row over the trigger, one sample (5 ms) after the raw force crosses it. The October 2026 sessions counted on the smoothed force, one or two samples later; replayed under the new rule they keep 4,006 of 4,009 presses (`analysis/count_rule_replay.py`). A slow push is counted later (`analysis/detector_lag_vs_rise.py`).
 - **Screen and sound:** a cue shows on the next 60 Hz frame, up to 17 ms later. On the study computer a sound was heard 77 to 87 ms after the game played it and a buzz felt 74 ms after its command; measure each computer with Settings, Setup, Audio delay.
 - **EEG markers:** a stimulus byte goes out on the frame that draws the stimulus, a press byte up to one frame after its sample, and `events.tsv` moves each press back to its sample and to where the push began. Checklist: [app/docs/eeg_lab_setup.txt](app/docs/eeg_lab_setup.txt).
 

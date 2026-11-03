@@ -43,6 +43,14 @@ def load(session: Path):
     return fsr, cal, samples, stims, presses, window_s
 
 
+def count_rule(fsr: dict) -> dict:
+    """The press-count rule a session ran, from its config snapshot. Every
+    session before 3 November 2026 counted on the smoothed value, and its
+    snapshot has no count_on key."""
+    return {"count_on": fsr.get("count_on") or "smoothed",
+            "count_samples": int(fsr.get("count_samples") or 2)}
+
+
 def replay(fsr: dict, cal: dict, samples: list, old: bool,
            rest_s: float = 0.3, hold_s: float = 2.0) -> tuple[list, Counter]:
     rules = (dict(release_frac=0.0, rest_release_s=0.0, hold_max_s=0.0,
@@ -52,7 +60,7 @@ def replay(fsr: dict, cal: dict, samples: list, old: bool,
                     value_alpha=float(fsr["value_alpha"]),
                     on_delta=list(cal["on_delta"]), off_delta=list(cal["off_delta"]),
                     abs_on_min=list(fsr["abs_on_min"]), abs_off_max=list(fsr["abs_off_max"]),
-                    debounce_ms=int(fsr["debounce_ms"]), **rules)
+                    debounce_ms=int(fsr["debounce_ms"]), **rules, **count_rule(fsr))
     det = FSRDetector(c)
     det.baseline = [float(x) for x in cal["resting"]]   # primed as the engine primes it
     events, reasons = [], Counter()

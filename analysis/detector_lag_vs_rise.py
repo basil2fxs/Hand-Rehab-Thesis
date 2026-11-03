@@ -4,14 +4,22 @@ the press's rise time.
 The detector of app/finger_rehab/hardware/fsr_detector.py is fed linear
 ramps from a resting level to a peak, sampled at 200 Hz, with the trigger
 at 30 percent of the gap as the study ran it. The raw crossing is the
-first sample at or above rest plus the trigger; the count is the
-detector's press event. Their difference is the lag the thesis quotes
-(12 ms at a 100 ms rise, 20 ms at 200 ms, 57 ms at 400 ms and about
-285 ms at 700 ms, against 5 to 10 ms on real presses), and this script
-draws it for Section 3.3.2. From about 0.8 s no ramp is counted at all:
-the baseline follows the signal until a press is counted, so a slow
-push is taken into it before it reaches the trigger (Calibration.
-baseline_hold is the fix the pilot tunes; tests/test_baseline_hold.py).
+first sample at or above rest plus the trigger, the trigger as it stood
+before the push; the count is the detector's press event. Their
+difference is the count lag, which includes the baseline creeping up
+behind a slow push.
+
+Two detectors are drawn. The study's: the count on the smoothed value
+and a baseline time constant of about 10 s (baseline_alpha 0.0005, the
+config every session ran), whose lag grows from 10 ms at a 100 ms rise
+to about 20 ms at 1 s and 36 to 86 ms at 2 to 3 s; every ramp is
+counted. And the count since 3 November: the second raw sample in a row
+over the trigger, one sample after the raw force crosses it, though on a
+slow rise the creeping baseline still lifts the trigger. The
+table also prints the code's default baseline_alpha of 0.02 (0.25 s),
+which the config overrides: on it the baseline follows a slow push up
+and no ramp over 0.8 s is counted, which is why a test now holds the
+code's defaults to the config.
 
 Run from the repository root:
     python3 analysis/detector_lag_vs_rise.py [--out figure.png] [--small]
@@ -30,17 +38,22 @@ from finger_rehab.hardware.fsr_detector import Calibration, FSRDetector  # noqa:
 
 FS = 200.0
 REST = 255
-RISES = [10, 15, 20, 25, 30, 40, 50, 60, 75, 100, 125, 150, 200, 250, 300, 350, 400,
-         450, 500, 550, 600, 650, 700, 750, 775, 800, 900, 1000]
+RISES = [10, 20, 30, 50, 75, 100, 150, 200, 300, 400, 500, 600, 700, 750, 800, 900, 1000,
+         1250, 1500, 1750, 2000, 2500, 3000]
 PEAKS = [40, 70, 150]
 PHASES = np.linspace(0.0, 1.0 / FS, 20, endpoint=False)
+# the three detectors: (rule, baseline_alpha)
+DETECTORS = {"study": ("smoothed", 0.0005), "old default": ("smoothed", 0.02), "now": ("raw", 0.0005)}
 
 
-def one_press(rise_ms: float, peak: int, phase_s: float, trigger_frac: float = 0.3) -> float:
+def one_press(rise_ms: float, peak: int, phase_s: float, rule: str = "smoothed",
+              alpha: float = 0.0005, trigger_frac: float = 0.3) -> float:
     on = max(1, int(round(trigger_frac * peak)))
     cal = Calibration(on_delta=[on] * 4, off_delta=[max(1, on - 10)] * 4,
-                      abs_on_min=[0] * 4, abs_off_max=[4095] * 4)
+                      abs_on_min=[0] * 4, abs_off_max=[4095] * 4,
+                      baseline_alpha=alpha, count_on=rule)
     det = FSRDetector(cal)
+    det.baseline = [float(REST)] * 4
     counted: list[float] = []
     det.on_press = lambda e: counted.append(e.t_perf)
     t0 = 2.0 + phase_s
@@ -56,57 +69,65 @@ def one_press(rise_ms: float, peak: int, phase_s: float, trigger_frac: float = 0
         else:
             v = REST + peak
         v = int(round(v))
+        # the crossing of the trigger as it stood at rest: the baseline
+        # creeping up behind a slow push delays the count past it, which is
+        # the delay a slow press meets
         if raw_cross is None and v >= REST + on:
             raw_cross = t
         det.feed(t, (v, REST, REST, REST))
+        if counted:
+            break
     if not counted or raw_cross is None:
         return float("nan")
     return (counted[0] - raw_cross) * 1000.0
 
 
-def table() -> dict[int, dict[int, float]]:
-    """Mean lag over the phases per peak and rise; nan where no phase of
-    that ramp was counted."""
-    out: dict[int, dict[int, float]] = {}
-    for peak in PEAKS:
-        out[peak] = {}
-        for rise in RISES:
-            lags = np.array([one_press(rise, peak, ph) for ph in PHASES])
-            out[peak][rise] = float(np.mean(lags[np.isfinite(lags)])) if np.isfinite(lags).any() else float("nan")
+def table() -> dict[str, dict[int, dict[int, float]]]:
+    """Mean lag over the phases per detector, peak and rise; nan where no
+    phase of that ramp was counted."""
+    out: dict[str, dict[int, dict[int, float]]] = {}
+    for name, (rule, alpha) in DETECTORS.items():
+        out[name] = {}
+        for peak in PEAKS:
+            out[name][peak] = {}
+            for rise in RISES:
+                lags = np.array([one_press(rise, peak, ph, rule, alpha) for ph in PHASES])
+                ok = np.isfinite(lags)
+                out[name][peak][rise] = float(np.mean(lags[ok])) if ok.any() else float("nan")
     return out
 
 
-def draw(out: dict[int, dict[int, float]], path: Path, small: bool = False) -> None:
+def draw(out: dict, path: Path, small: bool = False) -> None:
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+    fs = 8 if small else 10
     plt.rcParams.update({"font.family": "serif", "font.serif": ["Times New Roman", "DejaVu Serif"],
-                         "font.size": 8 if small else 10})
+                         "font.size": fs})
     # canvas = print width: 13.8 cm in the thesis (10 pt), 8.8 cm in the paper (8 pt)
     fig, ax = plt.subplots(figsize=(3.45, 2.0) if small else (5.43, 1.55))
-    colours = {40: "#94a3b8", 70: "#2563eb", 150: "#0f172a"}
-    for peak in PEAKS:
-        xs = [r for r in RISES if np.isfinite(out[peak][r])]
-        ys = [out[peak][r] for r in xs]
-        label = {40: "peak 40", 70: "70", 150: "150 counts"}[peak]
-        ax.plot(xs, ys, "-o", ms=2.4, lw=1.1, color=colours[peak], label=label)
-    # from the first ramp no peak's press is counted, the band runs to the edge
-    never = min(r for r in RISES if all(not np.isfinite(out[p][r]) for p in PEAKS))
-    edge = max(r for r in RISES if r < never)
-    ax.axvspan((edge + never) / 2, 1050, color="#cbd5e1", alpha=0.55, lw=0)
-    ax.text(915, 22, "never\ncounted", ha="center", va="center", fontsize=8 if small else 10, color="#0f172a")
+    xs = np.array(RISES, dtype=float)
+    lo = np.nanmin([[out["study"][p][r] for r in RISES] for p in PEAKS], axis=0)
+    hi = np.nanmax([[out["study"][p][r] for r in RISES] for p in PEAKS], axis=0)
+    ax.fill_between(xs, lo, hi, color="#93c5fd", alpha=0.6, lw=0)
+    ax.plot(xs, [out["study"][70][r] for r in RISES], "-", lw=1.4, color="#1d4ed8",
+            label="as the study ran")
+    ax.plot(xs, [out["now"][70][r] for r in RISES], "-", lw=1.4, color="#15803d",
+            label="two raw samples (now)")
     ax.set_xlabel("rise time, rest to peak (ms)")
     ax.set_ylabel("count lag (ms)")
     ax.set_yscale("log")
-    ax.set_yticks([5, 10, 20, 50, 100, 200, 500])
-    ax.set_yticklabels(["5", "10", "20", "50", "100", "200", "500"])
-    ax.set_xlim(0, 1050)
-    ax.set_ylim(4, 700)
+    # four labels, so the log axis stays readable at 1.55 in
+    ax.set_yticks([5, 10, 30, 100])
+    ax.set_yticklabels(["5", "10", "30", "100"])
+    ax.yaxis.set_minor_locator(matplotlib.ticker.NullLocator())
+    ax.set_xlim(0, 3050)
+    ax.set_ylim(3.5, 260)
     for side in ("top", "right"):
         ax.spines[side].set_visible(False)
-    # one row across the top left, where every curve is still under 100 ms
-    ax.legend(frameon=False, fontsize=8 if small else 10, loc="upper left", bbox_to_anchor=(0.0, 1.04),
-              ncol=3, handlelength=1.4, columnspacing=0.9, handletextpad=0.4)
+    # one row across the top, above every curve
+    ax.legend(frameon=False, fontsize=fs, loc="upper left", bbox_to_anchor=(0.0, 1.08),
+              ncol=2, handlelength=1.6, handletextpad=0.5, columnspacing=1.2)
     fig.tight_layout(pad=0.3)
     fig.savefig(path, dpi=500)
     plt.close(fig)
@@ -118,9 +139,11 @@ if __name__ == "__main__":
     ap.add_argument("--small", action="store_true")
     a = ap.parse_args()
     out = table()
-    print("rise ms  " + "  ".join(f"peak {p:>3}" for p in PEAKS))
-    for rise in RISES:
-        print(f"{rise:>7}  " + "  ".join(f"{out[p][rise]:8.1f}" for p in PEAKS))
+    for name in DETECTORS:
+        print(name)
+        print("  rise ms  " + "  ".join(f"peak {p:>3}" for p in PEAKS))
+        for rise in RISES:
+            print(f"  {rise:>7}  " + "  ".join(f"{out[name][p][rise]:8.1f}" for p in PEAKS))
     if a.out:
         draw(out, a.out, a.small)
         print("wrote", a.out)

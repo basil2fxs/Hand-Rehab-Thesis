@@ -284,6 +284,9 @@ class CalibrationScreen:
             self.step = STEP_RESTING
         elif self.step == STEP_RESTING:
             self.profile.resting = [statistics.fmean(c) for c in cols]
+            # the resting hand's own spread: a tremor raises the trigger
+            self.profile.resting_noise = [
+                statistics.pstdev(c) if len(c) > 1 else 0.0 for c in cols]
             self._status = "Resting level recorded."
             self._status_colour = self.theme.success
             self.step = STEP_PRESS

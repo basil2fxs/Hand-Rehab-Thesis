@@ -10,7 +10,9 @@ picker runs on:
 - open_port(): open one exactly as the marker writer would, and say
   why not when it will not open;
 - save_port(): keep the choice, on the same `port:` line of the same
-  eeg_lab.yaml a person would edit by hand, comments and all.
+  eeg_lab.yaml a person would edit by hand, comments and all;
+- box_guess(): at launch, the box's port without a person: the one USB
+  serial port that sends no hand board's force stream.
 
 It also answers the other half of the problem, reserved_port(): the
 hand-board discovery used to take any USB serial device when no known
@@ -26,6 +28,8 @@ from __future__ import annotations
 import logging
 import os
 import re
+import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -255,3 +259,63 @@ def save_port(cfg, port: str) -> tuple[Path | None, str]:
                       f"set port: {port} in eeg_lab.yaml to keep it.")
     log.info("EEG port %s saved to %s", port, path)
     return path, f"Saved to {path.name}."
+
+
+def streaming_ports(devices, listen_s: float = 5.0, open_fn=None) -> dict[str, bool]:
+    """Whether each port sent a hand board's force stream within listen_s.
+
+    Opening a Nano's port restarts it, and a board on this build's
+    firmware streams about 1.75 s later (4.24 s on the 2026-09 firmware),
+    so five seconds covers both. The ports are listened to together and
+    nothing is written to any of them, so a trigger box receives no byte.
+    """
+    if open_fn is None:
+        import serial
+
+        def open_fn(dev):
+            return serial.Serial(dev, 115200, timeout=0.1)
+    result = {str(d): False for d in devices}
+
+    def listen(dev: str) -> None:
+        try:
+            port = open_fn(dev)
+        except Exception as e:
+            log.debug("could not open %s to listen: %s", dev, e)
+            return
+        try:
+            buf = b""
+            end = time.perf_counter() + listen_s
+            while time.perf_counter() < end:
+                buf = (buf + (port.read(256) or b""))[-512:]
+                if b"FSR:" in buf:
+                    result[dev] = True
+                    return
+        except Exception as e:
+            log.debug("listening on %s stopped: %s", dev, e)
+        finally:
+            try:
+                port.close()
+            except Exception:
+                pass
+
+    threads = [threading.Thread(target=listen, args=(d,), daemon=True) for d in result]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(listen_s + 2.0)
+    return result
+
+
+def box_guess(choices, listen_s: float = 5.0, open_fn=None) -> str | None:
+    """The trigger box's port, when the ports themselves can say: of the
+    USB serial devices, the only one that sends no force stream. The scan
+    took the lab's box, an Arduino too, for a hand board, so its port was
+    set by hand on each new computer (3 November 2026). None when it
+    cannot be told (one device, or more than one silent), and the picker
+    asks as before."""
+    usb = [c.device for c in choices if getattr(c, "vid", None) is not None]
+    if len(usb) < 2:
+        return None
+    streams = streaming_ports(usb, listen_s, open_fn)
+    silent = [d for d, sent in streams.items() if not sent]
+    return silent[0] if len(silent) == 1 else None

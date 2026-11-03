@@ -238,7 +238,8 @@ class QuickCalibrationScreen(Screen):
         if not cap:
             return target_gap_band(0.0, 0.0)
         preload = max(0.0, cap["resting"][finger] - cap["empty"][finger])
-        return target_gap_band(preload, cap["empty_noise"][finger])
+        return target_gap_band(preload, cap["empty_noise"][finger],
+                               (cap.get("resting_noise") or [0.0] * N_FINGERS)[finger])
 
     def _bar_max(self) -> float:
         """Full scale of the pressure bar. Headroom above the band so a
@@ -265,6 +266,7 @@ class QuickCalibrationScreen(Screen):
             h: {"empty": [0.0] * N_FINGERS,
                 "empty_noise": [0.0] * N_FINGERS,
                 "resting": [0.0] * N_FINGERS,
+                "resting_noise": [0.0] * N_FINGERS,
                 "press": [0.0] * N_FINGERS}
             for h in self.hands
         }
@@ -481,6 +483,10 @@ class QuickCalibrationScreen(Screen):
                     for c in cols]
             else:
                 cap["resting"] = [statistics.fmean(c) for c in cols]
+                # the resting hand's own spread: a tremor raises the trigger
+                cap["resting_noise"] = [
+                    statistics.pstdev(c) if len(c) > 1 else 0.0
+                    for c in cols]
         self._phase_started_at = time.perf_counter()
         if empty_step:
             self._status = ""
@@ -570,6 +576,7 @@ class QuickCalibrationScreen(Screen):
                 empty=list(cap["empty"]),
                 empty_noise=list(cap["empty_noise"]),
                 resting=list(cap["resting"]),
+                resting_noise=list(cap.get("resting_noise") or [0.0] * N_FINGERS),
                 press=list(cap["press"]),
             )
             try:

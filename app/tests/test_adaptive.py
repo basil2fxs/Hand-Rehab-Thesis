@@ -76,6 +76,7 @@ class QualityWeightedAdaptiveTests(unittest.TestCase):
         from finger_rehab.analytics.adaptive import AdaptiveConfig, AdaptiveEngine
         eng = AdaptiveEngine(cfg=AdaptiveConfig(min_trials=2))
         eng.bpm = 80.0
+        eng.missed_once = True   # past the opening climb: the pressure rule
         # 20 trials where every press was a hit but at Late quality.
         for _ in range(20):
             for lane in range(4):
@@ -146,6 +147,7 @@ class RtAwareSlowDownTests(unittest.TestCase):
         from finger_rehab.analytics.adaptive import AdaptiveConfig, AdaptiveEngine
         eng = AdaptiveEngine(cfg=AdaptiveConfig(min_trials=2))
         eng.bpm = 60.0     # window ~900ms
+        eng.missed_once = True   # past the opening climb: the pressure rule
         for _ in range(30):
             for lane in range(4):
                 eng.record(lane, hit=True, rt_ms=820.0, quality=0.4)
@@ -159,6 +161,7 @@ class RtAwareSlowDownTests(unittest.TestCase):
         from finger_rehab.analytics.adaptive import AdaptiveConfig, AdaptiveEngine
         eng = AdaptiveEngine(cfg=AdaptiveConfig(min_trials=2))
         eng.bpm = 60.0
+        eng.missed_once = True   # past the opening climb: the pressure rule
         for s in eng.state:
             s.hit_ema = 0.72          # in band
             s.quality_ema = 0.72
@@ -244,6 +247,7 @@ class StreakAmplifiedSpeedUpTests(unittest.TestCase):
         from finger_rehab.analytics.adaptive import AdaptiveConfig, AdaptiveEngine
         eng = AdaptiveEngine(cfg=AdaptiveConfig(min_trials=2))
         eng.bpm = 60.0
+        eng.missed_once = True   # past the opening climb: the pressure rule
         # High hit rate AND high quality, but only streak=1.
         for s in eng.state:
             s.hit_ema = 0.95
@@ -265,6 +269,7 @@ class StreakAmplifiedSpeedUpTests(unittest.TestCase):
             eng = AdaptiveEngine(cfg=AdaptiveConfig(min_trials=2,
                                                      bpm_step=10.0))
             eng.bpm = 60.0
+            eng.missed_once = True   # past the opening climb: the pressure rule
             for s in eng.state:
                 s.hit_ema = 0.95
                 s.quality_ema = 0.95
@@ -436,6 +441,7 @@ class BandKeepingTests(unittest.TestCase):
                                                      AdaptiveEngine)
         eng = AdaptiveEngine(cfg=AdaptiveConfig(min_trials=2))
         eng.bpm = 60.0
+        eng.missed_once = True   # past the opening climb: the pressure rule
         for s in eng.state:
             s.hit_ema = 0.96
             s.quality_ema = 0.30
@@ -446,12 +452,16 @@ class BandKeepingTests(unittest.TestCase):
         eng.next_bpm()
         self.assertLessEqual(eng.bpm, before)
 
-    def test_config_and_dataclass_carry_the_180_cap(self) -> None:
+    def test_config_and_dataclass_carry_the_240_cap(self) -> None:
+        # 180 until 3 November 2026, when a 250 ms hand sat at it with a
+        # hit rate of 0.98, outside the band
         from finger_rehab.analytics.adaptive import AdaptiveConfig
         from finger_rehab.config import Config
-        self.assertEqual(AdaptiveConfig().bpm_max, 180.0)
+        self.assertEqual(AdaptiveConfig().bpm_max, 240.0)
         self.assertEqual(float(Config.load().get("adaptive.bpm_max")),
-                         180.0)
+                         240.0)
+        self.assertEqual(AdaptiveConfig().fast_start_gain,
+                         float(Config.load().get("adaptive.fast_start_gain")))
 
 
 class BandHoldsForEveryPlayerTests(unittest.TestCase):
@@ -546,6 +556,7 @@ class BandHoldsForEveryPlayerTests(unittest.TestCase):
                                                      AdaptiveEngine)
         eng = AdaptiveEngine(cfg=AdaptiveConfig(min_trials=2))
         eng.bpm = 60.0
+        eng.missed_once = True   # past the opening climb: the pressure rule
         for s in eng.state:
             s.hit_ema = 0.72
             s.quality_ema = 0.70
@@ -566,6 +577,7 @@ class BandHoldsForEveryPlayerTests(unittest.TestCase):
                                                      AdaptiveEngine)
         eng = AdaptiveEngine(cfg=AdaptiveConfig(min_trials=2))
         eng.bpm = 60.0
+        eng.missed_once = True   # past the opening climb: the pressure rule
         for s in eng.state:
             s.hit_ema = 0.72
             s.quality_ema = 0.30
@@ -616,6 +628,7 @@ class BandHoldsForEveryPlayerTests(unittest.TestCase):
             with self.subTest(hit_ema=hit_ema):
                 eng = AdaptiveEngine(cfg=AdaptiveConfig(min_trials=2))
                 eng.bpm = 60.0
+                eng.missed_once = True   # past the opening climb: the pressure rule
                 for s in eng.state:
                     s.hit_ema = hit_ema
                     s.quality_ema = 0.70
@@ -640,6 +653,7 @@ class ProbeStepTests(unittest.TestCase):
         from finger_rehab.analytics.adaptive import AdaptiveConfig, AdaptiveEngine
         eng = AdaptiveEngine(cfg=AdaptiveConfig(min_trials=2, bpm_step=10.0))
         eng.bpm = 80.0
+        eng.missed_once = True   # past the opening climb: the pressure rule
         # Hit rate in band (target_low=0.65, target_high=0.80),
         # RT comfortable (200 ms of 675 ms window = 0.30 util).
         for s in eng.state:

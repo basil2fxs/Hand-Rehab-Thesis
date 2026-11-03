@@ -226,7 +226,7 @@ class EightFingerSimultaneousPressTests(unittest.TestCase):
         cal = Calibration(num_sensors=4, value_alpha=1.0,
                            on_delta=[40] * 4, off_delta=[20] * 4,
                            abs_on_min=[300] * 4, abs_off_max=[300] * 4,
-                           debounce_ms=0)
+                           debounce_ms=0, count_samples=1)
         right = FSRDetector(cal, hand="right")
         left = FSRDetector(cal, hand="left")
         events: list[PressEvent] = []
@@ -264,7 +264,8 @@ class EightFingerSimultaneousPressTests(unittest.TestCase):
         )
         cal = Calibration(num_sensors=4, value_alpha=1.0,
                            on_delta=[40] * 4,
-                           abs_on_min=[300] * 4, debounce_ms=0)
+                           abs_on_min=[300] * 4, debounce_ms=0,
+                           count_samples=1)
         left = FSRDetector(cal, hand="left")
         seen: list[PressEvent] = []
         left.on_press = seen.append

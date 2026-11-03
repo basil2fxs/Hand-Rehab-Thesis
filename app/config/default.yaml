@@ -322,6 +322,20 @@ fsr:
   abs_on_min: [150, 150, 150, 150]
   abs_off_max: [1000, 1000, 1000, 1000]
   debounce_ms: 100
+  # What counts a press (3 November 2026). Every session before then
+  # counted it when the SMOOTHED value crossed the trigger, a median 5
+  # to 10 ms after the raw force did and up to 35 ms on a slow press,
+  # which missed the progress report's 5 ms target. "raw" counts it on
+  # the second raw sample in a row at or above the trigger: one sample
+  # (5 ms) after the raw crossing whatever the rise, while one noisy
+  # sample still cannot count a press. Replayed over the four
+  # sequence-task streams (analysis/count_rule_replay.py) it kept 4,006
+  # of the old rule's 4,009 presses and added 15 that only just reached
+  # the trigger, where the smoothing had held them under it, counted
+  # every scored press one sample after the raw crossing, and moved the
+  # four learning scores by 4 ms at most. "smoothed" restores the old rule.
+  count_on: raw
+  count_samples: 2
   # A finger resting on its pad above the release margin never
   # released, so its next presses went uncounted (Person 3,
   # sequence task, 15 Oct 2026). The detector now releases a
@@ -334,16 +348,24 @@ fsr:
   hold_max_s: 2.0
   baseline_down_alpha: 0.05
   # The baseline follows the signal while the finger is up, so a push
-  # still rising towards the trigger is taken into it: in simulation a
-  # linear rise to the light press over 0.8 s or more is never counted
-  # (28 Oct 2026). Holding the baseline once the push sits baseline_hold
-  # counts above it, for up to baseline_hold_s, counts slow pushes, but
-  # replayed over the four sequence-task streams 5 counts added 6 to 25
-  # presses a session and moved one learning score 11 ms, while 15
-  # counts left every score alone and counted ramps only to 0.7 to 2 s.
-  # It stays off until the pilot tunes it on patients' pushes.
+  # still rising towards the trigger is partly taken into it. The ramp
+  # simulation of 28 Oct 2026 found no rise over 0.8 s counted, but it
+  # ran the detector's code default of 0.02 for baseline_alpha, not the
+  # 0.0005 above; at 0.0005 every ramp to 3 s is counted (3 Nov 2026,
+  # analysis/detector_lag_vs_rise.py). Holding the baseline once the
+  # push sits baseline_hold counts above it is therefore not needed,
+  # and replayed over the four sequence-task streams 5 counts added 6
+  # to 25 presses a session and moved one learning score 11 ms. Off.
   baseline_hold: 0
   baseline_hold_s: 3.0
+
+instructions:
+  # Say each game's instruction aloud when its GET READY card opens, in
+  # the computer's own voice (finger_rehab/audio/spoken.py), holding the
+  # card until it is said. Off for the healthy study, whose sittings ran
+  # without it; on for anyone who reads slowly or cannot see the card.
+  # Rhythm is left out: its song starts with its countdown.
+  spoken: false
 
 quick_cal:
   # The gamified calibration that runs when a session starts, over
@@ -627,6 +649,10 @@ game:
   # baseline-quiet clock during the card). Test mode trims it to keep
   # quick demos quick.
   start_countdown_s: 3.0
+  # The first game of a sitting waits this long instead: the one player
+  # who ran a sitting alone asked for a pause before the first trials
+  # (the players' survey, Appendix M of the thesis). Test Mode still trims it.
+  first_countdown_s: 8.0
   # Every enforced wait in every mode can be cut short with Space or
   # by clicking the skip control (see finger_rehab/game/rest_skip.py).
   # Waits shorter than this never draw the control: a button that
@@ -712,7 +738,16 @@ adaptive:
   # guard healthy hands do not reach (Adaptive review, 1 October
   # 2026). Five pilot blocks peaked at 90 to 144 BPM, none at the cap,
   # and four entered the band after the climb at trials 22 to 34.
-  bpm_max: 180
+  # Raised again to 240 on 3 November 2026: a 250 ms hand, near Person
+  # 5's Reaction speed, sat at 180 with a hit rate of 0.98, outside the
+  # band. With the opening climb below, simulated hands of 250 to 800
+  # ms reach the band by trial 30 to 33 and hold 0.71 to 0.77
+  # (analysis/adaptive_band.py).
+  bpm_max: 240
+  # Until the block's first miss each hit raises the pace by this factor
+  # instead of the pressure rule, which took a fast hand 53 trials to
+  # reach the band from 30 BPM, past the study's 40-trial block. 1.0 is off.
+  fast_start_gain: 1.2
   bpm_step: 10                # base step. Scaled up when hit rate is far off.
   target_low: 0.65            # the 65-80% band; its centre is 72.5%
   target_high: 0.80

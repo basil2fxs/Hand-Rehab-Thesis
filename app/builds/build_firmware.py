@@ -173,7 +173,9 @@ def main(argv=None) -> int:
         dest = out / name
         shutil.copyfile(built, dest)
         images[name] = describe(dest, env)
-        print(f"  -> {dest.relative_to(ROOT)}  "
+        # --out may sit outside the app folder, where relative_to raises
+        shown = dest.relative_to(ROOT) if dest.is_relative_to(ROOT) else dest
+        print(f"  -> {shown}  "
               f"{images[name]['flash_bytes']} bytes of flash")
 
     manifest = {

@@ -68,9 +68,14 @@ class Calibration:
     # hand for bilateral (the detector is constructed once per hand).
     num_sensors: int = 4
     # Exponential-moving-average smoothing on the baseline. Lower =
-    # slower drift tracking, more press isolation. 0.02 = ~50-sample
-    # half-life at typical sample rates (200 Hz -> ~0.25 s).
-    baseline_alpha: float = 0.02
+    # slower drift tracking, more press isolation. 0.0005 is a time
+    # constant of about 10 s at 200 Hz, the value config/default.yaml
+    # ships and every session ran. This default was 0.02 (0.25 s) until
+    # 3 November 2026, so the ramp simulations that built a Calibration
+    # without the config ran a baseline 40 times faster than the device:
+    # they found slow pushes uncounted that the shipped settings count
+    # (tests/test_detector_defaults.py now holds the two together).
+    baseline_alpha: float = 0.0005
     # EMA smoothing on the value stream itself. Higher = less noise
     # in the value used for press / release detection. 0.35 keeps
     # the press onset crisp without letting raw spikes trip the
@@ -91,6 +96,19 @@ class Calibration:
     # same sensor. Stops a noisy threshold crossing producing two
     # back-to-back events at the same edge.
     debounce_ms: int = 100
+    # What counts a press. "smoothed" counts when the smoothed value
+    # crosses the trigger, which comes one or two samples (5 to 10 ms)
+    # after the raw force does on a real press, and more on a slow one;
+    # every session before 3 November 2026 ran it. "raw" counts on the
+    # count_samples-th raw sample in a row at or above the trigger, so a
+    # press is counted one sample after the raw force crosses, whatever
+    # its rise, and one noisy sample cannot count a press on its own
+    # (the smoothed value could be lifted over the trigger by a single
+    # spike). Release, the baseline and the peak still use the smoothed
+    # value. Replays of older sessions read the rule from the session's
+    # config snapshot, where a missing key means "smoothed".
+    count_on: str = "raw"
+    count_samples: int = 2
     # A finger that rests on its pad above the release margin never
     # releases, so its next presses go uncounted (Person 3's middle
     # finger in the sequence task, 15 October 2026). Three rules end
@@ -105,13 +123,14 @@ class Calibration:
     hold_max_s: float = 2.0
     baseline_down_alpha: float = 0.05
     # The baseline follows the signal while the finger is up, which
-    # includes a push still rising towards the trigger, so a slow push
-    # was taken into the resting level before it could be counted: a
-    # linear rise to the light press over 0.8 s or more never was (28
-    # October 2026). Once the smoothed value sits more than baseline_hold
-    # counts above the baseline, the baseline holds for up to
-    # baseline_hold_s, so a slow push is counted, and then follows again,
-    # so a finger that settles heavier is still tracked. 0 disables.
+    # includes a push still rising towards the trigger. At the old 0.02
+    # default a linear rise to the light press over 0.8 s was taken into
+    # the resting level before it could be counted (28 October 2026); at
+    # the shipped 0.0005 every ramp to 3 s is counted, so the hold is not
+    # needed and stays off. Once the smoothed value sits more than
+    # baseline_hold counts above the baseline, the baseline holds for up
+    # to baseline_hold_s and then follows again, so a finger that settles
+    # heavier is still tracked. 0 disables.
     baseline_hold: float = 0.0
     baseline_hold_s: float = 3.0
     # Free-form text the researcher can stash alongside the
@@ -260,6 +279,8 @@ class FSRDetector:
         self._anchor_floor: list[float | None] = [None] * n
         # When the value first sat more than baseline_hold above the baseline.
         self._hold_since: list[float | None] = [None] * n
+        # Raw samples in a row at or above the trigger (count_on "raw").
+        self._raw_run: list[int] = [0] * n
         # t_perf of the most recent feed() call, None before the first.
         # The continuous force view polls the detector rather than
         # seeing samples itself, so this is how it can tell a live
@@ -285,6 +306,7 @@ class FSRDetector:
         self._below_frac_since = [None] * n
         self._anchor_floor = [None] * n
         self._hold_since = [None] * n
+        self._raw_run = [0] * n
         self.last_feed_t = None
 
     def baseline_value(self, sensor_idx: int) -> float | None:
@@ -445,7 +467,12 @@ class FSRDetector:
             # Hysteresis safety so off threshold never sits at/above on
             off_thr = min(off_thr_raw, on_thr - 10)
             dt_ms = (t_perf - self.last_event_t[i]) * 1000.0
-            if not self.pressed[i] and sm >= on_thr and dt_ms >= cal.debounce_ms:
+            self._raw_run[i] = self._raw_run[i] + 1 if v >= on_thr else 0
+            if cal.count_on == "raw":
+                over = self._raw_run[i] >= max(1, int(cal.count_samples))
+            else:
+                over = sm >= on_thr
+            if not self.pressed[i] and over and dt_ms >= cal.debounce_ms:
                 self.pressed[i] = True
                 self.last_event_t[i] = t_perf
                 # Start tracking the peak for this press. The rising-

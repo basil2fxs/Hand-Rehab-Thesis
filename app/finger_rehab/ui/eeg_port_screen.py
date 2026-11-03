@@ -13,11 +13,17 @@ takes it off the hand boards first.
 Picking a port opens it exactly as the marker writer would, moves the
 markers onto it, and saves it (hardware/eeg_port.save_port) on the
 same line of eeg_lab.yaml a person would edit by hand.
+
+At launch the screen first listens to the USB serial ports for a few
+seconds (eeg_port.box_guess): a hand board sends its force stream, the
+box sends nothing, so when exactly one port stays silent it is picked
+without anyone choosing, and the list stays up to change it.
 """
 
 from __future__ import annotations
 
 import logging
+import threading
 from typing import TYPE_CHECKING
 
 import pygame
@@ -47,6 +53,11 @@ class EegPortScreen(Screen):
         self.scan = eeg_port.candidates
         self.opener = eeg_port.open_port
         self.saver = eeg_port.save_port
+        self.guesser = eeg_port.box_guess
+        # The launch guess, worked out off the game loop's thread:
+        # None while listening, "" when it could not tell.
+        self._guess: str | None = None
+        self._guessing = False
         from ..hardware.eeg_trigger import simulator_backend
         self.simulator = simulator_backend
         self._back = None
@@ -75,6 +86,20 @@ class EegPortScreen(Screen):
         else:
             self._say(self._current_line(), "muted")
         self.rescan()
+        if self.at_launch and markers.needs_port and not self._guessing:
+            self._guessing = True
+            self._guess = None
+            self._say(f"{self.status} Looking for it: the port with no "
+                      "force stream...", "error")
+            choices = list(self._choices)
+
+            def work() -> None:
+                try:
+                    self._guess = self.guesser(choices) or ""
+                except Exception as e:
+                    log.warning("trigger box guess failed: %s", e)
+                    self._guess = ""
+            threading.Thread(target=work, daemon=True).start()
 
     def _current_line(self) -> str:
         backend = getattr(self.engine.markers, "backend", None)
@@ -253,7 +278,18 @@ class EegPortScreen(Screen):
             b.handle_event(e)
 
     def update(self, dt: float) -> None:
-        pass
+        if self._guessing and self._guess is not None:
+            self._guessing = False
+            if self._guess and self.engine.markers.needs_port:
+                found = self._guess
+                self.pick(found)
+                if self._connected:
+                    self._say(f"Found the trigger box on {found}, the one port "
+                              "with no force stream. Pick another if that is "
+                              "wrong.", "success")
+            elif self.engine.markers.needs_port:
+                self._say("Could not tell the box from the hand boards. "
+                          "Pick its port.", "error")
 
     def draw(self, surf: pygame.Surface) -> None:
         theme, layout = self.theme, self.layout

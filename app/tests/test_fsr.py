@@ -377,6 +377,9 @@ class PeakForceTrackingTests(unittest.TestCase):
             on_delta=[40] * 4, off_delta=[20] * 4,
             abs_on_min=[300] * 4, abs_off_max=[300] * 4,
             debounce_ms=0,
+            # These presses are built a sample at a time, so one raw
+            # sample over the trigger counts (the device needs two).
+            count_samples=1,
         )
 
     def test_release_carries_peak_raw_and_peak_minus_baseline(self) -> None:

@@ -12,7 +12,7 @@ The code that runs on the hand device's Arduino Nano. The app ships both program
 
 ## What the firmware does
 
-When the board powers up, or when the game opens its port (which resets a Nano), it waits half a second, buzzes each motor for 200 ms in turn as a self-test, prints `### Setup Complete ###` and starts streaming about 2.6 s after the reset. From then on:
+When the board powers up, or when the game opens its port (which resets a Nano), its bootloader runs, then it waits 0.1 s, prints `### Setup Complete ###` and starts streaming; the self-test, each motor buzzed for 200 ms in turn, runs over the stream's first 1.6 s. Until November 2026 the self-test came first and the stream started 2.6 s after the bootloader, which held the game's first sample back to 4.2 s (`analysis/startup_sim.py`). From then on:
 
 - Every 5 ms it reads six bytes from each SingleTact over I2C (index 0x05, middle 0x06, ring 0x07, little 0x08) and prints one line, `FSR: a,b,c,d`, at 115200 baud. A failed read goes out as 0, which is why a loose lead and a dead pad look the same.
 - `STIM:n` (n from 1 to 4) runs finger n's motor for 150 ms without holding up the sampling; another `STIM:n` before then restarts the 150 ms. `STOP` stops every motor. Nothing is sent back, so the game knows a command left the computer, not that a motor moved.

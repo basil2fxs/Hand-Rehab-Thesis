@@ -93,7 +93,7 @@ class AdaptiveConfig:
     # It was raised from 140 for a headless 280 ms player, faster than
     # any healthy four-finger hand.
     bpm_min: float = 10.0
-    bpm_max: float = 180.0
+    bpm_max: float = 240.0
     bpm_step: float = 10.0
     # Weakness bias on lane selection. A lane's weight is
     # max(0.05, 1 - hit_ema) ** weakness_bias + 0.1 (lane_weights), so
@@ -117,6 +117,13 @@ class AdaptiveConfig:
     # is 1.0s so the press window is 0.9s; at 30 BPM the cadence is 2.0s
     # so the patient gets 1.8s to land the press.
     timeout_factor: float = 0.90
+    # Opening climb. Until the block's first miss, each hit raises the
+    # pace by this factor rather than by the pressure rule, whose +15 BPM
+    # cap and streak gate took a fast hand 53 trials to reach the band
+    # from the 30 BPM start, longer than the study's 40-trial block
+    # (Person 5's block climbed for 30 trials). The first miss hands the
+    # pace to the pressure rule. 1.0 turns it off (3 November 2026).
+    fast_start_gain: float = 1.2
 
 
 @dataclass
@@ -149,6 +156,8 @@ class AdaptiveEngine:
     # quality rates, RT utilisation, the combined pressure and the BPM
     # change, so the mode can log the controller's state per trial.
     last_decision: dict = field(default_factory=dict)
+    # False until the block's first miss: the opening climb runs until then.
+    missed_once: bool = False
 
     # Smallest speed-up signal next_bpm() will send while the hit rate
     # is above target_high and quality is holding up. Deliberately not
@@ -206,6 +215,7 @@ class AdaptiveEngine:
         else:
             self.current_miss_streak += 1
             self.current_streak = 0
+            self.missed_once = True
 
     @property
     def session_hit_rate(self) -> float:
@@ -305,6 +315,15 @@ class AdaptiveEngine:
             self.last_decision = {"gated": 1}
             return self.bpm
         self.bpm_decisions += 1
+        # The opening climb: every hit so far, so raise the pace by a
+        # fixed share until the first miss (AdaptiveConfig.fast_start_gain).
+        if (self.cfg.fast_start_gain > 1.0 and not self.missed_once
+                and self.current_streak > 0):
+            before = self.bpm
+            self.bpm = min(self.cfg.bpm_max, self.bpm * self.cfg.fast_start_gain)
+            self.last_decision = {"opening": 1,
+                                  "delta_bpm": round(self.bpm - before, 2)}
+            return self.bpm
         hr = self.session_hit_rate
         qr = self.session_quality_rate
         util = self.rt_utilisation

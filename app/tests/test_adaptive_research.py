@@ -74,7 +74,8 @@ class LoggingTests(unittest.TestCase):
             mode._handle_press(_press(mode.active.lane, t + 0.3), now=t + 0.3)
             t += 2.0
         self.assertIn("adaptive_state", _events(engine))
-        self.assertIn("pressure", mode.adapter.last_decision)
+        # 24 hits and no miss: the opening climb never handed over
+        self.assertEqual(mode.adapter.last_decision.get("opening"), 1)
         st = mode.block_stats()
         self.assertEqual(len(st["bpm_trace"]), 24)
         self.assertEqual(st["bpm_peak"], max(st["bpm_trace"]))
@@ -83,6 +84,18 @@ class LoggingTests(unittest.TestCase):
         self.assertEqual(sum(st["hits_per_finger"]), 24)
         self.assertEqual(st["carry_ms"], 150.0)
         self.assertEqual(st["bpm_next"], round(mode.adapter.bpm, 1))
+
+    def test_after_the_first_miss_the_pressure_rule_is_logged(self):
+        engine, mode = _mode()
+        engine.raw_logger = MagicMock()
+        mode.adapter.record(0, hit=False, rt_ms=None)       # the first miss
+        t = 0.0
+        for _i in range(8):
+            mode._fire(now=t)
+            mode._handle_press(_press(mode.active.lane, t + 0.3), now=t + 0.3)
+            t += 2.0
+        self.assertIn("pressure", mode.adapter.last_decision)
+        self.assertNotIn("opening", mode.adapter.last_decision)
 
     def test_the_results_card_shows_the_last_cue_pace(self):
         from types import SimpleNamespace

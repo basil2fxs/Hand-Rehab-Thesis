@@ -436,8 +436,9 @@ class ForceViewTests(unittest.TestCase):
         t = self._settle(det, 100)         # resting, no profile
         v = self._view(e)
         v.read(0)                          # freezes the reference at rest
-        t = self._settle(det, 130, n=800, t0=t)   # held force, ~4 s
-        # The live baseline has largely absorbed the hold by now...
+        t = self._settle(det, 130, n=4000, t0=t)  # held force, ~20 s
+        # The live baseline (a 10 s time constant at the shipped rate)
+        # has largely absorbed the hold by now...
         self.assertGreater(det.baseline[0], 120.0)
         # ...but the view still reports the force being produced.
         self.assertAlmostEqual(v.read(0).counts, 30.0, delta=2.0)
