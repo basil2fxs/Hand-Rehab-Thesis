@@ -8,9 +8,12 @@ speeds giving each hand's hit rate over a 40-trial block, the study's
 block length, as the study ran and as now. The trailing measure of
 settle_trial is kept for the tests' 53, but the climb's overshoot can
 put misses inside its window, so the block's own hit rate is the one
-plotted. The sweep is run again with the hand's trials varying by 45,
-60 and 94 ms (SD), the last the spread of a real player's single trials
-in the mixed model, and the 94 ms hand is drawn beside the 25 ms one.
+plotted. Panel (c) reads the 32 trials after the first miss, the
+progress report's block length: the climb ends at that miss, so the
+window leaves out its near-certain opening hits. The sweep is run again
+with the hand's trials varying by 45, 60 and 94 ms (SD), the last the
+spread of a real player's single trials in the mixed model, and the
+94 ms hand is drawn beside the 25 ms one.
 
     python3 adaptive_band.py --real /path/to/P01_..._adaptive --out fig.png [--small]
 """
@@ -56,6 +59,12 @@ def drive(mean_rt: float, sd: float, seed: int, bpm_max: float, n_trials: int = 
         eng.next_bpm()
         hits.append(1 if hit else 0)
     return np.array(hits), np.array(bpm)
+
+
+def after_climb(hits: np.ndarray, n: int = 32) -> float:
+    """Hit rate over the n trials after the first miss, where the climb ends."""
+    first = int(np.argmax(hits == 0)) if (hits == 0).any() else len(hits)
+    return float(hits[first + 1:first + 1 + n].mean())
 
 
 def trailing(hits: np.ndarray, w: int = WINDOW) -> np.ndarray:
@@ -106,10 +115,11 @@ def main(argv=None) -> int:
             rows = []
             for seed in seeds:
                 hits, bpm = drive(float(mean_rt), 25.0, seed, cap, gain=g)
-                rows.append((settle_trial(hits), hits[:40].mean(), hits[-100:].mean(), bpm[-1]))
+                rows.append((settle_trial(hits), after_climb(hits), hits[-100:].mean(), bpm[-1], hits[:40].mean()))
             sweep[key][mean_rt] = rows
             f40 = [r[1] for r in rows]
-            print(f"{key}, {mean_rt} ms: first 40 trials {np.mean(f40):.2f} ({min(f40):.2f} to {max(f40):.2f}); "
+            print(f"{key}, {mean_rt} ms: 32 trials after the first miss {np.mean(f40):.2f} ({min(f40):.2f} to {max(f40):.2f}); "
+                  f"first 40 {np.mean([r[4] for r in rows]):.2f}; "
                   f"last 100 {np.mean([r[2] for r in rows]):.2f} ({min(r[2] for r in rows):.2f} to "
                   f"{max(r[2] for r in rows):.2f}); settles at trials {[r[0] for r in rows]}; pace at the end "
                   f"{np.mean([r[3] for r in rows]):.0f} BPM")
@@ -120,9 +130,9 @@ def main(argv=None) -> int:
         for mean_rt in speeds:
             rows = [drive(float(mean_rt), sd, seed, 240.0, gain=1.2)[0] for seed in seeds]
             noisy[sd][mean_rt] = rows
-        f40 = [np.mean([h[:40].mean() for h in noisy[sd][m]]) for m in speeds]
+        f40 = [np.mean([after_climb(h) for h in noisy[sd][m]]) for m in speeds]
         l100 = [np.mean([h[-100:].mean() for h in noisy[sd][m]]) for m in speeds]
-        print(f"now, trial SD {sd:.0f} ms: first 40 trials {min(f40):.2f} to {max(f40):.2f} by hand; "
+        print(f"now, trial SD {sd:.0f} ms: 32 trials after the first miss {min(f40):.2f} to {max(f40):.2f} by hand; "
               f"last 100 {min(l100):.2f} to {max(l100):.2f}")
 
     # canvas = print width (13.8 cm thesis), every text element at 10 pt (8 pt small)
@@ -142,7 +152,7 @@ def main(argv=None) -> int:
         b.plot(np.arange(1, len(rb) + 1), rb, color="#c0392b", lw=1.5)
     a.axhspan(0.65, 0.80, color="#d9ead3", lw=0, label="65 to 80% band")
     a.set_ylim(0.3, 1.02)
-    a.set_ylabel("Hit rate, last 30 trials")
+    a.set_ylabel("Hit rate, trailing 30 trials")
     a.set_title("(a) Hit rate", loc="left", fontsize=fs)
     b.set_ylabel("Pace (BPM)")
     b.set_title("(b) Pace", loc="left", fontsize=fs)
@@ -162,15 +172,15 @@ def main(argv=None) -> int:
     xs, ys = [], []
     for mean_rt, rows in noisy[94.0].items():
         jit = np.random.default_rng(mean_rt + 1).uniform(-3, 3, len(rows))
-        xs += list(mean_rt + 21 + jit)
-        ys += [h[:40].mean() for h in rows]
+        xs += list(mean_rt + jit)
+        ys += [after_climb(h) for h in rows]
     c.plot(xs, ys, marker="^", ls="none", color="#b45309", ms=3.0, alpha=0.8)
-    c.plot(speeds, [np.mean([h[:40].mean() for h in noisy[94.0][s]]) for s in speeds], color="#b45309", lw=1.2,
+    c.plot(speeds, [np.mean([after_climb(h) for h in noisy[94.0][s]]) for s in speeds], color="#b45309", lw=1.2,
            label="climb, trials SD 94 ms (c)")
     c.set_xlabel("Hand's RT (ms)")
-    c.set_ylabel("Hit rate, first 40 trials")
-    c.set_title("(c) 40-trial block", loc="left", fontsize=fs)
-    c.set_ylim(0.6, 1.02)
+    c.set_ylabel("Hit rate, 32 trials")
+    c.set_title("(c) After the climb", loc="left", fontsize=fs)
+    c.set_ylim(0.5, 1.02)
     c.set_xticks([250, 350, 450])
     for ax in axes:
         for s in ("top", "right"):
