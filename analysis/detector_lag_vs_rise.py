@@ -112,7 +112,8 @@ def draw(out: dict, path: Path, small: bool = False) -> None:
     xs = np.array(RISES, dtype=float)
     lo = np.nanmin([[out["study"][p][r] for r in RISES] for p in PEAKS], axis=0)
     hi = np.nanmax([[out["study"][p][r] for r in RISES] for p in PEAKS], axis=0)
-    band_s = ax.fill_between(xs, lo, hi, color="#93c5fd", alpha=0.6, lw=0)
+    # outlined, since the green band drawn over it hides where it ends
+    band_s = ax.fill_between(xs, lo, hi, facecolor=(0.576, 0.773, 0.992, 0.6), edgecolor="#1d4ed8", lw=0.6)
     line_s, = ax.plot(xs, [out["study"][70][r] for r in RISES], "-", lw=1.4, color="#1d4ed8")
     lo_n = np.nanmin([[out["now"][p][r] for r in RISES] for p in PEAKS], axis=0)
     hi_n = np.nanmax([[out["now"][p][r] for r in RISES] for p in PEAKS], axis=0)

@@ -13,7 +13,9 @@ progress report's block length: the climb ends at that miss, so the
 window leaves out its near-certain opening hits. The sweep is run again
 with the hand's trials varying by 45, 60 and 94 ms (SD), the last the
 spread of a real player's single trials in the mixed model, and the
-94 ms hand is drawn beside the 25 ms one.
+94 ms hand is drawn beside the 25 ms one, with the sittings' controller
+at 94 ms as open triangles and a dashed line: at that spread it keeps more
+blocks in band than the climb.
 
     python3 adaptive_band.py --real /path/to/P01_..._adaptive --out fig.png [--small]
 """
@@ -99,7 +101,7 @@ def main(argv=None) -> int:
 
     # the controllers: the Semester 1 ceiling, the study's, and the one of 3 November 2026
     ctl = {"cap 140": (140.0, 1.0), "cap 180 (study)": (180.0, 1.0),
-           "climb, cap 240 (now)": (240.0, 1.2)}
+           "20% climb, cap 240 (option)": (240.0, 1.2)}
     runs = {name: drive(280.0, 25.0, 7, cap, gain=g) for name, (cap, g) in ctl.items()}
     for name, (hits, bpm) in runs.items():
         tr = trailing(hits)
@@ -131,6 +133,12 @@ def main(argv=None) -> int:
             rows = [drive(float(mean_rt), sd, seed, 240.0, gain=1.2)[0] for seed in seeds]
             noisy[sd][mean_rt] = rows
         f40 = [np.mean([after_climb(h) for h in noisy[sd][m]]) for m in speeds]
+        if sd == 94.0:
+            # the sittings' own controller at the same spread, the comparison the climb has to win
+            asrun94 = {m: [drive(float(m), sd, seed, 180.0, gain=1.0)[0] for seed in seeds] for m in speeds}
+            r94 = [after_climb(h) for m in speeds for h in asrun94[m]]
+            print(f"as run, trial SD 94 ms: {sum(0.65 <= r <= 0.80 for r in r94)} of {len(r94)} blocks in band "
+                  f"after the first miss")
         l100 = [np.mean([h[-100:].mean() for h in noisy[sd][m]]) for m in speeds]
         print(f"now, trial SD {sd:.0f} ms: 32 trials after the first miss {min(f40):.2f} to {max(f40):.2f} by hand; "
               f"last 100 {min(l100):.2f} to {max(l100):.2f}")
@@ -142,7 +150,7 @@ def main(argv=None) -> int:
     fig, axes = plt.subplots(1, 3, figsize=(3.4, 1.7) if args.small else (5.43, 2.4),
                              gridspec_kw={"width_ratios": [1.2, 1.2, 1.15]})
     a, b, c = axes
-    colours = {"cap 140": "0.6", "cap 180 (study)": "#1f4e8c", "climb, cap 240 (now)": "#2e8b57"}
+    colours = {"cap 140": "0.6", "cap 180 (study)": "#1f4e8c", "20% climb, cap 240 (option)": "#2e8b57"}
     for name, (hits, bpm) in runs.items():
         a.plot(np.arange(1, 301), trailing(hits), color=colours[name], lw=1.3, label=name)
         b.plot(np.arange(1, 301), bpm, color=colours[name], lw=1.3)
@@ -161,7 +169,7 @@ def main(argv=None) -> int:
         ax.set_xlabel("Trial")
         ax.set_xlim(0, 300)
     c.axhspan(0.65, 0.80, color="#d9ead3", lw=0)
-    for key, colour, mfc, dx in (("study", "#1f4e8c", "white", -7), ("now", "#2e8b57", "#2e8b57", 7)):
+    for key, colour, mfc, dx in (("study", "#1f4e8c", "white", -10.5), ("now", "#2e8b57", "#2e8b57", -3.5)):
         xs, ys = [], []
         for mean_rt, rows in sweep[key].items():
             jit = np.random.default_rng(mean_rt).uniform(-3, 3, len(rows))
@@ -172,14 +180,23 @@ def main(argv=None) -> int:
     xs, ys = [], []
     for mean_rt, rows in noisy[94.0].items():
         jit = np.random.default_rng(mean_rt + 1).uniform(-3, 3, len(rows))
-        xs += list(mean_rt + jit)
+        xs += list(mean_rt + 10.5 + jit)
         ys += [after_climb(h) for h in rows]
     c.plot(xs, ys, marker="^", ls="none", color="#b45309", ms=3.0, alpha=0.8)
+    # the sittings' controller at the same spread, each block, so its 49 of 60 can be seen against the climb's 39
+    xs, ys = [], []
+    for mean_rt, rows in asrun94.items():
+        jit = np.random.default_rng(mean_rt + 2).uniform(-3, 3, len(rows))
+        xs += list(mean_rt + 3.5 + jit)
+        ys += [after_climb(h) for h in rows]
+    c.plot(xs, ys, marker="^", ls="none", color="#1f4e8c", mfc="white", ms=3.0, alpha=0.8)
     c.plot(speeds, [np.mean([after_climb(h) for h in noisy[94.0][s]]) for s in speeds], color="#b45309", lw=1.2,
-           label="climb, trials SD 94 ms (c)")
+           label="20% climb, SD 94 ms (c)")
+    c.plot(speeds, [np.mean([after_climb(h) for h in asrun94[s]]) for s in speeds], color="#1f4e8c", lw=1.2, ls="--",
+           label="cap 180, SD 94 ms (c)")
     c.set_xlabel("Hand's RT (ms)")
     c.set_ylabel("Hit rate, 32 trials")
-    c.set_title("(c) After the climb", loc="left", fontsize=fs)
+    c.set_title("(c) After first miss", loc="left", fontsize=fs)
     c.set_ylim(0.5, 1.02)
     c.set_xticks([250, 350, 450])
     for ax in axes:
