@@ -175,25 +175,27 @@ def main(argv=None) -> int:
             jit = np.random.default_rng(mean_rt).uniform(-3, 3, len(rows))
             xs += list(mean_rt + dx + jit)
             ys += [r[1] for r in rows]
-        c.plot(xs, ys, marker="o", ls="none", color=colour, mfc=mfc, ms=3.0, alpha=0.8)
+        c.plot(xs, ys, marker="o", ls="none", color=colour, mfc=mfc, ms=2.6, alpha=0.5)
         c.plot(speeds, [np.mean([r[1] for r in sweep[key][s]]) for s in speeds], color=colour, lw=1.2)
     xs, ys = [], []
     for mean_rt, rows in noisy[94.0].items():
         jit = np.random.default_rng(mean_rt + 1).uniform(-3, 3, len(rows))
         xs += list(mean_rt + 10.5 + jit)
         ys += [after_climb(h) for h in rows]
-    c.plot(xs, ys, marker="^", ls="none", color="#b45309", ms=3.0, alpha=0.8)
+    c.plot(xs, ys, marker="^", ls="none", color="#2e8b57", ms=2.6, alpha=0.6)
     # the sittings' controller at the same spread, each block, so its 49 of 60 can be seen against the climb's 39
     xs, ys = [], []
     for mean_rt, rows in asrun94.items():
         jit = np.random.default_rng(mean_rt + 2).uniform(-3, 3, len(rows))
         xs += list(mean_rt + 3.5 + jit)
         ys += [after_climb(h) for h in rows]
-    c.plot(xs, ys, marker="^", ls="none", color="#1f4e8c", mfc="white", ms=3.0, alpha=0.8)
-    c.plot(speeds, [np.mean([after_climb(h) for h in noisy[94.0][s]]) for s in speeds], color="#b45309", lw=1.2,
-           label="20% climb, SD 94 ms (c)")
-    c.plot(speeds, [np.mean([after_climb(h) for h in asrun94[s]]) for s in speeds], color="#1f4e8c", lw=1.2, ls="--",
-           label="cap 180, SD 94 ms (c)")
+    c.plot(xs, ys, marker="^", ls="none", color="#1f4e8c", mfc="white", ms=2.6, alpha=0.6)
+    # colour stays with the controller in every panel: green the climb, blue the sittings' controller;
+    # at a real player's 94 ms spread both means are dashed
+    c.plot(speeds, [np.mean([after_climb(h) for h in noisy[94.0][s]]) for s in speeds], color="#2e8b57", lw=1.2,
+           ls="--")
+    c.plot(speeds, [np.mean([after_climb(h) for h in asrun94[s]]) for s in speeds], color="#1f4e8c", lw=1.2, ls="--")
+    c.plot([], [], color="0.35", lw=1.2, ls="--", marker="^", ms=3.0, mfc="white", label="SD 94 ms (c)")
     c.set_xlabel("Hand's RT (ms)")
     c.set_ylabel("Hit rate, 32 trials")
     c.set_title("(c) After first miss", loc="left", fontsize=fs)
