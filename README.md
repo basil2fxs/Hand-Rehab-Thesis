@@ -36,7 +36,7 @@ Hand-Rehab-Thesis/
 `-- Local_Runner.command      Runs the game straight from the code on a Mac
 ```
 
-Most folders carry a README that goes further. To change the software, start with [app/README.md](app/README.md) (run, test, release), then [app/finger_rehab](app/finger_rehab) for how the parts fit and what a session folder holds, and [app/finger_rehab/game/modes](app/finger_rehab/game/modes) to add or change a game. Results are made in [analysis](analysis) and filed in [FINAL TRIAL RESULTS](FINAL%20TRIAL%20RESULTS). The device itself is in [hardware](hardware) and [app/arduino](app/arduino).
+Each folder's README goes further. To change the software, start at [app/README.md](app/README.md), then [app/finger_rehab](app/finger_rehab) for how the parts fit, and [app/finger_rehab/game/modes](app/finger_rehab/game/modes) for the games. Results: [analysis](analysis) and [FINAL TRIAL RESULTS](FINAL%20TRIAL%20RESULTS). The device: [hardware](hardware) and [app/arduino](app/arduino).
 
 ## How it works
 
@@ -53,7 +53,7 @@ flowchart LR
   F --> N["analysis/session_analysis.ipynb"]
 ```
 
-The Nano reads the four pads 200 times a second and sends each reading over USB as a line of text. The game turns those numbers into presses, picks the next finger to cue and sends `STIM:n` back to buzz finger n. Every sample it receives and everything it does goes into a session folder, and the notebook reads the folders.
+The Nano reads the four pads 200 times a second and sends each reading over USB as a line of text. The game turns those numbers into presses, picks the next finger to cue and sends `STIM:n` back to buzz finger n. Every sample and every event goes into a session folder, which the notebook reads.
 
 There's no switch under a finger. Each pad keeps a slow baseline, and a press counts when the force crosses a trigger 30% of the way from that person's resting level to their light press, both measured at login. That is what lets a weak finger register: one fixed threshold had a little finger resting on its pad firing presses by itself. Settings, Setup, Press point moves the 30%.
 
@@ -62,7 +62,7 @@ There's no switch under a finger. Each pad keeps a slow baseline, and a press co
 ## Timing and limits
 
 - **Sensing:** each pad reads 0 to 10 N in 512 steps, about 20 mN a step. The Nano reads all four every 5 ms (199 Hz measured) and sends them over USB in bursts, so a sample arrives about 10 ms late, up to 20 ms; the notebook can re-time presses on the board's own clock.
-- **Presses:** a press counts on the second raw sample in a row over the trigger, one sample (5 ms) after the raw force crosses it. The October 2026 sessions counted on the smoothed force, one or two samples later; replayed under the new rule they keep 4,006 of 4,009 presses (`analysis/count_rule_replay.py`). A slow push is counted later (`analysis/detector_lag_vs_rise.py`).
+- **Presses:** a press counts on the second raw sample in a row over the trigger, 5 ms after the raw force crosses it, so one noisy sample can't count. Sessions before 3 November 2026 counted on the smoothed force, a sample or two later (`analysis/count_rule_replay.py` compares the two). A slow push is counted later (`analysis/detector_lag_vs_rise.py`).
 - **Screen and sound:** a cue shows on the next 60 Hz frame, up to 17 ms later. On the study computer a sound was heard 77 to 87 ms after the game played it and a buzz felt 74 ms after its command; measure each computer with Settings, Setup, Audio delay.
 - **EEG markers:** a stimulus byte goes out on the frame that draws the stimulus, a press byte up to one frame after its sample, and `events.tsv` moves each press back to its sample and to where the push began. Checklist: [app/docs/eeg_lab_setup.txt](app/docs/eeg_lab_setup.txt).
 
@@ -150,7 +150,7 @@ On Windows, Setup also has USB driver: it gets a board's missing driver from Win
 
 **The game runs but no data lands.** Settings, Data, Open data folder opens the folder in use, which is `~/Finger Rehab Data` when the app can't write beside itself. Check Test Mode is off (`game.test_mode_enabled`): it caps every block at six trials.
 
-**The EEG box does not appear.** Markers are off in the shipped game; `app/config/eeg_lab.yaml` turns them on, loaded from beside the lab exe or with `--config config/eeg_lab.yaml` from source. Set `eeg.port` to the box's port. `eeg.require_port` true refuses to start without a box; false logs the markers only. `eeg.baud` stays 9600: 1200 would reset the box, so the game refuses it.
+**The EEG box does not appear.** Markers are off in the shipped game; `app/config/eeg_lab.yaml` turns them on, loaded from beside the lab exe or with `--config config/eeg_lab.yaml` from source. Set `eeg.port` to the box's port; when the box isn't there at launch, the game listens for a few seconds and picks the one USB port that sends no force stream, leaving the list up to change it. `eeg.require_port` true refuses to start without a box; false logs the markers only. `eeg.baud` stays 9600: 1200 would reset the box, so the game refuses it.
 
 **Sessions look empty in the notebook.** It walks for `trials.csv` from the first `sessions` folder beside it or up to four levels above; a notebook copied elsewhere needs `SESSIONS_DIR` set in the Setup cell.
 

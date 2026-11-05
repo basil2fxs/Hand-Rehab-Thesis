@@ -11,7 +11,7 @@ Build scripts. Run them from `app/`. CI builds the same things on every push to 
 | `release_notes.py` | The text of each GitHub release | Run by CI |
 | `version.py` | Prints `SOFTWARE_VERSION`, the one version number for the app, the installer and every session's metadata | Run by the build scripts and CI |
 
-Each build script goes through the same steps. It rebuilds the firmware and fetches avrdude (neither stops the build: the hexes already staged are used, and a missing avrdude only means the app says so), wipes `bin/`, runs PyInstaller with `finger_rehab.spec` into `bin/dist/`, wraps the result (a disk image with an Applications link on a Mac, an Inno Setup installer on Windows from `installers/windows.iss`), and copies it into `builds/Mac/` or `builds/Windows/`. Last, both refresh `EEG_Lab`, the folder that goes to the lab, through `scripts/build_lab_package.py`; the exe in it can only come from a Windows build. None of the built files go into git.
+Both build scripts rebuild the firmware and fetch avrdude (a failure there doesn't stop the build), run PyInstaller with `finger_rehab.spec`, wrap the result (a disk image on a Mac, an Inno Setup installer from `installers/windows.iss` on Windows) and copy it into `builds/Mac/` or `builds/Windows/`. Last, they refresh `EEG_Lab` through `scripts/build_lab_package.py`; its exe can only come from a Windows build. None of the built files go into git.
 
 CI makes the same two installers plus `FingerRehab-EEGLab.zip` and, when the tests pass, publishes all three as the release for `SOFTWARE_VERSION` in `finger_rehab/data/session.py`. Raise that number, and the two matching strings in `finger_rehab.spec`, to start a new release.
 

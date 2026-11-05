@@ -12,7 +12,7 @@ For setting up and rehearsing the lab session, and for whoever changes the lab f
 
 1. Put the latest `Finger Rehab.exe` in `EEG_Lab` (from `FingerRehab-EEGLab.zip` on the [release](https://github.com/basil2fxs/Hand-Rehab-Thesis/releases/latest)).
 2. Run `Get PsychoPy.cmd` and install PsychoPy with its defaults.
-3. Plug in the hand device and the trigger box, then run `Check this PC.cmd`. A board with no driver: in the game, Settings, Setup, USB driver, Get the driver.
+3. Plug in the hand device and the trigger box, then run `Check this PC.cmd`. A board with no driver: in the game, Settings, Setup, USB driver, Get the driver. A box that isn't on COM10 is found by its silence (the one USB port with no force stream) and its port saved into this folder's `eeg_lab.yaml`.
 4. In the game: Settings, Setup, Audio delay, once.
 
 ## The simulator
@@ -51,7 +51,7 @@ The code map is `CODES` in `app/finger_rehab/hardware/eeg_trigger.py`, the one s
 | 200 + game, 220 + game | A game starts or ends (`MODE_IDS`), 219 a game abandoned |
 | 240 to 245 | The session starting and ending, a pause and its resume, a rest and its end |
 
-On the wire each byte is held for `eeg.pulse_ms`, then the line goes back to 0 and stays there for `eeg.gap_ms`. Events that collide queue by priority (session and block starts first, then stimuli, responses, feedback), so a marker can arrive late but never wrong. A stimulus byte goes out straight after the frame that draws the stimulus; a press byte follows within a frame of the sample that crossed the press point. After three failed writes the port is reopened once, and if that fails too the session carries on, logging every marker it could not send and marking the block EEG-degraded.
+On the wire each byte is held for `eeg.pulse_ms`, then the line goes back to 0 and stays there for `eeg.gap_ms`. Events that collide queue by priority (session and block starts first, then stimuli, responses, feedback), so a marker can arrive late but never wrong. A stimulus byte goes out straight after the frame that draws the stimulus; a press byte follows within a frame of the sample that counted the press. After three failed writes the port is reopened once, and if that fails too the session carries on, logging every marker it could not send and marking the block EEG-degraded.
 
 Every byte is also an `eeg` row in `raw.csv`, with the time of the event and the time it reached the wire. When an EEG block ends, `events.tsv`, `events.json` and `markers_codes.csv` are built from those rows, so the file and the wire record can't disagree. `events.tsv` moves each press back to its sample on the board's clock (`press_offset_ms`) and to where the push began (`onset_offset_ms`).
 

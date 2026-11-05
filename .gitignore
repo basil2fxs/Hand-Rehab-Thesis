@@ -17,6 +17,9 @@ env/
 .idea/
 .vscode/
 .pytest_cache/
+# pytest-cov's data file: it holds this computer's absolute paths.
+.coverage
+.coverage.*
 
 # PyInstaller working folders
 app/bin/build/

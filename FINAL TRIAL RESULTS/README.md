@@ -3,22 +3,22 @@
 
 | Folder | What it holds |
 | --- | --- |
-| `1 Healthy study` | The student sittings: `raw/` as copied off the lab computer, with names, and `sessions/` with every name replaced by a code. Also the one-page sitting sheet the students followed, and its source |
+| `1 Healthy study` | The student sittings: `raw/` as copied off the lab computer, with names, and `sessions/` with the names replaced by codes. Also the one-page sitting sheet the students followed, and its source |
 | `3 EEG lab` | The EEG sittings' session folders with their `.bdf` recordings, and `results/` from the EEG analysis |
-| `5 Thesis results` | `run_all.sh` and everything it writes: the sequence task, the press check, the count lag and the review PDF |
-| `2 Sensor comparison`, `4 Syllables case` | Empty. The pad bench and the Syllables case moved to future work (below) |
-| `6 Self tests` | Empty. The author's own between-day checks were planned for 23 to 27 October and not run |
+| `5 Thesis results` | `run_all.sh` and everything it writes |
+| `2 Sensor comparison`, `4 Syllables case` | Empty: the pad bench and the Syllables case moved to future work |
+| `6 Self tests` | Empty: the author's own between-day checks were planned and not run |
 
-The data were final on 22 October 2026: the laboratory's sequence task played four times (two of them with EEG, and one of those two also played Buzz Hunt), one 30-minute sitting and one Force Pilot block. The thesis calls the six people Person 1 to 6, the two EEG sittings first; the codes inside the data are the software's own (`P01` and up).
+The data were final on 22 October 2026: the laboratory's sequence task played four times (twice with EEG, and one of those also played Buzz Hunt), one 30-minute sitting and one Force Pilot block. The thesis calls the six people Person 1 to 6, the EEG sittings first; inside the data they carry the software's own codes (`P01` and up).
 
 ## Rerunning the thesis results
 
-`5 Thesis results/run_all.sh` reruns every analysis of the final data from the session folders here. It lives in this ignored folder because its paths hold the session folder names, and those carry names. It works from any folder:
+`5 Thesis results/run_all.sh` reruns the analysis of the final data. It lives in this ignored folder because its paths hold the session folder names, which hold names. It works from any folder:
 
     bash "FINAL TRIAL RESULTS/5 Thesis results/run_all.sh"
     bash "FINAL TRIAL RESULTS/5 Thesis results/run_all.sh" --eeg
 
-From `analysis/` it runs `sequence_task.py`, `press_check.py` and `count_lag.py` on the four sequence-task blocks, labelled `E1` and `E2` for the EEG sittings and `L1` and `L2` for the other two, writing `sequence_task/`, `press_check/` and `count_lag/`. With `--eeg` it then reruns the two-recording EEG statistics (`python3 -m eeg.group`, MNE needed) into `3 EEG lab/results/`. Last, `review_report.py` draws everything into `review/Results_for_review.pdf`. The review reads each EEG sitting's own results, so on a fresh copy run `python3 -m eeg` on each EEG sessions folder first (below). For new data, copy the script and point its folder lines at the new sessions; what each script measures is in [the analysis README](../analysis/README.md).
+From `analysis/` it runs `sequence_task.py`, `press_check.py`, `count_lag.py` and `hold_replay.py` on the four sequence-task blocks (labelled `E1` and `E2` for the EEG sittings, `L1` and `L2` for the others), and `onset_accuracy.py` on simulated pushes, each writing into its own folder or text file here. `--eeg` adds the two-recording EEG statistics (`python3 -m eeg.group`, MNE needed). Last, `review_report.py` draws it all into `review/Results_for_review.pdf`; it reads each EEG sitting's own results, so on a fresh copy run `python3 -m eeg` on each EEG sessions folder first. For new data, copy the script and point its folder lines at the new sessions. What each script measures: [the analysis README](../analysis/README.md).
 
 ## Student sittings
 
@@ -35,18 +35,16 @@ After the last sitting:
 
        python3 app/scripts/check_sitting.py --all --data "FINAL TRIAL RESULTS/1 Healthy study/sessions" --day <date>
 
-4. Open `analysis/session_analysis.ipynb`, set `SESSIONS_DIR` to `1 Healthy study/sessions` and Run All. Every length pools, and the tables and figures land in its `cohort_results/`; keep a copy in `5 Thesis results` for the handover.
-
-A check with fewer than 8 participants is described, not tested.
+4. Open `analysis/session_analysis.ipynb`, set `SESSIONS_DIR` to `1 Healthy study/sessions` and Run All. Every length pools, and the tables and figures land in its `cohort_results/`; keep a copy in `5 Thesis results`. Below 8 people a check is described, not tested.
 
 ## EEG sittings
 
-Copy [`EEG_Lab`](../EEG_Lab) to the lab PC and follow its README; run the marker check in [eeg_lab_setup.txt](../app/docs/eeg_lab_setup.txt) before the recording. Afterwards copy the lab folder's whole `sessions/`, `eeg/` and its `.bdf` included, into `3 EEG lab/sessions`, then from `analysis/` (MNE installed, see [its README](../analysis/README.md)):
+Copy [`EEG_Lab`](../EEG_Lab) to the lab PC and follow its README; run the marker check in [eeg_lab_setup.txt](../app/docs/eeg_lab_setup.txt) before recording. Afterwards copy the lab folder's whole `sessions/`, `eeg/` and its `.bdf` included, into `3 EEG lab/sessions`, then from `analysis/` (with MNE, see [its README](../analysis/README.md)):
 
     python3 -m eeg "../FINAL TRIAL RESULTS/3 EEG lab/sessions"
 
-Results land in `3 EEG lab/results/`, one folder per sitting.
+Results land in `3 EEG lab/results/`, a folder per sitting.
 
 ## Future work
 
-The sensor bench (`app/scripts/pad_bench.py --characterise`, 100 to 1000 g on each pad of the calibrated and the uncalibrated set), sittings on the left-hand device and Syllables with readers with dyslexia were moved to future work on 3 October 2026. Nothing for them is collected in this study. The calibrated set needs no load check for it: each pad holds the maker's calibration on its matched board (thesis Section 2.12).
+The sensor bench (`app/scripts/pad_bench.py --characterise`, 100 to 1000 g on each pad of both sets), sittings on the left-hand device and Syllables with readers with dyslexia moved to future work on 3 October 2026, so nothing for them was collected. The calibrated set needs no load check: each pad keeps the maker's calibration on its matched board (thesis Section 2.12).

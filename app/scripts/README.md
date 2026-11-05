@@ -1,17 +1,17 @@
 # scripts
 
-Tools run by hand from `app/`, for example `python3 scripts/check_sitting.py`. None is part of the game, and each file's docstring says how to run it and what it writes. Several drive the real engine headless (a simulated player on a stepped clock), so what they measure is what the game does, not a model of it.
+Tools run by hand from `app/`, for example `python3 scripts/check_sitting.py`. None is part of the game, and each file's docstring says how to run it and what it writes. The simulations drive the real engine headless, so they measure what the game does, not a model of it.
 
 | Script | What it does |
 | --- | --- |
 | **The device** | |
-| [`test_device.py`](test_device.py) | Full hardware check, pass or fail per item: the board streams at about 200 Hz, every pad rests in a sane range and answers for the right finger, each motor is felt on the right finger, and a normal press crosses the trigger. Run it after a rebuild or a long gap |
-| [`pad_bench.py`](pad_bench.py) | Bench the four pads with known masses: a quick counts-per-gram check, or `--characterise` for the sensor comparison (now future work) |
+| [`test_device.py`](test_device.py) | Full hardware check, pass or fail per item: the stream rate, each pad's resting range and finger, each motor, and a normal press crossing the trigger. Run it after a rebuild or a long gap |
+| [`pad_bench.py`](pad_bench.py) | Bench the four pads with known masses: a quick counts-per-gram check, or `--characterise` for the sensor comparison (future work) |
 | [`force_check.py`](force_check.py) | Check the newton scale with known masses |
-| [`buzz_soak.py`](buzz_soak.py) | Run the motors on a timer for as long as it is left going and log failures |
-| [`latency_check.py`](latency_check.py) | Drive the buzz and the screen on a fixed schedule so a phone camera or a piezo disc can time what the game cannot see |
-| [`clip_delay.py`](clip_delay.py) | Read the screen's delay off a 240 fps phone clip of `latency_check.py --display`: each LED flash against the tile's next change, to a fraction of a frame (needs ffmpeg) |
-| [`audio_latency.py`](audio_latency.py) | This computer's sound and buzz delays, saved for the game with `--write`: Settings, Setup, Audio delay from a terminal |
+| [`buzz_soak.py`](buzz_soak.py) | Run the motors on a timer for as long as it's left going, logging failures |
+| [`latency_check.py`](latency_check.py) | Drive the buzz and the screen on a fixed schedule, so a phone camera or a piezo disc can time what the game can't see |
+| [`clip_delay.py`](clip_delay.py) | Read the screen's delay off a 240 fps phone clip of `latency_check.py --display` (needs ffmpeg) |
+| [`audio_latency.py`](audio_latency.py) | This computer's sound and buzz delays, saved with `--write`: Settings, Setup, Audio delay from a terminal |
 | **A study day** | |
 | [`check_sitting.py`](check_sitting.py) | READY, or what to fix while the participant is still there |
 | [`deidentify_sessions.py`](deidentify_sessions.py) | Copy the sessions with every name replaced by a code, P01 upwards, before any analysis |

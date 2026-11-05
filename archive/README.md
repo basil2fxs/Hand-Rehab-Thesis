@@ -4,13 +4,11 @@ Old material kept for reference; nothing here runs in the game or the builds. Tw
 
 | Path | What it is |
 | --- | --- |
-| [`Webler EEG past program/`](Webler%20EEG%20past%20program) | Dr Welber Marinovic's PsychoPy SRT script and its tones |
-| [`old_interactive_game/`](old_interactive_game) | The earlier game this project grew from |
+| [`Webler EEG past program/`](Webler%20EEG%20past%20program) | The EEG lab's PsychoPy SRT script and its tones |
+| [`old_interactive_game/`](old_interactive_game) | The earlier game this project grew from, without its participants' data |
 | [`old_handover_sketch_Arduino_20251111/`](old_handover_sketch_Arduino_20251111) | The Arduino sketch from the November 2025 handover |
 | [`old_arduino_setup/`](old_arduino_setup) | An earlier sensor address sketch |
-| [`old_rayyan_stuff/`](old_rayyan_stuff) | Rayan's sensor bench data and scripts |
+| [`old_rayyan_stuff/`](old_rayyan_stuff) | The force-sensor bench data and scripts |
 | [`old_analysis_outputs/`](old_analysis_outputs) | Figures and tables from the analysis before the session model, `pre_session_model/` included |
 | [`old_test_sessions/`](old_test_sessions) | Bench sessions from August 2026, recorded before the study software |
-| [`stray_screenshot_sessions/`](stray_screenshot_sessions) | Sessions left behind by early screenshot runs |
 | [`old_tools/`](old_tools) | Early bench scripts for the pads and buzzers, replaced by the calibration in the game |
-| [`example_session_data.zip`](example_session_data.zip) | Semester 1 force-graphing trials and their plots, in the old folder layout |

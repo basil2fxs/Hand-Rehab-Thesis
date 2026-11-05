@@ -1,15 +1,15 @@
 # assets
 
-Everything the game ships besides code. The whole folder goes into the exe, the Mac app and the lab folder's `source/`, and code finds a file here through `cfg.resolve_path("assets/...")`, which works the same from source and from a build. One README covers every subfolder.
+Everything the game ships besides code. The whole folder goes into the exe, the Mac app and the lab folder's `source/`, and code finds a file here with `cfg.resolve_path("assets/...")`, which works the same from source and from a build.
 
 | Folder | What is in it |
 | --- | --- |
-| `firmware/` | The board firmware Settings flashes: `finger_rehab_nano.hex`, the sensor address tool `singletact_address_change.hex` and `manifest.json` (a checksum for each). Built from `arduino/` by `python3 builds/build_firmware.py`, and by CI on every push; not kept in git. A hex that fails its checksum is refused |
-| [`icons/`](icons) | `app_icon.icns` and `app_icon.ico`, the app icon. `pan_tool.png` (Google Material Icons open palm, Apache 2.0, [LICENSE](icons/LICENSE)) draws the hand buttons and badges |
-| [`music/`](music) | Songs for Rhythm and the menus, CC0 or CC-BY only, each with its `<song>.LICENCE.txt`; credits in [ATTRIBUTION.md](music/ATTRIBUTION.md). With no song here Rhythm will not start: add one and press Rescan |
-| [`charts/`](charts) | The study's Rhythm chart, frozen: `Easy_Lemon_medium.json`, the notes of the one song the timed sessions play, moved onto the music's attacks by `python3 scripts/build_study_chart.py`, so every sitting hears the same chart |
-| [`speech/`](speech) | Syllables audio: `<word>.wav`, `chunks/<chunk>.wav` and `syllables/<word>_<k>.wav`, listed in `manifest.json`. Synthetic voice Kokoro-82M (Apache 2.0), voice bf_emma, made by `scripts/syllables_tts.py` and tidied by `scripts/syllables_recording_kit.py tidy` (2 October 2026). A recorded voice replaces it with the same kit: `list`, `cut`, `check` |
-| [`words/`](words) | `syllables_source.txt`, the Syllables word list: the band (A, B or C), then the word split by hyphens with the stressed syllable in capitals (`A ba-NA-na`). `scripts/build_syllables_bank.py`, `build_syllables_pools.py` and `build_syllables_probe.py` write the JSON files the game reads. Rebuild the probe only on purpose: a changed probe starts a new series. Terms: [LICENCE.txt](words/LICENCE.txt) |
-| [`srt/`](srt) | The lab SRT's four tones, copied unchanged from its PsychoPy script: `V.wav`, `B.wav`, `N.wav`, `M.wav`, one per square from left to right. About 660, 700, 790 and 890 Hz (E5 to A5), 200 ms files, audible for 115 to 130 ms; N and M are 10 to 12 dB quieter than V and B. `srt.tone_dir` and `srt.tone_files` in `config/default.yaml` point here |
+| `firmware/` | The board firmware Settings flashes: `finger_rehab_nano.hex`, the address tool `singletact_address_change.hex`, and `manifest.json` with a checksum for each (a hex that fails it is refused). Built from `arduino/` by `python3 builds/build_firmware.py` and by CI; not kept in git |
+| [`icons/`](icons) | The app icon, and `pan_tool.png` (Google Material Icons, Apache 2.0, [LICENSE](icons/LICENSE)) for the hand buttons |
+| [`music/`](music) | Songs for Rhythm and the menus, CC0 or CC-BY only, each with its `<song>.LICENCE.txt` and credited in [ATTRIBUTION.md](music/ATTRIBUTION.md). Rhythm won't start with no song here |
+| [`charts/`](charts) | The study's Rhythm chart, frozen by `python3 scripts/build_study_chart.py` so every sitting hears the same notes |
+| [`speech/`](speech) | Syllables audio, listed in `manifest.json`: a synthetic voice (Kokoro-82M, Apache 2.0) made by `scripts/syllables_tts.py`. `scripts/syllables_recording_kit.py` swaps in a recorded voice |
+| [`words/`](words) | `syllables_source.txt`, the Syllables word list (band, then the word split into syllables with the stressed one in capitals, `A ba-NA-na`), and the JSON files the three `scripts/build_syllables_*.py` scripts make from it. Rebuild the probe only on purpose: a changed probe starts a new series. Terms: [LICENCE.txt](words/LICENCE.txt) |
+| [`srt/`](srt) | The lab SRT's four tones, copied unchanged from its PsychoPy script, one per square from left to right; `srt.tone_dir` and `srt.tone_files` in `config/default.yaml` point here |
 
-To add a song, put the mp3 in `music/` beside a `<song>.LICENCE.txt` and give it a line in `ATTRIBUTION.md`. The folder takes CC0 or CC-BY music only, since the repository is public.
+To add a song, put the mp3 in `music/` beside its `<song>.LICENCE.txt` and give it a line in `ATTRIBUTION.md`. Only CC0 or CC-BY music, since the repository is public.
