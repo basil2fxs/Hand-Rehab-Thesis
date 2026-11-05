@@ -107,31 +107,42 @@ def main(argv=None) -> int:
                          "xtick.labelsize": fs, "ytick.labelsize": fs, "legend.fontsize": fs})
     fig, ax = plt.subplots(figsize=((3.15, 1.65) if args.nolegend else (3.4, 1.95)) if args.small else (5.43, 2.55))
     resting = float(cal["resting"][LANE])
-    ax.plot(x, raw[sel], color="0.55", lw=0.6, label="raw counts")
-    ax.plot(x, base_old[sel] + off, color="#1f4e8c", lw=1.0, ls="--", label="release margin (old rules)")
-    ax.axhline(resting, color="k", lw=0.8, ls=":", label="resting level at calibration")
+    ax.plot(x, raw[sel], color="0.5", lw=0.5, label="raw counts")
+    ax.plot(x, base_old[sel] + off, color="#1f4e8c", lw=0.9, ls=(0, (4, 2)), label="release margin (old rules)")
+    ax.axhline(resting, color="k", lw=0.7, ls=(0, (1, 1.5)), label="resting level at calibration")
     for k, (a, b) in enumerate(long):
-        ax.axvspan((a - t0) / 60.0, (b - t0) / 60.0, color="#d8a7a7", alpha=0.55, lw=0,
+        ax.axvspan((a - t0) / 60.0, (b - t0) / 60.0, color="#f3c9c9", alpha=0.6, lw=0,
                    label="held down 2 s or more (old rules)" if k == 0 else None)
     rel = [(r - t0) / 60.0 for r, why in rel_new if t0 <= r <= t1 and why in ("rest", "hold")]
-    ax.plot(rel, [resting - 0.06 * (raw[sel].max() - resting)] * len(rel), marker="^", ls="none",
-            color="#c0392b", ms=4 if args.small else 5, label="released by the new rules")
+    # the axis stops 50 counts above rest, so the resting level and the release margin fill the panel
+    top = resting + 50.0
+    ax.plot(rel, [resting - 16.0] * len(rel), marker="^", ls="none",
+            color="#c0392b", ms=3.5 if args.small else 4.2, mew=0, label="released by the new rules")
     for tag, (a, b) in bounds.items():
         if tag.startswith("learning") and args.blocks[0] <= int(tag.split()[1]) <= args.blocks[1]:
             ax.annotate(f"block {tag.split()[1]}", xy=(((a + b) / 2 - t0) / 60.0, 1.0), xycoords=("data", "axes fraction"),
                         ha="center", va="bottom", fontsize=fs)
-            ax.axvline((a - t0) / 60.0, color="0.85", lw=0.6)
+            ax.axvline((a - t0) / 60.0, color="0.8", lw=0.5)
     ax.set_xlim(0, (t1 - t0) / 60.0)
-    ax.set_ylim(resting - 25, max(resting + 60, np.percentile(raw[sel], 99.5) + 10))
+    ax.set_ylim(resting - 25, top)
+    if long and not args.small:
+        # the one thing to see: between presses the pad sits above the margin, so the finger stays down
+        a, b = long[0]
+        mid = (a + b) / 2
+        level = float(np.median(raw[sel][(t[sel] >= a) & (t[sel] <= b)]))
+        ax.annotate("between presses the pad rests\nabove the release margin", xy=((mid - t0) / 60.0, level),
+                    xytext=(0.12, resting + 33), textcoords="data", fontsize=fs, color="#111827", va="center",
+                    linespacing=1.0, bbox=dict(boxstyle="square,pad=0.15", fc="white", ec="none", alpha=0.9),
+                    arrowprops=dict(arrowstyle="-|>", color="#111827", lw=0.7, mutation_scale=7, shrinkA=2, shrinkB=1))
     ax.set_xlabel("Time from the start of block %d (minutes)" % args.blocks[0])
-    ax.set_ylabel("Counts")
+    ax.set_ylabel("Pad reading (counts)")
     for s in ("top", "right"):
         ax.spines[s].set_visible(False)
     if not args.nolegend:
         # a legend row wider than the canvas widens the saved image and shrinks the print
         h, l = ax.get_legend_handles_labels()
         fig.legend(h, l, loc="lower center", ncol=2, frameon=False, fontsize=fs,
-                   handlelength=1.6, columnspacing=1.2, bbox_to_anchor=(0.5, 0.0))
+                   handlelength=1.6, columnspacing=1.2, handletextpad=0.5, bbox_to_anchor=(0.5, 0.0))
     fig.tight_layout(rect=(0, 0.0 if args.nolegend else 0.26, 1, 1))
     fig.savefig(args.out, dpi=500)
     w_in = plt.imread(args.out).shape[1] / 250
