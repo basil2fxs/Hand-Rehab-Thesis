@@ -100,8 +100,8 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
 
     # the controllers: the Semester 1 ceiling, the study's, and the one of 3 November 2026
-    ctl = {"cap 140": (140.0, 1.0), "cap 180 (study)": (180.0, 1.0),
-           "20% climb, cap 240 (option)": (240.0, 1.2)}
+    ctl = {"cap 140 (Semester 1)": (140.0, 1.0), "cap 180 (study)": (180.0, 1.0),
+           "20% climb, cap 240": (240.0, 1.2)}
     runs = {name: drive(280.0, 25.0, 7, cap, gain=g) for name, (cap, g) in ctl.items()}
     for name, (hits, bpm) in runs.items():
         tr = trailing(hits)
@@ -150,7 +150,7 @@ def main(argv=None) -> int:
     fig, axes = plt.subplots(1, 3, figsize=(3.4, 1.7) if args.small else (5.43, 2.4),
                              gridspec_kw={"width_ratios": [1.2, 1.2, 1.15]})
     a, b, c = axes
-    colours = {"cap 140": "0.6", "cap 180 (study)": "#1f4e8c", "20% climb, cap 240 (option)": "#2e8b57"}
+    colours = {"cap 140 (Semester 1)": "0.6", "cap 180 (study)": "#1f4e8c", "20% climb, cap 240": "#2e8b57"}
     for name, (hits, bpm) in runs.items():
         a.plot(np.arange(1, 301), trailing(hits), color=colours[name], lw=1.3, label=name)
         b.plot(np.arange(1, 301), bpm, color=colours[name], lw=1.3)
@@ -168,45 +168,33 @@ def main(argv=None) -> int:
     for ax in (a, b):
         ax.set_xlabel("Trial")
         ax.set_xlim(0, 300)
-    c.axhspan(0.65, 0.80, color="#d9ead3", lw=0)
-    for key, colour, mfc, dx in (("study", "#1f4e8c", "white", -10.5), ("now", "#2e8b57", "#2e8b57", -3.5)):
-        xs, ys = [], []
-        for mean_rt, rows in sweep[key].items():
-            jit = np.random.default_rng(mean_rt).uniform(-3, 3, len(rows))
-            xs += list(mean_rt + dx + jit)
-            ys += [r[1] for r in rows]
-        c.plot(xs, ys, marker="o", ls="none", color=colour, mfc=mfc, ms=2.6, alpha=0.5)
-        c.plot(speeds, [np.mean([r[1] for r in sweep[key][s]]) for s in speeds], color=colour, lw=1.2)
-    xs, ys = [], []
-    for mean_rt, rows in noisy[94.0].items():
-        jit = np.random.default_rng(mean_rt + 1).uniform(-3, 3, len(rows))
-        xs += list(mean_rt + 10.5 + jit)
-        ys += [after_climb(h) for h in rows]
-    c.plot(xs, ys, marker="^", ls="none", color="#2e8b57", ms=2.6, alpha=0.6)
-    # the sittings' controller at the same spread, each block, so its 49 of 60 can be seen against the climb's 39
-    xs, ys = [], []
-    for mean_rt, rows in asrun94.items():
-        jit = np.random.default_rng(mean_rt + 2).uniform(-3, 3, len(rows))
-        xs += list(mean_rt + 3.5 + jit)
-        ys += [after_climb(h) for h in rows]
-    c.plot(xs, ys, marker="^", ls="none", color="#1f4e8c", mfc="white", ms=2.6, alpha=0.6)
-    # colour stays with the controller in every panel: green the climb, blue the sittings' controller;
-    # at a real player's 94 ms spread both means are dashed
-    c.plot(speeds, [np.mean([after_climb(h) for h in noisy[94.0][s]]) for s in speeds], color="#2e8b57", lw=1.2,
-           ls="--")
-    c.plot(speeds, [np.mean([after_climb(h) for h in asrun94[s]]) for s in speeds], color="#1f4e8c", lw=1.2, ls="--")
-    c.plot([], [], color="0.35", lw=1.2, ls="--", marker="^", ms=3.0, mfc="white", label="SD 94 ms (c)")
+    # (c) counts the blocks that stay in band over the 32 trials after the first miss, of ten seeds
+    # per hand: blue the sittings' controller, green the climb; solid a steady hand (SD 25 ms),
+    # dashed a real player's spread (SD 94 ms). Lines, not 240 points, so the totals can be read
+    def in_band(values):
+        return sum(0.65 <= v <= 0.80 for v in values)
+    lines = (("study", "#1f4e8c", "-", {m: [r[1] for r in sweep["study"][m]] for m in speeds}),
+             ("climb", "#2e8b57", "-", {m: [r[1] for r in sweep["now"][m]] for m in speeds}),
+             ("study, SD 94", "#1f4e8c", "--", {m: [after_climb(h) for h in asrun94[m]] for m in speeds}),
+             ("climb, SD 94", "#2e8b57", "--", {m: [after_climb(h) for h in noisy[94.0][m]] for m in speeds}))
+    for name, colour, ls, vals in lines:
+        counts = [in_band(vals[m]) for m in speeds]
+        print(f"(c) {name}: {sum(counts)} of {len(seeds) * len(speeds)} blocks in band, by hand {counts}")
+        c.plot(speeds, counts, color=colour, ls=ls, lw=1.2, marker="o", ms=2.8,
+               mfc=colour if ls == "-" else "white", mec=colour, mew=0.8)
     c.set_xlabel("Hand's RT (ms)")
-    c.set_ylabel("Hit rate, 32 trials")
+    c.set_ylabel("Blocks in band, of 10")
     c.set_title("(c) After first miss", loc="left", fontsize=fs)
-    c.set_ylim(0.5, 1.02)
+    c.set_ylim(-0.6, 10.6)
+    c.set_yticks([0, 5, 10])
     c.set_xticks([250, 350, 450])
     for ax in axes:
         for s in ("top", "right"):
             ax.spines[s].set_visible(False)
     h, l = a.get_legend_handles_labels()
-    hc, lc = c.get_legend_handles_labels()
-    h, l = h + hc, l + lc
+    from matplotlib.lines import Line2D
+    h.append(Line2D([], [], color="0.35", lw=1.2, ls="--", marker="o", ms=2.8, mfc="white"))
+    l.append("dashed: SD 94 ms (c)")
     # the legend row must stay inside the canvas width, or the tight bounding box widens the
     # saved image and the print shrinks everything with it
     fig.legend(h, l, loc="lower center", ncol=3, frameon=False, fontsize=fs,

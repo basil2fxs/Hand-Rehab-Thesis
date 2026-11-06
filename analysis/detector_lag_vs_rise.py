@@ -9,10 +9,11 @@ before the push; the count is the detector's press event. Their
 difference is the count lag, which includes the baseline creeping up
 behind a slow push.
 
-Two detectors are drawn, each as a line for a 70-count gap over the
-band its 40, 70 and 150-count gaps span. A band steps where the creeping
-trigger passes a whole count, since the raw force must then reach the next
-one. The study's: the count on the smoothed value
+Two detectors are drawn, each as a line for a 70-count gap, on a linear
+axis, with a bar at 400 ms and at 3 s over the lags its 40, 70 and
+150-count gaps give there, the two rise times the thesis quotes. A
+gap's lag steps where the creeping trigger passes a whole count, since
+the raw force must then reach the next one. The study's: the count on the smoothed value
 and a baseline time constant of about 10 s (baseline_alpha 0.0005, the
 config every session ran), whose lag grows from 10 ms at a 100 ms rise
 to about 20 ms at 1 s and 36 to 86 ms at 2 to 3 s; every ramp is
@@ -105,34 +106,40 @@ def draw(out: dict, path: Path, small: bool = False) -> None:
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     fs = 8 if small else 10
+    ink, muted, grid = "#111827", "#6b7280", "#e5e7eb"
     plt.rcParams.update({"font.family": "serif", "font.serif": ["Times New Roman", "DejaVu Serif"],
-                         "font.size": fs})
+                         "font.size": fs, "axes.edgecolor": muted, "axes.labelcolor": ink,
+                         "xtick.color": muted, "ytick.color": muted, "axes.linewidth": 0.6,
+                         "xtick.major.width": 0.6, "ytick.major.width": 0.6})
     # canvas = print width: 13.8 cm in the thesis (10 pt), 8.8 cm in the paper (8 pt)
     fig, ax = plt.subplots(figsize=(3.45, 2.0) if small else (5.43, 1.55))
     xs = np.array(RISES, dtype=float)
-    lo = np.nanmin([[out["study"][p][r] for r in RISES] for p in PEAKS], axis=0)
-    hi = np.nanmax([[out["study"][p][r] for r in RISES] for p in PEAKS], axis=0)
-    # outlined, since the green band drawn over it hides where it ends
-    band_s = ax.fill_between(xs, lo, hi, facecolor=(0.576, 0.773, 0.992, 0.6), edgecolor="#1d4ed8", lw=0.6)
-    line_s, = ax.plot(xs, [out["study"][70][r] for r in RISES], "-", lw=1.4, color="#1d4ed8")
-    lo_n = np.nanmin([[out["now"][p][r] for r in RISES] for p in PEAKS], axis=0)
-    hi_n = np.nanmax([[out["now"][p][r] for r in RISES] for p in PEAKS], axis=0)
-    band_n = ax.fill_between(xs, lo_n, hi_n, color="#86efac", alpha=0.45, lw=0)
-    line_n, = ax.plot(xs, [out["now"][70][r] for r in RISES], "-", lw=1.4, color="#15803d")
-    ax.set_xlabel("rise time, rest to peak (ms)")
-    ax.set_ylabel("count lag (ms, log)")
-    ax.set_yscale("log")
-    # four labels, so the log axis stays readable at 1.55 in
-    ax.set_yticks([5, 10, 30, 100])
-    ax.set_yticklabels(["5", "10", "30", "100"])
-    ax.yaxis.set_minor_locator(matplotlib.ticker.NullLocator())
-    ax.set_xlim(0, 3050)
-    ax.set_ylim(3.5, 260)
+    colours = {"study": "#2563eb", "now": "#16a34a"}
+    names = {"study": "smoothed force (as the study ran)", "now": "second raw sample (now)"}
+    lines = []
+    # a linear axis, so the lag's growth on slow pushes reads as height; one line per rule
+    # for a 70-count gap, and at the two quoted rise times a bar over the three gaps,
+    # the two rules' bars set either side of the rise time so neither hides the other
+    for name, dx in (("study", -35), ("now", 35)):
+        line, = ax.plot(xs, [out[name][70][r] for r in RISES], "-", lw=1.3, color=colours[name], zorder=3)
+        lines.append(line)
+        for r in (400, 3000):
+            v = [out[name][p][r] for p in PEAKS]
+            ax.errorbar([r + dx], [out[name][70][r]], yerr=[[out[name][70][r] - min(v)], [max(v) - out[name][70][r]]],
+                        fmt="none", ecolor=colours[name], elinewidth=1.0, capsize=2.6, capthick=1.0, zorder=4)
+    ax.set_xlabel("Rise time, rest to peak (ms)")
+    ax.set_ylabel("Count lag (ms)")
+    ax.set_xlim(0, 3100)
+    ax.set_ylim(0, 92)
+    ax.set_yticks([0, 25, 50, 75])
+    ax.grid(axis="y", color=grid, lw=0.45)
+    ax.set_axisbelow(True)
     for side in ("top", "right"):
         ax.spines[side].set_visible(False)
-    # one row across the top, above every curve; each key is the line over its band
-    ax.legend([(band_s, line_s), (band_n, line_n)], ["as the study ran", "two raw samples (now)"], frameon=False, fontsize=fs, loc="upper left", bbox_to_anchor=(0.0, 1.08),
-              ncol=2, handlelength=1.6, handletextpad=0.5, columnspacing=1.2)
+    # the key sits in one row above the axes, clear of every line
+    ax.legend(lines, [names["study"], names["now"]], frameon=False, fontsize=fs, loc="lower left",
+              bbox_to_anchor=(0.0, 0.98), ncol=2, handlelength=1.6, handletextpad=0.5, columnspacing=1.6,
+              borderaxespad=0.0)
     fig.tight_layout(pad=0.3)
     fig.savefig(path, dpi=500)
     plt.close(fig)
