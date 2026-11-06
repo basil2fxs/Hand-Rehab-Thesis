@@ -17,6 +17,8 @@ Hand-Rehab-Thesis/
 |
 |-- FINAL TRIAL RESULTS/      The study: what to run, and where each result goes
 |
+|-- thesis/                   The thesis and the IEEE paper, as submitted
+|
 |-- analysis/                 The notebook and scripts that turn sessions into results
 |
 |-- app/                      The game
@@ -36,7 +38,7 @@ Hand-Rehab-Thesis/
 `-- Local_Runner.command      Runs the game straight from the code on a Mac
 ```
 
-Each folder's README goes further. To change the software, start at [app/README.md](app/README.md), then [app/finger_rehab](app/finger_rehab) for how the parts fit, and [app/finger_rehab/game/modes](app/finger_rehab/game/modes) for the games. Results: [analysis](analysis) and [FINAL TRIAL RESULTS](FINAL%20TRIAL%20RESULTS). The device: [hardware](hardware) and [app/arduino](app/arduino).
+Each folder's README goes further. To change the software, start at [app/README.md](app/README.md), then [app/finger_rehab](app/finger_rehab) for how the parts fit, and [app/finger_rehab/game/modes](app/finger_rehab/game/modes) for the games. Results: [analysis](analysis) and [FINAL TRIAL RESULTS](FINAL%20TRIAL%20RESULTS). The device: [hardware](hardware) and [app/arduino](app/arduino). The written work: [thesis](thesis).
 
 ## How it works
 
