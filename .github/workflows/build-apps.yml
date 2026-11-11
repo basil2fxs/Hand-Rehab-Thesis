@@ -10,8 +10,8 @@
 #   FingerRehab-macOS.dmg           drag to Applications
 #   FingerRehab-EEGLab.zip          the lab folder
 # A new version number makes a new release; another push of the same
-# number replaces that release's files with the newer build. The files
-# are also on each run's page for 30 days.
+# number replaces that release's files with the newer build and dates
+# the release by it. The files are also on each run's page for 30 days.
 #
 # All are self-contained: Python, pygame, numpy, librosa and matplotlib
 # ship inside. Nothing to install on the target machine.
@@ -43,10 +43,13 @@ jobs:
         with:
           python-version: "3.12"
 
+      # constraints.txt holds the exact versions the last release passed
+      # with, so a library's new version cannot fail a build that passed
+      # the day before, as pandas 3.1 did on 22 October 2026.
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
+          python -m pip install -r requirements.txt -c constraints.txt
 
       - name: Run the tests
         env:
@@ -79,7 +82,7 @@ jobs:
           key: pio-${{ hashFiles('app/arduino/*/platformio.ini') }}
 
       - name: Install PlatformIO
-        run: python -m pip install --upgrade platformio
+        run: python -m pip install platformio -c constraints.txt
 
       - name: Build the hexes
         run: python builds/build_firmware.py
@@ -108,7 +111,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt pyinstaller
+          python -m pip install -r requirements.txt pyinstaller -c constraints.txt
 
       # The test job runs on macOS, but the lab PC runs Windows, and the
       # EEG simulator listens for the game differently on each. Its
@@ -328,7 +331,7 @@ jobs:
   # wins. Every GitHub call is retried, because one HTTP 500 during an
   # upload once left the previous build's files in place, and the last
   # step fails the run unless the release now carries this commit's
-  # three files and is the one marked latest.
+  # three files, is the one marked latest and is dated by this build.
   release:
     needs: [test, build]
     if: >-
@@ -369,7 +372,7 @@ jobs:
           retry() {
             for i in 1 2 3 4 5; do
               "$@" && return 0
-              echo "attempt $i failed: $*"
+              echo "attempt $i failed: $*" >&2
               sleep $((i * 30))
             done
             return 1
@@ -379,10 +382,33 @@ jobs:
             retry gh release upload "$TAG" "$DIST"/FingerRehab-* --clobber
             retry gh release edit "$TAG" --title "Finger Rehab $APP_VERSION" \
               --target "$GITHUB_SHA" --notes-file notes.md --latest
+            # GitHub dates a release by the day it was first published,
+            # so a rebuilt 4.0 went on showing 28 September beside files
+            # built in November. Taking it to draft and publishing it
+            # again dates it by this build.
+            id=$(retry gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq .id)
+            retry gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$id" -F draft=true --silent
+            retry gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$id" -F draft=false -f make_latest=true --silent
           else
             retry gh release create "$TAG" "$DIST"/FingerRehab-* \
               --target "$GITHUB_SHA" --title "Finger Rehab $APP_VERSION" \
               --notes-file notes.md --latest
+          fi
+
+      # The step above takes the release to draft for a moment. If the
+      # job died or was cancelled right there, the README's download
+      # links would point at nothing. So whatever happened above, a
+      # release left as a draft is published again.
+      - name: Never leave the release a draft
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v$APP_VERSION"
+          id=$(gh api "repos/$GITHUB_REPOSITORY/releases" --jq ".[] | select(.tag_name == \"$TAG\" and .draft) | .id" | head -n 1)
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$id" -F draft=false -f make_latest=true --silent
+            echo "Release $TAG had been left a draft and is published again."
           fi
 
       - name: Check the release is this build
@@ -397,6 +423,11 @@ jobs:
           test "$target" = "$GITHUB_SHA" || { echo "release $TAG names $target, not $GITHUB_SHA"; exit 1; }
           latest=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)
           test "$latest" = "$TAG" || { echo "latest release is $latest, not $TAG"; exit 1; }
+          draft=$(gh release view "$TAG" --json isDraft --jq .isDraft)
+          test "$draft" = "false" || { echo "release $TAG is a draft"; exit 1; }
+          published=$(gh release view "$TAG" --json publishedAt --jq .publishedAt)
+          age=$(( $(date -u +%s) - $(date -u -d "$published" +%s) ))
+          test "$age" -lt 3600 || { echo "release $TAG is dated $published, not by this build"; exit 1; }
           gh release view "$TAG" --json body --jq .body | grep -q "${GITHUB_SHA:0:7}" \
             || { echo "release notes do not name ${GITHUB_SHA:0:7}"; exit 1; }
           for f in FingerRehab-Setup-Windows.exe FingerRehab-macOS.dmg FingerRehab-EEGLab.zip; do
@@ -404,4 +435,4 @@ jobs:
             got=$(gh release view "$TAG" --json assets --jq ".assets[] | select(.name == \"$f\") | .size")
             test "$want" = "$got" || { echo "$f is $got bytes on the release, $want built"; exit 1; }
           done
-          echo "Release $TAG is commit ${GITHUB_SHA:0:7}, marked latest, all three files this build's."
+          echo "Release $TAG is commit ${GITHUB_SHA:0:7}, marked latest, dated by this build, all three files this build's."

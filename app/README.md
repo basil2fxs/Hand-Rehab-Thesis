@@ -62,7 +62,7 @@ It takes about five minutes. CI runs the same suite on every push but skips the 
 
 ## Release
 
-Push to `main`. The [build-apps](../.github/workflows/build-apps.yml) workflow runs the tests, builds `FingerRehab-Setup-Windows.exe`, `FingerRehab-macOS.dmg` and `FingerRehab-EEGLab.zip` from that commit, and publishes them as the release named after `SOFTWARE_VERSION` in `app/finger_rehab/data/session.py`. If that number hasn't changed, the new files replace the ones already on that release. For a new version, raise `SOFTWARE_VERSION` and the two matching strings in `app/finger_rehab.spec` (a test checks they agree). Every session's `metadata.json` records the version, so a result can be traced back to its build. For local builds, see [`builds/`](builds).
+Push to `main`. The [build-apps](../.github/workflows/build-apps.yml) workflow runs the tests, builds `FingerRehab-Setup-Windows.exe`, `FingerRehab-macOS.dmg` and `FingerRehab-EEGLab.zip` from that commit, and publishes them as the release named after `SOFTWARE_VERSION` in `app/finger_rehab/data/session.py`. If that number hasn't changed, the new files replace the ones already on that release, and the release is dated by the new build. CI installs the exact library versions listed in `app/constraints.txt`, so a library update can't break a build that passed the day before; to update a library, change its line there. For a new version, raise `SOFTWARE_VERSION` and the two matching strings in `app/finger_rehab.spec` (a test checks they agree). Every session's `metadata.json` records the version, so a result can be traced back to its build. For local builds, see [`builds/`](builds).
 
 ## Generated files
 
