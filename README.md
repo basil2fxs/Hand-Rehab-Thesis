@@ -13,7 +13,7 @@ Hand-Rehab-Thesis/
 |-- Installers/               The Windows and macOS installers, from the latest release
 |
 |-- EEG_Lab/                  The folder that goes on the EEG lab computer
-|   `-- developer/            Stays off the lab PC: the EEG simulator and set-up tools
+|   `-- developer/            EEG simulator and set-up tools. Not needed on the lab PC
 |
 |-- FINAL TRIAL RESULTS/      The study: what to run, and where each result goes
 |
@@ -33,12 +33,12 @@ Hand-Rehab-Thesis/
 |   `-- builds/               Scripts that build the installers
 |
 |-- hardware/                 Build the device: parts, wiring, pins, CAD and print files
-|-- archive/                  Old material. Nothing here runs
-|-- sessions/                 Recorded data (kept off GitHub)
+|-- archive/                  Old material kept for reference. The game doesn't use it
+|-- sessions/                 Recorded data (not uploaded to GitHub)
 `-- Local_Runner.command      Runs the game straight from the code on a Mac
 ```
 
-Each folder's README goes further. To change the software, start at [app/README.md](app/README.md), then [app/finger_rehab](app/finger_rehab) for how the parts fit, and [app/finger_rehab/game/modes](app/finger_rehab/game/modes) for the games. Results: [analysis](analysis) and [FINAL TRIAL RESULTS](FINAL%20TRIAL%20RESULTS). The device: [hardware](hardware) and [app/arduino](app/arduino). The written work: [thesis](thesis).
+Each folder has its own README with more detail. To change the software, start at [app/README.md](app/README.md), then read [app/finger_rehab](app/finger_rehab) for how the parts fit together and [app/finger_rehab/game/modes](app/finger_rehab/game/modes) for the games. The results are in [analysis](analysis) and [FINAL TRIAL RESULTS](FINAL%20TRIAL%20RESULTS), the device is in [hardware](hardware) and [app/arduino](app/arduino), and the written work is in [thesis](thesis).
 
 ## How it works
 
@@ -57,7 +57,7 @@ flowchart LR
 
 The Nano reads the four pads 200 times a second and sends each reading over USB as a line of text. The game turns those numbers into presses, picks the next finger to cue and sends `STIM:n` back to buzz finger n. Every sample and every event goes into a session folder, which the notebook reads.
 
-There's no switch under a finger. Each pad keeps a slow baseline, and a press counts when the force crosses a trigger 30% of the way from that person's resting level to their light press, both measured at login. That is what lets a weak finger register: one fixed threshold had a little finger resting on its pad firing presses by itself. Settings, Setup, Press point moves the 30%.
+There's no switch under the fingers. Each pad keeps a slow baseline, and a press counts when the force crosses a trigger set 30% of the way from that person's resting level to their light press, both measured at login. That's what lets a weak finger register. With one fixed threshold, a little finger just resting on its pad kept setting off presses. The 30% can be changed in Settings, Setup, Press point.
 
 <p align="center"><img src="app/docs/images/login.png" width="32%" alt="The login screen"> <img src="app/docs/images/hand.png" width="32%" alt="The hand choice screen"> <img src="app/docs/images/calibration.png" width="32%" alt="The quick calibration"><br><sub>Log in (free play, or a timed session of 15 to 60 minutes), pick the hand, calibrate. The game menu has the same session picker.</sub></p>
 
@@ -66,18 +66,18 @@ There's no switch under a finger. Each pad keeps a slow baseline, and a press co
 - **Sensing:** each pad reads 0 to 10 N in 512 steps, about 20 mN a step. The Nano reads all four every 5 ms (199 Hz measured) and sends them over USB in bursts, so a sample arrives about 10 ms late, up to 20 ms; the notebook can re-time presses on the board's own clock.
 - **Presses:** a press counts on the second raw sample in a row over the trigger, 5 ms after the raw force crosses it, so one noisy sample can't count. Sessions before 3 November 2026 counted on the smoothed force, a sample or two later (`analysis/count_rule_replay.py` compares the two). A slow push is counted later (`analysis/detector_lag_vs_rise.py`).
 - **Screen and sound:** a cue shows on the next 60 Hz frame, up to 17 ms later. On the study computer a sound was heard 77 to 87 ms after the game played it and a buzz felt 74 ms after its command; measure each computer with Settings, Setup, Audio delay.
-- **EEG markers:** a stimulus byte goes out on the frame that draws the stimulus, a press byte up to one frame after its sample, and `events.tsv` moves each press back to its sample and to where the push began. Checklist: [app/docs/eeg_lab_setup.txt](app/docs/eeg_lab_setup.txt).
+- **EEG markers:** a stimulus byte goes out on the frame that draws the stimulus, a press byte up to one frame after its sample, and `events.tsv` moves each press back to its sample and to where the push began. The lab checklist is in [app/docs/eeg_lab_setup.txt](app/docs/eeg_lab_setup.txt).
 
 ## Install
 
-- **Windows:** run [`FingerRehab-Setup-Windows.exe`](https://github.com/basil2fxs/Hand-Rehab-Thesis/releases/latest/download/FingerRehab-Setup-Windows.exe). No administrator needed. SmartScreen says "Windows protected your PC": More info, Run anyway.
-- **macOS:** open [`FingerRehab-macOS.dmg`](https://github.com/basil2fxs/Hand-Rehab-Thesis/releases/latest/download/FingerRehab-macOS.dmg), drag Finger Rehab to Applications. First open: System Settings, Privacy & Security, Open Anyway.
+- **Windows:** run [`FingerRehab-Setup-Windows.exe`](https://github.com/basil2fxs/Hand-Rehab-Thesis/releases/latest/download/FingerRehab-Setup-Windows.exe). It doesn't need administrator rights. SmartScreen will say "Windows protected your PC": click More info, then Run anyway.
+- **macOS:** open [`FingerRehab-macOS.dmg`](https://github.com/basil2fxs/Hand-Rehab-Thesis/releases/latest/download/FingerRehab-macOS.dmg) and drag Finger Rehab to Applications. The first time it's opened, allow it in System Settings, Privacy & Security, Open Anyway.
 
-Neither installer is signed, which is why each asks once. Both are on the [latest release](https://github.com/basil2fxs/Hand-Rehab-Thesis/releases/latest), built and tested from the same commit. From source: [app/README.md](app/README.md). No board? The keyboard stands in: `J K L ;` right hand, `F D S A` left.
+Neither installer is signed, which is why each one asks for permission the first time. Both are on the [latest release](https://github.com/basil2fxs/Hand-Rehab-Thesis/releases/latest), built and tested from the same commit. To run from source instead, see [app/README.md](app/README.md). If there's no board, the keyboard can be used instead: `J K L ;` for the right hand, `F D S A` for the left.
 
 ## When a board is plugged in
 
-The game opens within a second: a watcher installed at first launch checks the ports once a second. A board already plugged in when the computer started needs unplugging and plugging back in. A copy run from source or straight off the disk image never installs the watcher, and nor does the lab build. With the game open, a board plugged in at the login, on the hub or in Settings connects by itself; one that arrives mid-game waits for that game to end.
+The game opens within a second, because a watcher installed at first launch checks the ports once a second. If the board was already plugged in when the computer started, unplug it and plug it back in. The watcher isn't installed when the game is run from source or straight off the disk image, and the lab build doesn't install it either. Once the game is open, a board plugged in at the login, on the hub or in Settings connects automatically, and one plugged in mid-game connects when that game ends.
 
 ## The ten games
 
@@ -117,63 +117,63 @@ The game opens within a second: a watcher installed at first launch checks the p
 | **Buzz Hunt** | Feel which finger buzzed, then press it. The sense of touch. |
 | **Echo** | Watch a sequence light up, then repeat it back. Memory span. |
 
-Each game's file opens with the research behind it, and its settings sit under its key in `app/config/default.yaml` (Muscle Memory is `pattern`, the Reaction card `srt`). How a game is put together, and how to add one: [app/finger_rehab/game/modes](app/finger_rehab/game/modes).
+Each game's file starts with the research behind it, and its settings are under its key in `app/config/default.yaml` (Muscle Memory is `pattern`, the Reaction card is `srt`). For how a game is put together and how to add one, see [app/finger_rehab/game/modes](app/finger_rehab/game/modes).
 
 ## Settings
 
 <p align="center"><img src="app/docs/images/settings.png" width="72%" alt="The Settings screen"></p>
 
-The cog on the login screen. Four tabs: Hand device (the finger test, which board is which hand, a test buzz), Sound and cues (levels and cue switches), Setup, and Data (the data folder, the Muscle Memory riff, Test Mode). The Setup jobs (flashing notes: [app/arduino](app/arduino)):
+Open Settings with the cog on the login screen. It has four tabs: Hand device (the finger test, which board is which hand, a test buzz), Sound and cues (levels and cue switches), Setup, and Data (the data folder, the Muscle Memory riff, Test Mode). These are the Setup jobs (the flashing notes are in [app/arduino](app/arduino)):
 
-- **Auto-start:** opens the game when the board is plugged in. The switch reads on or off, and off stays off.
-- **Flash firmware:** writes the game firmware to the board with the avrdude bundled in the app, about ten seconds.
-- **Sensor address:** moves one SingleTact to a new I2C address, with only that sensor connected.
-- **Audio delay:** once per computer, times its sound and buzz with the microphone so Rhythm lands on the beat. About two minutes in a quiet room, board plugged in; on Windows it asks for taps on the index pad.
+- **Auto-start:** opens the game when the board is plugged in. The switch shows on or off, and once it's turned off the game leaves it off.
+- **Flash firmware:** writes the game firmware to the board with the avrdude bundled in the app. It takes about ten seconds.
+- **Sensor address:** moves one SingleTact to a new I2C address. Only that sensor should be connected while it runs.
+- **Audio delay:** run it once on each computer. It times the computer's sound and buzz with the microphone so Rhythm stays on the beat. It takes about two minutes in a quiet room with the board plugged in, and on Windows it asks for taps on the index pad.
 
-On Windows, Setup also has USB driver: it gets a board's missing driver from Windows Update. Whatever the screen changes is saved to `config/user_settings.yaml` beside the app and laid over `default.yaml`, which holds every setting with the reason for its value. How the files stack: [app/config](app/config).
+On Windows, Setup also has USB driver, which gets a board's missing driver from Windows Update. Anything changed on this screen is saved to `config/user_settings.yaml` beside the app and applied on top of `default.yaml`, which lists every setting with the reason for its value. [app/config](app/config) explains how the files are layered.
 
 ## Troubleshooting
 
-**A sensor reads nothing, or sits at zero.** A failed read is sent as 0, so a loose lead, a dead pad and a pad on the wrong address look the same. Reseat both ends of the lead, then Settings, Setup, Sensor address, Scan shows which addresses answer.
+**A sensor reads nothing, or sits at zero.** A failed read is sent as 0, so a loose lead, a dead pad and a pad on the wrong address look the same. Reseat both ends of the lead, then use Settings, Setup, Sensor address, Scan to see which addresses answer.
 
-**A sensor drifts, or reads high at rest.** A pad squashed by the strap eats the gap between resting and pressing, and under 20 counts of travel is refused. Reposition the pad flat and calibrate again.
+**A sensor drifts, or reads high at rest.** A pad squashed by the strap leaves too little room between resting and pressing, and calibration is refused when there's under 20 counts of travel. Lay the pad flat again and recalibrate.
 
-**The board is not found, or the port keeps changing.** The first board found is the right hand, the second the left. To pin one: Settings, Hand device, pick the port per hand, Save. A saved port that no longer exists falls back to plug order. On Windows, a board that never shows up at all usually has no driver yet: Settings, Setup, USB driver.
+**The board is not found, or the port keeps changing.** The first board found is used as the right hand and the second as the left. To fix a board to a hand, go to Settings, Hand device, pick the port for each hand and press Save. If a saved port no longer exists, the game goes back to plug order. On Windows, a board that never shows up at all usually has no driver yet, so run Settings, Setup, USB driver.
 
-**Calibration is asked for every time.** Once per hand per session is the design. A repeat inside one session means the profile was refused: under 20 counts of travel, a trigger too high, or a pad reading zero when empty.
+**Calibration is asked for every time.** It's meant to be asked for once per hand in each session. If it comes up again inside one session, the profile was refused: under 20 counts of travel, a trigger too high, or a pad reading zero when empty.
 
-**A buzzer does not buzz.** Settings, Hand device, Test buzz fires that hand's motors in order, and clicking a finger tile buzzes just that finger. None firing on a board that streams fine is wiring, not software. No buzz before a cue means the cue is switched off in Sound and cues.
+**A buzzer does not buzz.** Settings, Hand device, Test buzz runs that hand's motors one after another, and clicking a finger tile buzzes just that finger. If none of them buzz on a board that's sending readings normally, the fault is in the wiring, not the software. If there's no buzz before a cue, the cue is switched off in Sound and cues.
 
-**Presses register on the wrong finger.** Two pads answer the same I2C address. Settings, Setup, Sensor address, with only that sensor connected: 0x05 index, 0x06 middle, 0x07 ring, 0x08 pinky. Never move a sensor off 0x04 with the others wired in.
+**Presses register on the wrong finger.** Two pads are answering on the same I2C address. Fix it in Settings, Setup, Sensor address, with only that sensor connected: 0x05 index, 0x06 middle, 0x07 ring, 0x08 pinky. Never move a sensor off 0x04 while the others are wired in.
 
-**The game does not open when the board is plugged in.** Settings, Hand device, Refresh. If the board isn't listed, it's the lead or the driver (Setup, USB driver). If it is, Auto-start should read on; it only fires when a board arrives, so unplug and replug.
+**The game does not open when the board is plugged in.** Go to Settings, Hand device and press Refresh. If the board isn't listed, the problem is the lead or the driver (Setup, USB driver). If it is listed, check that Auto-start says on. It only triggers when a board is plugged in, so unplug the board and plug it back in.
 
-**The board needs re-flashing.** Settings, Setup, Flash firmware writes `app/assets/firmware/finger_rehab_nano.hex` with the bundled avrdude. A Nano runs one of two bootloaders; the app tries both and remembers which worked.
+**The board needs re-flashing.** Settings, Setup, Flash firmware writes `app/assets/firmware/finger_rehab_nano.hex` with the bundled avrdude. A Nano has one of two bootloaders, so the app tries both and remembers which one worked.
 
-**The game runs but no data lands.** Settings, Data, Open data folder opens the folder in use, which is `~/Finger Rehab Data` when the app can't write beside itself. Check Test Mode is off (`game.test_mode_enabled`): it caps every block at six trials.
+**The game runs but no data is saved.** Settings, Data, Open data folder opens the folder being used, which is `~/Finger Rehab Data` when the app can't write next to itself. Check that Test Mode is off (`game.test_mode_enabled`), because it cuts every block to six trials.
 
-**The EEG box does not appear.** Markers are off in the shipped game; `app/config/eeg_lab.yaml` turns them on, loaded from beside the lab exe or with `--config config/eeg_lab.yaml` from source. Set `eeg.port` to the box's port; when the box isn't there at launch, the game listens for a few seconds and picks the one USB port that sends no force stream, leaving the list up to change it. `eeg.require_port` true refuses to start without a box; false logs the markers only. `eeg.baud` stays 9600: 1200 would reset the box, so the game refuses it.
+**The EEG box does not appear.** Markers are switched off in the released game. `app/config/eeg_lab.yaml` turns them on, and it's loaded from beside the lab exe or with `--config config/eeg_lab.yaml` from source. Set `eeg.port` to the box's port. If the box isn't found at launch, the game listens for a few seconds and picks the one USB port that sends no force stream, and it leaves the port list on screen in case that needs changing. With `eeg.require_port` set to true the game won't start without a box, and with false it only logs the markers. Leave `eeg.baud` at 9600: 1200 would reset the box, so the game refuses it.
 
-**Sessions look empty in the notebook.** It walks for `trials.csv` from the first `sessions` folder beside it or up to four levels above; a notebook copied elsewhere needs `SESSIONS_DIR` set in the Setup cell.
+**Sessions look empty in the notebook.** The notebook looks for `trials.csv` in the first `sessions` folder it finds, beside it or up to four levels above. If the notebook has been copied somewhere else, set `SESSIONS_DIR` in the Setup cell.
 
 ## Data
 
-Each game is one folder, `sessions/<date>/<login>_<time>_<game>/`, and nothing is overwritten: a second folder with the same name gets `_1` on the end.
+Each game gets its own folder, `sessions/<date>/<login>_<time>_<game>/`. Nothing is overwritten: a second folder with the same name gets `_1` on the end.
 
-- `trials.csv`: one row per trial, with the finger cued, the reaction time, the peak force in newtons and the cue switches in force.
+- `trials.csv`: one row per trial, with the finger cued, the reaction time, the peak force in newtons and which cue switches were on.
 - `raw.csv`: every 200 Hz sample, with the presses, releases, cues and EEG markers as event rows on the same clock.
 - `metadata.json`: the block summary, the calibration the block ran under, a copy of the config and the software version.
 - `report.html`, `summary.csv` and `charts/` for a quick look, and for EEG blocks `events.tsv` and `markers_codes.csv`.
 
-The folder name carries the login, so run `app/scripts/deidentify_sessions.py` before a copy leaves the computer. To analyse, open [`analysis/session_analysis.ipynb`](analysis), run the Setup cell, pick a save, Run All. Every column, and how the files are written: [app/finger_rehab](app/finger_rehab).
+The folder name includes the login name, so run `app/scripts/deidentify_sessions.py` before copying any data off the computer. To analyse a session, open [`analysis/session_analysis.ipynb`](analysis), run the Setup cell, pick a save and press Run All. [app/finger_rehab](app/finger_rehab) describes every column and how the files are written.
 
 ## The lab folder
 
-`EEG_Lab` (the `FingerRehab-EEGLab.zip` of the same build) holds the exe, `eeg_lab.yaml`, `run_in_psychopy.py`, `README.md`, a `source/` copy and `sessions/`, where `sessions/eeg/` takes ActiView's recording under the name the game menu shows, copied in from the EEG PC when ActiView runs there. Its `developer/` folder stays on the development PC: an EEG simulator for rehearsing, the PsychoPy download and a new-PC check.
-Open `run_in_psychopy.py` in PsychoPy Coder and press Run. Every other build has the markers switched off.
-`python3 app/scripts/check_lab_sync.py` says whether the lab folder is the same game as the app; `--fix` makes it so, and `Local_Runner.command` does that on every start.
-What each number means, in one picture: [EEG_Lab/README.md](EEG_Lab/README.md). How the folder is built and how the markers are made: [EEG_Lab/developer](EEG_Lab/developer). Checklist and code table: [app/docs/eeg_lab_setup.txt](app/docs/eeg_lab_setup.txt).
+`EEG_Lab` (also released as `FingerRehab-EEGLab.zip` from the same build) contains the exe, `eeg_lab.yaml`, `run_in_psychopy.py`, `README.md`, a `source/` copy and `sessions/`. ActiView's recording goes in `sessions/eeg/` under the name shown on the game menu, and is copied in from the EEG PC when ActiView runs there. The `developer/` folder isn't needed at the lab, so leave it on the development PC: it has an EEG simulator for rehearsing, the PsychoPy download and a check for a new PC.
+To start it, open `run_in_psychopy.py` in PsychoPy Coder and press Run. The markers are switched off in every other build.
+`python3 app/scripts/check_lab_sync.py` checks that the lab folder has the same version of the game as the app. Adding `--fix` updates it, and `Local_Runner.command` does this every time it starts.
+[EEG_Lab/README.md](EEG_Lab/README.md) has a picture showing what each marker number means, [EEG_Lab/developer](EEG_Lab/developer) explains how the folder is built and how the markers are made, and [app/docs/eeg_lab_setup.txt](app/docs/eeg_lab_setup.txt) has the checklist and code table.
 
 ## Licence
 
-Thesis work by Basil Toufexis, Curtin University, 2026; ask before reusing the code. It builds on Satoru Nakayama's 2025 software, whose serial protocol and press detection are kept so the old patient data still loads. Third-party terms live with the files: [music](app/assets/music/ATTRIBUTION.md), [icons](app/assets/icons/LICENSE), [words](app/assets/words/LICENCE.txt), [avrdude](app/tools/avrdude).
+This is thesis work by Basil Toufexis at Curtin University, 2026. Please ask before reusing the code. It builds on Satoru Nakayama's 2025 software and keeps its serial protocol and press detection, so the old patient data still loads. Third-party licences are kept with the files they cover: [music](app/assets/music/ATTRIBUTION.md), [icons](app/assets/icons/LICENSE), [words](app/assets/words/LICENCE.txt), [avrdude](app/tools/avrdude).

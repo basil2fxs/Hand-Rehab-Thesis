@@ -19,11 +19,11 @@ The scripts import the game's own code from `../app`, so a replay runs the exact
 
 <p align="center"><img src="../app/docs/images/analysis_norms.png" width="48%" alt="A normal-range figure from the cohort chapter"> <img src="../app/docs/images/analysis_reliability.png" width="48%" alt="A reliability figure from the cohort chapter"><br><sub>Two of the cohort chapter's figures, from a simulated cohort.</sub></p>
 
-It finds `sessions/` beside it or up to four levels above; set `SESSIONS_DIR` in the Setup cell for a copy kept elsewhere. Without the dropdown, set `pick` there by hand: `"latest"`, `"all"`, a code like `"P01"`, a day like `"2026-08-05"`, a game like `"adaptive"`, or a list of these, each narrowing the last. Run All on the newest game alone leaves most literature checks with "no data".
+It finds `sessions/` beside it or up to four levels above; set `SESSIONS_DIR` in the Setup cell for a copy kept elsewhere. Without the dropdown, set `pick` there by hand: `"latest"`, `"all"`, a code like `"P01"`, a day like `"2026-08-05"`, a game like `"adaptive"`, or a list of these, each narrowing the last. Running All on only the newest game leaves most of the literature checks showing "no data".
 
-The figures, tables and `report.html` go into the newest analysed session folder, under `analysis/`, beside `shared/matlab/finger_rehab.mat` for MATLAB and `shared/rayan_format/` for the bench scripts in [`app/docs/research/rayan`](../app/docs/research/rayan). One person's standing summary goes to `sessions/individual_patient_results/<code>/`, the cohort's to `sessions/cohort_results/`, which prints no test below eight people.
+The figures, tables and `report.html` go into the newest analysed session folder, under `analysis/`, beside `shared/matlab/finger_rehab.mat` for MATLAB and `shared/rayan_format/` for the bench scripts in [`app/docs/research/rayan`](../app/docs/research/rayan). One person's standing summary goes to `sessions/individual_patient_results/<code>/` and the cohort's to `sessions/cohort_results/`, which doesn't run any test with fewer than eight people.
 
-The notebook needs nothing from the repository, so it can be handed to someone on its own. The constants it copies from the game are held to the game by `app/tests/test_notebook_matches_software.py`. Methods and sources: [`app/docs/research/analysis_methods.md`](../app/docs/research/analysis_methods.md).
+The notebook doesn't need anything else from the repository, so it can be given to someone on its own. `app/tests/test_notebook_matches_software.py` checks that the constants it copies from the game still match the game. The methods and sources are in [`app/docs/research/analysis_methods.md`](../app/docs/research/analysis_methods.md).
 
 ## The scripts
 
@@ -34,12 +34,12 @@ The laboratory's sequence task and the press timing on the real sessions:
 | Script | What it answers |
 | --- | --- |
 | `sequence_task.py` | The task scored the lab's way (correct presses under 1000 ms, each block's first trial dropped): the learning score with its interval, read several ways, a mixed model with each player's own speed and learning, error rates, early presses and recall |
-| `press_check.py` | Whether each counted press sits where its push began on the force stream, how steeply it rose, and how late the computer stamped the samples |
+| `press_check.py` | Whether each counted press lines up with where its push began on the force stream, how steeply it rose, and how late the computer stamped the samples |
 | `onset_sensitivity.py`, `onset_accuracy.py` | How much the press check depends on its onset rule, and how close that rule gets to a push's known start |
 | `count_lag.py` | How many samples after the raw force crossed the trigger each press was counted |
 | `count_rule_replay.py` | The two-raw-sample count of 3 November 2026 replayed against the smoothed count the sessions ran |
 | `stuck_pad_replay.py`, `stuck_pad_figure.py` | What the resting-finger rules of 24 October 2026 change, replayed and drawn; the old rules must first reproduce every logged press |
-| `hold_replay.py` | What holding the baseline during a push would change (shipped off) |
+| `hold_replay.py` | What holding the baseline during a push would change (this option is off in the released game) |
 | `review_report.py` | All of it with the EEG, as a short PDF for the people checking the results |
 
 The detector and the device, simulated:
@@ -70,7 +70,7 @@ The thesis's run of the main ones, with the folder names filled in, is `run_all.
 python3 -m eeg "../FINAL TRIAL RESULTS/3 EEG lab/sessions"
 ```
 
-Results go beside the sessions, in `results/<date>_<participant>/`: a short `EEG_report.pdf` and a `detail/` folder with the full results. `--reuse` redraws from the cached run, kept in the system's temporary folder because it holds the recordings. Two recordings or more are read together with `python3 -m eeg.group SESSIONS_1 SESSIONS_2 --out DIR`, which tests each person's own difference between conditions; with two people, that's a statement about those two.
+Results go beside the sessions, in `results/<date>_<participant>/`: a short `EEG_report.pdf` and a `detail/` folder with the full results. `--reuse` redraws from the cached run, kept in the system's temporary folder because it holds the recordings. Two or more recordings are read together with `python3 -m eeg.group SESSIONS_1 SESSIONS_2 --out DIR`, which tests each person's own difference between conditions; with two people, the result only says something about those two.
 
 ## Tests
 

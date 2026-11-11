@@ -1,6 +1,6 @@
 # deep
 
-One review per game, from October 2026, reading the sources each game leans on in full rather than their abstracts. Each sets the game's parameters, scoring and analysis against the evidence, ranks what to change, and marks every source as read in full, abstract only or record only. Read a game's review before changing its numbers: most settings in `config/default.yaml` that look odd have their reason here. Codes like R1 or Rh1 are the checks named in the study design.
+One review per game, from October 2026. Each review reads the sources its game relies on in full, not just their abstracts. It compares the game's parameters, scoring and analysis with the evidence, ranks what to change, and marks every source as read in full, abstract only or record only. Read a game's review before changing its numbers: most settings in `config/default.yaml` that look odd have their reason here. Codes like R1 or Rh1 are the checks named in the study design.
 
 | File | Game | The main changes |
 | --- | --- | --- |

@@ -86,7 +86,7 @@ SYMPTOMS = [
     "Presses register on the wrong finger.",
     "The game does not open when the board is plugged in.",
     "The board needs re-flashing.",
-    "The game runs but no data lands.",
+    "The game runs but no data is saved.",
     "The EEG box does not appear.",
     "Sessions look empty in the notebook.",
 ]

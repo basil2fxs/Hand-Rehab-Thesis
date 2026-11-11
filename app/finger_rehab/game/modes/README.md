@@ -21,7 +21,7 @@ One file per game, each opening with the research behind it: what it measures, w
 
 ## What a game is
 
-A plain class: the engine builds it, its screen drives it, and it talks back through a few engine calls. [`adaptive.py`](adaptive.py) is the shortest complete one, so read it first.
+A game is a plain class. The engine builds it, its screen drives it, and it reports back through a few engine calls. [`adaptive.py`](adaptive.py) is the shortest complete one, so read it first.
 
 | The game provides | Called | What it does |
 | --- | --- | --- |
@@ -41,7 +41,7 @@ A plain class: the engine builds it, its screen drives it, and it talks back thr
 | `engine.raw_logger.queue_event(name, ...)` | An event row in `raw.csv` for anything the analysis will want |
 | `engine.finish_block()` | Ends the block: summary, files, results screen |
 
-`game/scoring.py` grades a reaction time as the 2025 game did, so old and new sessions compare: Perfect to 100 ms, Great to 200, Good to 500, then Late, and Miss with no press. A game can also carry `current_timeout_s` (the timing bar reads it), `export_files(folder)` for files beside `trials.csv` (how the SRT writes the lab script's files), and the `WaitSkip` mixin in `game/rest_skip.py` for a rest the player can cut short with Space.
+`game/scoring.py` grades a reaction time as the 2025 game did, so old and new sessions compare: Perfect to 100 ms, Great to 200, Good to 500, then Late, and Miss with no press. A game can also have `current_timeout_s` (the timing bar reads it), `export_files(folder)` for files beside `trials.csv` (how the SRT writes the lab script's files), and the `WaitSkip` mixin in `game/rest_skip.py` for a rest the player can cut short with Space.
 
 ## Adding a game
 

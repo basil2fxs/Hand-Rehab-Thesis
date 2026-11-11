@@ -1,6 +1,6 @@
 # research
 
-What each game rests on, and the study that tested it. When a comment in `config/default.yaml` or a game's docstring cites a paper, the reasoning is here, with its sources. These notes are dated records: they describe each decision when it was made and the study as it ran, while the READMEs and the code describe the software as it is now.
+The research each game is based on, and the study that tested it. When a comment in `config/default.yaml` or a game's docstring cites a paper, the reasoning is here, with its sources. These notes are dated records: they describe each decision when it was made and the study as it ran, while the READMEs and the code describe the software as it is now.
 
 ## The study
 

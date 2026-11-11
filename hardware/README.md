@@ -25,7 +25,7 @@ flowchart LR
   N --> M["Four vibration motors<br>on motor PCBs"]
 ```
 
-The board does the sensing and the buzzing, and talks to nothing but the game. The finger rests sit on threaded rods, one per finger, and are set by hand for each person before the hand goes on.
+The board does the sensing and the buzzing, and only communicates with the game. The finger rests are mounted on threaded rods, one per finger, and are adjusted by hand for each person before they put their hand on the device.
 
 ## Building one
 
@@ -40,7 +40,7 @@ The board does the sensing and the buzzing, and talks to nothing but the game. T
 | Part | Qty | AUD each | Notes |
 | --- | --- | --- | --- |
 | SingleTact 8 mm 10 N pad, calibrated, with its electronics | 4 | 192 | From the 2025 project |
-| *or* SingleTact 8 mm 10 N pad, uncalibrated | 4 | 53 | Bought for the sensor comparison. Needs the board below, which outlives a failed pad |
+| *or* SingleTact 8 mm 10 N pad, uncalibrated | 4 | 53 | Bought for the sensor comparison. Needs the board below, which can be reused if a pad fails |
 | SingleTact standard electronics (board and jumper wires) | 4 | 62 | Only with the uncalibrated pads |
 | Arduino Nano | 1 | 15 to 48 | Reads the pads and drives the motors. Clones work |
 | USB A to micro B cable | 1 | 17 | Jaycar |
@@ -64,7 +64,7 @@ From the parts and wiring diagram ([`images/parts_and_wiring.jpg`](images/parts_
 | D6 | Little finger motor |
 | USB | The computer |
 
-- **Pads:** index 0x05, middle 0x06, ring 0x07, little 0x08. A new pad comes on a factory address; move it with Settings, Setup, Sensor address, with only that pad plugged in. Every SingleTact also answers 0x04, so the app won't change 0x04 while other pads are wired in: the write would land on all of them.
+- **Pads:** index 0x05, middle 0x06, ring 0x07, little 0x08. A new pad comes on a factory address; move it with Settings, Setup, Sensor address, with only that pad plugged in. Every SingleTact also answers 0x04, so the app won't change 0x04 while other pads are wired in, because the change would be applied to all of them.
 - **Readings:** the board reads 6 bytes from each pad 200 times a second and sends `FSR: a,b,c,d` over USB at 115200 baud. The manual quotes up to 120 Hz per pad, but recorded sessions show a new value on nearly every read. A failed read is sent as 0.
 - **Buzz:** `STIM:n` from the game drives motor n (1 to 4) for 150 ms at PWM 200 of 255 (240 on the little finger). Nothing comes back, so the game knows a command was sent, not that a motor moved.
 
@@ -77,13 +77,13 @@ From the parts and wiring diagram ([`images/parts_and_wiring.jpg`](images/parts_
 | Finger rests | [`fingers.stl`](cad/fingers.stl) | 78 x 130 x 53 |
 
 - Print in PLA. The base and top are 231 mm long, so check the bed first.
-- The base holds the four pads. The top shell sits over it on the four magnets and can be swapped for other finger-groove layouts.
+- The base holds the four pads. The top shell is held on by the four magnets and can be swapped for other finger-groove layouts.
 - The chassis is sized for hand lengths from the 5th to the 95th percentile of the ANSUR II survey.
 - Fingertips meet the pads with about 2 mm of clearance, and the forearm rests at about 30 degrees of pronation ([cross-section](images/chassis_section.png), [both halves](images/chassis_left_right.png)).
 
 ## Powered finger rests (not fitted)
 
-A linear actuator was designed to move the finger rests, run by a second Arduino with [`linear_actuator.ino`](linear_actuator/linear_actuator.ino), a motor driver and two buttons. This build sets the rests on threaded rods instead, but the sketch and its wiring are kept for a build that brings it back:
+A linear actuator was designed to move the finger rests, run by a second Arduino with [`linear_actuator.ino`](linear_actuator/linear_actuator.ino), a motor driver and two buttons. This build sets the rests on threaded rods instead, but the sketch and its wiring are kept in case a later build uses it:
 
 | Pin | Goes to |
 | --- | --- |
@@ -96,20 +96,20 @@ Hold a button to move the rests; let go, or press both, and it stops. The button
 
 ## Changing the hardware
 
-- Pins and pad addresses live in `app/arduino/firmware_on_device/lib/Config/Config.h`; the sample rate, motor strength and buzz length in `Config.cpp` beside it. After a change, rebuild and flash the firmware ([app/arduino](../app/arduino)) and update the tables here: `app/tests/test_hardware_docs.py` reads them out of the firmware and the actuator sketch and fails when this page disagrees.
+- Pins and pad addresses are in `app/arduino/firmware_on_device/lib/Config/Config.h`; the sample rate, motor strength and buzz length in `Config.cpp` beside it. After a change, rebuild and flash the firmware ([app/arduino](../app/arduino)) and update the tables here: `app/tests/test_hardware_docs.py` reads them out of the firmware and the actuator sketch and fails when this page disagrees.
 - The newton figures assume 10 N pads read over 512 counts, 51.2 counts to the newton. The game converts with `fsr.force_calibration_n_per_count` in `app/config/default.yaml` and the notebook falls back on `fsr.sensor_rating_n` over `fsr.counts_full_scale`, so a pad with another rating needs all three changed.
 - The game reads four pads per board and up to two boards, one per hand.
 
 ## Two boards: the timing bench
 
-Before any Mirror gap or lead is reported, measure the rig with no hands in it: press each finger pair's two pads together with one rigid bar about 100 times, boards swapped between ports and between hands, and note the mean and SD of the logged gap. Measure each board's motor lag the way `latency.buzzer_ms` was measured. Each board's samples carry their own stamp, and raw.csv names the board of every sample row.
+Before any Mirror gap or lead is reported, measure the rig with no hands in it: press each finger pair's two pads together with one rigid bar about 100 times, boards swapped between ports and between hands, and note the mean and SD of the logged gap. Measure each board's motor lag the way `latency.buzzer_ms` was measured. Each board's samples have their own time stamp, and raw.csv names the board of every sample row.
 
 ## What a next build could fix
 
 - Motor strength is fixed when the firmware is compiled; the game can make a buzz longer but not stronger.
 - The custom PCB's design files and the motor's part number were not kept with the project.
-- The uncalibrated pads have not been benched (`app/scripts/pad_bench.py --characterise`); the calibrated set's newtons rest on the maker's calibration.
-- Powered finger rests would need a stall shut-off before going back in.
+- The uncalibrated pads have not been benched (`app/scripts/pad_bench.py --characterise`); the calibrated set's newton figures rely on the manufacturer's calibration.
+- Powered finger rests would need a stall shut-off before being fitted again.
 
 ## Not part of this build
 

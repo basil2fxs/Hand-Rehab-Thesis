@@ -26,6 +26,6 @@ Tools run by hand from `app/`, for example `python3 scripts/check_sitting.py`. N
 | **Files the repository keeps** | |
 | [`build_study_chart.py`](build_study_chart.py) | Freeze the study's Rhythm chart into `assets/charts/`, its notes moved onto the music's attacks |
 | [`build_lab_package.py`](build_lab_package.py) | Assemble the EEG lab folder from the app |
-| [`check_lab_sync.py`](check_lab_sync.py) | Is the lab folder the same game as the app? `--fix` makes it so |
+| [`check_lab_sync.py`](check_lab_sync.py) | Checks that the lab folder matches the app. `--fix` updates it |
 | [`make_screenshots.py`](make_screenshots.py) | Render every screen to `docs/images` for the READMEs |
 | [`make_eeg_cheat_sheet.py`](make_eeg_cheat_sheet.py) | Draw the EEG marker cheat sheet, dark and light, from the marker map |

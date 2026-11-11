@@ -1,6 +1,6 @@
 # finger_rehab
 
-The game as a Python package. `main.py` loads the config, finds the boards (or falls back to the keyboard), makes a `GameEngine` and runs it. Everything else hangs off the engine.
+The game as a Python package. `main.py` loads the config, finds the boards (or falls back to the keyboard), makes a `GameEngine` and runs it. Everything else is run by the engine.
 
 | Folder | What it does | Start with |
 | --- | --- | --- |
@@ -17,9 +17,9 @@ The game as a Python package. `main.py` loads the config, finds the boards (or f
 
 ## One session, start to finish
 
-1. `main.py` reads the flags and `Config.load()` stacks the YAML files. A frozen exe with `eeg_lab.yaml` beside it loads that file by itself, which is how the lab build starts in lab mode from a double-click.
-2. It takes a lock file, so a second copy refuses to start, then opens up to two Arduino boards, or the keyboard when there are none.
-3. `GameEngine.run()` builds every screen once and runs the frame loop: drain the new samples, run them through the press detectors, hand events to the screen on show, update, draw, flip, and only then send any EEG stimulus byte, so the byte lands as close to the picture as software can put it.
+1. `main.py` reads the flags and `Config.load()` stacks the YAML files. A frozen exe with `eeg_lab.yaml` beside it loads that file automatically, which is how the lab build starts in lab mode from a double-click.
+2. It takes a lock file, so a second copy won't start, then opens up to two Arduino boards, or the keyboard when there are none.
+3. `GameEngine.run()` builds every screen once and runs the frame loop: drain the new samples, run them through the press detectors, hand events to the screen on show, update, draw, flip, and only then send any EEG stimulus byte, so it goes out as close to the moment the picture appears as software allows.
 4. The login takes a name, the study details and a session length; the hand screen picks the hand, and the quick calibration measures it.
 5. `GameEngine.begin_game()` looks up the game's starter in `_BLOCK_STARTERS`. The starter builds the mode from the config and calls `_begin_block()`, which opens the session folder, starts the loggers and runs the GET READY countdown (8 s before a sitting's first game).
 6. The screen calls the mode's `update()` every frame. The mode cues fingers with `engine.on_stim()`, which lights the tile, buzzes, plays the tone and arms the EEG byte, and records each trial with `engine.log_trial()`.
@@ -31,19 +31,19 @@ Each board is one hand: four pads on an Arduino Nano sending `FSR: a,b,c,d` 200 
 
 `hardware/discovery.py` decides which board is which hand, at start-up and whenever Settings reconnects:
 
-1. A port saved in Settings (`serial.left_port`, `serial.right_port`) wins while that port exists. Port names change between plug-ins, so a stale one is ignored.
+1. A port saved in Settings (`serial.left_port`, `serial.right_port`) is used as long as that port exists. Port names can change each time a board is plugged in, so a saved port that no longer exists is ignored.
 2. A hand that already had a board this run keeps it, so a replugged board comes back on the same hand.
 3. Otherwise the first board found is the right hand and the second the left.
 
-Boards are recognised by USB vendor ID (`serial.vendor_ids`). The lab's marker box is an Arduino too, so its port is kept off the hand boards. New boards are looked for once a second, and one plugged in mid-game waits for that game to end. With one board the login offers right or left, and the board becomes that hand. The keyboard plays every game except Force Pilot and Buzz Hunt, which need a real force trace and real motors.
+Boards are recognised by USB vendor ID (`serial.vendor_ids`). The lab's marker box is an Arduino too, so its port is never used as a hand board. The game checks for new boards once a second, and one plugged in mid-game is connected when that game ends. With one board the login offers right or left, and the board becomes that hand. The keyboard plays every game except Force Pilot and Buzz Hunt, which need a real force trace and real motors.
 
 ## Calibration and the press detector
 
-A hand resting on the device loads each pad differently (the little finger's most), so one threshold read from an empty device fired presses from a resting hand on one finger and was out of reach on another. Each finger gets its own instead. The quick calibration at login records each pad empty, with the hand resting, and under a light press held for a second, and `hardware/calibration_profile.py` turns that into thresholds:
+A hand resting on the device puts a different load on each pad (most on the little finger's). A single threshold measured on an empty device set off presses from a resting hand on one finger and couldn't be reached on another, so each finger gets its own. The quick calibration at login records each pad empty, with the hand resting, and under a light press held for a second, and `hardware/calibration_profile.py` turns that into thresholds:
 
-- The trigger sits 30% of the way from resting to the light press (`fsr.press_fraction`; Settings, Setup, Press point). It never goes under 12 counts, eight times the pad's noise, the resting load plus three times the noise, or 2.5 times the peak of a hand that shakes at rest.
+- The trigger is set 30% of the way from resting to the light press (`fsr.press_fraction`; Settings, Setup, Press point). It never goes under 12 counts, eight times the pad's noise, the resting load plus three times the noise, or 2.5 times the peak of a hand that shakes at rest.
 - The gap it's taken from is capped at three times the smallest light press asked for, so pressing hard during calibration can't make the game hard to play.
-- The release sits lower, at 20% of the gap and at least 10 counts under the trigger, so a finger hovering at the trigger can't chatter.
+- The release point is lower, at 20% of the gap and at least 10 counts under the trigger, so a finger hovering at the trigger can't chatter.
 - A profile is refused when a finger travels under 20 counts, its trigger would need over 70% of its travel, or a pad reads zero empty.
 
 Profiles are saved as `config/calibration/current_<hand>.json`, with a dated copy in `history/`, and each block copies the one it ran under into `metadata.json`.
@@ -52,11 +52,11 @@ Profiles are saved as `config/calibration/current_<hand>.json`, with a dated cop
 
 ## Cues and the motors
 
-A cue has four switches (`cue.buzz_before`, `cue.sound_before`, `cue.buzz_after`, `cue.sound_after`), plus whether the screen lights the finger (`cue.show_target`); every trial row records the mix in `cue_flags`, for example `BS/--`. The firmware only knows `STIM:n` (buzz finger n for 150 ms) and `STOP`, so a longer buzz is the command repeated (`motor.cue_ms`). EEG markers ride the same path: `hardware/eeg_trigger.py` holds the code map and the writer, explained in [EEG_Lab/developer](../../EEG_Lab/developer).
+A cue has four switches (`cue.buzz_before`, `cue.sound_before`, `cue.buzz_after`, `cue.sound_after`), plus whether the screen lights the finger (`cue.show_target`); every trial row records the mix in `cue_flags`, for example `BS/--`. The firmware only knows `STIM:n` (buzz finger n for 150 ms) and `STOP`, so a longer buzz is the command repeated (`motor.cue_ms`). EEG markers are sent the same way: `hardware/eeg_trigger.py` holds the code map and the writer, explained in [EEG_Lab/developer](../../EEG_Lab/developer).
 
 ## The session folder
 
-`data/logger.py` makes one folder per game, `sessions/<YYYY-MM-DD>/<login>_<HHMMSS>_<game>/`, and never reuses a name. `sessions/` sits beside the app, or wherever `--data-dir` points.
+`data/logger.py` makes one folder per game, `sessions/<YYYY-MM-DD>/<login>_<HHMMSS>_<game>/`, and never reuses a name. `sessions/` is beside the app, or wherever `--data-dir` points.
 
 | File | What is in it |
 | --- | --- |
@@ -71,4 +71,4 @@ A cue has four switches (`cue.buzz_before`, `cue.sound_before`, `cue.buzz_after`
 
 ## Timed sessions
 
-The 15, 30, 45 and 60 minute sessions are presets under `protocol` in `config/default.yaml`: an order of games, the hand for each, and shorter counts that leave every threshold and scoring rule alone. `game/battery.py` turns a preset into one person's plan, picking order A or B from their study code, and NEXT UP walks through it. A new sitting is a config edit; `scripts/measure_battery.py` times it.
+The 15, 30, 45 and 60 minute sessions are presets under `protocol` in `config/default.yaml`: an order of games, the hand for each, and shorter trial counts, with every threshold and scoring rule left unchanged. `game/battery.py` turns a preset into one person's plan, picking order A or B from their study code, and NEXT UP steps through it. Adding a new sitting only needs a config edit, and `scripts/measure_battery.py` times it.

@@ -1,6 +1,6 @@
 # docs
 
-The written side of the project: how a study day runs, why each game is built the way it is, and how the EEG lab is set up. Nothing here runs.
+The written side of the project: how a study day runs, why each game is built the way it is, and how the EEG lab is set up. None of it is code.
 
 | Path | What it is |
 | --- | --- |

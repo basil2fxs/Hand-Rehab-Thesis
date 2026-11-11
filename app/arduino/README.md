@@ -15,16 +15,16 @@ The code that runs on the hand device's Arduino Nano. The app ships both program
 When the board powers up, or the game opens its port (which resets a Nano), the bootloader runs, then the firmware waits 0.1 s, prints `### Setup Complete ###` and starts streaming. Over the first 1.6 s of the stream it buzzes each motor for 200 ms in turn as a self-test. (Before November 2026 the self-test came first and held the first sample back by 2.6 s.) From then on:
 
 - Every 5 ms it reads six bytes from each SingleTact over I2C (index 0x05, middle 0x06, ring 0x07, little 0x08) and prints one line, `FSR: a,b,c,d`, at 115200 baud. A failed read goes out as 0, which is why a loose lead and a dead pad look the same.
-- `STIM:n` (n from 1 to 4) runs finger n's motor for 150 ms without holding up the sampling; another `STIM:n` before then restarts the 150 ms. `STOP` stops every motor. Nothing is sent back, so the game knows a command left the computer, not that a motor moved.
+- `STIM:n` (n from 1 to 4) runs finger n's motor for 150 ms without holding up the sampling; another `STIM:n` before then restarts the 150 ms. `STOP` stops every motor. Nothing is sent back, so the game knows a command was sent but not whether a motor actually moved.
 
-The protocol is the 2025 software's, kept so older sessions and tools still read. `firmware_on_device/lib/Config/Config.cpp` holds what can change: the sample rate, each motor's strength (PWM 200 of 255, 240 on the little finger) and the buzz length. `Config.h` holds the pins and addresses, which the board fixes. After a change, rebuild the hex, flash it, and update the wiring table in [hardware](../../hardware), which `tests/test_hardware_docs.py` checks against both files. The game expects 200 Hz (`fsr.sample_rate_hz`) and holds a longer buzz by repeating `STIM` before the 150 ms runs out (`motor.pulse_interval_ms`).
+The protocol is the same as the 2025 software's, so older sessions and tools still work. `firmware_on_device/lib/Config/Config.cpp` holds what can change: the sample rate, each motor's strength (PWM 200 of 255, 240 on the little finger) and the buzz length. `Config.h` holds the pins and addresses, which are set by how the board is wired. After a change, rebuild the hex, flash it, and update the wiring table in [hardware](../../hardware), which `tests/test_hardware_docs.py` checks against both files. The game expects 200 Hz (`fsr.sample_rate_hz`) and holds a longer buzz by repeating `STIM` before the 150 ms runs out (`motor.pulse_interval_ms`).
 
 ## Flashing
 
 Settings, Setup flashes both from `../assets/firmware` with the avrdude bundled in the app, so the Arduino IDE is not needed. `Finger Rehab --check-tools report.json` checks those tools by hand.
 
-- **Flash firmware:** press, confirm, wait about ten seconds. The board restarts and buzzes all four motors. The line under Firmware names the hex the app carries.
-- **Sensor address:** connect ONE sensor, enter the old and new address, confirm. The app flashes the address tool, moves the sensor, then puts the game firmware back; Scan lists what answers. Every SingleTact also answers 0x04 (SingleTact manual, section 2.3), so the app refuses a change from 0x04 with other sensors wired in. The device wants 0x05 index, 0x06 middle, 0x07 ring, 0x08 little.
+- **Flash firmware:** press, confirm, wait about ten seconds. The board restarts and buzzes all four motors. The line under Firmware names the hex file included in the app.
+- **Sensor address:** connect ONE sensor, enter the old and new address, confirm. The app flashes the address tool, moves the sensor, then puts the game firmware back; Scan lists what answers. Every SingleTact also answers 0x04 (SingleTact manual, section 2.3), so the app refuses a change from 0x04 with other sensors wired in. The device expects 0x05 index, 0x06 middle, 0x07 ring, 0x08 little.
 
 When it goes wrong (the full avrdude output is in the app log):
 

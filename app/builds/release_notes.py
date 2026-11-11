@@ -14,14 +14,16 @@ import time
 REPO = "https://github.com/basil2fxs/Hand-Rehab-Thesis"
 FILES = (
     ("FingerRehab-Setup-Windows.exe",
-     "Windows 10 or 11. Run it; no administrator needed. First run: "
-     '"Windows protected your PC", More info, Run anyway.'),
+     "Windows 10 or 11. Run it; it doesn't need administrator rights. "
+     'The first time, Windows shows "Windows protected your PC": click '
+     "More info, then Run anyway."),
     ("FingerRehab-macOS.dmg",
-     "macOS. Drag Finger Rehab to Applications. First open: System "
-     "Settings, Privacy & Security, Open Anyway."),
+     "macOS. Open it and drag Finger Rehab to Applications. The first "
+     "time it's opened, allow it in System Settings, Privacy & Security, "
+     "Open Anyway."),
     ("FingerRehab-EEGLab.zip",
-     "The EEG lab PC. Unzip, open run_in_psychopy.py in PsychoPy Coder, "
-     "press Run."),
+     "The EEG lab PC. Unzip it, open run_in_psychopy.py in PsychoPy "
+     "Coder and press Run."),
 )
 
 
@@ -30,12 +32,13 @@ def notes(version: str, commit: str, when: str | None = None) -> str:
     short = commit[:7]
     rows = "\n".join(f"| `{name}` | {what} |" for name, what in FILES)
     return (
-        f"Finger Rehab {version}, built from [{short}]({REPO}/commit/"
-        f"{commit}) on {when}; the tests passed.\n\n"
-        f"| File | For |\n| --- | --- |\n{rows}\n\n"
-        f"A later push of {version} replaces these files. Changes: the "
-        f"[commit history]({REPO}/commits/main). Setup: the "
-        f"[README]({REPO}#install).\n")
+        f"Finger Rehab {version}, built from commit [{short}]({REPO}/commit/"
+        f"{commit}) on {when}, after all the tests passed.\n\n"
+        f"| File | What it's for |\n| --- | --- |\n{rows}\n\n"
+        f"These files are replaced each time version {version} is rebuilt, "
+        f"so they always come from the newest build. What changed is in "
+        f"the [commit history]({REPO}/commits/main), and the setup steps "
+        f"are in the [README]({REPO}#install).\n")
 
 
 def main(argv: list[str]) -> int:

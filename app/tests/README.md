@@ -11,12 +11,12 @@ python -m pytest tests -k chords          # every test with chords in its name
 
 ## How they are grouped
 
-The file name says what a test guards:
+The file name shows what a test covers:
 
 | Files | What they check |
 | --- | --- |
 | `test_<game>_mode.py`, and `test_adaptive.py`, `test_rhythm.py`, `test_force_pilot.py`, `test_buzz_hunt.py`, `test_classic.py` | A game played through the real engine, and the rows it writes |
-| `test_<game>_research.py` | That the numbers a game took from its research review stay as the review set them |
+| `test_<game>_research.py` | That each game still uses the numbers its research review set |
 | `test_<game>_review.py`, `test_engine_review.py`, `test_review_minor.py` | The faults found by the code review of 27 September 2026, each reproduced; they fail on the code as it was |
 | `test_*_notebook.py`, `test_notebook_matches_software.py`, `test_rehab_analysis.py` | The notebook's chapters run on blocks the real engine wrote, and the notebook and the game agree on the file format |
 | `test_fsr.py`, `test_detector_defaults.py`, `test_calibration*.py`, `test_multi_serial.py`, `test_autoconnect.py`, `test_autostart*.py`, `test_flasher.py` | The press detector, calibration, boards and plug order, auto-start, flashing |

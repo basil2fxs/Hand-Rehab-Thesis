@@ -1,6 +1,6 @@
 # archive
 
-Old material kept for reference; nothing here runs in the game or the builds. Two folders are still read, so leave them: `old_rayyan_stuff/data` by the notebook's bench chapters, and `Webler EEG past program/` by the tests that check the Reaction card against the lab's script.
+Old material kept for reference. The game and the builds don't use any of it. Two folders are still read, so don't delete them: `old_rayyan_stuff/data` is read by the notebook's bench chapters, and `Webler EEG past program/` by the tests that check the Reaction card against the lab's script.
 
 | Path | What it is |
 | --- | --- |

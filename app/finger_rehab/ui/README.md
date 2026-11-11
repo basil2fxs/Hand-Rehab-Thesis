@@ -49,8 +49,8 @@ Screens draw on a fixed 1280 by 800 canvas (`ui.resolution`) that SDL scales to 
 
 ## Words on screen
 
-Screens name things by what the player does, and research terms stay in the logs. The Muscle Memory card never says anything repeats, because knowing about the sequence changes the learning the game measures (the comment above `ModeSelectScreen.MODES` gives the sources). Feedback stays encouraging, and a hit's flash carries a tick so it reads without the colour.
+Screens name things by what the player does, and research terms are only used in the logs. The Muscle Memory card never says anything repeats, because knowing about the sequence changes the learning the game measures (the comment above `ModeSelectScreen.MODES` gives the sources). Feedback is always encouraging, and a hit's flash includes a tick so it can be read without relying on colour.
 
 ## Pictures and tests
 
-`python3 scripts/make_screenshots.py` (from `app/`) renders every picture above from the real screens with a simulated player on a stepped clock, so they come out the same on any computer; `--only NAME` redoes one. `tests/test_screen_layout.py` checks the login and Settings screens and that clicks land on their buttons, `tests/test_settings_header_fits.py` that nothing on Settings overlaps, and `tests/test_lane_screen_polish.py` that the script still makes every picture a README shows.
+`python3 scripts/make_screenshots.py` (from `app/`) renders every picture above from the real screens with a simulated player on a stepped clock, so they come out the same on any computer; `--only NAME` redoes one. `tests/test_screen_layout.py` checks the login and Settings screens and that clicks register on their buttons, `tests/test_settings_header_fits.py` that nothing on Settings overlaps, and `tests/test_lane_screen_polish.py` that the script still makes every picture a README shows.

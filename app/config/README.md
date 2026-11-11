@@ -11,15 +11,15 @@ Every number the game runs on is a setting here, with the reason for its value w
 
 ## The order the files are read
 
-`finger_rehab/config.py` lays each file over the one before, key by key, so a file only needs the keys it changes:
+`finger_rehab/config.py` applies each file on top of the one before it, key by key, so a file only needs the keys it changes:
 
 1. `default.yaml`.
 2. `latency_profile.yaml`: this computer's measured sound and buzz delays, written by Settings, Setup, Audio delay. It may only set `latency.*` and the two rhythm offsets.
 3. `user_settings.yaml`: whatever the Settings screen saved. Skipped when a `--config` file is given.
-4. A `--config` file such as `eeg_lab.yaml`; a frozen exe loads an `eeg_lab.yaml` beside it by itself. If that file is the app's own copy, a trigger box port picked in the game (`eeg_port.yaml`) goes on top.
+4. A `--config` file such as `eeg_lab.yaml`; a frozen exe automatically loads an `eeg_lab.yaml` found beside it. If that file is the app's own copy, a trigger box port picked in the game (`eeg_port.yaml`) is applied on top.
 5. Command-line flags: `--eeg-port`, `--no-eeg-box`, `--windowed`, `--hand`, `--mode`, `--participant`, `--data-dir`.
 
-## Where the per-computer files live
+## Where the per-computer files are kept
 
 From source, here in `app/config/`. An installed app keeps them in a `config/` folder beside itself, or under `~/Finger Rehab Data` when it can't write there. The app writes `user_settings.yaml`, `eeg_port.yaml`, `latency_profile.yaml`, `srt_setups.json` (the Reaction card's saved set-ups) and any loaded Muscle Memory sequence, and git ignores them all, since they describe one machine.
 

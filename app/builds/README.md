@@ -15,4 +15,4 @@ Both build scripts rebuild the firmware and fetch avrdude (a failure there doesn
 
 CI makes the same two installers plus `FingerRehab-EEGLab.zip` and, when the tests pass, publishes all three as the release for `SOFTWARE_VERSION` in `finger_rehab/data/session.py`. Raise that number, and the two matching strings in `finger_rehab.spec`, to start a new release.
 
-Neither installer is signed, so the first open needs one click through. Windows: "Windows protected your PC", More info, Run anyway. macOS: System Settings, Privacy & Security, Open Anyway.
+Neither installer is signed, so each one has to be allowed the first time it's opened. On Windows the message is "Windows protected your PC": click More info, then Run anyway. On macOS go to System Settings, Privacy & Security, Open Anyway.
